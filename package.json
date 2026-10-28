@@ -1,43 +1,9 @@
 {
-  "name": "dsh-prompt-enhance",
-  "version": "1.1.0",
-  "description": "DeepSeek Harness 提示词增强：在会话输入框内把原始文本一键改写为更清晰、具体、结构完整的提示词，弹窗确认后可编辑、替换或直接发送。",
-  "keywords": [
-    "dsh",
-    "dsh-plugin",
-    "deepseek-harness",
-    "prompt",
-    "enhance",
-    "composer"
-  ],
-  "type": "module",
-  "main": "lib/index.js",
-  "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "lib",
-    "cordis.patch.yml",
-    "README.md"
-  ],
-  "license": "MIT",
-  "engines": {
-    "node": ">=20"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-conversation"
-      ],
-      "platform": "web"
-    },
-    "compatibility": {
-      "dsh": ">=0.2.0-rc.1 <0.3.0-0"
-    }
+  "name": "dsh-plugins",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DeepSeek Harness 插件集合",
+  "scripts": {
+    "pack": "pnpm -r pack"
   }
 }
