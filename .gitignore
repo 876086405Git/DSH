@@ -1,5 +1,6 @@
 node_modules/
 dist/
+# 常规打包产物不入库；发布用的 dsh-prompt-enhance-<version>.tgz 通过 git add -f 入库
 *.tgz
 .DS_Store
 Thumbs.db

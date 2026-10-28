@@ -30,7 +30,7 @@ cd plugins/dsh-prompt-enhance && npm pack
 # 从本地源码链接（开发态）
 dsh plugin --profile desktop add link:/path/to/plugins/dsh-prompt-enhance
 
-# 从打包产物（pnpm -r pack 的 tgz 输出在仓库根目录，产物不进版本库）
+# 从打包产物（pnpm -r pack 的 tgz 输出在仓库根目录；发布版 tgz 随仓库提交）
 dsh plugin --profile desktop add ./dsh-prompt-enhance-1.2.0.tgz
 ```
 
@@ -38,4 +38,4 @@ dsh plugin --profile desktop add ./dsh-prompt-enhance-1.2.0.tgz
 
 ## 开发方式
 
-本仓库插件由 **DeepSeek Harness（DSH）内的 AI 助手按需求实现**，人工负责需求定义、验收与迭代决策；代码、文档与截图由 AI 生成后经人工确认。git 历史自 2026-10-28 建立，此前 10-23 至 10-24 的开发过程未入库；`v1.1.0` 标签对应首个完整可用版本。
+本仓库插件由 **DeepSeek Harness（DSH）内的 AI 助手按需求实现**，人工负责需求定义、验收与迭代决策；代码、文档与截图由 AI 生成后经人工确认。git 历史自 2026-10-28 建立，此前 10-23 至 10-24 的开发过程未入库；`v1.1.0` 标签对应首个完整可用版本，`v1.2.0` 为当前发布版本（引用芯片保留 / 无边框透明闪烁 / Host 修复）。
