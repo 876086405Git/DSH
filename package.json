@@ -4,6 +4,6 @@
   "version": "0.0.0",
   "description": "DeepSeek Harness 插件集合",
   "scripts": {
-    "pack": "pnpm -r pack"
+    "pack": "pnpm -r --filter=./plugins/* pack"
   }
 }
