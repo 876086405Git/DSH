@@ -1,0 +1,10 @@
+# dsh-prompt-enhance — DSH bundle patch
+#
+# 把插件的 Host 半侧挂进当前 profile 的配置树；浏览器半侧由 package.json 的
+# dsh.client 声明，宿主按它自动组装 bundle，这里不用写。
+#
+# 安装：
+#   dsh plugin --profile <name> add <this-package-dir-or-tgz>
+- insert:
+    - id: dsh-prompt-enhance
+      name: dsh-prompt-enhance
