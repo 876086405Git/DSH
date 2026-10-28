@@ -1,7 +1,7 @@
 {
   "name": "dsh-prompt-enhance",
-  "version": "1.1.0",
-  "description": "DeepSeek Harness 提示词增强：在会话输入框内把原始文本一键改写为更清晰、具体、结构完整的提示词，弹窗确认后可编辑、替换或直接发送。",
+  "version": "1.2.0",
+  "description": "DeepSeek Harness 提示词增强：在会话输入框内把原始文本一键改写为更清晰、具体、结构完整的提示词，自动填入输入框并可一键撤回。",
   "keywords": [
     "dsh",
     "dsh-plugin",

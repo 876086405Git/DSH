@@ -38,14 +38,12 @@ window.__ModuleLoader__.load({
       '.__dpe_btn[data-on="1"]{color:var(--dsw-alias-state-business-primary,#6c8cff);background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b6bfb) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b6bfb) 22%,transparent)}',
       '.__dpe_btn[data-on="1"]:hover:not(:disabled){background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b6bfb) 16%,transparent)}',
       '.__dpe_btn:disabled{opacity:.38;cursor:default}',
-      '.__dpe_dots{display:inline-flex;align-items:center;justify-content:center;gap:3.5px;height:16px;width:auto}',
-      '.__dpe_dots i{display:block;width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.35;animation:__dpe_dot 1.25s cubic-bezier(.4,0,.2,1) infinite;will-change:transform,opacity}',
-      '.__dpe_dots i:nth-child(2){animation-delay:.17s}',
-      '.__dpe_dots i:nth-child(3){animation-delay:.34s}',
-      '@keyframes __dpe_dot{0%,100%{opacity:.32;transform:translateY(0)}28%{opacity:1;transform:translateY(-1.5px)}55%{opacity:.5;transform:translateY(0)}}',
-      '@media (prefers-reduced-motion: reduce){.__dpe_dots i{animation:none;opacity:.75;transform:none}.__dpe_btn[data-state="busy"]{animation:none}}',
-      '.__dpe_btn[data-state="busy"]{animation:__dpe_glow 2.4s ease-in-out infinite}',
-      '@keyframes __dpe_glow{0%,100%{box-shadow:0 0 0 0 rgba(108,140,255,0)}50%{box-shadow:0 0 12px 0 rgba(108,140,255,.16)}}',
+      /* 生成中采用无边框 + 透明背景：去掉外框线、焦点光圈和所有背景填充。 */
+      '.__dpe_btn[data-state="busy"]{background:transparent;border-color:transparent;box-shadow:none}',
+      '.__dpe_btn[data-state="busy"]:hover:not(:disabled),.__dpe_btn[data-state="busy"]:active:not(:disabled){background:transparent}',
+      '.__dpe_sparkle{transform-origin:50% 50%;animation:__dpe_flicker 1.6s ease-in-out infinite;will-change:opacity,filter}',
+      '@keyframes __dpe_flicker{0%,100%{opacity:.3;filter:brightness(.78)}50%{opacity:1;filter:brightness(1.3)}}',
+      '@media (prefers-reduced-motion: reduce){.__dpe_sparkle{animation:none;opacity:1;filter:none}}',
       '.__dpe_undoIcon{display:inline-flex;animation:__dpe_undoIn .18s ease-out}',
       '@keyframes __dpe_undoIn{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}',
       '.__dpe_toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%);z-index:2147483000;max-width:min(560px,calc(100vw - 48px));padding:10px 14px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.14));background:var(--dsw-alias-bg-layer-2,#1c1d22);color:var(--dsw-alias-label-primary,#ececec);font-size:12.5px;line-height:1.5;box-shadow:0 12px 40px rgba(0,0,0,.45);animation:__dpe_toastIn .16s ease-out}',
@@ -63,11 +61,11 @@ window.__ModuleLoader__.load({
     }
 
     /* ── 图标 ────────────────────────────────────────────────────────────── */
-    function iconSparkles(size) {
+    function iconSparkles(size, className) {
       return h('svg', {
         width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
         stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round',
-        'aria-hidden': 'true', focusable: 'false',
+        'aria-hidden': 'true', focusable: 'false', className: className,
       },
         h('path', { d: 'M10 3.2 11.55 7.4 15.75 8.95 11.55 10.5 10 14.7 8.45 10.5 4.25 8.95 8.45 7.4Z' }),
         h('path', { d: 'M17.5 13.6 18.45 16 20.85 16.95 18.45 17.9 17.5 20.3 16.55 17.9 14.15 16.95 16.55 16Z' }),
@@ -83,12 +81,6 @@ window.__ModuleLoader__.load({
       },
         h('path', { d: 'M9 14 4 9l5-5' }),
         h('path', { d: 'M4 9h10.5a5.5 5.5 0 0 1 0 11H12' }),
-      )
-    }
-
-    function iconDots() {
-      return h('span', { className: '__dpe_dots', 'aria-hidden': 'true' },
-        h('i', null), h('i', null), h('i', null),
       )
     }
 
@@ -111,12 +103,93 @@ window.__ModuleLoader__.load({
       return ReactDOM.createPortal(props.children, ref.current)
     }
 
+    /* ── 语义草稿：保留文件/文件夹/会话引用芯片 ──────────────────────────── */
+    var REFERENCE_APPEARANCES = { session: 1, file: 1, folder: 1 }
+
+    /** 复制一条引用投影，丢掉 occurrenceId 等编辑器内部字段；不合法返回 null。 */
+    function copyReference(reference) {
+      if (!reference || typeof reference !== 'object') return null
+      if (typeof reference.source !== 'string' || reference.source === '') return null
+      if (typeof reference.ref !== 'string') return null
+      if (typeof reference.label !== 'string') return null
+      if (typeof reference.clipboardText !== 'string' || reference.clipboardText === '') return null
+      if (typeof reference.offset !== 'number' || typeof reference.length !== 'number') return null
+      if (reference.length !== reference.clipboardText.length) return null
+      var copy = {
+        source: reference.source,
+        ref: reference.ref,
+        offset: reference.offset,
+        length: reference.length,
+        label: reference.label,
+        clipboardText: reference.clipboardText,
+      }
+      if (typeof reference.appearance === 'string' && REFERENCE_APPEARANCES[reference.appearance]) {
+        copy.appearance = reference.appearance
+      }
+      if (reference.invalid === true) copy.invalid = true
+      return copy
+    }
+
+    /** 当前草稿里仍然对得上位置的引用（按 offset 排序）。 */
+    function collectReferences(text, occurrences) {
+      var list = []
+      if (typeof text !== 'string' || !Array.isArray(occurrences)) return list
+      for (var i = 0; i < occurrences.length; i += 1) {
+        var copy = copyReference(occurrences[i])
+        if (!copy) continue
+        if (text.slice(copy.offset, copy.offset + copy.length) !== copy.clipboardText) continue
+        list.push(copy)
+      }
+      list.sort(function (a, b) { return a.offset - b.offset })
+      return list
+    }
+
+    /** 增强前的草稿快照：没有引用就是普通字符串，有引用才传宿主的结构化草稿。 */
+    function buildOriginalDraft(text, occurrences) {
+      var value = typeof text === 'string' ? text : String(text == null ? '' : text)
+      var references = collectReferences(value, occurrences)
+      if (references.length === 0) return value
+      return { text: value, references: references }
+    }
+
+    /** 把原引用文本按顺序映射到增强结果里；找不到的引用降级为纯文本。 */
+    function mapReferencesToText(text, occurrences) {
+      var mapped = []
+      if (typeof text !== 'string' || !Array.isArray(occurrences)) return mapped
+      var candidates = []
+      for (var i = 0; i < occurrences.length; i += 1) {
+        var copy = copyReference(occurrences[i])
+        if (copy) candidates.push(copy)
+      }
+      candidates.sort(function (a, b) { return a.offset - b.offset })
+      var cursor = 0
+      for (var j = 0; j < candidates.length; j += 1) {
+        var reference = candidates[j]
+        var at = text.indexOf(reference.clipboardText, cursor)
+        if (at < 0) continue
+        reference.offset = at
+        reference.length = reference.clipboardText.length
+        mapped.push(reference)
+        cursor = at + reference.length
+      }
+      return mapped
+    }
+
+    /** 增强后的草稿值：能映射到引用就传结构化草稿，否则退回纯字符串。 */
+    function buildEnhancedDraft(text, occurrences) {
+      var value = typeof text === 'string' ? text : String(text == null ? '' : text)
+      var references = mapReferencesToText(value, occurrences)
+      if (references.length === 0) return value
+      return { text: value, references: references }
+    }
+
     /* ── 输入框按钮 ──────────────────────────────────────────────────────── */
     function PromptEnhanceButton(props) {
       var useInput = props.useInput
       var inputActions = props.inputActions
       var input = typeof useInput === 'function' ? useInput(function (state) { return state }) : undefined
       var draft = input && typeof input.draft === 'string' ? input.draft : ''
+      var occurrences = input && Array.isArray(input.occurrences) ? input.occurrences : []
       var phase = input && typeof input.phase === 'string' ? input.phase : undefined
       var locked = phase !== undefined && phase !== 'plain'
       var [busy, setBusy] = useState(false)
@@ -171,18 +244,28 @@ window.__ModuleLoader__.load({
         if (mountedRef.current) setBusy(false)
       }
 
-      function writeDraft(text) {
+      /** 优先写结构化草稿（保留引用芯片），宿主拒绝时退回纯文本。 */
+      function writeDraft(value, fallbackText) {
         if (!inputActions || typeof inputActions.setDraft !== 'function') return false
-        try {
-          inputActions.setDraft(text)
-          return true
-        } catch (error) {
-          showToast('写入输入框失败：' + (error && error.message ? error.message : '未知错误'), 'error')
-          return false
+        var candidates = [value]
+        if (value !== null && typeof value === 'object') candidates.push(fallbackText)
+        var lastError = null
+        for (var i = 0; i < candidates.length; i += 1) {
+          var candidate = candidates[i]
+          if (typeof candidate !== 'string' && (candidate === null || typeof candidate !== 'object')) continue
+          try {
+            inputActions.setDraft(candidate)
+            return true
+          } catch (error) {
+            lastError = error
+          }
         }
+        showToast('写入输入框失败：' + (lastError && lastError.message ? lastError.message : '未知错误'), 'error')
+        return false
       }
 
       function requestEnhancement(text) {
+        var originalDraft = buildOriginalDraft(text, occurrences)
         var seq = ++requestSeq.current
         if (controllerRef.current) {
           try { controllerRef.current.abort() } catch (err) { /* noop */ }
@@ -242,9 +325,15 @@ window.__ModuleLoader__.load({
               showToast('原文已经足够清晰，模型没有做实质改动')
               return
             }
-            if (!writeDraft(enhanced)) return
-            setUndo({ original: text, enhanced: enhanced })
-            showToast('已自动填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文')
+            var enhancedDraft = buildEnhancedDraft(enhanced, occurrences)
+            if (!writeDraft(enhancedDraft, enhanced)) return
+            setUndo({ original: originalDraft, originalText: text, enhanced: enhanced })
+            var keptRefs = enhancedDraft && typeof enhancedDraft === 'object' && Array.isArray(enhancedDraft.references)
+              ? enhancedDraft.references.length
+              : 0
+            showToast(keptRefs > 0
+              ? '已自动填入增强结果 · 保留 ' + keptRefs + ' 个引用；点 ↺ 恢复原文'
+              : '已自动填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文')
           })
           .catch(function (error) {
             if (seq !== requestSeq.current || !mountedRef.current) return
@@ -262,7 +351,7 @@ window.__ModuleLoader__.load({
         if (!undo) return
         var record = undo
         setUndo(null)
-        if (writeDraft(record.original)) showToast('已恢复优化前的内容')
+        if (writeDraft(record.original, record.originalText)) showToast('已恢复优化前的内容')
       }
 
       var undoActive = !!undo && !busy && draft === undo.enhanced
@@ -304,7 +393,7 @@ window.__ModuleLoader__.load({
           if (event && typeof event.preventDefault === 'function') event.preventDefault()
         },
         onClick: onTrigger,
-      }, busy ? iconDots() : undoActive ? iconUndo(16) : iconSparkles(16))
+      }, busy ? iconSparkles(16, '__dpe_sparkle') : undoActive ? iconUndo(16) : iconSparkles(16))
 
       return h(React.Fragment, null,
         h('span', { className: '__dpe_root', 'data-plugin': 'dsh-prompt-enhance' }, button),
@@ -334,6 +423,14 @@ window.__ModuleLoader__.load({
 
     exports.apply = apply
     exports.inject = inject
+    /* 仅测试用：Node 侧从 bundle 里取出纯函数，验证引用映射。 */
+    exports.__draftReferences = {
+      copyReference: copyReference,
+      collectReferences: collectReferences,
+      buildOriginalDraft: buildOriginalDraft,
+      mapReferencesToText: mapReferencesToText,
+      buildEnhancedDraft: buildEnhancedDraft,
+    }
     return module.exports
   },
 });

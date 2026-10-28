@@ -31,7 +31,7 @@ cd plugins/dsh-prompt-enhance && npm pack
 dsh plugin --profile desktop add link:/path/to/plugins/dsh-prompt-enhance
 
 # 从打包产物（pnpm -r pack 的 tgz 输出在仓库根目录，产物不进版本库）
-dsh plugin --profile desktop add ./dsh-prompt-enhance-1.1.0.tgz
+dsh plugin --profile desktop add ./dsh-prompt-enhance-1.2.0.tgz
 ```
 
 改完插件需要重启 DSH 才生效。

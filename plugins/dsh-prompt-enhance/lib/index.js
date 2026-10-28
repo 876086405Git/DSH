@@ -35,7 +35,7 @@ const MAX_OUTPUT_TOKENS = 8192
 const MAX_CONCURRENT = 3
 
 /** 插件版本：读自己的 package.json；读不到就退回占位符。 */
-let PLUGIN_VERSION = '1.0.0'
+let PLUGIN_VERSION = '0.0.0-unknown'
 try {
   const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
@@ -72,7 +72,7 @@ function buildUserMessage(text, marker) {
   ].join('\n')
 }
 
-/** 清理模型输出：去掉整段代码围栏与常见的“增强后的提示词：”前缀。 */
+/** 清理模型输出：去掉整段代码围栏与常见的“以下是增强后的提示词：”前言。 */
 function sanitizeOutput(raw, original) {
   let out = String(raw == null ? '' : raw)
   out = out.replace(/^\uFEFF/, '').trim()
@@ -85,8 +85,15 @@ function sanitizeOutput(raw, original) {
   const tildes = out.match(tildeRe)
   if (tildes) out = tildes[1].trim()
 
+  /* 中文前言：好的/当然可以 + 以下是/这是 + 增强后/优化后/改写后 + 的 + 提示词： */
   out = out.replace(
-    /^(增强后的提示词|优化后的提示词|改写后的提示词|增强提示词|优化提示词|提示词|Enhanced prompt|Rewritten prompt|Improved prompt)\s*[:：]\s*/i,
+    /^(?:(?:好的|当然可以|没问题|可以)[，,。.!！]?\s*)?(?:(?:以下是|这是|下面是|这里是)(?:我为你|为你|给你的)?\s*)?(?:(?:增强后|优化后|改写后|增强|优化|改写)(?:的)?\s*)?(?:提示词|prompt)\s*[:：]\s*/i,
+    '',
+  ).trim()
+
+  /* 英文前言：Sure, here's the enhanced prompt: */
+  out = out.replace(
+    /^(?:(?:sure|certainly|of course)[,.!]?\s*)?here(?:'s| is| are)\s+(?:the\s+|your\s+)?(?:enhanced|rewritten|improved|optimized)\s+prompt\s*[:：]\s*/i,
     '',
   ).trim()
 
@@ -150,10 +157,12 @@ async function runModel(ctx, route, text, signal) {
   const messages = [
     { role: 'user', content: [{ type: 'text', text: buildUserMessage(text, marker) }] },
   ]
-  const maxTokens = Math.min(MAX_OUTPUT_TOKENS, Math.max(2048, Math.ceil(text.length * 1.6) + 512))
+  /* 规则允许改写到原文 2 倍，按 2.2 倍留出余量；到顶仍不够时由 finish=max-tokens 明确报错。 */
+  const maxTokens = Math.min(MAX_OUTPUT_TOKENS, Math.max(2048, Math.ceil(text.length * 2.2) + 512))
 
   let output = ''
   let finishKind = 'stop'
+  let sawFinish = false
   const stream = ctx.llm.stream({
     provider: route.provider,
     model: route.model,
@@ -170,14 +179,37 @@ async function runModel(ctx, route, text, signal) {
       continue
     }
     if (chunk.type === 'finish') {
-      finishKind = typeof chunk.kind === 'string' ? chunk.kind : 'stop'
+      sawFinish = true
+      /* 宿主协议：finish 块是 { type, reason: { kind, failure? } }；
+       * 兼容某些中间件摊平的 { type, kind, failure } 旧形状。 */
+      const reason = chunk.reason !== null && typeof chunk.reason === 'object' ? chunk.reason : chunk
+      finishKind = typeof reason.kind === 'string' ? reason.kind : 'stop'
       if (finishKind === 'error' || finishKind === 'aborted') {
-        const failure = chunk.failure || {}
+        const failure = (reason.failure && typeof reason.failure === 'object' ? reason.failure : chunk.failure) || {}
         const error = new Error(String(failure.message || (finishKind === 'aborted' ? '模型请求已取消' : '模型请求失败')))
         error.code = String(failure.code || (finishKind === 'aborted' ? 'ABORTED' : 'LLM_ERROR'))
         throw error
       }
     }
+  }
+
+  /* 协议保证每个流都以 finish 收尾；没有收尾说明流被意外掐断，半截内容同样不能填。 */
+  if (!sawFinish) {
+    const error = new Error('模型流意外中断，结果不完整；请重试')
+    error.code = 'STREAM_CLOSED'
+    throw error
+  }
+
+  /* 输出达到上限时必须报错：半截提示词一旦自动填入，用户会当成完整结果发出去。 */
+  if (finishKind === 'max-tokens') {
+    const error = new Error('模型输出达到长度上限，结果不完整；请缩短输入后重试')
+    error.code = 'OUTPUT_TRUNCATED'
+    throw error
+  }
+  if (finishKind !== 'stop') {
+    const error = new Error('模型提前结束（' + finishKind + '），本次结果不完整，未填入')
+    error.code = 'UNEXPECTED_FINISH'
+    throw error
   }
 
   return { output, finishKind }
