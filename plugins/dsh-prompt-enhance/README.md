@@ -51,7 +51,7 @@
 ### 方式一：dsh 插件命令（推荐）
 
 ```bash
-dsh plugin --profile desktop add link:F:/开发/dsh-prompt-enhance
+dsh plugin --profile desktop add link:F:/开发/dsh-prompt-enhance/plugins/dsh-prompt-enhance
 ```
 
 命令会把依赖写进 profile、并把声明了 `dsh.bundle` 的包自动并入 `dsh.profile.bundles`。
@@ -64,7 +64,7 @@ dsh plugin --profile desktop add link:F:/开发/dsh-prompt-enhance
 1. 在 profile 的 `node_modules` 下建立目录联接：
 
    ```cmd
-   mklink /J "%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-prompt-enhance" "F:\开发\dsh-prompt-enhance"
+   mklink /J "%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-prompt-enhance" "F:\开发\dsh-prompt-enhance\plugins\dsh-prompt-enhance"
    ```
 
 2. 在 `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml` 末尾追加：

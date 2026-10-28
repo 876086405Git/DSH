@@ -20,7 +20,7 @@ plugins/
 每个插件目录是独立的 npm 包（`main` + `dsh.bundle.patch`），无构建步骤：
 
 ```bash
-pnpm -r pack            # 在各自目录生成 <name>-<version>.tgz
+pnpm -r pack            # 在仓库根目录生成 <name>-<version>.tgz
 cd plugins/dsh-prompt-enhance && npm pack
 ```
 
@@ -30,7 +30,7 @@ cd plugins/dsh-prompt-enhance && npm pack
 # 从本地源码链接（开发态）
 dsh plugin --profile desktop add link:/path/to/plugins/dsh-prompt-enhance
 
-# 从打包产物
+# 从打包产物（pnpm -r pack 的 tgz 输出在仓库根目录，产物不进版本库）
 dsh plugin --profile desktop add ./dsh-prompt-enhance-1.1.0.tgz
 ```
 
