@@ -35,3 +35,7 @@ dsh plugin --profile desktop add ./dsh-prompt-enhance-1.1.0.tgz
 ```
 
 改完插件需要重启 DSH 才生效。
+
+## 开发方式
+
+本仓库插件由 **DeepSeek Harness（DSH）内的 AI 助手按需求实现**，人工负责需求定义、验收与迭代决策；代码、文档与截图由 AI 生成后经人工确认。git 历史自 2026-10-28 建立，此前 10-23 至 10-24 的开发过程未入库；`v1.1.0` 标签对应首个完整可用版本。
