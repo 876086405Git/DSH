@@ -1,0 +1,21 @@
+# DSH体检中心（dsh-checkup）
+# 作为 profile 的 bundle 被加载：条目 id = checkup，插件自身在 lib/index.js。
+- insert:
+    - id: checkup
+      name: dsh-checkup
+      config:
+        # 安装拦截总开关：false 时只记录、不阻断。
+        preflightEnabled: true
+        # 预读 package.json 的注册表顺序（本机默认走华为/淘宝镜像）。
+        registries:
+          - https://registry.npmmirror.com
+          - https://registry.npmjs.org
+        # 单个源的单次读取上限（ms）与重试次数。
+        lookupTimeoutMs: 8000
+        lookupAttempts: 2
+        # 命中即拒绝安装的「已知会拖垮桌面端」的包或包@版本。
+        knownBad: []
+        # 安全性：被判定为恶意 / 病毒的依赖包名（命中即阻止安装）。
+        maliciousPackages: []
+        # 预检有 warn 时也拒绝（默认 false：warn 只提示）。
+        blockOnWarn: false

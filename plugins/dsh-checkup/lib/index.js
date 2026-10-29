@@ -1,0 +1,1105 @@
+// Install Guard — host 入口
+//
+// 目标：在「安装插件 / skills / MCP」这一步之前做一次兼容性预检，不兼容就拦下，
+// 把「装完才发现桌面端起不来」变成「装之前就知道为什么」。
+//
+// 拦截点：宿主 pluginManager.installBundle（插件市场的所有安装都走它）。
+// 检查数据：npm registry 的 package.json（engines / peerDependencies / dsh 字段）+ 本机版本与已装包。
+// 面板数据：GET /api-checkup/state，手动预检：POST /api-checkup/check。
+//
+// 设计约束（都是本机踩过的坑）：
+//  · 插件自身不能让宿主 boot 失败 —— 所有可选服务（pluginManager / webServer）都用 ctx.inject 延迟拿，
+//    缺服务时只降级，不抛错。
+//  · 预检失败必须抛错（阻止安装），不能只打日志；错误里带完整明细供客户端展示。
+//  · 包元数据只用 HTTP 读，不依赖 pnpm 可执行文件，避免换机器就失效。
+
+import { homedir, platform } from 'node:os';
+import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { checkCandidate, summarize, RULE_IDS, CATEGORIES, declaredDshRange } from './rules.js';
+import { scanSourceText } from './security.js';
+import { checkSkill } from './skill.js';
+import { checkMcp, extractMcpTarget } from './mcp.js';
+import { auditEnvironment } from './audit.js';
+import { satisfies, parseVersion } from './version.js';
+
+export const name = 'checkup';
+
+// 不声明 inject：宿主里 pluginManager / webServer 都是可选服务，缺了也要能加载。
+export const inject = [];
+
+const HOME = process.env.DSH_HOME || join(homedir(), '.dsh');
+const STATE_DIR = join(HOME, 'checkup');
+const HISTORY_FILE = join(STATE_DIR, 'history.json');
+const SKILLS_ROOT = join(HOME, 'skills');
+const PROFILE_PATCH = join(HOME, 'profiles', 'desktop', 'cordis.patch.yml');
+const HISTORY_LIMIT = 50;
+
+// ── 环境探测（带缓存：一次会话内版本与包列表不会变）────────────────────────
+
+function resourcesAppDir() {
+  // 桌面端目录结构：<app>/resources/app/dsh、<app>/resources/app/lib
+  // DSH_APP_DIR 供自检/命令行场景显式指定（宿主内不需要）。
+  const candidates = [];
+  if (process.env.DSH_APP_DIR) candidates.push(resolve(process.env.DSH_APP_DIR));
+  const execPath = process.execPath || '';
+  if (execPath) candidates.push(resolve(execPath, '..', 'resources', 'app'));
+  if (process.resourcesPath) candidates.push(join(process.resourcesPath, 'app'));
+  return candidates.find((dir) => existsSync(join(dir, 'package.json')));
+}
+
+async function readJson(file) {
+  try {
+    return JSON.parse(await readFile(file, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+let cachedEnv;
+
+export async function probeEnvironment() {
+  if (cachedEnv) return cachedEnv;
+
+  const appDir = resourcesAppDir();
+  const appPkg = appDir ? await readJson(join(appDir, 'package.json')) : undefined;
+
+  // DSH 版本：桌面端 app/package.json 是权威来源，其次 profile 依赖树。
+  let dshVersion = appPkg?.version;
+  if (!dshVersion) {
+    const profilePkg = await readJson(join(HOME, 'profiles', 'desktop', 'package.json'));
+    dshVersion = profilePkg?.dependencies?.['@deepseek-ai/dsh'];
+  }
+
+  // 客户端注入目标：宿主 dsh/node_modules/@deepseek-ai 下真实存在的包。
+  const clientPackages = new Set();
+  const hostModules = appDir ? join(appDir, 'dsh', 'node_modules', '@deepseek-ai') : undefined;
+  if (hostModules && existsSync(hostModules)) {
+    for (const entry of await readdir(hostModules)) clientPackages.add(`@deepseek-ai/${entry}`);
+  }
+
+  // profile 与宿主内置版本（peer 检查用）：宿主 dsh/node_modules 里的包才是运行时真实提供的版本。
+  const installedVersions = {};
+  const profileModules = join(HOME, 'profiles', 'desktop', 'node_modules');
+  if (existsSync(profileModules)) {
+    for (const scoped of await readdir(profileModules, { withFileTypes: true }).catch(() => [])) {
+      if (scoped.isDirectory() && scoped.name.startsWith('@')) {
+        const scopeDir = join(profileModules, scoped.name);
+        for (const pkgEntry of await readdir(scopeDir, { withFileTypes: true }).catch(() => [])) {
+          if (!pkgEntry.isDirectory()) continue;
+          const pj = await readJson(join(scopeDir, pkgEntry.name, 'package.json'));
+          if (pj?.version) installedVersions[`${scoped.name}/${pkgEntry.name}`] = pj.version;
+        }
+      } else if (scoped.isDirectory()) {
+        const pj = await readJson(join(profileModules, scoped.name, 'package.json'));
+        if (pj?.version) installedVersions[scoped.name] = pj.version;
+      }
+    }
+  }
+  // 宿主内置的 @deepseek-ai/* 覆盖 profile 层（宿主实际提供的就是这一套）。
+  if (hostModules && existsSync(hostModules)) {
+    for (const entry of await readdir(hostModules, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory()) continue;
+      const pj = await readJson(join(hostModules, entry.name, 'package.json'));
+      if (pj?.version) installedVersions[`@deepseek-ai/${entry.name}`] = pj.version;
+    }
+  }
+
+  const profilePkg = await readJson(join(HOME, 'profiles', 'desktop', 'package.json'));
+
+  cachedEnv = {
+    dshVersion: dshVersion || '0.0.0',
+    dshVersionKnown: Boolean(dshVersion),
+    nodeVersion: process.versions.node || '0.0.0',
+    availableClientPackages: [...clientPackages],
+    installedVersions,
+    profileBundles: Array.isArray(profilePkg?.dsh?.profile?.bundles) ? profilePkg.dsh.profile.bundles : [],
+    bundleSoftLimit: 40,
+    knownBad: [],
+  };
+  return cachedEnv;
+}
+
+// ── 读取候选包的 manifest（HTTP，不依赖 pnpm）────────────────────────────────
+
+const DEFAULT_REGISTRIES = [
+  'https://registry.npmmirror.com',
+  'https://registry.npmjs.org',
+];
+
+export function parseInstallSpec(spec) {
+  if (typeof spec !== 'string' || !spec.trim()) return { kind: 'invalid' };
+  const text = spec.trim();
+  // file: 前缀与 Windows（反斜杠/正斜杠两种）绝对路径都按本地目录处理。
+  if (text.startsWith('file:')) return { kind: 'path', path: text.slice(5) };
+  if (/^[/.]|^[A-Za-z]:[\\/]|^\\\\/.test(text)) return { kind: 'path', path: text };
+  if (/^(?:git\+|git@|github:|gitlab:|bitbucket:)/i.test(text) || /^https?:\/\/.+\.(?:tgz|tar\.gz)$/i.test(text)) {
+    return { kind: 'remote' };
+  }
+  const at = text.lastIndexOf('@');
+  const hasRange = at > 0;
+  const pkgName = hasRange ? text.slice(0, at) : text;
+  const range = hasRange ? text.slice(at + 1) : 'latest';
+  return { kind: 'registry', name: pkgName, range: range || 'latest' };
+}
+
+async function fetchJson(url, timeoutMs, attempts = 2) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
+      if (!res.ok) return undefined;
+      return await res.json();
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  if (lastError) {
+    // 只记录，交由上层决定是否降级为「无法预读」
+    console.warn('[checkup] registry lookup failed:', url, lastError?.cause?.code || lastError?.name || String(lastError));
+  }
+  return undefined;
+}
+
+export async function resolveManifest(spec, options = {}) {
+  const parsed = parseInstallSpec(spec);
+
+  if (parsed.kind === 'invalid') return { parsed, manifest: undefined, reason: 'invalid-spec' };
+  if (parsed.kind === 'path') {
+    const pj = await readJson(join(parsed.path, 'package.json'));
+    return { parsed, manifest: pj, reason: pj ? undefined : 'path-has-no-manifest' };
+  }
+  if (parsed.kind === 'remote') return { parsed, manifest: undefined, reason: 'remote-spec-needs-fetch' };
+
+  const registries = options.registries?.length ? options.registries : DEFAULT_REGISTRIES;
+  const attempts = Number.isFinite(options.attempts) ? options.attempts : 2;
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 8000;
+  let sawManifest = false;
+
+  for (const registry of registries) {
+    const doc = await fetchJson(
+      `${registry}/${encodeURIComponent(parsed.name).replace('%2F', '/')}`,
+      timeoutMs,
+      attempts,
+    );
+    if (!doc) continue;
+    sawManifest = true;
+    const versions = doc.versions && typeof doc.versions === 'object' ? doc.versions : {};
+    const candidates = Object.keys(versions);
+    let picked;
+    if (parsed.range === 'latest' || parsed.range === '*' || parsed.range === '') {
+      picked = doc['dist-tags']?.latest;
+    } else {
+      picked = candidates
+        .filter((version) => satisfies(version, parsed.range))
+        .sort((a, b) => {
+          const va = parseVersion(a);
+          const vb = parseVersion(b);
+          if (!va || !vb) return 0;
+          return va.major - vb.major || va.minor - vb.minor || va.patch - vb.patch;
+        })
+        .pop();
+    }
+    if (picked && versions[picked]) {
+      return { parsed, manifest: { ...versions[picked], _registry: registry }, reason: undefined };
+    }
+    if (picked) return { parsed, manifest: undefined, reason: 'version-not-published' };
+  }
+  return { parsed, manifest: undefined, reason: sawManifest ? 'version-not-published' : 'not-found' };
+}
+
+// ── 预检编排 ────────────────────────────────────────────────────────────────
+
+// ── 源码扫描（只对本地目录安装生效）────────────────────────────────────────
+
+const SOURCE_EXT = /\.(?:js|mjs|cjs|ts|tsx|jsx|sh|ps1|bat|cmd)$/i;
+const SOURCE_MAX_FILES = 400;
+const SOURCE_MAX_BYTES = 512 * 1024;
+const SOURCE_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.cache']);
+
+/// 读取候选包目录里的脚本文件，交给纯函数扫描器判定隐私/恶意特征。
+export async function scanSourceDir(rootDir) {
+  const hits = [];
+  let scanned = 0;
+
+  async function walk(dir, depth) {
+    if (scanned >= SOURCE_MAX_FILES || depth > 6) return;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (scanned >= SOURCE_MAX_FILES) break;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (SOURCE_SKIP_DIRS.has(entry.name)) continue;
+        await walk(full, depth + 1);
+        continue;
+      }
+      if (!SOURCE_EXT.test(entry.name)) continue;
+      let text;
+      try {
+        const info = await stat(full);
+        if (info.size > SOURCE_MAX_BYTES) continue;
+        text = await readFile(full, 'utf8');
+      } catch {
+        continue;
+      }
+      scanned += 1;
+      const rel = full.slice(rootDir.length + 1).replace(/\\/g, '/');
+      hits.push(...scanSourceText(text, rel));
+    }
+  }
+
+  await walk(rootDir, 0);
+
+  const seen = new Set();
+  return hits.filter((hit) => {
+    const key = `${hit.id}:${hit.file}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// ── Skill / MCP 检查（没有安装 API，只能检查目录与配置）──────────────────────
+
+/// 解析可执行文件：绝对/相对路径直接判存在，裸命令按 PATH 找（Windows 补扩展名）。
+export function resolveCommandPath(command) {
+  if (typeof command !== 'string' || !command.trim()) return { path: '', exists: false };
+  const text = command.trim();
+  if (/[\\/]/.test(text)) return { path: text, exists: existsSync(text) };
+  const exts = platform() === 'win32' ? ['', '.exe', '.cmd', '.bat'] : [''];
+  const dirs = String(process.env.PATH || '').split(platform() === 'win32' ? ';' : ':');
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = join(dir, text + ext);
+      if (existsSync(candidate)) return { path: candidate, exists: true };
+    }
+  }
+  return { path: text, exists: false };
+}
+
+/// 读一个 skill 目录（文本文件上限 256KB，最多 500 个）。
+export async function readSkillFiles(rootDir) {
+  const files = [];
+  async function walk(dir, depth) {
+    if (depth > 4 || files.length > 500) return;
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full, depth + 1);
+        continue;
+      }
+      const rel = full.slice(rootDir.length + 1).replace(/\\/g, '/');
+      let text;
+      if (/\.(md|txt|json|ya?ml|js|mjs|cjs|py|sh|ps1|bat|cmd)$/i.test(entry.name)) {
+        try {
+          const info = await stat(full);
+          if (info.size <= 256 * 1024) text = await readFile(full, 'utf8');
+        } catch {
+          // 读不到就当没有文本：仍计入文件数
+        }
+      }
+      files.push({ path: rel, text });
+    }
+  }
+  await walk(rootDir, 0);
+  return files;
+}
+
+/// 检查一个 skill 目录（供面板/预检用）。
+export async function checkSkillDir(dirPath) {
+  const files = await readSkillFiles(dirPath);
+  const scriptHits = [];
+  for (const file of files) {
+    if (!file.text) continue;
+    if (!/\.(js|mjs|cjs|py|sh|ps1|bat|cmd)$/i.test(file.path)) continue;
+    scriptHits.push(...scanSourceText(file.text, file.path));
+  }
+  // ??????????? skill ????????? ~/.dsh/skills ????????
+  const selfName = String(dirPath || '').split(/[\\/]/).filter(Boolean).pop();
+  const existingNames = existsSync(SKILLS_ROOT)
+    ? (await readdir(SKILLS_ROOT).catch(() => [])).filter((name) => name !== selfName)
+    : [];
+  return summarize(
+    checkSkill({ dirPath, files, existingNames, scriptHits }),
+  );
+}
+
+/// 从 profile patch 里取出所有 MCP 条目（按行扫描，兼容 insert 嵌套写法）。
+export async function readMcpEntries() {
+  const text = existsSync(PROFILE_PATCH) ? await readFile(PROFILE_PATCH, 'utf8').catch(() => '') : '';
+  const lines = text.split(/\r?\n/);
+  const entries = [];
+  let current = null;
+  for (const line of lines) {
+    const idMatch = /^\s*-\s*id:\s*([\w.@/-]+)\s*$/.exec(line);
+    if (idMatch) {
+      if (current) entries.push(current);
+      current = { id: idMatch[1], lines: [] };
+      continue;
+    }
+    if (current) current.lines.push(line);
+  }
+  if (current) entries.push(current);
+
+  const mcp = [];
+  for (const entry of entries) {
+    const body = entry.lines.join('\n');
+    if (!body.includes('@deepseek-ai/dsh-mcp-client') && !body.includes('dsh-mcp-client')) continue;
+    const transport = (/transport:\s*([\w-]+)/.exec(body) || [])[1] || 'stdio';
+    const serverName = (/serverName:\s*([\w.-]+)/.exec(body) || [])[1];
+    const command = (/command:\s*([^\n]+)/.exec(body) || [])[1];
+    const args = [];
+    const argBlock = /args:\s*\n((?:\s+-\s*[^\n]+\n?)+)/.exec(body);
+    if (argBlock) {
+      for (const m of argBlock[1].matchAll(/-\s*([^\n]+)/g)) args.push(m[1].trim().replace(/^["']|["']$/g, ''));
+    }
+    // env 块里的明文密钥（体检要用）：形如 `API_KEY: sk-xxx` 且不是 ${VAR} 引用
+    const envBlock = /env:\s*\n((?:\s+[A-Za-z0-9_-]+:\s*[^\n]+\n?)+)/.exec(body);
+    let hasPlainSecret = false;
+    if (envBlock) {
+      for (const line of envBlock[1].split(/\r?\n/)) {
+        const m = /^\s+([A-Za-z0-9_-]+):\s*(.+?)\s*$/.exec(line);
+        if (!m) continue;
+        if (!/(?:api[_-]?key|token|secret|password|passwd)/i.test(m[1])) continue;
+        const value = m[2].replace(/^["']|["']$/g, '');
+        if (value.length >= 8 && !/^\$\{/.test(value)) hasPlainSecret = true;
+      }
+    }
+    mcp.push({
+      id: entry.id,
+      hasPlainSecret,
+      config: {
+        transport: transport.trim(),
+        serverName: serverName ? serverName.trim() : undefined,
+        command: command ? command.trim().replace(/^["']|["']$/g, '') : undefined,
+        args,
+      },
+    });
+  }
+  return mcp;
+}
+
+// ── 环境体检：采集已装插件 / skill / MCP 的真实状态 ─────────────────────────
+
+const PROFILE_DIR = join(HOME, 'profiles', 'desktop');
+const PROFILE_PKG = join(PROFILE_DIR, 'package.json');
+const PROFILE_MODULES = join(PROFILE_DIR, 'node_modules');
+
+/// 插件侧快照：bundle 登记、实体、依赖关系、版本兼容。
+export async function collectAuditPlugins() {
+  const pkg = await readJson(PROFILE_PKG);
+  const bundles = Array.isArray(pkg?.dsh?.profile?.bundles) ? pkg.dsh.profile.bundles : [];
+  const counts = new Map();
+  for (const entry of bundles) {
+    if (typeof entry !== 'string') continue;
+    counts.set(entry, (counts.get(entry) || 0) + 1);
+  }
+
+  const manifests = new Map();
+  for (const name of counts.keys()) {
+    const file = join(PROFILE_MODULES, name, 'package.json');
+    if (!existsSync(file)) {
+      manifests.set(name, null);
+      continue;
+    }
+    try {
+      manifests.set(name, JSON.parse(await readFile(file, 'utf8')));
+    } catch {
+      manifests.set(name, null);
+    }
+  }
+
+  const env = await probeEnvironment();
+  const appDir = resourcesAppDir();
+  const appModules = [
+    appDir ? join(appDir, 'node_modules') : '',
+    appDir ? join(appDir, 'dsh', 'node_modules') : '',
+  ].filter(Boolean);
+
+  const items = [];
+  for (const [name, count] of counts) {
+    const manifest = manifests.get(name);
+    // 内置 bundle 不在 profile 的 node_modules 里，由宿主 app 提供，不能算「实体缺失」。
+    const inApp = appModules.some((dir) => existsSync(join(dir, name)));
+    // 谁依赖它：同 profile 内其他插件的 dependencies / peerDependencies
+    const requiredBy = [];
+    for (const [other, otherManifest] of manifests) {
+      if (other === name || !otherManifest) continue;
+      const deps = { ...(otherManifest.dependencies || {}), ...(otherManifest.peerDependencies || {}) };
+      if (deps[name]) requiredBy.push(other);
+    }
+    const range = manifest ? declaredDshRange(manifest) : undefined;
+    const patchRel = manifest?.dsh?.bundle?.patch;
+    items.push({
+      name,
+      version: manifest?.version || '',
+      inBundles: true,
+      inNodeModules: Boolean(manifest) || inApp,
+      builtin: inApp && !manifest,
+      duplicateBundles: count,
+      declaresClient: Boolean(manifest?.dsh?.client),
+      missingPatch: Boolean(patchRel) && !existsSync(join(PROFILE_MODULES, name, patchRel)),
+      dshRange: range,
+      incompatibleDsh: Boolean(range && env.dshVersion && !satisfies(env.dshVersion, range)),
+      prerelease: /-(?:alpha|beta|rc|dev|canary|next)/i.test(manifest?.version || ''),
+      requiredBy,
+    });
+  }
+  return items;
+}
+
+/// skill 侧快照：目录内容、SKILL.md、脚本风险。
+export async function collectAuditSkills() {
+  if (!existsSync(SKILLS_ROOT)) return [];
+  const entries = await readdir(SKILLS_ROOT, { withFileTypes: true }).catch(() => []);
+  const items = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(SKILLS_ROOT, entry.name);
+    const files = await readSkillFiles(dir);
+    const hasSkillMd = files.some((file) => /(?:^|\/)SKILL\.md$/i.test(file.path));
+    let hasDangerousScript = false;
+    for (const file of files) {
+      if (!file.text) continue;
+      if (!/\.(js|mjs|cjs|py|sh|ps1|bat|cmd)$/i.test(file.path)) continue;
+      const hits = scanSourceText(file.text, file.path);
+      if (hits.some((hit) => hit.level === 'block')) {
+        hasDangerousScript = true;
+        break;
+      }
+    }
+    items.push({ name: entry.name, path: dir, exists: true, hasSkillMd, fileCount: files.length, hasDangerousScript });
+  }
+  return items;
+}
+
+/// MCP 侧快照：命令可用性、serverName、明文密钥。
+export async function collectAuditMcp() {
+  const entries = await readMcpEntries();
+  const rows = [];
+  for (const entry of entries) {
+    const resolved = resolveCommandPath(entry.config.command);
+    rows.push({
+      id: entry.id,
+      serverName: entry.config.serverName,
+      transport: entry.config.transport,
+      command: entry.config.command,
+      commandExists: entry.config.transport === 'stdio' ? resolved.exists : true,
+      hasPlainSecret: entry.hasPlainSecret === true,
+    });
+  }
+  return rows;
+}
+
+/// 环境体检入口：采集 + 判定 + 汇总。
+export async function runAudit() {
+  const env = await probeEnvironment();
+  const [plugins, skills, mcp] = await Promise.all([collectAuditPlugins(), collectAuditSkills(), collectAuditMcp()]);
+  const duplicateServerNames = mcp
+    .map((row) => row.serverName)
+    .filter((name, index, list) => name && list.indexOf(name) !== index);
+  return auditEnvironment({
+    plugins,
+    skills,
+    mcp,
+    context: { dshVersion: env.dshVersion, duplicateServerNames },
+  });
+}
+
+/// 检查一条 MCP 配置：静态规则 + 若目标是包则复用插件那套 registry 预检。
+export async function checkMcpConfig(config, options = {}) {  const entries = Array.isArray(options.existingServerNames) ? options.existingServerNames : (await readMcpEntries())
+    .map((item) => item.config.serverName)
+    .filter(Boolean);
+  const target = extractMcpTarget(config);
+  const checks = checkMcp(config, {
+    resolvedCommand: resolveCommandPath(config && config.command),
+    existingServerNames: entries.filter((name) => name !== (config && config.serverName)),
+    knownBad: Array.isArray(options.knownBad) ? options.knownBad : [],
+  });
+
+  let packageReport;
+  // 只有 npm 包能在 npm registry 侧预检；python 包由 uv 解析，查 npm 只会得到无意义的 not-found。
+  if (target.kind === 'npm-package') {
+    try {
+      packageReport = await runCheck(target.spec, options);
+    } catch {
+      packageReport = undefined;
+    }
+  }
+
+  return {
+    ...summarize(checks),
+    target,
+    packageReport,
+    at: new Date().toISOString(),
+  };
+}
+
+export async function runCheck(spec, config = {}) {
+  const env = await probeEnvironment();
+  const { parsed, manifest, reason } = await resolveManifest(spec, {
+    registries: config.registries,
+    timeoutMs: config.lookupTimeoutMs,
+    attempts: config.lookupAttempts,
+  });
+
+  // 本地路径安装能拿到源码 → 做隐私/恶意特征扫描；registry 包只扫 manifest。
+  let sourceHits = [];
+  if (parsed && parsed.kind === 'path') {
+    sourceHits = await scanSourceDir(parsed.path);
+  }
+
+  const report = checkCandidate({
+    spec,
+    manifest,
+    sourceHits,
+    env: {
+      ...env,
+      knownBad: Array.isArray(config.knownBad) ? config.knownBad : [],
+      maliciousPackages: Array.isArray(config.maliciousPackages) ? config.maliciousPackages : [],
+      installedNames: Object.keys(env.installedVersions || {}),
+    },
+  });
+
+  if (!manifest) {
+    report.checks.push({
+      id: 'bundle-declared',
+      level: 'warn',
+      title: '无法预读包内容',
+      detail:
+        reason === 'remote-spec-needs-fetch'
+          ? 'git / tarball 形式的安装目标需要下载后才能读取 package.json，本次只做安装后检查。'
+          : reason === 'not-found'
+            ? '所有注册表都没有返回该包，确认包名拼写与镜像可用性。'
+            : '未能读取 package.json（网络或路径问题）。',
+    });
+    report.ok = report.blocked === 0;
+  }
+
+  return {
+    ...report,
+    spec,
+    manifest: manifest
+      ? {
+          name: manifest.name,
+          version: manifest.version,
+          dsh: manifest.dsh,
+          engines: manifest.engines,
+          peerDependencies: manifest.peerDependencies,
+          registry: manifest._registry,
+        }
+      : undefined,
+    at: new Date().toISOString(),
+  };
+}
+
+// ── 历史记录 ────────────────────────────────────────────────────────────────
+
+async function readHistory() {
+  const doc = await readJson(HISTORY_FILE);
+  return Array.isArray(doc?.entries) ? doc.entries : [];
+}
+
+async function recordReport(report) {
+  try {
+    await mkdir(STATE_DIR, { recursive: true });
+    const entries = await readHistory();
+    entries.unshift({
+      at: report.at,
+      spec: report.spec,
+      ok: report.ok,
+      blocked: report.blocked,
+      warned: report.warned,
+      checks: report.checks.map((c) => ({ id: c.id, level: c.level, title: c.title, detail: c.detail })),
+    });
+    await writeFile(HISTORY_FILE, JSON.stringify({ entries: entries.slice(0, HISTORY_LIMIT) }, undefined, 2), {
+      mode: 0o600,
+    });
+  } catch {
+    // 记录失败不影响拦截判定
+  }
+}
+
+/// 拦截错误：客户端拿到 code 后弹窗展示 report。
+/// message 必须自带完整原因 —— 插件市场的失败提示只会展示这一行文本，
+/// 写清楚才能让用户不进日志就知道「为什么没装成」。
+export class ElectronicDogBlocked extends Error {
+  constructor(report) {
+    const blocked = report.checks.filter((c) => c.level === 'block');
+    const lines = blocked.map((c) => {
+      const hint = c.hint ? `（建议：${c.hint}）` : '';
+      return `- ${c.title}：${c.detail ?? ''}${hint}`;
+    });
+    super(`安装被预检拦截（${blocked.length} 项未通过）：\n${lines.join('\n')}`);
+    this.name = 'ElectronicDogBlocked';
+    this.code = 'checkup/blocked';
+    this.report = report;
+  }
+}
+
+// ── HTTP 面板数据 ───────────────────────────────────────────────────────────
+
+function jsonRoute(path, handle) {
+  return {
+    kind: 'exact',
+    path,
+    handler: async (req, res) => {
+      let status = 200;
+      let payload;
+      try {
+        [status, payload] = await handle(req);
+      } catch (error) {
+        status = 500;
+        payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(payload));
+    },
+  };
+}
+
+async function readBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(String(chunk));
+  try {
+    return JSON.parse(chunks.join('') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+// ── 配置读写（持久化到 profile 的 cordis.patch.yml）────────────────────────
+//
+// DSH 的插件配置持久位置就是 profile 的 patch 层（config-editor 写同一个文件）。
+// 这里只改自己这一条目的 config，写成单行 JSON —— YAML 是 JSON 超集，解析无需额外依赖。
+
+const PROFILE_PATCH_FILE = join(HOME, 'profiles', 'desktop', 'cordis.patch.yml');
+
+export function normalizeSettings(input, base) {
+  const source = input && typeof input === 'object' ? input : {};
+  const merged = { ...base };
+
+  if (typeof source.preflightEnabled === 'boolean') merged.preflightEnabled = source.preflightEnabled;
+  if (typeof source.blockOnWarn === 'boolean') merged.blockOnWarn = source.blockOnWarn;
+
+  if (Array.isArray(source.registries)) {
+    const cleaned = [...new Set(source.registries
+      .filter((entry) => typeof entry === 'string')
+      .map((entry) => entry.trim().replace(/\/+$/, ''))
+      .filter((entry) => /^https?:\/\/[^\s]+$/.test(entry)))];
+    if (cleaned.length === 0) throw new Error('至少保留一个 http(s) 注册表地址');
+    merged.registries = cleaned;
+  }
+
+  if (source.lookupTimeoutMs !== undefined) {
+    const value = Number(source.lookupTimeoutMs);
+    if (!Number.isFinite(value) || value < 1000 || value > 60000) throw new Error('超时需在 1000–60000 ms 之间');
+    merged.lookupTimeoutMs = Math.round(value);
+  }
+
+  if (source.lookupAttempts !== undefined) {
+    const value = Number(source.lookupAttempts);
+    if (!Number.isFinite(value) || value < 1 || value > 5) throw new Error('重试次数需在 1–5 之间');
+    merged.lookupAttempts = Math.round(value);
+  }
+
+  if (Array.isArray(source.knownBad)) {
+    merged.knownBad = [...new Set(source.knownBad
+      .filter((entry) => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter(Boolean))];
+  }
+
+  if (Array.isArray(source.maliciousPackages)) {
+    merged.maliciousPackages = [...new Set(source.maliciousPackages
+      .filter((entry) => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter(Boolean))];
+  }
+
+  return merged;
+}
+
+function renderConfigBlock(config) {
+  const ordered = {
+    preflightEnabled: config.preflightEnabled,
+    blockOnWarn: config.blockOnWarn,
+    registries: config.registries,
+    lookupTimeoutMs: config.lookupTimeoutMs,
+    lookupAttempts: config.lookupAttempts,
+    knownBad: config.knownBad,
+  };
+  return `  config: ${JSON.stringify(ordered)}`;
+}
+
+/// 把自己这一条目的 config 写进 profile patch（不存在则追加），返回 updated | appended。
+export async function writeProfileConfig(file, config) {
+  const exists = existsSync(file);
+  const text = exists ? await readFile(file, 'utf8') : '';
+  const lines = text.length > 0 ? text.split('\n') : [];
+
+  const start = lines.findIndex((line) => /^-\s*id:\s*checkup\s*$/.test(line));
+  if (start === -1) {
+    const tail = text.replace(/\s*$/, '');
+    const appended = `${tail}${tail ? '\n' : ''}- id: checkup\n  name: dsh-checkup\n${renderConfigBlock(config)}\n`;
+    await writeFile(file, appended, { mode: 0o600 });
+    return 'appended';
+  }
+
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^-\s/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+
+  const entry = lines.slice(start, end);
+  const nameLine = entry.find((line) => /^\s*name:/.test(line));
+  const rest = [entry[0]];
+  if (nameLine) rest.push(nameLine);
+  rest.push(renderConfigBlock(config));
+
+  const next = [...lines.slice(0, start), ...rest, ...lines.slice(end)].join('\n');
+  await writeFile(file, next.endsWith('\n') ? next : `${next}\n`, { mode: 0o600 });
+  return 'updated';
+}
+
+// ── 插件入口 ────────────────────────────────────────────────────────────────
+
+export function apply(ctx, config) {
+  const settings = {
+    preflightEnabled: config?.preflightEnabled !== false,
+    registries: Array.isArray(config?.registries) && config.registries.length ? [...config.registries] : [...DEFAULT_REGISTRIES],
+    lookupTimeoutMs: Number.isFinite(config?.lookupTimeoutMs) ? config.lookupTimeoutMs : 8000,
+    lookupAttempts: Number.isFinite(config?.lookupAttempts) ? config.lookupAttempts : 2,
+    knownBad: Array.isArray(config?.knownBad) ? [...config.knownBad] : [],
+    // 安全性：命中的依赖包名（如 ["evil-pkg", "@bad/scoped"]）直接判恶意。
+    maliciousPackages: Array.isArray(config?.maliciousPackages) ? [...config.maliciousPackages] : [],
+    blockOnWarn: config?.blockOnWarn === true,
+    // 市场点安装后，面板确认的最长等待时间（超时按拒绝处理）。
+    confirmTimeoutMs: Number.isFinite(config?.confirmTimeoutMs) ? config.confirmTimeoutMs : 180000,
+  };
+
+  const decide = async (spec) => {
+    const report = await runCheck(spec, settings);
+    if (settings.blockOnWarn && report.warned > 0) report.ok = false;
+    report.preflightEnabled = settings.preflightEnabled;
+    await recordReport(report);
+    return report;
+  };
+
+  // 面板自己的安装入口用：绕过拦截器直接调用原方法（检查已在面板里做过）。
+  let invokeInstall = null;
+  // 最近一次「检查通过」的 spec 与时间，安装接口必须命中它才放行，
+  // 防止面板状态过期后拿旧结论去装。
+  let approved = null;
+
+  // 「市场点安装 → 先看检查面板」的核心：把这次安装挂起，等面板确认。
+  // pending 里的每一项都持有原始 installBundle 的 resolve/reject。
+  let pendingSeq = 0;
+  const pending = new Map();
+
+  function createPending(spec, report, run, confirmTimeoutMs) {
+    const id = `p${Date.now()}-${++pendingSeq}`;
+    let timer;
+    const entry = {
+      id,
+      spec,
+      report,
+      createdAt: Date.now(),
+      // 面板确认：真正执行安装
+      confirm: () => {
+        clearTimeout(timer);
+        if (!pending.has(id)) return false;
+        pending.delete(id);
+        Promise.resolve()
+          .then(() => run())
+          .then(entry.resolve, entry.reject);
+        return true;
+      },
+      // 面板放弃 / 超时：让市场的安装请求以明确原因失败
+      cancel: () => {
+        clearTimeout(timer);
+        if (!pending.has(id)) return false;
+        pending.delete(id);
+        entry.reject(new ElectronicDogBlocked(report));
+        return true;
+      },
+      resolve: null,
+      reject: null,
+    };
+    return new Promise((resolve, reject) => {
+      entry.resolve = resolve;
+      entry.reject = reject;
+      pending.set(id, entry);
+      timer = setTimeout(() => {
+        if (!pending.has(id)) return;
+        pending.delete(id);
+        reject(new ElectronicDogBlocked(report));
+      }, Number.isFinite(confirmTimeoutMs) ? confirmTimeoutMs : 180000);
+    });
+  }
+
+  // 1) 拦截安装（preflightEnabled=false 时只记录、不阻断）
+  ctx.inject(['pluginManager'], (pmCtx) => {
+    const manager = pmCtx.pluginManager;
+    if (!manager || typeof manager.installBundle !== 'function') {
+      ctx.logger?.warn?.('checkup: pluginManager.installBundle 不可用，跳过拦截');
+      return;
+    }
+    const original = manager.installBundle;
+    const guarded = async function guardedInstall(spec, ...rest) {
+      if (!settings.preflightEnabled) return original.call(manager, spec, ...rest);
+      const report = await decide(spec);
+      // 所有经过拦截的安装都先交给面板确认：通过也要用户看见「✅ 检查通过」再点开始安装。
+      return createPending(spec, report, () => original.call(manager, spec, ...rest), settings.confirmTimeoutMs);
+    };
+    manager.installBundle = guarded;
+    invokeInstall = (spec, ...rest) => original.call(manager, spec, ...rest);
+    pmCtx.effect(() => () => {
+      if (manager.installBundle === guarded) manager.installBundle = original;
+      invokeInstall = null;
+      for (const entry of pending.values()) entry.cancel();
+      pending.clear();
+    });
+    ctx.logger?.info?.('checkup: 已接上安装拦截（挂起等待面板确认）');
+  });
+
+  // 2) 面板数据 + 手动预检
+  ctx.inject(['webServer'], (wsCtx) => {
+    const ws = wsCtx.webServer;
+    if (!ws || typeof ws.register !== 'function') return;
+
+    ws.register(
+      jsonRoute('/api-checkup/state', async () => {
+        const env = await probeEnvironment();
+        const entries = await readHistory();
+        return [
+          200,
+          {
+            ok: true,
+            env: {
+              dshVersion: env.dshVersion,
+              dshVersionKnown: env.dshVersionKnown,
+              nodeVersion: env.nodeVersion,
+              clientPackages: env.availableClientPackages.length,
+              bundles: env.profileBundles.length,
+            },
+            rules: RULE_IDS,
+            categories: CATEGORIES,
+            config: { ...settings },
+            configFile: PROFILE_PATCH_FILE,
+            history: entries,
+          },
+        ];
+      }),
+    );
+
+    ws.register(
+      jsonRoute('/api-checkup/config', async (req) => {
+        if (req.method === 'POST') {
+          const body = await readBody(req);
+          let next;
+          try {
+            next = normalizeSettings(body, settings);
+          } catch (error) {
+            return [400, { ok: false, error: error instanceof Error ? error.message : String(error) }];
+          }
+
+          try {
+            if (existsSync(PROFILE_PATCH_FILE)) {
+              await writeFile(`${PROFILE_PATCH_FILE}.checkup.bak`, await readFile(PROFILE_PATCH_FILE));
+            }
+          } catch {
+            // 备份失败不阻塞保存
+          }
+
+          let saved;
+          try {
+            saved = await writeProfileConfig(PROFILE_PATCH_FILE, next);
+          } catch (error) {
+            return [500, { ok: false, error: `写入配置失败：${error instanceof Error ? error.message : String(error)}` }];
+          }
+
+          Object.assign(settings, next);
+          return [200, { ok: true, config: { ...settings }, saved, file: PROFILE_PATCH_FILE }];
+        }
+        return [200, { ok: true, config: { ...settings }, file: PROFILE_PATCH_FILE }];
+      }),
+    );
+
+    // 面板轮询：是否有被挂起的安装等待确认（市场点安装后立刻出现检查面板）。
+    ws.register(
+      jsonRoute('/api-checkup/pending', async () => {
+        const entries = [...pending.values()].sort((a, b) => b.createdAt - a.createdAt);
+        const latest = entries[0];
+        if (!latest) return [200, { ok: true, pending: null }];
+        return [
+          200,
+          {
+            ok: true,
+            pending: {
+              id: latest.id,
+              spec: latest.spec,
+              createdAt: latest.createdAt,
+              report: latest.report,
+            },
+          },
+        ];
+      }),
+    );
+
+    // 面板按钮：确认安装 / 放弃安装。
+    ws.register(
+      jsonRoute('/api-checkup/confirm', async (req) => {
+        const body = await readBody(req);
+        const id = typeof body.id === 'string' ? body.id : '';
+        const action = body.action === 'cancel' ? 'cancel' : 'install';
+        const entry = pending.get(id);
+        if (!entry) return [404, { ok: false, error: '该安装请求已过期或已完成' }];
+        const handled = action === 'install' ? entry.confirm() : entry.cancel();
+        return [200, { ok: handled, action, spec: entry.spec }];
+      }),
+    );
+
+    // Skill 检查：skill 没有安装 API（就是一个目录），所以提供「装前检查目录」。
+    ws.register(
+      jsonRoute('/api-checkup/check-skill', async (req) => {
+        const body = await readBody(req);
+        const dirPath = typeof body.path === 'string' ? body.path.trim() : '';
+        if (!dirPath) return [400, { ok: false, error: '缺少 path' }];
+        if (!existsSync(dirPath)) return [404, { ok: false, error: `目录不存在：${dirPath}` }];
+        const report = await checkSkillDir(dirPath);
+        return [200, { ok: true, report, path: dirPath }];
+      }),
+    );
+
+    // MCP 检查：一条准备写入 profile 的 MCP 配置。
+    ws.register(
+      jsonRoute('/api-checkup/check-mcp', async (req) => {
+        const body = await readBody(req);
+        const config = body && typeof body.config === 'object' ? body.config : null;
+        if (!config) return [400, { ok: false, error: '缺少 config' }];
+        const report = await checkMcpConfig(config, {
+          registries: settings.registries,
+          lookupTimeoutMs: settings.lookupTimeoutMs,
+          lookupAttempts: settings.lookupAttempts,
+          knownBad: settings.knownBad,
+          maliciousPackages: settings.maliciousPackages,
+        });
+        return [200, { ok: true, report }];
+      }),
+    );
+
+    // 已装项体检：扫 ~/.dsh/skills 与 profile 里所有 MCP 条目。
+    ws.register(
+      jsonRoute('/api-checkup/inventory', async () => {
+        const skills = [];
+        if (existsSync(SKILLS_ROOT)) {
+          for (const entry of await readdir(SKILLS_ROOT, { withFileTypes: true }).catch(() => [])) {
+            if (!entry.isDirectory()) continue;
+            const dir = join(SKILLS_ROOT, entry.name);
+            const report = await checkSkillDir(dir);
+            skills.push({
+              name: entry.name,
+              path: dir,
+              ok: report.ok,
+              blocked: report.blocked,
+              warned: report.warned,
+              passed: report.passed,
+              checks: report.checks.filter((c) => c.level !== 'pass'),
+            });
+          }
+        }
+
+        const mcpEntries = await readMcpEntries();
+        const mcp = [];
+        for (const item of mcpEntries) {
+          const report = await checkMcpConfig(item.config, {
+            existingServerNames: mcpEntries.map((x) => x.config.serverName).filter(Boolean),
+            knownBad: settings.knownBad,
+          });
+          mcp.push({
+            id: item.id,
+            config: item.config,
+            ok: report.ok,
+            blocked: report.blocked,
+            warned: report.warned,
+            passed: report.passed,
+            checks: report.checks.filter((c) => c.level !== 'pass'),
+          });
+        }
+
+        return [200, { ok: true, skills, mcp, skillsRoot: SKILLS_ROOT }];
+      }),
+    );
+
+    // 环境体检：已装插件 / skill / MCP 的保留或卸载建议
+    ws.register(
+      jsonRoute('/api-checkup/audit', async () => {
+        const report = await runAudit();
+        return [200, { ok: true, report }];
+      }),
+    );
+
+    ws.register(
+      jsonRoute('/api-checkup/check', async (req) => {
+        const body = await readBody(req);
+        const spec = typeof body.spec === 'string' ? body.spec : '';
+        if (!spec.trim()) return [400, { ok: false, error: '缺少 spec' }];
+        const report = await decide(spec);
+        if (report.ok) approved = { spec: spec.trim(), at: Date.now() };
+        return [200, { ok: true, report }];
+      }),
+    );
+
+    // 面板的「开始安装插件」：只在检查通过、且刚通过（10 分钟内同一 spec）时才执行。
+    ws.register(
+      jsonRoute('/api-checkup/install', async (req) => {
+        const body = await readBody(req);
+        const spec = typeof body.spec === 'string' ? body.spec : '';
+        if (!spec.trim()) return [400, { ok: false, error: '缺少 spec' }];
+
+        const report = await decide(spec);
+        if (!report.ok) return [409, { ok: false, blocked: true, report, error: '检查未通过，未执行安装' }];
+
+        const fresh = approved && approved.spec === spec.trim() && Date.now() - approved.at < 10 * 60 * 1000;
+        if (!fresh) return [409, { ok: false, stale: true, report, error: '请先在检查面板完成检查，再点「开始安装插件」' }];
+
+        if (typeof invokeInstall !== 'function') {
+          return [503, { ok: false, report, error: '安装服务未就绪（pluginManager 不可用）' }];
+        }
+
+        approved = null;
+        try {
+          const result = await invokeInstall(spec);
+          return [200, { ok: true, report, spec: spec.trim(), result: { accepted: true, detail: describeInstallResult(result) } }];
+        } catch (error) {
+          return [500, { ok: false, report, error: error instanceof Error ? error.message : String(error) }];
+        }
+      }),
+    );
+  });
+}
+
+/// 安装返回值只取用户能理解的部分（形状由宿主决定，不做假设）。
+function describeInstallResult(result) {
+  if (!result || typeof result !== 'object') return '已提交安装';
+  if (typeof result.status === 'string') return `宿主动作：${result.status}`;
+  if (typeof result.id === 'string') return `安装任务：${result.id}`;
+  return '已提交安装';
+}

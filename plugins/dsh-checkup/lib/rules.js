@@ -1,0 +1,316 @@
+// Install Guard — 预检规则内核（纯函数：不碰 fs / 网络，便于单测与反向验证）
+//
+// 三类检查：
+//   compatibility —— 能不能在这个 DSH 版本上跑起来
+//   security      —— 会不会泄露隐私 / 带恶意或病毒代码（见 security.js）
+//   stability     —— 装上去稳不稳、有没有潜在 bug 风险（见 stability.js）
+//
+// 每条检查：{ id, category, level, title, detail, hint }
+//   level = 'block'  -> 立即阻止安装（弹窗列出原因）
+//           'warn'   -> 允许安装，但明确告知风险
+//           'pass'   -> 通过项（面板里折叠展示）
+
+import { satisfies, parseVersion } from './version.js';
+import { checkSecurity } from './security.js';
+import { checkStability } from './stability.js';
+
+export const CATEGORIES = [
+  { id: 'compatibility', label: '兼容性', desc: '能否在当前 DSH 客户端环境正确加载与运行' },
+  { id: 'security', label: '安全性', desc: '隐私泄露 / 恶意代码 / 病毒代码风险' },
+  { id: 'stability', label: '稳定性', desc: '运行是否稳定，是否存在潜在 bug 与维护风险' },
+];
+
+export const RULE_IDS = [
+  // 兼容性
+  'spec',
+  'runtime-version',
+  'node-engine',
+  'client-platform',
+  'client-inject',
+  'bundle-declared',
+  'peer-deps',
+  'known-bad',
+  'duplicate',
+  'bundle-load',
+  // 安全性
+  'sec-manifest',
+  'sec-scripts',
+  'sec-deps',
+  'sec-typosquat',
+  'sec-source',
+  'sec-traceability',
+  // 稳定性
+  'st-manifest',
+  'st-entrypoints',
+  'st-version',
+  'st-deps-weight',
+  'st-package-size',
+  'st-maintenance',
+  'st-engine-declared',
+];
+
+const CATEGORY = 'compatibility';
+const pass = (id, title, detail) => ({ id, category: CATEGORY, level: 'pass', title, detail });
+const warn = (id, title, detail, hint) => ({ id, category: CATEGORY, level: 'warn', title, detail, hint });
+const block = (id, title, detail, hint) => ({ id, category: CATEGORY, level: 'block', title, detail, hint });
+
+/// 把一个检查列表收敛成结论：任何 block 即失败；同时按三类统计。
+export function summarize(checks) {
+  const blocked = checks.filter((c) => c.level === 'block');
+  const warned = checks.filter((c) => c.level === 'warn');
+  const byCategory = {};
+  for (const category of CATEGORIES) {
+    const rows = checks.filter((c) => (c.category || CATEGORY) === category.id);
+    byCategory[category.id] = {
+      total: rows.length,
+      blocked: rows.filter((c) => c.level === 'block').length,
+      warned: rows.filter((c) => c.level === 'warn').length,
+      passed: rows.filter((c) => c.level === 'pass').length,
+    };
+  }
+  return {
+    ok: blocked.length === 0,
+    blocked: blocked.length,
+    warned: warned.length,
+    passed: checks.filter((c) => c.level === 'pass').length,
+    byCategory,
+    checks,
+  };
+}
+
+/// 从 manifest / 安装目标里取出「这个包声明支持的 DSH 版本」。
+export function declaredDshRange(manifest) {
+  const candidates = [
+    manifest?.dsh?.engines?.dsh,
+    manifest?.engines?.dsh,
+    manifest?.dsh?.version,
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.trim()) || undefined;
+}
+
+export function declaredNodeRange(manifest) {
+  return typeof manifest?.engines?.node === 'string' ? manifest.engines.node : undefined;
+}
+
+/// 主检查入口。
+export function checkCandidate(input) {
+  const { spec, manifest, env } = input || {};
+  const checks = [];
+  const manifestName = manifest?.name;
+
+  // 1. spec 形态
+  if (typeof spec !== 'string' || !spec.trim()) {
+    checks.push(block('spec', '安装目标为空', '没有提供要安装的包名或路径。'));
+    return summarize(checks);
+  }
+  checks.push(pass('spec', '安装目标可解析', spec.trim()));
+
+  if (!manifest || typeof manifest !== 'object') {
+    checks.push(
+      warn(
+        'spec',
+        '未取得包元数据',
+        '注册表或本地路径没有返回 package.json，只能做安装后检查。',
+        '确认网络/镜像可用，或改用本地路径安装。',
+      ),
+    );
+    return summarize(checks);
+  }
+
+  const label = manifestName ? `${manifestName}@${manifest.version || '?'}` : spec.trim();
+
+  // 2. 客户端版本兼容（本插件的核心诉求）
+  const dshRange = declaredDshRange(manifest);
+  if (dshRange) {
+    if (satisfies(env.dshVersion, dshRange)) {
+      checks.push(pass('runtime-version', '兼容当前 DeepSeek Harness', `${label} 声明 dsh ${dshRange}，当前 ${env.dshVersion}`));
+    } else {
+      checks.push(
+        block(
+          'runtime-version',
+          '与当前 DeepSeek Harness 版本不兼容',
+          `${label} 要求 dsh ${dshRange}，当前运行 ${env.dshVersion}`,
+          '升级/降级该插件到适配版本，或换用继续维护的分支。',
+        ),
+      );
+    }
+  } else {
+    checks.push(
+      warn(
+        'runtime-version',
+        '插件未声明 DSH 版本范围',
+        `${label} 的 package.json 里没有 dsh.engines.dsh / engines.dsh 字段，无法在装前判定版本兼容。`,
+        '安装后若启动异常，优先怀疑该插件未适配当前版本。',
+      ),
+    );
+  }
+
+  // 3. Node 运行时要求
+  const nodeRange = declaredNodeRange(manifest);
+  if (nodeRange) {
+    if (satisfies(env.nodeVersion, nodeRange)) {
+      checks.push(pass('node-engine', 'Node 运行时满足要求', `声明 node ${nodeRange}，当前 ${env.nodeVersion}`));
+    } else {
+      checks.push(
+        warn(
+          'node-engine',
+          'Node 运行时低于插件要求',
+          `${label} 要求 node ${nodeRange}，当前 ${env.nodeVersion}`,
+          '桌面端内置 Node 由 DSH 管理，升级 DSH 才可能满足。',
+        ),
+      );
+    }
+  }
+
+  // 4. 客户端平台
+  const client = manifest.dsh?.client;
+  if (client) {
+    const platform = client.platform;
+    if (platform === undefined || platform === 'web') {
+      checks.push(pass('client-platform', '客户端平台匹配', `platform=${platform ?? 'web(默认)'}`));
+    } else {
+      checks.push(
+        block(
+          'client-platform',
+          '客户端平台不匹配',
+          `${label} 声明 platform=${String(platform)}，桌面端只加载 web 平台，装上去不会显示甚至导致启动异常。`,
+          '换用 web 平台版本。',
+        ),
+      );
+    }
+  }
+
+  // 5. 客户端注入依赖（DSH boot 失败的高发原因）
+  const injects = Array.isArray(client?.inject) ? client.inject : [];
+  if (injects.length > 0) {
+    const available = new Set(env.availableClientPackages || []);
+    const missing = injects.filter((entry) => !available.has(entry));
+    if (missing.length === 0) {
+      checks.push(pass('client-inject', '客户端注入依赖齐全', injects.join(', ')));
+    } else {
+      checks.push(
+        block(
+          'client-inject',
+          '客户端注入依赖在当前版本不存在',
+          `缺少：${missing.join(', ')}（这些包在当前 DSH 版本里没有，加载时会 boot 失败并触发桌面端重启）`,
+          '安装适配当前 DSH 版本的插件版本，或联系作者移除对该包的依赖。',
+        ),
+      );
+    }
+  }
+
+  // 6. bundle patch 声明
+  const bundle = manifest.dsh?.bundle;
+  if (bundle === undefined) {
+    checks.push(
+      pass(
+        'bundle-declared',
+        '非 bundle 插件',
+        '该包只注册插件条目，不注入 profile patch（风险面更小）。',
+      ),
+    );
+  } else {
+    const patchPath = typeof bundle === 'object' && bundle ? bundle.patch : undefined;
+    if (typeof patchPath === 'string' && patchPath.trim()) {
+      checks.push(pass('bundle-declared', 'bundle patch 已声明', patchPath));
+    } else {
+      checks.push(
+        block(
+          'bundle-declared',
+          'bundle 声明缺少 patch 路径',
+          'dsh.bundle 存在但没有可用的 patch 文件路径，加载阶段会失败。',
+          '该包构建产物不完整，换用完整版本。',
+        ),
+      );
+    }
+  }
+
+  // 7. peerDependencies（DSH 自身只查安装时可见的部分，这里逐条明细）
+  const peers = manifest.peerDependencies && typeof manifest.peerDependencies === 'object' ? manifest.peerDependencies : {};
+  const peerIssues = [];
+  for (const [peerName, peerRange] of Object.entries(peers)) {
+    const installed = env.installedVersions?.[peerName];
+    if (!installed) {
+      peerIssues.push(`${peerName} 未安装（要求 ${peerRange}）`);
+      continue;
+    }
+    if (!satisfies(installed, String(peerRange))) {
+      peerIssues.push(`${peerName} 当前 ${installed}，要求 ${peerRange}`);
+    }
+  }
+  if (Object.keys(peers).length === 0) {
+    checks.push(pass('peer-deps', '无 peer 依赖约束', 'package.json 未声明 peerDependencies'));
+  } else if (peerIssues.length === 0) {
+    checks.push(pass('peer-deps', 'peer 依赖全部满足', `${Object.keys(peers).length} 项`));
+  } else {
+    checks.push(
+      warn(
+        'peer-deps',
+        'peer 依赖版本不匹配',
+        peerIssues.join('；'),
+        '多数情况仍可运行，但可能出现 API 缺失导致的运行时崩溃。',
+      ),
+    );
+  }
+
+  // 8. 已知会拖垮桌面端的版本黑名单
+  const signature = manifestName && manifest.version ? `${manifestName}@${manifest.version}` : '';
+  const knownBad = Array.isArray(env.knownBad) ? env.knownBad : [];
+  const hit = knownBad.find((entry) => entry === signature || entry === manifestName);
+  if (hit) {
+    checks.push(
+      block(
+        'known-bad',
+        '命中已知崩溃黑名单',
+        `${hit} 曾在本机或社区记录中导致桌面端启动失败。`,
+        '换用其他版本；确认修复后再从黑名单移除。',
+      ),
+    );
+  }
+
+  // 9. 重复安装
+  const bundles = Array.isArray(env.profileBundles) ? env.profileBundles : [];
+  if (manifestName && bundles.includes(manifestName)) {
+    checks.push(
+      warn(
+        'duplicate',
+        '已在 profile bundles 中',
+        `${manifestName} 已存在，重复安装会叠加条目、增加 boot 失败概率。`,
+        '先卸载旧版本再安装。',
+      ),
+    );
+  }
+
+  // 10. bundle 数量压力
+  const limit = Number.isFinite(env.bundleSoftLimit) ? env.bundleSoftLimit : 40;
+  if (bundles.length >= limit) {
+    checks.push(
+      warn(
+        'bundle-load',
+        'profile 已接近 bundle 上限',
+        `当前 ${bundles.length} 个 bundle（软上限 ${limit}）。bundle 越多，boot 失败后越难定位。`,
+        '优先禁用不再使用的插件。',
+      ),
+    );
+  }
+
+  // 安全性：隐私泄露 / 恶意代码 / 病毒特征
+  checks.push(...checkSecurity({ manifest, env, sourceHits: input && input.sourceHits }));
+
+  // 稳定性：运行稳定与潜在 bug 风险
+  checks.push(...checkStability({ manifest, env }));
+
+  return summarize(checks);
+}
+
+/// 校验「解析出的版本」是否真的比当前版本更合适（供 UI 提示用）。
+export function isNewer(candidate, current) {
+  const a = parseVersion(candidate);
+  const b = parseVersion(current);
+  if (!a || !b) return false;
+  return a.major !== b.major
+    ? a.major > b.major
+    : a.minor !== b.minor
+      ? a.minor > b.minor
+      : a.patch > b.patch;
+}

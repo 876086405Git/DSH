@@ -1,0 +1,14 @@
+{
+  "name": "dsh-fixture-compatible",
+  "version": "0.0.1",
+  "description": "自检用：完全符合当前 DSH 0.2.1-rc.3 的声明",
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-layout"]
+    }
+  },
+  "engines": { "dsh": ">=0.2.0" },
+  "peerDependencies": { "@deepseek-ai/cordis": "^4.0.0" }
+}
