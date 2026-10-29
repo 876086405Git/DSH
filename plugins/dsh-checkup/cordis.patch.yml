@@ -19,3 +19,8 @@
         maliciousPackages: []
         # 预检有 warn 时也拒绝（默认 false：warn 只提示）。
         blockOnWarn: false
+        # 逐项自定义处理方式：{ <规则id>: block | warn | pass }。
+        # 空对象 = 全部按规则自带等级；面板「检查规则」里的下拉就是改这里。
+        levelOverrides: {}
+        # 市场点「安装」后，面板确认弹窗的最长等待（ms），超时按拒绝处理。
+        confirmTimeoutMs: 180000

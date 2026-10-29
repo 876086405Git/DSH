@@ -1,9 +1,12 @@
 {
   "name": "dsh-checkup",
-  "version": "0.1.0",
-  "description": "DSH体检中心：安装前兼容性/安全性/稳定性预检与环境体检（插件 / skill / MCP）",
+  "version": "0.3.4",
+  "description": "DSH体检中心：安装前兼容性预检、环境体检、军械库四类检查（连接器 / 技能 / 插件 / 专家）",
   "type": "module",
   "main": "lib/index.js",
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
@@ -27,6 +30,7 @@
     }
   },
   "engines": {
+    "node": ">=18",
     "dsh": ">=0.2.0"
   },
   "keywords": [

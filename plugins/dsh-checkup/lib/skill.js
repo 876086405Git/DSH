@@ -7,14 +7,6 @@ const pass = (id, title, detail, category = 'stability') => ({ id, category, lev
 const warn = (id, title, detail, hint, category = 'stability') => ({ id, category, level: 'warn', title, detail, hint });
 const block = (id, title, detail, hint, category = 'stability') => ({ id, category, level: 'block', title, detail, hint });
 
-export const SKILL_RULE_IDS = [
-  'sk-manifest',
-  'sk-name',
-  'sk-scripts',
-  'sk-instructions',
-  'sk-deps',
-  'sk-size',
-];
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 

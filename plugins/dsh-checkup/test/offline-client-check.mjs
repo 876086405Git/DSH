@@ -85,6 +85,20 @@ try {
     registered,
   );
   ok(
+    '注册了落盘检查提示（checkup-sentinel-toast）',
+    registered.some((meta) => meta && meta.name === 'shell.overlay' && meta.id === 'checkup-sentinel-toast'),
+    registered.filter((meta) => meta && meta.name === 'shell.overlay'),
+  );
+  ok(
+    '两个 shell.overlay 注册 id 不冲突',
+    new Set(
+      registered
+        .filter((meta) => meta && meta.name === 'shell.overlay')
+        .map((meta) => meta.id),
+    ).size >= 2,
+    registered.filter((meta) => meta && meta.name === 'shell.overlay'),
+  );
+  ok(
     '注册了插件详情页预检区（plugins.detail.section）',
     registered.some((meta) => meta && meta.name === 'plugins.detail.section'),
     registered,

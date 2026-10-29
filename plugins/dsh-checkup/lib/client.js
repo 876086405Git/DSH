@@ -98,6 +98,31 @@ window.__ModuleLoader__.load({
 
     // ── 基础控件 ────────────────────────────────────────────────────────────
 
+    // 哨兵事件 → 一句话描述（动作中文 + 关键检查项）。
+    function sentinelActionLabel(event) {
+      const ids = (event.blockedIds || []).join('、');
+      switch (event.action) {
+        case 'quarantined':
+          return `已隔离到隔离区（${ids || 'block 级问题'}）`;
+        case 'quarantine-failed':
+          return `隔离失败（目录被占用？请手动处理）— ${ids}`;
+        case 'released':
+          return '已放行回 skill 根';
+        case 'deleted':
+          return '已从隔离区删除';
+        case 'removed':
+          return `已从 profile patch 摘除（${ids}）`;
+        case 'remove-failed':
+          return `摘除失败（已保留原样，请人工处理）— ${ids}`;
+        case 'warn-only':
+          return `仅告警未拦截 — ${ids}`;
+        case 'passed':
+          return event.warned > 0 ? `通过（${event.warned} 项提醒）` : '通过';
+        default:
+          return event.action;
+      }
+    }
+
     function Card({ title, desc, children, badge }) {
       return h(
         'section',
@@ -190,6 +215,11 @@ window.__ModuleLoader__.load({
         onChange: (event) => onChange(event.target.value),
         style: {
           width: width || 160,
+          // box-sizing + min-width 0：宽度按 border-box 计，且放进 grid/flex 里能被压缩，
+          // 否则固定像素宽度会撑破容器（MCP 表单那次溢出的直接原因）。
+          boxSizing: 'border-box',
+          minWidth: 0,
+          maxWidth: '100%',
           padding: '7px 10px',
           borderRadius: 7,
           border: `1px solid ${C.border}`,
@@ -434,6 +464,8 @@ window.__ModuleLoader__.load({
       const [installStage, setInstallStage] = useState('idle');
       const [installReport, setInstallReport] = useState(null);
       const [installMessage, setInstallMessage] = useState(null);
+      // #1 /check 通过后拿到的一次性 token，安装接口必须带上它。
+      const [approvalToken, setApprovalToken] = useState(null);
 
       // Skill / MCP：没有安装 API，提供「装前检查 + 已装项体检」
       const [skillPath, setSkillPath] = useState('');
@@ -447,7 +479,16 @@ window.__ModuleLoader__.load({
       const [inventory, setInventory] = useState(null);
       const [inventoryBusy, setInventoryBusy] = useState(false);
 
+      // 实时拦截哨兵：skill/MCP 落盘兜底拦截的事件与隔离区
+      const [guardData, setGuardData] = useState(null);
+      const [guardBusy, setGuardBusy] = useState(false);
+      const [guardMessage, setGuardMessage] = useState(null);
+
       // 环境体检：已装插件 / skill / MCP 的保留或卸载建议
+      // 军械库四类：连接器 / 技能 / 插件 / 专家
+      const [armoryReport, setArmoryReport] = useState(null);
+      const [armoryBusy, setArmoryBusy] = useState(false);
+      const [armoryMessage, setArmoryMessage] = useState(null);
       const [auditReport, setAuditReport] = useState(null);
       const [auditBusy, setAuditBusy] = useState(false);
       const [auditMessage, setAuditMessage] = useState(null);
@@ -560,6 +601,7 @@ window.__ModuleLoader__.load({
             if (!mounted.current) return;
             const r = data && data.report ? data.report : null;
             setInstallReport(r);
+            setApprovalToken(data && typeof data.approvalToken === 'string' ? data.approvalToken : null);
             setInstallStage(r && r.ok ? 'checked' : 'checked');
             load();
           })
@@ -577,11 +619,12 @@ window.__ModuleLoader__.load({
         if (!target) return;
         setInstallStage('installing');
         setInstallMessage(null);
-        postJson('/api-checkup/install', { spec: target })
+        postJson('/api-checkup/install', { spec: target, token: approvalToken })
           .then((data) => {
             if (!mounted.current) return;
             if (data && data.ok === true) {
               setInstallStage('done');
+              setApprovalToken(null);
               setInstallMessage(`已提交安装（${data.result && data.result.detail ? data.result.detail : '宿主动作已接受'}）。重启桌面端后生效。`);
             } else {
               setInstallStage('checked');
@@ -657,6 +700,70 @@ window.__ModuleLoader__.load({
           })
           .finally(() => {
             if (mounted.current) setInventoryBusy(false);
+          });
+      }, []);
+
+      // 实时拦截哨兵：拉取拦截事件 + 隔离区，处置（放行/删除）后自动刷新。
+      const loadGuard = useCallback(() => {
+        setGuardBusy(true);
+        getJson('/api-checkup/guard')
+          .then((data) => {
+            if (!mounted.current) return;
+            if (data && data.ok === true) {
+              setGuardData(data);
+              setGuardMessage(null);
+            } else {
+              setGuardMessage((data && data.error) || '哨兵数据读取失败');
+            }
+          })
+          .catch((error) => {
+            if (mounted.current) setGuardMessage(String(error));
+          })
+          .finally(() => {
+            if (mounted.current) setGuardBusy(false);
+          });
+      }, []);
+
+      useEffect(() => {
+        loadGuard();
+      }, [loadGuard]);
+
+      const releaseGuardItem = useCallback(
+        (dir, action) => {
+          setGuardBusy(true);
+          postJson('/api-checkup/guard/release', { dir, action })
+            .then((data) => {
+              if (!mounted.current) return;
+              if (data && data.ok === true) setGuardMessage(action === 'delete' ? '已删除隔离条目' : '已放行回 skill 根');
+              else setGuardMessage((data && data.error) || '操作失败');
+            })
+            .catch((error) => {
+              if (mounted.current) setGuardMessage(String(error));
+            })
+            .finally(() => {
+              if (mounted.current) loadGuard();
+            });
+        },
+        [loadGuard],
+      );
+
+      const runArmoryScan = useCallback(() => {
+        setArmoryBusy(true);
+        setArmoryMessage(null);
+        getJson('/api-checkup/armory')
+          .then((data) => {
+            if (!mounted.current) return;
+            if (data && data.ok === true) setArmoryReport(data);
+            else {
+              setArmoryReport(null);
+              setArmoryMessage((data && data.error) || '扫描失败');
+            }
+          })
+          .catch((error) => {
+            if (mounted.current) setArmoryMessage(String(error));
+          })
+          .finally(() => {
+            if (mounted.current) setArmoryBusy(false);
           });
       }, []);
 
@@ -805,7 +912,8 @@ window.__ModuleLoader__.load({
                       { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
                       groupIds.map((id) => {
                         const row = RULE_INFO[id] || ['兼容性', id, ''];
-                        const blocking = [
+                        // 规则自带的默认等级
+                        const defaultBlocking = [
                           'runtime-version',
                           'client-inject',
                           'client-platform',
@@ -816,6 +924,20 @@ window.__ModuleLoader__.load({
                           'sec-source',
                           'st-entrypoints',
                         ].includes(id);
+                        // 用户在「处理方式」里选的值优先；未选则用默认
+                        const customLevel = (draft.levelOverrides || {})[id];
+                        const effective = customLevel || (defaultBlocking ? 'block' : 'warn');
+                        const blocking = effective === 'block';
+                        const levelLabel =
+                          effective === 'block' ? '阻止' : effective === 'warn' ? '提醒' : '通过';
+                        const levelColor =
+                          effective === 'block' ? C.block : effective === 'warn' ? C.warn : C.pass;
+                        const levelBorder =
+                          effective === 'block'
+                            ? 'rgba(255,107,107,.45)'
+                            : effective === 'warn'
+                              ? 'rgba(240,180,41,.45)'
+                              : 'rgba(62,207,142,.45)';
                         return h(
                           'div',
                           {
@@ -839,14 +961,60 @@ window.__ModuleLoader__.load({
                                 fontSize: 11,
                                 padding: '1px 7px',
                                 borderRadius: 10,
-                                color: blocking ? C.block : C.warn,
-                                border: `1px solid ${blocking ? 'rgba(255,107,107,.45)' : 'rgba(240,180,41,.45)'}`,
+                                color: levelColor,
+                                border: `1px solid ${levelBorder}`,
                               },
                             },
-                            blocking ? '阻止' : '提醒',
+                            levelLabel,
                           ),
+                          customLevel
+                            ? h(
+                                'span',
+                                {
+                                  title: '已按你的设置覆盖规则默认等级',
+                                  style: {
+                                    flex: 'none',
+                                    fontSize: 10,
+                                    padding: '0 5px',
+                                    borderRadius: 8,
+                                    color: C.dim,
+                                    border: `1px dashed ${C.border}`,
+                                  },
+                                },
+                                '自定义',
+                              )
+                            : null,
                           h('span', { style: { fontWeight: 600, flex: 'none' } }, row[1]),
-                          h('span', { style: { color: C.dim, minWidth: 0 } }, row[2]),
+                          h('span', { style: { color: C.dim, minWidth: 0, flex: 1 } }, row[2]),
+                          h(
+                            'select',
+                            {
+                              value: customLevel || 'default',
+                              title: '这条检查该怎么处理',
+                              onChange: (event) => {
+                                const next = { ...(draft.levelOverrides || {}) };
+                                const value = event.target.value;
+                                if (value === 'default') delete next[id];
+                                else next[id] = value;
+                                patch({ levelOverrides: next });
+                              },
+                              style: {
+                                flex: 'none',
+                                fontSize: 11,
+                                padding: '3px 6px',
+                                borderRadius: 6,
+                                border: `1px solid ${C.border}`,
+                                background: 'rgba(0,0,0,.18)',
+                                color: C.text,
+                              },
+                            },
+                            [
+                              h('option', { key: 'default', value: 'default' }, '默认'),
+                              h('option', { key: 'block', value: 'block' }, '阻止'),
+                              h('option', { key: 'warn', value: 'warn' }, '提醒'),
+                              h('option', { key: 'pass', value: 'pass' }, '通过'),
+                            ],
+                          ),
                         );
                       }),
                     ),
@@ -967,14 +1135,28 @@ window.__ModuleLoader__.load({
           ),
           h(
             'div',
-            { style: { display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 10px', alignItems: 'center' } },
-            h('span', { style: { fontSize: 12, color: C.dim } }, 'transport'),
+            {
+              style: {
+                display: 'grid',
+                // 第一列固定标签宽，第二列 minmax(0, 1fr) —— 0 最小宽是关键，
+                // 默认的 auto 会让长 placeholder / select 撑破容器。
+                gridTemplateColumns: 'minmax(92px, 120px) minmax(0, 1fr)',
+                gap: '8px 10px',
+                alignItems: 'center',
+                maxWidth: '100%',
+              },
+            },
+            h('span', { style: { fontSize: 12, color: C.dim, minWidth: 0 } }, 'transport'),
             h(
               'select',
               {
                 value: mcpForm.transport,
                 onChange: (event) => setMcpForm({ ...mcpForm, transport: event.target.value }),
                 style: {
+                  width: '100%',
+                  maxWidth: '100%',
+                  minWidth: 0,
+                  boxSizing: 'border-box',
                   padding: '7px 10px',
                   borderRadius: 7,
                   border: `1px solid ${C.border}`,
@@ -985,25 +1167,25 @@ window.__ModuleLoader__.load({
               },
               ['stdio', 'sse', 'streamable-http'].map((value) => h('option', { key: value, value }, value)),
             ),
-            h('span', { style: { fontSize: 12, color: C.dim } }, 'serverName'),
+            h('span', { style: { fontSize: 12, color: C.dim, minWidth: 0 } }, 'serverName'),
             h(TextInput, {
               value: mcpForm.serverName,
               onChange: (value) => setMcpForm({ ...mcpForm, serverName: value }),
-              width: 320,
+              width: '100%',
               placeholder: 'cad（工具前缀 mcp__cad__*）',
             }),
-            h('span', { style: { fontSize: 12, color: C.dim } }, 'command'),
+            h('span', { style: { fontSize: 12, color: C.dim, minWidth: 0 } }, 'command'),
             h(TextInput, {
               value: mcpForm.command,
               onChange: (value) => setMcpForm({ ...mcpForm, command: value }),
-              width: 320,
+              width: '100%',
               placeholder: 'uvx / npx / 绝对路径',
             }),
-            h('span', { style: { fontSize: 12, color: C.dim } }, 'args'),
+            h('span', { style: { fontSize: 12, color: C.dim, minWidth: 0 } }, 'args'),
             h(TextInput, {
               value: mcpForm.args,
               onChange: (value) => setMcpForm({ ...mcpForm, args: value }),
-              width: 420,
+              width: '100%',
               placeholder: '--from cadgen==0.7.26 cadgen mcp',
             }),
           ),
@@ -1040,6 +1222,121 @@ window.__ModuleLoader__.load({
                     `mcp ${item.id}（${item.config.serverName || '未命名'}）：${item.ok ? '通过' : `${item.blocked} 项阻止 / ${item.warned} 项提醒`}`,
                   ),
                 ),
+              )
+            : null,
+        ),
+
+        // 5c+. 实时拦截哨兵：skill/MCP 安装不走 installBundle，这里 watch 文件系统兜底。
+        h(
+          Card,
+          {
+            title: '实时拦截哨兵（skill / MCP 落盘监控）',
+            desc: '军械库装 skill 是直接写 skills 目录、装 MCP 是直接写 profile patch，插件拦截器够不到。哨兵监听文件系统：新 skill / 新 MCP 条目落盘后数秒内自动检查，恶意脚本 skill 移入隔离区（可放行/删除），结构性问题的 MCP 条目自动摘除（带备份与 YAML 校验）。',
+          },
+          h(
+            'div',
+            { style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 } },
+            h(SmallButton, { tone: 'primary', onClick: loadGuard, disabled: guardBusy }, guardBusy ? '刷新中…' : '刷新拦截记录'),
+            guardData
+              ? h(
+                  'span',
+                  { style: { fontSize: 12, color: C.dim } },
+                  `隔离区 ${((guardData.quarantined || []).length)} 项 · 事件 ${((guardData.events || []).length)} 条 · 监听 ${((guardData.roots || []).length)} 个 skill 根 + profile patch`,
+                )
+              : null,
+          ),
+          guardMessage ? h('div', { style: { fontSize: 12, color: C.warn, marginBottom: 8 } }, guardMessage) : null,
+          guardData && (guardData.quarantined || []).length > 0
+            ? h(
+                'div',
+                { style: { marginBottom: 10 } },
+                h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 6 } }, '隔离区（等待处置）'),
+                (guardData.quarantined || []).map((dir) =>
+                  h(
+                    'div',
+                    { key: dir, style: { display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0' } },
+                    h('span', { style: { fontSize: 12, flex: 1, color: C.block } }, dir),
+                    h(SmallButton, { tone: 'primary', onClick: () => releaseGuardItem(dir, 'restore'), disabled: guardBusy }, '放行'),
+                    h(SmallButton, { onClick: () => releaseGuardItem(dir, 'delete'), disabled: guardBusy }, '删除'),
+                  ),
+                ),
+              )
+            : null,
+          guardData && (guardData.events || []).length > 0
+            ? h(
+                'div',
+                null,
+                h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 6 } }, '最近拦截事件'),
+                (guardData.events || []).slice(0, 12).map((event) =>
+                  h(
+                    'div',
+                    { key: event.id, style: { fontSize: 12, padding: '3px 0', color: event.action === 'passed' ? C.pass : C.block } },
+                    `[${String(event.at || '').replace('T', ' ').slice(0, 19)}] ${event.kind === 'mcp' ? `MCP ${event.mcpId}` : `skill ${event.name}`}：${sentinelActionLabel(event)}`,
+                  ),
+                ),
+              )
+            : null,
+          guardData && (guardData.events || []).length === 0 && (guardData.quarantined || []).length === 0
+            ? h('div', { style: { fontSize: 12, color: C.pass } }, '哨兵在线，暂无拦截事件（启动后新落盘的 skill / MCP 都会自动过检）。')
+            : null,
+        ),
+
+        // 5e. 军械库四类检查：连接器 / 技能 / 插件 / 专家
+        h(
+          Card,
+          {
+            title: '军械库四类检查',
+            desc: '覆盖大肥鱼军械库里的四类对象：连接器（MCP 条目）、技能（skills 目录，含专家捆绑技能）、插件（profile bundles）、专家（dsh-agent-preset 行）。',
+          },
+          h(
+            'div',
+            { style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' } },
+            h(SmallButton, { tone: 'primary', onClick: runArmoryScan, disabled: armoryBusy },
+              armoryBusy ? '扫描中…' : '扫描四类对象',
+            ),
+            armoryReport
+              ? h(
+                  'span',
+                  { style: { fontSize: 12, color: C.dim } },
+                  `连接器 ${armoryReport.counts.connector} · 技能 ${armoryReport.counts.skill} · 插件 ${armoryReport.counts.plugin} · 专家 ${armoryReport.counts.expert}`,
+                )
+              : null,
+          ),
+          armoryMessage ? h('div', { style: { fontSize: 12, color: C.warn, marginBottom: 8 } }, armoryMessage) : null,
+          armoryReport
+            ? h(
+                'div',
+                { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+                armoryReport.kinds.map((kind) => {
+                  const rows = (armoryReport.checks || []).filter((check) => check.armoryKind === kind.id);
+                  if (rows.length === 0) return null;
+                  const stats = armoryReport.byKind[kind.id] || { total: rows.length };
+                  return h(
+                    'div',
+                    { key: kind.id },
+                    h(
+                      'div',
+                      {
+                        style: {
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: 8,
+                          marginBottom: 8,
+                          paddingBottom: 6,
+                          borderBottom: `1px solid ${C.border}`,
+                        },
+                      },
+                      h('span', { style: { fontSize: 13, fontWeight: 700 } }, kind.label),
+                      h('span', { style: { fontSize: 11, color: C.dim, flex: 1, minWidth: 0 } }, kind.desc),
+                      h(
+                        'span',
+                        { style: { fontSize: 11, color: C.dim, flex: 'none' } },
+                        `${stats.total || rows.length} 项 · 阻止 ${stats.blocked ?? 0} · 提醒 ${stats.warned ?? 0}`,
+                      ),
+                    ),
+                    h(CheckRows, { checks: rows }),
+                  );
+                }),
               )
             : null,
         ),
@@ -1459,7 +1756,8 @@ window.__ModuleLoader__.load({
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function overlayBtn(label, action, opts) {
@@ -1675,6 +1973,127 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    // ── 落盘检查提示（右下角轻提示）──────────────────────────────────────
+    //
+    // 军械库装 skill / MCP 不走 installBundle，落盘后由哨兵检查；检查通过时旧实现
+    // 完全静默，用户以为"没检查"。这里把每条哨兵事件变成一条右下角提示：
+    //   passed → 绿色（检查过了）、warned → 黄色、quarantined/removed → 红色。
+    // 用原生 DOM 挂 body，避开槽容器的 stacking context。
+    const TOAST_ID = 'checkup-sentinel-toast-root';
+    const toastState = { items: [], seen: new Set(), timer: null, polling: null, host: null };
+
+    function ensureToastHost() {
+      let host = document.getElementById(TOAST_ID);
+      if (host && host.isConnected) return host;
+      host = document.createElement('div');
+      host.id = TOAST_ID;
+      host.style.cssText = [
+        'position:fixed',
+        'right:16px',
+        'bottom:16px',
+        'z-index:2147483000',
+        'display:flex',
+        'flex-direction:column',
+        'gap:8px',
+        'max-width:360px',
+        'pointer-events:none',
+      ].join(';');
+      document.body.appendChild(host);
+      return host;
+    }
+
+    function sentinelTone(action) {
+      if (action === 'quarantined' || action === 'removed') return { color: '#ff6b6b', icon: '⛔', text: '已拦截' };
+      if (action === 'warn-only') return { color: '#f0b429', icon: '⚠️', text: '有提醒' };
+      return { color: '#3ecf8e', icon: '✅', text: '通过' };
+    }
+
+    function renderToasts() {
+      const host = ensureToastHost();
+      host.innerHTML = toastState.items
+        .map((item) => {
+          const tone = sentinelTone(item.action);
+          const kindLabel = item.kind === 'mcp' ? '连接器' : '技能';
+          return (
+            '<div style="pointer-events:auto;display:flex;gap:8px;align-items:flex-start;' +
+            'padding:9px 11px;border-radius:9px;background:rgba(20,20,24,.96);' +
+            `border:1px solid ${tone.color}66;box-shadow:0 8px 24px rgba(0,0,0,.45);` +
+            'font-size:12px;line-height:1.6;color:#e8e8ea;">' +
+            `<span style="flex:none;">${tone.icon}</span>` +
+            '<div style="min-width:0;">' +
+            `<div><b>${escHtml(kindLabel)} ${escHtml(item.name)}</b> · ${tone.text}</div>` +
+            `<div style="color:#9a9aa2;margin-top:2px;">${escHtml(item.detail)}</div>` +
+            '</div></div>'
+          );
+        })
+        .join('');
+      if (toastState.items.length === 0) host.innerHTML = '';
+    }
+
+    function pushToast(event) {
+      const tone = sentinelTone(event.action);
+      const blocked = Array.isArray(event.blockedIds) ? event.blockedIds : [];
+      const detail =
+        event.action === 'quarantined'
+          ? `命中 ${blocked.join(', ') || '阻止项'}，已移入隔离区`
+          : event.action === 'removed'
+            ? `命中 ${blocked.join(', ') || '阻止项'}，已从配置摘除`
+            : event.action === 'warn-only'
+              ? '有提醒项，未自动处理'
+              : `未发现阻止/提醒项（${tone.text}）`;
+      toastState.items.push({ ...event, detail });
+      if (toastState.items.length > 3) toastState.items.shift();
+      renderToasts();
+      // 8 秒后自动消失；拦截类留 12 秒，给用户反应时间。
+      const life = event.action === 'quarantined' || event.action === 'removed' ? 12000 : 8000;
+      const target = toastState.items[toastState.items.length - 1];
+      setTimeout(() => {
+        toastState.items = toastState.items.filter((row) => row !== target);
+        renderToasts();
+      }, life);
+    }
+
+    function SentinelToast() {
+      useEffect(() => {
+        let disposed = false;
+        ensureToastHost();
+
+        const poll = () => {
+          getJson('/api-checkup/guard')
+            .then((data) => {
+              if (disposed) return;
+              const events = Array.isArray(data && data.events) ? data.events : [];
+              // 事件是"最新在前"的，反序遍历才能按时间顺序弹出。
+              for (const event of [...events].reverse()) {
+                if (!event || typeof event.id !== 'string') continue;
+                if (toastState.seen.has(event.id)) continue;
+                toastState.seen.add(event.id);
+                // #9 seen 只增不减会长期积累；超过上限时丢掉最早的一半。
+                if (toastState.seen.size > 200) {
+                  const stale = [...toastState.seen].slice(0, 100);
+                  for (const id of stale) toastState.seen.delete(id);
+                }
+                pushToast(event);
+              }
+              toastState.polling = setTimeout(poll, 2500);
+            })
+            .catch(() => {
+              toastState.polling = setTimeout(poll, 5000);
+            });
+        };
+        poll();
+
+        return () => {
+          disposed = true;
+          clearTimeout(toastState.polling);
+          const host = document.getElementById(TOAST_ID);
+          if (host) host.innerHTML = '';
+        };
+      }, []);
+
+      return null;
+    }
+
     // ── 插件详情页的预检区（市场里点进任何一个插件都能看到）─────────────────
     //
     // 宿主渲染方式是 renderSlot('plugins.detail.section', { subject })，
@@ -1831,8 +2250,14 @@ window.__ModuleLoader__.load({
       };
 
       replace();
+      // #6 节流：会话流式输出每秒触发几十次 DOM 变化，每次全量扫 button 太浪费。
+      let scheduled = 0;
       const observer = new MutationObserver(() => {
-        replace();
+        if (scheduled) return;
+        scheduled = setTimeout(() => {
+          scheduled = 0;
+          replace();
+        }, 200);
       });
       try {
         observer.observe(document.body, { childList: true, subtree: true });
@@ -1841,6 +2266,7 @@ window.__ModuleLoader__.load({
       }
       return () => {
         stopped = true;
+        if (scheduled) clearTimeout(scheduled);
         observer.disconnect();
       };
     }
@@ -1874,6 +2300,17 @@ window.__ModuleLoader__.load({
             label: () => 'DSH体检中心',
           },
           GuardPanel,
+        ),
+      );
+      // 落盘检查提示：任何界面右下角弹一条，告知"刚装的东西检查过了"。
+      ctx.slots.inject('shell.overlay', () =>
+        ctx.slots.register(
+          {
+            name: 'shell.overlay',
+            id: 'checkup-sentinel-toast',
+            inject: () => ({}),
+          },
+          SentinelToast,
         ),
       );
       // 全局浮层：不依赖设置页，任何界面都能弹出。

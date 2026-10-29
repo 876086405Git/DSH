@@ -8,14 +8,6 @@ const pass = (id, title, detail, category = 'stability') => ({ id, category, lev
 const warn = (id, title, detail, hint, category = 'stability') => ({ id, category, level: 'warn', title, detail, hint });
 const block = (id, title, detail, hint, category = 'stability') => ({ id, category, level: 'block', title, detail, hint });
 
-export const MCP_RULE_IDS = [
-  'mcp-shape',
-  'mcp-servername',
-  'mcp-command',
-  'mcp-package',
-  'mcp-env-secret',
-  'mcp-local-script',
-];
 
 const TRANSPORTS = new Set(['stdio', 'sse', 'streamable-http']);
 const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;

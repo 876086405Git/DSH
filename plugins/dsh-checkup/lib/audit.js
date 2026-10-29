@@ -44,6 +44,19 @@ function auditPlugin(plugin, context) {
     });
   }
 
+  // 硬保护：@deepseek-ai/* 是 DSH 自己的包，永远不能建议卸载。
+  // 打包版把宿主封在 app.asar 里，若探测不到实体，上面的「实体缺失」会误判 ——
+  // 用户照着删掉 dsh-base / dsh-web-app，DSH 直接起不来。这条规则优先于一切。
+  if (typeof name === 'string' && name.startsWith('@deepseek-ai/')) {
+    return item('plugin', name, {
+      version: plugin.version,
+      status: 'DSH 内置包',
+      verdict: VERDICT.KEEP,
+      reason: 'DSH 内置包（@deepseek-ai 官方包），属于客户端自身组成部分，任何情况下都不建议卸载。',
+      signals: ['官方包硬保护'],
+    });
+  }
+
   if (!inNodeModules && inBundles) {
     return item('plugin', name, {
       version: plugin.version,

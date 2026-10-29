@@ -54,6 +54,29 @@ const pass = (id, title, detail) => ({ id, category: CATEGORY, level: 'pass', ti
 const warn = (id, title, detail, hint) => ({ id, category: CATEGORY, level: 'warn', title, detail, hint });
 const block = (id, title, detail, hint) => ({ id, category: CATEGORY, level: 'block', title, detail, hint });
 
+/// 每条检查允许用户单独指定处理方式：'block' | 'warn' | 'pass'。
+/** 三档之外的值一律忽略 —— 配置写错时退回规则自身的判定，而不是猜一个。 */
+export const LEVEL_CHOICES = ['block', 'warn', 'pass'];
+
+/**
+ * 按用户的逐项设置覆盖 level。
+ *
+ * 只改 level，不动 title/detail/hint：用户改的是「怎么处理」，不是「结论是什么」。
+ * 被覆盖的条目会带上 overridden 与 originalLevel，界面据此标注「已自定义」。
+ */
+export function applyLevelOverrides(checks, levelOverrides) {
+  if (!levelOverrides || typeof levelOverrides !== 'object') return checks;
+  for (const check of checks) {
+    const forced = levelOverrides[check.id];
+    if (!LEVEL_CHOICES.includes(forced)) continue;
+    if (check.level === forced) continue;
+    check.originalLevel = check.level;
+    check.level = forced;
+    check.overridden = true;
+  }
+  return checks;
+}
+
 /// 把一个检查列表收敛成结论：任何 block 即失败；同时按三类统计。
 export function summarize(checks) {
   const blocked = checks.filter((c) => c.level === 'block');
@@ -94,14 +117,14 @@ export function declaredNodeRange(manifest) {
 
 /// 主检查入口。
 export function checkCandidate(input) {
-  const { spec, manifest, env } = input || {};
+  const { spec, manifest, env, levelOverrides } = input || {};
   const checks = [];
   const manifestName = manifest?.name;
 
   // 1. spec 形态
   if (typeof spec !== 'string' || !spec.trim()) {
     checks.push(block('spec', '安装目标为空', '没有提供要安装的包名或路径。'));
-    return summarize(checks);
+    return summarize(applyLevelOverrides(checks, levelOverrides));
   }
   checks.push(pass('spec', '安装目标可解析', spec.trim()));
 
@@ -114,7 +137,7 @@ export function checkCandidate(input) {
         '确认网络/镜像可用，或改用本地路径安装。',
       ),
     );
-    return summarize(checks);
+    return summarize(applyLevelOverrides(checks, levelOverrides));
   }
 
   const label = manifestName ? `${manifestName}@${manifest.version || '?'}` : spec.trim();
@@ -122,7 +145,18 @@ export function checkCandidate(input) {
   // 2. 客户端版本兼容（本插件的核心诉求）
   const dshRange = declaredDshRange(manifest);
   if (dshRange) {
-    if (satisfies(env.dshVersion, dshRange)) {
+    // 宿主版本读不到（打包版 app.asar、探测失败）时不能判「不兼容」：
+    // 「没读到」不等于「不满足」，据此拒绝安装会把所有插件都挡在门外。
+    if (env.dshVersionKnown === false) {
+      checks.push(
+        warn(
+          'runtime-version',
+          '无法核对 DSH 版本',
+          ` ${label} 声明 dsh ${dshRange}，但没读到宿主版本，跳过该项`,
+          '确认桌面端版本后再判断，或先装后观察启动是否正常。',
+        ),
+      );
+    } else if (satisfies(env.dshVersion, dshRange)) {
       checks.push(pass('runtime-version', '兼容当前 DeepSeek Harness', `${label} 声明 dsh ${dshRange}，当前 ${env.dshVersion}`));
     } else {
       checks.push(
@@ -184,18 +218,30 @@ export function checkCandidate(input) {
   const injects = Array.isArray(client?.inject) ? client.inject : [];
   if (injects.length > 0) {
     const available = new Set(env.availableClientPackages || []);
-    const missing = injects.filter((entry) => !available.has(entry));
-    if (missing.length === 0) {
-      checks.push(pass('client-inject', '客户端注入依赖齐全', injects.join(', ')));
-    } else {
+    // 空集不代表「全缺」：打包版把宿主封在 app.asar 里，读不到包列表时只能算「无法核对」。
+    if (available.size === 0) {
       checks.push(
-        block(
+        warn(
           'client-inject',
-          '客户端注入依赖在当前版本不存在',
-          `缺少：${missing.join(', ')}（这些包在当前 DSH 版本里没有，加载时会 boot 失败并触发桌面端重启）`,
-          '安装适配当前 DSH 版本的插件版本，或联系作者移除对该包的依赖。',
+          '无法核对客户端注入依赖',
+          `没有读到宿主内置包列表，${injects.length} 个注入依赖未核对`,
+          '确认桌面端能正常加载插件后再装。',
         ),
       );
+    } else {
+      const missing = injects.filter((entry) => !available.has(entry));
+      if (missing.length === 0) {
+        checks.push(pass('client-inject', '客户端注入依赖齐全', injects.join(', ')));
+      } else {
+        checks.push(
+          block(
+            'client-inject',
+            '客户端注入依赖在当前版本不存在',
+            `缺少：${missing.join(', ')}（这些包在当前 DSH 版本里没有，加载时会 boot 失败并触发桌面端重启）`,
+            '安装适配当前 DSH 版本的插件版本，或联系作者移除对该包的依赖。',
+          ),
+        );
+      }
     }
   }
 
@@ -231,6 +277,8 @@ export function checkCandidate(input) {
   for (const [peerName, peerRange] of Object.entries(peers)) {
     const installed = env.installedVersions?.[peerName];
     if (!installed) {
+      // 安装清单为空说明没读到宿主的包信息，不能据此断言「未安装」。
+      if (Object.keys(env.installedVersions || {}).length === 0) continue;
       peerIssues.push(`${peerName} 未安装（要求 ${peerRange}）`);
       continue;
     }
@@ -300,17 +348,6 @@ export function checkCandidate(input) {
   // 稳定性：运行稳定与潜在 bug 风险
   checks.push(...checkStability({ manifest, env }));
 
-  return summarize(checks);
+  return summarize(applyLevelOverrides(checks, levelOverrides));
 }
 
-/// 校验「解析出的版本」是否真的比当前版本更合适（供 UI 提示用）。
-export function isNewer(candidate, current) {
-  const a = parseVersion(candidate);
-  const b = parseVersion(current);
-  if (!a || !b) return false;
-  return a.major !== b.major
-    ? a.major > b.major
-    : a.minor !== b.minor
-      ? a.minor > b.minor
-      : a.patch > b.patch;
-}

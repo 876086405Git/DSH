@@ -1,0 +1,16 @@
+# 依赖与本地产物：都由宿主 profile 或构建时生成，不进版本库
+node_modules/
+package-lock.json
+
+# 构建产物
+*.tgz
+dist/
+
+# 插件运行时留下的备份 / 状态
+cordis.patch.yml.checkup.bak
+cordis.patch.yml.*.bak
+*.bak-*
+
+# 临时文件
+*.tmp
+*.log
