@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { DESKTOP_PROFILE_MODULES } from "./_paths.mjs";
 
 let failures = 0;
 const ok = (label, condition, extra) => {
@@ -180,7 +181,7 @@ console.log("\n[C1] 隔离区路径校验：穿越与同前缀兄弟目录都必
 
 console.log("\n[symlink] 采集必须识别 pnpm 的 symlink 包（真实 profile）");
 {
-  const rawProfile = "C:\\Users\\Administrator\\.dsh\\profiles\\desktop\\node_modules";
+  const rawProfile = DESKTOP_PROFILE_MODULES;
   let hasSymlinkPkg = false;
   try {
     for (const scope of fs.readdirSync(rawProfile, { withFileTypes: true })) {

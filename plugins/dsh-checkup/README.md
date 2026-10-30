@@ -112,12 +112,12 @@ mod.apply({ slots: { inject: (_, f) => f(), register: () => ({}) } }) // 不抛�
 
 ### 为什么改一处不生效
 
-`package.json` 里是 `"dsh-checkup": "file:E:/kaifa/DSH-KAIFA/dsh-checkup"`，
+`package.json` 里是 `"dsh-checkup": "file:<你的插件源目录>"`（下面用 `$repo` 表示），
 pnpm 装进 profile 后是**实体副本**（不是软链）：
 
 ```text
-E:\kaifa\DSH-KAIFA\dsh-checkup\                      ← 源（作者维护）
-C:\Users\Administrator\.dsh\profiles\desktop\node_modules\dsh-checkup\   ← 生效副本
+<你的插件源目录>\                                    ← 源（作者维护）
+%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-checkup\   ← 生效副本
 ```
 
 两处**内容相同但各自独立**，必须**同时改**，否则改了源不生效、改了副本重装又复发。
@@ -485,10 +485,14 @@ levelOverrides: { "runtime-version": "warn", "sec-scripts": "block" }
 ## 安装
 
 ```powershell
+# 0. 三个路径都按本机推导，不用改常量
+$repo = 'D:\你的路径\dsh-checkup'                       # ← 只改这一处：本插件源目录
+$app  = "$env:LOCALAPPDATA\Programs\DeepSeek Harness"   # 桌面端安装根
+$node = "$app\resources\runtime\primary-runtime\dependencies\node\bin\node.exe"
+$pnpm = "$app\resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs"
+
 # 1. 装包（本地目录方式）
-$node = 'C:\Users\Administrator\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\node\bin\node.exe'
-$pnpm = 'C:\Users\Administrator\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs'
-& $node $pnpm --dir "$env:USERPROFILE\.dsh\profiles\desktop" add "file:E:\kaifa\DSH-KAIFA\dsh-checkup"
+& $node $pnpm --dir "$env:USERPROFILE\.dsh\profiles\desktop" add "file:$repo"
 
 # 2. 加进 bundles（无 BOM，务必用 Node 写）
 #    dsh.profile.bundles 末尾追加 "dsh-checkup"

@@ -4,6 +4,7 @@
 import { checkCandidate, summarize } from '../lib/rules.js';
 import { satisfies } from '../lib/version.js';
 import { resolveManifest, parseInstallSpec } from '../lib/index.js';
+import { REPO_ROOT } from './_paths.mjs';
 
 let failures = 0;
 let skips = 0;
@@ -132,7 +133,7 @@ console.log('\n[9] peer 依赖版本偏差 → 提醒并列出明细');
 console.log('\n[10] spec 解析');
 assert('名称+范围', JSON.stringify(parseInstallSpec('dsh-armory@2.4.3')) === JSON.stringify({ kind: 'registry', name: 'dsh-armory', range: '2.4.3' }));
 assert('scoped 名称', parseInstallSpec('@scope/pkg@^1.2.0').name === '@scope/pkg');
-assert('本地路径', parseInstallSpec('E:\\kaifa\\DSH-KAIFA\\checkup').kind === 'path');
+assert('本地路径', parseInstallSpec(REPO_ROOT).kind === 'path', REPO_ROOT);
 
 console.log('\n[11] 真实 registry 预检（只读 HTTP，网络抖动时显式 SKIP）');
 {

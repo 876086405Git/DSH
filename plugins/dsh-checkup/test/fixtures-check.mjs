@@ -1,8 +1,10 @@
-﻿import { runCheck } from "../lib/index.js";
+import { join } from "node:path";
+import { runCheck } from "../lib/index.js";
+import { REPO_ROOT } from "./_paths.mjs";
 
 const cases = [
-  ["不兼容包", "E:/kaifa/DSH-KAIFA/dsh-checkup/test/fixtures/incompatible"],
-  ["兼容包", "E:/kaifa/DSH-KAIFA/dsh-checkup/test/fixtures/compatible"],
+  ["不兼容包", join(REPO_ROOT, "test", "fixtures", "incompatible")],
+  ["兼容包", join(REPO_ROOT, "test", "fixtures", "compatible")],
 ];
 
 for (const [label, spec] of cases) {
