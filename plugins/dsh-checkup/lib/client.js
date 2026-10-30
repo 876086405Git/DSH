@@ -53,6 +53,15 @@ window.__ModuleLoader__.load({
       'known-bad': ['兼容性', '崩溃黑名单', '命中则直接阻止安装'],
       duplicate: ['兼容性', '重复安装', '包已在 profile bundles 中时提醒'],
       'bundle-load': ['兼容性', 'bundle 数量', '接近软上限时提醒，避免 boot 失败后难定位'],
+      // 交叉比对（候选 vs 已装）
+      'dup-plugin-version': ['兼容性', '同名包版本比对', '已装同名包时比版本：升级 / 降级 / 换版，避免覆盖错副本'],
+      'conflict-deps': ['兼容性', '依赖排斥', '候选的 dependencies 与本地已装版本是否互斥（宿主单例包装出第二份实例会静默失效）'],
+      'dup-connector-name': ['稳定性', '连接器重名', '与已配置连接器的 serverName 撞车，工具前缀会互相覆盖'],
+      'conflict-connector-tool': ['稳定性', '连接器工具冲突', '同一后端换名字重复接入，或名字只差大小写/分隔符'],
+      'dup-skill-content': ['稳定性', '技能内容重复', '改名重装同一份技能（SKILL.md 正文指纹或 frontmatter name 撞车）'],
+      'cand-expert-shape': ['兼容性', '专家预设结构', 'id 前缀 / 名称 / 人设正文是否完整'],
+      'cand-expert-dup': ['稳定性', '专家重复', '与已装专家撞 id / 撞名 / 同一套人设换个名字'],
+      'cand-expert-refs': ['稳定性', '专家引用插件', '专家引用的第三方插件是否已安装'],
       // 安全性
       'sec-manifest': ['安全性', '包元数据', '拿不到 package.json 时无法扫描安装脚本与依赖'],
       'sec-scripts': ['安全性', '安装脚本', '检查 preinstall/install/postinstall 里的下载即执行、编码执行、LOLBin 加载'],

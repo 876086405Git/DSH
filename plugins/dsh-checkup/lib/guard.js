@@ -256,7 +256,8 @@ export class InstallSentinel {
     if (this.removedMcpIds.has(id)) return;
     let report;
     try {
-      report = await this.checkMcpConfig(entry.config, {});
+      // 这条已经写进 patch 了：交叉比对时要把自己那一份从重复计数里减掉。
+      report = await this.checkMcpConfig(entry.config, { candidatePersisted: true });
     } catch (error) {
       this.logger?.warn?.(`checkup: MCP ${id} 检查失败（不拦截）：${error?.message || error}`);
       return;

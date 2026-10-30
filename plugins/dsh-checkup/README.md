@@ -281,21 +281,24 @@ G5 这次真的差点让一轮修复白做 —— 现在每个脚本都明确输
 | 0.3.2 | 落盘提示补齐（D1 完整化） |
 | 0.3.3 | 第一轮全面审计的 10 项修复（F1~F7、D3、B3 增强）+ 描述乱码（E2） |
 | 0.3.4 | 第二轮逐文件审查的 12 项修复（H1~H12）+ symlink / 专家 persona / 孤儿误报 3 个回归 |
+| 0.4.0 | **候选 vs 已装交叉比对**：8 条新规则（插件版本/依赖排斥、连接器重名/工具冲突、技能内容重复、专家三查）；修 MCP 重名自过滤（原来永远 warn 不到）；技能比对纳入 `~/.agents/skills` |
 
-## 验证基线（0.3.4）
+## 验证基线（0.4.0）
 
 每次改动后跑这套，全绿才算完：
 
 | 项 | 命令 | 期望 |
 | --- | --- | --- |
-| 语法 | `node --check lib/*.js`（11 个） | 全部 exit 0 |
-| 全量自检 | `test/` 下 13 套 | 254 项 ok、0 fail |
-| 源码↔副本 | SHA256 比对 11 个文件 | 0 不一致 |
+| 语法 | `node --check lib/*.js`（12 个） | 全部 exit 0 |
+| 全量自检 | `test/` 下 14 套 | 全 ok、0 fail |
+| 反向插桩 | 把 8 条交叉比对规则逐条改回失效，跑 `test/cross-check.test.mjs` | 必须大面积 FAIL（20+ 项） |
+| 源码↔副本 | SHA256 比对 12 个文件 | 0 不一致 |
 | 副本独立自检 | `node test/offline-client-check.mjs <副本目录>` | ALL PASS |
 | 运行时（重启后） | `/api-checkup/{state,armory,inventory,guard,audit}` | 全 200；四类 8 项 pass |
 
-13 套套件清单：`verify` / `security-stability` / `skill-mcp` / `audit` / `degraded-probe` /
-`level-override` / `armory` / `guard` / `hardening` / `review-fixes` / `config` / `real-patch` / `offline-client-check`。
+14 套套件清单：`verify` / `security-stability` / `skill-mcp` / `audit` / `degraded-probe` /
+`level-override` / `armory` / `guard` / `hardening` / `review-fixes` / `config` / `real-patch` /
+`offline-client-check` / `cross-check`。
 
 > `test/probe_env.mjs` 与 `test/fixtures-check.mjs` 是**手工排查工具**，不在自检清单里：
 > 前者打印当前环境探测结果，后者校验 `fixtures/` 两个 package.json 是否仍符合预期用途。
@@ -336,6 +339,8 @@ pluginManager.installBundle(spec)      ← 本插件在此处包装
 | `peer-deps` | warn | peer 依赖逐条版本比对 |
 | `known-bad` | block | 崩溃黑名单命中 |
 | `duplicate` | warn | 已在 profile bundles 中 |
+| `dup-plugin-version` | warn | 已装同名包时比版本（升级 / 降级 / 换版），或同名包只作为依赖存在 |
+| `conflict-deps` | block/warn | 候选 `dependencies` 与已装版本互斥：宿主单例包（`@deepseek-ai/*`）block，普通包 warn |
 | `bundle-load` | warn | 接近 bundle 数量软上限 |
 
 ### 安全性（security）— 隐私泄露 / 恶意代码 / 病毒代码
@@ -365,6 +370,33 @@ pluginManager.installBundle(spec)      ← 本插件在此处包装
 每条返回 `{ id, category, level, title, detail, hint }`；任何 `block` 即拒绝安装。
 `summarize()` 另给出 `byCategory` 统计（每类的阻止 / 提醒 / 通过数）。
 
+## 交叉比对：候选 vs 已装（0.4.0 新增）
+
+0.3.4 之前只判「这个包能不能装」，不判「装上之后会不会和已装的打架」。0.4.0 补上这一层：
+**准备安装的对象**逐一与**本地已装对象**比对，判断重复、冲突排斥、不兼容。
+
+| 对象 | 规则 | 级别 | 判什么 |
+| --- | --- | --- | --- |
+| 插件 | `dup-plugin-version` | warn | 已装同名包时比版本：同版本 / 升级 / 降级 / 同名但只作为依赖存在 |
+| 插件 | `conflict-deps` | block / warn | 候选 `dependencies` 要求的版本与本地已装版本是否互斥；`@deepseek-ai/*` 是宿主单例包，装出第二份实例会静默失效 |
+| 连接器 | `dup-connector-name` | warn | `serverName` 与已配连接器撞车（大小写不敏感），工具前缀 `mcp__<server>__*` 会互相覆盖 |
+| 连接器 | `conflict-connector-tool` | warn | 名字只差分隔符（`c_ad` vs `cad`），或同一个后端（命令+参数完全相同）换了名字重复接入 |
+| 技能 | `dup-skill-content` | warn | 改名重装同一份技能：SKILL.md 正文指纹相同，或 frontmatter `name` 撞车 |
+| 专家 | `cand-expert-shape` | block / warn | id 前缀、名称、人设正文是否完整（空人设 / 不足 20 字） |
+| 专家 | `cand-expert-dup` | block / warn | 与已装专家撞 id（block）、同一套人设换名（warn）、名称撞车（warn） |
+| 专家 | `cand-expert-refs` | warn | 专家引用的第三方插件是否已安装 |
+
+设计要点：
+
+- **数据来源不再各扫各的**：`collectArmory()` 已经拿得到四类快照，现在这些数据直接进预检环境，
+  不再是「装前只看包名、装后才看全貌」。
+- **`candidatePersisted` 解决自己撞自己**：哨兵复查和「已装项体检」检查的是**已经写进配置**的条目，
+  重复计数要减掉自己那一份，否则每条都会自报重复。面板的装前检查传 `false`（候选还没落盘）。
+- **锚定规则改了**：连接器重名从 `mcp-servername` 搬到 `dup-connector-name` —— 名字合法性归前者，
+  「和已装的撞不撞」归后者，两边可以分别调级。
+- **技能两个根都算**：`~/.dsh/skills` 与 `~/.agents/skills` 一起比对，只扫前者会漏掉 agent 根里的同名冲突。
+- 专家走 `POST /api-checkup/check-expert` 预检（`{ candidate: { id, name, persona, externalRefs? } }`）。
+
 ## Skill 与 MCP（没有安装 API，靠检查 + 体检覆盖）
 
 宿主对这两类**没有安装入口**，所以体检中心不拦截、只做检查：
@@ -379,22 +411,35 @@ pluginManager.installBundle(spec)      ← 本插件在此处包装
 | id | 级别 | 内容 |
 | --- | --- | --- |
 | `sk-manifest` | 阻止 / 提醒 | 必须有 SKILL.md；frontmatter 要有 name + description |
-| `sk-name` | 提醒 | 命名规范、与已装 skill 重名 |
+| `sk-name` | 提醒 | 命名规范、与已装 skill 重名（`~/.dsh/skills` 与 `~/.agents/skills` 两个根都算） |
 | `sk-scripts` | 阻止 / 提醒 | skill 内 `.js/.py/.sh/.ps1` 的隐私读取、下载即执行、混淆执行 |
 | `sk-instructions` | 提醒 | SKILL.md 里教用户 `curl \| sh`、PowerShell 编码命令等 |
 | `sk-deps` | 通过 | 是否有 requirements.txt / package.json |
 | `sk-size` | 提醒 | 文件数 > 500 |
+| `dup-skill-content` | 提醒 | 与已装技能内容完全相同（SKILL.md 正文指纹），或 frontmatter `name` 撞车 |
 
 ### MCP 检查（`lib/mcp.js`）
 
 | id | 级别 | 内容 |
 | --- | --- | --- |
 | `mcp-shape` | 阻止 | transport ∈ {stdio, sse, streamable-http}；stdio 必须有 command |
-| `mcp-servername` | 提醒 | `^[A-Za-z0-9_-]{1,32}$`、不能与现有 MCP 重名（工具前缀 `mcp__<name>__*`） |
+| `mcp-servername` | 提醒 | `^[A-Za-z0-9_-]{1,32}$`（只管名字本身合法；撞名见下一条） |
+| `dup-connector-name` | 提醒 | `serverName` 与已配连接器重复（大小写不敏感；已落盘条目复查时减掉自己那份） |
+| `conflict-connector-tool` | 提醒 | 名字只差分隔符，或同一后端（命令+参数相同）换名字重复接入 |
 | `mcp-command` | 阻止 | 启动命令在 PATH / 绝对路径上是否存在 |
 | `mcp-package` | 提醒/通过 | npm 包（npx）→ 复用插件整套规则预检；python 包（uvx）只校验命令与参数 |
 | `mcp-env-secret` | 提醒 | env 里明文写 API key/token（建议 `${ENV}` 引用） |
 | `mcp-known-bad` | 阻止 | serverName / 包 / 程序名命中黑名单 |
+
+### 专家检查（`lib/expert.js`，0.4.0 新增）
+
+| id | 级别 | 内容 |
+| --- | --- | --- |
+| `cand-expert-shape` | 阻止 / 提醒 | id 必须是 `preset-*`（`preset-wbexpert-*` 才被军械库面板识别）、名称非空、人设正文非空 |
+| `cand-expert-dup` | 阻止 / 提醒 | 与已装专家撞 id → block；同一套人设换个名字 → warn；名称撞车 → warn |
+| `cand-expert-refs` | 提醒 | 专家引用的第三方插件没装，启用后工具不可用 |
+
+入口：`POST /api-checkup/check-expert`，body 为 `{ candidate: { id, name, persona, externalRefs? }, selfId? }`。
 
 ## 逐项自定义处理方式（block / warn / pass）
 

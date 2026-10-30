@@ -21,8 +21,9 @@ import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { checkCandidate, summarize, RULE_IDS, CATEGORIES, declaredDshRange } from './rules.js';
 import { scanSourceText } from './security.js';
-import { checkSkill } from './skill.js';
+import { checkSkill, parseFrontmatter, skillContentHash } from './skill.js';
 import { checkMcp, extractMcpTarget } from './mcp.js';
+import { checkExpert, summarizeExpert } from './expert.js';
 import { auditEnvironment } from './audit.js';
 import { checkArmory, summarizeArmory, ARMORY_KINDS, ARMORY_RULE_IDS } from './armory.js';
 import { satisfies, parseVersion } from './version.js';
@@ -349,6 +350,24 @@ export async function readSkillFiles(rootDir) {
   return files;
 }
 
+/// 只读 SKILL.md 做指纹（其余文件不读，避免体检时把每个技能整个扫一遍）。
+async function readSkillSignature(root, dirName) {
+  const row = { dirName, root, skillName: '', hash: '' };
+  const dir = join(root, dirName);
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const hit = entries.find((entry) => entry.isFile() && /^skill\.md$/i.test(entry.name));
+  if (!hit) return row;
+  let manifest;
+  try {
+    manifest = await readFile(join(dir, hit.name), 'utf8');
+  } catch {
+    return row;
+  }
+  row.hash = skillContentHash(manifest);
+  row.skillName = parseFrontmatter(manifest)?.name || '';
+  return row;
+}
+
 /// 检查一个 skill 目录（供面板/预检用）。
 export async function checkSkillDir(dirPath) {
   const files = await readSkillFiles(dirPath);
@@ -358,13 +377,25 @@ export async function checkSkillDir(dirPath) {
     if (!/\.(js|mjs|cjs|py|sh|ps1|bat|cmd)$/i.test(file.path)) continue;
     scriptHits.push(...scanSourceText(file.text, file.path));
   }
-  // 被检查的目录自己不算「与 ~/.dsh/skills 下的技能重名」。
-  const selfName = String(dirPath || '').split(/[\\/]/).filter(Boolean).pop();
-  const existingNames = existsSync(SKILLS_ROOT)
-    ? (await readdir(SKILLS_ROOT).catch(() => [])).filter((name) => name !== selfName)
-    : [];
+  // 被检查的目录自己不算「与已装技能重名」——按**完整路径**排除，不能按目录名：
+  // 另一个技能根里可能有同名目录，那正是要报出来的冲突。
+  const selfPath = resolve(String(dirPath || ''));
+  // 两个技能根都要比对：宿主会同时发现 ~/.dsh/skills 与 ~/.agents/skills，
+  // 只比前者会漏掉「agent 根里已有同名 / 同内容技能」这一类冲突。
+  const existingNames = [];
+  const existingSkills = [];
+  for (const root of [SKILLS_ROOT, AGENTS_SKILLS_ROOT]) {
+    const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = join(root, entry.name);
+      if (resolve(full) === selfPath) continue;
+      existingNames.push(entry.name);
+      existingSkills.push(await readSkillSignature(root, entry.name));
+    }
+  }
   return summarize(
-    checkSkill({ dirPath, files, existingNames, scriptHits }),
+    checkSkill({ dirPath, files, existingNames, existingSkills, scriptHits }),
   );
 }
 
@@ -669,9 +700,12 @@ export async function readExpertPresets() {
     if (typeof row.id === 'string' && row.id.startsWith(PREFIX)) {
       const cfg = row.config && typeof row.config === 'object' && !Array.isArray(row.config) ? row.config : {};
       let personaLen = 0;
+      let persona = '';
       const consider = (value) => {
         if (typeof value !== 'string') return;
         personaLen = Math.max(personaLen, value.replace(/\s+/g, '').length);
+        const cleaned = value.replace(/\s+/g, ' ').trim();
+        if (cleaned.length > persona.length) persona = cleaned;
       };
       // 真实形态：config.plugins[<persona 行>].config.prefix / suffix
       for (const plugin of Array.isArray(cfg.plugins) ? cfg.plugins : []) {
@@ -700,6 +734,7 @@ export async function readExpertPresets() {
         name: typeof cfg.name === 'string' ? cfg.name.trim() : '',
         plugin: row.id.slice(PREFIX.length),
         hasPersona: personaLen > 20,
+        persona,
         externalRefs,
       });
     }
@@ -802,7 +837,9 @@ export async function collectArmory() {
     });
   }
 
-  const experts = (await readExpertPresets()).map((row) => ({
+  // persona 正文可能有几千字，不进面板快照：只留比对用的关键字段，
+  // 需要正文比对时用 checkExpertConfig() 现读。
+  const experts = (await readExpertPresets()).map(({ persona, ...row }) => ({
     ...row,
     // 孤儿判定只看「专家引用的第三方插件包」是否还在 bundles 里。
     // 不能用 row.plugin（那只是 WorkBuddy 的专家标识，如 code-review-expert），
@@ -828,14 +865,24 @@ export async function runAudit() {
   });
 }
 
-/// 检查一条 MCP 配置：静态规则 + 若目标是包则复用插件那套 registry 预检。
-export async function checkMcpConfig(config, options = {}) {  const entries = Array.isArray(options.existingServerNames) ? options.existingServerNames : (await readMcpEntries())
-    .map((item) => item.config.serverName)
-    .filter(Boolean);
+/// 检查一条 MCP 配置：静态规则 + 与已装连接器的交叉比对 + 若目标是包则复用插件那套 registry 预检。
+export async function checkMcpConfig(config, options = {}) {
+  const rows = (await readMcpEntries()).map((item) => ({
+    id: item.id,
+    serverName: item.config.serverName,
+    command: item.config.command,
+    args: item.config.args,
+  }));
+  const entries = Array.isArray(options.existingServerNames)
+    ? options.existingServerNames
+    : rows.map((row) => row.serverName).filter(Boolean);
   const target = extractMcpTarget(config);
   const checks = checkMcp(config, {
     resolvedCommand: resolveCommandPath(config && config.command),
-    existingServerNames: entries.filter((name) => name !== (config && config.serverName)),
+    // 交叉比对要看到全部已装条目（含同名），「减掉自己那一份」由 candidatePersisted 控制。
+    existingServerNames: entries,
+    existingConnectors: rows,
+    candidatePersisted: options.candidatePersisted === true,
     knownBad: Array.isArray(options.knownBad) ? options.knownBad : [],
   });
 
@@ -853,6 +900,24 @@ export async function checkMcpConfig(config, options = {}) {  const entries = Ar
     ...summarize(checks),
     target,
     packageReport,
+    at: new Date().toISOString(),
+  };
+}
+
+/// 检查一条候选专家配置：结构 + 与已装专家的交叉比对。
+/// 专家是 patch 里的一行配置（不是包），所以没有 registry 侧可查，只做本地比对。
+export async function checkExpertConfig(candidate, options = {}) {
+  const experts = await readExpertPresets();
+  const env = await probeEnvironment();
+  const installedNames = [...new Set([...(env.profileBundles || []), ...Object.keys(env.installedVersions || {})])];
+  const checks = checkExpert(candidate, {
+    experts,
+    installedNames,
+    selfId: typeof options.selfId === 'string' ? options.selfId : '',
+  });
+  return {
+    ...summarizeExpert(checks),
+    candidate,
     at: new Date().toISOString(),
   };
 }
@@ -1427,6 +1492,19 @@ export function apply(ctx, config) {
       }),
     );
 
+    // 专家检查：一条准备写进 profile 的 dsh-agent-preset 配置。
+    ws.register(
+      jsonRoute('/api-checkup/check-expert', async (req) => {
+        const body = await readBody(req);
+        const candidate = body && typeof body.candidate === 'object' ? body.candidate : null;
+        if (!candidate) return [400, { ok: false, error: '缺少 candidate' }];
+        const report = await checkExpertConfig(candidate, {
+          selfId: typeof body.selfId === 'string' ? body.selfId : '',
+        });
+        return [200, { ok: true, report }];
+      }),
+    );
+
     // 已装项体检：扫 ~/.dsh/skills 与 profile 里所有 MCP 条目。
     ws.register(
       jsonRoute('/api-checkup/inventory', async () => {
@@ -1453,6 +1531,8 @@ export function apply(ctx, config) {
         for (const item of mcpEntries) {
           const report = await checkMcpConfig(item.config, {
             existingServerNames: mcpEntries.map((x) => x.config.serverName).filter(Boolean),
+            // 这里检查的是已经写进 patch 的条目：重复计数要减掉自己那一份。
+            candidatePersisted: true,
             knownBad: settings.knownBad,
           });
           mcp.push({

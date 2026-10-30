@@ -98,7 +98,10 @@ console.log('\n[F] MCP 配置检查');
   ok('命令不存在 → block', levelOf(missingCmd, 'mcp-command') === 'block');
 
   const dup = checkMcp({ transport: 'stdio', serverName: 'cad', command: 'uvx' }, { resolvedCommand: { exists: true, path: 'x' }, existingServerNames: ['cad'] });
-  ok('serverName 重复 → warn', levelOf(dup, 'mcp-servername') === 'warn');
+  // 0.4.0：重名判定从 mcp-servername 拆到 dup-connector-name —— 它本质是
+  // 「候选 vs 已装」的交叉比对，而不是名字本身的合法性；拆开才能单独调级。
+  ok('serverName 重复 → warn(dup-connector-name)', levelOf(dup, 'dup-connector-name') === 'warn');
+  ok('重名不影响名字合法性判定', levelOf(dup, 'mcp-servername') === 'pass');
 
   const secret = checkMcp(
     { transport: 'stdio', serverName: 'x', command: 'uvx', env: { API_KEY: 'sk-abcdef123456' } },
