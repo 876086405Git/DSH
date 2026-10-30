@@ -479,6 +479,8 @@ window.__ModuleLoader__.load({
       const [installMessage, setInstallMessage] = useState(null);
       // #1 /check 通过后拿到的一次性 token，安装接口必须带上它。
       const [approvalToken, setApprovalToken] = useState(null);
+      // 强制安装的风险提示面板（检查未通过 + 用户点「强制安装」后显示）。
+      const [installShowRisk, setInstallShowRisk] = useState(false);
 
       // Skill / MCP：没有安装 API，提供「装前检查 + 已装项体检」
       const [skillPath, setSkillPath] = useState('');
@@ -609,6 +611,7 @@ window.__ModuleLoader__.load({
         setInstallStage('checking');
         setInstallReport(null);
         setInstallMessage(null);
+        setInstallShowRisk(false);
         postJson('/api-checkup/check', { spec: target })
           .then((data) => {
             if (!mounted.current) return;
@@ -626,13 +629,14 @@ window.__ModuleLoader__.load({
           });
       }, [installSpec, load]);
 
-      // 安装流程第 3 步：只有检查通过后才能执行
-      const runInstall = useCallback(() => {
+      // 安装流程第 3 步：检查通过后执行；force=true 时为「已知风险强制安装」。
+      const runInstall = useCallback((force) => {
         const target = installSpec.trim();
         if (!target) return;
+        setInstallShowRisk(false);
         setInstallStage('installing');
         setInstallMessage(null);
-        postJson('/api-checkup/install', { spec: target, token: approvalToken })
+        postJson('/api-checkup/install', { spec: target, token: approvalToken, force: force === true })
           .then((data) => {
             if (!mounted.current) return;
             if (data && data.ok === true) {
@@ -1526,26 +1530,110 @@ window.__ModuleLoader__.load({
             ]),
           ),
 
-          // 未通过：红色横幅 + 原因（不出现安装按钮）
+          // 未通过：红色横幅 + 原因；点「强制安装」后换成风险提示面板。
           installReport && installReport.ok === false
-            ? h(
-                'div',
-                {
-                  style: {
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    marginBottom: 10,
-                    border: '1px solid rgba(255,107,107,.55)',
-                    background: 'rgba(255,107,107,.1)',
-                  },
-                },
-                h('div', { style: { fontSize: 14, fontWeight: 700, color: C.block } }, `检查未通过 · ${installReport.blocked} 项阻止安装`),
-                h(
+            ? installShowRisk
+              ? h(
                   'div',
-                  { style: { fontSize: 12, color: C.dim, marginTop: 4, lineHeight: 1.7 } },
-                  '按下面列出的原因处理好后，再点「开始检查」；检查通过前不会执行安装。',
-                ),
-              )
+                  {
+                    style: {
+                      padding: 12,
+                      borderRadius: 10,
+                      marginBottom: 10,
+                      border: '1px solid rgba(255,107,107,.55)',
+                      background: 'rgba(255,107,107,.08)',
+                    },
+                  },
+                  h(
+                    'div',
+                    { style: { fontSize: 14, fontWeight: 700, color: C.block, display: 'flex', alignItems: 'center', gap: 8 } },
+                    h('span', { style: { fontSize: 16 } }, '⚠️'),
+                    '强制安装风险确认',
+                  ),
+                  h(
+                    'div',
+                    { style: { fontSize: 12, color: C.dim, marginTop: 4, lineHeight: 1.7 } },
+                    `本次检查有 ${installReport.blocked} 项被阻止安装。强制安装会跳过这些拦截，把该插件直接装进运行环境。`,
+                  ),
+                  h(
+                    'div',
+                    { style: { marginTop: 10 } },
+                    (installReport.checks || [])
+                      .filter((c) => c.level === 'block')
+                      .map((c) =>
+                        h(
+                          'div',
+                          {
+                            key: c.id,
+                            style: {
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: 'rgba(0,0,0,.18)',
+                              border: '1px solid rgba(255,107,107,.35)',
+                              marginBottom: 8,
+                            },
+                          },
+                          h('div', { style: { fontSize: 12, fontWeight: 700, color: C.block } }, c.title),
+                          c.detail
+                            ? h('div', { style: { fontSize: 12, color: C.dim, marginTop: 3, lineHeight: 1.6 } }, c.detail)
+                            : null,
+                        ),
+                      ),
+                  ),
+                  h(
+                    'div',
+                    {
+                      style: {
+                        padding: 10,
+                        borderRadius: 8,
+                        border: '1px solid rgba(240,180,41,.45)',
+                        background: 'rgba(240,180,41,.08)',
+                        fontSize: 12,
+                        color: C.warn,
+                        marginTop: 10,
+                        lineHeight: 1.8,
+                      },
+                    },
+                    h('b', null, '可能带来的风险：'),
+                    '被拦截的问题（如版本不兼容、隐私读取、恶意代码、已知漏洞等）不会被修复，强制安装后它们会真实生效，可能导致隐私泄露、数据被篡改、桌面端崩溃或启动失败。',
+                    h('br'),
+                    h('b', null, '责任说明：'),
+                    '你已了解上述风险，并自愿在明知存在这些风险的情况下继续安装；由此造成的一切后果由你自行承担。',
+                  ),
+                  h(
+                    'div',
+                    { style: { marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' } },
+                    h(SmallButton, { onClick: () => setInstallShowRisk(false) }, '取消'),
+                    h(
+                      SmallButton,
+                      { tone: 'danger', onClick: () => runInstall(true), disabled: installStage === 'installing' },
+                      installStage === 'installing' ? '安装中…' : '已知风险确认安装',
+                    ),
+                  ),
+                )
+              : h(
+                  'div',
+                  {
+                    style: {
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      marginBottom: 10,
+                      border: '1px solid rgba(255,107,107,.55)',
+                      background: 'rgba(255,107,107,.1)',
+                    },
+                  },
+                  h('div', { style: { fontSize: 14, fontWeight: 700, color: C.block } }, `检查未通过 · ${installReport.blocked} 项阻止安装`),
+                  h(
+                    'div',
+                    { style: { fontSize: 12, color: C.dim, marginTop: 4, lineHeight: 1.7 } },
+                    '按下面列出的原因处理好后，再点「开始检查」；检查通过前不会执行安装。',
+                  ),
+                  h(
+                    'div',
+                    { style: { marginTop: 10 } },
+                    h(SmallButton, { onClick: () => setInstallShowRisk(true) }, '强制安装'),
+                  ),
+                )
             : null,
 
           // 通过：✅ 检查通过 + 安装按钮
@@ -1581,7 +1669,7 @@ window.__ModuleLoader__.load({
                         SmallButton,
                         {
                           tone: 'primary',
-                          onClick: runInstall,
+                          onClick: () => runInstall(false),
                           disabled: installStage === 'installing',
                         },
                         installStage === 'installing' ? '安装中…' : '开始安装插件',
@@ -1744,7 +1832,7 @@ window.__ModuleLoader__.load({
     // filter / contain，会形成新的 stacking context，把 position:fixed 与 z-index
     // 困在容器内——实测会被 DSH 自己的「正在准备安装…」对话框盖住。
     const OVERLAY_ID = 'checkup-overlay-root';
-    const overlayState = { pending: null, message: null, busy: false };
+    const overlayState = { pending: null, message: null, busy: false, showRisk: false };
 
     function ensureOverlayHost() {
       let host = document.getElementById(OVERLAY_ID);
@@ -1775,7 +1863,13 @@ window.__ModuleLoader__.load({
 
     function overlayBtn(label, action, opts) {
       const primary = opts && opts.primary;
+      const danger = opts && opts.danger;
       const disabled = opts && opts.disabled;
+      const tone = danger
+        ? 'background:#d93b3b;color:#fff;'
+        : primary
+          ? 'background:#4c8dff;color:#fff;'
+          : 'background:rgba(255,255,255,.08);color:#e8e8ea;';
       return (
         `<button data-action="${action}"${disabled ? ' disabled' : ''} style="` +
         'padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:' +
@@ -1783,7 +1877,7 @@ window.__ModuleLoader__.load({
         ';opacity:' +
         (disabled ? '.5' : '1') +
         ';border:1px solid rgba(255,255,255,.14);' +
-        (primary ? 'background:#4c8dff;color:#fff;' : 'background:rgba(255,255,255,.08);color:#e8e8ea;') +
+        tone +
         `">${escHtml(label)}</button>`
       );
     }
@@ -1846,6 +1940,42 @@ window.__ModuleLoader__.load({
         .join('');
     }
 
+    /// 强制安装的风险提示面板：列出被阻止的项 + 风险与责任说明。
+    /// 这是强制安装前的强制确认环节，不能跳过；取消则回到「检查未通过」状态。
+    function overlayRiskPanel(report) {
+      const blocks = (Array.isArray(report.checks) ? report.checks : []).filter((c) => c.level === 'block');
+      const blockRows = blocks
+        .map((check) => {
+          const detail = check.detail
+            ? `<div style="font-size:12px;color:#9a9aa2;margin-top:3px;line-height:1.6;">${escHtml(check.detail)}</div>`
+            : '';
+          return (
+            '<div style="padding:9px 11px;border-radius:8px;background:rgba(0,0,0,.18);' +
+            'border:1px solid rgba(255,107,107,.35);margin-bottom:8px;">' +
+            `<div style="font-size:12px;font-weight:700;color:#ff6b6b;">${escHtml(check.title)}</div>` +
+            detail +
+            '</div>'
+          );
+        })
+        .join('');
+      return (
+        '<div style="padding:14px 16px;overflow:auto;">' +
+        '<div style="padding:12px 14px;border-radius:10px;margin-bottom:12px;' +
+        'border:1px solid rgba(255,107,107,.55);background:rgba(255,107,107,.1);">' +
+        '<div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#ff6b6b;">' +
+        '<span style="font-size:17px;">⚠️</span>强制安装风险确认</div>' +
+        '<div style="font-size:12px;color:#9a9aa2;margin-top:4px;line-height:1.7;">' +
+        `本次检查有 ${blocks.length} 项被阻止安装。强制安装会跳过这些拦截，把该插件直接装进运行环境。</div></div>` +
+        (blockRows ? `<div style="margin-bottom:12px;">${blockRows}</div>` : '') +
+        '<div style="padding:12px 14px;border-radius:10px;border:1px solid rgba(240,180,41,.45);' +
+        'background:rgba(240,180,41,.08);font-size:12px;color:#f0b429;line-height:1.8;">' +
+        '<b>可能带来的风险：</b>被拦截的问题（如版本不兼容、隐私读取、恶意代码、已知漏洞等）不会被修复，' +
+        '强制安装后它们会真实生效，可能导致隐私泄露、数据被篡改、桌面端崩溃或启动失败。<br>' +
+        '<b>责任说明：</b>你已了解上述风险，并自愿在明知存在这些风险的情况下继续安装；由此造成的一切后果由你自行承担。</div>' +
+        '</div>'
+      );
+    }
+
     function renderOverlay() {
       const host = ensureOverlayHost();
       const { pending, message, busy } = overlayState;
@@ -1858,6 +1988,7 @@ window.__ModuleLoader__.load({
 
       const report = pending ? pending.report : null;
       const passed = Boolean(report && report.ok === true);
+      const showRisk = overlayState.showRisk && !passed && Boolean(report);
 
       let banner = '';
       if (message) {
@@ -1890,10 +2021,25 @@ window.__ModuleLoader__.load({
             : '按下面列出的原因处理后，重新点安装。'}</div></div>`;
       }
 
-      const footer = message
-        ? overlayBtn('关闭', 'dismiss')
-        : (passed ? overlayBtn(busy ? '安装中…' : '开始安装插件', 'install', { primary: true, disabled: busy }) : '') +
+      const bodyHtml = showRisk
+        ? overlayRiskPanel(report)
+        : `${banner}${report ? overlayCheckRows(report.checks) : ''}`;
+
+      let footer;
+      if (message) {
+        footer = overlayBtn('关闭', 'dismiss');
+      } else if (showRisk) {
+        // 强制安装的风险确认面板：右下角「已知风险确认安装」+ 取消。
+        footer =
+          overlayBtn('取消', 'force-cancel', { disabled: busy }) +
+          overlayBtn(busy ? '安装中…' : '已知风险确认安装', 'force-confirm', { danger: true, disabled: busy });
+      } else {
+        footer =
+          (passed
+            ? overlayBtn(busy ? '安装中…' : '开始安装插件', 'install', { primary: true, disabled: busy })
+            : overlayBtn('强制安装', 'force', { disabled: busy })) +
           overlayBtn(passed ? '取消安装' : '关闭（不安装）', 'cancel', { disabled: busy });
+      }
 
       host.innerHTML =
         '<div style="width:720px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;' +
@@ -1903,7 +2049,7 @@ window.__ModuleLoader__.load({
         '<span style="font-size:15px;font-weight:700;">DSH体检中心 · 安装前检查</span>' +
         '<span style="font-size:12px;color:#9a9aa2;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
         `${escHtml(pending ? pending.spec : '')}</span></div>` +
-        `<div style="padding:14px 16px;overflow:auto;">${banner}${report ? overlayCheckRows(report.checks) : ''}</div>` +
+        `<div style="padding:14px 16px;overflow:auto;">${bodyHtml}</div>` +
         `<div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.12);">${footer}</div>` +
         '</div>';
     }
@@ -1917,11 +2063,27 @@ window.__ModuleLoader__.load({
         const onClick = (event) => {
           const el = event.target && event.target.closest ? event.target.closest('[data-action]') : null;
           if (!el) return;
-          const action = el.getAttribute('data-action');
+          let action = el.getAttribute('data-action');
           if (action === 'dismiss') {
             overlayState.message = null;
             renderOverlay();
             return;
+          }
+          if (action === 'force') {
+            overlayState.showRisk = true;
+            renderOverlay();
+            return;
+          }
+          if (action === 'force-cancel') {
+            overlayState.showRisk = false;
+            renderOverlay();
+            return;
+          }
+          // 「已知风险确认安装」→ 走和正常安装一样的确认流程（后端 confirm 不看 block）。
+          const forced = action === 'force-confirm';
+          if (forced) {
+            overlayState.showRisk = false;
+            action = 'install';
           }
           const pending = overlayState.pending;
           if (!pending) return;
@@ -1934,7 +2096,10 @@ window.__ModuleLoader__.load({
                 overlayState.pending = null;
                 overlayState.message =
                   action === 'install'
-                    ? { ok: true, text: '已开始安装，完成后重启桌面端生效。' }
+                    ? {
+                        ok: true,
+                        text: forced ? '已强制安装，完成后重启桌面端生效。' : '已开始安装，完成后重启桌面端生效。',
+                      }
                     : { ok: false, text: '已取消本次安装。' };
               } else {
                 overlayState.message = { ok: false, text: (data && data.error) || '操作失败' };
@@ -1960,6 +2125,7 @@ window.__ModuleLoader__.load({
                   overlayState.pending = data.pending;
                   overlayState.message = null;
                   overlayState.busy = false;
+                  overlayState.showRisk = false;
                   renderOverlay();
                 }
               }

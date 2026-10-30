@@ -1683,9 +1683,11 @@ export function apply(ctx, config) {
         const spec = typeof body.spec === 'string' ? body.spec : '';
         if (!spec.trim()) return [400, { ok: false, error: '缺少 spec' }];
         const report = await decide(spec);
-        if (report.ok) approved = { spec: spec.trim(), at: Date.now(), token: randomUUID() };
-        // 只有本轮检查通过才发 token；面板要拿它才能调 /install。
-        return [200, { ok: true, report, approvalToken: report.ok ? approved.token : null }];
+        // 每轮检查都发一次性 token（未通过也发）：token 只证明「这个 spec 刚检查过」，
+        // 装不装得下由 /install 侧按 report.ok + force 决定。强制安装也必须走同一把 token，
+        // 不能绕过「必须先检查」这一步。
+        approved = { spec: spec.trim(), at: Date.now(), token: randomUUID() };
+        return [200, { ok: true, report, approvalToken: approved.token }];
       }),
     );
 
@@ -1695,9 +1697,13 @@ export function apply(ctx, config) {
         const body = await readBody(req);
         const spec = typeof body.spec === 'string' ? body.spec : '';
         if (!spec.trim()) return [400, { ok: false, error: '缺少 spec' }];
+        // 强制安装：用户在风险提示面板点「已知风险确认安装」后才带 force=true。
+        // 检查逻辑本身不改，只是允许在「用户明知风险」的前提下跳过 block；
+        // 一次性 token 仍然必须有效（必须先在本面板检查过这个 spec）。
+        const force = body.force === true;
 
         const report = await decide(spec);
-        if (!report.ok) return [409, { ok: false, blocked: true, report, error: '检查未通过，未执行安装' }];
+        if (!report.ok && !force) return [409, { ok: false, blocked: true, report, error: '检查未通过，未执行安装' }];
 
         const token = typeof body.token === 'string' ? body.token.trim() : '';
         const fresh =

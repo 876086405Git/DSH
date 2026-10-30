@@ -285,24 +285,26 @@ G5 这次真的差点让一轮修复白做 —— 现在每个脚本都明确输
 | 0.4.1 | **能力评估修复**：拿不到元数据改判「零预检」并阻止；`sec-source` 三态（不再假绿）；扫描器不再拦自己；`sec-scripts` 补两步下载执行 / `rm -rf ~` / 内联执行；字符串拼接去混淆；仿冒按「增删 / 换序 / 同形」分类；预发布宿主不再误杀；packument 进程内缓存 |
 | 0.5.0 | **静态分析加固**：常量折叠（`fromCharCode` / base64 / `join` / 转义）+ 文件级污点配对 + 远程代码执行检测；接 **OSV 已知漏洞**；包自带豁免（只能降级不放行）；packument 改 ETag 条件请求 |
 | 0.5.1 | 适配 DSH **0.2.1-rc.5** 的 `app.asar` 打包形态：`resourcesAppDir()` 增加 `app.asar.unpacked` 两个防御性候选（完整 asar 仍优先），`resourcesAppDir` 开放 `resourcesDirs` 参数便于测试 |
+| 0.6.0 | **强制安装**：检查不通过时可「明知风险继续安装」。市场拦截浮层与设置面板手动预检都加了「强制安装」入口 → 风险提示面板（列出被阻止项 + 风险与责任说明）→「已知风险确认安装」。后端 `/check` 每轮都发一次性 token、`/install` 接受 `force=true` 跳过 block（token 仍必须有效） |
 
-## 验证基线（0.5.1）
+## 验证基线（0.6.0）
 
 每次改动后跑这套，全绿才算完：
 
 | 项 | 命令 | 期望 |
 | --- | --- | --- |
-| 语法 | `node --check lib/*.js`（12 个） | 全部 exit 0 |
-| 全量自检 | `test/` 下 17 套 | 全 ok、0 fail |
+| 语法 | `node --check lib/*.js`（14 个） | 全部 exit 0 |
+| 全量自检 | `node --test "test/*.test.mjs"`（16 套） | 全 ok、0 fail |
 | 能力评测 | 78 例构造实例（见评估报告） | 全部命中，0 漏检 0 误判 |
-| 反向插桩 | 把交叉比对 / 加固规则逐条改回失效 | 必须大面积 FAIL |
-| 源码↔副本 | SHA256 比对 12 个文件 | 0 不一致 |
-| 副本独立自检 | `node test/offline-client-check.mjs <副本目录>` | ALL PASS |
+| 反向插桩 | 把交叉比对 / 加固 / 强制安装规则逐条改回失效 | 必须 FAIL |
+| 源码↔副本 | SHA256 比对 14 个文件 | 0 不一致 |
+| 独立脚本 | `verify` / `offline-client-check` 等 7 个 `.mjs` | 全部 exit 0 |
 | 运行时（重启后） | `/api-checkup/{state,armory,inventory,guard,audit}` | 全 200；四类 8 项 pass |
 
-17 套套件清单：`verify` / `security-stability` / `skill-mcp` / `audit` / `degraded-probe` /
+16 套 `*.test.mjs`：`security-stability` / `skill-mcp` / `audit` / `degraded-probe` /
 `level-override` / `armory` / `guard` / `hardening` / `hardening-2` / `ast-scan` / `appdir` /
-`review-fixes` / `config` / `real-patch` / `offline-client-check` / `cross-check`。
+`force-install` / `review-fixes` / `config` / `real-patch` / `cross-check`。
+另有独立脚本（不走 `node --test`）：`verify` / `offline-client-check` / `fixtures-check` / `probe_env`。
 
 > `test/probe_env.mjs` 与 `test/fixtures-check.mjs` 是**手工排查工具**，不在自检清单里：
 > 前者打印当前环境探测结果，后者校验 `fixtures/` 两个 package.json 是否仍符合预期用途。
