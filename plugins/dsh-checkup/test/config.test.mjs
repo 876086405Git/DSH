@@ -2,11 +2,10 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
 import { normalizeSettings, writeProfileConfig } from '../lib/index.js';
+import { loadYaml } from './_paths.mjs';
 
-const require = createRequire(import.meta.url);
-const yaml = require('C:/Users/Administrator/AppData/Local/Programs/DeepSeek Harness/resources/app/dsh/node_modules/yaml');
+const yaml = loadYaml();
 
 let failures = 0;
 const ok = (label, condition, extra) => {

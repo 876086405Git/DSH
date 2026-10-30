@@ -4,8 +4,9 @@
 // 不用反复重启桌面端。
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { REPO_ROOT } from './_paths.mjs';
 
-const target = process.argv[2] || 'E:/kaifa/DSH-KAIFA/dsh-checkup';
+const target = process.argv[2] || REPO_ROOT;
 const clientPath = `${target}/lib/client.js`;
 const pkg = JSON.parse(readFileSync(`${target}/package.json`, 'utf8'));
 

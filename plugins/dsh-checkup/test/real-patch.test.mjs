@@ -1,13 +1,12 @@
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import { writeProfileConfig } from "../lib/index.js";
+import { DESKTOP_PROFILE_PATCH, loadYaml } from "./_paths.mjs";
 
-const require = createRequire(import.meta.url);
-const yaml = require("C:/Users/Administrator/AppData/Local/Programs/DeepSeek Harness/resources/app/dsh/node_modules/yaml");
+const yaml = loadYaml();
 
-const real = "C:/Users/Administrator/.dsh/profiles/desktop/cordis.patch.yml";
+const real = DESKTOP_PROFILE_PATCH;
 const before = yaml.parse(readFileSync(real, "utf8"));
 const dir = mkdtempSync(join(tmpdir(), "guard-real-"));
 const copy = join(dir, "cordis.patch.yml");
