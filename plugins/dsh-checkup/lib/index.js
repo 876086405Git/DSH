@@ -24,6 +24,7 @@ import { scanSourceText } from './security.js';
 import { checkSkill, parseFrontmatter, skillContentHash } from './skill.js';
 import { checkMcp, extractMcpTarget } from './mcp.js';
 import { checkExpert, summarizeExpert } from './expert.js';
+import { queryOsv } from './osv.js';
 import { auditEnvironment } from './audit.js';
 import { checkArmory, summarizeArmory, ARMORY_KINDS, ARMORY_RULE_IDS } from './armory.js';
 import { satisfies, parseVersion } from './version.js';
@@ -60,20 +61,33 @@ const HISTORY_LIMIT = 50;
 
 // ── 环境探测（带缓存：一次会话内版本与包列表不会变）────────────────────────
 
-function resourcesAppDir() {
-  // 桌面端有两种形态：<resources>/app（目录）与 <resources>/app.asar（打包）。
-  // Electron 内 asar 被透明挂载，`fs.existsSync('<x>/app.asar/package.json')` 可直接工作，
-  // 所以两者都能当 appDir。只认 app/ 会让打包版读不到宿主版本与内置包，
-  // 进而把 @deepseek-ai/* 内置包误判成「实体缺失」——那是致命误报。
+/// 定位宿主 app 目录。`resourcesDirs` 可显式传入（测试用），默认从 execPath / resourcesPath 推导。
+/// 三种形态都要认：
+///   <resources>/app                  未打包（开发版 / 旧版）
+///   <resources>/app.asar             打包（0.2.1-rc.5 起，Electron 内 asar 透明挂载）
+///   <resources>/app.asar.unpacked/   只解包、不打包（防御性候选，目前没见到这种布局）
+/// 顺序有讲究：完整打包的 app.asar 比「部分解包的 app.asar.unpacked」更权威，
+/// 所以 unpacked 只作为兜底，不会抢在 app.asar 前面。
+export function resourcesAppDir(resourcesDirs) {
   const candidates = [];
   if (process.env.DSH_APP_DIR) candidates.push(resolve(process.env.DSH_APP_DIR));
-  const resourcesDirs = [];
-  const execPath = process.execPath || '';
-  if (execPath) resourcesDirs.push(resolve(execPath, '..', 'resources'));
-  if (process.resourcesPath) resourcesDirs.push(process.resourcesPath);
-  for (const resources of resourcesDirs) {
+
+  let dirs;
+  if (Array.isArray(resourcesDirs)) {
+    dirs = resourcesDirs;
+  } else {
+    dirs = [];
+    const execPath = process.execPath || '';
+    if (execPath) dirs.push(resolve(execPath, '..', 'resources'));
+    if (process.resourcesPath) dirs.push(process.resourcesPath);
+  }
+
+  for (const resources of dirs) {
     candidates.push(join(resources, 'app'));
     candidates.push(join(resources, 'app.asar'));
+    // 防御性候选：某些打包工具只把 dsh 解包到 app.asar.unpacked，asar 本身不含 package.json。
+    candidates.push(join(resources, 'app.asar.unpacked', 'dsh'));
+    candidates.push(join(resources, 'app.asar.unpacked'));
   }
   return candidates.find((dir) => existsSync(join(dir, 'package.json')));
 }
@@ -173,29 +187,49 @@ export function parseInstallSpec(spec) {
   return { kind: 'registry', name: pkgName, range: range || 'latest' };
 }
 
+// packument 进程内缓存：同一会话里重复预检同一个包不必反复下载整份元数据。
+// 不采用缩略元数据（application/vnd.npm.install-v1+json）：实测能省 59% 体积，
+// 但会丢掉 repository 字段，直接导致「来源可追溯」「维护信息」两条误报。
+// 新鲜期 60 秒；过期后用 ETag 做条件请求，304 就复用旧文档（省流量又不吃旧数据）。
+const PACKUMENT_TTL_MS = 60 * 1000;
+const packumentCache = new Map();
+
+/// 取一份 packument：返回 { doc } | { status } | { networkError }，让上层能区分「不存在」和「网络挂了」。
 async function fetchJson(url, timeoutMs, attempts = 2) {
-  let lastError;
+  const cached = packumentCache.get(url);
+  if (cached && Date.now() - cached.at < PACKUMENT_TTL_MS) return { doc: cached.doc, cached: true };
+
+  let networkError = false;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
-      if (!res.ok) return undefined;
-      return await res.json();
+      const headers = { accept: 'application/json' };
+      if (cached?.etag) headers['if-none-match'] = cached.etag;
+      const res = await fetch(url, { signal: controller.signal, headers });
+      // 404/410 才是「这个包不存在」；5xx、超时、DNS 失败属于网络故障，不能混为一谈。
+      if (res.status === 404 || res.status === 410) return { status: res.status };
+      if (res.status === 304 && cached) {
+        packumentCache.set(url, { ...cached, at: Date.now() });
+        return { doc: cached.doc, cached: true };
+      }
+      if (!res.ok) {
+        networkError = true;
+        continue;
+      }
+      const doc = await res.json();
+      packumentCache.set(url, { doc, etag: res.headers.get('etag') || '', at: Date.now() });
+      return { doc };
     } catch (error) {
-      lastError = error;
+      networkError = true;
+      const detail = error?.cause?.code || error?.name || String(error);
+      if (moduleLogger) moduleLogger.warn?.(`checkup: registry 读取失败 ${url} · ${detail}`);
+      else console.warn('[checkup] registry lookup failed:', url, detail);
     } finally {
       clearTimeout(timer);
     }
   }
-  if (lastError) {
-    // 只记录，交由上层决定是否降级为「无法预读」。
-    // 优先走宿主 logger（带统一前缀与级别），没有 ctx 时才退到 console。
-    const detail = lastError?.cause?.code || lastError?.name || String(lastError);
-    if (moduleLogger) moduleLogger.warn?.(`checkup: registry 读取失败 ${url} · ${detail}`);
-    else console.warn('[checkup] registry lookup failed:', url, detail);
-  }
-  return undefined;
+  return networkError ? { networkError: true } : { status: 0 };
 }
 
 export async function resolveManifest(spec, options = {}) {
@@ -212,13 +246,19 @@ export async function resolveManifest(spec, options = {}) {
   const attempts = Number.isFinite(options.attempts) ? options.attempts : 2;
   const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 8000;
   let sawManifest = false;
+  let sawNetworkError = false;
 
   for (const registry of registries) {
-    const doc = await fetchJson(
+    const got = await fetchJson(
       `${registry}/${encodeURIComponent(parsed.name).replace('%2F', '/')}`,
       timeoutMs,
       attempts,
     );
+    if (got.networkError) {
+      sawNetworkError = true;
+      continue;
+    }
+    const doc = got.doc;
     if (!doc) continue;
     sawManifest = true;
     const versions = doc.versions && typeof doc.versions === 'object' ? doc.versions : {};
@@ -242,7 +282,8 @@ export async function resolveManifest(spec, options = {}) {
     }
     if (picked) return { parsed, manifest: undefined, reason: 'version-not-published' };
   }
-  return { parsed, manifest: undefined, reason: sawManifest ? 'version-not-published' : 'not-found' };
+  if (sawManifest) return { parsed, manifest: undefined, reason: 'version-not-published' };
+  return { parsed, manifest: undefined, reason: sawNetworkError ? 'network-error' : 'not-found' };
 }
 
 // ── 预检编排 ────────────────────────────────────────────────────────────────
@@ -252,12 +293,20 @@ export async function resolveManifest(spec, options = {}) {
 const SOURCE_EXT = /\.(?:js|mjs|cjs|ts|tsx|jsx|sh|ps1|bat|cmd)$/i;
 const SOURCE_MAX_FILES = 400;
 const SOURCE_MAX_BYTES = 512 * 1024;
-const SOURCE_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.cache']);
+const SOURCE_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.cache', 'test', 'tests', '__tests__', 'fixtures']);
+// 测试文件里常放「恶意样本」（本插件自己就有一份），扫它等于自己拦自己。
+const SOURCE_SKIP_FILE = /(?:^|[.-])(?:test|spec)\.[^\\/]+$/i;
 
 /// 读取候选包目录里的脚本文件，交给纯函数扫描器判定隐私/恶意特征。
 export async function scanSourceDir(rootDir) {
   const hits = [];
   let scanned = 0;
+  // 本插件自己的规则表文件里就是这些正则的原文（security.js 的规则表、source-scan.js 的
+  // 敏感特征表），装自己时必然「命中自己」。只对「包名就是本插件」这一种情况跳过这两个
+  // 文件，别的包一律照扫 —— 换个同名包也只能让这两条从 block 降成 warn，不会变成通过。
+  const selfPkg = await readJson(join(rootDir, 'package.json'));
+  const isSelf = selfPkg?.name === 'dsh-checkup';
+  const SELF_RULE_FILES = new Set(['lib/security.js', 'lib/source-scan.js']);
 
   async function walk(dir, depth) {
     if (scanned >= SOURCE_MAX_FILES || depth > 6) return;
@@ -276,6 +325,7 @@ export async function scanSourceDir(rootDir) {
         continue;
       }
       if (!SOURCE_EXT.test(entry.name)) continue;
+      if (SOURCE_SKIP_FILE.test(entry.name)) continue;
       let text;
       try {
         const info = await stat(full);
@@ -286,6 +336,7 @@ export async function scanSourceDir(rootDir) {
       }
       scanned += 1;
       const rel = full.slice(rootDir.length + 1).replace(/\\/g, '/');
+      if (isSelf && SELF_RULE_FILES.has(rel)) continue;
       hits.push(...scanSourceText(text, rel));
     }
   }
@@ -930,39 +981,52 @@ export async function runCheck(spec, config = {}) {
     attempts: config.lookupAttempts,
   });
 
-  // 本地路径安装能拿到源码 → 做隐私/恶意特征扫描；registry 包只扫 manifest。
+  // 本地路径安装能拿到源码 → 做隐私/恶意特征扫描；registry 包没有源码可扫。
   let sourceHits = [];
-  if (parsed && parsed.kind === 'path') {
+  const sourceScanned = Boolean(parsed && parsed.kind === 'path');
+  if (sourceScanned) {
     sourceHits = await scanSourceDir(parsed.path);
+  }
+
+  // 包自带豁免：只能把 block 降成 warn（见 rules.js）。来源有两处：
+  //   ① 本地目录里的 .checkup-allow.json；② package.json 的 checkupAllow 数组。
+  const allowRules = [];
+  if (sourceScanned) {
+    const allowDoc = await readJson(join(parsed.path, '.checkup-allow.json'));
+    if (Array.isArray(allowDoc?.allow)) allowRules.push(...allowDoc.allow.map(String));
+  }
+  if (Array.isArray(manifest?.checkupAllow)) allowRules.push(...manifest.checkupAllow.map(String));
+
+  // 已知漏洞（OSV）：默认开启；查询失败只 warn，绝不因为断网就阻止安装。
+  let vulnerabilities;
+  if (config.vulnCheckEnabled !== false && manifest?.name && manifest?.version) {
+    const osv = await queryOsv({
+      name: manifest.name,
+      version: manifest.version,
+      fetchImpl: config.fetchImpl,
+      timeoutMs: config.osvTimeoutMs,
+    });
+    vulnerabilities = { name: manifest.name, version: manifest.version, ...osv };
   }
 
   const report = checkCandidate({
     spec,
     manifest,
     sourceHits,
+    sourceScanned,
+    allowRules,
+    vulnerabilities,
     levelOverrides: config.levelOverrides,
     env: {
       ...env,
       knownBad: Array.isArray(config.knownBad) ? config.knownBad : [],
       maliciousPackages: Array.isArray(config.maliciousPackages) ? config.maliciousPackages : [],
       installedNames: Object.keys(env.installedVersions || {}),
+      // 拿不到元数据的原因要传下去：网络故障、包不存在、git 形式，三种处理不一样。
+      manifestReason: reason,
+      manifestUnavailablePolicy: config.manifestUnavailablePolicy,
     },
   });
-
-  if (!manifest) {
-    report.checks.push({
-      id: 'bundle-declared',
-      level: 'warn',
-      title: '无法预读包内容',
-      detail:
-        reason === 'remote-spec-needs-fetch'
-          ? 'git / tarball 形式的安装目标需要下载后才能读取 package.json，本次只做安装后检查。'
-          : reason === 'not-found'
-            ? '所有注册表都没有返回该包，确认包名拼写与镜像可用性。'
-            : '未能读取 package.json（网络或路径问题）。',
-    });
-    report.ok = report.blocked === 0;
-  }
 
   return {
     ...report,

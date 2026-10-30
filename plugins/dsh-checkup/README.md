@@ -282,23 +282,27 @@ G5 这次真的差点让一轮修复白做 —— 现在每个脚本都明确输
 | 0.3.3 | 第一轮全面审计的 10 项修复（F1~F7、D3、B3 增强）+ 描述乱码（E2） |
 | 0.3.4 | 第二轮逐文件审查的 12 项修复（H1~H12）+ symlink / 专家 persona / 孤儿误报 3 个回归 |
 | 0.4.0 | **候选 vs 已装交叉比对**：8 条新规则（插件版本/依赖排斥、连接器重名/工具冲突、技能内容重复、专家三查）；修 MCP 重名自过滤（原来永远 warn 不到）；技能比对纳入 `~/.agents/skills` |
+| 0.4.1 | **能力评估修复**：拿不到元数据改判「零预检」并阻止；`sec-source` 三态（不再假绿）；扫描器不再拦自己；`sec-scripts` 补两步下载执行 / `rm -rf ~` / 内联执行；字符串拼接去混淆；仿冒按「增删 / 换序 / 同形」分类；预发布宿主不再误杀；packument 进程内缓存 |
+| 0.5.0 | **静态分析加固**：常量折叠（`fromCharCode` / base64 / `join` / 转义）+ 文件级污点配对 + 远程代码执行检测；接 **OSV 已知漏洞**；包自带豁免（只能降级不放行）；packument 改 ETag 条件请求 |
+| 0.5.1 | 适配 DSH **0.2.1-rc.5** 的 `app.asar` 打包形态：`resourcesAppDir()` 增加 `app.asar.unpacked` 两个防御性候选（完整 asar 仍优先），`resourcesAppDir` 开放 `resourcesDirs` 参数便于测试 |
 
-## 验证基线（0.4.0）
+## 验证基线（0.5.1）
 
 每次改动后跑这套，全绿才算完：
 
 | 项 | 命令 | 期望 |
 | --- | --- | --- |
 | 语法 | `node --check lib/*.js`（12 个） | 全部 exit 0 |
-| 全量自检 | `test/` 下 14 套 | 全 ok、0 fail |
-| 反向插桩 | 把 8 条交叉比对规则逐条改回失效，跑 `test/cross-check.test.mjs` | 必须大面积 FAIL（20+ 项） |
+| 全量自检 | `test/` 下 17 套 | 全 ok、0 fail |
+| 能力评测 | 78 例构造实例（见评估报告） | 全部命中，0 漏检 0 误判 |
+| 反向插桩 | 把交叉比对 / 加固规则逐条改回失效 | 必须大面积 FAIL |
 | 源码↔副本 | SHA256 比对 12 个文件 | 0 不一致 |
 | 副本独立自检 | `node test/offline-client-check.mjs <副本目录>` | ALL PASS |
 | 运行时（重启后） | `/api-checkup/{state,armory,inventory,guard,audit}` | 全 200；四类 8 项 pass |
 
-14 套套件清单：`verify` / `security-stability` / `skill-mcp` / `audit` / `degraded-probe` /
-`level-override` / `armory` / `guard` / `hardening` / `review-fixes` / `config` / `real-patch` /
-`offline-client-check` / `cross-check`。
+17 套套件清单：`verify` / `security-stability` / `skill-mcp` / `audit` / `degraded-probe` /
+`level-override` / `armory` / `guard` / `hardening` / `hardening-2` / `ast-scan` / `appdir` /
+`review-fixes` / `config` / `real-patch` / `offline-client-check` / `cross-check`。
 
 > `test/probe_env.mjs` 与 `test/fixtures-check.mjs` 是**手工排查工具**，不在自检清单里：
 > 前者打印当前环境探测结果，后者校验 `fixtures/` 两个 package.json 是否仍符合预期用途。
@@ -331,6 +335,7 @@ pluginManager.installBundle(spec)      ← 本插件在此处包装
 | id | 级别 | 检查内容 |
 | --- | --- | --- |
 | `spec` | pass | 安装目标可解析（包名 / 版本 / 本地路径 / git） |
+| `manifest-unavailable` | block | **拿不到 package.json = 零预检**：断网 / 查无此包 / git·tarball 形式一律拦下（可分项调成 warn） |
 | `runtime-version` | block | 插件声明的 `dsh.engines.dsh` 是否满足当前桌面端版本 |
 | `node-engine` | warn | `engines.node` 与内置 Node |
 | `client-platform` | block | `dsh.client.platform` 必须是 web |
@@ -348,9 +353,12 @@ pluginManager.installBundle(spec)      ← 本插件在此处包装
 | id | 级别 | 检查内容 |
 | --- | --- | --- |
 | `sec-scripts` | block | 安装钩子里的下载即执行（`curl\|sh`、`wget\|sh`）、PowerShell `-EncodedCommand`、`base64 -d \| sh`、`certutil -urlcache`、`mshta/bitsadmin/regsvr32`、`rm -rf /` |
-| `sec-deps` | block | 依赖命中 `maliciousPackages` 名单（支持 scope 前缀） |
-| `sec-typosquat` | warn | 包名与已装插件仅差一个字符（抢注 / 仿冒风险） |
-| `sec-source` | block/warn | 源码特征：读取 `.ssh` 私钥 / `.aws` 凭据 / 浏览器 Cookie、`process.env` 外传、`base64 + eval`、子进程下载执行、shell 拼接 |
+| `sec-deps` | block/warn | 依赖命中 `maliciousPackages` 名单即阻止；**名单为空时改为 warn「未启用」**，不再显示假绿 |
+| `sec-typosquat` | warn | 与已装包名仅差一个字符，且属于**增删 / 换序 / 同形替换**（纯换字母如 cad→cat 不报） |
+| `sec-source` | block/warn | 源码特征：读取 `.ssh` 私钥 / 云凭据 / 浏览器 Cookie、`process.env` 外传、`base64 + eval`、子进程下载执行、shell 拼接；**扫描前先做常量折叠**（拼接 / `fromCharCode` / base64 / `join` / `\x` 转义）；registry 安装没源码时明确报「未扫描」而非通过；同一文件命中 ≥3 条特征（规则表/样本）降级为提醒 |
+| `mal-remote-code` | block | 抓到远程 / 动态内容后又交给 `eval` / `new Function` / `vm.run` 执行 |
+| `sec-vulns` | block/warn | 按「包名 + 版本」查 **OSV**（GHSA / CVE / npm advisory）：高危阻止、其余提醒；查询失败只提醒（`vulnCheckEnabled=false` 可关） |
+| `sec-allowlist` | warn/pass | 包自带 `.checkup-allow.json` 或 `package.json.checkupAllow`：**只能把阻止降为提醒**，永远不能变成通过，且必须留一条痕 |
 | `sec-traceability` | warn | 缺 `repository` / `author`，出问题无法追责 |
 
 > 源码扫描只对**本地目录安装**生效（能读到文件）；registry 包只扫 `package.json`。
@@ -397,6 +405,46 @@ pluginManager.installBundle(spec)      ← 本插件在此处包装
 - **技能两个根都算**：`~/.dsh/skills` 与 `~/.agents/skills` 一起比对，只扫前者会漏掉 agent 根里的同名冲突。
 - 专家走 `POST /api-checkup/check-expert` 预检（`{ candidate: { id, name, persona, externalRefs? } }`）。
 
+## 0.4.1 能力评估修复清单
+
+2026-10-30 对 0.4.0 做了 65 个构造实例的能力评测，发现 6 处漏检、2 处误判、3 个结构性问题。逐条修复：
+
+| 问题 | 0.4.0 行为 | 0.4.1 行为 |
+| --- | --- | --- |
+| 断网 / 查无此包 / git·tarball | 只 warn「未取得包元数据」，`ok=true` 放行 | 新增 `manifest-unavailable`，默认 **block**（可单项调成 warn） |
+| registry 安装的 `sec-source` | 显示「通过」，实际没扫过任何文件 | 三态：`未扫描`（warn）/ `扫描后干净`（pass）/ 命中 |
+| 扫描器扫到自己 | `lib/security.js` 的规则正则 + `test/` 恶意样本夹具 → **block 自己** | 跳过 `test/tests/__tests__/fixtures` 与 `*.test.*`；同一文件命中 ≥3 条特征降级为提醒 |
+| `sec-scripts` 两步下载执行 | 只认 `curl … \| sh` 管道 | 识别「落盘 + 后续执行 / chmod +x」 |
+| `sec-scripts` 清家目录 | 只认 `rm -rf /` | `~`、`$HOME`、`%USERPROFILE%`、`*`、`.`、`/` 全认 |
+| `sec-scripts` 内联执行 | `node -e` 正则遇引号截断，抓不到 | `node -e` / `python -c` 里出现 `child_process`/`subprocess`/`eval` 即报 |
+| `sec-source` 字符串拼接绕过 | `"." + "s" + "sh"` 绕过 `.ssh` 检测 | 先折叠相邻字符串字面量再去匹配 |
+| `sec-typosquat` 短名误报 | `dsh-cad` vs `dsh-cat` 报仿冒 | 按「增删 / 换序 / 同形」分类，纯换字母不报；末段 < 6 字符不比 |
+| `runtime-version` 预发布误杀 | 宿主 `0.2.0-rc.1` + 声明 `>=0.2.0` → block | 按基线版本（`0.2.0`）判定 → warn，不阻止 |
+| `conflict-connector-tool` 参数换序 | 顺序不同就认不出同一后端 | 参数排序后再比指纹 |
+| `sec-deps` 名单为空 | 显示「通过」（其实没比对） | 改为 warn「未启用恶意依赖名单」 |
+| packument 重复下载 | 每次预检重下整份 | 进程内缓存 5 分钟（实测 621 ms → 2 ms） |
+| 降级路径 `spec` 重复 | 同一 id 出现两次 | 合并为一条 `manifest-unavailable` |
+
+评测结果：**70 例（65 原始 + 5 结构性）全部命中，0 漏检 / 0 误判**（0.4.0 为 57/65）。
+其中 2 例是判定口径调整而非「改期望」：空名单不再假绿、预发布宿主从 block 降为 warn，均在表里写明。
+
+## 0.5.0 静态分析加固：做到哪一步、做不到什么
+
+### 做法
+
+| 层 | 机制 | 挡住的写法 |
+| --- | --- | --- |
+| 常量折叠 | `String.fromCharCode(...)`、`Buffer.from(x,'base64')`/`atob`、`['a','b'].join('')`、`"a"+"b"`、`\x2e` / `\uXXXX` 转义，多轮折叠后交给原正则 | 把 `.ssh` / `id_rsa` / 恶意 URL 拆成碎片 |
+| 文件级污点配对 | 同一文件里既有敏感读（env / 家目录 / 凭据路径）又有网络出口（fetch / `.request(` / `import()` …） | 读 env 后绕个弯发出去 |
+| 远程代码执行 | 抓到远程或动态内容后又 `eval` / `new Function` / `vm.run` | 远程下发载荷 |
+| 已知漏洞 | 按 name@version 查 OSV，24 小时缓存，高危 block、其余 warn | 装了带 CVE 的旧版本 |
+| 包自带豁免 | `.checkup-allow.json` / `checkupAllow` → **只能 block→warn**，不能消失 | 误报时给作者一个正当出口 |
+
+### 边界（不可能靠静态分析解决）
+
+- 运行时才拼出来的字符串（依赖外部输入）、加密/压缩载荷、原生模块（`.node`）、WASM 里的逻辑；
+- 从网络取指令再执行的「无文件载荷」——只能靠行为监控，不能靠读源码；
+- 结论：这一层能挡住脚本小子级的混淆与顺手作恶，挡不住定向攻击。要根治得靠沙箱安装 + 运行时行为审计 + 来源签名，属于宿主架构范畴。
 ## Skill 与 MCP（没有安装 API，靠检查 + 体检覆盖）
 
 宿主对这两类**没有安装入口**，所以体检中心不拦截、只做检查：

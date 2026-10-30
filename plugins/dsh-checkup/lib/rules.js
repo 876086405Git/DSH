@@ -13,6 +13,7 @@
 import { satisfies, parseVersion, compareVersions } from './version.js';
 import { checkSecurity } from './security.js';
 import { checkStability } from './stability.js';
+import { checkVulnerabilities } from './osv.js';
 
 export const CATEGORIES = [
   { id: 'compatibility', label: '兼容性', desc: '能否在当前 DSH 客户端环境正确加载与运行' },
@@ -23,6 +24,7 @@ export const CATEGORIES = [
 export const RULE_IDS = [
   // 兼容性
   'spec',
+  'manifest-unavailable',
   'runtime-version',
   'node-engine',
   'client-platform',
@@ -47,6 +49,9 @@ export const RULE_IDS = [
   'sec-deps',
   'sec-typosquat',
   'sec-source',
+  'mal-remote-code',
+  'sec-vulns',
+  'sec-allowlist',
   'sec-traceability',
   // 稳定性
   'st-manifest',
@@ -138,13 +143,30 @@ export function checkCandidate(input) {
   checks.push(pass('spec', '安装目标可解析', spec.trim()));
 
   if (!manifest || typeof manifest !== 'object') {
+    // 拿不到 package.json 就等于「什么都没预检」，不能当成通过放行。
+    // 默认 block；想放行的人在面板里把本条单独改成「仅提醒」即可（levelOverrides）。
+    const policy = env.manifestUnavailablePolicy === 'warn' ? 'warn' : 'block';
+    const reason = env.manifestReason || 'unknown';
+    const text =
+      {
+        'network-error': 'registry 不可达（网络 / 镜像故障），读不到包元数据',
+        'not-found': '所有注册表都查不到这个包（核对包名拼写与镜像配置）',
+        'version-not-published': '注册表里没有满足该版本范围的发布',
+        'remote-spec-needs-fetch': 'git / tarball 形式必须先下载才能读到 package.json',
+        'path-has-no-manifest': '安装目录里没有 package.json',
+        'invalid-spec': '安装目标无法解析',
+      }[reason] || '没有取得 package.json';
+    const detail = `${text}；本次没有任何元数据可判，等于「零预检」安装。`;
+    const hint =
+      reason === 'remote-spec-needs-fetch'
+        ? '改用 registry 包名或本地目录安装，才能做源码扫描。'
+        : reason === 'network-error'
+          ? '等镜像恢复后重试；确实要用未知包时，把本条单独改成「仅提醒」。'
+          : '核对包名 / 版本范围，或改用本地目录安装。';
     checks.push(
-      warn(
-        'spec',
-        '未取得包元数据',
-        '注册表或本地路径没有返回 package.json，只能做安装后检查。',
-        '确认网络/镜像可用，或改用本地路径安装。',
-      ),
+      policy === 'block'
+        ? block('manifest-unavailable', '无法预检（拿不到包元数据）', detail, hint)
+        : warn('manifest-unavailable', '无法预检（拿不到包元数据）', detail, hint),
     );
     return summarize(applyLevelOverrides(checks, levelOverrides));
   }
@@ -168,14 +190,29 @@ export function checkCandidate(input) {
     } else if (satisfies(env.dshVersion, dshRange)) {
       checks.push(pass('runtime-version', '兼容当前 DeepSeek Harness', `${label} 声明 dsh ${dshRange}，当前 ${env.dshVersion}`));
     } else {
-      checks.push(
-        block(
-          'runtime-version',
-          '与当前 DeepSeek Harness 版本不兼容',
-          `${label} 要求 dsh ${dshRange}，当前运行 ${env.dshVersion}`,
-          '升级/降级该插件到适配版本，或换用继续维护的分支。',
-        ),
-      );
+      // 宿主是预发布（如 0.2.0-rc.1）时，semver 会判 `>=0.2.0` 不满足 —— 用户视角很荒谬。
+      // 同一版本号的正式基线能满足，就降级成提醒，不再拒绝安装。
+      const base = String(env.dshVersion || '').replace(/[-+].*$/, '');
+      const relaxed = Boolean(base && base !== env.dshVersion && satisfies(base, dshRange));
+      if (relaxed) {
+        checks.push(
+          warn(
+            'runtime-version',
+            '宿主是预发布版本，按基线版本判定兼容',
+            `${label} 声明 dsh ${dshRange}，宿主 ${env.dshVersion}（预发布，按 ${base} 视为满足）`,
+            '预发布与正式版可能有 API 差异；升级到对应正式版后本条会自动转为通过。',
+          ),
+        );
+      } else {
+        checks.push(
+          block(
+            'runtime-version',
+            '与当前 DeepSeek Harness 版本不兼容',
+            `${label} 要求 dsh ${dshRange}，当前运行 ${env.dshVersion}`,
+            '升级/降级该插件到适配版本，或换用继续维护的分支。',
+          ),
+        );
+      }
     }
   } else {
     checks.push(
@@ -455,10 +492,47 @@ export function checkCandidate(input) {
   }
 
   // 安全性：隐私泄露 / 恶意代码 / 病毒特征
-  checks.push(...checkSecurity({ manifest, env, sourceHits: input && input.sourceHits }));
+  checks.push(
+    ...checkSecurity({
+      manifest,
+      env,
+      sourceHits: input && input.sourceHits,
+      sourceScanned: input && input.sourceScanned,
+    }),
+  );
 
   // 稳定性：运行稳定与潜在 bug 风险
   checks.push(...checkStability({ manifest, env }));
+
+  // 已知漏洞（OSV）：由调用方查好传进来，这里只做汇总判定
+  const vulnInput = input && input.vulnerabilities;
+  if (vulnInput) checks.push(...checkVulnerabilities(vulnInput));
+
+  // 包自带豁免（.checkup-allow.json / package.json 的 checkupAllow）：
+  // 只允许把 block 降成 warn —— 永远不能变成 pass，而且必须留一条痕。
+  // 恶意包当然也能写这条，所以它只能「让人少一次点击」，不能「让检查消失」。
+  const allowRules = Array.isArray(input && input.allowRules) ? input.allowRules.map(String) : [];
+  if (allowRules.length > 0) {
+    const downgraded = [];
+    for (const check of checks) {
+      if (check.level !== 'block' || !allowRules.includes(check.id)) continue;
+      check.level = 'warn';
+      check.allowedBy = '包自带豁免声明';
+      downgraded.push(check.id);
+    }
+    const unique = [...new Set(downgraded)];
+    checks.push(
+      unique.length > 0
+        ? warn(
+            'sec-allowlist',
+            '包自带豁免声明，相关项已降级',
+            `豁免：${unique.join(', ')}（block → warn，没有变成通过）`,
+            '确认这是作者主动声明的；恶意包也能写这条，所以只降级不放行。',
+            'security',
+          )
+        : pass('sec-allowlist', '包自带豁免声明未命中任何阻止项', `声明了 ${allowRules.length} 条豁免：${allowRules.join(', ')}`, 'security'),
+    );
+  }
 
   return summarize(applyLevelOverrides(checks, levelOverrides));
 }

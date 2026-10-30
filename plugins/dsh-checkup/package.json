@@ -1,6 +1,6 @@
 {
   "name": "dsh-checkup",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "description": "DSH体检中心：安装前兼容性预检、候选与已装项交叉比对（插件/连接器/技能/专家）、环境体检、军械库四类检查",
   "type": "module",
   "main": "lib/index.js",

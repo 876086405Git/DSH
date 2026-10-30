@@ -147,7 +147,11 @@ export function checkMcp(config, env = {}) {
       .toLowerCase()
       .replace(/\.(?:exe|cmd|bat|ps1)$/, '');
     if (!program) return '';
-    const args = (Array.isArray(row?.args) ? row.args : []).map((value) => String(value).trim()).filter(Boolean);
+    // 参数顺序不代表身份：`--from pkg cmd` 与 `cmd --from pkg` 是同一个后端。
+    const args = (Array.isArray(row?.args) ? row.args : [])
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .sort();
     return `${program} ${args.join(' ')}`.trim();
   };
   const myBackend = backendKey({ command, args: cfg.args });
