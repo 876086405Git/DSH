@@ -76,9 +76,9 @@ console.log('\n[D] 安全性：恶意依赖名单（含反向插桩）');
   const report = checkCandidate({ spec: 'x@1.0.0', manifest: bad, env: baseEnv });
   ok('依赖命中名单 → 阻止', levelOf(report, 'sec-deps') === 'block');
 
-  // 插桩：把名单清空，同一 manifest 必须转为 pass
+  // 插桩：把名单清空 → 不再判恶意，但也不能显示成「通过」（根本没比对过任何依赖）
   const clean = checkCandidate({ spec: 'x@1.0.0', manifest: bad, env: { ...baseEnv, maliciousPackages: [] } });
-  ok('名单清空后 sec-deps=pass', levelOf(clean, 'sec-deps') === 'pass', levelOf(clean, 'sec-deps'));
+  ok('名单清空后 sec-deps=warn（未启用不再假绿）', levelOf(clean, 'sec-deps') === 'warn', levelOf(clean, 'sec-deps'));
 }
 
 console.log('\n[E] 安全性：源码特征');

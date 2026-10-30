@@ -44,6 +44,7 @@ window.__ModuleLoader__.load({
     const RULE_INFO = {
       // 兼容性
       spec: ['兼容性', '安装目标', '解析包名、版本、本地路径或 git/tarball 形式'],
+      'manifest-unavailable': ['兼容性', '包元数据', '拿不到 package.json（断网 / 查无此包 / git 形式）等于零预检，默认阻止安装'],
       'runtime-version': ['兼容性', '客户端版本兼容', '比对插件声明的 dsh.engines.dsh 与当前桌面端版本'],
       'node-engine': ['兼容性', 'Node 运行时', '比对 engines.node 与桌面端内置 Node 版本'],
       'client-platform': ['兼容性', '客户端平台', '只接受 web 平台（桌面端不加载其他平台）'],
@@ -68,6 +69,9 @@ window.__ModuleLoader__.load({
       'sec-deps': ['安全性', '恶意依赖名单', '依赖命中名单即判恶意（可配置）'],
       'sec-typosquat': ['安全性', '包名仿冒', '与已装插件名仅差一个字符，存在抢注/仿冒风险'],
       'sec-source': ['安全性', '源码特征', '读取 SSH/云凭据、浏览器 Cookie、环境变量外传、base64+eval 等'],
+      'mal-remote-code': ['安全性', '远程代码执行', '抓到远程/动态内容后交给 eval / new Function 执行'],
+      'sec-vulns': ['安全性', '已知漏洞', '按包名+版本查 OSV（GHSA/CVE），高危阻止、其余提醒；查询失败只提醒'],
+      'sec-allowlist': ['安全性', '包自带豁免', '包自带 .checkup-allow.json / checkupAllow：只能把阻止降为提醒，不能变成通过'],
       'sec-traceability': ['安全性', '来源可追溯', 'repository 与 author 齐全才便于追责'],
       // 稳定性
       'st-manifest': ['稳定性', '包元数据', '拿不到 package.json 时无法判断入口与依赖负担'],
