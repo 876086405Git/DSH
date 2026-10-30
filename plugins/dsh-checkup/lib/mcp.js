@@ -92,18 +92,93 @@ export function checkMcp(config, env = {}) {
         'stability',
       ),
     );
-  } else if (Array.isArray(env.existingServerNames) && env.existingServerNames.includes(serverName)) {
+  } else {
+    checks.push(pass('mcp-servername', 'serverName 合法', serverName));
+  }
+
+  // 2b) 与已装连接器的交叉比对：重名 / 同一个后端换名字 / 名字只差分隔符。
+  //     重复判定从 mcp-servername 里搬到这里，是因为它本质是「候选 vs 已装」的比对，
+  //     而不是名字本身的合法性；拆开后两边都能单独调级。
+  //     candidatePersisted=true 表示候选这条已经写进配置（哨兵复查 / 已装项体检），
+  //     此时要把自己那一份从重复计数里减掉，否则每条都会自报重复。
+  const others = Array.isArray(env.existingConnectors)
+    ? env.existingConnectors.filter((row) => row && typeof row === 'object')
+    : Array.isArray(env.existingServerNames)
+      ? env.existingServerNames.map((value) => ({ serverName: value }))
+      : [];
+  const persisted = env.candidatePersisted === true;
+  const keyOf = (value) => String(value == null ? '' : value).trim().toLowerCase();
+  const looseKey = (value) => keyOf(value).replace(/[-_\s]/g, '');
+  const myKey = keyOf(serverName);
+  const sameNameCount = myKey ? others.filter((row) => keyOf(row.serverName) === myKey).length : 0;
+  const duplicateCount = Math.max(0, sameNameCount - (persisted && myKey ? 1 : 0));
+
+  if (!myKey) {
+    checks.push(
+      pass('dup-connector-name', '无 serverName 可比对', '未设置 serverName，重名检查交给 mcp-servername 提示'),
+    );
+  } else if (duplicateCount > 0) {
     checks.push(
       warn(
-        'mcp-servername',
-        'serverName 与已存在的 MCP 重复',
-        `${serverName} 已在使用`,
-        '重复会导致工具名前缀冲突、互相覆盖。',
+        'dup-connector-name',
+        '与已装连接器 serverName 重复',
+        `${serverName} 在 profile 里已有 ${sameNameCount} 条同名条目`,
+        '同名会让 mcp__<serverName>__<tool> 前缀撞车、工具互相覆盖，只保留一个。',
         'stability',
       ),
     );
   } else {
-    checks.push(pass('mcp-servername', 'serverName 合法', serverName));
+    checks.push(
+      pass(
+        'dup-connector-name',
+        '连接器名称未被占用',
+        others.length ? `已比对 ${others.length} 个已装连接器，${serverName} 不重名` : '本机还没有已配置的连接器',
+      ),
+    );
+  }
+
+  // 同一个后端的另一种接入方式：命令+参数完全一致但换了 serverName，
+  // 或者名字只差大小写/下划线/连字符（工具前缀会互相覆盖）。
+  const backendKey = (row) => {
+    // 同一个可执行文件的写法可能差着扩展名：uvx / uvx.exe / c:/bin/uvx.EXE
+    const program = String(row?.command || '')
+      .split(/[\\/]/)
+      .pop()
+      .toLowerCase()
+      .replace(/\.(?:exe|cmd|bat|ps1)$/, '');
+    if (!program) return '';
+    const args = (Array.isArray(row?.args) ? row.args : []).map((value) => String(value).trim()).filter(Boolean);
+    return `${program} ${args.join(' ')}`.trim();
+  };
+  const myBackend = backendKey({ command, args: cfg.args });
+  const sameBackend = [];
+  const nearNames = [];
+  for (const row of others) {
+    const otherKey = keyOf(row.serverName);
+    const isSelf = persisted && otherKey === myKey;
+    if (isSelf) continue;
+    if (myKey && otherKey && otherKey !== myKey && looseKey(row.serverName) === looseKey(serverName)) {
+      nearNames.push(String(row.serverName));
+    }
+    if (myBackend && otherKey !== myKey && backendKey(row) === myBackend) {
+      sameBackend.push(String(row.serverName));
+    }
+  }
+  if (nearNames.length === 0 && sameBackend.length === 0) {
+    checks.push(
+      pass(
+        'conflict-connector-tool',
+        '与已装连接器无工具级冲突',
+        others.length ? '工具前缀与后端命令均不冲突' : '无可比对项',
+      ),
+    );
+  } else {
+    const reasons = [];
+    if (nearNames.length > 0) reasons.push(`serverName 只差分隔符：${nearNames.join(', ')}（工具前缀可能互相覆盖）`);
+    if (sameBackend.length > 0) reasons.push(`同一个后端已接入为：${sameBackend.join(', ')}（工具会重复暴露、调用结果互相干扰）`);
+    checks.push(
+      warn('conflict-connector-tool', '与已装连接器存在工具级冲突', reasons.join('；'), '去掉重复的那一个，或显式改成不同的 serverName。', 'stability'),
+    );
   }
 
   // 3) command 是否存在

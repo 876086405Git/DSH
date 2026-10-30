@@ -2,6 +2,7 @@
 //
 // skill 没有"安装 API"：它就是一个目录（~/.dsh/skills/<name>/），由文件系统 provider 发现。
 // 所以这里做的是「装前检查一个候选目录」+「装后体检已装 skill」两件事，纯函数便于测试。
+import { createHash } from 'node:crypto';
 
 const pass = (id, title, detail, category = 'stability') => ({ id, category, level: 'pass', title, detail });
 const warn = (id, title, detail, hint, category = 'stability') => ({ id, category, level: 'warn', title, detail, hint });
@@ -9,6 +10,13 @@ const block = (id, title, detail, hint, category = 'stability') => ({ id, catego
 
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
+
+/// SKILL.md 正文指纹：用于识别「同一份技能换个目录名重装」。
+export function skillContentHash(text) {
+  const normalized = String(text == null ? '' : text).replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  return createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+}
 
 /// 解析 SKILL.md 的 YAML frontmatter（只取标量字段，够用且无依赖）。
 export function parseFrontmatter(text) {
@@ -42,11 +50,13 @@ export function scanSkillInstructions(text) {
 }
 
 /// 检查一个候选 skill 目录（由 host 读成 { files: [{ path, text }] } 传入）。
-export function checkSkill({ name, dirPath, files, existingNames, scriptHits }) {
+export function checkSkill({ name, dirPath, files, existingNames, existingSkills, scriptHits }) {
   const checks = [];
   const list = Array.isArray(files) ? files : [];
   const skillMd = list.find((f) => /(?:^|\/)SKILL\.md$/i.test(f.path));
   const baseName = (name || (dirPath ? dirPath.split(/[\\/]/).filter(Boolean).pop() : '') || '').trim();
+  // frontmatter 在「SKILL.md 完整性」和后面的「改名同一份」两处都要用，提到外面算一次。
+  const meta = skillMd ? parseFrontmatter(skillMd.text || '') : undefined;
 
   // 1) SKILL.md 与 frontmatter
   if (!skillMd) {
@@ -60,7 +70,6 @@ export function checkSkill({ name, dirPath, files, existingNames, scriptHits }) 
       ),
     );
   } else {
-    const meta = parseFrontmatter(skillMd.text || '');
     if (!meta || !meta.name || !meta.description) {
       checks.push(
         warn(
@@ -169,6 +178,55 @@ export function checkSkill({ name, dirPath, files, existingNames, scriptHits }) 
     );
   } else {
     checks.push(pass('sk-size', 'skill 规模正常', `${count} 个文件`));
+  }
+
+  // 7) 交叉比对：与已装技能是否「同一份换个名字」
+  //    目录名相同由 sk-name 负责；这里查的是改名后仍能认出来的重复：
+  //    SKILL.md 正文指纹一致，或 frontmatter 的 name 撞车。
+  const installed = (Array.isArray(existingSkills) ? existingSkills : []).filter(
+    (row) => row && typeof row === 'object' && row.dirName !== baseName,
+  );
+  const myHash = skillMd ? skillContentHash(skillMd.text || '') : '';
+  const myDeclared = meta && meta.name ? String(meta.name).trim().toLowerCase() : '';
+  const sameHash = myHash ? installed.filter((row) => row.hash && row.hash === myHash).map((row) => row.dirName) : [];
+  const sameDeclared = myDeclared
+    ? installed
+        .filter((row) => row.skillName && String(row.skillName).trim().toLowerCase() === myDeclared)
+        .map((row) => row.dirName)
+    : [];
+
+  if (!skillMd) {
+    checks.push(pass('dup-skill-content', '无 SKILL.md 可比对', '缺 SKILL.md 已由 sk-manifest 报出，跳过内容比对'));
+  } else if (sameHash.length > 0) {
+    checks.push(
+      warn(
+        'dup-skill-content',
+        '与已装技能内容完全相同',
+        `${sameHash.join(', ')} 的 SKILL.md 正文与候选一字不差，只是目录名不同`,
+        '改名重装等于装两份同一技能，删掉多余的那份。',
+        'stability',
+      ),
+    );
+  } else if (sameDeclared.length > 0) {
+    checks.push(
+      warn(
+        'dup-skill-content',
+        'SKILL.md 声明的 name 与已装技能重复',
+        `frontmatter name=${myDeclared}，已被 ${sameDeclared.join(', ')} 使用`,
+        '模型按 name 路由，两个同名技能会互相干扰。',
+        'stability',
+      ),
+    );
+  } else {
+    checks.push(
+      pass(
+        'dup-skill-content',
+        '与已装技能无重复',
+        installed.length
+          ? `已比对 ${installed.length} 个已装技能：正文指纹与 frontmatter name 均不冲突`
+          : '本机还没有其它已装技能',
+      ),
+    );
   }
 
   return checks;

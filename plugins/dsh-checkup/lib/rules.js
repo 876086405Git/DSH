@@ -10,7 +10,7 @@
 //           'warn'   -> 允许安装，但明确告知风险
 //           'pass'   -> 通过项（面板里折叠展示）
 
-import { satisfies, parseVersion } from './version.js';
+import { satisfies, parseVersion, compareVersions } from './version.js';
 import { checkSecurity } from './security.js';
 import { checkStability } from './stability.js';
 
@@ -32,6 +32,15 @@ export const RULE_IDS = [
   'known-bad',
   'duplicate',
   'bundle-load',
+  // 交叉比对（候选 vs 已装）：插件、连接器、技能、专家各一组
+  'dup-plugin-version',
+  'conflict-deps',
+  'dup-connector-name',
+  'conflict-connector-tool',
+  'dup-skill-content',
+  'cand-expert-shape',
+  'cand-expert-dup',
+  'cand-expert-refs',
   // 安全性
   'sec-manifest',
   'sec-scripts',
@@ -327,6 +336,109 @@ export function checkCandidate(input) {
         '先卸载旧版本再安装。',
       ),
     );
+  }
+
+  // 9b. 交叉比对：同名包已在本地时，版本是否一致（升级/降级/换版本）
+  //     与 `duplicate` 的分工：那边只说「这个名字在 bundles 里」，这边说「装的是哪个版本、
+  //     和已装的比是升是降、会不会覆盖成另一份副本」。
+  const inBundles = Boolean(manifestName && bundles.includes(manifestName));
+  const installedVersion = manifestName ? env.installedVersions?.[manifestName] : undefined;
+  const incomingVersion = String(manifest.version || '');
+  if (!manifestName) {
+    checks.push(pass('dup-plugin-version', '无包名可比对', '元数据里没有 name，跳过多版本比对'));
+  } else if (!installedVersion) {
+    checks.push(
+      pass(
+        'dup-plugin-version',
+        '本地没有同名包',
+        inBundles
+          ? `${manifestName} 在 bundles 里登记过，但读不到已装版本（实体可能已缺失）`
+          : `${manifestName} 未在本地安装过`,
+      ),
+    );
+  } else if (!inBundles) {
+    checks.push(
+      warn(
+        'dup-plugin-version',
+        '同名包已作为依赖存在',
+        `${manifestName}@${installedVersion} 已在 node_modules 里（未登记为 bundle），再装成 bundle 会出现两份实例`,
+        '确认这个包是被别的插件依赖、还是确实要装成独立插件。',
+      ),
+    );
+  } else if (!incomingVersion || incomingVersion === installedVersion) {
+    checks.push(pass('dup-plugin-version', '已装版本与本次一致', `${manifestName}@${installedVersion}`));
+  } else {
+    const before = parseVersion(installedVersion);
+    const after = parseVersion(incomingVersion);
+    const downgrade = Boolean(before && after && compareVersions(after, before) < 0);
+    checks.push(
+      warn(
+        'dup-plugin-version',
+        downgrade ? '要安装的版本低于已装版本' : '已装同名包，但版本不同',
+        `${manifestName} 已装 ${installedVersion}，本次要装 ${incomingVersion}（${downgrade ? '降级' : '升级/换版'}）`,
+        downgrade
+          ? '降级会覆盖已装副本，若有其他插件依赖新版本的接口会连带失效。'
+          : '换版本会覆盖已装副本，先确认没有别的插件钉死在旧版本上。',
+      ),
+    );
+  }
+
+  // 9c. 交叉比对：候选声明的 dependencies 与本地已装版本是否互斥。
+  //     `peer-deps` 只查 peerDependencies，普通 dependencies 一直是盲区；
+  //     而 @deepseek-ai/* 是宿主单例包，装出第二份实例 = 注册不到宿主、插件静默失效。
+  const candidateDeps = { ...(manifest.dependencies || {}), ...(manifest.optionalDependencies || {}) };
+  const depEntries = Object.entries(candidateDeps).filter(([, range]) => typeof range === 'string' && range.trim());
+  const installedMap = env.installedVersions || {};
+  if (Object.keys(installedMap).length === 0) {
+    checks.push(
+      warn(
+        'conflict-deps',
+        '无法核对依赖冲突',
+        '没有读到自己已装的包版本清单，本次跳过依赖排斥检查',
+        '确认桌面端与 profile 的 node_modules 可读后再判断。',
+      ),
+    );
+  } else {
+    const conflicts = [];
+    for (const [depName, depRange] of depEntries) {
+      const have = installedMap[depName];
+      if (!have) continue; // 没装过就不存在「排斥」，交给安装过程自己解析
+      if (satisfies(have, depRange)) continue;
+      conflicts.push({ depName, depRange, have, singleton: depName.startsWith('@deepseek-ai/') });
+    }
+    const describe = (row) => `${row.depName} 已装 ${row.have}，候选要 ${row.depRange}`;
+    if (conflicts.length === 0) {
+      checks.push(
+        pass(
+          'conflict-deps',
+          '依赖与已装版本不冲突',
+          `${depEntries.length} 个依赖已比对 ${Object.keys(installedMap).length} 个已装包`,
+        ),
+      );
+    } else {
+      const hard = conflicts.filter((row) => row.singleton);
+      const soft = conflicts.filter((row) => !row.singleton);
+      if (hard.length > 0) {
+        checks.push(
+          block(
+            'conflict-deps',
+            '与宿主内置包的版本互斥',
+            `${hard.map(describe).join('；')}（这些是 DSH 单例包，装出第二份实例会注册不到宿主、插件静默失效）`,
+            '让作者放宽依赖范围，或换一个适配当前 DSH 的版本。',
+          ),
+        );
+      }
+      if (soft.length > 0) {
+        checks.push(
+          warn(
+            'conflict-deps',
+            '依赖版本与已装不一致',
+            `${soft.map(describe).join('；')}（包管理器会嵌套装第二份，体积与重复实例风险上升）`,
+            '确认候选是否必须依赖新的主版本；能放宽就放宽。',
+          ),
+        );
+      }
+    }
   }
 
   // 10. bundle 数量压力
