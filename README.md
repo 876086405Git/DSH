@@ -1,5 +1,10 @@
 # DSH 插件集合
 
+[![Release](https://img.shields.io/github/v/release/876086405Git/DSH?display_name=tag&label=release&color=2ea44f)](https://github.com/876086405Git/DSH/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/876086405Git/DSH/total?label=downloads)](https://github.com/876086405Git/DSH/releases)
+[![Last commit](https://img.shields.io/github/last-commit/876086405Git/DSH/main)](https://github.com/876086405Git/DSH/commits/main)
+[![Plugins](https://img.shields.io/badge/plugins-2-blue)](#插件列表)
+
 DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。
 
 ## 插件列表
