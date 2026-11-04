@@ -331,9 +331,11 @@ window.__ModuleLoader__.load({
             var keptRefs = enhancedDraft && typeof enhancedDraft === 'object' && Array.isArray(enhancedDraft.references)
               ? enhancedDraft.references.length
               : 0
-            showToast(keptRefs > 0
-              ? '已自动填入增强结果 · 保留 ' + keptRefs + ' 个引用；点 ↺ 恢复原文'
-              : '已自动填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文')
+            var ctxInfo = data && data.context && data.context.used === true ? '（已结合上文）' : ''
+            var sizeInfo = data && data.trimmed === true ? '（已按 ' + data.limit + ' 字上限精简）' : ''
+            showToast((keptRefs > 0
+              ? '已自动填入增强结果' + ctxInfo + sizeInfo + ' · 保留 ' + keptRefs + ' 个引用；点 ↺ 恢复原文'
+              : '已自动填入增强结果' + ctxInfo + sizeInfo + ' · 可直接编辑或发送；点 ↺ 恢复原文'))
           })
           .catch(function (error) {
             if (seq !== requestSeq.current || !mountedRef.current) return

@@ -202,7 +202,8 @@ DSH_APP_DIR="<DSH 安装目录>/resources/app" node test/verify.mjs
 # dsh-prompt-enhance — 提示词增强
 
 会话输入框加一个「提示词增强」按钮：把当前输入改写成结构化提示词，生成结果自动填入输入框，
-可一键撤回恢复原文。发布包：`dsh-prompt-enhance-1.2.0.tgz`。
+可一键撤回恢复原文。1.5.0 起支持深度理解上一条消息、并严格执行字数上限（150～800 字）。
+发布包：`dsh-prompt-enhance-1.5.0.tgz`。
 
 ---
 
@@ -231,5 +232,5 @@ dsh plugin --profile desktop add ./dsh-checkup-0.3.4.tgz
 
 本仓库插件由 **DeepSeek Harness（DSH）内的 AI 助手按需求实现**，人工负责需求定义、验收与迭代决策；
 代码、文档与截图由 AI 生成后经人工确认。git 历史自 2026-10-28 建立，此前 10-23 至 10-24 的开发过程未入库；
-`dsh-prompt-enhance` 的 `v1.1.0` 标签对应首个完整可用版本，`v1.2.0` 为当前发布版本
-（引用芯片保留 / 无边框透明闪烁 / Host 修复）。
+`dsh-prompt-enhance` 的 `v1.1.0` 标签对应首个完整可用版本；`v1.2.0` 补上引用芯片保留与无边框闪烁；
+`v1.5.0` 为当前发布版本（深度理解上一条消息 / 严格执行字数上限 / 超限自动压缩重写 + 兜底截断）。
