@@ -1,0 +1,39 @@
+{
+  "name": "dsh-session-watchdog",
+  "version": "0.3.0",
+  "description": "会话哨兵：实时监控 DSH 会话运行状态；异常停止时提醒并依据真实会话内容自动续跑；任务完成弹窗+铃声提醒（6 种提示音）；带设置面板。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "docs/01-设计说明.md",
+    "docs/02-实现方案.md",
+    "README.md"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc <5"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:settings": "node test/client-settings.selftest.mjs"
+  }
+}

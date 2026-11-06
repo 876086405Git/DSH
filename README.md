@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/876086405Git/DSH?display_name=tag&label=release&color=2ea44f)](https://github.com/876086405Git/DSH/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/876086405Git/DSH/total?label=downloads)](https://github.com/876086405Git/DSH/releases)
 [![Last commit](https://img.shields.io/github/last-commit/876086405Git/DSH/main)](https://github.com/876086405Git/DSH/commits/main)
-[![Plugins](https://img.shields.io/badge/plugins-2-blue)](#插件列表)
+[![Plugins](https://img.shields.io/badge/plugins-3-blue)](#插件列表)
 
 DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。
 
@@ -13,13 +13,15 @@ DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。
 | --- | --- |
 | [`dsh-checkup`](#dsh-checkup--dsh体检中心) | 装插件 / skill / MCP **之前先预检**，不兼容直接拦下；装完还能体检、救场、看军械库四类 |
 | `dsh-prompt-enhance` | 会话输入框的「提示词增强」按钮，生成后自动填入并可一键撤回 |
+| [`dsh-session-watchdog`](#dsh-session-watchdog--会话哨兵) | 实时监控会话；异常停止提醒并按**真实会话内容**自动续跑；任务完成弹窗 + 6 种叮咚提示音 |
 
 ## 目录结构
 
 ```text
 plugins/
 ├─ dsh-checkup/            DSH体检中心：安装前预检 + 环境体检 + 军械库四类检查
-└─ dsh-prompt-enhance/     提示词增强：一键把输入框内容改写成结构化提示词
+├─ dsh-prompt-enhance/     提示词增强：一键把输入框内容改写成结构化提示词
+└─ dsh-session-watchdog/   会话哨兵：异常停止提醒 + 真实上下文续跑 + 任务完成铃声
 ```
 
 ---
@@ -209,6 +211,104 @@ DSH_APP_DIR="<DSH 安装目录>/resources/app" node test/verify.mjs
 会话输入框加一个「提示词增强」按钮：把当前输入改写成结构化提示词，生成结果自动填入输入框，
 可一键撤回恢复原文。1.5.0 起支持深度理解上一条消息、并严格执行字数上限（150～800 字）。
 发布包：`dsh-prompt-enhance-1.5.0.tgz`。
+
+---
+
+# dsh-session-watchdog — 会话哨兵
+
+## 它解决什么问题
+
+DSH 的一次 turn 可能因为模型报错、限流、进程被杀、输出超长或长时间无响应而中断；人不在电脑前时，
+会话就停在半路，任务没人接。会话哨兵做三件事：
+
+1. **看得见**：宿主侧订阅 `session/event`，用「turn 结束原因 + 假死心跳 + 启动恢复」三通道判定异常停止；
+2. **叫得应**：页面卡片、侧栏徽标、系统通知；**任务正常完成也会弹窗并播放叮咚提示音（6 种可选）**；
+3. **接得上**：从该会话的**真实对话原文、未完成待办、目标、最后动作与错误**生成续跑指令（默认交给该会话自己的模型来写，失败自动回落到上下文拼装），走与 GUI 发消息相同的 `sessionController.prompt` 通道投递。
+
+## 主要功能
+
+### 1. 停止判定（三通道）
+
+| 通道 | 依据 | 说明 |
+| --- | --- | --- |
+| turn 结束原因 | `turn/end.reason.kind` | `error` / `interrupted` / `max-tokens` / `blocked` 视为异常；`completed` 完成提醒；`aborted` 默认静默 |
+| 假死心跳 | 运行中但长期无会话事件 | 无未完成工具 10 分钟、有未完成工具 15 分钟；每个 turn 只报一次；默认只提醒不自动续跑 |
+| 启动恢复 | 状态文件 + `sessionQuery` 扫描 | 上次退出时 turn 未闭合记为 `interrupted`；历史遗留会话默认只提醒 |
+
+误报控制：等待用户审批（`approval/asked` 未决）、用户手动继续（新 `turn/start`）、子代理会话（默认不监控）、排除目录/会话都按规则放行或静默。
+
+### 2. 提醒：页面卡片 + 徽标 + 系统通知 + 提示音
+
+- 异常提醒卡片带「续跑」「忽略」；完成提醒卡片只带「忽略」，**永不自动续跑**；
+- 侧栏徽标：红=异常、黄=续跑中、绿=已恢复/已完成（30s 自清）；
+- 系统通知：页面隐藏时发送，点击跳回对应会话；
+- 提示音：6 种 Web Audio 合成音色（叮咚（双音）/ 清脆双击 / 轻快三连音 / 水滴 / 柔和小铃 / 电子脉冲）+ 关闭，音量 0-100 可调，设置里可试听。
+
+### 3. 依据真实内容续跑
+
+- 事实来源：该会话最近 400 条事件里的真实对话原文（最近 10 条）、未完成 todo、目标、最后工具动作、最后错误、cwd；
+- 两种生成方式：`llm`（默认，用该会话的 provider/model 生成，禁止套模板/编造）与 `context`（不上模型，用真实内容拼装）；
+- 续跑前安全检查：等用户审批时暂停、cwd 不存在不续跑、子代理不续跑、同判定幂等、每会话 2 次/30min、全局 5 次/10min、连续失败 3 次熔断；
+- 3 秒延时，期间用户手动继续会自动撤销。
+
+### 4. 设置面板
+
+**设置 → 会话哨兵**，四组：提醒开关（含完成提醒 / 提示音 / 音量）、监控内容规则（含续跑指令生成方式）、监控范围（目录与会话白名单/黑名单）、阈值与预算。保存后**即时生效**（写入 `~/.dsh/session-watchdog/config.json`，优先级高于 profile 的静态 config）。
+
+## 安装与使用
+
+```bash
+# 方式一：仓库根目录的发布包
+dsh plugin --profile desktop add ./dsh-session-watchdog-0.3.0.tgz
+
+# 方式二：本地源码（开发态）
+dsh plugin --profile desktop add link:/path/to/plugins/dsh-session-watchdog
+```
+
+装好后打开 **设置 → 左侧「会话哨兵」**。默认已完成：完成提醒开、叮咚音、音量 70、续跑指令用模型生成。
+
+## 依赖与兼容性
+
+| 项 | 要求 | 说明 |
+| --- | --- | --- |
+| DSH | 0.2.2-rc.1（实测） | 使用 `session/event`、`ctx.agents`、`sessionController.prompt`、`ctx.llm`、`webServer` 路由 |
+| Node | >= 22.19 | 插件为 ESM，无构建步骤 |
+| 宿主服务 | 全部惰性获取 | `sessionController` / `webServer` / `ctx.llm` / `sessionQuery` 缺了自动降级 |
+
+## 验证
+
+```bash
+cd plugins/dsh-session-watchdog
+node --test                                # 59 项单测/集成/前端假环境自测
+node test/client-settings.selftest.mjs     # 设置面板 19 项断言
+node test/client-sound.selftest.mjs        # 完成提醒与铃声 11 项断言
+```
+
+反向插桩脚本 `test/mutation-check.ps1`（Windows PowerShell）证明关键断言可杀死 6 类变异体。
+
+## 配置
+
+配置写在 profile 的 `cordis.patch.yml`（条目 id `dsh-session-watchdog`），或直接在设置面板改（写 `config.json`，优先级更高）：
+
+```yaml
+- insert:
+    - id: dsh-session-watchdog
+      name: dsh-session-watchdog
+      config:
+        autoResume: true
+        notifyOnCompletion: true
+        completionSound: dingdong
+        completionVolume: 70
+        resumePromptMode: llm
+```
+
+数据落在 `~/.dsh/session-watchdog/`：`state.json`（运行态/未闭合 turn）、`config.json`（运行时配置）。
+
+## 文档与截图
+
+- [设计说明](plugins/dsh-session-watchdog/docs/01-设计说明.md)
+- [实现方案](plugins/dsh-session-watchdog/docs/02-实现方案.md)
+- 真机截图：[基础设置](plugins/dsh-session-watchdog/docs/preview/截图1-提醒开关.png)、[完成提醒与提示音](plugins/dsh-session-watchdog/docs/preview/截图6-任务完成提醒与提示音.png)、[续跑指令生成方式](plugins/dsh-session-watchdog/docs/preview/截图7-续跑指令生成方式.png)
 
 ---
 

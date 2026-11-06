@@ -1,0 +1,14 @@
+# dsh-session-watchdog —— 会话哨兵
+#
+# 宿主半侧：订阅 session/event，判定异常停止，提醒并可按策略自动续跑。
+# 浏览器半侧：会话列表徽标 + 页面内提醒卡片 + 系统通知，配置由宿主路由下发。
+#
+# 安装（本机 desktop profile）：
+#   dsh plugin --profile desktop add dsh-session-watchdog
+- insert:
+    - id: dsh-session-watchdog
+      name: dsh-session-watchdog
+      config:
+        enabled: true
+        autoResume: true
+        monitorSubagents: false
