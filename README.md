@@ -240,6 +240,7 @@ DSH 的一次 turn 可能因为模型报错、限流、进程被杀、输出超�
 ### 2. 提醒：页面卡片 + 徽标 + 系统通知 + 提示音
 
 - 异常提醒卡片带「续跑」「忽略」；完成提醒卡片只带「忽略」，**永不自动续跑**；
+- 卡片固定在**右下角**、从下往上堆叠并置于最顶层；卡片与系统通知里的会话名与会话列表**完全一致**（取 `displayTitle`），不出现「未命名」；
 - 侧栏徽标：红=异常、黄=续跑中、绿=已恢复/已完成（30s 自清）；
 - 系统通知：页面隐藏时发送，点击跳回对应会话；
 - 提示音：6 种 Web Audio 合成音色（叮咚（双音）/ 清脆双击 / 轻快三连音 / 水滴 / 柔和小铃 / 电子脉冲）+ 关闭，音量 0-100 可调，设置里可试听。
@@ -251,7 +252,16 @@ DSH 的一次 turn 可能因为模型报错、限流、进程被杀、输出超�
 - 续跑前安全检查：等用户审批时暂停、cwd 不存在不续跑、子代理不续跑、同判定幂等、每会话 2 次/30min、全局 5 次/10min、连续失败 3 次熔断；
 - 3 秒延时，期间用户手动继续会自动撤销。
 
-### 4. 设置面板
+### 4. v0.3.1 ~ v0.3.3 修复记录
+
+- **v0.3.1 崩溃修复**：续跑路径直接读未注入的 `ctx.llm` 会抛 `CordisError`，未捕获异常导致宿主
+  `fatal load failure`、桌面端重启。改为 `ctx.get()` 读可选服务 + 续跑全 try/catch + `fireResume` 兜底。
+- **v0.3.2 恢复上下文**：宿主重启后自动续跑会先用 `sessionQuery` 补读真实会话日志再生成指令，不再出现
+  「没有可用的对话记录」；完成卡片改右下角、会话名与会话列表一致、层级置顶。
+- **v0.3.3 摘要修复**：正常完成的卡片不再把历史工具错误码（如 `CODE_RUN_FAILED`）拼进摘要，
+  仅异常停止时显示并标注「最近工具失败 <code>」。
+
+### 5. 设置面板
 
 **设置 → 会话哨兵**，四组：提醒开关（含完成提醒 / 提示音 / 音量）、监控内容规则（含续跑指令生成方式）、监控范围（目录与会话白名单/黑名单）、阈值与预算。保存后**即时生效**（写入 `~/.dsh/session-watchdog/config.json`，优先级高于 profile 的静态 config）。
 
@@ -259,7 +269,7 @@ DSH 的一次 turn 可能因为模型报错、限流、进程被杀、输出超�
 
 ```bash
 # 方式一：仓库根目录的发布包
-dsh plugin --profile desktop add ./dsh-session-watchdog-0.3.0.tgz
+dsh plugin --profile desktop add ./dsh-session-watchdog-0.3.3.tgz
 
 # 方式二：本地源码（开发态）
 dsh plugin --profile desktop add link:/path/to/plugins/dsh-session-watchdog
@@ -284,7 +294,7 @@ node test/client-settings.selftest.mjs     # 设置面板 19 项断言
 node test/client-sound.selftest.mjs        # 完成提醒与铃声 11 项断言
 ```
 
-反向插桩脚本 `test/mutation-check.ps1`（Windows PowerShell）证明关键断言可杀死 6 类变异体。
+反向插桩脚本 `test/mutation-check.ps1`（Windows PowerShell）证明关键断言可杀死 A~J 共 10 类变异体。
 
 ## 配置
 
@@ -308,7 +318,7 @@ node test/client-sound.selftest.mjs        # 完成提醒与铃声 11 项断言
 
 - [设计说明](plugins/dsh-session-watchdog/docs/01-设计说明.md)
 - [实现方案](plugins/dsh-session-watchdog/docs/02-实现方案.md)
-- 真机截图：[基础设置](plugins/dsh-session-watchdog/docs/preview/截图1-提醒开关.png)、[完成提醒与提示音](plugins/dsh-session-watchdog/docs/preview/截图6-任务完成提醒与提示音.png)、[续跑指令生成方式](plugins/dsh-session-watchdog/docs/preview/截图7-续跑指令生成方式.png)
+- 真机截图：[基础设置](plugins/dsh-session-watchdog/docs/preview/截图1-提醒开关.png)、[完成提醒与提示音](plugins/dsh-session-watchdog/docs/preview/截图6-任务完成提醒与提示音.png)、[续跑指令生成方式](plugins/dsh-session-watchdog/docs/preview/截图7-续跑指令生成方式.png)、[完成卡片右下角真机验证](plugins/dsh-session-watchdog/docs/preview/实测-完成卡片右下角.png)
 
 ---
 

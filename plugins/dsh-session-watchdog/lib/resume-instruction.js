@@ -58,9 +58,13 @@ export function buildContextInstruction(brief) {
 
 /** 简短摘要（提醒卡片用），来自真实记录而不是固定文案。 */
 export function buildInstructionSummary(context, decision) {
-  const parts = [KIND_LABELS[decision.kind] || decision.kind || '异常停止']
+  const kind = decision.kind || 'unknown'
+  // 正常完成的卡片只写「正常完成」：不要把历史工具错误码（如 CODE_RUN_FAILED）当成完成状态，
+  // 那会让用户误以为这一轮失败了。错误码只在异常停止时展示，并显式标注是「最近工具失败」。
+  if (kind === 'completed') return '正常完成'
+  const parts = [KIND_LABELS[kind] || kind || '异常停止']
   if (context.todos && context.todos.pending && context.todos.pending.length > 0) parts.push('未完成 ' + context.todos.pending.length + ' 项')
-  if (context.lastError && context.lastError.code) parts.push(context.lastError.code)
+  if (context.lastError && context.lastError.code) parts.push('最近工具失败 ' + context.lastError.code)
   if (decision.error && decision.error.message && !(context.lastError && context.lastError.message === decision.error.message)) {
     parts.push(String(decision.error.message).slice(0, 60))
   }

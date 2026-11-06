@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-watchdog",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "description": "会话哨兵：实时监控 DSH 会话运行状态；异常停止时提醒并依据真实会话内容自动续跑；任务完成弹窗+铃声提醒（6 种提示音）；带设置面板。",
   "type": "module",
   "main": "lib/index.js",

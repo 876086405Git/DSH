@@ -68,6 +68,46 @@ try {
   Run-Test '由对应会话的真实内容经模型生成' 'test/plugin.test.mjs'
 } finally { [IO.File]::WriteAllText($f6, $orig6, (New-Object System.Text.UTF8Encoding($false))) }
 
+'--- Mutation G: 续跑时直接读 ctx.llm（v0.3.0 崩溃写法） ---'
+$f7 = Join-Path $root 'lib\index.js'
+$orig7 = [IO.File]::ReadAllText($f7)
+try {
+  $mut7 = $orig7.Replace("llm: readService(ctx, 'llm'),", "llm: ctx.llm,")
+  if ($mut7 -eq $orig7) { throw 'G: pattern not found' }
+  [IO.File]::WriteAllText($f7, $mut7, (New-Object System.Text.UTF8Encoding($false)))
+  Run-Test '插件未声明 inject' 'test/plugin.test.mjs'
+} finally { [IO.File]::WriteAllText($f7, $orig7, (New-Object System.Text.UTF8Encoding($false))) }
+
+'--- Mutation H: 崩溃恢复不补读会话日志（上下文为空） ---'
+$f8 = Join-Path $root 'lib\index.js'
+$orig8 = [IO.File]::ReadAllText($f8)
+try {
+  $mut8 = $orig8.Replace("await hydrateStartupDecision(decision)", "void hydrateStartupDecision(decision)")
+  if ($mut8 -eq $orig8) { throw 'H: pattern not found' }
+  [IO.File]::WriteAllText($f8, $mut8, (New-Object System.Text.UTF8Encoding($false)))
+  Run-Test '崩溃恢复' 'test/plugin.test.mjs'
+} finally { [IO.File]::WriteAllText($f8, $orig8, (New-Object System.Text.UTF8Encoding($false))) }
+
+'--- Mutation I: 卡片回到右上角（client 定位） ---'
+$f9 = Join-Path $root 'lib\client.js'
+$orig9 = [IO.File]::ReadAllText($f9)
+try {
+  $mut9 = $orig9.Replace("bottom: '12px',", "top: '12px',")
+  if ($mut9 -eq $orig9) { throw 'I: pattern not found' }
+  [IO.File]::WriteAllText($f9, $mut9, (New-Object System.Text.UTF8Encoding($false)))
+  Run-Test '固定在右下角' 'test/client-sound.selftest.mjs'
+} finally { [IO.File]::WriteAllText($f9, $orig9, (New-Object System.Text.UTF8Encoding($false))) }
+
+'--- Mutation J: 宿主标题回退到「未命名会话」 ---'
+$f10 = Join-Path $root 'lib\index.js'
+$orig10 = [IO.File]::ReadAllText($f10)
+try {
+  $mut10 = $orig10.Replace("title: decision.title || context.title || '',", "title: decision.title || context.title || '未命名会话',")
+  if ($mut10 -eq $orig10) { throw 'J: pattern not found' }
+  [IO.File]::WriteAllText($f10, $mut10, (New-Object System.Text.UTF8Encoding($false)))
+  Run-Test '异常结束' 'test/plugin.test.mjs'
+} finally { [IO.File]::WriteAllText($f10, $orig10, (New-Object System.Text.UTF8Encoding($false))) }
+
 '--- 还原后回归 ---'
 $out = & node --test 2>&1 | Out-String
 ($out -split "\r?\n" | Select-String '# pass|# fail') -join ' | '

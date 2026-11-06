@@ -1316,7 +1316,7 @@ if (typeof window !== 'undefined' && window.__ModuleLoader__ && typeof window.__
                   return;
                 }
                 if (Notification.permission !== 'granted') return;
-                const title = '会话哨兵 · ' + truncateText(alert.title || alert.sessionId, 60);
+                const title = '会话哨兵 · ' + truncateText(resolveSessionTitle(alert.sessionId, alert.title), 60);
                 const body = kindLabel(alert.kind) + '：' + describeAlert(alert);
                 const notification = new Notification(title, {
                   body: body,
@@ -2732,11 +2732,11 @@ if (typeof window !== 'undefined' && window.__ModuleLoader__ && typeof window.__
                 overlay.setAttribute('data-dsh-watchdog-overlay', '1');
                 Object.assign(overlay.style, {
                   position: 'fixed',
-                  top: '12px',
+                  bottom: '12px',
                   right: '12px',
-                  zIndex: '2147483000',
+                  zIndex: '2147483647',
                   display: 'flex',
-                  flexDirection: 'column',
+                  flexDirection: 'column-reverse',
                   alignItems: 'flex-end',
                   gap: '8px',
                   pointerEvents: 'none',
@@ -2749,6 +2749,29 @@ if (typeof window !== 'undefined' && window.__ModuleLoader__ && typeof window.__
                 warn('创建提醒浮层失败（已隔离）', error);
                 return null;
               }
+            }
+
+            /**
+             * 解析会话显示名：与会话列表保持完全一致（列表 displayTitle = title ?? cwd 目录名 ?? id）。
+             * 宿主提醒 title 可能为空（插件加载晚 / 标题事件在 400 条窗口外），这里以列表为准兜底；
+             * 也兼容旧宿主可能下发的「未命名会话」占位。
+             */
+            function resolveSessionTitle(sessionId, fallbackTitle) {
+              try {
+                const raw = typeof fallbackTitle === 'string' ? fallbackTitle.trim() : ''
+                if (raw !== '' && raw !== '未命名会话') return raw
+                const sessions = readService(scope, 'sessions')
+                const list = sessions && sessions.list
+                const snapshot = list && typeof list.getSnapshot === 'function' ? list.getSnapshot() : list
+                const row = snapshot && snapshot.byId ? snapshot.byId[sessionId] : null
+                if (row) {
+                  const title = typeof row.displayTitle === 'string' && row.displayTitle ? row.displayTitle : (typeof row.title === 'string' ? row.title : '')
+                  if (title) return title
+                }
+              } catch (error) {
+                /* 列表暂不可用：退回短 id，绝不显示「未命名」 */
+              }
+              return '会话 ' + String(sessionId || '').slice(0, 8)
             }
 
             /** 有卡片就排队，没超上限就直接显示。 */
@@ -2877,7 +2900,7 @@ if (typeof window !== 'undefined' && window.__ModuleLoader__ && typeof window.__
                   flex: 'none',
                 });
                 const title = document.createElement('span');
-                title.textContent = truncateText(alert.title || alert.sessionId, 48);
+                title.textContent = truncateText(resolveSessionTitle(alert.sessionId, alert.title), 48);
                 Object.assign(title.style, {
                   flex: '1',
                   minWidth: '0',

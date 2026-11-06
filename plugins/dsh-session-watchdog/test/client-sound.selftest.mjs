@@ -290,7 +290,9 @@ function boot(options = {}) {
   const ctx = {
     uiSession: {},
     get(name) {
-      return name === 'uiSession' ? ctx.uiSession : undefined
+      if (name === 'uiSession') return ctx.uiSession
+      if (name === 'sessions') return options.sessions || null
+      return undefined
     },
     inject() {},
     effect(fn) {
@@ -582,6 +584,53 @@ await test('完成提醒「忽略」：POST action=dismiss 后卡片移除、徽
     assert.equal(app.host.actionCalls[0].action, 'dismiss')
     assert.equal(app.diagnostics().badges().length, 0, '忽略后徽标应清除')
     assert.equal(env.starts >= 2, true)
+  } finally {
+    app.dispose()
+    removeFakeAudio()
+  }
+})
+
+await test('完成卡片固定在右下角（bottom:12px，且不再用 top 定位）', async () => {
+  const env = installFakeAudio()
+  const app = boot()
+  try {
+    app.host.push(completionAlert())
+    const cards = await waitForCard(app)
+    const overlay = (app.doc.body.children || []).find(
+      (child) => child.attributes && child.attributes['data-dsh-watchdog-overlay'] === '1',
+    )
+    assert.ok(overlay, '浮层应存在')
+    assert.equal(overlay.style.bottom, '12px', '浮层应贴右下角')
+    assert.ok(!overlay.style.top, '不应再用 top 定位')
+    assert.equal(overlay.style.right, '12px')
+    assert.equal(overlay.style.flexDirection, 'column-reverse', '卡片应从右下角向上堆叠')
+    assert.equal(overlay.style.zIndex, '2147483647', '卡片应置于最顶层，避免被其他插件浮层遮挡')
+    assert.equal(cards.length, 1)
+  } finally {
+    app.dispose()
+    removeFakeAudio()
+  }
+})
+
+await test('完成卡片标题与会话列表一致（宿主 title 为空或旧占位时取列表 displayTitle）', async () => {
+  const env = installFakeAudio()
+  const app = boot({
+    sessions: {
+      list: {
+        getSnapshot: () => ({ byId: { 'session-a': { displayTitle: '订单模块重构-真实列表名' } } }),
+      },
+    },
+  })
+  try {
+    app.host.push(completionAlert({ title: '' }))
+    let cards = await waitForCard(app)
+    assert.match(textOf(cards[0]), /订单模块重构-真实列表名/, '空标题应回落到列表 displayTitle')
+    app.host.push(completionAlert({ title: '未命名会话' }))
+    const ok = await until(() => findCards(app.doc).length >= 1)
+    assert.ok(ok)
+    cards = findCards(app.doc)
+    assert.match(textOf(cards[cards.length - 1]), /订单模块重构-真实列表名/, '旧占位「未命名会话」也必须被列表名替换')
+    assert.doesNotMatch(textOf(cards[cards.length - 1]), /未命名/)
   } finally {
     app.dispose()
     removeFakeAudio()

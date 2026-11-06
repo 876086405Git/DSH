@@ -12,6 +12,8 @@ import { apply } from '../lib/index.js'
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function createHarness(overrides = {}) {
+  const sessionQuery = overrides.sessionQuery;
+  const strictServices = overrides.strictServices === true;
   const listeners = new Map()
   const routes = new Map()
   const disposers = []
@@ -65,7 +67,8 @@ function createHarness(overrides = {}) {
       }
       callback(scope)
     },
-    sessionQuery: undefined,
+    sessionQuery,
+    get(name) { return services[name] },
   }
   const config = {
     enabled: true,
@@ -74,7 +77,18 @@ function createHarness(overrides = {}) {
     stateFile: join(stateDir, 'state.json'),
     ...overrides,
   }
-  apply(ctx, config)
+  const strict = strictServices
+  const target = strict
+    ? new Proxy(ctx, {
+        get(object, prop) {
+          if (typeof prop === 'string' && ['llm', 'agents', 'sessions', 'sessionQuery', 'logger'].includes(prop)) {
+            throw new Error('cannot get property "' + prop + '" without inject')
+          }
+          return Reflect.get(object, prop)
+        },
+      })
+    : ctx
+  apply(target, config)
   return {
     ctx,
     prompted,
@@ -149,7 +163,7 @@ test('异常结束 → 提醒流出现 error 并自动续跑（sessionController
     const alert = feed.alerts[0]
     assert.equal(alert.kind, 'error')
     assert.equal(alert.stage, 'resumed')
-    assert.equal(alert.title, '未命名会话')
+    assert.equal(alert.title, '')
     assert.match(alert.reason, /执行失败/)
     assert.equal(alert.instructionSource, 'context')
     assert.equal(alert.instructionError, 'llm-unavailable')
@@ -162,6 +176,21 @@ test('异常结束 → 提醒流出现 error 并自动续跑（sessionController
     assert.match(text, /补完单测/)
     assert.equal(h.prompted[0].mode, 'queue')
     assert.equal(h.prompted[0].sessionId, 'session-test')
+  } finally { h.dispose() }
+})
+
+test('完成提醒标题：来自 session/title 事件，与会话列表一致（不再出现未命名）', async () => {
+  const h = createHarness()
+  try {
+    const s = h.session()
+    h.emit('session/event', s, turnEvent('turn/start', { turn: 1 }))
+    h.emit('session/event', s, turnEvent('session/title', { title: '完成卡片验证' }))
+    h.emit('session/event', s, turnEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }))
+    await sleep(60)
+    const alert = (await h.alerts(0)).alerts[0]
+    assert.equal(alert.kind, 'completed')
+    assert.equal(alert.title, '完成卡片验证')
+    assert.doesNotMatch(alert.title, /未命名/)
   } finally { h.dispose() }
 })
 
@@ -488,4 +517,66 @@ test('续跑指令：模型失败时回落到真实上下文拼装（不丢内�
     assert.equal(alert.instructionSource, 'context')
     assert.match(alert.instructionError, /provider down/)
   } finally { h.dispose() }
+})
+
+
+test('回归：插件未声明 inject 时直接读 ctx.llm 会崩宿主（v0.3.0 实测），修复后手动续跑必须安全回落', async () => {
+  // 模拟 Cordis 严格上下文：直接读未注入服务属性会抛错，只能通过 ctx.get(name) 取
+  const h = createHarness({ strictServices: true })
+  try {
+    const s = h.session()
+    h.emit('session/event', s, turnEvent('turn/start', { turn: 1 }))
+    h.emit('session/event', s, turnEvent('user/message', { id: 'u1', role: 'user', content: [{ type: 'text', text: '把 v0.3.0 的崩溃修掉' }], source: { kind: 'user' } }))
+    h.emit('session/event', s, turnEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }))
+    await sleep(60)
+    const alert = (await h.alerts(0)).alerts[0]
+    assert.ok(alert, '完成提醒应存在')
+    const response = await h.request('/action', 'POST', { id: alert.id, action: 'resume' })
+    assert.equal(response.status, 200, '手动续跑不得把异常抛回宿主')
+    await sleep(120)
+    const after = (await h.alerts(0)).alerts[0]
+    assert.equal(after.stage, 'resumed', '无 llm 服务时应回落上下文模式并成功投递')
+    assert.equal(after.instructionSource, 'context')
+    assert.equal(after.instructionError, 'llm-unavailable')
+    assert.equal(h.prompted.length, 1)
+    assert.match(h.prompted[0].content[0].text, /【会话交接记录】/)
+  } finally { h.dispose() }
+})
+
+
+test('崩溃恢复：宿主重启后自动续跑会先补读真实会话日志，指令承接上下文（不是空记录）', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'watchdog-hydrate-'))
+  const stateFile = join(dir, 'state.json')
+  const now = Date.now()
+  writeFileSync(stateFile, JSON.stringify({
+    version: 1,
+    savedAt: now - 60000,
+    detector: [{ sessionId: 'session-crash', title: '', cwd: 'F:\\开发\\Dsh-chajian', provider: '', model: '', openTurn: 9, lastEventAt: now - 60000, turnStartedAt: now - 60000 }],
+    policy: { processed: [], sessions: [], globalResumes: [] },
+  }), 'utf8')
+  const events = [
+    { type: 'request/context', time: now - 90000, data: { provider: 'deepseek-account', model: 'deepseek-v4-flash' } },
+    { type: 'session/title', time: now - 89000, data: { title: '会话哨兵崩溃修复' } },
+    { type: 'turn/start', time: now - 88000, data: { turn: 9 } },
+    { type: 'user/message', time: now - 87000, data: { id: 'u1', role: 'user', content: [{ type: 'text', text: '修复 0.3.0 崩溃并重新验证续跑' }], source: { kind: 'user' } } },
+    { type: 'assistant/message', time: now - 86000, data: { turn: 9, step: 1, message: { id: 'a1', role: 'assistant', content: [{ type: 'text', text: '根因是 executeResume 直接读 ctx.llm' }] } } },
+    { type: 'turn/start', time: now - 80000, data: { turn: 10 } },
+  ]
+  const h = createHarness({ stateFile, sessionQuery: { async readSession() { return { events } } } })
+  try {
+    h.setLlm({ async prepareCall(config) { return { config: { provider: config.provider, model: config.model }, stream: async function* () { yield { type: 'text-delta', text: '继续把 0.3.2 装上，再跑一次真实续跑并推送仓库。' } } } } })
+    await sleep(3800)
+    assert.equal(h.prompted.length, 1, '启动恢复应自动续跑一次')
+    const text = h.prompted[0].content[0].text
+    assert.equal(text, '继续把 0.3.2 装上，再跑一次真实续跑并推送仓库。')
+    assert.doesNotMatch(text, /没有可用的对话记录/)
+    const alert = (await h.alerts(0)).alerts[0]
+    assert.equal(alert.kind, 'interrupted')
+    assert.equal(alert.stage, 'resumed')
+    assert.equal(alert.instructionSource, 'llm')
+    assert.match(alert.title, /会话哨兵崩溃修复/)
+  } finally {
+    h.dispose()
+    try { rmSync(dir, { recursive: true, force: true }) } catch { /* noop */ }
+  }
 })

@@ -104,10 +104,17 @@ test('llm 不可用 / 输出为空 / 抛错 → 回落真实上下文拼装', as
   assert.match(failing.text, /订单模块重构/)
 })
 
+test('正常完成摘要不再携带历史工具错误码（避免 CODE_RUN_FAILED 误导）', () => {
+  const input = buildInput()
+  const summary = buildInstructionSummary(input.context, { kind: 'completed' })
+  assert.equal(summary, '正常完成')
+  assert.doesNotMatch(summary, /CODE_RUN_FAILED|QUOTA/)
+})
+
 test('摘要来自真实待办/错误，而不是固定文案', () => {
   const input = buildInput()
   const summary = buildInstructionSummary(input.context, input.decision)
   assert.match(summary, /执行失败/)
   assert.match(summary, /未完成 1 项/)
-  assert.match(summary, /QUOTA/)
+  assert.match(summary, /最近工具失败 QUOTA/)
 })

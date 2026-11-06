@@ -1,6 +1,6 @@
 # 会话哨兵 · dsh-session-watchdog
 
-> v0.3.0 · 新增任务完成提醒 + 6 种叮咚提示音；续跑指令改为依据会话真实内容生成（模型生成 / 上下文拼装双模式）
+> v0.3.3 · 完成卡片不再误显示历史工具错误码（CODE_RUN_FAILED） · v0.3.2 · 完成卡片固定右下角、会话名与会话列表一致 · 崩溃恢复自动续跑补读真实会话日志 · v0.3.1 · 修复续跑路径读取未注入服务导致宿主崩溃 · v0.3.0 · 新增任务完成提醒 + 6 种叮咚提示音；续跑指令改为依据会话真实内容生成（模型生成 / 上下文拼装双模式）
 
 > DeepSeek Harness 插件：实时监控会话运行状态；会话异常停止时提醒，并可依据该会话的断点上下文自动续跑。
 
@@ -16,7 +16,7 @@ DSH 的一次 turn 可能因为模型报错、限流、进程被杀、输出超�
 
 ~~~powershell
 # 方式一：从发布包（仓库根目录）
-dsh plugin --profile desktop add ./dsh-session-watchdog-0.3.0.tgz
+dsh plugin --profile desktop add ./dsh-session-watchdog-0.3.3.tgz
 
 # 方式二：从本地源码（开发态，link 本地目录）
 dsh plugin --profile desktop add link:/path/to/plugins/dsh-session-watchdog
@@ -68,7 +68,7 @@ dsh plugin --profile desktop remove dsh-session-watchdog
 
 ~~~powershell
 cd F:\开发\Dsh-chajian\dsh-session-watchdog
-node --test                                    # 58 tests pass（含完成提醒、真实指令、设置面板自测）
+node --test                                    # 63 tests pass（含完成提醒、真实指令、设置面板/铃声、崩溃与恢复上下文回归）
 powershell -NoProfile -ExecutionPolicy Bypass -File test\mutation-check.ps1   # 反向插桩：4 个变异体全部被杀死
 ~~~
 
