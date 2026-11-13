@@ -948,7 +948,7 @@ if ($Verify -or $Repair) {
         # 版本不一致 / 未知：差异很可能来自版本本身，不能当损坏
         Write-Log ('体检结论: 发现 ' + $needCount + ' 个差异文件，但【版本不一致或无法确认】，无法判断是真损坏还是版本差异') 'WARN'
         Write-Log ''
-        # 上面 862 行已打印过版本对比，这里不重复；只在缺版本时补一句原因
+        # 上面已打印过版本对比，这里不重复；只在缺版本时补一句原因
         if (-not $verKnown) {
             Write-Log '  原因: 备份缺 _meta.json，或现装 exe 无版本信息。' 'WARN'
         }
@@ -960,11 +960,27 @@ if ($Verify -or $Repair) {
         Write-Log '    b) 先升级到与备份相同的版本，再跑 -Verify 复查' 'WARN'
         Write-Log ''
         Write-Log '  若已确认要跨版本强补，可加 -AllowCrossVersion。' 'WARN'
-        Write-Log '############################################################'
-        exit 5
-    }
 
-    Write-Log ('体检结论: 发现 ' + $needCount + ' 个问题文件，建议修复') 'WARN'
+        # 【v4.14 修复】原来这里无条件 exit 5，连 -Repair 模式也走这条路，
+        # 导致 -Repair 在版本不一致时根本没走到 Repair-FromBackup 的拒绝逻辑，
+        # 退出码是 5 而不是约定的 18（实测 6A：期望 18，实际 5）。
+        # 修复：-Repair 模式继续往下走，由 Repair-FromBackup 统一裁决并给 18；
+        #       -Verify 模式才在这里 exit 5。
+        if (-not $Repair) {
+            Write-Log '############################################################'
+            exit 5
+        }
+        # -Repair 且未加 -AllowCrossVersion：明确以 18 退出，不进入写盘
+        if (-not $AllowCrossVersion) {
+            Write-Log '############################################################'
+            Write-Log ('修复未执行：版本不一致或无法确认（备份 ' + $(if ($cmp.BackupVersion) { $cmp.BackupVersion } else { '未知' }) + ' vs 现装 ' + $(if ($cmp.CurrentVersion) { $cmp.CurrentVersion } else { '未知' }) + '）') 'ERROR'
+            Write-Log '  如确认要跨版本强补，请加 -AllowCrossVersion 参数。' 'WARN'
+            exit 18
+        }
+        Write-Log '已加 -AllowCrossVersion，继续按差异修复。' 'WARN'
+    } else {
+        Write-Log ('体检结论: 发现 ' + $needCount + ' 个问题文件，建议修复') 'WARN'
+    }
 
     # 5) 若只体检，到此为止
     if (-not $Repair) {
@@ -1019,11 +1035,16 @@ if ($RollbackOnly) {
     New-Section '手动回滚模式 / 从最近备份恢复'
     $latest = $null
     if (Test-Path $RollbackDir) {
+        # 【v4.14 修复】原来无过滤，会把 repair-* 安全副本目录也当备份选进来
+        # （repair-* 只含被修复的少数文件，拿它回滚会把安装目录搞坏）。
+        # 改为严格正则，只认标准 app-<版本>-<yyyyMMdd-HHmmss> 备份目录。
         $latest = Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -match '^app-[0-9A-Za-z.\-]+-\d{8}-\d{6}$' } |
                   Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
     if (-not $latest) {
         Write-Log ('没有找到任何备份（目录: ' + $RollbackDir + '）') 'ERROR'
+        Write-Log '  只认形如 app-<版本>-<yyyyMMdd-HHmmss> 的目录。' 'WARN'
         Write-Log '无法回滚。如果你的 DSH 还能用，说明不需要回滚。' 'WARN'
         Write-Log '############################################################'
         exit 16
@@ -1035,6 +1056,30 @@ if ($RollbackOnly) {
         try { $m = Get-Content $metaFile -Raw | ConvertFrom-Json; Write-Log ('备份版本: ' + $m.version + '  文件数: ' + $m.fileCount) } catch {}
     }
     $okRollback = Restore-FromBackup -BackupPath $latest.FullName
+
+    # 【v4.14 修复】清理 .broken- 故障现场（保留最近 1 个）。
+    # 原来清理逻辑只在「阶段4 验证目录可改名」里跑，而 -RollbackOnly 在那之前
+    # 就 exit 了 —— 实测多次回滚会累积 1GB+ 的 .broken- 目录（两次回滚留下 2 个，
+    # 共 2.1 GB）。这里补上同样的清理。
+    try {
+        $parentDir = Split-Path $InstallDir -Parent
+        $leafName = Split-Path $InstallDir -Leaf
+        $brokenDirs = @(Get-ChildItem $parentDir -Directory -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Name -match ('^' + [regex]::Escape($leafName) + [regex]::Escape('.broken-')) } |
+                        Sort-Object LastWriteTime -Descending)
+        if ($brokenDirs.Count -gt 1) {
+            Write-Log ('发现 ' + $brokenDirs.Count + ' 个 .broken- 故障现场，保留最近 1 个:') 'WARN'
+            foreach ($bd in ($brokenDirs | Select-Object -Skip 1)) {
+                $szMB = [math]::Round(((Get-ChildItem $bd.FullName -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB), 1)
+                if (Remove-DirRobust -Path $bd.FullName) {
+                    Write-Log ('  已删旧现场: ' + $bd.Name + ' (' + $szMB + ' MB)') 'OK'
+                } else {
+                    Write-Log ('  删除失败: ' + $bd.Name) 'WARN'
+                }
+            }
+        }
+    } catch {}
+
     if ($okRollback) {
         Write-Log ('回滚成功，当前版本 ' + (Get-InstalledVersion)) 'OK'
         Write-Log '############################################################'
