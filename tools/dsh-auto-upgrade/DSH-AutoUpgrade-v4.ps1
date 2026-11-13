@@ -168,8 +168,20 @@ function Test-DshWebAlive {
                 foreach ($probeHost in @('127.0.0.1')) {
                     try {
                         $r = Invoke-WebRequest -Uri ('http://' + $probeHost + ':' + $port + '/') -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-                        if ($r.StatusCode -eq 200 -and $r.Content -match '<html|<!doctype') {
-                            return [pscustomobject]@{ Port = $port; Status = $r.StatusCode; Length = $r.Content.Length }
+                        # 【v4.13 修复】PS 5.1 的 .Content 可能是 byte[]（同 feed 那个问题），
+                        # 直接 -match '<html' 会失败，导致 200 响应被判成「不健康」。
+                        $body = $r.Content
+                        if ($body -is [byte[]]) {
+                            try { $body = [System.Text.Encoding]::UTF8.GetString($body) } catch { $body = '' }
+                        }
+                        if ($body -isnot [string]) { $body = [string]$body }
+                        if ($r.StatusCode -eq 200 -and $body -match '<html|<!doctype') {
+                            return [pscustomobject]@{ Port = $port; Status = $r.StatusCode; Length = $body.Length }
+                        }
+                        # 200 但内容不含 html：也算服务活着（可能是 JSON / 重定向页），
+                        # 只是长度记为 0，避免误判启动失败。
+                        if ($r.StatusCode -eq 200) {
+                            return [pscustomobject]@{ Port = $port; Status = $r.StatusCode; Length = $body.Length }
                         }
                     } catch {
                         # 401 也算「服务活着」（只是缺 token）
@@ -794,6 +806,22 @@ if ($Verify -or $Repair) {
     $mode = if ($Repair) { '按需修复' } else { '仅体检' }
     New-Section ($mode + ' / 比对备份与现装')
 
+    # 【v4.13 新增】运行中检测：DSH 跑着的时候，exe / dll / asar 被进程占用，
+    # 体检读得到（只读没问题），但 -Repair 写不进去会失败；
+    # 更麻烦的是「造损坏」测试里连改都改不了，容易误判成「文件没坏」。
+    # 这里提前告知，让用户知道修复可能需要先关 DSH。
+    $runCount = @(Get-DshProcesses).Count
+    if ($runCount -gt 0) {
+        Write-Log ('检测到 DSH 正在运行（' + $runCount + ' 个进程）') 'WARN'
+        if ($Repair) {
+            Write-Log '  修复时被占用的文件（exe / dll / asar）会复制失败。' 'WARN'
+            Write-Log '  建议先关闭 DSH 再跑 -Repair；只体检（-Verify）不受影响。' 'WARN'
+        } else {
+            Write-Log '  体检是只读操作，不受影响；但若之后要修复，请先关闭 DSH。' 'INFO'
+        }
+        Write-Log ''
+    }
+
     # 1) 选备份
     # 【v4.11】优先选「版本与现装一致」的最近一份，而不是盲目取最新。
     # 原因：每次升级前都会备份旧版本，所以最新那份的版本往往正好是【升级前】的
@@ -1036,7 +1064,20 @@ $target = $null
 try {
     Write-Log ('查询 feed: ' + $FeedUrl)
     $resp = Invoke-WebRequest -Uri $FeedUrl -UseBasicParsing -TimeoutSec 30 -Headers @{ 'User-Agent' = 'electron-updater'; 'Cache-Control' = 'no-cache' }
+    # 【v4.13 修复·致命】PowerShell 5.1 的 Invoke-WebRequest 在部分环境下
+    # （实测虚拟机 Win11 + PS 5.1.26100）.Content 返回的是 System.Byte[] 而不是字符串，
+    # 直接对它 -match 永远失败 —— 表现为「feed 解析失败（无 version）」，
+    # 但同一个 URL 用 curl 拿到的内容完全正常。这会让自动升级在 feed 有新版时也失败。
+    # 修复：先判断类型，byte[] 就先转 UTF-8 字符串再解析。
     $yml = $resp.Content
+    if ($yml -is [byte[]]) {
+        try { $yml = [System.Text.Encoding]::UTF8.GetString($yml) } catch { $yml = '' }
+    }
+    if ($yml -isnot [string]) { $yml = [string]$yml }
+    # 兜底：若 Content 为空但 RawContent 有值，用 RawContent
+    if ([string]::IsNullOrWhiteSpace($yml) -and $resp.RawContent) {
+        $yml = [string]$resp.RawContent
+    }
     if ($yml -match '(?m)^version:\s*([0-9][^\s]*)') {
         $fv = $Matches[1].Trim("'").Trim('"')
         $furl = $null; $fsha = $null; $fsize = $null
@@ -1050,7 +1091,15 @@ try {
             Write-Log 'feed 中未解析到下载地址' 'WARN'
         }
     } else {
-        Write-Log 'feed 解析失败（无 version）' 'WARN'
+        # 【v4.13】诊断信息更具体，便于排查（原来只说「无 version」）
+        Write-Log ('feed 解析失败（内容里没有 version 行）') 'WARN'
+        Write-Log ('  内容长度 = ' + $yml.Length + ' 字节') 'WARN'
+        if ($yml.Length -gt 0) {
+            $head = $yml.Substring(0, [Math]::Min(200, $yml.Length)) -replace "`r?`n", ' | '
+            Write-Log ('  内容开头: ' + $head) 'WARN'
+        } else {
+            Write-Log '  内容为空（网络被拦截或返回空响应）' 'WARN'
+        }
     }
 } catch {
     Write-Log ('feed 查询失败: ' + $_.Exception.Message) 'WARN'
@@ -1702,19 +1751,58 @@ if (-not $healthy) {
     }
 } else {
     Write-Log '无需回滚' 'OK'
+
+    # 【v4.13 修复·架构级】升级成功后，为【新版本】补一份备份。
+    # 背景：备份是在「升级前」做的，所以备份的永远是【旧版本】。升级到新版本后，
+    # 磁盘上没有任何与新版本同版本的备份 —— 而 -Verify / -Repair 要求版本一致，
+    # 于是对新版本彻底失效（实测：升到 rc.3 后 -Verify 拿 rc.2 备份比对，
+    # 报 26 缺失 + 9 损坏 + 13 多余，全是版本差异，无法判断真损坏）。
+    # 修复：健康检查通过后，若没有当前版本的备份，就现场补一份。
+    try {
+        $verNow = Get-InstalledVersion
+        if ($verNow) {
+            $hasSame = $false
+            if (Test-Path $RollbackDir) {
+                foreach ($cand in @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+                                    Where-Object { $_.Name -match '^app-[0-9A-Za-z.\-]+-\d{8}-\d{6}$' })) {
+                    $cm = Join-Path $cand.FullName '_meta.json'
+                    if (Test-Path -LiteralPath $cm) {
+                        try {
+                            $cv = (Get-Content -LiteralPath $cm -Raw | ConvertFrom-Json).version
+                            if ($cv -and ((Compare-SemVer $cv $verNow) -eq 0)) { $hasSame = $true; break }
+                        } catch {}
+                    }
+                }
+            }
+            if ($hasSame) {
+                Write-Log ('已有 ' + $verNow + ' 的备份，无需补充') 'INFO'
+            } else {
+                Write-Log ('为当前版本 ' + $verNow + ' 补充一份备份（供 -Verify / -Repair 使用）...') 'INFO'
+                $newBk = Backup-Installation -VersionTag $verNow
+                if ($newBk) {
+                    Write-Log ('已补充 ' + $verNow + ' 的备份: ' + $newBk) 'OK'
+                } else {
+                    Write-Log '补充备份失败（不影响已完成的升级，但 -Verify/-Repair 对新版本不可用）' 'WARN'
+                }
+            }
+        }
+    } catch { Write-Log ('补充备份出错: ' + $_.Exception.Message) 'WARN' }
 }
 
-# 清理旧备份（保留最近 2 份）
+# 清理旧备份
 # 【v4.12 修复·严重】原来只写 Get-ChildItem $RollbackDir -Directory（无过滤），
 # 会把 v4.11 新增的 repair-<时间戳> 安全副本目录也算进「最近 2 份」。
 # 实测：rollback 目录里有 2 个 repair-* + 2 个 app-* 时，
 # 排序后跳过前 2 个，真正需要保留的 2 个 app-* 备份反而被删掉 —— 数据丢失级 bug。
 # 修复：只统计 app-* 备份；repair-* 单独按「保留最近 3 份」清理。
+# 【v4.13 调整】保留份数从 2 提高到 3，并用严格正则匹配目录名。
+# 原因：升级成功后会为新版本补一份备份，若仍只留 2 份，
+# 旧版本备份刚补完就被清掉，回滚能力变弱。
 try {
     $bks = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
-             Where-Object { $_.Name -like 'app-*' } |
+             Where-Object { $_.Name -match '^app-[0-9A-Za-z.\-]+-\d{8}-\d{6}$' } |
              Sort-Object LastWriteTime -Descending)
-    foreach ($b in ($bks | Select-Object -Skip 2)) {
+    foreach ($b in ($bks | Select-Object -Skip 3)) {
         if (Remove-DirRobust -Path $b.FullName) {
             Write-Log ('清理旧备份: ' + $b.Name)
         } else {
