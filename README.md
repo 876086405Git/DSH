@@ -5,7 +5,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/876086405Git/DSH/main)](https://github.com/876086405Git/DSH/commits/main)
 [![Plugins](https://img.shields.io/badge/plugins-3-blue)](#插件列表)
 
-DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。
+DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。另附一个配套工具：DSH 全自动升级工具。
 
 ## 插件列表
 
@@ -15,6 +15,12 @@ DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。
 | `dsh-prompt-enhance` | 会话输入框的「提示词增强」按钮，生成后自动填入并可一键撤回 |
 | [`dsh-session-watchdog`](#dsh-session-watchdog--会话哨兵) | 实时监控会话；异常停止提醒并按**真实会话内容**自动续跑；任务完成弹窗 + 6 种叮咚提示音 |
 
+## 配套工具
+
+| 工具 | 一句话说明 |
+| --- | --- |
+| [`dsh-auto-upgrade`](tools/dsh-auto-upgrade/README.md) | DSH 桌面端**全自动升级**：查版本 → 下载 → 校验 → 杀进程 → 备份 → 安装 → 核验 → 启动 → 健康检查 → 失败自动回滚。覆盖 21 个实测问题，虚拟机四场景验证通过 |
+
 ## 目录结构
 
 ```text
@@ -22,6 +28,9 @@ plugins/
 ├─ dsh-checkup/            DSH体检中心：安装前预检 + 环境体检 + 军械库四类检查
 ├─ dsh-prompt-enhance/     提示词增强：一键把输入框内容改写成结构化提示词
 └─ dsh-session-watchdog/   会话哨兵：异常停止提醒 + 真实上下文续跑 + 任务完成铃声
+
+tools/
+└─ dsh-auto-upgrade/       DSH 全自动升级：下载 / 校验 / 安装 / 核验 / 失败自动回滚
 ```
 
 ---
