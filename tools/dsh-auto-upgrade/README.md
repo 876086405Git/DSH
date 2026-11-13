@@ -70,7 +70,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "DSH-AutoUpgrade-v4.ps1" -Fo
 | 文件 | 说明 |
 |---|---|
 | `DSH-AutoUpgrade-v4.ps1` | 主脚本，UTF-8 带 BOM |
-| `一键升级-v4.bat` | 中文菜单启动器，UTF-8 无 BOM + CRLF |
+| `一键升级-v4.bat` | 启动器，**纯 ASCII**（只做转发） |
+| `menu.ps1` | 中文菜单，UTF-8 带 BOM |
 | `bom-guard.ps1` | BOM 自愈工具（脚本被改坏 BOM 时用） |
 | `README-v4.md` | 各版本修复明细 |
 | `技术文档.md` | 完整技术文档：21 个问题的现象/根因/修复、注意事项、验证记录 |
@@ -106,7 +107,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "DSH-AutoUpgrade-v4.ps1" -Fo
 ## 重要提醒
 
 - **`DSH-AutoUpgrade-v4.ps1` 必须保持 UTF-8 带 BOM**。多数编辑器保存会丢 BOM，丢了会产生几十个语法错误导致脚本完全跑不起来。用 `bom-guard.ps1` 修复。
-- **`一键升级-v4.bat` 必须保持 CRLF 行尾、无 BOM**。仓库已配置 `.gitattributes` 锁定这两点，请勿删除。
+- **`一键升级-v4.bat` 必须保持纯 ASCII**。cmd.exe 在 `chcp 65001` 下解析含多字节 UTF-8 的 .bat 时，文件读取指针会错位，实测会把 `echo [5] 强制重装当前版本（修复程序损坏）` 截断成 `● 本（修复程序损坏）` 并当成命令执行报错。所以中文菜单全部放在 `menu.ps1` 里，bat 只做转发。
+- **`menu.ps1` 必须 UTF-8 带 BOM**（含中文，PS5.1 需要）。
 - **`-Force` 允许降级**。当官方 feed 版本低于当前版本时，`-Force` 会真的降级，这是设计语义。
 
 ## 已知限制

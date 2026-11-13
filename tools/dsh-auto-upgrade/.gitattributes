@@ -19,6 +19,7 @@
 * -text
 
 *.ps1 -text
+menu.ps1 -text
 *.psm1 -text
 *.bat -text
 *.cmd -text
