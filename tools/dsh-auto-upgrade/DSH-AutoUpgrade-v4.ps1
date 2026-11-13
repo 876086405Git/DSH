@@ -37,7 +37,13 @@ param(
     [switch]$DryRun,
     [switch]$RollbackOnly,
     [switch]$DetachedChild,
-    [string]$InstallerPath = ''
+    [string]$InstallerPath = '',
+    # 【v4.11 新增】按需恢复
+    [switch]$Verify,              # 只体检：比对备份 vs 现装，不修改任何文件
+    [switch]$Repair,              # 按需补齐：只复制缺失/损坏文件（默认预演，需配 -Confirm）
+    [switch]$Confirm,             # 与 -Repair 配合，真正写盘
+    [switch]$AllowCrossVersion,   # 允许跨版本修复（默认拒绝）
+    [switch]$SkipHash             # 体检时只比大小不比哈希（快）
 )
 
 # 【v4.3 新增】未知参数校验。
@@ -55,8 +61,15 @@ if ($args.Count -gt 0) {
     Write-Host '  -Silent         静默安装（不弹安装向导）'
     Write-Host '  -NoStart        装完不自动启动 DSH'
     Write-Host '  -DryRun         仅预检，不下载不安装'
-    Write-Host '  -RollbackOnly   仅从最近备份回滚，不升级'
+    Write-Host '  -RollbackOnly   仅从最近备份回滚，不升级（整目录全量）'
     Write-Host '  -InstallerPath  指定安装包路径'
+    Write-Host ''
+    Write-Host '  按需恢复（v4.11 新增）：' -ForegroundColor Cyan
+    Write-Host '  -Verify         只体检：比对「备份 vs 现装」，列出缺失/损坏/多余，不修改任何文件'
+    Write-Host '  -Repair         按需补齐：只复制缺失/损坏的文件，其余不动（默认预演，不写盘）'
+    Write-Host '  -Confirm        与 -Repair 配合，真正写盘执行'
+    Write-Host '  -AllowCrossVersion  允许跨版本修复（默认拒绝，防止文件混杂）'
+    Write-Host '  -SkipHash       体检时只比大小不比 SHA256（大目录更快）'
     Write-Host ''
     Write-Host '提示：通常直接双击【一键升级-v4.bat】选菜单即可，不需要手敲参数。' -ForegroundColor Gray
     Write-Host ''
@@ -210,7 +223,7 @@ try {
 } catch {}
 Write-Log '############################################################'
 $cnBool = { param($v) if ($v) { '是' } else { '否' } }
-Write-Log ('DSH 全自动升级工具 v4（本机适配）启动' + '  强制重装=' + (& $cnBool $Force) + '  探测最新=' + (& $cnBool $ProbeLatest) + '  静默安装=' + (& $cnBool $Silent) + '  仅预检=' + (& $cnBool $DryRun) + '  仅回滚=' + (& $cnBool $RollbackOnly))
+Write-Log ('DSH 全自动升级工具 v4（本机适配）启动' + '  强制重装=' + (& $cnBool $Force) + '  探测最新=' + (& $cnBool $ProbeLatest) + '  静默安装=' + (& $cnBool $Silent) + '  仅预检=' + (& $cnBool $DryRun) + '  仅回滚=' + (& $cnBool $RollbackOnly) + '  体检=' + (& $cnBool $Verify) + '  按需修复=' + (& $cnBool $Repair))
 
 # ===================== 工具函数 =====================
 
@@ -496,6 +509,245 @@ function Restore-FromBackup {
     return $false
 }
 
+#  【v4.11 新增】按需恢复：Compare-BackupTree + Repair-FromBackup
+#  背景：原工具只有「整目录全量覆盖」一种恢复方式。如果只是安装目录里
+#        个别文件丢失/损坏（版本号对、app.asar 在、窗口也能起），阶段6
+#        核验完全检测不出来，只能靠 -Force 整包重装（约 5 分钟）。
+#  方案：
+#    -Verify  只体检：逐文件比对「备份 vs 现装」，输出缺失/损坏/多余清单，
+#             不做任何修改（零风险）。
+#    -Repair  按需补齐：在 -Verify 结果基础上，只从备份复制缺失/损坏的文件，
+#             其余不动。带版本一致性保护。
+# =====================================================================
+
+# 逐文件比对备份树与现装树，返回分类结果。不修改任何文件。
+# 返回对象：BackupPath / BackupVersion / CurrentVersion / SameVersion
+#           Missing  缺失（备份有、现装无）
+#           Corrupt  损坏（两边都有但大小或 SHA256 不同）
+#           Extra    多余（现装有、备份无）
+#           Total    备份文件总数 / Checked 已比对 / Intact 完好
+function Compare-BackupTree {
+    param(
+        [string]$BackupPath,
+        [switch]$SkipHash          # 只比大小不比哈希（快，适合大目录初筛）
+    )
+
+    $res = [pscustomobject]@{
+        BackupPath      = $BackupPath
+        BackupVersion   = ''
+        CurrentVersion  = ''
+        SameVersion     = $false
+        Missing         = @()
+        Corrupt         = @()
+        Extra           = @()
+        Total           = 0
+        Checked         = 0
+        Intact          = 0
+        Ok              = $false
+        Reason          = ''
+    }
+
+    if (-not $BackupPath -or -not (Test-Path -LiteralPath $BackupPath)) {
+        $res.Reason = '备份目录不存在'
+        return $res
+    }
+
+    # 读备份元数据
+    $metaFile = Join-Path $BackupPath '_meta.json'
+    if (Test-Path -LiteralPath $metaFile) {
+        try { $res.BackupVersion = (Get-Content -LiteralPath $metaFile -Raw | ConvertFrom-Json).version } catch {}
+    }
+    $res.CurrentVersion = Get-InstalledVersion
+    if ($res.BackupVersion -and $res.CurrentVersion) {
+        $res.SameVersion = ((Compare-SemVer $res.BackupVersion $res.CurrentVersion) -eq 0)
+    }
+    # 【v4.11】版本读不到时单独标记，便于上层给出准确提示
+    if (-not $res.CurrentVersion) {
+        $res.Reason = '无法读取现装版本（DSH 可能未安装，或 exe 无版本信息）'
+    } elseif (-not $res.BackupVersion) {
+        $res.Reason = '备份里没有版本信息（_meta.json 缺失或损坏）'
+    }
+
+    # 枚举备份里的所有文件（排除 _profile 和 _meta.json）
+    $excludeProfile = Join-Path $BackupPath '_profile'
+    $bkFiles = @(Get-ChildItem -LiteralPath $BackupPath -Recurse -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notlike ($excludeProfile + '*') -and $_.Name -ne '_meta.json' })
+    $res.Total = $bkFiles.Count
+    if ($res.Total -eq 0) {
+        $res.Reason = '备份里没有文件'
+        return $res
+    }
+
+    $bkPrefixLen = (Resolve-Path -LiteralPath $BackupPath).Path.TrimEnd('\').Length + 1
+
+    foreach ($bf in $bkFiles) {
+        $rel = $bf.FullName.Substring($bkPrefixLen)
+        $cur = Join-Path $InstallDir $rel
+        $res.Checked++
+
+        if (-not (Test-Path -LiteralPath $cur)) {
+            $res.Missing += [pscustomobject]@{ Rel = $rel; Reason = '缺失'; Size = $bf.Length }
+            continue
+        }
+
+        $cf = Get-Item -LiteralPath $cur -Force -ErrorAction SilentlyContinue
+        if (-not $cf) {
+            $res.Missing += [pscustomobject]@{ Rel = $rel; Reason = '无法访问'; Size = $bf.Length }
+            continue
+        }
+
+        # 大小不同 => 直接判损坏
+        if ($cf.Length -ne $bf.Length) {
+            $res.Corrupt += [pscustomobject]@{ Rel = $rel; Reason = ('大小不同 ' + $cf.Length + ' != ' + $bf.Length); Size = $bf.Length }
+            continue
+        }
+
+        # 大小相同：按需比对哈希（默认比，-SkipHash 时跳过）
+        if (-not $SkipHash) {
+            try {
+                $h1 = (Get-FileHash -LiteralPath $bf.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+                $h2 = (Get-FileHash -LiteralPath $cur -Algorithm SHA256 -ErrorAction Stop).Hash
+                if ($h1 -ne $h2) {
+                    $res.Corrupt += [pscustomobject]@{ Rel = $rel; Reason = '内容不同'; Size = $bf.Length }
+                    continue
+                }
+            } catch {
+                $res.Corrupt += [pscustomobject]@{ Rel = $rel; Reason = '哈希计算失败'; Size = $bf.Length }
+                continue
+            }
+        }
+
+        $res.Intact++
+    }
+
+    # 现装里多出来的文件（只统计，不参与修复）
+    try {
+        $curFiles = @(Get-ChildItem -LiteralPath $InstallDir -Recurse -File -Force -ErrorAction SilentlyContinue)
+        $bkRelSet = @{}
+        foreach ($bf in $bkFiles) { $bkRelSet[$bf.FullName.Substring($bkPrefixLen)] = $true }
+        $instPrefixLen = (Resolve-Path -LiteralPath $InstallDir).Path.TrimEnd('\').Length + 1
+        foreach ($cf in $curFiles) {
+            $rel = $cf.FullName.Substring($instPrefixLen)
+            if (-not $bkRelSet.ContainsKey($rel)) {
+                $res.Extra += [pscustomobject]@{ Rel = $rel; Size = $cf.Length }
+            }
+        }
+    } catch {}
+
+    $res.Ok = $true
+    return $res
+}
+
+# 按需修复：只从备份复制缺失/损坏的文件，其余不动。
+# 安全约束：
+#   - 必须显式 -Confirm 才真正写盘（默认只报告）
+#   - 版本不一致时默认拒绝，除非加 -AllowCrossVersion
+#   - 修复前把要覆盖的文件备份到 <RollbackDir>\repair-<时间戳>\（可回退）
+function Repair-FromBackup {
+    param(
+        [Parameter(Mandatory = $true)]$CompareResult,
+        [switch]$Confirm,
+        [switch]$AllowCrossVersion
+    )
+
+    if (-not $CompareResult -or -not $CompareResult.Ok) {
+        Write-Log ('体检结果无效: ' + $(if ($CompareResult) { $CompareResult.Reason } else { '空' })) 'ERROR'
+        return [pscustomobject]@{ Done = $false; Repaired = 0; Failed = 0; Reason = '体检结果无效' }
+    }
+
+    $need = @($CompareResult.Missing) + @($CompareResult.Corrupt)
+    if ($need.Count -eq 0) {
+        Write-Log '没有需要修复的文件（缺失 0，损坏 0）' 'OK'
+        return [pscustomobject]@{ Done = $true; Repaired = 0; Failed = 0; Reason = '无需修复' }
+    }
+
+    # 版本一致性保护
+    # 【v4.11】三档策略：
+    #   a) 两边都读到版本且一致      => 放行
+    #   b) 两边都读到版本但确实不一致 => 拒绝（除非 -AllowCrossVersion）
+    #   c) 有一边读不到版本          => 拒绝（除非 -AllowCrossVersion）
+    #      「读不到」不能当成「一致」：exe 无版本信息可能意味着安装本身已损坏，
+    #      此时盲目补文件风险更高，必须让用户显式确认。
+    $canCheckVer = ($CompareResult.BackupVersion -and $CompareResult.CurrentVersion)
+    if (-not $canCheckVer -and -not $AllowCrossVersion) {
+        Write-Log '无法确认版本一致性，拒绝按需修复：' 'ERROR'
+        Write-Log ('  备份版本: ' + $(if ($CompareResult.BackupVersion) { $CompareResult.BackupVersion } else { '(读不到)' })) 'WARN'
+        Write-Log ('  现装版本: ' + $(if ($CompareResult.CurrentVersion) { $CompareResult.CurrentVersion } else { '(读不到)' })) 'WARN'
+        Write-Log '  无法确认版本时补文件可能造成文件混杂。' 'WARN'
+        Write-Log '  如确认要修复，加 -AllowCrossVersion 参数显式放行。' 'WARN'
+        Write-Log '  或者用 -RollbackOnly 整目录回滚到备份版本（最稳）。' 'WARN'
+        return [pscustomobject]@{ Done = $false; Repaired = 0; Failed = 0; Reason = '无法确认版本' }
+    }
+    if ($canCheckVer -and -not $CompareResult.SameVersion -and -not $AllowCrossVersion) {
+        Write-Log ('版本不一致，拒绝按需修复：备份 ' + $CompareResult.BackupVersion + ' vs 现装 ' + $CompareResult.CurrentVersion) 'ERROR'
+        Write-Log '  跨版本补文件可能造成文件混杂、启动异常。' 'WARN'
+        Write-Log '  如确认要跨版本修复，加 -AllowCrossVersion 参数。' 'WARN'
+        Write-Log '  或者用 -RollbackOnly 整目录回滚到备份版本。' 'WARN'
+        return [pscustomobject]@{ Done = $false; Repaired = 0; Failed = 0; Reason = '版本不一致' }
+    }
+    if (-not $canCheckVer) {
+        Write-Log '已用 -AllowCrossVersion 放行：版本无法确认，按文件内容修复' 'WARN'
+    }
+
+    if (-not $Confirm) {
+        Write-Log ('【预演】本次将修复 ' + $need.Count + ' 个文件（缺失 ' + @($CompareResult.Missing).Count + '，损坏 ' + @($CompareResult.Corrupt).Count + '）') 'WARN'
+        Write-Log '  未加 -Confirm，不写盘。确认无误后加 -Confirm 重跑。' 'WARN'
+        return [pscustomobject]@{ Done = $true; Repaired = 0; Failed = 0; Reason = '预演模式' }
+    }
+
+    $backupPath = $CompareResult.BackupPath
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $safeDir = Join-Path $RollbackDir ('repair-' + $stamp)
+    New-Item -ItemType Directory -Force -Path $safeDir | Out-Null
+
+    $repaired = 0
+    $failed = 0
+    $failList = @()
+
+    foreach ($item in $need) {
+        $rel = $item.Rel
+        $src = Join-Path $backupPath $rel
+        $dst = Join-Path $InstallDir $rel
+
+        if (-not (Test-Path -LiteralPath $src)) {
+            Write-Log ('  跳过（备份里也没有）: ' + $rel) 'WARN'
+            $failed++
+            $failList += $rel
+            continue
+        }
+
+        try {
+            # 先把现有文件（若有）存到 repair-<时间戳> 便于回退
+            if (Test-Path -LiteralPath $dst) {
+                $safeDst = Join-Path $safeDir $rel
+                $safeParent = Split-Path $safeDst -Parent
+                if (-not (Test-Path -LiteralPath $safeParent)) { New-Item -ItemType Directory -Force -Path $safeParent | Out-Null }
+                try { Copy-Item -LiteralPath $dst -Destination $safeDst -Force -ErrorAction Stop } catch {}
+            }
+            # 确保目标父目录存在
+            $dstParent = Split-Path $dst -Parent
+            if (-not (Test-Path -LiteralPath $dstParent)) { New-Item -ItemType Directory -Force -Path $dstParent | Out-Null }
+            # 复制
+            Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop
+            $repaired++
+        } catch {
+            Write-Log ('  修复失败: ' + $rel + ' -> ' + $_.Exception.Message) 'WARN'
+            $failed++
+            $failList += $rel
+        }
+    }
+
+    Write-Log ('按需修复完成: 成功 ' + $repaired + '，失败 ' + $failed) $(if ($failed -eq 0) { 'OK' } else { 'WARN' })
+    if ($repaired -gt 0) { Write-Log ('  修复前的旧文件已存: ' + $safeDir) 'WARN' }
+    if ($failList.Count -gt 0) {
+        Write-Log '  失败清单：' 'WARN'
+        foreach ($f in ($failList | Select-Object -First 20)) { Write-Log ('    ' + $f) 'WARN' }
+        if ($failList.Count -gt 20) { Write-Log ('    ...还有 ' + ($failList.Count - 20) + ' 个') 'WARN' }
+    }
+
+    return [pscustomobject]@{ Done = ($failed -eq 0); Repaired = $repaired; Failed = $failed; Reason = ''; SafeDir = $safeDir }
+}
+
 function Exit-WithRestore {
     param([int]$Code, [string]$Reason)
     Write-Log ('中止: ' + $Reason) 'ERROR'
@@ -504,6 +756,9 @@ function Exit-WithRestore {
     Write-Log '############################################################'
     exit $Code
 }
+
+# ---------- 【v4.11 新增】按需恢复模式：-Verify / -Repair ----------
+# 与 -RollbackOnly（整目录全量覆盖）不同，这里只处理差异文件。
 
 function Remove-DirRobust {
     param([string]$Path)
@@ -522,6 +777,154 @@ function Remove-DirRobust {
         return (-not (Test-Path -LiteralPath $Path))
     } catch { return $false }
 }
+
+if ($Verify -or $Repair) {
+    $mode = if ($Repair) { '按需修复' } else { '仅体检' }
+    New-Section ($mode + ' / 比对备份与现装')
+
+    # 1) 选备份
+    # 【v4.11】优先选「版本与现装一致」的最近一份，而不是盲目取最新。
+    # 原因：每次升级前都会备份旧版本，所以最新那份的版本往往正好是【升级前】的
+    # 旧版本，与现装不符 —— 直接拿它比对会被版本保护拒绝，等于功能失效。
+    # 策略：先在所有备份里找版本匹配的，取最近一份；找不到再退回最新一份。
+    $curVer = Get-InstalledVersion
+    $allBk = @()
+    if (Test-Path $RollbackDir) {
+        $allBk = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -like 'app-*' } |
+                   Sort-Object LastWriteTime -Descending)
+    }
+    if ($allBk.Count -eq 0) {
+        Write-Log ('没有找到任何备份（目录: ' + $RollbackDir + '）') 'ERROR'
+        Write-Log '无法比对。请先正常升级一次以生成备份。' 'WARN'
+        Write-Log '############################################################'
+        exit 16
+    }
+
+    $bk = $null
+    if ($curVer) {
+        foreach ($cand in $allBk) {
+            $cm = Join-Path $cand.FullName '_meta.json'
+            $cv = ''
+            if (Test-Path -LiteralPath $cm) {
+                try { $cv = (Get-Content -LiteralPath $cm -Raw | ConvertFrom-Json).version } catch {}
+            }
+            if ($cv -and ((Compare-SemVer $cv $curVer) -eq 0)) { $bk = $cand; break }
+        }
+        if ($bk) {
+            Write-Log ('已选版本匹配的备份（现装 ' + $curVer + '）: ' + $bk.Name) 'OK'
+        }
+    }
+    if (-not $bk) {
+        $bk = $allBk[0]
+        Write-Log ('未找到版本匹配的备份，退回最新一份: ' + $bk.Name) 'WARN'
+        Write-Log ('  现装版本 ' + $(if ($curVer) { $curVer } else { '(读不到)' }) + '，此备份版本见下方；不一致时修复会被拒绝。') 'WARN'
+        Write-Log ('  如需指定其他备份，把它的目录改名成 app-<版本>-* 或在 -Repair 前先对齐版本。') 'WARN'
+    }
+    Write-Log ('使用备份: ' + $bk.FullName)
+    Write-Log ('备份时间: ' + $bk.LastWriteTime)
+    Write-Log ('现装版本: ' + $(if ($curVer) { $curVer } else { '(读不到)' }))
+    Write-Log ''
+
+    # 2) 比对
+    Write-Log ('开始比对（' + $(if ($SkipHash) { '仅比大小' } else { '大小 + SHA256' }) + '）...')
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $cmp = Compare-BackupTree -BackupPath $bk.FullName -SkipHash:$SkipHash
+    $sw.Stop()
+    Write-Log ('比对完成，耗时 ' + [math]::Round($sw.Elapsed.TotalSeconds, 1) + 's')
+
+    if (-not $cmp.Ok) {
+        Write-Log ('比对失败: ' + $cmp.Reason) 'ERROR'
+        Write-Log '############################################################'
+        exit 17
+    }
+
+    # 3) 输出结果
+    Write-Log ''
+    Write-Log ('备份版本: ' + $(if ($cmp.BackupVersion) { $cmp.BackupVersion } else { '(未知)' }) + '  现装版本: ' + $(if ($cmp.CurrentVersion) { $cmp.CurrentVersion } else { '(未知)' }))
+    if ($cmp.SameVersion) {
+        Write-Log '版本一致，可安全按需修复' 'OK'
+    } else {
+        Write-Log '版本不一致！按需修复会拒绝执行（除非加 -AllowCrossVersion）' 'WARN'
+    }
+    Write-Log ''
+    Write-Log ('文件总数: ' + $cmp.Total + '   完好: ' + $cmp.Intact + '   缺失: ' + @($cmp.Missing).Count + '   损坏: ' + @($cmp.Corrupt).Count + '   多余: ' + @($cmp.Extra).Count)
+
+    if (@($cmp.Missing).Count -gt 0) {
+        Write-Log ''
+        Write-Log ('--- 缺失文件（备份有、现装无）共 ' + @($cmp.Missing).Count + ' 个 ---') 'WARN'
+        foreach ($m in (@($cmp.Missing) | Select-Object -First 30)) {
+            Write-Log ('  [缺失] ' + $m.Rel + '  (' + [math]::Round($m.Size / 1KB, 1) + ' KB)') 'WARN'
+        }
+        if (@($cmp.Missing).Count -gt 30) { Write-Log ('  ...还有 ' + (@($cmp.Missing).Count - 30) + ' 个') 'WARN' }
+    }
+
+    if (@($cmp.Corrupt).Count -gt 0) {
+        Write-Log ''
+        Write-Log ('--- 损坏文件（内容或大小不一致）共 ' + @($cmp.Corrupt).Count + ' 个 ---') 'WARN'
+        foreach ($m in (@($cmp.Corrupt) | Select-Object -First 30)) {
+            Write-Log ('  [损坏] ' + $m.Rel + '  (' + $m.Reason + ')') 'WARN'
+        }
+        if (@($cmp.Corrupt).Count -gt 30) { Write-Log ('  ...还有 ' + (@($cmp.Corrupt).Count - 30) + ' 个') 'WARN' }
+    }
+
+    if (@($cmp.Extra).Count -gt 0) {
+        Write-Log ''
+        Write-Log ('--- 多余文件（现装有、备份无）共 ' + @($cmp.Extra).Count + ' 个（不参与修复，仅供参考）---') 'INFO'
+        foreach ($m in (@($cmp.Extra) | Select-Object -First 10)) {
+            Write-Log ('  [多余] ' + $m.Rel) 'INFO'
+        }
+        if (@($cmp.Extra).Count -gt 10) { Write-Log ('  ...还有 ' + (@($cmp.Extra).Count - 10) + ' 个') 'INFO' }
+    }
+
+    # 4) 结论
+    Write-Log ''
+    $needCount = @($cmp.Missing).Count + @($cmp.Corrupt).Count
+    if ($needCount -eq 0) {
+        Write-Log ('体检结论: 安装目录完整，无需修复（完好 ' + $cmp.Intact + '/' + $cmp.Total + '）') 'OK'
+        Write-Log '############################################################'
+        exit 0
+    }
+
+    Write-Log ('体检结论: 发现 ' + $needCount + ' 个问题文件，建议修复') 'WARN'
+
+    # 5) 若只体检，到此为止
+    if (-not $Repair) {
+        Write-Log ''
+        Write-Log '要修复请运行:  -Repair -Confirm' 'WARN'
+        Write-Log '（先不加 -Confirm 可预演，看会改哪些文件）' 'WARN'
+        Write-Log '############################################################'
+        exit 5
+    }
+
+    # 6) 执行按需修复
+    Write-Log ''
+    $rep = Repair-FromBackup -CompareResult $cmp -Confirm:$Confirm -AllowCrossVersion:$AllowCrossVersion
+
+    Write-Log ''
+    if ($rep.Done) {
+        if ($rep.Reason -eq '预演模式') {
+            Write-Log ('预演结束：将修复 ' + $needCount + ' 个文件。加 -Confirm 真正执行。') 'WARN'
+            Write-Log '############################################################'
+            exit 5
+        }
+        if ($rep.Repaired -gt 0) {
+            Write-Log ('修复成功 ' + $rep.Repaired + ' 个文件') 'OK'
+            Write-Log ('  修复前旧文件已存: ' + $rep.SafeDir) 'WARN'
+            Write-Log '  如需回退这些文件，从上面目录复制回去即可。' 'WARN'
+        } else {
+            Write-Log '没有文件被修复' 'OK'
+        }
+        Write-Log '############################################################'
+        exit 0
+    } else {
+        Write-Log ('修复未完全成功：成功 ' + $rep.Repaired + '，失败 ' + $rep.Failed + $(if ($rep.Reason) { '，原因: ' + $rep.Reason } else { '' })) 'ERROR'
+        Write-Log '############################################################'
+        exit 18
+    }
+}
+
+# =====================================================================
 
 
 # ---------- 手动回滚模式：直接从最近备份恢复，不升级 ----------
