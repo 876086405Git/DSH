@@ -1341,6 +1341,19 @@ export function apply(ctx, config) {
   const pending = new Map();
 
   function createPending(spec, report, run, confirmTimeoutMs) {
+    // 按 spec 去重：市场重试 / 重复触发 installBundle 时，旧挂起必须先作废。
+    // 否则会累积多个 pending 和多个定时器——旧定时器稍后 fire 就反复抛「已拦截」，
+    // 界面上表现为反复超时提示 + 浮层卡死。
+    for (const [pid, old] of [...pending]) {
+      if (old.spec !== spec) continue;
+      pending.delete(pid);
+      if (old.timer) clearTimeout(old.timer);
+      // 旧请求已被同 spec 的新请求取代；消息写清楚，避免被误读成「检查未通过」。
+      const superseded = new CheckupBlocked(old.report);
+      superseded.message = `该安装请求已被新的安装请求取代（${spec}）`;
+      old.reject(superseded);
+    }
+
     const id = `p${Date.now()}-${++pendingSeq}`;
     let timer;
     const entry = {
@@ -1348,6 +1361,7 @@ export function apply(ctx, config) {
       spec,
       report,
       createdAt: Date.now(),
+      timer: null,
       // 面板确认：真正执行安装
       confirm: () => {
         clearTimeout(timer);
@@ -1378,6 +1392,7 @@ export function apply(ctx, config) {
         pending.delete(id);
         reject(new CheckupBlocked(report));
       }, Number.isFinite(confirmTimeoutMs) ? confirmTimeoutMs : 180000);
+      entry.timer = timer;
     });
   }
 

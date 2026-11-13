@@ -2102,6 +2102,10 @@ window.__ModuleLoader__.load({
                       }
                     : { ok: false, text: '已取消本次安装。' };
               } else {
+                // 确认失败（多为挂起已超时/被取代 → 404）：一并清掉过期 pending，
+                // 否则浮层会一直停在旧状态，配合轮询看起来像反复超时。
+                overlayState.pending = null;
+                overlayState.showRisk = false;
                 overlayState.message = { ok: false, text: (data && data.error) || '操作失败' };
               }
             })
@@ -2120,12 +2124,24 @@ window.__ModuleLoader__.load({
           getJson('/api-checkup/pending')
             .then((data) => {
               if (disposed) return;
-              if (data && data.ok === true && data.pending) {
-                if (!overlayState.pending || overlayState.pending.id !== data.pending.id) {
-                  overlayState.pending = data.pending;
-                  overlayState.message = null;
-                  overlayState.busy = false;
+              if (data && data.ok === true) {
+                if (data.pending) {
+                  if (!overlayState.pending || overlayState.pending.id !== data.pending.id) {
+                    overlayState.pending = data.pending;
+                    overlayState.message = null;
+                    overlayState.busy = false;
+                    overlayState.showRisk = false;
+                    renderOverlay();
+                  }
+                } else if (overlayState.pending) {
+                  // 挂起已消失（超时 / 被同 spec 新请求取代 / 已处理）：
+                  // 清掉过期状态，否则浮层会一直卡在旧报告上，看起来像死循环。
+                  overlayState.pending = null;
                   overlayState.showRisk = false;
+                  overlayState.busy = false;
+                  if (!overlayState.message) {
+                    overlayState.message = { ok: false, text: '安装请求已结束（已超时或已被新的安装请求取代）。' };
+                  }
                   renderOverlay();
                 }
               }
