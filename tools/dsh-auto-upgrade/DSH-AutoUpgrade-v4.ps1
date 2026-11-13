@@ -505,6 +505,24 @@ function Exit-WithRestore {
     exit $Code
 }
 
+function Remove-DirRobust {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $true }
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) { return $true }
+    } catch {}
+    # 兜底：robocopy 空目录镜像清空，再删空壳
+    try {
+        $empty = Join-Path $env:TEMP ('_empty_' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        & robocopy $empty $Path /MIR /NFL /NDL /NJH /NJS /R:1 /W:1 2>&1 | Out-Null
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $empty -Recurse -Force -ErrorAction SilentlyContinue
+        return (-not (Test-Path -LiteralPath $Path))
+    } catch { return $false }
+}
+
 
 # ---------- 手动回滚模式：直接从最近备份恢复，不升级 ----------
 # 【v4.9 修复·致命】这个块原来放在行 169，但 Restore-FromBackup 函数定义在行 367。
@@ -951,18 +969,25 @@ if (-not $renameOk) {
 # 和 .broken-*（回滚时留的证据目录），这些每个都占 1GB+，堆几个就吃满空间。
 # 【v4.1 修正】.broken-* 是回滚失败时的故障现场，全删会丢掉排错依据：
 # 改为「保留最近 1 个 .broken-，其余清理」，兼顾空间与可诊断性。
+# 【v4.10 修复】残留目录里可能有文件名损坏（实测 4669 个文件里有一个路径
+# 含非法名 "pagepanenoselmaster.xml"，Remove-Item 报「未能找到路径的一部分」
+# 直接失败），导致 498 MB 垃圾永远删不掉。
+# 兜底方案：用 robocopy 拿一个空目录 /MIR 镜像过去（会把目标清空），
+# 再删空壳。这是 Windows 上删「删不掉的目录」的标准做法。
+
 $stalePatterns = @('.old-', '.new-', '.upgrade-probe')
 $cleanedAny = 0
 foreach ($pat in $stalePatterns) {
     $staleDirs = @(Get-ChildItem $parent -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match ('^' + [regex]::Escape($leaf) + [regex]::Escape($pat)) })
     foreach ($od in $staleDirs) {
-        try {
-            $szMB = [math]::Round(((Get-ChildItem $od.FullName -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB), 1)
-            Remove-Item $od.FullName -Recurse -Force -ErrorAction Stop
+        $szMB = [math]::Round(((Get-ChildItem $od.FullName -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB), 1)
+        if (Remove-DirRobust -Path $od.FullName) {
             Write-Log ('已删残留: ' + $od.Name + ' (' + $szMB + ' MB)') 'OK'
             $cleanedAny++
-        } catch { Write-Log ('残留删除失败: ' + $od.Name + ' -> ' + $_.Exception.Message) 'WARN' }
+        } else {
+            Write-Log ('残留删除失败（已尝试 robocopy 兜底）: ' + $od.Name + ' (' + $szMB + ' MB)') 'WARN'
+        }
     }
 }
 # .broken-* 单独处理：留最近 1 个作故障现场
@@ -973,12 +998,13 @@ if ($brokenDirs.Count -gt 0) {
     Write-Log ('发现 ' + $brokenDirs.Count + ' 个 .broken- 故障现场，保留最近 1 个用于排错:') 'WARN'
     Write-Log ('  保留: ' + $brokenDirs[0].Name)
     foreach ($bd in ($brokenDirs | Select-Object -Skip 1)) {
-        try {
-            $szMB = [math]::Round(((Get-ChildItem $bd.FullName -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB), 1)
-            Remove-Item $bd.FullName -Recurse -Force -ErrorAction Stop
+        $szMB = [math]::Round(((Get-ChildItem $bd.FullName -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB), 1)
+        if (Remove-DirRobust -Path $bd.FullName) {
             Write-Log ('  已删旧现场: ' + $bd.Name + ' (' + $szMB + ' MB)') 'OK'
             $cleanedAny++
-        } catch { Write-Log ('  删除失败: ' + $bd.Name) 'WARN' }
+        } else {
+            Write-Log ('  删除失败（已尝试 robocopy 兜底）: ' + $bd.Name) 'WARN'
+        }
     }
 }
 if ($cleanedAny -eq 0) { Write-Log '无旧残留需要清理' }
