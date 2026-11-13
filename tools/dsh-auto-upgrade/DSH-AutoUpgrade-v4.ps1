@@ -474,13 +474,21 @@ function Restore-FromBackup {
     Write-Log '从备份恢复程序目录（约 1 分钟，请稍候）...'
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $excludeDir = Join-Path $BackupPath '_profile'
-    & robocopy $BackupPath $InstallDir /E /NFL /NDL /NJH /NJS /R:1 /W:1 /MT:8 /XD $excludeDir 2>&1 | Out-Null
+    # 【v4.16 修复】原来只用 /XD 排除 _profile 目录，没排除 _meta.json 文件，
+    # 导致每次回滚都把备份元数据复制进安装目录（实测安装目录出现 _meta.json，
+    # 且后续 -Verify 把它报成「多余文件」）。加 /XF 排除该文件。
+    & robocopy $BackupPath $InstallDir /E /NFL /NDL /NJH /NJS /R:1 /W:1 /MT:8 /XD $excludeDir /XF '_meta.json' 2>&1 | Out-Null
     $code = $LASTEXITCODE
     $sw.Stop()
     if ($code -ge 8) {
         Write-Log ('恢复复制失败（robocopy 退出码 ' + $code + '）') 'ERROR'
         Write-Log ('备份仍在: ' + $BackupPath) 'WARN'
         return $false
+    }
+    # 兜底：万一安装目录里已存在 _meta.json（历史遗留），主动删掉
+    $strayMeta = Join-Path $InstallDir '_meta.json'
+    if (Test-Path -LiteralPath $strayMeta) {
+        try { Remove-Item -LiteralPath $strayMeta -Force -ErrorAction Stop; Write-Log '已清理安装目录里残留的 _meta.json' 'WARN' } catch {}
     }
     Write-Log ('恢复复制完成，耗时 ' + [math]::Round($sw.Elapsed.TotalSeconds, 1) + 's') 'OK'
 
@@ -769,6 +777,23 @@ function Repair-FromBackup {
         if ($failList.Count -gt 20) { Write-Log ('    ...还有 ' + ($failList.Count - 20) + ' 个') 'WARN' }
     }
 
+    # 【v4.15 修复】repair-* 安全副本的清理原来只在「阶段8」里跑，
+    # 只有完整升级流程才会执行；而 -Verify / -Repair 模式在阶段1 就分支出去了，
+    # 永远走不到阶段8 —— 实测连续几次 -Repair 后 repair-* 累积到 4 份，超出
+    # 约定的「保留最近 3 份」。这里补上清理，保证任何入口都不会堆积。
+    try {
+        $reps = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -like 'repair-*' } |
+                  Sort-Object LastWriteTime -Descending)
+        if ($reps.Count -gt 3) {
+            foreach ($old in ($reps | Select-Object -Skip 3)) {
+                if (Remove-DirRobust -Path $old.FullName) {
+                    Write-Log ('  清理旧修复副本: ' + $old.Name) 'INFO'
+                }
+            }
+        }
+    } catch {}
+
     return [pscustomobject]@{ Done = ($failed -eq 0); Repaired = $repaired; Failed = $failed; Reason = ''; SafeDir = $(if ($safeDirCreated) { $safeDir } else { '' }) }
 }
 
@@ -805,6 +830,23 @@ function Remove-DirRobust {
 if ($Verify -or $Repair) {
     $mode = if ($Repair) { '按需修复' } else { '仅体检' }
     New-Section ($mode + ' / 比对备份与现装')
+
+    # 【v4.15 新增】入口统一清理 repair-* 旧副本（保留最近 3 份）。
+    # 原因：清理逻辑原来只在阶段8（完整升级流程）里跑，而 -Verify / -Repair
+    # 在阶段1 就分支出去了 —— 实测连续几次 -Repair 后累积到 4 份。
+    # 放在最前面执行，保证任何入口进来都不会让旧副本堆积。
+    try {
+        $reps0 = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -like 'repair-*' } |
+                   Sort-Object LastWriteTime -Descending)
+        if ($reps0.Count -gt 3) {
+            foreach ($old0 in ($reps0 | Select-Object -Skip 3)) {
+                if (Remove-DirRobust -Path $old0.FullName) {
+                    Write-Log ('清理旧修复副本: ' + $old0.Name) 'INFO'
+                }
+            }
+        }
+    } catch {}
 
     # 【v4.13 新增】运行中检测：DSH 跑着的时候，exe / dll / asar 被进程占用，
     # 体检读得到（只读没问题），但 -Repair 写不进去会失败；
