@@ -698,7 +698,11 @@ function Repair-FromBackup {
     $backupPath = $CompareResult.BackupPath
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $safeDir = Join-Path $RollbackDir ('repair-' + $stamp)
-    New-Item -ItemType Directory -Force -Path $safeDir | Out-Null
+    # 【v4.12 修复】安全副本目录改为「按需创建」。
+    # 原来无条件 New-Item，导致只修复「缺失」文件（原本就没有旧文件可备份）时
+    # 也会留下一个空目录 —— 实测 3 个 repair-* 里 2 个是空的，纯垃圾。
+    # 现在只有真的复制了旧文件才建目录。
+    $safeDirCreated = $false
 
     $repaired = 0
     $failed = 0
@@ -719,6 +723,10 @@ function Repair-FromBackup {
         try {
             # 先把现有文件（若有）存到 repair-<时间戳> 便于回退
             if (Test-Path -LiteralPath $dst) {
+                if (-not $safeDirCreated) {
+                    New-Item -ItemType Directory -Force -Path $safeDir | Out-Null
+                    $safeDirCreated = $true
+                }
                 $safeDst = Join-Path $safeDir $rel
                 $safeParent = Split-Path $safeDst -Parent
                 if (-not (Test-Path -LiteralPath $safeParent)) { New-Item -ItemType Directory -Force -Path $safeParent | Out-Null }
@@ -738,14 +746,18 @@ function Repair-FromBackup {
     }
 
     Write-Log ('按需修复完成: 成功 ' + $repaired + '，失败 ' + $failed) $(if ($failed -eq 0) { 'OK' } else { 'WARN' })
-    if ($repaired -gt 0) { Write-Log ('  修复前的旧文件已存: ' + $safeDir) 'WARN' }
+    # 【v4.12 修复】副本位置提示交给上层统一输出，这里不再重复打印
+    # （原来函数内 + 上层各打一次，实测日志里同一行出现两次）。
+    if (-not $safeDirCreated -and $repaired -gt 0) {
+        Write-Log '  本次修复的都是「原本缺失」的文件，没有旧文件需要备份' 'INFO'
+    }
     if ($failList.Count -gt 0) {
         Write-Log '  失败清单：' 'WARN'
         foreach ($f in ($failList | Select-Object -First 20)) { Write-Log ('    ' + $f) 'WARN' }
         if ($failList.Count -gt 20) { Write-Log ('    ...还有 ' + ($failList.Count - 20) + ' 个') 'WARN' }
     }
 
-    return [pscustomobject]@{ Done = ($failed -eq 0); Repaired = $repaired; Failed = $failed; Reason = ''; SafeDir = $safeDir }
+    return [pscustomobject]@{ Done = ($failed -eq 0); Repaired = $repaired; Failed = $failed; Reason = ''; SafeDir = $(if ($safeDirCreated) { $safeDir } else { '' }) }
 }
 
 function Exit-WithRestore {
@@ -787,15 +799,20 @@ if ($Verify -or $Repair) {
     # 原因：每次升级前都会备份旧版本，所以最新那份的版本往往正好是【升级前】的
     # 旧版本，与现装不符 —— 直接拿它比对会被版本保护拒绝，等于功能失效。
     # 策略：先在所有备份里找版本匹配的，取最近一份；找不到再退回最新一份。
+    # 【v4.12 修复】原来的 -like 'app-*' 太宽松，会把 app-xxx.hidden、app-xxx.bak
+    # 这类「被改名但前缀仍是 app-」的目录也选进来（实测：隐藏 rc.2 备份后仍选中它）。
+    # 改为严格正则：只认 app-<版本>-<yyyyMMdd-HHmmss> 结尾的目录。
+    $bkNamePattern = '^app-[0-9A-Za-z.\-]+-\d{8}-\d{6}$'
     $curVer = Get-InstalledVersion
     $allBk = @()
     if (Test-Path $RollbackDir) {
         $allBk = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
-                   Where-Object { $_.Name -like 'app-*' } |
+                   Where-Object { $_.Name -match $bkNamePattern } |
                    Sort-Object LastWriteTime -Descending)
     }
     if ($allBk.Count -eq 0) {
         Write-Log ('没有找到任何备份（目录: ' + $RollbackDir + '）') 'ERROR'
+        Write-Log ('  只认形如 app-<版本>-<yyyyMMdd-HHmmss> 的目录；' + $bkNamePattern) 'WARN'
         Write-Log '无法比对。请先正常升级一次以生成备份。' 'WARN'
         Write-Log '############################################################'
         exit 16
@@ -842,7 +859,13 @@ if ($Verify -or $Repair) {
     # 3) 输出结果
     Write-Log ''
     Write-Log ('备份版本: ' + $(if ($cmp.BackupVersion) { $cmp.BackupVersion } else { '(未知)' }) + '  现装版本: ' + $(if ($cmp.CurrentVersion) { $cmp.CurrentVersion } else { '(未知)' }))
-    if ($cmp.SameVersion) {
+    # 【v4.12 修复】原来只有「一致 / 不一致」两态，_meta.json 缺失导致版本未知时
+    # 也报「版本不一致」，措辞误导（实测 D3 场景）。改为三态提示。
+    $canCheckVer = ($cmp.BackupVersion -and $cmp.CurrentVersion)
+    if (-not $canCheckVer) {
+        Write-Log '版本无法确认（备份缺 _meta.json 或现装 exe 无版本信息）' 'WARN'
+        Write-Log '  按需修复默认会拒绝执行，需加 -AllowCrossVersion 才放行。' 'WARN'
+    } elseif ($cmp.SameVersion) {
         Write-Log '版本一致，可安全按需修复' 'OK'
     } else {
         Write-Log '版本不一致！按需修复会拒绝执行（除非加 -AllowCrossVersion）' 'WARN'
@@ -878,12 +901,39 @@ if ($Verify -or $Repair) {
     }
 
     # 4) 结论
+    # 【v4.12 修复·重要】版本不一致时，所谓「缺失/损坏」很可能只是版本差异
+    # （新版本多了文件、旧版本没有），不是真损坏。原来直接输出「建议修复」，
+    # 措辞误导 —— 实测 rc.1 现装 vs rc.2 备份报 309 个「问题」，全是版本差异。
+    # 修复：版本无法确认或不一致时，结论单独措辞，并明确提示不要用 -Repair。
     Write-Log ''
     $needCount = @($cmp.Missing).Count + @($cmp.Corrupt).Count
+    $verKnown = ($cmp.BackupVersion -and $cmp.CurrentVersion)
+    $verSame = ($verKnown -and $cmp.SameVersion)
+
     if ($needCount -eq 0) {
         Write-Log ('体检结论: 安装目录完整，无需修复（完好 ' + $cmp.Intact + '/' + $cmp.Total + '）') 'OK'
         Write-Log '############################################################'
         exit 0
+    }
+
+    if (-not $verSame) {
+        # 版本不一致 / 未知：差异很可能来自版本本身，不能当损坏
+        Write-Log ('体检结论: 发现 ' + $needCount + ' 个差异文件，但【版本不一致或无法确认】，无法判断是真损坏还是版本差异') 'WARN'
+        Write-Log ''
+        # 上面 862 行已打印过版本对比，这里不重复；只在缺版本时补一句原因
+        if (-not $verKnown) {
+            Write-Log '  原因: 备份缺 _meta.json，或现装 exe 无版本信息。' 'WARN'
+        }
+        # 注意：日志里不要用 emoji（⚠️ 等），AppendAllText 写 UTF-8 后
+        # 在部分终端/编码环境下会显示成 ?? ，用纯文字更稳。
+        Write-Log '  [注意] 不建议用 -Repair：跨版本补文件会造成文件混杂、启动异常。' 'WARN'
+        Write-Log '  正确做法（二选一）：' 'WARN'
+        Write-Log '    a) 用 -RollbackOnly 整目录回滚到备份版本（最稳）' 'WARN'
+        Write-Log '    b) 先升级到与备份相同的版本，再跑 -Verify 复查' 'WARN'
+        Write-Log ''
+        Write-Log '  若已确认要跨版本强补，可加 -AllowCrossVersion。' 'WARN'
+        Write-Log '############################################################'
+        exit 5
     }
 
     Write-Log ('体检结论: 发现 ' + $needCount + ' 个问题文件，建议修复') 'WARN'
@@ -910,8 +960,12 @@ if ($Verify -or $Repair) {
         }
         if ($rep.Repaired -gt 0) {
             Write-Log ('修复成功 ' + $rep.Repaired + ' 个文件') 'OK'
-            Write-Log ('  修复前旧文件已存: ' + $rep.SafeDir) 'WARN'
-            Write-Log '  如需回退这些文件，从上面目录复制回去即可。' 'WARN'
+            if ($rep.SafeDir) {
+                Write-Log ('  被覆盖的旧文件已存: ' + $rep.SafeDir) 'WARN'
+                Write-Log '  如需回退这些文件，从上面目录复制回去即可。' 'WARN'
+            } else {
+                Write-Log '  本次补的都是原本缺失的文件，无旧文件需要备份。' 'INFO'
+            }
         } else {
             Write-Log '没有文件被修复' 'OK'
         }
@@ -1344,7 +1398,7 @@ for ($try = 1; $try -le $MaxRenameTries; $try++) {
         Rename-Item -LiteralPath $InstallDir -NewName $probeName -ErrorAction Stop
         Rename-Item -LiteralPath $probePath -NewName $leaf -ErrorAction Stop
         $renameOk = $true
-        Write-Log ('第 ' + $try + ' 次验证: 可改名 ✅') 'OK'
+        Write-Log ('第 ' + $try + ' 次验证: 可改名') 'OK'
         break
     } catch {
         Write-Log ('第 ' + $try + ' 次验证失败: ' + $_.Exception.Message) 'WARN'
@@ -1651,11 +1705,30 @@ if (-not $healthy) {
 }
 
 # 清理旧备份（保留最近 2 份）
+# 【v4.12 修复·严重】原来只写 Get-ChildItem $RollbackDir -Directory（无过滤），
+# 会把 v4.11 新增的 repair-<时间戳> 安全副本目录也算进「最近 2 份」。
+# 实测：rollback 目录里有 2 个 repair-* + 2 个 app-* 时，
+# 排序后跳过前 2 个，真正需要保留的 2 个 app-* 备份反而被删掉 —— 数据丢失级 bug。
+# 修复：只统计 app-* 备份；repair-* 单独按「保留最近 3 份」清理。
 try {
-    $bks = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    $bks = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -like 'app-*' } |
+             Sort-Object LastWriteTime -Descending)
     foreach ($b in ($bks | Select-Object -Skip 2)) {
-        Remove-Item $b.FullName -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Log ('清理旧备份: ' + $b.Name)
+        if (Remove-DirRobust -Path $b.FullName) {
+            Write-Log ('清理旧备份: ' + $b.Name)
+        } else {
+            Write-Log ('清理旧备份失败: ' + $b.Name) 'WARN'
+        }
+    }
+    # repair-* 安全副本：保留最近 3 份（用于回退被修复的文件）
+    $reps = @(Get-ChildItem $RollbackDir -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like 'repair-*' } |
+              Sort-Object LastWriteTime -Descending)
+    foreach ($r in ($reps | Select-Object -Skip 3)) {
+        if (Remove-DirRobust -Path $r.FullName) {
+            Write-Log ('清理旧修复副本: ' + $r.Name)
+        }
     }
 } catch {}
 
