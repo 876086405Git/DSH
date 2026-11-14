@@ -158,8 +158,8 @@ def main():
     a = p.parse_args()
     sdk = a.sdk_native.resolve(strict=True)
     sysroot = sdk / 'sysroot'
-    readelf = a.readelf.resolve(strict=True)
-    readelf.relative_to((sdk / 'llvm/bin').resolve(strict=True))
+    readelf = a.readelf.absolute()  # llvm-readelf may link to llvm-readobj, which prints another format.
+    readelf.resolve(strict=True).relative_to((sdk / 'llvm/bin').resolve(strict=True))
     inputs = [identity(sdk / 'build/cmake/ohos.toolchain.cmake'), identity(readelf)]
     for name, expected in SDK_HEADERS.items():
         item = identity(sysroot / 'usr/include' / name)
