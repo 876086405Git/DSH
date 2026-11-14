@@ -223,13 +223,17 @@ class CallSettingsController extends Notifier<CallSettings> {
   /// defaults shown before then).
   Future<void> edit(CallSettings Function(CallSettings saved) change) async {
     await _loaded;
-    if (ref.mounted) await update(change(state));
+    // Applied and taken in at once: another edit waiting too sees this one.
+    if (ref.mounted) await _keep(change(state));
   }
 
   Future<void> update(CallSettings next) async {
     // After the saved settings are in: they never overwrite a change made meanwhile.
     await _loaded;
-    if (!ref.mounted) return;
+    if (ref.mounted) await _keep(next);
+  }
+
+  Future<void> _keep(CallSettings next) async {
     state = next;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(

@@ -156,6 +156,9 @@ class VoiceCallController extends ChangeNotifier {
   bool _over = false;
   Timer? _overTimer;
 
+  /// Since the person began talking over her (for [_overTimer]'s deadline).
+  final _overFor = Stopwatch();
+
   /// What the person had heard of a reply they cut off, for their next message.
   String? _cutAt;
 
@@ -310,6 +313,9 @@ class VoiceCallController extends ChangeNotifier {
           _overTimer?.cancel();
           // The chosen pause's extra quiet doesn't count as talking on: a short
           // 嗯嗯 still arrives as an utterance before this confirms.
+          _overFor
+            ..reset()
+            ..start();
           _overTimer = Timer(confirmAfter + _pause.longer, _cutIn);
           return;
         }
@@ -532,6 +538,12 @@ class VoiceCallController extends ChangeNotifier {
   void setPause(CallPause pause) {
     if (_phase == CallPhase.ended || pause == _pause) return;
     _pause = pause;
+    // Talking over her right now: the deadline moves with the pause, from when they began.
+    if (_overTimer?.isActive ?? false) {
+      _overTimer!.cancel();
+      final left = confirmAfter + pause.longer - _overFor.elapsed;
+      _overTimer = Timer(left.isNegative ? Duration.zero : left, _cutIn);
+    }
     // Before the microphone is open this changes nothing there; startCall takes [_pause].
     unawaited(audio.callPause(pause));
   }

@@ -426,6 +426,19 @@ void main() {
     rig.call.hangUp();
   });
 
+  test('changed to 耐心 while talking over her: the confirmation waits the longer pause too', () async {
+    final rig = _Rig(confirmAfter: const Duration(milliseconds: 150));
+    await rig.call.start();
+    await rig.say();
+    rig.conversation.reply('一段很长的回答。');
+    rig.outs.single.emit(const SpeechOutStarted());
+    rig.audio.emit(const SpeechStart(over: true));
+    rig.call.setPause(CallPause.patient);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(rig.outs.single.stopped, isFalse);
+    rig.call.hangUp();
+  });
+
   test('skip: she stops, the call listens again', () async {
     final rig = _Rig();
     await rig.call.start();

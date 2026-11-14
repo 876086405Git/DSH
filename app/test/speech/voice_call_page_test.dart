@@ -348,6 +348,19 @@ void main() {
     expect(moving.flow, greaterThan(0.4));
   });
 
+  test('two changes made before the saved settings are read: both kept, and what was saved too', () async {
+    SharedPreferences.setMockInitialValues({'speech_call_v1': '{"bargeIn":false}'});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final calls = container.read(callSettingsProvider.notifier);
+    await Future.wait([
+      calls.edit((saved) => saved.copyWith(pause: CallPause.patient)),
+      calls.edit((saved) => saved.copyWith(speaker: false)),
+    ]);
+    final now = container.read(callSettingsProvider);
+    expect((now.pause, now.speaker, now.bargeIn), (CallPause.patient, false, false));
+  });
+
   test('a backdrop choice is kept', () async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
