@@ -415,3 +415,112 @@ app-* 备份 = 3    repair-* 副本 = 3    .broken- = 1
 Web：端口 57420 -> HTTP 401（服务存活）
 磁盘 = 17.2 GB
 ```
+
+## v4.17 新增：安装后闭环（并入 DSH-Tools 自愈能力）
+
+### 需求来源
+
+把 `C:\Users\Administrator\DSH-Tools` 下的 DSH 启动修复脚本能力并入升级工具，形成完整闭环：
+
+```
+下载 → 安装 → 成功则启动 → 启动异常则自动修复 → 修复失败则回滚并恢复数据 → 启动成功进主界面
+```
+
+### 并入的能力（来自 DSH-Tools）
+
+| # | 能力 | 来源文件 | 作用 |
+|---|---|---|---|
+| 1 | **Cookies 超限清理** | `dsh-launch-clean.ps1` §3-4 | `dsh-auth` cookie ≥ 50 时备份并重置，防「71 cookie → 16KB header → 渲染进程崩溃」 |
+| 2 | **卡住事务自愈** | 同上 §2 | 隔离 `NEEDS_ATTENTION` 事务 + 清 `safe-mode` 标记，防 SAFE MODE 只读启动导致的 134 崩溃 |
+| 3 | **autosync 熔断** | 同上 §2b | git 通道连续失败 ≥ 2 次自动关闭，防崩溃循环 |
+| 4 | **DevToolsActivePort 清理** | 同上 §5 | 硬杀后残留会让下次启动误判「已有实例在监听」 |
+
+**未并入**：`fix-sync-baseline.ps1`（依赖 git 远端交互，不属于升级闭环，且需人工判断是否为「其他设备的快照」）
+
+### 新增 5 个函数
+
+| 函数 | 作用 |
+|---|---|
+| `Repair-DshCookies` | Cookie 超限检测 + 备份重置（返回 Action/Count/Detail） |
+| `Repair-DshConfigTx` | 隔离卡住事务 + 清 SAFE MODE 标记 |
+| `Repair-DshAutosync` | git autosync 连续失败熔断 |
+| `Repair-DshDevToolsPort` | 清 DevToolsActivePort 残留 |
+| `Invoke-DshStartupHeal` | 总入口，依次跑上述 4 项并返回汇总 |
+
+### 阶段7 改造（安装后闭环核心）
+
+**启动前自愈**（新增）：
+```powershell
+Write-Log '启动前自愈检查（并入 DSH-Tools 能力）...'
+$healSummary = Invoke-DshStartupHeal -IncludeCookies
+```
+为什么放启动前而不是失败后：这 4 项正是「装完打不开」的常见根因，提前清掉能让启动一次成功，避免走「失败→回滚」重流程。
+
+**异常修复重试**（新增）：
+```powershell
+if ($winElapsed -lt 0) {
+    $webProbe = Test-DshWebAlive -TimeoutSec 15
+    if (-not $webProbe) {
+        # 首次启动失败 -> 清进程 -> 自愈 -> 重试启动（只重试一次，不无限循环）
+        ...
+    }
+}
+```
+
+**汇总输出**（新增「安装后闭环」段）：
+```
+--- 安装后闭环 ---
+  闭环结果: 启动成功，进入主界面
+  启动前自愈: 无需处理
+  异常修复重试: 未触发（首次启动即成功）
+  Cookie 状态: N 个 dsh-auth（阈值 50）
+```
+
+闭环 4 种结局：`已回滚（升级失败）` / `回滚失败（需人工）` / `启动成功，进入主界面` / `启动未通过`
+
+### 保留项（未破坏）
+
+- ✅ 原有 8 阶段流程完整保留（阶段1~8 一个不少）
+- ✅ 回滚机制 `Restore-FromBackup` 仍被调用（自动回滚 + 手动回滚两处）
+- ✅ 原 55 项断言全部保留并通过
+
+### 测试结果（5 轮，71 项断言）
+
+| 轮次 | 内容 | PASS | FAIL |
+|---|---|---|---|
+| 1 | 首轮（暴露虚拟机环境被重置） | 62 | 9 |
+| 2 | 恢复环境后 | 70 | 1（K14 断言写错） |
+| 3 | 修正 K14 断言 | **71** | **0** |
+| 4 | 闭环分支专项（17 项） | **17** | **0** |
+| 5 | **连续两轮稳定性确认** | **71 + 71** | **0 + 0** |
+
+### 闭环分支实测证据（第 4 轮）
+
+```
+4A 事务自愈:       Healed=2  隔离事务 test-stuck-001.json; 清除 SAFE MODE 标记;
+                   事务已移走=True  safe-mode已清=True  quarantine存在=True
+4B DevTools清理:   Removed=True  已清除残留 DevToolsActivePort
+4C autosync熔断:   Fused=True  git autosync 连续失败 3 次 -> 已关闭
+                   git已禁用=True  失败计数已清零=True  写回无BOM=True
+4D Cookie清理:     Action=skipped  DSH 正在运行，跳过 cookie 清理（正确行为）
+4E 汇总对象:       HealedCount/TxHealed/CookieAction 字段齐全
+```
+
+### 新增 16 项断言（K 组）
+
+| 断言 | 内容 |
+|---|---|
+| K1~K5 | 5 个自愈函数均已定义且被调用 |
+| K6 | 阶段7 有「启动前自愈」 |
+| K7 | 阶段7 有「异常修复重试」 |
+| K8 | 汇总含「安装后闭环」段 |
+| K9 | 闭环 4 种结局齐全 |
+| K10 | Cookie 阈值 = 50（与源脚本一致） |
+| K11 | Cookie 只备份不删除（数据安全） |
+| K12 | SAFE MODE 标记可回溯（quarantine） |
+| K13 | autosync 写回无 BOM（插件 JSON.parse 不炸） |
+| K14 | DSH-Tools 能力已并入 |
+| K15 | 8 阶段结构保留 |
+| K16 | 回滚机制保留 |
+
+**总断言数：55（原）+ 16（K组）= 71 项**
