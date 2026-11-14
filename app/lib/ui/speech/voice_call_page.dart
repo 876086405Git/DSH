@@ -154,6 +154,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
           bargeIn: saved.bargeIn,
           speaker: saved.speaker,
           spokenHint: saved.spoken ? appNote(appL10n.speechCallHint) : null,
+          pause: saved.pause,
         );
       },
       permission: () async => await bridge.requestPermission() == VoicePermission.granted,
@@ -167,6 +168,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     ref.listenManual(speechVoiceSettingsProvider, (_, _) => unawaited(_settleVoice()));
     ref.listenManual(voiceSettingsProvider, (_, _) => unawaited(_call.refreshRecognizer()));
     ref.listenManual(cloudAsrProvider, (_, _) => unawaited(_call.refreshRecognizer()));
+    ref.listenManual(callSettingsProvider.select((s) => s.pause), (_, pause) => _call.setPause(pause));
     HapticFeedback.mediumImpact();
     _enter.forward();
     unawaited(_start());

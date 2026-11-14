@@ -28,7 +28,7 @@ class _Rig {
         outs.add(out);
         return out;
       },
-      choices: () async => (bargeIn: bargeIn, speaker: true, spokenHint: '（语音通话）'),
+      choices: () async => (bargeIn: bargeIn, speaker: true, spokenHint: '（语音通话）', pause: CallPause.normal),
       cutNote: (heard) => '（被打断在：$heard）',
       thinkingCue: () async => cues++,
       confirmAfter: confirmAfter,
@@ -392,6 +392,18 @@ void main() {
     rig.call.hangUp();
     expect(rig.call.phase, CallPhase.ended);
     expect(rig.audio.calls, containsAllInOrder(['mute:true', 'speaker:false', 'callStop']));
+  });
+
+  test('停顿多久算说完: the chosen one opens the call; a change reaches the microphone at once', () async {
+    final rig = _Rig();
+    await rig.call.start();
+    expect(rig.audio.calls, contains('callStart:pause=normal'));
+    rig.call.setPause(CallPause.patient);
+    rig.call.setPause(CallPause.patient);
+    expect(rig.audio.calls.where((c) => c.startsWith('callPause:')), ['callPause:patient']);
+    rig.call.hangUp();
+    rig.call.setPause(CallPause.quick);
+    expect(rig.audio.calls.where((c) => c.startsWith('callPause:')), ['callPause:patient']);
   });
 
   test('skip: she stops, the call listens again', () async {

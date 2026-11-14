@@ -76,7 +76,7 @@ abstract class CallConversation {
 
 /// The person's choices for a call: speaking over her stops her; the
 /// loudspeaker or the earpiece; [spokenHint] goes before the first message.
-typedef CallChoices = ({bool bargeIn, bool speaker, String? spokenHint});
+typedef CallChoices = ({bool bargeIn, bool speaker, String? spokenHint, CallPause pause});
 
 /// One exchange of the call as it reads: what the person said, and her reply
 /// as far as it is known (all of it, or, [cut], as far as she got).
@@ -129,6 +129,7 @@ class VoiceCallController extends ChangeNotifier {
   /// when the page opens).
   final Future<CallChoices> Function() choices;
   bool _bargeIn = true;
+  CallPause _pause = CallPause.normal;
 
   /// Put before the call's first message: asks for short spoken answers.
   String? _spokenHint;
@@ -241,6 +242,7 @@ class VoiceCallController extends ChangeNotifier {
     final chosen = await choices();
     if (_disposed || _phase == CallPhase.ended) return;
     _bargeIn = chosen.bargeIn;
+    _pause = chosen.pause;
     _speaker = chosen.speaker;
     _spokenHint = chosen.spokenHint;
     notifyListeners();
@@ -269,7 +271,7 @@ class VoiceCallController extends ChangeNotifier {
       }
     }
     unawaited(const DiagnosticsChannel().recordVoiceStage('preparing'));
-    final started = await audio.startCall(bargeIn: _bargeIn);
+    final started = await audio.startCall(bargeIn: _bargeIn, pause: _pause);
     if (_disposed || _phase == CallPhase.ended) {
       if (started == CallStart.ok) unawaited(audio.stopCall());
       return;
@@ -522,6 +524,14 @@ class VoiceCallController extends ChangeNotifier {
     unawaited(audio.mute(on));
     if (on && _phase == CallPhase.hearing) _set(CallPhase.listening);
     notifyListeners();
+  }
+
+  /// Changed in 通话设置: the next pause is judged by it (the one under way too).
+  void setPause(CallPause pause) {
+    if (_phase == CallPhase.ended || pause == _pause) return;
+    _pause = pause;
+    // Before the microphone is open this changes nothing there; startCall takes [_pause].
+    unawaited(audio.callPause(pause));
   }
 
   Future<void> setSpeaker(bool on) async {

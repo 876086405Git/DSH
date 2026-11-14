@@ -52,6 +52,10 @@ final class CallError extends SpeechAudioEvent {
   final String reason;
 }
 
+/// How long the person may pause before what they said counts as finished
+/// (通话设置 → 停顿多久算说完): 快 is how calls were before it was a choice.
+enum CallPause { quick, normal, patient }
+
 enum CallStart { ok, permission, microphone, unavailable }
 
 class SpeechAudio {
@@ -117,8 +121,8 @@ class SpeechAudio {
   /// Stream [id] quieter while the person may be speaking over it, or back to full.
   Future<void> duck(String id, bool on) => _invoke<void>('duck', {'id': id, 'on': on});
 
-  Future<CallStart> startCall({required bool bargeIn}) async =>
-      switch (await _invoke<String>('callStart', {'bargeIn': bargeIn})) {
+  Future<CallStart> startCall({required bool bargeIn, CallPause pause = CallPause.normal}) async =>
+      switch (await _invoke<String>('callStart', {'bargeIn': bargeIn, 'pause': pause.name})) {
         'ok' => CallStart.ok,
         'permission' => CallStart.permission,
         'microphone' => CallStart.microphone,
@@ -128,6 +132,9 @@ class SpeechAudio {
   Future<void> stopCall() => _invoke<void>('callStop');
   Future<void> mute(bool on) => _invoke<void>('callMute', {'on': on});
   Future<void> bargeIn(bool on) => _invoke<void>('callBargeIn', {'on': on});
+
+  /// How long a pause ends what the person says, from now on in this call.
+  Future<void> callPause(CallPause pause) => _invoke<void>('callPause', {'pause': pause.name});
 
   /// Another player of the app's voice (the phone's own text-to-speech, a
   /// fetched file) started or stopped: the call listens more strictly meanwhile.

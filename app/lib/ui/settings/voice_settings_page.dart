@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../companion/companion_voice_source.dart';
 import '../../l10n/l10n.dart';
+import '../../speech/speech_audio.dart';
 import '../../speech/speech_settings.dart';
 import '../../state/streaming_asr_model_state.dart';
 import '../../state/voice_model_state.dart';
@@ -200,6 +201,14 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
               subtitle: l10n.speechCallBargeInHint,
               value: call.bargeIn,
               onChanged: (on) => unawaited(calls.update(call.copyWith(bargeIn: on))),
+            ),
+            SettingsSegmentTile<CallPause>(
+              key: const ValueKey('speech-call-pause'),
+              title: l10n.speechCallPause,
+              subtitle: l10n.speechCallPauseHint,
+              segments: callPauseSegments(l10n),
+              selected: call.pause,
+              onChanged: (pause) => unawaited(calls.update(call.copyWith(pause: pause))),
             ),
             SettingsSwitchTile(
               key: const ValueKey('speech-call-spoken'),

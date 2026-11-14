@@ -32438,6 +32438,36 @@ abstract class L10n {
   /// **'通话设置'**
   String get speechCallSettings;
 
+  /// No description provided for @speechCallPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'停顿多久算说完'**
+  String get speechCallPause;
+
+  /// No description provided for @speechCallPauseQuick.
+  ///
+  /// In zh, this message translates to:
+  /// **'快'**
+  String get speechCallPauseQuick;
+
+  /// No description provided for @speechCallPauseNormal.
+  ///
+  /// In zh, this message translates to:
+  /// **'适中'**
+  String get speechCallPauseNormal;
+
+  /// No description provided for @speechCallPausePatient.
+  ///
+  /// In zh, this message translates to:
+  /// **'耐心'**
+  String get speechCallPausePatient;
+
+  /// No description provided for @speechCallPauseHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'说话爱停顿、常被她抢话，就选「耐心」；嫌她接得慢，选「快」。'**
+  String get speechCallPauseHint;
+
   /// No description provided for @speechCallSpeechSection.
   ///
   /// In zh, this message translates to:

@@ -10,6 +10,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../companion/companion_voice_source.dart';
+import 'speech_audio.dart';
 
 const speechVoiceKeys = VoiceSettingsKeys(
   on: 'speech_voice_enabled',
@@ -135,6 +136,7 @@ class CallSettings {
     this.image = '',
     this.cue = true,
     this.visual = CallVisual.glass,
+    this.pause = CallPause.normal,
   });
 
   /// Speaking over her stops her (else what is said while she talks is ignored).
@@ -156,6 +158,9 @@ class CallSettings {
   /// The light in the middle.
   final CallVisual visual;
 
+  /// How long a pause ends what the person says.
+  final CallPause pause;
+
   CallSettings copyWith({
     bool? bargeIn,
     bool? spoken,
@@ -164,6 +169,7 @@ class CallSettings {
     String? image,
     bool? cue,
     CallVisual? visual,
+    CallPause? pause,
   }) => CallSettings(
     bargeIn: bargeIn ?? this.bargeIn,
     spoken: spoken ?? this.spoken,
@@ -172,6 +178,7 @@ class CallSettings {
     image: image ?? this.image,
     cue: cue ?? this.cue,
     visual: visual ?? this.visual,
+    pause: pause ?? this.pause,
   );
 }
 
@@ -199,6 +206,7 @@ class CallSettingsController extends Notifier<CallSettings> {
         image: json['image'] is String ? json['image'] as String : '',
         cue: json['cue'] != false,
         visual: CallVisual.values.asNameMap()[json['visual']] ?? CallVisual.glass,
+        pause: CallPause.values.asNameMap()[json['pause']] ?? CallPause.normal,
       );
     } on Object {
       // Defaults for this run.
@@ -227,6 +235,7 @@ class CallSettingsController extends Notifier<CallSettings> {
         'image': next.image,
         'cue': next.cue,
         'visual': next.visual.name,
+        'pause': next.pause.name,
       }),
     );
   }
