@@ -326,13 +326,20 @@ async function adminRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promi
   const sid = match[1]!;
   if (!match[2]) {
     method(request, 'GET'); await limitBurst(request, env, false); const paging = inspectionPage(url), detail = await submissionDetail(env, sid);
-    const inspection = detail.submission.submittedAt ? inspectPack(await blobBytes(env, detail.submission.metadata), detail.submission.metadata, sid, MAX_MOC_VERSION, paging) : emptyInspection();
+    let inspection = emptyInspection();
+    if (detail.submission.submittedAt) {
+      // A whole archive in memory, like an upload: the same one-large-at-a-time lease.
+      const release = largeArchiveLease(detail.submission.metadata.size);
+      try { inspection = inspectPack(await blobBytes(env, detail.submission.metadata), detail.submission.metadata, sid, MAX_MOC_VERSION, paging); } finally { release(); }
+    }
     return json(200, { ...detail, inspection });
   }
   if (match[2] === 'preview') {
     method(request, 'GET', 'HEAD'); await limitBurst(request, env, false);
     const submission = find((await loadState(env)).state, sid); need(submission.submittedAt, 'not_found', 404);
-    const preview = readPreview(await blobBytes(env, submission.metadata), url.searchParams.get('file'));
+    const release = largeArchiveLease(submission.metadata.size);
+    let preview: ReturnType<typeof readPreview>;
+    try { preview = readPreview(await blobBytes(env, submission.metadata), url.searchParams.get('file')); } finally { release(); }
     return new Response(request.method === 'HEAD' ? null : preview.bytes, { headers: {
       'Content-Type': preview.info.mediaType, 'Content-Length': String(preview.bytes.length),
       'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; sandbox",
