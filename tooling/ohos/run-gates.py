@@ -1112,6 +1112,8 @@ def main():
                      [rt + 'client-hmr-idle.test.mjs', rt + 'client-hmr-disposal.test.mjs',
                       'runtime/tests/client-hmr-closed-response.test.mjs'],
                      mode=mode, needs=('android-targets',), timeout=30)
+        g.node_tests('api-gateway-idle-' + mode, [rt + 'api-gateway-idle.test.mjs'],
+                     mode=mode, needs=('android-targets',), timeout=30)
     for mode in ['strict', 'plain']:
         g.node_tests('attachment-diagnostic-' + mode, [rt + 'attachment-error-recovery.test.mjs'],
                      mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})

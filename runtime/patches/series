@@ -182,3 +182,4 @@ ohos-mcp-command-router.diff
 ohos-workspace-grant-paths.diff
 ohos-workspace-edit.diff
 ohos-client-hmr-idle.diff
+ohos-api-gateway-idle.diff

@@ -144,6 +144,14 @@
         }
       }
     },
+    "ohos-api-gateway-idle.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
+          "after": "9d69b0cfd60d7f747251a7c3354a201ac8fef3080c6991cd4ebd4e35e2d27240",
+          "before": "91abae7edfaa2bf3154680829e77b1f341aa01ba9094795aa70b96ff3e15f52b"
+        }
+      }
+    },
     "ohos-attachment-diagnostic.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
@@ -2574,7 +2582,8 @@
       "ohos-mcp-command-router.diff",
       "ohos-workspace-grant-paths.diff",
       "ohos-workspace-edit.diff",
-      "ohos-client-hmr-idle.diff"
+      "ohos-client-hmr-idle.diff",
+      "ohos-api-gateway-idle.diff"
     ]
   }
 }
