@@ -160,6 +160,14 @@
         }
       }
     },
+    "ohos-client-hmr-idle.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js": {
+          "after": "93a6da0f44cbd32926f3cdf8cbcd99bbafdf8e4f70e80bb8ed8da80800ccea18",
+          "before": "b5abcec230011f25b6ab8eab9c1da41eddc9e050ce4ca57d8bda5715982edd30"
+        }
+      }
+    },
     "ohos-forge-github-unavailable.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-experimental-forge-github/lib/index.js": {
@@ -2565,7 +2573,8 @@
       "ohos-plugin-linkless.diff",
       "ohos-mcp-command-router.diff",
       "ohos-workspace-grant-paths.diff",
-      "ohos-workspace-edit.diff"
+      "ohos-workspace-edit.diff",
+      "ohos-client-hmr-idle.diff"
     ]
   }
 }

@@ -1097,6 +1097,11 @@ def main():
     for mode in ['plain', 'jitless']:
         g.node_tests('plugin-store-recovery-' + mode, [rt + 'plugin-store.test.mjs', rt + 'plugin-linkless-recovery.test.mjs'], mode=mode, needs=('prepared-inputs',))
     g.node_tests('provider-body-timeout', [rt + 'provider-body-timeout.test.mjs'], needs=('android-targets',))
+    for mode in ['plain', 'jitless']:
+        g.node_tests('client-hmr-idle-' + mode,
+                     [rt + 'client-hmr-idle.test.mjs', rt + 'client-hmr-disposal.test.mjs',
+                      'runtime/tests/client-hmr-closed-response.test.mjs'],
+                     mode=mode, needs=('android-targets',), timeout=30)
     for mode in ['strict', 'plain']:
         g.node_tests('attachment-diagnostic-' + mode, [rt + 'attachment-error-recovery.test.mjs'],
                      mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
