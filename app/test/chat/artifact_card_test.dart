@@ -303,7 +303,7 @@ void main() {
     expect(carrier.calls, contains('officeToPdf/render'));
     expect(android.methods, contains('pdfInfo'));
     final info = android.last('pdfInfo');
-    expect(info['path'], endsWith('/纪要.docx.pdf'));
+    expect(info['path'], endsWith('/纪要.pdf'));
     expect(find.text('正在转换为 PDF 预览…'), findsNothing);
   });
 
@@ -409,7 +409,7 @@ void main() {
     test('Office files: the Host\'s PDF, converted once per version', () async {
       expect(files.canConvertOffice, isTrue);
       final pdf = await files.officePdf('s1', _docx);
-      expect(pdf.path, endsWith('/纪要.docx.pdf'));
+      expect(pdf.path, endsWith('/纪要.pdf'));
       expect(utf8.decode(pdf.readAsBytesSync()), '%PDF-1.7 v1');
       carrier.calls.clear();
       await files.officePdf('s1', _docx);
