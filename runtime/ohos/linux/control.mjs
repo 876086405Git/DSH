@@ -25,12 +25,21 @@ const output = collector => {
 };
 const noOwner = () => ({ resourcesRetired: true, filesRemoved: true, dataRetained: false,
   ownerQuarantined: false, native: null, releaseErrorCode: null, guestClose: null, cleanCheckpoint: false });
+function nativeRetirement(native) {
+  if (!native) return null;
+  const result = { joined: native.joined === true, retirementError: native.retirementError, apiResult: native.apiResult };
+  if (Object.hasOwn(native, 'ramRetirement')) {
+    const ram = native.ramRetirement;
+    result.ramRetirement = plain(ram) ? { eligible: ram.eligible === true, attempted: ram.attempted === true,
+      trackedBytes: ram.trackedBytes, eligibleBytes: ram.eligibleBytes,
+      advisedBytes: ram.advisedBytes, errorCode: ram.errorCode } : null;
+  }
+  return result;
+}
 function retirement(value) {
-  const native = value.native;
   return { resourcesRetired: value.resourcesRetired === true, filesRemoved: value.filesRemoved === true,
     dataRetained: value.dataRetained === true, ownerQuarantined: value.ownerQuarantined === true,
-    native: native ? { joined: native.joined === true, retirementError: native.retirementError,
-      apiResult: native.apiResult } : null,
+    native: nativeRetirement(value.native),
     releaseErrorCode: value.releaseError ? codeOf(value.releaseError) : null,
     guestClose: value.guestClose ? { ...value.guestClose } : null, cleanCheckpoint: value.cleanCheckpoint === true };
 }
@@ -95,7 +104,7 @@ export class LinuxControl {
         started: job.started, cancelRequested: job.cancelRequested, outcome: job.outcome && { ...job.outcome },
         errorCode: job.errorCode, diagnostic: job.diagnostic && { ...job.diagnostic },
         stdout: output(job.handle.collected.stdout), stderr: output(job.handle.collected.stderr) } : null,
-      retirement: this.#retirement && { ...this.#retirement, native: this.#retirement.native && { ...this.#retirement.native },
+      retirement: this.#retirement && { ...this.#retirement, native: nativeRetirement(this.#retirement.native),
         guestClose: this.#retirement.guestClose && { ...this.#retirement.guestClose } } };
   }
   command(body) {

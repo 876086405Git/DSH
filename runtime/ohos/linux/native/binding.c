@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "temu_embed.h"
 #include "embed-fatal.h"
+#include "embed-ram.h"
 
 typedef struct {
     pthread_t thread;
@@ -17,6 +18,7 @@ typedef struct {
     napi_async_work work;
     napi_deferred deferred;
     napi_ref promise;
+    DshTemuRamRetirement ram_retirement;
 } Owner;
 static atomic_flag claimed = ATOMIC_FLAG_INIT;
 static napi_value fail(napi_env env, const char *code, const char *message) {
@@ -47,12 +49,16 @@ static void join_execute(napi_env env, void *data) {
     (void)env; Owner *owner = data;
     owner->join_error = pthread_join(owner->thread, NULL);
     owner->joined = owner->join_error == 0;
+    if (owner->joined) owner->ram_retirement = dsh_temu_ram_retire_joined();
 }
 static void boolean(napi_env env, napi_value out, const char *key, int b) {
     napi_value value; napi_get_boolean(env, b, &value); napi_set_named_property(env, out, key, value);
 }
 static void integer(napi_env env, napi_value out, const char *key, int n) {
     napi_value value; napi_create_int32(env, n, &value); napi_set_named_property(env, out, key, value);
+}
+static void bytes(napi_env env, napi_value out, const char *key, uint64_t n) {
+    napi_value value; napi_create_double(env, (double)n, &value); napi_set_named_property(env, out, key, value);
 }
 static void join_complete(napi_env env, napi_status status, void *data) {
     Owner *owner = data; napi_value out;
@@ -66,12 +72,24 @@ static void join_complete(napi_env env, napi_status status, void *data) {
         boolean(env, out, "retirementError", owner->result == -8);
         integer(env, out, "apiResult", owner->result);
         integer(env, out, "fatalReason", owner->fatal_reason);
+        napi_value ram;
+        if (napi_create_object(env, &ram) != napi_ok) {
+            napi_delete_async_work(env, owner->work); owner->work = NULL; return;
+        }
+        boolean(env, ram, "eligible", owner->ram_retirement.eligible);
+        boolean(env, ram, "attempted", owner->ram_retirement.attempted);
+        bytes(env, ram, "trackedBytes", owner->ram_retirement.tracked_bytes);
+        bytes(env, ram, "eligibleBytes", owner->ram_retirement.eligible_bytes);
+        bytes(env, ram, "advisedBytes", owner->ram_retirement.advised_bytes);
+        integer(env, ram, "errorCode", owner->ram_retirement.error_code);
+        napi_set_named_property(env, out, "ramRetirement", ram);
     } else {
         /* No successful pthread_join: do not read machine-thread fields. */
         napi_value unknown; napi_get_null(env, &unknown);
         napi_set_named_property(env, out, "retirementError", unknown);
         napi_set_named_property(env, out, "apiResult", unknown);
         napi_set_named_property(env, out, "fatalReason", unknown);
+        napi_set_named_property(env, out, "ramRetirement", unknown);
     }
     integer(env, out, "joinError", owner->join_error);
     napi_resolve_deferred(env, owner->deferred, out);

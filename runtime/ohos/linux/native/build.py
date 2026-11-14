@@ -22,14 +22,16 @@ if not a.host_test:
 with tarfile.open(a.source_archive) as t:t.extractall(out,filter='data')
 src=out/'tinyemu-2019-12-21'
 for patch in sorted((HERE/'patches').glob('*.patch')):
- if a.host_baseline and patch.name.startswith(('0012','0013')):continue
+ # The fatal-boundary comparison intentionally predates both its stop guard
+ # and the RAM retirement which depends on that guard.
+ if a.host_baseline and patch.name.startswith(('0012','0013','0017')):continue
  run(['patch','-d',src,'-p1','-i',patch],patch.stem)
 flags=[*extra,'-O2','-g0','-fPIC','-fvisibility=hidden','-UNDEBUG','-D_FILE_OFFSET_BITS=64','-D_LARGEFILE_SOURCE','-D_GNU_SOURCE','-DCONFIG_VERSION="2019-12-21"','-DCONFIG_SLIRP','-DCONFIG_RISCV_MAX_XLEN=64','-DTEMU_EMBED','-DDSH_FS_EXPORT','-I',HERE,'-I',src]
 files=['virtio','pci','fs','cutils','iomem','simplefb','json','machine','temu','fs_disk','riscv_machine','softfp']+['slirp/'+s for s in 'bootp ip_icmp mbuf slirp tcp_output cksum ip_input misc socket tcp_subr udp if ip_output sbuf tcp_input tcp_timer'.split()]+['riscv_cpu32','riscv_cpu64'];objects=[]
 for name in files:
  cpu=name.startswith('riscv_cpu');obj=out/(name.replace('/','_')+'.o');objects.append(obj)
  run([a.cc,*flags,*(['-DMAX_XLEN='+name[-2:]] if cpu else []),'-w','-c',src/(('riscv_cpu' if cpu else name)+'.c'),'-o',obj],'compile-'+name.replace('/','_'))
-for name in ['embed-fatal','fs_export','binding']:
+for name in ['embed-fatal','embed-ram','fs_export','binding']:
  obj=out/(name+'.o');objects.append(obj);napi=['-I',a.node_headers.resolve(),'-DNAPI_VERSION=8','-DNODE_GYP_MODULE_NAME=dsh_linux'] if name=='binding' else []
  if name=='binding' and not a.host_test:napi+=['-include',a.rename_header.resolve()]
  run([a.cc,*flags,*napi,'-std=c11','-Wall','-Wextra',*(['-Wno-unused-parameter'] if name=='fs_export' else []),'-Werror','-c',HERE/(name+'.c'),'-o',obj],'compile-'+name)

@@ -2,9 +2,9 @@
   "upstream": "https://bellard.org/tinyemu/tinyemu-2019-12-21.tar.gz",
   "archiveSha256": "be8351f2121819b3172fcedce5cb1826fa12c87da1b7ed98f269d3e802a05555",
   "files": {
-    "CMakeLists.txt": "d9d838e5c364f3fbbd92956fa37268f98e2b9a636e516a2a78d6294b467919a4",
+    "CMakeLists.txt": "9903e25f31d9753d9ed5e447ffde86b664d42c824eff50ecfdeedc66678b6f4e",
     "THIRD-PARTY-NOTICES.txt": "8aa05a2e0e64c199f75b5f96d694b1de3b27a2b1b81ab2f6dba3b8ce661f3c99",
-    "binding.c": "a54179c1cc291629faefe7c8ea0b9bcc8899ee833f742b5318885e878fdd91d2",
+    "binding.c": "069cf12e0c5627672f9e60624653e008e07d682f952ff714a54e86fd4f711bab",
     "embed-fatal.c": "15d366e8861f2bb993ac46025a83708a51193ad28c2d60a4d24ad7eba9c209b1",
     "embed-fatal.h": "29e7bdadd307c17ccbd8d171ee72d797e1af1a914405ee43affe4f37d1c71b62",
     "patches/0001-embed.patch": "c5b8fd3f6e0a9af8fb0f5821875bfa4966a562bf98e563a1622a1dcc94d7f74d",
@@ -25,6 +25,9 @@
     "patches/0015-block-write-errors.patch": "e6644b787e29c98caeab49b0911a88f88ab120c290dcaf07383c7e228f83d66d",
     "fs_export.c": "4ebc81e80db33f47daa7677ab84ae50bcff90411f490842602a4bdde9804f6f9",
     "fs_export.h": "978fea6b3a36b9c49751b1f8c306c0fad9414c114a95d9067a64fd67161c9200",
-    "patches/0016-app-workspace-export.patch": "d229bd61ea52c9f9743813565cbbf3f21a34a711512fdcf86747233a56f36696"
+    "patches/0016-app-workspace-export.patch": "d229bd61ea52c9f9743813565cbbf3f21a34a711512fdcf86747233a56f36696",
+    "embed-ram.c": "65fb48a61753b40c260ea737bee32b06f53ea3f6773138a46ed4615334e52e55",
+    "embed-ram.h": "3b919c585f581ef76afb29a26ee3d2a5668f42ccd5859ed8b9e0e8b53e825bab",
+    "patches/0017-joined-guest-ram-pages.patch": "d3397eebb38a132af64452982b7264adb7de77b4dc683e4530c418233768ec9d"
   }
 }

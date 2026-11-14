@@ -23,7 +23,7 @@ add_custom_command(OUTPUT "${DSH_LINUX_OUTPUT}/libdsh_linux.so"
     --output "${DSH_LINUX_OUTPUT}" --cc "${CMAKE_C_COMPILER}"
     --sdk-native "${DSH_OH_SDK_NATIVE}" --libnode "${DSH_NODE_LIBRARY}"
     --rename-header "${DSH_NODE_RENAME_HEADER}"
-  DEPENDS build.py source-lock.json binding.c embed-fatal.c embed-fatal.h fs_export.c fs_export.h temu_embed.h
+  DEPENDS build.py source-lock.json binding.c embed-fatal.c embed-fatal.h embed-ram.c embed-ram.h fs_export.c fs_export.h temu_embed.h
     ${DSH_LINUX_PATCHES} "${DSH_TINYEMU_ARCHIVE}" "${DSH_NODE_LIBRARY}" "${DSH_NODE_RENAME_HEADER}"
   VERBATIM)
 add_custom_target(dsh_linux ALL DEPENDS "${DSH_LINUX_OUTPUT}/libdsh_linux.so")

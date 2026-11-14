@@ -14,6 +14,18 @@ join 结果有 `joined`（仅 OS 线程已 join）、`apiResult`、`fatalReason`
 
 RW 写入检查 seek 和完整 fwrite；失败返回给既有 virtio IOERR，并按盘保留错误。退休仍只 flush/close 一次，同时检查先前 ferror，后续调用不会把失败改成成功。stdio 缓冲中的写失败可能到退休时才可见，因此 guest 的 syncfs/closed 不能替代成功的 native 退休结果；这里没有新增逐写 fsync，也不承诺宿主掉电耐久。
 
+## 1203：最终受控停机并 join 后丢弃主 RAM 的驻留页
+
+普通 Linux 开关关闭不触发本优化。安装完成后，`LinuxControl#setEnabled(false)` 只关闭准入并等待当前 job 收尾，保留同一运行 VM，以便再次启用；该分支没有 dispose/requestStop/join。最终 `shutdown()`，或安装尚未完成时的取消处置，才沿 owner.dispose → backend/native requestStop → join 到达本节边界。不可将“开关已关闭”当成页回收确认，也不改变一进程一个 VM 的复用合同。
+
+0017 仅登记 `riscv_machine_init` 中单独分配的主 RAM；低地址 RAM、CPU/TLB、设备、9P/slirp、owner 与配置对象仍保留。正常 controlled 返回 -3/-4 且没有 fatal 才允许处理，真正成功的 `pthread_join` 建立机器线程完成屏障后，join worker 才调用 `embed-ram.c`。启动失败、输入/输出/盘错误、fatal、join 失败或未执行的取消工作均不丢弃页。固定构建中的 CPU、设备、网络 select 和同步块设备/9P 回调都由同一 VM 线程驱动；没有可在 join 后继续触碰主 RAM 的已登记任务。
+
+只对 malloc payload 内从向上页对齐的起点到向下页对齐的终点执行一次 `madvise(MADV_DONTNEED)`。两端不完整页保持原样，因此不覆盖 malloc 元数据或相邻分配。虚拟地址、phys_mem 映射、TLB 地址和设备对象保持有效隔离，既不 free/munmap，也不恢复 guest 执行。第二次 create 仍拒绝，重复 join 仍复用同一 Promise；GC/cleanup 仍只请求 stop，不执行未确认的回收。
+
+成功 join 的结果增加可选观测 `ramRetirement`：`eligible` 表示正常停止且登记了主 RAM；`attempted` 表示对非空完整页区间发起了建议；`trackedBytes` 是登记的主 RAM 分配范围；`eligibleBytes` 是选中完整页区间；`advisedBytes` 仅在系统调用成功时等于该区间；`errorCode` 为 0 或保留的 errno。`advisedBytes` 不是设备实际回收字节数，也不是 PSS 差值。未知 join 的该字段为 null，不读取机器线程字段。页大小/范围错误或 madvise 失败单独报告，失败不填成功字节数，不改变 `apiResult`、盘 `retirementError` 或 clean checkpoint 三字段。
+
+`tooling/ohos/research/tinyemu-ram-retire/run.py` 在正式门中以 `tinyemu-ram-retirement` 登记。它重编真实生产对象，用单独链接的测试 observer 在 VM 线程的 mallocz 后主动触页，真实测 mincore 前后值，并经产品 Node async join 路径验证 9 个场景的 plain/jitless 两种执行。触页来自宿主夹具，不能称为客体负载。主 RAM 之外的分配未处理；完整 VM 内存寿命和 `nativeMemoryRelease:'process-exit'` 合同不变。OH SDK 编译、HAP 和设备的回收行为仍须实测。
+
 ## 已处理的宿主终止边界
 
 0001–0011 是此前已冻结的嵌入、CPU/CLINT、初始化错误、HTIF返回、非阻塞控制socket、只读盘及盘FILE退役源差。0012 在 controlled C 入口设线程局部 setjmp，仅对这个库链接的 exit/abort/__assert_fail 引用作 GNU/LLD --wrap；不改全局信号 handler、不 interpose 整个 App、不 monkeypatch Node。显式 fatal 以 -9 返回，fatalReason 1/2/3 分别为 exit/abort/assert。已登记的自有盘会退役；发生退役错误以 -8 优先，仍保存 fatalReason。此边界只穿过 TinyEMU 的 C 调用栈；生产 callbacks 为 NULL/只读原子，不允许从外部 C++/JS 回调跨 longjmp。

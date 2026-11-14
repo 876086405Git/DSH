@@ -145,6 +145,12 @@ setEnabled(true) 在 installing 时为幂等保持；setEnabled(false) 在 disab
 
 `nativeMemoryRelease`为`null | 'process-exit'`。owner真正持有native session后为process-exit，包括Socket封装失败但仍有linuxJoin债务。普通off/on复用同一VM；最终join或UNKNOWN收尾都不清除此事实。null只是缺少该持有事实，不等于零内存、已释放或任意字节数。VM allocation/owner当前保留到整个App进程退出，Node线程stop不是整个App进程退出。Dart提供固定中文notice供界面展示；不从全App PSS推定VM专属内存。
 
+1203 增加可选的 `retirement.native.ramRetirement` 观测。它可为 null（join 未确认），或包含 `eligible`、`attempted`、`trackedBytes`、`eligibleBytes`、`advisedBytes`、`errorCode` 六项。只在正常受控退出和真实 join 后，对主 RAM 内部完整页发出丢弃建议；虚拟地址和 VM 对象继续隔离。`advisedBytes` 记录系统调用成功接受的范围，不能当作 PSS 或设备实际回收量。失败保留非零 errno 与 0 成功建议字节，磁盘关闭结果与 `cleanCheckpoint` 独立。控制层复制这个观测，既不吞掉内存错误，也不让调用者修改 status 快照污染内部状态。
+
+已安装后的普通 `setEnabled(false)` 仅关闭准入并 drain job，既不 dispose owner，也不请求 native stop/join，因此不回收 RAM 页；再启用继续使用同一 VM。只有最终 `shutdown()` 或安装中的取消处置才会沿 dispose 到达 join。设备测量必须分别记录普通 switch-off、最终受控 shutdown/join、整个 App force-stop，不能混为一个“关闭 Linux”。
+
+旧 native 未返回该字段时，GET 保持旧形状。持久化 `instance.json` 的 native 记录仍精确只有 joined/retirementError/apiResult 三项，RAM 观测不进入 clean 判断或下一次恢复依据。现有 ETS 解码器不拒绝 native 的额外可选字段；现有 Dart 只取已知三项，因此允许它存在但不展示此观测。本改动不修改 Dart/ETS/UI，也不改变 `nativeMemoryRelease` 枚举。
+
 ## 7. 931非零作业的固定诊断
 
 `job.diagnostic`为null或`{category,evidence,message}`。仅fulfilled done后的settled、exitCode 1–255、非取消、非信号退出、非notStarted可有诊断；原outcome及errorCode保持。分类只引用完整且有效UTF-8的stderr，最多16KiB；尾部截断、混合多类或无法识别时为unknown，不能用文本修复UNKNOWN生命周期。
