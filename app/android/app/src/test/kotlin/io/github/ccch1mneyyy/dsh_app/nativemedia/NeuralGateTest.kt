@@ -183,6 +183,20 @@ class NeuralGateTest {
         }
     }
 
+    @Test fun aFailedCheckAfterADoneEndsAfterTheHangoverNotTheDoneWait() {
+        Capture(pause = TurnPause.NORMAL).use { c ->
+            c.feed(0.9f, 6)
+            c.feed(0.1f, 10)
+            c.worker.runNext()
+            c.feed(0.1f, 10)
+            c.turn.fails = true
+            c.worker.runNext()
+            // 600 ms would have been the done wait; a failed check waits the 1 s hangover.
+            assertEquals(emptyList<Edge>(), c.feed(0.1f, 29))
+            assertEquals(listOf(Edge.END), c.feed(0.1f, 1))
+        }
+    }
+
     @Test fun patientWaitsLongerAndAChangeMidPauseAppliesAtOnce() {
         Capture(pause = TurnPause.PATIENT).use { c ->
             c.feed(0.9f, 6)

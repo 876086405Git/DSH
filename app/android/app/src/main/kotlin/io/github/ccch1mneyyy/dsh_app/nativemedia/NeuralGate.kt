@@ -96,6 +96,7 @@ class NeuralGate(
             val failure = prediction.failure
             if (failure != null) {
                 turnFailed = true
+                done = false
                 if (!reported) {
                     reported = true
                     onTurnFailed(failure)

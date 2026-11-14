@@ -312,7 +312,8 @@ class _BackdropChooserState extends ConsumerState<_BackdropChooser> {
               key: const ValueKey('call-pause'),
               segments: callPauseSegments(l10n),
               selected: settings.pause,
-              onChanged: (pause) => unawaited(_set(settings.copyWith(pause: pause))),
+              onChanged: (pause) =>
+                  unawaited(ref.read(callSettingsProvider.notifier).edit((saved) => saved.copyWith(pause: pause))),
             ),
             const SizedBox(height: 8),
             Text(

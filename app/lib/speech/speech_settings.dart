@@ -219,6 +219,13 @@ class CallSettingsController extends Notifier<CallSettings> {
     return state;
   }
 
+  /// [change] applied to the saved settings once they are in (not to the
+  /// defaults shown before then).
+  Future<void> edit(CallSettings Function(CallSettings saved) change) async {
+    await _loaded;
+    if (ref.mounted) await update(change(state));
+  }
+
   Future<void> update(CallSettings next) async {
     // After the saved settings are in: they never overwrite a change made meanwhile.
     await _loaded;

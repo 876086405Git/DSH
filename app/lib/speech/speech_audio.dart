@@ -54,7 +54,17 @@ final class CallError extends SpeechAudioEvent {
 
 /// How long the person may pause before what they said counts as finished
 /// (通话设置 → 停顿多久算说完): 快 is how calls were before it was a choice.
-enum CallPause { quick, normal, patient }
+enum CallPause {
+  quick(Duration.zero),
+  normal(Duration(milliseconds: 400)),
+  patient(Duration(milliseconds: 1000));
+
+  const CallPause(this.longer);
+
+  /// How much longer than 快 a finished utterance takes to come through
+  /// (its trailing quiet: TurnPause.doneMs on the native side).
+  final Duration longer;
+}
 
 enum CallStart { ok, permission, microphone, unavailable }
 

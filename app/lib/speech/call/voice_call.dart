@@ -308,7 +308,9 @@ class VoiceCallController extends ChangeNotifier {
           // until what was said is known, or the person keeps talking.
           out.duck(true);
           _overTimer?.cancel();
-          _overTimer = Timer(confirmAfter, _cutIn);
+          // The chosen pause's extra quiet doesn't count as talking on: a short
+          // 嗯嗯 still arrives as an utterance before this confirms.
+          _overTimer = Timer(confirmAfter + _pause.longer, _cutIn);
           return;
         }
         _set(CallPhase.hearing);

@@ -17,6 +17,8 @@ class _Rig {
     bool bargeIn = true,
     Duration confirmAfter = const Duration(milliseconds: 60),
     Duration cueAfter = const Duration(milliseconds: 40),
+    // 快: the timings these tests were written for.
+    CallPause pause = CallPause.quick,
   }) : audio = FakeAudio(start: start),
        cloud = cloud ?? FakeCloud() {
     call = VoiceCallController(
@@ -28,7 +30,7 @@ class _Rig {
         outs.add(out);
         return out;
       },
-      choices: () async => (bargeIn: bargeIn, speaker: true, spokenHint: '（语音通话）', pause: CallPause.normal),
+      choices: () async => (bargeIn: bargeIn, speaker: true, spokenHint: '（语音通话）', pause: pause),
       cutNote: (heard) => '（被打断在：$heard）',
       thinkingCue: () async => cues++,
       confirmAfter: confirmAfter,
@@ -395,7 +397,7 @@ void main() {
   });
 
   test('停顿多久算说完: the chosen one opens the call; a change reaches the microphone at once', () async {
-    final rig = _Rig();
+    final rig = _Rig(pause: CallPause.normal);
     await rig.call.start();
     expect(rig.audio.calls, contains('callStart:pause=normal'));
     rig.call.setPause(CallPause.patient);
@@ -404,6 +406,24 @@ void main() {
     rig.call.hangUp();
     rig.call.setPause(CallPause.quick);
     expect(rig.audio.calls.where((c) => c.startsWith('callPause:')), ['callPause:patient']);
+  });
+
+  test('耐心: a short 嗯嗯 over her, arriving after the longer pause, does not stop her', () async {
+    final rig = _Rig(confirmAfter: const Duration(milliseconds: 60), pause: CallPause.patient);
+    await rig.call.start();
+    await rig.say();
+    rig.conversation.reply('一段很长的回答。');
+    rig.outs.single.emit(const SpeechOutStarted());
+    rig.audio.emit(const SpeechStart(over: true));
+    // Past confirmAfter, within 耐心's extra second: still waiting for the words.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(rig.outs.single.stopped, isFalse);
+    rig.cloud.text = '嗯嗯';
+    rig.audio.emit(Utterance(_Rig.second, const Duration(seconds: 1)));
+    await pumpEventQueue();
+    expect(rig.outs.single.stopped, isFalse);
+    expect(rig.call.phase, CallPhase.speaking);
+    rig.call.hangUp();
   });
 
   test('skip: she stops, the call listens again', () async {
