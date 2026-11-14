@@ -1,0 +1,98 @@
+{
+  "status": "PLANNED_NOT_RUN",
+  "normalCases": [
+    {
+      "name": "inspect-complete-containers-with-zero-sdk-calls",
+      "contract": "两个自制 PNG 容器；原 scanner/inspect，SDK 调用为零；源颜色仍 unknown"
+    },
+    {
+      "name": "source-unknown-color-is-not-replaced-by-working-facts",
+      "contract": "source known/color 与 working facts 分开；请求五项而工作事实由 fake getters 独立给出"
+    },
+    {
+      "name": "source-side-and-pixel-budgets-before-sdk-creation",
+      "contract": "6×4 源在 max_side=5 或 max_pixels=23 处明确报限额，未创建任何 SDK 对象"
+    },
+    {
+      "name": "two-targets-clone-base-orient-fit-inside-and-never-upscale",
+      "contract": "Exif6 原 6×4；第一次旋转到 4×6 再等比到 2×3；第二个大目标不放大，两次都 clone 原 base"
+    },
+    {
+      "name": "jpeg-first-quality-fit-and-output-outlives-frame",
+      "contract": "85 一次即适配；完整结构扫描/假 decode 后才返回；output 在 frame close 后字节保持"
+    },
+    {
+      "name": "webp-stops-at-first-acceptable-quality",
+      "contract": "85=160、75=120，soft=130；只执行两次且选择75"
+    },
+    {
+      "name": "three-qualities-select-smallest-success-with-fixed-capacity",
+      "contract": "85/75/60 各一次，160/80/120，soft=1；选择75的80 B best copy；returned capacity=80，各 Pack 输入 capacity=50MiB"
+    },
+    {
+      "name": "failed-pack-does-not-retry-or-publish-prior-best",
+      "contract": "第二 Pack 返回 IMAGE_TOO_LARGE 并留下无意义 failed size；保留 pack-data 原错、无第三次/无输出/无 verify，不读取该 size 的逐指令事实不在本观察范围"
+    },
+    {
+      "name": "requested-srgb-does-not-override-actual-base-color",
+      "contract": "请求 SRGB，实际 base getter 为 DISPLAY_P3；TRANSFORM_FAILED，不将请求当事实"
+    },
+    {
+      "name": "output-actual-color-mismatch-is-encode-failure",
+      "contract": "有效输出 decode 后实际非 sRGB；ENCODE_FAILED / pixel-not-srgb"
+    },
+    {
+      "name": "output-full-decode-error-is-invalid",
+      "contract": "输出 CreatePixelmap 返回 IMAGE_GET_IMAGE_DATA_FAILED；INVALID / output-decode"
+    },
+    {
+      "name": "output-getter-capability-error-is-unavailable",
+      "contract": "输出 color getter 返回 IMAGE_UNSUPPORTED_OPERATION；UNAVAILABLE / color-getter"
+    },
+    {
+      "name": "truncated-owned-output-is-rejected-before-sdk-decode",
+      "contract": "假 packer 自有输出长度少一字节；实际 scanner 拒绝，INVALID / output-container-scan，未创建输出 SDK source"
+    },
+    {
+      "name": "output-alpha-is-an-observed-fact-not-an-option",
+      "contract": "容器透明度与输出 getter 不同；ENCODE_FAILED / output-pixel-disagreement"
+    },
+    {
+      "name": "failed-open-retains-owner-and-borrowed-input-until-close",
+      "contract": "实际 open 返回 SDK decode 错误后 frame 非空；输入由 caller 保持到成功 close，源码/选项所有权被正常释放"
+    }
+  ],
+  "separateProcessCase": {
+    "name": "cleanup-unconfirmed-retains-owner-and-never-retries-release",
+    "contract": "base Destroy 返回 IMAGE_BAD_PARAMETER；frame/source/base 保持；第二次 close 同错且不再调 SDK；进程结束仍明确留有 unconfirmed 对象，不执行补释放来造零漏"
+  },
+  "policies": [
+    {
+      "macroValue": 1,
+      "expected": "Get→GetName→立即Destroy；所有权是本假模型选择，非真实 getter 证明"
+    },
+    {
+      "macroValue": 0,
+      "expected": "Get→GetName 后不Destroy；假 manager 随 map 正常退休，非真实 getter 证明"
+    }
+  ],
+  "normalExit": 0,
+  "fixtureAssertionExit": 70,
+  "usageExit": 64,
+  "expectedNormalCaseCountPerPolicy": 15,
+  "expectedSeparateCaseCountPerPolicy": 1,
+  "evidenceRules": [
+    "normal 每条 PASS 名称恰一次，OBS 和最终 SUMMARY 各完整；正常 liveFakeObjects 全零",
+    "独立进程 SUMMARY 为1且观察 live source/map 均1；不是泄漏检查 PASS",
+    "两模式均只读同一冻结 source/headers；任何编译、退出、超时或判据异常停止，不自动改 oracle 或重跑",
+    "所有输出复验 options 只能 INDEX，验证对象必须在交接 output 前退休",
+    "SDK 对象计数不等于 heap/RSS/设备资源；实际图像质量/像素/颜色/平台 ownership 均未测"
+  ],
+  "publicProductCallCount": 0,
+  "productExecutionClaim": false,
+  "notCovered": [
+    "真实 SDK/设备 codec、真实压缩像素、原生颜色管理所有权",
+    "全部八方向与 ApplyFlip 动态路径",
+    "所有释放/创建失败组合、分配失败、并发、Node-API 桥、模块装载、完整门"
+  ]
+}

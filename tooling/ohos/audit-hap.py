@@ -70,6 +70,47 @@ def load_native_assets():
     return module
 
 
+def audit_library_inputs(hap, zipped, native, aot):
+    """Check the packaged library set and input bytes before any SDK tool runs."""
+    problems, entries = [], {info.filename: info for info in zipped.infolist()}
+    # Optional libraries are admitted only by explicit native inputs.
+    python_pair = {'libdsh_python.so', 'libpython3.14.so'}
+    supplied = {name for name in python_pair if (native / name).is_file()}
+    optional = {name for name in ('libdsh_linux.so', 'libdsh_workspace_grants.so', 'libdsh_image_codec.so')
+                if (native / name).is_file()}
+    # The AOT's native assets, each only as its OH build from the native input directory.
+    native_assets = load_native_assets()
+    asset_sources, found = native_assets.plan(aot, native)
+    problems += [f'AOT native assets: {item}' for item in found]
+    expected_libs = LIBS | (python_pair if supplied else set()) | optional | set(asset_sources)
+    if supplied and supplied != python_pair:
+        problems.append('Incomplete native Python input pair')
+    libs = {name[len(LIB_DIR):] for name in entries if name.startswith(LIB_DIR)}
+    if libs != expected_libs:
+        problems.append(f'libs: missing {sorted(expected_libs - libs)}, extra {sorted(libs - expected_libs)}')
+    inputs = {name: native / name for name in ('libnode.so', 'libdsh_flock.so', 'libdsh_require_builtin.so')}
+    inputs.update({name: native / name for name in supplied | optional})
+    inputs.update(asset_sources)
+    inputs['libapp.so'] = aot / 'arm64-v8a/app.so'
+    table = {}
+    with hap.open('rb') as raw:
+        for name in sorted(libs):
+            info = entries[LIB_DIR + name]
+            table[name] = {'bytes': info.file_size, 'packed': info.compress_size,
+                           'stored': info.compress_type == zipfile.ZIP_STORED,
+                           'offsetMod4096': data_offset(raw, info) % 4096,
+                           'sha256': sha256(zipped.read(info))}
+            if name in inputs:
+                source = inputs[name].read_bytes()
+                table[name].update(inputBytes=len(source), identicalToInput=sha256(source) == table[name]['sha256'],
+                                   loadedBytesChanged=changes_outside_header(source, zipped.read(info)))
+                if table[name]['loadedBytesChanged']:
+                    problems.append(f"{name}: hvigor's pass changed {table[name]['loadedBytesChanged']} loaded bytes")
+    problems += [f'AOT native assets: {item}' for item in native_assets.packaged_problems(
+        asset_sources, aot, {name: zipped.read(LIB_DIR + name) for name in asset_sources if name in libs})]
+    return libs, supplied, table, problems
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--hap', required=True, type=Path)
@@ -89,42 +130,9 @@ def main():
     read = zipped.read
     report['entries'] = len(entries)
 
-    # Python is opt-in through a complete native input pair, never arbitrary HAP entries.
-    python_pair = {'libdsh_python.so', 'libpython3.14.so'}
-    supplied = {name for name in python_pair if (args.native / name).is_file()}
-    optional = {name for name in ('libdsh_linux.so', 'libdsh_workspace_grants.so')
-                if (args.native / name).is_file()}
-    # The AOT's native assets, each only as its OH build from the native input directory.
-    native_assets = load_native_assets()
-    asset_sources, found = native_assets.plan(args.aot, args.native)
-    problems += [f'AOT native assets: {item}' for item in found]
-    expected_libs = LIBS | (python_pair if supplied else set()) | optional | set(asset_sources)
-    if supplied and supplied != python_pair:
-        problems.append('Incomplete native Python input pair')
-    # Every library, as packaged, against what went in.
-    libs = {name[len(LIB_DIR):] for name in entries if name.startswith(LIB_DIR)}
-    if libs != expected_libs:
-        problems.append(f'libs: missing {sorted(expected_libs - libs)}, extra {sorted(libs - expected_libs)}')
-    inputs = {name: args.native / name for name in ('libnode.so', 'libdsh_flock.so', 'libdsh_require_builtin.so')}
-    inputs.update({name: args.native / name for name in supplied | optional})
-    inputs.update(asset_sources)
-    inputs['libapp.so'] = args.aot / 'arm64-v8a/app.so'
-    table = {}
-    with args.hap.open('rb') as raw:
-        for name in sorted(libs):
-            info = entries[LIB_DIR + name]
-            table[name] = {'bytes': info.file_size, 'packed': info.compress_size,
-                           'stored': info.compress_type == zipfile.ZIP_STORED,
-                           'offsetMod4096': data_offset(raw, info) % 4096, 'sha256': sha256(read(info))}
-            if name in inputs:
-                source = inputs[name].read_bytes()
-                table[name].update(inputBytes=len(source), identicalToInput=sha256(source) == table[name]['sha256'],
-                                   loadedBytesChanged=changes_outside_header(source, read(info)))
-                if table[name]['loadedBytesChanged']:
-                    problems.append(f"{name}: hvigor's pass changed {table[name]['loadedBytesChanged']} loaded bytes")
+    libs, supplied, table, input_problems = audit_library_inputs(args.hap, zipped, args.native, args.aot)
+    problems += input_problems
     report['libs'] = table
-    problems += [f'AOT native assets: {item}' for item in native_assets.packaged_problems(
-        asset_sources, args.aot, {name: read(LIB_DIR + name) for name in asset_sources if name in libs})]
 
     with tempfile.TemporaryDirectory(prefix='audit-hap-') as temp:
         out = Path(temp) / 'all'

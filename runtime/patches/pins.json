@@ -196,6 +196,14 @@
         }
       }
     },
+    "ohos-image-codec.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "483f43132a06c13aab65e1033557bb2d30860accb7a9e8700254cbbfbc84278e",
+          "before": "dd15efce9b5bbd0d896728f22bb3e9dd4643176555174f5bfcb39adfc75074df"
+        }
+      }
+    },
     "ohos-liveshare-owner-unavailable.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-experimental-liveshare/lib/index.js": {
@@ -2583,7 +2591,8 @@
       "ohos-workspace-grant-paths.diff",
       "ohos-workspace-edit.diff",
       "ohos-client-hmr-idle.diff",
-      "ohos-api-gateway-idle.diff"
+      "ohos-api-gateway-idle.diff",
+      "ohos-image-codec.diff"
     ]
   }
 }

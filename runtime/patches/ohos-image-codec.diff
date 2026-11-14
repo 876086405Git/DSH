@@ -1,0 +1,122 @@
+--- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+@@ -14,6 +14,49 @@
+ 		throw Object.assign(new Error("OpenHarmony publication preload is required"), { code: "ERR_OHOS_PUBLICATION_PRELOAD_MISSING" });
+ 	}
+ 	return service.publish(source, target, { fs });
++}
++
++// OpenHarmony image operations use the fixed HAP binding captured by preload.
++// The non-OH Sharp implementation and its descriptor remain unchanged.
++const ohosEncodedImages = new WeakSet();
++function requireOhosImageCodec() {
++	const codec = globalThis[Symbol.for("dsh.go.ohos.image-codec")];
++	if (codec?.protocolVersion !== 1 || typeof codec.identity !== "function" || typeof codec.probe !== "function" || typeof codec.detect !== "function" || typeof codec.encode !== "function") throw new AttachmentError("鸿蒙图像组件尚未就绪；普通文件仍可上传或保存。", "OHOS_IMAGE_CODEC_UNAVAILABLE");
++	return codec;
++}
++function ohosImageError(error, fallback, message) {
++	if (error instanceof AttachmentError) return error;
++	const known = ["OHOS_IMAGE_CODEC_UNAVAILABLE", "INVALID_IMAGE", "IMAGE_TOO_MANY_PIXELS", "IMAGE_DIMENSION_TOO_LARGE", "ATTACHMENT_WRITE_FAILED"];
++	const code = known.includes(error?.code) ? error.code : error?.code === "OHOS_IMAGE_CLEANUP_UNCONFIRMED" ? "ATTACHMENT_WRITE_FAILED" : fallback;
++	const mapped = new AttachmentError(code === "OHOS_IMAGE_CODEC_UNAVAILABLE" ? "鸿蒙图像组件或必要能力尚未就绪。" : message, code, { cause: error });
++	if (typeof error?.code === "string") mapped.nativeCode = error.code;
++	if (typeof error?.stage === "string") mapped.nativeStage = error.stage;
++	if (typeof error?.nativeStatus === "number") mapped.nativeStatus = error.nativeStatus;
++	if (typeof error?.encodingCapBytes === "number") mapped.encodingCapBytes = error.encodingCapBytes;
++	if (typeof error?.resourcesRetired === "boolean") mapped.resourcesRetired = error.resourcesRetired;
++	if (error?.retirement !== void 0) mapped.retirement = error.retirement;
++	return mapped;
++}
++async function callOhosImage(method, args, fallback, message) {
++	try {
++		return await requireOhosImageCodec()[method](...args);
++	} catch (error) {
++		throw ohosImageError(error, fallback, message);
++	}
++}
++function ohosImageIdentity() {
++	try {
++		return requireOhosImageCodec().identity();
++	} catch (error) {
++		throw ohosImageError(error, "OHOS_IMAGE_CODEC_UNAVAILABLE", "The packaged image codec is unavailable.");
++	}
++}
++async function encodeOhosImage(data, target) {
++	const image = await callOhosImage("encode", [data, target], "ATTACHMENT_WRITE_FAILED", "Unable to convert image to the verified normalized form.");
++	// Only a successful native encode plus output verification and awaited close
++	// reaches this point. Do not replace that proof with converted source facts.
++	ohosEncodedImages.add(image);
++	return image;
+ }
+ 
+ //#region lib/types/compression-limiter.js
+@@ -179,6 +222,7 @@
+ * @returns verified format and dimensions.
+ */
+ async function probeImage(data) {
++	if (process.platform === "openharmony") return callOhosImage("probe", [data], "INVALID_IMAGE", "Unsupported or malformed image data.");
+ 	const sharp = requireSharp();
+ 	try {
+ 		return await imageMetadata(sharp(data, {
+@@ -197,6 +241,7 @@
+ * @returns verified format and dimensions.
+ */
+ async function detectImage(data, limits) {
++	if (process.platform === "openharmony") return callOhosImage("detect", [data, limits], "INVALID_IMAGE", "Unsupported or malformed image data.");
+ 	const sharp = requireSharp();
+ 	try {
+ 		const image = sharp(data, {
+@@ -267,6 +312,11 @@
+ * @returns verified provider-independent normalized bytes and metadata.
+ */
+ async function normalizeImage(data, detected, policy) {
++	if (process.platform === "openharmony") {
++		const { width, height } = initialDimensions(detected, policy);
++		const image = await encodeOhosImage(data, { width, height, maxBytes: policy.maxBytes });
++		return { data: image.data, mediaType: image.mediaType, width: image.width, height: image.height };
++	}
+ 	if (canPassThroughNormalization(detected, data.byteLength, policy)) return {
+ 		data,
+ 		mediaType: detected.mediaType,
+@@ -786,6 +836,14 @@
+ 	checkedInteger(target.maxBytes, "Image request maxBytes");
+ }
+ function descriptor(attachment, target) {
++	if (process.platform === "openharmony") return JSON.stringify({
++		transformVersion: `${REQUEST_IMAGE_TRANSFORM_VERSION}-ohos-ndk26-v1`,
++		attachmentId: attachment.attachmentId,
++		targetWidth: target.width,
++		targetHeight: target.height,
++		encodedByteBudget: target.maxBytes,
++		encoding: ohosImageIdentity()
++	});
+ 	return JSON.stringify({
+ 		transformVersion: REQUEST_IMAGE_TRANSFORM_VERSION,
+ 		attachmentId: attachment.attachmentId,
+@@ -825,6 +883,7 @@
+ 	}).toColourspace("srgb");
+ }
+ async function createRequestImage(attachment, target, hasAlpha) {
++	if (process.platform === "openharmony") return encodeOhosImage(attachment.data, target);
+ 	if (target.width >= attachment.ref.width && target.height >= attachment.ref.height && attachment.data.byteLength <= target.maxBytes) return {
+ 		data: attachment.data,
+ 		mediaType: attachment.ref.mediaType,
+@@ -851,11 +910,18 @@
+ 		};
+ 	} catch (error) {
+ 		if (error?.code === "ENOENT") return void 0;
++		// Cancellation/cache fallback must not hide an unretired native owner.
++		if (process.platform === "openharmony" && (error?.nativeCode === "OHOS_IMAGE_CLEANUP_UNCONFIRMED" || error?.retirement?.confirmed === false)) throw error;
+ 		signal?.throwIfAborted();
++		if (process.platform === "openharmony" && error?.code === "OHOS_IMAGE_CODEC_UNAVAILABLE") throw error;
+ 		return;
+ 	}
+ }
+ async function verifyRequestImage(image, expectedAlpha) {
++	if (process.platform === "openharmony") {
++		if (!ohosEncodedImages.has(image)) throw new AttachmentError("Image output has no completed native verification.", "ATTACHMENT_WRITE_FAILED");
++		return image;
++	}
+ 	const detected = await detectImage(image.data);
+ 	if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width !== image.width || detected.height !== image.height || detected.mediaType !== image.mediaType || !encodedAlphaIsCompatible(expectedAlpha, detected)) throw new AttachmentError("Encoded model-request image does not match its verified 8-bit sRGB metadata.", "ATTACHMENT_WRITE_FAILED");
+ 	return {

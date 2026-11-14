@@ -19,8 +19,9 @@
 #   --full            keep externalNativeOptions and build the whole unsigned HAP
 #   --aot DIR         app.so and flutter_assets: the ohos-aot-<sha> Actions artifact
 #   --native DIR      libnode.so, libdsh_flock.so, libdsh_require_builtin.so
-#                     (runtime/ohos/native/build-hap-libs.py), optionally libdsh_linux.so and
-#                     libdsh_workspace_grants.so, and an OH build of every native asset the AOT
+#                     (runtime/ohos/native/build-hap-libs.py), optionally libdsh_linux.so,
+#                     libdsh_workspace_grants.so and libdsh_image_codec.so (runtime/ohos/image),
+#                     and an OH build of every native asset the AOT
 #                     carries (libsqlite3.so: runtime/ohos/native/build-sqlite.py)
 #   --runtime ZIP     dsh-runtime-rawfile.zip, one Stored dsh-runtime/runtime.zip
 #                     (runtime/ohos/package/compose-runtime.py)
@@ -375,7 +376,7 @@ if [ "$FULL" = 1 ]; then
   done
   # libdsh_host.so is hvigor's to build; libc++_shared.so is its to add.
   cp "$NATIVE/libnode.so" "$NATIVE/libdsh_flock.so" "$NATIVE/libdsh_require_builtin.so" "$LIBS/"
-  for optional in libdsh_linux.so libdsh_workspace_grants.so; do
+  for optional in libdsh_linux.so libdsh_workspace_grants.so libdsh_image_codec.so; do
     if [ -f "$NATIVE/$optional" ]; then cp "$NATIVE/$optional" "$LIBS/"; fi
   done
   # The transport contains exactly one Stored asset; never expand its members.

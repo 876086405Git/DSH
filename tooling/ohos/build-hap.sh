@@ -61,6 +61,8 @@ if [[ -f "$NATIVE_LIBS/libdsh_python.so" || -f "$NATIVE_LIBS/libpython3.14.so" ]
 fi
 if [[ -f "$NATIVE_LIBS/libdsh_linux.so" ]]; then PREBUILT+=(libdsh_linux.so); fi
 if [[ -f "$NATIVE_LIBS/libdsh_workspace_grants.so" ]]; then PREBUILT+=(libdsh_workspace_grants.so); fi
+# Image is an explicit optional product library; SDK dependencies remain system libraries.
+if [[ -f "$NATIVE_LIBS/libdsh_image_codec.so" ]]; then PREBUILT+=(libdsh_image_codec.so); fi
 for lib in "${PREBUILT[@]}"; do
   [[ -f "$NATIVE_LIBS/$lib" ]] || { printf 'Missing native library: %s\n' "$NATIVE_LIBS/$lib" >&2; exit 1; }
 done

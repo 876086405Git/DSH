@@ -551,6 +551,12 @@ def main():
         header = g.path('node_root', 'include/node/node_api.h')
         return {'nodeApiHeaderSha256': sha(header)}
     g.internal('native-tools', native_tools, needs=('tools',))
+    # Finite image host components. Real attachment integration is a separate gate.
+    g.run('image-container-facts', lambda: g.py(rt + 'image-host-components.py', '--source', s, '--out', o / 'image-container-facts', '--suite', 'container', '--cc', p('cc')), needs=('tools',), timeout=120, tests=[rt + 'image-host-components.py', rt + 'image-container-facts.c'], scope='Original 28 bounded container assertions; no pixel decode or device')
+    g.run('image-encoding-ladder', lambda: g.py(rt + 'image-host-components.py', '--source', s, '--out', o / 'image-encoding-ladder', '--suite', 'ladder', '--cc', p('cc')), needs=('tools',), timeout=120, tests=[rt + 'image-host-components.py', rt + 'image-encoding-ladder.c'], scope='Original 13 finite encoding-ladder cases with fake packer; no real codec')
+    g.run('image-ndk-fake-sdk', lambda: g.py(rt + 'image-host-components.py', '--source', s, '--out', o / 'image-ndk-fake-sdk', '--suite', 'ndk', '--cc', p('cc')), needs=('tools',), timeout=300, tests=[rt + 'image-host-components.py', rt + 'image-ndk-contract.c', rt + 'image-ndk-sdk-fake.c', rt + 'image-ndk-inputs.c'], scope='Real codec_ndk source with original SDK headers and explicit fake SDK; two compile policies, 32 case executions, no real SDK ownership claim')
+    for image_mode in ('plain', 'jitless'):
+        g.run('image-codec-bridge-' + image_mode, lambda m=image_mode: g.py(rt + 'image-host-components.py', '--source', s, '--out', o / ('image-codec-bridge-' + m), '--suite', 'bridge', '--cc', p('cc'), '--cxx', p('cxx'), '--node', node(), '--node-headers', headers(), *(['--jitless'] if m == 'jitless' else [])), needs=('native-tools',), timeout=210, tests=[rt + 'image-host-components.py', rt + 'image-codec-bridge.test.mjs', rt + 'image-codec-fake.c'], scope='Original four Node lifecycle cases, current bridge plus fixture-only backend; ordinary host API, no OH SDK or attachment chain')
     g.run('tinyemu-poweroff', lambda: g.py('tooling/ohos/research/tinyemu-poweroff/run.py', '--source-archive', p('tinyemu_source_archive'), '--output', o / 'tinyemu-poweroff', '--cc', p('cc')), needs=('tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-poweroff/run.py', 'tooling/ohos/research/tinyemu-poweroff/semantic-core.c', 'tooling/ohos/research/tinyemu-poweroff/clock-cpu.c'], scope='Real TinyEMU BIOS poweroff return; no device release, Linux guest, HAP or device')
     g.internal('proc-mapping-tools', lambda _: verify_proc_mapping(), needs=('tools',))
     def permission_tools(_):
@@ -743,6 +749,28 @@ def main():
           env=lambda: {'OHOS_NATIVE_RG': str(rg())}, needs=('rg-inputs', 'build-regex'), timeout=300,
           tests=[rt + 'process-rg-unicode-differential.mjs'], scope='Existing host-only all-valid-scalar native comparison; not a latency measurement')
     g.run('compose', lambda: g.py('runtime/ohos/package/compose-runtime.py', '--target', 'ohos', '--dsh-prefix', p('prepared') / 'dsh', '--process-prefix', p('prepared') / 'process', '--target-report', p('prepared') / 'target-report.json', '--prepared-inputs', p('prepared') / 'prepared-inputs.json', '--regex-artifact', s / 'runtime/ohos/process/build/re2js-unicode.mjs', '--esbuild-prefix', p('esbuild_prefix'), '--imports-report', o / 'composition-imports.json', '--out', o / 'composed', '--node', node(), '--runtime-core', s / 'app/ohos/entry/src/main/ets/runtime/RuntimeCore.ets', '--keep-expanded'), needs=('prepared-inputs', 'build-regex'), timeout=300)
+    # The unchanged attachment actor consumes an actual composed payload; its
+    # explicit host-only marker is added to a small private test view by the entry.
+    g.run('image-attachment-admission', lambda: g.py(rt + 'image-attachment-admission.test.py'),
+          needs=('tools',), tests=[rt + 'image-attachment-admission.test.py'],
+          scope='Real input selector against explicit Composer dependency fixtures; formal omission and final-pin admission, no full composition or SDK')
+    for image_attachment_mode in ('plain', 'jitless'):
+        g.run('image-attachment-' + image_attachment_mode,
+              lambda m=image_attachment_mode: g.py(
+                  rt + 'image-attachment-entry.py',
+                  '--source', s, '--payload', payload(),
+                  '--manifest', o / 'composed/expanded/dsh-runtime/manifest.json',
+                  '--node', node(), '--node-headers', headers(),
+                  '--publication-fixture', native() / 'libpublication-test-linked.so',
+                  '--cc', p('cc'), '--cxx', p('cxx'),
+                  '--out', o / ('image-attachment-' + m),
+                  *(['--jitless'] if m == 'jitless' else [])),
+              needs=('compose', 'native-publication-build', 'native-tools'), timeout=600,
+              tests=[rt + name for name in (
+                  'image-attachment-entry.py', 'image-attachment-entry.mjs',
+                  'image-attachment-input-catalog.json', 'image-attachment-oracle.json',
+                  'image-attachment-sdk.c', 'image-attachment-inputs.c')],
+              scope='Two original full host save/read/request attachment chains and the original same-variant sequential miss; actual facade/fixed-loader/NDK/bridge with explicit SDK and publication carriers, no real pixel decode, OH link or device')
     for filename in ['composition-inputs.test.py', 'composition-archive.test.py']:
         g.run(filename[:-3], lambda f=filename: g.py(rt + f), needs=('tools',), tests=[rt + filename])
     g.run('composition-boundaries', lambda: g.py(rt + 'composition-gates.py', '--out', o / 'composition-boundaries'), needs=('tools',))

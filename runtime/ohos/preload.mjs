@@ -9,5 +9,6 @@ await import('./process/files/workspace-edit.mjs');
 await import('./linux/host-paths.mjs');
 await import('./net/dsh-preload.mjs');
 await import('./publication/preload.mjs');
+await import('./image/preload.mjs');
 await import('./plugins/preload.mjs');
 await import('./process/node-worker-preload.mjs');
