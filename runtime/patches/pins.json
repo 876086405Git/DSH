@@ -344,6 +344,14 @@
         }
       }
     },
+    "ohos-web-converter-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-web/lib/index.js": {
+          "after": "2265c123e7f6bec161d7071709de939f1404df08e6816ec740cba976e48ccbe6",
+          "before": "08a37554c57a8a1a98b47489cd6a0c53c43b646060bdcc94b2b211bf04c2498c"
+        }
+      }
+    },
     "ohos-workspace-changes.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js": {
@@ -2592,7 +2600,8 @@
       "ohos-workspace-edit.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-api-gateway-idle.diff",
-      "ohos-image-codec.diff"
+      "ohos-image-codec.diff",
+      "ohos-web-converter-lazy.diff"
     ]
   }
 }

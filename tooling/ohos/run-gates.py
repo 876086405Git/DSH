@@ -1090,6 +1090,7 @@ def main():
         g.node_tests('linux-base-download-' + mode, [rt + 'linux-base-download.test.mjs'], mode=mode, needs=('tools',))
     g.run('linux-download-user-agent', lambda: g.py('tooling/ohos/tests/linux-download-ua.py', '--inputs', p('linux_job_inputs'), '--output', o / 'linux-download-user-agent', '--node', node()), needs=('tools',), timeout=180, tests=['tooling/ohos/tests/linux-download-ua.py', rt + 'linux-base-user-agent.test.mjs'], scope='Real verified local HTTPS with fixed product UA, explicit test CA and pinned input-cache checks; no Huawei availability/device claim')
 
+    g.run('tinyemu-clint-deadline', lambda: g.py('tooling/ohos/research/tinyemu-clint-deadline/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--out', o / 'tinyemu-clint-deadline', '--cc', p('cc'), '--node', node()), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-clint-deadline/' + name for name in ['run.py', 'timer-boundary.c', 'select-observer.c', 'node-case.mjs']] + ['tooling/ohos/research/tinyemu-native/clock-cpu.c'], scope='Actual RV32/RV64 unsigned CLINT and WFI boundaries, existing clock regressions and production Node tiny BIOS select/VM-thread CPU observations; no Linux kernel, SDK/device or App CPU attribution')
     g.run('tinyemu-install', lambda: g.py('tooling/ohos/research/tinyemu-install/run.py', '--source-archive', p('tinyemu_source_archive'), '--diskimage', p('tinyemu_diskimage_archive'), '--alpine', p('tinyemu_alpine_archive'), '--output', o / 'tinyemu-install', '--cc', p('cc'), '--node', node()), needs=('tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-install/' + name for name in ['run.py', 'build-image.py', 'install-call.c', 'prepare-fixture.mjs', 'semantic-core.c', 'clock-cpu.c']], scope='Real three-drive guest installation and Node plain image preparation; no HAP/device or cancellation completion')
     for mode in ['jit', 'strict']:
         g.node_tests('linux-prepare-images-' + mode, [rt + 'linux-prepare-images.test.mjs'], mode=mode, needs=('tools',))
@@ -1132,6 +1133,16 @@ def main():
     for filename in ['test.sh', 'test-integration.sh', 'test-proxy-env.sh', 'test-dispatcher-errors.sh']:
         g.run('net-' + filename[:-3], lambda f=filename: ['bash', s / 'runtime/ohos/net' / f], needs=('prepared-inputs', *(['network-interface-tools'] if filename == 'test-proxy-env.sh' else [])), env=lambda f=filename: {**g.common(), **({'NODE': str(p('fetch_node'))} if f == 'test.sh' else {})}, timeout=300)
     g.node_tests('net-bootstrap', [rt + 'net-bootstrap.test.mjs'], needs=('prepared-inputs',))
+    for web_converter_mode in ('plain', 'jitless'):
+        g.run('web-converter-lazy-' + web_converter_mode,
+              lambda m=web_converter_mode: g.py(rt + 'web-converter-entry.py',
+                  '--source', s, '--prefix', o / 'targets/ohos-prefix', '--node', node(),
+                  '--out', o / ('web-converter-lazy-' + m),
+                  *(['--jitless'] if m == 'jitless' else [])),
+              needs=('prepared-inputs', 'android-targets'), timeout=180,
+              tests=[rt + name for name in ('web-converter-entry.py', 'web-converter-entry.mjs',
+                                            'web-converter-golden.json')],
+              scope='Actual public web tool registration/conversion, lazy module boundary, concurrent first HTML, cache and fault recovery; host only')
     for mode in ['plain', 'jitless']:
         g.node_tests('plugin-store-recovery-' + mode, [rt + 'plugin-store.test.mjs', rt + 'plugin-linkless-recovery.test.mjs'], mode=mode, needs=('prepared-inputs',))
     g.node_tests('provider-body-timeout', [rt + 'provider-body-timeout.test.mjs'], needs=('android-targets',))
@@ -1226,6 +1237,9 @@ def main():
                  needs=('prepared-inputs', 'ohos-test-helpers', 'native-loader'), extra=plugin_hmr_env)
     publication = ['publication-atomic', 'publication-atomic-fuse', 'publication-ledger', 'publication-ledger-lifecycle', 'publication-capabilities']
     lifecycle = ['lifecycle-journal', 'lifecycle-budget', 'lifecycle-tool-budgets', 'lifecycle-transport', 'lifecycle-engine', 'lifecycle-explicit-resume', 'runtime-capabilities']
+    for mode in ['plain', 'jitless']:
+        g.node_tests('lifecycle-idle-' + mode, [rt + 'lifecycle-idle.test.mjs'],
+                     mode=mode, needs=('android-targets',), timeout=30)
     for mode in ['marker', 'strict']:
         g.node_tests('publication-' + mode, [rt + n + '.test.mjs' for n in publication], mode=mode, needs=('native-publication-build', 'prepared-inputs'), extra=linked_env, timeout=240, host_links=True)
         g.node_tests('publication-lock-' + mode, [rt + 'publication-lock.test.mjs'],

@@ -71,6 +71,12 @@ cmake --build /build/linux-oh
 
 940 增加 `fs_export.c` 与补丁 0016：嵌入构建（`-DDSH_FS_EXPORT`）里 `fsN` 设备不再用上游 fs_disk，而是逐级 `openat(O_NOFOLLOW)` 从导出根重新解析每个操作的路径、拒绝 `.`/`..`、所有对象报告为客体作业身份 60081、错误码按 Linux errno 原样回传、打开时带 O_NONBLOCK。上游 fs_disk 用路径字符串交给宿主解析，客体造一个指向宿主路径的符号链接或把已打开 fid 的父目录换成链接，宿主就会跟着走出导出根；`tooling/ohos/tests/linux-fs-export.test.py` 对这些情形逐项验证。授权 FD 根（grants/）仍是研究件。本件不负责正式安装 RPC。首次下载/准备/guest tar/工具overlay/同VM交接已有不同范围真实证据，但还没有一份最终签名 HAP 实装证据。所有工具测试均在 Linux host 仿真，gh pr list 真实账号留本机测。关闭 Linux 后 owner 仍隔离，不能同 App 重新启动；正常连续作业必须复用仍运行的 VM，不以每 job 停机。父级必须把 903 的取消标志、leader实际退出状态、双流ACK与租约收尾保留，绝不以 native join 代替 job complete。
 
+## 1208：CLINT 的无符号未来截止时间
+
+0018 修复 `riscv_machine_get_sleep_duration` 先计算 unsigned 差再存入 int64_t 的错误。`mtimecmp` 为 UINT64_MAX 或其它相差超过 INT64_MAX 的未来值时，旧实现误置 MTIP、唤醒真实 WFI 并把 sleep delay 变成 0。RISC-V 的比较是 unsigned mtime >= mtimecmp；现在先按这个关系判断到期，只有确定在未来才计算 uint64_t 剩余量并按原毫秒取整/上限截断。等于截止或邻近过去、低32位回卷、已 pending MTIP、CPU 非休眠与原 10 ms 上限保持既有行为。极远过去值也被纠正：例如 mtime=UINT64_MAX、mtimecmp=0 时，旧差值回卷成1而漏置MTIP，新实现按unsigned关系正确置位。
+
+针对入口 `tinyemu-clint-deadline` 重编实际宿主对象，覆盖 RV32/RV64 各7个边界、既有13个clock用例和低字写1项，另由真实 Node/TinyEMU 执行设置 UINT64_MAX、启用 MTIE 再 WFI 的小客体 BIOS，在 plain/jitless 两模式计数零等待 select 和 VM线程CPU时钟。clock 注入只用于边界C夹具；Node BIOS 用实际时钟。该错误能使特定裸 BIOS 忙转，尚无实际 Linux 内核空闲路径或设备CPU占比归因证据。没有扩大 MAX_SLEEP_TIME；普通 WFI 的约100Hz轮询与 slirp/停止唤醒调度另行处理。详见 `tooling/ohos/research/tinyemu-clint-deadline/README.zh.md`。
+
 ## 许可
 
 固定 TinyEMU 核心 MIT；实际编入的 slirp 包含 MIT/BSD 类声明及原作者通知，逐文件首部原文收入 THIRD-PARTY-NOTICES.txt 并随 runtime ZIP 分发。这里没有新增 HAP 用户态工具包；Alpine/BusyBox、Bellard Linux内核及903 APK工具的对应源码/许可证闭包仍属镜像分发，不能以本 native notices 替代。Node N-API 为已固定 Node 依赖。
