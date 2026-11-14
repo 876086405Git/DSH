@@ -1246,6 +1246,10 @@ def main():
     g.node_tests('launch-clip', [rt + 'launch-clip.test.mjs'], needs=('embedding-package',), extra=lambda: {'OHOS_FLUTTER_EMBEDDING': str(o / 'embedding-package/package')})
     tooling = ['managed-skill', 'native-host-lazy', 'runtime-archive', 'runtime-channel', 'linux-control', 'lifecycle-host', 'web-files', 'transient-task', 'runtime-recovery', 'recovery-storage', 'native-recovery-gate', 'last-known-good']
     g.node_tests('ets-runtime-tooling', [tools + n + '.test.mjs' for n in tooling], needs=('native-zlib-build', 'prepared-inputs'), extra=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node'), 'OHOS_INSTALL_RECORD_WIRE': str(o / 'install-record-wire.json')}, timeout=240)
+    g.run('runtime-background-idle', lambda: g.node('--test', '--test-name-pattern=1200 background polling',
+        g.source / (tools + 'runtime-channel.test.mjs')), needs=('native-zlib-build',),
+        env=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node')}, tests=[tools + 'runtime-channel.test.mjs'],
+        scope='Actual RuntimeController bodies; count background/foreground polling and one-second lifecycle refresh with the host clock fixture')
     g.internal('install-record-wire', lambda _: verify_install_record_wire(o / 'install-record-wire.json'), needs=('ets-runtime-tooling',))
     for mode in ['plain', 'jitless']:
         g.node_tests('secrets-picker-' + mode, [rt + 'secrets.test.mjs', tools + 'attachment-files-channel.test.mjs'], mode=mode, needs=('tools',))

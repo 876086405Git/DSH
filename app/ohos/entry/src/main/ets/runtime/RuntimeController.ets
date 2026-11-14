@@ -75,7 +75,7 @@ export class RuntimeController {
   private taskOwner: TransientTaskOwner | null = null;
   private retiredOwners: TransientTaskOwner[] = [];
   private ownerAbility: UIAbility | null = null;
-  private lifecycleTicks: number = 0;
+  private lifecycleElapsedMs: number = 0;
   private idleDiagnosticsEnabled: boolean = false;
   private workspaceRecovery: boolean = false;
   private idleDiagnosticsWindow: IdleDiagnosticsWindow | null = null;
@@ -97,6 +97,7 @@ export class RuntimeController {
   private stopping: Promise<void> | null = null;
   private linux: LinuxControl = new LinuxControl();
   private timer: number | null = null;
+  private pollIntervalMs: number = 100;
   private lastNative: HostState | null = null;
   private runtimeGeneration: number = 0;
   private recovery: RuntimeRecovery;
@@ -127,6 +128,7 @@ export class RuntimeController {
     RuntimeController.foreground = false;
     RuntimeController.shared?.taskOwner?.observe(false);
     RuntimeController.shared?.lifecycle.observe(false);
+    RuntimeController.shared?.startPolling();
   }
 
   static onDestroy(ability: UIAbility): void {
@@ -134,6 +136,7 @@ export class RuntimeController {
     RuntimeController.foreground = false; RuntimeController.ability = null;
     RuntimeController.shared?.retireOwner();
     RuntimeController.shared?.lifecycle.observe(false);
+    RuntimeController.shared?.startPolling();
   }
 
   constructor(context: common.Context) {
@@ -179,6 +182,7 @@ export class RuntimeController {
     if (this.ownerAbility !== ability) this.bindOwner();
     this.taskOwner?.observe(true);
     this.lifecycle.observe(true);
+    this.startPolling();
   }
 
   private bindOwner(): void {
@@ -395,14 +399,21 @@ export class RuntimeController {
     this.emit(new Map<string, Object | null>([['type', 'status'], ['status', this.snapshot()]]));
   }
 
-  private startPolling(): void {
-    const state = nativeHostState();
-    if (this.timer === null && ['starting', 'running', 'stopping'].includes(state.phase)) {
-      this.timer = setInterval(() => {
-        if (this.idleDiagnosticsEnabled && this.idleDiagnosticsWindow !== null) this.idleDiagnosticsWindow.pollTicks++;
-        this.collect();
-      }, 100);
-    }
+  private startPolling(state: HostState = nativeHostState()): void {
+    const active = ['starting', 'running', 'stopping'].includes(state.phase);
+    // A background log has no visible frame deadline. Keep the one-second
+    // task-owner heartbeat; foreground, startup and stop still collect at 100 ms.
+    const interval = state.phase === 'running' && !RuntimeController.foreground && !this.requestedStop ? 1000 : 100;
+    if (this.timer !== null && active && interval === this.pollIntervalMs) return;
+    if (this.timer !== null) clearInterval(this.timer);
+    this.timer = null;
+    if (!active) return;
+    this.pollIntervalMs = interval;
+    this.timer = setInterval(() => {
+      if (this.idleDiagnosticsEnabled && this.idleDiagnosticsWindow !== null) this.idleDiagnosticsWindow.pollTicks++;
+      this.lifecycleElapsedMs += this.pollIntervalMs;
+      this.collect();
+    }, interval);
   }
 
   collect(): void {
@@ -425,8 +436,8 @@ export class RuntimeController {
     }
     this.noteHealthy(state);
     this.noteLastGood(state);
-    if (++this.lifecycleTicks >= 10) {
-      this.lifecycleTicks = 0;
+    if (this.lifecycleElapsedMs >= 1000) {
+      this.lifecycleElapsedMs = 0;
       if (this.idleDiagnosticsEnabled && this.idleDiagnosticsWindow !== null) this.idleDiagnosticsWindow.lifecycleRefreshRequests++;
       this.lifecycle.refresh();
     }
@@ -457,10 +468,7 @@ export class RuntimeController {
       this.lastNative = state;
       this.emitStatus();
     }
-    if (!['starting', 'running', 'stopping'].includes(state.phase) && this.timer !== null) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.startPolling(state);
   }
 
   private noteHealthy(state: HostState): void {

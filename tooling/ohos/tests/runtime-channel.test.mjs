@@ -2221,3 +2221,64 @@ test('942 idle diagnostics: existing poll and collect paths count calls while en
     channel.close(); t.mock.timers.reset();
   }
 });
+
+test('1200 background polling: a quiet minute collects sixty times and retains one-second lifecycle refresh', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const c = await controllerCase('background-idle-minute');
+  await c.controller.install(false);
+  await c.controller.start(null, false, null, false);
+  native.state.phase = 'running'; native.state.baseUrl = 'http://127.0.0.1:3080';
+  native.state.token = 'idle-poll-fixture-token';
+  c.controller.collect(); await Promise.resolve();
+  c.controller.setIdleDiagnosticsEnabled(true);
+  try {
+    for (let second = 0; second < 60; second++) {
+      t.mock.timers.tick(1000);
+      await Promise.resolve(); await new Promise(setImmediate);
+    }
+    const counts = idlePlain942(c.controller.getIdleDiagnostics()).window.counters;
+    assert.equal(counts.pollTicks, 60, 'a background running engine needs at most one collection per second');
+    assert.equal(counts.collectCalls, 60);
+    assert.equal(counts.lifecycleRefreshRequests, 60, 'the task-owner activity window must still be refreshed every second');
+    assert.equal(native.stops, 0, 'idle throttling does not stop the engine');
+  } finally {
+    await c.controller.stop(); native.state.phase = 'idle'; c.controller.collect(); t.mock.timers.reset();
+  }
+});
+
+test('1200 background polling: real ability callbacks restore fast foreground collection and reject a stale background callback', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const c = await controllerCase('background-idle-ability');
+  await c.controller.install(false); await c.controller.start(null, false, null, false);
+  native.state.phase = 'running'; native.state.baseUrl = 'http://127.0.0.1:3080';
+  native.state.token = 'idle-ability-fixture-token';
+  c.controller.collect(); await Promise.resolve();
+  const previous = RuntimeController.shared; RuntimeController.shared = c.controller;
+  const old = new EntryAbility(), current = new EntryAbility();
+  c.controller.setIdleDiagnosticsEnabled(true);
+  const ticks = () => idlePlain942(c.controller.getIdleDiagnostics()).window.counters.pollTicks;
+  try {
+    old.onForeground(); current.onForeground(); old.onBackground();
+    await Promise.resolve();
+    let before = ticks(); t.mock.timers.tick(1000); await Promise.resolve();
+    assert.equal(ticks() - before, 10, 'current foreground owner retains 100 ms polling');
+    current.onBackground(); await Promise.resolve();
+    before = ticks(); t.mock.timers.tick(1000); await Promise.resolve();
+    assert.equal(ticks() - before, 1, 'background callback switches the existing running timer immediately');
+    current.onForeground(); await Promise.resolve();
+    native.events.push({ kind: 'log', stream: 'stdout', line: 'foreground output' });
+    before = ticks(); t.mock.timers.tick(100); await Promise.resolve();
+    assert.equal(ticks() - before, 1);
+    assert(c.controller.recentLogs(10).some(line => line.includes('foreground output')));
+    await c.controller.stop();
+    before = ticks(); t.mock.timers.tick(100); await Promise.resolve();
+    assert.equal(ticks() - before, 1, 'stopping retains its original 100 ms observation');
+    native.state.phase = 'exited'; native.state.exitCode = 0;
+    c.controller.collect(); await Promise.resolve();
+    before = ticks(); t.mock.timers.tick(5000); await Promise.resolve();
+    assert.equal(ticks(), before, 'a settled engine has no collection timer');
+  } finally {
+    current.onDestroy(); RuntimeController.shared = previous;
+    native.state.phase = 'idle'; c.controller.collect(); t.mock.timers.reset();
+  }
+});
