@@ -101,13 +101,14 @@
  	if (target.width >= attachment.ref.width && target.height >= attachment.ref.height && attachment.data.byteLength <= target.maxBytes) return {
  		data: attachment.data,
  		mediaType: attachment.ref.mediaType,
-@@ -851,11 +910,17 @@
+@@ -851,11 +910,18 @@
  		};
  	} catch (error) {
  		if (error?.code === "ENOENT") return void 0;
 +		// Cancellation/cache fallback must not hide an unretired native owner.
 +		if (process.platform === "openharmony" && (error?.nativeCode === "OHOS_IMAGE_CLEANUP_UNCONFIRMED" || error?.retirement?.confirmed === false)) throw error;
  		signal?.throwIfAborted();
++		if (process.platform === "openharmony" && error?.code === "OHOS_IMAGE_CODEC_UNAVAILABLE") throw error;
  		return;
  	}
  }
