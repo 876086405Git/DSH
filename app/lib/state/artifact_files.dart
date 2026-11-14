@@ -99,7 +99,12 @@ class ArtifactFiles {
     final root = await _cacheRoot();
     final key = _fnv('pdf\n${conn.hostId ?? conn.label}\n$sessionId\n${artifact.path}');
     final dir = Directory('${root.path}/artifacts/$key');
-    final target = File('${dir.path}/${_safeName(artifact.name)}.pdf');
+    // 纪要.docx → 纪要.pdf: swapping the extension keeps a name the phone could
+    // already store within its 255-byte limit (appending .pdf might not).
+    final base = _safeName(artifact.name);
+    final dot = base.lastIndexOf('.');
+    final pdfName = '${dot > 0 ? base.substring(0, dot) : base}.pdf';
+    final target = File('${dir.path}/$pdfName');
     final marker = File('${dir.path}/.version');
     if (target.existsSync() && marker.existsSync() && marker.readAsStringSync() == stat.version) {
       return target;
@@ -108,7 +113,7 @@ class ArtifactFiles {
     if (rendered.pdf.isEmpty) throw const ArtifactError('unsupported');
     await dir.create(recursive: true);
     final staging = await dir.createTemp('.part-');
-    final part = File('${staging.path}/${_safeName(artifact.name)}.pdf');
+    final part = File('${staging.path}/$pdfName');
     try {
       await part.writeAsBytes(rendered.pdf, flush: true);
       part.renameSync(target.path);
