@@ -1080,6 +1080,15 @@ def main():
                      needs=('prepared-inputs', 'android-targets', 'build-bash', 'build-regex'),
                      extra=lambda: {'DSH_PREFIX': str(prefix())})
     g.run('linux-runtime-backend', lambda: g.py('tooling/ohos/research/linux-backend/run.py', '--node', node(), '--dsh-prefix', p('prepared') / 'dsh', '--native-library-dir', p('tinyemu_native_library_dir'), '--guest-config', p('tinyemu_guest_config'), '--output', o / 'linux-runtime-backend'), needs=('prepared-inputs',), timeout=600, tests=['tooling/ohos/research/linux-backend/' + name for name in ['run.py', 'protocol.test.mjs', 'clean-close.test.mjs', 'guest-test.mjs']], scope='Production Linux backend with real Node NAPI and private guest disks; no SDK/device or authorized workspace 9P')
+    for mcp_mode in ('plain', 'jitless'):
+        g.run('mcp-stdio-plugin-' + mcp_mode, lambda m=mcp_mode: g.py(
+            rt + 'mcp-stdio-entry.py', '--source', s, '--prefix', prefix(), '--node', node(),
+            '--python', sys.executable, '--out', o / ('mcp-stdio-plugin-' + m),
+            *(['--jitless'] if m == 'jitless' else [])),
+            needs=('prepared-inputs', 'android-targets'), timeout=60,
+            tests=[rt + name for name in ('mcp-stdio-entry.py', 'mcp-stdio-plugin-entry.mjs',
+                                         'mcp-stdio-guest-fixture.mjs', 'mcp-stdio-server.py')],
+            scope='Real Cordis MCP plugin initialize/list/two calls over current Linux JS routing and TCP to a real local Python stdio server; explicit owner/native-session/guest-kernel fixture, no VM/HAP/device')
     g.node_tests('linux-instance-process', [rt + 'linux-instance-process.test.mjs'],
                  needs=('prepared-inputs', 'native-publication-build'), extra=linked_env, timeout=120)
     g.node_tests('linux-proxy-fixture', ['tooling/ohos/research/linux-proxy/proxy-fixture.test.mjs'], needs=('tools',))
