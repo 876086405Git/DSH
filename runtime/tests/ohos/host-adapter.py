@@ -172,12 +172,28 @@ async function until(phase) {
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--node-root', required=True, type=Path)
-    parser.add_argument('--ohos-headers', required=True, type=Path,
-                        help='Downloaded public native_api.h/common.h and hilog/log.h; not an SDK')
+    headers_group = parser.add_mutually_exclusive_group(required=True)
+    headers_group.add_argument('--ohos-headers', type=Path,
+                               help='Downloaded public native_api.h/common.h and hilog/log.h; not an SDK')
+    headers_group.add_argument('--host-header-shim', action='store_true',
+                               help='Explicit desktop Node N-API/hilog fixture; no OH header or ABI evidence')
     parser.add_argument('--out', required=True, type=Path)
     args = parser.parse_args()
-    node_root, headers, out = (p.resolve() for p in [args.node_root, args.ohos_headers, args.out])
+    node_root, out = args.node_root.resolve(), args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
+    if args.host_header_shim:
+        headers = out / 'explicit-host-header-shim'
+        (headers / 'napi').mkdir(parents=True)
+        (headers / 'hilog').mkdir()
+        (headers / 'napi/native_api.h').write_text('// Desktop fixture, not an OH header.\n#include <node_api.h>\n')
+        (headers / 'hilog/log.h').write_text('''// Fixture-only declaration and values; not OH ABI evidence.
+#pragma once
+enum LogType { LOG_APP = 0 };
+enum LogLevel { LOG_INFO = 4, LOG_ERROR = 6 };
+extern "C" int OH_LOG_Print(LogType, LogLevel, unsigned int, const char*, const char*, ...);
+''')
+    else:
+        headers = args.ohos_headers.resolve()
     (out / 'stub.cc').write_text(STUB)
     (out / 'probe.cjs').write_text(SCRIPT)
     core = ROOT / 'app/ohos/entry/src/main/cpp'
@@ -208,7 +224,11 @@ def main():
         'lifecycle_state.h','phone_state.h','workspace_grants.cpp','workspace_grants.h','workspace_grants_abi.h',
         'workspace_fids.h','workspace_fids_abi.h']]
     inputs.append(ROOT/'runtime/ohos/host/phone_contract.h')
-    (out/'report.json').write_text(json.dumps({'scope':'desktop Node N-API plus public OH headers, not OH SDK',
+    inputs.extend([Path(__file__), headers/'napi/native_api.h', headers/'hilog/log.h', node_root/'bin/node'])
+    scope = ('desktop Node N-API plus explicit hilog/header shim; no OH headers/ABI/SDK/device evidence'
+             if args.host_header_shim else 'desktop Node N-API plus public OH headers, not OH SDK')
+    (out/'report.json').write_text(json.dumps({'scope':scope,
+        'headerSource':'explicit-host-shim' if args.host_header_shim else 'provided-public-OH-headers',
         'inputs':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs},'rows':rows},indent=2)+'\n')
     for result in results:
         print(result.stdout,end='');print(result.stderr,end='')

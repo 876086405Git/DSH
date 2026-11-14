@@ -750,6 +750,9 @@ def main():
     g.node_tests('composition-import-seams', [rt + 'composition-import-seams.test.mjs'], mode='strict', needs=('compose',), extra=lambda: {'OHOS_COMPOSITION_PREFIX': str(payload()), 'OHOS_PROCESS_SOURCE': str(payload() / 'runtime/ohos/process')})
     g.run('composition-process-matrix', lambda: g.py(rt + 'run-composition-tests.py', '--payload', payload(), '--node', node(), '--out', o / 'composition-process-matrix'), needs=('compose',), timeout=300)
     g.run('host-core', lambda: g.py(rt + 'host-core.py', '--out', o / 'host-core'), needs=('tools',))
+    g.run('host-capture', lambda: g.py(rt + 'host-capture.py', '--cxx', p('cxx'), '--out', o / 'host-capture'),
+          needs=('tools',), timeout=90, tests=[rt + 'host-capture.py', rt + 'host-capture.cc'],
+          scope='Actual native Capture threads and poll counts with fake Node runner; cancellation/tail/retained writer cases; no SDK/device CPU claim')
     g.run('host-profile', lambda: g.py(rt + 'host-lifecycle-profile.py', '--out', o / 'host-profile'), needs=('tools',))
     g.run('host-adapter', lambda: g.py(rt + 'host-adapter.py', '--node-root', p('node_root'), '--ohos-headers', p('ohos_headers'), '--out', o / 'host-adapter'), needs=('native-tools',))
     def round_libraries(_):

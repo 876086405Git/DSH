@@ -70,6 +70,8 @@ class Host {
   std::thread engine_;
   StopNode stop_node_ = nullptr;
   bool stop_requested_ = false;
+  bool stop_delivered_ = false;
+  int capture_wake_ = -1;  // Registered/removed under mutex_ before descriptor close.
   LogSink sink_;
 };
 }  // namespace dsh

@@ -128,16 +128,30 @@ bool ForeignLine(const std::string& line) {
 
 // File descriptors 1/2 are process-wide. Capture is deliberately scoped to the
 // single engine lifetime; no raw bytes are forwarded to hilog or Ark.
+void WakeCapture(int fd) {
+  if (fd < 0) return;
+  const char byte = 1;
+  // Nonblocking writes coalesce when a wake is already pending. The read end
+  // remains open until its reader has joined, and Host unregisters under mutex.
+  while (write(fd, &byte, 1) < 0 && errno == EINTR) {}
+}
+
 class Capture {
  public:
-  Capture(std::function<void(const std::string&, std::string)> line, std::function<void()> check_stop)
-      : line_(std::move(line)), check_stop_(std::move(check_stop)) {
+  Capture(std::function<void(const std::string&, std::string)> line,
+          std::function<bool()> check_stop, std::function<void(int)> set_stop_wake)
+      : line_(std::move(line)), check_stop_(std::move(check_stop)), set_stop_wake_(std::move(set_stop_wake)) {
     try {
       for (int i = 0; i != 2; ++i) {
         Require(pipe(pipes_[i]) == 0, "ERR_OHOS_HOST_STDIO", "Cannot open runtime output pipe");
         for (int fd : pipes_[i]) fcntl(fd, F_SETFD, FD_CLOEXEC);
         Require(fcntl(pipes_[i][0], F_SETFL, O_NONBLOCK) == 0,
                 "ERR_OHOS_HOST_STDIO", "Cannot configure runtime output pipe");
+        Require(pipe(wakes_[i]) == 0, "ERR_OHOS_HOST_STDIO", "Cannot open runtime output wake pipe");
+        for (int fd : wakes_[i]) {
+          Require(fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 && fcntl(fd, F_SETFL, O_NONBLOCK) == 0,
+                  "ERR_OHOS_HOST_STDIO", "Cannot configure runtime output wake pipe");
+        }
         saved_[i] = dup(i + 1);
         Require(saved_[i] >= 0, "ERR_OHOS_HOST_STDIO", "Cannot preserve application output");
       }
@@ -148,11 +162,14 @@ class Capture {
         close(pipes_[i][1]); pipes_[i][1] = -1;
         readers_[i] = std::thread([this, i] { Read(i); });
       }
+      set_stop_wake_(wakes_[0][1]);
     } catch (...) { Close(); throw; }
   }
   ~Capture() { Close(); }
  private:
   void Close() {
+    // Prevent Stop from writing to a descriptor after it can be closed/reused.
+    set_stop_wake_(-1);
     std::fflush(stdout);
     std::fflush(stderr);
     for (int i = 0; i != 2; ++i) {
@@ -160,9 +177,11 @@ class Capture {
       if (pipes_[i][1] >= 0) { close(pipes_[i][1]); pipes_[i][1] = -1; }
     }
     ending_ = true;
+    for (int i = 0; i != 2; ++i) WakeCapture(wakes_[i][1]);
     for (int i = 0; i != 2; ++i) {
       if (readers_[i].joinable()) readers_[i].join();
       if (pipes_[i][0] >= 0) { close(pipes_[i][0]); pipes_[i][0] = -1; }
+      for (int& fd : wakes_[i]) if (fd >= 0) { close(fd); fd = -1; }
     }
     // Readers hand foreign lines back to these until they have finished.
     for (int i = 0; i != 2; ++i) {
@@ -184,7 +203,10 @@ class Capture {
     bool overflow = false;
     char bytes[4096];
     for (;;) {
-      if (index == 0) check_stop_();
+      // Only an unacknowledged cancellation needs a timed retry: the runner
+      // cannot accept stop until it has set its active flag. Normal idle waits
+      // are event-driven, including stderr, and Close has its own wake source.
+      const bool retry_stop = index == 0 && !ending_ && check_stop_();
       const auto count = read(pipes_[index][0], bytes, sizeof(bytes));
       if (count > 0) {
         for (ssize_t n = 0; n < count; ++n) {
@@ -200,18 +222,29 @@ class Capture {
       else if (errno == EINTR) continue;
       else if (errno == EAGAIN) {
         if (ending_) break;
-        pollfd fd{pipes_[index][0], POLLIN, 0};
-        poll(&fd, 1, 50);
+        pollfd fds[2]{{pipes_[index][0], POLLIN, 0}, {wakes_[index][0], POLLIN, 0}};
+        const int result = poll(fds, 2, retry_stop ? 50 : -1);
+        if (result < 0 && errno != EINTR) break;
+        if (fds[1].revents & POLLIN) {
+          char notices[64];
+          for (;;) {
+            const auto count = read(wakes_[index][0], notices, sizeof(notices));
+            if (count > 0 || (count < 0 && errno == EINTR)) continue;
+            break;
+          }
+        }
       } else break;
     }
     if (overflow || !pending.empty()) Emit(index, stream, pending, overflow);
   }
   int pipes_[2][2]{{-1, -1}, {-1, -1}};
+  int wakes_[2][2]{{-1, -1}, {-1, -1}};
   int saved_[2]{-1, -1};
   std::thread readers_[2];
   std::atomic<bool> ending_{false};
   std::function<void(const std::string&, std::string)> line_;
-  std::function<void()> check_stop_;
+  std::function<bool()> check_stop_;
+  std::function<void(int)> set_stop_wake_;
 };
 }  // namespace
 
@@ -342,9 +375,14 @@ void Host::Run(HostOptions options, StartNode start_node) {
       {
         Capture capture([this](const std::string& stream, std::string line) { Line(stream, std::move(line)); }, [this] {
           // Covers stop between the cancellation check and dsh_node_start's
-          // active flag. The existing stdout reader retries without another thread.
+          // active flag. Once accepted, the runner remembers the request.
           std::lock_guard<std::mutex> lock(mutex_);
-          if (stop_requested_) stop_node_();
+          if (stop_requested_ && !stop_delivered_) stop_delivered_ = stop_node_() != 0;
+          return stop_requested_ && !stop_delivered_;
+        }, [this](int fd) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          capture_wake_ = fd;
+          if (stop_requested_) WakeCapture(capture_wake_);
         });
         // If stop arrived before the runner became active, do not initialize Node.
         bool canceled;
@@ -377,7 +415,8 @@ void Host::Stop() {
   if (state_.phase != "starting" && state_.phase != "running" && state_.phase != "stopping") return;
   stop_requested_ = true;
   state_.phase = "stopping";
-  stop_node_();
+  if (!stop_delivered_) stop_delivered_ = stop_node_() != 0;
+  WakeCapture(capture_wake_);
 }
 
 HostState Host::State() {
