@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Finite host attachment integration using the unchanged image-attachment actor.
+"""Finite host attachment integration with original cases and cache-error recovery.
 
 Formal mode reads an actual adjacent composer manifest. Component mode instead
 requires a current official patcher target report and never reports a runtimeVersion.
@@ -369,7 +369,8 @@ def validate_result(directory, oracle, native):
         labels += [case['name'] + suffix for suffix in
                    (':before-save', ':save-returned', ':read-returned', ':request-returned')]
     labels += ['sequential-repeat:before', 'sequential-repeat:returned',
-               'all-public-awaits-finished', 'context-dispose-returned']
+               'all-public-awaits-finished', 'cache-unknown-orientation:before',
+               'cache-unknown-orientation:reencoded', 'context-dispose-returned']
     phases = report['phases']
     require([phase['label'] for phase in phases] == labels, 'Original public boundary list differs')
     previous_rows = 0
@@ -412,9 +413,22 @@ def validate_result(directory, oracle, native):
             repeat['cached']['sourceFacts']['space'] == {'$undefined': True}, 'Repeated cache evidence differs')
     before, after = by_label['sequential-repeat:before'], by_label['sequential-repeat:returned']
     require(all(after[key] - before[key] == 1 for key in METRICS), 'Repeat did not perform the original fresh work')
+    legacy = by_label['all-public-awaits-finished']
+    require(all(legacy[key] == oracle['total'][key] for key in METRICS),
+            'Original integration totals changed before the added cache regression')
+    recovery = report['cacheUnavailableRecovery']
+    alpha = next(case for case in oracle['cases'] if case['name'] == 'transparent-png')
+    require(recovery['result'] == 'RECOVERED_SOURCE_REENCODE' and
+            recovery['stage'] == 'source-orientation' and recovery['variantId'] == alpha['variantId'] and
+            recovery['cacheSha256'] == '2682f9b15402276e3a33d0dfddfbc3a7a2450a7ad9eed9369d634ef455921417' and
+            recovery['delta'] == dict.fromkeys(METRICS, 1),
+            'Actual scanner cache failure did not recover the unchanged source variant')
+    before, after = by_label['cache-unknown-orientation:before'], by_label['cache-unknown-orientation:reencoded']
+    require(all(after[key] - before[key] == 1 for key in METRICS),
+            'Cache recovery did not perform one fresh verified encoding')
     total = trace_snapshot(rows)
     require(total['live'] == [] and total['created'] == total['released'] and
-            all(total[key] == oracle['total'][key] for key in METRICS) and
+            all(total[key] == oracle['total'][key] + 1 for key in METRICS) and
             all(row['a'] == 85 and row['b'] == 240 for row in total['packRecords']),
             'Final SDK trace totals differ')
     require(report['cleanup'].get('contextDisposed') is True and 'error' not in report['cleanup'] and
@@ -422,9 +436,10 @@ def validate_result(directory, oracle, native):
     require(not any(row['path'].startswith('attachments/v1/tmp/') or row['path'].endswith('.tmp')
                     for row in report['files']), 'Original actor observed leftover temporary files')
     return {'report': record(report_path), 'trace': record(trace_path), 'imageCases': 2,
-            'sequentialRequests': 1, 'boundaryCount': len(phases), 'traceRows': len(rows),
+            'sequentialRequests': 1, 'cacheUnavailableRecovery': recovery,
+            'boundaryCount': len(phases), 'traceRows': len(rows),
             'sdkTotals': {key: total[key] for key in METRICS}, 'sameVariantRequestCache': 'observed miss',
-            'scope': 'Recomputed original actor observations; not a second filesystem measurement or real pixel decode',
+            'scope': 'Recomputed original actor observations and added real-scanner cache recovery; not a second filesystem measurement or real pixel decode',
             'publicationOwner': report['cleanup']['publicationOwner'], 'observerFD': report['cleanup']['observerFD']}
 
 
@@ -449,7 +464,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=False)
     state = {'schema': 1, 'status': 'SETUP_NOT_RUN', 'startedUTC': utc(), 'steps': [],
              'mode': 'jitless' if args.jitless else 'plain', 'productStarted': False,
-             'scope': 'Two unchanged host attachment cases and one sequential request; fake SDK/pixels, no OH link or device'}
+             'scope': 'Two original host attachment cases, sequential unknown-colour miss and actual cache-orientation recovery; explicit SDK/pixels fixture, no OH link or device'}
     save(args.out / 'STARTED.json', state)
     inputs, view_rows, built, selection = [], [], [], None
     try:

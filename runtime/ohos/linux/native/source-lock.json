@@ -29,6 +29,7 @@
     "embed-ram.c": "65fb48a61753b40c260ea737bee32b06f53ea3f6773138a46ed4615334e52e55",
     "embed-ram.h": "3b919c585f581ef76afb29a26ee3d2a5668f42ccd5859ed8b9e0e8b53e825bab",
     "patches/0017-joined-guest-ram-pages.patch": "d3397eebb38a132af64452982b7264adb7de77b4dc683e4530c418233768ec9d",
-    "patches/0018-clint-unsigned-deadline.patch": "9025c5b53c8d90631651a9c54ac5ea9781eb419f0273457386763d9d6df997cd"
+    "patches/0018-clint-unsigned-deadline.patch": "9025c5b53c8d90631651a9c54ac5ea9781eb419f0273457386763d9d6df997cd",
+    "patches/0019-embedded-riscv-sleep-micros.patch": "23de511e7358653d1e0fac7a40767320dc4e418f40e63c7b41893fc60b1923a4"
   }
 }

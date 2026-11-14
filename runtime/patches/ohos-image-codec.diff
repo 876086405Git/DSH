@@ -78,7 +78,7 @@
  	if (canPassThroughNormalization(detected, data.byteLength, policy)) return {
  		data,
  		mediaType: detected.mediaType,
-@@ -786,6 +836,14 @@
+@@ -804,6 +854,14 @@
  	checkedInteger(target.maxBytes, "Image request maxBytes");
  }
  function descriptor(attachment, target) {
@@ -93,7 +93,7 @@
  	return JSON.stringify({
  		transformVersion: REQUEST_IMAGE_TRANSFORM_VERSION,
  		attachmentId: attachment.attachmentId,
-@@ -825,6 +883,7 @@
+@@ -843,6 +901,7 @@
  	}).toColourspace("srgb");
  }
  async function createRequestImage(attachment, target, hasAlpha) {
@@ -101,14 +101,13 @@
  	if (target.width >= attachment.ref.width && target.height >= attachment.ref.height && attachment.data.byteLength <= target.maxBytes) return {
  		data: attachment.data,
  		mediaType: attachment.ref.mediaType,
-@@ -851,11 +910,18 @@
+@@ -869,11 +928,17 @@
  		};
  	} catch (error) {
  		if (error?.code === "ENOENT") return void 0;
 +		// Cancellation/cache fallback must not hide an unretired native owner.
 +		if (process.platform === "openharmony" && (error?.nativeCode === "OHOS_IMAGE_CLEANUP_UNCONFIRMED" || error?.retirement?.confirmed === false)) throw error;
  		signal?.throwIfAborted();
-+		if (process.platform === "openharmony" && error?.code === "OHOS_IMAGE_CODEC_UNAVAILABLE") throw error;
  		return;
  	}
  }
@@ -120,3 +119,20 @@
  	const detected = await detectImage(image.data);
  	if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width !== image.width || detected.height !== image.height || detected.mediaType !== image.mediaType || !encodedAlphaIsCompatible(expectedAlpha, detected)) throw new AttachmentError("Encoded model-request image does not match its verified 8-bit sRGB metadata.", "ATTACHMENT_WRITE_FAILED");
  	return {
+@@ -1102,8 +1167,14 @@
+ 	}
+ 	requestVersion(ref, target, stored, signal) {
+ 		signal?.throwIfAborted();
+-		const variantId = requestImageVariantId(ref, target);
+-		const key = String(variantId);
++		// This key only joins in-flight callers. The persistent variant still uses
++		// the complete codec identity after source existence and integrity checks.
++		const key = process.platform === "openharmony" ? JSON.stringify({
++			attachmentId: ref.attachmentId,
++			targetWidth: target.width,
++			targetHeight: target.height,
++			encodedByteBudget: target.maxBytes
++		}) : String(requestImageVariantId(ref, target));
+ 		let operation = this.requestInflight.get(key);
+ 		if (operation?.controller.signal.aborted) {
+ 			this.requestInflight.delete(key);

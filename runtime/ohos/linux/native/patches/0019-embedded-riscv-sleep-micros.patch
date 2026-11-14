@@ -1,0 +1,98 @@
+--- a/machine.h
++++ b/machine.h
+@@ -137,6 +137,10 @@
+ 
+ extern const VirtMachineClass riscv_machine_class;
+ extern const VirtMachineClass pc_machine_class;
++#ifdef TEMU_EMBED
++/* Embedded RISC-V only; cap and result are in microseconds. */
++int riscv_machine_get_sleep_duration_us(VirtMachine *s, int delay_us);
++#endif
+ 
+ void __attribute__((format(printf, 1, 2))) vm_error(const char *fmt, ...);
+ int vm_get_int(JSONValue obj, const char *name, int *pval);
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -1005,8 +1005,8 @@
+     free(s);
+ }
+ 
+-/* in ms */
+-static int riscv_machine_get_sleep_duration(VirtMachine *s1, int delay)
++static int riscv_machine_get_sleep_duration_unit(VirtMachine *s1, int delay,
++                                                 uint32_t ticks_per_unit)
+ {
+     RISCVMachine *m = (RISCVMachine *)s1;
+     RISCVCPUState *s = m->cpu_state;
+@@ -1020,8 +1020,7 @@
+             riscv_cpu_set_mip(s, MIP_MTIP);
+             delay = 0;
+         } else {
+-            /* convert delay to ms */
+-            delay1 = (m->timecmp - now) / (RTC_FREQ / 1000);
++            delay1 = (m->timecmp - now) / ticks_per_unit;
+             if (delay > 0 && delay1 < (uint64_t)delay)
+                 delay = delay1;
+         }
+@@ -1030,6 +1029,20 @@
+         delay = 0;
+     return delay;
+ }
++
++/* Existing class API remains in milliseconds for every caller. */
++static int riscv_machine_get_sleep_duration(VirtMachine *s1, int delay)
++{
++    return riscv_machine_get_sleep_duration_unit(s1, delay, RTC_FREQ / 1000);
++}
++
++#ifdef TEMU_EMBED
++int riscv_machine_get_sleep_duration_us(VirtMachine *s1, int delay_us)
++{
++    return riscv_machine_get_sleep_duration_unit(s1, delay_us,
++                                                 RTC_FREQ / 1000000);
++}
++#endif
+ 
+ static void riscv_machine_interp(VirtMachine *s1, int max_exec_cycle)
+ {
+--- a/temu.c
++++ b/temu.c
+@@ -696,7 +696,13 @@
+     int stdin_fd;
+ #endif
+     
+-    delay = virt_machine_get_sleep_duration(m, MAX_SLEEP_TIME);
++#ifdef TEMU_EMBED
++    /* Keep the device budget in ms; do not truncate the CPU deadline here. */
++    if (m->vmc == &riscv_machine_class)
++        delay = MAX_SLEEP_TIME;
++    else
++#endif
++        delay = virt_machine_get_sleep_duration(m, MAX_SLEEP_TIME);
+     
+     /* wait for an event */
+     FD_ZERO(&rfds);
+@@ -724,8 +730,21 @@
+ #ifdef CONFIG_FS_NET
+     fs_net_set_fdset(&fd_max, &rfds, &wfds, &efds, &delay);
+ #endif
+-    tv.tv_sec = delay / 1000;
+-    tv.tv_usec = (delay % 1000) * 1000;
++#ifdef TEMU_EMBED
++    if (m->vmc == &riscv_machine_class) {
++        int delay_us;
++        /* select_fill still uses ms. Apply the CPU cap at the last boundary,
++           keeping the existing 10 ms maximum and floor (not ceil) semantics. */
++        delay = max_int(0, min_int(delay, MAX_SLEEP_TIME));
++        delay_us = riscv_machine_get_sleep_duration_us(m, delay * 1000);
++        tv.tv_sec = delay_us / 1000000;
++        tv.tv_usec = delay_us % 1000000;
++    } else
++#endif
++    {
++        tv.tv_sec = delay / 1000;
++        tv.tv_usec = (delay % 1000) * 1000;
++    }
+     ret = select(fd_max + 1, &rfds, &wfds, &efds, &tv);
+     if (m->net) {
+         m->net->select_poll(m->net, &rfds, &wfds, &efds, ret);

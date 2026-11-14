@@ -749,7 +749,7 @@ def main():
           env=lambda: {'OHOS_NATIVE_RG': str(rg())}, needs=('rg-inputs', 'build-regex'), timeout=300,
           tests=[rt + 'process-rg-unicode-differential.mjs'], scope='Existing host-only all-valid-scalar native comparison; not a latency measurement')
     g.run('compose', lambda: g.py('runtime/ohos/package/compose-runtime.py', '--target', 'ohos', '--dsh-prefix', p('prepared') / 'dsh', '--process-prefix', p('prepared') / 'process', '--target-report', p('prepared') / 'target-report.json', '--prepared-inputs', p('prepared') / 'prepared-inputs.json', '--regex-artifact', s / 'runtime/ohos/process/build/re2js-unicode.mjs', '--esbuild-prefix', p('esbuild_prefix'), '--imports-report', o / 'composition-imports.json', '--out', o / 'composed', '--node', node(), '--runtime-core', s / 'app/ohos/entry/src/main/ets/runtime/RuntimeCore.ets', '--keep-expanded'), needs=('prepared-inputs', 'build-regex'), timeout=300)
-    # The unchanged attachment actor consumes an actual composed payload; its
+    # The attachment actor consumes an actual composed payload; its
     # explicit host-only marker is added to a small private test view by the entry.
     g.run('image-attachment-admission', lambda: g.py(rt + 'image-attachment-admission.test.py'),
           needs=('tools',), tests=[rt + 'image-attachment-admission.test.py'],
@@ -770,7 +770,7 @@ def main():
                   'image-attachment-entry.py', 'image-attachment-entry.mjs',
                   'image-attachment-input-catalog.json', 'image-attachment-oracle.json',
                   'image-attachment-sdk.c', 'image-attachment-inputs.c')],
-              scope='Two original full host save/read/request attachment chains and the original same-variant sequential miss; actual facade/fixed-loader/NDK/bridge with explicit SDK and publication carriers, no real pixel decode, OH link or device')
+              scope='Original host save/read/request chains, same-variant unknown-colour cache miss, and actual scanner cache-orientation failure recovery; facade/fixed-loader/NDK/bridge with explicit SDK and publication carriers, no real pixel decode, OH link or device')
     for filename in ['composition-inputs.test.py', 'composition-archive.test.py']:
         g.run(filename[:-3], lambda f=filename: g.py(rt + f), needs=('tools',), tests=[rt + filename])
     g.run('composition-boundaries', lambda: g.py(rt + 'composition-gates.py', '--out', o / 'composition-boundaries'), needs=('tools',))
@@ -1091,6 +1091,7 @@ def main():
     g.run('linux-download-user-agent', lambda: g.py('tooling/ohos/tests/linux-download-ua.py', '--inputs', p('linux_job_inputs'), '--output', o / 'linux-download-user-agent', '--node', node()), needs=('tools',), timeout=180, tests=['tooling/ohos/tests/linux-download-ua.py', rt + 'linux-base-user-agent.test.mjs'], scope='Real verified local HTTPS with fixed product UA, explicit test CA and pinned input-cache checks; no Huawei availability/device claim')
 
     g.run('tinyemu-clint-deadline', lambda: g.py('tooling/ohos/research/tinyemu-clint-deadline/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--out', o / 'tinyemu-clint-deadline', '--cc', p('cc'), '--node', node()), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-clint-deadline/' + name for name in ['run.py', 'timer-boundary.c', 'select-observer.c', 'node-case.mjs']] + ['tooling/ohos/research/tinyemu-native/clock-cpu.c'], scope='Actual RV32/RV64 unsigned CLINT and WFI boundaries, existing clock regressions and production Node tiny BIOS select/VM-thread CPU observations; no Linux kernel, SDK/device or App CPU attribution')
+    g.run('tinyemu-sleep-micros', lambda: g.py('tooling/ohos/research/tinyemu-sleep-micros/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--out', o / 'tinyemu-sleep-micros', '--cc', p('cc')), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-sleep-micros/' + name for name in ['run.py', 'sleep-boundary.c']] + ['tooling/ohos/research/tinyemu-native/clock-cpu.c', 'tooling/ohos/research/tinyemu-clint-deadline/timer-boundary.c'], scope='Actual RV32/RV64 WFI and select microsecond boundaries, legacy millisecond and nonembed dispatch, existing CLINT/clock regressions; explicit clock/select/network fixtures, no Linux/device timing or hard deadline claim')
     g.run('tinyemu-install', lambda: g.py('tooling/ohos/research/tinyemu-install/run.py', '--source-archive', p('tinyemu_source_archive'), '--diskimage', p('tinyemu_diskimage_archive'), '--alpine', p('tinyemu_alpine_archive'), '--output', o / 'tinyemu-install', '--cc', p('cc'), '--node', node()), needs=('tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-install/' + name for name in ['run.py', 'build-image.py', 'install-call.c', 'prepare-fixture.mjs', 'semantic-core.c', 'clock-cpu.c']], scope='Real three-drive guest installation and Node plain image preparation; no HAP/device or cancellation completion')
     for mode in ['jit', 'strict']:
         g.node_tests('linux-prepare-images-' + mode, [rt + 'linux-prepare-images.test.mjs'], mode=mode, needs=('tools',))
@@ -1155,6 +1156,10 @@ def main():
                      mode=mode, needs=('android-targets',), timeout=30)
     for mode in ['strict', 'plain']:
         g.node_tests('attachment-diagnostic-' + mode, [rt + 'attachment-error-recovery.test.mjs'],
+                     mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
+    # Actual storage/cache/shared requests; known-sRGB codec registration is an explicit test seam.
+    for mode in ['strict', 'sim']:
+        g.node_tests('attachment-image-cache-' + mode, [rt + 'attachment-image-cache.test.mjs'],
                      mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
     # Optional entries that would reach a real process past the OH subprocess backend.
     for name in ['forge-github-unavailable', 'liveshare-owner-unavailable', 'market-git-unavailable']:

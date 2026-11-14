@@ -77,6 +77,10 @@ cmake --build /build/linux-oh
 
 针对入口 `tinyemu-clint-deadline` 重编实际宿主对象，覆盖 RV32/RV64 各7个边界、既有13个clock用例和低字写1项，另由真实 Node/TinyEMU 执行设置 UINT64_MAX、启用 MTIE 再 WFI 的小客体 BIOS，在 plain/jitless 两模式计数零等待 select 和 VM线程CPU时钟。clock 注入只用于边界C夹具；Node BIOS 用实际时钟。该错误能使特定裸 BIOS 忙转，尚无实际 Linux 内核空闲路径或设备CPU占比归因证据。没有扩大 MAX_SLEEP_TIME；普通 WFI 的约100Hz轮询与 slirp/停止唤醒调度另行处理。详见 `tooling/ohos/research/tinyemu-clint-deadline/README.zh.md`。
 
+## 1217：embedded RISC-V 微秒等待
+
+0019 在实际 embedded RISC-V 的 select 最后边界使用微秒下取整，避免未来不足1ms的CLINT截止时间被毫秒取整成零而反复忙转。先保留slirp/fs的毫秒预算，再用CPU微秒预算截断；仍保留10ms最大请求、不足1µs可零等待、旧毫秒接口及其他class语义。它包括0018前置，不改停止唤醒或slirp调度。真实旧毫秒API与非embed兼容边界、RV32/RV64实际WFI/select及原clock回归由 `tinyemu-sleep-micros` 门验证；目标设备和完整Linux网络/9p语义不由边界夹具代证。详见 `tooling/ohos/research/tinyemu-sleep-micros/README.zh.md`。
+
 ## 许可
 
 固定 TinyEMU 核心 MIT；实际编入的 slirp 包含 MIT/BSD 类声明及原作者通知，逐文件首部原文收入 THIRD-PARTY-NOTICES.txt 并随 runtime ZIP 分发。这里没有新增 HAP 用户态工具包；Alpine/BusyBox、Bellard Linux内核及903 APK工具的对应源码/许可证闭包仍属镜像分发，不能以本 native notices 替代。Node N-API 为已固定 Node 依赖。

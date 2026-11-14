@@ -52,6 +52,25 @@ function bytesEqual(actual, expected) {
   assert.equal(hash(actual), expected.sha256);
   assert.equal(Buffer.from(actual).toString('hex'), expected.hex);
 }
+function pngWithUnknownOrientation(bytes) {
+  // A valid ancillary text chunk makes the real scanner conservatively leave
+  // source orientation unknown. It must invalidate a disposable cache entry.
+  const type = Buffer.from('tEXt'), data = Buffer.from('Comment\0image-cache-orientation');
+  const chunk = Buffer.alloc(data.length + 12);
+  chunk.writeUInt32BE(data.length, 0); type.copy(chunk, 4); data.copy(chunk, 8);
+  let crc = 0xffffffff;
+  for (const value of Buffer.concat([type, data])) {
+    crc ^= value;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  chunk.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 8 + data.length);
+  for (let cursor = 8; cursor < bytes.length; cursor += 12 + bytes.readUInt32BE(cursor)) {
+    if (bytes.toString('ascii', cursor + 4, cursor + 8) === 'IEND') {
+      return Buffer.concat([bytes.subarray(0, cursor), chunk, bytes.subarray(cursor)]);
+    }
+  }
+  throw new Error('The independent PNG fixture has no IEND');
+}
 let ctx, store, codec, publication, began = false;
 async function boundary(label) {
   const current = await trace();
@@ -163,6 +182,22 @@ try {
   const total = await boundary('all-public-awaits-finished');
   for (const key of metricKeys) assert.equal(total[key], oracle.total[key]);
   assert.equal(total.packRecords.every(x => x.a === 85 && x.b === 240), true);
+  const alpha = records.get('transparent-png');
+  const cachePath = join(store.cacheRoot, 'request-images', alpha.c.variantId.slice(7, 9), alpha.c.variantId.slice(7));
+  const unsupportedCache = pngWithUnknownOrientation(await readFile(join(here, 'image-attachment-fixtures', 'alpha.png')));
+  await assert.rejects(codec.probe(unsupportedCache), error => error.code === 'OHOS_IMAGE_CODEC_UNAVAILABLE'
+    && error.stage === 'source-orientation');
+  await writeFile(cachePath, unsupportedCache);
+  const beforeRecovery = await boundary('cache-unknown-orientation:before');
+  report.cacheUnavailableRecovery = { cacheSha256: hash(unsupportedCache), stage: 'source-orientation',
+    scope: 'Actual product scanner and preload reject only the disposable cache; original source remains valid' };
+  const recovered = await store.readImageRequest(alpha.ref, alpha.c.target);
+  requestObject(recovered, alpha.c);
+  const afterRecovery = await boundary('cache-unknown-orientation:reencoded');
+  assert.deepEqual(delta(beforeRecovery, afterRecovery), { packs: 1, sourceDecodes: 1, verificationDecodes: 1, scales: 1 });
+  bytesEqual(await readFile(cachePath), alpha.c.request);
+  report.cacheUnavailableRecovery = { ...report.cacheUnavailableRecovery, result: 'RECOVERED_SOURCE_REENCODE',
+    variantId: recovered.variantId, delta: delta(beforeRecovery, afterRecovery) };
   report.files = await filesBelow(home);
   assert.equal(report.files.some(x => x.path.startsWith('attachments/v1/tmp/')), false);
   assert.equal(report.files.some(x => x.path.endsWith('.tmp')), false);
