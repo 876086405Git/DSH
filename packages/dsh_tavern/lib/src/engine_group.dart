@@ -276,6 +276,8 @@ class _GroupCoordinator {
               characterId: member.characterId,
               groupNames: view.names,
               groupNotMuted: view.enabledNames,
+              messageVariables: state['messageVariables'],
+              messageVariablesExists: state.containsKey('messageVariables'),
               packRegex: gameplayResources.regex,
             );
             final text = environment
@@ -304,6 +306,7 @@ class _GroupCoordinator {
         engine._store.updateChat(
           id,
           variables: _copy(variables),
+          settings: {if (_mvuDeclared(host.card.data)) 'mvuEnabled': true},
           metadata: _runtimeMetadata(engine._store.chat(id).metadata, state),
         );
         return id;

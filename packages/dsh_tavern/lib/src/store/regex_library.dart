@@ -20,6 +20,9 @@ final class RegexLibrary {
   final _random = Random.secure();
   List<TavernRegexScript> _scripts = const [];
   Future<void> _queue = Future.value();
+
+  /// Synchronous cache notification after the real runtime collection adopts.
+  void Function()? committedObserver;
   File get _file => File('${root.path}/regex-library.json');
 
   Future<void> initialize() async {
@@ -40,12 +43,21 @@ final class RegexLibrary {
       return;
     }
     final decoded = jsonDecode(text);
-    if (decoded is! Map<String, Object?> || decoded['version'] != 1 || decoded['scripts'] is! List<Object?>) {
+    if (decoded is! Map<String, Object?>) {
+      throw const FormatException('Unsupported regex library.');
+    }
+    _scripts = decodeScripts(decoded);
+    committedObserver?.call();
+  }
+
+  /// Uses the same stored-record parser as initialize and whole-library writes.
+  static List<TavernRegexScript> decodeScripts(Map<String, Object?> document) {
+    if (document['version'] != 1 || document['scripts'] is! List<Object?>) {
       throw const FormatException('Unsupported regex library.');
     }
     final result = <TavernRegexScript>[];
     final ids = <String>{};
-    for (final value in decoded['scripts']! as List<Object?>) {
+    for (final value in document['scripts']! as List<Object?>) {
       if (value is! Map<String, Object?> ||
           value['id'] is! String ||
           value['raw'] is! Map<String, Object?> ||
@@ -71,7 +83,7 @@ final class RegexLibrary {
         ),
       );
     }
-    _scripts = List.unmodifiable(result);
+    return List.unmodifiable(result);
   }
 
   List<TavernRegexScript> get scripts => List.unmodifiable(_scripts);
@@ -166,6 +178,102 @@ final class RegexLibrary {
       if (records.isNotEmpty) await _save([..._scripts, ...records]);
       return TavernRegexImportResult(records);
     });
+  }
+
+  /// Replaces one physical library. A null result means its exact before-image
+  /// changed. The caller owns the detached input and maps that conflict.
+  Future<({Map<String, Object?> document, String rawText, List<TavernRegexScript> scripts})?> replaceScripts(
+    List<({String? engineId, Map<String, Object?> raw})> items, {
+    required bool expectedPresent,
+    required String? expectedRawText,
+    void Function()? check,
+    void Function(({Map<String, Object?> document, String rawText, List<TavernRegexScript> scripts}))? onCommitted,
+  }) => _exclusive(() async {
+    check?.call();
+    final source = await _readAuthoringText();
+    check?.call();
+    bool matches(({String text, String rawText})? value) =>
+        expectedPresent == (value != null) && expectedRawText == value?.rawText;
+    if (!matches(source)) {
+      return null;
+    }
+    final document = source == null ? <String, Object?>{'version': 1, 'scripts': <Object?>[]} : jsonDecode(source.text);
+    if (document is! Map<String, Object?>) {
+      throw const FormatException('Unsupported regex library.');
+    }
+    final originals = decodeScripts(document);
+    final byId = {for (final value in originals) value.id: value};
+    final rawById = {
+      for (final value in document['scripts']! as List<Object?>)
+        (value! as Map<String, Object?>)['id']! as String: value,
+    };
+    final used = <String>{};
+    for (final item in items) {
+      final id = item.engineId;
+      if (id != null && (!byId.containsKey(id) || !used.add(id))) {
+        throw ArgumentError.value(id, 'engineId', 'The library identity is absent or repeated.');
+      }
+    }
+    final reserved = byId.keys.toSet();
+    final records = <Map<String, Object?>>[];
+    for (final (index, item) in items.indexed) {
+      check?.call();
+      final id = item.engineId ?? _newId(reserved);
+      final original = byId[id];
+      final row = original == null
+          ? <String, Object?>{
+              'id': id,
+              'sourceText': jsonEncode(item.raw),
+              'importedAt': _clock().toUtc().toIso8601String(),
+            }
+          : Map<String, Object?>.from(rawById[id]! as Map<String, Object?>);
+      row['raw'] = item.raw;
+      if (original == null || !_sameRaw(original.raw, item.raw)) {
+        final path = '\$.scripts[$index].raw';
+        final diagnostic = await inspectRegexScript(item.raw, worker, path: path);
+        check?.call();
+        final report = assessImport(
+          kind: TavernImportKind.regex,
+          document: item.raw,
+          path: path,
+          regexDiagnostics: [diagnostic],
+          checkedAt: _clock().toUtc(),
+        );
+        row['diagnostics'] = [diagnostic.toJson()];
+        row['importReport'] = report.toJson();
+      }
+      records.add(row);
+    }
+    final next = Map<String, Object?>.from(document)..['scripts'] = records;
+    final prepared = decodeScripts(next);
+    Future<bool> current() async => matches(await _readAuthoringText());
+    if (!await current()) {
+      return null;
+    }
+    check?.call();
+    ({Map<String, Object?> document, String rawText, List<TavernRegexScript> scripts})? adopted;
+    final saved = await _save(
+      prepared,
+      document: next,
+      current: current,
+      check: check,
+      onCommitted: (text) {
+        adopted = (document: next, rawText: text, scripts: prepared);
+        onCommitted?.call(adopted!);
+      },
+    );
+    return saved ? adopted : null;
+  });
+
+  static bool _sameRaw(Object? left, Object? right) {
+    if (left is Map<String, Object?> && right is Map<String, Object?>) {
+      return left.length == right.length &&
+          left.entries.every((entry) => right.containsKey(entry.key) && _sameRaw(entry.value, right[entry.key]));
+    }
+    if (left is List<Object?> && right is List<Object?>) {
+      return left.length == right.length && left.indexed.every((entry) => _sameRaw(entry.$2, right[entry.$1]));
+    }
+    return left == right;
   }
 
   Future<TavernRegexScript> updateScript(String id, Map<String, Object?> patch) {
@@ -272,27 +380,43 @@ final class RegexLibrary {
     return result;
   }
 
-  Future<void> _save(List<TavernRegexScript> scripts) async {
+  Future<bool> _save(
+    List<TavernRegexScript> scripts, {
+    Map<String, Object?>? document,
+    Future<bool> Function()? current,
+    void Function()? check,
+    void Function(String text)? onCommitted,
+  }) async {
     final temporary = File('${_file.path}.writing');
-    final text = jsonEncode({
-      'version': 1,
-      'scripts': [
-        for (final script in scripts)
+    final text = jsonEncode(
+      document ??
           {
-            'id': script.id,
-            'raw': script.raw,
-            'sourceText': script.sourceText,
-            'importedAt': script.importedAt.toIso8601String(),
-            'diagnostics': [for (final issue in script.diagnostics) issue.toJson()],
-            if (script.importReport != null) 'importReport': script.importReport!.toJson(),
+            'version': 1,
+            'scripts': [
+              for (final script in scripts)
+                {
+                  'id': script.id,
+                  'raw': script.raw,
+                  'sourceText': script.sourceText,
+                  'importedAt': script.importedAt.toIso8601String(),
+                  'diagnostics': [for (final issue in script.diagnostics) issue.toJson()],
+                  if (script.importReport != null) 'importReport': script.importReport!.toJson(),
+                },
+            ],
           },
-      ],
-    });
+    );
     try {
       await root.create(recursive: true);
       await temporary.writeAsString(text, flush: true);
+      if (current != null && !await current()) {
+        return false;
+      }
+      check?.call();
       await temporary.rename(_file.path);
       _scripts = List.unmodifiable(scripts);
+      onCommitted?.call(text);
+      committedObserver?.call();
+      return true;
     } finally {
       if (await temporary.exists()) await temporary.delete();
     }

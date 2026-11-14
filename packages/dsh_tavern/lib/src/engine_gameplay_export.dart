@@ -7,13 +7,14 @@ final class _GameplayExportPlan {
     required this.files,
     required this.recheck,
     this.png,
+    this.avatar,
   });
   final TavernGameplayExportRequest request;
   final TavernGameplayExportPreview preview;
 
   /// Card assets, or pack files excluding the generated root pack.json.
   final Map<String, Uint8List> files;
-  final Uint8List? png;
+  final Uint8List? png, avatar;
   final Future<void> Function() recheck;
 }
 
@@ -61,6 +62,7 @@ extension _GameplayExports on TavernEngine {
       plan.preview.mergedRaw,
       plan.files,
       plan.png,
+      plan.avatar,
       request.format,
       request.at,
     );
@@ -81,12 +83,13 @@ Future<Uint8List> _encodeGameplayExport(
   Map<String, Object?> raw,
   Map<String, Uint8List> files,
   Uint8List? png,
+  Uint8List? avatar,
   TavernCardFormat? format,
   DateTime at,
 ) => Isolate.run(() {
   if (kind == TavernGameplayExportKind.character) {
     return const CardCodec().encode(
-      TavernCard(json: raw, assets: files, png: png),
+      TavernCard(json: raw, assets: files, png: png, avatar: avatar),
       format: format!,
       modifiedAt: at,
     );
@@ -103,6 +106,7 @@ TavernGameplayExportPreview _gameplayExportPreview({
   required List<Map<String, Object?>> issues,
   required Map<String, Uint8List> files,
   Uint8List? png,
+  Uint8List? avatar,
   Map<String, Object?> facts = const {},
 }) {
   final paths = files.keys.toList()..sort();
@@ -120,6 +124,7 @@ TavernGameplayExportPreview _gameplayExportPreview({
         {'path': path, 'length': files[path]!.length, 'sha256': crypto.sha256.convert(files[path]!).toString()},
     ],
     if (png != null) 'png': {'length': png.length, 'sha256': crypto.sha256.convert(png).toString()},
+    if (avatar != null) 'avatar': {'length': avatar.length, 'sha256': crypto.sha256.convert(avatar).toString()},
   });
   return TavernGameplayExportPreview(
     previewId: identity,

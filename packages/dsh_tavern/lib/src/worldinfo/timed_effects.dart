@@ -243,9 +243,12 @@ class _PackWorldInfoState {
       return;
     }
     for (final type in const ['sticky', 'cooldown']) {
-      if (row.containsKey(type) && row[type] is! Map<String, Object?>) {
-        _bad(source, '$entryPath/$type');
-        return;
+      if (row.containsKey(type)) {
+        final timer = row[type];
+        if (timer is! Map<String, Object?> || !timer.containsKey('start') || !timer.containsKey('end')) {
+          _bad(source, '$entryPath/$type');
+          return;
+        }
       }
     }
   }

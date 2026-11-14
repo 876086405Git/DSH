@@ -1011,6 +1011,8 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
     if (_closed) {
       return;
     }
+    scriptHelperDocumentCommitted(document);
+    resourcesChanged();
     for (final entry in _variableVersions.values) {
       final target = entry.target;
       if (target.scope == TavernVariableScope.global) {
@@ -1030,6 +1032,7 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
       return;
     }
     scriptResourceCardCommitted(id, data);
+    scriptHelperCardCommitted(id, data);
     for (final entry in _variableVersions.values) {
       final target = entry.target;
       if (target.scope == TavernVariableScope.character && target.characterId == id) {
@@ -1047,6 +1050,8 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
 
   void cardRemoved(String id) {
     if (_closed) return;
+    scriptHelperCardRemoved(id);
+    scriptBookDirectoryCardCommitted(id, null);
     _resourceVersion('characterData:$id', null, present: false);
     _resourceVersion('embedded:$id', null, present: false);
     for (final entry in _variableVersions.values) {
@@ -1071,7 +1076,13 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
     if (_closed) {
       return;
     }
+    engine._presetWorkingStoreCommitted(chatIds, presetsChanged);
     generationStoreCommitted(chatIds);
+    if (presetsChanged) {
+      _scriptPresetLibraryCommitted();
+      scriptHelperPresetsCommitted();
+      resourcesChanged();
+    }
     for (final entry in _variableVersions.values) {
       final target = entry.target;
       if (target.scope == TavernVariableScope.chat && chatIds.contains(target.chatId)) {

@@ -247,6 +247,8 @@ final class _AuthoringPromptContextCapture {
     groupNames: view.names,
     groupNotMuted: view.enabledNames,
     preset: preset,
+    messageVariables: turn.state['messageVariables'],
+    messageVariablesExists: turn.state.containsKey('messageVariables'),
     packRegex: turn.gameplayResources.regex,
   );
   final text = _preparePromptUser(environment, input, regexTrace: regexTrace);
@@ -593,12 +595,15 @@ extension _AuthoringPromptContexts on TavernEngine {
         defaultPresetId != null) {
       selectPreset(defaultPresetId);
     }
+    final presetWorking = _captureAuthoringPresetWorking(globalSettings, admissionChat, selectedPresetId, real: real);
     final director = real ? _directors.latestSuccess(chat.id) : null;
     final rawTurnSettings = _authoringContextSettings(
       globalSettings,
       chat,
       metadata,
       selectedPreset: presetRaw,
+      selectedPresetId: selectedPresetId,
+      presetWorking: presetWorking,
       managedRegex: const [],
     );
     final admissionSettings = _personaSettings(rawTurnSettings, persona);
@@ -613,9 +618,6 @@ extension _AuthoringPromptContexts on TavernEngine {
     final gameplayConfigRows = _store.readGameplayConfigurationRows([
       if (savedConfigId is String && savedConfigId.isNotEmpty) savedConfigId,
     ]);
-    final simulationGameplay = simulationBootstrap
-        ? _store.readGameplaySimulationData(gameplayAdmission.snapshot, configIds: gameplayConfigRows.keys)
-        : null;
     final secret = real && kind != _TurnKind.impersonate && _secretsEnabled(admissionSettings)
         ? _store.agentRunsByKind(chat.id, const {'director.secret_proposal'}, limit: 1).firstOrNull
         : null;
@@ -642,16 +644,23 @@ extension _AuthoringPromptContexts on TavernEngine {
     final pendingResources = <String, Future<_AuthoringCapturedResource>>{};
     final auditReads = <String, _AuthoringAuditRead>{};
     final audits = _AuthoringCapturedAudits(auditReads);
+    final secretDefinitions = <String, _AuthoringSecretDefinitionRead>{};
     final reservedProofIds = <String>{if (director != null) director.id, if (secret != null) secret.id};
     final proofs = _AuthoringSecretProofs(
       captureId: captureId,
       chatId: real ? chat.id : null,
       captured: audits,
+      capturedDefinitions: secretDefinitions,
       reservedIds: reservedProofIds,
     );
 
     void checkAdmission() {
       cancellation.check();
+      if (real && !_store.toolChatExists(admissionChat.id) ||
+          _captureAuthoringPresetWorking(globalSettings, admissionChat, selectedPresetId, real: real).token !=
+              presetWorking.token) {
+        _authoringContextConflict();
+      }
       if (!_gameplayAdmissionCurrent(this, gameplayAdmission)) {
         _authoringContextConflict();
       }
@@ -728,6 +737,24 @@ extension _AuthoringPromptContexts on TavernEngine {
       }
     }
 
+    void captureSecretDefinition(String id) {
+      if (secretDefinitions.containsKey(id)) {
+        return;
+      }
+      try {
+        // The raw row, including absence, is independent seal evidence.
+        // A parse/read failure stays deferred at this definition's own slot.
+        final rows = _store.readGameplayConfigurationRows([id]);
+        final historical = _gameplayHistoricalConfig(this, {'dshgoPackDefinitionConfigId': id});
+        for (final entry in rows.entries) {
+          gameplayConfigRows.putIfAbsent(entry.key, () => entry.value);
+        }
+        secretDefinitions[id] = (definition: historical.config?.secrets, error: null, stack: null);
+      } catch (error, stack) {
+        secretDefinitions[id] = (definition: null, error: error, stack: stack);
+      }
+    }
+
     void captureLedger(Map<String, Object?> saved) {
       if (!real) {
         return;
@@ -735,10 +762,29 @@ extension _AuthoringPromptContexts on TavernEngine {
       final ledger = _SecretLedger(saved);
       for (final binding in ledger.bindings) {
         reservedProofIds.add(binding['bindingId']! as String);
-        captureAudit(binding['bindReceiptId']! as String);
+        final receiptId = binding['bindReceiptId']! as String;
+        captureAudit(receiptId);
+        final receipt = auditReads[receiptId]?.row;
+        if (!_secretProofMatches(receipt, binding)) {
+          continue;
+        }
+        final proposalId = receipt!.result['proposalRunId'];
+        if (proposalId is! String || proposalId != binding['proposalRunId']) {
+          continue;
+        }
+        // Child reads keep separate missing/error facts. They cannot erase a
+        // successfully captured committed bind receipt.
+        captureAudit(proposalId);
+        final configId = _secretBindingConfigId(binding, auditReads[proposalId]?.row);
+        if (configId != null) {
+          captureSecretDefinition(configId);
+        }
       }
     }
 
+    if (kind != _TurnKind.impersonate && _secretsEnabled(admissionSettings)) {
+      captureLedger(initialState);
+    }
     final cards = <String, StoredCharacter>{};
     final cardDocuments = <String, Map<String, Object?>>{};
     for (final id in {chat.characterId, actorId, ...?group?.members.map((value) => value.characterId)}) {
@@ -777,7 +823,15 @@ extension _AuthoringPromptContexts on TavernEngine {
             cancellation,
           );
     final settings = _personaSettings(
-      _authoringContextSettings(globalSettings, chat, metadata, selectedPreset: presetRaw, managedRegex: managedRegex),
+      _authoringContextSettings(
+        globalSettings,
+        chat,
+        metadata,
+        selectedPreset: presetRaw,
+        selectedPresetId: selectedPresetId,
+        presetWorking: presetWorking,
+        managedRegex: managedRegex,
+      ),
       persona,
     );
     _GameplayRuntime? prospectiveGameplay;
@@ -882,6 +936,8 @@ extension _AuthoringPromptContexts on TavernEngine {
           currentChat,
           currentMetadata,
           selectedPreset: presetRaw,
+          selectedPresetId: selectedPresetId,
+          presetWorking: presetWorking,
           managedRegex: managedRegex,
         ),
         readNode: (id) {
@@ -1044,6 +1100,8 @@ extension _AuthoringPromptContexts on TavernEngine {
         chat,
         currentMetadata,
         selectedPreset: presetRaw,
+        selectedPresetId: selectedPresetId,
+        presetWorking: presetWorking,
         managedRegex: managedRegex,
       );
     }
@@ -1171,6 +1229,11 @@ extension _AuthoringPromptContexts on TavernEngine {
     if (kind != _TurnKind.impersonate && _secretsEnabled(settings)) {
       captureLedger(initialState);
     }
+    // All finite ledger dependencies are now captured. Include the same old
+    // definition rows in the isolated seed without rereading global settings.
+    final simulationGameplay = simulationBootstrap
+        ? _store.readGameplaySimulationData(gameplayAdmission.snapshot, configIds: gameplayConfigRows.keys)
+        : null;
     // The added user preserves every old ancestor but ends an empty source.
     // Default state initialization can change current knowledge; defer these
     // possible reads until the recomputed director's actual consumption gate.
@@ -1195,7 +1258,13 @@ extension _AuthoringPromptContexts on TavernEngine {
         ..._strings(bindings[source.name]),
         if (source == WorldInfoSource.character)
           for (final id in group == null ? [actorId] : [for (final member in group.members) member.characterId])
-            ..._strings(_map(settings['characterLorebooks'])[id]),
+            ..._characterLinkedBookIds(
+              settings,
+              id,
+              embedded: group == null
+                  ? data.containsKey('character_book')
+                  : (cards[id]?.card.data.containsKey('character_book') ?? false),
+            ),
         if (source == WorldInfoSource.persona && persona.persona != null)
           ..._strings(_map(settings['personaLorebooks'])[persona.persona!.id]),
       ];
@@ -1341,6 +1410,7 @@ extension _AuthoringPromptContexts on TavernEngine {
               personas: simulationPersonas!,
               presetRows: simulationPresets!,
               defaultPresetId: defaultPresetId,
+              presetWorking: presetWorking,
               chat: chat,
               history: history,
               state: initialState,
@@ -1390,6 +1460,11 @@ extension _AuthoringPromptContexts on TavernEngine {
         'deepseek': config.deepseek,
         'thinking': config.thinking,
         'presetId': selectedPresetId,
+        'presetWorking': {
+          'token': presetWorking.token,
+          'global': presetWorking.global != null,
+          'chat': presetWorking.chat != null,
+        },
         'resources': [
           for (final resource in resources.values)
             {
@@ -1427,6 +1502,8 @@ Map<String, Object?> _authoringContextSettings(
   Map<String, Object?> metadata, {
   required Map<String, Object?>? selectedPreset,
   required List<Map<String, Object?>> managedRegex,
+  String? selectedPresetId,
+  _PresetWorkingCapture? presetWorking,
 }) {
   var result = chat == null
       ? _copy(global)
@@ -1442,21 +1519,14 @@ Map<String, Object?> _authoringContextSettings(
   } else if (chat != null && chat.settings.containsKey('preset')) {
     result['preset'] = _map(chat.settings['preset']);
   }
-  final overrides = _map(result['presetOverrides']);
-  final sampling = <String, Object?>{
-    for (final key in const [
-      'temperature',
-      'top_p',
-      'presence_penalty',
-      'frequency_penalty',
-      'openai_max_tokens',
-      'openai_max_context',
-    ])
-      if (overrides.containsKey(key)) key: overrides[key],
-  };
-  if (sampling.isNotEmpty) {
-    result['preset'] = {..._map(result['preset']), ...sampling};
-  }
+  result = _applyPresetWorkingSettings(
+    result,
+    global: global,
+    chat: chat,
+    selectedSource: _capturedPresetSource(global, chat, selectedPresetId),
+    selectedPresetId: selectedPresetId,
+    working: presetWorking,
+  );
   result.remove('managedRegexScripts');
   if (managedRegex.isNotEmpty) {
     result['managedRegexScripts'] = managedRegex;
@@ -1530,6 +1600,7 @@ StoredCharacter _authoringRuntimeCharacter(
       json: parsed.json,
       assets: {for (final path in resource.mediaRefs) path: resource.media['resources/$path']!},
       png: resource.media['source.png'] ?? (format == TavernCardFormat.png ? resource.media['original.png'] : null),
+      avatar: current?.card.avatar,
       originalBytes: resource.media['original.${format.name}'],
       sourceFormat: format,
     ),

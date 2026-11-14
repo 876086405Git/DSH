@@ -672,6 +672,8 @@ extension _SlashRawGenerationPreparation on _ScriptCoordinator {
       preset: preset,
       regexPresetSettings: capture.contextRegexPresetSettings,
       gameplayCapture: capture.gameplayCapture,
+      messageVariables: capture.state['messageVariables'],
+      messageVariablesExists: capture.state.containsKey('messageVariables'),
       macroHistory: capture.chat == null ? dependencies.history : null,
       onCharacterDependency: capture.actorId == null ? dependencies.observeCharacter : null,
       collapseNewlinesOverride: spec.outputPolicy.cleanup.collapseNewlines,

@@ -930,6 +930,8 @@ extension _ScriptMacroEffects on _ScriptCoordinator {
       preset: promptPreset,
       regexPresetSettings: regexPreset,
       gameplayCapture: gameplayCapture,
+      messageVariables: state['messageVariables'],
+      messageVariablesExists: state.containsKey('messageVariables'),
       macroHistory: chat == null ? _MacroEffectHistoryUnavailable(dependencies) : null,
       onCharacterDependency: actorId == null ? characterDependency : null,
       prepareCharacterFieldsOnDemand: prepareCharacterFieldsOnDemand,
@@ -987,7 +989,7 @@ extension _ScriptMacroEffects on _ScriptCoordinator {
     }
   }
 
-  Future<String> _substitutePublicMacros(String contextId, String text) async {
+  Future<String> _substitutePublicMacros(String contextId, String text, {void Function()? onEffectsCommitted}) async {
     final context = _context(contextId);
     if (text.isEmpty) return '';
     final scope = _ScriptEffectScope.publicMacro(this, context);
@@ -1004,6 +1006,9 @@ extension _ScriptMacroEffects on _ScriptCoordinator {
       capture.checkDependencies();
       scope.checkAlive();
       await _commitCapturedMacroUnit(capture, stage: TavernSlashEffectStage.handler, operation: 'substituteMacros');
+      if (scope.committed) {
+        onEffectsCommitted?.call();
+      }
       return result;
     } catch (error, stack) {
       scope.observe(error);
