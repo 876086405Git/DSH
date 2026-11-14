@@ -827,6 +827,251 @@ function Remove-DirRobust {
     } catch { return $false }
 }
 
+# =====================================================================
+#  【v4.17 新增】安装后闭环自愈能力（并入 C:\Users\Administrator\DSH-Tools）
+#
+#  来源脚本：DSH-Tools\dsh-launch-clean.ps1（16.9 KB，启动前自愈 4 项）
+#            DSH-Tools\dsh-cookie-fix.ps1（单独版 cookie 清理）
+#  并入理由：这些自愈能解决「装完启动异常」的一类根因，比直接回滚更轻。
+#            升级后启动失败时先尝试自愈再启动，能救回一批本会被回滚的场景。
+#
+#  并入的 4 项：
+#    1) Cookies 超限清理   —— dsh-auth cookie >= 50 时备份并重置，
+#                            防「71 cookie -> 16KB header -> 渲染进程崩溃」
+#    2) 卡住事务自愈       —— 隔离 NEEDS_ATTENTION 事务 + 清 safe-mode 标记，
+#                            防 SAFE MODE 只读启动导致的下一次启动 134 崩溃
+#    3) autosync 熔断      —— git 通道连续失败 >= 2 次则关闭，防崩溃循环
+#    4) DevToolsActivePort —— 硬杀后残留会让下次启动误判「已有实例在监听」
+#  未并入：fix-sync-baseline.ps1（依赖 git 远端交互，不属于升级闭环）
+# =====================================================================
+
+# 1) Cookies 超限清理。返回 @{ Action='none|cleaned|skipped|error'; Count=n; Detail=... }
+function Repair-DshCookies {
+    param([int]$Threshold = 50)
+
+    $res = [pscustomobject]@{ Action = 'none'; Count = -1; Bytes = -1; Detail = '' }
+    $netDir = Join-Path $env:APPDATA '@deepseek-ai\dsh-desktop\Network'
+    $cookie = Join-Path $netDir 'Cookies'
+    if (-not (Test-Path -LiteralPath $cookie)) {
+        $res.Action = 'skipped'; $res.Detail = 'Cookies 文件不存在'
+        return $res
+    }
+
+    # DSH 运行时 SQLite 被占用，必须先关掉才能安全读/改
+    if (@(Get-DshProcesses).Count -gt 0) {
+        $res.Action = 'skipped'; $res.Detail = 'DSH 正在运行，跳过 cookie 清理'
+        return $res
+    }
+
+    # 用 Python 读 sqlite 统计（与源脚本一致；没有 Python 就跳过，不猜）
+    $pyExe = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'
+    if (-not (Test-Path $pyExe)) { $pyExe = 'python' }
+    $probe = @'
+import sqlite3, sys, os, shutil
+src = sys.argv[1]
+tmp = os.path.join(os.environ["TEMP"], "_dsh_ck_count.db")
+try:
+    shutil.copyfile(src, tmp)
+    con = sqlite3.connect(tmp, timeout=5)
+    cur = con.cursor()
+    cur.execute("SELECT COUNT(*) FROM cookies")
+    total = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM cookies WHERE name LIKE 'dsh-auth%'")
+    auth = cur.fetchone()[0]
+    cur.execute("SELECT SUM(LENGTH(name)+COALESCE(LENGTH(encrypted_value),0)+COALESCE(LENGTH(value),0)+LENGTH(host_key)+LENGTH(COALESCE(path,''))) FROM cookies")
+    tot = cur.fetchone()[0] or 0
+    print("%d|%d|%d" % (total, auth, tot))
+    con.close()
+finally:
+    try: os.remove(tmp)
+    except Exception: pass
+'@
+    $tmpPy = Join-Path $env:TEMP '_dsh_ck_count_v417.py'
+    [IO.File]::WriteAllText($tmpPy, $probe, (New-Object System.Text.UTF8Encoding($false)))
+    try {
+        $out = (& $pyExe $tmpPy $cookie) 2>&1
+        if (("$out") -match '^(\d+)\|(\d+)\|(\d+)$') {
+            $res.Count = [int]$Matches[2]
+            $res.Bytes = [int]$Matches[3]
+        } else {
+            $res.Action = 'error'; $res.Detail = 'cookie 统计失败（Python 不可用或输出异常）'
+            return $res
+        }
+    } catch {
+        $res.Action = 'error'; $res.Detail = ('cookie 统计异常: ' + $_.Exception.Message)
+        return $res
+    } finally {
+        Remove-Item $tmpPy -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($res.Count -lt $Threshold) {
+        $res.Action = 'none'
+        $res.Detail = ('dsh-auth cookie ' + $res.Count + ' 个，低于阈值 ' + $Threshold)
+        return $res
+    }
+
+    # 超限：备份（重命名，绝不删除），DSH 下次启动会重建空库
+    try {
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $bak = Join-Path $netDir ('Cookies.bak-' + $stamp)
+        Move-Item -LiteralPath $cookie -Destination $bak -Force -ErrorAction Stop
+        $j = Join-Path $netDir 'Cookies-journal'
+        if (Test-Path -LiteralPath $j) {
+            Move-Item -LiteralPath $j -Destination (Join-Path $netDir ('Cookies-journal.bak-' + $stamp)) -Force -ErrorAction SilentlyContinue
+        }
+        $res.Action = 'cleaned'
+        $res.Detail = ('dsh-auth cookie ' + $res.Count + ' 个 >= 阈值 ' + $Threshold + '，已备份重置: ' + (Split-Path $bak -Leaf))
+        return $res
+    } catch {
+        $res.Action = 'error'; $res.Detail = ('cookie 备份失败: ' + $_.Exception.Message)
+        return $res
+    }
+}
+
+# 2) 卡住事务 + SAFE MODE 标记自愈。返回 @{ Healed=n; Detail=... }
+function Repair-DshConfigTx {
+    $res = [pscustomobject]@{ Healed = 0; Detail = '' }
+    $txRoot = Join-Path $env:USERPROFILE '.dsh\dsh-config-manager\transactions'
+    if (-not (Test-Path -LiteralPath $txRoot)) {
+        $res.Detail = '无 transactions 目录'
+        return $res
+    }
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $quarantine = Join-Path $txRoot ('quarantine\auto-' + $stamp)
+
+    # 2a) 隔离 NEEDS_ATTENTION 事务（移到 quarantine，绝不删除）
+    $activeDir = Join-Path $txRoot 'active'
+    if (Test-Path -LiteralPath $activeDir) {
+        foreach ($f in @(Get-ChildItem $activeDir -File -Filter '*.json' -ErrorAction SilentlyContinue)) {
+            try {
+                $j = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+                if ($j.state -eq 'NEEDS_ATTENTION') {
+                    New-Item -ItemType Directory -Path $quarantine -Force | Out-Null
+                    Move-Item -LiteralPath $f.FullName -Destination (Join-Path $quarantine $f.Name) -Force -ErrorAction Stop
+                    $res.Healed++
+                    $res.Detail += ('隔离事务 ' + $f.Name + '; ')
+                }
+            } catch {}
+        }
+    }
+
+    # 2b) 清 safe-mode 标记（会让 host 只读启动，进而 134 崩溃）
+    $marker = Join-Path $txRoot 'safe-mode'
+    if (Test-Path -LiteralPath $marker) {
+        try {
+            New-Item -ItemType Directory -Path $quarantine -Force | Out-Null
+            Copy-Item -LiteralPath $marker -Destination (Join-Path $quarantine 'safe-mode.json') -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $marker -Force -ErrorAction Stop
+            $res.Healed++
+            $res.Detail += '清除 SAFE MODE 标记; '
+        } catch {}
+    }
+
+    if ($res.Healed -eq 0) { $res.Detail = '事务干净，无 SAFE MODE' }
+    return $res
+}
+
+# 3) autosync 熔断：git 通道连续失败 >= 2 次则关闭（防崩溃循环）。
+#    返回 @{ Fused=$bool; Fails=n; Detail=... }
+function Repair-DshAutosync {
+    $res = [pscustomobject]@{ Fused = $false; Fails = 0; Detail = '' }
+    $autoCfg = Join-Path $env:USERPROFILE '.dsh\dsh-config-manager\sync\sync-autosync.json'
+    if (-not (Test-Path -LiteralPath $autoCfg)) {
+        $res.Detail = '无 autosync 配置'
+        return $res
+    }
+    try {
+        $raw = Get-Content -LiteralPath $autoCfg -Raw -Encoding UTF8 -ErrorAction Stop
+        $cfg = $raw | ConvertFrom-Json
+        $gitCh = $cfg.channels.git
+        if ($null -eq $gitCh) { $res.Detail = '无 git 通道'; return $res }
+        $fails = [int]$gitCh.consecutiveFailures
+        $res.Fails = $fails
+        if ($gitCh.enabled -eq $true -and $fails -ge 2) {
+            $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            Copy-Item -LiteralPath $autoCfg -Destination ($autoCfg + '.bak-' + $stamp) -Force -ErrorAction SilentlyContinue
+            $gitCh.enabled = $false
+            $gitCh.consecutiveFailures = 0
+            $gitCh.realtime = $false
+            $json = $cfg | ConvertTo-Json -Depth 10
+            # 必须无 BOM：插件 JSON.parse 遇 BOM 会报错
+            [IO.File]::WriteAllText($autoCfg, $json, (New-Object System.Text.UTF8Encoding($false)))
+            $res.Fused = $true
+            $res.Detail = ('git autosync 连续失败 ' + $fails + ' 次 -> 已关闭（手动同步仍可用）')
+        } else {
+            $res.Detail = ('git autosync 正常或已关闭（失败 ' + $fails + ' 次）')
+        }
+    } catch {
+        $res.Detail = ('autosync 检查失败: ' + $_.Exception.Message)
+    }
+    return $res
+}
+
+# 4) 清 DevToolsActivePort 残留（硬杀后残留会让下次启动误判已有实例）。
+#    返回 @{ Removed=$bool; Detail=... }
+function Repair-DshDevToolsPort {
+    $res = [pscustomobject]@{ Removed = $false; Detail = '' }
+    $p = Join-Path $env:APPDATA '@deepseek-ai\dsh-desktop\DevToolsActivePort'
+    if (-not (Test-Path -LiteralPath $p)) {
+        $res.Detail = '无残留'
+        return $res
+    }
+    try {
+        Remove-Item -LiteralPath $p -Force -ErrorAction Stop
+        $res.Removed = $true
+        $res.Detail = '已清除残留 DevToolsActivePort'
+    } catch {
+        $res.Detail = ('清除失败: ' + $_.Exception.Message)
+    }
+    return $res
+}
+
+# 启动前自愈总入口：依次跑 4 项，返回汇总对象。
+# 参数 -IncludeCookies 控制是否做 cookie 清理（需要 DSH 已关闭才有意义）。
+function Invoke-DshStartupHeal {
+    param([switch]$IncludeCookies)
+
+    $summary = [pscustomobject]@{
+        TxHealed     = 0
+        AutosyncFused = $false
+        CookieAction = 'skipped'
+        CookieCount  = -1
+        DevToolsCleared = $false
+        HealedCount  = 0
+        Detail       = @()
+    }
+
+    # 事务 + SAFE MODE
+    $tx = Repair-DshConfigTx
+    $summary.TxHealed = $tx.Healed
+    if ($tx.Healed -gt 0) { $summary.HealedCount += $tx.Healed; $summary.Detail += ('[事务] ' + $tx.Detail) }
+
+    # autosync 熔断
+    $as = Repair-DshAutosync
+    $summary.AutosyncFused = $as.Fused
+    if ($as.Fused) { $summary.HealedCount++; $summary.Detail += ('[同步] ' + $as.Detail) }
+
+    # DevToolsActivePort
+    $dt = Repair-DshDevToolsPort
+    $summary.DevToolsCleared = $dt.Removed
+    if ($dt.Removed) { $summary.HealedCount++; $summary.Detail += ('[端口] ' + $dt.Detail) }
+
+    # Cookies（只在 DSH 已关闭且明确要求时做）
+    if ($IncludeCookies) {
+        $ck = Repair-DshCookies
+        $summary.CookieAction = $ck.Action
+        $summary.CookieCount = $ck.Count
+        if ($ck.Action -eq 'cleaned') {
+            $summary.HealedCount++
+            $summary.Detail += ('[Cookie] ' + $ck.Detail)
+        } elseif ($ck.Action -eq 'error') {
+            $summary.Detail += ('[Cookie] ' + $ck.Detail)
+        }
+    }
+
+    return $summary
+}
+
 if ($Verify -or $Repair) {
     $mode = if ($Repair) { '按需修复' } else { '仅体检' }
     New-Section ($mode + ' / 比对备份与现装')
@@ -1737,9 +1982,67 @@ try {
 # ===================== 阶段7：启动与健康检查 =====================
 New-Section '阶段7 / 启动与健康检查'
 
+# 【v4.17 新增·安装后闭环】启动前自愈。
+# 并入自 DSH-Tools\dsh-launch-clean.ps1 的 4 项能力：
+#   事务/SAFE MODE 自愈、autosync 熔断、DevToolsActivePort 清理、Cookies 超限清理。
+# 为什么放在「启动前」而不是「启动失败后」：
+#   这 4 项正是「装完打不开」的常见根因（尤其 SAFE MODE 和 cookie 超限），
+#   提前清掉能让启动一次成功，避免走「失败→回滚」的重流程。
+# 注意：cookie 清理要求 DSH 已关闭 —— 阶段3 已确保进程全杀，这里正好满足。
+Write-Log '启动前自愈检查（并入 DSH-Tools 能力）...'
+$healSummary = Invoke-DshStartupHeal -IncludeCookies
+if ($healSummary.HealedCount -gt 0) {
+    Write-Log ('自愈完成，处理 ' + $healSummary.HealedCount + ' 项:') 'OK'
+    foreach ($d in $healSummary.Detail) { Write-Log ('  ' + $d) 'OK' }
+} else {
+    Write-Log '自愈检查通过，无需处理' 'OK'
+    foreach ($d in $healSummary.Detail) { Write-Log ('  ' + $d) }
+}
+
 Start-Dsh
 $winElapsed = Wait-DshWindow -TimeoutSec 90
 $healthy = $false
+
+# 【v4.17 新增·安装后闭环】启动异常 -> 自动修复 -> 重试启动。
+# 闭环顺序（用户要求）：安装 -> 启动 -> 异常则修复 -> 修复失败才回滚。
+# 这里只在「首次启动明显异常」时触发一次修复重试，不做无限循环。
+$healRetried = $false
+if ($winElapsed -lt 0) {
+    # 窗口没出现，先用 Web 探测确认是不是「无 GPU 环境降级」，避免误判
+    $webProbe = Test-DshWebAlive -TimeoutSec 15
+    if (-not $webProbe) {
+        Write-Log '首次启动未见窗口/Web 服务，触发安装后自愈修复...' 'WARN'
+        $healRetried = $true
+
+        # 先彻底清进程，避免自愈时文件被占用
+        $round = 0
+        do {
+            $round++
+            $ps = @(Get-DshProcesses)
+            if ($ps.Count -eq 0) { break }
+            foreach ($p in $ps) { try { $p.Kill(); $null = $p.WaitForExit(5000) } catch {} }
+            Start-Sleep -Seconds 2
+        } while ($round -lt 5)
+
+        $heal2 = Invoke-DshStartupHeal -IncludeCookies
+        if ($heal2.HealedCount -gt 0) {
+            Write-Log ('修复阶段处理 ' + $heal2.HealedCount + ' 项:') 'OK'
+            foreach ($d in $heal2.Detail) { Write-Log ('  ' + $d) 'OK' }
+        } else {
+            Write-Log '修复阶段未发现可自愈项（可能是其它原因导致启动失败）' 'WARN'
+        }
+
+        # 重试启动
+        Write-Log '自愈后重新启动 DSH...'
+        Start-Dsh
+        $winElapsed = Wait-DshWindow -TimeoutSec 90
+        if ($winElapsed -ge 0) {
+            Write-Log ('自愈后主窗口已出现 ' + $winElapsed + 's') 'OK'
+        } else {
+            Write-Log '自愈后仍未出现窗口，继续走 Web 探测判定' 'WARN'
+        }
+    }
+}
 
 # 【v4.4 新增·虚拟机/无GPU环境修复】Web 服务健康探测
 # 背景：2026-11-13 在 Hyper-V 虚拟机（Microsoft Hyper-V Video 虚拟显卡）实测发现：
@@ -1923,6 +2226,23 @@ Write-Log ('安装包 : ' + $localPath)
 Write-Log ('来源   : ' + $target.Source + ' / ' + $target.Version)
 Write-Log ('备份   : ' + $backupPath)
 Write-Log ('日志   : ' + $LogFile)
+
+# 【v4.17 新增】安装后闭环状态
+Write-Log '--- 安装后闭环 ---'
+$loopStage = if ($rolledBack) { '已回滚（升级失败）' }
+             elseif ($rollbackFailed) { '回滚失败（需人工）' }
+             elseif ($healthy) { '启动成功，进入主界面' }
+             else { '启动未通过' }
+Write-Log ('  闭环结果: ' + $loopStage) $(if ($healthy) { 'OK' } else { 'WARN' })
+Write-Log ('  启动前自愈: ' + $(if ($healSummary.HealedCount -gt 0) { '处理 ' + $healSummary.HealedCount + ' 项' } else { '无需处理' }))
+if ($healRetried) {
+    Write-Log ('  异常修复重试: 已执行（' + $(if ($winElapsed -ge 0 -or $healthy) { '修复后启动成功' } else { '修复后仍未成功' }) + '）') $(if ($healthy) { 'OK' } else { 'WARN' })
+} else {
+    Write-Log '  异常修复重试: 未触发（首次启动即成功）'
+}
+if ($healSummary.CookieCount -ge 0) {
+    Write-Log ('  Cookie 状态: ' + $healSummary.CookieCount + ' 个 dsh-auth（阈值 50）')
+}
 Write-Log '--- 数据安全检查 ---'
 foreach ($pd in $ProtectedData) {
     if (Test-Path $pd) { Write-Log ('  完好: ' + $pd) 'OK' }
