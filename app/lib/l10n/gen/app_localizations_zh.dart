@@ -2887,6 +2887,12 @@ class L10nZh extends L10n {
   String get botsPetImportHint => '导入你自己的像素宠物：一个 zip，里面是 pack.json 和序列帧 PNG，格式见仓库里的 docs/design/pets.md。长按导入的宠物可以删除。';
 
   @override
+  String get botsPetMake => '让 AI 做一只宠物';
+
+  @override
+  String get botsPetMakeSubtitle => '把 GIF、表情包或主题转成宠物包';
+
+  @override
   String botsPetImportDone(String name) {
     return '「$name」来了';
   }

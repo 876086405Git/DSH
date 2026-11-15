@@ -3061,6 +3061,12 @@ class L10nEn extends L10n {
       'Bring your own pixel pet: a zip with pack.json and PNG frame sheets; the format is in docs/design/pets.md in the repository. Long-press an imported pet to delete it.';
 
   @override
+  String get botsPetMake => 'Make a pet with AI';
+
+  @override
+  String get botsPetMakeSubtitle => 'Turn GIFs, stickers or a theme into a pet pack';
+
+  @override
   String botsPetImportDone(String name) {
     return '$name is here';
   }

@@ -9,6 +9,7 @@ import 'package:dsh_app/pets/pet_pack.dart';
 import 'package:dsh_app/pets/pet_prefs.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
 import 'package:dsh_app/pets/pet_state.dart' show noPetId;
+import 'package:dsh_app/state/compose_inbox.dart';
 import 'package:dsh_app/ui/pets/pet_menu.dart';
 import 'package:dsh_app/ui/pets/pet_picker.dart';
 import 'package:dsh_app/ui/pets/pet_settings_page.dart';
@@ -124,6 +125,16 @@ void main() {
     await settle(tester, () => false);
     return ProviderScope.containerOf(tester.element(find.byType(PetSettingsPage)));
   }
+
+  testWidgets('让 AI 做一只宠物: the skill word waits in a new composer', (tester) async {
+    final container = await open(tester, () => null);
+    expect(find.text('让 AI 做一只宠物'), findsOneWidget);
+    await tester.tap(find.text('让 AI 做一只宠物'));
+    await tester.pump();
+    final pending = container.read(composeInboxProvider);
+    expect(pending, isNotEmpty);
+    expect(pending.first.text, '/pet-theme ');
+  });
 
   testWidgets('导入: your pet joins the picker, chosen, and says who made it', (tester) async {
     final file = zip({'cat/pack.json': utf8.encode(jsonEncode(packJson())), 'cat/idle.png': png(32, 16)});
