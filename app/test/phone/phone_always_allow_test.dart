@@ -1,8 +1,6 @@
 // 始终允许: the two wire fields, the copies that must carry them, the
 // controller write, and the page (danger notice first, list and removal).
 
-import 'package:dsh_app/phone/phone_channel.dart';
-import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/phone_state.dart';
