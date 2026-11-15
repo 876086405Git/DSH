@@ -1,0 +1,44 @@
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -40,5 +40,8 @@
+ static u_int time_fasttimo, last_slowtimo;
+ static int do_slowtimo;
++#ifdef TEMU_EMBED
++static int fasttimo_pending; /* Zero is also a valid curtime at wrap. */
++#endif
+ 
+ static struct in_addr dns_addr;
+ static u_int dns_addr_time;
+@@ -268,8 +271,15 @@
+ 			/*
+ 			 * See if we need a tcp_fasttimo
+ 			 */
++#ifdef TEMU_EMBED
++			if (!fasttimo_pending && so->so_tcpcb->t_flags & TF_DELACK) {
++			   time_fasttimo = curtime;
++			   fasttimo_pending = 1;
++			}
++#else
+ 			if (time_fasttimo == 0 && so->so_tcpcb->t_flags & TF_DELACK)
+ 			   time_fasttimo = curtime; /* Flag when we want a fasttimo */
++#endif
+ 
+ 			/*
+ 			 * NOFDREF can include still connecting to local-host,
+@@ -371,9 +381,16 @@
+ 	/*
+ 	 * See if anything has timed out
+ 	 */
++#ifdef TEMU_EMBED
++		if (fasttimo_pending && ((curtime - time_fasttimo) >= 2)) {
++#else
+ 		if (time_fasttimo && ((curtime - time_fasttimo) >= 2)) {
++#endif
+ 			tcp_fasttimo(slirp);
+ 			time_fasttimo = 0;
++#ifdef TEMU_EMBED
++			fasttimo_pending = 0;
++#endif
+ 		}
+ 		if (do_slowtimo && ((curtime - last_slowtimo) >= 499)) {
+ 			ip_slowtimo(slirp);

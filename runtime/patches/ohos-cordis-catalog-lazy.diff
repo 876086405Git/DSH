@@ -1,0 +1,35 @@
+--- a/node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js
++++ b/node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js
+@@ -1,5 +1,4 @@
+ /** First-party Host inspect providers registered by the Cordis tool package. */
+-import { EVENT_API, queryEventApi, queryServiceApi } from "./api-catalog.js";
+ import { queryLiveConfig } from "./config.js";
+ const EMPTY_INPUT = { type: 'object', properties: {}, additionalProperties: false };
+ const ANY_OUTPUT = { description: 'JSON data owned by this inspect provider.' };
+@@ -24,7 +23,7 @@
+ const CONFIG_OUTPUT = {
+     description: 'One directory page of live entries with patch ids, Config status, total, and nextOffset, or one entry\'s projected JSON Schema with shared definitions, omission acceptance, and projection limitations.',
+ };
+-const HOST_EVENTS = EVENT_API.filter(event => !event.name.startsWith('cordis/'));
++let hostEvents;
+ /**
+  * Construct Host providers over generated Catalogs, evaluator declarations, and live Tool scope.
+  * @param ctx - Host context used for live Loader Config and Agent-scoped Tool queries.
+@@ -32,8 +31,15 @@
+  */
+ export function hostInspectProviders(ctx) {
+     return [
+-        registration('Service', 'Progressive Host Service discovery: compact capability/signature directory, then one exact coding contract.', 'listService', input => queryServiceApi(readExact(input, 'service')), SERVICE_INPUT, SERVICE_OUTPUT),
+-        registration('Event', 'Progressive Host Event discovery: compact listener directory, then one exact event contract.', 'listEvents', input => queryEventApi(readExact(input, 'event'), HOST_EVENTS), EVENT_INPUT, EVENT_OUTPUT),
++        registration('Service', 'Progressive Host Service discovery: compact capability/signature directory, then one exact coding contract.', 'listService', async input => {
++            const catalog = await import('./api-catalog.js');
++            return catalog.queryServiceApi(readExact(input, 'service'));
++        }, SERVICE_INPUT, SERVICE_OUTPUT),
++        registration('Event', 'Progressive Host Event discovery: compact listener directory, then one exact event contract.', 'listEvents', async input => {
++            const catalog = await import('./api-catalog.js');
++            hostEvents ??= catalog.EVENT_API.filter(event => !event.name.startsWith('cordis/'));
++            return catalog.queryEventApi(readExact(input, 'event'), hostEvents);
++        }, EVENT_INPUT, EVENT_OUTPUT),
+         registration('Config', 'Progressive live plugin Config discovery: paged entry directory with schema status, then one entry\'s exact JSON Schema.', 'listConfigs', input => queryLiveConfig(ctx, input), CONFIG_INPUT, CONFIG_OUTPUT),
+         {
+             manifest: {

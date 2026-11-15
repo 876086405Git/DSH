@@ -176,6 +176,14 @@
         }
       }
     },
+    "ohos-cordis-catalog-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
+          "after": "d03cb1f3c28eca98d500d51467ed2491510a0d18cf5c0caf8fe576a8ecb7a428",
+          "before": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8"
+        }
+      }
+    },
     "ohos-forge-github-unavailable.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-experimental-forge-github/lib/index.js": {
@@ -2601,7 +2609,8 @@
       "ohos-client-hmr-idle.diff",
       "ohos-api-gateway-idle.diff",
       "ohos-image-codec.diff",
-      "ohos-web-converter-lazy.diff"
+      "ohos-web-converter-lazy.diff",
+      "ohos-cordis-catalog-lazy.diff"
     ]
   }
 }

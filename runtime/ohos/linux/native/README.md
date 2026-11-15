@@ -81,6 +81,28 @@ cmake --build /build/linux-oh
 
 0019 在实际 embedded RISC-V 的 select 最后边界使用微秒下取整，避免未来不足1ms的CLINT截止时间被毫秒取整成零而反复忙转。先保留slirp/fs的毫秒预算，再用CPU微秒预算截断；仍保留10ms最大请求、不足1µs可零等待、旧毫秒接口及其他class语义。它包括0018前置，不改停止唤醒或slirp调度。真实旧毫秒API与非embed兼容边界、RV32/RV64实际WFI/select及原clock回归由 `tinyemu-sleep-micros` 门验证；目标设备和完整Linux网络/9p语义不由边界夹具代证。详见 `tooling/ohos/research/tinyemu-sleep-micros/README.zh.md`。
 
+## 0020：嵌入 slirp 的 UDP 到期身份（1220）
+
+上游 `curtime` 与 `so_expire` 是 32 位毫秒。新 UDP 在 `UINT32_MAX-1000` 创建时，四分钟后的截止值回卷成一个更小的非零数，既有 `so_expire <= curtime` 会在下一次 fill 立即关闭真实 FD；截止值恰为零又会和“永久 listener”哨兵混淆。该边界是受控时钟注入的宿主复现，没有手机已经遇到的证据。
+
+0020 只在 `TEMU_EMBED` 为私有 socket 保留 64 位最近续期起点和 32 位 duration，以 duration 0 表示未启用超时。`slirp_select_poll` 仍只读取一次 `CLOCK_MONOTONIC`，宽值供 UDP 使用，其低 32 位仍写回原 `curtime`；DNS 一秒缓存、TCP fast/slow timer 的字段与判断没有改变。固定 duration 仍为 240000/10000 ms，并在编译期检查为正且小于 `2^31`。不能仅凭 duration 小于半周期，就假定宿主停止调度的间隔也小于半周期；因此没有只改成 32 位 signed 差比较。
+
+对可表示的单调时间区间，UDP 在 `now-start >= duration` 时到期；所有 attach/listen/send/recv 续期以及清零调用统一走该状态。低 32 位 `so_expire` 保留给原诊断显示，不再兼任 OH 的永久哨兵。成功发送才续期；普通接收续四分钟、DNS foreign-port 为 53 的分支续十秒；永久 listener 收发仍永久。非嵌入构建继续使用原字段、原零哨兵和原比较，没有把修复扩散到 Android 或独立上游模拟器。
+
+首次 poll 的合同来自实际调用顺序：`slirp_open`/`slirp_init` 只初始化空 UDP 链；`virt_machine_run` 先完成 net select/poll，随后才 dispatch CPU。客体 virtio TX 经 `slirp_input` 到 UDP/ICMP 创建临时 socket，RA 临时 listener 也只在 TCP 流量处理中创建。可早期调用的公开 host-forward listener 使用永久标志；固定 OH 启动链没有调用这个 API。产品网络回调在唯一 VM 线程同步执行，未新增线程或全局信号。任意外部调用者在首次 poll 前直接调用内部 `udp_attach` 不属于该 OH 调用合同。
+
+私有 socket 布局在嵌入构建改变，必须完整重编所有 slirp 对象，不能把新旧布局的对象混链。当前 Linux x86_64 宿主实测 socket 168→184 字节、Slirp 1088→1120 字节；这不是目标 SDK ABI 检查。非嵌入两边布局相同。库名、N-API 导出、Node 与 Dart 接口不变。
+
+定向门 `slirp-udp-expiry` 从固定归档新鲜构建，再只逆掉 0020 得到同版旧源码：同一 31 用例旧实现 11 个缺陷断言失败、OH 候选 31/31；非嵌入两边 31 行真实行为记录完全相同，刻意保留其 11 个旧缺陷。另用实际 `temu.c` 私有 slirp 适配器与真实 loopback UDP 检查首 poll 在首包前更新时钟；CPU 批次是显式测试包生产者，并非客体指令。所有 `fcntl`/`EBADF`、socket 收发及 slirp list 操作真实执行。没有将旧缺陷复现算成 31 项通过。
+
+此补丁不扩大 10 ms 等待预算、不增加 waker、不修 TCP fasttimo 的零哨兵，也不消除 1211 的其它阻点。到期仍在原 fill/poll 顺序按已采样时间判定，不承诺宿主墙钟精确四分钟或有界线程调度。宽计时的证明限于单调、有效且可表示的毫秒区间；没有新加对既有 clock_gettime 失败的兜底。SDK/设备尚未运行。
+
 ## 许可
 
 固定 TinyEMU 核心 MIT；实际编入的 slirp 包含 MIT/BSD 类声明及原作者通知，逐文件首部原文收入 THIRD-PARTY-NOTICES.txt 并随 runtime ZIP 分发。这里没有新增 HAP 用户态工具包；Alpine/BusyBox、Bellard Linux内核及903 APK工具的对应源码/许可证闭包仍属镜像分发，不能以本 native notices 替代。Node N-API 为已固定 Node 依赖。
+
+## 1228：TCP delayed ACK 的零时基
+
+0021 仅在 TEMU_EMBED 下把 fasttimo 的挂起状态与32位时间戳分开。真实 TCP 输入置 TF_DELACK 后，fill 首次登记当前时间并置 pending；poll 到达原有2ms条件时执行 tcp_fasttimo 并清 pending。curtime 在32位回卷恰为0也可登记，不会被误当成无定时器而推迟到下一次 fill。不会改变2ms条件、499ms slow timer、select等待上限、UDP或停止唤醒；非嵌入预处理结果保持相同。32位模时间的旧有限范围仍在，未扩成跨完整32位周期暂停的期限保证。
+
+针对门 slirp-fasttimo fresh 构建固定源码，以真实 slirp/TCP/loopback 与明确的 guest Ethernet/单调clock边界验证13场景；原7绿6红、候选13绿，另核重复登记、第二数据段、连接关闭及select错误路径。该门没有执行guest指令，也不测手机或墙钟ACK时限。SDK/设备需本机验证；不是1211长等待方案。

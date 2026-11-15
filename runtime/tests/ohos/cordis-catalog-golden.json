@@ -1,0 +1,15 @@
+{
+  "sourceProvidersSha256": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8",
+  "sourceCatalogSha256": "c3482a44a85471824680d05ba6b993f0abff02026b44acc8e4ec64eeb5f0533a",
+  "contract": {
+    "manifests": "1a854660400ca4879e6b48e9d373b94ded746c6edd84a838e17f618964a58c49",
+    "tools": "0f75d08819a3f07d50414c4da5993b8dbd0480b82a1bd4d3e7f8fe0ed925031a",
+    "serviceDirectory": "4e3f80ff3e1b109d4d97c5048e22dc85bc084b67ca20c621d659956535c0d543",
+    "eventDirectory": "1632d6508a1bd8a9f4e86dcde0e75c80a9ac252174a589f32b84d81eb8b940e1",
+    "serviceCount": 107,
+    "eventCount": 82,
+    "allServices": "a03506478dda41d1507445e2d14e7799fa4908c3976d60012202a570c7c7f6ef",
+    "allEvents": "e464338fbcd5b2bbb3f40711c363095b2778df9b10da468ea97731fe9d92e7d0",
+    "config": "d467c6fb75b29150eeae18a81daad4160dab0c780571bee9b964951a944f1cf2"
+  }
+}

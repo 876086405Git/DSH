@@ -1092,6 +1092,8 @@ def main():
 
     g.run('tinyemu-clint-deadline', lambda: g.py('tooling/ohos/research/tinyemu-clint-deadline/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--out', o / 'tinyemu-clint-deadline', '--cc', p('cc'), '--node', node()), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-clint-deadline/' + name for name in ['run.py', 'timer-boundary.c', 'select-observer.c', 'node-case.mjs']] + ['tooling/ohos/research/tinyemu-native/clock-cpu.c'], scope='Actual RV32/RV64 unsigned CLINT and WFI boundaries, existing clock regressions and production Node tiny BIOS select/VM-thread CPU observations; no Linux kernel, SDK/device or App CPU attribution')
     g.run('tinyemu-sleep-micros', lambda: g.py('tooling/ohos/research/tinyemu-sleep-micros/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--out', o / 'tinyemu-sleep-micros', '--cc', p('cc')), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-sleep-micros/' + name for name in ['run.py', 'sleep-boundary.c']] + ['tooling/ohos/research/tinyemu-native/clock-cpu.c', 'tooling/ohos/research/tinyemu-clint-deadline/timer-boundary.c'], scope='Actual RV32/RV64 WFI and select microsecond boundaries, legacy millisecond and nonembed dispatch, existing CLINT/clock regressions; explicit clock/select/network fixtures, no Linux/device timing or hard deadline claim')
+    g.run('slirp-udp-expiry', lambda: g.py('tooling/ohos/research/slirp-udp-expiry/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--cc', p('cc'), '--out', o / 'slirp-udp-expiry'), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/slirp-udp-expiry/' + name for name in ['run.py', 'expiry.c', 'first-poll.c']], scope='Actual slirp/UDP FDs with controlled monotonic clock, 31-case old/new comparison, nonembed equivalence and real first product loop with explicit CPU packet producer; no guest/device or hard wall-time expiry claim')
+    g.run('slirp-fasttimo', lambda: g.py('tooling/ohos/research/slirp-fasttimo/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--cc', p('cc'), '--out', o / 'slirp-fasttimo'), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/slirp-fasttimo/' + name for name in ['run.py', 'tcp-wire.c']], scope='Actual slirp TCP handshake/data/ACK and loopback peer, 13 old/new cases with explicit guest Ethernet and monotonic clock; nonembed source equivalence; no guest instructions, device or wall-time ACK bound')
     g.run('tinyemu-install', lambda: g.py('tooling/ohos/research/tinyemu-install/run.py', '--source-archive', p('tinyemu_source_archive'), '--diskimage', p('tinyemu_diskimage_archive'), '--alpine', p('tinyemu_alpine_archive'), '--output', o / 'tinyemu-install', '--cc', p('cc'), '--node', node()), needs=('tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-install/' + name for name in ['run.py', 'build-image.py', 'install-call.c', 'prepare-fixture.mjs', 'semantic-core.c', 'clock-cpu.c']], scope='Real three-drive guest installation and Node plain image preparation; no HAP/device or cancellation completion')
     for mode in ['jit', 'strict']:
         g.node_tests('linux-prepare-images-' + mode, [rt + 'linux-prepare-images.test.mjs'], mode=mode, needs=('tools',))
@@ -1154,6 +1156,9 @@ def main():
                      mode=mode, needs=('android-targets',), timeout=30)
         g.node_tests('api-gateway-idle-' + mode, [rt + 'api-gateway-idle.test.mjs'],
                      mode=mode, needs=('android-targets',), timeout=30)
+    for mode in ['plain', 'jitless']:
+        g.node_tests('cordis-catalog-lazy-' + mode, [rt + 'cordis-catalog-lazy.test.mjs'],
+                     mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
     for mode in ['strict', 'plain']:
         g.node_tests('attachment-diagnostic-' + mode, [rt + 'attachment-error-recovery.test.mjs'],
                      mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
@@ -1317,6 +1322,8 @@ def main():
         g.source / (tools + 'runtime-channel.test.mjs')), needs=('native-zlib-build',),
         env=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node')}, tests=[tools + 'runtime-channel.test.mjs'],
         scope='Actual RuntimeController bodies; count background/foreground polling and one-second lifecycle refresh with the host clock fixture')
+    for mode in ['plain', 'jitless']:
+        g.node_tests('runtime-archive-copy-' + mode, [tools + 'runtime-archive-copy.test.mjs'], mode=mode, needs=('native-zlib-build',), extra=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node')})
     g.internal('install-record-wire', lambda _: verify_install_record_wire(o / 'install-record-wire.json'), needs=('ets-runtime-tooling',))
     for mode in ['plain', 'jitless']:
         g.node_tests('secrets-picker-' + mode, [rt + 'secrets.test.mjs', tools + 'attachment-files-channel.test.mjs'], mode=mode, needs=('tools',))

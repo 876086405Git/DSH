@@ -281,7 +281,8 @@ export class OhosRuntimeStorage implements RuntimeStorage {
       await this.archive.extract(file, async (buffer: ArrayBuffer, count: number): Promise<void> => {
         let written = 0;
         while (written < count) {
-          const n = await fs.write(output.fd, buffer.slice(written, count), {offset: offset + written});
+          const chunk: ArrayBuffer = written === 0 && count === buffer.byteLength ? buffer : buffer.slice(written, count);
+          const n = await fs.write(output.fd, chunk, {offset: offset + written});
           if (!Number.isSafeInteger(n) || n <= 0 || n > count - written) {
             throw new RuntimeChannelError('ohos_write_failed', '运行时文件写入未完成。');
           }
