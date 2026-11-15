@@ -1456,6 +1456,7 @@ def main():
           tests=[rt + name for name in ['diagnostic-evidence.test.mjs', 'diagnostic-keyboard.test.mjs', 'diagnostic-evidence-cold.mjs', 'diagnostic-evidence-linux.py']],
           scope='Actual ETS record/fault channel and real Linux FD persistence; explicit HiAppEvent SDK boundary; strict host types and separate cold write/read processes; no device delivery claim')
     g.internal('dart-consumer-evidence', lambda _: verify_dart_consumers(o), needs=('diagnostics-dart', 'performance-dart'))
+    g.node_tests('arkts-compatibility', [rt + 'arkts-compatibility.test.mjs'], needs=('tools',), timeout=120)
     g.run('keyboard-geometry', lambda: g.py(rt + 'keyboard-geometry-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'keyboard-geometry'),
           needs=('tools',), timeout=300, tests=[rt + 'keyboard-geometry.test.mjs', rt + 'keyboard-log.test.mjs', rt + 'entry-ability-fixture.test.mjs'],
           scope='Actual own-window geometry/diagnostics/EntryAbility with explicit Window/Flutter/clock boundaries; strict host types, not SDK or device')
@@ -1565,6 +1566,25 @@ def main():
           ['host-speech-tests.dart', 'host-lifecycle-tests.dart', 'host-http-tests.dart', 'host-preview-tests.dart',
            'host-compat-tests.dart', 'host-route-tests.dart', 'host-system-tests.dart', 'host-native-integration.dart']],
           scope='Actual Dart upper/HTTP + fixed main speech.js + frozen 1216 ETS; explicit framework, local provider and AudioRenderer OS boundaries; no Flutter engine, SDK, device, UI enablement or paid API claim')
+    g.run('system-tts-preview-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
+          '../runtime/tests/ohos/companion-external-data_test.dart',
+          '../runtime/tests/ohos/system-tts-preview-data_test.dart', 'test/companion/companion_voice_test.dart',
+          'test/companion/companion_voice_source_test.dart', 'test/speech/speech_out_test.dart',
+          'test/speech/voice_call_test.dart', 'test/settings/voice_settings_test.dart'),
+          cwd=g.flutter_source / 'app', env=lambda: {**g.flutter_env, 'NODE': str(node()),
+          'OHOS_TYPESCRIPT_PREFIX': str(p('typescript_prefix')), 'OHOS_TTS_SOURCE_ROOT': str(g.flutter_source)},
+          needs=('tools', 'flutter-input-identity',), timeout=300,
+          tests=[rt + 'companion-external-data_test.dart', rt + 'companion-external-rpc.mjs',
+                 rt + 'system-tts-preview-data_test.dart', rt + 'system-tts-preview-rpc.mjs',
+                 'app/test/companion/companion_voice_test.dart', 'app/test/companion/companion_voice_source_test.dart',
+                 'app/test/speech/speech_out_test.dart', 'app/test/speech/voice_call_test.dart',
+                 'app/test/settings/voice_settings_test.dart'],
+          scope='Actual Flutter ordinary OH companion external preflight, preserved per-id system fallback and preview cancellation; finite loopback/RPC to actual ETS with explicit HMS/audio boundaries; Android/default data controls; no SDK/device or paid API claim')
+    g.run('system-tts-preview-dart-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/companion/companion_voice.dart',
+          '../runtime/tests/ohos/companion-external-data_test.dart', '../runtime/tests/ohos/system-tts-preview-data_test.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
+          tests=['app/lib/companion/companion_voice.dart', rt + 'companion-external-data_test.dart', rt + 'system-tts-preview-data_test.dart'],
+          scope='Actual Flutter analyzer for OH companion preflight/cancellation data and finite consumer tests; no UI or Native edits')
     g.run('call-route-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
           '../runtime/tests/ohos/audio-route-data_test.dart', '../runtime/tests/ohos/call-start-mute-data_test.dart',
           '../runtime/tests/ohos/call-start-mute-integration_test.dart', '../runtime/tests/ohos/call-start-pause-integration_test.dart',
@@ -1590,6 +1610,18 @@ def main():
           'lib/voice/streaming_pcm.dart', 'lib/voice/live_words.dart', 'lib/state/streaming_asr_state.dart'),
           cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300,
           scope='Real Flutter analysis of changed system-caption data/protocol files; no UI enablement')
+    g.run('flutter-media-video-poster-data', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
+          '../runtime/tests/ohos/media-video-poster-data_test.dart', 'test/media/media_video_test.dart',
+          'test/media/media_card_test.dart', 'test/chat/artifact_card_test.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300,
+          tests=[rt + 'media-video-poster-data_test.dart', 'app/test/media/media_video_test.dart',
+                 'app/test/media/media_card_test.dart', 'app/test/chat/artifact_card_test.dart'],
+          scope='Actual Flutter OH poster-cache producer, finite local Session HTTP/file I/O and real codec; controlled poster encoder markers, unchanged Android/default and existing media consumers; no SDK/device decoding claim')
+    g.run('flutter-media-video-poster-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/media/video.dart',
+          '../runtime/tests/ohos/media-video-poster-data_test.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
+          tests=['app/lib/media/video.dart', rt + 'media-video-poster-data_test.dart'],
+          scope='Actual Flutter analyzer for the OH poster cache data file and its finite consumer tests; no UI or Native edits')
     flutter_tests = ['test/secrets', 'test/ohos/attachment_files_test.dart', 'test/runtime/phone_callback_bridge_test.dart', 'test/runtime/runtime_recovery_test.dart', 'test/runtime/ohos_install_record_test.dart', 'test/usage/ohos_device_contract_test.dart',
                      'test/safe_mode/safe_mode_logic_test.dart', 'test/state/engine_control_test.dart', 'test/runtime/runtime_controller_test.dart',
                      'test/plugins/ohos_replace_cancel_test.dart', 'test/remote/pairing_system_scanner_test.dart',

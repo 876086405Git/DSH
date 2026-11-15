@@ -4,7 +4,8 @@ declare module '@ohos.window' {
     interface Rect { left: number; top: number; width: number; height: number; }
     interface WindowAnimationConfig { curve: number; duration?: number; param?: Array<number>; }
     interface KeyboardInfo { beginRect: Rect; endRect: Rect; animated?: boolean; config?: WindowAnimationConfig; }
-    interface AvoidArea { leftRect: Rect; topRect: Rect; rightRect: Rect; bottomRect: Rect; }
+    // SDK contract includes visible, even though it has no supported display semantics.
+    interface AvoidArea { visible: boolean; leftRect: Rect; topRect: Rect; rightRect: Rect; bottomRect: Rect; }
     interface AvoidAreaOptions { type: AvoidAreaType; area: AvoidArea; }
     enum AvoidAreaType { TYPE_SYSTEM = 0, TYPE_KEYBOARD = 3 }
     interface Window {

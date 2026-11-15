@@ -4,6 +4,13 @@ import window from '@ohos.window';
 import { Any } from '@ohos/flutter_ohos';
 import { BusinessError } from '@ohos.base';
 
+interface KeyboardAvoidRects {
+  leftRect: window.Rect;
+  topRect: window.Rect;
+  rightRect: window.Rect;
+  bottomRect: window.Rect;
+}
+
 interface KeyboardSample {
   timestamp: number;
   event: string;

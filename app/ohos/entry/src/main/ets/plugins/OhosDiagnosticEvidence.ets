@@ -99,7 +99,8 @@ export class OhosDiagnosticEvidence {
     return this.serialize('', async (): Promise<Map<string, Any>> => {
       const value: Map<string, Any> = new Map<string, Any>();
       const availability: Map<string, Any> = new Map<string, Any>();
-      for (const kind of KINDS) {
+      for (let kindIndex: number = 0; kindIndex < KINDS.length; kindIndex++) {
+        const kind: string = KINDS[kindIndex];
         let rows: DiagnosticEvidenceRow[] = [];
         let state: string = 'available';
         try { rows = await this.read(kind); if (this.failed.has(kind)) state = 'unavailable'; }
@@ -181,8 +182,8 @@ export class OhosDiagnosticEvidence {
     if (!Array.isArray(raw)) throw new DiagnosticEvidenceError('invalid_storage');
     const result: DiagnosticEvidenceRow[] = [];
     const items: Any[] = (raw as Any[]).slice(-this.storageRowLimit(kind));
-    for (let index = 0; index < items.length; index++) {
-      const item: Any = items[index];
+    for (let itemIndex: number = 0; itemIndex < items.length; itemIndex++) {
+      const item: Any = items[itemIndex];
       if (item === null || typeof item !== 'object') continue;
       const fields: EvidenceFields = item as EvidenceFields;
       if (typeof fields.at !== 'number') continue;
@@ -228,9 +229,12 @@ export class OhosDiagnosticEvidence {
   private async cleanFaults(): Promise<void> {
     const rows: DiagnosticEvidenceRow[] = await this.read('processExits');
     let changed: boolean = false;
-    for (const row of rows) {
+    for (let rowIndex: number = 0; rowIndex < rows.length; rowIndex++) {
+      const row: DiagnosticEvidenceRow = rows[rowIndex];
       if (row.logs === undefined || row.logs.length === 0) continue;
-      for (const path of row.logs) {
+      const logs: string[] = row.logs;
+      for (let logIndex: number = 0; logIndex < logs.length; logIndex++) {
+        const path: string = logs[logIndex];
         try { await fs.unlink(path); }
         catch (error) { if ((error as BusinessError).code !== 13900002) throw error as Error; }
       }

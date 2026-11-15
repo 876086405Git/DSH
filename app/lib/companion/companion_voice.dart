@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import '../speech/deepseek_speech.dart';
 import '../speech/speech_audio.dart';
 import '../speech/speech_out.dart';
+import '../state/android_features.dart';
 import 'companion_voice_source.dart';
 
 enum CompanionVoiceEventType {
@@ -158,7 +159,9 @@ class _Line {
 /// sentence that can't be fetched or played is read in the phone's own voice
 /// when it has one. Events carry the loudness of fetched WAV audio for her mouth.
 class CompanionSpeaker {
-  CompanionSpeaker(this._voice, this._client, this._folder, [this._deepseek, this._ohosCall, this._ohosOutput]) {
+  CompanionSpeaker(this._voice, this._client, this._folder, [
+    this._deepseek, this._ohosCall, this._ohosOutput, this._ohos = false,
+  ]) {
     _native = _voice.events.listen(_heard);
   }
 
@@ -172,6 +175,8 @@ class CompanionSpeaker {
   // native payload remains unchanged; this optional route is only wired on OH.
   final bool Function()? _ohosCall;
   final Object? Function()? _ohosOutput;
+  // OH's ordinary companion uses system TTS; fetched files have no player.
+  final bool _ohos;
   late final StreamSubscription<CompanionVoiceEvent> _native;
   final _events = StreamController<CompanionVoiceEvent>.broadcast();
 
@@ -258,12 +263,18 @@ class CompanionSpeaker {
   Future<String?> preview(CompanionVoiceSettings next, String text) async {
     settings = next;
     stop();
+    final generation = _generation;
     final id = 'preview-${++_previews}';
     if (next.source == CompanionVoiceSource.system) {
-      if (!await _voice.ready()) return 'no-phone-voice';
-      return await _voice.speak(id, text, flush: true) ? null : 'no-phone-voice';
+      final ready = await _voice.ready();
+      if (_ohos && generation != _generation) return 'cancelled';
+      if (!ready) return 'no-phone-voice';
+      final accepted = await _voice.speak(id, text, flush: true);
+      if (_ohos && generation != _generation) return 'cancelled';
+      return accepted ? null : 'no-phone-voice';
     }
     if (!next.configured) return 'not-set-up';
+    if (_ohos) return lastError = 'unsupported voice format';
     final client = _client();
     try {
       final audio = await fetchCompanionVoice(next, text, client, deepseek: _deepseek);
@@ -278,6 +289,13 @@ class CompanionSpeaker {
   }
 
   Future<CompanionVoiceAudio?> _fetch(CompanionVoiceSettings settings, String text) async {
+    if (_ohos) {
+      lastError = 'unsupported voice format';
+      // Keep the existing per-line system fallback, including a first line
+      // arriving before ready's warm-up. The pump can still leave on _cut.
+      if (!_phoneReady) await warmPhone();
+      return null;
+    }
     final client = _client();
     try {
       final audio = await fetchCompanionVoice(settings, text, client, deepseek: _deepseek);
@@ -378,6 +396,9 @@ final companionSpeakerProvider = Provider<CompanionSpeaker>((ref) {
     ref.watch(companionVoiceClientProvider),
     ref.watch(companionVoiceFolderProvider),
     ref.watch(deepSeekSpeechProvider),
+    null,
+    null,
+    ref.watch(operatingSystemProvider) == 'ohos',
   );
   ref.onDispose(speaker.dispose);
   return speaker;
