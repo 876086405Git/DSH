@@ -313,19 +313,35 @@ class LightPainter {
       }
     }
 
+    // A wide, faint pass is laid down once, on the middle ring, with the whole
+    // bundle's opacity: those strokes are far wider than the rings are apart, so
+    // one reads as all of them (under the blur, side by side, the same light),
+    // and the frame costs about a third of stroking each ring.
+    void bundle(double Function(double w) width, double Function(double a) alpha) {
+      final mid = rings ~/ 2;
+      var a = 0.0;
+      for (var k = 0; k < rings; k++) {
+        a += alpha(_alpha[k]);
+      }
+      paint
+        ..strokeWidth = width(_width[mid])
+        ..color = Color.fromRGBO(0, 0, 0, clamp01(a));
+      canvas.drawPath(_paths[mid], paint);
+    }
+
     // the glow, on its own layer to be softened
     canvas.saveLayer(bounds, _layer..blendMode = op);
     // 1 · halo: very wide, very faint, shared out between the rings so the
     // total stays the same however many there are
     final haloK = light.halo * i * (dark ? 1 : 0.2) / count;
     for (final (wk, ak) in const [(0.7, 0.045), (0.42, 0.075), (0.24, 0.11), (0.12, 0.16)]) {
-      pass((_) => light.r * wk, (_) => ak * haloK);
+      bundle((_) => light.r * wk, (_) => ak * haloK);
     }
     // 2 · bloom: three soft passes hugging each ring; across the bundle they
     // sum into one luminous band, the glassy ribbon
     final bloomK = i * (dark ? 1 : 0.6) * _bloom;
     for (final (wk, ak) in const [(16.0, 0.05), (8.0, 0.11), (4.0, 0.2)]) {
-      pass((w) => w * wk * _bloomSize, (a) => ak * bloomK * a);
+      bundle((w) => w * wk * _bloomSize, (a) => ak * bloomK * a);
     }
     canvas.restore();
 
