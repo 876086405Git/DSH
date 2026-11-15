@@ -35,7 +35,7 @@ After a system force-stop, reopen DSH Go before it can recover. Repeated failure
 - Shizuku: install and start Shizuku yourself, explicitly request authorization here, then connect. The actual service identity may be shell (UID 2000) or root (UID 0); check the status and each command confirmation.
 - **Self-ADB**: enable Wireless debugging in Android Developer options, open its pairing-code dialog, and enter the six-digit code and pairing port here (or use discovery). Connect after pairing. The connection port differs from the pairing port; leave it blank to discover a local endpoint. Pairing codes are not saved or logged. This feature does not contact other devices.
 
-Every `android_shell` tool call requires native confirmation of the complete command and actual identity. Screen-control task/always confirmation exemptions do not apply. System authorization, background-display authorization, and accessibility-restoration authorization do not authorize arbitrary commands. App rules cannot constrain every Shell operation. Do not rewrite a refused command or switch channels to bypass a refusal.
+Every `android_shell` tool call requires native confirmation of the complete command and actual identity, with the same **Allow once** / **Allow this turn** / **Cancel**: Allow once passes only this command; after Allow this turn the rest of this turn's commands don't ask; Cancel drops only this command. Screen-control exemptions and **Always allow** don't apply, and the next turn asks for each command again. System authorization, background-display authorization, and accessibility-restoration authorization do not authorize arbitrary commands. App rules cannot constrain every Shell operation. Do not rewrite a cancelled command or switch channels to bypass the decision.
 
 The default command deadline is 30 seconds, with a 60-second maximum. Commands are limited to 2048 UTF-8 bytes, with a shared 64 KiB text-output cap and explicit truncation. Results include the actual exit code, stdout, stderr and timeout/cancellation status. Output goes to the current model: do not run commands that print secrets, login state or other content you do not want sent. Interactive terminals, binary transfer and persistent background jobs are not supported. Ubuntu paths, working directories and environment are not inherited.
 
@@ -75,7 +75,7 @@ Whatever the settings, the bar closes when the reply ends.
 - **Stop** on the "Operating your phone" card on the phone control page.
 - **Stop phone control** on the engine notification. **Stop engine** on the same notification stops the whole engine.
 
-Stopping phone control also stops every reply in progress on this phone's engine.
+A stop affects this turn only: the rest of this turn's phone actions don't run, and the next turn resumes and asks you again — no need to turn phone control back on in Settings. **Cancel** on a confirmation card is different: it drops just that one action, leaves the rest of the turn alone, and doesn't stop the turn.
 
 ## Confirmation
 
@@ -83,12 +83,27 @@ Stopping phone control also stops every reply in progress on this phone's engine
 `Settings › Phone control › Confirmation`
 
 - **Always ask** (default): asks before entering a new app, sending, deleting or paying.
-- **This task**: asks once per task. Choose **Allow for task** on the approval card, and the rest of the task goes ahead.
+- **This task**: asks once this turn. Choose **Allow this turn** on the card, and the rest of the turn goes ahead.
 - **Always skip**: acts without asking. Asks you to confirm before turning on.
+
+The card and the notification always have the same three answers:
+
+- **Allow once**: this step only.
+- **Allow this turn**: the same app and kind of action are not asked again this turn; the next turn asks again.
+- **Cancel**: drops only this action. The rest of the turn goes on, and the turn isn't stopped.
 
 When you pick Phone control during first-time setup, you choose once after agreeing to the disclosure: **Ask me at key steps** (Always ask) or **Fully automatic** (Always skip). You can change it here anytime.
 
-An approval card left for 30 seconds counts as **Decline**. In every mode, system settings and permission pages, passwords and verification codes, and DSH Go itself stay with you unless turned on under **Lift limits**; apps set to Hands off are changed in **App rules**. Confirmation lists these, with links to both.
+An approval card left for 30 seconds counts as **Cancel**. In every mode, system settings and permission pages, passwords and verification codes, and DSH Go itself stay with you unless turned on under **Lift limits**; apps set to Hands off are changed in **App rules**. Confirmation lists these, with links to both.
+
+## Always allow
+
+<!-- nav: commonSettings,hubSettingsPhoneControl,phoneAlwaysAllowTitle -->
+`Settings › Phone control › Always allow`
+
+One switch and a list of apps, off by default. Turning it on first shows a line: “Once on, DSH can send content to these apps without asking. Sent content can’t be taken back.” It applies only after **Turn on**; turning it off takes one tap and brings ordinary confirmations back.
+
+With it on, **Add app** adds an app by package name and **Remove** takes one off the list. Ordinary confirmations are skipped for these apps; hard rules still stop system settings pages, passwords and codes, payment fields, and apps set to **Hands off**.
 
 ## Confirmations and return
 

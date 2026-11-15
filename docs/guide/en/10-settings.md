@@ -22,7 +22,7 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 - **Personalization**:
   - **Personal preferences**: instructions for the AI; new chats follow them. Clear and save to remove them.
   - **Visual replies**: on by default; the AI on this phone's engine can answer with charts, comparisons and tappable options. Takes effect after the engine restarts; tap **Restart now** when asked.
-  - **Agent presets**: how new chats work by default; you can also create, copy and edit presets.
+  - **Agent presets**: how new chats work by default; you can also create, copy and edit presets. A preset decides which tools a chat can use. Coding presets such as **Standard mode** and **PTC mode** bring `bash`, `run_code` and other Linux tools; a custom persona preset can have no tools at all, so pick the right preset when you start a chat.
   - The first two show only with this phone's engine.
 
 ## Capabilities

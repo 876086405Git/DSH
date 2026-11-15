@@ -31,6 +31,7 @@ import '../theme/theme.dart';
 import 'action_log_page.dart';
 import 'android_shell_page.dart';
 import 'a11y_restore_sheet.dart';
+import 'always_allow_page.dart';
 import 'app_rules_page.dart';
 import 'dnd_mode_page.dart';
 import 'phone_disclosure_sheet.dart';
@@ -796,6 +797,12 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             spot: SettingsIndex.entry(SettingsPageId.phoneUnlocks),
             subtitle: phoneUnlockSummary(context.l10n, policies) ?? context.l10n.phoneControlLoading,
             onTap: () => _push(const PhoneUnlockPage()),
+          ),
+          ListPageRow(
+            icon: AppIcons.allowed,
+            spot: SettingsIndex.entry(SettingsPageId.phoneAlwaysAllow),
+            subtitle: phoneAlwaysAllowSummary(context.l10n, policies) ?? context.l10n.phoneControlLoading,
+            onTap: policies == null ? null : () => _push(const PhoneAlwaysAllowPage()),
           ),
         ],
       ),

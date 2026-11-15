@@ -841,20 +841,29 @@ class PhoneCorePromptOwnerTest {
         assertSame(SystemTarget.UserChoice, startedPlan!!.target)
     }
 
-    @Test fun unknownSystemTargetsAskEveryTimeEvenInAlwaysMode() {
+    @Test fun unknownSystemTargetsIgnoreStandingWaiversButAcceptOneRoundGrant() {
         policies = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
         freshTarget = Either.Right(SystemTarget.Unknown)
         preparedTarget = SystemTarget.Unknown
-        for (call in listOf(::openApp, ::openUrl, ::shareIntent)) {
-            val before = launches + urls + intents
-            val result = call()
-            assertFalse(result.text, result.isError)
-            assertEquals(before + 1, launches + urls + intents)
-            assertEquals(before + 1, asked)
+        // 始终免确认不继承给「未知处理应用」：允许一次后下一次仍然弹卡。
+        confirm = { Decision.ALLOW_ONCE }
+        repeat(2) { round ->
+            assertFalse(openUrl().isError)
+            assertEquals(round + 1, asked)
             assertSame(SystemTarget.Unknown, startedPlan!!.target)
+            assertTrue(focusRequests.last().allowRound)
             assertNull(focusRequests.last().packageName)
-            assertFalse(focusRequests.last().offerTaskWaiver)
         }
+        // 一次「本轮允许」让本轮同类未知处理应用确认不再问。
+        confirm = { Decision.ALLOW_APP_FOR_TASK }
+        assertFalse(openUrl().isError)
+        assertEquals(3, asked)
+        assertFalse(openUrl().isError)
+        assertEquals(3, asked)
+        // 下一轮从新任务开始，重新询问。
+        replace()
+        assertFalse(openUrl().isError)
+        assertEquals(4, asked)
         assertFalse(tasks.isWaived)
         assertFalse(tasks.isApproved("example.app"))
     }
@@ -1525,7 +1534,7 @@ class PhoneCorePromptOwnerTest {
         assertEquals(1, asked)
         assertEquals(1, main.focusInputs)
         assertEquals(1, main.focusCloses)
-        assertFalse(focusRequests.single().offerTaskWaiver)
+        assertFalse(focusRequests.single().allowRound)
         assertFalse(focusRequests.single().firstInApp)
         assertNull(focusRequests.single().visualScope)
     }
@@ -1543,7 +1552,7 @@ class PhoneCorePromptOwnerTest {
 
     @Test fun focusRejectsBroadConsentAndClosesCapturedPlan() {
         committedFocusScreen()
-        confirm = { Decision.ALLOW_ALL_FOR_TASK }
+        confirm = { Decision.ALLOW_APP_FOR_TASK }
         assertTrue(focusCall().isError)
         assertEquals(0, main.focusInputs)
         assertEquals(1, main.focusCloses)

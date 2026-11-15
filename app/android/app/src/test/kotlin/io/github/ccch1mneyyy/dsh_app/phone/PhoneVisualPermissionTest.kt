@@ -88,7 +88,7 @@ class PhoneVisualPermissionTest {
             f.read(); assertFalse(f.tap().isError)
             assertEquals(2, f.asks.size)
             assertTrue(f.asks[0].firstInApp); assertNull(f.asks[0].visualScope)
-            assertNotNull(f.asks[1].visualScope); assertFalse(f.asks[1].offerTaskWaiver)
+            assertNotNull(f.asks[1].visualScope); assertFalse(f.asks[1].allowRound)
             f.read(); assertFalse(f.tap().isError)
             assertEquals(2, f.asks.size); assertEquals(2, f.actions)
         }
@@ -114,7 +114,7 @@ class PhoneVisualPermissionTest {
                 assertFalse(f.tap().isError)
             }
             assertEquals(2, f.actions); assertEquals(2, f.asks.size)
-            assertTrue(f.asks.all { it.visualScope == null && !it.offerTaskWaiver })
+            assertTrue(f.asks.all { it.visualScope == null })
             assertFalse(f.tasks.isApproved("example.app")); assertFalse(f.tasks.isWaived)
             assertFalse(f.tasks.hasVisualGrant(f.tasks.activeOwner()!!, f.scope!!))
         }
@@ -166,7 +166,7 @@ class PhoneVisualPermissionTest {
             assertNotEquals(before, f.id); assertTrue(f.accepted)
             assertFalse(f.tap().isError)
             assertEquals(2, f.actions); assertEquals(2, f.asks.size)
-            assertTrue(f.asks.all { it.visualScope == null && !it.offerTaskWaiver })
+            assertTrue(f.asks.all { it.visualScope == null })
             assertFalse(f.tasks.hasVisualGrant(f.tasks.activeOwner()!!, f.scope!!))
         }
     }
@@ -188,7 +188,7 @@ class PhoneVisualPermissionTest {
             f.knownTarget = true; f.read(); f.tap("long")
             f.policy = PhonePolicies(confirmMode = ConfirmMode.ALWAYS, confirmEveryWritePackages = listOf("example.app"))
             f.read(); f.tap()
-            assertEquals(3, f.asks.size); assertTrue(f.asks.all { it.visualScope == null && !it.offerTaskWaiver })
+            assertEquals(3, f.asks.size); assertTrue(f.asks.all { it.visualScope == null })
         }
     }
     @Test fun scopeTransitionsViaScreensWithoutCoordinatesRevokeBeforeReturningToA() {
@@ -221,6 +221,17 @@ class PhoneVisualPermissionTest {
             assertFalse(f.tasks.isApproved("example.app"))
         }
     }
+    @Test fun alwaysAllowCannotSkipTheIndependentVisualConfirmation() {
+        Fixture().use { f ->
+            f.policy = PhonePolicies(alwaysAllowEnabled = true, alwaysAllowPackages = listOf("example.app"))
+            f.read(); assertFalse(f.tap().isError)
+            // 普通首问被「始终允许」豁免，但视觉 scope 仍必须单独确认一次。
+            assertEquals(1, f.asks.size)
+            assertNotNull(f.asks.single().visualScope)
+            assertFalse(f.asks.single().allowRound)
+            assertTrue(f.tasks.hasVisualGrant(f.tasks.activeOwner()!!, f.scope!!))
+        }
+    }
     @Test fun policyChangedDuringOrdinaryConfirmationCannotOfferVisualPermission() {
         Fixture().use { f ->
             f.decision = { Decision.ALLOW_ONCE }
@@ -231,7 +242,7 @@ class PhoneVisualPermissionTest {
             f.read(); assertFalse(f.tap().isError)
             assertEquals(2, f.asks.size)
             assertTrue(f.asks.all { it.visualScope == null })
-            assertFalse(f.asks.last().offerTaskWaiver)
+            assertTrue(f.asks.last().allowRound)
             assertEquals(1, f.actions)
             val owner = f.tasks.activeOwner()!!
             assertFalse(f.tasks.hasVisualGrant(owner, f.scope!!))

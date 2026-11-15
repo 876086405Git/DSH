@@ -1634,7 +1634,8 @@ class L10nZh extends L10n {
   String get androidShellEnable => '允许 Android Shell';
 
   @override
-  String get androidShellEnableHint => '独立开关，不随不打扰模式或屏幕免确认设置开启。';
+  String get androidShellEnableHint =>
+      '独立开关，不随不打扰模式或屏幕免确认开启；只增加 Android 命令通道，不影响 Ubuntu 里的 bash / run_code 等工具，两者可同时使用。';
 
   @override
   String get androidShellConfirmationNote => '每条命令均需确认，可能修改系统和文件。';
@@ -1810,6 +1811,9 @@ class L10nZh extends L10n {
 
   @override
   String get androidShellErrorInvalidResponse => '没有收到有效的原生状态，请刷新或更新 App。';
+
+  @override
+  String get androidShellErrorStopped => '本轮已结束或暂停，请重新开启后再试。';
 
   @override
   String get androidShellErrorStopFailed => '未确认已停止，请刷新状态并重试停止。';
@@ -10409,6 +10413,38 @@ class L10nZh extends L10n {
   String get phoneAppRulesPackageHint => '在「设置 → 应用 → 应用信息」里能找到';
 
   @override
+  String get phoneAlwaysAllowTitle => '始终允许';
+
+  @override
+  String get phoneAlwaysAllowOff => '未开启';
+
+  @override
+  String phoneAlwaysAllowCount(int count) {
+    return '已允许 $count 个应用';
+  }
+
+  @override
+  String get phoneAlwaysAllowSwitchHint => '不再询问就把内容发到你选的应用';
+
+  @override
+  String get phoneAlwaysAllowWarning => '开启后 DSH 可不再询问就把内容发到这些应用，发出后无法撤回。';
+
+  @override
+  String get phoneAlwaysAllowConfirm => '确认开启';
+
+  @override
+  String get phoneAlwaysAllowAdd => '添加应用';
+
+  @override
+  String get phoneAlwaysAllowEmpty => '还没有允许的应用';
+
+  @override
+  String get phoneAlwaysAllowRemove => '移除';
+
+  @override
+  String get phoneAlwaysAllowSaveFailed => '保存失败';
+
+  @override
   String get phoneDndRequiresAndroid => '需要 Android 14 及以上';
 
   @override
@@ -10637,7 +10673,7 @@ class L10nZh extends L10n {
   String get phoneConfirmAskHint => '进新 App、发送、删除、付款前先问你';
 
   @override
-  String get phoneConfirmTaskHint => '每个任务只问一次';
+  String get phoneConfirmTaskHint => '本轮只问一次';
 
   @override
   String get phoneConfirmAlwaysHint => '从不询问，直接操作';

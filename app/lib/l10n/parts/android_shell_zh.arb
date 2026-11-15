@@ -3,7 +3,7 @@
   "androidShellEntryHint": "独立的系统命令通道，默认关闭",
   "androidShellSubtitle": "通过 Shizuku 或自连 ADB 在这台手机上执行 Android 系统命令，不是 Ubuntu 里的 bash。",
   "androidShellEnable": "允许 Android Shell",
-  "androidShellEnableHint": "独立开关，不随不打扰模式或屏幕免确认设置开启。",
+  "androidShellEnableHint": "独立开关，不随不打扰模式或屏幕免确认开启；只增加 Android 命令通道，不影响 Ubuntu 里的 bash / run_code 等工具，两者可同时使用。",
   "androidShellConfirmationNote": "每条命令均需确认，可能修改系统和文件。",
   "androidShellMasterOff": "先在上一页打开「手机操控」。",
   "androidShellRiskTitle": "允许执行 Android 系统命令？",
@@ -78,6 +78,7 @@
   "androidShellErrorProtocolMismatch": "当前原生模块不支持此 Shell 协议，请更新 App。",
   "androidShellErrorNativeUnavailable": "此构建的 Android Shell 原生模块不可用。",
   "androidShellErrorInvalidResponse": "没有收到有效的原生状态，请刷新或更新 App。",
+  "androidShellErrorStopped": "本轮已结束或暂停，请重新开启后再试。",
   "androidShellErrorStopFailed": "未确认已停止，请刷新状态并重试停止。",
   "androidShellErrorUnknown": "未能确认操作结果。先核实结果；已派发的命令不要自动重试。"
 }

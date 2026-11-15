@@ -720,8 +720,8 @@ class PhoneCore(
             }
         }
         val label = ui.get("phone_system_unknown_app", "未知应用") // l10n:keep test default
-        val verdict = safety.confirmationOnce(ui.get("phone_system_confirm_unknown",
-            "处理应用未知，允许这次操作（%1\$s）吗？", summary), null, label, "unknown-app") // l10n:keep test default
+        val verdict = safety.confirmation(ui.get("phone_system_confirm_unknown",
+            "处理应用未知，要执行（%1\$s）吗？", summary), null, label, "unknown-app", inheritWaiver = false) // l10n:keep test default
         when (val result = safety.resolve(verdict, scope, owner)) {
             is SafetyGate.Result.No -> return Out(result.message, error = true, app = label,
                 summary = summary, decision = result.decision)

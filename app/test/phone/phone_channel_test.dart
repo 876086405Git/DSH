@@ -174,10 +174,12 @@ void main() {
     expect(native.callsOf('adbPair').single.arguments, {'code': '482913', 'port': 37123});
     expect(native.callsOf('adbConnect').single.arguments, {'port': 45269});
     expect(native.callsOf('actionLog').single.arguments, {'limit': 7});
-    // Only the two lists and the confirm mode go over the wire.
+    // The two lists, 始终允许 and the confirm mode go over the wire.
     expect(native.callsOf('setPolicies').single.arguments, {
       'denyPackages': ['cmb.pb'],
       'confirmEveryWritePackages': ['com.tencent.mm'],
+      'alwaysAllowEnabled': false,
+      'alwaysAllowPackages': <String>[],
       'confirmMode': 'ask',
     });
   });

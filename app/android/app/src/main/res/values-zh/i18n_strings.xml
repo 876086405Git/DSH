@@ -48,19 +48,18 @@
     <string name="live_chip_phone">操作中</string>
     <string name="live_chip_paused">已暂停</string>
     <!-- overlay -->
-    <string name="overlay_allow_task_no_ask">允许，本任务不再问</string>
-    <string name="overlay_allow_task">允许（本任务）</string>
     <string name="overlay_allow_once">允许一次</string>
+    <string name="overlay_allow_round">本轮允许</string>
     <string name="overlay_this_app">这个应用</string>
     <string name="overlay_confirm_title">DSH 请你确认</string>
     <string name="overlay_open_app">DSH 想操作「%1$s」</string>
-    <string name="overlay_decline">拒绝</string>
+    <string name="overlay_decline">取消</string>
     <string name="overlay_stop">停止</string>
     <string name="overlay_handoff_phone">需要你来操作手机</string>
     <string name="overlay_continue">继续</string>
     <string name="overlay_public_approval">DSH 等你确认</string>
     <string name="overlay_channel">手机操控确认</string>
-    <string name="overlay_channel_description">DSH 操作手机时请你确认的提示（允许 / 拒绝 / 停止）</string>
+    <string name="overlay_channel_description">DSH 操作手机时请你确认的提示（允许一次 / 本轮允许 / 取消）</string>
     <string name="overlay_stopped">已停止</string>
     <string name="overlay_paused">已暂停 · 点「继续」后 DSH 接着做</string>
     <string name="overlay_pause">暂停</string>
@@ -71,12 +70,7 @@
     <string name="overlay_steer_sent">已发给 DSH：%1$s</string>
     <string name="overlay_first_app">首次操作「%1$s」</string>
     <string name="overlay_action_title">DSH 想做这件事</string>
-    <string name="overlay_waiver_hint">本任务不再问：之后的步骤直接做，密码、支付、银行和系统设置仍会拦下。30 秒内不选，按「拒绝」处理</string>
-    <string name="overlay_timeout_hint">30 秒内不选，按「拒绝」处理</string>
-    <string name="overlay_allow_remaining">允许，本任务不再询问</string>
-    <string name="overlay_allow_app_task">允许操作「%1$s」（本任务）</string>
-    <string name="overlay_allow_this_app_task">允许操作此应用（本任务）</string>
-    <string name="overlay_allow_step">只允许这一步</string>
+    <string name="overlay_timeout_hint">30 秒内不选，按「取消」处理</string>
     <string name="overlay_handoff_title">需要你来操作</string>
     <string name="overlay_handoff_hint">完成后点「继续」，DSH 接着做。</string>
     <string name="overlay_handoff_secret">密码和验证码需要你来输入</string>
