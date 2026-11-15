@@ -27,7 +27,7 @@ env = dict(os.environ, **env_values)
 argv = [str(node), '--test', '--test-isolation=none', '--test-reporter=tap',
         'runtime/tests/ohos/voice-channel.test.mjs']
 sources = list((repo / 'app/ohos/entry/src/main/ets/plugins').glob('*Voice*.ets'))
-sources += [repo / 'app/ohos/entry/src/main/ets/plugins/HmsKits.ets', repo / 'app/ohos/entry/src/main/ets/plugins/HmsSpeechKit.ets']
+sources += [repo / 'app/ohos/entry/src/main/ets/plugins/HmsAsrLease.ets', repo / 'app/ohos/entry/src/main/ets/plugins/HmsKits.ets', repo / 'app/ohos/entry/src/main/ets/plugins/HmsSpeechKit.ets']
 sources += list((repo / 'runtime/tests/ohos').glob('voice-*.mjs')) + [Path(__file__).resolve()]
 sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 (out / 'sources.json').write_text(json.dumps({str(p.relative_to(repo)): sha(p) for p in sources}, indent=2) + '\n')

@@ -1,6 +1,7 @@
 // Explicit host type surface, not a replacement for the pinned OH Flutter SDK.
 declare module '@ohos.app.ability.UIAbility' {
-  export default class UIAbility {}
+  import common from '@ohos.app.ability.common';
+  export default class UIAbility { context: common.UIAbilityContext; }
 }
 declare module '@ohos/flutter_ohos' {
   import UIAbility from '@ohos.app.ability.UIAbility';

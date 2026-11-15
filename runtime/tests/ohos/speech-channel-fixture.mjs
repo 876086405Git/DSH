@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
@@ -121,11 +121,19 @@ export function speechChannelFixture(options = {}) {
     vm.runInNewContext(result.outputText, {
       module, exports: module.exports, Map, Set, WeakSet, Promise, Error, ArrayBuffer, Uint8Array,
       setTimeout, clearTimeout,
+      // This legacy playback fixture explicitly has no capturer capability.
+      // call-capture-fixture executes the same controller with the capture SDK boundary.
+      canIUse(capability) { assert.equal(capability, 'SystemCapability.Multimedia.Audio.Capturer'); return false; },
       require(name) {
         if (name === '@ohos/flutter_ohos') return flutter;
         if (name === './OhosPcmStream') return { OhosPcmStream: Backend };
         if (name === './PcmStreamTypes') return { PcmTerminalKind };
+        if (name === './OhosSpeechPlayback') return load(resolve(etsRoot, 'plugins/OhosSpeechPlayback.ets'));
         if (name.startsWith('.') && path.endsWith('/entryability/EntryAbility.ets')) return entryImports(name);
+        if (name.startsWith('.')) return load(resolve(dirname(path), name + '.ets'));
+        if (['@ohos.multimedia.audio', '@ohos.systemDateTime', '@ohos.window', '@ohos.abilityAccessCtrl'].includes(name)) {
+          return { default: {} };
+        }
         throw new Error('unadapted boundary ' + name + ' from ' + path);
       },
     }, { filename: path });

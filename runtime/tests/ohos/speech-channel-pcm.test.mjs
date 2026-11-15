@@ -32,6 +32,31 @@ function combined(options = {}) {
   return { ...native, ...attach(), attach, call, channels, protocolEvents: events };
 }
 
+test('call and level options reach real PCM; playLevel follows hardware progress and stream identity', async () => {
+  const f = combined(), call = (method, args) => f.call(f.methods, method, args);
+  try {
+    assert.deepEqual(await call('open', { id: 'call-1', call: true, levels: true, rate: 24000 }), { value: true });
+    const renderer = f.renderers[0];
+    assert.equal(renderer.settings.rendererInfo.usage, 2);
+    const bytes = new Uint8Array(1920), view = new DataView(bytes.buffer);
+    for (let at = 0; at < 960; at++) view.setInt16(at * 2, 8192, true);
+    assert.deepEqual(await call('write', { id: 'call-1', bytes }), { value: 1920 });
+    renderer.pump(1920);
+    await until(() => renderer.timestampReads > 0);
+    assert.equal(f.protocolEvents.filter(event => event.type === 'playLevel').length, 0);
+    renderer.framePos = 960;
+    await until(() => f.protocolEvents.some(event => event.type === 'playLevel'));
+    const event = f.protocolEvents.find(event => event.type === 'playLevel');
+    assert.equal(event.method, 'event'); assert.equal(event.id, 'call-1');
+    assert(Math.abs(event.value - ((20 * Math.log10(0.25) + 50) / 40)) < 1e-12);
+    await call('stop');
+    const count = f.protocolEvents.length;
+    renderer.framePos = 1920;
+    await new Promise(resolve => setTimeout(resolve, 85));
+    assert.equal(f.protocolEvents.length, count); assert.equal(f.timers.size, 0);
+  } finally { await call('stop'); }
+});
+
 test('real channel and real PCM backend preserve split samples and wait for drain/release before done', async () => {
   const f = combined(), call = (name, args) => f.call(f.methods, name, args);
   assert.deepEqual(await call('open', { id: 'ds1', rate: 24000 }), { value: true });

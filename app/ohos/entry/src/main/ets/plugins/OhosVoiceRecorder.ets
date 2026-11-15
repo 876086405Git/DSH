@@ -2,9 +2,11 @@
 import audio from '@ohos.multimedia.audio';
 import { VoiceFailure, VoiceNotice, VoiceResource, retiredVoice } from './VoiceTypes';
 import { VoicePcm } from './VoicePcm';
+import { VoicePcmFrames } from './VoicePcmTap';
 
 export class OhosVoiceRecorder implements VoiceResource {
   private pcm: VoicePcm;
+  private tap: VoicePcmFrames = new VoicePcmFrames('dictation');
   private capturer?: audio.AudioCapturer;
   private opening?: Promise<void>;
   private closing?: Promise<void>;
@@ -12,6 +14,7 @@ export class OhosVoiceRecorder implements VoiceResource {
   private released: boolean = false;
   private startAttempted: boolean = false;
   private accepting: boolean = false;
+  private ready: boolean = false;
   private discarded: boolean = false;
   private subscribed: boolean = false;
   private interruptSubscribed: boolean = false;
@@ -77,11 +80,18 @@ export class OhosVoiceRecorder implements VoiceResource {
     if (this.discarded || !this.current()) throw retiredVoice();
     this.checkFormat(created);
     if (this.fault) throw new VoiceFailure('audio', '录音流已被中断。', 100);
+    this.ready = true;
+    if (this.pcm.length > 0) this.deferUpdates();
   }
 
   private receive(buffer: ArrayBuffer): void {
     if (!this.accepting || this.discarded || !this.current()) return;
-    try { this.pcm.append(buffer); } catch (_) { this.fault = true; }
+    try {
+      const before: number = this.pcm.length;
+      this.pcm.append(buffer);
+      this.tap.append(new Uint8Array(buffer, 0, this.pcm.length - before),
+        (): boolean => !this.discarded && !this.fault && this.current());
+    } catch (_) { this.fault = true; }
     if (this.pcm.full || this.fault) this.accepting = false;
     // No AudioCapturer API, Flutter callback or I/O runs inside readData.
     this.deferUpdates();
@@ -93,6 +103,14 @@ export class OhosVoiceRecorder implements VoiceResource {
     Promise.resolve().then(async (): Promise<void> => {
       this.scheduled = false;
       if (this.discarded || !this.current()) return;
+      // readData can precede successful start. Live PCM must additionally pass
+      // overflow admission before it is visible to subtitles.
+      if (!this.ready && !this.fault) return;
+      if (this.ready && this.capturer && !this.released) {
+        try { if (this.capturer.getOverflowCountSync() !== 0) this.fault = true; }
+        catch (_) { this.fault = true; }
+      }
+      if (this.fault) this.tap.reset(); else this.tap.flush();
       this.emit({ type: 'level', value: this.pcm.level });
       if (this.fault || this.pcm.full) {
         try { await this.close(); } catch (_) { this.fault = true; }
@@ -107,7 +125,7 @@ export class OhosVoiceRecorder implements VoiceResource {
   }
 
   private close(): Promise<void> {
-    this.closeRequested = true; this.accepting = false;
+    this.closeRequested = true; this.accepting = false; this.tap.reset();
     if (!this.closing) {
       this.closing = this.closeNative().catch((error: Error): void => {
         this.closing = undefined; throw error as Error;

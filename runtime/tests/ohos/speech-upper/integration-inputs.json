@@ -1,15 +1,23 @@
 {
   "native": {
-    "app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets": "f0216b2181b5756b1db4eef8b0da46e3f97bc2eccf78476c9b7c09078db5c748",
-    "app/ohos/entry/src/main/ets/plugins/OhosPcmStream.ets": "747a3aa595cacbca8a402cb33125ef7656bb9dc580152fba5a41b6e906ade670",
-    "app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets": "22aa92583db126bdf559c3e70b814730de1e2592ae0b68afa0e438d26699d073",
+    "app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets": "db2f686993b2606ce14f0c6b5eeca85a5f0a0a706119536be49abbfe7f4cd8ef",
+    "app/ohos/entry/src/main/ets/plugins/OhosPcmStream.ets": "a9bc81475ea61fb6a1f096030caddb28eb00e486fbe7e5a344088272fcab92ab",
+    "app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets": "416a8fed9352143a6f92b8011d1748859bc3b828706411f465abdf7766d655aa",
     "app/ohos/entry/src/main/ets/plugins/PcmByteQueue.ets": "db707f061e5da2efde6cd1ae3afe42450a53d05ed5f3118e1827de968e8dd4c6",
-    "runtime/tests/ohos/pcm-stream-fixture.mjs": "ab6a12631fbccc1f1ba4528faffc368cc630e22b0f93854a9a8c03d522d9df5e"
+    "runtime/tests/ohos/pcm-stream-fixture.mjs": "67c8f794a53b9faee0122972550ee8a8a574c698199501202fc9a2c1ddc6361f",
+    "app/ohos/entry/src/main/ets/plugins/OhosSpeechPlayback.ets": "2b806c1cf73d1f02d053e581d6b7fb30d3ea281a2567a82b1e8a9c8f7acca4e0",
+    "app/ohos/entry/src/main/ets/plugins/OhosSpeechCall.ets": "64650a91b26aed958bebc340b3c904145a7afe698b4666f71a2a3eb6754af1f6",
+    "app/ohos/entry/src/main/ets/plugins/OhosCallCapture.ets": "31f1ac9903f802e2198e8e778bb488629196489969a548b25658cdfd59588e2a",
+    "app/ohos/entry/src/main/ets/plugins/CallEnergyGate.ets": "800cbdedb4d2cf3e11de66941b57a4ba70c62dcced895a7f68c63a6f5d41730a",
+    "app/ohos/entry/src/main/ets/plugins/VoicePcmTap.ets": "1dd67ddfdb367e298f6efb097f6817f5854eaa94aa9417cf6617cf08da2feacc",
+    "app/ohos/entry/src/main/ets/plugins/VoicePcm.ets": "e40d09807ba8851bdee637853a49c5beaa3f558d7f6d41d05e713746e9a71ded",
+    "app/ohos/entry/src/main/ets/plugins/VoiceTypes.ets": "a14268626600ed9b4d5ffc5690364ba11b373edffc8c847db6e650df24895478",
+    "app/ohos/entry/src/main/ets/plugins/VoiceMicLease.ets": "9f2ebdee088b1d054ba2002f276ac70610e96b51d525f6d833b822e1fcba05a4"
   },
   "bridge": {
     "commit": "b4527967afb4a7e245c59b5954493cb4a2c919e9",
     "path": "runtime/bridge/dsh-go-bridge/lib/speech.js",
     "sha256": "2593ca0537b054eaaeee6c3ccac308bd5e2cf1c08692007c38d04c5988873e1e"
   },
-  "scope": "1216 native component + fixed existing main bridge; neither OS nor paid API claims"
+  "scope": "1301 system-TTS lane +1302 call PCM playback +1303 call capture dependency closure; unchanged main bridge; explicit OS boundaries, no SDK/device/paid API claim"
 }

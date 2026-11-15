@@ -1,4 +1,5 @@
 import audio from '@ohos.multimedia.audio';
+import { BusinessError } from '@ohos.base';
 import { PcmByteQueue } from './PcmByteQueue';
 import { PcmStreamBackend, PcmStreamFailure, PcmStreamListener, PcmStreamOptions,
   PcmTerminalKind } from './PcmStreamTypes';
@@ -8,12 +9,15 @@ let playbackLease: OhosPcmStream | null = null;
 const MAX_QUEUED_BYTES: number = 2 * 1024 * 1024;
 const MAX_CALLBACK_BYTES: number = 64 * 1024;
 
+interface PcmLevelMark { frame: number; value: number; }
+
 // PCM16LE mono, 24 kHz. API 12+ callback rendering; no deprecated write() API.
 // open() is an actual create/start preflight, not a guarantee of future focus.
 export class OhosPcmStream implements PcmStreamBackend {
   private readonly rate: number;
   private readonly call: boolean;
   private readonly levels: boolean;
+  private speaker: boolean;
   private readonly current: () => boolean;
   private readonly listener: PcmStreamListener;
   private renderer: audio.AudioRenderer | null = null;
@@ -28,6 +32,7 @@ export class OhosPcmStream implements PcmStreamBackend {
   private writeSubscribed: boolean = false;
   private interruptSubscribed: boolean = false;
   private stateSubscribed: boolean = false;
+  private routeSubscribed: boolean = false;
   private submitted: boolean = false;
   private startPending: boolean = false;
   private startSent: boolean = false;
@@ -37,16 +42,25 @@ export class OhosPcmStream implements PcmStreamBackend {
   private closing: Promise<void> | null = null;
   private draining: Promise<void> | null = null;
   private volumeWork: Promise<void> | null = null;
+  private routeWork: Promise<void> | null = null;
   private scheduled: number = -1;
+  private levelScheduled: number = -1;
+  private levelFrames: number = 0;
+  private levelSum: number = 0;
+  private submittedFrames: number = 0;
+  private lastPlayFrame: number = 0;
+  private levelQueue: Array<PcmLevelMark> = [];
   private terminalKind: PcmTerminalKind | null = null;
   private terminalReason: string = '';
   private terminalSent: boolean = false;
   private readonly writeCallback: (buffer: ArrayBuffer) => audio.AudioDataCallbackResult;
   private readonly interruptCallback: (event: audio.InterruptEvent) => void;
   private readonly stateCallback: (state: audio.AudioState) => void;
+  private readonly routeCallback: (event: audio.AudioStreamDeviceChangeInfo) => void;
 
   constructor(options: PcmStreamOptions, current: () => boolean, listener: PcmStreamListener) {
     this.rate = options.rate; this.call = options.call; this.levels = options.levels;
+    this.speaker = options.speaker !== false;
     this.current = current; this.listener = listener;
     this.writeCallback = (buffer: ArrayBuffer): audio.AudioDataCallbackResult => this.fill(buffer);
     this.interruptCallback = (event: audio.InterruptEvent): void => {
@@ -65,6 +79,13 @@ export class OhosPcmStream implements PcmStreamBackend {
         this.finish(PcmTerminalKind.Stopped, 'renderer-state');
       } else if (state === audio.AudioState.STATE_RELEASED) {
         this.finish(PcmTerminalKind.Error, 'renderer-state');
+      }
+    };
+    this.routeCallback = (_event: audio.AudioStreamDeviceChangeInfo): void => {
+      // A route can reset and pass the previous framePos between two polls.
+      // Its event retires the old PCM epoch without inventing a sample offset.
+      if (this.live && this.levels && this.submitted) {
+        this.finish(PcmTerminalKind.Error, 'playback-route-changed');
       }
     };
   }
@@ -107,7 +128,7 @@ export class OhosPcmStream implements PcmStreamBackend {
 
   private async acquire(): Promise<void> {
     this.ensureCurrent();
-    if (this.rate !== 24000 || this.call || this.levels ||
+    if (this.rate !== 24000 ||
       !canIUse('SystemCapability.Multimedia.Audio.Renderer')) throw new PcmStreamFailure('unsupported');
     const previous = playbackLease;
     if (previous !== null && !previous.live) {
@@ -123,16 +144,24 @@ export class OhosPcmStream implements PcmStreamBackend {
       streamInfo: { samplingRate: audio.AudioSamplingRate.SAMPLE_RATE_24000,
         channels: audio.AudioChannel.CHANNEL_1, sampleFormat: audio.AudioSampleFormat.SAMPLE_FORMAT_S16LE,
         encodingType: audio.AudioEncodingType.ENCODING_TYPE_RAW },
-      rendererInfo: { usage: audio.StreamUsage.STREAM_USAGE_AUDIOBOOK, rendererFlags: 0 }
+      rendererInfo: { usage: this.call ? audio.StreamUsage.STREAM_USAGE_VOICE_COMMUNICATION :
+        audio.StreamUsage.STREAM_USAGE_AUDIOBOOK, rendererFlags: 0 }
     };
     const created = await audio.createAudioRenderer(options);
     if (!created) throw new PcmStreamFailure('create');
     this.renderer = created; this.ensureCurrent(); this.checkFormat(created);
+    if (this.call) {
+      await created.setDefaultOutputDevice(this.speaker ? audio.DeviceType.SPEAKER : audio.DeviceType.EARPIECE);
+      this.ensureCurrent();
+    }
     const bufferSize = created.getBufferSizeSync();
     if (!Number.isSafeInteger(bufferSize) || bufferSize <= 0 || bufferSize % 2 !== 0 ||
       bufferSize > MAX_CALLBACK_BYTES) throw new PcmStreamFailure('buffer-size');
     created.on('audioInterrupt', this.interruptCallback); this.interruptSubscribed = true;
     created.on('stateChange', this.stateCallback); this.stateSubscribed = true;
+    if (this.levels) {
+      created.on('outputDeviceChangeWithInfo', this.routeCallback); this.routeSubscribed = true;
+    }
     await created.setInterruptMode(audio.InterruptMode.INDEPENDENT_MODE);
     this.ensureCurrent();
     created.on('writeData', this.writeCallback); this.writeSubscribed = true;
@@ -185,11 +214,13 @@ export class OhosPcmStream implements PcmStreamBackend {
       if (take <= 0 || take % 2 !== 0) throw new PcmStreamFailure('truncated-sample');
       const destination = new Uint8Array(buffer);
       queue.take(destination, take);
+      if (this.levels) this.appendLevels(destination, take);
       // The service consumes the ENTIRE callback buffer when VALID is returned.
       // Only the final EOF callback may be short; initialise its whole tail.
       if (take < length) destination.fill(0, take);
       this.submitted = true;
       if (!this.startSent) { this.startPending = true; this.deferSignals(); }
+      if (this.levelQueue.length > 0) this.deferSignals();
       return audio.AudioDataCallbackResult.VALID;
     } catch (_) {
       this.finish(PcmTerminalKind.Error, 'callback');
@@ -208,8 +239,57 @@ export class OhosPcmStream implements PcmStreamBackend {
         try { this.listener.started(); } catch (_) {}
       }
       if (!this.live) { this.close().catch((): void => {}); return; }
+      this.scheduleLevels();
       if (this.drainReady && this.draining === null && this.current()) this.beginDrain();
     }, 0);
+  }
+
+  private appendLevels(bytes: Uint8Array, length: number): void {
+    const frameSamples: number = this.rate * 40 / 1000;
+    for (let at: number = 0; at < length; at += 2) {
+      const sample: number = (bytes[at] | (bytes[at + 1] << 8)) << 16 >> 16;
+      this.levelSum += sample * sample;
+      this.levelFrames++; this.submittedFrames++;
+      if (this.levelFrames === frameSamples) {
+        const rms: number = Math.sqrt(this.levelSum / frameSamples) / 32768;
+        const db: number = rms <= 1e-5 ? -100 : 20 * Math.log10(rms);
+        this.levelQueue.push({ frame: this.submittedFrames, value: Math.max(0, Math.min(1, (db + 50) / 40)) });
+        this.levelFrames = 0; this.levelSum = 0;
+        if (this.levelQueue.length * frameSamples * 2 > MAX_QUEUED_BYTES) throw new PcmStreamFailure('level-queue-limit');
+      }
+    }
+  }
+
+  private scheduleLevels(): void {
+    if (this.levelScheduled !== -1 || !this.live || !this.current() || this.levelQueue.length === 0) return;
+    this.levelScheduled = setTimeout((): void => {
+      this.levelScheduled = -1;
+      const renderer: audio.AudioRenderer | null = this.renderer;
+      if (!this.live || !this.current() || renderer === null) return;
+      let position: number;
+      try { position = renderer.getAudioTimestampInfoSync().framePos; }
+      catch (error) {
+        // Before the first played frame, the SDK may still reject the timestamp.
+        if (this.lastPlayFrame === 0 && (error as BusinessError).code === 6800103) {
+          this.scheduleLevels(); return;
+        }
+        this.finish(PcmTerminalKind.Error, 'playback-position'); return;
+      }
+      if (!Number.isFinite(position) || position < 0) {
+        this.finish(PcmTerminalKind.Error, 'playback-position'); return;
+      }
+      if (position < this.lastPlayFrame) {
+        // A route/flush reset loses the relation to this PCM stream. Do not
+        // invent heard text by treating a new hardware epoch as the old one.
+        this.finish(PcmTerminalKind.Error, 'playback-position-reset'); return;
+      }
+      this.lastPlayFrame = position;
+      while (this.levelQueue.length > 0 && this.levelQueue[0].frame <= position && this.live && this.current()) {
+        const mark: PcmLevelMark = this.levelQueue.shift()!;
+        try { this.listener.level?.(mark.value); } catch (_) {}
+      }
+      this.scheduleLevels();
+    }, 40);
   }
 
   private beginDrain(): void {
@@ -244,10 +324,26 @@ export class OhosPcmStream implements PcmStreamBackend {
     catch (_) { if (this.live) this.finish(PcmTerminalKind.Error, 'volume'); }
   }
 
+  async setSpeaker(on: boolean): Promise<void> {
+    if (!this.call || !this.ready || !this.live || !this.current()) throw new PcmStreamFailure('route');
+    const previous: Promise<void> | null = this.routeWork;
+    const work: Promise<void> = Promise.resolve().then(async (): Promise<void> => {
+      if (previous !== null) { try { await previous; } catch (_) {} }
+      this.ensureCurrent();
+      const renderer: audio.AudioRenderer | null = this.renderer;
+      if (renderer === null) throw new PcmStreamFailure('route');
+      await renderer.setDefaultOutputDevice(on ? audio.DeviceType.SPEAKER : audio.DeviceType.EARPIECE);
+      this.speaker = on;
+    });
+    this.routeWork = work;
+    await work;
+  }
+
   stop(): Promise<void> {
     this.chooseTerminal(PcmTerminalKind.Stopped, '');
     this.live = false; this.ready = false;
     if (this.queue !== null) this.queue.clear();
+    this.clearLevels();
     return this.close();
   }
 
@@ -263,7 +359,13 @@ export class OhosPcmStream implements PcmStreamBackend {
     this.chooseTerminal(kind, reason);
     this.live = false; this.ready = false;
     if (this.queue !== null) this.queue.clear();
+    this.clearLevels();
     this.deferSignals();
+  }
+
+  private clearLevels(): void {
+    if (this.levelScheduled !== -1) { clearTimeout(this.levelScheduled); this.levelScheduled = -1; }
+    this.levelQueue = []; this.levelFrames = 0; this.levelSum = 0;
   }
 
   private close(): Promise<void> {
@@ -282,6 +384,7 @@ export class OhosPcmStream implements PcmStreamBackend {
   }
 
   private async releaseNative(): Promise<void> {
+    this.clearLevels();
     if (this.scheduled !== -1) { clearTimeout(this.scheduled); this.scheduled = -1; }
     if (this.opening !== null) { try { await this.opening; } catch (_) {} }
     const renderer = this.renderer;
@@ -297,6 +400,10 @@ export class OhosPcmStream implements PcmStreamBackend {
       if (this.stateSubscribed) {
         try { renderer.off('stateChange', this.stateCallback); } catch (_) {}
         this.stateSubscribed = false;
+      }
+      if (this.routeSubscribed) {
+        try { renderer.off('outputDeviceChangeWithInfo', this.routeCallback); } catch (_) {}
+        this.routeSubscribed = false;
       }
       // Native stop may drain its old buffer. An abort first requests pause and
       // discards that buffer; natural completion has already awaited drain.
@@ -327,6 +434,7 @@ export class OhosPcmStream implements PcmStreamBackend {
       }
       if (this.draining !== null) { try { await this.draining; } catch (_) {} }
       if (this.volumeWork !== null) { try { await this.volumeWork; } catch (_) {} }
+      if (this.routeWork !== null) { try { await this.routeWork; } catch (_) {} }
       try { await renderer.release(); }
       catch (_) {
         this.chooseTerminal(PcmTerminalKind.Error, 'release'); this.sendTerminal();

@@ -15,7 +15,7 @@ test('actual EntryAbility registers the dsh/speech playback protocol', async () 
   assert.equal(fixture.channels.filter(channel => channel.name === contract.channel).length, 1);
   assert.equal(fixture.channels.some(channel => channel.name === 'dsh/speech/events'), false);
   assert.equal(fixture.plugin.getUniqueClassName(), 'DshSpeechPlugin');
-  assert.deepEqual(fixture.streams[0].configuration, { rate: 24000, call: false, levels: false });
+  assert.deepEqual(fixture.streams[0].configuration, { rate: 24000, call: false, levels: false, speaker: true });
   assert.equal(contract.referenceCommit, 'dd130b31061e305cd9c06e103c3e5210fee1922f');
   assert.equal(contract.pcm.sampleRate, fixture.streams[0].configuration.rate);
   success(await call(fixture, 'stop'));
@@ -73,15 +73,15 @@ test('PCM bytes, waiting, EOF and terminal events follow the same method channel
   success(await call(fixture, 'stop'));
 });
 
-test('unsupported call, levels and rate fail before renderer creation; capture is unavailable', async () => {
+test('unsupported rate and malformed options fail before renderer creation; absent capture capability is explicit', async () => {
   const fixture = speechChannelFixture();
-  for (const extra of [{ call: true }, { levels: true }, { rate: 48000 }, { rate: '24000' }, { call: 'false' }]) {
+  for (const extra of [{ rate: 48000 }, { rate: '24000' }, { call: 'false' }, { levels: 'true' }]) {
     assert.deepEqual(await open(fixture, 'ds1', extra), { value: false });
   }
   assert.deepEqual(await call(fixture, 'open', { rate: 24000 }), { value: false });
   assert.equal(fixture.streams.length, 0);
   assert.deepEqual(await call(fixture, 'callStart', { bargeIn: true }), { value: 'unavailable' });
-  assert.deepEqual(await call(fixture, 'callSpeaker', { on: true }), { value: false });
+  assert.deepEqual(await call(fixture, 'callSpeaker', { on: true }), { value: true }); // next-call preference, no renderer
   for (const method of ['callStop', 'callMute', 'callBargeIn', 'callPlaying']) success(await call(fixture, method, { on: true }));
   assert.deepEqual(await call(fixture, 'capabilities'), { missing: true }, 'do not invent an unconsumed capability protocol');
   assert.equal(fixture.streams.length, 0);

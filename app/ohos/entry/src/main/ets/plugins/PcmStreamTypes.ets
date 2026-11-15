@@ -1,8 +1,9 @@
-// dsh/speech playback subset. Call capture and heard-time levels are not available here.
+// dsh/speech PCM playback; microphone ownership is handled separately.
 export interface PcmStreamOptions {
   rate: number;
   call: boolean;
   levels: boolean;
+  speaker?: boolean;
 }
 
 export enum PcmTerminalKind {
@@ -13,6 +14,7 @@ export enum PcmTerminalKind {
 
 export interface PcmStreamListener {
   started: () => void;
+  level?: (value: number) => void;
   terminal: (kind: PcmTerminalKind, reason: string) => void;
 }
 
@@ -23,6 +25,7 @@ export interface PcmStreamBackend {
   end(): void;
   stop(): Promise<void>;
   duck(on: boolean): Promise<void>;
+  setSpeaker: (on: boolean) => Promise<void>;
 }
 
 export class PcmStreamFailure extends Error {

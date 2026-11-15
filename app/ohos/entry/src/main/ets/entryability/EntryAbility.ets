@@ -28,6 +28,8 @@ import LaunchPlugin from '../plugins/LaunchPlugin';
 import LaunchClipPlugin from '../plugins/LaunchClipPlugin';
 import VoicePlugin from '../plugins/VoicePlugin';
 import SpeechPlugin from '../plugins/SpeechPlugin';
+import CompanionVoicePlugin from '../plugins/CompanionVoicePlugin';
+import StreamingAsrPlugin from '../plugins/StreamingAsrPlugin';
 import Want from '@ohos.app.ability.Want';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import window from '@ohos.window';
@@ -64,6 +66,8 @@ export default class EntryAbility extends FlutterAbility {
     RuntimeController.onForeground(this);
     VoicePlugin.onForeground(this);
     SpeechPlugin.onForeground(this);
+    CompanionVoicePlugin.onForeground(this);
+    StreamingAsrPlugin.onForeground(this);
     NativeFilesPlugin.onForeground(this);
     AuthorizedWorkspacesPlugin.onForeground(this);
     NativeMediaPlugin.onForeground(this);
@@ -76,6 +80,8 @@ export default class EntryAbility extends FlutterAbility {
     RuntimeController.onBackground(this);
     VoicePlugin.onBackground(this);
     SpeechPlugin.onBackground(this);
+    CompanionVoicePlugin.onBackground(this);
+    StreamingAsrPlugin.onBackground(this);
     NativeFilesPlugin.onBackground(this);
     AuthorizedWorkspacesPlugin.onBackground(this);
     NativeMediaPlugin.onBackground(this);
@@ -84,6 +90,8 @@ export default class EntryAbility extends FlutterAbility {
 
   onDestroy(): void {
     SpeechPlugin.onBackground(this);
+    CompanionVoicePlugin.onBackground(this);
+    StreamingAsrPlugin.onBackground(this);
     PastePlugin.onBackground(this);
     RuntimeController.onDestroy(this);
     AuthorizedWorkspacesPlugin.onBackground(this);
@@ -115,6 +123,8 @@ export default class EntryAbility extends FlutterAbility {
     flutterEngine.getPlugins()?.add(new HmsSharePlugin())
     flutterEngine.getPlugins()?.add(new VoicePlugin())
     flutterEngine.getPlugins()?.add(new SpeechPlugin())
+    flutterEngine.getPlugins()?.add(new CompanionVoicePlugin())
+    flutterEngine.getPlugins()?.add(new StreamingAsrPlugin())
     flutterEngine.getPlugins()?.add(new ShortcutsPlugin())
     flutterEngine.getPlugins()?.add(new LauncherIconPlugin())
     flutterEngine.getPlugins()?.add(new LaunchPlugin())

@@ -114,6 +114,7 @@ def main():
         for name, extra in [
             ('host-speech-tests', []), ('host-lifecycle-tests', []), ('host-http-tests', []),
             ('host-preview-tests', []), ('host-compat-tests', [context]), ('host-route-tests', []),
+            ('host-system-tests', []),
             ('host-native-integration', [args.node, fixture / 'native-rpc.mjs', source,
                                          args.typescript_prefix, out / 'native', args.bridge_source]),
         ]:

@@ -59,7 +59,10 @@ def main():
             'pcm-stream-fixture.mjs', 'speech-channel-pcm.test.mjs', 'entry-ability-fixture.test.mjs',
             'pcm-audio-contract.d.ts', 'speech-flutter-contract.d.ts')]
         products += [repo / 'app/ohos/entry/src/main/ets/plugins' / (name + '.ets')
-                     for name in ('SpeechPlugin', 'OhosPcmStream', 'PcmStreamTypes', 'PcmByteQueue')]
+                     for name in ('SpeechPlugin', 'OhosSpeechPlayback', 'OhosPcmStream', 'PcmStreamTypes', 'PcmByteQueue',
+                                  'OhosSpeechCall', 'OhosCallCapture', 'CallEnergyGate', 'VoicePcmTap',
+                                  'VoicePcm', 'VoiceTypes', 'VoiceMicLease')]
+        drivers += [repo / 'runtime/tests/ohos/call-platform-contract.d.ts']
     sources = sorted(set(drivers + products))
     snapshot = lambda: {str(path): {'bytes': path.stat().st_size, 'sha256': sha(path)} for path in sources}
     before = snapshot(); save(out / 'sources-before.json', before)
@@ -74,7 +77,7 @@ def main():
                 target = stage / (path.stem + '.ts'); target.write_bytes(path.read_bytes())
                 assert sha(target) == sha(path)
                 staged.append(target)
-        for name in ('pcm-audio-contract.d.ts', 'speech-flutter-contract.d.ts'):
+        for name in ('pcm-audio-contract.d.ts', 'speech-flutter-contract.d.ts', 'call-platform-contract.d.ts'):
             target = stage / name; target.write_bytes((repo / 'runtime/tests/ohos' / name).read_bytes())
             staged.append(target)
         types = stage / 'empty-types'; types.mkdir()

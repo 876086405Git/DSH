@@ -83,7 +83,7 @@ class CompanionVoice {
   }
 
   /// Queues [text] under [id] in the phone's voice, or replaces what it is saying with [flush].
-  Future<bool> speak(String id, String text, {bool flush = false}) async {
+  Future<bool> speak(String id, String text, {bool flush = false, bool ohosCall = false}) async {
     try {
       return await _channel.invokeMethod<bool>('speak', {
             'id': id,
@@ -91,6 +91,7 @@ class CompanionVoice {
             'flush': flush,
             'pitch': pitch,
             'rate': rate,
+            if (Platform.operatingSystem == 'ohos' && ohosCall) 'call': true,
           }) ??
           false;
     } on Object {
@@ -157,7 +158,7 @@ class _Line {
 /// sentence that can't be fetched or played is read in the phone's own voice
 /// when it has one. Events carry the loudness of fetched WAV audio for her mouth.
 class CompanionSpeaker {
-  CompanionSpeaker(this._voice, this._client, this._folder, [this._deepseek]) {
+  CompanionSpeaker(this._voice, this._client, this._folder, [this._deepseek, this._ohosCall, this._ohosOutput]) {
     _native = _voice.events.listen(_heard);
   }
 
@@ -167,6 +168,10 @@ class CompanionSpeaker {
 
   /// Who pays for DeepSeek's voice, asked per sentence (an account may sign in or out).
   final DeepSeekSpeechResolver? _deepseek;
+  // OH's system TTS needs communication usage for call audio. Android's
+  // native payload remains unchanged; this optional route is only wired on OH.
+  final bool Function()? _ohosCall;
+  final Object? Function()? _ohosOutput;
   late final StreamSubscription<CompanionVoiceEvent> _native;
   final _events = StreamController<CompanionVoiceEvent>.broadcast();
 
@@ -218,9 +223,15 @@ class CompanionSpeaker {
       // In order, each after the engine is up; a line it won't take ends as
       // an error, or whoever waits for its end would wait for good.
       final generation = _generation;
+      final ohosCall = _ohosCall?.call() ?? false;
+      final ohosOutput = _ohosOutput?.call();
       _phoneLines = _phoneLines.then((_) async {
         if (!_phoneReady) await warmPhone();
-        if (generation != _generation || await _voice.speak(id, text, flush: flush)) return;
+        if (generation != _generation ||
+            (_ohosOutput != null && !identical(ohosOutput, _ohosOutput())) ||
+            await _voice.speak(id, text, flush: flush, ohosCall: ohosCall)) {
+          return;
+        }
         if (!_events.isClosed) _events.add(CompanionVoiceEvent(CompanionVoiceEventType.error, id));
       });
       return;
@@ -377,7 +388,19 @@ final companionSpeakerProvider = Provider<CompanionSpeaker>((ref) {
 /// reply aloud never cuts into her lines' bookkeeping.
 final speechSpeakerProvider = Provider<CompanionSpeaker>((ref) {
   if (Platform.operatingSystem == 'ohos') {
-    final speaker = OhosSpeechSpeaker(ref.watch(deepSeekSpeechProvider), ref.watch(speechAudioProvider));
+    late final OhosSpeechSpeaker speaker;
+    speaker = OhosSpeechSpeaker(
+      ref.watch(deepSeekSpeechProvider),
+      ref.watch(speechAudioProvider),
+      CompanionSpeaker(
+        ref.watch(companionVoiceProvider),
+        ref.watch(companionVoiceClientProvider),
+        ref.watch(companionVoiceFolderProvider),
+        null,
+        () => speaker.systemCall,
+        () => speaker.systemOutput,
+      ),
+    );
     ref.onDispose(speaker.dispose);
     return speaker;
   }

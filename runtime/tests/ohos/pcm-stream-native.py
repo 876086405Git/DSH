@@ -23,7 +23,7 @@ sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 product_names = ['OhosPcmStream.ets', 'PcmByteQueue.ets', 'PcmStreamTypes.ets']
 products = [repo / 'app/ohos/entry/src/main/ets/plugins' / name for name in product_names]
 tests = [repo / 'runtime/tests/ohos' / name for name in
-         ['pcm-stream.test.mjs', 'pcm-stream-fixture.mjs', 'pcm-audio-contract.d.ts', 'pcm-stream-native.py']]
+         ['pcm-stream.test.mjs', 'pcm-stream-call.test.mjs', 'pcm-stream-fixture.mjs', 'pcm-audio-contract.d.ts', 'pcm-stream-native.py']]
 sources = products + tests + [repo / 'tooling/ohos/run-gates.py', repo / 'docs/design/harmonyos/speech-pcm.md']
 before = {str(path.relative_to(repo)): sha(path) for path in sources}
 (out / 'sources.json').write_text(json.dumps(before, indent=2) + '\n')
@@ -70,7 +70,8 @@ results = {'typescript': type_result}
 if type_result['exitCode'] == 0:
     for name, flags in [('plain', []), ('jitless', ['--jitless'])]:
         result = run(name, [node, *flags, '--test', '--test-isolation=none', '--test-reporter=tap',
-                           repo / 'runtime/tests/ohos/pcm-stream.test.mjs'], env)
+                           repo / 'runtime/tests/ohos/pcm-stream.test.mjs',
+                           repo / 'runtime/tests/ohos/pcm-stream-call.test.mjs'], env)
         results[name] = result
         if result['exitCode'] == 0:
             assert result['counts'].get('tests', 0) > 0 and result['counts']['pass'] == result['counts']['tests']
@@ -84,7 +85,7 @@ report = {'exitCode': 0 if ok else 1, 'nodeSha256': sha(node), 'typescriptVersio
           'scope': 'Actual ETS backend/queue with explicit AudioRenderer/timer doubles; '
                    'strict TypeScript against documented host surface; not ArkTS/API-26/device execution',
           'notRun': ['HarmonyOS SDK ArkTS compiler', 'AudioRenderer service/device', 'real Dart paid-request preflight'],
-          'integrationStatus': 'BLOCKED_SOURCE_BASELINE until actual Dart preflight precedes synthesis'}
+          'integrationStatus': 'SCOPED_NATIVE_ONLY; Dart admission is verified by the separate speech-upper gate'}
 (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))
 raise SystemExit(report['exitCode'])

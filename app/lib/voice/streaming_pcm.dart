@@ -6,6 +6,9 @@ import 'voice_platform_events.dart';
 
 enum StreamingPcmSource { call, dictation }
 
+/// OH lifecycle signal from the same native tap; Android PCM is unchanged.
+enum StreamingPcmReset { muted, resumed, stopped }
+
 /// Taps an existing recorder; the caller still owns microphone start/stop and permissions.
 class StreamingPcmCapture {
   StreamingPcmCapture({MethodChannel? channel, Stream<dynamic>? platformEvents})
@@ -15,6 +18,7 @@ class StreamingPcmCapture {
   final MethodChannel _channel;
   final Stream<dynamic> _platformEvents;
   final _frames = StreamController<Uint8List>.broadcast();
+  final _resets = StreamController<StreamingPcmReset>.broadcast();
   StreamSubscription<dynamic>? _subscription;
   Future<void> _operation = Future.value();
   static int _nextSession = 0;
@@ -22,13 +26,25 @@ class StreamingPcmCapture {
   bool _disposed = false;
 
   Stream<Uint8List> get frames => _frames.stream;
+  Stream<StreamingPcmReset> get resets => _resets.stream;
 
   Future<void> start(StreamingPcmSource source) => _serialize(() async {
     if (_disposed) return;
     await _stop();
     final session = _session = ++_nextSession;
     _subscription = _platformEvents.listen((raw) {
-      if (raw is! Map || raw['type'] != 'pcm' || raw['pcmSession'] != session || _session != session) return;
+      if (raw is! Map || raw['pcmSession'] != session || _session != session) return;
+      if (raw['type'] == 'pcmReset' && raw['source'] == source.name) {
+        final reason = switch (raw['reason']) {
+          'muted' => StreamingPcmReset.muted,
+          'resumed' => StreamingPcmReset.resumed,
+          'stopped' => StreamingPcmReset.stopped,
+          _ => null,
+        };
+        if (reason != null) _resets.add(reason);
+        return;
+      }
+      if (raw['type'] != 'pcm') return;
       final bytes = raw['bytes'];
       if (raw['rate'] == 16000 && bytes is Uint8List && bytes.length == 640) _frames.add(bytes);
     }, onError: _frames.addError);
@@ -67,6 +83,7 @@ class StreamingPcmCapture {
       await stop();
     } finally {
       await _frames.close();
+      await _resets.close();
     }
   }
 }

@@ -671,7 +671,12 @@ SpeechOut speechOutFor(
     }
     return DeepSeekOut(deepseek, audio, voice: settings.deepseekVoice, call: call, levels: levels, gap: gap);
   }
-  if (Platform.operatingSystem == 'ohos') return _OhosUnavailableOut();
+  if (Platform.operatingSystem == 'ohos' && settings.source != CompanionVoiceSource.system) return _OhosUnavailableOut();
   speaker.settings = settings;
+  if (Platform.operatingSystem == 'ohos') {
+    final out = _OhosSystemOut(speaker, onPlaying: call ? (on) => unawaited(audio.playing(on)) : null);
+    if (speaker is OhosSpeechSpeaker) speaker._attachSystemOut(out, call: call);
+    return out;
+  }
   return SpeakerOut(speaker, onPlaying: call ? (on) => unawaited(audio.playing(on)) : null);
 }

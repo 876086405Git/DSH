@@ -34,6 +34,8 @@ export function pcmFixture(options = {}) {
       this.drains = 0; this.pauses = 0; this.flushes = 0;
       this.volumes = []; this.uncommitted = []; this.committed = [];
       this.formatChecks = 0; this.released = false; renderers.push(this);
+      this.framePos = 0; this.timestampReads = 0;
+      this.outputDevices = [];
     }
     getStreamInfoSync() {
       api('format'); this.formatChecks++;
@@ -42,6 +44,11 @@ export function pcmFixture(options = {}) {
       return { ...format, ...config.format, ...(this.formatChecks > 1 ? config.afterFormat : {}) };
     }
     getBufferSizeSync() { api('buffer-size'); return config.bufferSize ?? 8; }
+    getAudioTimestampInfoSync() {
+      api('timestamp'); this.timestampReads++;
+      if (config.timestampError) throw Error('controlled timestamp');
+      return { framePos: this.framePos, timestamp: this.framePos * 1e9 / 24000 };
+    }
     on(name, callback) {
       api('on:' + name); if (config.onFailure === name) throw Error('controlled on');
       this.listeners.set(name, callback); this.allListeners.set(name, callback);
@@ -51,6 +58,11 @@ export function pcmFixture(options = {}) {
       this.listeners.delete(name);
     }
     async setInterruptMode(mode) { api('interrupt-mode'); this.mode = mode; if (config.mode) await config.mode(this); }
+    async setDefaultOutputDevice(device) {
+      api('output-device');
+      if (config.outputDevice) await config.outputDevice(this, device);
+      this.outputDevices.push(device);
+    }
     async start() {
       api('start'); this.starts++; this.state = state.STATE_RUNNING;
       if (config.start) await config.start(this);
@@ -104,7 +116,8 @@ export function pcmFixture(options = {}) {
   const audio = {
     AudioSamplingRate: { SAMPLE_RATE_24000: 24000 }, AudioChannel: { CHANNEL_1: 1 },
     AudioSampleFormat: { SAMPLE_FORMAT_S16LE: 1 }, AudioEncodingType: { ENCODING_TYPE_RAW: 0 },
-    StreamUsage: { STREAM_USAGE_AUDIOBOOK: 12 }, InterruptMode: { INDEPENDENT_MODE: 1 },
+    StreamUsage: { STREAM_USAGE_AUDIOBOOK: 12, STREAM_USAGE_VOICE_COMMUNICATION: 2 }, InterruptMode: { INDEPENDENT_MODE: 1 },
+    DeviceType: { EARPIECE: 1, SPEAKER: 2, DEFAULT: 1000 },
     InterruptForceType: { INTERRUPT_FORCE: 0, INTERRUPT_SHARE: 1 },
     InterruptHint: { INTERRUPT_HINT_PAUSE: 2, INTERRUPT_HINT_STOP: 3, INTERRUPT_HINT_DUCK: 4,
       INTERRUPT_HINT_UNDUCK: 5, INTERRUPT_HINT_MUTE: 6, INTERRUPT_HINT_RESUME: 1 },
@@ -123,11 +136,16 @@ export function pcmFixture(options = {}) {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
     });
     assert.equal(transformed.diagnostics?.length ?? 0, 0, 'TypeScript transpile diagnostics');
-    const boundaries = { '@ohos.multimedia.audio': { default: audio }, ...extraBoundaries };
+    const boundaries = { '@ohos.multimedia.audio': { default: audio },
+      '@ohos.systemDateTime': { default: {} }, '@ohos.window': { default: {} },
+      '@ohos.abilityAccessCtrl': { default: {} }, ...extraBoundaries };
     try {
       vm.runInNewContext(transformed.outputText, {
         module, exports: module.exports, Map, Set, ArrayBuffer, Uint8Array, DataView, Promise, Error,
-        canIUse(capability) { assert.equal(capability, 'SystemCapability.Multimedia.Audio.Renderer'); return config.supported !== false; },
+        canIUse(capability) {
+          if (capability === 'SystemCapability.Multimedia.Audio.Capturer') return false;
+          assert.equal(capability, 'SystemCapability.Multimedia.Audio.Renderer'); return config.supported !== false;
+        },
         setTimeout(callback, delay) {
           const id = nextTimer++;
           timers.set(id, setTimeout(() => { timers.delete(id); callback(); }, delay));
@@ -147,6 +165,7 @@ export function pcmFixture(options = {}) {
   function make(settings = {}, isCurrent = () => current) {
     return new Stream({ rate: 24000, call: false, levels: false, ...settings }, isCurrent, {
       started() { assert(!inWrite); events.push({ kind: 'start' }); if (config.listenerThrows) throw Error('retired listener'); },
+      level(value) { assert(!inWrite); events.push({ kind: 'level', value }); },
       terminal(kind, reason) { assert(!inWrite); events.push({ kind, reason }); if (config.listenerThrows) throw Error('retired listener'); }
     });
   }

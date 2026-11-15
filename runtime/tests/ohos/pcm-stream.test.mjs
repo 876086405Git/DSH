@@ -28,8 +28,8 @@ test('open really creates, checks format twice, selects independent focus and st
   assert.deepEqual(terminals(h), [{ kind: 'stopped', reason: '' }]);
 });
 
-test('unsupported call, levels, rate and capability fail before creating native output', async () => {
-  for (const settings of [{ call: true }, { levels: true }, { rate: 48000 }, { rate: NaN }]) {
+test('unsupported rate and capability fail before creating native output', async () => {
+  for (const settings of [{ rate: 48000 }, { rate: NaN }]) {
     const h = pcmFixture(), s = h.make(settings);
     assert.equal(await s.open(), false); assert.equal(h.renderers.length, 0);
     assert(!h.calls.includes('create')); assert.equal(terminals(h)[0].kind, 'error');

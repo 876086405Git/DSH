@@ -105,6 +105,8 @@ rl.on('line', line => {
 });
 const locked = ['app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets', 'app/ohos/entry/src/main/ets/plugins/OhosPcmStream.ets',
   'app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets', 'app/ohos/entry/src/main/ets/plugins/PcmByteQueue.ets',
-  'runtime/tests/ohos/pcm-stream-fixture.mjs'];
+  'runtime/tests/ohos/pcm-stream-fixture.mjs',
+  ...['OhosSpeechPlayback', 'OhosSpeechCall', 'OhosCallCapture', 'CallEnergyGate', 'VoicePcmTap',
+      'VoicePcm', 'VoiceTypes', 'VoiceMicLease'].map(name => 'app/ohos/entry/src/main/ets/plugins/' + name + '.ets')];
 emit({ ready: true, bridgeUrl, bridgeSha256, inputSha256: Object.fromEntries(locked.map(path => [path,
   createHash('sha256').update(fs.readFileSync(resolve(root, path))).digest('hex')])) });

@@ -42,10 +42,14 @@ WRAPPED_TEST_LOGS = {
     'tinyemu-event-wake': ['tinyemu-event-wake/test.log'],
     'linux-startup-close': ['linux-startup-close/test.log'],
     'speech-channel-*': ['{name}/test.log'],
+    'call-capture-*': ['{name}/test.log'],
+    'system-tts-*': ['{name}/test.log'],
     'git-*': ['{name}/stdout.log'], 'owned-*': ['{name}/stdout.log'],
     'native-files': ['native-files/logic.log'], 'pdf': ['pdf/logic.log'],
     'hms-share': ['hms-share/logic.log'], 'native-media': ['native-media/logic.log'],
-    'voice': ['voice/test.log'], 'performance-dart': ['performance-dart/logic.log'],
+    'voice': ['voice/test.log'],
+    'system-asr-native': ['system-asr-native/plain.log', 'system-asr-native/jitless.log'],
+    'performance-dart': ['performance-dart/logic.log'],
     'diagnostics-dart': ['diagnostics-dart/node-test.log'],
     'composition-process-matrix': ['composition-process-matrix/jit.log', 'composition-process-matrix/strict.log'],
     'pcm-stream-native': ['pcm-stream-native/plain.log', 'pcm-stream-native/jitless.log'],
@@ -337,7 +341,7 @@ class Gates:
                     raise ValueError('Required bridge scope did not pass')
                 if inventory['fullInventoryStatus'] != 'LITERAL_DISPATCHES_MATCHED':
                     incomplete.append('Full bridge inventory remains incomplete')
-            if code == 0 and name == 'flutter-consumers':
+            if code == 0 and name in ('flutter-consumers', 'system-asr-dart'):
                 events = [json.loads(line) for line in text.splitlines() if line.startswith('{')]
                 done = [event for event in events if event.get('type') == 'done']
                 tests_done = [event for event in events if event.get('type') == 'testDone' and not event.get('hidden', False)]
@@ -1417,7 +1421,9 @@ def main():
     for name in ['pdf', 'hms-share']:
         g.run(name, lambda n=name: g.py(rt + n + '-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--out', o / n, '--cxx', p('cxx')), needs=('tools',), timeout=240)
     g.run('native-media', lambda: g.py(rt + 'native-media-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--path-provider-source', p('path_provider_source'), '--cxx', p('cxx'), '--out', o / 'native-media'), needs=('tools',), timeout=240)
-    g.run('pcm-stream-native', lambda: g.py(rt + 'pcm-stream-native.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'pcm-stream-native'), needs=('tools',), timeout=240, tests=[rt + 'pcm-stream.test.mjs'])
+    g.run('system-asr-native', lambda: g.py(rt + 'system-asr-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'system-asr-native'), needs=('tools',), timeout=300,
+          tests=[rt + 'system-asr-native.test.mjs', rt + 'system-asr-channel.test.mjs', rt + 'system-asr-capture.test.mjs'], scope='Real external-PCM ASR ETS, channel, lease and EntryAbility; explicit HMS/Flutter/clock host boundaries; not SDK/device')
+    g.run('pcm-stream-native', lambda: g.py(rt + 'pcm-stream-native.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'pcm-stream-native'), needs=('tools',), timeout=240, tests=[rt + 'pcm-stream.test.mjs', rt + 'pcm-stream-call.test.mjs'], scope='Actual PCM ETS: communication usage, 40ms levels from hardware-frame-position doubles, ownership/drain barriers; not SDK or device audio')
     g.run('performance-dart', lambda: g.py(rt + 'performance-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'performance-dart'), needs=('tools', 'dart-tools'), timeout=180)
     g.run('diagnostics-dart', lambda: g.py(rt + 'diagnostics-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--zlib-addon', o / 'zlib.node', '--output', o / 'diagnostics-dart'), needs=('tools', 'dart-tools', 'native-zlib-build'), timeout=240)
     g.internal('dart-consumer-evidence', lambda _: verify_dart_consumers(o), needs=('diagnostics-dart', 'performance-dart'))
@@ -1434,6 +1440,11 @@ def main():
     # upstream Dart preflight/streaming integration before UI enablement.
     for mode in ['plain', 'jitless']:
         g.run('speech-channel-' + mode, lambda m=mode: g.py(rt + 'speech-channel-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('speech-channel-' + m)), needs=('tools',), timeout=180, tests=[rt + 'speech-channel.test.mjs', rt + 'speech-channel-pcm.test.mjs', rt + 'entry-ability-fixture.test.mjs'])
+    for mode in ['plain', 'jitless']:
+        g.run('call-capture-' + mode, lambda m=mode: g.py(rt + 'call-capture-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('call-capture-' + m)), needs=('tools',), timeout=180,
+              tests=[rt + name for name in ['call-capture.test.mjs', 'call-control.test.mjs', 'voice-pcm-tap.test.mjs', 'speech-call-channel.test.mjs', 'voice-channel.test.mjs']],
+              scope='Actual ETS energy fallback, capture/control, PCM tap and dictation regression; explicit OS boundaries; no SDK or device claim')
+        g.run('system-tts-' + mode, lambda m=mode: g.py(rt + 'system-tts-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('system-tts-' + m)), needs=('tools',), timeout=180, tests=[rt + 'system-tts.test.mjs'], scope='Actual EntryAbility and system TTS/PCM channel bodies; explicit HMS/Flutter/AudioRenderer boundaries; not SDK or device validation')
     tooling = ['managed-skill', 'native-host-lazy', 'runtime-archive', 'runtime-channel', 'linux-control', 'lifecycle-host', 'web-files', 'transient-task', 'runtime-recovery', 'recovery-storage', 'native-recovery-gate', 'last-known-good']
     g.node_tests('ets-runtime-tooling', [tools + n + '.test.mjs' for n in tooling], needs=('native-zlib-build', 'prepared-inputs'), extra=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node'), 'OHOS_INSTALL_RECORD_WIRE': str(o / 'install-record-wire.json')}, timeout=240)
     g.run('runtime-background-idle', lambda: g.node('--test', '--test-name-pattern=1200 background polling',
@@ -1508,11 +1519,22 @@ def main():
           '--node', node(), '--typescript-prefix', p('typescript_prefix'),
           '--deps-config', g.flutter_source / 'app/.dart_tool/package_config.json',
           '--bridge-source', s / 'runtime/bridge/dsh-go-bridge/lib/speech.js', '--out', o / 'speech-upper-host'),
-          needs=('tools', 'dart-tools', 'flutter-input-identity', 'speech-channel-jitless', 'pcm-stream-native'),
+          needs=('tools', 'dart-tools', 'flutter-input-identity', 'speech-channel-jitless', 'system-tts-jitless', 'pcm-stream-native'),
           timeout=240, tests=[rt + 'speech-upper.py'] + [rt + 'speech-upper/' + name for name in
           ['host-speech-tests.dart', 'host-lifecycle-tests.dart', 'host-http-tests.dart', 'host-preview-tests.dart',
-           'host-compat-tests.dart', 'host-route-tests.dart', 'host-native-integration.dart']],
+           'host-compat-tests.dart', 'host-route-tests.dart', 'host-system-tests.dart', 'host-native-integration.dart']],
           scope='Actual Dart upper/HTTP + fixed main speech.js + frozen 1216 ETS; explicit framework, local provider and AudioRenderer OS boundaries; no Flutter engine, SDK, device, UI enablement or paid API claim')
+    g.run('system-asr-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
+          '../runtime/tests/ohos/system-asr-data_test.dart', 'test/voice/streaming_asr_test.dart', 'test/voice/streaming_pcm_test.dart',
+          'test/speech/voice_call_test.dart', 'test/speech/turn_words_test.dart', 'test/voice/native_trial_test.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300,
+          tests=[rt + 'system-asr-data_test.dart', 'app/test/voice/streaming_asr_test.dart', 'app/test/voice/streaming_pcm_test.dart',
+                 'app/test/speech/voice_call_test.dart', 'app/test/speech/turn_words_test.dart', 'app/test/voice/native_trial_test.dart'],
+          scope='Actual Linux Flutter/Dart system-caption data consumers and unchanged sherpa isolate regression; explicit native channel boundary; not OHOS SDK/device')
+    g.run('system-asr-dart-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/voice/ohos_streaming_asr.dart', 'lib/voice/streaming_asr_model.dart',
+          'lib/voice/streaming_pcm.dart', 'lib/voice/live_words.dart', 'lib/state/streaming_asr_state.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300,
+          scope='Real Flutter analysis of changed system-caption data/protocol files; no UI enablement')
     flutter_tests = ['test/secrets', 'test/ohos/attachment_files_test.dart', 'test/runtime/phone_callback_bridge_test.dart', 'test/runtime/runtime_recovery_test.dart', 'test/runtime/ohos_install_record_test.dart', 'test/usage/ohos_device_contract_test.dart',
                      'test/safe_mode/safe_mode_logic_test.dart', 'test/state/engine_control_test.dart', 'test/runtime/runtime_controller_test.dart',
                      'test/plugins/ohos_replace_cancel_test.dart', 'test/remote/pairing_system_scanner_test.dart',
