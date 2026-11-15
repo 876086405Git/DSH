@@ -108,6 +108,23 @@
   "phoneAppRulesAcceptRisk": "我知道风险，仍然修改",
   "phoneAppRulesPackage": "包名",
   "phoneAppRulesPackageHint": "在「设置 → 应用 → 应用信息」里能找到",
+  "phoneAlwaysAllowTitle": "始终允许",
+  "phoneAlwaysAllowOff": "未开启",
+  "phoneAlwaysAllowCount": "已允许 {count} 个应用",
+  "@phoneAlwaysAllowCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneAlwaysAllowSwitchHint": "不再询问就把内容发到你选的应用",
+  "phoneAlwaysAllowWarning": "开启后 DSH 可不再询问就把内容发到这些应用，发出后无法撤回。",
+  "phoneAlwaysAllowConfirm": "确认开启",
+  "phoneAlwaysAllowAdd": "添加应用",
+  "phoneAlwaysAllowEmpty": "还没有允许的应用",
+  "phoneAlwaysAllowRemove": "移除",
+  "phoneAlwaysAllowSaveFailed": "保存失败",
   "phoneDndRequiresAndroid": "需要 Android 14 及以上",
   "phoneDndHiddenScreen": "在看不见的屏幕上操作",
   "phoneNotReadyYet": "还没准备好",
@@ -184,7 +201,7 @@
   "phoneConfirmTask": "本任务免确认",
   "phoneConfirmAlways": "始终免确认",
   "phoneConfirmAskHint": "进新 App、发送、删除、付款前先问你",
-  "phoneConfirmTaskHint": "每个任务只问一次",
+  "phoneConfirmTaskHint": "本轮只问一次",
   "phoneConfirmAlwaysHint": "从不询问，直接操作",
   "phoneConfirmTitle": "确认方式",
   "phoneConfirmAlwaysTitle": "始终免确认？",

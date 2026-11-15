@@ -69,6 +69,7 @@ enum SettingsPageId {
   agentPresets,
   phone,
   phoneAppRules,
+  phoneAlwaysAllow,
   phoneAndroidShell,
   phoneDnd,
   phoneUnlocks,
@@ -436,6 +437,12 @@ final _pages = <SettingsPageMeta>[
     title: (l) => l.phoneAppRulesTitle,
     parent: SettingsPageId.phone,
     keywords: (l) => l.searchKwAppRules,
+  ),
+  SettingsPageMeta(
+    SettingsPageId.phoneAlwaysAllow,
+    title: (l) => l.phoneAlwaysAllowTitle,
+    parent: SettingsPageId.phone,
+    keywords: (l) => l.phoneAlwaysAllowSwitchHint,
   ),
   SettingsPageMeta(
     SettingsPageId.phoneAndroidShell,

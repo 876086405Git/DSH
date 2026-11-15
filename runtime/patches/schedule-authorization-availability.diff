@@ -1,0 +1,31 @@
+--- a/node_modules/@deepseek-ai/dsh-schedule/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-schedule/lib/index.js
+@@ -2460,1 +2460,2 @@
+-			const denied = () => new RemoteError("schedule-authorization-required", "This task requires a separate, explicit user authorization. Rejection, cancellation, timeout, or an unavailable confirmation interface does not authorize it.");
++			const denied = () => new RemoteError("schedule-authorization-required", "This task requires a separate, explicit user authorization. Rejection, cancellation, timeout, or an unavailable confirmation interface does not authorize it.");
++			const rejected = () => new RemoteError("schedule-authorization-rejected", "The user rejected this task. No schedule was created or updated.");
+@@ -2504,1 +2505,3 @@
+-				if (combined.aborted || this.stopping || !Array.isArray(accepted) || accepted.length !== 1 || accepted[0].id !== id || !Array.isArray(accepted[0].selected) || accepted[0].selected.length !== 1 || accepted[0].selected[0] !== approve || accepted[0].custom !== void 0) throw denied();
++				if (combined.aborted || this.stopping || !Array.isArray(accepted) || accepted.length !== 1 || accepted[0].id !== id || !Array.isArray(accepted[0].selected) || accepted[0].selected.length !== 1 || accepted[0].custom !== void 0) throw denied();
++				if (accepted[0].selected[0] === "拒绝 / Reject") throw rejected();
++				if (accepted[0].selected[0] !== approve) throw denied();
+@@ -2507,1 +2510,6 @@
+-				if (error instanceof RemoteError) throw error;
++				if (error instanceof RemoteError) throw error;
++				if (combined.aborted || this.stopping) throw denied();
++				if (error?.name === "UserQuestionError") {
++					if (error.code === "NO_PROVIDER") throw new RemoteError("schedule-authorization-unavailable", "确认界面暂时不可用，请解锁手机或恢复连接后重试。 The confirmation interface is temporarily unavailable. Unlock the phone or restore the connection, then retry. No schedule was created or updated.");
++					if (error.code === "ASK_CANCELLED") throw rejected();
++				}
+--- a/node_modules/@deepseek-ai/dsh-tool-schedule/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-schedule/lib/index.js
+@@ -333,1 +333,3 @@
+-	"authorization_required",
++	"authorization_required",
++	"authorization_unavailable",
++	"authorization_rejected",
+@@ -462,1 +464,3 @@
+-		if (error?.code === "schedule-authorization-required") return { code: "authorization_required", message: error.message };
++		if (error?.code === "schedule-authorization-required") return { code: "authorization_required", message: error.message };
++		if (error?.code === "schedule-authorization-unavailable") return { code: "authorization_unavailable", message: error.message };
++		if (error?.code === "schedule-authorization-rejected") return { code: "authorization_rejected", message: error.message };

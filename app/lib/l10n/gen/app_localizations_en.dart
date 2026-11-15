@@ -1722,7 +1722,7 @@ class L10nEn extends L10n {
 
   @override
   String get androidShellEnableHint =>
-      'A separate switch, independent of non-disruptive mode and screen confirmation settings.';
+      'A separate switch, independent of non-disruptive mode and screen confirmation. It only adds an Android command channel; Ubuntu tools such as bash and run_code keep working, and both can be used together.';
 
   @override
   String get androidShellConfirmationNote =>
@@ -1914,6 +1914,9 @@ class L10nEn extends L10n {
 
   @override
   String get androidShellErrorInvalidResponse => 'No valid native status was received. Refresh or update the app.';
+
+  @override
+  String get androidShellErrorStopped => 'This round has ended or is paused. Turn it on again and retry.';
 
   @override
   String get androidShellErrorStopFailed => 'Stopping was not confirmed. Refresh the status and retry stopping.';
@@ -11517,6 +11520,39 @@ class L10nEn extends L10n {
   String get phoneAppRulesPackageHint => 'Find it in Settings → Apps → App info';
 
   @override
+  String get phoneAlwaysAllowTitle => 'Always allow';
+
+  @override
+  String get phoneAlwaysAllowOff => 'Off';
+
+  @override
+  String phoneAlwaysAllowCount(int count) {
+    return '$count apps allowed';
+  }
+
+  @override
+  String get phoneAlwaysAllowSwitchHint => 'Send content to the apps you pick without asking';
+
+  @override
+  String get phoneAlwaysAllowWarning =>
+      'Once on, DSH can send content to these apps without asking. Sent content can’t be taken back.';
+
+  @override
+  String get phoneAlwaysAllowConfirm => 'Turn on';
+
+  @override
+  String get phoneAlwaysAllowAdd => 'Add app';
+
+  @override
+  String get phoneAlwaysAllowEmpty => 'No apps allowed yet';
+
+  @override
+  String get phoneAlwaysAllowRemove => 'Remove';
+
+  @override
+  String get phoneAlwaysAllowSaveFailed => 'Couldn’t save';
+
+  @override
   String get phoneDndRequiresAndroid => 'Requires Android 14 or later';
 
   @override
@@ -11758,7 +11794,7 @@ class L10nEn extends L10n {
   String get phoneConfirmAskHint => 'Asks before entering a new app, sending, deleting or paying';
 
   @override
-  String get phoneConfirmTaskHint => 'Asks once per task';
+  String get phoneConfirmTaskHint => 'Asks once this round';
 
   @override
   String get phoneConfirmAlwaysHint => 'Acts without asking';

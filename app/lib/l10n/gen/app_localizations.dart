@@ -3107,7 +3107,7 @@ abstract class L10n {
   /// No description provided for @androidShellEnableHint.
   ///
   /// In zh, this message translates to:
-  /// **'独立开关，不随不打扰模式或屏幕免确认设置开启。'**
+  /// **'独立开关，不随不打扰模式或屏幕免确认开启；只增加 Android 命令通道，不影响 Ubuntu 里的 bash / run_code 等工具，两者可同时使用。'**
   String get androidShellEnableHint;
 
   /// No description provided for @androidShellConfirmationNote.
@@ -3451,6 +3451,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'没有收到有效的原生状态，请刷新或更新 App。'**
   String get androidShellErrorInvalidResponse;
+
+  /// No description provided for @androidShellErrorStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'本轮已结束或暂停，请重新开启后再试。'**
+  String get androidShellErrorStopped;
 
   /// No description provided for @androidShellErrorStopFailed.
   ///
@@ -20354,6 +20360,66 @@ abstract class L10n {
   /// **'在「设置 → 应用 → 应用信息」里能找到'**
   String get phoneAppRulesPackageHint;
 
+  /// No description provided for @phoneAlwaysAllowTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'始终允许'**
+  String get phoneAlwaysAllowTitle;
+
+  /// No description provided for @phoneAlwaysAllowOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'未开启'**
+  String get phoneAlwaysAllowOff;
+
+  /// No description provided for @phoneAlwaysAllowCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已允许 {count} 个应用'**
+  String phoneAlwaysAllowCount(int count);
+
+  /// No description provided for @phoneAlwaysAllowSwitchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'不再询问就把内容发到你选的应用'**
+  String get phoneAlwaysAllowSwitchHint;
+
+  /// No description provided for @phoneAlwaysAllowWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后 DSH 可不再询问就把内容发到这些应用，发出后无法撤回。'**
+  String get phoneAlwaysAllowWarning;
+
+  /// No description provided for @phoneAlwaysAllowConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认开启'**
+  String get phoneAlwaysAllowConfirm;
+
+  /// No description provided for @phoneAlwaysAllowAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加应用'**
+  String get phoneAlwaysAllowAdd;
+
+  /// No description provided for @phoneAlwaysAllowEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有允许的应用'**
+  String get phoneAlwaysAllowEmpty;
+
+  /// No description provided for @phoneAlwaysAllowRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除'**
+  String get phoneAlwaysAllowRemove;
+
+  /// No description provided for @phoneAlwaysAllowSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存失败'**
+  String get phoneAlwaysAllowSaveFailed;
+
   /// No description provided for @phoneDndRequiresAndroid.
   ///
   /// In zh, this message translates to:
@@ -20813,7 +20879,7 @@ abstract class L10n {
   /// No description provided for @phoneConfirmTaskHint.
   ///
   /// In zh, this message translates to:
-  /// **'每个任务只问一次'**
+  /// **'本轮只问一次'**
   String get phoneConfirmTaskHint;
 
   /// No description provided for @phoneConfirmAlwaysHint.

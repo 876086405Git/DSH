@@ -417,7 +417,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     fun policiesMap(): Map<String, Any?> {
         val p = policies()
         val labels = LinkedHashMap<String, String>()
-        for (pkg in (p.denyPackages + p.confirmEveryWritePackages + PhonePolicies().denyPackages + PhonePolicies().confirmEveryWritePackages).distinct()) {
+        for (pkg in (p.denyPackages + p.confirmEveryWritePackages + p.alwaysAllowPackages +
+                PhonePolicies().denyPackages + PhonePolicies().confirmEveryWritePackages).distinct()) {
             label(pkg)?.let { labels[pkg] = it }
         }
         return p.toMap() + mapOf("labels" to labels, "defaults" to PhonePolicies().toMap(),

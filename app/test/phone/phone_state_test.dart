@@ -278,6 +278,8 @@ void main() {
     expect(native.callsOf('setPolicies').single.arguments, {
       'denyPackages': ['com.eg.android.AlipayGphone', 'com.unionpay', 'cmb.pb', 'com.icbc'],
       'confirmEveryWritePackages': <String>[],
+      'alwaysAllowEnabled': false,
+      'alwaysAllowPackages': <String>[],
       'confirmMode': 'ask',
     });
     final s = c.read(phoneProvider);

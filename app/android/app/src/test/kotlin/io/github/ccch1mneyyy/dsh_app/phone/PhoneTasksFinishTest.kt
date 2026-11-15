@@ -110,6 +110,29 @@ class PhoneTasksFinishTest {
         assertTrue(t.finish(t.snapshot().id))
     }
 
+    @Test fun roundGrantsBelongToOneTurn() {
+        val t = tasks()
+        val owner = (t.begin() as PhoneTasks.Begin.Go).owner
+        assertTrue(t.confirmIfCurrent(owner, grant = PhoneTasks.grantKey("example.app", "first-in-app")))
+        assertTrue(t.hasGrant("example.app", "first-in-app"))
+        assertFalse(t.hasGrant("example.app", "sensitive:发送"))
+        assertFalse(t.hasGrant("other.app", "first-in-app"))
+        assertTrue(t.finish())
+        assertFalse(t.hasGrant("example.app", "first-in-app")) // 下一轮从零开始。
+    }
+
+    @Test fun cancelPendingDropsTheStopHoldSoTheNextTurnStartsFresh() {
+        val t = tasks()
+        t.begin()
+        t.stop("stopped on the pill")
+        assertTrue(t.snapshot().stopped)
+        assertTrue(t.begin() is PhoneTasks.Begin.Refused)
+        t.cancelPending() // Host run end: the stop only covered the turn it interrupted.
+        assertFalse(t.isStopped())
+        val next = t.begin()
+        assertTrue(next is PhoneTasks.Begin.Go && next.newTask)
+    }
+
     @Test fun anOldFinishRequestCannotClearANewerStopHold() {
         val t = tasks()
         t.begin()

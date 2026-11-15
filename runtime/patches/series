@@ -148,6 +148,7 @@ deepseek-attachment-error.diff
 fork-default-effort.diff
 config-editor-lock-order.diff
 piai-overflow-output-limit.diff
+schedule-authorization-availability.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff

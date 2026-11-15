@@ -71,6 +71,14 @@ void main() {
       expect(_search('bash').first.spot, SettingsIndex.entry(SettingsPageId.shell));
     });
 
+    test('「始终允许」 finds the always-allow page', () {
+      final alwaysAllow = SettingsIndex.entry(SettingsPageId.phoneAlwaysAllow);
+      for (final query in ['始终允许', 'always allow']) {
+        expect(_ids(query).first, alwaysAllow.id, reason: query);
+      }
+      expect(_ids('不再询问'), contains(alwaysAllow.id));
+    });
+
     test('lower case, full width folded, spaces dropped', () {
       expect(normalizeQuery('ＡＰＩ　Key'), 'apikey');
       expect(normalizeQuery(' Dark  Mode '), 'darkmode');

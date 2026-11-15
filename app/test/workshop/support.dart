@@ -43,7 +43,7 @@ Map<String, Object?> workshopCaps({bool uploads = true, bool companion = true, S
   'schema': 1, 'features': {'uploads': uploads, 'companion': companion}, 'kinds': ['pet', 'companion'],
   'licenses': workshopLicenses.toList(), 'account': {'origin': account ?? workshopTestAccount.toString(), 'clientId': clientId},
   'maxMocVersion': 6,
-  'limits': {'archiveBytes': workshopArchiveBytes, 'expandedBytes': workshopExpandedBytes, 'companionMemberBytes': 16 * 1024 * 1024, 'companionEntries': 1000, 'petEntries': 256},
+  'limits': {'archiveBytes': workshopArchiveBytes, 'expandedBytes': workshopExpandedBytes, 'companionMemberBytes': 32 * 1024 * 1024, 'companionEntries': 1000, 'petEntries': 256},
 };
 
 Map<String, Object?> workshopSubmissionJson({String id = workshopTestId, String status = 'draft', Map<String, Object?>? metadata}) => {

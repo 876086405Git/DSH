@@ -36,25 +36,34 @@ class PhonePromptTest {
 
     @Test fun reviewNeverAuthorizesEvenIfAnotherSurfaceSendsAnAllowAction() {
         val t = begin(kind = PromptKind.REVIEW); val p = shown(t)
-        for (choice in listOf(PromptChoice.ALLOW_ONCE, PromptChoice.ALLOW_APP, PromptChoice.ALLOW_TASK, PromptChoice.ALLOW_VISUAL, PromptChoice.CONTINUE)) {
+        for (choice in listOf(PromptChoice.ALLOW_ONCE, PromptChoice.ALLOW_APP, PromptChoice.ALLOW_VISUAL, PromptChoice.CONTINUE)) {
             assertFalse(p.choose(choice)); assertTrue(t.live)
         }
         assertTrue(p.choose(PromptChoice.OPEN))
         assertEquals(PromptOutcome.OPEN, t.finalResult().outcome)
     }
 
-    @Test fun engineApprovalCannotGrantAnyTaskWaiver() {
+    @Test fun engineApprovalCannotGrantRoundOrVisualConsent() {
         val p = shown(begin())
-        assertFalse(p.choose(PromptChoice.ALLOW_TASK)); assertFalse(p.choose(PromptChoice.ALLOW_APP))
+        assertFalse(p.choose(PromptChoice.ALLOW_APP))
         assertFalse(p.choose(PromptChoice.ALLOW_VISUAL))
         assertTrue(p.choose(PromptChoice.ALLOW_ONCE))
     }
 
-    @Test fun nativeWaiverIsOnlyOfferedByItsNativeRequest() {
-        val c = PromptContent(PromptKind.NATIVE_CONFIRM, "step", ConfirmRequest("step", null, null, false, offerTaskWaiver = true))
+    @Test fun nativeRoundGrantIsOnlyOfferedByItsNativeRequest() {
+        val c = PromptContent(PromptKind.NATIVE_CONFIRM, "step", ConfirmRequest("step", null, null, false))
         val t = arbiter.begin(null, source, c, 30_000) { true }!!
-        assertTrue(shown(t).choose(PromptChoice.ALLOW_TASK))
-        assertEquals(PromptOutcome.ALLOW_TASK, t.await().outcome)
+        assertTrue(shown(t).choose(PromptChoice.ALLOW_APP))
+        assertEquals(PromptOutcome.ALLOW_APP, t.await().outcome)
+    }
+
+    @Test fun aOnceOnlyNativeRequestRejectsAnUnlistedRoundChoice() {
+        val request = ConfirmRequest("once", "App", "example.app", false, allowRound = false)
+        val t = arbiter.begin(null, source, PromptContent(PromptKind.NATIVE_CONFIRM, "once", request), 30_000) { true }!!
+        val p = shown(t)
+        assertFalse(p.choose(PromptChoice.ALLOW_APP))
+        assertTrue(p.choose(PromptChoice.ALLOW_ONCE))
+        assertEquals(PromptOutcome.ALLOW_ONCE, t.finalResult().outcome)
     }
 
     @Test fun passiveRevocationKeepsAReasonButAnActualUserStopDoesNot() {
@@ -251,7 +260,6 @@ class PhonePromptTest {
         }!!
         val p = shown(ticket, PromptSurface.APP)
         assertFalse(p.choose(PromptChoice.ALLOW_APP))
-        assertFalse(p.choose(PromptChoice.ALLOW_TASK))
         assertTrue(p.choose(PromptChoice.ALLOW_VISUAL))
         assertEquals(PromptOutcome.ALLOW_VISUAL, ticket.finalResult().outcome)
         now += 30_001
@@ -260,15 +268,23 @@ class PhonePromptTest {
         assertEquals(PromptOutcome.STOPPED, ticket.finalResult().outcome)
     }
 
-    @Test fun visualNotificationsKeepOnceWithoutChangingTheFullCardOrOrdinaryChoices() {
+    @Test fun nativeChoicesFollowTheRoundAndVisualGrants() {
         val scope = VisualScope.Background("resource", PhoneAppIdentity("example.app", 10123), Any())
         val request = ConfirmRequest("visual", "App", "example.app", false, visualScope = scope)
         val content = PromptContent(PromptKind.NATIVE_CONFIRM, "visual", request)
-        assertEquals(listOf(PromptChoice.ALLOW_VISUAL, PromptChoice.ALLOW_ONCE, PromptChoice.REJECT, PromptChoice.STOP), content.choices)
-        assertEquals(listOf(PromptChoice.ALLOW_ONCE, PromptChoice.REJECT, PromptChoice.STOP), content.notificationChoices)
+        // 视觉 scope 只提供自己的一次授权，不带普通「本轮允许」。
+        assertEquals(listOf(PromptChoice.ALLOW_VISUAL, PromptChoice.ALLOW_ONCE, PromptChoice.REJECT), content.choices)
+        assertEquals(listOf(PromptChoice.ALLOW_ONCE, PromptChoice.REJECT), content.notificationChoices)
+        // 普通确认 = 允许一次 / 本轮允许 / 取消，通知与完整卡片一致。
         val ordinary = content.copy(native = request.copy(visualScope = null, firstInApp = true))
-        assertEquals(listOf(PromptChoice.ALLOW_APP, PromptChoice.REJECT, PromptChoice.STOP), ordinary.notificationChoices)
+        assertEquals(listOf(PromptChoice.ALLOW_ONCE, PromptChoice.ALLOW_APP, PromptChoice.REJECT), ordinary.choices)
+        assertEquals(ordinary.choices, ordinary.notificationChoices)
+        // 单次授权请求（allowRound = false）只有两档。
+        val once = content.copy(native = request.copy(visualScope = null, allowRound = false))
+        assertEquals(listOf(PromptChoice.ALLOW_ONCE, PromptChoice.REJECT), once.choices)
+        assertEquals(once.choices, once.notificationChoices)
         val engine = PromptContent(PromptKind.APPROVAL, "approval")
+        assertEquals(listOf(PromptChoice.ALLOW_ONCE, PromptChoice.REJECT), engine.choices)
         assertEquals(engine.choices, engine.notificationChoices)
     }
 

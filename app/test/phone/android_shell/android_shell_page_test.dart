@@ -352,6 +352,7 @@ void main() {
       final l10n = lookupL10n(locale);
       for (final code in [
         'disabled',
+        'stopped',
         'notConnected',
         'shizukuMissing',
         'shizukuStopped',

@@ -322,6 +322,18 @@ class PhoneController extends Notifier<PhoneState> {
     return true;
   }
 
+  /// 始终允许: the switch and the app list, written together. False when the
+  /// native side refused (nothing changes).
+  Future<bool> setAlwaysAllow({required bool enabled, required List<String> packages}) async {
+    final current = state.policies;
+    if (current == null) return false;
+    final next = current.withAlwaysAllow(enabled: enabled, packages: packages);
+    final ok = await _channel.setPolicies(next);
+    if (!ok || !ref.mounted) return false;
+    state = state.copyWith(policies: _acceptedPolicyWrite(next));
+    return true;
+  }
+
   /// 每次都询问 / 本任务免确认 / 始终免确认; false when the native side refused
   /// (nothing changes). Written, it also settles a first-run choice still
   /// pending: the latest word wins.
@@ -336,7 +348,7 @@ class PhoneController extends Notifier<PhoneState> {
     return true;
   }
 
-  // The old setter writes these three fields. Preserve newer read-only settings,
+  // The old setter writes these fields. Preserve newer read-only settings,
   // unlocks and OCR state rather than restoring the pre-await object.
   PhonePolicies? _acceptedPolicyWrite(PhonePolicies written) {
     final current = state.policies;
@@ -344,6 +356,8 @@ class PhoneController extends Notifier<PhoneState> {
     return PhonePolicies(
       denyPackages: written.denyPackages,
       confirmEveryWritePackages: written.confirmEveryWritePackages,
+      alwaysAllowEnabled: written.alwaysAllowEnabled,
+      alwaysAllowPackages: written.alwaysAllowPackages,
       confirmMode: written.confirmMode,
       labels: current.labels,
       defaultDeny: current.defaultDeny,

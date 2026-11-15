@@ -65,7 +65,7 @@ export function validatePet(bytes: Uint8Array, meta: SubmissionMeta): PackSummar
 }
 
 // Large motions run past 1 MiB; the app re-encodes every JSON it uploads.
-export const COMPANION_JSON_CAP = 4 * 1024 * 1024;
+export const COMPANION_JSON_CAP = 8 * 1024 * 1024;
 const extensions = new Set(['json', 'moc3', 'png', 'jpg', 'jpeg', 'webp', 'wav', 'mp3', 'txt', 'md']);
 const extension = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
 function companionReference(zip: WorkshopArchive, home: string, value: unknown, allowed: string[]): string {

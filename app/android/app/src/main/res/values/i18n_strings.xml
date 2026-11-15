@@ -51,19 +51,18 @@
     <string name="live_chip_phone">Acting</string>
     <string name="live_chip_paused">Paused</string>
     <!-- overlay -->
-    <string name="overlay_allow_task_no_ask">Allow for task</string>
-    <string name="overlay_allow_task">Allow for task</string>
     <string name="overlay_allow_once">Allow once</string>
+    <string name="overlay_allow_round">Allow this turn</string>
     <string name="overlay_this_app">this app</string>
     <string name="overlay_confirm_title">DSH needs approval</string>
     <string name="overlay_open_app">DSH wants to control “%1$s”</string>
-    <string name="overlay_decline">Decline</string>
+    <string name="overlay_decline">Cancel</string>
     <string name="overlay_stop">Stop</string>
     <string name="overlay_handoff_phone">Your turn to use the phone</string>
     <string name="overlay_continue">Continue</string>
     <string name="overlay_public_approval">DSH needs approval</string>
     <string name="overlay_channel">Phone control approval</string>
-    <string name="overlay_channel_description">Approve, decline or stop DSH’s phone actions</string>
+    <string name="overlay_channel_description">Approve once, for this turn, or cancel DSH’s phone actions</string>
     <string name="overlay_stopped">Stopped</string>
     <string name="overlay_paused">Paused · Tap Continue to resume</string>
     <string name="overlay_pause">Pause</string>
@@ -74,12 +73,7 @@
     <string name="overlay_steer_sent">Sent to DSH: %1$s</string>
     <string name="overlay_first_app">First action in “%1$s”</string>
     <string name="overlay_action_title">DSH wants to do this</string>
-    <string name="overlay_waiver_hint">Allow the remaining steps in this task. Passwords, payments, banking and system settings stay blocked. No choice in 30 seconds means Decline</string>
-    <string name="overlay_timeout_hint">No choice in 30 seconds means Decline</string>
-    <string name="overlay_allow_remaining">Allow for task</string>
-    <string name="overlay_allow_app_task">Allow “%1$s” for task</string>
-    <string name="overlay_allow_this_app_task">Allow app for task</string>
-    <string name="overlay_allow_step">Allow this step</string>
+    <string name="overlay_timeout_hint">No choice in 30 seconds means Cancel</string>
     <string name="overlay_handoff_title">Your turn</string>
     <string name="overlay_handoff_hint">Tap Continue when you’re done. DSH will take over.</string>
     <string name="overlay_handoff_secret">Passwords and codes are yours to enter</string>

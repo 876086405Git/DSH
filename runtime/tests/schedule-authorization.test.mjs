@@ -403,3 +403,41 @@ test('real UserQuestionService and api-remotes forward Session consent before a 
   }
   assert.equal(f.writes.length, 1);
 });
+
+
+test('real no-answerer and explicit refusal stay distinct at the schedule tool boundary', async t => {
+  const load = name => import(pathToFileURL(join(resolve(prefix), 'node_modules/@deepseek-ai', name, 'lib/index.js')));
+  const { Context } = await load('cordis');
+  const { UserQuestionService, UserQuestionError } = await load('dsh-user-questions');
+  const ctx = new Context();
+  t.after(() => ctx.fiber.dispose());
+  const f = fixture();
+  f.agent.ctx = ctx;
+  ctx.provide('agents', { get: id => id === f.agent.id ? f.agent : undefined, roots: () => [f.agent] });
+  const questions = Object.create(UserQuestionService.prototype);
+  Object.defineProperty(questions, 'ctx', { value: ctx });
+  const get = f.ctx.get;
+  f.ctx.get = name => name === 'userQuestions' ? questions : get(name);
+  const definitions = new Map();
+  applyTools({ systemPrompt: { section() {}, getSectionOrder() { return 0; } }, schedule: f.service,
+    tools: { register(def) { definitions.set(def.name, def); } }, inject(_deps, callback) { callback(this); } });
+  const create = () => definitions.get('schedule_create').execute({ title: 'Synthetic', prompt: 'Harmless',
+    rrule: 'DTSTART:20991230T230000Z\nRRULE:FREQ=DAILY;COUNT=1', target: 'this_session' }, { agent: f.agent, signal: signal() });
+  const unavailable = await create();
+  assert.equal(unavailable.code, 'authorization_unavailable');
+  assert.match(unavailable.message, /解锁/);
+  assert.equal(f.writes.length, 0);
+  for (const answer of [
+    request => ({ answers: [{ id: request.questions[0].id, selected: ['拒绝 / Reject'] }] }),
+    () => { throw new UserQuestionError('The user declined to answer this question.', 'ASK_CANCELLED'); },
+  ]) {
+    const stop = ctx.on('user-questions/request', answer);
+    try { assert.equal((await create()).code, 'authorization_rejected'); }
+    finally { stop(); }
+    assert.equal(f.writes.length, 0);
+  }
+  const stop = ctx.on('user-questions/request', granted);
+  try { assert.ok((await create()).id); }
+  finally { stop(); }
+  assert.equal(f.writes.length, 1, 'a later explicitly authorized attempt still works');
+});
