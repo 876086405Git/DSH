@@ -58,8 +58,6 @@ class VoicePlugin :
     private var recorder: WavRecorder? = null
     private var recognizerMic = 0
     private var recorderMic = 0
-    /** 本次录音走「内置模型」：停止时直接在本进程转写，只回文字。 */
-    private var offline = false
     private var generation = 0L
     private var pendingPermission: MethodChannel.Result? = null
 
@@ -70,6 +68,7 @@ class VoicePlugin :
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        StreamingPcm.disable()
         methods.setMethodCallHandler(null)
         events.setStreamHandler(null)
         releaseAll()
@@ -114,13 +113,20 @@ class VoicePlugin :
             "openSettings" -> result.success(openSettings())
             "startRecognizer" -> startRecognizer(call.argument<String>("language"), call.argument<Number>("sessionId")?.toLong() ?: 0, result)
             "startRecorder" -> startRecorder(call.argument<Int>("maxSeconds") ?: 60, call.argument<Number>("sessionId")?.toLong() ?: 0, result)
-            // 内置模型：本进程内的 SenseVoice，不经过引擎，也不经过系统识别服务。
-            "offlineStatus" -> result.success(mapOf(
-                "ready" to SenseVoiceEngine.isReady(),
-                "failure" to SenseVoiceEngine.failure(),
-            ))
-            "prepareOffline" -> prepareOffline(result)
-            "startOffline" -> startOffline(call.argument<Int>("maxSeconds") ?: 60, call.argument<Number>("sessionId")?.toLong() ?: 0, result)
+            "streamingPcm" -> {
+                val source = call.argument<String>("source")
+                val id = call.argument<Number>("pcmSession")?.toLong() ?: 0
+                if (source == null) StreamingPcm.disable(id)
+                else if (source == "call" || source == "dictation") {
+                    StreamingPcm.enable(source, id) { tap, bytes, valid -> main.post {
+                        if (StreamingPcm.current(tap) && valid()) sink?.success(mapOf(
+                            "type" to "pcm", "bytes" to bytes, "rate" to 16000,
+                            "source" to tap.source, "pcmSession" to tap.id,
+                        ))
+                    } }
+                } else return result.error("pcm-source", "invalid PCM source", null)
+                result.success(null)
+            }
             "stop" -> stop(result)
             "cancel" -> {
                 releaseAll()
@@ -285,6 +291,7 @@ class VoicePlugin :
         lateinit var r: WavRecorder
         r = WavRecorder(
             maxSeconds = maxSeconds.coerceIn(1, 600),
+            isCurrentCapture = { generation == ownGeneration && recorder === r },
             onLevel = { level -> main.post {
                 if (generation == ownGeneration && recorder === r) emit(sessionId, mapOf("type" to "level", "value" to level))
             } },
@@ -329,32 +336,12 @@ class VoicePlugin :
         }
         val r = recorder ?: return result.success(null)
         recorder = null
-        val wasOffline = offline
-        offline = false
         val mic = recorderMic
         val environment = VoiceDiagnostics.environment(appContext)
         // Joining the capture thread and building the WAV can take a moment.
         Thread {
             val recorded = runCatching { r.finish() }
             if (recorded.isFailure) VoiceDiagnostics.failure(appContext, environment, 100, "record", recorded.exceptionOrNull())
-            // 内置模型：录完直接在本进程转写，只回文字（不回 WAV）。
-            if (wasOffline && recorded.isSuccess) {
-                val wav = recorded.getOrNull()
-                val text = runCatching {
-                    if (wav == null) "" else SenseVoiceEngine.transcribe(pcmOf(wav))
-                }
-                main.post {
-                    MicArbiter.endDictation(mic)
-                    text.fold(
-                        onSuccess = { value -> result.success(mapOf("type" to "offline", "text" to value)) },
-                        onFailure = { error ->
-                            VoiceDiagnostics.failure(appContext, environment, 5, "offline", error)
-                            result.error("offline", error.message ?: "转写失败", mapOf("code" to 5))
-                        },
-                    )
-                }
-                return@Thread
-            }
             main.post {
                 MicArbiter.endDictation(mic)
                 if (recorded.isFailure) result.error("audio", "could not finish recording", mapOf("code" to 100))
@@ -363,93 +350,8 @@ class VoicePlugin :
         }.start()
     }
 
-    /**
-     * 内置模型：把 SenseVoice 从 assets 解到私有目录并加载识别器。
-     *
-     * 首次约 10–30 秒（228 MB 落盘），之后启动直接 mmap。放后台线程，主线程只等回调。
-     */
-    private fun prepareOffline(result: MethodChannel.Result) {
-        Thread({
-            val failure = SenseVoiceEngine.prepare(appContext)
-            main.post {
-                if (failure == null) {
-                    result.success(mapOf("ready" to true))
-                } else {
-                    result.error("offline", failure, mapOf("code" to 5))
-                }
-            }
-        }, "dsh-voice-offline-prepare").start()
-    }
-
-    /** 内置模型听写：录完直接在本进程转写，不碰引擎，也不碰系统识别服务。 */
-    private fun startOffline(maxSeconds: Int, sessionId: Long, result: MethodChannel.Result) {
-        releaseAll()
-        val environment = VoiceDiagnostics.environment(appContext)
-        if (!hasPermission()) {
-            VoiceDiagnostics.failure(appContext, environment, 9, "record")
-            return result.error("permission", "microphone permission required", mapOf("code" to 9))
-        }
-        val failure = SenseVoiceEngine.prepare(appContext)
-        if (failure != null) {
-            VoiceDiagnostics.failure(appContext, environment, 5, "offline", null)
-            return result.error("offline", failure, mapOf("code" to 5))
-        }
-        val ownGeneration = generation
-        lateinit var r: WavRecorder
-        r = WavRecorder(
-            maxSeconds = maxSeconds.coerceIn(1, 600),
-            onLevel = { level -> main.post {
-                if (generation == ownGeneration && recorder === r) emit(sessionId, mapOf("type" to "level", "value" to level))
-            } },
-            onLimit = { main.post {
-                if (generation == ownGeneration && recorder === r) emit(sessionId, mapOf("type" to "limit"))
-            } },
-            onError = { main.post {
-                if (generation == ownGeneration && recorder === r) {
-                    VoiceDiagnostics.failure(appContext, environment, 100, "record")
-                    releaseAll()
-                    emit(sessionId, mapOf("type" to "error", "code" to 100))
-                }
-            } },
-        )
-        val mic = MicArbiter.beginDictation()
-        val started = runCatching { r.start() }
-        if (started.getOrDefault(false) != true) {
-            Thread {
-                runCatching { r.discard() }
-                main.post { MicArbiter.endDictation(mic) }
-            }.start()
-            VoiceDiagnostics.failure(appContext, environment, 100, "record", started.exceptionOrNull())
-            return result.error("audio", "the microphone could not be opened", mapOf("code" to 100))
-        }
-        recorder = r
-        recorderMic = mic
-        offline = true
-        result.success(null)
-    }
-
-    /** Pulls the PCM payload out of a 16-bit mono WAV (skips the RIFF header). */
-    private fun pcmOf(wav: ByteArray): ByteArray {
-        var offset = 12
-        while (offset + 8 <= wav.size) {
-            val id = String(wav, offset, 4, Charsets.US_ASCII)
-            val size = (wav[offset + 4].toInt() and 0xFF) or
-                ((wav[offset + 5].toInt() and 0xFF) shl 8) or
-                ((wav[offset + 6].toInt() and 0xFF) shl 16) or
-                ((wav[offset + 7].toInt() and 0xFF) shl 24)
-            if (id == "data") {
-                val start = offset + 8
-                val end = (start + size).coerceAtMost(wav.size)
-                return wav.copyOfRange(start, end)
-            }
-            offset += 8 + size + (size and 1)
-        }
-        return ByteArray(0)
-    }
-
     private fun releaseAll() {
         generation++
-        offline = false
         releaseRecognizer()
         recorder?.let { r ->
             recorder = null
@@ -468,6 +370,7 @@ class VoicePlugin :
     }
 
     override fun onCancel(arguments: Any?) {
+        StreamingPcm.disable()
         sink = null
     }
 
