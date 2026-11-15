@@ -10,6 +10,15 @@ interface KeyboardSample {
   geometry: Map<string, Any>;
 }
 
+// The keyboard's avoid rectangles as they are exported: window.AvoidArea also
+// carries visible, which this record never did.
+interface KeyboardAvoidRects {
+  leftRect: window.Rect;
+  topRect: window.Rect;
+  rightRect: window.Rect;
+  bottomRect: window.Rect;
+}
+
 function rect(value: window.Rect): window.Rect | null {
   const numbers: Array<number> = [value.left, value.top, value.width, value.height];
   if (!numbers.every((n: number): boolean => Number.isFinite(n)) || value.width < 0 || value.height < 0) return null;
@@ -61,7 +70,7 @@ export class OhosKeyboardLog {
         const right: window.Rect | null = rect(data.area.rightRect);
         const bottom: window.Rect | null = rect(data.area.bottomRect);
         if (left === null || top === null || right === null || bottom === null) return;
-        const clean: window.AvoidArea = { leftRect: left, topRect: top, rightRect: right, bottomRect: bottom };
+        const clean: KeyboardAvoidRects = { leftRect: left, topRect: top, rightRect: right, bottomRect: bottom };
         const geometry: Map<string, Any> = new Map<string, Any>();
         geometry.set('left', coordinates(left)); geometry.set('top', coordinates(top));
         geometry.set('right', coordinates(right)); geometry.set('bottom', coordinates(bottom));

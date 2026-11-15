@@ -15,8 +15,8 @@ export class CompanionWidgetStore {
   private constructor(filesDir: string) { this.directory = filesDir + '/companion-widget'; }
 
   static at(filesDir: string): CompanionWidgetStore {
-    let store: CompanionWidgetStore | undefined = this.stores.get(filesDir);
-    if (!store) { store = new CompanionWidgetStore(filesDir); this.stores.set(filesDir, store); }
+    let store: CompanionWidgetStore | undefined = CompanionWidgetStore.stores.get(filesDir);
+    if (!store) { store = new CompanionWidgetStore(filesDir); CompanionWidgetStore.stores.set(filesDir, store); }
     return store;
   }
 
