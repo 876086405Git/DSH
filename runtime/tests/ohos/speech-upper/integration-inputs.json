@@ -1,8 +1,8 @@
 {
   "native": {
-    "app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets": "22dddd91c892ed7e08303fec9f52f60b7cd28f13838dbdda2db0d1570a7940a4",
+    "app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets": "f0216b2181b5756b1db4eef8b0da46e3f97bc2eccf78476c9b7c09078db5c748",
     "app/ohos/entry/src/main/ets/plugins/OhosPcmStream.ets": "747a3aa595cacbca8a402cb33125ef7656bb9dc580152fba5a41b6e906ade670",
-    "app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets": "f93b2b19711fed700278ee9a748069b7b96f9735ec00fcdaaa7ca31dfcfb917a",
+    "app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets": "22aa92583db126bdf559c3e70b814730de1e2592ae0b68afa0e438d26699d073",
     "app/ohos/entry/src/main/ets/plugins/PcmByteQueue.ets": "db707f061e5da2efde6cd1ae3afe42450a53d05ed5f3118e1827de968e8dd4c6",
     "runtime/tests/ohos/pcm-stream-fixture.mjs": "ab6a12631fbccc1f1ba4528faffc368cc630e22b0f93854a9a8c03d522d9df5e"
   },
