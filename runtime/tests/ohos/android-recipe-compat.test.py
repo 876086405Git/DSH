@@ -2,7 +2,7 @@
 """Replay the actual old/new shell recipe blocks and mutate their real inputs.
 
 External archives are identical small fixtures, not Android image downloads.
-The baseline must be the verified main-c3872ae9 runtime directory.
+The baseline must be the verified main-0441caf4 runtime directory.
 """
 import argparse
 from contextlib import contextmanager
@@ -71,11 +71,11 @@ def main():
     for name, expected in {
         'build-runtime.sh': '71918e114d6f9a80392cc63410b4b65751c6f815d741d48066b2e401aff83bd4',
         'lib/rtbuild.py': '904e61535a38a9a4464ab56f9ae444af538b91251f06bc73280fa35481bb972e',
-        'patches/pins.json': '6e0e3defbd8c4ee84b1263427d6fdea4c195584a08071393deee0894b3d9feaa',
-        'patches/series': 'd6b57c88a99ed358ce1897b5317c61787a2d14a97c960b4fe1b8b6c384056adc',
+        'patches/pins.json': '119a3d949264f480b57ff6cea7e9a2b68fd3cbb281022abc788edb2869eb2d33',
+        'patches/series': '154565b33636471c26cd9d2af67285095404732f4e7241a63d8da310cf4a40ec',
         'session-deletion/generate.py': '44aab75244ef5035d58ba2e03f4976fee514bf531bf7ca5abe5f854f889991a7',
     }.items():
-        assert sha((baseline / name).read_bytes()) == expected, 'not the main-c3872ae9 baseline: ' + name
+        assert sha((baseline / name).read_bytes()) == expected, 'not the main-0441caf4 baseline: ' + name
     cases = []
     with tempfile.TemporaryDirectory(prefix='android-recipe-contract-') as temporary:
         root = Path(temporary)
