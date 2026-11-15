@@ -187,19 +187,17 @@ try {
     job = await run(['/bin/sh', '-c', 'set -eu; git init --bare -q /workspace/source931; git clone -q --no-hardlinks /workspace/source931 /workspace/clone931; git -C /workspace/clone931 rev-parse --is-inside-work-tree']);
   } else job = await run(['git', '-C', '/workspace/clone931', 'rev-parse', '--is-inside-work-tree']);
   check('real local git repository survives without creating a commit', bytes(job.stdout).toString() === 'true\n');
-  await command('setEnabled', { enabled: false }); await waitFor(value => value.state === 'disabled', 'off');
-  check('ordinary off retains this VM without native join', owner.nativeRetirement === undefined && creates === 1);
-  await command('setEnabled', { enabled: true }); await waitFor(value => value.admission, 'on');
-  check('on reuses same epoch and owner', owner.active.epoch === active.epoch && creates === 1 && ownerCreations === 1);
   const requestId = (await status()).nextRequestId;
   await command('runPrivateGuest', { requestId, argv: ['python3', '-c', 'import time;print("cancel-started",flush=True);time.sleep(60)'], cwd: '/workspace' });
   await waitFor(value => value.job?.id === requestId && value.job.started && bytes(value.job.stdout).toString().includes('cancel-started'), 'cancel started', 60000);
-  await command('setEnabled', { enabled: false });
-  const cancelled = await waitFor(value => value.state === 'disabled' && value.job.state === 'settled', 'cancel settled', 20000);
-  check('cancel preserves actual SIGKILL outcome and completed output', cancelled.job.cancelRequested && cancelled.job.outcome.cancelled === true && cancelled.job.outcome.signal === 'SIGKILL', { outcome: cancelled.job.outcome });
-  await command('setEnabled', { enabled: true }); await waitFor(value => value.admission, 'on after cancellation');
-  const closeRequested = event('shutdown-command'); await command('shutdown');
-  shutdown = await waitFor(value => value.shutdownComplete, 'synchronized guest/native shutdown', 60000);
+  // Ordinary off on an opened VM is the final barrier: cancel the job, close the guest, join.
+  const closeRequested = event('shutdown-command'); await command('setEnabled', { enabled: false });
+  shutdown = await waitFor(value => value.shutdownComplete && value.job?.state === 'settled', 'off retires the VM', 60000);
+  check('off cancels with the actual SIGKILL outcome and keeps completed output', shutdown.job.cancelRequested && shutdown.job.outcome.cancelled === true && shutdown.job.outcome.signal === 'SIGKILL', { outcome: shutdown.job.outcome });
+  const before = await status(), again = await request('/dsh-go/v1/linux', { v: 1, instanceId: before.instanceId, attemptId: before.attemptId, action: 'setEnabled', enabled: true }, cookie);
+  observations.push({ action: 'setEnabled', requestId: null, status: again.status });
+  check('after off this process refuses on and asks for an app restart, with no second VM', shutdown.state === 'stopped' && shutdown.restartRequired === true &&
+    again.status === 409 && again.text.includes('ERR_OHOS_LINUX_CLOSED') && creates === 1 && ownerCreations === 1, { status: again.status });
   const checkpoint = JSON.parse(await readFile(join(active.directory, 'instance.json'), 'utf8'));
   event('checkpoint-confirmed', { state: checkpoint.state, cleanCheckpoint: shutdown.retirement.cleanCheckpoint });
   check('fulfilled shutdown confirms sync, native retirement and committed clean', shutdown.retirement.resourcesRetired && shutdown.retirement.cleanCheckpoint && shutdown.retirement.dataRetained && !shutdown.retirement.filesRemoved &&
