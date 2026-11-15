@@ -126,6 +126,22 @@
   "workshopErrorCancelled": "Cancelled.",
   "workshopErrorUnknownResult": "It's unclear whether that went through. Refresh and check before trying again.",
   "workshopErrorGeneric": "That didn't work. Try again later.",
+  "workshopErrorWithCode": "That didn't work. Try again later. ({code})",
+  "@workshopErrorWithCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopErrorPackage": "A file in this pack doesn't meet the requirements, so it can't be uploaded ({code}).",
+  "@workshopErrorPackage": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "workshopDisclosureTitle": "Let the Workshop confirm your GitHub identity",
   "workshopDisclosureLead": "To submit, manage your submissions or report something, the Workshop needs to know who you are. To find out, your GitHub sign-in credential is sent to the Workshop service below, which asks GitHub which account it belongs to.",
   "workshopDisclosureWorker": "Workshop that receives the credential",

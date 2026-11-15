@@ -216,11 +216,10 @@ Future<void> _exportCompanion((String, String, Map<String, String>) args) async 
       expanded += bytes.length;
       _complete(expanded <= workshopExpandedBytes && bytes.length <= 16 * 1024 * 1024 && archive.files.length < 1000, 'companion_too_large');
       _complete(bytes.isNotEmpty, 'companion_empty_file');
-      if (_extension(name) == '.json') _complete(bytes.length <= 1024 * 1024, 'companion_too_large');
+      if (_extension(name) == '.json') _complete(bytes.length <= companionJsonCap, 'companion_too_large');
       if (_extension(name) == '.png') {
-        // Reuse the exact import gate, including 8 MiB, 4096 per side,
-        // 16 MiB decoded RGBA, CRC/IDAT checks and actual pixel decoding.
-        _complete(pngIntact(bytes is Uint8List ? bytes : Uint8List.fromList(bytes)), 'companion_bad_png');
+        final size = pngSize(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
+        _complete(size != null && size.$1 <= companionTextureSide && size.$2 <= companionTextureSide, 'companion_bad_png');
       }
       archive.add(ArchiveFile.bytes('character/$name', bytes));
     }

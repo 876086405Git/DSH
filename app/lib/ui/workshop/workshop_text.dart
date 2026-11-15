@@ -53,8 +53,13 @@ String workshopErrorLine(L10n l10n, String code) => switch (code) {
   'workshop_busy' => l10n.workshopErrorBusy,
   'workshop_cancelled' => l10n.workshopErrorCancelled,
   'workshop_unconfigured' || 'workshop_untrusted_origin' => l10n.workshopNotOpenMessage,
-  _ => l10n.workshopErrorGeneric,
+  // A pack the phone or the server would not take: the code says which check,
+  // so a person (or whoever they ask) can tell what to fix.
+  _ when _packCode.hasMatch(code) => l10n.workshopErrorPackage(code.substring('workshop_'.length)),
+  _ => l10n.workshopErrorWithCode(code.startsWith('workshop_') ? code.substring('workshop_'.length) : code),
 };
+
+final _packCode = RegExp(r'^workshop_(?:companion|pet|png|sheet|pack|zip|archive|moc)_');
 
 /// As [workshopErrorLine] for an exception: a write whose result is unknown
 /// says so, whatever its code, because retrying it could do the thing twice.

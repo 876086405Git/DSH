@@ -36,13 +36,13 @@ export function petManifest() {
     animations: { idle: { sheet: 'idle.png', frameW: 1, frameH: 1, cols: 1, box: { x: 0, y: 0, w: 1, h: 1 }, frames: [{ i: 0, ms: 100 }] } }, states: { idle: ['idle'] } };
 }
 export function pet(pack: object = petManifest(), extras: [string, Uint8Array][] = []) { return zip([['pack.json', Buffer.from(JSON.stringify(pack))], ['idle.png', png()], ...extras]); }
-export function companion(options: { version?: number; runtime?: boolean; reference?: string } = {}) {
+export function companion(options: { version?: number; runtime?: boolean; reference?: string; texture?: Uint8Array } = {}) {
   const meta = { ...BASE_META, kind: 'companion' as const };
   return zip([
     ['character/character.json', Buffer.from(JSON.stringify({ schema: 1, name: 'Synthetic model', model: 'sample.model3.json', author: meta.author, license: meta.license, source: meta.source }))],
     ['character/sample.model3.json', Buffer.from(JSON.stringify({ Version: 3, FileReferences: { Moc: options.reference ?? 'sample.moc3', Textures: ['texture.png'] } }))],
     ['character/sample.moc3', Buffer.from([77, 79, 67, 51, options.version ?? 6, 0, 0, 0])],
-    ['character/texture.png', png()],
+    ['character/texture.png', options.texture ?? png()],
     ...(options.runtime ? [['runtime/script.js', Buffer.from('synthetic runtime must be rejected')]] as [string, Uint8Array][] : []),
   ]);
 }
