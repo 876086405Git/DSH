@@ -97,10 +97,14 @@ class LauncherBridge extends NativeInbox<LauncherEntry> {
   /// What the launcher has, as far as this run knows.
   List<RecentShortcut>? _published;
 
+  /// Publishes not answered yet: one of them may still replace [_published].
+  int _sending = 0;
+
   /// Publishes [recents] (newest first) unless the launcher already has
   /// them. True when the launcher has them now.
   Future<bool> setRecent(List<RecentShortcut> recents) async {
-    if (_published != null && listEquals(_published, recents)) return true;
+    if (_sending == 0 && _published != null && listEquals(_published, recents)) return true;
+    _sending++;
     try {
       final ok = await channel.invokeMethod<bool>('setRecent', {
         'items': [for (final r in recents) r.toJson()],
@@ -112,6 +116,8 @@ class LauncherBridge extends NativeInbox<LauncherEntry> {
       return false;
     } on PlatformException {
       return false;
+    } finally {
+      _sending--;
     }
   }
 }
