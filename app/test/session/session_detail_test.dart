@@ -140,6 +140,13 @@ void main() {
       await pumpFrames(tester, 8);
       expect(find.text('跑一遍测试确认'), findsOneWidget);
       expect(find.text('4/5'), findsOneWidget);
+
+      // A screen reader's tap switches too (#157).
+      final semantics = tester.ensureSemantics();
+      tester.semantics.tap(find.semantics.byLabel('轨迹'));
+      await pumpFrames(tester, 8);
+      expect(find.text('第 2 轮'), findsOneWidget);
+      semantics.dispose();
     });
 
     testWidgets('changes: one row per file across turns → change page', (tester) async {
