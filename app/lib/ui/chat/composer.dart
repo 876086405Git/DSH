@@ -53,6 +53,7 @@ class Composer extends StatefulWidget {
     this.stopping = false,
     this.sessionReady = true,
     this.accessory,
+    this.enhance,
     this.leading,
     this.tray,
     this.hasAttachments = false,
@@ -95,6 +96,9 @@ class Composer extends StatefulWidget {
 
   /// 发送键左边的小件(上下文环),40dp 高,底对齐。
   final Widget? accessory;
+
+  /// 发送键左边的第二个小件(提示词增强 ✨),放在 [accessory] 之前。
+  final Widget? enhance;
 
   /// 输入框左边的 40dp 件(＋ 附件)。
   final Widget? leading;
@@ -537,6 +541,7 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
                       if (leadingKey != null) ...[leadingKey, const SizedBox(width: 8)],
                       Expanded(child: field),
                       const SizedBox(width: 8),
+                      if (widget.enhance != null) ...[widget.enhance!, const SizedBox(width: _keyGap)],
                       if (accessory != null) ...[accessory, const SizedBox(width: 2)],
                       sendKey,
                     ],
@@ -560,6 +565,7 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (widget.enhance != null) ...[widget.enhance!, const SizedBox(width: _keyGap)],
                           if (accessory != null) ...[accessory, const SizedBox(width: _keyGap)],
                           sendKey,
                         ],

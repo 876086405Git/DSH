@@ -151,6 +151,14 @@ const _mirrorsDefine = String.fromEnvironment('DSH_UPDATE_MIRRORS', defaultValue
 const _betaTokenDefine = String.fromEnvironment('DSH_BETA_CHANNEL_TOKEN');
 const _betaOriginDefine = String.fromEnvironment('DSH_BETA_CHANNEL_ORIGIN', defaultValue: updateMirrorOrigin);
 
+/// 共存版构建（`--dart-define=DSH_COEXIST_BUILD=true`）关掉 App 内更新检查。
+///
+/// 共存版包名带 `.coexist` 后缀，官方 Release 里那些 APK 的包名没有后缀：
+/// 下载下来装上只是多一个 App，不会更新共存版自己。留着一个点了会装错包的
+/// 按钮比没有更糟，所以共存版不显示「检查更新」和「每日自动检查」，
+/// 由 `tooling/coexist/daily-check.ps1` 在电脑上重建。
+const coexistBuild = bool.fromEnvironment('DSH_COEXIST_BUILD');
+
 /// The configuration the app ships with (see the library comment for overrides).
 UpdateSources defaultUpdateSources() => buildUpdateSources(
   mirror: _mirrorDefine,

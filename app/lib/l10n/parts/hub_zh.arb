@@ -336,5 +336,25 @@
   "hubQuickPanelSwipe": "左滑打开",
   "hubQuickPanelSwipeHint": "在对话里从右向左滑。代码块、表格这些能横向滚动的内容不受影响。",
   "hubQuickPanelItems": "显示的入口",
-  "hubQuickPanelItemsNone": "没有选择，左滑不会打开"
+  "hubQuickPanelItemsNone": "没有选择，左滑不会打开",
+  "settingsEnhanceTitle": "提示词增强",
+  "settingsEnhanceModel": "增强用的模型",
+  "settingsEnhanceTest": "测试连接",
+  "settingsEnhanceTestHint": "用当前 key 和模型发一次最小请求，确认能连通",
+  "settingsEnhanceTesting": "正在测试…",
+  "settingsEnhanceTestOk": "连接正常",
+  "settingsEnhanceTestOkReply": "连接正常，模型回复：{reply}",
+  "settingsEnhanceNoKey": "还没配 API key，先到「模型」里填一个",
+  "settingsEnhanceBadKey": "API key 无效或已过期",
+  "settingsEnhanceBusy": "请求太频繁，稍后再试",
+  "settingsEnhanceNetwork": "网络不通或超时",
+  "settingsEnhanceServer": "模型服务出错",
+  "settingsEnhanceIncomplete": "模型输出被截断",
+  "@settingsEnhanceTestOkReply": {
+    "placeholders": {
+      "reply": {
+        "type": "String"
+      }
+    }
+  }
 }

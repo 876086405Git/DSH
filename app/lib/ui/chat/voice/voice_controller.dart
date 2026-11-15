@@ -181,6 +181,10 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
   int _anchorStart = 0;
   int _anchorEnd = 0;
   String _heard = '';
+  /// 「内置模型」是否已加载（SenseVoice 在本进程里就绪）。
+  bool _offlineReady = false;
+  /// 本次听写走的是内置模型（停止时取文字而不是 WAV）。
+  bool _offlineSession = false;
 
   VoicePhase get phase => _phase;
   bool get active => _phase != VoicePhase.idle;
@@ -216,6 +220,14 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     final caps = await bridge.capabilities();
     if (_disposed) return;
     _caps = caps;
+    // 内置模型不依赖引擎，所以它的状态单独探，且失败不影响其它路径。
+    try {
+      final offline = await bridge.offlineStatus();
+      if (_disposed) return;
+      _offlineReady = offline.ready;
+    } catch (_) {
+      // 桥接不认这个方法（旧版宿主）就当没有内置模型。
+    }
     final c = client();
     final generation = c?.mux.generation;
     _probedClient = c;
@@ -364,6 +376,19 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     }
     final system =
         _runMode == VoiceMode.system || (_runMode == VoiceMode.auto && _caps.recognizer && !_caps.systemUnreliable);
+    // 内置模型：显式选它时只用它；自动模式在它就绪时优先用它。它不经过引擎，
+    // 也不经过系统识别，所以排在两条老路径之前。
+    final offlineWanted =
+        _runMode == VoiceMode.offline || (_runMode == VoiceMode.auto && _offlineReady);
+    if (offlineWanted) {
+      final offlineValue = input.value;
+      _base = offlineValue;
+      _anchorStart = offlineValue.selection.isValid ? offlineValue.selection.start : offlineValue.text.length;
+      _anchorEnd = offlineValue.selection.isValid ? offlineValue.selection.end : offlineValue.text.length;
+      _heard = '';
+      await _startOffline(operation);
+      return;
+    }
     if (system && !_caps.recognizer) {
       _finish();
       _say(
@@ -552,6 +577,48 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// 用「内置模型」开始听写：录音在本机，转写也在本机，不碰引擎。
+  Future<void> _startOffline(int operation) async {
+    _engine = VoiceEngine.system;
+    _offlineSession = true;
+    _setPhase(VoicePhase.starting);
+    try {
+      await bridge.startOffline(maxSeconds: 60);
+    } on PlatformException catch (error) {
+      if (!_current(operation)) return;
+      _offlineSession = false;
+      _finish();
+      _say(VoiceMessage(voiceErrorText(_platformCode(error))));
+      return;
+    }
+    if (!_current(operation) || _phase != VoicePhase.starting) return;
+    HapticFeedback.lightImpact();
+    _setPhase(VoicePhase.listening);
+  }
+
+  /// 结束内置模型听写并取回文字。
+  Future<void> _transcribeOffline(int operation) async {
+    String text;
+    try {
+      text = await bridge.stopOffline();
+    } on PlatformException catch (error) {
+      if (!_current(operation)) return;
+      _finish();
+      _say(VoiceMessage(voiceErrorText(_platformCode(error))));
+      return;
+    }
+    if (!_current(operation)) return;
+    if (text.isEmpty) {
+      _finish();
+      _say(VoiceMessage(appL10n.voiceErrorNoMatch));
+      return;
+    }
+    _heard = text;
+    _apply(text, provisional: false);
+    onRecognized?.call();
+    _finish();
+  }
+
   Future<void> _fallback(int operation) async {
     _fallbackTried = true;
     _switching = true;
@@ -588,6 +655,9 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     HapticFeedback.lightImpact();
     _setPhase(VoicePhase.transcribing);
     _stopLive();
+    // 内置模型必须在 system 分支之前：它借了 VoiceEngine.system 的状态，
+    // 但停止时要取文字（stopOffline），不是取 WAV。
+    if (_offlineSession) return _transcribeOffline(operation);
     if (_engine == VoiceEngine.system) {
       _finalTimeout = Timer(const Duration(seconds: 6), () {
         if (!_current(operation) || _engine != VoiceEngine.system) return;
@@ -798,6 +868,7 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     _base = null;
     _draftText = null;
     _engine = null;
+    _offlineSession = false;
     level.value = 0;
     _setPhase(VoicePhase.idle);
   }

@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
+import io.github.ccch1mneyyy.dsh_app.BuildConfig
+
 import android.app.Activity
 import android.graphics.Canvas
 import android.graphics.Color
@@ -140,8 +142,10 @@ class BackgroundProbeActivity : Activity() {
 
 /** Private Binder messages, never marshalled into the adb/root byte stream. */
 internal object ProbeActivityContract {
-    const val PACKAGE = "io.github.ccch1mneyyy.dsh_app"
-    const val ACTIVITY = "$PACKAGE.phone.background.BackgroundProbeActivity"
+    // The privileged side starts this activity by component name, so it has to
+    // follow the real applicationId (the coexist build ships a different one).
+    val PACKAGE = BuildConfig.APPLICATION_ID
+    val ACTIVITY = "$PACKAGE.phone.background.BackgroundProbeActivity"
     const val RECEIVER = "receiver"
     const val NONCE = "nonce"
     const val DISPLAY = "display"

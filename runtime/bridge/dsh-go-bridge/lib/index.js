@@ -29,6 +29,7 @@ import { createSessionDeletion, sessionDeletionUnavailable } from "./session-del
 import { createSpeechRoutes } from "./speech.js";
 import { createUsage } from "./usage.js";
 import { createCompanionRoutes } from "./companion/routes.js";
+import { createPromptEnhanceRoutes } from "./prompt-enhance/routes.js";
 import { createCompanionPromptContext, FULL_PRESET } from './companion/prompt-context.js';
 import { createCompanionStore } from "./companion/store.js";
 import { createRecallCoordinator } from "./companion/recall.js";
@@ -407,6 +408,7 @@ export function apply(ctx, config) {
     webCtx.effect(() => () => speechRoutes.dispose(), "dsh-go-bridge: speech routes");
     const companionRoutes = createCompanionRoutes({ send, store: companionStore, recall: companionRecall, signals: companionSignals, ctx: webCtx, promptContext: companionPrompt });
     webCtx.effect(() => () => companionRoutes.dispose(), 'dsh-go-bridge: companion auxiliary requests');
+    const promptEnhance = createPromptEnhanceRoutes(webCtx, { readBody });
     webCtx.effect(() => () => nativeRoutes.dispose(), "dsh-go-bridge: native routes");
     webCtx.effect(() => webCtx.webServer.registerUpgrade({
       path: STREAM_PATH,
@@ -436,6 +438,7 @@ export function apply(ctx, config) {
       if (await pluginConfig.handle(req, res, path)) return;
       if (await speechRoutes.handle(req, res, path)) return;
       if (await companionRoutes.handle(req, res, path)) return;
+      if (await promptEnhance.handle(req, res, path)) return;
       if (path.startsWith(`${PREFIX}/v1/`) && await nativeRoutes.handle(req, res, path, url)) return;
       if (path === `${PREFIX}/v1/capabilities`) {
         if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, { error: { code: "method-not-allowed", message: "method not allowed" } });

@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.BuildConfig
+
 /**
  * The person-editable part of the rules: apps the agent may neither read nor
  * operate, apps where every write is confirmed, how much is asked, and the hard rules the
@@ -113,7 +115,7 @@ enum class ConfirmMode(val wire: String) {
  * the model, not this code). Public so the screen reader can mark `⚠` with the same word list.
  */
 object SafetyRules {
-    const val OWN_PACKAGE = "io.github.ccch1mneyyy.dsh_app"
+    val OWN_PACKAGE = BuildConfig.APPLICATION_ID
 
     /**
      * The word that makes tapping [label] sensitive, or null. Delegates to [SensitiveWords] (shared
