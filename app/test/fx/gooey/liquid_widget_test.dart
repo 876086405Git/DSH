@@ -43,9 +43,9 @@ class _Menu extends StatelessWidget {
   }
 }
 
-Widget _app(Widget child, {bool reduced = false}) => MaterialApp(
+Widget _app(Widget child, {bool reduced = false, double devicePixelRatio = 1}) => MaterialApp(
   home: MediaQuery(
-    data: MediaQueryData(disableAnimations: reduced),
+    data: MediaQueryData(disableAnimations: reduced, devicePixelRatio: devicePixelRatio),
     child: Center(
       child: RepaintBoundary(
         key: const ValueKey('shot'),
@@ -141,7 +141,7 @@ void main() {
     expect(SchedulerBinding.instance.transientCallbackCount, 0);
   });
 
-  Widget slider(double left, {bool reduced = false}) => _app(
+  Widget slider(double left, {bool reduced = false, double devicePixelRatio = 1}) => _app(
     Liquid(
       fill: _fill,
       blur: LiquidTabs.blur,
@@ -165,6 +165,7 @@ void main() {
       ),
     ),
     reduced: reduced,
+    devicePixelRatio: devicePixelRatio,
   );
 
   testWidgets('move: the liquid trails a jump, then the group falls asleep', (tester) async {
@@ -298,8 +299,9 @@ void main() {
   });
 
   testWidgets('the liquid edge is cut about one device pixel wide, not blurred', (tester) async {
-    expect(tester.view.devicePixelRatio, 3);
-    await tester.pumpWidget(slider(20));
+    // A 3× screen, and captured at 3×.
+    await tester.pumpWidget(slider(20, devicePixelRatio: 3));
+    expect(MediaQuery.devicePixelRatioOf(tester.element(find.byType(Liquid))), 3);
     final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('shot')));
     final image = (await tester.runAsync(() => boundary.toImage(pixelRatio: 3)))!;
     final data = (await tester.runAsync(() => image.toByteData()))!;
