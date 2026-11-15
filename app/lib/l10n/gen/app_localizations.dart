@@ -10886,6 +10886,30 @@ abstract class L10n {
   /// **'系统输入法诊断'**
   String get systemImeTitle;
 
+  /// No description provided for @systemImeOhosTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本应用键盘几何'**
+  String get systemImeOhosTitle;
+
+  /// No description provided for @systemImeOhosCollect.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出最近的键盘几何'**
+  String get systemImeOhosCollect;
+
+  /// No description provided for @systemImeOhosPrivacy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复现后再导出。只取本应用主窗口最近 120 秒的键盘弹出、高度和避让位置（最多 64 条），不含输入内容，也不读系统输入法日志。'**
+  String get systemImeOhosPrivacy;
+
+  /// No description provided for @systemImeOhosUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'主窗口暂时不可用，回到聊天页再试'**
+  String get systemImeOhosUnavailable;
+
   /// No description provided for @systemImeCollect.
   ///
   /// In zh, this message translates to:

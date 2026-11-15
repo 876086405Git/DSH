@@ -5861,6 +5861,18 @@ class L10nZh extends L10n {
   String get systemImeTitle => '系统输入法诊断';
 
   @override
+  String get systemImeOhosTitle => '本应用键盘几何';
+
+  @override
+  String get systemImeOhosCollect => '导出最近的键盘几何';
+
+  @override
+  String get systemImeOhosPrivacy => '复现后再导出。只取本应用主窗口最近 120 秒的键盘弹出、高度和避让位置（最多 64 条），不含输入内容，也不读系统输入法日志。';
+
+  @override
+  String get systemImeOhosUnavailable => '主窗口暂时不可用，回到聊天页再试';
+
+  @override
   String get systemImeCollect => '采集本次日志';
 
   @override

@@ -61,7 +61,7 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 
 - **Help**: takes "what can this app do" to a new chat, where the AI answers from this guide. Not shown in Web mode.
 - **Community**: chat groups and the forum.
-- **Diagnostics**: inspect the environment, export a bundle, or **Let the AI read diagnostics**; HarmonyOS has no **Automatic failure analysis**. See [FAQ](11-faq.md).
+- **Diagnostics**: inspect the environment, export a bundle, or **Let the AI read diagnostics**, and enable **Automatic failure analysis** (off by default); when the keyboard covers the input, **This app's keyboard geometry** exports where the keyboard sat in the last two minutes, without anything typed. See [FAQ](11-faq.md).
 - **About DSH Go**:
   - **Version**: the app version, such as 0.9.2 (10251234), with the build number in parentheses. When there's a new version, this row on the Settings page says **Update available**.
   - **Check for updates**: HarmonyOS can't update inside the app. A new version opens the update window with **What’s new**, and the release page says how to get it; it may not have a HarmonyOS package yet. To pass on this version, tap **Skip this version**.

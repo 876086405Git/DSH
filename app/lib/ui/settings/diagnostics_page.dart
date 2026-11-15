@@ -136,8 +136,8 @@ class DiagnosticsPage extends ConsumerWidget {
         ),
         // Its failure evidence is recorded natively: Android's own, HarmonyOS's from HiAppEvent.
         const AutomaticDiagnosticsSection(),
-        // The capture reads Android's system log; HarmonyOS gives apps no such log.
-        if (ref.watch(androidSystemFeaturesProvider)) const SystemImeDiagnosticsSection(),
+        // Android reads the system log through a privileged channel; HarmonyOS, this app's own window.
+        const SystemImeDiagnosticsSection(),
         DiagnosticsExportCard(
           title: l10n.pluginsExport,
           extra: [
@@ -358,13 +358,15 @@ class _SystemImeDiagnosticsSectionState extends ConsumerState<SystemImeDiagnosti
     builder: (context, _) {
       final l10n = context.l10n;
       final evidence = _diagnostics.evidence;
+      // HarmonyOS records this app's own window geometry: no privileged log, nothing to grant.
+      final ohos = ref.watch(operatingSystemProvider) == 'ohos';
       final status = _diagnostics.collecting
           ? l10n.systemImeCollecting
           : switch (evidence?.code) {
               null => l10n.systemImeNotCollected,
               'ok' => l10n.systemImeRetained,
               'noEvents' => l10n.systemImeNoEvents,
-              'unavailable' => l10n.systemImeUnavailable,
+              'unavailable' => ohos ? l10n.systemImeOhosUnavailable : l10n.systemImeUnavailable,
               'unsupported' => l10n.systemImeUnsupported,
               'denied' => l10n.systemImeDenied,
               'cancelled' => l10n.systemImeCancelled,
@@ -374,12 +376,12 @@ class _SystemImeDiagnosticsSectionState extends ConsumerState<SystemImeDiagnosti
               _ => l10n.systemImeFailed,
             };
       return SettingsSection(
-        title: l10n.systemImeTitle,
+        title: ohos ? l10n.systemImeOhosTitle : l10n.systemImeTitle,
         children: [
           SettingsTile(
             icon: AppIcons.exportLog,
-            title: l10n.systemImeCollect,
-            subtitle: l10n.systemImePrivacy,
+            title: ohos ? l10n.systemImeOhosCollect : l10n.systemImeCollect,
+            subtitle: ohos ? l10n.systemImeOhosPrivacy : l10n.systemImePrivacy,
             onTap: _diagnostics.collecting
                 ? null
                 : () => _diagnostics.collect(isCurrent: () => mounted && (_route?.isCurrent ?? true)),
@@ -392,7 +394,7 @@ class _SystemImeDiagnosticsSectionState extends ConsumerState<SystemImeDiagnosti
               label: l10n.systemImeCapturedAt,
               value: DateTime.fromMillisecondsSinceEpoch(evidence.capturedAt).toString().split('.').first,
             ),
-          if (evidence?.code == 'unavailable')
+          if (evidence?.code == 'unavailable' && !ohos)
             SettingsTile(
               icon: AppIcons.permissions,
               title: l10n.systemImePermissions,

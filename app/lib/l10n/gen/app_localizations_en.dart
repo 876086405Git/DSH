@@ -6209,6 +6209,19 @@ class L10nEn extends L10n {
   String get systemImeTitle => 'System input-method diagnostics';
 
   @override
+  String get systemImeOhosTitle => 'This app\'s keyboard geometry';
+
+  @override
+  String get systemImeOhosCollect => 'Export recent keyboard geometry';
+
+  @override
+  String get systemImeOhosPrivacy =>
+      'Reproduce first, then export. Only the last 120 seconds of this app\'s main window: the keyboard showing, its height and the area it covers (64 entries at most); no typed text, no system IME log.';
+
+  @override
+  String get systemImeOhosUnavailable => 'The main window is not available right now; go back to a chat and try again';
+
+  @override
   String get systemImeCollect => 'Capture recent events';
 
   @override
