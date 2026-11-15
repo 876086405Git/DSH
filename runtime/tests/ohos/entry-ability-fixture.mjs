@@ -30,6 +30,7 @@ export const entryAbilityImports = Object.freeze({
   '../plugins/LaunchPlugin': ['default'],
   '../plugins/LaunchClipPlugin': ['default'],
   '../plugins/VoicePlugin': ['default'],
+  '../plugins/SpeechPlugin': ['default'],
   '@ohos.app.ability.Want': ['default'],
   '@ohos.app.ability.AbilityConstant': ['default'],
   '@ohos.window': ['default'],

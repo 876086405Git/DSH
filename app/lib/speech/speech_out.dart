@@ -9,6 +9,7 @@
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io' show Platform;
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -17,6 +18,10 @@ import '../companion/companion_voice.dart';
 import '../companion/companion_voice_source.dart';
 import 'deepseek_speech.dart';
 import 'speech_audio.dart';
+import 'speech_compat.dart';
+
+part 'ohos_speech_out.dart';
+part 'ohos_speech_preview.dart';
 
 sealed class SpeechOutEvent {
   const SpeechOutEvent();
@@ -657,9 +662,16 @@ SpeechOut speechOutFor(
   bool levels = false,
   DeepSeekSpeechFailure Function()? gap,
 }) {
+  if (Platform.operatingSystem == 'ohos' && settings is OhosSpeechVoiceSettings) {
+    return _OhosDeepSeekOut(deepseek, audio, voice: settings.voice, call: call, levels: levels, gap: gap);
+  }
   if (settings.source == CompanionVoiceSource.deepseek) {
+    if (Platform.operatingSystem == 'ohos') {
+      return _OhosDeepSeekOut(deepseek, audio, voice: settings.deepseekVoice, call: call, levels: levels, gap: gap);
+    }
     return DeepSeekOut(deepseek, audio, voice: settings.deepseekVoice, call: call, levels: levels, gap: gap);
   }
+  if (Platform.operatingSystem == 'ohos') return _OhosUnavailableOut();
   speaker.settings = settings;
   return SpeakerOut(speaker, onPlaying: call ? (on) => unawaited(audio.playing(on)) : null);
 }

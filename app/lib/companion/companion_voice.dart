@@ -16,6 +16,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../speech/deepseek_speech.dart';
+import '../speech/speech_audio.dart';
+import '../speech/speech_out.dart';
 import 'companion_voice_source.dart';
 
 enum CompanionVoiceEventType {
@@ -374,6 +376,11 @@ final companionSpeakerProvider = Provider<CompanionSpeaker>((ref) {
 /// DeepSeek's (that one streams: speech_out.dart). Its own queue: reading a
 /// reply aloud never cuts into her lines' bookkeeping.
 final speechSpeakerProvider = Provider<CompanionSpeaker>((ref) {
+  if (Platform.operatingSystem == 'ohos') {
+    final speaker = OhosSpeechSpeaker(ref.watch(deepSeekSpeechProvider), ref.watch(speechAudioProvider));
+    ref.onDispose(speaker.dispose);
+    return speaker;
+  }
   final speaker = CompanionSpeaker(
     ref.watch(companionVoiceProvider),
     ref.watch(companionVoiceClientProvider),

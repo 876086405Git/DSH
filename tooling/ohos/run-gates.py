@@ -36,12 +36,15 @@ FLUTTER_L10N_OUTPUTS = {
 # These existing controllers hide node:test output in their declared files.
 # Inspect only this explicit contract, never unrelated logs under the output.
 WRAPPED_TEST_LOGS = {
+    'speech-channel-*': ['{name}/test.log'],
     'git-*': ['{name}/stdout.log'], 'owned-*': ['{name}/stdout.log'],
     'native-files': ['native-files/logic.log'], 'pdf': ['pdf/logic.log'],
     'hms-share': ['hms-share/logic.log'], 'native-media': ['native-media/logic.log'],
     'voice': ['voice/test.log'], 'performance-dart': ['performance-dart/logic.log'],
     'diagnostics-dart': ['diagnostics-dart/node-test.log'],
     'composition-process-matrix': ['composition-process-matrix/jit.log', 'composition-process-matrix/strict.log'],
+    'pcm-stream-native': ['pcm-stream-native/plain.log', 'pcm-stream-native/jitless.log'],
+    'attachment-cache-proof-native-*': ['{name}/test.log'],
 }
 
 
@@ -1106,6 +1109,12 @@ def main():
                      [rt + 'linux-control-entry.test.mjs', rt + 'linux-owner-control.test.mjs', rt + 'linux-control.test.mjs', rt + 'linux-control-persistence.test.mjs', rt + 'linux-instance.test.mjs', rt + 'linux-proxy-control.test.mjs', rt + 'linux-ram-retirement.test.mjs'],
                      mode=mode, needs=('prepared-inputs', 'android-targets', 'native-publication-build'),
                      extra=linked_env, timeout=120)
+        g.run('linux-routed-budget-' + mode,
+              lambda m=mode: g.py(rt + 'linux-routed-budget.py', '--node', node(), '--mode', m,
+                                 '--out', o / ('linux-routed-budget-' + m)),
+              needs=('prepared-inputs',), timeout=60,
+              tests=[rt + 'linux-routed-budget.py', rt + 'linux-routed-budget-probe.mjs'],
+              scope='Actual LinuxControl with real async timers and isolated child wall-clock offsets; explicit owner/backend; no VM, suspend, SDK or scheduler upper-bound claim')
         g.node_tests('command-router-' + mode,
                      [rt + 'node-streaming-stdin.test.mjs', rt + 'plugin-process.test.mjs', rt + 'mcp-command-router.test.mjs', rt + 'python-command-router.test.mjs', rt + 'command-router-ownership.test.mjs', rt + 'linux-command-routing.test.mjs'],
                      mode=mode, imports=(["runtime/ohos/sim/marker.mjs"] if mode == 'plain' else []) + ['runtime/ohos/process/node-worker-preload.mjs'],
@@ -1166,6 +1175,22 @@ def main():
     for mode in ['strict', 'sim']:
         g.node_tests('attachment-image-cache-' + mode, [rt + 'attachment-image-cache.test.mjs'],
                      mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
+    # Requires the already registered 941-12 image components; this overlay adds no native ABI.
+    for mode in ['strict', 'sim']:
+        g.node_tests('attachment-cache-proof-' + mode, [rt + 'attachment-cache-proof.test.mjs'],
+                     mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
+    for proof_mode in ('plain', 'jitless'):
+        g.run('attachment-cache-proof-native-' + proof_mode,
+              lambda m=proof_mode: g.py(rt + 'attachment-cache-proof.py',
+                  '--source', s, '--prefix', o / ('image-attachment-' + m) / 'view',
+                  '--native-library-dir', o / ('image-attachment-' + m) / 'native',
+                  '--publication-fixture', native() / 'libpublication-test-linked.so',
+                  '--node', node(), '--out', o / ('attachment-cache-proof-native-' + m),
+                  *(['--jitless'] if m == 'jitless' else [])),
+              needs=('image-attachment-' + proof_mode,), timeout=180,
+              tests=[rt + name for name in ('attachment-cache-proof.py', 'attachment-cache-proof-native.mjs',
+                                            'image-attachment-oracle.json')],
+              scope='Actual image pipeline conversion counts, current bytes, owners and one-proof eviction; reuse the prior exact host SDK library, no new ABI or device claim')
     # Optional entries that would reach a real process past the OH subprocess backend.
     for name in ['forge-github-unavailable', 'liveshare-owner-unavailable', 'market-git-unavailable']:
         g.node_tests(name, [rt + name + '.test.mjs'], needs=('android-targets',))
@@ -1304,6 +1329,7 @@ def main():
     for name in ['pdf', 'hms-share']:
         g.run(name, lambda n=name: g.py(rt + n + '-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--out', o / n, '--cxx', p('cxx')), needs=('tools',), timeout=240)
     g.run('native-media', lambda: g.py(rt + 'native-media-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--path-provider-source', p('path_provider_source'), '--cxx', p('cxx'), '--out', o / 'native-media'), needs=('tools',), timeout=240)
+    g.run('pcm-stream-native', lambda: g.py(rt + 'pcm-stream-native.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'pcm-stream-native'), needs=('tools',), timeout=240, tests=[rt + 'pcm-stream.test.mjs'])
     g.run('performance-dart', lambda: g.py(rt + 'performance-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'performance-dart'), needs=('tools', 'dart-tools'), timeout=180)
     g.run('diagnostics-dart', lambda: g.py(rt + 'diagnostics-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--zlib-addon', o / 'zlib.node', '--output', o / 'diagnostics-dart'), needs=('tools', 'dart-tools', 'native-zlib-build'), timeout=240)
     g.internal('dart-consumer-evidence', lambda _: verify_dart_consumers(o), needs=('diagnostics-dart', 'performance-dart'))
@@ -1316,6 +1342,10 @@ def main():
         return {'scope': 'The fixed embedding unpacked for the launch clip fixture; not a build'}
     g.internal('embedding-package', embedding_package, needs=('tools',))
     g.node_tests('launch-clip', [rt + 'launch-clip.test.mjs'], needs=('embedding-package',), extra=lambda: {'OHOS_FLUTTER_EMBEDDING': str(o / 'embedding-package/package')})
+    # Playback/registration only. Paid synthesis admission still requires the
+    # upstream Dart preflight/streaming integration before UI enablement.
+    for mode in ['plain', 'jitless']:
+        g.run('speech-channel-' + mode, lambda m=mode: g.py(rt + 'speech-channel-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('speech-channel-' + m)), needs=('tools',), timeout=180, tests=[rt + 'speech-channel.test.mjs', rt + 'speech-channel-pcm.test.mjs', rt + 'entry-ability-fixture.test.mjs'])
     tooling = ['managed-skill', 'native-host-lazy', 'runtime-archive', 'runtime-channel', 'linux-control', 'lifecycle-host', 'web-files', 'transient-task', 'runtime-recovery', 'recovery-storage', 'native-recovery-gate', 'last-known-good']
     g.node_tests('ets-runtime-tooling', [tools + n + '.test.mjs' for n in tooling], needs=('native-zlib-build', 'prepared-inputs'), extra=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node'), 'OHOS_INSTALL_RECORD_WIRE': str(o / 'install-record-wire.json')}, timeout=240)
     g.run('runtime-background-idle', lambda: g.node('--test', '--test-name-pattern=1200 background polling',
@@ -1386,6 +1416,15 @@ def main():
         return {'source': verify_flutter_inputs(g.flutter_source, g.flutter_original_inputs),
                 'localPackages': verify_flutter_packages(g.flutter_source)}
     g.internal('flutter-input-identity', flutter_identity, needs=('flutter-l10n', 'install-record-wire'))
+    g.run('speech-upper-host', lambda: g.py(rt + 'speech-upper.py', '--source', s, '--dart', p('dart'),
+          '--node', node(), '--typescript-prefix', p('typescript_prefix'),
+          '--deps-config', g.flutter_source / 'app/.dart_tool/package_config.json',
+          '--bridge-source', s / 'runtime/bridge/dsh-go-bridge/lib/speech.js', '--out', o / 'speech-upper-host'),
+          needs=('tools', 'dart-tools', 'flutter-input-identity', 'speech-channel-jitless', 'pcm-stream-native'),
+          timeout=240, tests=[rt + 'speech-upper.py'] + [rt + 'speech-upper/' + name for name in
+          ['host-speech-tests.dart', 'host-lifecycle-tests.dart', 'host-http-tests.dart', 'host-preview-tests.dart',
+           'host-compat-tests.dart', 'host-route-tests.dart', 'host-native-integration.dart']],
+          scope='Actual Dart upper/HTTP + fixed main speech.js + frozen 1216 ETS; explicit framework, local provider and AudioRenderer OS boundaries; no Flutter engine, SDK, device, UI enablement or paid API claim')
     flutter_tests = ['test/secrets', 'test/ohos/attachment_files_test.dart', 'test/runtime/phone_callback_bridge_test.dart', 'test/runtime/runtime_recovery_test.dart', 'test/runtime/ohos_install_record_test.dart', 'test/usage/ohos_device_contract_test.dart',
                      'test/safe_mode/safe_mode_logic_test.dart', 'test/state/engine_control_test.dart', 'test/runtime/runtime_controller_test.dart',
                      'test/plugins/ohos_replace_cancel_test.dart', 'test/remote/pairing_system_scanner_test.dart',

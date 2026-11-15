@@ -207,7 +207,7 @@
     "ohos-image-codec.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
-          "after": "27e79a37dd24f0c48aafcebdf273db7bc1cacca4539be6a236daed1b3bd7c590",
+          "after": "c214dbcf81a38447c9c0870971271391b1b222fc5d6ffe998a63972ca93247a4",
           "before": "dd15efce9b5bbd0d896728f22bb3e9dd4643176555174f5bfcb39adfc75074df"
         }
       }

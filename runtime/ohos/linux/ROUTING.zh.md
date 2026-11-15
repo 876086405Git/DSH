@@ -34,6 +34,8 @@ bash -c '<脚本>'（虚拟 shell Worker）
 - 未开启：退出 127，`ERR_OHOS_LINUX_DISABLED: Linux 环境未开启：请在 设置 · 能力 · Linux 环境 中打开后重试。`（虚拟 shell 不再追加“鸿蒙本机不可用”的通用提示）。`resolveExecutable` 此时抛 SubprocessExecutableNotFoundError。路由命令从不触发安装。
 - 已开启、正在恢复保留的实例：最多等 120 秒到 opened；首次安装（要下载）不等，127 并指向设置页进度；其他状态（failed/unknown/stopped…）127 并带状态与错误码。
 - 客体同一时间只跑一个作业，`runPrivateGuest` 与路由命令共用。路由命令最多等 10 秒，之后 126 `ERR_OHOS_LINUX_BUSY` 并说出占用者的命令名；`runPrivateGuest` 忙时照旧立即 409。**限制**：一个常驻的 stdio MCP 服务器会一直占着通道，期间 agent 的每条 gh/python3/pip 都会在 10 秒后报忙。等待是轮询，不保证先来先得。
+
+恢复和忙等待的两个预算都从 `spawnRouted` 调用时起算；每轮先检查准入及空闲，仍需等待时才检查预算，继续使用 100 ms 定时轮询。预算使用 Node 的单调计时，日历时钟前后调整不会被算作等待时长。Linux 的 `CLOCK_MONOTONIC` 不包含整机 suspend；进程暂停或回调晚调度也不会让本方法提前执行。因此这不是包含深睡和任意 OS 调度延迟的硬墙钟截止，也不改变权限／lease 使用的时钟。
 - 开关 false 与最终停止会取消正在跑的路由命令（与 `runPrivateGuest` 作业相同）。
 - 代理：931 的 LinuxProxyPolicy 逐作业生效。shell 环境里从 App 进程继承来的代理变量（值与父进程相同）先去掉，由策略决定；脚本里刻意设置的不同值在 manual/direct 下冲突，126 并说明。
 

@@ -182,6 +182,7 @@ await fs.writeFile(path.join(temp, 'EntryAbility.mts'),
   `import { RuntimeController } from './RuntimeController.mts';\nimport { FlutterAbility } from '${hostFixtureUrl}';\n` +
   `const OhosKeyboardLog = class { attach() {} detach() {} };\n` +
   `const VoicePlugin = { onForeground() {}, onBackground() {} };\n` +
+  `const SpeechPlugin = { onForeground() {}, onBackground() {} };\n` +
   `const AppLinksPlugin = { onForeground() {}, onBackground() {} };\n` +
   `const PastePlugin = { onForeground() {}, onBackground() {} };\n` +
   `const NativeFilesPlugin = { onForeground() {}, onBackground() {} };\n` +

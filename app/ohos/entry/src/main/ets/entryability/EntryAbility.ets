@@ -27,6 +27,7 @@ import LauncherIconPlugin from '../plugins/LauncherIconPlugin';
 import LaunchPlugin from '../plugins/LaunchPlugin';
 import LaunchClipPlugin from '../plugins/LaunchClipPlugin';
 import VoicePlugin from '../plugins/VoicePlugin';
+import SpeechPlugin from '../plugins/SpeechPlugin';
 import Want from '@ohos.app.ability.Want';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import window from '@ohos.window';
@@ -62,6 +63,7 @@ export default class EntryAbility extends FlutterAbility {
     AppLinksPlugin.onForeground(this);
     RuntimeController.onForeground(this);
     VoicePlugin.onForeground(this);
+    SpeechPlugin.onForeground(this);
     NativeFilesPlugin.onForeground(this);
     AuthorizedWorkspacesPlugin.onForeground(this);
     NativeMediaPlugin.onForeground(this);
@@ -73,6 +75,7 @@ export default class EntryAbility extends FlutterAbility {
     AppLinksPlugin.onBackground(this);
     RuntimeController.onBackground(this);
     VoicePlugin.onBackground(this);
+    SpeechPlugin.onBackground(this);
     NativeFilesPlugin.onBackground(this);
     AuthorizedWorkspacesPlugin.onBackground(this);
     NativeMediaPlugin.onBackground(this);
@@ -80,6 +83,7 @@ export default class EntryAbility extends FlutterAbility {
   }
 
   onDestroy(): void {
+    SpeechPlugin.onBackground(this);
     PastePlugin.onBackground(this);
     RuntimeController.onDestroy(this);
     AuthorizedWorkspacesPlugin.onBackground(this);
@@ -110,6 +114,7 @@ export default class EntryAbility extends FlutterAbility {
     flutterEngine.getPlugins()?.add(new PastePlugin())
     flutterEngine.getPlugins()?.add(new HmsSharePlugin())
     flutterEngine.getPlugins()?.add(new VoicePlugin())
+    flutterEngine.getPlugins()?.add(new SpeechPlugin())
     flutterEngine.getPlugins()?.add(new ShortcutsPlugin())
     flutterEngine.getPlugins()?.add(new LauncherIconPlugin())
     flutterEngine.getPlugins()?.add(new LaunchPlugin())

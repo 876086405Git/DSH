@@ -114,6 +114,11 @@ class SpeechAudio {
 
   Future<void> stop() => _invoke<void>('stop');
 
+  /// OH's owned coordinator must observe a failed native retirement or EOF
+  /// handoff. These use the existing channel protocol without swallowing errors.
+  Future<void> stopChecked() => _channel.invokeMethod<void>('stop');
+  Future<void> endChecked(String id) => _channel.invokeMethod<void>('end', {'id': id});
+
   /// Stream [id] quieter while the person may be speaking over it, or back to full.
   Future<void> duck(String id, bool on) => _invoke<void>('duck', {'id': id, 'on': on});
 

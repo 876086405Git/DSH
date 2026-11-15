@@ -1,0 +1,15 @@
+{
+  "native": {
+    "app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets": "22dddd91c892ed7e08303fec9f52f60b7cd28f13838dbdda2db0d1570a7940a4",
+    "app/ohos/entry/src/main/ets/plugins/OhosPcmStream.ets": "747a3aa595cacbca8a402cb33125ef7656bb9dc580152fba5a41b6e906ade670",
+    "app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets": "f93b2b19711fed700278ee9a748069b7b96f9735ec00fcdaaa7ca31dfcfb917a",
+    "app/ohos/entry/src/main/ets/plugins/PcmByteQueue.ets": "db707f061e5da2efde6cd1ae3afe42450a53d05ed5f3118e1827de968e8dd4c6",
+    "runtime/tests/ohos/pcm-stream-fixture.mjs": "ab6a12631fbccc1f1ba4528faffc368cc630e22b0f93854a9a8c03d522d9df5e"
+  },
+  "bridge": {
+    "commit": "b4527967afb4a7e245c59b5954493cb4a2c919e9",
+    "path": "runtime/bridge/dsh-go-bridge/lib/speech.js",
+    "sha256": "2593ca0537b054eaaeee6c3ccac308bd5e2cf1c08692007c38d04c5988873e1e"
+  },
+  "scope": "1216 native component + fixed existing main bridge; neither OS nor paid API claims"
+}

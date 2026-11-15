@@ -1,6 +1,6 @@
 --- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
-@@ -14,6 +14,49 @@
+@@ -14,6 +14,52 @@
  		throw Object.assign(new Error("OpenHarmony publication preload is required"), { code: "ERR_OHOS_PUBLICATION_PRELOAD_MISSING" });
  	}
  	return service.publish(source, target, { fs });
@@ -9,6 +9,9 @@
 +// OpenHarmony image operations use the fixed HAP binding captured by preload.
 +// The non-OH Sharp implementation and its descriptor remain unchanged.
 +const ohosEncodedImages = new WeakSet();
++const ohosRequestImage = Symbol("ohosRequestImage");
++// One completed publication proof per module, containing no image storage.
++let ohosCacheProof;
 +function requireOhosImageCodec() {
 +	const codec = globalThis[Symbol.for("dsh.go.ohos.image-codec")];
 +	if (codec?.protocolVersion !== 1 || typeof codec.identity !== "function" || typeof codec.probe !== "function" || typeof codec.detect !== "function" || typeof codec.encode !== "function") throw new AttachmentError("鸿蒙图像组件尚未就绪；普通文件仍可上传或保存。", "OHOS_IMAGE_CODEC_UNAVAILABLE");
@@ -50,7 +53,7 @@
  }
  
  //#region lib/types/compression-limiter.js
-@@ -179,6 +222,7 @@
+@@ -179,6 +225,7 @@
  * @returns verified format and dimensions.
  */
  async function probeImage(data) {
@@ -58,7 +61,7 @@
  	const sharp = requireSharp();
  	try {
  		return await imageMetadata(sharp(data, {
-@@ -197,6 +241,7 @@
+@@ -197,6 +244,7 @@
  * @returns verified format and dimensions.
  */
  async function detectImage(data, limits) {
@@ -66,7 +69,7 @@
  	const sharp = requireSharp();
  	try {
  		const image = sharp(data, {
-@@ -267,6 +312,11 @@
+@@ -267,6 +315,11 @@
  * @returns verified provider-independent normalized bytes and metadata.
  */
  async function normalizeImage(data, detected, policy) {
@@ -78,7 +81,7 @@
  	if (canPassThroughNormalization(detected, data.byteLength, policy)) return {
  		data,
  		mediaType: detected.mediaType,
-@@ -804,6 +854,14 @@
+@@ -804,6 +857,14 @@
  	checkedInteger(target.maxBytes, "Image request maxBytes");
  }
  function descriptor(attachment, target) {
@@ -93,7 +96,7 @@
  	return JSON.stringify({
  		transformVersion: REQUEST_IMAGE_TRANSFORM_VERSION,
  		attachmentId: attachment.attachmentId,
-@@ -843,6 +901,7 @@
+@@ -843,6 +904,7 @@
  	}).toColourspace("srgb");
  }
  async function createRequestImage(attachment, target, hasAlpha) {
@@ -101,7 +104,25 @@
  	if (target.width >= attachment.ref.width && target.height >= attachment.ref.height && attachment.data.byteLength <= target.maxBytes) return {
  		data: attachment.data,
  		mediaType: attachment.ref.mediaType,
-@@ -869,11 +928,17 @@
+@@ -855,11 +917,15 @@
+ function cachePath(root, hash) {
+ 	return join(root, "request-images", hash.slice(0, 2), hash);
+ }
+-async function readCached(path, target, expectedAlpha, signal) {
++async function readCached(path, target, expectedAlpha, signal, variantId, owner) {
+ 	try {
+ 		const data = new Uint8Array(await readFile(path, { signal }));
+ 		const detected = await probeImage(data);
+-		if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width > target.width || detected.height > target.height || !encodedAlphaIsCompatible(expectedAlpha, detected)) return void 0;
++		const proof = owner?.active && ohosCacheProof?.owner === owner ? ohosCacheProof : void 0;
++		const verified = proof?.variantId === variantId && proof.sha256 === digest(data) &&
++			proof.width === detected.width && proof.height === detected.height &&
++			proof.mediaType === detected.mediaType && proof.hasAlpha === detected.hasAlpha;
++		if (detected.depth !== "uchar" || detected.space !== "srgb" && !(detected.space === void 0 && verified) || detected.width > target.width || detected.height > target.height || !encodedAlphaIsCompatible(expectedAlpha, detected)) return void 0;
+ 		return {
+ 			data,
+ 			mediaType: detected.mediaType,
+@@ -869,11 +935,17 @@
  		};
  	} catch (error) {
  		if (error?.code === "ENOENT") return void 0;
@@ -119,7 +140,57 @@
  	const detected = await detectImage(image.data);
  	if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width !== image.width || detected.height !== image.height || detected.mediaType !== image.mediaType || !encodedAlphaIsCompatible(expectedAlpha, detected)) throw new AttachmentError("Encoded model-request image does not match its verified 8-bit sRGB metadata.", "ATTACHMENT_WRITE_FAILED");
  	return {
-@@ -1102,8 +1167,14 @@
+@@ -906,19 +978,32 @@
+ * @returns verified request bytes and deterministic variant identity.
+ */
+ async function readRequestImageFile(root, attachment, target, signal) {
++	return readRequestImage(root, attachment, target, signal);
++}
++async function readRequestImage(root, attachment, target, signal, owner) {
+ 	signal?.throwIfAborted();
+ 	validateTarget(target);
+ 	const source = await probeImage(attachment.data);
+ 	const variantId = requestImageVariantId(attachment.ref, target);
+ 	const path = cachePath(root, String(variantId).slice(7));
+-	const cached = await readCached(path, target, source.hasAlpha, signal);
++	const cached = await readCached(path, target, source.hasAlpha, signal, variantId, owner);
+ 	const created = cached ?? await createRequestImage(attachment, target, source.hasAlpha);
+ 	const version = cached ?? (created.data === attachment.data ? {
+ 		...created,
+ 		hasAlpha: source.hasAlpha
+ 	} : await verifyRequestImage(created, source.hasAlpha));
+ 	signal?.throwIfAborted();
+-	if (cached === void 0 && version.data !== attachment.data) await writeCached(path, version.data);
++	if (cached === void 0 && version.data !== attachment.data) {
++		// Native verification and close finished before this private output was
++		// returned. Keep only scalars before exposing its mutable bytes to callers.
++		const proof = owner?.active ? Object.freeze({ owner, variantId, sha256: digest(version.data),
++			mediaType: version.mediaType, width: version.width, height: version.height, hasAlpha: version.hasAlpha }) : void 0;
++		await writeCached(path, version.data);
++		if (owner) {
++			signal?.throwIfAborted();
++			if (owner.active) ohosCacheProof = proof;
++		}
++	}
+ 	return {
+ 		variantId,
+ 		attachment: attachment.ref,
+@@ -1064,6 +1149,14 @@
+ 		if (!Number.isSafeInteger(compressionConcurrency) || compressionConcurrency < 1 || compressionConcurrency > 8) throw new Error(`attachment-local: imageCompressionConcurrency must be an integer from 1 through 8`);
+ 		this.imageCompressionConcurrency = compressionConcurrency;
+ 		this.compression = new CompressionLimiter(compressionConcurrency);
++		if (process.platform === "openharmony") {
++			const owner = { active: true };
++			this[ohosRequestImage] = (attachment, target, signal) => readRequestImage(this.cacheRoot, attachment, target, signal, owner);
++			ctx.effect(() => () => {
++				owner.active = false;
++				if (ohosCacheProof?.owner === owner) ohosCacheProof = void 0;
++			});
++		}
+ 	}
+ 	async validateImage(input) {
+ 		await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy));
+@@ -1102,8 +1195,14 @@
  	}
  	requestVersion(ref, target, stored, signal) {
  		signal?.throwIfAborted();
@@ -136,3 +207,13 @@
  		let operation = this.requestInflight.get(key);
  		if (operation?.controller.signal.aborted) {
  			this.requestInflight.delete(key);
+@@ -1111,7 +1210,8 @@
+ 		}
+ 		if (operation === void 0) {
+ 			const shared = new SharedRequest((sharedSignal) => this.compression.run(async () => {
+-				return await readRequestImageFile(this.cacheRoot, stored ?? await this.readImage(ref, sharedSignal), target, sharedSignal);
++				const attachment = stored ?? await this.readImage(ref, sharedSignal);
++				return process.platform === "openharmony" ? this[ohosRequestImage](attachment, target, sharedSignal) : readRequestImageFile(this.cacheRoot, attachment, target, sharedSignal);
+ 			}));
+ 			operation = shared;
+ 			this.requestInflight.set(key, shared);

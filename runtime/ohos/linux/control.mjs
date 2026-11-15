@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { STATUS_CODES } from 'node:http';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isMainThread } from 'node:worker_threads';
@@ -248,7 +249,7 @@ export class LinuxControl {
    * long-lived server holding it cannot queue every later command forever.
    */
   async spawnRouted(spec, { signal, label, waitMs = 10000, resumeMs = 120000 } = {}) {
-    const resumeBy = Date.now() + resumeMs, busyBy = Date.now() + waitMs;
+    const resumeBy = performance.now() + resumeMs, busyBy = performance.now() + waitMs;
     for (;;) {
       signal?.throwIfAborted();
       const status = this.status(), busy = (this.#job && this.#job.state !== 'settled') || this.#routed;
@@ -258,10 +259,10 @@ export class LinuxControl {
         if (status.state === 'installing' && this.#owner?.bootMode === 'install') {
           throw routed(127, 'ERR_OHOS_LINUX_INSTALLING', `Linux 环境正在首次安装，完成后重试；进度见 ${settings}。`);
         }
-        if (status.state !== 'installing' || Date.now() >= resumeBy) {
+        if (status.state !== 'installing' || performance.now() >= resumeBy) {
           throw routed(127, 'ERR_OHOS_LINUX_UNAVAILABLE', `Linux 环境当前不可用（${status.state}${status.lastErrorCode ? '，' + status.lastErrorCode : ''}）：请在 ${settings} 查看，必要时重启 App。`);
         }
-      } else if (Date.now() >= busyBy) {
+      } else if (performance.now() >= busyBy) {
         throw routed(126, 'ERR_OHOS_LINUX_BUSY', `Linux 环境同一时间只运行一个命令，现在被 ${this.#routed?.label ?? '另一个命令'} 占用；请等它结束后重试。`);
       }
       await delay(100, undefined, { signal });
