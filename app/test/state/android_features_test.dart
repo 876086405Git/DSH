@@ -62,6 +62,7 @@ import '../shell/golden_harness.dart';
 const _pages = {
   'page:phone',
   'page:phoneAppRules',
+  'page:phoneAlwaysAllow',
   'page:phoneAndroidShell',
   'page:phoneDnd',
   'page:phoneUnlocks',
