@@ -489,6 +489,11 @@ class ChatController extends Notifier<ChatState> {
   final _claimedAt = <String, int>{};
   final _retryingFailed = <String>{};
 
+  /// Sends still waiting for the Host to answer the prompt RPC. A prompt
+  /// here may well have landed; anything else with no inbox slot after a
+  /// fresh baseline did not.
+  final _delivering = <String>{};
+
   /// Our prompts taken out of the inbox to be sent again ([_takeOut]): their
   /// bubbles stay, as 「发送中」, until they are back.
   final _moving = <String, _ChatOperation>{};
@@ -577,6 +582,7 @@ class ChatController extends Notifier<ChatState> {
     _modelChange = null;
     _historyRead = null;
     _moving.clear();
+    _delivering.clear();
     _synchronized = false;
     _syncScope = Object();
     _resyncFuture = null;
@@ -1179,6 +1185,16 @@ class ChatController extends Notifier<ChatState> {
       final pendingIds = _pending.map((prompt) => prompt.requestId).toSet();
       _claimedAt.removeWhere((requestId, _) => !pendingIds.contains(requestId));
     }
+    // A fresh baseline is the Host saying what it holds. A prompt that is
+    // neither in that inbox nor echoed, and is not waiting on its own prompt
+    // answer, did not make it: stop showing it as on its way.
+    if (freshSnapshot && _delivering.isEmpty && _pending.isNotEmpty) {
+      final inbox = _inboxIds();
+      _pending = List.unmodifiable([
+        for (final prompt in _pending)
+          if (!prompt.failed && !inbox.contains(prompt.requestId)) prompt.failedAt(_transcript.cursor) else prompt,
+      ]);
+    }
     final pending = _placePending();
     state = ChatState(
       items: items,
@@ -1319,6 +1335,7 @@ class ChatController extends Notifier<ChatState> {
         attachments: List.unmodifiable(attachments),
       ),
     ]);
+    _delivering.add(requestId);
     // A retried request can already be in the log; the Host will not echo it twice.
     if (retrying) _dropEchoed(_transcript.events);
     state = state.copyWith(
@@ -1330,7 +1347,7 @@ class ChatController extends Notifier<ChatState> {
     try {
       if (beforeDeliver != null) {
         final go = await beforeDeliver(requestId);
-        if (!_currentOperation(operation)) return false;
+        if (!_currentOperation(operation)) return _retireSend(requestId);
         if (!go) {
           // The caller let it go (伙伴小屋 left this conversation meanwhile):
           // nothing went out, so nothing waits and nothing failed.
@@ -1340,7 +1357,7 @@ class ChatController extends Notifier<ChatState> {
         }
       }
       final receipts = await _stageFiles(operation, attachments);
-      if (!_currentOperation(operation)) return false;
+      if (!_currentOperation(operation)) return _retireSend(requestId);
       var promptMode = effective == SendMode.steer ? PromptMode.steer : PromptMode.queue;
       String? stopFailed;
       // Interrupt stops first, then sends: DSH keeps the inbox across a stop
@@ -1349,7 +1366,7 @@ class ChatController extends Notifier<ChatState> {
       if (effective == SendMode.interrupt) {
         final stopped = await _stop(operation);
         // Retirement is not a failed cancel: it must never fall back to steer.
-        if (!_currentOperation(operation)) return false;
+        if (!_currentOperation(operation)) return _retireSend(requestId);
         if (!stopped) {
           // The turn goes on: the message joins it instead.
           promptMode = PromptMode.steer;
@@ -1374,7 +1391,7 @@ class ChatController extends Notifier<ChatState> {
       state = state.copyWith(error: stopFailed, notice: notice);
       return true;
     } catch (e) {
-      if (!_currentOperation(operation)) return false;
+      if (!_currentOperation(operation)) return _retireSend(requestId);
       // Durable inbox/claim/end feedback also proves acceptance when a
       // preparation failure never writes a user/message echo.
       if (!_pending.any((p) => p.requestId == requestId) ||
@@ -1392,6 +1409,8 @@ class ChatController extends Notifier<ChatState> {
       _pending = List.unmodifiable(_pending.where((p) => p.requestId != requestId));
       state = state.copyWith(pending: _placePending(), error: _sendFailure(e));
       return false;
+    } finally {
+      _delivering.remove(requestId);
     }
   }
 
@@ -1428,6 +1447,30 @@ class ChatController extends Notifier<ChatState> {
     } finally {
       _retryingFailed.remove(prompt.requestId);
     }
+  }
+
+  /// The watch this send was started against is gone (a new follow, another
+  /// Host, a later stop): its answer can no longer be matched to the bubble.
+  /// The optimistic bubble goes with it instead of waiting forever — a Host
+  /// that did take the prompt still echoes it, and a send that never went out
+  /// leaves its text to the screen (「没发出去」 hands it back to the composer).
+  bool _retireSend(String requestId) {
+    if (_pending.any((p) => p.requestId == requestId)) {
+      _pending = List.unmodifiable(_pending.where((p) => p.requestId != requestId));
+      state = state.copyWith(pending: _placePending());
+    }
+    return false;
+  }
+
+  /// Prompts taken out of the inbox will not be put back (this app stopped
+  /// owning that conversation first): their bubbles go, and the screen puts
+  /// their text back, instead of leaving them waiting forever.
+  List<PendingPrompt> _retireTaken(List<PendingPrompt> prompts) {
+    if (prompts.isEmpty) return const [];
+    final gone = {for (final prompt in prompts) prompt.requestId};
+    _pending = List.unmodifiable(_pending.where((p) => !gone.contains(p.requestId)));
+    state = state.copyWith(pending: _placePending());
+    return List.unmodifiable(prompts);
   }
 
   /// A message went out: one more turn in the usage statistics (only how
@@ -1641,9 +1684,8 @@ class ChatController extends Notifier<ChatState> {
       return const [];
     }
     final last = _waiting().lastOrNull;
-    if (last == null || !last.resendable || !await _takeOut(operation, last) || !_currentOperation(operation)) {
-      return const [];
-    }
+    if (last == null || !last.resendable || !await _takeOut(operation, last)) return const [];
+    if (!_currentOperation(operation)) return _retireTaken([last]);
     return _putBack(operation, [last]);
   }
 
@@ -1664,18 +1706,19 @@ class ChatController extends Notifier<ChatState> {
       for (final p in _waiting().skipWhile((p) => p.requestId != prompt.requestId).skip(1))
         if (p.slot == InboxSlot.nextTurn && p.resendable) p,
     ];
-    if (!await _takeOut(operation, prompt) || !_currentOperation(operation)) return const [];
+    if (!await _takeOut(operation, prompt)) return const [];
+    if (!_currentOperation(operation)) return _retireTaken([prompt]);
     // Stopped or not, it goes back: a turn that goes on takes it as before.
     if (state.running) {
       await _stop(operation, failure: appL10n.stateChatStopFailed);
-      if (!_currentOperation(operation)) return const [];
+      if (!_currentOperation(operation)) return _retireTaken([prompt]);
     }
     final moved = [prompt];
     for (final p in behind) {
-      if (!_currentOperation(operation)) return const [];
+      if (!_currentOperation(operation)) return _retireTaken(moved);
       if (await _takeOut(operation, p)) moved.add(p);
     }
-    if (!_currentOperation(operation)) return const [];
+    if (!_currentOperation(operation)) return _retireTaken(moved);
     return _putBack(operation, moved);
   }
 
@@ -1726,7 +1769,7 @@ class ChatController extends Notifier<ChatState> {
     final lost = <PendingPrompt>[];
     Object? failure;
     for (final prompt in prompts) {
-      if (!_currentOperation(operation)) return const [];
+      if (!_currentOperation(operation)) return _retireTaken([...lost, prompt]);
       try {
         await _deliver(
           operation,
