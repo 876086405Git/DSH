@@ -1566,7 +1566,7 @@ def main():
           ['host-speech-tests.dart', 'host-lifecycle-tests.dart', 'host-http-tests.dart', 'host-preview-tests.dart',
            'host-compat-tests.dart', 'host-route-tests.dart', 'host-system-tests.dart', 'host-native-integration.dart']],
           scope='Actual Dart upper/HTTP + fixed main speech.js + frozen 1216 ETS; explicit framework, local provider and AudioRenderer OS boundaries; no Flutter engine, SDK, device, UI enablement or paid API claim')
-    g.run('system-tts-preview-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
+    g.run('companion-tts-preview-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
           '../runtime/tests/ohos/companion-external-data_test.dart',
           '../runtime/tests/ohos/system-tts-preview-data_test.dart', 'test/companion/companion_voice_test.dart',
           'test/companion/companion_voice_source_test.dart', 'test/speech/speech_out_test.dart',
@@ -1580,8 +1580,9 @@ def main():
                  'app/test/speech/speech_out_test.dart', 'app/test/speech/voice_call_test.dart',
                  'app/test/settings/voice_settings_test.dart'],
           scope='Actual Flutter ordinary OH companion external preflight, preserved per-id system fallback and preview cancellation; finite loopback/RPC to actual ETS with explicit HMS/audio boundaries; Android/default data controls; no SDK/device or paid API claim')
-    g.run('system-tts-preview-dart-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/companion/companion_voice.dart',
-          '../runtime/tests/ohos/companion-external-data_test.dart', '../runtime/tests/ohos/system-tts-preview-data_test.dart'),
+    # Only the app's own files: from app/ the analyzer can't resolve package:dsh_app in
+    # runtime/tests; `flutter test` above compiles those tests against the app.
+    g.run('companion-tts-preview-dart-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/companion/companion_voice.dart'),
           cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
           tests=['app/lib/companion/companion_voice.dart', rt + 'companion-external-data_test.dart', rt + 'system-tts-preview-data_test.dart'],
           scope='Actual Flutter analyzer for OH companion preflight/cancellation data and finite consumer tests; no UI or Native edits')
@@ -1617,8 +1618,7 @@ def main():
           tests=[rt + 'media-video-poster-data_test.dart', 'app/test/media/media_video_test.dart',
                  'app/test/media/media_card_test.dart', 'app/test/chat/artifact_card_test.dart'],
           scope='Actual Flutter OH poster-cache producer, finite local Session HTTP/file I/O and real codec; controlled poster encoder markers, unchanged Android/default and existing media consumers; no SDK/device decoding claim')
-    g.run('flutter-media-video-poster-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/media/video.dart',
-          '../runtime/tests/ohos/media-video-poster-data_test.dart'),
+    g.run('flutter-media-video-poster-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/media/video.dart'),
           cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
           tests=['app/lib/media/video.dart', rt + 'media-video-poster-data_test.dart'],
           scope='Actual Flutter analyzer for the OH poster cache data file and its finite consumer tests; no UI or Native edits')

@@ -17,15 +17,6 @@ interface KeyboardSample {
   geometry: Map<string, Any>;
 }
 
-// The keyboard's avoid rectangles as they are exported: window.AvoidArea also
-// carries visible, which this record never did.
-interface KeyboardAvoidRects {
-  leftRect: window.Rect;
-  topRect: window.Rect;
-  rightRect: window.Rect;
-  bottomRect: window.Rect;
-}
-
 function rect(value: window.Rect): window.Rect | null {
   const numbers: Array<number> = [value.left, value.top, value.width, value.height];
   if (!numbers.every((n: number): boolean => Number.isFinite(n)) || value.width < 0 || value.height < 0) return null;
