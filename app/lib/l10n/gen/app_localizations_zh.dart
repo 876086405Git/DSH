@@ -25230,6 +25230,16 @@ class L10nZh extends L10n {
   String get workshopErrorGeneric => '没有成功，稍后再试。';
 
   @override
+  String workshopErrorWithCode(String code) {
+    return '没有成功，稍后再试。（$code）';
+  }
+
+  @override
+  String workshopErrorPackage(String code) {
+    return '包里有文件不符合要求，没法上传（$code）。';
+  }
+
+  @override
   String get workshopDisclosureTitle => '让工坊核对你的 GitHub 身份';
 
   @override

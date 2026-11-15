@@ -26576,6 +26576,16 @@ class L10nEn extends L10n {
   String get workshopErrorGeneric => 'That didn\'t work. Try again later.';
 
   @override
+  String workshopErrorWithCode(String code) {
+    return 'That didn\'t work. Try again later. ($code)';
+  }
+
+  @override
+  String workshopErrorPackage(String code) {
+    return 'A file in this pack doesn\'t meet the requirements, so it can\'t be uploaded ($code).';
+  }
+
+  @override
   String get workshopDisclosureTitle => 'Let the Workshop confirm your GitHub identity';
 
   @override

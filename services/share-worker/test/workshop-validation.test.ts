@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkshopArchive, inflate, nameAlias, strictJson } from '../src/workshop-archive';
 import { validatePack, validatePet } from '../src/workshop-pack';
 import { validatePng } from '../src/workshop-png';
-import { companion, metaFor, pet, petManifest, png, zip } from './workshop-fixtures';
+import { chunk, companion, metaFor, pet, petManifest, png, zip } from './workshop-fixtures';
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../app/test/pets/fixtures/${name}.json`, import.meta.url), 'utf8'));
 const accepted = (f: () => unknown) => { try { f(); return true; } catch { return false; } };
 
@@ -51,6 +51,20 @@ it('rejects runtime, unsafe/missing references and future/unknown moc formats', 
   for (const options of [{ runtime: true }, { reference: '../sample.moc3' }, { reference: 'https://example.org/a.moc3' }, { version: 7 }, { version: 0 }]) {
     const bytes = companion(options); expect(() => validatePack(bytes, metaFor(bytes, { kind: 'companion' }), 6)).toThrow();
   }
+});
+it('takes Live2D-sized textures by their header: 4096 and 8192 a side pass, larger or not a PNG fails', () => {
+  const texture = (side: number) => {
+    const head = Buffer.alloc(13); head.writeUInt32BE(side); head.writeUInt32BE(side, 4); head[8] = 8; head[9] = 6;
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IEND', Buffer.alloc(0))]);
+  };
+  for (const side of [4096, 8192]) {
+    const bytes = companion({ texture: texture(side) });
+    expect(validatePack(bytes, metaFor(bytes, { kind: 'companion' }), 6)).toMatchObject({ mocVersions: [6] });
+  }
+  const huge = companion({ texture: texture(8193) });
+  expect(() => validatePack(huge, metaFor(huge, { kind: 'companion' }), 6)).toThrow('png_decoded_size');
+  const jpegNamedPng = companion({ texture: Buffer.alloc(64, 0xff) });
+  expect(() => validatePack(jpegNamedPng, metaFor(jpegNamedPng, { kind: 'companion' }), 6)).toThrow('png_header');
 });
 it('refuses hidden extras instead of publishing local secrets or settings', () => {
   const bytes = pet(petManifest(), [['private.json', Buffer.from('{"synthetic":"not-for-publication"}')]]);
