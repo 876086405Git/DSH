@@ -2,7 +2,7 @@
 // Nothing here reads credentials, local preferences or a widget tree.
 
 const workshopArchiveBytes = 50 * 1024 * 1024;
-const workshopExpandedBytes = 128 * 1024 * 1024;
+const workshopExpandedBytes = 256 * 1024 * 1024;
 const workshopPreviewSide = 512;
 const workshopPreviewPixels = 262144;
 const workshopPreviewBytes = 2 * 1024 * 1024;

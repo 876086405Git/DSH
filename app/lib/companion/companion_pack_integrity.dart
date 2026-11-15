@@ -5,7 +5,10 @@ part of 'companion_pack.dart';
 const companionMaxMocVersion = 6;
 
 /// One JSON file of a character; large motions run past 1 MiB.
-const companionJsonCap = 4 * 1024 * 1024;
+const companionJsonCap = 8 * 1024 * 1024;
+
+/// One file of a character on export; an 8192-wide PNG can pass 16 MiB.
+const companionMemberCap = 32 * 1024 * 1024;
 
 /// A texture's longest side. The WebView decodes it, so a texture is only
 /// checked for being a PNG of at most this size (Live2D uses 4096 and up).
