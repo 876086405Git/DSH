@@ -95,20 +95,37 @@ def main():
         assert len(product_objects) > 20 and '-DTEMU_EMBED' in product_flags and '-UNDEBUG' in product_flags
         record([built / 'BUILD.json', *product_objects])
         record([p for p in source.rglob('*') if p.suffix in ('.c', '.h')])
-        baseline = out / 'baseline-source'
+        # 0023 consumes the corrected UDP fields/clock and TCP pending state.
+        # Compare the target patch on a common pre-event-wait layer, while the
+        # separately named candidate-embed set still runs the full current chain.
+        comparison = out / 'comparison-source'
         report['uncompiledBackupsOmitted'] = [str(p.relative_to(source)) for p in source.rglob('*.orig')]
-        shutil.copytree(source, baseline, ignore=shutil.ignore_patterns('*.orig'))
-        run(out, 'reverse-only-0021', ['patch', '--fuzz=0', '-R', '-d', baseline, '-p1', '-i',
+        shutil.copytree(source, comparison, ignore=shutil.ignore_patterns('*.orig'))
+        comparison_reversed = ['0024-embedded-start-close-debt.patch', '0023-embedded-event-wait.patch']
+        for patch in comparison_reversed:
+            run(out, 'comparison-reverse-' + patch[:4], ['patch', '--fuzz=0', '-R', '-d', comparison,
+                '-p1', '-i', native / 'patches' / patch])
+        baseline = out / 'baseline-source'
+        shutil.copytree(comparison, baseline, ignore=shutil.ignore_patterns('*.orig'))
+        run(out, 'baseline-reverse-0021', ['patch', '--fuzz=0', '-R', '-d', baseline, '-p1', '-i',
                                      native / 'patches/0021-embedded-fasttimo-zero.patch'])
-        changed = [p.relative_to(source).as_posix() for p in source.rglob('*')
-                   if p.suffix in ('.c', '.h') and sha(p) != sha(baseline / p.relative_to(source))]
+        changed = sorted(p.relative_to(comparison).as_posix() for p in comparison.rglob('*')
+                   if p.suffix in ('.c', '.h') and sha(p) != sha(baseline / p.relative_to(comparison)))
         assert changed == ['slirp/slirp.c'], changed
-        report['onlyGeneratedSourceDifferences'] = changed
-        record([p for p in baseline.rglob('*') if p.suffix in ('.c', '.h')])
+        report['baselineMeaning'] = 'Common historical layer: current chain minus0024/0023, then only0021 reversed; full current candidate also executes separately'
+        report['comparisonReversedPatches'] = comparison_reversed
+        report['onlyTargetDifferencesBetweenCommonLayers'] = changed
+        report['fullCandidateVersusCommonLayerDifferences'] = sorted(p.relative_to(source).as_posix()
+            for p in source.rglob('*') if p.suffix in ('.c', '.h')
+            and sha(p) != sha(comparison / p.relative_to(source)))
+        assert report['fullCandidateVersusCommonLayerDifferences'] == [
+            'machine.h', 'riscv_machine.c', 'slirp/libslirp.h', 'slirp/slirp.c', 'temu.c', 'temu_embed.h']
+        record([p for root in [comparison, baseline] for p in root.rglob('*') if p.suffix in ('.c', '.h')])
 
         sets = {}
         for label, src, embedded, reuse in [
-            ('baseline-embed', baseline, True, False), ('candidate-embed', source, True, True),
+            ('baseline-embed', baseline, True, False), ('comparison-embed', comparison, True, False),
+            ('candidate-embed', source, True, True),
             ('baseline-nonembed', baseline, False, False), ('candidate-nonembed', source, False, False),
         ]:
             folder = out / label; objects = []
@@ -130,7 +147,7 @@ def main():
                 row = json.loads(result.stdout); rows.append(row)
                 assert result.returncode == int(not row['passed'])
                 if not row['passed']: failed.append(index)
-            expected_failures = [] if label == 'candidate-embed' else LEGACY_FAILURES
+            expected_failures = [] if label in ('comparison-embed', 'candidate-embed') else LEGACY_FAILURES
             assert failed == expected_failures, (label, failed)
             report['checks'].append({'label': label, 'rows': rows, 'failedCases': failed,
                 'meaning': '13 candidate scenarios passed' if not failed else 'Original 6 failing cases for one zero-sentinel defect among 13 controls; not13green'})
@@ -140,6 +157,8 @@ def main():
                     '-ffile-prefix-map=' + str(src) + '=/fixed-tinyemu', src / 'slirp/slirp.c'])
                 report[label + 'PreprocessedSha256'] = hashlib.sha256(result.stdout).hexdigest()
             print(label, '13 green' if not failed else '7 green / 6 original red', flush=True)
+        assert sets['comparison-embed'] == sets['candidate-embed']
+        report['fullCandidateAndCommonLayerExact13RowsEqual'] = True
         assert sets['baseline-nonembed'] == sets['candidate-nonembed']
         assert report['baseline-nonembedPreprocessedSha256'] == report['candidate-nonembedPreprocessedSha256']
         report['nonembedExactRowsAndNormalizedPreprocessorEqual'] = True

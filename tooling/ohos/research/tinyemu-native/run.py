@@ -21,6 +21,11 @@ for kind in ['bios','kernel','initrd']:
  bad={**config,kind:'large.bin'};(out/(kind+'.json')).write_text(json.dumps(bad))
 for variant in ['baseline','candidate']:
  binary=out/variant/'libdsh_linux.so'
+ if variant=='baseline':
+  # A positive NAPI/CPU/stop/join control excludes unresolved ABI/imports from
+  # the process-fatal oracle below. The host-only bridge uses the old entry.
+  r=run([a.node,HERE/'node-case.mjs',binary.parent,out/'normal.json','normal'],'baseline-node-control')
+  check('baseline real Node controlled ABI',r.returncode==0,**json.loads(r.stdout or b'{}'))
  for kind in ['bios','kernel','initrd']:
   r=run([a.node,HERE/'node-case.mjs',binary.parent,out/(kind+'.json'),'fatal'],variant+'-fatal-'+kind)
   check(variant+' oversized '+kind,(r.returncode==0 and b'"hostSurvived":true' in r.stdout) if variant=='candidate' else (r.returncode!=0 and b'hostSurvived' not in r.stdout),exitCode=r.returncode)

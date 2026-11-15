@@ -93,7 +93,7 @@ cmake --build /build/linux-oh
 
 私有 socket 布局在嵌入构建改变，必须完整重编所有 slirp 对象，不能把新旧布局的对象混链。当前 Linux x86_64 宿主实测 socket 168→184 字节、Slirp 1088→1120 字节；这不是目标 SDK ABI 检查。非嵌入两边布局相同。库名、N-API 导出、Node 与 Dart 接口不变。
 
-定向门 `slirp-udp-expiry` 从固定归档新鲜构建，再只逆掉 0020 得到同版旧源码：同一 31 用例旧实现 11 个缺陷断言失败、OH 候选 31/31；非嵌入两边 31 行真实行为记录完全相同，刻意保留其 11 个旧缺陷。另用实际 `temu.c` 私有 slirp 适配器与真实 loopback UDP 检查首 poll 在首包前更新时钟；CPU 批次是显式测试包生产者，并非客体指令。所有 `fcntl`/`EBADF`、socket 收发及 slirp list 操作真实执行。没有将旧缺陷复现算成 31 项通过。
+定向门 `slirp-udp-expiry` 从固定归档新鲜构建完整生产链；在研究副本依次逆掉依赖层 0024、0023，得到公共历史层，再仅逆 0020 构造旧实现。后两者只有 0020 的六个文件不同；同一 31 用例旧实现 11 个缺陷断言失败、公共历史层和完整当前 OH 候选分别 31/31；非嵌入两边 31 行真实行为记录完全相同，刻意保留其 11 个旧缺陷。另用实际 `temu.c` 私有 slirp 适配器与真实 loopback UDP 检查首 poll 在首包前更新时钟；CPU 批次是显式测试包生产者，并非客体指令。所有 `fcntl`/`EBADF`、socket 收发及 slirp list 操作真实执行。没有将旧缺陷复现算成 31 项通过。
 
 此补丁不扩大 10 ms 等待预算、不增加 waker、不修 TCP fasttimo 的零哨兵，也不消除 1211 的其它阻点。到期仍在原 fill/poll 顺序按已采样时间判定，不承诺宿主墙钟精确四分钟或有界线程调度。宽计时的证明限于单调、有效且可表示的毫秒区间；没有新加对既有 clock_gettime 失败的兜底。SDK/设备尚未运行。
 
@@ -106,3 +106,11 @@ cmake --build /build/linux-oh
 0021 仅在 TEMU_EMBED 下把 fasttimo 的挂起状态与32位时间戳分开。真实 TCP 输入置 TF_DELACK 后，fill 首次登记当前时间并置 pending；poll 到达原有2ms条件时执行 tcp_fasttimo 并清 pending。curtime 在32位回卷恰为0也可登记，不会被误当成无定时器而推迟到下一次 fill。不会改变2ms条件、499ms slow timer、select等待上限、UDP或停止唤醒；非嵌入预处理结果保持相同。32位模时间的旧有限范围仍在，未扩成跨完整32位周期暂停的期限保证。
 
 针对门 slirp-fasttimo fresh 构建固定源码，以真实 slirp/TCP/loopback 与明确的 guest Ethernet/单调clock边界验证13场景；原7绿6红、候选13绿，另核重复登记、第二数据段、连接关闭及select错误路径。该门没有执行guest指令，也不测手机或墙钟ACK时限。SDK/设备需本机验证；不是1211长等待方案。
+
+## 1267：历史对照的依赖闭包
+
+`--host-test --host-baseline` 仅用于 fatal/SIGPIPE 反例，排除 0012、0013、0017 及依赖它们的 0023、0024。当前 NAPI binding 仍使用唤醒入口，因此此模式另外编译研究目录 `tinyemu-native/baseline-entry.c`：它只把新入口转到真实旧 controlled ABI，并提供零值 wait-error TLS，不模拟事件等待。构建收据记录全部跳过项与桥源码摘要。原 oversized、exit/abort/assert、SIGPIPE 反例之前，新增真实 Node 加载、客体输出、stop/join 阳性控制，防止未解析符号被误算成预期进程退出。正常宿主/正式 OH 构建不编译此桥，仍应用完整生产补丁链。
+
+UDP 与 TCP 研究门均在完整生成源码的副本上用 `--fuzz=0` 逆掉 0024→0023，再分别仅逆 0020 或 0021。两层间六/一个 C/H 文件差及原 11/6 个失败集合独立检查；完整当前生产链另以 `candidate-embed` 执行同样 31/13 场景，不能用历史层通过代替它。UDP 两侧非嵌入行/布局、TCP 两侧非嵌入行/预处理结果与首 poll 原合同仍保留。历史层是目标修复的受控反例，不是当前生产版本。
+
+正式 `tinyemu-native` 登记还要求独立四盘工具 guest 配置；没有该输入时，仅运行无 `--guest-config` 的宿主部分不能把整登记标为通过，也不能用小 BIOS 或 demo Linux 替代工具 guest。

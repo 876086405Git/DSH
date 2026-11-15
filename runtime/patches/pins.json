@@ -207,7 +207,7 @@
     "ohos-image-codec.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
-          "after": "372f6994454d9a36f1d54ce9817e3c4884e042cc13cb9d75fec71b4fde91816b",
+          "after": "fe0d80a1badf6b1faf26f6a2cf908b011c02ca5a3247ab081aabab3b8511a60a",
           "before": "dd15efce9b5bbd0d896728f22bb3e9dd4643176555174f5bfcb39adfc75074df"
         }
       }
@@ -241,6 +241,18 @@
         "node_modules/@modelcontextprotocol/client/dist/stdio.mjs": {
           "after": "b04d2db0feb4a733b68bab98abc15ae85d8ba81bd474fd9e30bd5e04b5ba50ea",
           "before": "26bba09797abb03929888ce234141ab89e5456a8ff3cdf5fadcb522d42f4ba3e"
+        }
+      }
+    },
+    "ohos-mcp-start-close.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@modelcontextprotocol/client/dist/stdio.cjs": {
+          "after": "d6e7cd153e9edc99a852eba3b480eba42bfef2569d03e61e6a16beaf4f7c9f55",
+          "before": "4addd12b80580f18a024a14ee55d9007da6df937c594a07a590f731d6bef8d1d"
+        },
+        "node_modules/@modelcontextprotocol/client/dist/stdio.mjs": {
+          "after": "8a3320ea65d4846346cf714f98ebad70450147c84bf18ea441ab87bfd06cbae6",
+          "before": "b04d2db0feb4a733b68bab98abc15ae85d8ba81bd474fd9e30bd5e04b5ba50ea"
         }
       }
     },
@@ -2628,7 +2640,8 @@
       "ohos-web-converter-lazy.diff",
       "ohos-cordis-catalog-lazy.diff",
       "ohos-skill-root-events.diff",
-      "ohos-piai-empty-models.diff"
+      "ohos-piai-empty-models.diff",
+      "ohos-mcp-start-close.diff"
     ]
   }
 }

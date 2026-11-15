@@ -49,6 +49,7 @@ WRAPPED_TEST_LOGS = {
     'pcm-stream-native': ['pcm-stream-native/plain.log', 'pcm-stream-native/jitless.log'],
     'attachment-cache-proof-native-*': ['{name}/test.log'],
     'image-file-storage-native-*': ['{name}/test.log'],
+    'image-cancel-cache-miss-native-*': ['{name}/test.log'],
 }
 
 
@@ -649,7 +650,7 @@ def main():
         return result
     g.internal('native-static-resources', native_static, needs=('tools',))
     g.run('native-publication-build', lambda: ['bash', s / (rt + 'build-publication-native.sh'), p('node_root'), native()], needs=('native-tools',))
-    g.run('tinyemu-native', lambda: g.py('tooling/ohos/research/tinyemu-native/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--output', o / 'tinyemu-native', '--cc', p('cc'), '--node', node(), '--guest-config', p('tinyemu_guest_config')), needs=('native-tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-native/' + name for name in ['run.py', 'node-case.mjs', 'guest-case.mjs', 'build-guest-fixture.py', 'fatal-call.c', 'network-call.c', 'join-fault.c', 'join-fault.mjs', 'socket-construction.mjs', 'semantic-core.c', 'clock-cpu.c']], scope='Real host Node NAPI + TinyEMU fatal/FD/join and provided private guest fixture; no SDK/HAP/device')
+    g.run('tinyemu-native', lambda: g.py('tooling/ohos/research/tinyemu-native/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--output', o / 'tinyemu-native', '--cc', p('cc'), '--node', node(), '--guest-config', p('tinyemu_guest_config')), needs=('native-tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-native/' + name for name in ['run.py', 'node-case.mjs', 'guest-case.mjs', 'build-guest-fixture.py', 'baseline-entry.c', 'fatal-call.c', 'network-call.c', 'join-fault.c', 'join-fault.mjs', 'socket-construction.mjs', 'semantic-core.c', 'clock-cpu.c']], scope='Real host Node NAPI + TinyEMU fatal/FD/join and provided private guest fixture; fatal baseline uses explicit legacy-entry bridge after omitting dependent event-wait layer; no SDK/HAP/device')
     g.run('tinyemu-ram-retirement', lambda: g.py('tooling/ohos/research/tinyemu-ram-retire/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--out', o / 'tinyemu-ram-retirement', '--cc', p('cc'), '--node', node()), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-ram-retire/' + name for name in ['run.py', 'monitor.c', 'node-case.mjs']], scope='Actual product Node async join and TinyEMU main RAM; test-only host page touch and fault observers, mincore before/after assertions; no guest workload, SDK/device or PSS claim')
     g.run('hap-linux-stage', lambda: g.py('tooling/ohos/research/tinyemu-native/hap-stage.py', '--source', s, '--expect-linux'), needs=('tools',), tests=['tooling/ohos/research/tinyemu-native/hap-stage.py'], scope='Actual pre-SDK staging and cleanup; not HAP build')
     g.run('tinyemu-block-io', lambda: g.py('tooling/ohos/research/tinyemu-block-io/run.py', '--source-archive', p('tinyemu_source_archive'), '--output', o / 'tinyemu-block-io', '--cc', p('cc')), needs=('tools',), timeout=120, tests=['tooling/ohos/research/tinyemu-block-io/run.py', 'tooling/ohos/research/tinyemu-block-io/block-io.c'], scope='Actual regular-file write/seek/flush errors through production TinyEMU and virtio status; bounded RAM/IRQ fixture, no guest/SDK/device')
@@ -1070,6 +1071,15 @@ def main():
     g.run('host-safe-profile', lambda: g.py(rt + 'host-safe-profile.py', '--node', node(), '--native-library-dir', o / 'round-native', '--publication-fixture', native() / 'libpublication-test-linked.so', '--assembled-payload', payload(), '--out', o / 'host-safe-profile'), needs=('compose', 'native-publication-build', 'round-native-libraries'), timeout=600, tests=[rt + 'host-safe-profile.py'], scope='Actual Host safe argv and original public round; not OH device restart')
     for label, host in [('loopback', '127.0.0.1'), ('owned-http', g.config.get('ownedHttpHost', ''))]:
         g.run('mcp-' + label, lambda h=host: g.py(rt + 'add13/host-gate.py', '--source', s, '--payload', payload(), '--manifest', o / 'composed/manifest.json', '--node', node(), '--native-library-dir', o / 'round-native', '--publication-fixture', native() / 'libpublication-test-linked.so', '--out', o / ('mcp-' + label), '--expect', 'complete', '--mcp-host', h if label == 'loopback' else owned_http_host(h)), needs=('compose', 'native-publication-build', 'native-static-resources', 'round-native-libraries'), timeout=240)
+    for mcp_start_mode in ['plain', 'jitless']:
+        g.run('mcp-start-close-' + mcp_start_mode, lambda m=mcp_start_mode: g.py(
+            rt + 'mcp-start-close.py', '--source', s, '--prefix', prefix(),
+            '--node', node(), '--python', sys.executable,
+            '--out', o / ('mcp-start-close-' + m), *(['--jitless'] if m == 'jitless' else [])),
+            needs=('prepared-inputs', 'android-targets'), timeout=120,
+            tests=[rt + name for name in ('mcp-start-close.py', 'mcp-start-close-actor.mjs',
+                'mcp-stdio-guest-fixture.mjs', 'mcp-stdio-server.py', 'linux-control-fixture.mjs')],
+            scope='Actual MCP plugin and ESM/CJS SDK close while main startup waits for Linux admission; real Python normal initialize/two calls; unchanged kill-before-start events; explicit guest/native fixture, no VM/device')
     g.node_tests('python-loader', [rt + 'python-loader.test.mjs'], needs=('tools',))
     g.run('python-build-inputs', lambda: g.py(rt + 'python-build-inputs.test.py'), needs=('tools',), tests=[rt + 'python-build-inputs.test.py'], scope='Python ELF preflight and fixed system certificate compile option; controlled compiler boundary, no SDK build')
     g.run('python-package', lambda: g.py(rt + 'python-package.test.py'), needs=('tools',), tests=[rt + 'python-package.test.py'], scope='Actual stdlib compilation and composer asset integrity; no SDK/device claim')
@@ -1224,6 +1234,18 @@ def main():
               tests=[rt + name for name in ('image-file-storage.py', 'image-file-storage-native.mjs',
                                             'image-file-storage-observer.mjs', 'image-attachment-oracle.json')],
               scope='Actual fs allocation identity, plain Uint8Array public shape/transfer, short/growing/empty reads and unchanged codec snapshot; prior explicit host SDK fixture, no resident-memory or device claim')
+    for cancel_mode in ('plain', 'jitless'):
+        g.run('image-cancel-cache-miss-native-' + cancel_mode,
+              lambda m=cancel_mode: g.py(rt + 'image-cancel-cache-miss.py',
+                  '--source', s, '--prefix', o / ('image-attachment-' + m) / 'view',
+                  '--native-library-dir', o / ('image-attachment-' + m) / 'native',
+                  '--publication-fixture', native() / 'libpublication-test-linked.so',
+                  '--node', node(), '--out', o / ('image-cancel-cache-miss-native-' + m),
+                  *(['--jitless'] if m == 'jitless' else [])),
+              needs=('image-attachment-' + cancel_mode,), timeout=60,
+              tests=[rt + name for name in ('image-cancel-cache-miss.py', 'image-cancel-cache-miss-native.mjs',
+                                            'image-cancel-cache-miss-fs.mjs', 'image-attachment-oracle.json')],
+              scope='Actual missing-cache I/O, abort before its original Promise resolves, no new cancelled native encode, original reason and immediate retry; explicit libuv contention/host SDK fixtures, no time bound')
     # Optional entries that would reach a real process past the OH subprocess backend.
     for name in ['forge-github-unavailable', 'liveshare-owner-unavailable', 'market-git-unavailable']:
         g.node_tests(name, [rt + name + '.test.mjs'], needs=('android-targets',))

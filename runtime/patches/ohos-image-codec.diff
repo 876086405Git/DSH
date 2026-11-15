@@ -165,7 +165,7 @@
  	const detected = await detectImage(image.data);
  	if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width !== image.width || detected.height !== image.height || detected.mediaType !== image.mediaType || !encodedAlphaIsCompatible(expectedAlpha, detected)) throw new AttachmentError("Encoded model-request image does not match its verified 8-bit sRGB metadata.", "ATTACHMENT_WRITE_FAILED");
  	return {
-@@ -906,19 +985,32 @@
+@@ -906,19 +985,33 @@
  * @returns verified request bytes and deterministic variant identity.
  */
  async function readRequestImageFile(root, attachment, target, signal) {
@@ -179,6 +179,7 @@
  	const path = cachePath(root, String(variantId).slice(7));
 -	const cached = await readCached(path, target, source.hasAlpha, signal);
 +	const cached = await readCached(path, target, source.hasAlpha, signal, variantId, owner);
++	if (process.platform === "openharmony") signal?.throwIfAborted();
  	const created = cached ?? await createRequestImage(attachment, target, source.hasAlpha);
  	const version = cached ?? (created.data === attachment.data ? {
  		...created,
@@ -200,7 +201,7 @@
  	return {
  		variantId,
  		attachment: attachment.ref,
-@@ -1064,6 +1156,14 @@
+@@ -1064,6 +1157,14 @@
  		if (!Number.isSafeInteger(compressionConcurrency) || compressionConcurrency < 1 || compressionConcurrency > 8) throw new Error(`attachment-local: imageCompressionConcurrency must be an integer from 1 through 8`);
  		this.imageCompressionConcurrency = compressionConcurrency;
  		this.compression = new CompressionLimiter(compressionConcurrency);
@@ -215,7 +216,7 @@
  	}
  	async validateImage(input) {
  		await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy));
-@@ -1102,8 +1202,14 @@
+@@ -1102,8 +1203,14 @@
  	}
  	requestVersion(ref, target, stored, signal) {
  		signal?.throwIfAborted();
@@ -232,7 +233,7 @@
  		let operation = this.requestInflight.get(key);
  		if (operation?.controller.signal.aborted) {
  			this.requestInflight.delete(key);
-@@ -1111,7 +1217,8 @@
+@@ -1111,7 +1218,8 @@
  		}
  		if (operation === void 0) {
  			const shared = new SharedRequest((sharedSignal) => this.compression.run(async () => {

@@ -16,10 +16,12 @@ const prefix = resolve(process.env.DSH_DISCOVERY_PREFIX);
 const source = await readFile(join(prefix, 'node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js'), 'utf8');
 const digest = createHash('sha256').update(source).digest('hex');
 // Upstream, the common chain (main's piai-discovery-response-cancel.diff now carries
-// the cleanup), and the reviewed OH attachment follow-up on top of it.
+// the cleanup), the reviewed OH attachment follow-up, and the OH empty-models
+// collection change. The latter leaves this discovery region byte-identical.
 assert(['1a3ae58f9b4493e15459cc5000ec80f21b5d3f4a9dea6ffb6bc28e5b8817ae8a',
         '71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa',
-        '083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a'].includes(digest), 'unreviewed adapter bytes');
+        '083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a',
+        '25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b'].includes(digest), 'unreviewed adapter bytes');
 const require = createRequire(join(prefix, 'package.json'));
 const {LlmError} = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href);
 const begin = 'const LISTABLE_PROTOCOLS = new Set([';

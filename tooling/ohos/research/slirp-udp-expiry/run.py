@@ -91,19 +91,33 @@ def main():
         assert len(product_objects) > 20 and '-DTEMU_EMBED' in product_flags and '-UNDEBUG' in product_flags
         record([built / 'BUILD.json', *product_objects])
         record([p for p in source.rglob('*') if p.suffix in ('.c', '.h')])
-        baseline = out / 'baseline-source'
-        # Backups are not compiler inputs. Keep the omission visible in the report.
+        # 0023 consumes the corrected UDP fields/clock and TCP pending state.
+        # Compare the target patch on a common pre-event-wait layer, while the
+        # separately named candidate-embed set still runs the full current chain.
+        comparison = out / 'comparison-source'
         report['uncompiledBackupsOmitted'] = [str(p.relative_to(source)) for p in source.rglob('*.orig')]
-        shutil.copytree(source, baseline, ignore=shutil.ignore_patterns('*.orig'))
-        run(out, 'reverse-only-0020', ['patch', '--fuzz=0', '-R', '-d', baseline, '-p1', '-i',
+        shutil.copytree(source, comparison, ignore=shutil.ignore_patterns('*.orig'))
+        comparison_reversed = ['0024-embedded-start-close-debt.patch', '0023-embedded-event-wait.patch']
+        for patch in comparison_reversed:
+            run(out, 'comparison-reverse-' + patch[:4], ['patch', '--fuzz=0', '-R', '-d', comparison,
+                '-p1', '-i', native / 'patches' / patch])
+        baseline = out / 'baseline-source'
+        shutil.copytree(comparison, baseline, ignore=shutil.ignore_patterns('*.orig'))
+        run(out, 'baseline-reverse-0020', ['patch', '--fuzz=0', '-R', '-d', baseline, '-p1', '-i',
                                      native / 'patches/0020-embedded-udp-expiry.patch'])
-        report['baselineMeaning'] = 'Current native source with only0020 reversed; all other patches identical'
-        changed = [p.relative_to(source).as_posix() for p in source.rglob('*')
-                   if p.suffix in ('.c', '.h') and sha(p) != sha(baseline / p.relative_to(source))]
-        assert sorted(changed) == ['slirp/misc.c', 'slirp/misc.h', 'slirp/slirp.c',
-                                   'slirp/socket.c', 'slirp/socket.h', 'slirp/udp.c']
-        report['onlyGeneratedSourceDifferences'] = sorted(changed)
-        record([p for p in baseline.rglob('*') if p.suffix in ('.c', '.h')])
+        changed = sorted(p.relative_to(comparison).as_posix() for p in comparison.rglob('*')
+                   if p.suffix in ('.c', '.h') and sha(p) != sha(baseline / p.relative_to(comparison)))
+        assert changed == ['slirp/misc.c', 'slirp/misc.h', 'slirp/slirp.c',
+                                   'slirp/socket.c', 'slirp/socket.h', 'slirp/udp.c'], changed
+        report['baselineMeaning'] = 'Common historical layer: current chain minus0024/0023, then only0020 reversed; full current candidate also executes separately'
+        report['comparisonReversedPatches'] = comparison_reversed
+        report['onlyTargetDifferencesBetweenCommonLayers'] = changed
+        report['fullCandidateVersusCommonLayerDifferences'] = sorted(p.relative_to(source).as_posix()
+            for p in source.rglob('*') if p.suffix in ('.c', '.h')
+            and sha(p) != sha(comparison / p.relative_to(source)))
+        assert report['fullCandidateVersusCommonLayerDifferences'] == [
+            'machine.h', 'riscv_machine.c', 'slirp/libslirp.h', 'slirp/slirp.c', 'temu.c', 'temu_embed.h']
+        record([p for root in [comparison, baseline] for p in root.rglob('*') if p.suffix in ('.c', '.h')])
 
         def flags_for(src, embedded):
             return [x.replace(str(source), str(src)) for x in product_flags if embedded or x != '-DTEMU_EMBED']
@@ -123,7 +137,8 @@ def main():
 
         sets = {}
         for label, src, embedded, reuse in [
-            ('baseline-embed', baseline, True, False), ('candidate-embed', source, True, True),
+            ('baseline-embed', baseline, True, False), ('comparison-embed', comparison, True, False),
+            ('candidate-embed', source, True, True),
             ('baseline-nonembed', baseline, False, False), ('candidate-nonembed', source, False, False),
         ]:
             folder, flags, objects = compile_slirp(label, src, embedded, reuse)
@@ -132,13 +147,15 @@ def main():
             rows = [json.loads(line) for line in result.stdout.splitlines()]
             assert len(rows) == 31 and len({x['case'] for x in rows}) == 31
             failures = {x['case'] for x in rows if not x['passed']}
-            expected_failures = set() if label == 'candidate-embed' else LEGACY_FAILURES
+            expected_failures = set() if label in ('comparison-embed', 'candidate-embed') else LEGACY_FAILURES
             passed = failures == expected_failures and result.returncode == int(bool(expected_failures))
             check = {'label': label, 'passed': passed, 'rows': rows, 'failedCases': sorted(failures),
                      'meaning': 'Corrected candidate31/31' if not expected_failures else 'Original11defects reproduced; not31green'}
             report['checks'].append(check); save(); assert passed, label
             sets[label] = (folder, flags, objects, rows)
             print(label, 'candidate31/31' if not failures else 'expected legacy11failures/31', flush=True)
+        assert sets['comparison-embed'][3] == sets['candidate-embed'][3]
+        report['fullCandidateAndCommonLayerExact31RowsEqual'] = True
         assert sets['baseline-nonembed'][3] == sets['candidate-nonembed'][3]
         report['nonembedExact31RowsEqual'] = True
 
@@ -154,7 +171,7 @@ def main():
         report['nonembedLayout'] = layouts
 
         first_polls = {}
-        for label in ['baseline-embed', 'candidate-embed']:
+        for label in ['baseline-embed', 'comparison-embed', 'candidate-embed']:
             folder, flags, slirp_objects, _ = sets[label]
             # Rebuild all slirp units against the matching private socket layout;
             # the unrelated machine objects come from the one fresh product build.

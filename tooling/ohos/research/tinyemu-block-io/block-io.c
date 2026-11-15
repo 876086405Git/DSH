@@ -6,6 +6,18 @@
 #include <sys/stat.h>
 #include "temu.c"
 #include "virtio.c"
+#include "slirp/libslirp.h"
+
+/* This block-only fixture starts no CPU/network. The full production temu.c
+   retains the slirp callback address for its event-wait identity check. Keep
+   the real header ABI, but fail if that unrelated callback is ever entered. */
+void slirp_select_fill(Slirp *slirp, int *pnfds,
+                       fd_set *readfds, fd_set *writefds, fd_set *xfds)
+{
+    (void)slirp; (void)pnfds; (void)readfds; (void)writefds; (void)xfds;
+    fputs("unexpected slirp_select_fill in block-only fixture\n", stderr);
+    abort();
+}
 
 static uint8_t ram[32768];
 static int irq_level;
