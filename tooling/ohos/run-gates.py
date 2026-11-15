@@ -36,6 +36,9 @@ FLUTTER_L10N_OUTPUTS = {
 # These existing controllers hide node:test output in their declared files.
 # Inspect only this explicit contract, never unrelated logs under the output.
 WRAPPED_TEST_LOGS = {
+    'linux-creation-retirement': ['linux-creation-retirement/test.log'],
+    'tinyemu-event-wake': ['tinyemu-event-wake/test.log'],
+    'linux-startup-close': ['linux-startup-close/test.log'],
     'speech-channel-*': ['{name}/test.log'],
     'git-*': ['{name}/stdout.log'], 'owned-*': ['{name}/stdout.log'],
     'native-files': ['native-files/logic.log'], 'pdf': ['pdf/logic.log'],
@@ -45,6 +48,7 @@ WRAPPED_TEST_LOGS = {
     'composition-process-matrix': ['composition-process-matrix/jit.log', 'composition-process-matrix/strict.log'],
     'pcm-stream-native': ['pcm-stream-native/plain.log', 'pcm-stream-native/jitless.log'],
     'attachment-cache-proof-native-*': ['{name}/test.log'],
+    'image-file-storage-native-*': ['{name}/test.log'],
 }
 
 
@@ -1088,6 +1092,9 @@ def main():
     g.node_tests('python-backend', [rt + 'python-backend.test.mjs'], needs=('tools',))
     g.run('python-native', lambda: g.py(rt + 'python-native.py', '--node-headers', p('node_source') / 'src', '--output', o / 'python-native'), needs=('tools',), timeout=120, tests=[rt + 'python-native.test.cjs', rt + 'python-host.test.mjs'], scope='Actual host libpython Node-API probe; streamed text output, cooperative cancellation, no device claim')
     g.run('tinyemu-console-ready', lambda: g.py('tooling/ohos/research/tinyemu-console-ready/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--cc', p('cc'), '--out', o / 'tinyemu-console-ready'), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-console-ready/' + name for name in ['run.py', 'console-ready.c']], scope='Actual product loop, slirp UDP reply and initialized VirtIO console; explicit CPU packet/ring/IRQ fixtures, diagnostic old/new and normal candidate controls; no guest instructions, SDK/device or performance claim')
+    g.run('tinyemu-event-wake', lambda: g.py(rt + 'tinyemu-event-wake/run.py', '--source', s, '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--cc', p('cc'), '--node', node(), '--out', o / 'tinyemu-event-wake'), needs=('native-tools',), timeout=300, tests=[rt + 'tinyemu-event-wake/' + name for name in ['run.py', 'component.py', 'wake-call.c', 'wake-boundary.c', 'wake-loop-bridge.c', 'slirp-deadline.c', 'owner-fault.c', 'owner-case.mjs', 'lifecycle-case.mjs', 'adoption-case.mjs']], scope='Actual C deadlines/socket waits and Node owner stop/join/FD/GC faults; explicit link fault seams; no device, finite scheduler or blocking disk bound')
+    g.run('linux-startup-close', lambda: g.py(rt + 'linux-startup-close/run.py', '--source', s, '--native-run', o / 'tinyemu-event-wake/RUN.json', '--node', node(), '--cc', p('cc'), '--publication', native() / 'libpublication-test-linked.so', '--out', o / 'linux-startup-close'), needs=('tinyemu-event-wake', 'prepared-inputs', 'native-publication-build'), timeout=120, tests=[rt + 'linux-startup-close/' + name for name in ['run.py', 'close-fault.c', 'native-case.mjs', 'owner-case.mjs', 'partial-start.mjs']], scope='Actual drive-open/fseek/ftello rollback and native join, real Owner/Control/files/flock; explicit per-library syscall/configuration faults; no guest instructions, SDK/device or full teardown')
+    g.run('linux-creation-retirement', lambda: g.py(rt + 'linux-creation-retirement.py', '--source', s, '--native-run', o / 'tinyemu-event-wake/RUN.json', '--node', node(), '--publication', native() / 'libpublication-test-linked.so', '--out', o / 'linux-creation-retirement'), needs=('tinyemu-event-wake', 'prepared-inputs', 'native-publication-build'), timeout=90, tests=[rt + 'linux-creation-retirement.py', rt + 'linux-creation-retirement.test.mjs'], scope='Actual NAPI constructor and Owner/Control/files/flock with existing pthread/close fault DSO; no VM body, new compile or device')
     g.run('tinyemu-retire', lambda: g.py('tooling/ohos/research/tinyemu-retire/run.py', '--source-archive', p('tinyemu_source_archive'), '--diskimage', p('tinyemu_diskimage_archive'), '--alpine', p('tinyemu_alpine_archive'), '--output', o / 'tinyemu-retire', '--cc', p('cc')), needs=('tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-retire/' + name for name in ['run.py', 'build-image.py', 'install-call.c', 'retire-call.c', 'fault-wrap.c', 'semantic-core.c', 'clock-cpu.c']], scope='Real owned disk FD retirement including flush/close failures and Linux install; VM remains quarantined; no HAP/device')
     g.node_tests('spawn-boundary', [rt + 'child-process-boundary.test.mjs'], needs=('tools',))
     for mode in ['jit', 'strict']:
@@ -1106,6 +1113,9 @@ def main():
                      mode=mode, needs=('prepared-inputs',))
         g.node_tests('linux-guest-environment-' + mode, [rt + 'linux-guest-environment.test.mjs'],
                      mode=mode, needs=('prepared-inputs',))
+        g.node_tests('linux-wake-retirement-' + mode, [rt + 'linux-wake-retirement.test.mjs'],
+                     mode=mode, needs=('prepared-inputs', 'android-targets', 'native-publication-build'),
+                     extra=linked_env, timeout=60)
         g.node_tests('linux-app-control-' + mode,
                      [rt + 'linux-control-entry.test.mjs', rt + 'linux-owner-control.test.mjs', rt + 'linux-control.test.mjs', rt + 'linux-control-persistence.test.mjs', rt + 'linux-instance.test.mjs', rt + 'linux-proxy-control.test.mjs', rt + 'linux-ram-retirement.test.mjs'],
                      mode=mode, needs=('prepared-inputs', 'android-targets', 'native-publication-build'),
@@ -1162,6 +1172,10 @@ def main():
         g.node_tests('plugin-store-recovery-' + mode, [rt + 'plugin-store.test.mjs', rt + 'plugin-linkless-recovery.test.mjs'], mode=mode, needs=('prepared-inputs',))
     g.node_tests('provider-body-timeout', [rt + 'provider-body-timeout.test.mjs'], needs=('android-targets',))
     for mode in ['plain', 'jitless']:
+        g.node_tests('piai-empty-models-' + mode, [rt + 'piai-empty-models.test.mjs'],
+                     mode=mode, imports=(rt + 'piai-empty-models-network.mjs',),
+                     needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
+    for mode in ['plain', 'jitless']:
         g.node_tests('skill-root-events-' + mode,
                      [rt + 'skill-root-events.test.mjs', rt + 'skill-root-events-fault.test.mjs', 'runtime/tests/skill-watcher-recheck.test.mjs'],
                      mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
@@ -1198,6 +1212,18 @@ def main():
               tests=[rt + name for name in ('attachment-cache-proof.py', 'attachment-cache-proof-native.mjs',
                                             'image-attachment-oracle.json')],
               scope='Actual image pipeline conversion counts, current bytes, owners and one-proof eviction; reuse the prior exact host SDK library, no new ABI or device claim')
+    for storage_mode in ('plain', 'jitless'):
+        g.run('image-file-storage-native-' + storage_mode,
+              lambda m=storage_mode: g.py(rt + 'image-file-storage.py',
+                  '--source', s, '--prefix', o / ('image-attachment-' + m) / 'view',
+                  '--native-library-dir', o / ('image-attachment-' + m) / 'native',
+                  '--publication-fixture', native() / 'libpublication-test-linked.so',
+                  '--node', node(), '--out', o / ('image-file-storage-native-' + m),
+                  *(['--jitless'] if m == 'jitless' else [])),
+              needs=('image-attachment-' + storage_mode,), timeout=60,
+              tests=[rt + name for name in ('image-file-storage.py', 'image-file-storage-native.mjs',
+                                            'image-file-storage-observer.mjs', 'image-attachment-oracle.json')],
+              scope='Actual fs allocation identity, plain Uint8Array public shape/transfer, short/growing/empty reads and unchanged codec snapshot; prior explicit host SDK fixture, no resident-memory or device claim')
     # Optional entries that would reach a real process past the OH subprocess backend.
     for name in ['forge-github-unavailable', 'liveshare-owner-unavailable', 'market-git-unavailable']:
         g.node_tests(name, [rt + name + '.test.mjs'], needs=('android-targets',))

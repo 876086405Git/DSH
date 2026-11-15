@@ -1,0 +1,65 @@
+diff --git a/temu.c b/temu.c
+--- a/temu.c
++++ b/temu.c
+@@ -441,6 +441,16 @@
+     return ret;
+ }
+ 
++#ifdef TEMU_EMBED
++static _Thread_local int embed_start_close_failed;
++static void block_device_start_close(FILE *f)
++{
++    if (fclose(f) != 0) embed_start_close_failed = 1;
++}
++#else
++#define block_device_start_close fclose
++#endif
++
+ static BlockDevice *block_device_try_init(const char *filename,
+                                           BlockDeviceModeEnum mode)
+ {
+@@ -463,7 +473,7 @@
+     }
+     if (fseek(f, 0, SEEK_END) != 0) {
+         int error = errno;
+-        fclose(f);
++        block_device_start_close(f);
+         errno = error;
+         perror(filename);
+         return NULL;
+@@ -471,7 +481,7 @@
+     file_size = ftello(f);
+     if (file_size < 0) {
+         int error = errno;
+-        fclose(f);
++        block_device_start_close(f);
+         errno = error;
+         perror(filename);
+         return NULL;
+@@ -534,7 +544,7 @@
+     if (!bs)
+         return;
+     bf = bs->opaque;
+-    fclose(bf->f);
++    block_device_start_close(bf->f);
+     if (bf->sector_table) {
+         for(i = 0; i < bf->nb_sectors; i++)
+             free(bf->sector_table[i]);
+@@ -1123,6 +1133,7 @@
+     VirtMachineParams p_s, *p = &p_s;
+     int i;
+ 
++    embed_start_close_failed = 0;
+     virt_machine_set_defaults(p);
+     if (virt_machine_load_config_file_local(p, path) < 0)
+         return TEMU_EMBED_RETRYABLE_START_FAILURE;
+@@ -1204,7 +1215,8 @@
+             block_device_file_close(p->tab_drive[--i].block_dev);
+         virt_machine_free_config(p);
+         errno = error;
+-        return TEMU_EMBED_RETRYABLE_START_FAILURE;
++        return embed_start_close_failed ? TEMU_EMBED_RETIRE_FAILED_UNRELEASED
++                                        : TEMU_EMBED_RETRYABLE_START_FAILURE;
+     }
+ }
+ 

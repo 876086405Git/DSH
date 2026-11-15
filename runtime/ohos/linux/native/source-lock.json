@@ -4,7 +4,7 @@
   "files": {
     "CMakeLists.txt": "9903e25f31d9753d9ed5e447ffde86b664d42c824eff50ecfdeedc66678b6f4e",
     "THIRD-PARTY-NOTICES.txt": "8aa05a2e0e64c199f75b5f96d694b1de3b27a2b1b81ab2f6dba3b8ce661f3c99",
-    "binding.c": "069cf12e0c5627672f9e60624653e008e07d682f952ff714a54e86fd4f711bab",
+    "binding.c": "d5a90eac315bbc654ce3767596aba09e525f3def27119344978af2f2404d32b9",
     "embed-fatal.c": "15d366e8861f2bb993ac46025a83708a51193ad28c2d60a4d24ad7eba9c209b1",
     "embed-fatal.h": "29e7bdadd307c17ccbd8d171ee72d797e1af1a914405ee43affe4f37d1c71b62",
     "patches/0001-embed.patch": "c5b8fd3f6e0a9af8fb0f5821875bfa4966a562bf98e563a1622a1dcc94d7f74d",
@@ -20,7 +20,7 @@
     "patches/0011-controlled-drive-retire.patch": "78025a679ec6216c191661c38331dd9b584b2b69ae88d940f52ed7c731ce5d03",
     "patches/0012-embedded-fatal-boundary.patch": "1a7d9bc99285a409faa0961699542da0e71049d86bde4cc98a08b80ed79b85d6",
     "patches/0013-embedded-network-nosigpipe.patch": "439769b843ee36fe1a1753ee842470a74556a23b849c7be6b87cb2a307e42e3a",
-    "temu_embed.h": "e6b6da718dd459cee79733c854c3b2a1d55fae2956c9030c7806a7d2dc733485",
+    "temu_embed.h": "9bc744e17baf3c57b9bd6d2970a7b43416219a52e3225a1ba152890a83fc65e0",
     "patches/0014-grant-fid-decoder.patch": "c356a51798380a59267621884e096e0e7de36b727b3915eb282ff2b868906d27",
     "patches/0015-block-write-errors.patch": "e6644b787e29c98caeab49b0911a88f88ab120c290dcaf07383c7e228f83d66d",
     "fs_export.c": "4ebc81e80db33f47daa7677ab84ae50bcff90411f490842602a4bdde9804f6f9",
@@ -33,6 +33,8 @@
     "patches/0019-embedded-riscv-sleep-micros.patch": "23de511e7358653d1e0fac7a40767320dc4e418f40e63c7b41893fc60b1923a4",
     "patches/0020-embedded-udp-expiry.patch": "dd9dff1328c5e3b28f9847bd3aed94c8575e5f1f69cf42e21ac19acd61fb3844",
     "patches/0021-embedded-fasttimo-zero.patch": "885ee34234818adc7865c4c7df3c916205ffdb1254de82345aa70aa96c568b9a",
-    "patches/0022-console-input-ready.patch": "7fd05336bcbe005b519bbfe13b0ffbe64e271c743fd1420943fda014b835fb04"
+    "patches/0022-console-input-ready.patch": "7fd05336bcbe005b519bbfe13b0ffbe64e271c743fd1420943fda014b835fb04",
+    "patches/0023-embedded-event-wait.patch": "5f72d3a92a14b0d9ab5bea9cbe01221fcb38371e3c057c05a97dd783266a7eab",
+    "patches/0024-embedded-start-close-debt.patch": "57ab029a8d10537a2bc6129496f6ea87c3bc2f89ae6e4b6202c32d9c1d720159"
   }
 }

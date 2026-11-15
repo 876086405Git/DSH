@@ -29,6 +29,17 @@ const noOwner = () => ({ resourcesRetired: true, filesRemoved: true, dataRetaine
 function nativeRetirement(native) {
   if (!native) return null;
   const result = { joined: native.joined === true, retirementError: native.retirementError, apiResult: native.apiResult };
+  for (const key of ['joinAttempted', 'joinError', 'waitError']) if (Object.hasOwn(native, key)) result[key] = native[key];
+  if (Object.hasOwn(native, 'stopNotification')) {
+    const wake = native.stopNotification;
+    result.stopNotification = plain(wake) ? { attempted: wake.attempted === true, notified: wake.notified === true,
+      unnecessary: wake.unnecessary === true, errorCode: wake.errorCode } : null;
+  }
+  if (Object.hasOwn(native, 'fdRetirement')) {
+    const fds = native.fdRetirement;
+    result.fdRetirement = plain(fds) ? { retired: fds.retired === true, consoleError: fds.consoleError,
+      wakeReadError: fds.wakeReadError, wakeWriteError: fds.wakeWriteError } : null;
+  }
   if (Object.hasOwn(native, 'ramRetirement')) {
     const ram = native.ramRetirement;
     result.ramRetirement = plain(ram) ? { eligible: ram.eligible === true, attempted: ram.attempted === true,

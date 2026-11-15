@@ -24,7 +24,12 @@ export function loadLinuxNative({ nativeLibraryDirectory }) {
         }
         finally { owner.requestStop(); }
         // Caller must observe this explicit join rather than lose the owner.
-        cause.linuxJoin = owner.join(); throw cause;
+        try { cause.linuxJoin = owner.join(); }
+        catch (joinError) {
+          cause.linuxJoin = Promise.reject(joinError);
+          cause.linuxJoin.catch(() => {});
+        }
+        throw cause;
       }
       return Object.freeze({
         socket,

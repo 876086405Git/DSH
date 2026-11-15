@@ -20,7 +20,8 @@ export function cleanGuestClose(value, epoch) {
   return exact(value, ['epoch', 'rootfsSync', 'syncMethod', 'syncScope']) && value.epoch === epoch &&
     value.rootfsSync === true && value.syncMethod === 'syncfs' && value.syncScope === 'rootfs';
 }
-const cleanNative = value => value?.joined === true && value.retirementError === false && [-3, -4].includes(value.apiResult);
+const cleanNative = value => value?.joined === true && value.retirementError === false && [-3, -4].includes(value.apiResult) &&
+  (value.fdRetirement === undefined || value.fdRetirement?.retired === true);
 
 function assetIdentity(manifest) {
   const roles = {};

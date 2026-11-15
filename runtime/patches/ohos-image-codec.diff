@@ -81,7 +81,30 @@
  	if (canPassThroughNormalization(detected, data.byteLength, policy)) return {
  		data,
  		mediaType: detected.mediaType,
-@@ -804,6 +857,14 @@
+@@ -626,6 +679,13 @@
+ async function saveImageFile(root, input, limits, policy) {
+ 	return commitPreparedImageFile(root, await prepareImageFile(input, limits, policy));
+ }
++// fs.readFile owns its completed, closed-file result. Keep the public plain
++// Uint8Array shape without duplicating a complete private backing allocation.
++// Short/unknown-size reads can be pooled subviews; retain their exact-sized copy.
++function imageFileBytes(buffer) {
++	if (process.platform === "openharmony" && buffer.byteLength === buffer.buffer.byteLength) return new Uint8Array(buffer.buffer);
++	return new Uint8Array(buffer);
++}
+ /**
+ * Read and verify one content-addressed image.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+@@ -639,7 +699,7 @@
+ 	const sha256 = ensureReference(ref);
+ 	let data;
+ 	try {
+-		data = new Uint8Array(await readFile(normalizedImagePath(root, ref), { signal }));
++		data = imageFileBytes(await readFile(normalizedImagePath(root, ref), { signal }));
+ 	} catch (error) {
+ 		signal?.throwIfAborted();
+ 		if (error instanceof Error && "code" in error && error.code === "ENOENT") throw new AttachmentError("Attachment object is missing.", "ATTACHMENT_NOT_FOUND");
+@@ -804,6 +864,14 @@
  	checkedInteger(target.maxBytes, "Image request maxBytes");
  }
  function descriptor(attachment, target) {
@@ -96,7 +119,7 @@
  	return JSON.stringify({
  		transformVersion: REQUEST_IMAGE_TRANSFORM_VERSION,
  		attachmentId: attachment.attachmentId,
-@@ -843,6 +904,7 @@
+@@ -843,6 +911,7 @@
  	}).toColourspace("srgb");
  }
  async function createRequestImage(attachment, target, hasAlpha) {
@@ -104,14 +127,16 @@
  	if (target.width >= attachment.ref.width && target.height >= attachment.ref.height && attachment.data.byteLength <= target.maxBytes) return {
  		data: attachment.data,
  		mediaType: attachment.ref.mediaType,
-@@ -855,11 +917,15 @@
+@@ -855,11 +924,15 @@
  function cachePath(root, hash) {
  	return join(root, "request-images", hash.slice(0, 2), hash);
  }
 -async function readCached(path, target, expectedAlpha, signal) {
+-	try {
+-		const data = new Uint8Array(await readFile(path, { signal }));
 +async function readCached(path, target, expectedAlpha, signal, variantId, owner) {
- 	try {
- 		const data = new Uint8Array(await readFile(path, { signal }));
++	try {
++		const data = imageFileBytes(await readFile(path, { signal }));
  		const detected = await probeImage(data);
 -		if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width > target.width || detected.height > target.height || !encodedAlphaIsCompatible(expectedAlpha, detected)) return void 0;
 +		const proof = owner?.active && ohosCacheProof?.owner === owner ? ohosCacheProof : void 0;
@@ -122,7 +147,7 @@
  		return {
  			data,
  			mediaType: detected.mediaType,
-@@ -869,11 +935,17 @@
+@@ -869,11 +942,17 @@
  		};
  	} catch (error) {
  		if (error?.code === "ENOENT") return void 0;
@@ -140,7 +165,7 @@
  	const detected = await detectImage(image.data);
  	if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width !== image.width || detected.height !== image.height || detected.mediaType !== image.mediaType || !encodedAlphaIsCompatible(expectedAlpha, detected)) throw new AttachmentError("Encoded model-request image does not match its verified 8-bit sRGB metadata.", "ATTACHMENT_WRITE_FAILED");
  	return {
-@@ -906,19 +978,32 @@
+@@ -906,19 +985,32 @@
  * @returns verified request bytes and deterministic variant identity.
  */
  async function readRequestImageFile(root, attachment, target, signal) {
@@ -175,7 +200,7 @@
  	return {
  		variantId,
  		attachment: attachment.ref,
-@@ -1064,6 +1149,14 @@
+@@ -1064,6 +1156,14 @@
  		if (!Number.isSafeInteger(compressionConcurrency) || compressionConcurrency < 1 || compressionConcurrency > 8) throw new Error(`attachment-local: imageCompressionConcurrency must be an integer from 1 through 8`);
  		this.imageCompressionConcurrency = compressionConcurrency;
  		this.compression = new CompressionLimiter(compressionConcurrency);
@@ -190,7 +215,7 @@
  	}
  	async validateImage(input) {
  		await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy));
-@@ -1102,8 +1195,14 @@
+@@ -1102,8 +1202,14 @@
  	}
  	requestVersion(ref, target, stored, signal) {
  		signal?.throwIfAborted();
@@ -207,7 +232,7 @@
  		let operation = this.requestInflight.get(key);
  		if (operation?.controller.signal.aborted) {
  			this.requestInflight.delete(key);
-@@ -1111,7 +1210,8 @@
+@@ -1111,7 +1217,8 @@
  		}
  		if (operation === void 0) {
  			const shared = new SharedRequest((sharedSignal) => this.compression.run(async () => {

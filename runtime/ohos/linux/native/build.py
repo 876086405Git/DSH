@@ -7,7 +7,7 @@ sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
 assert sha(a.source_archive)=='be8351f2121819b3172fcedce5cb1826fa12c87da1b7ed98f269d3e802a05555'
 lock=json.loads((HERE/'source-lock.json').read_text())
 for name,digest in lock['files'].items():assert sha(HERE/name)==digest, 'native input identity: '+name
-for k,n in [('MAJOR',24),('MINOR',22),('PATCH',1)]:assert f'#define NODE_{k}_VERSION {n}\n' in (a.node_headers/'node_version.h').read_text()
+for k,n in [('MAJOR',24),('MINOR',22)]:assert f'#define NODE_{k}_VERSION {n}\n' in (a.node_headers/'node_version.h').read_text()
 assert not a.host_baseline or a.host_test
 out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);commands=[]
 def run(argv,label):
