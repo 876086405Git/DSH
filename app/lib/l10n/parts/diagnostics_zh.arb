@@ -4,7 +4,7 @@
   "automaticDiagnosticsTitle": "自动故障分析",
   "automaticDiagnosticsHint": "默认关闭 · 仅本机、前台且引擎可用时发送；同版本同类故障 24 小时内合并。关闭后停止新请求，已发送信息无法撤回。",
   "automaticDiagnosticsConsentTitle": "开启自动故障分析？",
-  "automaticDiagnosticsConsent": "发生故障时，App 会将脱敏的版本、Android 系统信息、运行时状态、错误类别、语音阶段及自身进程退出原因，发送给当前本机引擎配置的模型服务商，可能产生模型费用。不含聊天正文、录音、凭据或原始日志。报告保存在独立的只读分析对话，不自动切换当前对话，不自动执行修复或向 GitHub 外发。关闭或切换主机后不再发起新分析，并尝试停止已有分析；已发送的信息无法撤回。",
+  "automaticDiagnosticsConsent": "发生故障时，App 会将脱敏的版本、设备与系统信息、运行时状态、错误类别、语音阶段及自身进程退出原因，发送给当前本机引擎配置的模型服务商，可能产生模型费用。不含聊天正文、录音、凭据或原始日志。报告保存在独立的只读分析对话，不自动切换当前对话，不自动执行修复或向 GitHub 外发。关闭或切换主机后不再发起新分析，并尝试停止已有分析；已发送的信息无法撤回。",
   "automaticDiagnosticsEnable": "同意并开启",
   "automaticDiagnosticsOff": "已关闭",
   "automaticDiagnosticsWaiting": "等待本机连接、前台与引擎可用",

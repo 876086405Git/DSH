@@ -4,7 +4,7 @@
   "automaticDiagnosticsTitle": "Automatic failure analysis",
   "automaticDiagnosticsHint": "Off by default. Local, foreground and engine-ready only. Same-version failures are merged for 24 hours. Disabling stops new requests; sent data cannot be retracted.",
   "automaticDiagnosticsConsentTitle": "Enable automatic failure analysis?",
-  "automaticDiagnosticsConsent": "On a failure, the app sends redacted versions, Android system facts, runtime state, error categories, voice stages and its own process exit reasons to the model provider configured on your local engine. Model charges may apply. No chat text, recordings, credentials or raw logs are included. Reports stay in a separate read-only analysis conversation without changing your current chat. No automatic repairs or GitHub publication. Disabling or switching hosts blocks new analyses and attempts to stop existing analysis; data already sent cannot be retracted.",
+  "automaticDiagnosticsConsent": "On a failure, the app sends redacted versions, device and system facts, runtime state, error categories, voice stages and its own process exit reasons to the model provider configured on your local engine. Model charges may apply. No chat text, recordings, credentials or raw logs are included. Reports stay in a separate read-only analysis conversation without changing your current chat. No automatic repairs or GitHub publication. Disabling or switching hosts blocks new analyses and attempts to stop existing analysis; data already sent cannot be retracted.",
   "automaticDiagnosticsEnable": "Agree and enable",
   "automaticDiagnosticsOff": "Off",
   "automaticDiagnosticsWaiting": "Waiting for a local connection, foreground and ready engine",
