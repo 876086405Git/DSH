@@ -19,7 +19,7 @@ node tooling/ohos/linux-device-measure.mjs \
 
 客户端只接受 `http://127.0.0.1:1..65535`，可有一个尾部斜线；不接受localhost、IPv6、用户名、路径、query或其他目标。它按已有 `/?token=...` → 303 / `dsh-auth-*` cookie流程登录，随后只访问精确控制route。不跟随重定向；TCP连接固定为所选loopback端口，宿主代理环境不能改变目的地。token、cookie、显式guest env和完整请求body都不写证据或console。
 
-默认顺序为启用、轮询真实progress/opened、固定工具版本和功能检查、空仓库本地clone、受控长任务取消、最终shutdown。只有状态中的真实退休条件成立才记 `shutdownConfirmed:true`；客户端不调用nativeStop，不把HTTP成功、202、断连或Node退出当作native joined。
+默认顺序为启用、轮询真实progress/opened、固定工具版本和功能检查、空仓库本地clone、受控长任务取消、最终shutdown。只有状态中的真实退休条件成立才记 `shutdownConfirmed:true`；客户端不调用nativeStop，不把HTTP成功、202、断连或Node退出当作native joined。 当前普通 off 会进入最终 shutdown/join；取消后的 `stopped` 只有满足同一 `retirementConfirmed` 条件才接受，随后显式 shutdown 复核同 owner 的完成状态。旧服务的 `disabled` 仍只表示取消后关闭 admission，最后仍必须确认真实退休；不能把这个兼容分支用作 join 证明。
 
 ## 显式代理配置
 
@@ -150,7 +150,7 @@ node tooling/ohos/linux-device-measure.mjs \
 
 UNKNOWN保留outcome=null；UNKNOWN的历史作业可以与后来确认的native退休同时存在。`filesRemoved:false`、`dataRetained:true`与资源已退役可以同时成立。默认模式只核原native退休；两段witness模式另核同步closed、持久clean和恢复，不混为一个布尔。
 
-`job.diagnostic` 是stderr所报告的DNS/连接/TLS中断/证书类别或unknown，中文按固定枚举重建，不透传服务端任意message。它只允许已settled、未取消、非signal的普通非零退出；不改变原exitCode/signal/cancelled，也不能证明是谁中断网络。`nativeMemoryRelease:'process-exit'` 表示VM原生内存当前仍须整个App进程退出后回收；普通off/on复用同一个VM，最终shutdown的join并不等于heap释放。null或旧v1缺字段表示没有这个事实，绝不等于零内存或已释放；CLI不从PSS差值估算VM字节数。
+`job.diagnostic` 是stderr所报告的DNS/连接/TLS中断/证书类别或unknown，中文按固定枚举重建，不透传服务端任意message。它只允许已settled、未取消、非signal的普通非零退出；不改变原exitCode/signal/cancelled，也不能证明是谁中断网络。`nativeMemoryRelease:'process-exit'` 表示保留的VM原生对象仍须整个App进程退出后回收。当前普通off也走最终shutdown/join，同一App进程不能再启该VM；受控join后主RAM内部整页可以执行advice，但join不等于全部heap释放，advised字节也不等于实际RSS/PSS回收。null或旧v1缺字段表示没有这个事实，绝不等于零内存或已释放；CLI不从PSS差值估算VM字节数。
 
 退出0可能是 `PASS_LOCAL_ONLY`、只启用一个外部选项的 `PASS_PARTIAL_SCOPE`、两选项都启用的 `PASS_SCOPED`，或只读取状态的 `OBSERVED_ONLY`；必须结合逐项NOT_RUN和scope读取。真实内容/退出码不符为FAIL、退出1。未确认、UNKNOWN、协议/网络错误为INCOMPLETE/UNKNOWN、退出2；收到SIGINT/SIGTERM后仍尝试同owner收尾，退出130。客户端或网络/存储中断不是资源已回收的证明，不要重新跑整套命令去猜结果。
 
@@ -167,6 +167,6 @@ node tooling/ohos/linux-device-measure.mjs \
 
 ## 已做与未做
 
-宿主定向测试：`node --test tooling/ohos/tests/linux-device-measure.test.mjs`，仍登记统一门 `linux-device-measure`。原12项场景延续；其中精确非UTF8 tail断言移至本CLI已202确认的job，历史job只读观察按新保密合同改为省略。新增14项覆盖931字段、代理幂等重试、sticky输出省略、env-file保密、历史代理job与失响应、proxy矛盾值拒绝、配置前异主job、两CLI进程的write/read协议、clean/identity/epoch拒绝、固定见证不得覆盖及只读参数约束，合计26项通过。HTTP控制服务和guest输出是显式替身；两CLI进程不是两台或两次真实guest。测试不调用git/gh、不运行VM、不登录账号，不能替代本机执行上面的命令。此前decoder丢失931持久UUID，以及后续独审发现的proxy无效值接受、历史代理输出落盘反例，均已用实际调用先红后绿。
+宿主定向测试：`node --test tooling/ohos/tests/linux-device-measure.test.mjs`，仍登记统一门 `linux-device-measure`。原12项场景延续；其中精确非UTF8 tail断言移至本CLI已202确认的job，历史job只读观察按新保密合同改为省略。新增14项覆盖931字段、代理幂等重试、sticky输出省略、env-file保密、历史代理job与失响应、proxy矛盾值拒绝、配置前异主job、两CLI进程的write/read协议、clean/identity/epoch拒绝、固定见证不得覆盖及只读参数约束，原26项的历史通过范围不变。1289另加普通off已真实报告退休与join未确认两项兼容检查；最终结果以该版本的实际执行记录为准。HTTP控制服务和guest输出是显式替身；两CLI进程不是两台或两次真实guest。测试不调用git/gh、不运行VM、不登录账号，不能替代本机执行上面的命令。此前decoder丢失931持久UUID，以及后续独审发现的proxy无效值接受、历史代理输出落盘反例，均已用实际调用先红后绿。
 
 历史930另以CLI SHA256 `72bd2e4840e84a2415822cc736206132b49113368364798aa5e455a995a987c5` 接真实BrowserAuth/HTTP/control/owner/backend/native/guest，默认套件8项PASS、2项显式NOT_RUN，整体66.643秒。测得本表锁定版本、stdin搜索、空库clone及取消；实际结局为cancelled=true、requestedSignal=SIGTERM、signal=SIGKILL。生产端在harness后续清理前已核native joined、数据FD为0和发布盘保留，与CLI的shutdownConfirmed一致。该流程仅下载传输使用已核本地归档替身，不证明华为源网络、手机、SDK、远程clone或账号。原始SUMMARY SHA256 `667e090c67db50e39a379c06eab18145b17431e4139f9c422d87d38b765aa915`，完整producer与CLI证据随930交付归档提供。它是旧版历史结果，不能替代本次931新增代理与两App测量路径的最终组合验证和手机复跑。

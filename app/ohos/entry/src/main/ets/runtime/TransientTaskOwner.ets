@@ -3,6 +3,7 @@ import { ContinuousTaskOwner } from './ContinuousTaskOwner';
 import backgroundTaskManager from '@ohos.resourceschedule.backgroundTaskManager';
 import { NativeHostModule } from './NativeHost';
 import { HostLifecycleAck } from './RuntimeLifecycle';
+import type { HostLifecycleSnapshot } from 'libdsh_host.so';
 
 // Allow the one-second refresh cycle plus bounded ACK/scheduling delay.
 const ACTIVITY_WINDOW_MS: number = 3000;
@@ -27,6 +28,7 @@ export class TransientTaskOwner {
   private activityBusy: boolean = false;
   private requestedAt: number = -1;
   private awaitingActivity: boolean = false;
+  private idleAccepted: boolean = false;
   private cleanup: number[] = [];
   private cleanupAttempts: Map<number, number> = new Map<number, number>();
   private failure: string | null = null;
@@ -51,7 +53,7 @@ export class TransientTaskOwner {
     const before = this.host.lifecycleSnapshot();
     const freshBusy = this.activityBusy && this.activityRevision === before.revision &&
       before.available === 1 && before.nowMs >= this.activityAt && before.nowMs - this.activityAt <= ACTIVITY_WINDOW_MS;
-    this.foreground = foreground;
+    this.foreground = foreground; this.idleAccepted = false;
     // Synchronous shared native state changes before any OS cancellation.
     this.host.lifecycleUpdate('foreground', this.owner, 0, foreground ? 1 : 0);
     this.release(); this.activityBusy = false;
@@ -98,11 +100,13 @@ export class TransientTaskOwner {
   }
 
   private receive(ack: HostLifecycleAck): void {
+    this.idleAccepted = false;
     if (this.retired || ack === undefined || ack.nativeHost === null) return;
     const native = ack.nativeHost;
     const current = this.host.lifecycleSnapshot();
     if (native.engineGeneration !== current.engineGeneration || native.ownerGeneration !== this.owner ||
         native.revision !== current.revision || current.available !== 1 || current.clockFailed !== 0) return;
+    this.idleAccepted = !ack.busy;
     if (this.continuous?.active() === true && (!ack.busy || ack.manualPaused)) this.release();
     if (this.foreground) {
       this.activityAt = native.nowMs; this.activityRevision = native.revision;
@@ -132,7 +136,7 @@ export class TransientTaskOwner {
 
   retire(): void {
     if (this.retired) return;
-    this.retired = true; this.awaitingActivity = false;
+    this.retired = true; this.awaitingActivity = false; this.idleAccepted = false;
     try { this.host.lifecycleUpdate('retire', this.owner, 0, 0); }
     catch (_) { this.failure = 'ohos_transient_native_failed'; }
     this.release();
@@ -156,6 +160,16 @@ export class TransientTaskOwner {
   }
 
   cleanupPending(): boolean { return this.cleanup.length > 0 || this.continuous?.cleanupPending() === true; }
+
+  canPausePolling(): boolean {
+    if (this.retired || this.foreground || !this.idleAccepted || this.awaitingActivity || this.grant !== 0 ||
+        this.continuous?.active() === true || this.cleanupPending()) return false;
+    try {
+      const current: HostLifecycleSnapshot = this.host.lifecycleSnapshot();
+      return current.ownerGeneration === this.owner && current.available === 1 && current.clockFailed === 0 &&
+        current.foreground === 0 && (current.phase === 0 || current.phase === 4);
+    } catch (_) { return false; }
+  }
 
   private retryableCleanup(): boolean {
     return this.cleanup.some((id: number): boolean => (this.cleanupAttempts.get(id) ?? 0) < 3);

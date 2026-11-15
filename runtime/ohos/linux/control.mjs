@@ -97,6 +97,15 @@ export class LinuxControl {
     // and its commands outside those directories are refused as not exported.
     if (this.#attemptId === null) this.#exports = Object.freeze(roots.map((path, index) => Object.freeze({ tag: 'dsh' + index, path })));
   }
+  /** Retained results and an idle retained VM are not work; uncertain retirement is. */
+  hasActiveWork() {
+    if (this.#shutdownComplete) return false;
+    return this.#unknown || this.#backend?.state === 'quarantined'
+      || (this.#job !== undefined && this.#job.state !== 'settled') || this.#routed !== null
+      || (this.#installPromise !== undefined && !this.#installSettled)
+      || this.#disablePromise !== undefined || this.#discardPromise !== undefined
+      || (this.#closing && !this.#shutdownComplete);
+  }
   status() {
     const backendState = this.#backend?.state ?? null;
     const unknown = this.#unknown || backendState === 'quarantined' || this.#job?.state === 'unknown';
@@ -165,6 +174,9 @@ export class LinuxControl {
     if (this.#disablePromise || this.#discardPromise) return;
     if (!this.#installPromise) { this.#phase = 'disabled'; return; }
     const installing = !this.#backend;
+    // A running VM has one native lifetime. Ordinary off uses its final join
+    // barrier; discarded RAM pages cannot resume in this App process.
+    if (!installing) { this.shutdown(); return; }
     this.#phase = 'disabling';
     if (installing) this.#installAbort.abort(fail('ABORT_ERR', 'Installation cancelled by explicit switch'));
     this.#disablePromise = (async () => {

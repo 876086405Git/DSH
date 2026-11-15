@@ -74,6 +74,11 @@ export class RuntimeLifecycle {
 
   failureCode(): string | null { return this.failure; }
 
+  synchronized(): boolean {
+    return this.baseUrl !== null && this.token !== null && this.requested === this.revision &&
+      this.acknowledged === this.revision && this.failure === null;
+  }
+
   private resetRetry(): void {
     if (this.retry !== null) clearTimeout(this.retry);
     this.retry = null; this.retryDelay = 1000; this.observation = null;

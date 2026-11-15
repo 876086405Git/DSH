@@ -69,7 +69,7 @@ test('older native reports without the optional observation retain their exact s
   assert.equal(f.control.status().retirement.cleanCheckpoint, true);
 });
 
-test('ordinary switch-off keeps the same running VM; only final shutdown joins and observes RAM retirement', async t => {
+test('ordinary switch-off joins once and observes RAM retirement without making the owner reusable', async t => {
   const ramRetirement = { eligible: true, attempted: true, trackedBytes: 16777216,
     eligibleBytes: 16773120, advisedBytes: 16773120, errorCode: 0 };
   const f = await fixture(t, { joined: true, ownerQuarantined: true, retirementError: false,
@@ -81,16 +81,16 @@ test('ordinary switch-off keeps the same running VM; only final shutdown joins a
   };
   const attempt = f.control.status().attemptId;
   command(false);
-  await until(() => f.control.status().state === 'disabled'); await tick();
+  await until(() => f.control.status().state === 'stopped'); await tick();
   assert.equal(f.control.status().admission, false);
-  assert.equal(f.control.status().guestOpened, true);
-  assert.equal(f.control.status().retirement, null);
-  assert.deepEqual(f.counts(), { created: 1, stopped: 0, joined: 0 });
-  command(true); await until(() => f.control.status().admission);
+  assert.equal(f.control.status().guestOpened, false);
+  assert.equal(f.control.status().shutdownComplete, true);
+  assert.equal(f.control.status().restartRequired, true);
+  assert.equal(f.counts().created, 1); assert.equal(f.counts().joined, 1);
+  assert.throws(() => command(true), { code: 'ERR_OHOS_LINUX_CLOSED' });
   assert.equal(f.control.status().attemptId, attempt);
-  assert.deepEqual(f.counts(), { created: 1, stopped: 0, joined: 0 });
   await f.control.shutdown();
   assert.equal(f.counts().created, 1); assert.equal(f.counts().joined, 1);
-  assert.ok(f.counts().stopped > 0, 'final shutdown requests the idempotent native stop');
+  assert.ok(f.counts().stopped > 0, 'ordinary off requests the idempotent native stop');
   assert.deepEqual(f.control.status().retirement.native.ramRetirement, ramRetirement);
 });

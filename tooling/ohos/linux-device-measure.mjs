@@ -584,7 +584,8 @@ export async function measure(options) {
     if (!remote) result.cases.push({ label: 'git-remote-clone', status: 'NOT_RUN', reason: 'NO_CLONE_URL' });
     await run({ label: 'cooperative-cancel', argv: ['python3', '-u', '-c',
       'import time\nprint("DSH_CANCEL_READY", flush=True)\ntime.sleep(600)'] }, true);
-    await waitFor('disabled-after-cancel', options.shutdownTimeoutMs, value => !value.enabled && !value.admission && value.state === 'disabled');
+    await waitFor('off-after-cancel', options.shutdownTimeoutMs, value => !value.enabled && !value.admission &&
+      (value.state === 'disabled' || value.state === 'stopped' && retirementConfirmed(value)));
     result.cancellation = { requested: true, jobSettled: state.job?.state === 'settled',
       cancelRequested: state.job?.cancelRequested, outcome: state.job?.outcome, ownerRetained: state.ownerRetained,
       guestOpened: state.guestOpened, attemptId: state.attemptId };

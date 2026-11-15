@@ -116,19 +116,22 @@ test('fixed requestId deduplicates actual starts, retains bounded binary output 
   const next = await f.peer.admitted(); await f.peer.complete(next.job); await until(() => f.control.status().job.state === 'settled');
 });
 
-test('off waits true release and on reuses the same opened owner/session', async t => {
+test('off waits true job release and final join; on requires App restart', async t => {
   const f = await fixture(t); await f.enable(); f.run(); const start = await f.peer.admitted();
   const off = f.command('setEnabled', { enabled: false }); assert.equal(off.admission, false);
-  assert.equal(off.state, 'disabling'); assert.equal(off.job.outcome, null);
+  assert.equal(off.state, 'stopping'); assert.equal(off.job.outcome, null);
+  assert.equal(off.restartRequired, true); assert.equal(off.shutdownComplete, false);
   await until(() => f.peer.commands.some(command => command.op === 'cancel'));
   assert.equal(f.control.status().job.cancelRequested, true); assert.equal(f.control.status().job.outcome, null);
-  f.command('setEnabled', { enabled: false }); assert.throws(() => f.command('setEnabled', { enabled: true }), { code: 'ERR_OHOS_LINUX_BUSY' });
+  assert.throws(() => f.command('setEnabled', { enabled: false }), { code: 'ERR_OHOS_LINUX_CLOSED' });
+  assert.throws(() => f.command('setEnabled', { enabled: true }), { code: 'ERR_OHOS_LINUX_CLOSED' });
   assert.equal(f.peer.commands.filter(command => command.op === 'cancel').length, 1);
   assert.deepEqual(f.counts(), { created: 1, stopped: 0, joined: 0 });
-  await f.peer.complete(start.job, { cancelled: true }); await until(() => f.control.status().state === 'disabled');
-  assert.equal(f.control.status().guestOpened, true); assert.equal(f.control.status().job.outcome.cancelled, true);
-  assert.equal(f.command('setEnabled', { enabled: true }).admission, true);
-  assert.deepEqual(f.calls(), { loads: 1, manifests: 1, owners: 1 }); assert.deepEqual(f.counts(), { created: 1, stopped: 0, joined: 0 });
+  await f.peer.complete(start.job, { cancelled: true }); await until(() => f.control.status().state === 'stopped');
+  assert.equal(f.control.status().guestOpened, false); assert.equal(f.control.status().job.outcome.cancelled, true);
+  assert.equal(f.control.status().shutdownComplete, true);
+  assert.throws(() => f.command('setEnabled', { enabled: true }), { code: 'ERR_OHOS_LINUX_CLOSED' });
+  assert.deepEqual(f.calls(), { loads: 1, manifests: 1, owners: 1 }); assert.equal(f.counts().created, 1); assert.equal(f.counts().joined, 1);
 });
 
 test('actual socket loss overrides stale active owner state and preserves UNKNOWN through join', async t => {
@@ -193,15 +196,17 @@ test('missing fixed assets are discovered only by explicit enable and never load
 });
 
 
-test('native memory remains process-owned after ordinary off/on and successful final join', async t => {
+test('native owner remains process-owned after ordinary off now confirms final join', async t => {
   const f = await fixture(t); await f.enable(); const opened = f.control.status();
-  f.command('setEnabled', { enabled: false }); await until(() => f.control.status().state === 'disabled');
-  const disabled = f.control.status(); await f.enable(); const reopened = f.control.status();
-  assert.equal(f.counts().created, 1); assert.equal(f.counts().joined, 0);
+  f.command('setEnabled', { enabled: false }); await until(() => f.control.status().state === 'stopped');
+  const disabled = f.control.status();
+  assert.equal(disabled.restartRequired, true); assert.equal(disabled.shutdownComplete, true);
+  assert.throws(() => f.command('setEnabled', { enabled: true }), { code: 'ERR_OHOS_LINUX_CLOSED' });
+  assert.equal(f.counts().created, 1); assert.equal(f.counts().joined, 1);
   const closed = await f.control.shutdown();
   assert.equal(closed.shutdownComplete, true); assert.equal(closed.retirement.native.joined, true);
   assert.equal(f.counts().created, 1); assert.equal(f.counts().joined, 1);
-  for (const state of [opened, disabled, reopened, closed]) assert.equal(state.nativeMemoryRelease, 'process-exit');
+  for (const state of [opened, disabled, closed]) assert.equal(state.nativeMemoryRelease, 'process-exit');
 });
 
 test('native memory is not inferred from an owner whose download failed before VM creation', async t => {
@@ -270,9 +275,9 @@ test('discardRetained is refused while on, installing, running or holding a VM, 
   f.run(); const start = await f.peer.admitted();
   await assert.rejects(f.command('discardRetained'), { code: 'ERR_OHOS_LINUX_BUSY' });
   await f.peer.complete(start.job); await until(() => f.control.status().job.state === 'settled');
-  f.command('setEnabled', { enabled: false }); await until(() => f.control.status().state === 'disabled');
-  // Off, but this process's VM still holds the disk until the App exits.
-  await assert.rejects(f.command('discardRetained'), { code: 'ERR_OHOS_LINUX_RESTART_REQUIRED' });
+  f.command('setEnabled', { enabled: false }); await until(() => f.control.status().state === 'stopped');
+  // Ordinary off ended this process's one VM lifetime. Retained data is not deleted.
+  await assert.rejects(f.command('discardRetained'), { code: 'ERR_OHOS_LINUX_CLOSED' });
   assert.equal(f.discards(), 0); assert.equal(f.control.status().lastErrorCode, null);
   assert.equal((await readdir(f.data)).length, 2);
   await f.control.shutdown();

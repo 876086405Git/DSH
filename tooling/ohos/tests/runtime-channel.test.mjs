@@ -2223,14 +2223,14 @@ test('942 idle diagnostics: existing poll and collect paths count calls while en
   }
 });
 
-test('1200 background polling: a quiet minute collects sixty times and retains one-second lifecycle refresh', async t => {
+test('1200 background polling: an acknowledged idle minute suspends periodic collection and lifecycle refresh', async t => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const c = await controllerCase('background-idle-minute');
   await c.controller.install(false);
   await c.controller.start(null, false, null, false);
   native.state.phase = 'running'; native.state.baseUrl = 'http://127.0.0.1:3080';
   native.state.token = 'idle-poll-fixture-token';
-  c.controller.collect(); await Promise.resolve();
+  c.controller.collect(); await Promise.resolve(); await new Promise(setImmediate);
   c.controller.setIdleDiagnosticsEnabled(true);
   try {
     for (let second = 0; second < 60; second++) {
@@ -2238,9 +2238,9 @@ test('1200 background polling: a quiet minute collects sixty times and retains o
       await Promise.resolve(); await new Promise(setImmediate);
     }
     const counts = idlePlain942(c.controller.getIdleDiagnostics()).window.counters;
-    assert.equal(counts.pollTicks, 60, 'a background running engine needs at most one collection per second');
-    assert.equal(counts.collectCalls, 60);
-    assert.equal(counts.lifecycleRefreshRequests, 60, 'the task-owner activity window must still be refreshed every second');
+    assert.equal(counts.pollTicks, 0, 'a confirmed idle background owner needs no periodic collection');
+    assert.equal(counts.collectCalls, 0);
+    assert.equal(counts.lifecycleRefreshRequests, 0, 'idle/released admission does not spend an activity window');
     assert.equal(native.stops, 0, 'idle throttling does not stop the engine');
   } finally {
     await c.controller.stop(); native.state.phase = 'idle'; c.controller.collect(); t.mock.timers.reset();
@@ -2265,7 +2265,7 @@ test('1200 background polling: real ability callbacks restore fast foreground co
     assert.equal(ticks() - before, 10, 'current foreground owner retains 100 ms polling');
     current.onBackground(); await Promise.resolve();
     before = ticks(); t.mock.timers.tick(1000); await Promise.resolve();
-    assert.equal(ticks() - before, 1, 'background callback switches the existing running timer immediately');
+    assert.equal(ticks() - before, 0, 'a matching idle ACK suspends the background interval');
     current.onForeground(); await Promise.resolve();
     native.events.push({ kind: 'log', stream: 'stdout', line: 'foreground output' });
     before = ticks(); t.mock.timers.tick(100); await Promise.resolve();

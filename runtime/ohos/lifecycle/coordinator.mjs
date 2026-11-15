@@ -57,10 +57,11 @@ export class BoundaryCoordinator {
   #gateWaiters = 0;
   #admissionTarget = true;
   constructor({ journal, bootId, flushSession, readEvents, resolveAgent = () => undefined,
-    revalidateTransport = async () => {}, onStage = () => {}, readHost = readNativeHost, hasActiveRounds = () => false }) {
+    revalidateTransport = async () => {}, onStage = () => {}, readHost = readNativeHost, hasActiveRounds = () => false, hasActiveWork = () => false }) {
     if (!journal || !knownString(bootId) || typeof flushSession !== 'function' || typeof readEvents !== 'function') throw new TypeError('Lifecycle requires durable session adapters and boot identity');
     this.#readHost = readHost;
     this.hasActiveRounds = hasActiveRounds;
+    this.hasActiveWork = hasActiveWork;
     this.#journal = journal;
     this.bootId = bootId;
     this.clock = new ActiveBudgetClock(bootId, () => this.#updateNativePolling());
@@ -173,7 +174,11 @@ export class BoundaryCoordinator {
     }
   }
   #refreshNative() {
-    try { this.#nativeHost = validateHostSnapshot(this.#readHost()); this.#nativeFailure = undefined; }
+    try {
+      // The native reader returns a fresh validated, frozen snapshot itself.
+      this.#nativeHost = this.#readHost === readNativeHost ? this.#readHost() : validateHostSnapshot(this.#readHost());
+      this.#nativeFailure = undefined;
+    }
     catch { this.#nativeHost = undefined; this.#nativeFailure = 'ERR_OHOS_LIFECYCLE_NATIVE'; }
     const desired = !this.#manualPaused && nativeAllows(this.#nativeHost);
     if (desired !== this.#admissionTarget) {
@@ -509,7 +514,7 @@ export class BoundaryCoordinator {
   #hostStatus() {
     const blocked = this.#fault || this.#journal.failed || this.#journal.corruption;
     return { v: 1, nativeHost: this.#nativeHost ?? null, closed: this.#closing, paused: !!this.#gate, confirmedPause: this.clock.paused,
-      manualPaused: this.#manualPaused, busy: this.#pending.size > 0 || this.hasActiveRounds() === true,
+      manualPaused: this.#manualPaused, busy: this.#pending.size > 0 || this.hasActiveRounds() === true || this.hasActiveWork() === true,
       blocked: !!blocked, controlVersion: this.#controlVersion,
       host: { revision: this.#nativeHost?.revision ?? 0,
         foreground: this.#nativeHost?.available === 1 && this.#nativeHost?.foreground === 1,

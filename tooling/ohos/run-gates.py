@@ -36,6 +36,7 @@ FLUTTER_L10N_OUTPUTS = {
 # These existing controllers hide node:test output in their declared files.
 # Inspect only this explicit contract, never unrelated logs under the output.
 WRAPPED_TEST_LOGS = {
+    'background-parking-*': ['{name}/test.log'],
     'session-resource-cleanup': ['session-resource-cleanup/test.log'],
     'linux-creation-retirement': ['linux-creation-retirement/test.log'],
     'tinyemu-event-wake': ['tinyemu-event-wake/test.log'],
@@ -1127,6 +1128,10 @@ def main():
         g.node_tests('linux-wake-retirement-' + mode, [rt + 'linux-wake-retirement.test.mjs'],
                      mode=mode, needs=('prepared-inputs', 'android-targets', 'native-publication-build'),
                      extra=linked_env, timeout=60)
+        g.node_tests('linux-off-retirement-' + mode,
+                     [rt + 'linux-off-retirement.test.mjs', rt + 'linux-off-retirement-adjacent.test.mjs'],
+                     mode=mode, needs=('prepared-inputs', 'android-targets', 'native-publication-build'),
+                     extra=lambda m=mode: {**linked_env(), 'DSH_1289_CASES': str(o / ('linux-off-retirement-' + m) / 'cases')}, timeout=60)
         g.node_tests('linux-app-control-' + mode,
                      [rt + 'linux-control-entry.test.mjs', rt + 'linux-owner-control.test.mjs', rt + 'linux-control.test.mjs', rt + 'linux-control-persistence.test.mjs', rt + 'linux-instance.test.mjs', rt + 'linux-proxy-control.test.mjs', rt + 'linux-ram-retirement.test.mjs'],
                      mode=mode, needs=('prepared-inputs', 'android-targets', 'native-publication-build'),
@@ -1159,6 +1164,10 @@ def main():
     g.node_tests('linux-proxy-fixture', ['tooling/ohos/research/linux-proxy/proxy-fixture.test.mjs'], needs=('tools',))
     g.run('linux-private-proxy', lambda: g.py('tooling/ohos/research/linux-proxy/run.py', '--source', s, '--node', node(), '--dsh-prefix', p('prepared') / 'dsh', '--native-library-dir', p('tinyemu_native_library_dir'), '--publication-fixture', native() / 'libpublication-test-linked.so', '--assets', p('linux_install_assets'), '--archive', p('tinyemu_alpine_archive'), '--output', o / 'linux-private-proxy'), needs=('tools', 'prepared-inputs', 'native-publication-build'), timeout=900, tests=['tooling/ohos/research/linux-proxy/' + name for name in ['run.py', 'guest-proxy.mjs', 'proxy-pair.mjs', 'proxy-fixture.mjs', 'proxy-fixture.test.mjs']], scope='Actual private guest Git/gh HTTP CONNECT and TLS-to-proxy, domestic Git/urllib bypass with explicit private TLS/DNS fixtures; credentials/HTTP/wire/raw outputs never recorded; no phone/public account claim')
     g.node_tests('linux-resume-witness', ['tooling/ohos/research/linux-resume/guest-witness.test.mjs'], needs=('tools',))
+    for jobs_mode in ('plain', 'jitless'):
+        g.node_tests('jobs-active-' + jobs_mode, [rt + 'jobs-active.test.mjs'],
+                     mode=jobs_mode, needs=('prepared-inputs', 'android-targets'),
+                     extra=lambda: {'DSH_PREFIX': str(prefix())})
     g.node_tests('linux-job-diagnostics', [rt + 'linux-job-diagnostics.test.mjs', rt + 'linux-job-diagnostics-control.test.mjs'], needs=('prepared-inputs',))
     g.run('linux-clean-resume', lambda: g.py('tooling/ohos/research/linux-resume/run.py', '--node', node(), '--dsh-prefix', p('prepared') / 'dsh', '--native-library-dir', p('tinyemu_native_library_dir'), '--publication-fixture', native() / 'libpublication-test-linked.so', '--assets', p('linux_install_assets'), '--archive', p('tinyemu_alpine_archive'), '--output', o / 'linux-clean-resume'), needs=('prepared-inputs', 'native-publication-build'), timeout=900, tests=['tooling/ohos/research/linux-resume/' + name for name in ['run.py', 'guest-resume.mjs', 'guest-witness.mjs', 'guest-witness.test.mjs']], scope='Two sequential real Node/VM lifetimes, same actual supplied asset generation and retained target; real HTTP/guest sync/native retirement plus fresh-epoch directboot, no HAP/device/upgrade migration or power-loss claim')
     g.run('linux-installation-owner', lambda: g.py('tooling/ohos/research/linux-owner/run.py', '--node', node(), '--dsh-prefix', p('prepared') / 'dsh', '--native-library-dir', p('tinyemu_native_library_dir'), '--publication-fixture', native() / 'libpublication-test-linked.so', '--assets', p('linux_install_assets'), '--archive', p('tinyemu_alpine_archive'), '--output', o / 'linux-installation-owner'), needs=('prepared-inputs', 'native-publication-build'), timeout=900, tests=['tooling/ohos/research/linux-owner/run.py', 'tooling/ohos/research/linux-owner/owner-test.mjs'], scope='Actual first install owner/guest pivot/clean close/stop FD cleanup; explicit archive transport, no Huawei HTTP/HAP/device assertion')
@@ -1182,6 +1191,10 @@ def main():
     for mode in ['plain', 'jitless']:
         g.node_tests('plugin-store-recovery-' + mode, [rt + 'plugin-store.test.mjs', rt + 'plugin-linkless-recovery.test.mjs'], mode=mode, needs=('prepared-inputs',))
     g.node_tests('provider-body-timeout', [rt + 'provider-body-timeout.test.mjs'], needs=('android-targets',))
+    for mode in ['plain', 'jitless']:
+        g.node_tests('piai-text-preabort-' + mode, [rt + 'piai-text-preabort.test.mjs'],
+                     mode=mode, imports=(rt + 'piai-empty-models-network.mjs',),
+                     needs=('android-targets',), timeout=30, extra=lambda: {'DSH_PREFIX': str(prefix())})
     for mode in ['plain', 'jitless']:
         g.node_tests('piai-empty-models-' + mode, [rt + 'piai-empty-models.test.mjs'],
                      mode=mode, imports=(rt + 'piai-empty-models-network.mjs',),
@@ -1328,9 +1341,27 @@ def main():
                  needs=('prepared-inputs', 'ohos-test-helpers', 'native-loader'), extra=plugin_hmr_env)
     publication = ['publication-atomic', 'publication-atomic-fuse', 'publication-ledger', 'publication-ledger-lifecycle', 'publication-capabilities']
     lifecycle = ['lifecycle-journal', 'lifecycle-budget', 'lifecycle-tool-budgets', 'lifecycle-transport', 'lifecycle-engine', 'lifecycle-explicit-resume', 'runtime-capabilities']
+    for parking_mode in ['plain', 'jitless']:
+        g.run('background-parking-' + parking_mode,
+              lambda m=parking_mode: g.py(rt + 'background-parking.py', '--source', s,
+                  '--node', node(), '--node-headers', headers(), '--cxx', p('cxx'),
+                  '--esbuild-prefix', p('esbuild_prefix'), '--out', o / ('background-parking-' + m), '--mode', m),
+              needs=('native-tools',), timeout=180,
+              tests=[rt + name for name in ['background-parking.py', 'background-idle-native.cc', 'background-idle-fixture.mjs', 'background-idle.test.mjs', 'background-foreground.test.mjs', 'background-parking-boundaries.test.mjs']],
+              scope='Selected ETS bodies and real LifecycleState; deterministic timer/clock and explicit OS/HTTP/ready boundaries, foreground/cleanup/qualification controls; no SDK/device/actual HTTP or CPU/PSS claim')
+    for mode in ['plain', 'jitless']:
+        for activity in ['lifecycle-independent-activity', 'lifecycle-jobs-retirement', 'linux-activity']:
+            g.node_tests(activity + '-' + mode, [rt + activity + '.test.mjs'], mode=mode,
+                         needs=('prepared-inputs', 'native-publication-build', 'round-native-libraries'),
+                         extra=lambda: {**linked_env(), 'DSH_GO_OHOS_NATIVE_LIBRARY_DIR': str(o / 'round-native')}, timeout=30)
     for mode in ['plain', 'jitless']:
         g.node_tests('lifecycle-idle-' + mode, [rt + 'lifecycle-idle.test.mjs'],
                      mode=mode, needs=('android-targets',), timeout=30)
+        g.node_tests('lifecycle-native-reader-' + mode, [rt + 'lifecycle-native-reader.test.mjs'],
+                     mode=mode, imports=[rt + 'lifecycle-native-reader-instrument.mjs'],
+                     needs=('prepared-inputs', 'native-publication-build', 'round-native-libraries'),
+                     extra=lambda: {'LD_PRELOAD': str(native() / 'libpublication-test-linked.so') + ':' + str(o / 'round-native/libdsh_host.so'),
+                                    'DSH_GO_OHOS_NATIVE_LIBRARY_DIR': str(o / 'round-native')}, timeout=30)
     for mode in ['marker', 'strict']:
         g.node_tests('publication-' + mode, [rt + n + '.test.mjs' for n in publication], mode=mode, needs=('native-publication-build', 'prepared-inputs'), extra=linked_env, timeout=240, host_links=True)
         g.node_tests('publication-lock-' + mode, [rt + 'publication-lock.test.mjs'],

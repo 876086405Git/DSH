@@ -94,9 +94,14 @@ async function fixture(options = {}) {
         state.state = 'disabled'; state.job.state = 'settled';
         state.job.outcome = { exitCode: null, signal: 'SIGKILL', cancelled: true, requestedSignal: 'SIGTERM' };
       }
+      if (options.ordinaryOffFinal && state.state === 'stopping' && state.job?.cancelRequested && state.job.state === 'running') {
+        state.job.state = 'settled';
+        state.job.outcome = { exitCode: null, signal: 'SIGKILL', cancelled: true, requestedSignal: 'SIGTERM' };
+      }
       if (state.state === 'stopping' && ++shutdownPolls >= 2) {
         state.state = state.job?.state === 'unknown' ? 'unknown' : 'stopped';
         state.shutdownComplete = !options.noJoin;
+        if (options.ordinaryOffFinal) { state.guestOpened = false; state.backendState = 'closed'; state.restartRequired = true; }
         state.retirement = options.noJoin ? retired({ resourcesRetired: false,
           native: { joined: false, retirementError: null, apiResult: null } }) : retired();
         if (options.protocol931) { state.retirement.guestClose = closeProof(options.sameEpoch ? 'a'.repeat(64) : (options.bootMode === 'resume' ? 'b' : 'a').repeat(64));
@@ -121,7 +126,7 @@ async function fixture(options = {}) {
       if (body.enabled) {
         state.attemptId ??= 'fixture-attempt'; state.state = 'installing'; state.ownerRetained = true;
         state.progress = { stage: 'download', done: 0, total: 100, step: null };
-      } else { state.state = 'disabling'; if (state.job) state.job.cancelRequested = true; }
+      } else { state.state = options.ordinaryOffFinal ? 'stopping' : 'disabling'; if (state.job) state.job.cancelRequested = true; }
     } else if (body.action === 'runPrivateGuest') {
       if (options.raceOnFirstRun && !raced) {
         raced = true; current = 'foreign'; state.nextRequestId++;
@@ -171,7 +176,8 @@ async function fixture(options = {}) {
       }
       if (dropping) { dropping = false; replace = !!options.replaceAfterDrop; res.destroy(); return; }
     } else if (body.action === 'shutdown') {
-      state.state = 'stopping'; state.enabled = false; state.admission = false;
+      if (!options.ordinaryOffFinal || !state.shutdownComplete) state.state = 'stopping';
+      state.enabled = false; state.admission = false;
     } else throw new Error('unexpected action');
     reply(res, 202, state);
   });
@@ -568,3 +574,31 @@ test('observation and mutually exclusive witness options reject all mutations be
     assert.equal(server.requests.length, 0);
   } finally { await server.close(); for (const result of results) await result.cleanup(); }
 });
+
+
+for (const noJoin of [false, true]) {
+  test(`ordinary off with final-retirement status keeps join admission strict: noJoin=${noJoin}`, async t => {
+    const server = await fixture({ ordinaryOffFinal: true, noJoin }); let result;
+    try {
+      result = await run(server);
+      const observed = { code: result.code, summary: result.summary,
+        scope: 'Real CLI and local HTTP; explicit control/guest fixture, not a VM or device.' };
+      if (process.env.DSH_1289_DEVICE_CASES) {
+        await fs.mkdir(process.env.DSH_1289_DEVICE_CASES, { recursive: true });
+        await fs.writeFile(path.join(process.env.DSH_1289_DEVICE_CASES, `ordinary-off-${noJoin ? 'unconfirmed' : 'joined'}.json`), JSON.stringify(observed, null, 2) + '\n');
+      }
+      t.diagnostic(JSON.stringify({ noJoin, code: observed.code, status: observed.summary?.status,
+        shutdownConfirmed: observed.summary?.shutdownConfirmed, errors: observed.summary?.errors }));
+      if (noJoin) {
+        assert.notEqual(result.code, 0); assert.equal(result.summary.shutdownConfirmed, false);
+        assert.ok(!result.summary.status.startsWith('PASS_'));
+      } else {
+        assert.equal(result.code, 0, result.stdout + result.stderr);
+        assert.equal(result.summary.status, 'PASS_LOCAL_ONLY');
+        assert.equal(result.summary.shutdownConfirmed, true);
+        assert.equal(result.summary.finalStatus.state, 'stopped');
+        assert.equal(result.summary.cancellation.jobSettled, true);
+      }
+    } finally { await server.close(); await result?.cleanup(); }
+  });
+}

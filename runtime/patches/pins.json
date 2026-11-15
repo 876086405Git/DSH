@@ -212,6 +212,14 @@
         }
       }
     },
+    "ohos-jobs-active.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
+          "after": "5585ee7025496ad1ab9cdb46bcb58307a971bee7db39dab6eebc76ded9e53186",
+          "before": "223f6569c2be54c26cf537ed8014b3330ea2f69cc0a3e3d5bba46c2fc413cbf8"
+        }
+      }
+    },
     "ohos-liveshare-owner-unavailable.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-experimental-liveshare/lib/index.js": {
@@ -289,6 +297,14 @@
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
           "after": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b",
           "before": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a"
+        }
+      }
+    },
+    "ohos-piai-text-preabort.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "762e49300daac811c36184c9cb8ba44460de7fb5bacca06bc0c1b377cb192be1",
+          "before": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b"
         }
       }
     },
@@ -2641,7 +2657,9 @@
       "ohos-cordis-catalog-lazy.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
-      "ohos-mcp-start-close.diff"
+      "ohos-mcp-start-close.diff",
+      "ohos-jobs-active.diff",
+      "ohos-piai-text-preabort.diff"
     ]
   }
 }

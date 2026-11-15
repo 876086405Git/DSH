@@ -22,7 +22,7 @@ runtime/ohos/preload.mjs 在插件执行前捕获宿主目录与原生库目录�
 | 作业完成 | 对应requestId的job settled及真实outcome；输出按backend合同收尾 | HTTP202、socket断开、UI已显示文字 |
 | 最终资源退役 | shutdownComplete且retirement.resourcesRetired；有native时须joined=true且retirementError=false | 请求停止已发出、job结束、任意超时 |
 
-普通Linux开关false先关准入，再取消和等待当前job；健康空闲VM保留。再次true复用同一个owner，不创建第二VM。最终引擎停止另走shutdown，等真实资源退役后才调用NativeHost.stop。并发stop共享同一个屏障；reset也先等屏障，再写durable reset意图。停止确认失败会抛稳定错误，不先写reset.json或假装Node已安全停止。
+普通Linux开关false先关准入；已有backend时进入现有shutdown屏障，取消并等待private/routed job、guest close与真实join。该VM生命周期结束后再次true必须重启App，不创建第二VM。最终引擎停止复用同一shutdown屏障，等真实资源退役后才调用NativeHost.stop。并发stop共享同一个屏障；reset也先等屏障，再写durable reset意图。停止确认失败会抛稳定错误，不先写reset.json或假装Node已安全停止。
 
 历史job UNKNOWN可以与之后真实资源join同时存在，join不会把UNKNOWN改成exitCode=0。未join时native的retirementError/apiResult可以为null；ETS与Dart保留这些未知事实。VM/native owner仍按既有一次性隔离合同保留，没有声明全部VM内存释放或同App重新初始化安全。
 
@@ -116,7 +116,7 @@ runtime/ohos/preload.mjs 在插件执行前捕获宿主目录与原生库目录�
 
 本件的机器可核原始命令、输入SHA、stdout/stderr、先红后绿、独立复核报告随正式ZIP交付。真实host N-API、TypeScript转译后的实际ETS方法、实际Dart、真实本地HTTP、真实TinyEMU与手机是不同测量层，报告分别标明边界替身，不能互相代替。
 
-组合路径已在真实TinyEMU中完成17项检查。使用实际BrowserAuth、HTTP、生产control/owner/backend和native/guest；唯一替换是归档下载传输，流入已核SHA的真实Alpine归档，不能据此声明华为源或手机网络通过。
+以下是原930/931组合路径已在真实TinyEMU中完成的17项历史检查；普通off/on合同在追加10后已改变，历史原数不冒充1289新候选结果。使用实际BrowserAuth、HTTP、生产control/owner/backend和native/guest；唯一替换是归档下载传输，流入已核SHA的真实Alpine归档，不能据此声明华为源或手机网络通过。
 
 | 用例 | 本次宿主真实guest观察 | 本机验收要求 |
 |---|---|---|
@@ -125,7 +125,7 @@ runtime/ohos/preload.mjs 在插件执行前捕获宿主目录与原生库目录�
 | rg私有文件 | beta needle加换行，exitCode=0 | 用已写入的确定内容核结果 |
 | git clone本地空bare仓库 | 工作树rev-parse为true，退出0；有正常空仓库warning | 此结果只覆盖本地空仓库，远程非空仓库另测 |
 | gh pr list | NOT_RUN | 本机显式提供真实账号与目标仓库，不在交付包中保存凭据 |
-| off/on | owner创建数1、下载数1；epoch、target和实际data FD保持 | 普通关闭不重建VM、不丢已写数据 |
+| off/on（历史原数） | owner创建数1、下载数1；epoch、target和实际data FD保持 | 新合同为普通off等join且须重启App再开；本行只保留旧观察，新候选量化另验 |
 | 取消运行中任务 | requestedSignal=SIGTERM；实际signal=SIGKILL、exitCode=null、cancelled=true | 展示实际结局，不把请求的信号当实际退出原因 |
 | 最终shutdown | native joined=true、retirementError=false、apiResult=-4；所拥有的data FD数回到0 | 必须观察真实屏障，不以202或超时替代 |
 
@@ -135,6 +135,6 @@ runtime/ohos/preload.mjs 在插件执行前捕获宿主目录与原生库目录�
 
 设备测量脚本与详细命令在tooling/ohos/linux-device-measure.mjs和同名.zh.md。脚本有12项宿主HTTP定点绿，包含初始检查后被其他客户端抢号的实红→同测绿。它另以冻结字节接入实际guest控制链：两个Node进程、66.643秒、默认8项PASS与2项NOT_RUN、13项生产者/消费者交叉核对通过；退休与data FD清零先于harness清理。真实账号与HTTPS远程clone仍未运行。使用脚本须保证独占测量窗口：当前GET到后续owner级off/shutdown不是原子租约，不能声称任意多客户端并发均被隔离。
 
-设备至少验：首次安装实际进度/取消/失败清理；python/gh/rg/小仓库clone；普通关闭取消当前job且保留同一VM，再开不新建；最终App引擎关闭等真实join；未知状态不误报成功；DSH主引擎/rootfs与Android产物不受影响。gh pr list的真实账号和远程仓库访问由本机显式提供，默认测量不执行账号操作。
+设备至少验：首次安装实际进度/取消/失败清理；python/gh/rg/小仓库clone；普通关闭取消当前job并等真实join，再开要求重启App；最终App引擎关闭等真实join；未知状态不误报成功；DSH主引擎/rootfs与Android产物不受影响。gh pr list的真实账号和远程仓库访问由本机显式提供，默认测量不执行账号操作。
 
 完整统一门按tooling/ohos/run-gates.py的新增登记由本机执行。已知设备待验证项是SDK26 HTTP拦截器/头表示、oh-flutter Map桥接、HAP native加载、首次华为下载和耗时、后台冻结/保活、TinyEMU实际内存与功耗。任何设备失败保留实际状态与原始输出，不由宿主通过推断修正为通过。
