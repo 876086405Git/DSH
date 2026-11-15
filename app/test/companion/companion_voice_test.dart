@@ -401,7 +401,7 @@ void main() {
     });
 
     for (final (os, sources) in [
-      ('ohos', ['deepseek']),
+      ('ohos', ['deepseek', 'system']),
       ('android', ['deepseek', 'system', 'preset', 'openai', 'custom']),
     ]) {
       testWidgets('朗读 on $os offers the voices it can play: $sources', (tester) async {

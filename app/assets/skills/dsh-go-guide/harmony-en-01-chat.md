@@ -30,12 +30,12 @@ When the composer is empty and speech recognition is available, the send button 
 
 ## Read aloud and voice calls
 
-Under each reply there is a **Read aloud** key: tap it to hear the reply, tap again to stop. It's also in the reply's long-press menu, and in the tavern when you long-press a character's message. Code blocks, tables and link addresses are left out. The HarmonyOS version uses DeepSeek's voice, paid by your signed-in DeepSeek account, or the API key in Settings when signed out; you can choose between its two voices:
+Under each reply there is a **Read aloud** key: tap it to hear the reply, tap again to stop. It's also in the reply's long-press menu, and in the tavern when you long-press a character's message. Code blocks, tables and link addresses are left out. DeepSeek's voice is used by default, paid by your signed-in DeepSeek account, or the API key in Settings when signed out; you can switch to the phone's own voice, which costs nothing and works offline:
 
 <!-- nav: commonSettings,voiceSettingsTitle,speechVoiceTitle -->
 `Settings › Voice › Reading voice`
 
-The HarmonyOS version doesn't have voice calls yet: there's no **Voice call** in the plus panel.
+**Voice call** in the plus panel opens a call: just speak, pause, and it is sent; the answer is read while it is written. Start talking while the AI speaks and it stops to listen (turn off **Interrupt by speaking** in Settings); tap the light in the middle to skip an answer. At the bottom are **Mute**, **Hang up** and **Speaker** / **Earpiece**. Approvals and questions appear on the call page. The key at the top right changes the **Call background**: **Deep sea**, **My picture**, or your **Companion** from the companion room, who speaks along with the voice. Calls end when the app goes to the background. Live captions during a call come from the HarmonyOS recognizer (Mandarin) on the phone, with no model to download; the end of what you say is judged by volume and pauses, so in a noisy place you may need to pause a little longer.
 
 ## Create images and video
 

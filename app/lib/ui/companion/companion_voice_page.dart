@@ -334,8 +334,8 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
     final s = _seen = _watch();
     if (s == null) return AppPage.list(title: title, children: const []);
     final following = !widget.shared && s.follow;
-    // HarmonyOS plays DeepSeek's stream only; the other sources have no player there yet.
-    final deepseekOnly = ref.watch(operatingSystemProvider) == 'ohos';
+    // HarmonyOS plays DeepSeek's stream and its own voice; the others have no player there yet.
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     _fill(s);
     if (s.cloneSample.isNotEmpty && _recordingFor != s.cloneSample) unawaited(_describe(s.cloneSample));
     final busy = _preview == '';
@@ -382,8 +382,8 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
               ),
             for (final (source, title, hint) in [
               (CompanionVoiceSource.deepseek, l10n.speechVoiceDeepseek, l10n.speechVoiceDeepseekHint),
-              if (!deepseekOnly) ...[
-                (CompanionVoiceSource.system, l10n.companionVoiceSystem, l10n.companionVoiceSystemHint),
+              (CompanionVoiceSource.system, l10n.companionVoiceSystem, l10n.companionVoiceSystemHint),
+              if (!ohos) ...[
                 (CompanionVoiceSource.preset, l10n.companionVoicePreset, l10n.companionVoicePresetHint),
                 (CompanionVoiceSource.openai, l10n.companionVoiceOpenai, l10n.companionVoiceOpenaiHint),
                 (CompanionVoiceSource.custom, l10n.companionVoiceCustom, l10n.companionVoiceCustomHint),

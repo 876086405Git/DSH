@@ -40,11 +40,11 @@ import '../companion/companion_stage.dart';
 import '../fx/voice_ring/voice_ring.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
-import '../../state/streaming_asr_model_state.dart';
 import '../../state/streaming_asr_state.dart';
 import '../../state/streaming_pcm_state.dart';
 import '../../usage/usage_stats.dart';
 import '../../voice/live_words.dart';
+import '../../voice/live_words_model.dart';
 import '../../voice/streaming_pcm.dart';
 import 'call/call_backdrop.dart';
 import 'call/call_parts.dart';
@@ -211,13 +211,21 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   Future<void> _start() async {
     final pcm = ref.read(streamingPcmCaptureProvider);
     final asr = ref.read(streamingAsrProvider);
-    final store = ref.read(streamingAsrModelStoreProvider.future);
+    final found = liveWordsModel(ref);
     await _call.start();
     try {
-      final models = await store;
-      final model = await models.installed();
-      if (model == null || !mounted || _call.phase == CallPhase.ended) return;
-      final live = _live = LiveWords(pcm, asr, model, StreamingPcmSource.call, _call.live, trial: models.trial);
+      final chosen = await found;
+      if (chosen == null || !mounted || _call.phase == CallPhase.ended) return;
+      final live = _live = LiveWords(
+        pcm,
+        asr,
+        chosen.model,
+        StreamingPcmSource.call,
+        _call.live,
+        trial: chosen.trial,
+        // Captions that stop mid-call leave the call itself going.
+        onFailure: (_) => _live = null,
+      );
       await live.start();
     } on Object {
       // Without live captions the call goes on as before.

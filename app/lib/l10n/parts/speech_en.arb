@@ -53,6 +53,19 @@
   "speechCallCueHint": "A soft chime when an answer is slow to start",
   "speechLiveSection": "Live captions",
   "speechLiveName": "Streaming recognizer",
+  "speechLiveSystemName": "System recognizer (Mandarin)",
+  "speechLiveSystemReadyNote": "Provided by HarmonyOS, no model to download; calls use it automatically",
+  "speechLiveSystemBusy": "In use",
+  "speechLiveSystemBusyNote": "Voice input or another recognition is using it; tap Retry when it is done",
+  "speechLiveSystemFailedNote": "System recognition isn't available on this phone now: {reason}",
+  "@speechLiveSystemFailedNote": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "speechLiveSystemFooter": "Captions and barge-in detection run on the phone through the HarmonyOS recognizer; the text sent to the AI still comes from the recognition chosen above, and a cloud choice uploads the recording.",
   "speechLiveAbsentNote": "Download it and calls show your words as you speak, and stop sooner when you cut in. About {mb}; it runs on the phone",
   "@speechLiveAbsentNote": {
     "placeholders": {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/streaming_asr_state.dart';
 import 'package:dsh_app/state/voice_settings.dart';
 import 'package:dsh_app/state/voice_state.dart';
 import 'package:dsh_app/ui/chat/voice/voice_bridge.dart';
@@ -126,11 +127,14 @@ void main() {
       expect(find.text(zh.harmonyVoiceLocalLine), findsNothing);
     });
 
-    testWidgets('朗读 is there, no 实时字幕 or 通话 yet; DeepSeek and a cloud service still listen', (tester) async {
+    testWidgets('朗读, 实时字幕 on the system recognizer and 通话 are there; DeepSeek and a cloud service still listen', (tester) async {
       await page(tester, 'ohos', height: 4000);
       expect(find.byKey(const ValueKey('speech-voice')), findsOneWidget);
-      expect(find.text(zh.speechLiveSection), findsNothing);
-      expect(find.byKey(const ValueKey('speech-call-barge-in')), findsNothing);
+      expect(find.text(zh.speechLiveSection), findsOneWidget);
+      expect(find.byKey(const ValueKey('live-system-card')), findsOneWidget);
+      expect(find.byKey(const ValueKey('live-model-card')), findsNothing);
+      expect(find.text(zh.speechLiveSystemFooter), findsOneWidget);
+      expect(find.byKey(const ValueKey('speech-call-barge-in')), findsOneWidget);
       expect(find.byKey(const ValueKey('voice-mode-deepseek')), findsOneWidget);
       expect(find.byKey(const ValueKey('voice-mode-cloud')), findsOneWidget);
     });
@@ -190,4 +194,52 @@ void main() {
       });
     }
   }
+
+  group('the HarmonyOS captions card', () {
+    final zh = lookupL10n(AppLocale.zhCN);
+
+    Future<void> card(WidgetTester tester, Future<SystemAsrReadiness> Function() probe) => tester.pumpWidget(
+      ProviderScope(
+        overrides: [ohosStreamingAsrReadyProvider.overrideWith((ref) => probe())],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: L10n.supportedLocales,
+          localizationsDelegates: L10n.localizationsDelegates,
+          theme: testTheme(Brightness.light),
+          home: const Scaffold(body: SystemAsrCard()),
+        ),
+      ),
+    );
+
+    testWidgets('ready says so and offers nothing to download', (tester) async {
+      await card(tester, () async => SystemAsrReadiness.ready);
+      await tester.pumpAndSettle();
+      expect(find.text(zh.voiceModelReady), findsOneWidget);
+      expect(find.text(zh.speechLiveSystemReadyNote), findsOneWidget);
+      expect(find.byKey(const ValueKey('live-system-retry')), findsNothing);
+      expect(find.text(zh.voiceModelDownload), findsNothing);
+    });
+
+    testWidgets('busy yields and asks again only when told', (tester) async {
+      var asked = 0;
+      await card(tester, () async {
+        asked++;
+        return SystemAsrReadiness.busy;
+      });
+      await tester.pumpAndSettle();
+      expect(find.text(zh.speechLiveSystemBusy), findsOneWidget);
+      expect(asked, 1);
+      await tester.tap(find.byKey(const ValueKey('live-system-retry')));
+      await tester.pumpAndSettle();
+      expect(asked, 2);
+    });
+
+    testWidgets('a failed probe shows its reason, not a missing download', (tester) async {
+      await card(tester, () async => throw StateError('offline resources missing'));
+      await tester.pumpAndSettle();
+      expect(find.text(zh.voiceModelFailed), findsOneWidget);
+      expect(find.textContaining('offline resources missing'), findsOneWidget);
+      expect(find.byKey(const ValueKey('live-system-retry')), findsOneWidget);
+    });
+  });
 }

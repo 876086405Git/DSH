@@ -18176,6 +18176,26 @@ class L10nZh extends L10n {
   String get speechLiveName => '流式识别模型';
 
   @override
+  String get speechLiveSystemName => '系统识别（普通话）';
+
+  @override
+  String get speechLiveSystemReadyNote => '由鸿蒙系统提供，不用下载模型，通话时自动使用';
+
+  @override
+  String get speechLiveSystemBusy => '使用中';
+
+  @override
+  String get speechLiveSystemBusyNote => '语音输入或另一项识别正在用它，用完后点重试';
+
+  @override
+  String speechLiveSystemFailedNote(String reason) {
+    return '这台手机现在用不了系统识别：$reason';
+  }
+
+  @override
+  String get speechLiveSystemFooter => '字幕和插话判断由鸿蒙系统识别在手机上完成；发给 AI 的文字仍由上面选的识别方式给出，选了云端识别录音就会上传。';
+
+  @override
   String speechLiveAbsentNote(String mb) {
     return '下载后，通话时一边说一边出字，插话也停得更快。约 $mb，在手机上运行';
   }

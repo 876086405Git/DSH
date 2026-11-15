@@ -33344,6 +33344,42 @@ abstract class L10n {
   /// **'流式识别模型'**
   String get speechLiveName;
 
+  /// No description provided for @speechLiveSystemName.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统识别（普通话）'**
+  String get speechLiveSystemName;
+
+  /// No description provided for @speechLiveSystemReadyNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'由鸿蒙系统提供，不用下载模型，通话时自动使用'**
+  String get speechLiveSystemReadyNote;
+
+  /// No description provided for @speechLiveSystemBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用中'**
+  String get speechLiveSystemBusy;
+
+  /// No description provided for @speechLiveSystemBusyNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音输入或另一项识别正在用它，用完后点重试'**
+  String get speechLiveSystemBusyNote;
+
+  /// No description provided for @speechLiveSystemFailedNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台手机现在用不了系统识别：{reason}'**
+  String speechLiveSystemFailedNote(String reason);
+
+  /// No description provided for @speechLiveSystemFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'字幕和插话判断由鸿蒙系统识别在手机上完成；发给 AI 的文字仍由上面选的识别方式给出，选了云端识别录音就会上传。'**
+  String get speechLiveSystemFooter;
+
   /// No description provided for @speechLiveAbsentNote.
   ///
   /// In zh, this message translates to:

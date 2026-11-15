@@ -9,6 +9,7 @@ import '../../speech/speech_audio.dart';
 import '../../speech/speech_settings.dart';
 import '../../state/android_features.dart';
 import '../../state/streaming_asr_model_state.dart';
+import '../../state/streaming_asr_state.dart' show SystemAsrReadiness, ohosStreamingAsrReadyProvider;
 import '../../state/voice_model_state.dart';
 import '../../state/voice_settings.dart';
 import '../../state/voice_state.dart';
@@ -130,8 +131,6 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     final languages = ohos ? ref.watch(voiceCapabilitiesProvider).value?.languages : null;
     final chineseOnly = languages != null && languages.isNotEmpty && languages.every((l) => l.startsWith('zh'));
-    // 实时字幕 and 语音通话 have no HarmonyOS side yet (the streaming recognizer).
-    final speech = ref.watch(androidSystemFeaturesProvider);
     final call = ref.watch(callSettingsProvider);
     final calls = ref.read(callSettingsProvider.notifier);
     return AppPage.list(
@@ -193,65 +192,64 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
             footer: Text(l10n.voiceModelFooter),
             children: const [VoiceModelCard()],
           ),
-        if (speech)
-          SettingsSection(
-            title: l10n.speechLiveSection,
-            footer: Text(l10n.speechLiveFooter),
-            children: const [StreamingAsrModelCard()],
-          ),
-        if (speech)
-          SettingsSection(
-            title: l10n.speechCallSection,
-            footer: Text(l10n.speechCallFooter),
-            children: [
-              SettingsTile(
-                key: const ValueKey('speech-call-backdrop'),
-                title: l10n.speechBackdropTitle,
-                value: Text(switch (call.backdrop) {
-                  CallBackdrop.sea => l10n.speechBackdropSea,
-                  CallBackdrop.image => l10n.speechBackdropImage,
-                  CallBackdrop.companion => l10n.speechBackdropCompanion,
-                }),
-                onTap: () => unawaited(showCallBackdropSheet(context)),
-              ),
-              SettingsSwitchTile(
-                key: const ValueKey('speech-call-barge-in'),
-                title: l10n.speechCallBargeIn,
-                subtitle: l10n.speechCallBargeInHint,
-                value: call.bargeIn,
-                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(bargeIn: on))),
-              ),
-              SettingsSegmentTile<CallPause>(
-                key: const ValueKey('speech-call-pause'),
-                title: l10n.speechCallPause,
-                subtitle: l10n.speechCallPauseHint,
-                segments: callPauseSegments(l10n),
-                selected: call.pause,
-                onChanged: (pause) => unawaited(calls.edit((saved) => saved.copyWith(pause: pause))),
-              ),
-              SettingsSwitchTile(
-                key: const ValueKey('speech-call-spoken'),
-                title: l10n.speechCallSpoken,
-                subtitle: l10n.speechCallSpokenHint,
-                value: call.spoken,
-                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(spoken: on))),
-              ),
-              SettingsSwitchTile(
-                key: const ValueKey('speech-call-speaker'),
-                title: l10n.speechCallSpeaker,
-                subtitle: l10n.speechCallSpeakerHint,
-                value: call.speaker,
-                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(speaker: on))),
-              ),
-              SettingsSwitchTile(
-                key: const ValueKey('speech-call-cue'),
-                title: l10n.speechCallCue,
-                subtitle: l10n.speechCallCueHint,
-                value: call.cue,
-                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(cue: on))),
-              ),
-            ],
-          ),
+        SettingsSection(
+          title: l10n.speechLiveSection,
+          footer: Text(ohos ? l10n.speechLiveSystemFooter : l10n.speechLiveFooter),
+          // HarmonyOS captions use its own recognizer: nothing to download.
+          children: [ohos ? const SystemAsrCard() : const StreamingAsrModelCard()],
+        ),
+        SettingsSection(
+          title: l10n.speechCallSection,
+          footer: Text(l10n.speechCallFooter),
+          children: [
+            SettingsTile(
+              key: const ValueKey('speech-call-backdrop'),
+              title: l10n.speechBackdropTitle,
+              value: Text(switch (call.backdrop) {
+                CallBackdrop.sea => l10n.speechBackdropSea,
+                CallBackdrop.image => l10n.speechBackdropImage,
+                CallBackdrop.companion => l10n.speechBackdropCompanion,
+              }),
+              onTap: () => unawaited(showCallBackdropSheet(context)),
+            ),
+            SettingsSwitchTile(
+              key: const ValueKey('speech-call-barge-in'),
+              title: l10n.speechCallBargeIn,
+              subtitle: l10n.speechCallBargeInHint,
+              value: call.bargeIn,
+              onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(bargeIn: on))),
+            ),
+            SettingsSegmentTile<CallPause>(
+              key: const ValueKey('speech-call-pause'),
+              title: l10n.speechCallPause,
+              subtitle: l10n.speechCallPauseHint,
+              segments: callPauseSegments(l10n),
+              selected: call.pause,
+              onChanged: (pause) => unawaited(calls.edit((saved) => saved.copyWith(pause: pause))),
+            ),
+            SettingsSwitchTile(
+              key: const ValueKey('speech-call-spoken'),
+              title: l10n.speechCallSpoken,
+              subtitle: l10n.speechCallSpokenHint,
+              value: call.spoken,
+              onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(spoken: on))),
+            ),
+            SettingsSwitchTile(
+              key: const ValueKey('speech-call-speaker'),
+              title: l10n.speechCallSpeaker,
+              subtitle: l10n.speechCallSpeakerHint,
+              value: call.speaker,
+              onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(speaker: on))),
+            ),
+            SettingsSwitchTile(
+              key: const ValueKey('speech-call-cue'),
+              title: l10n.speechCallCue,
+              subtitle: l10n.speechCallCueHint,
+              value: call.cue,
+              onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(cue: on))),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -545,6 +543,65 @@ class VoiceModelCard extends ConsumerWidget {
 }
 
 /// The streaming recognizer for live captions: download (about 198 MB), progress, delete.
+/// HarmonyOS's own recognizer for live captions: what its probe says now, and a
+/// retry when it was busy or failed. It never downloads or deletes anything.
+class SystemAsrCard extends ConsumerWidget {
+  const SystemAsrCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final colors = DshColors.of(context);
+    final probe = ref.watch(ohosStreamingAsrReadyProvider);
+    final (status, statusColor, note) = switch (probe) {
+      AsyncData(value: SystemAsrReadiness.ready) => (l10n.voiceModelReady, colors.success, l10n.speechLiveSystemReadyNote),
+      AsyncData(value: SystemAsrReadiness.busy) => (
+        l10n.speechLiveSystemBusy,
+        theme.colorScheme.onSurfaceVariant,
+        l10n.speechLiveSystemBusyNote,
+      ),
+      AsyncError(:final error) => (l10n.voiceModelFailed, colors.danger, l10n.speechLiveSystemFailedNote('$error')),
+      _ => ('', colors.textTertiary, null),
+    };
+    final retry = probe is AsyncError || probe.value == SystemAsrReadiness.busy;
+    return Padding(
+      key: const ValueKey('live-system-card'),
+      padding: VoiceModelCard.padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(child: Text(l10n.speechLiveSystemName, style: settingsTitleStyle(context))),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(status, textAlign: TextAlign.end, style: theme.textTheme.bodyMedium?.copyWith(color: statusColor)),
+              ),
+            ],
+          ),
+          if (note != null) ...[
+            const SizedBox(height: 6),
+            Text(note, style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary)),
+          ],
+          if (retry) ...[
+            const SizedBox(height: 14),
+            OutlinedButton(
+              key: const ValueKey('live-system-retry'),
+              onPressed: () => ref.invalidate(ohosStreamingAsrReadyProvider),
+              child: Text(l10n.commonRetry),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class StreamingAsrModelCard extends ConsumerWidget {
   const StreamingAsrModelCard({super.key});
 
