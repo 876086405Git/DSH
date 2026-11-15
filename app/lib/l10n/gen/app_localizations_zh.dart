@@ -9416,7 +9416,7 @@ class L10nZh extends L10n {
   String get linuxFirstHint => '第一次开启会下载约 3.5 MB 的基础系统并安装，大约一两分钟；之后再开几秒就好。';
 
   @override
-  String get linuxMemoryNote => '开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关后，要等 App 完全退出才会还给系统。';
+  String get linuxMemoryNote => '开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关会把这部分还给系统，之后要重新打开 App 才能再开启。';
 
   @override
   String get linuxStateOn => '已开启';
@@ -9455,7 +9455,13 @@ class L10nZh extends L10n {
   String get linuxRequestFailed => '没能和引擎通信，请稍后重试。';
 
   @override
-  String get linuxRestartRequired => 'Linux 已经停止，需要完全退出并重新打开 App 才能再开启。';
+  String get linuxRestartRequired => 'Linux 已经停止，重新打开 App 后才能再开启。';
+
+  @override
+  String get linuxReopenApp => '重新打开 App';
+
+  @override
+  String get linuxReopenFailed => '没能自动重新打开，请手动退出 App 再打开。';
 
   @override
   String linuxErrorWithCode(String code) {

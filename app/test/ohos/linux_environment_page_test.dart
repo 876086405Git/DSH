@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/ohos_linux_runtime.dart';
+import 'package:dsh_app/runtime/runtime_state.dart' show runtimeBridgeProvider;
 import 'package:dsh_app/secrets/secure_storage.dart';
 import 'package:dsh_app/state/ohos_linux_state.dart';
 import 'package:dsh_app/ui/settings/linux_environment_page.dart';
@@ -12,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../chat/support/harness.dart' show testTheme;
+import '../safe_mode/support.dart' show FakeBridge;
 
 Map<String, Object?> _status([Map<String, Object?> extra = const {}]) => {
   'v': 1,
@@ -103,12 +105,30 @@ class _Secrets extends AppSecureStorage {
   Future<void> delete({required String key}) async => values.remove(key);
 }
 
-Future<ProviderContainer> _pump(WidgetTester tester, _Runtime runtime, _Secrets secrets, {bool settle = true}) async {
+class _Bridge extends FakeBridge {
+  Object? reopenError;
+  int reopened = 0;
+
+  @override
+  Future<void> reopenApp() async {
+    reopened++;
+    if (reopenError != null) throw reopenError!;
+  }
+}
+
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  _Runtime runtime,
+  _Secrets secrets, {
+  bool settle = true,
+  _Bridge? bridge,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         ohosLinuxRuntimeProvider.overrideWithValue(runtime),
         ohosLinuxSecretsProvider.overrideWithValue(secrets),
+        runtimeBridgeProvider.overrideWithValue(bridge ?? _Bridge()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -162,13 +182,35 @@ void main() {
     expect(runtime.calls.where((call) => call == 'getStatus').length, 2);
   });
 
-  testWidgets('a stopped Linux that needs an app restart says so and locks the switch', (tester) async {
+  testWidgets('a stopped Linux that needs an app restart says so, locks the switch and offers the reopen', (
+    tester,
+  ) async {
     final runtime = _Runtime(_snapshot({'state': 'stopped', 'restartRequired': true}));
-    await _pump(tester, runtime, _Secrets());
-    expect(find.textContaining('重新打开 App'), findsOneWidget);
+    final bridge = _Bridge();
+    await _pump(tester, runtime, _Secrets(), bridge: bridge);
+    expect(find.text('Linux 已经停止，重新打开 App 后才能再开启。'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('linux-switch')));
     await tester.pumpAndSettle();
     expect(runtime.calls, ['getStatus']);
+
+    await tester.tap(find.byKey(const ValueKey('linux-reopen')));
+    await tester.pumpAndSettle();
+    expect(bridge.reopened, 1);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('a reopen the system refuses tells the user to reopen by hand', (tester) async {
+    final runtime = _Runtime(_snapshot({'state': 'stopped', 'restartRequired': true}));
+    final bridge = _Bridge()..reopenError = PlatformException(code: '16000050');
+    await _pump(tester, runtime, _Secrets(), bridge: bridge);
+    await tester.tap(find.byKey(const ValueKey('linux-reopen')));
+    await tester.pump();
+    expect(find.text('没能自动重新打开，请手动退出 App 再打开。'), findsOneWidget);
+  });
+
+  testWidgets('a Linux that can still be turned on offers no reopen', (tester) async {
+    await _pump(tester, _Runtime(_snapshot()), _Secrets());
+    expect(find.byKey(const ValueKey('linux-reopen')), findsNothing);
   });
 
   testWidgets('a manual proxy is stored in secure storage and sent to the engine', (tester) async {

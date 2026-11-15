@@ -9940,7 +9940,7 @@ class L10nEn extends L10n {
 
   @override
   String get linuxMemoryNote =>
-      'While Linux is on, the app uses roughly 100 MB more memory. Turning it off gives that back only when the app fully quits.';
+      'While Linux is on, the app uses roughly 100 MB more memory. Turning it off gives that back; turning it on again then needs the app reopened.';
 
   @override
   String get linuxStateOn => 'On';
@@ -9979,7 +9979,13 @@ class L10nEn extends L10n {
   String get linuxRequestFailed => 'Couldn’t reach the engine. Try again in a moment.';
 
   @override
-  String get linuxRestartRequired => 'Linux has stopped. Quit and reopen the app to turn it on again.';
+  String get linuxRestartRequired => 'Linux has stopped. Reopen the app to turn it on again.';
+
+  @override
+  String get linuxReopenApp => 'Reopen app';
+
+  @override
+  String get linuxReopenFailed => 'Couldn\'t reopen the app. Quit it and open it again.';
 
   @override
   String linuxErrorWithCode(String code) {

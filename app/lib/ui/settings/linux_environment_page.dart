@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../runtime/ohos_linux_runtime.dart';
+import '../../runtime/runtime_state.dart' show runtimeBridgeProvider;
 import '../../state/ohos_linux_state.dart';
 import '../common/app_dialog.dart';
 import '../common/status_chip.dart';
@@ -100,6 +101,17 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
   }
 
   OhosLinuxController get _linux => ref.read(ohosLinuxProvider.notifier);
+
+  Future<void> _reopen() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final failed = context.l10n.linuxReopenFailed;
+    try {
+      await ref.read(runtimeBridgeProvider).reopenApp();
+    } catch (_) {
+      // The system says no while the app isn't on top, or within 3 s of the last time.
+      messenger.showSnackBar(SnackBar(content: Text(failed)));
+    }
+  }
 
   Future<void> _reinstall() async {
     if (!await confirmLinuxReinstall(context) || !mounted) return;
@@ -208,6 +220,12 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                   : (value) => unawaited(_linux.setEnabled(value)),
             ),
             SettingsTile(title: l10n.linuxStatus, value: StatusChip(tone: tone, label: label), chevron: false),
+            if (restart)
+              SettingsTile(
+                key: const ValueKey('linux-reopen'),
+                title: l10n.linuxReopenApp,
+                onTap: () => unawaited(_reopen()),
+              ),
             if (progress != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),

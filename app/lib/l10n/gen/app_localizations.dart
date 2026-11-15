@@ -17441,7 +17441,7 @@ abstract class L10n {
   /// No description provided for @linuxMemoryNote.
   ///
   /// In zh, this message translates to:
-  /// **'开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关后，要等 App 完全退出才会还给系统。'**
+  /// **'开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关会把这部分还给系统，之后要重新打开 App 才能再开启。'**
   String get linuxMemoryNote;
 
   /// No description provided for @linuxStateOn.
@@ -17519,8 +17519,20 @@ abstract class L10n {
   /// No description provided for @linuxRestartRequired.
   ///
   /// In zh, this message translates to:
-  /// **'Linux 已经停止，需要完全退出并重新打开 App 才能再开启。'**
+  /// **'Linux 已经停止，重新打开 App 后才能再开启。'**
   String get linuxRestartRequired;
+
+  /// No description provided for @linuxReopenApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新打开 App'**
+  String get linuxReopenApp;
+
+  /// No description provided for @linuxReopenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能自动重新打开，请手动退出 App 再打开。'**
+  String get linuxReopenFailed;
 
   /// No description provided for @linuxErrorWithCode.
   ///

@@ -4,7 +4,7 @@
   "linuxSwitch": "开启 Linux",
   "linuxStatus": "状态",
   "linuxFirstHint": "第一次开启会下载约 3.5 MB 的基础系统并安装，大约一两分钟；之后再开几秒就好。",
-  "linuxMemoryNote": "开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关后，要等 App 完全退出才会还给系统。",
+  "linuxMemoryNote": "开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关会把这部分还给系统，之后要重新打开 App 才能再开启。",
   "linuxStateOn": "已开启",
   "linuxStateOff": "未开启",
   "linuxStateInstalling": "正在准备",
@@ -17,7 +17,9 @@
   "linuxStageTools": "安装工具",
   "linuxEngineOffline": "本机引擎没在运行，启动引擎后再来开启。",
   "linuxRequestFailed": "没能和引擎通信，请稍后重试。",
-  "linuxRestartRequired": "Linux 已经停止，需要完全退出并重新打开 App 才能再开启。",
+  "linuxRestartRequired": "Linux 已经停止，重新打开 App 后才能再开启。",
+  "linuxReopenApp": "重新打开 App",
+  "linuxReopenFailed": "没能自动重新打开，请手动退出 App 再打开。",
   "linuxErrorWithCode": "没能开启：{code}",
   "@linuxErrorWithCode": {
     "placeholders": {
