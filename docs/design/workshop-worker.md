@@ -91,7 +91,7 @@ companion 的 JSON 逐成员完成严格解析和语义校验。ZIP 目录在循
 
 这样做移除了随 JSON 成员累计保留的对象图，不是流式 JSON 解析或完整的内存保证。单个 JSON 仍会完整形成对象图；其节点复杂度、解析临时字符串、PNG 完整 scanline、zlib 拼接瞬态和其他请求的缓冲都需要运行时测量。对象离开函数作用域也不保证 GC 立即归还内存。[Workers 内存限制](https://developers.cloudflare.com/workers/platform/limits/#memory) 是每个 isolate 128 MB，一个 isolate 可能同时承载多项请求，不能把 128 MiB 的归档展开门当作堆预算。2026-11-15 在 Node 里实测：45 MiB 的伙伴包（6 张噪声贴图）上传并通过验证，除请求体和测试替身 R2 各自的副本外，额外占用约 45 MiB。
 
-moc 上限 6 来自 `tooling/companion/fixtures/live2d-core-sources-v1.json` 里 2026-11-07 的实测：官方 Core 6.0.1、SHA `8741…ef47`、`latestMocVersion` 6。这份历史记录不证明当前安装 runtime 的聚合摘要一致。版本头通过不等于 Core 一致性或所有模型功能可渲染；批准者仍须用获准的固定 Core 做完整的一致性 / 加载检查，并核对模型许可、内容和实际 App 效果。Worker 不附带 Core / runtime / 模型 / 贴图。companion ≤ 1000 成员、单成员 16 MiB、展开 128 MiB；PNG 沿用 pet 的完整上限，其余数据格式不声称已做音视频或 Core 的完整解码。
+moc 上限 6 来自 `tooling/companion/fixtures/live2d-core-sources-v1.json` 里 2026-11-07 的实测：官方 Core 6.0.1、SHA `8741…ef47`、`latestMocVersion` 6。这份历史记录不证明当前安装 runtime 的聚合摘要一致。版本头通过不等于 Core 一致性或所有模型功能可渲染；批准者仍须用获准的固定 Core 做完整的一致性 / 加载检查，并核对模型许可、内容和实际 App 效果。Worker 不附带 Core / runtime / 模型 / 贴图。companion ≤ 1000 成员、单成员 32 MiB、展开 256 MiB、JSON 成员 8 MiB；贴图 PNG 只查签名、IHDR 和单边 ≤ 8192（WebView 解码），不再沿用 pet 的完整上限，其余数据格式不声称已做音视频或 Core 的完整解码。
 
 ## 测试覆盖
 
