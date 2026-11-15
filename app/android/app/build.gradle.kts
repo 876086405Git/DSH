@@ -90,13 +90,11 @@ android {
             jniLibs.srcDir(File(runtimeOut, "arm64-v8a/jniLibs"))
             // 内置模型 (sherpa-onnx) and the model itself ship inside the APK.
             assets.srcDir("src/main/assets/voice")
-            jniLibs.srcDir("src/main/jniLibs")
         }
         getByName("x64") {
             assets.srcDir(File(runtimeOut, "x86_64/assets"))
             jniLibs.srcDir(File(runtimeOut, "x86_64/jniLibs"))
             assets.srcDir("src/main/assets/voice")
-            jniLibs.srcDir("src/main/jniLibs")
         }
     }
 
@@ -108,6 +106,9 @@ android {
             // sherpa_onnx_android_* 1.13.4 and ORT Android 1.27.0 each ship an ORT 1.27.0
             // (sherpa's own build): either serves both, with the same exports.
             pickFirsts += "**/libonnxruntime.so"
+            // 本地 AAR（JitPack 元数据坏了才用文件）和 sherpa_onnx_android_* 都带这几个
+            // 同名 .so；内容相同，任取一份即可。
+            pickFirsts += listOf("**/libsherpa-onnx-c-api.so", "**/libsherpa-onnx-cxx-api.so", "**/libsherpa-onnx-jni.so")
             // Keep the Termux binaries byte-identical to runtime/out (their hashes are in the manifest).
             keepDebugSymbols += listOf("**/libproot.so", "**/libproot-loader.so", "**/libtalloc.so", "**/libandroid-shmem.so", "**/libtawcroot.so")
         }
@@ -180,16 +181,13 @@ dependencies {
     // Bundled Chinese OCR. SDK statistics disclosed separately; initialization is opt-in per use.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
-    // 内置模型 (offline dictation): SenseVoice through sherpa-onnx, in this process, with no
-    // engine involved. The AAR carries the arm64-v8a and x86_64 native libraries; the model
-    // itself lives in assets/voice (see docs/design/voice-input.md and #716).
-    //
-    // 用本地 AAR 而不是 JitPack 坐标：JitPack 给这个版本生成的元数据 group 与坐标不一致
-    // （"bad group: expected='com.github.k2-fsa/sherpa-onnx'"），依赖解析阶段就失败。
-    // 这个文件就是 JitPack 上的同一个 v2.0.1 构建（47 MB，含四个 ABI 的 .so）。
-    implementation(files("libs/sherpa-onnx-v2.0.1.aar"))
     // sherpa's Java binding is Kotlin; the app is Java/Kotlin mixed but does not otherwise
     // depend on the Kotlin runtime.
+    // 内置模型：sherpa-onnx 的 Kotlin 绑定 + jni 库。
+    // 用本地 AAR 而不是 JitPack 坐标：JitPack 给 v2.0.1 生成的元数据 group 与坐标不一致
+    // （"bad group: expected='com.github.k2-fsa/sherpa-onnx'"），依赖解析阶段就失败。
+    // 这个文件就是 JitPack 上的同一个 v2.0.1 构建（47 MB，含四个 ABI）。
+    implementation(files("libs/sherpa-onnx-v2.0.1.aar"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
     testImplementation("junit:junit:4.13.2")
     // Android stubs do not implement JSONObject in local JVM upgrade tests.

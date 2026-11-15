@@ -213,7 +213,6 @@ class WavRecorder(
     }
 
     internal companion object {
-        /** What this recorder writes, and what [SenseVoiceEngine] must be told. */
         const val TARGET_RATE = 16000
     }
 }

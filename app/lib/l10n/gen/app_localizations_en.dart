@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -20830,8 +20831,7 @@ class L10nEn extends L10n {
       locale: localeName,
       other:
           'This card has $count more items you can\'t edit here (lorebook, extensions…). Saving keeps them as they are, and existing chats don\'t change.',
-      one:
-          'This card has 1 more item you can\'t edit here (lorebook, extensions…). Saving keeps it as it is, and existing chats don\'t change.',
+      one: 'This card has 1 more item you can\'t edit here (lorebook, extensions…). Saving keeps it as it is, and existing chats don\'t change.',
     );
     return '$_temp0';
   }
