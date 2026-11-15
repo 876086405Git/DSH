@@ -215,7 +215,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'sdcard');
       await tester.tap(find.text('前往'));
       await tester.pump();
-      expect(find.text('从「/」开始写完整路径'), findsOneWidget);
+      expect(find.text('写完整路径，如 /root/workspace 或 C:/Users/me'), findsOneWidget);
       await tester.enterText(find.byType(TextField), '/sdcard/Documents/');
       await tester.tap(find.text('前往'));
       await _settle(tester);
@@ -224,6 +224,28 @@ void main() {
       expect(find.widgetWithText(BreadcrumbCapsule, '手机存储'), findsOneWidget);
       expect(find.text('blog'), findsOneWidget);
     });
+
+    // A Windows host (#1309): its drive paths go as typed, the root keeps its slash.
+    for (final path in ['C:/Users/me/project', 'C:/']) {
+      testWidgets('a Windows host path goes to the host as typed: $path', (tester) async {
+        final host = sampleWorkspaceHost();
+        await _pump(
+          tester,
+          Builder(
+            builder: (context) => TextButton(onPressed: () => showDirectoryPicker(context), child: const Text('open')),
+          ),
+          _live(host),
+        );
+        await tester.tap(find.text('open'));
+        await _settle(tester);
+        await tester.tap(find.text('输入路径'));
+        await _settle(tester);
+        await tester.enterText(find.byType(TextField), path);
+        await tester.tap(find.text('前往'));
+        await _settle(tester);
+        expect(host.argsOf('directoryPicker/list').last, {'path': path});
+      });
+    }
   });
 
   group('管理工作区', () {

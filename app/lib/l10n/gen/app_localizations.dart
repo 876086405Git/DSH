@@ -28151,7 +28151,7 @@ abstract class L10n {
   /// No description provided for @remoteDirectoryAbsolutePath.
   ///
   /// In zh, this message translates to:
-  /// **'从「/」开始写完整路径'**
+  /// **'写完整路径，如 /root/workspace 或 C:/Users/me'**
   String get remoteDirectoryAbsolutePath;
 
   /// No description provided for @remoteDirectoryNewFolder.

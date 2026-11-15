@@ -15385,7 +15385,7 @@ class L10nZh extends L10n {
   String get remoteDirectoryGo => '前往';
 
   @override
-  String get remoteDirectoryAbsolutePath => '从「/」开始写完整路径';
+  String get remoteDirectoryAbsolutePath => '写完整路径，如 /root/workspace 或 C:/Users/me';
 
   @override
   String get remoteDirectoryNewFolder => '新建文件夹';

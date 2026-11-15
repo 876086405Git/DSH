@@ -366,7 +366,7 @@
   "remoteDirectoryRecent": "Recent",
   "remoteDirectoryEnterPath": "Enter path",
   "remoteDirectoryGo": "Go",
-  "remoteDirectoryAbsolutePath": "Enter the full path, starting with “/”",
+  "remoteDirectoryAbsolutePath": "Enter the full path, like /root/workspace or C:/Users/me",
   "remoteDirectoryNewFolder": "New folder",
   "remoteDirectoryParentCaption": "In “{name}”",
   "remoteDirectoryFolderName": "Folder name",
