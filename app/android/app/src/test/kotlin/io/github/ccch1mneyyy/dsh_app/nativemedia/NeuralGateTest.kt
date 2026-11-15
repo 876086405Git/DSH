@@ -49,12 +49,13 @@ class NeuralGateTest {
         override fun awaitTermination(timeout: Long, unit: TimeUnit) = isTerminated
     }
 
-    private class Capture(echoCancelled: Boolean = true) : AutoCloseable {
+    /** [pause]: 快 by default here, the timings these tests were written for. */
+    private class Capture(echoCancelled: Boolean = true, pause: TurnPause = TurnPause.QUICK) : AutoCloseable {
         val vad = Vad()
         val turn = Turn()
         val worker = Worker()
         val failures = mutableListOf<Exception>()
-        val gate = NeuralGate(vad, turn, echoCancelled, worker) { failures += it }
+        val gate = NeuralGate(vad, turn, echoCancelled, worker, { failures += it }, pause)
         var now = 0L
         private val frame = ShortArray(320)
         fun feed(probability: Float, frames: Int, sample: Short = 1000): List<Edge> {
@@ -156,6 +157,62 @@ class NeuralGateTest {
             assertEquals(1, c.worker.tasks.size)
             c.worker.runNext()
             assertEquals(listOf(Edge.END), c.feed(0.1f, 1, 0))
+        }
+    }
+
+    @Test fun normalBelievesTheModelOnlyAfterSixHundredMillisecondsOfQuiet() {
+        Capture(pause = TurnPause.NORMAL).use { c ->
+            c.feed(0.9f, 6)
+            c.feed(0.1f, 10)
+            c.worker.runNext()
+            // The model says done at 200 ms: a breath mid-sentence, not yet the end.
+            assertEquals(emptyList<Edge>(), c.feed(0.1f, 19))
+            assertEquals(listOf(Edge.END), c.feed(0.1f, 1))
+        }
+    }
+
+    @Test fun aDoneTakenBackByALaterCheckDoesNotEndTheTurn() {
+        Capture(pause = TurnPause.NORMAL).use { c ->
+            c.feed(0.9f, 6)
+            c.feed(0.1f, 10)
+            c.worker.runNext()
+            c.feed(0.1f, 10)
+            c.turn.value = 0.2f
+            c.worker.runNext()
+            assertEquals(emptyList<Edge>(), c.feed(0.1f, 20))
+        }
+    }
+
+    @Test fun aFailedCheckAfterADoneEndsAfterTheHangoverNotTheDoneWait() {
+        Capture(pause = TurnPause.NORMAL).use { c ->
+            c.feed(0.9f, 6)
+            c.feed(0.1f, 10)
+            c.worker.runNext()
+            c.feed(0.1f, 10)
+            c.turn.fails = true
+            c.worker.runNext()
+            // 600 ms would have been the done wait; a failed check waits the 1 s hangover.
+            assertEquals(emptyList<Edge>(), c.feed(0.1f, 29))
+            assertEquals(listOf(Edge.END), c.feed(0.1f, 1))
+        }
+    }
+
+    @Test fun patientWaitsLongerAndAChangeMidPauseAppliesAtOnce() {
+        Capture(pause = TurnPause.PATIENT).use { c ->
+            c.feed(0.9f, 6)
+            c.feed(0.1f, 10)
+            c.worker.runNext()
+            assertEquals(emptyList<Edge>(), c.feed(0.1f, 40))
+            // Switched to 快 in the middle of the pause: the model's done holds now.
+            c.gate.pause = TurnPause.QUICK
+            assertEquals(listOf(Edge.END), c.feed(0.1f, 1))
+        }
+        Capture(pause = TurnPause.PATIENT).use { c ->
+            c.feed(0.9f, 6)
+            c.feed(0.1f, 10)
+            c.worker.runNext()
+            assertEquals(emptyList<Edge>(), c.feed(0.1f, 49))
+            assertEquals(listOf(Edge.END), c.feed(0.1f, 1))
         }
     }
 
