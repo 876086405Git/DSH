@@ -2,6 +2,27 @@
 
 `DSH-go-coexist` 是 **DSH Go 的共存版（coexist）分支**，基于官方 [ccch1mneyyy/dsh-go](https://github.com/ccch1mneyyy/dsh-go) 的发布版改造而来。
 
+## 📦 直接下载安装包
+
+最新共存版 APK 在 Releases 里，不用自己构建：
+
+**[⬇️ DSH Go 共存版 v1.1.0 (arm64)](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.1.0)**
+
+```
+文件：dsh-go-1.1.0-coexist-arm64.apk
+大小：685 MB
+SHA-256：9fefc37c73919e60f01ec95082c1c4033dc4c52999b8400ddc8fcbefb8734966
+```
+
+国内直连慢的话，在下载地址前加 `https://gh-proxy.com/`：
+
+```
+https://gh-proxy.com/https://github.com/876086405Git/DSH/releases/download/coexist-v1.1.0/dsh-go-1.1.0-coexist-arm64.apk
+```
+
+> Release 标签用 `coexist-` 前缀（`coexist-v1.1.0`），和本仓库插件的 `v1.1.0` 区分开。
+
+---
 > **和本仓库 `main` 分支的关系**：`main` 是「DSH 插件集合」（`plugins/` 下三个独立 DSH 桌面插件），和这个分支**内容零重叠、互不影响**。这个分支是完整的 Android 应用源码，不含任何插件代码。
 
 ---
