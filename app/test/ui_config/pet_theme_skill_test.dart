@@ -8,7 +8,7 @@ import 'dart:io';
 import 'package:dsh_app/ui_config/ui_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'skill_native_support.dart';
+
 import 'support.dart';
 
 void main() {
@@ -19,10 +19,10 @@ void main() {
     expect(bundle.name, petThemeSkillName);
     expect(bundle.files.keys, containsAll([
       'SKILL.md',
-      'scripts/pet_theme_convert.py',
-      'scripts/pet_svg_frames.py',
-      'scripts/make_pet_pack.py',
-      'scripts/pet_pack_check.py',
+      ['scripts', 'pet_theme_convert.py'].join('/'),
+      ['scripts', 'pet_svg_frames.py'].join('/'),
+      ['scripts', 'make_pet_pack.py'].join('/'),
+      ['scripts', 'pet_pack_check.py'].join('/'),
     ]));
     expect(bundle.writeOrder.last.key, 'SKILL.md');
     expect(isManagedUiSkill(bundle.skillMd), isTrue);
@@ -34,9 +34,9 @@ void main() {
     final bundle = await loadUiSkillBundle(readAssetFromDisk, petThemeSkillName);
     for (final name in ['pet_theme_convert.py', 'pet_svg_frames.py', 'make_pet_pack.py']) {
       expect(
-        bundle.files['scripts/' + name],
-        File('tool/' + name).readAsStringSync(),
-        reason: 'app/tool/' + name + ' changed: copy it to assets/skills/pet-theme/' + name,
+        bundle.files[['scripts', name].join('/')],
+        File(['tool', name].join('/')).readAsStringSync(),
+        reason: 'app/tool/$name changed: copy it to assets/skills/pet-theme/$name',
       );
     }
   });
@@ -46,9 +46,9 @@ void main() {
     final root = tempRootfs();
     addTearDown(() => root.deleteSync(recursive: true));
     expect(await installUiSkill(root, bundle), UiSkillInstallResult.installed);
-    final installed = Directory(root.path + '/root/.dsh/skills/' + petThemeSkillName);
-    expect(File(installed.path + '/SKILL.md').existsSync(), isTrue);
-    expect(File(installed.path + '/scripts/pet_theme_convert.py').existsSync(), isTrue);
-    expect(File(installed.path + '/scripts/pet_pack_check.py').existsSync(), isTrue);
+    final installed = Directory([root.path, 'root', '.dsh', 'skills', petThemeSkillName].join('/'));
+    expect(File([installed.path, 'SKILL.md'].join('/')).existsSync(), isTrue);
+    expect(File([installed.path, 'scripts', 'pet_theme_convert.py'].join('/')).existsSync(), isTrue);
+    expect(File([installed.path, 'scripts', 'pet_pack_check.py'].join('/')).existsSync(), isTrue);
   });
 }
