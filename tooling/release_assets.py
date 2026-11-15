@@ -287,7 +287,8 @@ def main() -> None:
         except (ReleaseError, apk_delta.DeltaError) as e:
             sys.exit(str(e))
     sums += [f"{patch['sha256']}  {patch['name']}" for patch in patches]
-    (args.out / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
+    (args.out / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8", newline="
+")
 
     manifest = {
         "schema": 1,
@@ -301,7 +302,8 @@ def main() -> None:
     }
     if patches:
         manifest["patches"] = {"arm64": patches}
-    (args.out / "update.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (args.out / "update.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="
+")
 
     try:
         built = f"{decode(build):%Y-%m-%d %H:%M} UTC+8"
