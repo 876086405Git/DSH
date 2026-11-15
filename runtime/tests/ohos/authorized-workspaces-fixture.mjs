@@ -34,7 +34,7 @@ export async function workspaceFixture(t, initial = {}) {
   class FlutterAbility { configureFlutterEngine() {} onForeground() {} onBackground() {} onDestroy() {} }
   class Stub {
     static registerWith() {} static onForeground() {} static onBackground() {} static onDestroy() {}
-    static receive() {} static applyFrameCache() {} attach() {} detach() {}
+    static receive() {} static applyFrameCache() {} attach() {} detach() {} setForeground() {}
   }
   class DocumentPicker {
     constructor(context) { assert.equal(context, app); }

@@ -43,6 +43,7 @@ const info = { beginRect: { left: 0, top: 2400, width: 1080, height: 0 }, endRec
 
 test('every will and did event leaves one public line with the rects, animated and config', () => {
   const f = fixture();
+  f.log.setForeground(true);
   f.log.attach(f.stage);
   assert.deepEqual([...f.listeners.keys()], EVENTS);
   for (const event of EVENTS.slice(0, 4)) f.listeners.get(event)(info);
@@ -59,15 +60,17 @@ test('every will and did event leaves one public line with the rects, animated a
 
 test('height and the keyboard\'s avoid area are logged, other avoid areas are not', () => {
   const f = fixture();
+  f.log.setForeground(true);
   f.log.attach(f.stage);
   f.listeners.get('keyboardHeightChange')(900);
   f.listeners.get('avoidAreaChange')({ type: 0, area: { bottomRect: { height: 1 } } });
-  f.listeners.get('avoidAreaChange')({ type: 3, area: { bottomRect: { height: 900 } } });
-  assert.deepEqual(f.lines.map(l => [l[3], l[4]]), [['height', '900'], ['avoidArea', '{"bottomRect":{"height":900}}']]);
+  f.listeners.get('avoidAreaChange')({ type: 3, area: { leftRect: {left:0,top:0,width:0,height:0}, topRect: {left:0,top:0,width:0,height:0}, rightRect: {left:0,top:0,width:0,height:0}, bottomRect: {left:0,top:1500,width:1080,height:900} } });
+  assert.deepEqual(f.lines.map(l => [l[3], l[4]]), [['height', '900'], ['avoidArea', '{"leftRect":{"left":0,"top":0,"width":0,"height":0},"topRect":{"left":0,"top":0,"width":0,"height":0},"rightRect":{"left":0,"top":0,"width":0,"height":0},"bottomRect":{"left":0,"top":1500,"width":1080,"height":900}}']]);
 });
 
 test('detach takes off exactly what it put on, and twice is harmless', () => {
   const f = fixture();
+  f.log.setForeground(true);
   f.log.attach(f.stage);
   f.log.detach();
   assert.equal(f.listeners.size, 0);
@@ -77,15 +80,20 @@ test('detach takes off exactly what it put on, and twice is harmless', () => {
 
 test('attaching again replaces the old listeners rather than doubling them', () => {
   const f = fixture();
+  f.log.setForeground(true);
   f.log.attach(f.stage);
   const first = f.listeners.get('keyboardWillShow');
+  f.log.setForeground(true);
   f.log.attach(f.stage);
   assert.equal(f.listeners.size, EVENTS.length);
-  assert.equal(f.listeners.get('keyboardWillShow'), first);
+  assert.notEqual(f.listeners.get('keyboardWillShow'), first);
+  first(info);
+  assert.equal(f.lines.length, 0, 'retired callback must be inert after same-window reattach');
 });
 
 test('an event the device refuses costs a warning, not the other events', () => {
   const f = fixture({ refuse: ['keyboardWillShow'] });
+  f.log.setForeground(true);
   f.log.attach(f.stage);
   assert.deepEqual([...f.listeners.keys()], EVENTS.slice(1));
   assert.deepEqual(f.warnings.map(w => w[3]), ['keyboardWillShow']);

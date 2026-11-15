@@ -180,7 +180,7 @@ assertEntryAbilityImports(entryText);
 entryText = entryText.replace(/^import .*;\n/gm, '');
 await fs.writeFile(path.join(temp, 'EntryAbility.mts'),
   `import { RuntimeController } from './RuntimeController.mts';\nimport { FlutterAbility } from '${hostFixtureUrl}';\n` +
-  `const OhosKeyboardLog = class { attach() {} detach() {} };\n` +
+  `const OhosKeyboardLog = class { attach() {} detach() {} setForeground() {} };\n` +
   `const VoicePlugin = { onForeground() {}, onBackground() {} };\n` +
   `const SpeechPlugin = { onForeground() {}, onBackground() {} };\n` +
   `const CompanionVoicePlugin = { onForeground() {}, onBackground() {} };\n` +

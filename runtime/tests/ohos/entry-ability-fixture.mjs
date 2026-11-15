@@ -35,6 +35,7 @@ export const entryAbilityImports = Object.freeze({
   '../plugins/SpeechPlugin': ['default'],
   '../plugins/CompanionVoicePlugin': ['default'],
   '../plugins/StreamingAsrPlugin': ['default'],
+  '../plugins/CompanionWidgetPlugin': ['default'],
   '@ohos.app.ability.Want': ['default'],
   '@ohos.app.ability.AbilityConstant': ['default'],
   '@ohos.window': ['default'],
@@ -72,6 +73,7 @@ class EntryPluginStub {
   static onBackground() {}
   static onDestroy() {}
   static applyFrameCache() {}
+  setForeground() {}
   attach() {}
   detach() {}
   onAttachedToEngine() {}

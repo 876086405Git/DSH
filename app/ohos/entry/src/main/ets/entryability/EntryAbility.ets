@@ -32,6 +32,7 @@ import VoicePlugin from '../plugins/VoicePlugin';
 import SpeechPlugin from '../plugins/SpeechPlugin';
 import CompanionVoicePlugin from '../plugins/CompanionVoicePlugin';
 import StreamingAsrPlugin from '../plugins/StreamingAsrPlugin';
+import CompanionWidgetPlugin from '../plugins/CompanionWidgetPlugin';
 import Want from '@ohos.app.ability.Want';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import window from '@ohos.window';
@@ -63,6 +64,7 @@ export default class EntryAbility extends FlutterAbility {
   }
 
   onForeground(): void {
+    this.keyboardLog.setForeground(true);
     PastePlugin.onForeground(this);
     AppLinksPlugin.onForeground(this);
     RuntimeController.onForeground(this);
@@ -79,6 +81,7 @@ export default class EntryAbility extends FlutterAbility {
   }
 
   onBackground(): void {
+    this.keyboardLog.setForeground(false);
     PastePlugin.onBackground(this);
     AppLinksPlugin.onBackground(this);
     RuntimeController.onBackground(this);
@@ -97,6 +100,8 @@ export default class EntryAbility extends FlutterAbility {
   onDestroy(): void {
     MediaVideoPlugin.onDestroy(this);
     PictureShortcutPlugin.onBackground(this);
+    this.keyboardLog.setForeground(false);
+    this.keyboardLog.detach();
     SpeechPlugin.onBackground(this);
     CompanionVoicePlugin.onBackground(this);
     StreamingAsrPlugin.onBackground(this);
@@ -125,7 +130,7 @@ export default class EntryAbility extends FlutterAbility {
       return host.openUserFile(root, relative);
     }, new NativeVoiceStopControl(this.context)))
     flutterEngine.getPlugins()?.add(new PerformancePlugin())
-    flutterEngine.getPlugins()?.add(new DiagnosticsPlugin())
+    flutterEngine.getPlugins()?.add(new DiagnosticsPlugin(this.keyboardLog))
     flutterEngine.getPlugins()?.add(new UsagePlugin())
     flutterEngine.getPlugins()?.add(new PastePlugin())
     flutterEngine.getPlugins()?.add(new HmsSharePlugin())
@@ -133,6 +138,7 @@ export default class EntryAbility extends FlutterAbility {
     flutterEngine.getPlugins()?.add(new SpeechPlugin())
     flutterEngine.getPlugins()?.add(new CompanionVoicePlugin())
     flutterEngine.getPlugins()?.add(new StreamingAsrPlugin())
+    flutterEngine.getPlugins()?.add(new CompanionWidgetPlugin())
     flutterEngine.getPlugins()?.add(new ShortcutsPlugin())
     flutterEngine.getPlugins()?.add(new LauncherIconPlugin())
     flutterEngine.getPlugins()?.add(new PictureShortcutPlugin())

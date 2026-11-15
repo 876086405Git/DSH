@@ -11,7 +11,7 @@ import vm from 'node:vm';
 import { createHash } from 'node:crypto';
 import { zipBytes, nativeZlib } from '../../../tooling/ohos/tests/runtime-archive-fixture.mjs';
 
-const repo = fileURLToPath(new URL('../../../', import.meta.url));
+const repo = process.env.OHOS_DIAGNOSTIC_SOURCE_ROOT ?? fileURLToPath(new URL('../../../', import.meta.url));
 assert(process.env.OHOS_TYPESCRIPT_PREFIX);
 const ts = createRequire(resolve(process.env.OHOS_TYPESCRIPT_PREFIX, 'package.json'))('typescript');
 export const deferred = () => Promise.withResolvers();
@@ -119,6 +119,7 @@ export async function diagnosticsFixture(t, options = {}) {
       configure(){throw Error('global HiAppEvent config forbidden');}
     }},
     '@ohos.file.fs':{default:api},
+    '@ohos.window':{default:{AvoidAreaType:{TYPE_KEYBOARD:3}}},
     '@ohos.hilog':{default:{info(){},warn(){}}},
     '@ohos.app.ability.common':{default:{}},
     '@ohos.app.ability.wantAgent':{default:{}},
@@ -179,7 +180,7 @@ export async function diagnosticsFixture(t, options = {}) {
   }
   const current=runtime();
   const controller=() => { const Controller=load(resolve(repo,'app/ohos/entry/src/main/ets/runtime/RuntimeController.ets')).RuntimeController;return new Controller(app); };
-  return {...current,root,app,operations,fds,api,native,timers,controller,faults,faultDirectory,
+  return {...current,root,app,operations,fds,api,native,timers,controller,faults,faultDirectory,load,
     emitFault:info=>{faults.queue.push(info);for(const watcher of faults.watchers.values())watcher.onTrigger(faults.queue.length,1,{});},
     attach:plugin => attach(current.Plugin,plugin),call,
     path:join(app.filesDir,'dsh-runtime','engine.log'),directory:join(app.filesDir,'dsh-runtime'),

@@ -49,6 +49,8 @@ sources = [
     'app/ohos/entry/src/main/ets/plugins/DiagnosticsPlugin.ets',
     'app/ohos/entry/src/main/ets/plugins/OhosDiagnosticEvidence.ets',
     'app/ohos/entry/src/main/ets/plugins/OhosFaultEvents.ets',
+    'app/ohos/entry/src/main/ets/plugins/OhosKeyboardLog.ets',
+    'app/lib/state/android_features.dart',
     'app/ohos/entry/src/main/ets/plugins/OhosDeviceFacts.ets',
     'app/ohos/entry/src/main/ets/runtime/RuntimeCore.ets',
     'app/ohos/entry/src/main/ets/runtime/RuntimeController.ets',
@@ -100,7 +102,8 @@ class MethodChannel {
 }
 ''')
     (stubs / 'flutter_riverpod/lib/flutter_riverpod.dart').write_text('''
-class Provider<T> { const Provider(T Function(Object) create); }
+class Ref { T watch<T>(Provider<T> provider) => throw StateError('unused provider fixture'); }
+class Provider<T> { const Provider(T Function(Ref) create); }
 ''')
     config = out / 'package_config.json'
     config.write_text(json.dumps({'configVersion': 2, 'packages': [
@@ -138,10 +141,11 @@ Future<void> main(List<String> args) async {
   check(raw.method=='engineLog' && (raw.arguments as Map)['maxBytes']==12345 && lines.join('|')=='第一行|tail', 'engineLog method, byte argument and UTF-8 list');
   final empty=await const DiagnosticsChannel().info();
   check(empty.app.isEmpty && empty.device.isEmpty && (await const DiagnosticsChannel().engineLog()).isEmpty, 'missing plugin retains existing fallback');
-  // DiagnosticsPlugin.ets answers notImplemented for anything but info/engineLog.
+  // This isolated legacy channel fixture deliberately has no keyboard invokeMethod.
+  // Actual OH collect/cancel and Flutter consumption have their own geometry gate.
   final ime=await channel.collectSystemIme();
   await channel.cancelSystemIme();
-  check(ime.code=='unsupported' && ime.events.isEmpty, 'OH system IME capture is unsupported, not failed');
+  check(ime.code=='unsupported' && ime.events.isEmpty, 'missing legacy method retains unsupported fallback, not a native capability claim');
   final redacted=NativeDiagnostics.fromMap({'voice': {'transcript':'hidden', 'audio':'hidden', 'recognizerAvailable':true, 'recentFailures':[{'code':42,'transcript':'hidden'}]}}).voice;
   check(!jsonEncode(redacted).contains('hidden') && redacted['recognizerAvailable']==true, 'real Dart voice allowlist rejects content');
 }

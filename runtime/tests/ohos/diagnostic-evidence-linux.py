@@ -30,15 +30,15 @@ def main():
     version = json.loads((prefix / 'node_modules/typescript/package.json').read_text())['version']
     if not version.startswith('5.9.'):
         raise ValueError('TypeScript 5.9.x is required; exact observed version is recorded, not pinned')
-    plugin_names = ['DiagnosticsPlugin', 'OhosDiagnosticEvidence', 'OhosFaultEvents']
+    plugin_names = ['DiagnosticsPlugin', 'OhosDiagnosticEvidence', 'OhosFaultEvents', 'OhosKeyboardLog']
     sources = [repo / 'app/ohos/entry/src/main/ets/plugins' / (name + '.ets') for name in plugin_names]
     sources += [repo / 'app/ohos/entry/src/main/ets/plugins/OhosDeviceFacts.ets']
     sources += [repo / 'app/ohos/entry/src/main/ets/runtime' / (name + '.ets') for name in
                 ['PersistedRuntimeLog', 'RuntimeCore', 'RuntimeController', 'RuntimeLifecycle',
                  'RuntimeZip', 'OhosRuntimeArchive', 'OhosRuntimeStorage']]
     sources += [repo / 'runtime/tests/ohos' / name for name in
-                ['diagnostic-evidence.test.mjs', 'diagnostic-evidence-cold.mjs', 'diagnostics-fixture.mjs',
-                 'diagnostic-evidence-linux.py', 'diagnostic-evidence-host.d.ts', 'diagnostic-evidence-data_test.dart']]
+                ['diagnostic-evidence.test.mjs', 'diagnostic-keyboard.test.mjs', 'diagnostic-evidence-cold.mjs', 'diagnostics-fixture.mjs',
+                 'diagnostic-evidence-linux.py', 'diagnostic-evidence-host.d.ts', 'keyboard-geometry-host.d.ts', 'diagnostic-evidence-data_test.dart']]
     sources += [repo / 'tooling/ohos/tests/runtime-archive-fixture.mjs', repo / 'tooling/ohos/run-gates.py']
     sources += [repo / 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/diagnostics/EvidenceStore.kt']
     sources += [repo / 'app/lib/diagnostics' / name for name in
@@ -52,6 +52,7 @@ def main():
         target = plugins / (name + '.ts'); target.write_bytes(origin.read_bytes())
         assert sha(target) == sha(origin)
     (stage / 'host.d.ts').write_bytes((repo / 'runtime/tests/ohos/diagnostic-evidence-host.d.ts').read_bytes())
+    (stage / 'window.d.ts').write_bytes((repo / 'runtime/tests/ohos/keyboard-geometry-host.d.ts').read_bytes())
     # Type-only surfaces for unchanged neighbors. Runtime tests load their real bodies.
     (plugins / 'OhosDeviceFacts.d.ts').write_text('export declare function ohosDeviceIdentity(): Map<string, unknown>;\nexport declare function systemMemoryBytes(): number | null;\n')
     (runtime / 'RuntimeCore.d.ts').write_text('export interface RuntimeFile {size: number;}\nexport interface RuntimeManifest {runtimeVersion: string; dshVersion: string; nodeVersion: string; files: RuntimeFile[];}\n')
@@ -66,7 +67,8 @@ def main():
     plans = [('typescript', [node, prefix / 'node_modules/typescript/lib/tsc.js', '--project', stage / 'tsconfig.json'])]
     for mode in ['plain', 'jitless']:
         plans.append((mode, [node] + (['--jitless'] if mode == 'jitless' else []) +
-                     ['--test', '--test-isolation=none', '--test-reporter=tap', repo / 'runtime/tests/ohos/diagnostic-evidence.test.mjs']))
+                     ['--test', '--test-isolation=none', '--test-reporter=tap', repo / 'runtime/tests/ohos/diagnostic-evidence.test.mjs',
+                      repo / 'runtime/tests/ohos/diagnostic-keyboard.test.mjs']))
     for mode in ['write', 'read']:
         plans.append(('cold-' + mode, [node, repo / 'runtime/tests/ohos/diagnostic-evidence-cold.mjs', mode, out / 'cold-root']))
     for name, argv in plans:

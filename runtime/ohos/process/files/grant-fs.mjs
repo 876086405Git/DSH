@@ -9,10 +9,12 @@ export class NativeGrantFs {
   #path(value){if(typeof value!=='string'||value.includes('\0')||value.length>4096||!value.startsWith('/'))throw failure('EINVAL');
     if(value==='/')return '';const relative=value.slice(1);if(relative.split('/').some(x=>!x||x==='.'||x==='..'))throw failure('EACCES');return relative;}
   #call(method,...args){if(!this.#handle)throw failure('ERR_WORKSPACE_LEASE');return this.#binding[method](this.#handle,...args);}
-  async readFileBuffer(value){const relative=this.#path(value),parts=[];let size=0;
+  #readBuffer(value){const relative=this.#path(value),parts=[];let size=0;
     while(true){const bytes=this.#call('read',relative,size,Math.min(chunk,limit-size+1));if(bytes.length===0)break;
       size+=bytes.length;if(size>limit)throw failure('ERR_WORKSPACE_LIMIT');parts.push(bytes);}
     return Buffer.concat(parts,size);}
+  async readFileBuffer(value){return this.#readBuffer(value);}
+  async #readCopyBuffer(value){return this.#readBuffer(value);}
   // Same 64 MiB resource ceiling as whole reads; never report a truncated file
   // as EOF. The caller owns this handle until iteration closes.
   async *readFileChunks(value,signal){const relative=this.#path(value);let size=0;
@@ -31,8 +33,8 @@ export class NativeGrantFs {
     return Buffer.concat(parts,size);}
   async readFile(value,options){return (await this.readFileBuffer(value)).toString(encoding(options));}
   async readFileBytes(value){return (await this.readFileBuffer(value)).toString('latin1');}
-  async #write(value,content,options,append){const relative=this.#path(value);if(!relative)throw failure('EISDIR');
-    const bytes=typeof content==='string'?Buffer.from(content,encoding(options)):Buffer.from(content);if(bytes.length>limit)throw failure('ERR_WORKSPACE_LIMIT');
+  async #write(value,content,options,append,ownedCopy=false){const relative=this.#path(value);if(!relative)throw failure('EISDIR');
+    const bytes=ownedCopy?content:typeof content==='string'?Buffer.from(content,encoding(options)):Buffer.from(content);if(bytes.length>limit)throw failure('ERR_WORKSPACE_LIMIT');
     const position=typeof options==='object'?(options.ohosWritePosition??(options.ohosOverwriteAtStart===true?0:undefined)):undefined;
     if(position!==undefined&&(!Number.isSafeInteger(position)||position<0||!Number.isSafeInteger(position+bytes.length)))throw failure('EINVAL');
     let offset=0,first=true;do{const part=bytes.subarray(offset,Math.min(offset+chunk,bytes.length));
@@ -62,7 +64,7 @@ export class NativeGrantFs {
   async mv(source,dest){const from=this.#path(source),to=this.#path(dest);if(!from||!to)throw failure('EBUSY');this.#call('mutate','rename',from,to);}
   async cp(source,dest,options={},depth=0){if(depth>64)throw failure('ERR_WORKSPACE_LIMIT');const st=await this.lstat(source);
     if(st.isDirectory){if(!options.recursive)throw failure('EISDIR');await this.mkdir(dest,{recursive:true});for(const name of await this.readdir(source))await this.cp(path.posix.join(source,name),path.posix.join(dest,name),options,depth+1);}
-    else if(st.isFile)await this.writeFile(dest,await this.readFileBuffer(source));else throw failure('ENOTSUP');}
+    else if(st.isFile)await this.#write(dest,await this.#readCopyBuffer(source),undefined,false,true);else throw failure('ENOTSUP');}
   resolvePath(base,value){return path.posix.resolve(base,value);}
   getAllPaths(){return [];}
   async realpath(value){await this.stat(value);return value;}

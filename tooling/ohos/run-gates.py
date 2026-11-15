@@ -46,6 +46,7 @@ WRAPPED_TEST_LOGS = {
     'media-video-*': ['{name}/test.log'],
     'call-capture-*': ['{name}/test.log'],
     'system-tts-*': ['{name}/test.log'],
+    'companion-widget-*': ['{name}/test.log'],
     'git-*': ['{name}/stdout.log'], 'owned-*': ['{name}/stdout.log'],
     'native-files': ['native-files/logic.log'], 'pdf': ['pdf/logic.log'],
     'hms-share': ['hms-share/logic.log'], 'native-media': ['native-media/logic.log'],
@@ -53,6 +54,7 @@ WRAPPED_TEST_LOGS = {
     'system-asr-native': ['system-asr-native/plain.log', 'system-asr-native/jitless.log'],
     'performance-dart': ['performance-dart/logic.log'],
     'diagnostics-dart': ['diagnostics-dart/node-test.log'],
+    'keyboard-geometry': ['keyboard-geometry/plain.log', 'keyboard-geometry/jitless.log'],
     'composition-process-matrix': ['composition-process-matrix/jit.log', 'composition-process-matrix/strict.log'],
     'pcm-stream-native': ['pcm-stream-native/plain.log', 'pcm-stream-native/jitless.log'],
     'attachment-cache-proof-native-*': ['{name}/test.log'],
@@ -700,6 +702,8 @@ def main():
     g.node_tests('workspace-native-snapshot', [rt + 'workspace-snapshot.test.mjs'], needs=('workspace-shell-publisher', 'workspace-shell-addon'), extra=lambda: {'OHOS_GRANT_ADDON': str(o / 'workspace-shell.node'), 'OHOS_GRANT_PUBLISHER': str(o / 'workspace-publisher.node'), 'OHOS_GRANT_HOST': str(o / 'libdsh_host.so')})
     for workspace_mode in ('plain', 'jitless'):
         g.node_tests('workspace-shell-' + workspace_mode, [rt + 'workspace-shell.test.mjs'], mode=workspace_mode, needs=('workspace-shell-publisher', 'workspace-shell-addon', 'build-bash'), extra=lambda: {'OHOS_GRANT_ADDON': str(o / 'workspace-shell.node'), 'OHOS_GRANT_PUBLISHER': str(o / 'workspace-publisher.node'), 'OHOS_GRANT_HOST': str(o / 'libdsh_host.so')})
+    for cp_mode in ('plain', 'jitless'):
+        g.node_tests('workspace-cp-private-' + cp_mode, [rt + 'workspace-cp-private.test.mjs'], mode=cp_mode, timeout=45, needs=('workspace-shell-publisher', 'workspace-shell-addon', 'build-bash'), extra=lambda: {'OHOS_GRANT_ADDON': str(o / 'workspace-shell.node'), 'OHOS_GRANT_PUBLISHER': str(o / 'workspace-publisher.node'), 'OHOS_GRANT_HOST': str(o / 'libdsh_host.so')})
     g.run('build-regex', lambda: g.node(s / 'runtime/ohos/process/build-rg-regex.mjs', p('esbuild_prefix')), needs=('prepared-inputs',), env=g.common)
     def rg_inputs(_):
         rg = p('android_pristine') / 'node_modules/@vscode/ripgrep-linux-x64/bin/rg'
@@ -1449,9 +1453,14 @@ def main():
     g.run('diagnostics-dart', lambda: g.py(rt + 'diagnostics-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--zlib-addon', o / 'zlib.node', '--output', o / 'diagnostics-dart'), needs=('tools', 'dart-tools', 'native-zlib-build'), timeout=240)
     g.run('diagnostic-evidence', lambda: g.py(rt + 'diagnostic-evidence-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--zlib-addon', o / 'zlib.node', '--out', o / 'diagnostic-evidence'),
           needs=('tools', 'native-zlib-build'), timeout=240,
-          tests=[rt + name for name in ['diagnostic-evidence.test.mjs', 'diagnostic-evidence-cold.mjs', 'diagnostic-evidence-linux.py']],
+          tests=[rt + name for name in ['diagnostic-evidence.test.mjs', 'diagnostic-keyboard.test.mjs', 'diagnostic-evidence-cold.mjs', 'diagnostic-evidence-linux.py']],
           scope='Actual ETS record/fault channel and real Linux FD persistence; explicit HiAppEvent SDK boundary; strict host types and separate cold write/read processes; no device delivery claim')
     g.internal('dart-consumer-evidence', lambda _: verify_dart_consumers(o), needs=('diagnostics-dart', 'performance-dart'))
+    g.run('keyboard-geometry', lambda: g.py(rt + 'keyboard-geometry-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'keyboard-geometry'),
+          needs=('tools',), timeout=300, tests=[rt + 'keyboard-geometry.test.mjs', rt + 'keyboard-log.test.mjs', rt + 'entry-ability-fixture.test.mjs'],
+          scope='Actual own-window geometry/diagnostics/EntryAbility with explicit Window/Flutter/clock boundaries; strict host types, not SDK or device')
+    for widget_mode in ('plain', 'jitless'):
+        g.run('companion-widget-' + widget_mode, lambda m=widget_mode: g.py(rt + 'companion-widget-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('companion-widget-' + m)), needs=('tools',), timeout=180, tests=[rt + 'companion-widget.test.mjs', rt + 'entry-ability-fixture.test.mjs'], scope='Actual companion widget ETS/Form data with independent OS processes and real Linux flock/atomic files; explicit FormKit boundary, no page/profile/device proof')
     channels = ['app-links-channel', 'frame-rate-channel', 'keyboard-log', 'connectivity-channel', 'notify-channel', 'paste-channel', 'voice-stop-control', 'liveview-fallback', 'files-media-channel', 'usage-channel', 'launch-channel', 'launcher-icon-channel', 'shortcuts-channel', 'entry-ability-fixture']
     g.node_tests('ets-channels', [rt + n + '.test.mjs' for n in channels], needs=('native-opener-build',), extra=lambda: {'OHOS_USER_FILE_ADDON': str(o / 'user-file-access.node')}, timeout=240)
     def embedding_package(_):
@@ -1574,6 +1583,14 @@ def main():
                      'test/runtime/ohos_idle_diagnostics_test.dart',
                      'test/chat/attachment_file_budget_test.dart', 'test/remote/private_key_file_budget_test.dart',
                      'test/chat/attachment_owner_test.dart', 'test/remote/ssh_key_callback_lifetime_test.dart', 'test/share_hosted', 'test/share/share_panel_test.dart']
+    g.run('flutter-keyboard-geometry', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', '../runtime/tests/ohos/keyboard-geometry-data_test.dart',
+          'test/diagnostics/system_ime_diagnostics_test.dart', 'test/diagnostics/diagnostics_refresh_test.dart', 'test/diagnostics/diagnostics_sections_test.dart'),
+          cwd=g.flutter_source / 'app', env=lambda: {**g.flutter_env, 'OHOS_KEYBOARD_CONSUMER_INPUT': str(o / 'keyboard-geometry/codec-input.json')},
+          needs=('flutter-input-identity', 'keyboard-geometry'), timeout=300,
+          tests=[rt + 'keyboard-geometry-data_test.dart', 'app/test/diagnostics/system_ime_diagnostics_test.dart', 'app/test/diagnostics/diagnostics_refresh_test.dart', 'app/test/diagnostics/diagnostics_sections_test.dart'],
+          scope='Actual Flutter parser/channel/export/coordinator consumes own-window geometry and unchanged Android regressions; no device or UI enablement')
+    g.run('flutter-keyboard-geometry-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/diagnostics/system_ime_evidence.dart', 'lib/diagnostics/diagnostics_channel.dart', 'lib/diagnostics/diagnostics_markdown.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300)
     g.run('flutter-consumers', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', *flutter_tests), cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300, tests=['app/' + x for x in flutter_tests], scope='Actual Linux Flutter engine and Dart consumers; not OHOS AOT/device')
     g.run('flutter-diagnostic-evidence', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', '../runtime/tests/ohos/diagnostic-evidence-data_test.dart',
           'test/diagnostics/automatic_diagnostics_test.dart', 'test/diagnostics/diagnostics_sections_test.dart',
@@ -1588,6 +1605,7 @@ def main():
           cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
           scope='Real Flutter analyzer for the three changed diagnostic data/protocol files')
     g.run('flutter-picture-shortcut-data', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '../runtime/tests/ohos/picture_shortcut_data_test.dart'), cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=120, tests=[rt + 'picture_shortcut_data_test.dart'], scope='Actual unchanged Dart picture-shortcut consumer and channel serialization; explicit native boundary, no UI enablement or phone result')
+    g.run('flutter-companion-widget-data', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '../runtime/tests/ohos/companion_widget_data_test.dart'), cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=120, tests=[rt + 'companion_widget_data_test.dart'], scope='Actual unchanged companion widget Dart consumer and channel serialization; no desktop UI/registration proof')
     g.run('flutter-clipboard-consumer', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', 'test/runtime/ohos_clipboard_consumer_test.dart'), cwd=g.flutter_source / 'app',
           env={**g.flutter_env, 'OHOS_CLIPBOARD_WIRE': str(o / 'clipboard-settlement/after-observations.json')}, needs=('flutter-input-identity', 'clipboard-settlement'), timeout=120,
           tests=['app/test/runtime/ohos_clipboard_consumer_test.dart'], scope='Actual HAR replies consumed by Flutter Clipboard, ApiKeyPage and EditableText; not device clipboard permission')

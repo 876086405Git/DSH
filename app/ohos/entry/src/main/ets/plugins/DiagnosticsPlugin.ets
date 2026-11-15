@@ -13,6 +13,7 @@ import { RuntimeFile, RuntimeManifest } from '../runtime/RuntimeCore';
 import { OhosRuntimeStorage } from '../runtime/OhosRuntimeStorage';
 import { DiagnosticEvidenceError, EvidenceFields, OhosDiagnosticEvidence } from './OhosDiagnosticEvidence';
 import { OhosFaultEvents } from './OhosFaultEvents';
+import { OhosKeyboardLog } from './OhosKeyboardLog';
 
 export default class DiagnosticsPlugin implements FlutterPlugin, AbilityAware {
   private binding: FlutterPluginBinding | null = null;
@@ -22,6 +23,11 @@ export default class DiagnosticsPlugin implements FlutterPlugin, AbilityAware {
   private busy: boolean = false;
   private evidence: OhosDiagnosticEvidence | null = null;
   private faults: OhosFaultEvents | null = null;
+  private keyboard: OhosKeyboardLog;
+
+  constructor(keyboard: OhosKeyboardLog = new OhosKeyboardLog()) {
+    this.keyboard = keyboard;
+  }
 
   getUniqueClassName(): string { return 'DshDiagnosticsPlugin'; }
   onAttachedToEngine(binding: FlutterPluginBinding): void {
@@ -36,6 +42,14 @@ export default class DiagnosticsPlugin implements FlutterPlugin, AbilityAware {
       if (this.binding !== binding) { this.error(result, 'detached'); return; }
       if (call.method === 'recordAppError' || call.method === 'recordVoiceStage') {
         this.record(binding, call, result); return;
+      }
+      if (call.method === 'collectSystemIme') {
+        try { result.success(this.keyboard.snapshot(this.ability !== null)); } catch (_) {}
+        return;
+      }
+      if (call.method === 'cancelSystemIme') {
+        try { result.success(null); } catch (_) {}
+        return;
       }
       if (!['info', 'engineLog'].includes(call.method)) { try { result.notImplemented(); } catch (_) {} return; }
       if (this.busy) { this.error(result, 'busy'); return; }
