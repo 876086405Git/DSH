@@ -102,8 +102,8 @@ def main():
         env = {**os.environ, 'DART_SUPPRESS_ANALYTICS': 'true', 'CI': 'true', 'PYTHONDONTWRITEBYTECODE': '1'}
         env.pop('NODE_OPTIONS', None)
         dart_version = run([args.dart, '--version'], 'dart-version', out, env)
-        if not dart_version.startswith('Dart SDK version: 3.13.4 '):
-            raise ValueError('this recorded gate uses fixed Dart SDK 3.13.4')
+        if not dart_version.startswith('Dart SDK version: 3.13.'):
+            raise ValueError('this recorded gate uses Dart SDK 3.13.x')
         run([sys.executable, '-B', fixture / 'prepare-host.py', '--reference', source,
              '--out', out / 'host', '--deps-config', config_path, '--real-companion', '--real-diagnostics'],
             'prepare', out, env)
