@@ -238,7 +238,11 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   Future<void> send() => _sending ??= _send().whenComplete(() => _sending = null);
 
   Future<void> _send() async {
-    if (!UsageBuild.active || !ref.mounted || !state.collecting) return;
+    // A run belongs to the ledger it started with: turning off replaces it,
+    // so off and on again while a request waits leaves the run nothing to do.
+    final ledger = _ledger;
+    bool live() => ref.mounted && state.collecting && identical(_ledger, ledger);
+    if (!UsageBuild.active || !live()) return;
     final now = _now();
     if (_failedAt case final at? when !now.isBefore(at) && now.difference(at) < retryGap) return;
     if (_closedDay == usageDay(now)) return;
@@ -250,7 +254,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
       return;
     }
     final device = _device ??= await ref.read(usageDeviceProvider)();
-    if (!ref.mounted || !state.collecting) return;
+    if (!live()) return;
     final iid = _currentIid(now);
     final http = ref.read(usageHttpProvider);
     final endpoint = ref.read(usageEndpointProvider);
@@ -272,7 +276,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
         // A host from before v3 refuses its counts, one from before v2 the
         // model and system: the same day again one contract lower, and that
         // one for the rest of this run of the app.
-        while (status == 400 && (payload['v']! as int) > 1 && ref.mounted && state.collecting) {
+        while (status == 400 && (payload['v']! as int) > 1 && live()) {
           _contract = (payload['v']! as int) - 1;
           payload = body();
           // No answer to the lower one is a failed send, not the earlier 400.
@@ -283,7 +287,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
         // Quietly: tried again the next time the app comes to the front.
       }
       // Turned off meanwhile: everything is gone already.
-      if (!ref.mounted || !state.collecting) return;
+      if (!live()) return;
       switch (UsageReply.of(status)) {
         case UsageReply.sent:
           _ledger.sent(day);
