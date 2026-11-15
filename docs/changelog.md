@@ -2,6 +2,30 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.1.0 · 2026-11-15
+
+### 中文
+
+- **语音：朗读、语音输入和语音通话。** 回复可以用 DeepSeek 的声音朗读，输入框可以说话输入，也可以直接和她语音通话。通话里能随时打断她，她会自己判断你说完了再接话，有实时字幕；「停顿多久算说完」可以选，默认多等一会儿。通话中可以换声音和识别方式。用账号登录时语音接口不认账号，会改用 API Key。
+- **酒馆：玩法包和做卡工具。** 新增玩法包；做卡时可以让 AI 改卡、挑着应用改动、看历史版本、看最终提示词，还能先试玩。长对话不再越聊越卡（显示、用量统计、读对话都快了很多）。支持工具回合和自定义模型渠道，数值可以手填；回复长到顶栏下面时顶栏会加遮罩。
+- **手机操控：悬浮条和不打扰模式。** 操控时屏幕边缘换成柔和的色带；悬浮条可以拖动、贴边，小球闲置时半藏在边上。不打扰模式选好通道、连上就能用，不再被一整套准入检查拦住；主屏读不到当前应用时改成确认一次，不再直接拒绝。
+- **使用统计 v3。** 新增酒馆、伙伴小屋、语音通话和 token 用量。
+- **桌宠更活泼。** 反应有多种动画，彩蛋在各种状态下都能触发，新增「搬东西」动作。
+- 其他新功能：创意工坊的投稿改用 GitHub 账号登录，默认连接 go.dshtui.com；自定义启动画面在填满模式下可以缩放和调整位置；新增九个界面特效。
+- **修复。** 进语音通话闪退；发给模型的内部提示不再出现在对话里；远程连接点「重连」立刻重连；伙伴小屋在旧版系统 WebView 上打不开、记忆保存的回包丢了列表不刷新；悬浮宠物在系统重新允许动画后不动；从系统设置打开实时活动回来后不补发；自动检查更新时中途关掉仍弹更新页；深色模式下分段选择器的滑块看不见；子代理都停了标题栏的忙碌点还在转；DeepSeek 图片附件丢失被当成网络错误。引擎运行时的 proot 升到 5.1.107.102（主要是硬链接模拟的修复）。
+- **验证情况。** 语音、悬浮条、不打扰模式和 proot 升级只在自动测试和编译检查里验证过，没有在真机上完整走过。遇到问题请导出诊断并开 issue。
+
+### English
+
+- **Voice: read aloud, voice input and voice calls.** Replies can be read aloud in DeepSeek's voice, you can dictate in the input box, or call her directly. During a call you can interrupt her at any time; she works out when you've finished before answering, with live captions. How long a pause counts as finished is adjustable and defaults to waiting a little longer. You can change the voice and the recognition method mid-call. When signed in with an account the speech service won't accept, it falls back to your API key.
+- **Tavern: play packs and card authoring.** Play packs are new. While making a card you can have the AI revise it, pick which changes to apply, browse past versions, see the final prompt and try it out first. Long chats no longer slow down as they grow (display, usage and loading are all much faster). Tool turns and custom model providers are supported, numbers can be typed in, and the top bar gets a scrim when a long reply scrolls under it.
+- **Phone control: overlay bar and Do Not Disturb.** The screen edge shows a soft band while the app is in control; the overlay bar can be dragged and docked to an edge, and the ball tucks half away when idle. Do Not Disturb works as soon as a channel is chosen and connected, without the old admission checks; when the home screen can't tell which app is in front, it asks you once instead of refusing.
+- **Usage stats v3.** Adds Tavern, the companion room, voice calls and token usage.
+- **Livelier pets.** Reactions have several animations, easter eggs trigger in every state, and there's a new carrying action.
+- Other new features: Creative Workshop submissions now sign in with GitHub, and the workshop connects to go.dshtui.com by default; a custom launch screen in fill mode can be zoomed and repositioned; nine new interface effects.
+- **Fixes.** A crash on entering a voice call; internal notes meant for the model no longer show up in the chat; Reconnect for remote connections reconnects right away; the companion room failing to open on older system WebViews, and its memory list not refreshing when a save reply was lost; the floating pet staying still after the system re-enables animations; the live activity not being re-posted after returning from system settings; the update page still appearing when an automatic check was turned off midway; the segmented control's thumb vanishing in dark mode; the busy dot in the title bar spinning after all sub-agents had stopped; a lost DeepSeek image attachment being reported as a network error. The engine runtime's proot is now 5.1.107.102 (mostly fixes to hard-link emulation).
+- **Testing.** Voice, the overlay bar, Do Not Disturb and the proot update have only been checked by automated tests and builds, not fully on a real phone. If you run into a problem, please export diagnostics and open an issue.
+
 ## 1.0.16 · 2026-11-13
 
 ### 中文
