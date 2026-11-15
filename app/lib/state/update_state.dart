@@ -13,6 +13,7 @@ import '../update/installer.dart';
 import '../update/privileged_installer.dart';
 import '../update/release.dart';
 import '../update/update_config.dart';
+export '../update/update_config.dart' show coexistBuild;
 import '../update/update_http.dart';
 import '../update/version.dart';
 import '../usage/usage_net.dart' show UsageDeviceChannel;
@@ -620,7 +621,11 @@ class AppUpdateController extends Notifier<AppUpdateState> {
 
   /// The launch check: runs only when enabled and due ([isAutoCheckDue]).
   /// True when the caller should offer the update (newer and not skipped).
+  ///
+  /// 共存版直接返回 false：它拿到的 Release APK 包名和自���不同，装了不是升级，
+  /// 见 `update_config.dart` 的 [coexistBuild]。
   Future<bool> autoCheckIfDue() async {
+    if (coexistBuild) return false;
     await ready;
     final prefs = _prefs;
     if (!ref.mounted || prefs == null || !state.checkable || !state.autoCheck || state.busy) return false;

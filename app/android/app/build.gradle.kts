@@ -72,9 +72,12 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.github.ccch1mneyyy.dsh_app"
-        if (sideBuild) applicationIdSuffix = sideSuffix
-        manifestPlaceholders["appLabel"] = if (sideBuild) "DSH Go 测试" else "DSH Go"
+        // 共存版：与官方版（io.github.ccch1mneyyy.dsh_app）包名不同，因此可以同时
+        // 安装、各自保留数据，也不需要同一把签名钥匙。namespace 仍是原包名：
+        // 它只决定 R 类与 BuildConfig 的生成位置，与安装身份无关。
+        // 官方的 DSH_SIDE_BUILD（.test 后缀）是给设备测试用的，共存版不用它。
+        applicationId = "io.github.ccch1mneyyy.dsh_app.coexist"
+        manifestPlaceholders["appLabel"] = "DSH Go 共存"
         // java.nio.file (symlinks while unpacking the rootfs) needs API 26.
         minSdk = 26
         // Target 28 like Termux, so the API 29+ exec restriction on app-private
@@ -82,6 +85,13 @@ android {
         targetSdk = 28
         versionCode = flutter.versionCode.takeIf { it > 1 } ?: buildMinuteVersionCode()
         versionName = flutter.versionName
+    }
+
+    // Kotlin code reads its own package from BuildConfig instead of hard-coding it:
+    // the coexist build ships a different applicationId, and every runtime check
+    // (own-app guards, launcher aliases, privileged grants) has to follow it.
+    buildFeatures {
+        buildConfig = true
     }
 
     flavorDimensions += "abi"
@@ -103,10 +113,15 @@ android {
         getByName("arm64") {
             assets.srcDir(File(runtimeOut, "arm64-v8a/assets"))
             jniLibs.srcDir(File(runtimeOut, "arm64-v8a/jniLibs"))
+            // 内置模型 (sherpa-onnx) and the model itself ship inside the APK.
+            assets.srcDir("src/main/assets/voice")
+            jniLibs.srcDir("src/main/jniLibs")
         }
         getByName("x64") {
             assets.srcDir(File(runtimeOut, "x86_64/assets"))
             jniLibs.srcDir(File(runtimeOut, "x86_64/jniLibs"))
+            assets.srcDir("src/main/assets/voice")
+            jniLibs.srcDir("src/main/jniLibs")
         }
     }
 
@@ -129,7 +144,10 @@ android {
     }
 
     androidResources {
-        noCompress += listOf("gz", "xz", "zst", "tar")
+        // 内置模型的 onnx 必须不压缩：① `AssetManager.openFd` 对压缩资源会抛
+        // FileNotFoundException；② 首次落盘要读 228 MB，压缩后还要边解压边写，慢一倍。
+        // 代价是 APK 大一点（不压缩约 228 MB，压缩后 152 MB），换来的是可 mmap 的资源。
+        noCompress += listOf("gz", "xz", "zst", "tar", "onnx")
     }
 
     signingConfigs {
@@ -186,6 +204,18 @@ dependencies {
     testImplementation("com.microsoft.onnxruntime:onnxruntime:1.27.0")
     // Bundled Chinese OCR. SDK statistics disclosed separately; initialization is opt-in per use.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+
+    // 内置模型 (offline dictation): SenseVoice through sherpa-onnx, in this process, with no
+    // engine involved. The AAR carries the arm64-v8a and x86_64 native libraries; the model
+    // itself lives in assets/voice (see docs/design/voice-input.md and #716).
+    //
+    // 用本地 AAR 而不是 JitPack 坐标：JitPack 给这个版本生成的元数据 group 与坐标不一致
+    // （"bad group: expected='com.github.k2-fsa/sherpa-onnx'"），依赖解析阶段就失败。
+    // 这个文件就是 JitPack 上的同一个 v2.0.1 构建（47 MB，含四个 ABI 的 .so）。
+    implementation(files("libs/sherpa-onnx-v2.0.1.aar"))
+    // sherpa's Java binding is Kotlin; the app is Java/Kotlin mixed but does not otherwise
+    // depend on the Kotlin runtime.
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
     testImplementation("junit:junit:4.13.2")
     // Android stubs do not implement JSONObject in local JVM upgrade tests.
     testImplementation("org.json:json:20240303")

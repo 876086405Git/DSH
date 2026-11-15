@@ -3,6 +3,8 @@
 // See THIRD_PARTY_NOTICES.md.
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
+import io.github.ccch1mneyyy.dsh_app.BuildConfig
+
 import android.os.Bundle
 import android.os.Parcel
 import java.io.InputStream
@@ -134,7 +136,7 @@ object Proto {
     /** 自动恢复无障碍: grants [APP_PACKAGE] WRITE_SECURE_SETTINGS in [USER]; nothing else is grantable. */
     const val OP_GRANT_SECURE_SETTINGS = "grantSecureSettings"
     const val USER = "user"
-    const val APP_PACKAGE = "io.github.ccch1mneyyy.dsh_app"
+    val APP_PACKAGE = BuildConfig.APPLICATION_ID
 
     const val INJECT_OK = "injectOk"
     /** Gate only, with INJECT_OK false: the failing injection's [ERROR] code. Older cores omit it. */

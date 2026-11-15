@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.icons
 
+import io.github.ccch1mneyyy.dsh_app.BuildConfig
+
 /**
  * 桌面图标: which `<activity-alias>` (AndroidManifest.xml) is the launcher entry, and how to move
  * between them. Pure, unit-tested on the JVM; [LauncherIconPlugin] reads and writes the states.
@@ -35,7 +37,7 @@ internal object LauncherIcons {
     /** The mipmap a variant's launcher entry uses (its alias's android:icon; LaunchThemesTest checks). */
     fun mipmapOf(variant: String): String = if (variant == MIST) "ic_launcher" else "ic_launcher_$variant"
 
-    private const val PKG = "io.github.ccch1mneyyy.dsh_app"
+    private val PKG = BuildConfig.APPLICATION_ID
 
     class Alias(val variant: String, val className: String, val enabledByManifest: Boolean) {
         override fun toString() = className.substringAfterLast('.')

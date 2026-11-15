@@ -40,6 +40,7 @@ export 'src/phone_callback.dart';
 export 'src/phone_session.dart';
 export 'src/plugin_config_api.dart';
 export 'src/plugins_api.dart';
+export 'src/prompt_enhance_api.dart';
 export 'src/providers_api.dart';
 export 'src/references_api.dart';
 export 'src/rpc.dart';

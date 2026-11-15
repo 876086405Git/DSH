@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.diagnostics
 
+import io.github.ccch1mneyyy.dsh_app.BuildConfig
+
 /** No log text, identifiers or unrecognised fields can cross this boundary. */
 data class SystemImeEvent(
     val timestamp: Long,
@@ -15,7 +17,7 @@ data class SystemImeEvent(
 }
 
 object SystemImeEvidence {
-    const val APP_PACKAGE = "io.github.ccch1mneyyy.dsh_app"
+    val APP_PACKAGE = BuildConfig.APPLICATION_ID
     const val WINDOW_MS = 120_000L
     const val MAX_EVENTS = 64
     const val MAX_BYTES = 128 * 1024

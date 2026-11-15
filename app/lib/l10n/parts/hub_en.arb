@@ -181,5 +181,25 @@
   "hubQuickPanelSwipe": "Open with a left swipe",
   "hubQuickPanelSwipeHint": "Swipe right to left over the chat. Code blocks, tables and other content that scrolls sideways aren’t affected.",
   "hubQuickPanelItems": "What it lists",
-  "hubQuickPanelItemsNone": "Nothing chosen: a left swipe won't open it"
+  "hubQuickPanelItemsNone": "Nothing chosen: a left swipe won't open it",
+  "settingsEnhanceTitle": "Prompt enhance",
+  "settingsEnhanceModel": "Model for enhance",
+  "settingsEnhanceTest": "Test connection",
+  "settingsEnhanceTestHint": "Send one tiny request with this key and model to check it works",
+  "settingsEnhanceTesting": "Testing…",
+  "settingsEnhanceTestOk": "Connected",
+  "settingsEnhanceTestOkReply": "Connected. The model replied: {reply}",
+  "settingsEnhanceNoKey": "No API key yet — add one under Models",
+  "settingsEnhanceBadKey": "The API key is invalid or expired",
+  "settingsEnhanceBusy": "Too many requests; try again shortly",
+  "settingsEnhanceNetwork": "Network unavailable or timed out",
+  "settingsEnhanceServer": "The model service returned an error",
+  "settingsEnhanceIncomplete": "The model's output was cut off",
+  "@settingsEnhanceTestOkReply": {
+    "placeholders": {
+      "reply": {
+        "type": "String"
+      }
+    }
+  }
 }

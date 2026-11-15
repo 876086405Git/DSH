@@ -44,3 +44,11 @@ site/build/
 runtime/ohos/process/build/
 # NodeMobile, the runtime archive and addon sources: tooling/ios/prepare-engine.sh
 app/ios/Engine/
+# 内置语音模型的模型文件与本地库由 app/tool/fetch_voice_model.py 按
+# model.lock.json 的哈希下载（约 228 MB），不进仓库。
+app/android/app/src/main/assets/voice/*.onnx
+app/android/app/src/main/assets/voice/tokens.txt
+app/android/app/src/main/jniLibs/**/*.so
+# sherpa-onnx 的 AAR（47 MB，JitPack 同一个构建）由 app/tool/fetch_voice_model.py
+# 的 --check 流程落盘，不进仓库。
+app/android/app/libs/*.aar

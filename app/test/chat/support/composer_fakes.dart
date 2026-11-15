@@ -183,6 +183,26 @@ class FakeVoiceBridge implements VoiceBridge {
   @override
   Future<void> startRecorder({required int maxSeconds}) async => calls.add('recorder:$maxSeconds');
 
+  /// 「内置模型」：默认不可用，测试按需打开。
+  bool offlineReady = false;
+  String offlineText = '';
+
+  @override
+  Future<VoiceOfflineStatus> offlineStatus() async =>
+      VoiceOfflineStatus(ready: offlineReady);
+
+  @override
+  Future<void> prepareOffline() async => calls.add('prepareOffline');
+
+  @override
+  Future<void> startOffline({required int maxSeconds}) async => calls.add('offline:$maxSeconds');
+
+  @override
+  Future<String> stopOffline() async {
+    calls.add('stopOffline');
+    return offlineText;
+  }
+
   @override
   Future<Uint8List?> stop() async {
     calls.add('stop');

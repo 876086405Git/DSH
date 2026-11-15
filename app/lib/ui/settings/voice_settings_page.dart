@@ -28,6 +28,7 @@ String voiceModeLabel(L10n l10n, VoiceMode mode) => switch (mode) {
   VoiceMode.system => l10n.voiceModeSystem,
   VoiceMode.engine => l10n.voiceModeEngine,
   VoiceMode.cloud => l10n.voiceModeCloud,
+  VoiceMode.offline => l10n.voiceModeOffline,
 };
 
 /// The 朗读 voice in a few words, for its row.
@@ -178,6 +179,7 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
                               : l10n.harmonyVoiceSystemHint,
                         VoiceMode.engine => l10n.voiceModeEngineHint,
                         VoiceMode.cloud => l10n.voiceModeCloudHint,
+                        VoiceMode.offline => l10n.voiceModeOfflineHint,
                       },
                       trailing: SizedBox.square(
                         dimension: 32,

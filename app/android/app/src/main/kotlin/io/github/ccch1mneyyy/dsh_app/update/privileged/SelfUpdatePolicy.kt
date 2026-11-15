@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.update.privileged
 
+import io.github.ccch1mneyyy.dsh_app.BuildConfig
+
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -27,7 +29,7 @@ internal data class SelfUpdateReceipt(
 
 /** This is an installer capability, not a shell command API. */
 internal object SelfUpdatePolicy {
-    const val PACKAGE = "io.github.ccch1mneyyy.dsh_app"
+    val PACKAGE = BuildConfig.APPLICATION_ID
     const val REVISION = "dsh-self-update-1"
     const val TAG = "dsh_self_update_v1"
     const val MAX_APK_BYTES = 2L * 1024 * 1024 * 1024
