@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_voice_source.dart';
@@ -251,13 +252,25 @@ void main() {
   });
 
   testWidgets('背景: the water by default; a picture once picked; her only when she lives here', (tester) async {
-    final (_, _) = await pumpCall(tester, extra: [callBackdropPickerProvider.overrideWithValue(() async => null)]);
+    final (audio, _) = await pumpCall(tester, extra: [callBackdropPickerProvider.overrideWithValue(() async => null)]);
     await tester.tap(find.byKey(const ValueKey('call-backdrop')));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('通话设置'), findsOneWidget);
     // In a call the sheet also offers her voice and the recognition.
     expect(find.byKey(const ValueKey('call-voice')), findsOneWidget);
     expect(find.byKey(const ValueKey('call-recognition')), findsOneWidget);
+    // 停顿多久算说完: 适中 by default; 耐心 is kept and reaches the call.
+    await tester.ensureVisible(find.text('耐心'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('耐心'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump();
+    expect(
+      ProviderScope.containerOf(tester.element(find.byType(VoiceCallPage))).read(callSettingsProvider).pause,
+      CallPause.patient,
+    );
+    expect(audio.calls, contains('callPause:patient'));
     expect(find.text('深海'), findsOneWidget);
     expect(find.text('选一张图'), findsOneWidget);
     // No companion pack in tests: her card is there but can't be chosen.
@@ -334,6 +347,22 @@ void main() {
       moving.tick(t, phase: CallPhase.listening, mic: 0, voice: 0, isMuted: false);
     }
     expect(moving.flow, greaterThan(0.4));
+  });
+
+  test('two changes made before the saved settings are read: both kept, and what was saved too', () async {
+    SharedPreferences.setMockInitialValues({'speech_call_v1': '{"bargeIn":false}'});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final calls = container.read(callSettingsProvider.notifier);
+    await Future.wait([
+      calls.edit((saved) => saved.copyWith(pause: CallPause.patient)),
+      calls.edit((saved) => saved.copyWith(speaker: false)),
+    ]);
+    final now = container.read(callSettingsProvider);
+    expect((now.pause, now.speaker, now.bargeIn), (CallPause.patient, false, false));
+    // And saved so: the last write carries both.
+    final saved = jsonDecode((await SharedPreferences.getInstance()).getString('speech_call_v1')!) as Map;
+    expect((saved['pause'], saved['speaker'], saved['bargeIn']), ('patient', false, false));
   });
 
   test('a backdrop choice is kept', () async {

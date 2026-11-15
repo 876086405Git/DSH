@@ -14,7 +14,10 @@ import kotlin.math.sqrt
  * on a loud speaker without a working echo canceller the clip can still trip it (and stop itself),
  * and quiet speech over the clip can be missed. Nothing here keeps or sends audio.
  */
-class SpeechGate(private val echoCancelled: Boolean = true) : TurnGate {
+class SpeechGate(
+    private val echoCancelled: Boolean = true,
+    override var pause: TurnPause = TurnPause.NORMAL,
+) : TurnGate {
     enum class Edge { NONE, START, END }
 
     private var floor = Double.NaN
@@ -65,7 +68,7 @@ class SpeechGate(private val echoCancelled: Boolean = true) : TurnGate {
         // Speaking: over when it stays below the start threshold less the hysteresis.
         if (levelDb < start - HYSTERESIS_DB) {
             quietMs += FRAME_MS
-            if (quietMs >= HANGOVER_MS) {
+            if (quietMs >= pause.hangoverMs) {
                 speaking = false
                 quietMs = 0
                 return Edge.END
@@ -89,7 +92,6 @@ class SpeechGate(private val echoCancelled: Boolean = true) : TurnGate {
         const val HYSTERESIS_DB = 6.0
         const val START_FRAMES = 6        // 120 ms
         const val PLAY_START_FRAMES = 10  // 200 ms
-        const val HANGOVER_MS = 700L
         const val SETTLE_MS = 400L
 
         /** RMS of PCM16 samples in dBFS (−100 for silence). */

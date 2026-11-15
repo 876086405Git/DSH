@@ -18696,6 +18696,21 @@ class L10nEn extends L10n {
   String get speechCallSettings => 'Call settings';
 
   @override
+  String get speechCallPause => 'Pause before she answers';
+
+  @override
+  String get speechCallPauseQuick => 'Short';
+
+  @override
+  String get speechCallPauseNormal => 'Medium';
+
+  @override
+  String get speechCallPausePatient => 'Long';
+
+  @override
+  String get speechCallPauseHint => 'Pick Long if she cuts in while you pause; Short if she feels slow to answer.';
+
+  @override
   String get speechCallSpeechSection => 'Voice and recognition';
 
   @override

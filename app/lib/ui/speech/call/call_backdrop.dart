@@ -17,6 +17,7 @@ import '../../../companion/companion_float.dart';
 import '../../../companion/companion_pack.dart';
 import '../../../companion/companion_state.dart';
 import '../../../l10n/l10n.dart';
+import '../../../speech/speech_audio.dart';
 import '../../../speech/speech_settings.dart';
 import '../../../state/voice_settings.dart';
 import '../../common/app_sheet.dart';
@@ -305,6 +306,21 @@ class _BackdropChooserState extends ConsumerState<_BackdropChooser> {
           ),
           if (widget.inCall) ...[
             const SizedBox(height: 20),
+            Text(l10n.speechCallPause, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 10),
+            SegmentedPill<CallPause>(
+              key: const ValueKey('call-pause'),
+              segments: callPauseSegments(l10n),
+              selected: settings.pause,
+              onChanged: (pause) =>
+                  unawaited(ref.read(callSettingsProvider.notifier).edit((saved) => saved.copyWith(pause: pause))),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.speechCallPauseHint,
+              style: theme.textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
+            ),
+            const SizedBox(height: 20),
             Text(l10n.speechCallSpeechSection, style: theme.textTheme.titleSmall),
             const SizedBox(height: 6),
             SheetGroup(
@@ -474,3 +490,10 @@ class _Placeholder extends StatelessWidget {
     child: Center(child: Icon(icon, color: Colors.white70, size: 28)),
   );
 }
+
+/// 快 / 适中 / 耐心, for 停顿多久算说完 here and in the settings.
+List<PillSegment<CallPause>> callPauseSegments(L10n l10n) => [
+  PillSegment(CallPause.quick, l10n.speechCallPauseQuick),
+  PillSegment(CallPause.normal, l10n.speechCallPauseNormal),
+  PillSegment(CallPause.patient, l10n.speechCallPausePatient),
+];

@@ -24,8 +24,19 @@ class SpeechGateTest {
         // A short pause inside the sentence does not end it.
         assertEquals(emptyList<Edge>(), g.feed(-62.0, 20))
         assertEquals(emptyList<Edge>(), g.feed(-30.0, 10))
-        // 700 ms of quiet does.
-        assertEquals(listOf(Edge.END), g.feed(-62.0, 40))
+        // A second of quiet does (适中).
+        assertEquals(emptyList<Edge>(), g.feed(-62.0, 49))
+        assertEquals(listOf(Edge.END), g.feed(-62.0, 1))
+    }
+
+    @Test fun quickAndPatientEndSoonerAndLater() {
+        for ((pause, frames) in listOf(TurnPause.QUICK to 35, TurnPause.PATIENT to 80)) {
+            val g = SpeechGate(pause = pause)
+            g.feed(-62.0, 100)
+            g.feed(-30.0, 10)
+            assertEquals(emptyList<Edge>(), g.feed(-62.0, frames - 1))
+            assertEquals(listOf(Edge.END), g.feed(-62.0, 1))
+        }
     }
 
     @Test fun theClipsEchoIsHeldToAHigherBar() {

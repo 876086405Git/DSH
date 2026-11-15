@@ -48,10 +48,14 @@ class FakeAudio extends SpeechAudio {
   Future<void> duck(String id, bool on) async => calls.add('duck:$id:$on');
 
   @override
-  Future<CallStart> startCall({required bool bargeIn}) async {
+  Future<CallStart> startCall({required bool bargeIn, CallPause pause = CallPause.normal}) async {
     calls.add('callStart:bargeIn=$bargeIn');
+    calls.add('callStart:pause=${pause.name}');
     return start;
   }
+
+  @override
+  Future<void> callPause(CallPause pause) async => calls.add('callPause:${pause.name}');
 
   @override
   Future<void> stopCall() async => calls.add('callStop');

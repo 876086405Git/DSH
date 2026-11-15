@@ -17716,6 +17716,21 @@ class L10nZh extends L10n {
   String get speechCallSettings => '通话设置';
 
   @override
+  String get speechCallPause => '停顿多久算说完';
+
+  @override
+  String get speechCallPauseQuick => '快';
+
+  @override
+  String get speechCallPauseNormal => '适中';
+
+  @override
+  String get speechCallPausePatient => '耐心';
+
+  @override
+  String get speechCallPauseHint => '说话爱停顿、常被她抢话，就选「耐心」；嫌她接得慢，选「快」。';
+
+  @override
   String get speechCallSpeechSection => '声音和识别';
 
   @override

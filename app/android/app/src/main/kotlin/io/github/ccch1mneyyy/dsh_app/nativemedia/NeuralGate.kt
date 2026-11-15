@@ -14,6 +14,7 @@ class NeuralGate(
     },
     /** The turn model failed on a pause (said once per gate): that pause ends the energy gate's way. */
     private val onTurnFailed: (Exception) -> Unit = {},
+    override var pause: TurnPause = TurnPause.NORMAL,
 ) : TurnGate {
     interface VadModel : AutoCloseable {
         fun probability(frame: ShortArray): Float
@@ -45,6 +46,9 @@ class NeuralGate(
 
     /** This pause's check failed: it ends after the energy gate's hangover instead. */
     private var turnFailed = false
+
+    /** The turn model's last word on this pause: done. Believed once the pause is [TurnPause.doneMs] long. */
+    private var done = false
     private var reported = false
 
     override fun setPlaying(on: Boolean, nowMs: Long) {
@@ -83,23 +87,29 @@ class NeuralGate(
             quietSamples = 0
             requestedQuietSamples = 0
             turnFailed = false
+            done = false
         } else {
             quietSamples += frame.size
         }
-        if (utteranceSamples >= MAX_SAMPLES || quietSamples >= FORCE_END_SAMPLES) return end()
-        if (prediction != null && prediction.generation == generation && quietSamples >= CHECK_SAMPLES) {
+        if (utteranceSamples >= MAX_SAMPLES || quietSamples >= samples(pause.forceMs)) return end()
+        if (prediction != null && prediction.generation == generation) {
             val failure = prediction.failure
             if (failure != null) {
                 turnFailed = true
+                done = false
                 if (!reported) {
                     reported = true
                     onTurnFailed(failure)
                 }
-            } else if (prediction.probability >= END_THRESHOLD) {
-                return end()
+            } else {
+                // A later check may take it back (a short pause looks finished more often than a long one).
+                done = prediction.probability >= END_THRESHOLD
             }
         }
-        if (turnFailed && quietSamples >= HANGOVER_SAMPLES) return end()
+        // A short pause mid-sentence often looks finished: the model is believed
+        // only once the pause is as long as the person asked for.
+        if (done && quietSamples >= samples(pause.doneMs)) return end()
+        if (turnFailed && quietSamples >= samples(pause.hangoverMs)) return end()
         if (!pending && quietSamples - requestedQuietSamples >= CHECK_SAMPLES) {
             snapshot.fill(0f, 0, WINDOW_SAMPLES - size)
             var source = (written - size + WINDOW_SAMPLES) % WINDOW_SAMPLES
@@ -122,6 +132,8 @@ class NeuralGate(
         return SpeechGate.Edge.NONE
     }
 
+    private fun samples(ms: Int) = RATE / 1000 * ms
+
     private fun append(frame: ShortArray) {
         for (sample in frame) {
             audio[written] = sample
@@ -133,6 +145,7 @@ class NeuralGate(
     private fun end(): SpeechGate.Edge {
         speaking = false
         turnFailed = false
+        done = false
         generation++
         loudSamples = 0
         quietSamples = 0
@@ -145,6 +158,7 @@ class NeuralGate(
         if (size == 0) return
         speaking = false
         turnFailed = false
+        done = false
         generation++
         loudSamples = 0
         quietSamples = 0
@@ -173,8 +187,6 @@ class NeuralGate(
         private const val START_SAMPLES = RATE * 120 / 1000
         private const val PLAY_START_SAMPLES = RATE * 200 / 1000
         private const val CHECK_SAMPLES = RATE * 200 / 1000
-        private const val FORCE_END_SAMPLES = RATE * 3
-        private const val HANGOVER_SAMPLES = (RATE * SpeechGate.HANGOVER_MS / 1000).toInt()
         private const val PREROLL_SAMPLES = RATE * 300 / 1000
         private const val MAX_SAMPLES = RATE * 110
     }
