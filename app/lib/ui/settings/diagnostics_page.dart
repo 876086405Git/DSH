@@ -134,8 +134,8 @@ class DiagnosticsPage extends ConsumerWidget {
             InfoRow(label: 'API Key', value: settings.hasApiKey ? l10n.pluginsConfigured : l10n.commonNotSet),
           ],
         ),
-        // Its failure evidence is recorded by Android's native side; HarmonyOS keeps none.
-        if (ref.watch(androidSystemFeaturesProvider)) const AutomaticDiagnosticsSection(),
+        // Its failure evidence is recorded natively: Android's own, HarmonyOS's from HiAppEvent.
+        const AutomaticDiagnosticsSection(),
         // The capture reads Android's system log; HarmonyOS gives apps no such log.
         if (ref.watch(androidSystemFeaturesProvider)) const SystemImeDiagnosticsSection(),
         DiagnosticsExportCard(

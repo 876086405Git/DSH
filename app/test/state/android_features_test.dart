@@ -74,7 +74,6 @@ const _rows = {
   'phone-background-guide',
   'phone-files',
   'permission-phone-confirm',
-  'icon-shortcut',
   'pet-outside-app',
   'pet-display-when',
   'pet-overlay-shows',
@@ -460,11 +459,11 @@ void main() {
       expect(find.byType(LaunchScreenSection), findsOneWidget);
     });
 
-    testWidgets('on HarmonyOS: the launcher icon and launch screen, the rest of the page stays', (tester) async {
+    testWidgets('on HarmonyOS: the launcher icon, picture shortcut and launch screen, the rest of the page stays', (tester) async {
       await _pump(tester, const AppearancePage(), android: false);
       expect(find.byType(AppIconPicker), findsOneWidget);
       expect(find.text(_zh.pluginsAppIcon), findsOneWidget);
-      expect(find.byType(IconShortcutTile), findsNothing);
+      expect(find.byType(IconShortcutTile), findsOneWidget);
       expect(find.byType(LaunchScreenSection), findsOneWidget);
       expect(find.text(_zh.launchScreenTitle), findsOneWidget);
       expect(find.byType(ThemeModePicker), findsOneWidget);

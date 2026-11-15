@@ -837,7 +837,6 @@ abstract final class Spots {
     page: SettingsPageId.appearance,
     title: (l) => l.iconShortcutRow,
     keywords: (l) => l.searchKwIconShortcut,
-    androidOnly: true,
   );
   static final launchScreen = SettingSpot(
     'launch-screen',
