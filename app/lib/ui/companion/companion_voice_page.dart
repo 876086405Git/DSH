@@ -20,6 +20,7 @@ import '../../l10n/l10n.dart';
 import '../../speech/deepseek_speech.dart';
 import '../../speech/speech_settings.dart';
 import '../../state/account_state.dart';
+import '../../state/android_features.dart' show operatingSystemProvider;
 import '../providers/provider_widgets.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
@@ -333,6 +334,8 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
     final s = _seen = _watch();
     if (s == null) return AppPage.list(title: title, children: const []);
     final following = !widget.shared && s.follow;
+    // HarmonyOS plays DeepSeek's stream only; the other sources have no player there yet.
+    final deepseekOnly = ref.watch(operatingSystemProvider) == 'ohos';
     _fill(s);
     if (s.cloneSample.isNotEmpty && _recordingFor != s.cloneSample) unawaited(_describe(s.cloneSample));
     final busy = _preview == '';
@@ -379,10 +382,12 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
               ),
             for (final (source, title, hint) in [
               (CompanionVoiceSource.deepseek, l10n.speechVoiceDeepseek, l10n.speechVoiceDeepseekHint),
-              (CompanionVoiceSource.system, l10n.companionVoiceSystem, l10n.companionVoiceSystemHint),
-              (CompanionVoiceSource.preset, l10n.companionVoicePreset, l10n.companionVoicePresetHint),
-              (CompanionVoiceSource.openai, l10n.companionVoiceOpenai, l10n.companionVoiceOpenaiHint),
-              (CompanionVoiceSource.custom, l10n.companionVoiceCustom, l10n.companionVoiceCustomHint),
+              if (!deepseekOnly) ...[
+                (CompanionVoiceSource.system, l10n.companionVoiceSystem, l10n.companionVoiceSystemHint),
+                (CompanionVoiceSource.preset, l10n.companionVoicePreset, l10n.companionVoicePresetHint),
+                (CompanionVoiceSource.openai, l10n.companionVoiceOpenai, l10n.companionVoiceOpenaiHint),
+                (CompanionVoiceSource.custom, l10n.companionVoiceCustom, l10n.companionVoiceCustomHint),
+              ],
             ])
               SettingsTile(
                 title: title,

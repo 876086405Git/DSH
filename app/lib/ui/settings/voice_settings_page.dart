@@ -130,30 +130,29 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
     final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     final languages = ohos ? ref.watch(voiceCapabilitiesProvider).value?.languages : null;
     final chineseOnly = languages != null && languages.isNotEmpty && languages.every((l) => l.startsWith('zh'));
-    // 朗读, 实时字幕 and 语音通话 have no HarmonyOS side yet (dsh/speech, the streaming recognizer).
+    // 实时字幕 and 语音通话 have no HarmonyOS side yet (the streaming recognizer).
     final speech = ref.watch(androidSystemFeaturesProvider);
     final call = ref.watch(callSettingsProvider);
     final calls = ref.read(callSettingsProvider.notifier);
     return AppPage.list(
       title: l10n.voiceSettingsTitle,
       children: [
-        if (speech)
-          SettingsSection(
-            title: l10n.speechReadSection,
-            footer: Text(l10n.speechReadFooter),
-            children: [
-              SettingsTile(
-                key: const ValueKey('speech-voice'),
-                icon: AppIcons.readAloud,
-                tinted: false,
-                spot: SettingsIndex.entry(SettingsPageId.voiceReading),
-                value: Text(speechVoiceLabel(l10n, ref.watch(speechVoiceSettingsProvider))),
-                onTap: () =>
-                    Navigator.of(context)
-                        .push(MaterialPageRoute<void>(builder: (_) => const CompanionVoicePage(shared: true))),
-              ),
-            ],
-          ),
+        SettingsSection(
+          title: l10n.speechReadSection,
+          footer: Text(l10n.speechReadFooter),
+          children: [
+            SettingsTile(
+              key: const ValueKey('speech-voice'),
+              icon: AppIcons.readAloud,
+              tinted: false,
+              spot: SettingsIndex.entry(SettingsPageId.voiceReading),
+              value: Text(speechVoiceLabel(l10n, ref.watch(speechVoiceSettingsProvider))),
+              onTap: () =>
+                  Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => const CompanionVoicePage(shared: true))),
+            ),
+          ],
+        ),
         SettingsSection(
           title: l10n.voiceModeSection,
           footer: harmonyLocal ? Text(l10n.harmonyVoiceLocalLine, key: const ValueKey('voice-local-line')) : null,

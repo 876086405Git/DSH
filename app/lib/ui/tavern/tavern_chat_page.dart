@@ -16,7 +16,6 @@ import '../../l10n/l10n.dart';
 import '../../speech/read_aloud.dart';
 import '../../speech/voice_cloud.dart';
 import '../speech/speech_ui.dart';
-import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/voice_model_state.dart';
@@ -1216,8 +1215,6 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     final marked = ref.read(tavernBookmarksProvider(widget.chatId).notifier).has(message.nodeId);
     final readId = 'tavern:${message.nodeId}';
     final reading = ref.read(readAloudProvider).id == readId;
-    // HarmonyOS has no speech output yet (dsh/speech).
-    final speech = ref.read(androidSystemFeaturesProvider);
     final action = await showAppSheet<_MessageAction>(
       context,
       // As tall as its rows: eight of them pass the default cap on a phone.
@@ -1239,7 +1236,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
               margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               children: [
                 row(_MessageAction.copy, AppIcons.copy, l10n.commonCopy),
-                if (character && speech)
+                if (character)
                   row(
                     _MessageAction.readAloud,
                     reading ? AppIcons.stop : AppIcons.readAloud,

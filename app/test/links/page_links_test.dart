@@ -208,8 +208,7 @@ void main() {
           for (final id in SettingsIndex.linkIds)
             if (SettingsIndex.androidOnlyLink(SettingsIndex.ohosLink(id))) id,
         };
-        // 朗读的声音: HarmonyOS has no speech output yet (dsh/speech).
-        expect(left, {'phone-files', 'voice-reading'});
+        expect(left, {'phone-files'});
       });
 
       testWidgets('a page nobody has is still the router\'s to say', (tester) async {

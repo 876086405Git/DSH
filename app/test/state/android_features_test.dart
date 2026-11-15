@@ -65,8 +65,6 @@ const _pages = {
   'page:phoneAndroidShell',
   'page:phoneDnd',
   'page:phoneUnlocks',
-  // 朗读的声音: HarmonyOS has no speech output yet.
-  'page:voiceReading',
 };
 const _rows = {
   'phone-a11y-restore',

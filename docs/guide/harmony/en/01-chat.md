@@ -30,7 +30,12 @@ When the composer is empty and speech recognition is available, the send button 
 
 ## Read aloud and voice calls
 
-The HarmonyOS version doesn't have read aloud or voice calls yet: there's no **Read aloud** under replies or in their long-press menu, and no **Voice call** in the plus panel.
+Under each reply there is a **Read aloud** key: tap it to hear the reply, tap again to stop. It's also in the reply's long-press menu, and in the tavern when you long-press a character's message. Code blocks, tables and link addresses are left out. The HarmonyOS version uses DeepSeek's voice, paid by your signed-in DeepSeek account, or the API key in Settings when signed out; you can choose between its two voices:
+
+<!-- nav: commonSettings,voiceSettingsTitle,speechVoiceTitle -->
+`Settings › Voice › Reading voice`
+
+The HarmonyOS version doesn't have voice calls yet: there's no **Voice call** in the plus panel.
 
 ## Create images and video
 

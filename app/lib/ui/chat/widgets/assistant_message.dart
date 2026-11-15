@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
 import '../../../speech/read_aloud.dart';
-import '../../../state/android_features.dart';
 import '../../speech/speech_ui.dart';
 import '../../common/expand_reveal.dart';
 import '../../common/fluid_bits.dart';
@@ -218,10 +217,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
                       onBranch: widget.onBranch,
                       branching: widget.branching,
                       onShare: () => shareReply(context, widget.item),
-                      // HarmonyOS has no speech output yet (dsh/speech).
-                      onReadAloud: ref.watch(androidSystemFeaturesProvider)
-                          ? () => readAloudReply(context, widget.item.key, dshUiPlainText(text))
-                          : null,
+                      onReadAloud: () => readAloudReply(context, widget.item.key, dshUiPlainText(text)),
                       reading: ref.watch(readAloudProvider.select((s) => s.phaseOf(widget.item.key))),
                       onRegenerate: widget.onRegenerate,
                       regenerating: widget.regenerating,
@@ -254,8 +250,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
         MessageAction.selectText,
         if (onQuote != null) MessageAction.quote,
         MessageAction.share,
-        if (ProviderScope.containerOf(context, listen: false).read(androidSystemFeaturesProvider))
-          MessageAction.readAloud,
+        MessageAction.readAloud,
         if (onRegenerate != null && !widget.regenerating) MessageAction.regenerate,
         if (onBranch != null && !widget.branching) MessageAction.branch,
       ],

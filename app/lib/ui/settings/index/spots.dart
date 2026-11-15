@@ -530,7 +530,6 @@ final _pages = <SettingsPageMeta>[
     parent: SettingsPageId.voice,
     keywords: (l) => l.searchKwVoiceReading,
     links: const ['voice-reading'],
-    androidOnly: true,
   ),
   SettingsPageMeta(
     SettingsPageId.performance,

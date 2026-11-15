@@ -126,9 +126,9 @@ void main() {
       expect(find.text(zh.harmonyVoiceLocalLine), findsNothing);
     });
 
-    testWidgets('no 朗读, 实时字幕 or 通话 there yet; DeepSeek and a cloud service still listen', (tester) async {
+    testWidgets('朗读 is there, no 实时字幕 or 通话 yet; DeepSeek and a cloud service still listen', (tester) async {
       await page(tester, 'ohos', height: 4000);
-      expect(find.byKey(const ValueKey('speech-voice')), findsNothing);
+      expect(find.byKey(const ValueKey('speech-voice')), findsOneWidget);
       expect(find.text(zh.speechLiveSection), findsNothing);
       expect(find.byKey(const ValueKey('speech-call-barge-in')), findsNothing);
       expect(find.byKey(const ValueKey('voice-mode-deepseek')), findsOneWidget);
