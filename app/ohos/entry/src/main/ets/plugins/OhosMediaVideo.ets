@@ -220,7 +220,7 @@ export class OhosMediaVideo {
 
   close(): Promise<void> {
     this.active = false; this.wanted = false; this.playGeneration++;
-    this.cancelPreparation?.(this.failure ?? new MediaVideoError('closed'));
+    this.cancelPreparation?.((this.failure ?? new MediaVideoError('closed')) as Error);
     if (this.closing !== null) return this.closing;
     const work: Promise<void> = this.release(); this.closing = work;
     work.then((): void => { if (this.closing === work) this.closing = null; },

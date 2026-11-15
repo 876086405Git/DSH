@@ -180,7 +180,9 @@ export class OhosDiagnosticEvidence {
     catch (_) { throw new DiagnosticEvidenceError('invalid_storage'); }
     if (!Array.isArray(raw)) throw new DiagnosticEvidenceError('invalid_storage');
     const result: DiagnosticEvidenceRow[] = [];
-    for (const item of (raw as Any[]).slice(-this.storageRowLimit(kind))) {
+    const items: Any[] = (raw as Any[]).slice(-this.storageRowLimit(kind));
+    for (let index = 0; index < items.length; index++) {
+      const item: Any = items[index];
       if (item === null || typeof item !== 'object') continue;
       const fields: EvidenceFields = item as EvidenceFields;
       if (typeof fields.at !== 'number') continue;
