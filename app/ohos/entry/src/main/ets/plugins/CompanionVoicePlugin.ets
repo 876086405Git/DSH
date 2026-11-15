@@ -213,8 +213,8 @@ export default class CompanionVoicePlugin implements FlutterPlugin, AbilityAware
   };
 
   private async close(): Promise<void> {
-    this.initialized = false;
     try { await this.opening; } catch (_) {}
+    this.initialized = false;
     const tts: textToSpeech.TextToSpeechEngine | null = this.tts;
     if (tts !== null) {
       try { tts.stop(); } catch (_) { /* shutdown is the resource-retirement operation */ }

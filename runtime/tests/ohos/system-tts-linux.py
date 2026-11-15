@@ -40,6 +40,8 @@ def main():
     if args.baseline_root:
         argv.append('--test-name-pattern=^actual EntryAbility registers')
     argv.append('runtime/tests/ohos/system-tts.test.mjs')
+    if not args.baseline_root:
+        argv.append('runtime/tests/ohos/system-tts-init-retry.test.mjs')
     sources = [repo / 'runtime/tests/ohos' / name for name in
                ('system-tts-fixture.mjs', 'system-tts.test.mjs', 'system-tts-linux.py')]
     sources += [product / 'app/ohos/entry/src/main/ets/entryability/EntryAbility.ets',
@@ -48,6 +50,7 @@ def main():
     plugins = ('CompanionVoicePlugin', 'HmsTextToSpeechKit', 'OhosSpeechPlayback')
     stubs = ('kits/@kit.CoreSpeechKit.d.ts', 'api/@hms.ai.textToSpeech.d.ts', 'api/@hms.ai.speechRecognizer.d.ts')
     if not args.baseline_root:
+        sources.append(repo / 'runtime/tests/ohos/system-tts-init-retry.test.mjs')
         sources += [product / 'app/ohos/entry/src/main/ets/plugins' / (name + '.ets')
                     for name in (*plugins, 'SpeechPlugin')]
         sources += [repo / 'tooling/ohos/hms-stubs' / name for name in stubs]

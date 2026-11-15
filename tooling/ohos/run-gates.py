@@ -1479,7 +1479,7 @@ def main():
         g.run('call-capture-' + mode, lambda m=mode: g.py(rt + 'call-capture-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('call-capture-' + m)), needs=('tools',), timeout=180,
               tests=[rt + name for name in ['call-capture.test.mjs', 'call-control.test.mjs', 'voice-pcm-tap.test.mjs', 'speech-call-channel.test.mjs', 'voice-channel.test.mjs', 'call-route.test.mjs', 'call-start-mute.test.mjs', 'call-start-pause.test.mjs']],
               scope='Actual ETS energy fallback, capture/control including startup mute and pause, system-TTS app route, PCM tap and dictation regression; explicit OS boundaries; no SDK or device claim')
-        g.run('system-tts-' + mode, lambda m=mode: g.py(rt + 'system-tts-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('system-tts-' + m)), needs=('tools',), timeout=180, tests=[rt + 'system-tts.test.mjs'], scope='Actual EntryAbility and system TTS/PCM channel bodies; explicit HMS/Flutter/AudioRenderer boundaries; not SDK or device validation')
+        g.run('system-tts-' + mode, lambda m=mode: g.py(rt + 'system-tts-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('system-tts-' + m)), needs=('tools',), timeout=180, tests=[rt + 'system-tts.test.mjs', rt + 'system-tts-init-retry.test.mjs'], scope='Actual EntryAbility and system TTS/PCM channel bodies; explicit HMS/Flutter/AudioRenderer boundaries; not SDK or device validation')
     tooling = ['managed-skill', 'native-host-lazy', 'runtime-archive', 'runtime-channel', 'linux-control', 'lifecycle-host', 'web-files', 'transient-task', 'runtime-recovery', 'recovery-storage', 'native-recovery-gate', 'last-known-good']
     g.node_tests('ets-runtime-tooling', [tools + n + '.test.mjs' for n in tooling], needs=('native-zlib-build', 'prepared-inputs'), extra=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node'), 'OHOS_INSTALL_RECORD_WIRE': str(o / 'install-record-wire.json')}, timeout=240)
     g.run('runtime-background-idle', lambda: g.node('--test', '--test-name-pattern=1200 background polling',
@@ -1638,6 +1638,22 @@ def main():
     g.run('flutter-keyboard-geometry-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/diagnostics/system_ime_evidence.dart', 'lib/diagnostics/diagnostics_channel.dart', 'lib/diagnostics/diagnostics_markdown.dart'),
           cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300)
     g.run('flutter-consumers', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', *flutter_tests), cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300, tests=['app/' + x for x in flutter_tests], scope='Actual Linux Flutter engine and Dart consumers; not OHOS AOT/device')
+    g.run('diagnostic-cancel-wire', lambda: g.node(s / (rt + 'automatic-diagnostics-cancel-wire.mjs')),
+          env=lambda: {**g.common(), 'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node'),
+                       'OHOS_DIAGNOSTIC_SOURCE_ROOT': str(s), 'OHOS_CANCEL_OWNER_WIRE': str(o / 'diagnostic-cancel-wire.json')},
+          needs=('tools', 'native-zlib-build'), timeout=60, tests=[rt + 'automatic-diagnostics-cancel-wire.mjs'],
+          scope='Two increasing-time snapshots from actual OH diagnostic ETS and Linux persistence; explicit HiAppEvent boundary, no phone fault claim')
+    g.run('flutter-diagnostic-cancel-state', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
+          '../runtime/tests/ohos/automatic-diagnostics-cancel-state_test.dart'),
+          cwd=g.flutter_source / 'app', env=lambda: {**g.flutter_env, 'OHOS_CANCEL_OWNER_WIRE': str(o / 'diagnostic-cancel-wire.json')},
+          needs=('flutter-input-identity', 'diagnostic-cancel-wire'), timeout=300,
+          tests=[rt + 'automatic-diagnostics-cancel-state_test.dart'],
+          scope='Actual OH provider/sender and DshClient loopback HTTP cancellation ownership; same-epoch new check and Android/default compatibility, zero model requests')
+    g.run('flutter-diagnostic-cancel-state-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/diagnostics/automatic_diagnostics.dart',
+          '../runtime/tests/ohos/automatic-diagnostics-cancel-state_test.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
+          tests=['app/lib/diagnostics/automatic_diagnostics.dart', rt + 'automatic-diagnostics-cancel-state_test.dart'],
+          scope='Real Flutter analyzer for the OH cancellation state guard and actual-provider finite tests')
     g.run('flutter-diagnostic-evidence', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', '../runtime/tests/ohos/diagnostic-evidence-data_test.dart',
           'test/diagnostics/automatic_diagnostics_test.dart', 'test/diagnostics/diagnostics_sections_test.dart',
           'test/diagnostics/automatic_diagnostics_provider_test.dart', 'test/diagnostics/voice_diagnostics_test.dart'),
