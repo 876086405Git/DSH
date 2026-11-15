@@ -1,0 +1,246 @@
+# Only the iSH path, on the iOS Simulator: prepare the engine, build iSH and its N-API owner
+# for the simulator, one plain engine round, then the real approval chain into the guest.
+# It stops where the full iOS compile run goes on to Flutter, the app and the archive, so a
+# change to the guest is checked in about ten minutes instead of an hour. The steps are the
+# same as in ios-compile.yml's engine job.
+name: iOS guest
+
+on:
+  push:
+    branches: [main, 'feat/ios-**', 'ios/**']
+    paths:
+      - 'runtime/ios/guest/**'
+      - 'runtime/ios/host/**'
+      - 'tooling/ios/ish/**'
+      - 'tooling/ios/build-ish.sh'
+      - 'tooling/ios/build-guest-addon.sh'
+      - 'tooling/ios/engine-smoke/**'
+      - 'tooling/ios/guest-specialization.py'
+      - 'tooling/ios/guest-tests/**'
+      - 'tooling/ios/tests/guest-*'
+      - 'runtime/tests/ios-guest-policy.test.mjs'
+      - 'runtime/tests/fixtures/ios-guest-runtime.mjs'
+      - 'runtime/tests/fixtures/ios-root-grants-channel.mjs'
+      - 'tooling/ios/guest-preload.js.txt'
+      - 'app/ios/Runner/Guest*'
+      - 'app/ios/Runner/EngineChannel.swift'
+      - 'app/lib/runtime/ios_guest.dart'
+      - '.github/workflows/ios-guest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-guest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.1'
+      - name: Check native owner identity and suspension on Linux
+        run: |
+          node_headers="$(node -p 'require("node:path").resolve(require("node:path").dirname(process.execPath), "../include/node")')"
+          test -f "$node_headers/node_api.h"
+          python3 -B tooling/ios/guest-tests/test-root-identity.py "$node_headers"
+          python3 -B tooling/ios/guest-tests/test-crash-addon.py "$node_headers"
+      - name: Build the pinned virtual shell and worker dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix runtime/ohos/process
+          npm ci --ignore-scripts --no-audit --no-fund --prefix runtime/ohos/node/build-tools
+          python3 runtime/ohos/process/build-just-bash.py
+          node runtime/ohos/process/build-rg-regex.mjs
+      - name: Prepare isolated locked DSH test inputs
+        run: |
+          prefix="$RUNNER_TEMP/ios-guest-test-dsh"
+          mkdir "$prefix"
+          cp runtime/locks/dsh-0.2.2-rc.1/package*.json "$prefix/"
+          npm ci --ignore-scripts --no-audit --no-fund --prefix "$prefix"
+          python3 -I -B runtime/lib/rtbuild.py patch-dsh --prefix "$prefix" --dsh-version 0.2.2-rc.1 --target ohos --out "$prefix/patch-results.json" --target-report "$prefix/target-report.json"
+          echo "IOS_GUEST_TEST_PREFIX=$prefix" >> "$GITHUB_ENV"
+      - name: Check routing, approval tickets and descriptor admission without Apple code
+        run: |
+          node --test tooling/ios/guest-tests/route.test.mjs tooling/ios/guest-tests/runtime.test.mjs tooling/ios/guest-tests/root-grants.test.mjs runtime/tests/ios-guest-policy.test.mjs tooling/ios/engine-smoke/guest-harness.test.mjs
+          python3 tooling/ios/tests/guest-admission.test.py -v
+
+  guest:
+    needs: routing
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DSH_IOS_ENGINE_WORK: ${{ github.workspace }}/../engine-work
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare the engine
+        id: prepare
+        run: |
+          python3 --version
+          log="$(mktemp)"
+          if ! bash tooling/ios/prepare-engine.sh 2>&1 | tee "$log"; then
+            tail -n 8 "$log" | cut -c1-600 | sed -e 's/%/%25/g' -e 's/^/::error title=prepare-engine::/'
+            exit 1
+          fi
+          ls -la app/ios/Engine
+
+      - name: Check guest suspension and cancellation contracts
+        run: |
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          # route/runtime need the patched DSH prefix; the routing job runs them.
+          "$node" --test tooling/ios/guest-tests/channel-cancel.test.mjs tooling/ios/guest-tests/suspended.test.mjs
+          python3 tooling/ios/guest-tests/test-crash-marker.py
+
+      - name: Install the iSH build tools
+        run: |
+          # Homebrew ships ld.lld in its own formula now, not with llvm.
+          brew install llvm lld
+          python3 -m venv "$RUNNER_TEMP/ish-tools"
+          "$RUNNER_TEMP/ish-tools/bin/pip" install meson==1.7.2 ninja==1.11.1.4
+          echo "$RUNNER_TEMP/ish-tools/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
+          PATH="$(brew --prefix lld)/bin:$PATH" ld.lld --version
+
+      - name: Identify the pinned iSH build inputs
+        id: ish-inputs
+        run: |
+          device="$(bash tooling/ios/build-ish.sh --cache-key iphoneos)"
+          simulator="$(bash tooling/ios/build-ish.sh --cache-key iphonesimulator)"
+          key="$(printf '%s\n%s\n' "$device" "$simulator" | shasum -a 256 | cut -d' ' -f1)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the iSH frameworks and fixed source archive
+        id: ish-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            app/ios/Engine/ish-cache
+            app/ios/Engine/build/iphoneos/guest
+            app/ios/Engine/build/iphonesimulator/guest
+          key: ${{ runner.os }}-ish-${{ steps.ish-inputs.outputs.key }}
+
+      - name: Compile iSH and its N-API owner for the simulator and device
+        id: ish-build
+        run: |
+          for sdk in iphonesimulator iphoneos; do
+            out="app/ios/Engine/build/$sdk/guest"
+            log="$RUNNER_TEMP/ish-$sdk.log"
+            if ! bash tooling/ios/build-guest-addon.sh "$sdk" "$out" 2>&1 | tee "$log"; then
+              tail -n 12 "$log" | cut -c1-600 | sed -e 's/%/%25/g' -e 's/^/::error title=iSH build::/'
+              exit 1
+            fi
+            for name in DshGuest DshGuestBridge; do
+              binary="$out/$name.framework/$name"
+              file "$binary"
+              xcrun lipo "$binary" -verify_arch arm64
+              install_name="$(xcrun otool -D "$binary" | tail -n 1)"
+              test "$install_name" = "@rpath/$name.framework/$name"
+              xcrun vtool -show-build "$binary"
+            done
+            xcrun nm -gU "$out/DshGuestBridge.framework/DshGuestBridge" | grep 'napi_register_module_v1$'
+          done
+
+      - name: Save the compiled iSH cache
+        if: steps.ish-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            app/ios/Engine/ish-cache
+            app/ios/Engine/build/iphoneos/guest
+            app/ios/Engine/build/iphonesimulator/guest
+          key: ${{ steps.ish-cache.outputs.cache-primary-key }}
+
+      - name: Keep the iSH build logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ish-build
+          path: ${{ runner.temp }}/ish-*.log
+          if-no-files-found: ignore
+
+      - name: Compile the native pieces for the simulator
+        run: |
+          log="$(mktemp)"
+          if ! bash tooling/ios/build-engine-native.sh iphonesimulator "$RUNNER_TEMP/sim" -DDSH_IOS_ENGINE_SMOKE 2>&1 | tee "$log"; then
+            grep -E 'error:|Undefined|ld:' "$log" | awk '!seen[$0]++' | head -10 | cut -c1-600               | sed -e 's/%/%25/g' -e 's/^/::error title=native::/'
+            exit 1
+          fi
+          for name in DshFlock DshRequireBuiltin; do
+            test -f "$RUNNER_TEMP/sim/$name.framework/$name"
+            test -f "$RUNNER_TEMP/sim/$name.framework/Info.plist"
+          done
+          cp -R app/ios/Engine/NodeMobile.xcframework/ios-arm64-simulator/NodeMobile.framework "$RUNNER_TEMP/sim/"
+          xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator             tooling/ios/engine-smoke/smoke.c -o "$RUNNER_TEMP/smoke"
+
+      - name: Run a round on the simulator
+        run: |
+          mkdir -p "$RUNNER_TEMP/tree"
+          unzip -q app/ios/Engine/runtime.zip 'files/*' -d "$RUNNER_TEMP/tree"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/guest-tests/suspended-routing.mjs "$RUNNER_TEMP/tree/files/runtime/ohos/process/build/just-bash/index.js"
+          udid="$(python3 tooling/ios/engine-smoke/pick-simulator.py)"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid"
+          echo "DSH_SIMULATOR=$udid" >> "$GITHUB_ENV"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          status=0
+          "$node" tooling/ios/engine-smoke/drive.mjs --simulator "$udid" --smoke "$RUNNER_TEMP/smoke"             --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/smoke-work"             --ws "$RUNNER_TEMP/tree/files" || status=$?
+          "$node" tooling/ios/engine-smoke/annotate.mjs "$RUNNER_TEMP/smoke-work"
+          exit "$status"
+
+      - name: Cache the fixed Alpine guest fixture
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/guest-archive/alpine-minirootfs-3.24.4-aarch64.tar.gz
+          key: ios-guest-alpine-3.24.4-aarch64-4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de
+
+      - name: Run real guest tools through the simulator approval chain
+        run: |
+          mkdir -p "$RUNNER_TEMP/guest-archive"
+          archive="$RUNNER_TEMP/guest-archive/alpine-minirootfs-3.24.4-aarch64.tar.gz"
+          if [ ! -f "$archive" ]; then
+            curl --fail --location --retry 3 --output "$archive" https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.4-aarch64.tar.gz
+          fi
+          printf '%s  %s\n' 4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de "$archive" | shasum -a 256 -c -
+          # Production Swift state/channel/installer with a transport-only Flutter
+          # shim; native persistence is checked separately above and by guest smoke.
+          bash tooling/ios/guest-tests/crash-channel.sh "$archive"
+          # Foundation/CryptoKit + the actual I3 installer, no alternate unpacker/database builder.
+          xcrun swiftc -swift-version 5 -parse-as-library app/ios/Runner/GuestRootfsArchive.swift app/ios/Runner/GuestRootfsInstaller.swift tooling/ios/engine-smoke/guest-install.swift -o "$RUNNER_TEMP/guest-install"
+          "$RUNNER_TEMP/guest-install" "$archive" "$RUNNER_TEMP/guest-installation"
+          for name in DshGuest DshGuestBridge; do
+            test -f "app/ios/Engine/build/iphonesimulator/guest/$name.framework/$name"
+            cp -R "app/ios/Engine/build/iphonesimulator/guest/$name.framework" "$RUNNER_TEMP/sim/"
+            test -f "$RUNNER_TEMP/sim/$name.framework/$name"
+          done
+          xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator tooling/ios/engine-smoke/guest-smoke.c -o "$RUNNER_TEMP/guest-smoke"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/guest-drive.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/guest-smoke" --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/guest-smoke-work" --ws "$RUNNER_TEMP/tree/files" --rootfs "$RUNNER_TEMP/guest-installation/rootfs"
+
+      - name: Keep real guest approval evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-guest-smoke
+          path: |
+            ${{ runner.temp }}/guest-smoke-work/guest-report.json
+            ${{ runner.temp }}/guest-smoke-work/engine.log
+          if-no-files-found: warn
+
+      - name: Say how a crashed process died
+        if: ${{ failure() }}
+        run: python3 tooling/ios/engine-smoke/crash-notes.py 60

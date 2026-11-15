@@ -56,3 +56,5 @@ export 'src/transcript.dart';
 export 'src/workspace_api.dart';
 export 'src/workspace_upload.dart';
 export 'src/workspaces_api.dart';
+
+export 'src/lifecycle_api.dart';

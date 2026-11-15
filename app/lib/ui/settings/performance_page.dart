@@ -69,22 +69,24 @@ class PerformancePage extends ConsumerWidget {
               ),
           ],
         ),
-        SettingsSection(
-          footer: Text(ohos ? l10n.performanceRefreshHintOhos : l10n.performanceRefreshHint),
-          children: [
-            SettingsSegmentTile<RefreshRateMode>(
-              key: const ValueKey('performance-refresh-rate'),
-              spot: Spots.refreshRate,
-              segments: [
-                PillSegment(RefreshRateMode.auto, l10n.performanceAuto),
-                PillSegment(RefreshRateMode.max, l10n.performanceRefreshMax),
-                PillSegment(RefreshRateMode.system, l10n.performanceRefreshSystem),
-              ],
-              selected: prefs.refreshRate,
-              onChanged: (mode) => unawaited(notifier.setRefreshRate(mode)),
-            ),
-          ],
-        ),
+        // iOS paces frames itself (RefreshRateService leaves it alone).
+        if (ref.watch(operatingSystemProvider) != 'ios')
+          SettingsSection(
+            footer: Text(ohos ? l10n.performanceRefreshHintOhos : l10n.performanceRefreshHint),
+            children: [
+              SettingsSegmentTile<RefreshRateMode>(
+                key: const ValueKey('performance-refresh-rate'),
+                spot: Spots.refreshRate,
+                segments: [
+                  PillSegment(RefreshRateMode.auto, l10n.performanceAuto),
+                  PillSegment(RefreshRateMode.max, l10n.performanceRefreshMax),
+                  PillSegment(RefreshRateMode.system, l10n.performanceRefreshSystem),
+                ],
+                selected: prefs.refreshRate,
+                onChanged: (mode) => unawaited(notifier.setRefreshRate(mode)),
+              ),
+            ],
+          ),
         if (ohos)
           SettingsSection(
             children: [

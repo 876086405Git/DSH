@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/access_state.dart';
+import '../../state/android_features.dart';
 import '../../state/app_info.dart';
 import '../theme/app_icons.dart';
 
@@ -73,11 +74,12 @@ extension AccessItemText on AccessItem {
     AccessItem.overlay => l10n.accessOverlayTitle,
   };
 
-  /// Why, in one line. On HarmonyOS an alert can only go out while the app runs.
+  /// Why, in one line. On HarmonyOS and iOS an alert can only go out while the
+  /// app runs.
   String why(L10n l10n, {required String os}) => switch (this) {
     AccessItem.mic => l10n.accessMicWhy,
     AccessItem.storage => l10n.accessStorageWhy,
-    AccessItem.notifications => os == 'ohos' ? l10n.harmonyNotifyWhy : l10n.accessNotifyWhy,
+    AccessItem.notifications => androidSystemFeaturesOn(os) ? l10n.accessNotifyWhy : l10n.harmonyNotifyWhy,
     AccessItem.battery => l10n.accessBatteryWhy,
     AccessItem.vendorBackground => l10n.accessVendorBackgroundWhy,
     AccessItem.autostart => l10n.accessAutostartWhy,

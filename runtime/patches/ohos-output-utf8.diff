@@ -1,3 +1,4 @@
+# rc.1: main subprocess-utf8-cursor owns live UTF-8 semantics; retain OH tail backing-buffer bound only.
 --- a/node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js
 +++ b/node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js
 @@ -144,7 +144,8 @@

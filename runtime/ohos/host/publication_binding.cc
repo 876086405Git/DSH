@@ -6,7 +6,9 @@
 #include <node.h>
 #include <node_api.h>
 #include <uv.h>
+#if !defined(__APPLE__)
 #include <deviceinfo.h>
+#endif
 
 #include <cerrno>
 #include <dirent.h>
@@ -19,15 +21,47 @@
 #include <cstring>
 #include <fcntl.h>
 #include <limits>
+#if defined(__APPLE__)
+#include <cstdio>
+#include <sys/sysctl.h>
+#else
 #include <linux/fs.h>
+#endif
 #include <string>
 #include <sys/file.h>
+#if !defined(__APPLE__)
 #include <sys/syscall.h>
+#endif
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <vector>
 
 namespace {
+
+#if defined(__APPLE__)
+constexpr int kMissingAttribute = ENOATTR;
+int SetAttribute(int fd, const char* name, const void* value, size_t size) {
+  return fsetxattr(fd, name, value, size, 0, XATTR_CREATE);
+}
+ssize_t GetAttribute(int fd, const char* name, void* value, size_t size) {
+  return fgetxattr(fd, name, value, size, 0, 0);
+}
+std::string SystemString(const char* name) {
+  size_t size = 0;
+  if (sysctlbyname(name, nullptr, &size, nullptr, 0) != 0 || size == 0) return "";
+  std::vector<char> bytes(size);
+  if (sysctlbyname(name, bytes.data(), &size, nullptr, 0) != 0 || size == 0) return "";
+  return std::string(bytes.data(), strnlen(bytes.data(), size));
+}
+#else
+constexpr int kMissingAttribute = ENODATA;
+int SetAttribute(int fd, const char* name, const void* value, size_t size) {
+  return fsetxattr(fd, name, value, size, XATTR_CREATE);
+}
+ssize_t GetAttribute(int fd, const char* name, void* value, size_t size) {
+  return fgetxattr(fd, name, value, size);
+}
+#endif
 
 // POSIX syscalls report positive errno values; libuv's Unix enum is negative.
 // Use the pinned header's complete map without importing bundled uv_* symbols.
@@ -42,10 +76,17 @@ const char* ErrorName(int error_number) {
 
 napi_value GetSystemBuildIdentity(napi_env env, napi_callback_info) {
   // These are public OS build properties, never a device serial or user ID.
-  // Product builds resolve these four APIs from libdeviceinfo_ndk.z.so.
   const char* names[] = {"osFullName", "displayVersion", "incrementalVersion", "securityPatchTag"};
+#if defined(__APPLE__)
+  // iOS has no patch tag; the kernel's version string changes with every OS build.
+  const std::string apple[] = {SystemString("kern.ostype"), SystemString("kern.osproductversion"),
+                               SystemString("kern.osversion"), SystemString("kern.version")};
+  const char* values[] = {apple[0].c_str(), apple[1].c_str(), apple[2].c_str(), apple[3].c_str()};
+#else
+  // Product builds resolve these four APIs from libdeviceinfo_ndk.z.so.
   const char* values[] = {OH_GetOSFullName(), OH_GetDisplayVersion(),
                           OH_GetIncrementalVersion(), OH_GetSecurityPatchTag()};
+#endif
   constexpr size_t maximum_bytes = 1024;
   napi_value result;
   if (napi_create_object(env, &result) != napi_ok) return nullptr;
@@ -95,7 +136,10 @@ napi_value RenameNoReplace(napi_env env, napi_callback_info info) {
   std::string source, destination;
   if (!ReadPath(env, argv[0], &source) || !ReadPath(env, argv[1], &destination)) return nullptr;
 
-#ifdef SYS_renameat2
+#if defined(__APPLE__)
+  const int rename_result = renamex_np(source.c_str(), destination.c_str(), RENAME_EXCL);
+  const int error_number = rename_result == 0 ? 0 : errno;
+#elif defined(SYS_renameat2)
   const long rename_result = syscall(SYS_renameat2, AT_FDCWD, source.c_str(),
                               AT_FDCWD, destination.c_str(), RENAME_NOREPLACE);
   const int error_number = rename_result == 0 ? 0 : errno;
@@ -288,7 +332,7 @@ napi_value SetOwnershipMarker(napi_env env, napi_callback_info info) {
     napi_throw_type_error(env, "ERR_INVALID_ARG_VALUE", "Ownership token must not contain NUL");
     return nullptr;
   }
-  const int result = fsetxattr(descriptor, kOwnershipAttribute, bytes.data(), length, XATTR_CREATE);
+  const int result = SetAttribute(descriptor, kOwnershipAttribute, bytes.data(), length);
   const int error_number = result == 0 ? 0 : errno;
   if (error_number != 0) return ThrowAttributeError(env, error_number, "fsetxattr");
   napi_value undefined;
@@ -306,10 +350,10 @@ napi_value GetOwnershipMarker(napi_env env, napi_callback_info info) {
   }
   int descriptor;
   if (!ReadDescriptor(env, argv[0], &descriptor)) return nullptr;
-  const ssize_t expected = fgetxattr(descriptor, kOwnershipAttribute, nullptr, 0);
+  const ssize_t expected = GetAttribute(descriptor, kOwnershipAttribute, nullptr, 0);
   const int first_error = expected < 0 ? errno : 0;
   napi_value result;
-  if (first_error == ENODATA) {
+  if (first_error == kMissingAttribute) {
     if (napi_get_undefined(env, &result) != napi_ok) return nullptr;
     return result;
   }
@@ -321,9 +365,9 @@ napi_value GetOwnershipMarker(napi_env env, napi_callback_info info) {
   // A zero-size query is not a read. Use at least one byte so a concurrent
   // growth cannot turn the second syscall into another successful size query.
   std::vector<char> bytes(expected == 0 ? 1 : static_cast<size_t>(expected));
-  const ssize_t actual = fgetxattr(descriptor, kOwnershipAttribute, bytes.data(), bytes.size());
+  const ssize_t actual = GetAttribute(descriptor, kOwnershipAttribute, bytes.data(), bytes.size());
   const int read_error = actual < 0 ? errno : 0;
-  if (read_error == ENODATA) {
+  if (read_error == kMissingAttribute) {
     if (napi_get_undefined(env, &result) != napi_ok) return nullptr;
     return result;
   }

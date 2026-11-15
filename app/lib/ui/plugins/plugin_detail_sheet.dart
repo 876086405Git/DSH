@@ -479,7 +479,7 @@ class BundleSheet extends ConsumerWidget {
                         icon: AppIcons.power,
                         title: l10n.commonEnable,
                         onTap: () => unawaited(togglePluginBundle(context, bundle, !bundle.enabled)),
-                        trailing: Switch(
+                        trailing: Switch.adaptive(
                           value: bundle.enabled,
                           onChanged: (v) => unawaited(togglePluginBundle(context, bundle, v)),
                         ),

@@ -263,7 +263,18 @@ class PhoneTurnEndController extends Notifier<void> {
       _ownerClient = null;
       _ownerGeneration = null;
       _trace('task=${link.taskId} event=begin');
-      unawaited(_snapshot(link.taskId!));
+      // iOS binds the task to the authenticated engine request at admission.
+      // A session-list snapshot is for legacy Android tasks with no owner; it
+      // can be ambiguous or still pending while the exact iOS owner is known.
+      final client = ref.read(localConnectionProvider).value?.client;
+      final owner = legacy.ownerSessionId;
+      if (owner != null && owner.isNotEmpty && client != null) {
+        _ownerClient = client;
+        _ownerGeneration = client.mux.generation;
+        link.began([owner]);
+      } else {
+        unawaited(_snapshot(link.taskId!));
+      }
     } else if (!link.armed) {
       final reading = _reading;
       if (reading != null) _retireRead(reading, invalidate: false);

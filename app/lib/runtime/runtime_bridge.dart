@@ -208,6 +208,7 @@ class RuntimeStatus {
     this.resetPending = false,
     this.backgroundTask,
     this.longTaskEligible = false,
+    this.continuedRun = false,
   });
 
   const RuntimeStatus.unknown() : this(phase: RuntimePhase.notInstalled);
@@ -294,6 +295,9 @@ class RuntimeStatus {
   /// app opens, and nothing starts until it has.
   final bool resetPending;
 
+  /// iOS: the system is letting the engine keep running while the app is away.
+  final bool continuedRun;
+
   Map<String, Object?> get launchDiagnostics => {
     'directEngineEnabled': directEngineEnabled,
     'directEngineAvailable': directEngineAvailable,
@@ -366,6 +370,7 @@ class RuntimeStatus {
     launchFailureReason: map['launchFailureReason'] as String?,
     tidyingFiles: map['tidyingFiles'] == true,
     resetPending: map['resetPending'] == true,
+    continuedRun: map['continuedRun'] == true,
   );
 }
 
@@ -768,6 +773,9 @@ class RuntimeBridge {
 
   /// HarmonyOS: closes the app and opens it again, the only way to another engine start.
   Future<void> reopenApp() => _methods.invokeMethod<void>('reopenApp');
+
+  /// iOS: whether a local turn is running, which is what asks the system to let it go on.
+  Future<void> setTurnRunning(bool running) => _methods.invokeMethod<void>('turnRunning', {'running': running});
 
   /// Deletes the runtime with everything in /root except [keep].
   Future<void> reset({ResetKeep keep = const ResetKeep()}) => _methods.invokeMethod<void>('reset', {'keep': keep.wire});

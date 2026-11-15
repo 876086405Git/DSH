@@ -92,6 +92,13 @@ class MergeFixture(unittest.TestCase):
 
 
 class MergeCliTest(MergeFixture):
+    def test_appledouble_metadata_is_not_an_arb_catalog(self):
+        (self.parts / '._probe_zh.arb').write_bytes(b'\x00\x05\x16\x07metadata')
+        (self.parts.parent / '._app_en.arb').write_bytes(b'\x00\x05\x16\x07metadata')
+        result = self.run_cli('--no-gen')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(self.outputs[0].read_text())['title'], '标题')
+
     def test_valid_merge_preserves_template_metadata(self):
         self.write('zh', {'title': '{name} 的标题', '@title': {'placeholders': {'name': {'type': 'String'}}}})
         self.write('en', {'title': 'Title for {name}'})

@@ -91,7 +91,13 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
        _modelReady = modelReady ?? _noModel,
        _harmony = harmony ?? _noModel,
        _observing = observeLifecycle {
-    if (_observing) WidgetsBinding.instance.addObserver(this);
+    if (_observing) {
+      final binding = WidgetsBinding.instance;
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        _foreground = binding.lifecycleState == AppLifecycleState.resumed;
+      }
+      binding.addObserver(this);
+    }
     unawaited(refresh());
   }
 
@@ -355,7 +361,16 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
         _runMode == VoiceMode.system || (_runMode == VoiceMode.auto && _caps.recognizer && !_caps.systemUnreliable);
     if (system && !_caps.recognizer) {
       _finish();
-      _say(VoiceMessage(_harmony() ? appL10n.harmonyVoiceSystemUnavailable : appL10n.voiceChooseSystem, change: true));
+      _say(
+        VoiceMessage(
+          _harmony()
+              ? appL10n.harmonyVoiceSystemUnavailable
+              : wordsForIos
+              ? appL10n.iosVoiceAllowSystem
+              : appL10n.voiceChooseSystem,
+          change: true,
+        ),
+      );
       return;
     }
     final value = input.value;

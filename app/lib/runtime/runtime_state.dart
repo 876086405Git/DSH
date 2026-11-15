@@ -22,6 +22,27 @@ class RuntimeNotice {
 }
 
 /// What the UI needs to know about the local runtime.
+/// What the engine reported about moving saved paths when the app's container changed
+/// (runtime/ios/storage/preload.mjs). Only ever said on iOS, and said again at every start while
+/// it's still true.
+enum RelocationIssue {
+  /// Old history whose original location can't be proven: it's kept as it is, not repaired.
+  originUnavailable('[IOS_RELOCATION_ORIGIN_UNAVAILABLE]'),
+
+  /// Some conversations couldn't be moved and were set aside with the reason.
+  sessionIsolated('[IOS_RELOCATION_SESSION_ISOLATED]');
+
+  const RelocationIssue(this.code);
+
+  /// How Node prints the warning's code. The rest of the line isn't for matching on.
+  final String code;
+
+  String get text => switch (this) {
+    RelocationIssue.originUnavailable => appL10n.iosRelocationOriginUnavailable,
+    RelocationIssue.sessionIsolated => appL10n.iosRelocationSessionIsolated,
+  };
+}
+
 class LocalRuntimeState {
   const LocalRuntimeState({
     this.status = const RuntimeStatus.unknown(),
@@ -29,6 +50,7 @@ class LocalRuntimeState {
     this.loaded = false,
     this.notice,
     this.available = true,
+    this.relocation = const {},
   });
 
   final RuntimeStatus status;
@@ -44,6 +66,9 @@ class LocalRuntimeState {
   /// handler, e.g. HarmonyOS before its engine host lands): only remote hosts.
   final bool available;
 
+  /// What this start of the engine reported; cleared when the next one begins.
+  final Set<RelocationIssue> relocation;
+
   LocalRuntimeState copyWith({
     RuntimeStatus? status,
     RuntimeProgressEvent? progress,
@@ -51,12 +76,14 @@ class LocalRuntimeState {
     bool? loaded,
     RuntimeNotice? notice,
     bool? available,
+    Set<RelocationIssue>? relocation,
   }) => LocalRuntimeState(
     status: status ?? this.status,
     progress: clearProgress ? null : (progress ?? this.progress),
     loaded: loaded ?? this.loaded,
     notice: notice ?? this.notice,
     available: available ?? this.available,
+    relocation: relocation ?? this.relocation,
   );
 }
 
@@ -77,13 +104,16 @@ class RuntimeResetFailure implements Exception {
 /// A committed or uncertain request must not be treated as a rolled-back reset.
 class RuntimeResetPending extends RuntimeResetFailure {
   const RuntimeResetPending(Object cause, {RuntimeResetCommitState commitState = RuntimeResetCommitState.committed})
-      : super(commitState, cause);
+    : super(commitState, cause);
   Object? get reopenError => committed ? cause : null;
 }
 
 class LocalRuntimeController extends Notifier<LocalRuntimeState> {
   StreamSubscription<RuntimeEvent>? _sub;
   var _statusRevision = 0;
+
+  /// Said once per launch of the app: the engine repeats these at every start.
+  final _relocationSaid = <RelocationIssue>{};
 
   RuntimeBridge get _bridge => ref.read(runtimeBridgeProvider);
 
@@ -115,12 +145,23 @@ class LocalRuntimeController extends Notifier<LocalRuntimeState> {
   void _onEvent(RuntimeEvent event) {
     switch (event) {
       case RuntimeStatusEvent(:final status):
+        if (status.phase == RuntimePhase.starting && state.relocation.isNotEmpty) {
+          state = state.copyWith(relocation: const {});
+        }
         _statusRevision++;
         state = state.copyWith(status: status, loaded: true, clearProgress: status.phase != RuntimePhase.installing);
       case RuntimeProgressEvent():
         state = state.copyWith(progress: event);
-      case RuntimeLogsEvent():
-        break;
+      case RuntimeLogsEvent(:final entries):
+        for (final entry in entries) {
+          for (final issue in RelocationIssue.values) {
+            if (!entry.line.contains(issue.code) || state.relocation.contains(issue)) continue;
+            state = state.copyWith(
+              relocation: {...state.relocation, issue},
+              notice: _relocationSaid.add(issue) ? RuntimeNotice((state.notice?.seq ?? 0) + 1, issue.text) : null,
+            );
+          }
+        }
       case RuntimeNoticeEvent(:final text):
         state = state.copyWith(notice: RuntimeNotice((state.notice?.seq ?? 0) + 1, text));
     }

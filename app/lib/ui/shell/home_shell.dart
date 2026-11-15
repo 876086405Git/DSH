@@ -349,10 +349,12 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                         const BackgroundNetHost()
                       else ...[
                         const BackgroundPauseHost(),
-                        // 系统操作: its session and a handoff's prompt (draws nothing here).
-                        const SystemActionsHost(),
-                        // How a reset asked for before the app reopened came out (draws nothing).
-                        const ResetReceiptHost(),
+                        if (ref.watch(operatingSystemProvider) == 'ohos') ...[
+                          // 系统操作: its session and a handoff's prompt (draws nothing here).
+                          const SystemActionsHost(),
+                          // How a reset asked for before the app reopened came out (draws nothing).
+                          const ResetReceiptHost(),
+                        ],
                       ],
                       // Daily update check + install resume (draws nothing).
                       const UpdateLaunchCheck(),

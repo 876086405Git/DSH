@@ -179,7 +179,6 @@ class HostsController extends Notifier<HostsState> {
       }
     }
 
-    await put(SshSecrets.attachTokenKey(id), config.dshMode == SshDshMode.attachOnly ? secrets.attachToken?.trim() : null);
     if (config.auth == SshAuthMethod.password) {
       await put(SshSecrets.passwordKey(id), secrets.password);
       await _secrets.delete(SshSecrets.privateKeyKey(id));
@@ -189,6 +188,12 @@ class HostsController extends Notifier<HostsState> {
       await put(SshSecrets.passphraseKey(id), secrets.passphrase);
       await _secrets.delete(SshSecrets.passwordKey(id));
     }
+    // A failure writing the credential the person just entered must be
+    // reported as that failure, not hidden behind unrelated token cleanup.
+    await put(
+      SshSecrets.attachTokenKey(id),
+      config.dshMode == SshDshMode.attachOnly ? secrets.attachToken?.trim() : null,
+    );
   }
 
   Future<SshSecrets> loadSecrets(String id) async {
@@ -212,7 +217,12 @@ class HostsController extends Notifier<HostsState> {
   Future<void> removeSsh(String id) async {
     await _loaded;
     await _persist([...state.ssh.where((h) => h.id != id)]);
-    for (final key in [SshSecrets.passwordKey(id), SshSecrets.privateKeyKey(id), SshSecrets.passphraseKey(id), SshSecrets.attachTokenKey(id)]) {
+    for (final key in [
+      SshSecrets.passwordKey(id),
+      SshSecrets.privateKeyKey(id),
+      SshSecrets.passphraseKey(id),
+      SshSecrets.attachTokenKey(id),
+    ]) {
       try {
         await _secrets.delete(key);
       } catch (_) {}
@@ -477,7 +487,7 @@ final relayBackendProvider = Provider<RelayBackend>((ref) {
     clientVersion: AppInfo.version.split('+').first,
     // flutter_webrtc has no HarmonyOS implementation: straight to the relay,
     // not two handshakes that fail on the way there.
-    peerConnector: ref.watch(androidSystemFeaturesProvider) ? flutterPeerConnector : null,
+    peerConnector: ref.watch(webRtcAvailableProvider) ? flutterPeerConnector : null,
     loadCompactHistory: () async {
       await history.ready;
       return ref.read(remoteCompactHistoryProvider);

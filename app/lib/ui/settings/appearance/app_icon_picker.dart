@@ -89,10 +89,12 @@ class AppIconPicker extends ConsumerWidget {
     final l10n = context.l10n;
     final messenger = ScaffoldMessenger.maybeOf(context);
     // HarmonyOS refuses for good under a custom theme or in an app twin.
-    final failed = ref.read(operatingSystemProvider) == 'ohos' ? l10n.harmonyIconChangeFailed : l10n.pluginsIconChangeFailed;
+    final failed = ref.read(operatingSystemProvider) == 'ohos'
+        ? l10n.harmonyIconChangeFailed
+        : l10n.pluginsIconChangeFailed;
     final ok = await ref.read(appIconProvider.notifier).select(icon);
     if (ok) {
-      messenger?.showBriefNotice(l10n.pluginsIconChanged);
+      messenger?.showBriefNotice(wordsForIos ? l10n.iosIconChanged : l10n.pluginsIconChanged);
     } else {
       messenger
         ?..hideCurrentSnackBar()

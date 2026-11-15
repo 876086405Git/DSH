@@ -128,6 +128,7 @@ class SettingsPageMeta {
     this.row = true,
     this.androidOnly = false,
     this.ohosOnly = false,
+    this.iosToo = false,
   });
 
   final SettingsPageId id;
@@ -160,6 +161,7 @@ class SettingsPageMeta {
 
   /// HarmonyOS's own, where Android has a page of its own for the same idea.
   final bool ohosOnly;
+  final bool iosToo;
 
   /// The row on [parent] that opens this page.
   late final SettingSpot entry = SettingSpot(
@@ -174,6 +176,7 @@ class SettingsPageMeta {
     condition: condition,
     androidOnly: androidOnly,
     ohosOnly: ohosOnly,
+    iosToo: iosToo,
   );
 }
 
@@ -195,6 +198,8 @@ class SettingSpot {
     this.ohosTitle,
     this.androidOnly = false,
     this.ohosOnly = false,
+    this.iosToo = false,
+    this.iosLacks = false,
   });
 
   /// Stable, unique: `phone-confirm`, `page:phone`.
@@ -232,13 +237,20 @@ class SettingSpot {
   final Label? ohosTitle;
 
   /// The title on this OS, for what lists the spot away from its row.
-  Label titleOn({required bool androidFeatures}) => androidFeatures ? title : ohosTitle ?? title;
+  Label titleOn({required bool harmony}) => harmony ? ohosTitle ?? title : title;
 
   /// Android's own, on a page that isn't ([SettingsIndex.androidOnly]).
   final bool androidOnly;
 
   /// HarmonyOS's own ([SettingsPageMeta.ohosOnly]).
   final bool ohosOnly;
+
+  /// One of [androidOnly]'s that iOS has as well: only HarmonyOS goes without.
+  final bool iosToo;
+
+  /// What Android and HarmonyOS have and iOS doesn't (a picture shortcut, the
+  /// refresh rate, the rescue profile).
+  final bool iosLacks;
 
   bool get isEntry => opens != null;
 }
@@ -285,10 +297,11 @@ abstract final class SettingsIndex {
   /// Search leaves these out on HarmonyOS (androidSystemFeaturesProvider).
   static bool androidOnly(SettingSpot spot) => spot.androidOnly || chain(spot.page).any((p) => page(p).androidOnly);
 
-  /// Whether the `dshgo://open/<id>` link [id] leads to something [androidOnly].
-  static bool androidOnlyLink(String id) {
+  /// Whether the `dshgo://open/<id>` link [id] leads to something [androidOnly]
+  /// (on [ios], also to what it lacks: [SettingSpot.iosLacks]).
+  static bool androidOnlyLink(String id, {bool ios = false}) {
     final spot = pageForLink(id)?.entry ?? spotForLink(id);
-    return spot != null && androidOnly(spot);
+    return spot != null && (androidOnly(spot) && !(ios && spot.iosToo) || ios && spot.iosLacks);
   }
 
   /// Whether the `dshgo://open/<id>` link [id] leads to what only HarmonyOS has.
@@ -413,6 +426,7 @@ final _pages = <SettingsPageMeta>[
     freq: Freq.medium,
     links: const ['phone'],
     androidOnly: true,
+    iosToo: true,
   ),
   SettingsPageMeta(
     SettingsPageId.systemActions,
@@ -784,6 +798,7 @@ abstract final class Spots {
     title: (l) => l.phoneReturnAfterDone,
     keywords: (l) => l.searchKwPhoneReturn,
     condition: SpotCondition.phoneControlOn,
+    iosToo: true,
   );
   static final phoneBackgroundGuide = SettingSpot(
     'phone-background-guide',
@@ -844,6 +859,7 @@ abstract final class Spots {
     page: SettingsPageId.appearance,
     title: (l) => l.iconShortcutRow,
     keywords: (l) => l.searchKwIconShortcut,
+    iosLacks: true,
   );
   static final launchScreen = SettingSpot(
     'launch-screen',
@@ -877,6 +893,7 @@ abstract final class Spots {
     title: (l) => l.botsPetOutsideApp,
     keywords: (l) => l.searchKwPetOutside,
     androidOnly: true,
+    iosToo: true,
   );
   static final petDisplayWhen = SettingSpot(
     'pet-display-when',
@@ -884,6 +901,7 @@ abstract final class Spots {
     title: (l) => l.botsPetDisplayWhen,
     keywords: (l) => l.searchKwPetDisplayWhen,
     androidOnly: true,
+    iosToo: true,
   );
   static final petOverlayShows = SettingSpot(
     'pet-overlay-shows',
@@ -995,6 +1013,7 @@ abstract final class Spots {
     page: SettingsPageId.performance,
     title: (l) => l.performanceRefresh,
     keywords: (l) => l.searchKwRefreshRate,
+    iosLacks: true,
   );
   static final blur = SettingSpot(
     'blur',
@@ -1105,6 +1124,7 @@ abstract final class Spots {
     title: (l) => l.phoneSafeStartSettings,
     altTitle: (l) => l.phoneSafeLeave,
     keywords: (l) => l.searchKwSafeMode,
+    iosLacks: true,
   );
   static final workspaceRecovery = SettingSpot(
     'workspace-recovery',

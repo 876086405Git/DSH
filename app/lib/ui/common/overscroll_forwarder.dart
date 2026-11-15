@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // See THIRD_PARTY_NOTICES.md.
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
 /// 嵌套纵向滚动的"到头让路"。
@@ -34,7 +35,15 @@ class OverscrollForwarder extends StatelessWidget {
         }
         return true;
       },
-      child: child,
+      // A bounce reports no overscroll, so on iOS the drag would stay in here and the list above
+      // would never move. Android clamps by default.
+      child: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+          ? ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context)
+                  .copyWith(physics: const ClampingScrollPhysics(parent: RangeMaintainingScrollPhysics())),
+              child: child,
+            )
+          : child,
     );
   }
 }

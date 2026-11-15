@@ -100,7 +100,7 @@ class VoiceSettingsTile extends ConsumerWidget {
     icon: AppIcons.voice,
     tint: tint,
     spot: SettingsIndex.entry(SettingsPageId.voice),
-    value: Text(voiceModeLabel(context.l10n, ref.watch(voiceSettingsProvider))),
+    value: Text(voiceModeLabel(context.l10n, wordsForIos ? VoiceMode.system : ref.watch(voiceSettingsProvider))),
     onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VoiceSettingsPage())),
   );
 }
@@ -156,48 +156,52 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
           title: l10n.voiceModeSection,
           footer: harmonyLocal ? Text(l10n.harmonyVoiceLocalLine, key: const ValueKey('voice-local-line')) : null,
           children: [
-            for (final mode in VoiceMode.values)
-              if (!harmonyLocal || mode != VoiceMode.engine)
-                Semantics(
-                  checked: selected == mode,
-                  inMutuallyExclusiveGroup: true,
-                  child: SettingsTile(
-                    key: ValueKey('voice-mode-${mode.name}'),
-                    title: voiceModeLabel(l10n, mode),
-                    subtitle: switch (mode) {
-                      VoiceMode.auto => harmonyLocal ? l10n.harmonyVoiceAutoHint : l10n.voiceModeAutoHint,
-                      VoiceMode.deepseek => l10n.voiceModeDeepseekHint,
-                      VoiceMode.system =>
-                        !ohos
-                            ? l10n.voiceModeSystemHint
-                            : chineseOnly
-                            ? l10n.harmonyVoiceSystemHintChinese
-                            : l10n.harmonyVoiceSystemHint,
-                      VoiceMode.engine => l10n.voiceModeEngineHint,
-                      VoiceMode.cloud => l10n.voiceModeCloudHint,
-                    },
-                    trailing: SizedBox.square(
-                      dimension: 32,
-                      child: Icon(selected == mode ? AppIcons.radioOn : AppIcons.radioOff, size: 24),
+            if (wordsForIos)
+              SettingsTile(title: voiceModeLabel(l10n, VoiceMode.system), subtitle: l10n.iosVoiceSystemHint),
+            if (!wordsForIos)
+              for (final mode in VoiceMode.values)
+                if (!harmonyLocal || mode != VoiceMode.engine)
+                  Semantics(
+                    checked: selected == mode,
+                    inMutuallyExclusiveGroup: true,
+                    child: SettingsTile(
+                      key: ValueKey('voice-mode-${mode.name}'),
+                      title: voiceModeLabel(l10n, mode),
+                      subtitle: switch (mode) {
+                        VoiceMode.auto => harmonyLocal ? l10n.harmonyVoiceAutoHint : l10n.voiceModeAutoHint,
+                        VoiceMode.deepseek => l10n.voiceModeDeepseekHint,
+                        VoiceMode.system =>
+                          !ohos
+                              ? l10n.voiceModeSystemHint
+                              : chineseOnly
+                              ? l10n.harmonyVoiceSystemHintChinese
+                              : l10n.harmonyVoiceSystemHint,
+                        VoiceMode.engine => l10n.voiceModeEngineHint,
+                        VoiceMode.cloud => l10n.voiceModeCloudHint,
+                      },
+                      trailing: SizedBox.square(
+                        dimension: 32,
+                        child: Icon(selected == mode ? AppIcons.radioOn : AppIcons.radioOff, size: 24),
+                      ),
+                      onTap: () => unawaited(ref.read(voiceSettingsProvider.notifier).setMode(mode)),
                     ),
-                    onTap: () => unawaited(ref.read(voiceSettingsProvider.notifier).setMode(mode)),
                   ),
-                ),
           ],
         ),
-        if (selected == VoiceMode.cloud) const _CloudAsrForm(),
-        if (!harmonyLocal)
+        if (!wordsForIos && selected == VoiceMode.cloud) const _CloudAsrForm(),
+        if (!harmonyLocal && !wordsForIos)
           SettingsSection(
             title: l10n.voiceModelSection,
             footer: Text(l10n.voiceModelFooter),
             children: const [VoiceModelCard()],
           ),
-        SettingsSection(
-          title: l10n.speechLiveSection,
-          footer: Text(ohos ? l10n.speechLiveSystemFooter : l10n.speechLiveFooter),
-          // HarmonyOS captions use its own recognizer: nothing to download.
-          children: [ohos ? const SystemAsrCard() : const StreamingAsrModelCard()],
-        ),
+        if (!wordsForIos)
+          SettingsSection(
+            title: l10n.speechLiveSection,
+            footer: Text(ohos ? l10n.speechLiveSystemFooter : l10n.speechLiveFooter),
+            // HarmonyOS captions use its own recognizer: nothing to download.
+            children: [ohos ? const SystemAsrCard() : const StreamingAsrModelCard()],
+          ),
         SettingsSection(
           title: l10n.speechCallSection,
           footer: Text(l10n.speechCallFooter),
@@ -555,7 +559,11 @@ class SystemAsrCard extends ConsumerWidget {
     final colors = DshColors.of(context);
     final probe = ref.watch(ohosStreamingAsrReadyProvider);
     final (status, statusColor, note) = switch (probe) {
-      AsyncData(value: SystemAsrReadiness.ready) => (l10n.voiceModelReady, colors.success, l10n.speechLiveSystemReadyNote),
+      AsyncData(value: SystemAsrReadiness.ready) => (
+        l10n.voiceModelReady,
+        colors.success,
+        l10n.speechLiveSystemReadyNote,
+      ),
       AsyncData(value: SystemAsrReadiness.busy) => (
         l10n.speechLiveSystemBusy,
         theme.colorScheme.onSurfaceVariant,
@@ -580,7 +588,11 @@ class SystemAsrCard extends ConsumerWidget {
               Flexible(child: Text(l10n.speechLiveSystemName, style: settingsTitleStyle(context))),
               const SizedBox(width: 12),
               Flexible(
-                child: Text(status, textAlign: TextAlign.end, style: theme.textTheme.bodyMedium?.copyWith(color: statusColor)),
+                child: Text(
+                  status,
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: statusColor),
+                ),
               ),
             ],
           ),

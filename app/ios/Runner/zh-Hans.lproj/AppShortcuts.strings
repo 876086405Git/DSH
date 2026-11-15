@@ -1,0 +1,5 @@
+"Ask ${applicationName}" = "问 ${applicationName}";
+"Ask ${applicationName} something" = "问问 ${applicationName}";
+"Talk to ${applicationName}" = "和 ${applicationName} 说话";
+"Voice input in ${applicationName}" = "用 ${applicationName} 语音输入";
+"New conversation in ${applicationName}" = "在 ${applicationName} 新建对话";

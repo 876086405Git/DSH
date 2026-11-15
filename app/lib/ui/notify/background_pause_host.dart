@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../runtime/background_pause.dart';
+import '../../runtime/continued_run.dart';
 import '../theme/app_icons.dart';
 import 'background_net_host.dart';
 
@@ -57,6 +58,7 @@ class _BackgroundPauseHostState extends ConsumerState<BackgroundPauseHost> {
   Widget build(BuildContext context) {
     // Keeps the controller (and what it follows) alive with the shell.
     ref.watch(backgroundPauseProvider.select((_) => null));
+    ref.watch(continuedRunProvider);
     return const SizedBox.shrink();
   }
 }

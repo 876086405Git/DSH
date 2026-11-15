@@ -63,7 +63,7 @@ class RefreshRateService {
 
   /// Registers the frame listener and sends the initial mode. Safe to call twice.
   void start() {
-    if (_started) return;
+    if (_started || _systemDecides) return;
     _started = true;
     // Widget tests have no platform side and must not leave timers behind; the mode is
     // still sent so a test can assert the channel traffic.
@@ -75,9 +75,12 @@ class RefreshRateService {
 
   static bool get _motionOnly => operatingSystem == 'ohos';
 
+  /// iOS paces frames itself (ProMotion); nothing to ask for.
+  static bool get _systemDecides => operatingSystem == 'ios';
+
   /// Called by the settings row and by the stored preference after launch.
   Future<void> setMode(RefreshRateMode mode) async {
-    if (_mode == mode) return;
+    if (_mode == mode || _systemDecides) return;
     _mode = mode;
     _idle?.cancel();
     if (mode != RefreshRateMode.auto) _active = false;

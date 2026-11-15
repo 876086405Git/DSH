@@ -185,7 +185,7 @@ class _SubagentSettingsPageState extends ConsumerState<SubagentSettingsPage> {
         badge: layer == FieldLayer.user && canWrite ? modifiedBadge : null,
         enabled: canWrite && !saving,
         onTap: canWrite && !saving ? () => _toggle(settings, !on) : null,
-        trailing: Switch(value: on, onChanged: canWrite && !saving ? (v) => _toggle(settings, v) : null),
+        trailing: Switch.adaptive(value: on, onChanged: canWrite && !saving ? (v) => _toggle(settings, v) : null),
       ),
     );
     final sections = <SchemaFormSection>[

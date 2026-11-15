@@ -86,6 +86,17 @@ class GuideSyncTest(unittest.TestCase):
         for flat, target in manifest['files'].items():
             self.assertEqual((assets / flat).read_bytes(), (self.guide / target).read_bytes())
 
+    def test_appledouble_metadata_does_not_enter_the_bundled_guide(self):
+        self.write('docs/guide/zh/._01-engine.md', 'not a guide page')
+        self.write('app/lib/l10n/parts/._hub_zh.arb', 'not JSON')
+        self.write('app/android/app/src/main/res/values/._s.xml', 'not XML')
+        self.assertEqual(guide_sync.run(self.repo, write=True), [])
+        assets = self.repo / 'app/assets/skills/dsh-go-guide'
+        (assets / '._SKILL.md').write_bytes(b'\x00\x05\x16\x07metadata')
+        self.assertEqual(guide_sync.run(self.repo, write=False), [])
+        manifest = json.loads((assets / 'manifest.json').read_text())
+        self.assertFalse(any(name.startswith('._') for name in manifest['files']))
+
     def test_generated_assets_cannot_drift(self):
         guide_sync.run(self.repo, write=True)
         assets = self.repo / 'app/assets/skills/dsh-go-guide'

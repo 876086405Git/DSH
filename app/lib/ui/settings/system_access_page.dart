@@ -42,9 +42,7 @@ class _SystemAccessPageState extends ConsumerState<SystemAccessPage> {
   void initState() {
     super.initState();
     // Back from system settings: read everything again.
-    _lifecycle = AppLifecycleListener(
-      onResume: () => unawaited(ref.read(accessReadingsProvider.notifier).refresh()),
-    );
+    _lifecycle = AppLifecycleListener(onResume: () => unawaited(ref.read(accessReadingsProvider.notifier).refresh()));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(ref.read(accessReadingsProvider.notifier).refresh());
     });
@@ -64,20 +62,27 @@ class _SystemAccessPageState extends ConsumerState<SystemAccessPage> {
     final os = ref.watch(operatingSystemProvider);
     return AppPage.list(
       title: l10n.accessPageTitle,
-      subtitle: Text(os == 'ohos' ? l10n.harmonyAccessSubtitle : l10n.accessPageSubtitle),
+      subtitle: Text(
+        os == 'ohos'
+            ? l10n.harmonyAccessSubtitle
+            : os == 'ios'
+            ? l10n.iosAccessSubtitle
+            : l10n.accessPageSubtitle,
+      ),
       children: [
         if (readings != null)
           for (final feature in accessFeaturesFor(os))
             if ([
-              for (final item in accessItemsFor(feature, readings.vendor))
-                if (accessStateOf(item, readings, visited) case final state?)
-                  AccessItemTile(
-                    item: item,
-                    state: state,
-                    vendor: readings.vendor,
-                    onTap: () => unawaited(openAccessItem(context, item)),
-                  ),
-            ] case final rows when rows.isNotEmpty)
+                  for (final item in accessItemsFor(feature, readings.vendor))
+                    if (accessStateOf(item, readings, visited) case final state?)
+                      AccessItemTile(
+                        item: item,
+                        state: state,
+                        vendor: readings.vendor,
+                        onTap: () => unawaited(openAccessItem(context, item)),
+                      ),
+                ]
+                case final rows when rows.isNotEmpty)
               SettingsSection(
                 key: ValueKey('access-section-${feature.name}'),
                 title: feature.title(l10n),

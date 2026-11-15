@@ -21,7 +21,7 @@ typedef ImageBytes = Future<Uint8List> Function();
 
 /// The toast for a picture that did not reach the gallery.
 String gallerySaveErrorText(String code) => switch (code) {
-  'permission' => appL10n.chatImageStorageDenied,
+  'permission' => wordsForIos ? appL10n.iosPhotosDenied : appL10n.chatImageStorageDenied,
   'unsupported' => appL10n.chatImageCannotSave,
   'download' => appL10n.chatImageDownloadFailed,
   _ => appL10n.chatImageSaveFailed,

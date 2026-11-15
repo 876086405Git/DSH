@@ -1,0 +1,12 @@
+"DSH Go is working" = "DSH Go 正在运行";
+"This conversation is still going" = "这一轮对话还在继续";
+"Ask DSH Go" = "问 DSH Go";
+"Ask" = "提问";
+"Message" = "内容";
+"What would you like to ask?" = "想问什么？";
+"Ask DSH Go ${text}" = "问 DSH Go ${text}";
+"Opens a new conversation with this message in the composer." = "新建对话，把这段内容放进输入框。";
+"Voice Input" = "语音输入";
+"Opens a new conversation and starts dictating." = "新建对话并开始听写。";
+"New Conversation" = "新建对话";
+"Opens a new conversation." = "新建对话。";

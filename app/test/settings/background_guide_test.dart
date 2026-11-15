@@ -239,6 +239,12 @@ void main() {
       }
     });
 
+    testWidgets('iOS suspends the same way: the same page', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()), os: 'ios');
+      expect(find.text(zh.harmonyBackgroundSubtitle), findsOneWidget);
+      expect(find.text(zh.pluginsSystemBatteryOptimization), findsNothing);
+    });
+
     testWidgets('the notifications row shows where they stand', (tester) async {
       await pump(tester, _Notify(const NotifySystemStatus()));
       expect(find.descendant(of: find.byKey(row), matching: find.text(zh.accessStateOn)), findsOneWidget);

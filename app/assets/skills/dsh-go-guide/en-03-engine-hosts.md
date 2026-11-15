@@ -2,6 +2,33 @@
 
 DSH can run right on this phone (this phone's engine), or on your computer or server with your phone connecting to it. Chats, workspaces and plugins belong to each host.
 
+## Running in the background on iPhone
+
+The local engine continues after leaving the app only while the system actually allows background execution. A playing, unsuspended picture-in-picture pet and an accepted continued-processing task are independent sources; ending one must not clear the other. An enabled switch, downloaded assets or a previously visible PiP does not prove current execution permission.
+
+Pet PiP is off by default and is not a prerequisite for phone control or pet selection; native phone tasks request system continued execution directly. If you explicitly enable PiP on the phone-control page and choose to keep it after tasks, it can also support ordinary local chats. Start a real PiP from the foreground before switching apps. If PiP closes, pauses, the device locks or audio is interrupted, and no other system execution grant remains, the engine pauses at its next tool boundary. iOS can still suspend or terminate the app; permanent uptime is not promised.
+
+PiP does not approve tools, disable safe mode or resume a phone task you manually paused. Return to the app for confirmations; restoring PiP does not approve a previous request. An engine on a remote host does not depend on the iPhone's PiP.
+
+## Linux and Python on iPhone
+
+<!-- nav: commonSettings,hubSettingsEngine -->
+`Settings › Local engine` · [Open](dshgo://open/engine)
+
+On iPhone, find the **Linux environment** section on that page.
+
+Install the optional environment, then restart the local engine. It uses Alpine. Installing the environment does not also install Python, git or rg. Commands have a different available set when Linux is missing or paused; check its actual status first.
+
+You can explicitly ask a local chat to install Python and pip:
+
+```sh
+apk add python3 py3-pip
+python3 --version
+python3 -m pip --version
+```
+
+Installing packages changes the Linux system and needs approval for that system write. Workspace-write permission does not replace it. Inspect the actual download, installation or execution error; do not reset, uninstall or change pairing settings to address a missing package. The Linux environment does not grant arbitrary access to other iOS apps.
+
 ## This phone or remote
 
 The first time you open the app, choose where DSH runs:

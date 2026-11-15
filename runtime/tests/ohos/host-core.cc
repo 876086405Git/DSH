@@ -77,8 +77,17 @@ int main(int argc, char** argv) {
                            options.native_library_dir, options.linux_directory, options.workspace_roots[0], options.guest_root + "/root/.agents"}) {
     std::filesystem::create_directories(path);
   }
-  for (const char* name : {"libdsh_flock.so", "libdsh_require_builtin.so"})
-    std::ofstream(std::filesystem::path(options.native_library_dir) / name) << "path fixture, not an ELF library\n";
+#if defined(DSH_IOS_HOST)
+  const std::filesystem::path libraries[] = {"DshFlock.framework/DshFlock", "DshRequireBuiltin.framework/DshRequireBuiltin"};
+#else
+  const std::filesystem::path libraries[] = {"libdsh_flock.so", "libdsh_require_builtin.so"};
+#endif
+  for (const auto& name : libraries) {
+    const auto file = std::filesystem::path(options.native_library_dir) / name;
+    std::filesystem::create_directories(file.parent_path());
+    std::ofstream(file) << "path fixture, not a native library\n";
+  }
+  const auto flock = base / "libs" / libraries[0];
   for (const char* name : {"runtime/ohos/preload.mjs", "node_modules/@deepseek-ai/dsh/lib/bin.js",
                          "runtime/ohos/process/index.mjs", "runtime/ohos/process/sandbox.mjs",
                          "runtime/ohos/lifecycle/index.mjs", "runtime/ohos/capabilities/index.mjs",
@@ -95,15 +104,15 @@ int main(int argc, char** argv) {
   if (scenario == "native-root") options.native_library_dir = "/";
   if (scenario == "native-missing-dir") options.native_library_dir += "/missing";
   if (scenario == "native-nul") options.native_library_dir += std::string("\0tail", 5);
-  if (scenario == "native-missing-file") std::filesystem::remove(base / "libs/libdsh_flock.so");
+  if (scenario == "native-missing-file") std::filesystem::remove(flock);
   if (scenario == "native-not-regular") {
-    std::filesystem::remove(base / "libs/libdsh_flock.so");
-    std::filesystem::create_directory(base / "libs/libdsh_flock.so");
+    std::filesystem::remove(flock);
+    std::filesystem::create_directory(flock);
   }
   if (scenario == "native-file-symlink") {
-    std::filesystem::remove(base / "libs/libdsh_flock.so");
+    std::filesystem::remove(flock);
     std::ofstream(base / "outside.so") << "outside fixture";
-    std::filesystem::create_symlink(base / "outside.so", base / "libs/libdsh_flock.so");
+    std::filesystem::create_symlink(base / "outside.so", flock);
   }
   if (scenario == "native-env-override") options.env["DSH_GO_OHOS_NATIVE_LIBRARY_DIR"] = "/untrusted";
   if (scenario == "layout-no-guest") options.guest_root.clear();

@@ -33,7 +33,11 @@ std::string Directory(const std::string& path, const char* code = "ERR_OHOS_HOST
 
 std::string NativeDirectory(const std::string& path) {
   const auto root = Directory(path, "ERR_OHOS_NATIVE_LIBRARY_PATH");
+#if defined(DSH_IOS_HOST)
+  for (const char* name : {"DshFlock.framework/DshFlock", "DshRequireBuiltin.framework/DshRequireBuiltin"}) {
+#else
   for (const char* name : {"libdsh_flock.so", "libdsh_require_builtin.so"}) {
+#endif
     const auto expected = root + "/" + name;
     std::error_code error;
     const auto real = std::filesystem::canonical(expected, error);

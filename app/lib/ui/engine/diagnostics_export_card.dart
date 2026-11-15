@@ -23,7 +23,12 @@ String diagnosticsStepText(DiagnosticsStep step, {required bool harmony}) => swi
   DiagnosticsStep.collecting => appL10n.phoneDiagnosticsCollecting,
   DiagnosticsStep.packing => appL10n.phoneDiagnosticsPacking,
   DiagnosticsStep.sharing => appL10n.phoneDiagnosticsSharing,
-  DiagnosticsStep.saving => harmony ? appL10n.harmonySaving : appL10n.phoneDiagnosticsSaving,
+  DiagnosticsStep.saving =>
+    harmony
+        ? appL10n.harmonySaving
+        : wordsForIos
+        ? appL10n.iosSavingToFiles
+        : appL10n.phoneDiagnosticsSaving,
 };
 
 /// The two ways out for a diagnostics bundle — 「分享诊断包」 and
@@ -135,8 +140,19 @@ class _DiagnosticsExportCardState extends ConsumerState<DiagnosticsExportCard> {
         ),
         ListPageRow(
           icon: AppIcons.download,
-          title: _harmony ? l10n.harmonySaveToFile : l10n.phoneDiagnosticsSave,
-          subtitle: _subtitle(_Action.save, _harmony ? l10n.harmonySaveChooseLocation : l10n.phoneDiagnosticsSaveHint),
+          title: _harmony
+              ? l10n.harmonySaveToFile
+              : wordsForIos
+              ? l10n.iosSaveToFiles
+              : l10n.phoneDiagnosticsSave,
+          subtitle: _subtitle(
+            _Action.save,
+            _harmony
+                ? l10n.harmonySaveChooseLocation
+                : wordsForIos
+                ? l10n.iosFilesFolderHint
+                : l10n.phoneDiagnosticsSaveHint,
+          ),
           trailing: _ring(_Action.save),
           chevron: _busy != _Action.save,
           onTap: idle ? () => unawaited(_run(_Action.save)) : null,

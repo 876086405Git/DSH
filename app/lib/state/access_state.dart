@@ -52,24 +52,26 @@ const onboardingWantsVoiceKey = VoiceModelController.onboardingKey;
 /// What [os] offers is [accessFeaturesFor]'s, never all of these.
 enum AccessFeature { files, pet, phone, background, voice, alerts, systemActions }
 
-/// What first run and 系统权限 offer on [os], in their order. HarmonyOS has only
-/// what works there: its files and windows over other apps aren't reachable,
-/// the phone only through 系统操作 (which needs no permission of its own), and
-/// nothing keeps a turn running in the background (后台运行 says so), which
-/// leaves notifications their own feature.
-List<AccessFeature> accessFeaturesFor(String os) => os == 'ohos'
-    ? const [AccessFeature.alerts, AccessFeature.systemActions, AccessFeature.voice]
-    : const [
-        AccessFeature.files,
-        AccessFeature.pet,
-        AccessFeature.phone,
-        AccessFeature.background,
-        AccessFeature.voice,
-      ];
+/// What first run and 系统权限 offer on [os], in their order. HarmonyOS and iOS
+/// have only what works there: their files and windows over other apps aren't
+/// reachable, and nothing keeps a turn running in the background (后台运行 says
+/// so), which leaves notifications their own feature. HarmonyOS reaches the
+/// phone only through 系统操作, which needs no permission of its own.
+List<AccessFeature> accessFeaturesFor(String os) => switch (os) {
+  'ohos' => const [AccessFeature.alerts, AccessFeature.systemActions, AccessFeature.voice],
+  _ when androidSystemFeaturesOn(os) => const [
+    AccessFeature.files,
+    AccessFeature.pet,
+    AccessFeature.phone,
+    AccessFeature.background,
+    AccessFeature.voice,
+  ],
+  _ => const [AccessFeature.alerts, AccessFeature.voice],
+};
 
-/// Whether 语音输入 on [os] means the offline model's download: HarmonyOS uses
-/// the system's recogniser and has no model.
-bool accessVoiceDownloads(String os) => os != 'ohos';
+/// Whether 语音输入 on [os] means the offline model's download: HarmonyOS and
+/// iOS use the system's recogniser and have no model.
+bool accessVoiceDownloads(String os) => androidSystemFeaturesOn(os);
 
 /// One system permission or maker's switch, in the order first run walks
 /// them: the system's own dialogs first, then settings pages, the makers'
@@ -98,10 +100,10 @@ enum AccessItem {
   };
 
   /// Asked for on [os] with a system dialog: the answer is back when the call
-  /// returns. HarmonyOS asks for notifications that way; Android's come with
-  /// their channels, and this opens their settings page.
+  /// returns. HarmonyOS and iOS ask for notifications that way; Android's come
+  /// with their channels, and this opens their settings page.
   bool dialogOn(String os) =>
-      this == mic || this == storage || this == battery || (this == notifications && os == 'ohos');
+      this == mic || this == storage || this == battery || (this == notifications && !androidSystemFeaturesOn(os));
 }
 
 /// Where an item stands.
@@ -307,9 +309,9 @@ class SystemAccessDriver implements AccessDriver {
   @override
   Future<AccessReadings> read() async {
     // Only what [accessFeaturesFor] offers there: the runtime's storage and
-    // battery answers on HarmonyOS aren't readings (always not granted, an
-    // error) and the rest has no native side. Unread, none can show as off.
-    if (ref.read(operatingSystemProvider) == 'ohos') {
+    // battery answers on HarmonyOS and iOS aren't readings (always not granted,
+    // an error) and the rest has no native side. Unread, none can show as off.
+    if (!androidSystemFeaturesOn(ref.read(operatingSystemProvider))) {
       final mic = _readMic();
       final notify = _readNotifications();
       final readings = AccessReadings(mic: await mic, notifications: await notify);
@@ -375,7 +377,7 @@ class SystemAccessDriver implements AccessDriver {
           return true;
         case AccessItem.notifications:
           final notify = ref.read(notifyChannelProvider);
-          if (again || ref.read(operatingSystemProvider) != 'ohos') return notify.openSettings();
+          if (again || androidSystemFeaturesOn(ref.read(operatingSystemProvider))) return notify.openSettings();
           // The system's dialog; refused, the step says so and 重试 comes back
           // here with [again], for the settings a dialog can no longer reach.
           await notify.requestPermission();

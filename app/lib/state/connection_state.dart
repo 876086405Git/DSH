@@ -11,6 +11,8 @@ import '../remote/relay/relay_backend.dart';
 import '../remote/ssh/ssh_link.dart';
 import '../remote/ssh/ssh_transport.dart';
 import '../runtime/runtime_bridge.dart';
+import '../runtime/container_paths.dart';
+import 'workspaces_state.dart';
 import '../runtime/runtime_state.dart';
 import 'hosts_state.dart';
 import 'permission_default_repair.dart';
@@ -80,6 +82,15 @@ class LocalConnectionController extends AsyncNotifier<HostConnection?> {
     );
     final (baseUrl, token) = endpoint;
     if (baseUrl == null || token == null) return null;
+
+    if (ContainerPaths.enabled) {
+      final paths = await ContainerPaths.refresh();
+      if (!r.mounted) return null;
+      if (r.read(activeHostProvider).isLocal) {
+        await r.read(workspacePrefsProvider.notifier).relocate(paths);
+      }
+      if (!r.mounted) return null;
+    }
 
     final client = await r.read(localClientConnectorProvider)(baseUri: Uri.parse(baseUrl), token: token);
     if (!r.mounted) {

@@ -96,7 +96,13 @@ class _NotificationSettingsPageState extends ConsumerState<NotificationSettingsP
 
   void _settingsFailed() => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: Text(_ohos ? appL10n.harmonyNotificationSettingsFailed : appL10n.pluginsNotificationSettingsFailed),
+      content: Text(
+        wordsForIos
+            ? appL10n.iosNotificationSettingsFailed
+            : _ohos
+            ? appL10n.harmonyNotificationSettingsFailed
+            : appL10n.pluginsNotificationSettingsFailed,
+      ),
     ),
   );
 
@@ -254,23 +260,25 @@ class _NotificationSettingsPageState extends ConsumerState<NotificationSettingsP
           ],
         ),
         if (liveBlocked) _liveNote(),
-        SettingsSection(
-          title: ohos ? l10n.harmonyLiveTitle : l10n.liveSettingsTitle,
-          footer: Text(ohos ? l10n.harmonyLiveFooter : l10n.liveSettingsFooter),
-          children: [
-            SettingsSwitchTile(
-              spot: Spots.notifyLive,
-              title: ohos ? l10n.harmonyLiveSwitch : null,
-              subtitle: ohos
-                  ? (liveSupported ? l10n.harmonyLiveSubtitle : l10n.harmonyLiveUnavailable)
-                  : liveSupported
-                  ? l10n.liveSettingsSubtitle
-                  : l10n.liveUnsupported,
-              value: prefs.live && liveSupported,
-              onChanged: on && liveSupported ? (v) => unawaited(notifier.setLive(v)) : null,
-            ),
-          ],
-        ),
+        // iOS has them, this app doesn't yet: nothing to switch on.
+        if (!wordsForIos)
+          SettingsSection(
+            title: ohos ? l10n.harmonyLiveTitle : l10n.liveSettingsTitle,
+            footer: Text(ohos ? l10n.harmonyLiveFooter : l10n.liveSettingsFooter),
+            children: [
+              SettingsSwitchTile(
+                spot: Spots.notifyLive,
+                title: ohos ? l10n.harmonyLiveSwitch : null,
+                subtitle: ohos
+                    ? (liveSupported ? l10n.harmonyLiveSubtitle : l10n.harmonyLiveUnavailable)
+                    : liveSupported
+                    ? l10n.liveSettingsSubtitle
+                    : l10n.liveUnsupported,
+                value: prefs.live && liveSupported,
+                onChanged: on && liveSupported ? (v) => unawaited(notifier.setLive(v)) : null,
+              ),
+            ],
+          ),
         SettingsSection(
           title: l10n.pluginsSystemSettings,
           // Android posts a public version for the lock screen; here the real text goes to the system.
@@ -278,7 +286,11 @@ class _NotificationSettingsPageState extends ConsumerState<NotificationSettingsP
           children: [
             SettingsTile(
               spot: Spots.notifySystem,
-              subtitle: ohos ? l10n.harmonyEnableBanner : l10n.pluginsEnableFloatingNotifications,
+              subtitle: ohos
+                  ? l10n.harmonyEnableBanner
+                  : wordsForIos
+                  ? l10n.iosEnableBanners
+                  : l10n.pluginsEnableFloatingNotifications,
               onTap: () => unawaited(_openSystem()),
             ),
           ],

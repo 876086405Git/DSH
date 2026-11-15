@@ -37,7 +37,11 @@ class DshRemoteRelayBackend implements RelayBackend, RelayNetworkBackend, RelayP
            remote.RemoteAccount(
              secrets: _Secrets(secrets),
              serverUrl: serverUrl,
-             deviceName: Platform.operatingSystem == 'ohos' ? 'DSH App (HarmonyOS)' : 'DSH App (Android)',
+             deviceName: switch (Platform.operatingSystem) {
+               'ohos' => 'DSH App (HarmonyOS)',
+               'ios' => 'DSH App (iOS)',
+               _ => 'DSH App (Android)',
+             },
              platform: 'dsh-app-android',
              clientVersion: clientVersion,
              onDirectFallback: (_) => debugPrint('[dsh-remote] automatic transport fallback'),

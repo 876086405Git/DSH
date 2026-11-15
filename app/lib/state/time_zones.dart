@@ -179,7 +179,7 @@ Future<String> detectDeviceTimeZone() async {
   final env = Platform.environment['TZ']?.replaceFirst(RegExp(r'^:'), '');
   if (usable(env)) return env!;
   try {
-    if (Platform.isAndroid || Platform.operatingSystem == 'ohos') {
+    if (Platform.isAndroid || Platform.isIOS || Platform.operatingSystem == 'ohos') {
       return await detectAndroidTimeZone();
     } else if (Platform.isLinux || Platform.isMacOS) {
       final file = File('/etc/timezone');

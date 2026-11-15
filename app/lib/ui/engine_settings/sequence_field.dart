@@ -137,7 +137,7 @@ class _SequenceFieldSheetState extends ConsumerState<SequenceFieldSheet> {
     final value = _draft[index];
     final kind = kindOf(source);
     if (kind == FieldKind.toggle) {
-      return SwitchListTile(
+      return SwitchListTile.adaptive(
         title: Text(title),
         value: value == true,
         contentPadding: EdgeInsets.zero,

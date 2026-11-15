@@ -331,9 +331,11 @@ class NotifyChannel {
     } on MissingPluginException {
       return const NotifySystemStatus.unavailable();
     } on PlatformException {
-      // Android's answer is only ever a stale one; HarmonyOS's failure means it
-      // doesn't know, which mustn't read as every switch on.
-      return Platform.operatingSystem == 'ohos' ? const NotifySystemStatus.unavailable() : const NotifySystemStatus();
+      // Android's answer is only ever a stale one; a failure on HarmonyOS or iOS
+      // means it doesn't know, which mustn't read as every switch on.
+      return Platform.operatingSystem == 'ohos' || Platform.isIOS
+          ? const NotifySystemStatus.unavailable()
+          : const NotifySystemStatus();
     }
   }
 
@@ -366,7 +368,8 @@ class NotifyChannel {
 
   Future<void> cancelAll() => _call('cancelAll');
 
-  /// HarmonyOS's permission dialog; true when notifications are on afterwards.
+  /// The system's permission dialog on HarmonyOS and iOS; true when notifications
+  /// are on afterwards.
   /// It comes up once: after a refusal only [openSettings] can turn them on.
   Future<bool> requestPermission() async {
     try {

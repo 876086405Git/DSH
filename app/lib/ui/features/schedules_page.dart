@@ -144,7 +144,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
       ],
       children: [
         // The on-device engine is suspended with the app: a remote host's tasks don't care.
-        if (ref.watch(operatingSystemProvider) == 'ohos' && ref.watch(activeHostProvider).isLocal)
+        if (!ref.watch(androidSystemFeaturesProvider) && ref.watch(activeHostProvider).isLocal)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Text(l10n.harmonySchedulesLocal, style: Theme.of(context).textTheme.bodySmall),

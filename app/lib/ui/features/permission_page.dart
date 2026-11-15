@@ -197,7 +197,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
               spot: Spots.phoneFiles,
               subtitle: l10n.hubSettingsPhoneFilesHint,
               onTap: () => unawaited(_onPhoneFiles(!phoneFiles)),
-              trailing: Switch(value: phoneFiles, onChanged: (v) => unawaited(_onPhoneFiles(v))),
+              trailing: Switch.adaptive(value: phoneFiles, onChanged: (v) => unawaited(_onPhoneFiles(v))),
             ),
           ),
         // The control itself stays on 手机操控: this opens it at that row.

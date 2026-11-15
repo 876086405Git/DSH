@@ -66,7 +66,11 @@ List<SlashCommand> appSlashCommands({bool harmony = false}) => [
   SlashCommand(
     name: 'export',
     label: appL10n.stateCommandExportLabel,
-    description: harmony ? appL10n.harmonyCommandExportDescription : appL10n.stateCommandExportDescription,
+    description: harmony
+        ? appL10n.harmonyCommandExportDescription
+        : wordsForIos
+        ? appL10n.iosCommandExportDescription
+        : appL10n.stateCommandExportDescription,
     kind: SlashCommandKind.app,
   ),
   SlashCommand(

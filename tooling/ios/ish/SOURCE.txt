@@ -1,0 +1,13 @@
+DshGuest embeds the iSH ARM64 user-mode Linux interpreter.
+Upstream: https://github.com/OpenMinis/ish-arm64
+Commit: c5c264da19148512167aa493d7bd4e50aae1b74e
+Source: https://codeload.github.com/OpenMinis/ish-arm64/tar.gz/c5c264da19148512167aa493d7bd4e50aae1b74e
+SHA256: 046e17769c9978e21060d465c0610a27a033dba2af92f58f42e7d8bcb6bb36ad
+Local modifications: the accompanying iSH-build.patch and iSH-job-runtime.patch.
+Our C task backend is in runtime/ios/guest/native/ in the DSH Go source.
+Rebuild: obtain this DSH Go version's source from https://github.com/ccch1mneyyy/dsh-Go
+and run tooling/ios/build-ish.sh iphoneos OUTPUT_DIR (or iphonesimulator).
+The build instructions, source pin and patch are in tooling/ios/ish/.
+Distributors must make the complete corresponding source for their released
+DSH Go version, including build scripts and modifications, available under the
+applicable licenses. A URL to a moving branch alone is not a release source offer.

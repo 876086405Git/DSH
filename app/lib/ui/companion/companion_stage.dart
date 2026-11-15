@@ -20,7 +20,9 @@ import '../web/web_view_guard.dart';
 
 /// Phones with less memory than this get a smaller texture (4096² is about
 /// 64 MB of GPU memory, more with mipmaps).
-const _bigTextureFromBytes = 6 * 1024 * 1024 * 1024;
+// Physical memory reported by iOS is slightly below the marketed RAM size;
+// this separates the 4 GB and 6 GB device classes without a model-name list.
+const _bigTextureFromBytes = 5 * 1024 * 1024 * 1024;
 
 /// Why a stage left for good on its own account ([CompanionStageEvents.onFailed]):
 /// her renderer died, or the pack under her was about to change. Not for the
@@ -168,7 +170,10 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       _server = server;
       final device = await IslandPlatform.instance.device();
       if (stale()) return;
-      final small = device.totalMem > 0 && device.totalMem < _bigTextureFromBytes;
+      // WebKit's GPU-process budget is separate from the phone's RAM.
+      final ios = defaultTargetPlatform == TargetPlatform.iOS;
+      final small = device.totalMem > 0 ? device.totalMem < _bigTextureFromBytes : ios;
+      final lowMemory = device.totalMem <= 0 || device.totalMem <= 3 * 1024 * 1024 * 1024;
       final web = WebViewController(onPermissionRequest: (request) => unawaited(request.deny()));
       await web.setJavaScriptMode(JavaScriptMode.unrestricted);
       await web.setBackgroundColor(widget.bare ? const Color(0x00000000) : const Color(0xFF0D2F55));
@@ -209,7 +214,20 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       _timeout = Timer(_readyTimeout, () => _fail('timeout'));
       await web.loadRequest(
         server.pageUrl(
-          query: {if (small) 'maxTexture': '2048', if (reduceMotion) 'reduceMotion': '1', if (widget.bare) 'bare': '1'},
+          query: {
+            if (small) 'maxTexture': ios && lowMemory ? '1024' : '2048',
+            if (ios) ...{
+              'dpr': lowMemory
+                  ? '1'
+                  : small
+                  ? '1.5'
+                  : '2',
+              'antialias': '0',
+              'gpuBudget': 'low',
+            },
+            if (reduceMotion) 'reduceMotion': '1',
+            if (widget.bare) 'bare': '1',
+          },
         ),
       );
     } on Object catch (error) {

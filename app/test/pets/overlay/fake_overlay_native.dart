@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 class FakeOverlayNative {
   FakeOverlayNative({
+    this.platform = 'android',
     this.permission = 'denied',
     this.enabled = false,
     this.alwaysShow = false,
@@ -17,6 +18,7 @@ class FakeOverlayNative {
 
   static const channel = MethodChannel('dsh/pet_overlay');
 
+  final String platform;
   String permission;
   bool enabled;
   bool alwaysShow;
@@ -35,6 +37,7 @@ class FakeOverlayNative {
   List<String> get methods => [for (final c in calls) c.method];
 
   Map<String, Object?> get status => {
+    'platform': platform,
     'enabled': enabled,
     'alwaysShow': alwaysShow,
     'permission': permission,

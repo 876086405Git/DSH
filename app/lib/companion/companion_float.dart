@@ -18,22 +18,24 @@ import 'companion_server.dart';
 
 @immutable
 class CompanionFloatOptions {
-  const CompanionFloatOptions({this.enabled = false,
-    this.zoom = 0.9, this.y = 0});
+  const CompanionFloatOptions({this.enabled = false, this.zoom = 0.9, this.y = 0});
 
   final bool enabled;
   final double zoom;
   final double y;
 
   Map<String, String> get query => {
-    'mode': 'float', 'maxTexture': '2048', 'maskSize': '1024', 'antialias': '0',
-    'floatZoom': '$zoom', 'floatY': '$y',
+    'mode': 'float',
+    'maxTexture': '2048',
+    'maskSize': '1024',
+    'antialias': '0',
+    'floatZoom': '$zoom',
+    'floatY': '$y',
   };
 
   @override
-  bool operator ==(Object other) => other is CompanionFloatOptions &&
-      other.enabled == enabled &&
-      other.zoom == zoom && other.y == y;
+  bool operator ==(Object other) =>
+      other is CompanionFloatOptions && other.enabled == enabled && other.zoom == zoom && other.y == y;
   @override
   int get hashCode => Object.hash(enabled, zoom, y);
 }
@@ -42,6 +44,7 @@ class CompanionFloatOptions {
 class CompanionFloatState {
   const CompanionFloatState({this.loading = false, this.configured = false, this.problem});
   final bool loading;
+
   /// The native owner accepted the page; this is not proof of a rendered frame.
   final bool configured;
   final String? problem;
@@ -57,11 +60,17 @@ class CompanionFloatPage {
 
 typedef CompanionFloatConfigure = Future<void> Function(Uri? page);
 typedef CompanionFloatStart = Future<CompanionFloatPage> Function(
-    CompanionPackStore store, CompanionFloatOptions options);
+  CompanionPackStore store,
+  CompanionFloatOptions options,
+);
 
 class CompanionFloatSession {
-  CompanionFloatSession({required this.loadStore, required this.startPage,
-    required this.configure, required this.changed});
+  CompanionFloatSession({
+    required this.loadStore,
+    required this.startPage,
+    required this.configure,
+    required this.changed,
+  });
 
   final Future<CompanionPackStore> Function() loadStore;
   final CompanionFloatStart startPage;
@@ -92,8 +101,8 @@ class CompanionFloatSession {
     if (!_closed && _options.enabled) await _refresh();
   }
 
-  bool _current(int generation, [int? revision]) => !_closed &&
-      _generation == generation && (revision == null || _store?.revision == revision);
+  bool _current(int generation, [int? revision]) =>
+      !_closed && _generation == generation && (revision == null || _store?.revision == revision);
 
   void _publish(CompanionFloatState value) {
     if (!_closed) changed(value);
@@ -197,15 +206,23 @@ class CompanionFloatSession {
       }
     } on Object catch (error) {
       if (!_current(generation)) return;
-      try { await _stopReaders(); } on Object { /* Keep the primary stable error. */ }
+      try {
+        await _stopReaders();
+      } on Object {
+        /* Keep the primary stable error. */
+      }
       if (_current(generation)) {
-        _publish(CompanionFloatState(problem: switch (error) {
-          MissingPluginException() => 'companion_native_unavailable',
-          PlatformException() => 'companion_channel_failed',
-          FileSystemException() => 'companion_storage',
-          SocketException() => 'companion_server_failed',
-          _ => 'companion_unavailable',
-        }));
+        _publish(
+          CompanionFloatState(
+            problem: switch (error) {
+              MissingPluginException() => 'companion_native_unavailable',
+              PlatformException() => 'companion_channel_failed',
+              FileSystemException() => 'companion_storage',
+              SocketException() => 'companion_server_failed',
+              _ => 'companion_unavailable',
+            },
+          ),
+        );
       }
     }
   }
@@ -223,8 +240,10 @@ class CompanionFloatSession {
 
 /// Same-root stores share mutation hooks. Keep the factory, not a failed
 /// Future: reopening settings or explicitly reselecting can retry storage.
-final companionFloatStoreProvider = Provider<Future<CompanionPackStore> Function()>((ref) => () async =>
-    CompanionPackStore(Directory('${(await getApplicationSupportDirectory()).path}/companion')));
+final companionFloatStoreProvider = Provider<Future<CompanionPackStore> Function()>(
+  (ref) =>
+      () async => CompanionPackStore(Directory('${(await getApplicationSupportDirectory()).path}/companion')),
+);
 
 /// Subscribe before checking; a late check from a replaced/removed pack is
 /// never offered as an enabled choice. Opening settings does not download.
@@ -253,7 +272,8 @@ final companionFloatAvailabilityProvider = StreamProvider.autoDispose<String?>((
 /// One controller survives ordinary preference/status changes. Rebuilding it
 /// per selection would let an old asynchronous close clear a newer page.
 final companionFloatProvider = NotifierProvider<CompanionFloatController, CompanionFloatState>(
-    CompanionFloatController.new);
+  CompanionFloatController.new,
+);
 
 class CompanionFloatController extends Notifier<CompanionFloatState> {
   late CompanionFloatSession _session;
@@ -271,10 +291,11 @@ class CompanionFloatController extends Notifier<CompanionFloatState> {
         return CompanionFloatPage(server.pageUrl(query: options.query), server.close);
       },
       configure: (page) async {
-        await channel.configureCompanion(
-            page: page, notice: page == null ? null : appL10n.botsPetOverlayFallback);
+        await channel.configureCompanion(page: page, notice: page == null ? null : appL10n.botsPetOverlayFallback);
       },
-      changed: (value) { if (ref.mounted) state = value; },
+      changed: (value) {
+        if (ref.mounted) state = value;
+      },
     );
     ref.onDispose(() => unawaited(session.close().catchError((Object _) {})));
     void update() {
@@ -283,13 +304,23 @@ class CompanionFloatController extends Notifier<CompanionFloatState> {
         if (!ref.mounted) return;
         final prefs = ref.read(petPrefsProvider);
         final overlay = ref.read(petOverlayProvider);
-        unawaited(session.select(CompanionFloatOptions(
-          enabled: prefs.loaded && prefs.enabled &&
-              prefs.overlayRenderer == PetOverlayRenderer.companion && overlay.working,
-          zoom: prefs.floatZoom, y: prefs.floatY,
-        )));
+        unawaited(
+          session.select(
+            CompanionFloatOptions(
+              enabled:
+                  !overlay.ios &&
+                  prefs.loaded &&
+                  prefs.enabled &&
+                  prefs.overlayRenderer == PetOverlayRenderer.companion &&
+                  overlay.working,
+              zoom: prefs.floatZoom,
+              y: prefs.floatY,
+            ),
+          ),
+        );
       });
     }
+
     ref.listen(petPrefsProvider, (_, _) => update());
     ref.listen(petOverlayProvider.select((value) => value.working), (_, _) => update());
     update();

@@ -93,6 +93,19 @@ void main() {
         isFalse,
       );
     });
+
+    test('the system is still letting it run: it never paused', () {
+      expect(
+        BackgroundPausePolicy.onReturn(
+          away: const Duration(minutes: 5),
+          local: true,
+          wasRunning: true,
+          running: true,
+          continued: true,
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('controller', () {

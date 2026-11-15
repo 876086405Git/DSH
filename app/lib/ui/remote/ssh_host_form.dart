@@ -7,9 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../remote/ssh/ssh_link.dart';
+import '../../state/android_features.dart';
 import '../../state/attachments.dart';
 import '../../state/connection_state.dart';
-import '../../state/android_features.dart';
 import '../../state/hosts_state.dart';
 import '../common/field_paste.dart';
 import '../providers/provider_widgets.dart' show FormFieldBlock, FormFieldGroup;
@@ -181,7 +181,19 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> with FieldPas
   void dispose() {
     unawaited(_testSub?.cancel());
     unawaited(_test?.close());
-    for (final c in [_name, _host, _port, _user, _command, _cwd, _password, _privateKey, _passphrase, _attachToken, _remotePort]) {
+    for (final c in [
+      _name,
+      _host,
+      _port,
+      _user,
+      _command,
+      _cwd,
+      _password,
+      _privateKey,
+      _passphrase,
+      _attachToken,
+      _remotePort,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -249,11 +261,12 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> with FieldPas
     if (_errors.containsKey(field)) setState(() => _errors = {..._errors}..remove(field));
   }
 
-  SshSecrets get _secrets =>
-      SshSecrets(
-        password: _password.text, privateKey: _privateKey.text, passphrase: _passphrase.text,
-        attachToken: _attachToken.text.trim(),
-      );
+  SshSecrets get _secrets => SshSecrets(
+    password: _password.text,
+    privateKey: _privateKey.text,
+    passphrase: _passphrase.text,
+    attachToken: _attachToken.text.trim(),
+  );
 
   Future<void> _runTest({bool restart = false}) async {
     FocusManager.instance.primaryFocus?.unfocus();
@@ -535,11 +548,13 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> with FieldPas
             ),
             SettingsSection(
               title: l10n.remoteAuthentication,
-              footer: Text(switch ((_auth == SshAuthMethod.password, ref.watch(operatingSystemProvider) == 'ohos')) {
-                (true, true) => l10n.harmonyPasswordStorageHelp,
-                (false, true) => l10n.harmonyKeyStorageHelp,
-                (true, false) => l10n.remotePasswordStorageHelp,
-                (false, false) => l10n.remoteKeyStorageHelp,
+              footer: Text(switch ((_auth == SshAuthMethod.password, ref.watch(operatingSystemProvider))) {
+                (true, 'ohos') => l10n.harmonyPasswordStorageHelp,
+                (false, 'ohos') => l10n.harmonyKeyStorageHelp,
+                (true, 'ios') => l10n.remotePasswordStorageHelpIos,
+                (false, 'ios') => l10n.remoteKeyStorageHelpIos,
+                (true, _) => l10n.remotePasswordStorageHelp,
+                (false, _) => l10n.remoteKeyStorageHelp,
               }),
               children: [
                 FormFieldGroup(
@@ -693,12 +708,15 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> with FieldPas
                     FormFieldBlock(
                       label: l10n.remoteWorkingDirectory,
                       helper: _dshMode == SshDshMode.attachOnly
-                          ? l10n.remoteAttachWorkingDirectoryHelp : l10n.remoteWorkingDirectoryHelp,
+                          ? l10n.remoteAttachWorkingDirectoryHelp
+                          : l10n.remoteWorkingDirectoryHelp,
                       child: TextField(
                         controller: _cwd,
                         autocorrect: false,
                         style: mono,
-                        decoration: InputDecoration(hintText: _dshMode == SshDshMode.attachOnly ? '/srv/code' : '~/code'),
+                        decoration: InputDecoration(
+                          hintText: _dshMode == SshDshMode.attachOnly ? '/srv/code' : '~/code',
+                        ),
                       ),
                     ),
                   ],

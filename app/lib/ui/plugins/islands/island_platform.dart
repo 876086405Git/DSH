@@ -59,7 +59,8 @@ final class IslandTrimMemory extends IslandPlatformEvent {
 }
 
 /// The platform side of the islands (Android `islands/IslandsPlugin.kt`,
-/// HarmonyOS `plugins/IslandsPlugin.ets`): what webview_flutter doesn't do.
+/// HarmonyOS `plugins/IslandsPlugin.ets`, iOS `Runner/IslandsChannel.swift`):
+/// what webview_flutter doesn't do.
 /// Every call is best effort and never throws.
 abstract class IslandPlatform {
   static IslandPlatform instance = MethodChannelIslandPlatform();
@@ -67,8 +68,9 @@ abstract class IslandPlatform {
   Future<IslandDevice> device();
 
   /// Takes over the WebView behind [webViewId] (webview_flutter's
-  /// `AndroidWebViewController.webViewIdentifier`, or the fork's
-  /// `OhosWebViewController.webViewIdentifier`): follows [dark] for
+  /// `AndroidWebViewController.webViewIdentifier`, the fork's
+  /// `OhosWebViewController.webViewIdentifier` or
+  /// `WebKitWebViewController.webViewIdentifier`): follows [dark] for
   /// `prefers-color-scheme`, zooms text to [textZoom] percent and survives
   /// a renderer crash instead of taking the app down. False when there's no
   /// such WebView (or no platform side).
@@ -101,7 +103,9 @@ class MethodChannelIslandPlatform extends IslandPlatform {
   /// Asks the OS: stock Flutter has no `TargetPlatform.ohos`.
   final bool _ohos;
 
-  bool get _hasPlatformSide => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || _ohos);
+  bool get _hasPlatformSide =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS || _ohos);
 
   final _events = StreamController<IslandPlatformEvent>.broadcast();
   bool _listening = false;

@@ -308,9 +308,15 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
 
   Future<void> _onEntry(LauncherEntry entry) async {
     switch (entry) {
-      case NewChatEntry():
-        // Dictation is the native composer's; the page starts a conversation.
-        if (mounted) await _compose(null);
+      case NewChatEntry(:final text):
+        // Dictation is the native composer's; Siri's supplied text still
+        // belongs in the web composer, without sending it.
+        if (mounted) {
+          final request = ref.read(operatingSystemProvider) == 'ios' && text.isNotEmpty
+              ? ComposeRequest(text: text)
+              : null;
+          await _compose(request);
+        }
       case ScreenshotEntry(:final path):
         await _onShare(
           IncomingShare(

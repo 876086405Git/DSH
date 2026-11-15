@@ -123,7 +123,7 @@ class NativePluginSection extends ConsumerWidget {
                       icon: _surfaceIcon(surface),
                       title: surface.label,
                       onTap: () => set(!on),
-                      trailing: Switch(value: on, onChanged: set),
+                      trailing: Switch.adaptive(value: on, onChanged: set),
                     ),
                   );
                 },
@@ -145,7 +145,7 @@ class NativePluginSection extends ConsumerWidget {
                     title: l10n.plugslotsVoiceSwitch,
                     subtitle: cannot ? l10n.harmonyPluginVoiceUnavailable : null,
                     onTap: cannot ? null : () => set(!on),
-                    trailing: Switch(value: on && !cannot, onChanged: cannot ? null : set),
+                    trailing: Switch.adaptive(value: on && !cannot, onChanged: cannot ? null : set),
                   ),
                 );
               },

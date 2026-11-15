@@ -1,0 +1,470 @@
+DSH iSH confined backend build patch. 未在 Apple 上编译 / Not compiled on Apple.
+Pinned upstream: c5c264da19148512167aa493d7bd4e50aae1b74e
+Strict real VDSO; robust SDK paths; confined C backend and framework link target.
+
+--- a/vdso/arm64/meson.build
++++ b/vdso/arm64/meson.build
+@@ -7,36 +7,13 @@
+ # On macOS, you need an aarch64 cross-compiler toolchain.
+ # On Linux, you can use the native compiler if running on arm64, or a cross compiler.
+ 
+-# Try to find an aarch64 compiler
+-clang = find_program('/usr/local/opt/llvm/bin/clang', '/opt/homebrew/opt/llvm/bin/clang', '/opt/local/bin/clang', 'clang', required: false)
+-
+-if clang.found()
+-    # Check if the compiler supports aarch64 target
+-    check_cc = find_program('./check-cc-arm64.sh', required: false)
+-    if check_cc.found()
+-        result = run_command(check_cc, clang, check: false)
+-        if result.returncode() != 0
+-            message('ARM64 VDSO: Cross-compiler check failed')
+-            message(result.stdout() + result.stderr())
+-        endif
+-    endif
+-
+-    vdso_compiler = [clang, '-target', 'aarch64-linux-gnu', '-fuse-ld=lld']
+-
+-    vdso = custom_target('vdso-arm64',
+-        input: ['vdso.S', 'vdso.c', 'vdso.lds'],
+-        output: 'libvdso.so.elf',
+-        command: vdso_compiler + [
+-            '-o', '@OUTPUT@', '@INPUT0@', '@INPUT1@',
+-            '-nostdlib', '-Wl,-T,@INPUT2@', '-Wl,--hash-style,sysv',
+-            '-shared', '-fPIC', '-ffreestanding'
+-        ] + get_option('vdso_c_args').split())
+-else
+-    # Create a dummy vdso target if no compiler is available
+-    # This allows building for ARM64 guest even without a vdso
+-    message('ARM64 VDSO: No suitable cross-compiler found, VDSO will not be built')
+-    # Create an empty file as placeholder
+-    vdso = custom_target('vdso-arm64-stub',
+-        output: 'libvdso.so.elf',
+-        command: ['touch', '@OUTPUT@'])
+-endif
++# DSH: require LLVM on PATH (CI prepends Homebrew LLVM). Never emit a dummy.
++clang = find_program('clang', required: true, native: true)
++vdso = custom_target('vdso-arm64',
++    input: ['vdso.S', 'vdso.c', 'vdso.lds'],
++    output: 'libvdso.so.elf',
++    command: [clang, '-target', 'aarch64-linux-gnu', '-fuse-ld=lld',
++        '-o', '@OUTPUT@', '@INPUT0@', '@INPUT1@',
++        '-nostdlib', '-Wl,-T,@INPUT2@', '-Wl,--hash-style,sysv',
++        '-shared', '-fPIC', '-ffreestanding'
++    ] + get_option('vdso_c_args').split())
+--- a/meson.build
++++ b/meson.build
+@@ -51,7 +51,8 @@
+ #                or env CFLAGS=-DISH_GADGET_PROFILE meson setup ...
+ # Adds ~9 instructions per gret (ring-buffer write); not for production builds.
+ 
+-includes = [include_directories('.')]
++includes = [include_directories('.'), include_directories('dsh-native')]
++add_project_arguments('-DDSH_IOS_GUEST_CONFINED=1', language: 'c')
+ 
+ threads = dependency('threads')
+ librt = cc.find_library('rt', required: false)
+@@ -1786,6 +1787,22 @@
+         'platform/' + host_machine.system() + '.c',
+     ]
+ 
++    src += files(
++        'dsh-native/bound_admission.c',
++        'dsh-native/bound_file.c',
++        'dsh-native/bound_ish_directory.c',
++        'dsh-native/bound_ish_fd.c',
++        'dsh-native/bound_ish_fs.c',
++        'dsh-native/bound_ish_mapping.c',
++        'dsh-native/bound_parent.c',
++        'dsh-native/guest_backend.c',
++        'dsh-native/guest_dns.c',
++        'dsh-native/interruptible.c',
++        'dsh-native/job_bridge.c',
++        'dsh-native/job_stdio.c',
++        'dsh-native/job_task.c',
++        'dsh-native/job_threads.c',
++    )
+     libish = library('ish', src,
+         include_directories: includes)
+     ish = declare_dependency(
+@@ -1862,3 +1878,17 @@
+ 
+ e2e_test = find_program('tests/e2e/e2e.bash')
+ test('e2e', e2e_test, args: ['-y'], timeout: 180)
++
++# DSH: whole-kernel link, with unresolved symbols rejected on both platforms.
++# The embedding supplies the confined C task backend; JIT remains disabled.
++dsh_link_args = ['-Wl,--no-undefined', '-Wl,-Bsymbolic']
++dsh_suffix = 'so'
++if host_machine.system() == 'darwin'
++    dsh_link_args = ['-Wl,-install_name,@rpath/DshGuest.framework/DshGuest']
++    dsh_suffix = []
++endif
++shared_library('DshGuest',
++    link_whole: [libish, libish_emu, libfakefs],
++    dependencies: dependencies,
++    name_prefix: '', name_suffix: dsh_suffix,
++    install: false, link_args: dsh_link_args + (host_machine.system() == 'darwin' ? ['-lresolv'] : []))
+--- a/tools/staticdefine.sh
++++ b/tools/staticdefine.sh
+@@ -1,23 +1,41 @@
+-#!/bin/bash -e
+-compile_commands=$1
+-input=$2
+-output=$3
+-dep=$4
+-flags=$(python3 - <<END
+-import json
+-with open('$compile_commands') as f:
+-    commands = json.load(f)
+-for command in commands:
+-    if command['file'].endswith('asbestos/asbestos.c'):
+-        break
+-command = command['command']
+-command = command.split()[:-9] + ['-MD', '-MQ', '$output', '-MF', '$dep']
+-print(' '.join(command))
+-END
+-)
+-$flags $input -include "$(dirname $0)/staticdefine.h" -S -o - | \
+-sed -ne 's:^[[:space:]]*\.ascii[[:space:]]*"\(.*\)".*:\1:;
+-         /^->/{s:->#\(.*\):/* \1 */:;
+-         s:^->\([^ ]*\) [\$$#]*\([^ ]*\) \(.*\):#define \1 \2 /* \3 */:;
+-         s:->::; p;}' > $output
+-# sed magic was copied from the linux kernel build system
++#!/bin/bash
++set -euo pipefail
++# DSH: preserve SDK/source paths containing spaces and propagate compiler errors.
++python3 - "$@" <<'PYTHON'
++import json, pathlib, re, shlex, subprocess, sys
++commands_path, source, output, dep = sys.argv[1:]
++commands = json.loads(pathlib.Path(commands_path).read_text())
++command = next(c for c in commands if c['file'].endswith('asbestos/asbestos.c'))
++args = shlex.split(command['command'])
++flags = []
++i = 0
++while i < len(args):
++    arg = args[i]
++    if arg in ('-o', '-MF', '-MQ', '-MT'):
++        i += 2
++        continue
++    if arg in ('-c', '-MD', '-MMD') or arg == command['file']:
++        i += 1
++        continue
++    flags.append(arg)
++    i += 1
++text = subprocess.check_output(flags + ['-MD', '-MQ', output, '-MF', dep,
++    source, '-include', str(pathlib.Path(source).parent.parent / 'tools/staticdefine.h'),
++    '-S', '-o', '-'], text=True, cwd=command['directory'])
++lines = []
++for line in text.splitlines():
++    match = re.match(r'\s*\.ascii\s+"(.*)"', line)
++    if match:
++        line = match[1]
++    if not line.startswith('->'):
++        continue
++    if line.startswith('->#'):
++        lines.append('/* ' + line[3:] + ' */')
++    elif line == '->':
++        lines.append('')
++    else:
++        match = re.match(r'->([^ ]+) [\$#]*([^ ]+) (.*)', line)
++        if match:
++            lines.append('#define ' + match[1] + ' ' + match[2] + ' /* ' + match[3] + ' */')
++pathlib.Path(output).write_text('\n'.join(lines) + '\n')
++PYTHON
+--- a/asbestos/guest-arm64/gadgets-aarch64/crypto.S
++++ b/asbestos/guest-arm64/gadgets-aarch64/crypto.S
+@@ -367,8 +367,14 @@
+     // Execute native SHA512SU0 instruction
+     // SHA512SU0 V0.2D, V1.2D
+     // A11/A12 hosts have no SHA512 instructions (FEAT_SHA512): software
++#ifdef __APPLE__
+     adrp x8, NAME(ish_host_sha512)@PAGE
+     ldrb w8, [x8, NAME(ish_host_sha512)@PAGEOFF]
++#else
++    adrp x8, :got:ish_host_sha512
++    ldr x8, [x8, :got_lo12:ish_host_sha512]
++    ldrb w8, [x8]
++#endif
+     cbz w8, sha512su0_soft
+     .inst 0xcec08020         // sha512su0 v0.2d, v1.2d
+ 
+@@ -422,8 +428,14 @@
+     // Execute native SHA512SU1 instruction
+     // SHA512SU1 V0.2D, V1.2D, V2.2D
+     // A11/A12 hosts have no SHA512 instructions (FEAT_SHA512): software
++#ifdef __APPLE__
+     adrp x8, NAME(ish_host_sha512)@PAGE
+     ldrb w8, [x8, NAME(ish_host_sha512)@PAGEOFF]
++#else
++    adrp x8, :got:ish_host_sha512
++    ldr x8, [x8, :got_lo12:ish_host_sha512]
++    ldrb w8, [x8]
++#endif
+     cbz w8, sha512su1_soft
+     .inst 0xce628820         // sha512su1 v0.2d, v1.2d, v2.2d
+ 
+@@ -478,8 +490,14 @@
+     // Execute native SHA512H instruction
+     // SHA512H Qd, Qn, Vm.2D -> SHA512H Q0, Q1, V2.2D
+     // A11/A12 hosts have no SHA512 instructions (FEAT_SHA512): software
++#ifdef __APPLE__
+     adrp x8, NAME(ish_host_sha512)@PAGE
+     ldrb w8, [x8, NAME(ish_host_sha512)@PAGEOFF]
++#else
++    adrp x8, :got:ish_host_sha512
++    ldr x8, [x8, :got_lo12:ish_host_sha512]
++    ldrb w8, [x8]
++#endif
+     cbz w8, sha512h_soft
+     .inst 0xce628020         // sha512h q0, q1, v2.2d
+ 
+@@ -534,8 +552,14 @@
+     // Execute native SHA512H2 instruction
+     // SHA512H2 Q0, Q1, V2.2D
+     // A11/A12 hosts have no SHA512 instructions (FEAT_SHA512): software
++#ifdef __APPLE__
+     adrp x8, NAME(ish_host_sha512)@PAGE
+     ldrb w8, [x8, NAME(ish_host_sha512)@PAGEOFF]
++#else
++    adrp x8, :got:ish_host_sha512
++    ldr x8, [x8, :got_lo12:ish_host_sha512]
++    ldrb w8, [x8]
++#endif
+     cbz w8, sha512h2_soft
+     .inst 0xce628420         // sha512h2 q0, q1, v2.2d
+ 
+--- a/fs/fake.c
++++ b/fs/fake.c
+@@ -28,6 +28,26 @@
+ #include "fs/real.h"
+ #define ISH_INTERNAL
+ #include "fs/fake.h"
++
++// DSH portability for the Linux build verification target.
++#if defined(__linux__)
++#define st_atimespec st_atim
++#define st_mtimespec st_mtim
++#define st_ctimespec st_ctim
++#endif
++static int dsh_fd_path(int fd, char path[PATH_MAX]) {
++#ifdef __APPLE__
++    return fcntl(fd, F_GETPATH, path);
++#else
++    char link[64];
++    snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
++    ssize_t size = readlink(link, path, PATH_MAX - 1);
++    if (size < 0) return -1;
++    if (size == PATH_MAX - 1) { errno = ENAMETOOLONG; return -1; }
++    path[size] = 0;
++    return 0;
++#endif
++}
+ 
+ // TODO document database
+ 
+@@ -1145,7 +1165,7 @@
+     /* Get the absolute path of root_fd (F_GETPATH resolves symlinks,
+      * e.g. /var -> /private/var on iOS) */
+     char root_abs[PATH_MAX];
+-    if (fcntl(root_fd, F_GETPATH, root_abs) != 0) {
++    if (dsh_fd_path(root_fd, root_abs) != 0) {
+         fprintf(stderr, "create_relative_symlink: F_GETPATH failed\n");
+         /* Fall back to absolute symlink */
+         return symlinkat(host_path, root_fd, host_link);
+@@ -1221,7 +1241,7 @@
+     /* Log root_fd info for context */
+     {
+         char fd_path[PATH_MAX];
+-        if (fcntl(g_fakefs_mount->root_fd, F_GETPATH, fd_path) == 0) {
++        if (dsh_fd_path(g_fakefs_mount->root_fd, fd_path) == 0) {
+             fprintf(stderr, "fakefs_bind_mount: root_fd=%d path=\"%s\"\n",
+                     g_fakefs_mount->root_fd, fd_path);
+         } else {
+--- a/fs/netlink.c
++++ b/fs/netlink.c
+@@ -7,8 +7,12 @@
+ #include <errno.h>
+ #include <ifaddrs.h>
+ #include <net/if.h>
++#ifdef __APPLE__
+ #include <net/if_dl.h>
+ #include <net/if_types.h>
++#else
++#include <netpacket/packet.h>
++#endif
+ #include <netinet/in.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -231,6 +235,7 @@
+         struct netlink_host_link *l = link_for(links, n_links, ifa->ifa_name, ifa->ifa_flags);
+         if (l == NULL || ifa->ifa_addr == NULL)
+             continue;
++#ifdef __APPLE__
+         if (ifa->ifa_addr->sa_family == AF_LINK) {
+             const struct sockaddr_dl *dl = (const struct sockaddr_dl *) (void *) ifa->ifa_addr;
+             if (dl->sdl_type == IFT_ETHER)
+@@ -260,6 +265,17 @@
+             }
+             continue;
+         }
++#else
++        if (ifa->ifa_addr->sa_family == AF_PACKET) {
++            const struct sockaddr_ll *ll = (const void *) ifa->ifa_addr;
++            l->arphrd = ll->sll_hatype;
++            if (ll->sll_halen == 6) {
++                memcpy(l->lladdr, ll->sll_addr, 6);
++                l->has_lladdr = true;
++            }
++            continue;
++        }
++#endif
+         int fam = ifa->ifa_addr->sa_family;
+         if (fam != AF_INET && fam != AF_INET6)
+             continue;
+@@ -305,10 +321,12 @@
+             if (ifa->ifa_netmask != NULL) {
+                 const struct sockaddr_in6 *m = (const struct sockaddr_in6 *) (void *) ifa->ifa_netmask;
+                 size_t have = 16;
++#ifdef __APPLE__
+                 // A netmask sockaddr may be shorter than a full one.
+                 size_t off = offsetof(struct sockaddr_in6, sin6_addr);
+                 if (m->sin6_len < off + 16)
+                     have = m->sin6_len > off ? m->sin6_len - off : 0;
++#endif
+                 a->prefixlen = prefix_len((const uint8_t *) &m->sin6_addr, have);
+             }
+             static const uint8_t v6_loopback[16] = {[15] = 1};
+--- a/asbestos/guest-arm64/gadgets-aarch64/bits.S
++++ b/asbestos/guest-arm64/gadgets-aarch64/bits.S
+@@ -104,21 +104,13 @@
+     gret
+ 
+ // SXTW Xd, Wn - Sign extend word
+-.gadget sxtw
+-    sxtw _tmp, w0
+-    gret
++// DSH: sxtw is implemented by math.S (the generator's code-stream ABI).
+ 
+ // UXTB Xd, Wn - Zero extend byte
+-.gadget uxtb
+-    uxtb w0, w0
+-    mov _tmp, x0
+-    gret
++// DSH: uxtb is implemented by math.S (the generator's code-stream ABI).
+ 
+ // UXTH Xd, Wn - Zero extend halfword
+-.gadget uxth
+-    uxth w0, w0
+-    mov _tmp, x0
+-    gret
++// DSH: uxth is implemented by math.S (the generator's code-stream ABI).
+ 
+ /*
+  * Bit counting operations
+@@ -159,10 +151,7 @@
+     rev _tmp, _tmp
+     gret
+ 
+-.gadget rev32
+-    rev w0, w0
+-    mov _tmp, x0
+-    gret
++// DSH: rev32 is implemented by math.S (the generator's code-stream ABI).
+ 
+ // REV16 Xd, Xn - Reverse bytes in halfwords
+ .gadget rev16_64
+diff --git a/kernel/uname.c b/kernel/uname.c
+index 4e86c15..c368e51 100644
+--- a/kernel/uname.c
++++ b/kernel/uname.c
+@@ -23,7 +23,9 @@ void do_uname(struct uname *uts) {
+ 
+     memset(uts, 0, sizeof(struct uname));
+     strcpy(uts->system, "Linux");
+-    strcpy(uts->hostname, hostname);
++    // DSH: the host's name can be longer than Linux's 65-byte field (it was on a CI Mac, and
++    // FORTIFY_SOURCE trapped the copy); the guest gets it cut to fit.
++    snprintf(uts->hostname, sizeof(uts->hostname), "%s", hostname);
+     strcpy(uts->release, "4.20.69-ish");
+     snprintf(uts->version, sizeof(uts->version), "%s %s %s", uname_version, __DATE__, __TIME__);
+ #if defined(GUEST_ARM64)
+--- a/fs/fake.c
++++ b/fs/fake.c
+@@ -1131,7 +1131,9 @@
+ 
+     // this is annoying
+     char entry_path[MAX_PATH + 1];
+-    realfs_getpath(fd, entry_path);
++    int path_error = realfs_getpath(fd, entry_path);
++    if (path_error < 0)
++        return path_error;
+ 
+     /* [T-ios-log-verbose-tier] Per-ENTRY trace, gated on the app's Verbose
+      * level. Unconditional it produced 1.68 M lines / 183 MB in one day from
+@@ -1147,7 +1149,9 @@
+             *strrchr(entry_path, '/') = '\0';
+         }
+     } else if (strcmp(entry->name, ".") != 0) {
+-        // god I don't know what to do if this would overflow
++        // A host directory plus its next entry must fit, including slash and NUL.
++        if (strlen(entry_path) + 1 + strlen(entry->name) >= sizeof(entry_path))
++            return _ENAMETOOLONG;
+         strcat(entry_path, "/");
+         strcat(entry_path, entry->name);
+     }
+@@ -1464,10 +1468,15 @@
+ 
+ static int fakefs_mount(struct mount *mount) {
+     char db_path[PATH_MAX];
+-    strcpy(db_path, mount->source);
+-    char *basename = strrchr(db_path, '/') + 1;
+-    assert(strcmp(basename, "data") == 0);
+-    strcpy(basename, "meta.db");
++    const char *slash = strrchr(mount->source, '/');
++    if (slash == NULL || strcmp(slash + 1, "data") != 0)
++        return _EINVAL;
++    size_t prefix_length = slash + 1 - mount->source;
++    // meta.db is longer than data; validate its full path before either copy.
++    if (prefix_length > sizeof(db_path) - sizeof("meta.db"))
++        return _ENAMETOOLONG;
++    memcpy(db_path, mount->source, prefix_length);
++    memcpy(db_path + prefix_length, "meta.db", sizeof("meta.db"));
+ 
+     // do this now so rebuilding can use root_fd
+     int err = realfs.mount(mount);
+--- a/fs/real.c
++++ b/fs/real.c
+@@ -32,8 +32,8 @@
+ 
+ static int getpath(int fd, char *buf) {
+ #if defined(__linux__)
+-    char proc_fd[20];
+-    sprintf(proc_fd, "/proc/self/fd/%d", fd);
++    char proc_fd[64];
++    snprintf(proc_fd, sizeof(proc_fd), "/proc/self/fd/%d", fd);
+     ssize_t size = readlink(proc_fd, buf, MAX_PATH - 1);
+     if (size >= 0)
+         buf[size] = '\0';
+--- a/fs/path.c
++++ b/fs/path.c
+@@ -229,7 +229,9 @@
+                 mount_release(mount);
+                 if (levels >= 5)
+                     return _ELOOP;
+-                // readlink does not null terminate
++                // readlink may fill the supplied capacity without a terminator.
++                if ((size_t) res >= MAX_PATH - (size_t) (c - out))
++                    return _ENAMETOOLONG;
+                 c[res] = '\0';
+                 // if we should restart from the root, copy down
+                 if (*c == '/')
+@@ -237,6 +239,9 @@
+                 char *expanded_path = possible_symlink;
+                 strcpy(expanded_path, out);
+                 if (strcmp(p, "") != 0) {
++                    size_t prefix_length = strlen(expanded_path);
++                    if (strlen(p) >= sizeof(possible_symlink) - prefix_length - 1)
++                        return _ENAMETOOLONG;
+                     strcat(expanded_path, "/");
+                     strcat(expanded_path, p);
+                 }

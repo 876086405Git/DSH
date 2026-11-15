@@ -100,14 +100,15 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
     }
     // Android's native side keeps only a few unread shares, dropping the oldest
     // as the next arrives, with no way to say one is still wanted: read it now.
-    if (ref.read(operatingSystemProvider) != 'ohos') {
+    final os = ref.read(operatingSystemProvider);
+    if (os != 'ohos' && os != 'ios') {
       final request = await ComposeRequest.fromShare(share, heldBytes: _heldDraftBytes);
       if (mounted) await _compose(request);
       return;
     }
-    // HarmonyOS's inbox holds a batch until it is used (ShareConsumption). Read
-    // after the answer: shares arriving behind an unanswered 「放弃修改？」 wait
-    // in the cache, not in memory.
+    // HarmonyOS's and iOS's inboxes hold a batch until it is used. Read after
+    // the answer: shares arriving behind an unanswered 「放弃修改？」 wait in the
+    // cache, not in memory.
     await _showChat();
     if (!mounted) return ComposeRequest.discardShare(share);
     final request = await ComposeRequest.fromShare(share, heldBytes: _heldDraftBytes);
@@ -117,7 +118,10 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
   /// Bytes the draft this arrival lands in already holds; share loading checks
   /// the message's whole budget before buffering anything.
   int get _heldDraftBytes {
-    final draft = ref.read(draftStoreProvider).drafts[ref.read(currentSessionProvider) ?? 'new'];
+    // iOS shares always merge into the new-chat draft, even when another
+    // conversation is selected. Its attachments own the pre-read budget.
+    final key = ref.read(operatingSystemProvider) == 'ios' ? 'new' : ref.read(currentSessionProvider) ?? 'new';
+    final draft = ref.read(draftStoreProvider).drafts[key];
     return totalAttachmentBytes(draft?.attachments ?? const []);
   }
 
@@ -184,8 +188,12 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
   /// with unsaved edits open, it still lands there, ready for when they're
   /// back.
   Future<void> _compose(ComposeRequest request) async {
-    await _showChat();
-    if (mounted) ref.read(composeInboxProvider.notifier).push(request);
+    final revealed = await _showChat();
+    if (!mounted) return;
+    // Siri dictation needs the visible composer. Keeping an edit page open
+    // cancels this voice request; text and files may still wait in its draft.
+    if (!revealed && request.voice && ref.read(operatingSystemProvider) == 'ios') return;
+    ref.read(composeInboxProvider.notifier).push(request);
   }
 
   /// Back to the chat: pages and sheets above it closed (unsaved edits only

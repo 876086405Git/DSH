@@ -1,6 +1,6 @@
 // 伙伴小屋 on the home screen (android companion/CompanionWidget.kt): what the
-// room looks like, sent whenever it changes. Without the native side (iOS for
-// now, tests) the call fails quietly and nothing else changes.
+// room looks like, sent whenever it changes. iOS publishes the same display
+// snapshot through WidgetKit. Without a native side (desktop/tests), skip it.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

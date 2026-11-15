@@ -66,6 +66,7 @@ CI（`.github/workflows/ci.yml`）在 PR 上跑通用检查和改动涉及的部
 ### 鸿蒙
 
 - 鸿蒙和 Android 功能一致是目标，前端优先。能实现的功能走同一套 UI；做不到的才用 `androidSystemFeaturesProvider` / `operatingSystemProvider`（`app/lib/state/android_features.dart`）按功能隐藏，不全局放开或关闭，并在鸿蒙指南里写明替代。
+- `androidSystemFeaturesProvider` 在鸿蒙和 iOS 上都是 false。只属于鸿蒙的分支判断 `operatingSystemProvider == 'ohos'`，不要用它的 false 代指鸿蒙。
 - 鸿蒙改动不能改变 Android 的运行时字节和行为；门禁的 Android 对照（`android-targets`、`android-version-tree`）以 main 为基线。
 - ArkTS 按严格模式写：for-of 变量显式类型、子类传给 `Error` 参数要 `as Error`、静态方法不用 `this`。改了 `app/ohos/` 就跑 `check-arkts.sh`。
 - 签名材料（`.p12`、证书、profile）只放仓库外（`DSH_OHOS_SIGN`），不入库、不回显。

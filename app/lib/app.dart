@@ -56,6 +56,13 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   /// and that lands at once rather than half a cross-fade later (减少动画).
   bool? _reducedBefore;
 
+  /// MaterialApp builds Theme for AnimationStyle.noAnimation and AnimatedTheme for anything else,
+  /// so the cross-fade coming on or off replaces everything above the builder. The navigator has a
+  /// global key to survive that; what the builder holds needs one too, or the launch screen and
+  /// the theme reveal start again from nothing, and a launch screen waiting for its motion to end
+  /// never leaves.
+  final _layers = GlobalKey(debugLabel: 'app layers');
+
   @override
   void initState() {
     super.initState();
@@ -152,9 +159,7 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     // 刷新率设置改动时告诉原生;setMode 对同一个值不做任何事。
-    unawaited(
-      RefreshRateService.instance.setMode(ref.watch(performancePrefsProvider.select((p) => p.refreshRate))),
-    );
+    unawaited(RefreshRateService.instance.setMode(ref.watch(performancePrefsProvider.select((p) => p.refreshRate))));
     final themeMode = ref.watch(uiThemeModeProvider.select((s) => s.value));
     final appearance = ref.watch(appearanceProvider);
     final waiting =
@@ -196,6 +201,7 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
       builder: (context, child) {
         final media = MediaQuery.of(context);
         return MediaQuery(
+          key: _layers,
           data: media.copyWith(disableAnimations: media.disableAnimations || performance.reduceMotion),
           child: AppMotionScope(
             fluid: fluid,

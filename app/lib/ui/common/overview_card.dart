@@ -31,7 +31,7 @@ import 'status_chip.dart';
 ///   leading: OverviewGlyph(AppIcons.phoneControl, tint: 6),
 ///   title: const Text('手机操控'),
 ///   subtitle: const Text('可以操作手机'),
-///   trailing: Switch(value: on, onChanged: ...),   // 不传且有 onTap 时画箭头
+///   trailing: Switch.adaptive(value: on, onChanged: ...),   // 不传且有 onTap 时画箭头
 ///   onTap: ...,
 ///   footer: OverviewFooter(tone: StatusTone.ok, text: '无障碍已开启'),
 ///   onFooterTap: ...,

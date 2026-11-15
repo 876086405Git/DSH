@@ -104,6 +104,19 @@ void main() {
       expect(c.phase, LaunchPhase.gone);
     });
 
+    testWidgets('a layer remounted mid-motion plays on and goes', (tester) async {
+      final c = await start(tester, cold: true);
+      c.ready();
+      await wait(tester, 100);
+      expect(c.phase, LaunchPhase.playing);
+      // A new State under the same controller, as swapping a widget above it makes. iOS holds a
+      // cold start for the motion alone until the engine runs, and a first run has no engine.
+      await tester.pumpWidget(KeyedSubtree(key: const ValueKey('remounted'), child: launchApp(c)));
+      await wait(tester, (LaunchMotion.total + LaunchMotion.leave).inMilliseconds + 200);
+      expect(c.phase, LaunchPhase.gone);
+      expect(channel.calls, contains('done'));
+    });
+
     testWidgets('the engine up before the motion ends: it goes then', (tester) async {
       final c = await start(tester, cold: true);
       await wait(tester, 200);

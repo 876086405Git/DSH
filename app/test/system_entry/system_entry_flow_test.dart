@@ -22,6 +22,7 @@ import 'package:dsh_app/ui/common/discard_guard.dart';
 import 'package:dsh_app/ui/shell/system_entry_host.dart';
 import 'package:dsh_app/ui/web/web_home.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -158,6 +159,85 @@ void main() {
     final slot = Directory('${dir.path}/slot-$name')..createSync();
     return File('${slot.path}/$name')..writeAsBytesSync(bytes);
   }
+
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    for (final mode in ['created-paused', 'existing-paused', 'created-resumed']) {
+      testWidgets('voice initial state $platform $mode', (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          natives(tester);
+          for (final phase
+              in tester.binding.lifecycleState == AppLifecycleState.paused
+                  ? [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]
+                  : [AppLifecycleState.resumed]) {
+            tester.binding.handleAppLifecycleStateChanged(phase);
+          }
+          if (mode == 'created-paused') {
+            for (final phase in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+              tester.binding.handleAppLifecycleStateChanged(phase);
+            }
+          }
+          await _pump(tester, ChatHarness(session: 's1', states: {'s1': const ChatState(loading: false)}));
+          if (mode == 'existing-paused') {
+            for (final phase in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+              tester.binding.handleAppLifecycleStateChanged(phase);
+            }
+          }
+          final expectedState = mode == 'created-resumed' ? AppLifecycleState.resumed : AppLifecycleState.paused;
+          expect(tester.binding.lifecycleState, expectedState);
+          await _entries.push({'kind': 'voice'});
+          await tester.pump();
+          if (mode != 'created-resumed') {
+            expect(_voice.calls, isEmpty);
+            await tester.pump(const Duration(milliseconds: 2999));
+            expect(_voice.calls, isEmpty);
+            await tester.pump(const Duration(milliseconds: 2));
+          }
+          await pumpFrames(tester, 6);
+          expect(tester.binding.lifecycleState, expectedState);
+          final observed = List<String>.of(_voice.calls);
+          await _unmount(tester);
+          for (final phase
+              in tester.binding.lifecycleState == AppLifecycleState.paused
+                  ? [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]
+                  : [AppLifecycleState.resumed]) {
+            tester.binding.handleAppLifecycleStateChanged(phase);
+          }
+          if (mode == 'existing-paused' || (platform == TargetPlatform.iOS && mode == 'created-paused')) {
+            expect(observed, isEmpty);
+          } else {
+            expect(observed, containsAllInOrder(['permission', 'recognizer']));
+          }
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+  }
+
+  testWidgets('iOS voice resumes during the launch wait', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      natives(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      for (final phase in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+        tester.binding.handleAppLifecycleStateChanged(phase);
+      }
+      await _pump(tester, ChatHarness(session: 's1', states: {'s1': const ChatState(loading: false)}));
+      await _entries.push({'kind': 'voice'});
+      await tester.pump(const Duration(seconds: 1));
+      expect(_voice.calls, isEmpty);
+      for (final phase in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+        tester.binding.handleAppLifecycleStateChanged(phase);
+      }
+      await pumpFrames(tester, 6);
+      final observed = List<String>.of(_voice.calls);
+      await _unmount(tester);
+      expect(observed, containsAllInOrder(['permission', 'recognizer']));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('a share opens 新对话 with its text and files in the composer, not sent', (tester) async {
     natives(tester);
@@ -448,6 +528,79 @@ void main() {
     expect(_composerFocused(tester), isTrue);
     expect(_voice.calls, isEmpty);
     await _unmount(tester);
+  });
+
+  group('Siri navigation permission', () {
+    Future<Map<String, Object?>> afterAnswer(
+      WidgetTester tester, {
+      required bool discard,
+      String os = 'ios',
+      bool voice = true,
+    }) async {
+      debugDefaultTargetPlatformOverride = os == 'ios' ? TargetPlatform.iOS : TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      natives(tester);
+      await _pump(tester, ChatHarness(), os: os);
+      await openDirtyPage(tester, find.byType(ChatScreen));
+      await _entries.push(voice ? {'kind': 'voice'} : {'kind': 'new', 'text': '留到返回聊天时'});
+      await untilAsked(tester);
+      expect(_voice.calls, isEmpty);
+      await tester.tap(discard ? dialogButton<FilledButton>() : dialogButton<TextButton>());
+      await pumpFrames(tester);
+      final composer = tester.widget<Composer>(find.byType(Composer, skipOffstage: false));
+      final field = tester.widget<TextField>(
+        find.descendant(
+          of: find.byType(Composer, skipOffstage: false),
+          matching: find.byType(TextField, skipOffstage: false),
+        ),
+      );
+      final observed = <String, Object?>{
+        'calls': List.of(_voice.calls),
+        'voiceActive': composer.voice!.active,
+        'editing': find.byType(DiscardGuard).evaluate().isNotEmpty,
+        'text': field.controller!.text,
+      };
+      await _unmount(tester);
+      debugDefaultTargetPlatformOverride = null;
+      return observed;
+    }
+
+    testWidgets('iOS keeps editing without starting hidden dictation', (tester) async {
+      expect(await afterAnswer(tester, discard: false), {
+        'calls': <String>[],
+        'voiceActive': false,
+        'editing': true,
+        'text': '',
+      });
+    });
+
+    testWidgets('iOS discard opens the chat and starts dictation', (tester) async {
+      expect(await afterAnswer(tester, discard: true), {
+        'calls': ['permission', 'recognizer'],
+        'voiceActive': true,
+        'editing': false,
+        'text': '',
+      });
+    });
+
+    testWidgets('iOS text still fills the draft behind a kept page', (tester) async {
+      expect(await afterAnswer(tester, discard: false, voice: false), {
+        'calls': <String>[],
+        'voiceActive': false,
+        'editing': true,
+        'text': '留到返回聊天时',
+      });
+    });
+
+    testWidgets('Android shortcut retains its existing behavior', (tester) async {
+      expect(await afterAnswer(tester, discard: false, os: 'android'), {
+        'calls': ['permission', 'recognizer'],
+        'voiceActive': true,
+        'editing': true,
+        'text': '',
+      });
+    });
   });
 
   testWidgets('语音输入 opens 新对话 listening', (tester) async {

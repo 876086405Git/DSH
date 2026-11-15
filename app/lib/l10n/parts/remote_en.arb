@@ -323,6 +323,8 @@
   "remoteAuthentication": "Sign-in method",
   "remotePasswordStorageHelp": "Saved only on this phone, encrypted by Android Keystore",
   "remoteKeyStorageHelp": "Saved only on this phone, encrypted by Android Keystore. Supports Ed25519, RSA and ECDSA.",
+  "remotePasswordStorageHelpIos": "Saved only on this phone, encrypted by the system keychain",
+  "remoteKeyStorageHelpIos": "Saved only on this phone, encrypted by the system keychain. Supports Ed25519, RSA and ECDSA.",
   "remotePrivateKey": "Private key",
   "remoteShow": "Show",
   "remoteImportKeyFile": "Import from file",
