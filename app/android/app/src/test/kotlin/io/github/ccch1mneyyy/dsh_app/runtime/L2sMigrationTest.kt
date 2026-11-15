@@ -12,7 +12,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Fixtures are built the way PRoot 5.1.107.98's link2symlink builds them
+ * Fixtures are built the way PRoot 5.1.107.102's link2symlink builds them
  * (src/extension/link2symlink/link2symlink.c, move_and_symlink_path and
  * decrement_link_count), matching what an emulator install showed: a name's
  * symlink and the intermediate both hold host-absolute paths into the store.

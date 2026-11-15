@@ -342,7 +342,7 @@ os.replace(sys.argv[1], sys.argv[2])
                 self.assertEqual(self.calls()[before:], [primary] + ([backup] if backup else []) + [cas])
 
     def test_pinned_termux_inputs_do_not_require_live_package_index(self):
-        for pkg, version, pool in (("proot", "5.1.107.98", "p"),
+        for pkg, version, pool in (("proot", "5.1.107.102", "p"),
                                    ("libtalloc", "2.5.0", "libt"),
                                    ("libandroid-shmem", "0.7", "liba")):
             for arch in ("aarch64", "x86_64"):

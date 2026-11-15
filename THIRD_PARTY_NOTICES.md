@@ -388,7 +388,7 @@ APK 内置的 Linux 运行时由 `runtime/build-runtime.sh` 构建，以下组�
 
 | 组件 | 版本 | 来源 | 许可 |
 |---|---|---|---|
-| proot | 5.1.107.98 | Termux（源码 https://github.com/termux/proot） | GPL-2.0（`licenses/proot-COPYING.txt`） |
+| proot | 5.1.107.102 | Termux（源码 https://github.com/termux/proot） | GPL-2.0（`licenses/proot-COPYING.txt`） |
 | libtalloc | 2.5.0 | Termux | LGPL-3.0-or-later（`licenses/libtalloc-notice.txt`） |
 | libandroid-shmem | 0.7 | Termux | BSD-3-Clause（`licenses/libandroid-shmem-copyright.txt`） |
 | Ubuntu Base 与软件包（tzdata、ca-certificates、git 及依赖） | 24.04.5 | Canonical / Ubuntu | 各包自带，见 `/usr/share/doc/` |
@@ -397,7 +397,7 @@ APK 内置的 Linux 运行时由 `runtime/build-runtime.sh` 构建，以下组�
 | pnpm | 11.28.5 | npm | MIT |
 | DeepSeek Harness 主包（`@deepseek-ai/dsh`） | 0.2.1-rc.4 | npm | MIT；构建补丁集合由 `runtime/patches/pins.json` 决定 |
 
-GPL / LGPL 组件的对应源码：proot、libtalloc、libandroid-shmem 的二进制取自 Termux 官方 apt 仓库（https://packages.termux.dev/apt/termux-main ），`runtime/build-runtime.sh` 固定了每个 .deb 的 SHA-256。源码分别在 https://github.com/termux/proot （tag `v5.1.107.98`，构建时一并下载并核对哈希）、https://www.samba.org/ftp/talloc/ （2.5.0）、https://github.com/termux/libandroid-shmem （0.7）；Termux 的构建配方在 https://github.com/termux/termux-packages 。本项目对这三个二进制的修改只有上面说的 DT_NEEDED / DT_SONAME 改名。
+GPL / LGPL 组件的对应源码：proot、libtalloc、libandroid-shmem 的二进制取自 Termux 官方 apt 仓库（https://packages.termux.dev/apt/termux-main ），`runtime/build-runtime.sh` 固定了每个 .deb 的 SHA-256。源码分别在 https://github.com/termux/proot （tag `v5.1.107.102`，构建时一并下载并核对哈希）、https://www.samba.org/ftp/talloc/ （2.5.0）、https://github.com/termux/libandroid-shmem （0.7）；Termux 的构建配方在 https://github.com/termux/termux-packages 。本项目对这三个二进制的修改只有上面说的 DT_NEEDED / DT_SONAME 改名。
 
 ### npm 传递依赖与发行核验
 
