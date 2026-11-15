@@ -6,7 +6,18 @@ EDITS = {'runtime/ohos/process/index.mjs': (('  get temporaryRoot() { return thi
                                      'path.startsWith(root + "/")); }'),
                                     ('  get temporaryRoot() { return this.backend.temporaryRoot; }',
                                      '  get temporaryRoot() { return this.backend.temporaryRoot; }\n'
-                                     '  get guestMetadata() { return this.backend.guestMetadata; }')),
+                                     '  get guestMetadata() { return this.backend.virtual.guestMetadata; }'),
+                                    # HarmonyOS's own Linux (TinyEMU) isn't on iOS: gh, python3 and pip
+                                    # stay with the virtual shell, whose routing hands them to the iOS guest.
+                                    ('    this.linux = createLinuxControl();\n'
+                                     '    // Agent and plugin commands such as gh, python3 and pip run in the App\'s Linux.\n'
+                                     '    this.backend = new CommandRouter({ ...config, onSpillFailure },\n'
+                                     '      { linux: roots => createLinuxCommandBackend({ control: this.linux, ...roots, onSpillFailure }) });',
+                                     '    // iOS: its own Linux guest takes gh, python3 and pip through the virtual shell.\n'
+                                     '    this.backend = new CommandRouter({ ...config, onSpillFailure });'),
+                                    ("    ctx.inject(['webServer'], webCtx => registerLinuxControlRoutes(webCtx, this.linux));\n"
+                                     "    ctx.effect(() => () => this.linux.shutdown(), 'ohos Linux joined shutdown');\n",
+                                     '')),
  'node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js': (('\t\t...cwd !== void 0 ? { cwd } : {},\n'
                                                          '\t\tsignal: exec.signal',
                                                          '\t\t...cwd !== void 0 ? { cwd } : {},\n'
