@@ -1,5 +1,6 @@
 import 'package:dsh_app/tavern/tavern_preview.dart';
 import 'package:dsh_app/tavern/tavern_provider.dart';
+import 'package:dsh_app/ui/bots/bot_chat_kit.dart';
 import 'package:dsh_app/ui/tavern/tavern_chat_page.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
@@ -25,10 +26,15 @@ class _Counted extends PreviewTavern {
   });
 }
 
-Future<void> _open(WidgetTester tester, PreviewTavern tavern, {Map<String, Object> prefs = const {}}) async {
+Future<void> _open(
+  WidgetTester tester,
+  PreviewTavern tavern, {
+  Map<String, Object> prefs = const {},
+  Size size = const Size(390, 844),
+}) async {
   SharedPreferences.setMockInitialValues(prefs);
   final chat = (await tester.runAsync(() => tavern.createChat('sample-innkeeper')))!;
-  tester.view.physicalSize = const Size(390, 844) * 2;
+  tester.view.physicalSize = size * 2;
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -66,6 +72,17 @@ Future<int> _sendCountingRows(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('a reply that grows past the top shades the header, though nothing was scrolled', (tester) async {
+    // Short enough that the reply outgrows it; the list stays at its newest end.
+    await _open(tester, _Counted(), size: const Size(390, 420));
+    double shade() => tester.widget<BotChatHeader>(find.byType(BotChatHeader)).scrolledUnder!.value;
+    expect(shade(), 0);
+
+    await _sendCountingRows(tester);
+    expect(find.textContaining('地下室'), findsOneWidget);
+    expect(shade(), greaterThan(0));
+  });
+
   testWidgets('a piece of the reply rebuilds the reply, not the messages above it', (tester) async {
     final tavern = _Counted();
     await _open(tester, tavern);
