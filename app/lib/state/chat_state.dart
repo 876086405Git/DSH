@@ -1458,6 +1458,7 @@ class ChatController extends Notifier<ChatState> {
   /// that did take the prompt still echoes it, and a send that never went out
   /// leaves its text to the screen (「没发出去」 hands it back to the composer).
   bool _retireSend(String requestId) {
+    if (!ref.mounted) return false;
     if (_pending.any((p) => p.requestId == requestId)) {
       _pending = List.unmodifiable(_pending.where((p) => p.requestId != requestId));
       state = state.copyWith(pending: _placePending());
@@ -1469,7 +1470,7 @@ class ChatController extends Notifier<ChatState> {
   /// owning that conversation first): their bubbles go, and the screen puts
   /// their text back, instead of leaving them waiting forever.
   List<PendingPrompt> _retireTaken(List<PendingPrompt> prompts) {
-    if (prompts.isEmpty) return const [];
+    if (prompts.isEmpty || !ref.mounted) return const [];
     final gone = {for (final prompt in prompts) prompt.requestId};
     _pending = List.unmodifiable(_pending.where((p) => !gone.contains(p.requestId)));
     state = state.copyWith(pending: _placePending());
