@@ -51,6 +51,26 @@
     {
       "name": "dsh_paste_failed",
       "value": "Could not read the clipboard. Try again or enter the text manually."
+    },
+    {
+      "name": "companion_widget_label",
+      "value": "Companion room"
+    },
+    {
+      "name": "companion_widget_description",
+      "value": "She's on your home screen. Tap to visit."
+    },
+    {
+      "name": "companion_widget_name",
+      "value": "Whale girl"
+    },
+    {
+      "name": "companion_widget_waiting",
+      "value": "Waiting for you in the room"
+    },
+    {
+      "name": "companion_widget_asleep",
+      "value": "Asleep"
     }
   ]
 }

@@ -116,6 +116,21 @@
         ]
       }
     ],
+    "extensionAbilities": [
+      {
+        "name": "CompanionFormAbility",
+        "srcEntry": "./ets/formability/CompanionFormAbility.ets",
+        "label": "$string:companion_widget_label",
+        "description": "$string:companion_widget_description",
+        "type": "form",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:companion_form"
+          }
+        ]
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"
