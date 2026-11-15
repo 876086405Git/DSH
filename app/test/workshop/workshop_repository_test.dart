@@ -537,7 +537,8 @@ void main() {
   test('companion prepare applies the same full PNG gate as the Worker', () async {
     final store = CompanionPackStore(Directory('${temp.path}/companion'), expectedRuntime: workshopRuntimeDigest());
     final publication = WorkshopPublication(workshopMeta(kind: 'companion'));
-    for (final texture in [workshopPng(4096, 2048), <int>[1, 2, 3]]) {
+    // Past the longest side a texture may have (#1328), and not a PNG at all.
+    for (final texture in [workshopPng(companionTextureSide + 1, 1), <int>[1, 2, 3]]) {
       await store.install(workshopZip(temp, {...workshopRuntime(), ...workshopCharacter(), 'character/texture.png': texture}).path);
       expect(await store.installed(), isTrue, reason: 'the general local import acceptance is unchanged');
       final output = File('${temp.path}/bad-texture.zip');

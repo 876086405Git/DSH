@@ -19,7 +19,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../pets/pet_name_alias.dart';
-import '../pets/pet_pack_validator.dart' show decodePetJson, PetValidationException, pngIntact;
+import '../pets/pet_pack_validator.dart' show decodePetJson, PetValidationException, pngSize;
 import '../workshop/workshop_export.dart';
 import '../workshop/workshop_models.dart';
 import '../workshop/workshop_receipt.dart';

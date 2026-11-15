@@ -345,6 +345,21 @@ void main() {
     expect(json.toString(), isNot(contains('PRIVATE_PERSONA')));
   });
 
+  test('a Live2D-sized texture and a motion saved with a BOM still export', () async {
+    // Only the header is read: 4096 a side is far past a pet sheet's limit.
+    final header = BytesBuilder()
+      ..add([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13])
+      ..add(ascii.encode('IHDR'))
+      ..add([0, 0, 16, 0, 0, 0, 16, 0, 8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    final texture = header.takeBytes();
+    final files = workshopCharacter();
+    files['character/texture.png'] = texture;
+    files['character/idle.motion3.json'] = [0xef, 0xbb, 0xbf, ...files['character/idle.motion3.json']!];
+    await store.install(workshopZip(temp, {...workshopRuntime(), ...files}).path);
+    final exported = await store.exportZip(File('${temp.path}/large-texture.zip'));
+    expect(workshopUnzip(exported)['character/texture.png'], texture);
+  });
+
   test('export refuses new files inside its managed root and existing external files', () async {
     await seed();
     final managed = File('${store.pack.path}/character/new-export.zip');

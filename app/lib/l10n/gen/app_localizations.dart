@@ -47420,6 +47420,18 @@ abstract class L10n {
   /// **'没有成功，稍后再试。'**
   String get workshopErrorGeneric;
 
+  /// No description provided for @workshopErrorWithCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有成功，稍后再试。（{code}）'**
+  String workshopErrorWithCode(String code);
+
+  /// No description provided for @workshopErrorPackage.
+  ///
+  /// In zh, this message translates to:
+  /// **'包里有文件不符合要求，没法上传（{code}）。'**
+  String workshopErrorPackage(String code);
+
   /// No description provided for @workshopDisclosureTitle.
   ///
   /// In zh, this message translates to:

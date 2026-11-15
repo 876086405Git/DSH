@@ -126,6 +126,22 @@
   "workshopErrorCancelled": "已取消。",
   "workshopErrorUnknownResult": "不确定有没有成功。先刷新看看，别急着重试。",
   "workshopErrorGeneric": "没有成功，稍后再试。",
+  "workshopErrorWithCode": "没有成功，稍后再试。（{code}）",
+  "@workshopErrorWithCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopErrorPackage": "包里有文件不符合要求，没法上传（{code}）。",
+  "@workshopErrorPackage": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "workshopDisclosureTitle": "让工坊核对你的 GitHub 身份",
   "workshopDisclosureLead": "投稿、管理自己的投稿和举报，工坊都要先知道你是谁。办法是把你的 GitHub 登录凭据发给下面这个工坊服务，由它去问 GitHub 你是哪个账号。",
   "workshopDisclosureWorker": "收到凭据的工坊",

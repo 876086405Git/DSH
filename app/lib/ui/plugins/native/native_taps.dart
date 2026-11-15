@@ -366,6 +366,32 @@ Future<bool> runNativeTap(
   }
 }
 
+/// Hands back the file requests of an answer nobody acts on (the panel went
+/// away meanwhile): the bridge gave them out already, and the next pick on the
+/// connection would wait for them. execute closes them as cancelled before
+/// any picker opens.
+Future<void> _releaseFiles(
+  NativeFileCoordinator? files,
+  List<NativeEffect> effects,
+  DshGoInvocation invocation,
+  DateTime tappedAt,
+  DateTime Function() now,
+) async {
+  final stream = invocation.stream;
+  if (files == null || stream == null) return;
+  for (final effect in effects.whereType<PickFileEffect>()) {
+    await files.execute(
+      effect,
+      pkg: invocation.pkg,
+      stream: stream,
+      userGesture: false,
+      tappedAt: tappedAt,
+      now: now,
+      isCurrent: () => false,
+    );
+  }
+}
+
 Future<bool> _invoke(
   BuildContext context,
   WidgetRef ref, {
@@ -391,6 +417,8 @@ Future<bool> _invoke(
   final diagnostics = ref.read(nativeDiagnosticsProvider.notifier);
   final work = ref.read(nativeWorkProvider.notifier);
   final clock = ref.read(nativeClockProvider);
+  // Read now: the panel may be gone (and its ref with it) when the answer comes.
+  final files = ref.read(nativeFileCoordinatorProvider);
   final DshGoInvokeResult result;
   final invokedAt = clock();
   try {
@@ -409,7 +437,10 @@ Future<bool> _invoke(
     }
     return false;
   }
-  if (!guard.current) return false;
+  if (!guard.current) {
+    await _releaseFiles(files, parseNativeEffects(result.effects, []), invocation, tappedAt, clock);
+    return false;
+  }
   diagnostics.invoked(package, result.elapsed);
   void dataEffect(NativeEffect effect) {
     if (!guard.current) return;
