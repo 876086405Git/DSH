@@ -25,9 +25,9 @@ On HarmonyOS the pet stays in the app: it can't show outside the app, and there'
 
 The companion room is a separate full page with an animated Live2D character. It isn't the status pet above: the pet watches the agent for you, and the room is a place to spend a little time.
 
-Tap the **Switch mode** button at the top of the chat list, then **Companion room**; if you've set a startup mode, the app opens straight into it. The first time, import an asset pack (zip). Character assets aren't part of the app and stay on this phone; you can remove them from the menu at the top right of the room.
+Tap the **Switch mode** button at the top of the chat list, then **Companion room**; if you've set a startup mode, the app opens straight into it. When the app comes with her, she swims in by herself the first time; after you remove her from the menu at the top right of the room, you can bring her back or import another asset pack (zip). Her assets stay on this phone.
 
-On HarmonyOS she stays on this page: she can't live in a floating window, and there's no home-screen widget.
+On HarmonyOS she can't live in a floating window.
 
 What you can do:
 
@@ -40,13 +40,14 @@ What you can do:
 - Zoom: pinch to zoom and move.
 - Her corner: there's a snack in the shell at the bottom left, a bubble floating on the right, and a seaweed cushion behind her. Tap the shell to give her a snack, the bubble to play, and the cushion to let her rest for a while. What she's doing shows under her name.
 - Feed her, hold her: drag a snack out of the shell dish and let go at her mouth, and she eats it. Rest a finger on her to give her a hug. Tilt the phone and the reef shifts a little.
-- Her voice: HarmonyOS can't give her a voice yet. **Her voice** in the menu has no effect on this phone, for the phone's own voice and for external speech services alike.
+- Her voice: turn on **Let her speak** under **Her voice** in the menu and she reads her words aloud; she stops as soon as you type or use the microphone. On HarmonyOS she uses **The phone's own** voice, which works offline; DeepSeek, external speech services and voice cloning aren't there yet. Tap **Preview** to check it works.
 - About her: under **About her** in the menu, change her name, what she calls you, and her persona: who she is, her personality, how she talks, all of it, with **Reset** to start over. The default persona includes a few boundaries you can delete; only the format of her expression marks is added by the app.
 - Getting closer: visit and pat her often and she slowly gets more familiar with you; **You two** in the menu shows how far you've come. Once you're close she hums more and has fonder words for a pat.
 - Your other chats: while the room is open, she tells you when another chat finishes, fails or waits for your approval; tap Take a look to go there.
 - Her invitations: when you sit quietly with her for a while, she may now and then ask, above the input bar, whether you'd like to rest on the cushion together. Tap **Sure** and she leans back on it; tap **Not now** or just leave it, and she waits a while before asking again. She asks silently. Choose how often in **How often she speaks up** in the menu at the top right: **Now and then** by default (at most twice a day, at least 6 hours apart), **Often** or **Chatty** for more, **Quiet** for none. Mentions of your other chats count toward the same allowance.
+- Home-screen card: add the Companion room card to your home screen to see what she's doing and the last thing she said; tap it to visit. The card updates only while the app is running.
 
-She notices that you visit and pat her, and slowly gets more familiar with you; staying away for a few days doesn't upset her. Write down things you want her to remember in **What she remembers** in the menu. You can edit or delete them anytime. In Full mode they stay on the current host; in Light mode, on this phone. She doesn't bring these up by herself yet, can't speak aloud and only shows text, and can't touch your files or phone.
+She notices that you visit and pat her, and slowly gets more familiar with you; staying away for a few days doesn't upset her. Write down things you want her to remember in **What she remembers** in the menu. You can edit or delete them anytime. In Full mode they stay on the current host; in Light mode, on this phone. She doesn't bring these up by herself yet, and can't touch your files or phone.
 
 If this host's engine is older, she runs on the default preset and may ask to use tools. When "Something needs your confirmation" appears, tap it and handle the request in the regular chat.
 

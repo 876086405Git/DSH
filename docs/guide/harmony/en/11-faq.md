@@ -17,7 +17,15 @@ To report a problem, export a diagnostics bundle here. It includes the version, 
 
 To let the AI look into it, tap **Let the AI read diagnostics**. The app writes a bounded snapshot for the local engine, then ask the AI to "check the diagnostics". The bundled `dsh-go-support` skill walks the symptoms and drafts an issue you can paste.
 
-On HarmonyOS the diagnostics page has no **Automatic failure analysis** and no **System input-method diagnostics**: nothing analyzes a crash by itself. After a crash, reopen the app and export a bundle, or tap **Let the AI read diagnostics**.
+### Crashes and automatic failure analysis
+
+The app keeps bounded local records of error categories and voice stages, and the next time it opens it reads the crash and freeze events the system recorded for this app, keeping the latest 8. Exception bodies, recordings and chat content aren't kept, and these aren't complete crash stacks. No record doesn't prove there was no failure.
+
+**Automatic failure analysis** is off by default, and turning it on explains what is sent and to whom: after a failure, only while the app is in the foreground and connected to the working local engine, redacted versions, device and system facts, error categories, voice stages and exit events go to the model provider configured on that engine. Model charges may apply. Chat bodies, recordings, credentials and raw logs aren't sent. After an app crash, analysis waits until the app is reopened and connected. It runs in a separate conversation, without switching your current chat or performing repairs; tap **View latest analysis conversation** to read it. Turning it off, switching to a remote host or going to the background stops new requests; data already sent can't be retracted.
+
+### The keyboard covers the input
+
+After reproducing it, tap **Export recent keyboard geometry** under **This app's keyboard geometry**. It takes only the last 120 seconds of keyboard show/hide, height and avoid-area records for this app's main window (at most 64), with no typed text, and doesn't read system input-method logs. No records don't prove the keyboard is fine. Share the result with the AI or attach it to your report along with a diagnostics bundle.
 
 ## The engine stops in the background, or notifications don't arrive
 
@@ -71,7 +79,7 @@ On this phone's HarmonyOS engine these commands need the Linux environment; see 
 
 - **Off**: turn on **Turn on Linux**. The first time, wait until it's ready, then ask the AI to try again; while it's getting ready those commands still fail rather than wait for it.
 - The page says the local engine isn't running: start the local engine first.
-- The page asks you to quit and reopen the app: do that, then turn it on.
+- The page asks you to reopen the app: tap **Reopen app**, or quit and open it again, then turn it on.
 - It says the existing Linux data can't be used any more (usually after an app update): tap **Reinstall Linux** on the same page, then turn on **Turn on Linux**. What was installed inside Linux is deleted; see [Engine and remote hosts](03-engine-hosts.md#linux-environment).
 - **Failed**, or it couldn't turn on with a code: include that code and a diagnostics bundle when you report the problem.
 - The AI says Linux is busy: Linux runs one command at a time, and a plugin's long-running Python service holds it the whole time, so other commands report busy after a short wait. Turn that plugin off or try later.

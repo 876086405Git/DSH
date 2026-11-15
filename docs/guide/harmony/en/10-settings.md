@@ -22,7 +22,7 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 - **Personalization**:
   - **Personal preferences**: instructions for the AI; new chats follow them. Clear and save to remove them.
   - **Visual replies**: on by default; the AI on this phone's engine can answer with charts, comparisons and tappable options. Takes effect after the engine restarts; tap **Restart now** when asked.
-  - **Agent presets**: how new chats work by default; you can also create, copy and edit presets.
+  - **Agent presets**: how new chats work by default; you can also create, copy and edit presets. A preset decides which tools a chat can use. Coding presets such as **Standard mode** and **PTC mode** bring `bash`, `run_code` and other command tools; a custom persona preset can have no tools at all, so pick the right preset when you start a chat.
   - The first two show only with this phone's engine.
 
 ## Capabilities
@@ -42,7 +42,7 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 - **Interface**: the **Mode** group at the top sets **Open on launch** (Work, Companion or Tavern). Below it, choose whether the app opens to **Native** or **Web**, and DSH Web's options; see [Web mode](05-web.md).
 - **Language**: **System**, **简体中文** or **English**.
 - **Notifications**: turn on **Allow notifications**, then choose **Turn complete**, **Error or stopped**, **Needs approval** and **Questions for you**. Alerts need the app running, and none go out once the system suspends it; alerts from remote hosts also need the connection online. **Progress notification** shows a chat's status in the notification bar; it's a plain notification and stops updating once the system suspends the app. Sound, banners and the lock screen are set in system settings; banners are off by default.
-- **Voice**: how voice input recognizes speech: **Automatic**, **DeepSeek**, **System** or **Another cloud service**. **Automatic** uses DeepSeek when you're signed in or have an API key, otherwise the system's recognition; with DeepSeek or another cloud service, the recording is sent to that service. HarmonyOS's own engine has no voice model; **Voice model** is offered only while connected to a remote host. This page also has **Reading voice**, **Live captions** (the HarmonyOS recognizer, showing whether it's available, with no model to download) and the **Voice call** settings.
+- **Voice**: how voice input recognizes speech: **Automatic**, **DeepSeek**, **System** or **Another cloud service**. **Automatic** uses DeepSeek when you're signed in or have an API key, otherwise the system's recognition; with DeepSeek or another cloud service, the recording is sent to that service. HarmonyOS's own engine has no voice model; **Voice model** is offered only while connected to a remote host. This page also has **Reading voice** (for reading replies aloud and voice calls), **Live captions** (the HarmonyOS recognizer, showing whether it's available, with no model to download), and for voice calls **Call background**, **Interrupt by speaking**, **Pause before she answers**, **Spoken answers**, **Speakerphone by default** and **Thinking sound**.
 - **Performance**: **Auto**, **Full** or **Light**, plus glass blur, interface motion, fluid motion **Refresh rate** (Auto / Max / System) and **Frame cache**.
 - **Background running**: what happens to chats on this phone once the app leaves the screen; see [FAQ](11-faq.md).
 - **System permissions**: what each feature needs from HarmonyOS. [Open](dshgo://open/system-permissions)

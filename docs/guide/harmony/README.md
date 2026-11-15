@@ -14,7 +14,7 @@
 - [插件](zh/08-plugins.md)：安装、开关、更新与卸载、原生设置与网页版编辑、原生界面
 - [外观](zh/09-appearance.md)：明暗、配色、图标、启动画面、壁纸、对话字号
 - [设置](zh/10-settings.md)：设置页每一项的作用、检查更新
-- [常见问题](zh/11-faq.md)：连不上、后台暂停、引擎启动、headless 凭据、系统操作、Linux 环境、宠物、插件、App 发送的数据
+- [常见问题](zh/11-faq.md)：连不上、闪退与自动故障分析、键盘挡住输入框、后台暂停、引擎启动、headless 凭据、系统操作、Linux 环境、宠物、插件、App 发送的数据
 - [DS Bot](zh/12-bots.md)：手机端支持、工作目录、复制 Bot
 - [酒馆](zh/13-tavern.md)：导入角色卡、书架与对话、舞台、群聊、排版和备份
 - [全部功能](zh/14-all-features.md)：网页版功能的总目录、当前对话的入口、插件面板、分享配置
@@ -35,7 +35,7 @@
 - [Plugins](en/08-plugins.md): installing, turning on and off, updating and uninstalling, native settings and web editing, native UI
 - [Appearance](en/09-appearance.md): light and dark, colors, icons, launch screen, wallpaper, chat text size
 - [Settings](en/10-settings.md): what each setting does, checking for updates
-- [Troubleshooting](en/11-faq.md): connection, pausing in the background, engine start, headless credentials, system actions, Linux environment, pets, plugins, what the app sends
+- [Troubleshooting](en/11-faq.md): connection, crashes and automatic failure analysis, the keyboard covering the input, pausing in the background, engine start, headless credentials, system actions, Linux environment, pets, plugins, what the app sends
 - [DS Bot](en/12-bots.md): mobile support, working directories, duplicating a Bot
 - [Tavern](en/13-tavern.md): importing character cards, shelf and chats, stage, group chats, layout and backups
 - [All features](en/14-all-features.md): the index of DSH Web features on the phone, current-chat entries, plugin panels, share profiles
