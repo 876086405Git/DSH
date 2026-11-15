@@ -1649,8 +1649,7 @@ def main():
           needs=('flutter-input-identity', 'diagnostic-cancel-wire'), timeout=300,
           tests=[rt + 'automatic-diagnostics-cancel-state_test.dart'],
           scope='Actual OH provider/sender and DshClient loopback HTTP cancellation ownership; same-epoch new check and Android/default compatibility, zero model requests')
-    g.run('flutter-diagnostic-cancel-state-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/diagnostics/automatic_diagnostics.dart',
-          '../runtime/tests/ohos/automatic-diagnostics-cancel-state_test.dart'),
+    g.run('flutter-diagnostic-cancel-state-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/diagnostics/automatic_diagnostics.dart'),
           cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
           tests=['app/lib/diagnostics/automatic_diagnostics.dart', rt + 'automatic-diagnostics-cancel-state_test.dart'],
           scope='Real Flutter analyzer for the OH cancellation state guard and actual-provider finite tests')
