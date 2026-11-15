@@ -104,8 +104,12 @@ if ((want_beta)) && [[ ! -s $beta_file ]]; then
   die "--beta needs a token file ($beta_file)"
 fi
 if ((want_beta)) && [[ $mode == release && -n $beta_file && -s $beta_file ]]; then
-  bits=$(stat -c %a "$beta_file")
-  [[ $bits == 600 || $bits == 400 ]] || die "$beta_file is mode $bits; chmod 600 it"
+  # Same rule as beta-keys.sh: Git Bash (MSYS) makes the mode up, so it is only checked elsewhere.
+  case "$(uname -s)" in
+    MINGW*|MSYS*) ;;
+    *) bits=$(stat -c %a "$beta_file")
+       [[ $bits == 600 || $bits == 400 ]] || die "$beta_file is mode $bits; chmod 600 it" ;;
+  esac
   beta=1
 fi
 
