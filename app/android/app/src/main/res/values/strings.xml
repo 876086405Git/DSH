@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 共存版的桌面名：与官方版（DSH Go）区分，两个图标不会认错。
+     默认与 values-zh 相同；官方版构建把这里当作原样输出。 -->
+<resources>
+    <string name="app_name">DSH Go 共存</string>
+</resources>

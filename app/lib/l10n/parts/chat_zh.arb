@@ -770,5 +770,35 @@
         "type": "String"
       }
     }
-  }
+  },
+  "chatEnhanceAction": "增强提示词",
+  "chatEnhanceUndoAction": "恢复原文",
+  "chatEnhanceCancelAction": "取消增强",
+  "chatEnhanceEmptyInput": "先输入内容",
+  "chatEnhanceInputChanged": "输入内容已变化，本次结果未填入",
+  "chatEnhanceFilled": "已填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文",
+  "chatEnhanceFilledWithContext": "已填入增强结果（已结合上文）· 点 ↺ 恢复原文",
+  "chatEnhanceTrimmedSuffix": "（已按 {limit} 字上限精简）",
+  "chatEnhanceUndone": "已恢复优化前的内容",
+  "chatEnhanceUnavailable": "当前 Host 还不支持提示词增强",
+  "chatEnhanceNoModel": "没有可用的模型",
+  "chatEnhanceBusy": "上一次还在生成，稍等一下",
+  "chatEnhanceTimeout": "增强超时，请重试",
+  "chatEnhanceIncomplete": "结果不完整（模型输出被截断），未填入",
+  "chatEnhanceFailed": "增强失败：{reason}；草稿未改动",
+  "@chatEnhanceTrimmedSuffix": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "@chatEnhanceFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "chatEnhanceNotConnected": "还没连上引擎，连接后再试"
 }

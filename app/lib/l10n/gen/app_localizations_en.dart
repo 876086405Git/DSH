@@ -1,6 +1,5 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
-
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -5007,6 +5006,58 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get chatEnhanceAction => 'Enhance prompt';
+
+  @override
+  String get chatEnhanceUndoAction => 'Restore original';
+
+  @override
+  String get chatEnhanceCancelAction => 'Cancel enhance';
+
+  @override
+  String get chatEnhanceEmptyInput => 'Type something first';
+
+  @override
+  String get chatEnhanceInputChanged => 'The input changed, so this result was not applied';
+
+  @override
+  String get chatEnhanceFilled => 'Enhanced · edit or send it, or tap ↺ to restore what you had';
+
+  @override
+  String get chatEnhanceFilledWithContext => 'Enhanced with the conversation so far · tap ↺ to restore what you had';
+
+  @override
+  String chatEnhanceTrimmedSuffix(int limit) {
+    return ' ($limit-character cap applied)';
+  }
+
+  @override
+  String get chatEnhanceUndone => 'Restored what you had written';
+
+  @override
+  String get chatEnhanceUnavailable => 'This Host does not support prompt enhance yet';
+
+  @override
+  String get chatEnhanceNoModel => 'No model is available';
+
+  @override
+  String get chatEnhanceBusy => 'The previous one is still running';
+
+  @override
+  String get chatEnhanceTimeout => 'Enhance timed out; try again';
+
+  @override
+  String get chatEnhanceIncomplete => 'The result was incomplete (the model was cut off), so it was not applied';
+
+  @override
+  String chatEnhanceFailed(String reason) {
+    return 'Enhance failed: $reason; your draft is unchanged';
+  }
+
+  @override
+  String get chatEnhanceNotConnected => 'Not connected to the engine yet; try again once it is';
+
+  @override
   String get commonCancel => 'Cancel';
 
   @override
@@ -9439,6 +9490,47 @@ class L10nEn extends L10n {
 
   @override
   String get hubQuickPanelItemsNone => 'Nothing chosen: a left swipe won\'t open it';
+
+  @override
+  String get settingsEnhanceTitle => 'Prompt enhance';
+
+  @override
+  String get settingsEnhanceModel => 'Model for enhance';
+
+  @override
+  String get settingsEnhanceTest => 'Test connection';
+
+  @override
+  String get settingsEnhanceTestHint => 'Send one tiny request with this key and model to check it works';
+
+  @override
+  String get settingsEnhanceTesting => 'Testing…';
+
+  @override
+  String get settingsEnhanceTestOk => 'Connected';
+
+  @override
+  String settingsEnhanceTestOkReply(String reply) {
+    return 'Connected. The model replied: $reply';
+  }
+
+  @override
+  String get settingsEnhanceNoKey => 'No API key yet — add one under Models';
+
+  @override
+  String get settingsEnhanceBadKey => 'The API key is invalid or expired';
+
+  @override
+  String get settingsEnhanceBusy => 'Too many requests; try again shortly';
+
+  @override
+  String get settingsEnhanceNetwork => 'Network unavailable or timed out';
+
+  @override
+  String get settingsEnhanceServer => 'The model service returned an error';
+
+  @override
+  String get settingsEnhanceIncomplete => 'The model\'s output was cut off';
 
   @override
   String get launchScreenTitle => 'Launch screen';
@@ -20738,7 +20830,8 @@ class L10nEn extends L10n {
       locale: localeName,
       other:
           'This card has $count more items you can\'t edit here (lorebook, extensions…). Saving keeps them as they are, and existing chats don\'t change.',
-      one: 'This card has 1 more item you can\'t edit here (lorebook, extensions…). Saving keeps it as it is, and existing chats don\'t change.',
+      one:
+          'This card has 1 more item you can\'t edit here (lorebook, extensions…). Saving keeps it as it is, and existing chats don\'t change.',
     );
     return '$_temp0';
   }
@@ -26061,6 +26154,13 @@ class L10nEn extends L10n {
 
   @override
   String get voiceModeCloudHint => 'An OpenAI-compatible transcription API, such as Whisper or SiliconFlow';
+
+  @override
+  String get voiceModeOffline => 'Bundled model';
+
+  @override
+  String get voiceModeOfflineHint =>
+      'SenseVoice runs inside the app, using neither the engine nor the system recognizer — works on a remote host too';
 
   @override
   String get voiceCloudSection => 'Cloud recognition service';

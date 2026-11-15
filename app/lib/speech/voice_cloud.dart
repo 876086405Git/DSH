@@ -137,7 +137,7 @@ final voiceCloudProvider = Provider<VoiceCloudResolver>((ref) {
       case VoiceMode.cloud:
         final settings = await ref.read(cloudAsrProvider.notifier).ready();
         return settings.configured ? OpenAiVoiceCloud(settings, ref.read(deepSeekSpeechHttpProvider)) : null;
-      case VoiceMode.system || VoiceMode.engine:
+      case VoiceMode.system || VoiceMode.engine || VoiceMode.offline:
         return null;
     }
   };
@@ -154,7 +154,7 @@ final voiceCloudLikelyProvider = Provider<bool Function()>(
         VoiceMode.auto =>
           ref.read(settingsProvider).apiKey.trim().isNotEmpty ||
               ref.read(accountProvider).phase == AccountPhase.signedIn,
-        VoiceMode.system || VoiceMode.engine => false,
+        VoiceMode.system || VoiceMode.engine || VoiceMode.offline => false,
       },
 );
 
@@ -202,6 +202,8 @@ final callRecognizerProvider = Provider<Future<VoiceCloud?> Function()>((ref) {
       VoiceMode.engine => await engine() ?? await cloud(VoiceMode.deepseek),
       VoiceMode.cloud => await cloud(VoiceMode.cloud) ?? await cloud(VoiceMode.deepseek) ?? await engine(),
       VoiceMode.auto || VoiceMode.deepseek || VoiceMode.system => await cloud(VoiceMode.deepseek) ?? await engine(),
+      // 内置模型在本机转写，不走云端也不走引擎。
+      VoiceMode.offline => await engine(),
     };
   };
 });

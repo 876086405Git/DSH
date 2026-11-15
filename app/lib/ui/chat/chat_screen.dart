@@ -34,6 +34,8 @@ import '../../state/chat_state.dart';
 import '../../state/commands_state.dart';
 import '../../state/compose_inbox.dart';
 import '../../state/composer_insert.dart';
+import '../../state/prompt_enhance_local.dart';
+import '../../companion/companion_state.dart' show companionLightClientProvider;
 import '../../state/phone_skill_use.dart';
 import '../../state/composer_quote.dart';
 import '../../state/connection_state.dart';
@@ -54,9 +56,11 @@ import '../../state/sessions_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/usage_state.dart';
 import '../../state/voice_state.dart';
+import '../../state/prompt_enhance_state.dart';
 import '../../state/voice_model_state.dart';
 import '../../state/voice_settings.dart';
 import '../../state/workspaces_state.dart' show selectedWorkspaceProvider, workspaceTitle;
+import 'prompt_enhance_button.dart';
 import '../../usage/usage_stats.dart';
 import '../common/app_sheet.dart';
 import '../common/brief_notice.dart';
@@ -274,6 +278,165 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
 
   /// The open conversation's id, or `new`.
   late String _draftKey;
+
+  /// 提示词增强的请求代次：取消/切会话后旧请求的结果直接丢弃。
+  int _enhanceSeq = 0;
+
+  /// 取消在途的增强（上游调用无法真正掐断，这里丢掉结果并回 idle）。
+  void _cancelEnhance() {
+    _enhanceSeq += 1;
+    ref.read(promptEnhanceProvider.notifier).reset(sessionKey: _draftKey);
+  }
+
+  /// 增强用的会话上文：最近 6 条可见正文（用户消息 + 助手正文，不含 reasoning）。
+  List<PromptEnhanceContextMessage> _enhanceContext(String? sessionId) {
+    if (sessionId == null) return const [];
+    final items = ref.read(chatProvider(sessionId)).items;
+    final recent = <PromptEnhanceContextMessage>[];
+    for (final item in items) {
+      if (item is UserChatItem) {
+        final text = item.text.trim();
+        if (text.isNotEmpty) recent.add(PromptEnhanceContextMessage(role: 'user', text: text));
+      } else if (item is AssistantChatItem) {
+        final text = item.text.trim();
+        if (text.isNotEmpty && !item.streaming) {
+          recent.add(PromptEnhanceContextMessage(role: 'assistant', text: text));
+        }
+      }
+    }
+    if (recent.isEmpty) return const [];
+    final tail = recent.length > 6 ? recent.sublist(recent.length - 6) : recent;
+    return [
+      ...tail.sublist(0, tail.length - 1),
+      PromptEnhanceContextMessage(role: tail.last.role, text: tail.last.text, focus: true),
+    ];
+  }
+
+  /// 点 ✨：把草稿交给模型改写，成功才写回输入框。
+  ///
+  /// 优先走手机本地直连（App 自带 API key 调模型）：远程主机模式下宿主插件
+  /// 路由转不过来，本地直连是唯一两边都成立的路。本地没配 key 或调用失败时，
+  /// 再退回宿主那条（本机引擎/桌面插件）。
+  Future<void> _enhancePrompt(String? sessionId, ModelSelection? selection) async {
+    final l10n = context.l10n;
+    final original = _input.text;
+    if (original.trim().isEmpty) {
+      _toast(l10n.chatEnhanceEmptyInput);
+      return;
+    }
+    final key = _draftKey;
+    final seq = ++_enhanceSeq;
+    final enhanceContext = _enhanceContext(sessionId);
+    final client = ref.read(activeConnectionProvider).value?.client;
+    if (client == null) {
+      // 静默 return 会让人以为按钮坏了：这里必须说清是没连上。
+      _toast(l10n.chatEnhanceNotConnected);
+      return;
+    }
+    final settings = ref.read(settingsProvider);
+    final apiKey = settings.apiKey.trim();
+    final model = settings.promptEnhanceModel;
+    ref.read(promptEnhanceProvider.notifier).start(key);
+    try {
+      // ① 手机本地直连。
+      PromptEnhanceResult result;
+      if (apiKey.isNotEmpty) {
+        final local = await enhancePromptLocally(
+          client: ref.read(companionLightClientProvider)(),
+          apiKey: apiKey,
+          text: original,
+          model: model,
+          context: enhanceContext,
+        );
+        result = PromptEnhanceResult(
+          text: local.text,
+          unchanged: local.text == original,
+          limit: 800,
+          compressed: false,
+          trimmed: false,
+          inputLength: original.length,
+          outputLength: local.text.length,
+          elapsedMs: 0,
+          provider: 'deepseek',
+          model: local.model,
+          contextUsed: local.contextUsed,
+          contextMessageCount: enhanceContext.length,
+        );
+      } else {
+        // ② 没配 key：退回宿主那条，它会用自己的模型。
+        result = await client.promptEnhance(
+          text: original,
+          context: enhanceContext,
+          selection: selection,
+        );
+      }
+      if (!mounted || seq != _enhanceSeq) return;
+      if (_input.text != original) {
+        // 生成期间草稿被改过：不覆盖用户的新内容。
+        ref.read(promptEnhanceProvider.notifier).reset(sessionKey: key);
+        _toast(l10n.chatEnhanceInputChanged);
+        return;
+      }
+      _input.value = TextEditingValue(
+        text: result.text,
+        selection: TextSelection.collapsed(offset: result.text.length),
+      );
+      _focus.requestFocus();
+      ref.read(promptEnhanceProvider.notifier).succeeded(
+        sessionKey: key,
+        original: original,
+        result: result.text,
+        contextUsed: result.contextUsed,
+        trimmed: result.trimmed,
+      );
+      final base = result.contextUsed ? l10n.chatEnhanceFilledWithContext : l10n.chatEnhanceFilled;
+      _toast(result.trimmed ? '$base${l10n.chatEnhanceTrimmedSuffix(result.limit)}' : base);
+    } on PromptEnhanceFailure catch (error) {
+      if (!mounted || seq != _enhanceSeq) return;
+      ref.read(promptEnhanceProvider.notifier).reset(sessionKey: key, failureCode: error.code);
+      _toast(_enhanceFailureText(error));
+    } catch (error) {
+      if (!mounted || seq != _enhanceSeq) return;
+      ref.read(promptEnhanceProvider.notifier).reset(sessionKey: key, failureCode: 'LLM_ERROR');
+      _toast(l10n.chatEnhanceFailed('$error'));
+    }
+  }
+
+  String _enhanceFailureText(PromptEnhanceFailure error) {
+    final l10n = context.l10n;
+    switch (error.code) {
+      case 'ROUTE_NOT_FOUND':
+        return l10n.chatEnhanceUnavailable;
+      case 'NO_MODEL':
+        return l10n.chatEnhanceNoModel;
+      case 'BUSY':
+        return l10n.chatEnhanceBusy;
+      case 'TIMEOUT':
+        return l10n.chatEnhanceTimeout;
+      case 'OUTPUT_TRUNCATED':
+      case 'STREAM_CLOSED':
+      case 'UNEXPECTED_FINISH':
+        return l10n.chatEnhanceIncomplete;
+      default:
+        return l10n.chatEnhanceFailed(error.message);
+    }
+  }
+
+  /// 点 ↺：恢复增强前的原文（只有草稿仍等于结果时才成立）。
+  void _undoEnhance() {
+    final state = ref.read(promptEnhanceProvider);
+    final original = state.original;
+    if (original == null || !state.canUndoFor(_input.text)) {
+      ref.read(promptEnhanceProvider.notifier).reset(sessionKey: _draftKey);
+      return;
+    }
+    _input.value = TextEditingValue(
+      text: original,
+      selection: TextSelection.collapsed(offset: original.length),
+    );
+    _focus.requestFocus();
+    ref.read(promptEnhanceProvider.notifier).reset(sessionKey: _draftKey);
+  }
 
   PreparedPhoneSkill? _preparedPhoneSkill;
   PreparedPhoneSkill? _sendingPhoneSkill;
@@ -1614,6 +1777,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     final idleBlank =
         idle != null && sessionId != null && ref.watch(chatProvider(sessionId).select((s) => s.items.isEmpty));
 
+    final enhanceState = ref.watch(promptEnhanceProvider);
     // 只盯顶栏 / 输入条需要的几个字段:流式增量不重建整页。
     final chat = sessionId == null
         ? null
@@ -2244,6 +2408,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                               onRemove: _removeDraft,
                                               labels: frameLabels(generate, generateModel, _drafts.length),
                                             ),
+                                    ),
+                                    enhance: PromptEnhanceButton(
+                                      controller: _input,
+                                      phase: enhanceState.phase,
+                                      undoResult: enhanceState.result,
+                                      connected: connected,
+                                      // 增强是桥的一次独立调用，不参与会话的发送/同步状态：
+                                      // 回复生成中、会话同步中都应当照常可用。只有真正的连接
+                                      // 建立（connected）才决定能不能点。
+                                      ready: true,
+                                      onEnhance: () => _enhancePrompt(
+                                        sessionId,
+                                        sessionId == null ? pendingModel : chat?.model,
+                                      ),
+                                      onCancel: _cancelEnhance,
+                                      onUndo: _undoEnhance,
                                     ),
                                     accessory: sessionId == null || contextFraction == null
                                         ? null

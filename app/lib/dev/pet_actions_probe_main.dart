@@ -116,6 +116,16 @@ class _FallbackRecorder implements VoiceBridge {
   Future<void> openSettings() async {}
   @override
   Future<void> startRecognizer({String? language}) async => throw UnsupportedError('No system recognizer fixture');
+  // 「内置模型」不在这个探针的覆盖范围里：它只脚本化前台回退录音。
+  @override
+  Future<VoiceOfflineStatus> offlineStatus() async => const VoiceOfflineStatus(ready: false);
+  @override
+  Future<void> prepareOffline() async => throw UnsupportedError('No bundled model fixture');
+  @override
+  Future<void> startOffline({required int maxSeconds}) async =>
+      throw UnsupportedError('No bundled model fixture');
+  @override
+  Future<String> stopOffline() async => throw UnsupportedError('No bundled model fixture');
   @override
   Future<void> startRecorder({required int maxSeconds}) async {
     log('fallback-recorder', {'fixture': 'one-second PCM16 WAV'});

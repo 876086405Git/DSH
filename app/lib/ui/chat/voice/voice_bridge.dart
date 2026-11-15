@@ -9,6 +9,23 @@ import 'package:flutter/services.dart';
 import '../../../voice/voice_platform_events.dart';
 
 /// What the phone can do.
+/// 「内置模型」的状态：模型是否已加载，以及加载失败的原因。
+class VoiceOfflineStatus {
+  const VoiceOfflineStatus({required this.ready, this.failure});
+
+  static const unavailable = VoiceOfflineStatus(ready: false);
+
+  final bool ready;
+
+  /// 加载失败的原因；null 表示没失败过（可能还没加载）。
+  final String? failure;
+
+  factory VoiceOfflineStatus.fromMap(Map<Object?, Object?>? map) => VoiceOfflineStatus(
+    ready: map?['ready'] == true,
+    failure: map?['failure'] as String?,
+  );
+}
+
 class VoiceCapabilities {
   const VoiceCapabilities({
     required this.recognizer,
@@ -100,6 +117,24 @@ abstract class VoiceBridge {
   /// Records for the engine's recognizer, at most [maxSeconds].
   Future<void> startRecorder({required int maxSeconds});
 
+  /// 「内置模型」是否可用：SenseVoice 在 App 进程里就绪。
+  ///
+  /// 不依赖引擎、不依赖系统识别服务，所以本机/远程、在线/离线都一样。
+  Future<VoiceOfflineStatus> offlineStatus();
+
+  /// Loads the bundled model (first call copies ~228 MB out of assets).
+  Future<void> prepareOffline();
+
+  /// Records for the bundled model, at most [maxSeconds].
+  Future<void> startOffline({required int maxSeconds});
+
+  /// Ends an [startOffline] session and returns the transcript.
+  ///
+  /// Separate from [stop] on purpose: that one returns a WAV for the engine's
+  /// recognizer, while the bundled model transcribes in this process and hands
+  /// back text.
+  Future<String> stopOffline();
+
   /// Ends listening: the recognizer delivers its final text as an event;
   /// the recorder returns its WAV (16 kHz mono PCM16), or null when there
   /// was nothing.
@@ -185,6 +220,32 @@ class MethodChannelVoiceBridge implements VoiceBridge {
 
   @override
   Future<Uint8List?> stop() => _methods.invokeMethod<Uint8List>('stop');
+
+  @override
+  Future<VoiceOfflineStatus> offlineStatus() async {
+    try {
+      final map = await _methods.invokeMethod<Map<Object?, Object?>>('offlineStatus');
+      return VoiceOfflineStatus.fromMap(map);
+    } on MissingPluginException {
+      return VoiceOfflineStatus.unavailable;
+    } on PlatformException {
+      return VoiceOfflineStatus.unavailable;
+    }
+  }
+
+  @override
+  Future<void> prepareOffline() =>
+      _methods.invokeMethod<void>('prepareOffline');
+
+  @override
+  Future<void> startOffline({required int maxSeconds}) =>
+      _methods.invokeMethod<void>('startOffline', {'maxSeconds': maxSeconds, 'sessionId': _session});
+
+  @override
+  Future<String> stopOffline() async {
+    final map = await _methods.invokeMethod<Map<Object?, Object?>>('stop');
+    return (map?['text'] as String?)?.trim() ?? '';
+  }
 
   @override
   Future<void> cancel() async {

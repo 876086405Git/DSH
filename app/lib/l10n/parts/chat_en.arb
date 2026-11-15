@@ -319,5 +319,35 @@
   "chatGoalStateSemantics": "Goal, {objective}, {state}",
   "chatTodoItemSemantics": "{content}, {state}",
   "chatMentionSemantics": "{kind}: {label}",
-  "chatArtifactSemantics": "{name}, {description}"
+  "chatArtifactSemantics": "{name}, {description}",
+  "chatEnhanceAction": "Enhance prompt",
+  "chatEnhanceUndoAction": "Restore original",
+  "chatEnhanceCancelAction": "Cancel enhance",
+  "chatEnhanceEmptyInput": "Type something first",
+  "chatEnhanceInputChanged": "The input changed, so this result was not applied",
+  "chatEnhanceFilled": "Enhanced · edit or send it, or tap ↺ to restore what you had",
+  "chatEnhanceFilledWithContext": "Enhanced with the conversation so far · tap ↺ to restore what you had",
+  "chatEnhanceTrimmedSuffix": " ({limit}-character cap applied)",
+  "chatEnhanceUndone": "Restored what you had written",
+  "chatEnhanceUnavailable": "This Host does not support prompt enhance yet",
+  "chatEnhanceNoModel": "No model is available",
+  "chatEnhanceBusy": "The previous one is still running",
+  "chatEnhanceTimeout": "Enhance timed out; try again",
+  "chatEnhanceIncomplete": "The result was incomplete (the model was cut off), so it was not applied",
+  "chatEnhanceFailed": "Enhance failed: {reason}; your draft is unchanged",
+  "@chatEnhanceTrimmedSuffix": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "@chatEnhanceFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "chatEnhanceNotConnected": "Not connected to the engine yet; try again once it is"
 }

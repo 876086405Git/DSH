@@ -3029,6 +3029,36 @@
       }
     }
   },
+  "chatEnhanceAction": "增强提示词",
+  "chatEnhanceUndoAction": "恢复原文",
+  "chatEnhanceCancelAction": "取消增强",
+  "chatEnhanceEmptyInput": "先输入内容",
+  "chatEnhanceInputChanged": "输入内容已变化，本次结果未填入",
+  "chatEnhanceFilled": "已填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文",
+  "chatEnhanceFilledWithContext": "已填入增强结果（已结合上文）· 点 ↺ 恢复原文",
+  "chatEnhanceTrimmedSuffix": "（已按 {limit} 字上限精简）",
+  "@chatEnhanceTrimmedSuffix": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "chatEnhanceUndone": "已恢复优化前的内容",
+  "chatEnhanceUnavailable": "当前 Host 还不支持提示词增强",
+  "chatEnhanceNoModel": "没有可用的模型",
+  "chatEnhanceBusy": "上一次还在生成，稍等一下",
+  "chatEnhanceTimeout": "增强超时，请重试",
+  "chatEnhanceIncomplete": "结果不完整（模型输出被截断），未填入",
+  "chatEnhanceFailed": "增强失败：{reason}；草稿未改动",
+  "@chatEnhanceFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "chatEnhanceNotConnected": "还没连上引擎，连接后再试",
   "commonCancel": "取消",
   "commonRetry": "重试",
   "commonClose": "关闭",
@@ -5519,6 +5549,26 @@
   "hubQuickPanelSwipeHint": "在对话里从右向左滑。代码块、表格这些能横向滚动的内容不受影响。",
   "hubQuickPanelItems": "显示的入口",
   "hubQuickPanelItemsNone": "没有选择，左滑不会打开",
+  "settingsEnhanceTitle": "提示词增强",
+  "settingsEnhanceModel": "增强用的模型",
+  "settingsEnhanceTest": "测试连接",
+  "settingsEnhanceTestHint": "用当前 key 和模型发一次最小请求，确认能连通",
+  "settingsEnhanceTesting": "正在测试…",
+  "settingsEnhanceTestOk": "连接正常",
+  "settingsEnhanceTestOkReply": "连接正常，模型回复：{reply}",
+  "@settingsEnhanceTestOkReply": {
+    "placeholders": {
+      "reply": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsEnhanceNoKey": "还没配 API key，先到「模型」里填一个",
+  "settingsEnhanceBadKey": "API key 无效或已过期",
+  "settingsEnhanceBusy": "请求太频繁，稍后再试",
+  "settingsEnhanceNetwork": "网络不通或超时",
+  "settingsEnhanceServer": "模型服务出错",
+  "settingsEnhanceIncomplete": "模型输出被截断",
   "launchScreenTitle": "启动画面",
   "launchDefault": "默认",
   "launchCustom": "自定义",
@@ -15675,6 +15725,8 @@
   "voiceModeDeepseekHint": "用 DeepSeek 的语音识别，登录的账号或 API Key 付费",
   "voiceModeCloud": "其他云端服务",
   "voiceModeCloudHint": "OpenAI 兼容的语音转写接口，例如 Whisper、硅基流动",
+  "voiceModeOffline": "内置模型",
+  "voiceModeOfflineHint": "SenseVoice 跑在 App 里，不依赖引擎和系统识别，本机与远程都能用",
   "voiceCloudSection": "云端识别服务",
   "voiceCloudFooter": "录音会发给这个服务识别。Key 只存在这台手机上。",
   "voiceCloudBaseHelper": "填到 /v1 为止，App 会请求 …/audio/transcriptions",

@@ -142,6 +142,8 @@
   "voiceModeDeepseekHint": "用 DeepSeek 的语音识别，登录的账号或 API Key 付费",
   "voiceModeCloud": "其他云端服务",
   "voiceModeCloudHint": "OpenAI 兼容的语音转写接口，例如 Whisper、硅基流动",
+  "voiceModeOffline": "内置模型",
+  "voiceModeOfflineHint": "SenseVoice 跑在 App 里，不依赖引擎和系统识别，本机与远程都能用",
   "voiceCloudSection": "云端识别服务",
   "voiceCloudFooter": "录音会发给这个服务识别。Key 只存在这台手机上。",
   "voiceCloudBaseHelper": "填到 /v1 为止，App 会请求 …/audio/transcriptions",

@@ -1,0 +1,30 @@
+{
+  "comment": "内置模型（#716）的锁定清单：app/tool/fetch_voice_model.py 按这里的哈希下载并校验。模型权重不进版本库（见 .gitignore）。",
+  "provider": "sensevoice-local",
+  "version": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17",
+  "sherpaOnnx": {
+    "tag": "v2.0.1",
+    "aarUrl": "https://jitpack.io/com/github/k2-fsa/sherpa-onnx/sherpa-onnx/v2.0.1/sherpa-onnx-v2.0.1.aar",
+    "aarSha256": "a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7",
+    "libraries": ["libonnxruntime.so", "libsherpa-onnx-jni.so"],
+    "abis": ["arm64-v8a", "x86_64"]
+  },
+  "assets": [
+    {
+      "name": "model.int8.onnx",
+      "bytes": 239233841,
+      "sha256": "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
+      "urls": [
+        "https://www.modelscope.cn/models/pengzhendong/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/resolve/73eca47697f980daa3d16112404174b6b950b514/model.int8.onnx"
+      ]
+    },
+    {
+      "name": "tokens.txt",
+      "bytes": 315894,
+      "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
+      "urls": [
+        "https://www.modelscope.cn/models/pengzhendong/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/resolve/73eca47697f980daa3d16112404174b6b950b514/tokens.txt"
+      ]
+    }
+  ]
+}

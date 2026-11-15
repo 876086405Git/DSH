@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// How 语音输入 listens. [deepseek]: DeepSeek's recognizer (the signed-in account or
 /// the API key); [cloud]: an OpenAI-compatible service set up in 设置 › 语音; auto
 /// uses DeepSeek's when someone can pay for it, else as before.
-enum VoiceMode { auto, deepseek, system, engine, cloud }
+/// [offline]: 「内置模型」— SenseVoice runs inside the app process, so it needs
+/// neither the engine nor the system recognizer (works on a remote host too).
+enum VoiceMode { auto, deepseek, system, engine, cloud, offline }
 
 class VoiceSettingsController extends Notifier<VoiceMode> {
   static const preferenceKey = 'voice_recognition_mode';

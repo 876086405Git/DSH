@@ -26,3 +26,9 @@
 -dontwarn org.bouncycastle.**
 -keep class org.conscrypt.** { *; }
 -keep class io.github.muntashirakon.adb.** { *; }
+
+# sherpa-onnx reads its Java config objects from native code: the JNI bridge asks
+# for fields by name (GetFieldID "decodingMethod" and friends). Renaming them in
+# the release build makes every model load fail with
+# "Failed to get field ID for decodingMethod", so the whole binding keeps its names.
+-keep class com.k2fsa.sherpa.onnx.** { *; }

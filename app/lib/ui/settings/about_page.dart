@@ -44,7 +44,9 @@ class AboutPage extends ConsumerWidget {
               spot: Spots.version,
               value: Text(version, style: AppType.tabular(theme.textTheme.bodyMedium!)),
             ),
-            const AppUpdateTiles(),
+            // 共存版不显示更新入口：Release 里的 APK 包名和它不同，
+            // 点了会装成另一个 App，见 update_config.dart 的 coexistBuild。
+            if (!coexistBuild) const AppUpdateTiles(),
             SettingsTile(
               key: const ValueKey('settings-star'),
               spot: Spots.star,

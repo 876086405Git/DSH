@@ -8642,6 +8642,102 @@ abstract class L10n {
   /// **'{name}，{description}'**
   String chatArtifactSemantics(String name, String description);
 
+  /// No description provided for @chatEnhanceAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强提示词'**
+  String get chatEnhanceAction;
+
+  /// No description provided for @chatEnhanceUndoAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复原文'**
+  String get chatEnhanceUndoAction;
+
+  /// No description provided for @chatEnhanceCancelAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消增强'**
+  String get chatEnhanceCancelAction;
+
+  /// No description provided for @chatEnhanceEmptyInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'先输入内容'**
+  String get chatEnhanceEmptyInput;
+
+  /// No description provided for @chatEnhanceInputChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入内容已变化，本次结果未填入'**
+  String get chatEnhanceInputChanged;
+
+  /// No description provided for @chatEnhanceFilled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文'**
+  String get chatEnhanceFilled;
+
+  /// No description provided for @chatEnhanceFilledWithContext.
+  ///
+  /// In zh, this message translates to:
+  /// **'已填入增强结果（已结合上文）· 点 ↺ 恢复原文'**
+  String get chatEnhanceFilledWithContext;
+
+  /// No description provided for @chatEnhanceTrimmedSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **'（已按 {limit} 字上限精简）'**
+  String chatEnhanceTrimmedSuffix(int limit);
+
+  /// No description provided for @chatEnhanceUndone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复优化前的内容'**
+  String get chatEnhanceUndone;
+
+  /// No description provided for @chatEnhanceUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前 Host 还不支持提示词增强'**
+  String get chatEnhanceUnavailable;
+
+  /// No description provided for @chatEnhanceNoModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可用的模型'**
+  String get chatEnhanceNoModel;
+
+  /// No description provided for @chatEnhanceBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一次还在生成，稍等一下'**
+  String get chatEnhanceBusy;
+
+  /// No description provided for @chatEnhanceTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强超时，请重试'**
+  String get chatEnhanceTimeout;
+
+  /// No description provided for @chatEnhanceIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'结果不完整（模型输出被截断），未填入'**
+  String get chatEnhanceIncomplete;
+
+  /// No description provided for @chatEnhanceFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强失败：{reason}；草稿未改动'**
+  String chatEnhanceFailed(String reason);
+
+  /// No description provided for @chatEnhanceNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没连上引擎，连接后再试'**
+  String get chatEnhanceNotConnected;
+
   /// No description provided for @commonCancel.
   ///
   /// In zh, this message translates to:
@@ -16507,6 +16603,84 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'没有选择，左滑不会打开'**
   String get hubQuickPanelItemsNone;
+
+  /// No description provided for @settingsEnhanceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'提示词增强'**
+  String get settingsEnhanceTitle;
+
+  /// No description provided for @settingsEnhanceModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强用的模型'**
+  String get settingsEnhanceModel;
+
+  /// No description provided for @settingsEnhanceTest.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试连接'**
+  String get settingsEnhanceTest;
+
+  /// No description provided for @settingsEnhanceTestHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'用当前 key 和模型发一次最小请求，确认能连通'**
+  String get settingsEnhanceTestHint;
+
+  /// No description provided for @settingsEnhanceTesting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在测试…'**
+  String get settingsEnhanceTesting;
+
+  /// No description provided for @settingsEnhanceTestOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正常'**
+  String get settingsEnhanceTestOk;
+
+  /// No description provided for @settingsEnhanceTestOkReply.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正常，模型回复：{reply}'**
+  String settingsEnhanceTestOkReply(String reply);
+
+  /// No description provided for @settingsEnhanceNoKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没配 API key，先到「模型」里填一个'**
+  String get settingsEnhanceNoKey;
+
+  /// No description provided for @settingsEnhanceBadKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'API key 无效或已过期'**
+  String get settingsEnhanceBadKey;
+
+  /// No description provided for @settingsEnhanceBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求太频繁，稍后再试'**
+  String get settingsEnhanceBusy;
+
+  /// No description provided for @settingsEnhanceNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络不通或超时'**
+  String get settingsEnhanceNetwork;
+
+  /// No description provided for @settingsEnhanceServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型服务出错'**
+  String get settingsEnhanceServer;
+
+  /// No description provided for @settingsEnhanceIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型输出被截断'**
+  String get settingsEnhanceIncomplete;
 
   /// No description provided for @launchScreenTitle.
   ///
@@ -44923,6 +45097,18 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'OpenAI 兼容的语音转写接口，例如 Whisper、硅基流动'**
   String get voiceModeCloudHint;
+
+  /// No description provided for @voiceModeOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置模型'**
+  String get voiceModeOffline;
+
+  /// No description provided for @voiceModeOfflineHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'SenseVoice 跑在 App 里，不依赖引擎和系统识别，本机与远程都能用'**
+  String get voiceModeOfflineHint;
 
   /// No description provided for @voiceCloudSection.
   ///

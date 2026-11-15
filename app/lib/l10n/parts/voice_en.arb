@@ -76,6 +76,8 @@
   "voiceModeDeepseekHint": "DeepSeek’s recognizer, paid by your signed-in account or API key",
   "voiceModeCloud": "Another cloud service",
   "voiceModeCloudHint": "An OpenAI-compatible transcription API, such as Whisper or SiliconFlow",
+  "voiceModeOffline": "Bundled model",
+  "voiceModeOfflineHint": "SenseVoice runs inside the app, using neither the engine nor the system recognizer — works on a remote host too",
   "voiceCloudSection": "Cloud recognition service",
   "voiceCloudFooter": "Recordings are sent to this service. The key stays on this phone.",
   "voiceCloudBaseHelper": "Up to /v1; the app calls …/audio/transcriptions",

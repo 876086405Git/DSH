@@ -70,6 +70,9 @@ const Set<String> harnessRemoteAllowlist = {
   'session/modelCatalog',
   'session/page',
   'session/prompt',
+  // 插件的本地 web 路由转发（ds-harness-remote 的 RPC 方法名）。
+  // 具体放行哪个插件路由由 Host 侧 PLUGIN_ROUTE_ALLOWLIST 决定，这里只允许发这条 RPC。
+  'plugin.route.call',
   'remoteAccess/follow',
   'session/projections',
   'session/initializeDefaultModel',

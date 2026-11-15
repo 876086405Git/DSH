@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
 import '../performance/performance_state.dart';
+import 'prompt_enhance_local.dart' show promptEnhanceDefaultModel;
 import 'provider_keys.dart';
 import 'read_list_epoch.dart';
 
@@ -26,6 +27,7 @@ class AppSettings {
     this.chatTextScale = 1.0,
     this.foldCompletedTurns = true,
     this.visualReplies = true,
+    this.promptEnhanceModel = 'deepseek-flash',
     this.customProviderIds = const {},
     this.loaded = false,
   });
@@ -72,6 +74,10 @@ class AppSettings {
   /// Off only drops the instructions; views that arrive are still drawn.
   final bool visualReplies;
 
+  /// 「提示词增强」用哪个模型：手机本地直连时发给 api.deepseek.com 的 model 名。
+  /// 取值见 `promptEnhanceModels`（prompt_enhance_local.dart）。
+  final String promptEnhanceModel;
+
   /// Custom providers created on the local engine whose key is kept on the
   /// phone ([ProviderKeyVault]). Known at launch, before the engine runs, so
   /// the first-run gate can tell "has a model to talk to" without it.
@@ -97,6 +103,7 @@ class AppSettings {
     double? chatTextScale,
     bool? foldCompletedTurns,
     bool? visualReplies,
+    String? promptEnhanceModel,
     Set<String>? customProviderIds,
     bool? loaded,
   }) => AppSettings(
@@ -113,6 +120,7 @@ class AppSettings {
     chatTextScale: chatTextScale ?? this.chatTextScale,
     foldCompletedTurns: foldCompletedTurns ?? this.foldCompletedTurns,
     visualReplies: visualReplies ?? this.visualReplies,
+    promptEnhanceModel: promptEnhanceModel ?? this.promptEnhanceModel,
     customProviderIds: customProviderIds ?? this.customProviderIds,
     loaded: loaded ?? this.loaded,
   );
@@ -139,6 +147,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _chatTextScaleKey = 'chat_text_scale';
   static const _foldTurnsKey = 'fold_completed_turns';
   static const _visualRepliesKey = 'visual_replies';
+  static const _promptEnhanceModelKey = 'prompt_enhance_model';
   static const _secure = FlutterSecureStorage();
   late Future<void> _loaded;
 
@@ -187,6 +196,8 @@ class SettingsController extends Notifier<AppSettings> {
       chatTextScale: _knownScale(prefs.getDouble(_chatTextScaleKey)),
       foldCompletedTurns: prefs.getBool(_foldTurnsKey) ?? true,
       visualReplies: prefs.getBool(_visualRepliesKey) ?? true,
+      promptEnhanceModel:
+          prefs.getString(_promptEnhanceModelKey) ?? promptEnhanceDefaultModel,
       customProviderIds: providerIds,
       loaded: true,
     );
@@ -273,6 +284,13 @@ class SettingsController extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_visualRepliesKey, value);
     state = state.copyWith(visualReplies: value);
+  }
+
+  /// 「提示词增强」用哪个模型（手机本地直连时生效）。
+  Future<void> setPromptEnhanceModel(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_promptEnhanceModelKey, value);
+    state = state.copyWith(promptEnhanceModel: value);
   }
 
   Future<void> setWebPhoneLayout(bool value) async {

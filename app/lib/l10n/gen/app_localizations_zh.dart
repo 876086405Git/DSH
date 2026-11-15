@@ -1,6 +1,5 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
-
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -4705,6 +4704,58 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get chatEnhanceAction => '增强提示词';
+
+  @override
+  String get chatEnhanceUndoAction => '恢复原文';
+
+  @override
+  String get chatEnhanceCancelAction => '取消增强';
+
+  @override
+  String get chatEnhanceEmptyInput => '先输入内容';
+
+  @override
+  String get chatEnhanceInputChanged => '输入内容已变化，本次结果未填入';
+
+  @override
+  String get chatEnhanceFilled => '已填入增强结果 · 可直接编辑或发送；点 ↺ 恢复原文';
+
+  @override
+  String get chatEnhanceFilledWithContext => '已填入增强结果（已结合上文）· 点 ↺ 恢复原文';
+
+  @override
+  String chatEnhanceTrimmedSuffix(int limit) {
+    return '（已按 $limit 字上限精简）';
+  }
+
+  @override
+  String get chatEnhanceUndone => '已恢复优化前的内容';
+
+  @override
+  String get chatEnhanceUnavailable => '当前 Host 还不支持提示词增强';
+
+  @override
+  String get chatEnhanceNoModel => '没有可用的模型';
+
+  @override
+  String get chatEnhanceBusy => '上一次还在生成，稍等一下';
+
+  @override
+  String get chatEnhanceTimeout => '增强超时，请重试';
+
+  @override
+  String get chatEnhanceIncomplete => '结果不完整（模型输出被截断），未填入';
+
+  @override
+  String chatEnhanceFailed(String reason) {
+    return '增强失败：$reason；草稿未改动';
+  }
+
+  @override
+  String get chatEnhanceNotConnected => '还没连上引擎，连接后再试';
+
+  @override
   String get commonCancel => '取消';
 
   @override
@@ -8944,6 +8995,47 @@ class L10nZh extends L10n {
 
   @override
   String get hubQuickPanelItemsNone => '没有选择，左滑不会打开';
+
+  @override
+  String get settingsEnhanceTitle => '提示词增强';
+
+  @override
+  String get settingsEnhanceModel => '增强用的模型';
+
+  @override
+  String get settingsEnhanceTest => '测试连接';
+
+  @override
+  String get settingsEnhanceTestHint => '用当前 key 和模型发一次最小请求，确认能连通';
+
+  @override
+  String get settingsEnhanceTesting => '正在测试…';
+
+  @override
+  String get settingsEnhanceTestOk => '连接正常';
+
+  @override
+  String settingsEnhanceTestOkReply(String reply) {
+    return '连接正常，模型回复：$reply';
+  }
+
+  @override
+  String get settingsEnhanceNoKey => '还没配 API key，先到「模型」里填一个';
+
+  @override
+  String get settingsEnhanceBadKey => 'API key 无效或已过期';
+
+  @override
+  String get settingsEnhanceBusy => '请求太频繁，稍后再试';
+
+  @override
+  String get settingsEnhanceNetwork => '网络不通或超时';
+
+  @override
+  String get settingsEnhanceServer => '模型服务出错';
+
+  @override
+  String get settingsEnhanceIncomplete => '模型输出被截断';
 
   @override
   String get launchScreenTitle => '启动画面';
@@ -24727,6 +24819,12 @@ class L10nZh extends L10n {
 
   @override
   String get voiceModeCloudHint => 'OpenAI 兼容的语音转写接口，例如 Whisper、硅基流动';
+
+  @override
+  String get voiceModeOffline => '内置模型';
+
+  @override
+  String get voiceModeOfflineHint => 'SenseVoice 跑在 App 里，不依赖引擎和系统识别，本机与远程都能用';
 
   @override
   String get voiceCloudSection => '云端识别服务';
