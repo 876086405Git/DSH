@@ -148,3 +148,4 @@ deepseek-attachment-error.diff
 fork-default-effort.diff
 config-editor-lock-order.diff
 piai-overflow-output-limit.diff
+schedule-authorization-availability.diff
