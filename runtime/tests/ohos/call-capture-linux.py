@@ -32,12 +32,13 @@ def main():
     if not version.startswith('5.9.'):
         raise ValueError('TypeScript 5.9.x is required')
     tests = ['call-capture.test.mjs', 'call-control.test.mjs', 'voice-pcm-tap.test.mjs',
-             'speech-call-channel.test.mjs', 'voice-channel.test.mjs']
+             'speech-call-channel.test.mjs', 'voice-channel.test.mjs', 'call-route.test.mjs', 'call-start-mute.test.mjs', 'call-start-pause.test.mjs']
     drivers = [repo / 'runtime/tests/ohos' / name for name in
-               tests + ['call-capture-fixture.mjs', 'voice-fixture.mjs', 'call-capture-linux.py']]
+               tests + ['call-capture-fixture.mjs', 'call-route-fixture.mjs', 'voice-fixture.mjs', 'call-capture-linux.py']]
     plugins = repo / 'app/ohos/entry/src/main/ets/plugins'
     products = list(plugins.glob('*Voice*.ets')) + [plugins / (name + '.ets') for name in
-               ['CallEnergyGate', 'OhosCallCapture', 'OhosSpeechCall', 'SpeechPlugin',
+               ['CallEnergyGate', 'OhosCallCapture', 'OhosSpeechCall', 'OhosCallRoute', 'SpeechPlugin',
+                'OhosPcmStream', 'PcmByteQueue', 'HmsTextToSpeechKit',
                 'PcmStreamTypes', 'OhosSpeechPlayback', 'HmsKits', 'HmsSpeechKit', 'HmsAsrLease']]
     reference = repo / 'app/android/app/src/main/kotlin/ai/dsh/go/SpeechPlugin.kt'
     # Android is a read-only method-name oracle for speech-call-channel.test.mjs.
@@ -67,7 +68,7 @@ def main():
               'counts': counts, 'mode': args.mode, 'elapsedSeconds': time.monotonic() - started,
               'inputsUnchanged': before == after, 'nodeSha256': sha(node), 'typescriptVersion': version,
               'typescriptSourceSha256': sha(prefix / 'node_modules/typescript/lib/typescript.js'),
-              'scope': 'Actual ETS call energy/capture/control/tap/channel and existing dictation; explicit OS/Flutter/PCM-renderer boundaries',
+              'scope': 'Actual ETS call energy/capture/control/tap/channel, system-TTS app-route and existing dictation; explicit OS/Flutter boundaries',
               'notRun': ['HarmonyOS SDK/HAP', 'physical microphone/AEC', 'Silero/smart-turn',
                          'device ASR accuracy', 'actual speaker route or screen power'],
               'requiresCumulativePlaybackGate': 'pcm-stream-native plus speech-channel plain/jitless'}

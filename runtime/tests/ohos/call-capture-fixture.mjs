@@ -20,6 +20,15 @@ export function captureFixture(options = {}) {
   const cache = new Map(), capturers = [], events = [], api = [], screenCalls=[],channels=[],streams=[];
   let inRead = false, current = true, time = 0, released = 0;
   const check = name => { assert(!inRead, 'audio API inside readData: ' + name); api.push(name); };
+  const session = { active: false, device: 1000, devices: [], callbacks: new Set(),
+    isAudioSessionActivated() { return this.active; }, getDefaultOutputDevice() { return this.device; },
+    on(name, callback) { this.callbacks.add(callback); }, off(name, callback) { this.callbacks.delete(callback); },
+    async activateAudioSession() { this.active = true; }, async deactivateAudioSession() { this.active = false; },
+    async setDefaultOutputDevice(device) {
+      if (device !== 1000) await options.route?.(device === 2);
+      this.device = device; this.devices.push(device);
+    }
+  };
   class Capturer {
     constructor(config) { this.config = config; this.listeners = new Map(); this.releases = 0; this.stops = 0; capturers.push(this); }
     getStreamInfoSync() { check('format'); return { samplingRate:16000, channels:1, sampleFormat:1, encodingType:0, ...options.format }; }
@@ -39,6 +48,7 @@ export function captureFixture(options = {}) {
     interrupt(hintType = 3) { this.listeners.get('audioInterrupt')?.({ hintType }); }
   }
   const audio = {
+    getAudioManager:()=>({getSessionManager:()=>session}),AudioConcurrencyMode:{CONCURRENCY_DEFAULT:0},DeviceType:{EARPIECE:1,SPEAKER:2,DEFAULT:1000},
     AudioSamplingRate:{SAMPLE_RATE_16000:16000}, AudioChannel:{CHANNEL_1:1},
     AudioSampleFormat:{SAMPLE_FORMAT_S16LE:1}, AudioEncodingType:{ENCODING_TYPE_RAW:0},
     SourceType:{SOURCE_TYPE_VOICE_COMMUNICATION:7}, InterruptHint:{INTERRUPT_HINT_STOP:3,INTERRUPT_HINT_PAUSE:2,INTERRUPT_HINT_MUTE:6},
@@ -116,5 +126,5 @@ export function captureFixture(options = {}) {
     }
     return {plugin,engine,ability,request,background(){Plugin.onBackground(ui);},foreground(){Plugin.onForeground(ui);}};
   }
-  return {load,make,call,speech,screen,screenCalls,channels,streams,context:{applicationInfo:{accessTokenId:321}},capturers,events,api,retire(){current=false;},get released(){return released;}};
+  return {load,make,call,speech,screen,screenCalls,channels,streams,session,context:{applicationInfo:{accessTokenId:321}},capturers,events,api,retire(){current=false;},get released(){return released;}};
 }

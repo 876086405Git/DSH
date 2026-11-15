@@ -35,6 +35,7 @@ for path in sorted((client / 'lib').rglob('*.dart')):
 
 app_root = (args.app_after or reference).resolve()
 app_files = ['speech/' + name for name in ['speech_audio.dart', 'speech_out.dart', 'deepseek_speech.dart']]
+app_files.append('state/android_features.dart')
 if (app_root / 'app/lib/speech/speech_compat.dart').exists():
     app_files.append('speech/speech_compat.dart')
 if args.real_companion:

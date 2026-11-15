@@ -60,7 +60,7 @@ def main():
             'pcm-audio-contract.d.ts', 'speech-flutter-contract.d.ts')]
         products += [repo / 'app/ohos/entry/src/main/ets/plugins' / (name + '.ets')
                      for name in ('SpeechPlugin', 'OhosSpeechPlayback', 'OhosPcmStream', 'PcmStreamTypes', 'PcmByteQueue',
-                                  'OhosSpeechCall', 'OhosCallCapture', 'CallEnergyGate', 'VoicePcmTap',
+                                  'OhosSpeechCall', 'OhosCallRoute', 'OhosCallCapture', 'CallEnergyGate', 'VoicePcmTap',
                                   'VoicePcm', 'VoiceTypes', 'VoiceMicLease')]
         drivers += [repo / 'runtime/tests/ohos/call-platform-contract.d.ts']
     sources = sorted(set(drivers + products))

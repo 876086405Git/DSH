@@ -11,6 +11,13 @@ import { PcmStreamBackend, PcmStreamListener, PcmStreamOptions, PcmTerminalKind 
 import { OhosSpeechCall } from './OhosSpeechCall';
 import { CallCaptureListener } from './OhosCallCapture';
 
+// One pending callStart's choices, including changes before a capture owner exists.
+class SpeechCallStart {
+  muted: boolean;
+  pause: string;
+  constructor(muted: boolean, pause: string) { this.muted = muted; this.pause = pause; }
+}
+
 class SpeechOpenRequest {
   active: boolean = true;
   call: boolean = false;
@@ -53,6 +60,7 @@ export default class SpeechPlugin implements FlutterPlugin, AbilityAware {
   private owner: SpeechStreamOwner | null = null;
   private calls: OhosSpeechCall | null = null;
   private callGeneration: number = 0;
+  private callStartRequest: SpeechCallStart | null = null;
   private externalPlaying: boolean = false;
 
   getUniqueClassName(): string { return 'DshSpeechPlugin'; }
@@ -187,7 +195,7 @@ export default class SpeechPlugin implements FlutterPlugin, AbilityAware {
     if (owner?.call) await this.closeOwner(owner);
   }
   private retire(): void {
-    this.callGeneration++; this.externalPlaying = false;
+    this.callGeneration++; this.callStartRequest = null; this.externalPlaying = false;
     this.calls?.stop().catch((): void => {}); this.stop().catch((): void => {});
   }
 
@@ -257,24 +265,38 @@ export default class SpeechPlugin implements FlutterPlugin, AbilityAware {
       const generation: number = ++this.callGeneration;
       const ability: AbilityPluginBinding | null = this.ability;
       if (!calls || !ability || !this.onScreen()) return 'unavailable';
-      this.externalPlaying = false;
-      try { await this.stopCallPlayback(); } catch (_) { return 'unavailable'; }
-      if (generation !== this.callGeneration || this.ability !== ability || !this.onScreen()) return 'unavailable';
       const pause: Any = call.argument('pause');
-      const outcome: string = await calls.start(ability.getAbility().context, call.argument('bargeIn') !== false,
+      const request: SpeechCallStart = new SpeechCallStart(call.argument('muted') === true,
         typeof pause === 'string' ? pause : 'normal');
-      if (generation !== this.callGeneration) return 'unavailable';
-      this.syncCallPlaying(); return outcome;
+      this.callStartRequest = request; this.externalPlaying = false;
+      try {
+        try { await this.stopCallPlayback(); } catch (_) { return 'unavailable'; }
+        if (generation !== this.callGeneration || this.ability !== ability || !this.onScreen()) return 'unavailable';
+        const outcome: string = await calls.start(ability.getAbility().context, call.argument('bargeIn') !== false,
+          request.pause, (): boolean => request.muted, (): string => request.pause);
+        if (generation !== this.callGeneration) return 'unavailable';
+        this.syncCallPlaying(); return outcome;
+      } finally {
+        // A retired request may settle after the following call has begun.
+        if (this.callStartRequest === request) this.callStartRequest = null;
+      }
     }
     if (call.method === 'callStop') {
-      this.callGeneration++; this.externalPlaying = false;
+      this.callGeneration++; this.callStartRequest = null; this.externalPlaying = false;
       try { await calls?.stop(); } finally { await this.stopCallPlayback(); }
       return null;
     }
-    if (call.method === 'callMute') { calls?.mute(call.argument('on') === true); return null; }
+    if (call.method === 'callMute') {
+      const on: boolean = call.argument('on') === true;
+      if (this.callStartRequest) this.callStartRequest.muted = on;
+      calls?.mute(on); return null;
+    }
     if (call.method === 'callBargeIn') { calls?.bargeIn(call.argument('on') !== false); return null; }
     if (call.method === 'callPause') {
-      const pause: Any = call.argument('pause'); calls?.pause(typeof pause === 'string' ? pause : 'normal'); return null;
+      const pause: Any = call.argument('pause');
+      const value: string = typeof pause === 'string' ? pause : 'normal';
+      if (this.callStartRequest) this.callStartRequest.pause = value;
+      calls?.pause(value); return null;
     }
     if (call.method === 'callPlaying') { this.externalPlaying = call.argument('on') === true; this.syncCallPlaying(); return null; }
     if (call.method === 'callSpeaker') return calls ? await calls.setSpeaker(call.argument('on') !== false) : false;

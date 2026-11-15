@@ -5,6 +5,14 @@
   },
   "b452": {
     "app/lib/companion/companion_voice_source.dart": "cc9924c384708d37787b66a5f093ae55854252ad274e8060ba1589d20bae7562",
+    "app/lib/diagnostics/diagnostics_channel.dart": "613aaf72a0170f9c6eb47a52c315d8cd03feba15d540ed3e88eb84c990231519"
+  },
+  "1306": {
+    "app/lib/companion/companion_voice_source.dart": "cc9924c384708d37787b66a5f093ae55854252ad274e8060ba1589d20bae7562",
     "app/lib/diagnostics/diagnostics_channel.dart": "0680013a0bab6859fb91a52df5a9ffa4586978cf0e12baae7327f97440531df7"
+  },
+  "1317": {
+    "app/lib/companion/companion_voice_source.dart": "cc9924c384708d37787b66a5f093ae55854252ad274e8060ba1589d20bae7562",
+    "app/lib/diagnostics/diagnostics_channel.dart": "0ddc68345c6b271f63af885443bac7ac30963349c6626eb137b59b147219a384"
   }
 }

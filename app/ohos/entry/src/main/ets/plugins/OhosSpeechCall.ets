@@ -4,6 +4,7 @@ import abilityAccessCtrl from '@ohos.abilityAccessCtrl';
 import window from '@ohos.window';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { OhosCallCapture, CallCaptureListener } from './OhosCallCapture';
+import { OhosCallRoute } from './OhosCallRoute';
 import { VoiceMicLease, VoiceMicToken } from './VoiceMicLease';
 import { retiredVoice } from './VoiceTypes';
 
@@ -16,6 +17,8 @@ class CallOwner {
   closing?: Promise<void>;
   capture?: OhosCallCapture;
   captureStarted: boolean = false;
+  routePreparing: boolean = false;
+  route?: OhosCallRoute;
   mic?: VoiceMicToken;
   window?: window.Window;
   previousKeepScreenOn: boolean = false;
@@ -24,7 +27,7 @@ class CallOwner {
 }
 
 export class OhosSpeechCall {
-  // Includes a pending/failed window restore, after the microphone was released.
+  // Includes pending/failed route or window restoration after microphone release.
   private static physical?: OhosSpeechCall;
   private owner?: CallOwner;
   private generation: number = 0;
@@ -41,8 +44,10 @@ export class OhosSpeechCall {
   get speaker(): boolean { return this.speakerValue; }
   private live(owner: CallOwner): boolean { return owner.active && this.owner === owner && this.current(); }
 
-  async start(context: common.UIAbilityContext, bargeIn: boolean, pause: string): Promise<string> {
+  async start(context: common.UIAbilityContext, bargeIn: boolean, pause: string,
+    currentMute: () => boolean = (): boolean => false, currentPause?: () => string): Promise<string> {
     if (!this.current()) return 'unavailable';
+    this.speakerRequest++;
     const generation: number = ++this.generation;
     try {
       const previous: OhosSpeechCall | undefined = OhosSpeechCall.physical;
@@ -56,7 +61,8 @@ export class OhosSpeechCall {
       if (generation !== this.generation || !this.current()) return 'unavailable';
       if (grant !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) return 'permission';
       VoiceMicLease.assertDictationAvailable();
-      const owner: CallOwner = new CallOwner(bargeIn, pause); this.owner = owner;
+      const owner: CallOwner = new CallOwner(bargeIn, currentPause ? currentPause() : pause);
+      owner.muted = currentMute(); this.owner = owner;
       OhosSpeechCall.physical = this;
       const token: VoiceMicToken = new VoiceMicToken('dictation', (): Promise<void> => this.closeOwner(owner),
         (): boolean => !owner.active);
@@ -77,7 +83,16 @@ export class OhosSpeechCall {
           VoiceMicLease.release(token); if (owner.mic === token) owner.mic = undefined;
         });
         owner.capture = capture; capture.bargeIn = owner.bargeIn; capture.pause = owner.pause;
-        capture.muted = owner.muted; capture.setPlaying(this.playing); await capture.start();
+        capture.muted = owner.muted; capture.setPlaying(this.playing);
+        const route: OhosCallRoute = new OhosCallRoute((): boolean => this.live(owner), (): void => {
+          if (this.live(owner)) this.listener.error('audio-session');
+          this.closeOwner(owner).catch((): void => {});
+        });
+        owner.route = route; owner.routePreparing = true; await route.open(this.speakerValue);
+        owner.routePreparing = false;
+        if (!this.live(owner)) throw retiredVoice();
+        // The documented session ordering applies to recording as well as playback.
+        await capture.start();
         if (!this.live(owner)) throw retiredVoice();
         owner.captureStarted = true;
         const target: window.Window = await window.getLastWindow(context);
@@ -92,7 +107,7 @@ export class OhosSpeechCall {
       try { await owner.preparing; return 'ok'; }
       catch (_) {
         try { await this.closeOwner(owner); } catch (_) {}
-        return generation === this.generation && this.current() && !owner.captureStarted ? 'microphone' : 'unavailable';
+        return generation === this.generation && this.current() && !owner.captureStarted && !owner.routePreparing ? 'microphone' : 'unavailable';
       }
     } catch (_) { return generation === this.generation && this.current() ? 'microphone' : 'unavailable'; }
   }
@@ -113,16 +128,19 @@ export class OhosSpeechCall {
   async setSpeaker(on: boolean): Promise<boolean> {
     if (!this.current()) throw retiredVoice();
     const request: number = ++this.speakerRequest;
-    await this.route(on);
+    const owner: CallOwner | undefined = this.owner;
+    if (owner && !this.live(owner)) throw retiredVoice();
+    if (owner?.route) await owner.route.setSpeaker(on);
+    else await this.route(on);
     // A slow old renderer can finish after stop and a newer accepted preference.
     // Reject the old method reply as well: Dart writes its Boolean after await.
-    if (request !== this.speakerRequest || !this.current()) throw retiredVoice();
-    // With no renderer the callback stores a preference for the next call stream;
-    // this Boolean is not a claim that a physical speaker was selected.
+    if (request !== this.speakerRequest || !this.current() || (owner && !this.live(owner))) throw retiredVoice();
+    // An active call has requested the SDK default for PCM and system TTS.
+    // Without a call, keep the existing preference for the next call stream.
     this.speakerValue = on; return on;
   }
   async stop(): Promise<void> {
-    this.generation++; this.playing = false;
+    this.generation++; this.speakerRequest++; this.playing = false;
     const owner: CallOwner | undefined = this.owner;
     if (!owner) return;
     await this.closeOwner(owner);
@@ -139,6 +157,7 @@ export class OhosSpeechCall {
         try { if (owner.capture) await owner.capture.stop(); } catch (error) { failure = error as Error; }
         try { await owner.preparing; } catch (_) {}
         if (!owner.capture && owner.mic) { VoiceMicLease.release(owner.mic); owner.mic = undefined; }
+        try { if (owner.route) await owner.route.close(); } catch (error) { failure = error as Error; }
         try {
           if (owner.keepScreenAttempted && owner.window) {
             await owner.window.setWindowKeepScreenOn(owner.previousKeepScreenOn); owner.keepScreenAttempted = false;

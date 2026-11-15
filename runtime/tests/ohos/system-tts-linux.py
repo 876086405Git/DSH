@@ -54,7 +54,7 @@ def main():
         sources.append(repo / 'runtime/tests/ohos/speech-flutter-contract.d.ts')
         sources.append(repo / 'runtime/tests/ohos/call-platform-contract.d.ts')
         sources += [product / 'app/ohos/entry/src/main/ets/plugins' / (name + '.ets') for name in
-                    ('OhosSpeechCall', 'OhosCallCapture', 'CallEnergyGate', 'VoicePcmTap', 'VoicePcm', 'VoiceTypes', 'VoiceMicLease')]
+                    ('OhosSpeechCall', 'OhosCallRoute', 'OhosCallCapture', 'CallEnergyGate', 'VoicePcmTap', 'VoicePcm', 'VoiceTypes', 'VoiceMicLease')]
     snapshot = lambda: {str(path): {'bytes': path.stat().st_size, 'sha256': sha(path)} for path in sources}
     before = snapshot(); save(out / 'sources-before.json', before)
     save(out / 'command.json', {'argv': argv, 'cwd': str(repo), 'env': env})

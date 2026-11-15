@@ -77,6 +77,22 @@ declare module '@ohos.multimedia.audio' {
       release(): Promise<void>;
     }
     function createAudioCapturer(options: AudioCapturerOptions): Promise<AudioCapturer>;
+    // AudioSessionManager API12 activation and API20 default output, official
+    // arkts-apis-audio-audiosessionmanager; explicit host fixture, not SDK.
+    enum AudioConcurrencyMode { CONCURRENCY_DEFAULT = 0 }
+    interface AudioSessionStrategy { concurrencyMode: AudioConcurrencyMode; }
+    interface AudioSessionDeactivatedEvent { reason: number; }
+    interface AudioSessionManager {
+      isAudioSessionActivated(): boolean;
+      getDefaultOutputDevice(): DeviceType;
+      setDefaultOutputDevice(device: DeviceType): Promise<void>;
+      activateAudioSession(strategy: AudioSessionStrategy): Promise<void>;
+      deactivateAudioSession(): Promise<void>;
+      on(type: 'audioSessionDeactivated', callback: (event: AudioSessionDeactivatedEvent) => void): void;
+      off(type: 'audioSessionDeactivated', callback?: (event: AudioSessionDeactivatedEvent) => void): void;
+    }
+    interface AudioManager { getSessionManager(): AudioSessionManager; }
+    function getAudioManager(): AudioManager;
 
   }
   export default audio;

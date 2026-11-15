@@ -1,4 +1,4 @@
-// Compile and execute the known a836 and b452 module/type contexts, with
+// Compile and execute the pinned a836, b452 and 1317 module/type contexts, with
 // original companion settings and diagnostics methods in each source tree.
 import 'dart:async';
 import 'dart:convert';
@@ -58,7 +58,7 @@ Future<void> main(List<String> args) async {
     'voices': speech.voices, 'enumValues': CompanionVoiceSource.values.map((x) => x.name).toList(), 'calls': calls}));
   diagnostics.clear();
   await const DiagnosticsChannel().recordVoiceStage('call_started', backend: 'cloud');
-  final mainContext = args.single == 'b452';
+  final mainContext = args.single == 'b452' || args.single == '1317';
   final memberPriority = diagnostics.length == (mainContext ? 1 : 0);
   print(jsonEncode({'name': 'real diagnostics instance member precedes extension', 'pass': memberPriority,
     'context': args.single, 'callStartedRecorded': diagnostics.length}));

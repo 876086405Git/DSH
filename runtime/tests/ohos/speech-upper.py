@@ -58,7 +58,7 @@ def main():
         context = next((name for name, files in contexts.items()
                         if all(sha(source / path) == expected for path, expected in files.items())), None)
         if context is None:
-            raise ValueError('companion/diagnostics source context is not pinned a836 or b452')
+            raise ValueError('companion/diagnostics source context is not pinned')
         contract = json.loads((fixture / 'integration-inputs.json').read_text())
         for name, expected in contract['native'].items():
             if sha(source / name) != expected:
@@ -93,6 +93,7 @@ def main():
         tracked = [source / path for path in contract['native']]
         tracked += [source / 'runtime/tests/ohos/speech-upper.py', source / 'tooling/ohos/run-gates.py']
         tracked += [args.bridge_source.resolve(), source / 'app/pubspec.lock']
+        tracked.append(source / 'app/lib/state/android_features.dart')
         for directory in ['app/lib/speech', 'packages/dsh_client/lib',
                           'app/lib/companion', 'app/lib/diagnostics', 'runtime/tests/ohos/speech-upper']:
             tracked += [path for path in (source / directory).rglob('*') if path.is_file()]

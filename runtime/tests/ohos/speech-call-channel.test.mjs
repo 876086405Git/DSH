@@ -20,7 +20,7 @@ test('speaker preference reaches future call renderer and active SDK rejection i
   assert.deepEqual(await s.request('callSpeaker',{on:false}),{value:false});
   assert.deepEqual(await s.request('open',{id:'r',rate:24000,call:true,levels:true}),{value:true});
   assert.equal(f.streams[0].config.speaker,false);
-  assert.deepEqual(await s.request('callSpeaker',{on:true}),{value:true});assert.deepEqual(f.streams[0].speakers,[true]);
+  assert.deepEqual(await s.request('callSpeaker',{on:true}),{value:true});assert.equal(f.session.devices.at(-1),2);
   options.route=()=>{throw Error('route');};assert.equal((await s.request('callSpeaker',{on:false})).error,'speech-output');
   await s.request('callStop');
 });
@@ -30,9 +30,9 @@ test('late speaker route cannot overwrite newer preference or return stale succe
   const f=captureFixture(options),s=f.speech();await s.request('callStart',{pause:'normal'});
   await s.request('open',{id:'old',rate:24000,call:true});
   const old=s.request('callSpeaker',{on:false});await settle();
-  const stop=s.request('stop');await settle(); // real handler retires owner while native close waits for route
-  assert.deepEqual(await s.request('callSpeaker',{on:true}),{value:true});
-  route.resolve();assert.equal((await old).error,'speech-output');await stop;
+  const stop=s.request('stop');await settle(); // playback may stop while the call's app route is pending
+  const latest=s.request('callSpeaker',{on:true});await settle();
+  route.resolve();assert.equal((await old).error,'speech-output');assert.deepEqual(await latest,{value:true});await stop;
   assert.deepEqual(await s.request('open',{id:'new',rate:24000,call:true}),{value:true});
   assert.equal(f.streams[1].config.speaker,true);await s.request('callStop');
 });

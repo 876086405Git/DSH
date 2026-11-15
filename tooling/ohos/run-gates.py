@@ -1476,8 +1476,8 @@ def main():
         g.run('speech-channel-' + mode, lambda m=mode: g.py(rt + 'speech-channel-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('speech-channel-' + m)), needs=('tools',), timeout=180, tests=[rt + 'speech-channel.test.mjs', rt + 'speech-channel-pcm.test.mjs', rt + 'entry-ability-fixture.test.mjs'])
     for mode in ['plain', 'jitless']:
         g.run('call-capture-' + mode, lambda m=mode: g.py(rt + 'call-capture-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('call-capture-' + m)), needs=('tools',), timeout=180,
-              tests=[rt + name for name in ['call-capture.test.mjs', 'call-control.test.mjs', 'voice-pcm-tap.test.mjs', 'speech-call-channel.test.mjs', 'voice-channel.test.mjs']],
-              scope='Actual ETS energy fallback, capture/control, PCM tap and dictation regression; explicit OS boundaries; no SDK or device claim')
+              tests=[rt + name for name in ['call-capture.test.mjs', 'call-control.test.mjs', 'voice-pcm-tap.test.mjs', 'speech-call-channel.test.mjs', 'voice-channel.test.mjs', 'call-route.test.mjs', 'call-start-mute.test.mjs', 'call-start-pause.test.mjs']],
+              scope='Actual ETS energy fallback, capture/control including startup mute and pause, system-TTS app route, PCM tap and dictation regression; explicit OS boundaries; no SDK or device claim')
         g.run('system-tts-' + mode, lambda m=mode: g.py(rt + 'system-tts-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('system-tts-' + m)), needs=('tools',), timeout=180, tests=[rt + 'system-tts.test.mjs'], scope='Actual EntryAbility and system TTS/PCM channel bodies; explicit HMS/Flutter/AudioRenderer boundaries; not SDK or device validation')
     tooling = ['managed-skill', 'native-host-lazy', 'runtime-archive', 'runtime-channel', 'linux-control', 'lifecycle-host', 'web-files', 'transient-task', 'runtime-recovery', 'recovery-storage', 'native-recovery-gate', 'last-known-good']
     g.node_tests('ets-runtime-tooling', [tools + n + '.test.mjs' for n in tooling], needs=('native-zlib-build', 'prepared-inputs'), extra=lambda: {'OHOS_TEST_ZLIB_ADDON': str(o / 'zlib.node'), 'OHOS_INSTALL_RECORD_WIRE': str(o / 'install-record-wire.json')}, timeout=240)
@@ -1565,6 +1565,20 @@ def main():
           ['host-speech-tests.dart', 'host-lifecycle-tests.dart', 'host-http-tests.dart', 'host-preview-tests.dart',
            'host-compat-tests.dart', 'host-route-tests.dart', 'host-system-tests.dart', 'host-native-integration.dart']],
           scope='Actual Dart upper/HTTP + fixed main speech.js + frozen 1216 ETS; explicit framework, local provider and AudioRenderer OS boundaries; no Flutter engine, SDK, device, UI enablement or paid API claim')
+    g.run('call-route-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
+          '../runtime/tests/ohos/audio-route-data_test.dart', '../runtime/tests/ohos/call-start-mute-data_test.dart',
+          '../runtime/tests/ohos/call-start-mute-integration_test.dart', '../runtime/tests/ohos/call-start-pause-integration_test.dart',
+          'test/speech/voice_call_test.dart', 'test/speech/speech_out_test.dart'),
+          cwd=g.flutter_source / 'app', env=lambda: {**g.flutter_env, 'NODE': str(node()), 'OHOS_TYPESCRIPT_PREFIX': str(p('typescript_prefix'))},
+          needs=('tools', 'flutter-input-identity',), timeout=180,
+          tests=[rt + 'audio-route-data_test.dart', rt + 'call-start-mute-data_test.dart', rt + 'call-start-mute-integration_test.dart',
+                 rt + 'call-start-mute-rpc.mjs', rt + 'call-start-pause-integration_test.dart', rt + 'call-start-pause-rpc.mjs',
+                 'app/test/speech/voice_call_test.dart', 'app/test/speech/speech_out_test.dart'],
+          scope='Actual Flutter OH call-route and preparing mute/pause consumers; preparation tests call actual ETS through finite local RPC with OS audio/permission boundaries; unchanged Android controls; no SDK/device claim')
+    g.run('call-route-dart-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/speech/speech_audio.dart', 'lib/speech/call/voice_call.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
+          tests=['app/lib/speech/speech_audio.dart', 'app/lib/speech/call/voice_call.dart'],
+          scope='Actual Flutter analyzer for the two call-route data files; no UI or SDK claim')
     g.run('system-asr-dart', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1',
           '../runtime/tests/ohos/system-asr-data_test.dart', 'test/voice/streaming_asr_test.dart', 'test/voice/streaming_pcm_test.dart',
           'test/speech/voice_call_test.dart', 'test/speech/turn_words_test.dart', 'test/voice/native_trial_test.dart'),
