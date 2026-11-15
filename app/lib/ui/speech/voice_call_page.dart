@@ -20,6 +20,7 @@ import '../../companion/companion_voice.dart';
 import '../../companion/companion_voice_source.dart';
 import '../../l10n/l10n.dart';
 import '../../performance/performance_state.dart';
+import '../../state/android_features.dart' show operatingSystemProvider;
 import '../../speech/call/chat_call.dart';
 import '../../speech/call/thinking_cue.dart';
 import '../../speech/call/voice_call.dart';
@@ -116,6 +117,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// The system asks for less motion (read each build): the light holds still
   /// and the page comes in without its staggered rise.
   bool _still = false;
+  bool _lean = false;
 
   @override
   void initState() {
@@ -367,7 +369,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// listening to the person, speaking with her voice, turning while it thinks; or the glass orb.
   Widget _light(CallVisual visual, CallPalette palette, bool dark, double size) {
     if (visual == CallVisual.glass) {
-      return CallLight(key: const ValueKey('glass'), scene: _scene, palette: palette, size: size);
+      return CallLight(key: const ValueKey('glass'), scene: _scene, palette: palette, size: size, lean: _lean);
     }
     final phase = _call.phase;
     return VoiceRing(
@@ -382,6 +384,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
       size: size * 0.82,
       theme: dark ? VoiceRingTheme.dark : VoiceRingTheme.light,
       paused: phase == CallPhase.ended,
+      lean: _lean,
       level: () => switch (_call.phase) {
         CallPhase.hearing when !_call.muted => VoiceRingLevel.mic(_call.micLevel),
         CallPhase.speaking => VoiceRingLevel.playback(_call.voiceLevel),
@@ -458,7 +461,12 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final theme = Theme.of(context);
     _still = AppMotion.reduced(context);
     final settings = ref.watch(callSettingsProvider);
-    final blur = ref.watch(performanceDefaultsProvider).blur;
+    final performance = ref.watch(performanceDefaultsProvider);
+    final blur = performance.blur;
+    // HarmonyOS's renderer, or the light mode, can't redo wide blurs every frame: the light,
+    // the screen's edge and the keys over a moving field are drawn without them there.
+    final lean = _lean = ref.watch(operatingSystemProvider) == 'ohos' || performance.lightweight;
+    final keyBlur = blur && !lean;
     final ended = _call.phase == CallPhase.ended;
     final image =
         settings.backdrop == CallBackdrop.image && settings.image.isNotEmpty && File(settings.image).existsSync()
@@ -491,6 +499,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
           backgroundColor: palette.field,
           body: CallClock(
             onTick: _tick,
+            lean: lean,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -523,7 +532,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
                   },
                 ),
                 // The screen's edge glows only with the glass orb; the ring is light enough on its own.
-                if (settings.visual == CallVisual.glass) CallEdgeGlow(scene: _scene, palette: palette),
+                if (settings.visual == CallVisual.glass) CallEdgeGlow(scene: _scene, palette: palette, lean: lean),
                 if (her)
                   // Her feet fade into the water so the words below stay readable.
                   const IgnorePointer(
@@ -547,7 +556,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
                           title: widget.title,
                           since: _since,
                           live: !ended && _since != null,
-                          blur: blur,
+                          blur: keyBlur,
                           onTranscript: _openTranscript,
                           onBackdrop: ended
                               ? null
@@ -643,7 +652,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
                               icon: _call.muted ? AppIcons.micMuted : AppIcons.voice,
                               label: _call.muted ? l10n.speechCallUnmute : l10n.speechCallMute,
                               on: _call.muted,
-                              blur: blur,
+                              blur: keyBlur,
                               onTap: ended ? null : () => _call.setMuted(!_call.muted),
                             ),
                             distance: 28,
@@ -665,7 +674,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
                               icon: _call.speaker ? AppIcons.readAloud : AppIcons.earpiece,
                               label: _call.speaker ? l10n.speechCallSpeakerOn : l10n.speechCallEarpiece,
                               on: _call.speaker,
-                              blur: blur,
+                              blur: keyBlur,
                               onTap: ended ? null : () => unawaited(_call.setSpeaker(!_call.speaker)),
                             ),
                             distance: 28,

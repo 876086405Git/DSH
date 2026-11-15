@@ -271,26 +271,31 @@ class _FieldPainter extends CustomPainter {
 
 /// The sphere of glass. Its resting diameter is [size] × 0.5; the rest is its glow.
 class CallLight extends StatelessWidget {
-  const CallLight({super.key, required this.scene, required this.palette, this.size = 300});
+  const CallLight({super.key, required this.scene, required this.palette, this.size = 300, this.lean = false});
 
   final CallScene scene;
   final CallPalette palette;
   final double size;
 
+  /// The halo as a graded disc instead of a blur: where a renderer can't
+  /// afford a wide blur every frame (HarmonyOS, the light performance mode).
+  final bool lean;
+
   @override
   Widget build(BuildContext context) => RepaintBoundary(
     child: SizedBox.square(
       dimension: size,
-      child: CustomPaint(painter: _GlassPainter(scene, palette)),
+      child: CustomPaint(painter: _GlassPainter(scene, palette, lean)),
     ),
   );
 }
 
 class _GlassPainter extends CustomPainter {
-  _GlassPainter(this.scene, this.palette) : super(repaint: scene);
+  _GlassPainter(this.scene, this.palette, this.lean) : super(repaint: scene);
 
   final CallScene scene;
   final CallPalette palette;
+  final bool lean;
 
   // How each light inside wanders, and how big it is.
   static const _paths = [
@@ -314,13 +319,35 @@ class _GlassPainter extends CustomPainter {
     final disc = Rect.fromCircle(center: center, radius: r);
 
     // Outside: a soft halo of the theme's colour.
-    canvas.drawCircle(
-      center,
-      r * 1.02,
-      Paint()
-        ..color = tones[2].withValues(alpha: ((light ? 0.28 : 0.18) + scene.glow * 0.45) * fade)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.45),
-    );
+    final halo = tones[2].withValues(alpha: ((light ? 0.28 : 0.18) + scene.glow * 0.45) * fade);
+    if (lean) {
+      // A disc of r·1.02 blurred by σ = r·0.45, read off the blur's own falloff:
+      // full well inside, half at the edge, gone 2.5σ out.
+      final outer = r * 2.145;
+      canvas.drawCircle(
+        center,
+        outer,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              halo,
+              halo.withValues(alpha: halo.a * 0.85),
+              halo.withValues(alpha: halo.a * 0.5),
+              halo.withValues(alpha: halo.a * 0.12),
+              halo.withValues(alpha: 0),
+            ],
+            stops: const [0, 0.266, 0.476, 0.727, 1],
+          ).createShader(Rect.fromCircle(center: center, radius: outer)),
+      );
+    } else {
+      canvas.drawCircle(
+        center,
+        r * 1.02,
+        Paint()
+          ..color = halo
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.45),
+      );
+    }
 
     canvas.save();
     canvas.clipPath(Path()..addOval(disc));
@@ -399,16 +426,19 @@ class _GlassPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GlassPainter old) => old.palette != palette;
+  bool shouldRepaint(_GlassPainter old) => old.palette != palette || old.lean != lean;
 }
 
 /// The theme's colour running faintly round the edge of the screen, as Siri's:
 /// barely there while the call waits, a little stronger with a voice.
 class CallEdgeGlow extends StatelessWidget {
-  const CallEdgeGlow({super.key, required this.scene, required this.palette, this.radius = 44});
+  const CallEdgeGlow({super.key, required this.scene, required this.palette, this.radius = 44, this.lean = false});
 
   final CallScene scene;
   final CallPalette palette;
+
+  /// Widening, fading strokes instead of one blurred one (see [CallLight.lean]).
+  final bool lean;
 
   /// Follows the screen's corners.
   final double radius;
@@ -416,17 +446,18 @@ class CallEdgeGlow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IgnorePointer(
     child: RepaintBoundary(
-      child: CustomPaint(painter: _EdgePainter(scene, palette, radius), child: const SizedBox.expand()),
+      child: CustomPaint(painter: _EdgePainter(scene, palette, radius, lean), child: const SizedBox.expand()),
     ),
   );
 }
 
 class _EdgePainter extends CustomPainter {
-  _EdgePainter(this.scene, this.palette, this.radius) : super(repaint: scene);
+  _EdgePainter(this.scene, this.palette, this.radius, this.lean) : super(repaint: scene);
 
   final CallScene scene;
   final CallPalette palette;
   final double radius;
+  final bool lean;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -444,34 +475,64 @@ class _EdgePainter extends CustomPainter {
       colors: [...palette.tones, palette.tones.first],
       transform: GradientRotation(scene.flow * 0.5),
     ).createShader(Offset.zero & size);
+    final width = 10 + scene.energy * 6 + scene.accent * 5;
+    final alpha = strength.clamp(0.0, 1.0);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..shader = shader;
+    if (lean) {
+      // The 16 blur read as eight nested strokes, each 6 wider on either side and
+      // carrying the Gaussian's share between its edge and the next one's.
+      double falloff(double d) => math.exp(-d * d / (2 * 16 * 16));
+      final peak = alpha * math.min(1.0, width / 40);
+      for (var k = 0; k < 8; k++) {
+        canvas.drawRRect(
+          frame,
+          paint
+            ..strokeWidth = width + 12.0 * k
+            ..color = Colors.white.withValues(alpha: peak * (falloff(6.0 * k) - falloff(6.0 * k + 6))),
+        );
+      }
+      return;
+    }
     canvas.drawRRect(
       frame,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 10 + scene.energy * 6 + scene.accent * 5
-        ..shader = shader
-        ..color = Colors.white.withValues(alpha: strength.clamp(0.0, 1.0))
+      paint
+        ..strokeWidth = width
+        ..color = Colors.white.withValues(alpha: alpha)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
     );
   }
 
   @override
-  bool shouldRepaint(_EdgePainter old) => old.radius != radius || old.palette != palette;
+  bool shouldRepaint(_EdgePainter old) => old.radius != radius || old.palette != palette || old.lean != lean;
 }
 
 /// Drives a [CallScene] from a ticker for as long as it is mounted.
 class CallClock extends StatefulWidget {
-  const CallClock({super.key, required this.onTick, required this.child});
+  const CallClock({super.key, required this.onTick, required this.child, this.lean = false});
 
   final void Function(double seconds) onTick;
   final Widget child;
+
+  /// At most 60 ticks a second, as the voice ring already keeps: a 120 Hz
+  /// screen would otherwise repaint the whole page twice as often.
+  final bool lean;
 
   @override
   State<CallClock> createState() => _CallClockState();
 }
 
 class _CallClockState extends State<CallClock> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker((elapsed) => widget.onTick(elapsed.inMicroseconds / 1e6));
+  late final Ticker _ticker = createTicker(_tick);
+  double? _last;
+
+  void _tick(Duration elapsed) {
+    final now = elapsed.inMicroseconds / 1e6;
+    if (widget.lean && _last != null && now - _last! < 1 / 62) return;
+    _last = now;
+    widget.onTick(now);
+  }
 
   @override
   void initState() {

@@ -14,6 +14,8 @@ import 'package:dsh_app/ui/speech/call/call_backdrop.dart';
 import 'package:dsh_app/ui/speech/call/call_parts.dart';
 import 'package:dsh_app/ui/speech/call/call_visuals.dart';
 import 'package:dsh_app/ui/speech/voice_call_page.dart';
+import 'package:dsh_app/state/android_features.dart' show operatingSystemProvider;
+import 'package:dsh_app/ui/speech/call/call_visuals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -235,6 +237,18 @@ void main() {
     }
     expect(find.text('还没开口。你们说的话会一句句记在这里。'), findsOneWidget);
   });
+
+  for (final (os, lean) in [('android', false), ('ohos', true)]) {
+    testWidgets('on $os the glass light ${lean ? 'is drawn without wide blurs' : 'keeps its blurs'}', (tester) async {
+      await pumpCall(tester, extra: [operatingSystemProvider.overrideWithValue(os)]);
+      expect(tester.widget<CallLight>(find.byType(CallLight)).lean, lean);
+      expect(tester.widget<CallEdgeGlow>(find.byType(CallEdgeGlow)).lean, lean);
+      // The keys over the moving field lose their frosting only when lean.
+      expect(find.byType(BackdropFilter), lean ? findsNothing : findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('call-hang-up')));
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
 
   testWidgets('mute and loudspeaker keys switch and say so', (tester) async {
     final (audio, _) = await pumpCall(tester);

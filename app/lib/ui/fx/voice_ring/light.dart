@@ -257,7 +257,15 @@ class LightPainter {
     _forTint = tint;
   }
 
-  void paint(Canvas canvas, OrbFrame frame, {required bool dark, required Rect bounds, Rgb? tint, GlowFollower? glow}) {
+  void paint(
+    Canvas canvas,
+    OrbFrame frame, {
+    required bool dark,
+    required Rect bounds,
+    Rgb? tint,
+    GlowFollower? glow,
+    bool soft = true,
+  }) {
     final light = frame.light!;
     _resolve(light.stops, dark, tint, glow);
     // the conic spectrum, turned to the light's angle about its centre
@@ -313,8 +321,9 @@ class LightPainter {
       }
     }
 
-    // the glow, on its own layer to be softened
-    canvas.saveLayer(bounds, _layer..blendMode = op);
+    // the glow, on its own layer to be softened; a lean ring lays it down
+    // as it is, its wide faint strokes soft enough without the blur
+    if (soft) canvas.saveLayer(bounds, _layer..blendMode = op);
     // 1 · halo: very wide, very faint, shared out between the rings so the
     // total stays the same however many there are
     final haloK = light.halo * i * (dark ? 1 : 0.2) / count;
@@ -327,7 +336,7 @@ class LightPainter {
     for (final (wk, ak) in const [(16.0, 0.05), (8.0, 0.11), (4.0, 0.2)]) {
       pass((w) => w * wk * _bloomSize, (a) => ak * bloomK * a);
     }
-    canvas.restore();
+    if (soft) canvas.restore();
 
     // 3 · chromatic fringes, scaled about the centre (dark substrates only)
     if (dark && light.fringe > 0) {
