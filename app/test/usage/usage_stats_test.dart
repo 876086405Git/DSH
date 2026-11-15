@@ -4,6 +4,7 @@
 // install id every 90 days; 3 quiet tries a day; a body with exactly the
 // contract's fields; and the counts coming from where they happen.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/phone/phone_channel.dart';
@@ -75,6 +76,19 @@ class _RefusedThenOffline extends FakeUsageHttp {
   Future<int> post(Uri url, String json, {Duration timeout = const Duration(seconds: 10)}) {
     offline = requests.isNotEmpty;
     return super.post(url, json, timeout: timeout);
+  }
+}
+
+/// Keeps the first answer until the test gives it.
+class _FirstHeld extends FakeUsageHttp {
+  final first = Completer<int>();
+
+  @override
+  Future<int> post(Uri url, String json, {Duration timeout = const Duration(seconds: 10)}) {
+    if (requests.isNotEmpty) return super.post(url, json, timeout: timeout);
+    urls.add(url);
+    requests.add(jsonDecode(json) as Map<String, Object?>);
+    return first.future;
   }
 }
 
@@ -362,6 +376,20 @@ void main() {
       [for (final r in http.requests) '${r['day']} v${r['v']}'],
       ['2026-10-26 v3', '2026-10-26 v2', '2026-10-27 v2'],
     );
+  });
+
+  test('off and on again while a v3 send waits: its 400 sends nothing from before again', () async {
+    final held = _FirstHeld();
+    http = held;
+    final ledger = UsageLedger()..touch(DateTime(2026, 10, 26, 9));
+    final c = await start(prefs: {...noticed, UsageStatsController.daysKey: ledger.encode()}, phoneFacts: phone);
+    expect(held.requests, hasLength(1));
+    await c.usage.setEnabled(false);
+    await c.usage.setEnabled(true);
+    await settle();
+    held.first.complete(400);
+    await settle();
+    expect(held.requests, hasLength(1), reason: 'the old id and day are gone');
   });
 
   test('no answer to the lower contract is a failed send, not a refusal', () async {
