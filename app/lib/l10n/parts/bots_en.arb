@@ -324,6 +324,8 @@
   "botsPetSource": "From DSH-TUI",
   "botsPetImport": "Import",
   "botsPetImportHint": "Bring your own pixel pet: a zip with pack.json and PNG frame sheets; the format is in docs/design/pets.md in the repository. Long-press an imported pet to delete it.",
+  "botsPetMake": "Make a pet with AI",
+  "botsPetMakeSubtitle": "Turn GIFs, stickers or a theme into a pet pack",
   "botsPetImportDone": "{name} is here",
   "botsPetCodexTitle": "{name} was converted from a Codex pet",
   "botsPetCodexBody": "Most of it carries over as it was. A few things differ:",

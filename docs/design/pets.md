@@ -387,28 +387,33 @@ Clawd 主题 zip 的导入走宠物包转换工具（`app/tool/make_pet_pack.py`
 - **编号只在基础名存在时合并。** 孤立出现的 `tickle2`（没有 `tickle`）保留为独立反应名，不被静默丢掉，误编号的包能看出问题。
 - **缺省字段有确定回退。** 缺状态播 idle、缺 `tiers` 不分档、缺 `reactions` 键跳过该手势，见 §3.2 末尾；旧包不会因为少写字段被拒。
 
-### 3.8 Clawd on Desk 主题包转换（2026-11-14）
+### 3.8 素材转换工具（2026-11-15）
 
-app/tool/pet_theme_convert.py 把 clawd-on-desk 主题（theme.json + APNG + CSS/SVG 动画）转成 schema 1 宠物包，给玩家自制宠物用。素材是 CC BY-NC-SA 4.0 同人美术，**不进仓库**：自己克隆主题，把 --theme 指过去。
+app/tool/pet_theme_convert.py 把素材转成 schema 1 宠物包，按目录内容自动识别：
 
-    python3 tool/pet_theme_convert.py --theme DIR --out DIR [--id ID] [--input-name NAME] [--source URL]
+- clawd-on-desk 主题：theme.json + APNG，idle/roam/drag 的 CSS/SVG 由 pet_svg_frames.py 光栅化；
+  states、tiers、idleAnimations、reactions、timings 全从 theme.json 推导。
+- 图片：GIF / APNG / WebP / PNG，一个文件一个动画；文件名按中英文关键词认状态（idle、thinking、
+  working、error、done、sleep、walk、poke、drag、tickle 等），认不出来的进待机小剧场。
+- 逐帧目录（walk/01.png）与 Aseprite JSON 导出（按 frameTags 分动画）；单张图片做成静态待机。
+
+    python3 tool/pet_theme_convert.py --input DIR --out DIR [--id ID] [--input-name NAME] [--source URL] [--crisp]
     python3 -I tool/test_pet_theme_convert.py
 
-映射全部从 theme.json 推导，不写死某个主题：
-
-- states 保留全部变体（App 的 bonusOf 回退会自己用第 2 段起）。
-- workingTiers / jugglingTiers → tiers，按 minSessions 降序；主题每档的 files 变体 dsh-Go 没有挂载点，只取主文件，转换日志会列出丢掉的。
-- 有 tiers 的状态，多余动画写进 bonus（有 tier 命中时 App 不会回退，必须显式给）；其他状态留给 App 回退。
-- idleAnimations → idlePool；reactions 自动映射，double.files 展开成 tickle / tickle2 / tickle3；timings 去掉 notification 的 autoReturn（持续态）。
-- dsh-Go 没有的状态（dizzy / yawning / dozing / collapsing / mini-*）不导出。
-- sleep.afterMs 固定 60 秒：主题的 mouseSleepTimeout 是桌面鼠标空闲时间。
+技能 app/assets/skills/pet-theme/ 随 App 安装（脚本是 app/tool 的副本，测试会查一致性），
+宠物页的「让 AI 做一只宠物」把 /pet-theme 填进新对话。
 
 两个固定决定（改之前先看 §5 渲染）：
 
-- **画布 144×144（6 倍逻辑单位）、pixelArt: false**。素材是 12 倍导出、动画带亚像素平移；降到 2 倍再走像素画的最近邻整数放大，每帧位移不足一个画布像素，量化后是「几帧不动再跳一格」。144 画布 + 2×2 面积平均 + 平滑插值把损失压到接近素材本身：质心二阶差分 1.609%（288 原图 1.610%），不同帧保留 91%（48 画布只有 86%）。代价是边缘不再纯硬边。
-- **tickle2 / tickle3 编号而不是数组**：旧版 App 只读 tickle、忽略编号键，新版合并成候选列表，一份包通吃新旧。
+- **像素画保持原尺寸锐利绘制，其它素材用 144×144、pixelArt: false**。小图、硬边素材按原尺寸走像素画
+  整数放大；带亚像素位移或抗锯齿的素材（clawd 主题是 12 倍导出）降到 2 倍再整数放大会「几帧不动再
+  跳一格」，改成 144 画布 + 面积平均 + 平滑插值（质心二阶差分 1.609%，288 原图 1.610%，不同帧保留
+  91%）。--crisp 强制前者。
+- **tickle2 / tickle3 编号而不是数组**：旧版 App 只读 tickle、忽略编号键，新版合并成候选列表，一份包
+  通吃新旧。
 
-已知限制：tiers 每档的 files 变体不导出；SVG 的 CSS 关键帧参数写死在 pet_svg_frames.py，主题改 CSS 要同步改。
+已知限制：clawd 主题每档只取主文件（tiers 的 files 变体不导出）；SVG 的 CSS 关键帧参数写死在
+pet_svg_frames.py；整张精灵表要先拆帧或导出 Aseprite JSON。
 
 ## 4. 状态归约 `PetMood`
 

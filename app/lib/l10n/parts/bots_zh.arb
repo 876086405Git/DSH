@@ -744,6 +744,8 @@
   "botsPetSource": "来自 DSH-TUI",
   "botsPetImport": "导入",
   "botsPetImportHint": "导入你自己的像素宠物：一个 zip，里面是 pack.json 和序列帧 PNG，格式见仓库里的 docs/design/pets.md。长按导入的宠物可以删除。",
+  "botsPetMake": "让 AI 做一只宠物",
+  "botsPetMakeSubtitle": "把 GIF、表情包或主题转成宠物包",
   "botsPetImportDone": "「{name}」来了",
   "botsPetCodexTitle": "「{name}」是从 Codex 宠物转过来的",
   "botsPetCodexBody": "大部分照原样，有几处不完全一样：",

@@ -189,6 +189,7 @@ flutter:
     - assets/skills/dsh-go-guide/
     - assets/skills/dsh-go-support/
     - assets/skills/companion-adapt/
+    - assets/skills/pet-theme/
 
 
   # To add assets to your application, add an assets section, like this:

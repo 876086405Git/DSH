@@ -5354,6 +5354,18 @@ abstract class L10n {
   /// **'导入你自己的像素宠物：一个 zip，里面是 pack.json 和序列帧 PNG，格式见仓库里的 docs/design/pets.md。长按导入的宠物可以删除。'**
   String get botsPetImportHint;
 
+  /// No description provided for @botsPetMake.
+  ///
+  /// In zh, this message translates to:
+  /// **'让 AI 做一只宠物'**
+  String get botsPetMake;
+
+  /// No description provided for @botsPetMakeSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'把 GIF、表情包或主题转成宠物包'**
+  String get botsPetMakeSubtitle;
+
   /// No description provided for @botsPetImportDone.
   ///
   /// In zh, this message translates to:
