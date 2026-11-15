@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dsh_app/links/launcher_entries.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -81,16 +83,18 @@ void main() {
   group('setRecent', () {
     late List<Object?> sent;
     late bool accept;
+    Completer<bool>? held;
 
     setUp(() {
       sent = [];
       accept = true;
+      held = null;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
         call,
       ) async {
         if (call.method == 'setRecent') {
           sent.add(call.arguments);
-          return accept;
+          return held?.future ?? accept;
         }
         return true;
       });
@@ -117,6 +121,24 @@ void main() {
       await bridge.setRecent([b, a]);
       await bridge.setRecent(const []);
       expect(sent, hasLength(3));
+    });
+
+    test('back to the published list while another is on its way: it still goes out', () async {
+      final bridge = LauncherBridge();
+      addTearDown(bridge.dispose);
+      expect(await bridge.setRecent([a]), isTrue);
+      final reply = held = Completer<bool>();
+      final toB = bridge.setRecent([b]);
+      await Future<void>.delayed(Duration.zero);
+      held = null;
+      final backToA = bridge.setRecent([a]);
+      reply.complete(true);
+      expect(await toB, isTrue);
+      expect(await backToA, isTrue);
+      expect(sent, hasLength(3));
+      expect((sent.last! as Map)['items'], [
+        {'id': 'a', 'title': '周报', 'host': HostRef.local.encode()},
+      ]);
     });
 
     test('tries again after the launcher refused (rate limit)', () async {

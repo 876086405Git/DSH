@@ -167,13 +167,13 @@ catalog = json.load(open(pins))
 names, _ = rtbuild.select_dsh_patches(catalog, os.path.dirname(pins), 'android')
 m = json.load(open(manifest))
 terminal = {}
-for name in names:
-    versions = catalog["patches"][name]
-    for rel, pin in versions[m["dshVersion"]].items():
+assert set(names) <= set(m["dshPatches"]), m["dshPatches"]
+# The build records the series application order in the manifest.
+for name in m["dshPatches"]:
+    for rel, pin in catalog["patches"][name][m["dshVersion"]].items():
         if rel in terminal:
             assert terminal[rel] == pin["before"], (name, rel, 'broken ordered hash chain')
         terminal[rel] = pin["after"]
-    assert name in m["dshPatches"], m["dshPatches"]
 for rel, expected in terminal.items():
     got = hashlib.sha256(open(os.path.join(root, "opt/dsh", rel), "rb").read()).hexdigest()
     assert got == expected, (rel, got)

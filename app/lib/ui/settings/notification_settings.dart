@@ -26,6 +26,9 @@ mixin _RefreshOnResume<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       onResume: () {
         ref.invalidate(notifySystemStatusProvider);
         ref.invalidate(liveSystemStatusProvider);
+        // 实时活动 may have just been allowed there: offer the running activity
+        // again (the native side posts nothing new if it already shows it).
+        unawaited(ref.read(notifyChannelProvider).live(ref.read(livePushProvider)));
       },
     );
   }

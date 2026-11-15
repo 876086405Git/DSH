@@ -483,7 +483,7 @@ internal object PetOverlay {
         val area = safeArea()
         // Full-body default, within both the readback cap and the existing dock margins.
         val geometry = CompanionFloatGeometry.fit(
-            v.context.dp(PetSize.fromName(machine.last?.size ?: "medium").dp * 4),
+            v.context.dp(PetSize.dpOf(machine.last?.size) * 4),
             area, edge(v.context),
         ) ?: return
         val epoch = ++companionEpoch
@@ -627,7 +627,7 @@ internal object PetOverlay {
         val request = ++loadRequest
         val density = app.resources.displayMetrics.density
         worker.execute {
-            val l = sprites.load(id, worker) { pack -> pack.screenScale(PetSize.fromName(size), density) }
+            val l = sprites.load(id, worker) { pack -> pack.screenScale(size, density) }
             l?.warmResident()
             main.post {
                 if (request != loadRequest || loadingKey != key || packKey(machine.last) != key) {

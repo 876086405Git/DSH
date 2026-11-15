@@ -302,6 +302,7 @@ class _ModeTile extends StatelessWidget {
       selected: selected,
       label: label,
       excludeSemantics: true,
+      onTap: enabled ? onTap : null,
       child: Pressable(
         onTap: onTap,
         enabled: enabled,
@@ -535,6 +536,7 @@ class _Swatch extends StatelessWidget {
       selected: selected,
       label: l10n.pluginsColorLabel(label),
       excludeSemantics: true,
+      onTap: onTap,
       child: Pressable(
         onTap: onTap,
         child: Column(

@@ -76,7 +76,7 @@ abstract class CallConversation {
 
 /// The person's choices for a call: speaking over her stops her; the
 /// loudspeaker or the earpiece; [spokenHint] goes before the first message.
-typedef CallChoices = ({bool bargeIn, bool speaker, String? spokenHint});
+typedef CallChoices = ({bool bargeIn, bool speaker, String? spokenHint, CallPause pause});
 
 /// One exchange of the call as it reads: what the person said, and her reply
 /// as far as it is known (all of it, or, [cut], as far as she got).
@@ -129,6 +129,7 @@ class VoiceCallController extends ChangeNotifier {
   /// when the page opens).
   final Future<CallChoices> Function() choices;
   bool _bargeIn = true;
+  CallPause _pause = CallPause.normal;
 
   /// Put before the call's first message: asks for short spoken answers.
   String? _spokenHint;
@@ -154,6 +155,9 @@ class VoiceCallController extends ChangeNotifier {
   /// The person began speaking over her: she is quieter until it is known what they said.
   bool _over = false;
   Timer? _overTimer;
+
+  /// Since the person began talking over her (for [_overTimer]'s deadline).
+  final _overFor = Stopwatch();
 
   /// What the person had heard of a reply they cut off, for their next message.
   String? _cutAt;
@@ -241,6 +245,7 @@ class VoiceCallController extends ChangeNotifier {
     final chosen = await choices();
     if (_disposed || _phase == CallPhase.ended) return;
     _bargeIn = chosen.bargeIn;
+    _pause = chosen.pause;
     _speaker = chosen.speaker;
     _spokenHint = chosen.spokenHint;
     notifyListeners();
@@ -269,7 +274,7 @@ class VoiceCallController extends ChangeNotifier {
       }
     }
     unawaited(const DiagnosticsChannel().recordVoiceStage('preparing'));
-    final started = await audio.startCall(bargeIn: _bargeIn);
+    final started = await audio.startCall(bargeIn: _bargeIn, pause: _pause);
     if (_disposed || _phase == CallPhase.ended) {
       if (started == CallStart.ok) unawaited(audio.stopCall());
       return;
@@ -306,7 +311,12 @@ class VoiceCallController extends ChangeNotifier {
           // until what was said is known, or the person keeps talking.
           out.duck(true);
           _overTimer?.cancel();
-          _overTimer = Timer(confirmAfter, _cutIn);
+          // The chosen pause's extra quiet doesn't count as talking on: a short
+          // 嗯嗯 still arrives as an utterance before this confirms.
+          _overFor
+            ..reset()
+            ..start();
+          _overTimer = Timer(confirmAfter + _pause.longer, _cutIn);
           return;
         }
         _set(CallPhase.hearing);
@@ -522,6 +532,20 @@ class VoiceCallController extends ChangeNotifier {
     unawaited(audio.mute(on));
     if (on && _phase == CallPhase.hearing) _set(CallPhase.listening);
     notifyListeners();
+  }
+
+  /// Changed in 通话设置: the next pause is judged by it (the one under way too).
+  void setPause(CallPause pause) {
+    if (_phase == CallPhase.ended || pause == _pause) return;
+    _pause = pause;
+    // Talking over her right now: the deadline moves with the pause, from when they began.
+    if (_overTimer?.isActive ?? false) {
+      _overTimer!.cancel();
+      final left = confirmAfter + pause.longer - _overFor.elapsed;
+      _overTimer = Timer(left.isNegative ? Duration.zero : left, _cutIn);
+    }
+    // Before the microphone is open this changes nothing there; startCall takes [_pause].
+    unawaited(audio.callPause(pause));
   }
 
   Future<void> setSpeaker(bool on) async {

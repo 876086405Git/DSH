@@ -572,7 +572,7 @@ def hit_boxes(anims, scale, mapping, order):
     hits = {
         'default': default,
         'wide': union_box([default] + [boxes[n] for n in wide_anims]),
-        'sleeping': union_box([boxes[n] for n in sleeping_anims]),
+        'sleeping': union_box([boxes[n] for n in sleeping_anims]) if sleeping_anims else default,
         'byAnim': by_anim,
         'wideAnims': wide_anims,
         'sleepingAnims': sleeping_anims,

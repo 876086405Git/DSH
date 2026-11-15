@@ -4,6 +4,7 @@
 // Deepy's 5× sheets are sampled nearest-neighbour: no colour on screen that
 // is not in the sheet.
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dsh_app/pets/pet_pack.dart';
@@ -67,7 +68,7 @@ void main() {
   tearDown(PetSheets.instance.clear);
 
   for (final dpr in ratios) {
-    for (final size in PetSize.values) {
+    for (final size in PetSize.presets) {
       testWidgets('鲸娘 at ${dpr}x, ${size.name}: whole device pixels per art pixel, one colour each', (tester) async {
         final anim = girl.animFor(PetStateName.idle);
         final (rgba, w, h, k) = await render(tester, girl, anim, size, dpr);
@@ -119,12 +120,24 @@ void main() {
   test('sizes: whole device pixels, the three always differ', () {
     for (final dpr in ratios) {
       for (final pack in [deepy, girl]) {
-        final ks = [for (final s in PetSize.values) petDevicePixels(pack, s, dpr)];
+        final ks = [for (final s in PetSize.presets) petDevicePixels(pack, s, dpr)];
         expect(ks[0] < ks[1] && ks[1] < ks[2], isTrue, reason: '${pack.id} at $dpr: $ks');
         // Standard is the doc's formula (round(30 dp × dpr ÷ body)) unless
         // that equals small.
         final standard = (30 * dpr / pack.contentBox.height).round();
         if (standard > ks[0]) expect(ks[1], standard);
+      }
+    }
+  });
+
+  test('自定义 rounds its own height to whole device pixels', () {
+    for (final dpr in ratios) {
+      for (final pack in [deepy, girl]) {
+        for (final dp in [15.0, 30.0, 45.0, 90.0]) {
+          final k = petDevicePixels(pack, PetSize.custom, dpr, customHeight: dp);
+          expect(k, math.max(1, (dp * dpr / pack.contentBox.height).round()), reason: '${pack.id} at $dpr, $dp dp');
+          expect(petScale(pack, PetSize.custom, dpr, customHeight: dp), k / dpr);
+        }
       }
     }
   });
@@ -150,7 +163,7 @@ void main() {
     final packs = {'whale-girl': girl, 'deepy-whale': deepy};
     for (final (id, dpr, ks) in expected) {
       final pack = packs[id]!;
-      expect([for (final s in PetSize.values) petDevicePixels(pack, s, dpr)], ks, reason: '$id at $dpr×');
+      expect([for (final s in PetSize.presets) petDevicePixels(pack, s, dpr)], ks, reason: '$id at $dpr×');
     }
   });
 }

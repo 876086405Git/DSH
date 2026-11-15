@@ -42,7 +42,7 @@ sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
 
 
 def read(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 
@@ -273,6 +273,31 @@ class PatchDsh(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(read(self.target), final)
         self.assertEqual(load(applied), ["guard.diff", "aa-later.diff"])
+
+        # The host smoke consumes this recorded order, not the patch filenames.
+        root = Path(self.tmp.name, "host-root")
+        (root / "opt").mkdir(parents=True)
+        os.rename(self.prefix, root / "opt/dsh")
+        client = root / "opt/dsh-go/dsh-go-bridge/lib/client.js"
+        client.parent.mkdir(parents=True)
+        client.write_text("// layout fixture\n")
+        overlay = root / "etc/dsh-app/dsh-web.patch.yml"
+        overlay.parent.mkdir(parents=True)
+        overlay.write_text("- insert:\n    - name: /opt/dsh-go/dsh-go-bridge/lib/index.js\n")
+        manifest = root / "manifest.json"
+        manifest.write_text(json.dumps({"dshVersion": "1.0.0", "dshPatches": load(applied)}))
+        script = read(os.path.join(HERE, "..", "test-host.sh"))
+        code = script.split('python3 -I - "$ROOT" "$HERE/patches/pins.json" "$MANIFEST" "$HERE" <<\'PY\'', 1)[1]
+        code = code.split("\n", 1)[1].split("\nPY\n", 1)[0]
+        verified = subprocess.run([sys.executable, "-I", "-c", code, str(root), pins_path, str(manifest), os.path.join(HERE, "..")],
+                                  capture_output=True, text=True)
+        self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+
+        # The final hash alone cannot reveal an omitted earlier patch.
+        manifest.write_text(json.dumps({"dshVersion": "1.0.0", "dshPatches": ["aa-later.diff"]}))
+        missing = subprocess.run([sys.executable, "-I", "-c", code, str(root), pins_path, str(manifest), os.path.join(HERE, "..")],
+                                 capture_output=True, text=True)
+        self.assertNotEqual(missing.returncode, 0)
 
     def test_invalid_series_fails_before_recording_or_writing(self):
         for names in ([], ["guard.diff", "guard.diff"], ["missing.diff"],

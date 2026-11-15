@@ -64,7 +64,7 @@
 | `PET_MARKET_ENABLED` | 既有宠物市场镜像开关，当前 `1` | 保持现有值；不是工坊紧急关闭开关 |
 | `MARKET_SOURCE_URL` | 既有插件/宠物市场的 HTTPS 上游；未配置沿用项目默认 | 工坊上线不用新增此值；更换上游另按既有市场文档核对 |
 | `UPLOADS_PER_HOUR` | 既有分享链接的每客户端小时额度，当前 `20` | **不能用它关闭工坊投稿**；工坊按操作把计数值设为自己的 5/20 |
-| `MAX_BYTES` | 既有分享 API 大小上限，当前 20 MiB | 不改变工坊固定 20 MiB ZIP 上限 |
+| `MAX_BYTES` | 既有分享 API 大小上限，当前 20 MiB | 不改变工坊固定 50 MiB ZIP 上限 |
 | `DOWNLOAD_ACCESS` | 既有 App 安装包下载方式，当前 `public` | 保持部署方原政策；不是工坊审核/下载开关 |
 | `DL_BASE_URL` | 公开下载桶的 HTTPS 基址，当前 `https://dl.dshtui.com/` | 与你已创建的公开桶域名一致 |
 | `CN_BASE_URL` | 可选香港下载桶基址，当前空 | 未配置该下载线路时保持空 |

@@ -166,6 +166,14 @@ class PetPackTest {
         assertEquals(61f, w.bottom)
     }
 
+    @Test fun customSizeRoundsItsOwnHeight() {
+        val p = PetPack.parse(json)
+        // 49 px body: 60 dp at 2.75 is round(3.37) = 3 whole px per art px, 15 dp is round(0.84) = 1.
+        assertEquals(3f, p.screenScale("custom:60.0", 2.75f))
+        assertEquals(1f, p.screenScale("custom:15.0", 2.75f))
+        assertEquals(p.screenScale(PetSize.LARGE, 2.75f), p.screenScale("large", 2.75f))
+    }
+
     @Test fun screenScaleMatchesTheAppForEverySize() {
         val p = PetPack.parse(json)
         // The app's petDevicePixels (pet_sprite.dart, and pet_pixel_test.dart's ratio list): whole

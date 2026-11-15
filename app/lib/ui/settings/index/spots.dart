@@ -894,6 +894,12 @@ abstract final class Spots {
     keywords: (l) => l.searchKwPetOverlayFraming,
     androidOnly: true,
   );
+  static final petMake = SettingSpot(
+    'pet-make',
+    page: SettingsPageId.pets,
+    title: (l) => l.botsPetMake,
+    keywords: (l) => l.searchKwPets,
+  );
   static final workshop = SettingSpot(
     'workshop',
     page: SettingsPageId.pets,
@@ -1228,6 +1234,7 @@ final _rows = <SettingSpot>[
   Spots.petDisplayWhen,
   Spots.petOverlayShows,
   Spots.petOverlayFraming,
+  Spots.petMake,
   Spots.workshop,
   Spots.uiMode,
   Spots.hardwareEnterSends,

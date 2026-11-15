@@ -4,7 +4,7 @@ import { assetUrl, blobKey } from '../src/workshop-common';
 import { STATE_KEY } from '../src/workshop-state';
 import { makeCtx, makeEnv } from './fakes';
 import { PetBucket } from './pet-market-fakes';
-import { companion, metaFor, pet, petManifest } from './workshop-fixtures';
+import { companion, largeCompanion, metaFor, pet, petManifest } from './workshop-fixtures';
 
 const API = '/api/workshop/v1';
 let githubUser = 42;
@@ -210,8 +210,9 @@ it('charges invalid archive attempts and verifies both declared SHA and actual b
   const wrong = Buffer.from(item.bytes); wrong[0] ^= 1;
   expect(await (await f.call(`${API}/submissions/${item.sid}/archive`, 'PUT', wrong)).json()).toEqual({ error: 'workshop_sha_mismatch' });
   expect(await (await f.call(`${API}/submissions/${item.sid}/archive`, 'PUT', wrong.subarray(1))).json()).toEqual({ error: 'workshop_size_mismatch' });
+  expect(await (await f.call(`${API}/submissions/${item.sid}/archive`, 'PUT', Buffer.concat([item.bytes, Buffer.from([0])]))).json()).toEqual({ error: 'workshop_size_mismatch' });
   expect(f.bucket.objects.has(blobKey(item.meta.sha256))).toBe(false); expect(f.state().submissions[0].status).toBe('draft');
-  expect([...f.kv.values.values()]).toContain('2');
+  expect([...f.kv.values.values()]).toContain('3');
 });
 it('reports a CAS loser without losing the winning submission', async () => {
   const f = setup(), bytes = pet(), meta = metaFor(bytes);
@@ -277,3 +278,60 @@ it('lets moderators terminate abandoned drafts while retaining immutable metadat
   expect((await f.call(path, 'POST', { reason: 'Repeat withdrawal' }, true)).status).toBe(200);
   expect(f.state().audit).toHaveLength(2);
 });
+it('auto-approves a checked upload when the switch is on, idempotently, and leaves version conflicts pending', async () => {
+  const f = setup(); f.env.WORKSHOP_AUTO_APPROVE = '1';
+  const item = await f.create(), out = await f.upload(item);
+  expect(out.submission).toMatchObject({ status: 'approved', review: { decision: 'approve', reason: '自动通过' } });
+  expect((await (await f.call('/market/workshop.json')).json() as any).entries).toHaveLength(1);
+  expect((await f.call(assetUrl(item.meta))).status).toBe(200);
+  expect((await f.upload(item)).submission.status).toBe('approved');
+  expect(f.state().audit.map((e: any) => e.action)).toEqual(['create', 'submit', 'approve']);
+  githubUser = 43; const outsider = await f.create(item.bytes, { version: '2.0.0' });
+  expect((await f.upload(outsider)).submission.status).toBe('pending');
+  githubUser = 42;
+  f.env.WORKSHOP_AUTO_APPROVE = '0';
+  const manual = await f.create(item.bytes, { version: '3.0.0' });
+  expect((await f.upload(manual)).submission.status).toBe('pending');
+});
+it('publishes a companion over the old 20 MiB cap and keeps its state readable', async () => {
+  const f = setup(), bytes = largeCompanion(4);
+  expect(bytes.length).toBeGreaterThan(25 * 1024 * 1024);
+  const item = await f.publish(bytes, { kind: 'companion' });
+  expect(f.state().releases[0].size).toBe(bytes.length);
+  // Over the old 20 MiB cap: listed apart, where apps from before 50 MiB never look.
+  for (const path of ['/market/companions.json', '/market/workshop.json']) {
+    const listed = await (await f.call(path)).json() as any;
+    expect(listed.entries).toEqual([]); expect(listed.largeEntries).toHaveLength(1);
+  }
+  expect((await f.call(assetUrl(item.meta))).status).toBe(200);
+}, 30_000);
+it('reads and checks one large archive at a time per isolate; another gets 429 and can retry', async () => {
+  const f = setup(), bytes = largeCompanion(3);
+  const [a, b] = [await f.create(bytes, { kind: 'companion' }), await f.create(bytes, { kind: 'companion' })];
+  const archive = (sid: string) => f.call(`${API}/submissions/${sid}/archive`, 'PUT', bytes);
+  const [x, y] = await Promise.all([archive(a.sid), archive(b.sid)]);
+  expect([x.status, y.status]).toEqual([200, 429]);
+  expect(await y.json()).toEqual({ error: 'workshop_rate_limited' }); expect(y.headers.get('Retry-After')).toBe('60');
+  expect((await f.upload(b)).submission.status).toBe('pending');
+}, 30_000);
+it('gives up on a large body that stops arriving and frees the isolate for the next one', async () => {
+  const f = setup(), bytes = largeCompanion(3), item = await f.create(bytes, { kind: 'companion' });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    // pull() runs once the first chunk is taken: the Worker is reading, its deadline is set.
+    let reading!: () => void; const started = new Promise<void>(resolve => { reading = resolve; });
+    const stalled = new ReadableStream<Uint8Array>({
+      start(c) { c.enqueue(bytes.subarray(0, 1024)); },
+      pull() { reading(); return new Promise<void>(() => {}); },
+    });
+    const pending = worker.fetch(new Request('https://example.org' + `${API}/submissions/${item.sid}/archive`, {
+      method: 'PUT', body: stalled, duplex: 'half',
+      headers: { Authorization: 'Bearer synthetic_github_token', 'X-Workshop-Account-Origin': 'https://github.com', 'Content-Type': 'application/zip' },
+    } as RequestInit), f.env, makeCtx().ctx);
+    await started;
+    await vi.advanceTimersByTimeAsync(9 * 60_000 + 1);
+    const response = await pending;
+    expect(response.status).toBe(408); expect(await response.json()).toEqual({ error: 'workshop_upload_timeout' });
+  } finally { vi.useRealTimers(); }
+  expect((await f.upload(item)).submission.status).toBe('pending');
+}, 30_000);

@@ -48,6 +48,32 @@ class WorkshopPublicationInput {
     rightsConfirmed: rightsConfirmed ?? this.rightsConfirmed,
   );
 
+  /// The person fills only what they want to; the rest comes from here.
+  /// Left empty: either name from the other, 1.0.0, the account's name as
+  /// author, 作者授权 as licence, the account's GitHub page as the source, and
+  /// an id from the English name (or [fallbackId]). Typed values stay, so a
+  /// wrong one is still reported.
+  WorkshopPublicationInput withDefaults({String? login, required String fallbackId}) {
+    final zh = titleZh.trim(), en = titleEn.trim();
+    final account = login == null || login.isEmpty ? null : login;
+    var slug = (en.isNotEmpty ? en : zh).toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    if (slug.length > 40) slug = slug.substring(0, 40);
+    slug = slug.replaceAll(RegExp(r'^-+|-+$'), '');
+    return copyWith(
+      id: id.trim().isEmpty ? (workshopId(slug) ? slug : fallbackId) : id,
+      version: version.trim().isEmpty ? '1.0.0' : version,
+      titleZh: zh.isEmpty ? en : titleZh,
+      titleEn: en.isEmpty ? zh : titleEn,
+      author: author.trim().isEmpty && account != null ? account : author,
+      license: license.isEmpty ? workshopDefaultLicense : license,
+      source: source.trim().isEmpty && account != null ? 'https://github.com/$account' : source,
+    );
+  }
+
+  /// What 许可 means when none is picked: shared with the author's permission,
+  /// which ticking 「我有权分享」 already says.
+  static const workshopDefaultLicense = 'LicenseRef-Author-Permission';
+
   factory WorkshopPublicationInput.fromMetadata(WorkshopMetadata metadata) => WorkshopPublicationInput(
     id: metadata.id, version: metadata.version, minApp: metadata.minApp,
     titleZh: metadata.title['zh']!, titleEn: metadata.title['en']!, author: metadata.author,

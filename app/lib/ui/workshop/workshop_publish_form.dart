@@ -8,18 +8,24 @@
 // except through the controller's submit().
 
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/attachments.dart' show formatBytes;
+import '../../state/workshop_account_state.dart';
 import '../../state/workshop_auth_state.dart';
 import '../../state/workshop_publication.dart';
 import '../../state/workshop_publish_sources.dart';
 import '../../state/workshop_publish_state.dart';
 import '../../workshop/workshop_models.dart';
+import '../../workshop/workshop_repository.dart' show workshopLocalError;
 import '../common/app_sheet.dart';
 import '../common/brief_notice.dart';
 import '../common/capsule_chip.dart';
@@ -101,9 +107,9 @@ String? workshopPublishBlock(WorkshopAccessState access, String kind) {
 
 /// The name a source goes by on this page.
 String workshopSourceName(L10n l10n, WorkshopPublishSource source) {
-  if (source.kind == 'companion') return l10n.workshopPublishCompanionCurrent;
+  if (source.kind == 'companion' && !source.fromFile) return l10n.workshopPublishCompanionCurrent;
   final name = source.name?.trim() ?? '';
-  return name.isEmpty ? source.localId : name;
+  return name.isEmpty ? (source.fromFile ? l10n.workshopPublishFromFile : source.localId) : name;
 }
 
 /// What on this phone can be sent in: the person's own pixel pets and the
@@ -148,9 +154,9 @@ class WorkshopPublishSourceList extends ConsumerWidget {
               icon: AppIcons.workshop,
               title: l10n.workshopPublishSourcesEmptyTitle,
               message: l10n.workshopPublishSourcesEmptyMessage,
-              actionLabel: l10n.workshopRefresh,
-              onAction: reload,
             ),
+            const SizedBox(height: 16),
+            ListPageCard(children: [_FileRow(onPick: onPick)]),
             // "No companion here" is what the empty state already says; a
             // companion that could not be read is a reason worth showing.
             if (issues.containsKey('all') ||
@@ -174,6 +180,7 @@ class WorkshopPublishSourceList extends ConsumerWidget {
                 block: workshopPublishBlock(access, source.kind),
                 onTap: () => onPick(source),
               ),
+            _FileRow(onPick: onPick),
           ],
         ),
         if (notes.isNotEmpty) ...[const SizedBox(height: 12), ...notes],
@@ -202,6 +209,61 @@ class _SourceRow extends StatelessWidget {
       onTap: block == null ? onTap : null,
     );
     return block == null ? row : Opacity(opacity: 0.56, child: row);
+  }
+}
+
+/// 「从文件选择」: a pet or companion zip that is not on this phone. It goes
+/// through the same import as 导入 first, so a file of the wrong shape is
+/// turned away here with the import's reason; what is in use stays as it is.
+class _FileRow extends ConsumerStatefulWidget {
+  const _FileRow({required this.onPick});
+
+  final ValueChanged<WorkshopPublishSource> onPick;
+
+  @override
+  ConsumerState<_FileRow> createState() => _FileRowState();
+}
+
+class _FileRowState extends ConsumerState<_FileRow> {
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    final stage = ref.read(workshopFileStagerProvider);
+    final l10n = context.l10n;
+    final picked = await FilePicker.pickFile();
+    if (picked == null || !mounted) return;
+    setState(() => _busy = true);
+    File? copy;
+    try {
+      // Picks may be content URIs: bring it somewhere the unzipper can seek.
+      copy = File('${(await getTemporaryDirectory()).path}/workshop-pick-${DateTime.now().microsecondsSinceEpoch}.zip');
+      final sink = copy.openWrite();
+      try {
+        await sink.addStream(picked.readAsByteStream());
+      } finally {
+        await sink.close();
+      }
+      final source = await stage(copy);
+      if (mounted) widget.onPick(source);
+    } on Object catch (error) {
+      if (mounted) showBriefNotice(context, workshopErrorLine(l10n, workshopLocalError(error).code));
+    } finally {
+      try { await copy?.delete(); } on Object { /* A cache file. */ }
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return ListPageRow(
+      icon: AppIcons.files,
+      title: l10n.workshopPublishFromFile,
+      subtitle: l10n.workshopPublishFromFileHint,
+      subtitleMaxLines: 2,
+      trailing: _busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+      onTap: _busy ? null : () => unawaited(_pick()),
+    );
   }
 }
 
@@ -315,7 +377,16 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
 
   /// What the fields say now. The rights tick is not part of the form: it is
   /// given on the next step, for the packed result.
-  WorkshopPublicationInput _draft() => WorkshopPublicationInput(
+  WorkshopPublicationInput _draft() => _typed().withDefaults(
+    login: ref.read(workshopAccountProvider).login,
+    fallbackId: _fallbackId,
+  );
+
+  /// An id for a work with no English name to make one from; kept for this
+  /// form, so the draft does not change under the person.
+  late final _fallbackId = '${widget.source.kind}-${math.Random().nextInt(1 << 24).toRadixString(16).padLeft(6, '0')}';
+
+  WorkshopPublicationInput _typed() => WorkshopPublicationInput(
     id: _id.text,
     version: _version.text,
     minApp: _minApp,
@@ -328,7 +399,10 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
     tags: workshopTagsOf(_tags.text),
   );
 
-  bool _dirty() => !workshopSameDeclaration(_draft(), ref.read(workshopPublishProvider).input);
+  bool _dirty() => !workshopSameDeclaration(
+    _draft(),
+    ref.read(workshopPublishProvider).input.withDefaults(login: ref.read(workshopAccountProvider).login, fallbackId: _fallbackId),
+  );
 
   void _edited(String field) {
     if (_errors.containsKey(field)) setState(() => _errors = {..._errors}..remove(field));
@@ -450,6 +524,7 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
                           key: _fieldKeys[PublishField.titleEn],
                           label: l10n.workshopPublishTitleEn,
                           error: error(PublishField.titleEn),
+                          helper: l10n.workshopPublishTitleEnHelper,
                           child: TextField(
                             key: const ValueKey('workshop-publish-title-en'),
                             controller: _titleEn,
@@ -499,6 +574,7 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
                           key: _fieldKeys[PublishField.author],
                           label: l10n.workshopPublishAuthor,
                           error: error(PublishField.author),
+                          helper: l10n.workshopPublishAuthorHelper,
                           child: TextField(
                             key: const ValueKey('workshop-publish-author'),
                             controller: _author,
@@ -511,6 +587,7 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
                           key: _fieldKeys[PublishField.license],
                           label: l10n.workshopStatLicense,
                           error: error(PublishField.license),
+                          helper: l10n.workshopPublishLicenseHelper,
                           child: ValueListenableBuilder<String>(
                             valueListenable: _license,
                             builder: (context, selected, _) => Wrap(
@@ -521,8 +598,9 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
                                   CapsuleChoiceChip(
                                     label: workshopLicenseText(l10n, license),
                                     selected: selected == license,
+                                    // Tapped again: none, which publishes as 作者授权.
                                     onSelected: () {
-                                      _license.value = license;
+                                      _license.value = selected == license ? '' : license;
                                       _edited(PublishField.license);
                                     },
                                   ),

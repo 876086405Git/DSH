@@ -1,5 +1,6 @@
 // Original synthetic pixels/archives only; these fixtures carry no licensed
 // model data, real credentials, user settings, or real account identities.
+import { randomBytes } from 'node:crypto';
 import { deflateRawSync, deflateSync } from 'node:zlib';
 import { crc32 } from '../src/workshop-archive';
 import type { SubmissionMeta } from '../src/workshop-common';
@@ -44,5 +45,21 @@ export function companion(options: { version?: number; runtime?: boolean; refere
     ['character/texture.png', png()],
     ...(options.runtime ? [['runtime/script.js', Buffer.from('synthetic runtime must be rejected')]] as [string, Uint8Array][] : []),
   ]);
+}
+/** A companion over the old 20 MiB cap: textures of incompressible noise,
+ *  stored, each under the 8 MiB PNG limit. */
+export function largeCompanion(textures: number, side = 1400) {
+  const meta = { ...BASE_META, kind: 'companion' as const }, names = Array.from({ length: textures }, (_, i) => `t${i}.png`);
+  const noise = () => {
+    const head = Buffer.alloc(13); head.writeUInt32BE(side); head.writeUInt32BE(side, 4); head[8] = 8; head[9] = 6;
+    const raw = randomBytes((side * 4 + 1) * side); for (let y = 0; y < side; y++) raw[y * (side * 4 + 1)] = 0;
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', deflateSync(raw, { level: 0 })), chunk('IEND', Buffer.alloc(0))]);
+  };
+  return zip([
+    ['character/character.json', Buffer.from(JSON.stringify({ schema: 1, name: 'Synthetic model', model: 'sample.model3.json', author: meta.author, license: meta.license, source: meta.source }))],
+    ['character/sample.model3.json', Buffer.from(JSON.stringify({ Version: 3, FileReferences: { Moc: 'sample.moc3', Textures: names } }))],
+    ['character/sample.moc3', Buffer.from([77, 79, 67, 51, 6, 0, 0, 0])],
+    ...names.map(name => [`character/${name}`, noise()] as [string, Uint8Array]),
+  ], false);
 }
 export function metaFor(bytes: Uint8Array, overrides: Partial<SubmissionMeta> = {}): SubmissionMeta { return { ...BASE_META, sha256: sha(bytes), size: bytes.length, ...overrides }; }

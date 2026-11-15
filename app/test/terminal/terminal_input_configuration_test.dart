@@ -1,3 +1,4 @@
+import 'package:dsh_app/ui/terminal/terminal_keyboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +39,26 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.newline);
     await settleTerminal(tester);
     expect(attach.written, '中\r');
+  });
+
+  testWidgets('a tap on the screen brings the keyboard back on a fresh connection (#1277)', (tester) async {
+    final backend = FakeTerminalBackend();
+    await pumpTerminalPage(tester, backend);
+    final attach = backend.attachOf(backend.created.single['id']! as String);
+    tester.testTextInput.log.clear();
+
+    // What a tap on the screen calls (TerminalScreen wires onTapUp to it).
+    tester.state<TerminalKeyboardState>(find.byType(TerminalKeyboard)).show();
+    await tester.pump();
+    expect(
+      tester.testTextInput.log.map((call) => call.method),
+      containsAllInOrder(['TextInput.setClient', 'TextInput.show']),
+    );
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(text: '  ls', selection: TextSelection.collapsed(offset: 4)),
+    );
+    await settleTerminal(tester);
+    expect(attach.written, 'ls');
   });
 
   testWidgets('terminal rename keeps ordinary text input while editing a Chinese name', (tester) async {

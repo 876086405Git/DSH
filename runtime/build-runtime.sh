@@ -48,7 +48,7 @@ PNPM_VERSION="${PNPM_VERSION:-11.28.5}"
 # dist.integrity of pnpm-$PNPM_VERSION.tgz, identical on registry.npmjs.org and npmmirror
 PNPM_INTEGRITY="${PNPM_INTEGRITY:-sha512-SEVj0wtMKtJ8tIqpT/KzAtvOvI/2vyiBbCWJiG4UbOf3bzVPO8GkOOb16XaMMCqgpvet2CMpA81M+BQmy8FNng==}"
 UBUNTU_VERSION="${UBUNTU_VERSION:-24.04.5}"
-PROOT_VERSION="5.1.107.98"
+PROOT_VERSION="5.1.107.102"
 TALLOC_VERSION="2.5.0"
 SHMEM_VERSION="0.7"
 UBUNTU_EXTRA="${UBUNTU_EXTRA:-tzdata ca-certificates git}"   # extra noble debs (+ dependency closure)
@@ -77,8 +77,8 @@ declare -A PIN=(
   [ubuntu-base-24.04.5-base-amd64.tar.gz]=e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
   [node-v24.22.1-linux-arm64.tar.xz]=dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e
   [node-v24.22.1-linux-x64.tar.xz]=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
-  [proot_5.1.107.98_aarch64.deb]=29de40efea4daa2a6168b617915206511c63e8d46bf5f4b07d48723441ef7f3b
-  [proot_5.1.107.98_x86_64.deb]=1c31ad7e1046f4d418fef19b6dfaa9a14801d2047ade6ad0375b3f5501e3e227
+  [proot_5.1.107.102_aarch64.deb]=10a394b585c2fc2b2c8502544f4e5f1be581dc8bfff79e8ba62f16207423e030
+  [proot_5.1.107.102_x86_64.deb]=2497064226c15971be8131c7facead94a06c225347796326a383c832dca57758
   [libtalloc_2.5.0_aarch64.deb]=556591f43bb773ad8777e1a29522640866a55f95dab71914418b94a8c58ad5a7
   [libtalloc_2.5.0_x86_64.deb]=b8c6d95f20075dc1f9ec6573575b2444e8d526e48e0d8d6d5cf4e071e6e06530
   [libandroid-shmem_0.7_aarch64.deb]=0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6
@@ -86,7 +86,7 @@ declare -A PIN=(
   [cpython-3.12.15+20261021-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz]=b4567aa5a11f51b540c4dfd9e082ebf23e554f8ac17b85caa6cea23e83693394
   [cpython-3.12.15+20261021-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz]=6d7521138fd33afddc1ccd08abb007d9a2829e38117c2576f9efdc0ec73ce772
   # GPL-2.0 source of the proot binary (same archive Termux's build recipe pins); used for COPYING.
-  [proot-v5.1.107.98.zip]=9de61bddd6f5016d065e2755b72ff4747290e5f992562f031785b107b51d02ba
+  [proot-v5.1.107.102.zip]=30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852
 )
 
 log() { printf '\033[1;34m[runtime %s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*" >&2; }

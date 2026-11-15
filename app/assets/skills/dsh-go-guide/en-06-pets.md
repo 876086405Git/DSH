@@ -10,7 +10,7 @@ Pick a pet to keep you company in chats. When a turn finishes, fails, or waits f
 Tap **Pets** in the Appearance group of Settings, or touch and hold the pet in a chat and choose **Pet settings**. Choose a pet first; the other settings appear below it.
 
 - Choose **Deepy**, **Whale girl** or **None**.
-- **Size**: **Small**, **Standard** or **Large**. Standard by default.
+- **Size**: **Small**, **Standard** or **Large**. Standard by default. If a pet looks too small or too big, choose **Custom** and drag the slider to 50–300% of Standard; the preview above follows, and it saves when you let go.
 - **Quiet mode**: animations only, no bubbles.
 
 The pet, size and Quiet mode apply both in and outside the app.
@@ -91,7 +91,7 @@ The page has three tabs:
 - **Installed**: what came from the Workshop onto this phone. A new version, or an item withdrawn by its author or a reviewer, is marked here; open an item to update or uninstall it. This tab works offline.
 - **My uploads**: what you sent in and where each one stands in review. Sign in with your GitHub account first.
 
-To submit: tap **Submit** under **My uploads**, pick a pet you imported or your current companion, fill in the name, author, license and source link, check the packed result, tick **I confirm I have the right to share this** and send it. A pet comes with a preview picture by default, the first frame of its idle animation, and you can turn it off; for a companion you can pick a PNG as its cover (at most 512 pixels a side and 2 MB), or leave it and the first letter of its name is shown. A reviewer looks at it first, and it shows up under **Browse** once approved; a rejection says why, and you can fix it and send it again. To take one back, open it and tap **Withdraw**.
+To submit: tap **Submit** under **My uploads**, pick a pet you imported, your current companion, or tap **Choose a file** to pick a pet or companion zip directly (no need to import it first; a file in the wrong format is turned away right there). Only a name is needed: the English name, ID, author, license and source link are optional, and when left empty they become the other name, an ID made from the name, your GitHub username, Author permission and your GitHub page. Then check the packed result, tick **I confirm I have the right to share this** and send it. A pet comes with a preview picture by default, the first frame of its idle animation, and you can turn it off; for a companion you can pick a PNG as its cover (at most 512 pixels a side and 2 MB), or leave it and the first letter of its name is shown. Once it passes the format checks it is listed right away under **Browse**; if someone reports it, a reviewer looks and takes it down with a reason if needed. To take one back, open it and tap **Withdraw**.
 
 If the phone's record of an unfinished submission can't be read, or keeps failing to clear, that step offers **Let go of this record**. It only deletes the record on this phone (if the phone's submission records can't be read as a whole, it clears the unfinished records of every account on this phone, and the confirmation says so) and doesn't ask the Workshop to cancel anything: if the Workshop already received the submission, it stays under **My uploads**; if not, you'll need to submit again.
 

@@ -70,7 +70,8 @@ class VoiceCapture(
             return false
         }
         record = r
-        val g = SpeechGate(echoCancelled).also { gate = it }
+        // 快's 700 ms: what voice input always had (the call's pause is its own setting).
+        val g = SpeechGate(echoCancelled, TurnPause.QUICK).also { gate = it }
         if (playing) g.setPlaying(true, SystemClock.elapsedRealtime())
         running = true
         val mine = ++session

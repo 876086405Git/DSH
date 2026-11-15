@@ -14,12 +14,17 @@ import '../../pets/pet_prefs.dart';
 import '../../pets/pet_signals.dart';
 import '../../pets/pet_state.dart';
 import '../../state/android_features.dart';
+import '../../state/compose_inbox.dart';
+import '../../state/ui_mode_state.dart';
+import '../../state/web_target.dart';
+import '../../ui_config/ui_skill.dart' show petThemeSkillName;
 import '../common/expand_reveal.dart';
 import '../settings/settings_widgets.dart';
 import '../theme/app_icons.dart';
 import '../shell/page_frame.dart';
 import '../workshop/workshop_screen.dart';
 import 'overlay_settings_tile.dart';
+import 'pet_custom_size.dart';
 import 'pet_picker.dart';
 
 /// 设置 › 宠物: the chosen pet (or 不显示) on the right; opens
@@ -66,6 +71,18 @@ class PetSettingsPage extends ConsumerWidget {
           footer: Text(_source(l10n, prefs.packId, ref.watch(petPackProvider(prefs.packId)).value)),
           children: const [PetPicker(importable: true)],
         ),
+        // 自己带来的素材：交给新对话里的 AI，用 pet-theme 技能转成宠物包.
+        SettingsSection(
+          children: [
+            SettingsTile(
+              spot: Spots.petMake,
+              icon: AppIcons.skill,
+              title: l10n.botsPetMake,
+              subtitle: l10n.botsPetMakeSubtitle,
+              onTap: () => _makePet(context),
+            ),
+          ],
+        ),
         // 创意工坊: pets other people made. Only where this build has one to open.
         if (ref.watch(workshopAvailableProvider))
           SettingsSection(
@@ -95,6 +112,7 @@ class PetSettingsPage extends ConsumerWidget {
                     selected: prefs.size,
                     onChanged: (s) => unawaited(notifier.setSize(s)),
                   ),
+                  ExpandReveal(open: prefs.size == PetSize.custom, child: const PetCustomSizePanel()),
                   SettingsSwitchTile(
                     spot: Spots.petQuiet,
                     subtitle: l10n.botsPetQuietSubtitle,
@@ -117,6 +135,20 @@ class PetSettingsPage extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// 「让 AI 做一只宠物」: the skill word waits in a new conversation's composer;
+  /// sending it, with a link or files, is the person's call.
+  static void _makePet(BuildContext context) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
+    final request = ComposeRequest(text: '/$petThemeSkillName ');
+    if (container.read(uiModeProvider).web) {
+      // The web home has no native composer: the page opens a new chat with it.
+      container.read(webOpenProvider.notifier).request(const DshWebTarget(newSession: true), compose: request);
+    } else {
+      container.read(composeInboxProvider.notifier).push(request);
+    }
   }
 
   /// Who made the chosen pet, as its pack says (docs/design/pets.md §9), and

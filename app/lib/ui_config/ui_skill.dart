@@ -50,6 +50,12 @@ const supportSkillName = 'dsh-go-support';
 /// Uses the same report, prompt and checked adapter as companion light mode.
 const companionAdaptSkillName = 'companion-adapt';
 
+/// The fifth: turns a clawd-on-desk theme into an importable pet pack. The converter
+/// and its friends ship as text next to SKILL.md (app/tool/pet_theme_convert.py is
+/// the source of truth) and are written to the skill folder's scripts/ so the agent
+/// can run them on the host.
+const petThemeSkillName = 'pet-theme';
+
 /// The managed line inside SKILL.md's front matter.
 const uiSkillManagedMarker = '# dsh-go:managed';
 
@@ -173,6 +179,7 @@ final extraSkillLoadersProvider = Provider<List<UiSkillBundleLoader>>((ref) {
     () => loadUiSkillBundle(null, guideSkillName, os),
     () => loadUiSkillBundle(null, supportSkillName),
     () => loadUiSkillBundle(null, companionAdaptSkillName),
+    () => loadUiSkillBundle(null, petThemeSkillName),
   ];
 });
 

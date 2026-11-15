@@ -20,6 +20,17 @@ enum class PetSize(val dp: Float) {
             "large" -> LARGE
             else -> MEDIUM
         }
+
+        /** 宠物设置 › 自定义's range of body height, dp (the app's `PetSize.customMin` / `customMax`). */
+        const val CUSTOM_MIN = 15f
+        const val CUSTOM_MAX = 90f
+
+        /** A size key as [PetPush.size] holds it: a preset name, or `custom:<dp>`. */
+        fun customDp(key: String?): Float? =
+            key?.removePrefix("custom:")?.takeIf { it != key }?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(CUSTOM_MIN, CUSTOM_MAX)
+
+        /** Body height for a size key, dp. */
+        fun dpOf(key: String?): Float = customDp(key) ?: fromName(key).dp
     }
 }
 
@@ -171,6 +182,12 @@ class PetPack(
      */
     fun screenScale(size: PetSize, density: Float): Float =
         if (pixelArt) devicePixels(size, density).toFloat() else size.dp * density / contentBox.h
+
+    /** [screenScale] for a size key: a preset, or 自定义's `custom:<dp>`, rounded on its own. */
+    fun screenScale(key: String, density: Float): Float {
+        val dp = PetSize.customDp(key) ?: return screenScale(PetSize.fromName(key), density)
+        return if (pixelArt) (dp.toDouble() * density / contentBox.h).roundToInt().coerceAtLeast(1).toFloat() else dp * density / contentBox.h
+    }
 
     /**
      * Whole physical pixels per art pixel for [size]: `round(dp × density ÷ body)`, then small /

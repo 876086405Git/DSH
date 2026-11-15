@@ -28,24 +28,34 @@ enum PetStateName {
   static PetStateName fromName(String? name) => values.asNameMap()[name] ?? idle;
 }
 
-/// The three sizes in 宠物设置, by body height (docs/design/pets.md §2.10).
-/// The name is the persisted value.
+/// The sizes in 宠物设置, by body height (docs/design/pets.md §2.10): three
+/// presets, and [custom] at the height the person dragged to
+/// ([PetPrefs.customHeight]). The name is the persisted value.
 enum PetSize {
   small,
   medium,
-  large;
+  large,
+  custom;
+
+  /// The three with a height of their own.
+  static const presets = [small, medium, large];
+
+  /// 自定义's range, dp of body height: half to three times 标准.
+  static const customMin = 15.0, customMax = 90.0;
 
   String get label => switch (this) {
     small => appL10n.stateSizeSmall,
     medium => appL10n.stateSizeStandard,
     large => appL10n.stateSizeLarge,
+    custom => appL10n.stateSizeCustom,
   };
 
   /// Target height of the pet's body (its pack's `contentBox`), dp. The
   /// drawn size snaps to a whole number of device pixels per art pixel.
+  /// [custom] has none of its own: [PetPrefs.bodyHeight] holds it.
   double get bodyHeight => switch (this) {
     small => 22,
-    medium => 30,
+    medium || custom => 30,
     large => 40,
   };
 
@@ -302,6 +312,7 @@ class PetState {
     this.foreground = true,
     this.packId = noPetId,
     this.size = PetSize.medium,
+    this.bodyHeight = 30,
     this.quiet = false,
     this.reduceMotion = false,
     this.canStop = false,
@@ -333,6 +344,9 @@ class PetState {
   final String packId;
   final PetSize size;
 
+  /// Body height, dp: [size]'s, or the 自定义 one.
+  final double bodyHeight;
+
   /// 安静模式: moves only, no bubbles.
   final bool quiet;
   final bool reduceMotion;
@@ -352,6 +366,7 @@ class PetState {
     'foreground': foreground,
     'packId': packId,
     'size': size.name,
+    if (size == PetSize.custom) 'bodyHeight': bodyHeight,
     'quiet': quiet,
     'reduceMotion': reduceMotion,
     'canStop': canStop,
@@ -369,6 +384,7 @@ class PetState {
       other.foreground == foreground &&
       other.packId == packId &&
       other.size == size &&
+      other.bodyHeight == bodyHeight &&
       other.quiet == quiet &&
       other.reduceMotion == reduceMotion &&
       other.canStop == canStop &&
@@ -384,6 +400,7 @@ class PetState {
     foreground,
     packId,
     size,
+    bodyHeight,
     quiet,
     reduceMotion,
     canStop,

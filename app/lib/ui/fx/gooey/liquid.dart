@@ -471,8 +471,13 @@ class _RenderLiquid extends RenderProxyBox {
     final goo = _then(_blurOf(_blur), _alpha(_contrast, Liquid.interceptFor(_contrast)));
     final bin = _then(goo, _binarize);
     // The threshold runs on the opaque shape; the fill (colour and alpha) is
-    // applied on top of the thresholded silhouette.
-    _layer.imageFilter = _then(goo, ColorFilter.mode(_fill, BlendMode.srcIn));
+    // applied on top of the thresholded silhouette. The threshold cuts the
+    // edge with no antialiasing, so a hair of blur after the tint turns that
+    // hard edge back into a smooth one (the goo itself stays crisp).
+    _layer.imageFilter = _then(
+      _then(goo, ColorFilter.mode(_fill, BlendMode.srcIn)),
+      _blurOf(0.6),
+    );
     ui.ImageFilter morph(ui.ImageFilter src, double spread, {required bool grow}) => _then(
       src,
       grow

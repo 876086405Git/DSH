@@ -40,6 +40,7 @@
   "stateSizeSmall": "小",
   "stateSizeStandard": "标准",
   "stateSizeLarge": "大",
+  "stateSizeCustom": "自定义",
   "statePetDone": "做完了",
   "statePetFailed": "出错了",
   "statePhoneNotReady": "手机操控模块未就绪",

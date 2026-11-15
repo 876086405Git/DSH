@@ -1,11 +1,11 @@
 {
   "schema": 2,
-  "baseline": "dd130b31",
+  "baseline": "c3872ae9",
   "target": "android",
   "sources": {
     "build-runtime.sh": {
-      "sha256": "f18e3023a2287335702c8a47f33815752f76577ee2d5cc3601a51c4dc192b214",
-      "legacySha256": "e544ad161dd3abce4c535c1e2863fb3875b40853b0f7b52693875e2dd269afe4"
+      "sha256": "beab81526f3a3a7a3f291b585d4ebd7e8d7ad343f4d456371c6d8b20be82efd0",
+      "legacySha256": "71918e114d6f9a80392cc63410b4b65751c6f815d741d48066b2e401aff83bd4"
     },
     "lib/rtbuild.py": {
       "sha256": "3b31f7d71574300ac8984597d264cc98ad65a345621cf6119bb326a536212917",

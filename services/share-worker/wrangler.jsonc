@@ -78,6 +78,9 @@
     "PET_MARKET_ENABLED": "1",
     "WORKSHOP_UPLOAD_ENABLED": "1",
     "WORKSHOP_COMPANION_ENABLED": "1",
+    // "1": submissions that pass the archive checks go public on upload; the
+    // review queue only gets version conflicts. Reports and withdrawal remain.
+    "WORKSHOP_AUTO_APPROVE": "1",
     // Public client id of the GitHub OAuth App "dsh-Go Workshop" (owned by
     // ccch1mneyyy, device flow on, tokens without expiry). Empty would make
     // capabilities say clientId null and the App offer no sign-in.

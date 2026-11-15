@@ -127,7 +127,7 @@ String? _remoteText(L10n l10n, WorkshopInstalledRow row) => switch (row.remoteUn
   'workshop_not_found' => l10n.workshopInstalledNoteNotListed,
   'workshop_version_rewritten' => l10n.workshopInstalledNoteRewritten,
   'workshop_companion_disabled' => l10n.workshopErrorCompanionOff,
-  'workshop_min_app' || 'workshop_app_version_unknown' => l10n.workshopInstalledNoteMinApp,
+  'workshop_min_app' || 'workshop_app_version_unknown' || 'workshop_app_too_old' => l10n.workshopInstalledNoteMinApp,
   'workshop_version_withdrawn' when row.installedWithdrawn == true => null,
   _ => l10n.workshopInstalledNoteUnavailable,
 };

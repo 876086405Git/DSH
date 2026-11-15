@@ -199,7 +199,13 @@ data class PetPush(
                 host = ((target?.get("host") ?: m["host"]) as? String)?.takeIf { it.length <= 2_000 },
                 // Older senders without `active`: busy states and a bubble count.
                 active = activeRaw ?: (state in BUSY || bubble != null),
-                size = (m["size"] as? String)?.takeIf { it == "small" || it == "medium" || it == "large" } ?: "medium",
+                size = when (val name = m["size"] as? String) {
+                    "small", "medium", "large" -> name
+                    // 自定义: its height rides along; the key changes with it, so the sprite reloads.
+                    "custom" -> (m["bodyHeight"] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+                        ?.let { "custom:${Math.round(it.coerceIn(PetSize.CUSTOM_MIN, PetSize.CUSTOM_MAX) * 10) / 10f}" } ?: "medium"
+                    else -> "medium"
+                },
                 quiet = m["quiet"] == true,
                 reduceMotion = m["reduceMotion"] == true,
                 canStop = m["canStop"] == true,

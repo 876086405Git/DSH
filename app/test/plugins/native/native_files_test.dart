@@ -75,6 +75,9 @@ class _Transport implements NativeFileTransport {
   final statuses = <String>[];
   VoidCallback? afterUpload;
   Object? uploadError;
+
+  /// Thrown once, by the next complete.
+  Object? completeError;
   DshGoInvokeResult response = const DshGoInvokeResult();
   @override
   Future<void> upload(String request, String stream, NativeSelectedFile file, Uint8List data) async {
@@ -88,6 +91,9 @@ class _Transport implements NativeFileTransport {
   @override
   Future<DshGoInvokeResult> complete(String request, String stream, String status) async {
     statuses.add(status);
+    final error = completeError;
+    completeError = null;
+    if (error != null) throw error;
     return response;
   }
 }
@@ -275,6 +281,25 @@ void main() {
     );
     expect(transport.statuses.last, 'error');
     expect(platform.cancels, hasLength(3));
+  });
+
+  test('a selected complete lost on the way is closed with error, so the next pick is not refused', () async {
+    final platform = _Platform(), transport = _Transport();
+    final runtime = NativeFileCoordinator(platform: platform, transport: transport, gate: NativeFileGate());
+    platform.files = [
+      platform.file([1, 2], reported: 2),
+    ];
+    transport.completeError = StateError('connection reset');
+    await expectLater(
+      _execute(runtime),
+      throwsA(isA<NativeFileException>().having((e) => e.problem, 'transport', NativeFileProblem.failed)),
+    );
+    expect(transport.statuses, ['selected', 'error']);
+    platform.files = [
+      platform.file([3], reported: 1),
+    ];
+    await _execute(runtime);
+    expect(transport.statuses.last, 'selected');
   });
 
   test('app-wide gate and host cancellation do not wait for a never-returning chooser', () async {

@@ -62,7 +62,7 @@ class InputStoreTest(unittest.TestCase):
         (repo / "runtime").mkdir(parents=True)
         shell = (REPO / "runtime/build-runtime.sh").read_text(encoding="utf-8")
         _, pins = store.shell_inputs(REPO)
-        old = pins["proot-v5.1.107.98.zip"]
+        old = pins["proot-v5.1.107.102.zip"]
         (repo / "runtime/build-runtime.sh").write_text(shell.replace(old, "f" * 64), encoding="utf-8")
         shutil.copytree(REPO / "runtime/locks", repo / "runtime/locks")
         lock = repo / "runtime/locks/pnpm-11.28.5/package-lock.json"

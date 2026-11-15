@@ -20,7 +20,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # dsh-go: only the version name is kept here. `+1` is a placeholder: the
 # versionCode is the build minute, stamped by tooling/build-apk.sh (see
 # docs/release.md「构建号」). Don't bump it by hand.
-version: 1.0.16+1
+version: 1.1.0+1
 
 environment:
   sdk: ^3.13.4
@@ -189,6 +189,7 @@ flutter:
     - assets/skills/dsh-go-guide/
     - assets/skills/dsh-go-support/
     - assets/skills/companion-adapt/
+    - assets/skills/pet-theme/
 
 
   # To add assets to your application, add an assets section, like this:

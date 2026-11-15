@@ -602,6 +602,11 @@ class GlassSegments extends StatelessWidget {
   final TabController controller;
   final List<String> labels;
 
+  void _select(int i) {
+    if (controller.index != i) HapticFeedback.selectionClick();
+    controller.animateTo(i);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -658,14 +663,11 @@ class GlassSegments extends StatelessWidget {
                                 inMutuallyExclusiveGroup: true,
                                 label: label,
                                 excludeSemantics: true,
+                                // A screen reader's tap, as the finger's below.
+                                onTap: () => _select(i),
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    if (controller.index != i) {
-                                      HapticFeedback.selectionClick();
-                                    }
-                                    controller.animateTo(i);
-                                  },
+                                  onTap: () => _select(i),
                                   child: Center(
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 4),

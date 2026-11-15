@@ -323,6 +323,54 @@ void main() {
     });
   });
 
+  group('an overtaken send', () {
+    test('does not keep waiting as 插话中 after a new follow takes over', () async {
+      client.events.add(const SessionStatusEvent('s1', true));
+      await settle();
+      final gate = Completer<String>();
+      client.promptResult = gate;
+      final sending = chat().send('现在停止');
+      await settle();
+      expect(state().pending.single.mode, SendMode.steer);
+
+      // Back on screen or reconnected: a new follow makes this send the old
+      // one's business. Its answer can never be matched to the bubble again.
+      client.events.add(SessionSyncEvent(SessionFollowEpoch()));
+      await settle();
+
+      gate.completeError(const DshCarrierLostException('gone'));
+      expect(await sending, isFalse);
+      expect(state().pending, isEmpty);
+    });
+
+    test('a prompt the Host never took stops showing as on its way', () async {
+      client.events.add(const SessionStatusEvent('s1', true));
+      await settle();
+      expect(await chat().send('现在停止'), isTrue);
+      await settle();
+      expect(state().pending.single.mode, SendMode.steer);
+
+      // The Host's own baseline says it holds nothing and never echoed it.
+      client.events.add(
+        SessionSnapshotEvent.fromJson('s1', {
+          'header': {'id': 's1'},
+          'cursor': 3,
+          'records': <Object?>[],
+          'projections': {
+            'asOfSeq': 3,
+            'values': {
+              'inbox': {'next-turn': <Object?>[], 'next-step': <Object?>[]},
+            },
+          },
+        }),
+      );
+      await settle();
+      final pending = state().pending.single;
+      expect(pending.failed, isTrue);
+      expect(pending.mode, SendMode.steer);
+    });
+  });
+
   test('approval and answer failures never show an unknown reason', () async {
     client.responseError = const DshRemoteException('x', 'boom');
     await chat().respond(

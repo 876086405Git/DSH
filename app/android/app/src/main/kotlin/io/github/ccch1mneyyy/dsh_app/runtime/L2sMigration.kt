@@ -15,7 +15,7 @@ import java.security.SecureRandom
 
 /**
  * Turns PRoot's fake hard links into real files, so an install that ran under
- * PRoot can launch directly. PRoot's --link2symlink (Termux 5.1.107.98, with
+ * PRoot can launch directly. PRoot's --link2symlink (Termux 5.1.107.102, with
  * PROOT_L2S_DIR={ROOTFS}/root/.l2s) moves a file that gets a second name into
  * that store as `.l2s.<name><NNNN>.<MMMM>`, MMMM being its link count, and
  * leaves symlinks with host-absolute targets: the intermediate

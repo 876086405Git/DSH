@@ -467,12 +467,14 @@ void main() {
       await tester.tap(find.text('下一步'));
       await _settle(tester);
 
-      expect(find.text('名称不能为空，最多 120 个字'), findsOneWidget);
+      // Left empty is filled in (the other name, the account, 作者授权); only
+      // what was typed wrong is said.
+      expect(find.text('名称不能为空，最多 120 个字'), findsNothing);
       expect(find.text('只能用小写字母、数字和短横线，最多 40 个字符'), findsOneWidget);
       expect(find.text('写成 1.0.0 这样的版本号'), findsOneWidget);
-      expect(find.text('作者不能为空，最多 256 个字'), findsOneWidget);
-      expect(find.text('选一个许可'), findsOneWidget);
-      expect(find.text('填一个以 https:// 开头的链接'), findsOneWidget);
+      expect(find.text('作者不能为空，最多 256 个字'), findsNothing);
+      expect(find.text('选一个许可'), findsNothing);
+      expect(find.text('填一个以 https:// 开头的链接'), findsNothing);
       expect(world.events, ['read-pending']);
       expect(tester.widget<TextField>(_field('version')).controller!.text, 'one', reason: 'what was typed stays');
       _expectWords(tester);

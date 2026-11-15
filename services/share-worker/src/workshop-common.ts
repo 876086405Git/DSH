@@ -1,7 +1,10 @@
 import { record, validVersion as catalogVersion } from './pet-catalog';
 
-export const UPLOAD_CAP = 20 * 1024 * 1024;
-export const EXPANDED_CAP = 64 * 1024 * 1024;
+export const UPLOAD_CAP = 50 * 1024 * 1024;
+/** The cap until 2026-11-15. Apps from before then reject a whole catalog
+ *  holding a larger entry, so those entries are listed apart (catalog). */
+export const LEGACY_UPLOAD_CAP = 20 * 1024 * 1024;
+export const EXPANDED_CAP = 128 * 1024 * 1024;
 export const MEMBER_CAP = 16 * 1024 * 1024;
 export const PREVIEW_CONTRACT = { schema: 1, sources: ['pet-idle', 'companion-preview'], format: 'png',
   maxWidth: 512, maxHeight: 512, maxPixels: 262144, maxBytes: 2097152 } as const;

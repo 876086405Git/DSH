@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../companion/companion_voice_source.dart';
 import '../../l10n/l10n.dart';
+import '../../speech/speech_audio.dart';
 import '../../speech/speech_settings.dart';
 import '../../state/android_features.dart';
 import '../../state/streaming_asr_model_state.dart';
@@ -219,28 +220,36 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
                 title: l10n.speechCallBargeIn,
                 subtitle: l10n.speechCallBargeInHint,
                 value: call.bargeIn,
-                onChanged: (on) => unawaited(calls.update(call.copyWith(bargeIn: on))),
+                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(bargeIn: on))),
+              ),
+              SettingsSegmentTile<CallPause>(
+                key: const ValueKey('speech-call-pause'),
+                title: l10n.speechCallPause,
+                subtitle: l10n.speechCallPauseHint,
+                segments: callPauseSegments(l10n),
+                selected: call.pause,
+                onChanged: (pause) => unawaited(calls.edit((saved) => saved.copyWith(pause: pause))),
               ),
               SettingsSwitchTile(
                 key: const ValueKey('speech-call-spoken'),
                 title: l10n.speechCallSpoken,
                 subtitle: l10n.speechCallSpokenHint,
                 value: call.spoken,
-                onChanged: (on) => unawaited(calls.update(call.copyWith(spoken: on))),
+                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(spoken: on))),
               ),
               SettingsSwitchTile(
                 key: const ValueKey('speech-call-speaker'),
                 title: l10n.speechCallSpeaker,
                 subtitle: l10n.speechCallSpeakerHint,
                 value: call.speaker,
-                onChanged: (on) => unawaited(calls.update(call.copyWith(speaker: on))),
+                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(speaker: on))),
               ),
               SettingsSwitchTile(
                 key: const ValueKey('speech-call-cue'),
                 title: l10n.speechCallCue,
                 subtitle: l10n.speechCallCueHint,
                 value: call.cue,
-                onChanged: (on) => unawaited(calls.update(call.copyWith(cue: on))),
+                onChanged: (on) => unawaited(calls.edit((saved) => saved.copyWith(cue: on))),
               ),
             ],
           ),

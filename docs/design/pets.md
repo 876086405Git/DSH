@@ -10,7 +10,7 @@
 - **一屏一个吉祥物。** 宠物站在活动条上时接管鲸尾；空状态里的静止鲸尾在宠物开启时也隐藏。
 - **同一件事只提醒一次。** 宠物在屏幕上时，它的气泡替代现有的玻璃横幅。当前正在看的对话不冒气泡，只做动作。后台照常发系统通知。
 - **不挡事。** 命中区只算身体，避开「回到底部」按钮，输入框弹出层打开时让位，列表底部为宠物留出高度，悬浮窗空闲时原地变淡。
-- **像素必须清楚。** 每个美术像素对应整数个**物理**像素，位置也对齐物理像素。尺寸按身体高度分小、标准、大三档。
+- **像素必须清楚。** 每个美术像素对应整数个**物理**像素，位置也对齐物理像素。尺寸按身体高度分小、标准、大三档，另有「自定义」（见 §2.10 下的说明）。
 - **悬浮窗做成可降级的可选项。** 默认关闭，用户打开时再申请权限。被拒、被系统藏起、被 ROM 杀掉，都退回 App 内宠物加系统通知，不报错。
 
 ## 1. 调研：采用什么、避开什么
@@ -48,7 +48,7 @@
 
 - 设置 › 主题里加一组「宠物」，点进去是宠物页。宠物页包含：
   - 选宠物：Deepy 小鲸鱼、鲸娘、不显示，带实时预览；
-  - 大小：小、标准、大；
+  - 大小：小、标准、大、自定义（选自定义时下面展开预览和滑条）；
   - 安静模式；
   - App 外显示；
   - 作者与来源，作为页底一行小字。
@@ -188,6 +188,7 @@
 
   身体高度取 `contentBox.h`。
 - 缩放倍数 `k` 的定义是：每个美术像素占多少个**物理像素**。像素画包要求 `k` 为整数：先算 `max(1, round(目标dp × devicePixelRatio ÷ contentBox.h))`，再让小、标准、大**至少各差 1**（`medium = max(small + 1, …)`，`large = max(medium + 1, …)`）。不加这一步的话，dpr 2.75 的手机上 22/30/40dp 会同时落成 1/2/2，三档分不出大小，悬浮窗还会比 App 内小一档。
+- 「自定义」（2026-11-15）：身体高度 15–90dp，即标准的 50%–300%，滑条按标准的 5% 一格，显示为百分比。它单独取整 `max(1, round(高度 × dpr ÷ contentBox.h))`，不参与三档的「至少差 1」。拖动时只重画设置页里的预览，松手才保存（`pet.custom_height`），聊天页和悬浮窗随之更新；切回三档时这个高度留着，下次选自定义还在。悬浮窗收到 `size: custom` 和 `bodyHeight`，在原生侧变成 `custom:<dp>` 这个尺寸键，高度变了就重新载入贴图。用处是有的宠物包按 `contentBox` 定档后看起来还是偏小或偏大。
 - 非像素画包（`pixelArt: false`）的 `k` 不限整数：`k = 目标dp × devicePixelRatio ÷ contentBox.h`。
 - 宠物的左上角和脚线都对齐到物理像素。
 - 悬浮窗和 App 内用同一档位，也就是同一套 `k`：App 内是 `pet_sprite.dart` 的 `petDevicePixels`，悬浮窗是 Kotlin `PetPack.devicePixels`，两边各有一份逐值对齐的单测（`pet_pixel_test.dart`、`PetPackTest.kt`）。
@@ -386,28 +387,33 @@ Clawd 主题 zip 的导入走宠物包转换工具（`app/tool/make_pet_pack.py`
 - **编号只在基础名存在时合并。** 孤立出现的 `tickle2`（没有 `tickle`）保留为独立反应名，不被静默丢掉，误编号的包能看出问题。
 - **缺省字段有确定回退。** 缺状态播 idle、缺 `tiers` 不分档、缺 `reactions` 键跳过该手势，见 §3.2 末尾；旧包不会因为少写字段被拒。
 
-### 3.8 Clawd on Desk 主题包转换（2026-11-14）
+### 3.8 素材转换工具（2026-11-15）
 
-app/tool/pet_theme_convert.py 把 clawd-on-desk 主题（theme.json + APNG + CSS/SVG 动画）转成 schema 1 宠物包，给玩家自制宠物用。素材是 CC BY-NC-SA 4.0 同人美术，**不进仓库**：自己克隆主题，把 --theme 指过去。
+app/tool/pet_theme_convert.py 把素材转成 schema 1 宠物包，按目录内容自动识别：
 
-    python3 tool/pet_theme_convert.py --theme DIR --out DIR [--id ID] [--input-name NAME] [--source URL]
+- clawd-on-desk 主题：theme.json + APNG，idle/roam/drag 的 CSS/SVG 由 pet_svg_frames.py 光栅化；
+  states、tiers、idleAnimations、reactions、timings 全从 theme.json 推导。
+- 图片：GIF / APNG / WebP / PNG，一个文件一个动画；文件名按中英文关键词认状态（idle、thinking、
+  working、error、done、sleep、walk、poke、drag、tickle 等），认不出来的进待机小剧场。
+- 逐帧目录（walk/01.png）与 Aseprite JSON 导出（按 frameTags 分动画）；单张图片做成静态待机。
+
+    python3 tool/pet_theme_convert.py --input DIR --out DIR [--id ID] [--input-name NAME] [--source URL] [--crisp]
     python3 -I tool/test_pet_theme_convert.py
 
-映射全部从 theme.json 推导，不写死某个主题：
-
-- states 保留全部变体（App 的 bonusOf 回退会自己用第 2 段起）。
-- workingTiers / jugglingTiers → tiers，按 minSessions 降序；主题每档的 files 变体 dsh-Go 没有挂载点，只取主文件，转换日志会列出丢掉的。
-- 有 tiers 的状态，多余动画写进 bonus（有 tier 命中时 App 不会回退，必须显式给）；其他状态留给 App 回退。
-- idleAnimations → idlePool；reactions 自动映射，double.files 展开成 tickle / tickle2 / tickle3；timings 去掉 notification 的 autoReturn（持续态）。
-- dsh-Go 没有的状态（dizzy / yawning / dozing / collapsing / mini-*）不导出。
-- sleep.afterMs 固定 60 秒：主题的 mouseSleepTimeout 是桌面鼠标空闲时间。
+技能 app/assets/skills/pet-theme/ 随 App 安装（脚本是 app/tool 的副本，测试会查一致性），
+宠物页的「让 AI 做一只宠物」把 /pet-theme 填进新对话。
 
 两个固定决定（改之前先看 §5 渲染）：
 
-- **画布 144×144（6 倍逻辑单位）、pixelArt: false**。素材是 12 倍导出、动画带亚像素平移；降到 2 倍再走像素画的最近邻整数放大，每帧位移不足一个画布像素，量化后是「几帧不动再跳一格」。144 画布 + 2×2 面积平均 + 平滑插值把损失压到接近素材本身：质心二阶差分 1.609%（288 原图 1.610%），不同帧保留 91%（48 画布只有 86%）。代价是边缘不再纯硬边。
-- **tickle2 / tickle3 编号而不是数组**：旧版 App 只读 tickle、忽略编号键，新版合并成候选列表，一份包通吃新旧。
+- **像素画保持原尺寸锐利绘制，其它素材用 144×144、pixelArt: false**。小图、硬边素材按原尺寸走像素画
+  整数放大；带亚像素位移或抗锯齿的素材（clawd 主题是 12 倍导出）降到 2 倍再整数放大会「几帧不动再
+  跳一格」，改成 144 画布 + 面积平均 + 平滑插值（质心二阶差分 1.609%，288 原图 1.610%，不同帧保留
+  91%）。--crisp 强制前者。
+- **tickle2 / tickle3 编号而不是数组**：旧版 App 只读 tickle、忽略编号键，新版合并成候选列表，一份包
+  通吃新旧。
 
-已知限制：tiers 每档的 files 变体不导出；SVG 的 CSS 关键帧参数写死在 pet_svg_frames.py，主题改 CSS 要同步改。
+已知限制：clawd 主题每档只取主文件（tiers 的 files 变体不导出）；SVG 的 CSS 关键帧参数写死在
+pet_svg_frames.py；整张精灵表要先拆帧或导出 Aseprite JSON。
 
 ## 4. 状态归约 `PetMood`
 
@@ -524,7 +530,7 @@ app/tool/pet_theme_convert.py 把 clawd-on-desk 主题（theme.json + APNG + CSS
 | 气泡 | 做完了 · 出错了 · 等你确认 · 等你回答 · 标题 · 做完了 · 3 个对话做完了 |
 | 长按菜单（App 内） | 换宠物 · 藏起来 1 小时 · 宠物设置 |
 | 长按半轮盘（悬浮窗） | 问一句 · 截图并问 DSH-Go · 新对话 · 停止当前任务（运行中）· 切换主机（多个）· 今天不再显示 · 宠物设置 |
-| 宠物页 | 宠物 · 大小（小 / 标准 / 大）· 安静模式 · App 外显示（有事时显示 / 一直显示）· 未授权 |
+| 宠物页 | 宠物 · 大小（小 / 标准 / 大 / 自定义）· 安静模式 · App 外显示（有事时显示 / 一直显示）· 未授权 |
 
 - 不写解释段落，不加感叹号，不用表情符号，不卖萌，不写催促或内疚式的话。
 - 安静模式的说明只占一行：「只做动作，不冒气泡」。

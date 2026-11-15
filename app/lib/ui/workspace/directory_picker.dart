@@ -197,7 +197,11 @@ class DirectoryLocationsSheet extends ConsumerWidget {
   }
 }
 
-/// Asks for an absolute folder path.
+/// A Windows host's absolute path (C:/Users/me, C:\Users\me) and its drive root.
+final _drivePath = RegExp(r'^[A-Za-z]:[\\/]');
+final _driveRoot = RegExp(r'^[A-Za-z]:[\\/]$');
+
+/// Asks for an absolute folder path, as the host writes it.
 Future<String?> askFolderPath(BuildContext context) async {
   final l10n = context.l10n;
   final path = await showTextPrompt(
@@ -207,9 +211,9 @@ Future<String?> askFolderPath(BuildContext context) async {
     confirm: l10n.remoteDirectoryGo,
     mono: true,
     keyboardType: TextInputType.url,
-    validate: (v) => v.startsWith('/') ? null : l10n.remoteDirectoryAbsolutePath,
+    validate: (v) => v.startsWith('/') || _drivePath.hasMatch(v) ? null : l10n.remoteDirectoryAbsolutePath,
   );
-  if (path == null) return null;
+  if (path == null || _driveRoot.hasMatch(path)) return path;
   return path.length > 1 && path.endsWith('/') ? path.substring(0, path.length - 1) : path;
 }
 

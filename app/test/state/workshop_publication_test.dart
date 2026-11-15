@@ -79,4 +79,23 @@ void main() {
     expect(companion.author, 'Author');
     expect(companion.rightsConfirmed, isFalse);
   });
+
+  test('only a name is needed: the rest is filled from the account, typed values stay', () {
+    final filled = WorkshopPublicationInput(titleZh: '小猫 Cat').withDefaults(login: 'octo', fallbackId: 'pet-abc123');
+    expect(filled.titleEn, '小猫 Cat');
+    expect(filled.id, 'cat');
+    expect(filled.author, 'octo');
+    expect(filled.license, 'LicenseRef-Author-Permission');
+    expect(filled.source, 'https://github.com/octo');
+    expect(filled.version, '1.0.0');
+    expect(filled.errors(includeRights: false), isEmpty);
+    expect(WorkshopPublicationInput(titleEn: '我的猫').withDefaults(login: 'octo', fallbackId: 'pet-abc123').id, 'pet-abc123');
+    expect(_valid().withDefaults(login: 'octo', fallbackId: 'x').errors(includeRights: false), isEmpty);
+    expect(_valid().withDefaults(login: 'octo', fallbackId: 'x').source, 'https://source.example/cat');
+    // Without an account the author and source still have to be typed.
+    expect(WorkshopPublicationInput(titleZh: '猫').withDefaults(fallbackId: 'pet-1').errors(includeRights: false).keys,
+      containsAll(['author', 'source']));
+    expect(WorkshopPublicationInput(titleZh: '猫', id: 'Bad Id').withDefaults(login: 'o', fallbackId: 'p').errors(includeRights: false).keys,
+      contains('id'));
+  });
 }

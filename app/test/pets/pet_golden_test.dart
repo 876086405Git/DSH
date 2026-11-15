@@ -108,7 +108,7 @@ void main() {
   for (final brightness in Brightness.values) {
     final tone = brightness.name;
     for (final (pack, short) in [(deepy, 'deepy'), (girl, 'girl')]) {
-      for (final size in PetSize.values) {
+      for (final size in PetSize.presets) {
         testWidgets('$short on the composer, ${size.name}, $tone', (tester) async {
           await scene(tester, pack: pack, size: size, brightness: brightness);
           await golden(tester, 'pet_composer_${short}_${size.name}_$tone');

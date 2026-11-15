@@ -185,6 +185,18 @@ void main() {
     expect(container.read(settingsProvider).themeMode, ThemeMode.system);
   });
 
+  testWidgets('a screen reader can pick the mode and the colour (#157)', (tester) async {
+    final container = await _pumpApp(tester);
+    final semantics = tester.ensureSemantics();
+    tester.semantics.tap(find.semantics.byLabel('深色'));
+    await tester.pumpAndSettle();
+    expect(container.read(settingsProvider).themeMode, ThemeMode.dark);
+    tester.semantics.tap(find.semantics.byLabel('配色：琥珀'));
+    await tester.pumpAndSettle();
+    expect(container.read(accentProvider), AppAccent.amber);
+    semantics.dispose();
+  });
+
   testWidgets('every picker sits on one grid: 16 from the card, 12 apart, columns aligned', (tester) async {
     await _pumpApp(tester);
     Rect cardOf(Type picker) =>

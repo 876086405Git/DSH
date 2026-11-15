@@ -4,6 +4,9 @@ export interface Env {
   /** Emergency switches. Absent/"1" is enabled; "0" pauses the new capability. */
   WORKSHOP_UPLOAD_ENABLED?: string;
   WORKSHOP_COMPANION_ENABLED?: string;
+  /** "1": a submission that passes the archive checks is approved as soon as
+   *  it is uploaded. Absent/"0": it waits in the review queue as pending. */
+  WORKSHOP_AUTO_APPROVE?: string;
   /** Public client id of the GitHub OAuth App the App signs authors in with;
    *  empty or malformed: capabilities announce `clientId: null`. */
   WORKSHOP_GITHUB_CLIENT_ID?: string;

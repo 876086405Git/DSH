@@ -9,6 +9,8 @@ import 'package:dsh_app/pets/pet_pack.dart';
 import 'package:dsh_app/pets/pet_prefs.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
 import 'package:dsh_app/pets/pet_state.dart' show noPetId;
+import 'package:dsh_app/state/compose_inbox.dart';
+import 'package:dsh_app/state/ui_mode_state.dart';
 import 'package:dsh_app/ui/pets/pet_menu.dart';
 import 'package:dsh_app/ui/pets/pet_picker.dart';
 import 'package:dsh_app/ui/pets/pet_settings_page.dart';
@@ -104,6 +106,7 @@ void main() {
     File? Function() picked, {
     PetLibrary? library,
     PetOverlayChannel? overlay,
+    bool web = false,
   }) async {
     usePhoneView(tester);
     await tester.pumpWidget(
@@ -118,12 +121,33 @@ void main() {
             (ref, id) async => isUserPet(id) ? ref.watch(petLibraryProvider).load(id) : diskPack(id),
           ),
           petPrefsProvider.overrideWith(() => FixedPetPrefs(const PetPrefs(loaded: true))),
+          if (web) uiModeProvider.overrideWith(_WebMode.new),
         ],
       ),
     );
     await settle(tester, () => false);
     return ProviderScope.containerOf(tester.element(find.byType(PetSettingsPage)));
   }
+
+  testWidgets('让 AI 做一只宠物: the skill word waits in a new composer', (tester) async {
+    final container = await open(tester, () => null);
+    expect(find.text('让 AI 做一只宠物'), findsOneWidget);
+    await tester.tap(find.text('让 AI 做一只宠物'));
+    await tester.pump();
+    final pending = container.read(composeInboxProvider);
+    expect(pending, isNotEmpty);
+    expect(pending.first.text, '/pet-theme ');
+  });
+
+  testWidgets('让 AI 做一只宠物 in web mode: the page opens a new chat with it', (tester) async {
+    final container = await open(tester, () => null, web: true);
+    await tester.tap(find.text('让 AI 做一只宠物'));
+    await tester.pump();
+    final request = container.read(webOpenProvider)!;
+    expect(request.target.newSession, isTrue);
+    expect(request.compose!.text, '/pet-theme ');
+    expect(container.read(composeInboxProvider), isEmpty);
+  });
 
   testWidgets('导入: your pet joins the picker, chosen, and says who made it', (tester) async {
     final file = zip({'cat/pack.json': utf8.encode(jsonEncode(packJson())), 'cat/idle.png': png(32, 16)});
@@ -300,4 +324,9 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     expect(container.read(petPrefsProvider).packId, defaultPetId);
   });
+}
+
+class _WebMode extends UiModeController {
+  @override
+  UiModeState build() => const UiModeState(mode: UiMode.web, loaded: true);
 }

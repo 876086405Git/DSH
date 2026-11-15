@@ -16,24 +16,27 @@ import '../../pets/pet_state.dart';
 import '../theme/motion.dart';
 
 /// Device pixels per art pixel for [size]: whole numbers, one apart at
-/// least, so the three sizes always differ.
-int petDevicePixels(PetPack pack, PetSize size, double devicePixelRatio) {
-  int k(PetSize s) => math.max(1, (s.bodyHeight * devicePixelRatio / pack.contentBox.height).round());
+/// least, so the three presets always differ. 自定义 rounds [customHeight]
+/// on its own.
+int petDevicePixels(PetPack pack, PetSize size, double devicePixelRatio, {double customHeight = 30}) {
+  int at(double dp) => math.max(1, (dp * devicePixelRatio / pack.contentBox.height).round());
+  if (size == PetSize.custom) return at(customHeight);
+  int k(PetSize s) => at(s.bodyHeight);
   final small = k(PetSize.small);
   final medium = math.max(small + 1, k(PetSize.medium));
   final large = math.max(medium + 1, k(PetSize.large));
   return switch (size) {
     PetSize.small => small,
     PetSize.medium => medium,
-    PetSize.large => large,
+    PetSize.large || PetSize.custom => large,
   };
 }
 
 /// Logical pixels per art pixel: whole device pixels for pixel art, the
 /// target body height otherwise.
-double petScale(PetPack pack, PetSize size, double devicePixelRatio) => pack.pixelArt
-    ? petDevicePixels(pack, size, devicePixelRatio) / devicePixelRatio
-    : size.bodyHeight / pack.contentBox.height;
+double petScale(PetPack pack, PetSize size, double devicePixelRatio, {double customHeight = 30}) => pack.pixelArt
+    ? petDevicePixels(pack, size, devicePixelRatio, customHeight: customHeight) / devicePixelRatio
+    : (size == PetSize.custom ? customHeight : size.bodyHeight) / pack.contentBox.height;
 
 /// One animation of [pack], as big as the canvas × [scale].
 ///

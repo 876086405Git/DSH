@@ -221,8 +221,10 @@ class NativeFileCoordinator {
         await transport.upload(effect.request, stream, file, Uint8List.sublistView(bytes, 0, length));
       }
       if (!current()) return null;
-      completed = true;
       final response = await transport.complete(effect.request, stream, files.isEmpty ? 'cancelled' : 'selected');
+      // Only once it got there: a complete lost on the way is closed below,
+      // or the bridge keeps the request and refuses the next pick.
+      completed = true;
       return current() ? response : null;
     } catch (error) {
       if (!completed) {

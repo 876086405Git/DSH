@@ -758,7 +758,7 @@
   "remoteDirectoryRecent": "最近",
   "remoteDirectoryEnterPath": "输入路径",
   "remoteDirectoryGo": "前往",
-  "remoteDirectoryAbsolutePath": "从「/」开始写完整路径",
+  "remoteDirectoryAbsolutePath": "写完整路径，如 /root/workspace 或 C:/Users/me",
   "remoteDirectoryNewFolder": "新建文件夹",
   "remoteDirectoryParentCaption": "在「{name}」里",
   "@remoteDirectoryParentCaption": {

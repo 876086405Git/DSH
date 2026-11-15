@@ -508,7 +508,8 @@ class PetLayerState extends ConsumerState<PetLayer> with TickerProviderStateMixi
   double get _scale {
     final pack = _pack;
     if (pack == null) return 1;
-    return petScale(pack, ref.read(petPrefsProvider).size, _dpr);
+    final prefs = ref.read(petPrefsProvider);
+    return petScale(pack, prefs.size, _dpr, customHeight: prefs.customHeight);
   }
 
   /// Body extents left and right of the foot point, logical px.

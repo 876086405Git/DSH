@@ -250,18 +250,25 @@ class GuestFs {
     return files;
   }
 
-  /// Writes [skill] as `skills/<name>/…`, replacing what was there.
+  /// Writes [skill] as `skills/<name>/…`, replacing what was there. The new
+  /// files are written beside the skills folder first, so a write that fails
+  /// (a full disk) leaves the installed skill as it was.
   void writeSkill(SharedSkill skill) {
     final folder = dir('$skillsRoot/${skill.name}');
     final flat = file('$skillsRoot/${skill.name}.md');
-    if (flat.existsSync()) flat.deleteSync();
-    if (folder.existsSync()) folder.deleteSync(recursive: true);
+    final staging = dir('$skillsRoot.dsh-app-tmp/${skill.name}');
+    if (staging.existsSync()) staging.deleteSync(recursive: true);
+    staging.createSync(recursive: true);
     for (final MapEntry(key: rel, value: text) in skill.files.entries) {
       if (!SharedSkill.isSafePath(rel)) continue;
-      final target = File('${folder.path}/$rel');
+      final target = File('${staging.path}/$rel');
       target.parent.createSync(recursive: true);
       target.writeAsStringSync(text, flush: true);
     }
+    if (flat.existsSync()) flat.deleteSync();
+    if (folder.existsSync()) folder.deleteSync(recursive: true);
+    folder.parent.createSync(recursive: true);
+    staging.renameSync(folder.path);
   }
 
   Future<void> deleteImportedAgentsMd() async {

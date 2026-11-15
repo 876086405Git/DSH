@@ -5366,6 +5366,18 @@ abstract class L10n {
   /// **'导入你自己的像素宠物：一个 zip，里面是 pack.json 和序列帧 PNG，格式见仓库里的 docs/design/pets.md。长按导入的宠物可以删除。'**
   String get botsPetImportHint;
 
+  /// No description provided for @botsPetMake.
+  ///
+  /// In zh, this message translates to:
+  /// **'让 AI 做一只宠物'**
+  String get botsPetMake;
+
+  /// No description provided for @botsPetMakeSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'把 GIF、表情包或主题转成宠物包'**
+  String get botsPetMakeSubtitle;
+
   /// No description provided for @botsPetImportDone.
   ///
   /// In zh, this message translates to:
@@ -5533,6 +5545,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'大小'**
   String get botsPetSize;
+
+  /// No description provided for @botsPetCustomSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义大小'**
+  String get botsPetCustomSize;
 
   /// No description provided for @botsPetQuiet.
   ///
@@ -29159,7 +29177,7 @@ abstract class L10n {
   /// No description provided for @remoteDirectoryAbsolutePath.
   ///
   /// In zh, this message translates to:
-  /// **'从「/」开始写完整路径'**
+  /// **'写完整路径，如 /root/workspace 或 C:/Users/me'**
   String get remoteDirectoryAbsolutePath;
 
   /// No description provided for @remoteDirectoryNewFolder.
@@ -33512,6 +33530,36 @@ abstract class L10n {
   /// **'通话设置'**
   String get speechCallSettings;
 
+  /// No description provided for @speechCallPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'停顿多久算说完'**
+  String get speechCallPause;
+
+  /// No description provided for @speechCallPauseQuick.
+  ///
+  /// In zh, this message translates to:
+  /// **'快'**
+  String get speechCallPauseQuick;
+
+  /// No description provided for @speechCallPauseNormal.
+  ///
+  /// In zh, this message translates to:
+  /// **'适中'**
+  String get speechCallPauseNormal;
+
+  /// No description provided for @speechCallPausePatient.
+  ///
+  /// In zh, this message translates to:
+  /// **'耐心'**
+  String get speechCallPausePatient;
+
+  /// No description provided for @speechCallPauseHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'说话爱停顿、常被她抢话，就选「耐心」；嫌她接得慢，选「快」。'**
+  String get speechCallPauseHint;
+
   /// No description provided for @speechCallSpeechSection.
   ///
   /// In zh, this message translates to:
@@ -33949,6 +33997,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'大'**
   String get stateSizeLarge;
+
+  /// No description provided for @stateSizeCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get stateSizeCustom;
 
   /// No description provided for @statePetDone.
   ///
@@ -48227,8 +48281,38 @@ abstract class L10n {
   /// No description provided for @workshopPublishSourcesEmptyMessage.
   ///
   /// In zh, this message translates to:
-  /// **'自己导入的像素宠物和现在的伙伴可以投稿。'**
+  /// **'自己导入的像素宠物和现在的伙伴可以投稿，也可以直接从文件选一个。'**
   String get workshopPublishSourcesEmptyMessage;
+
+  /// No description provided for @workshopPublishFromFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'从文件选择'**
+  String get workshopPublishFromFile;
+
+  /// No description provided for @workshopPublishFromFileHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'宠物或伙伴的 zip，不用先导入'**
+  String get workshopPublishFromFileHint;
+
+  /// No description provided for @workshopPublishTitleEnHelper.
+  ///
+  /// In zh, this message translates to:
+  /// **'选填，留空就用中文名称'**
+  String get workshopPublishTitleEnHelper;
+
+  /// No description provided for @workshopPublishAuthorHelper.
+  ///
+  /// In zh, this message translates to:
+  /// **'选填，留空就用你的 GitHub 用户名'**
+  String get workshopPublishAuthorHelper;
+
+  /// No description provided for @workshopPublishLicenseHelper.
+  ///
+  /// In zh, this message translates to:
+  /// **'选填，不选就是「作者授权」'**
+  String get workshopPublishLicenseHelper;
 
   /// No description provided for @workshopPublishSourcesIssue.
   ///
@@ -48299,7 +48383,7 @@ abstract class L10n {
   /// No description provided for @workshopPublishIdHelper.
   ///
   /// In zh, this message translates to:
-  /// **'小写字母、数字和短横线'**
+  /// **'选填，留空按名称自动生成；小写字母、数字和短横线'**
   String get workshopPublishIdHelper;
 
   /// No description provided for @workshopPublishAuthor.
@@ -48323,7 +48407,7 @@ abstract class L10n {
   /// No description provided for @workshopPublishSourceHelper.
   ///
   /// In zh, this message translates to:
-  /// **'作品主页或出处，以 https:// 开头'**
+  /// **'选填，留空就用你的 GitHub 主页；以 https:// 开头'**
   String get workshopPublishSourceHelper;
 
   /// No description provided for @workshopPublishSectionAbout.

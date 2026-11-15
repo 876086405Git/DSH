@@ -1710,14 +1710,25 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                     },
                     calls: _canvasCalls,
                   )
-                : NotificationListener<ScrollNotification>(
+                // A reply growing (or older messages arriving) lengthens the
+                // list without scrolling it: that is a metrics change, not a
+                // scroll, and the header has to hear of it too, or the story
+                // runs up under it unshaded.
+                : NotificationListener<Notification>(
                     onNotification: (n) {
-                      if (n.metrics.axis == Axis.vertical) {
-                        _scrolled.value = ((n.metrics.maxScrollExtent - n.metrics.pixels) / 24).clamp(0.0, 1.0);
-                        _readingBack.value = n.metrics.pixels > 240;
-                        if (novel) _immerse(n);
-                        // The list runs newest first: what is left above is older.
-                        if (n.metrics.extentAfter < 600) unawaited(_loadOlder());
+                      final metrics = switch (n) {
+                        ScrollNotification(:final metrics) || ScrollMetricsNotification(:final metrics) => metrics,
+                        _ => null,
+                      };
+                      if (metrics != null && metrics.axis == Axis.vertical) {
+                        _scrolled.value = ((metrics.maxScrollExtent - metrics.pixels) / 24).clamp(0.0, 1.0);
+                        _readingBack.value = metrics.pixels > 240;
+                        if (n is ScrollNotification) {
+                          if (novel) _immerse(n);
+                          // The list runs newest first: what is left above is
+                          // older. Only a scroll back asks for more.
+                          if (metrics.extentAfter < 600) unawaited(_loadOlder());
+                        }
                       }
                       return false;
                     },

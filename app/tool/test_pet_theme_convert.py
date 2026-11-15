@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -224,6 +224,89 @@ class MappingTest(unittest.TestCase):
             last = max(f['i'] for f in anim['frames'])
             self.assertLessEqual(anim['cols'], w // anim['frameW'], name)
             self.assertLess(last // anim['cols'], h // anim['frameH'], name)
+
+
+class GenericInputTest(unittest.TestCase):
+    """Art that is not a clawd theme: images, frame folders, Aseprite, one still."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix='pet-art-')
+        self.out = tempfile.mkdtemp(prefix='pet-pack-')
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+        shutil.rmtree(self.out, ignore_errors=True)
+
+    def _solid(self, w, h, colour, dy=0):
+        a = np.zeros((h, w, 4), np.uint8)
+        a[dy:dy + h - 4, 2:w - 2] = (colour[0], colour[1], colour[2], 255)
+        return Image.fromarray(a, 'RGBA')
+
+    def _gif(self, name, n, colour):
+        frames = [self._solid(64, 64, colour, i) for i in range(n)]
+        frames[0].save(os.path.join(self.dir, name + '.gif'), save_all=True,
+                       append_images=frames[1:], duration=120, loop=0)
+
+    def test_animated_images_become_states(self):
+        self._gif('idle', 3, (90, 160, 220))
+        self._gif('error', 2, (220, 80, 70))
+        self._gif('hello', 2, (120, 200, 120))
+        self._solid(64, 64, (10, 10, 10)).save(os.path.join(self.dir, 'sticker.png'))
+        pack = C.build(self.dir, self.out, 'test')
+        self.assertEqual(pack['states']['idle'], ['idle'])
+        self.assertEqual(pack['states']['error'], ['error'])
+        self.assertEqual(pack['reactions']['tapLeft'], 'hello')
+        self.assertEqual([x['anim'] for x in pack['idlePool']['anims']], ['sticker'])
+        self.assertIs(pack['pixelArt'], True)
+        self.assertEqual(len(pack['animations']['idle']['frames']), 3)
+
+    def test_frame_folder(self):
+        walk = os.path.join(self.dir, 'walk')
+        os.makedirs(walk)
+        for i in range(4):
+            self._solid(64, 64, (200, 160, 90), i).save(os.path.join(walk, '%02d.png' % (i + 1)))
+        pack = C.build(self.dir, self.out, 'walk-pet')
+        self.assertEqual(pack['states']['roam'], ['walk'])
+        self.assertEqual(len(pack['animations']['walk']['frames']), 4)
+
+    def test_aseprite_export(self):
+        sheet = Image.new('RGBA', (64 * 3, 64), (0, 0, 0, 0))
+        for i in range(3):
+            sheet.alpha_composite(self._solid(64, 64, (240, 200, 120), i), (i * 64, 0))
+        sheet.save(os.path.join(self.dir, 'sprite.png'))
+        frames = {'f%d' % i: {'frame': {'x': i * 64, 'y': 0, 'w': 64, 'h': 64}, 'duration': 90}
+                  for i in range(3)}
+        data = {'frames': frames, 'meta': {'image': 'sprite.png',
+                'frameTags': [{'name': 'idle', 'from': 0, 'to': 1},
+                              {'name': 'thinking', 'from': 2, 'to': 2}]}}
+        json.dump(data, open(os.path.join(self.dir, 'sprite.json'), 'w'))
+        pack = C.build(self.dir, self.out, 'ase')
+        self.assertEqual(len(pack['animations']['idle']['frames']), 2)
+        self.assertEqual(len(pack['animations']['thinking']['frames']), 1)
+        self.assertEqual([f['ms'] for f in pack['animations']['idle']['frames']], [90, 90])
+
+    def test_chinese_names_keep_their_own_states(self):
+        self._solid(48, 48, (240, 60, 80)).save(os.path.join(self.dir, '待机.png'))
+        self._solid(48, 48, (50, 150, 230)).save(os.path.join(self.dir, '思考.png'))
+        pack = C.build(self.dir, self.out, 'zh')
+        self.assertEqual(pack['states']['idle'], ['待机'])
+        self.assertEqual(pack['states']['thinking'], ['思考'])
+
+    def test_single_still_becomes_idle(self):
+        self._solid(48, 48, (160, 120, 200)).save(os.path.join(self.dir, 'solo.png'))
+        pack = C.build(self.dir, self.out, 'solo')
+        self.assertEqual(pack['states'], {'idle': ['solo']})
+        self.assertEqual(pack['idlePool']['anims'], [])
+        self.assertEqual(pack['canvas'], {'w': 48, 'h': 48})
+
+    def test_large_soft_art_gets_the_smooth_canvas(self):
+        im = Image.new('RGBA', (300, 300), (0, 0, 0, 0))
+        ImageDraw.Draw(im).ellipse((50, 50, 250, 250), fill=(255, 0, 0, 128))
+        im.save(os.path.join(self.dir, 'soft.png'))
+        pack = C.build(self.dir, self.out, 'soft')
+        self.assertIs(pack['pixelArt'], False)
+        self.assertEqual(pack['canvas'], {'w': 144, 'h': 144})
+
 
 if __name__ == '__main__':
     unittest.main()

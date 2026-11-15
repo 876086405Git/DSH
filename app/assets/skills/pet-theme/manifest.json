@@ -1,0 +1,10 @@
+{
+  "name": "pet-theme",
+  "files": {
+    "SKILL.md": "SKILL.md",
+    "pet_theme_convert.py": "scripts/pet_theme_convert.py",
+    "pet_svg_frames.py": "scripts/pet_svg_frames.py",
+    "make_pet_pack.py": "scripts/make_pet_pack.py",
+    "pet_pack_check.py": "scripts/pet_pack_check.py"
+  }
+}

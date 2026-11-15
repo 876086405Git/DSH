@@ -66,6 +66,15 @@ class PetPushTest {
         assertFalse(p.active)
     }
 
+    @Test fun customSizeCarriesItsHeightInTheKey() {
+        assertEquals("custom:45.0", PetPush.fromMap(mapOf("state" to "idle", "size" to "custom", "bodyHeight" to 45), now).size)
+        assertEquals("custom:90.0", PetPush.fromMap(mapOf("state" to "idle", "size" to "custom", "bodyHeight" to 500.0), now).size)
+        assertEquals("medium", PetPush.fromMap(mapOf("state" to "idle", "size" to "custom"), now).size)
+        assertEquals("medium", PetPush.fromMap(mapOf("state" to "idle", "size" to "custom:45"), now).size)
+        assertEquals(45f, PetSize.dpOf("custom:45.0"))
+        assertEquals(40f, PetSize.dpOf("large"))
+    }
+
     @Test fun theLineIsDartsTextVerbatim() {
         val b = PetPush.fromMap(mapOf("bubble" to mapOf("id" to "x", "text" to "3 个对话做完了", "title" to "修复登录", "untilMs" to now + 8_000)), now).bubble!!
         assertEquals("3 个对话做完了", b.line)

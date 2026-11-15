@@ -11,7 +11,7 @@ import java.nio.file.SecureDirectoryStream
 import java.nio.file.attribute.BasicFileAttributeView
 import java.nio.file.attribute.BasicFileAttributes
 
-/** PRoot 5.1.107.98 names its private glue directory with the tracer's getpid(). */
+/** PRoot 5.1.107.102 names its private glue directory with the tracer's getpid(). */
 internal object ProotTempFiles {
     private val NAME = Regex("proot-([1-9][0-9]*)-[A-Za-z0-9]{6}")
 
