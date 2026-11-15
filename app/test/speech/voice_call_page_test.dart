@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_voice_source.dart';
@@ -359,6 +360,9 @@ void main() {
     ]);
     final now = container.read(callSettingsProvider);
     expect((now.pause, now.speaker, now.bargeIn), (CallPause.patient, false, false));
+    // And saved so: the last write carries both.
+    final saved = jsonDecode((await SharedPreferences.getInstance()).getString('speech_call_v1')!) as Map;
+    expect((saved['pause'], saved['speaker'], saved['bargeIn']), ('patient', false, false));
   });
 
   test('a backdrop choice is kept', () async {
