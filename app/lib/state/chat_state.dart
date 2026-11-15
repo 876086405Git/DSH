@@ -1185,10 +1185,10 @@ class ChatController extends Notifier<ChatState> {
       final pendingIds = _pending.map((prompt) => prompt.requestId).toSet();
       _claimedAt.removeWhere((requestId, _) => !pendingIds.contains(requestId));
     }
-    // A fresh baseline is the Host saying what it holds. A prompt that is
-    // neither in that inbox nor echoed, and is not waiting on its own prompt
-    // answer, did not make it: stop showing it as on its way.
-    if (freshSnapshot && _delivering.isEmpty && _pending.isNotEmpty) {
+    // A fresh baseline that carries the inbox is the Host saying what it
+    // holds. A prompt that is neither there nor echoed, and is not waiting on
+    // its own prompt answer, did not make it: stop showing it as on its way.
+    if (freshSnapshot && _delivering.isEmpty && _pending.isNotEmpty && _transcript.projections.has('inbox')) {
       final inbox = _inboxIds();
       _pending = List.unmodifiable([
         for (final prompt in _pending)
