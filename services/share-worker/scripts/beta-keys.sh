@@ -39,6 +39,8 @@ wrangler_config
 private_file() { # FILE: must exist, readable only by us
   [[ -s "$1" ]] || die "$1 is missing or empty"
   local mode
+  # Git Bash / Cygwin report a made-up mode (chmod doesn't change NTFS ACLs), so the check can't pass there.
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; esac
   mode=$(stat -c %a "$1")
   [[ "$mode" == 600 || "$mode" == 400 ]] || die "$1 is mode $mode; chmod 600 it"
 }
