@@ -11,6 +11,7 @@ import '../diagnostics/diagnostics_channel.dart';
 class OhosSpeechVoiceSettings extends CompanionVoiceSettings {
   const OhosSpeechVoiceSettings({this.voice = 'stella'});
   final String voice;
+  @override
   String get deepseekVoice => voice;
 }
 

@@ -10,6 +10,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart';

@@ -806,7 +806,7 @@ final class _DshHttpStream {
     // abort after headers owns the socket even before the caller reads body.
     // The iterator pauses after this single chunk until the caller advances.
     _first = reader.moveNext();
-    unawaited(_first!.then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    unawaited(_first!.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
     if (_closed || abort.isAborted || connection._closed) {
       // Headers may arrive after cancellation won. Own that late response too.
       await reader.cancel();

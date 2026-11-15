@@ -24,7 +24,7 @@ class _OhosSpeechLane {
     final result = Future.wait<void>([_retiring, stopped, previous._physicalOpenDone.future]);
     // Failure remains observable to the old output. A later open may retry the
     // native retained owner; the native lease decides whether creation is safe.
-    _retiring = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _retiring = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return result.then<void>((_) {});
   }
 }
@@ -210,12 +210,12 @@ class _OhosDeepSeekOut implements SpeechOut {
     _capacityWake = null;
     // Close this speech owner before cancelling its reader. Closing a bridge
     // aborts only its exchange group; a direct owner owns its HTTP client.
-    unawaited(_speech?.then<void>((speech) => speech?.close(), onError: (Object _, StackTrace __) {}));
-    unawaited(_reader?.cancel().then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    unawaited(_speech?.then<void>((speech) => speech?.close(), onError: (Object _, StackTrace _) {}));
+    unawaited(_reader?.cancel().then<void>((_) {}, onError: (Object _, StackTrace _) {}));
     final retirement = _ohosSpeechLane.release(this, stopNative: stopNative);
     unawaited(retirement.then<void>((_) {
       _publish(terminal);
-    }, onError: (Object _, StackTrace __) {
+    }, onError: (Object _, StackTrace _) {
       _publish(const SpeechOutFailed(DeepSeekSpeechError(DeepSeekSpeechFailure.protocol, 'audio stop failed')));
     }));
   }
