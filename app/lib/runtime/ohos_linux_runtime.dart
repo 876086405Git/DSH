@@ -1,4 +1,6 @@
 import 'dart:convert';
+// The plain-Dart probe (runtime/tests/ohos/linux-runtime-dart.py) swaps services.dart for a stub without Uint8List.
+// ignore: unnecessary_import
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -55,9 +57,9 @@ class OhosLinuxProxyConfiguration {
   final String? noProxy;
   Map<String, String> toMap() => {
     'mode': mode.name,
-    if (httpProxy != null) 'httpProxy': httpProxy!,
-    if (httpsProxy != null) 'httpsProxy': httpsProxy!,
-    if (noProxy != null) 'noProxy': noProxy!,
+    'httpProxy': ?httpProxy,
+    'httpsProxy': ?httpsProxy,
+    'noProxy': ?noProxy,
   };
 }
 
@@ -78,8 +80,9 @@ class OhosLinuxProxyStatus {
         'httpConfigured',
         'httpsConfigured',
       }.contains(key),
-    ))
+    )) {
       _invalid();
+    }
     final source = OhosLinuxProxyMode.values.firstWhere(
       (mode) => mode.name == value['source'],
       orElse: () => _invalid(),
@@ -87,8 +90,9 @@ class OhosLinuxProxyStatus {
     final http = _bool(value['httpConfigured']);
     final https = _bool(value['httpsConfigured']);
     if (source == OhosLinuxProxyMode.direct && (http || https) ||
-        source == OhosLinuxProxyMode.manual && !http && !https)
+        source == OhosLinuxProxyMode.manual && !http && !https) {
       _invalid();
+    }
     return OhosLinuxProxyStatus._(
       source,
       _integer(value['revision']),
@@ -119,8 +123,9 @@ class OhosLinuxOutput {
         bytes.length > 16384 ||
         retained != bytes.length ||
         total < retained ||
-        (total > retained && !truncated))
+        (total > retained && !truncated)) {
       _invalid();
+    }
     return OhosLinuxOutput._(bytes.asUnmodifiableView(), total, truncated);
   }
 
@@ -148,8 +153,9 @@ class OhosLinuxOutcome {
     if ((exit != null && exit > 255) ||
         (signal != null && !RegExp(r'^SIG[A-Z0-9]+$').hasMatch(signal)) ||
         (exit != null && signal != null) ||
-        (exit == null && signal == null && !(cancelled && notStarted)))
+        (exit == null && signal == null && !(cancelled && notStarted))) {
       _invalid();
+    }
     return OhosLinuxOutcome._(
       exit,
       signal,
@@ -183,8 +189,9 @@ class OhosLinuxJobDiagnostic {
         }.contains(category) ||
         evidence != (category == 'unknown' ? 'none' : 'stderr') ||
         message.isEmpty ||
-        message.length > 512)
+        message.length > 512) {
       _invalid();
+    }
     return OhosLinuxJobDiagnostic._(category, evidence, message);
   }
 
@@ -231,8 +238,9 @@ class OhosLinuxJob {
             outcome.signal != null ||
             outcome.exitCode == null ||
             outcome.exitCode! < 1 ||
-            outcome.exitCode! > 255))
+            outcome.exitCode! > 255)) {
       _invalid();
+    }
     return OhosLinuxJob._(
       id,
       knownState,
@@ -290,8 +298,9 @@ class OhosLinuxGuestClose {
     if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(epoch) ||
         value['rootfsSync'] != true ||
         value['syncMethod'] != 'syncfs' ||
-        value['syncScope'] != 'rootfs')
+        value['syncScope'] != 'rootfs') {
       _invalid();
+    }
     return OhosLinuxGuestClose._(epoch);
   }
 
@@ -343,8 +352,9 @@ class OhosLinuxRetirement {
             retirement.nativeJoined != true ||
             retirement.nativeRetirementError != false ||
             (retirement.nativeApiResult != -3 &&
-                retirement.nativeApiResult != -4)))
+                retirement.nativeApiResult != -4))) {
       _invalid();
+    }
     return retirement;
   }
 
@@ -404,8 +414,9 @@ class OhosLinuxSnapshot {
               r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$',
             ).hasMatch(persistentInstance)) ||
         (bootMode != null && bootMode != 'install' && bootMode != 'resume') ||
-        (persistentInstance == null) != (bootMode == null))
+        (persistentInstance == null) != (bootMode == null)) {
       _invalid();
+    }
     final next = _integer(value['nextRequestId']);
     final state = OhosLinuxState.parse(value['state']);
     final opened = _bool(value['guestOpened']);
@@ -417,8 +428,9 @@ class OhosLinuxSnapshot {
     if (instance.isEmpty ||
         next < 1 ||
         (retirement?.cleanCheckpoint == true && persistentInstance == null) ||
-        (shutdown && retirement?.confirmed != true))
+        (shutdown && retirement?.confirmed != true)) {
       _invalid();
+    }
     return OhosLinuxSnapshot._(
       instance,
       _optionalString(value['attemptId']),
@@ -482,8 +494,8 @@ class OhosLinuxSnapshot {
 /// completed installation or command. The caller may poll [getStatus].
 class OhosLinuxRuntime {
   const OhosLinuxRuntime({
-    MethodChannel channel = const MethodChannel('dsh/runtime'),
-  }) : _channel = channel;
+    this._channel = const MethodChannel('dsh/runtime'),
+  });
   final MethodChannel _channel;
 
   Future<OhosLinuxSnapshot> _call(
@@ -516,8 +528,9 @@ class OhosLinuxRuntime {
     Map<String, String> environment = const {},
     String stdin = '',
   }) {
-    if (scope.attemptId == null)
+    if (scope.attemptId == null) {
       throw StateError('Linux has no installation attempt');
+    }
     return _call('runLinuxPrivateGuest', {
       'instanceId': scope.instanceId,
       'attemptId': scope.attemptId,

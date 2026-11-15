@@ -168,6 +168,7 @@ void main() {
       'rpcMethods': requests.map((request) => request['method']).toList(),
       'fixtureErrors': serverErrors.map((error) => error.toString()).toList(),
     };
+    // ignore: avoid_print
     print('OH_MATERIALIZE_TARGET ${jsonEncode(observation)}');
     expect(serverErrors, isEmpty);
     expect(targetError, isNull, reason: 'the actual Dart materialize call must return a file');
