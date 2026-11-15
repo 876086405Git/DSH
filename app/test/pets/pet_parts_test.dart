@@ -300,12 +300,15 @@ void main() {
       await tester.tap(find.text('鲸娘'));
       await tester.pump();
       expect(c.read(petPrefsProvider).packId, 'whale-girl');
+      await tester.ensureVisible(find.text('大'));
       await tester.tap(find.text('大'));
       await tester.pump();
       expect(c.read(petPrefsProvider).size, PetSize.large);
+      await tester.ensureVisible(find.text('安静模式'));
       await tester.tap(find.text('安静模式'));
       await tester.pump();
       expect(c.read(petPrefsProvider).quiet, isTrue);
+      await tester.ensureVisible(find.text('不显示'));
       await tester.tap(find.text('不显示'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));

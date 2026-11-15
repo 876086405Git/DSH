@@ -72,6 +72,7 @@ class PetSettingsPage extends ConsumerWidget {
         SettingsSection(
           children: [
             SettingsTile(
+              spot: Spots.petMake,
               icon: AppIcons.skill,
               title: l10n.botsPetMake,
               subtitle: l10n.botsPetMakeSubtitle,
