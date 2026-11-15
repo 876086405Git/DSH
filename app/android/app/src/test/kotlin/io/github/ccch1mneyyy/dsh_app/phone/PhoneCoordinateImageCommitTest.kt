@@ -44,7 +44,9 @@ class PhoneCoordinateImageCommitTest {
             override fun gate() = object : UserGate {
                 override fun confirm(request: ConfirmRequest): Decision {
                     confirmations++
-                    assertFalse(request.offerTaskWaiver)
+                    // A coordinate tap keeps its own ordinary card; no visual scope is inherited.
+                    assertNull(request.visualScope)
+                    assertTrue(request.allowRound)
                     return Decision.ALLOW_ONCE
                 }
                 override fun handoff(reason: String, timeoutMs: Long): HandoffResult = error("unused")

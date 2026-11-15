@@ -108,6 +108,23 @@
   "phoneAppRulesAcceptRisk": "Change anyway",
   "phoneAppRulesPackage": "Package name",
   "phoneAppRulesPackageHint": "Find it in Settings → Apps → App info",
+  "phoneAlwaysAllowTitle": "Always allow",
+  "phoneAlwaysAllowOff": "Off",
+  "phoneAlwaysAllowCount": "{count} apps allowed",
+  "@phoneAlwaysAllowCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneAlwaysAllowSwitchHint": "Send content to the apps you pick without asking",
+  "phoneAlwaysAllowWarning": "Once on, DSH can send content to these apps without asking. Sent content can’t be taken back.",
+  "phoneAlwaysAllowConfirm": "Turn on",
+  "phoneAlwaysAllowAdd": "Add app",
+  "phoneAlwaysAllowEmpty": "No apps allowed yet",
+  "phoneAlwaysAllowRemove": "Remove",
+  "phoneAlwaysAllowSaveFailed": "Couldn’t save",
   "phoneDndRequiresAndroid": "Requires Android 14 or later",
   "phoneDndHiddenScreen": "Works on a hidden screen",
   "phoneNotReadyYet": "Not ready yet",
@@ -184,7 +201,7 @@
   "phoneConfirmTask": "This task",
   "phoneConfirmAlways": "Always skip",
   "phoneConfirmAskHint": "Asks before entering a new app, sending, deleting or paying",
-  "phoneConfirmTaskHint": "Asks once per task",
+  "phoneConfirmTaskHint": "Asks once this round",
   "phoneConfirmAlwaysHint": "Acts without asking",
   "phoneConfirmTitle": "Confirmation",
   "phoneConfirmAlwaysTitle": "Always skip confirmation?",

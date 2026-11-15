@@ -16,6 +16,7 @@ import 'phone_widgets.dart';
 
 String androidShellErrorText(L10n l10n, String code) => switch (code) {
   'disabled' => l10n.androidShellErrorDisabled,
+  'stopped' => l10n.androidShellErrorStopped,
   'notConnected' => l10n.androidShellErrorNotConnected,
   'shizukuMissing' => l10n.androidShellErrorShizukuMissing,
   'shizukuStopped' => l10n.androidShellErrorShizukuStopped,

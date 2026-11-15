@@ -5,9 +5,8 @@
     <string name="phone_prompt_native_title">DSH Go · Phone control</string>
     <string name="phone_prompt_handoff_title">DSH Go · Your turn</string>
     <string name="phone_prompt_allow_once">Allow once</string>
-    <string name="phone_prompt_allow_app">Allow this app for this task</string>
-    <string name="phone_prompt_allow_task">Allow for this task</string>
-    <string name="phone_prompt_reject">Reject</string>
+    <string name="phone_prompt_allow_app">Allow this turn</string>
+    <string name="phone_prompt_reject">Cancel</string>
     <string name="phone_prompt_open">Review in app</string>
     <string name="phone_prompt_later">Later</string>
     <string name="phone_prompt_stop">Stop task</string>

@@ -1105,59 +1105,40 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         card.addView(ScrollView(service).apply { addView(body); isVerticalScrollBarEnabled = false },
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         card.addView(TextView(service).apply {
-            text = if (request.offerTaskWaiver) {
-                AppStrings.get(service, R.string.overlay_waiver_hint)
-            } else {
-                AppStrings.get(service, R.string.overlay_timeout_hint)
-            }
+            text = AppStrings.get(service, R.string.overlay_timeout_hint)
             textSize = 12f; setTextColor(c.faint); setLineSpacing(0f, 1.2f); setPadding(0, 0, 0, dp(10))
         })
 
         val armedAt = SystemClock.uptimeMillis() + ARM_MS
         val guarded = mutableListOf<GuardedButton>()
         fun decide(d: Decision) { if (pending.resolve(d)) main.post { if (pendingConfirm === pending) dismissConfirm() } }
-        // 本任务免确认: the main choice waives the rest of the task. Otherwise, on the first action
-        // in an app, the main choice allows that app for the rest of the task so later steps there
-        // don't ask again. "Only this step" stays available as the quieter option either way.
-        val wide = request.visualScope != null || request.offerTaskWaiver || request.firstInApp
-        if (request.visualScope != null) {
-            val visual = GuardedButton(service, armedAt).apply {
-                text = AppStrings.get(service, R.string.phone_prompt_allow_visual)
-                style(this, c.accent, c.onAccent, c)
-                setOnClickListener { decide(Decision.ALLOW_VISUAL_FOR_TASK) }
-            }
-            guarded += visual
-            card.addView(visual, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)).apply { bottomMargin = dp(8) })
-        } else if (request.offerTaskWaiver) {
-            val all4task = GuardedButton(service, armedAt).apply {
-                text = AppStrings.get(service, R.string.overlay_allow_remaining)
-                style(this, c.accent, c.onAccent, c)
-                setOnClickListener { decide(Decision.ALLOW_ALL_FOR_TASK) }
-            }
-            guarded += all4task
-            card.addView(all4task, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)).apply { bottomMargin = dp(8) })
-        } else if (request.firstInApp) {
-            val app4task = GuardedButton(service, armedAt).apply {
-                text = if (app != null) AppStrings.get(service, R.string.overlay_allow_app_task, app) else AppStrings.get(service, R.string.overlay_allow_this_app_task)
-                style(this, c.accent, c.onAccent, c)
-                setOnClickListener { decide(Decision.ALLOW_APP_FOR_TASK) }
-            }
-            guarded += app4task
-            card.addView(app4task, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)).apply { bottomMargin = dp(8) })
+        // 允许一次 is the main answer; 本轮允许 (same app and kind, this turn only) stays beside 取消.
+        // A visual scope is its own grant: allow visual taps for this task, or only this one step.
+        val visual = request.visualScope != null
+        val round = !visual && request.allowRound
+        val primary = GuardedButton(service, armedAt).apply {
+            text = AppStrings.get(service, if (visual) R.string.phone_prompt_allow_visual else R.string.overlay_allow_once)
+            style(this, c.accent, c.onAccent, c)
+            setOnClickListener { decide(if (visual) Decision.ALLOW_VISUAL_FOR_TASK else Decision.ALLOW_ONCE) }
         }
-        val row = LinearLayout(service).apply { gravity = Gravity.CENTER_VERTICAL }
-        row.addView(textButton(AppStrings.get(service, R.string.overlay_stop), c.danger, c) { decide(Decision.STOP) })
-        row.addView(View(service), LinearLayout.LayoutParams(0, 1, 1f))
-        row.addView(textButton(AppStrings.get(service, R.string.overlay_decline), c.ink, c) { decide(Decision.DENY) }.apply { background = outlined(c) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(46)).apply { marginEnd = dp(8) })
-        val allow = GuardedButton(service, armedAt).apply {
-            text = if (wide) AppStrings.get(service, R.string.overlay_allow_step) else AppStrings.get(service, R.string.overlay_allow_once)
-            if (wide) style(this, c.accentSoft, c.onAccentSoft, c) else style(this, c.accent, c.onAccent, c)
-            setOnClickListener { decide(Decision.ALLOW_ONCE) }
+        guarded += primary
+        card.addView(primary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)).apply { bottomMargin = dp(8) })
+        val decline = textButton(AppStrings.get(service, R.string.overlay_decline), c.ink, c) { decide(Decision.DENY) }
+        decline.background = outlined(c)
+        if (round || visual) {
+            val second = GuardedButton(service, armedAt).apply {
+                text = AppStrings.get(service, if (round) R.string.overlay_allow_round else R.string.overlay_allow_once)
+                style(this, c.accentSoft, c.onAccentSoft, c)
+                setOnClickListener { decide(if (round) Decision.ALLOW_APP_FOR_TASK else Decision.ALLOW_ONCE) }
+            }
+            guarded += second
+            val row = LinearLayout(service).apply { gravity = Gravity.CENTER_VERTICAL }
+            row.addView(second, LinearLayout.LayoutParams(0, dp(46), 1f))
+            row.addView(decline, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(8) })
+            card.addView(row)
+        } else {
+            card.addView(decline, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)))
         }
-        guarded += allow
-        row.addView(allow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(46)))
-        card.addView(row)
         root.addView(card, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
         guarded.forEach { it.alpha = 0.5f }

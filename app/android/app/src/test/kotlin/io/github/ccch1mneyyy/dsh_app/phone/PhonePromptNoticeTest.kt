@@ -30,7 +30,7 @@ class PhonePromptNoticeTest {
             assertEquals(listOf(ticket.content), posted.values.toList())
             assertSame(p, ticket.presentation(p.nonce))
             assertEquals(surface, ticket.finalPresentationSurface())
-            assertFalse(p.choose(PromptChoice.ALLOW_TASK))
+            assertFalse(p.choose(PromptChoice.ALLOW_APP))
             assertTrue(p.choose(PromptChoice.ALLOW_ONCE))
             assertTrue(posted.isEmpty())
             assertEquals(PromptOutcome.ALLOW_ONCE, ticket.finalResult().outcome)

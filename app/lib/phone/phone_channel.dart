@@ -944,7 +944,8 @@ enum PhoneConfirmMode {
   /// 每次都询问: a new app, sending, deleting, paying… ask first.
   ask,
 
-  /// 本任务免确认: the first question of a task can waive the rest of it.
+  /// 本任务免确认 (本轮允许): the first question of a round can waive the
+  /// rest of it.
   task,
 
   /// 始终免确认: nothing is asked.
@@ -954,14 +955,17 @@ enum PhoneConfirmMode {
   static PhoneConfirmMode parse(Object? wire) => values.firstWhere((m) => m.name == wire, orElse: () => ask);
 }
 
-/// `getPolicies` / `setPolicies`. Only the two lists and [confirmMode] go back
-/// over the wire; [labels] and the defaults are optional extras the native
-/// side may send. [unlocks] never rides along: it changes only through
-/// [PhoneChannel.setUnlock], so a stale copy can't lift or restore a rule.
+/// `getPolicies` / `setPolicies`. Only the two lists, 始终允许 and
+/// [confirmMode] go back over the wire; [labels] and the defaults are optional
+/// extras the native side may send. [unlocks] never rides along: it changes
+/// only through [PhoneChannel.setUnlock], so a stale copy can't lift or
+/// restore a rule.
 class PhonePolicies {
   const PhonePolicies({
     this.denyPackages = const [],
     this.confirmEveryWritePackages = const [],
+    this.alwaysAllowEnabled = false,
+    this.alwaysAllowPackages = const [],
     this.labels = const {},
     this.defaultDeny = const [],
     this.defaultConfirm = const [],
@@ -976,6 +980,9 @@ class PhonePolicies {
     return PhonePolicies(
       denyPackages: _strings(m['denyPackages']),
       confirmEveryWritePackages: _strings(m['confirmEveryWritePackages']),
+      // Only an explicit true turns it on; a missing or malformed value is off.
+      alwaysAllowEnabled: m['alwaysAllowEnabled'] == true,
+      alwaysAllowPackages: _strings(m['alwaysAllowPackages']),
       labels: {
         for (final e in _map(m['labels']).entries)
           if (e.key is String && e.value is String) e.key as String: e.value as String,
@@ -995,6 +1002,10 @@ class PhonePolicies {
   final List<String> denyPackages;
   final List<String> confirmEveryWritePackages;
 
+  /// 始终允许: send content to these apps without asking.
+  final bool alwaysAllowEnabled;
+  final List<String> alwaysAllowPackages;
+
   /// Package → app label, from the native side.
   final Map<String, String> labels;
 
@@ -1013,12 +1024,16 @@ class PhonePolicies {
   Map<String, Object?> toWire() => {
     'denyPackages': denyPackages,
     'confirmEveryWritePackages': confirmEveryWritePackages,
+    'alwaysAllowEnabled': alwaysAllowEnabled,
+    'alwaysAllowPackages': alwaysAllowPackages,
     'confirmMode': confirmMode.name,
   };
 
   PhonePolicies withConfirmMode(PhoneConfirmMode mode) => PhonePolicies(
     denyPackages: denyPackages,
     confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: alwaysAllowEnabled,
+    alwaysAllowPackages: alwaysAllowPackages,
     labels: labels,
     defaultDeny: defaultDeny,
     defaultConfirm: defaultConfirm,
@@ -1030,6 +1045,8 @@ class PhonePolicies {
   PhonePolicies withUnlock(PhoneUnlock unlock, bool on) => PhonePolicies(
     denyPackages: denyPackages,
     confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: alwaysAllowEnabled,
+    alwaysAllowPackages: alwaysAllowPackages,
     labels: labels,
     defaultDeny: defaultDeny,
     defaultConfirm: defaultConfirm,
@@ -1041,6 +1058,8 @@ class PhonePolicies {
   PhonePolicies withLocalOcrEnabled(bool? enabled) => PhonePolicies(
     denyPackages: denyPackages,
     confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: alwaysAllowEnabled,
+    alwaysAllowPackages: alwaysAllowPackages,
     labels: labels,
     defaultDeny: defaultDeny,
     defaultConfirm: defaultConfirm,
@@ -1081,6 +1100,8 @@ class PhonePolicies {
     return PhonePolicies(
       denyPackages: deny,
       confirmEveryWritePackages: confirm,
+      alwaysAllowEnabled: alwaysAllowEnabled,
+      alwaysAllowPackages: alwaysAllowPackages,
       labels: labels,
       defaultDeny: defaultDeny,
       defaultConfirm: defaultConfirm,
@@ -1089,6 +1110,20 @@ class PhonePolicies {
       localOcrEnabled: localOcrEnabled,
     );
   }
+
+  /// 始终允许: the switch and the app list, written together.
+  PhonePolicies withAlwaysAllow({required bool enabled, required List<String> packages}) => PhonePolicies(
+    denyPackages: denyPackages,
+    confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: enabled,
+    alwaysAllowPackages: packages,
+    labels: labels,
+    defaultDeny: defaultDeny,
+    defaultConfirm: defaultConfirm,
+    confirmMode: confirmMode,
+    unlocks: unlocks,
+    localOcrEnabled: localOcrEnabled,
+  );
 }
 
 // ── Action log ───────────────────────────────────────────────────────────────
@@ -1115,7 +1150,7 @@ enum PhoneDecision {
 
   /// Native vocabulary (PhoneCore / SafetyGate): `ok`, `allowed` (no question
   /// needed), `continue` (handoff resumed), `confirmed`, `confirmed-app`,
-  /// `confirmed-task` (本任务免确认 granted), `denied` (said no or 30 s without a choice), `stopped`, `paused`,
+  /// `denied` (said no or 30 s without a choice), `stopped`, `paused`,
   /// `refused:<rule>`, `unavailable`, `stale`, `timeout` (the tool ran out of
   /// time), `error`. Older or future words fall back to [unknown].
   static PhoneDecision parse(Object? wire) {
