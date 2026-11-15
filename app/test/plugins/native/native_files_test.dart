@@ -373,6 +373,75 @@ void main() {
     expect(transport.statuses, ['selected']);
   });
 
+  testWidgets('an answer that comes after the panel went away hands its file request back', (tester) async {
+    final platform = _Platform(), transport = _Transport();
+    var current = true;
+    final bridge =
+        FakeBridge(
+            contributions([
+              {
+                ...plugin(
+                  'files',
+                  panels: [
+                    {'id': 'panel', 'title': 'Files'},
+                  ],
+                ),
+                'capabilities': ['files'],
+              },
+            ]),
+          )
+          ..answer = (_) {
+            // The person switched away before the bridge answered.
+            current = false;
+            return const DshGoInvokeResult(effects: [_wire]);
+          };
+    final stream = DshGoStream(() async => _FileSocket(), features: const ['files']);
+    final runtime = NativeFileCoordinator(platform: platform, transport: transport, gate: NativeFileGate());
+    Future<bool>? tapped;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...nativeOverrides(bridge, clock: () => _now),
+          nativeStreamProvider.overrideWithValue(stream),
+          nativeFileCoordinatorProvider.overrideWithValue(runtime),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: L10n.localizationsDelegates,
+          supportedLocales: L10n.supportedLocales,
+          home: Consumer(
+            builder: (context, ref, _) {
+              ref.watch(nativeContributionsProvider);
+              return Scaffold(
+                body: TextButton(
+                  onPressed: () => tapped = runNativeTap(
+                    context,
+                    ref,
+                    package: 'files',
+                    surface: NativeSurface.panel,
+                    id: 'panel',
+                    action: 'choose',
+                    userGesture: true,
+                    stillCurrent: () => current,
+                  ),
+                  child: const Text('Choose'),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Choose'));
+      expect(await tapped, isFalse);
+    });
+    expect(platform.picks, 0);
+    expect(transport.statuses, ['cancelled']);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await stream.close();
+  });
+
   testWidgets('actual tap runner gates selection and rejects callback side effects', (tester) async {
     final clipboardCalls = <MethodCall>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
