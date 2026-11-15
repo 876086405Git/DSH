@@ -1,0 +1,36 @@
+{
+  "schema": 2,
+  "upstream": {
+    "tag": "3.47.9-ohos-1.0.0",
+    "commit": "e5f752df3e25ec897da3c98a74bcced7c21b0bd3",
+    "repository": "https://atomgit.com/oh-flutter/flutter_flutter.git",
+    "releaseArchiveSha256": "20903e3b9197004b0181e3a2acc9243d04e5b10fa63d19453969dfc97dc87e42",
+    "harSha256": "b46e5e370827ef0b80b0d25b219e902680a4a0620c6a75fa6b3cef95a36ff15a"
+  },
+  "fixes": [
+    {
+      "patch": "pasteboard-settlement.patch",
+      "target": "package/src/main/ets/util/PasteboardUtils.ets",
+      "beforeSha256": "bf5e71746b1168c39993dbfdc80333b8f20f3843430b0f31330a7d8a3316f35c",
+      "afterSha256": "4f16b6fa39cfc6d668895ce6e01a6faeec250c845feeeac700ba5d3263a84803",
+      "patchSha256": "455d6cba1acd8879f753e3c9aa9fb3992b8bf196cff56ea27812b51e14eafd7e"
+    },
+    {
+      "patch": "haptic-presets.patch",
+      "target": "package/src/main/ets/plugin/PlatformPlugin.ets",
+      "beforeSha256": "6ffecb1d0d5b6b28e1018e9be7d823f7a6ba23d126ca85fc2c442ff97368d1a5",
+      "afterSha256": "938829683d527ce8e0c4f2f76895122c36b0992633596dc0e7b196890e2882a9",
+      "patchSha256": "0915da9b4618de10276bf7e3828304f7f2bc5e056454e33bd1c3fbc7e6b24dc4"
+    }
+  ],
+  "licenses": {
+    "LICENSE": "89519eca6f7b9529b35bdddd623a58c3af06a88c458dbd6531ddb4675acf75a9",
+    "LICENSE_HW": "25042c5f07a9155678f045507abcaab89e30d342b6c6ef021fbaee6ff8066ea7",
+    "LICENSE_KHZG": "52d7462b9ee07f0eb252a814adf8bbc0226f5505d1f685a42e2d7cbe93a5a10d",
+    "LICENSE.flutter_har_zip.md": "c3c3381691b771667db80de111f4891a5c791e3b5cf73cd71624b19457bfbfb2"
+  },
+  "consumers": {
+    "package/src/main/ets/plugin/editing/ListenableEditingState.ets": "f084c956917df514c50770022860d201ae22af7ea35286eb2532d3eb272ae4f2",
+    "package/src/main/ets/plugin/editing/TextEditingDelta.ets": "3f6ce8d33fbbe1e92743c1c3209d9866ad4f4b1d979255d2813d1b151c84907d"
+  }
+}

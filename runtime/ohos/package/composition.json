@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "target": "ohos",
+  "dshVersion": "0.2.2-rc.1",
+  "nodeVersion": "24.22.1",
+  "installation": {
+    "npmVersion": "11.9.0",
+    "arguments": [
+      "ci",
+      "--ignore-scripts",
+      "--omit=optional",
+      "--include=dev",
+      "--install-strategy=hoisted",
+      "--install-links=true",
+      "--no-audit",
+      "--no-fund"
+    ],
+    "dshClone": "none: fresh locked npm install in a new directory",
+    "hardlinks": "reject shared regular files in both prepared prefixes"
+  },
+  "dshLockSha256": "9809a7a64fd5d40df441a30fb4407c037802162d75e8a8e39dc0ef2569bec2ab",
+  "processLockSha256": "5a815fc00cafc62fca834fe3e2abf6792bd3263c1a386cb2948d6a4063ed8f30",
+  "regexSha256": "80eaea2a9e50a2851e332fa4fccffeb01550584ad3c448a2eadd88b43373d5f1",
+  "dshRemovePackages": {
+    "@deepseek-ai/libreoffice-kit": "Office 转换在鸿蒙明确 unavailable；保留原文档与 PDF 打开/下载",
+    "@deepseek-ai/libreoffice-kit-wasm": "无 WebAssembly，删除完整 LibreOffice wasm 运行时",
+    "@deepseek-ai/node-addon-system-*": "系统原生 addon 使用两个固定 HAP libs，不携其他平台包",
+    "@img/*": "没有已核的鸿蒙图像 codec；删除其他平台 native/wasm 产物",
+    "sharp": "图像解码/重编码在鸿蒙明确拒绝，用户可连接电脑处理",
+    "@koromix/*": "Windows FFI/其他平台 native 库不进入鸿蒙数据树",
+    "koffi": "Windows FFI 分支不在鸿蒙执行",
+    "node-pty": "无进程/PTy，既有虚拟后端明确拒绝终端",
+    "sherpa-onnx-*": "既有本地语音平台门拒绝鸿蒙，删除其他平台推理库",
+    "@vscode/ripgrep": "鸿蒙搜索使用固定虚拟 rg 路径，不启动外部二进制",
+    "@vscode/ripgrep-*": "鸿蒙搜索使用固定虚拟 rg 路径，不携其他平台二进制",
+    "node-addon-require-builtin-*": "require-builtin 使用固定 HAP libs，不携其他平台预构建包",
+    "node-addon-internal-loader-*": "未批准的原生产品不进入鸿蒙组成",
+    "ts-algebra": "只供类型代数，声明已排除；没有DSH运行时JavaScript消费者"
+  },
+  "processRemovePackages": {
+    "just-bash": "使用固定私有 ESM 构建，原包的 CLI/browser/CJS/vendor 全部不分发",
+    "sql.js": "删除完整 SQLite wasm 包；Node 内建 node:sqlite 保留",
+    "typescript": "构建期/已禁用脚本路径，不进入运行时",
+    "run": "JS/QuickJS wasm 命令不在已批准的命令表",
+    "minimisted": "仅 isomorphic-git CLI 使用，CLI 同时排除；保留 Git API",
+    "@mongodb-js/*": "未启用的可选原生解压模块",
+    "node-liblzma": "未启用的可选原生解压模块",
+    "node-addon-api": "原生模块构建头，不是运行时依赖"
+  },
+  "processRemoveFiles": {
+    "node_modules/isomorphic-git/cli.cjs": "不用 isogit CLI；git 由同进程 API 后端提供",
+    "node_modules/abort-controller/polyfill.mjs": "未使用的旧全局polyfill入口；Node24已有AbortController，库的正式dist入口保留",
+    "node_modules/diff/eslint.config.mjs": "上游lint配置；Git使用的ESM/CJS API和许可保留",
+    "node_modules/hasown/eslint.config.mjs": "上游lint配置，不是运行时入口"
+  },
+  "nativeLibraries": {
+    "flock": "libdsh_flock.so",
+    "require-builtin": "libdsh_require_builtin.so"
+  },
+  "dshRemoveFiles": {
+    "node_modules/@aws-sdk/*/dist-es/*": "固定包的Node条件选择dist-cjs；dist-es是带无扩展名导入的bundler输入，不供Node直接执行",
+    "node_modules/@smithy/*/dist-es/*": "固定包的Node条件选择dist-cjs；dist-es是带无扩展名导入的bundler输入，不供Node直接执行",
+    "node_modules/@opentelemetry/*/build/esm/*": "固定包的Node入口为build/src；该分支只由module/esnext构建条件选择",
+    "node_modules/@opentelemetry/*/build/esnext/*": "固定包的Node入口为build/src；该分支只由module/esnext构建条件选择",
+    "node_modules/fontkit/src/*": "固定fontkit Node exports使用已生成dist/module.mjs或dist/main.cjs，原src不是设备入口",
+    "node_modules/json-schema-to-ts/lib/esm/*": "固定包的Node main为lib/cjs；lib/esm只为module构建字段",
+    "node_modules/@agentclientprotocol/sdk/dist/*.test.js": "上游发布的开发测试依赖vitest；不在设备运行",
+    "node_modules/gaxios/build/*/browser-test/*": "上游浏览器测试夹具不在设备运行",
+    "node_modules/gaxios/build/*/system-test/*": "上游包安装测试夹具不在设备运行",
+    "node_modules/gaxios/build/*/test/*": "上游单元测试夹具不在设备运行",
+    "node_modules/node-domexception/.history/*": "上游发布的编辑器历史快照，包含不完整语法，不是运行时文件",
+    "node_modules/@swc/helpers/scripts/*": "上游生成脚本依赖开发工具；已生成helpers保留",
+    "node_modules/diff/eslint.config.mjs": "上游lint配置依赖开发工具；ESM/CJS API与许可证保留",
+    "node_modules/fast-uri/benchmark/*": "上游基准脚本依赖未分发开发包，不是运行时入口",
+    "node_modules/minisearch/src/*.test.js": "上游源码测试；Node exports使用dist产物",
+    "node_modules/@deepseek-ai/dsh-api-job-controller/lib/types/client/*": "types输出中的浏览器源码副本；公开/client入口使用已捆绑lib/client.js",
+    "node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/client/*": "types输出中的浏览器源码副本；公开/client入口使用已捆绑lib/client.js",
+    "node_modules/@deepseek-ai/dsh-api-terminal-controller/lib/types/client/*": "types输出中的浏览器源码副本；公开/client入口使用已捆绑lib/client.js",
+    "node_modules/@deepseek-ai/dsh-api-workspace-controller/lib/types/client/*": "types输出中的浏览器源码副本；公开/client入口使用已捆绑lib/client.js",
+    "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/types/index.js": "types目录中的未打补丁重复入口；公开根入口是已明确拒绝OH转换的lib/index.js",
+    "node_modules/json-schema-to-ts/lib/types/*": "类型输出中的原始JavaScript副本含无扩展名导入；固定Node main使用lib/cjs，正式ESM消费由Node解析CJS",
+    "node_modules/rrule/dist/esm/*": "rrule 2.8.1 Node main固定dist/es5/rrule.js；dist/esm是module bundler输入，含无扩展名相对import，非Node公开入口"
+  }
+}

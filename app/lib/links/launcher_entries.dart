@@ -4,7 +4,8 @@
 // screenshot taken explicitly from the floating pet. Native
 // side: android/.../shortcuts/ (EntryActivity, ShortcutsPlugin — MethodChannel
 // `dsh/shortcuts`) and tile/NewChatTileService.kt. Routed by
-// lib/ui/shell/system_entry_host.dart.
+// lib/ui/shell/system_entry_host.dart. HarmonyOS has the two static shortcuts
+// (ohos/.../ShortcutsPlugin.ets): no tile, and no public API for recent ones.
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';

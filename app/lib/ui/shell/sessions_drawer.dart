@@ -872,13 +872,18 @@ class _EmptyState extends ConsumerWidget {
         actionLabel: l10n.shellStartEngine,
         onAction: () => unawaited(EngineControl.ensureStarted(ProviderScope.containerOf(context))),
       ),
-      RuntimePhase.notInstalled when status.runtimeMissing => EmptyView(
-        compact: true,
-        icon: AppIcons.thisPhone,
-        title: l10n.localEnvNotInstalled,
-        actionLabel: l10n.phoneEngineInstallRuntime,
-        onAction: () => unawaited(openLocalInstall(context)),
-      ),
+      RuntimePhase.notInstalled when status.runtimeMissing => switch (localMissingCopy(
+        l10n,
+        available: ref.watch(localRuntimeProvider.select((s) => s.available)),
+      )) {
+        final copy => EmptyView(
+          compact: true,
+          icon: AppIcons.thisPhone,
+          title: copy.title,
+          actionLabel: copy.action,
+          onAction: () => unawaited(openLocalInstall(context)),
+        ),
+      },
       _ => EmptyView(
         compact: true,
         icon: AppIcons.power,

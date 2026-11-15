@@ -305,6 +305,10 @@ class LinkRouter {
     return handled;
   }
 
+  /// Says [message] where the router's own toast goes, for a handler that took
+  /// a link and has only this to say about it.
+  void toast(String message) => _toast?.call(message);
+
   void _unhandled(Uri uri) {
     final file = uri.scheme == 'file' || uri.scheme == AppLinks.unreadableScheme;
     _toast?.call(file ? appL10n.stateFileOpenFailed : appL10n.stateLinkOpenFailed);

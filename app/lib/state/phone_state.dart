@@ -519,6 +519,7 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
     if (revision != null) statusRevision = revision;
     return true;
   }
+
   ref.onDispose(() {
     disposed = true;
     unawaited(sub?.cancel());
@@ -530,14 +531,18 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
     var userStopped = status.task.stopped && (status.task.stopSource == null || status.task.stopSource == 'USER');
     var active = status.task.active;
     var launch = status.callerCapability?.launch;
-    var modernSeen = status.callerCapability?.modernSeen == true || status.tasks.any((task) => task.sessionId != null);
+    // iOS reports its authenticated singleton owner on task, without Android's task list.
+    var modernSeen =
+        status.callerCapability?.modernSeen == true ||
+        status.task.ownerSessionId != null ||
+        status.tasks.any((task) => task.sessionId != null);
     var versioned = status.taskProtocol == 1 || launch != null;
     sub = channel.statusChanges.listen((s) {
       if (disposed || !acceptStatus(s)) return;
       final capability = s.callerCapability;
       final previousLaunch = launch;
       if (capability != null && previousLaunch != null && capability.launch < previousLaunch) return;
-      final modernTasks = s.tasks.any((task) => task.sessionId != null);
+      final modernTasks = s.task.ownerSessionId != null || s.tasks.any((task) => task.sessionId != null);
       if (capability != null && (previousLaunch == null || capability.launch > previousLaunch)) {
         launch = capability.launch;
         modernSeen = (previousLaunch == null && modernSeen) || capability.modernSeen || modernTasks;

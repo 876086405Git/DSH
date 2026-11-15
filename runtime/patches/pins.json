@@ -144,6 +144,94 @@
         }
       }
     },
+    "ohos-attachment-publication.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b",
+          "before": "3c17ef1ee80f8e1c9dc9229df4dd680e63387af750a4d26c3d9d056841e2911d"
+        }
+      }
+    },
+    "ohos-hap-native-libraries.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/node-addon-system/lib/flock.js": {
+          "after": "44f6c73890025ef7fe2e450da636f4ee257b32ec5d595ac7707d7cfeb266f516",
+          "before": "e42af00c298d56322c073bf7cc66485096028318ab645a2e69dc2aa7481ba646"
+        },
+        "node_modules/node-addon-native-custom-loader/lib/index.js": {
+          "after": "00bfe83989700049796ea03dc1cd9ab6e2789167bc038deed2f9d698eec9a55b",
+          "before": "6d83f4e5426895d40820acf507146226a893c5aefba00a08bf0884446160049e"
+        }
+      }
+    },
+    "ohos-mcp-stdio-unavailable.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js": {
+          "after": "1b279593ef19f7ca2c7b46893bd897424b1fc8a5c0e0644140dbba0e488f9f99",
+          "before": "00e0f6f5fed9adaeb78000cd0f00ae37037c48a88d441586be936b142178d343"
+        }
+      }
+    },
+    "ohos-network-transport.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js": {
+          "after": "a7fc14bf0adad3d4dedaa391296ecbbaf1075baf3d23dfdc4eb6ff53b7a3f650",
+          "before": "5310861bc89788ea24be82a3b323e34cbd42b9e6214e2a179b2e6f92a8758cd5"
+        },
+        "node_modules/@deepseek-ai/dsh-web-fetch-http/lib/index.js": {
+          "after": "f9595a0f2c796839a6a5f68a3cd2585a6d68fafb4a16b9d5191f89f5e5e60a31",
+          "before": "4d6ebdc8be0404361aad52f75c4f4b3e264ba068dfaa0ba2a40f955d2337c064"
+        }
+      }
+    },
+    "ohos-output-utf8.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js": {
+          "after": "feea1fd338ab0c3b2cab0509fbaf9e6d4a849fede0715350cf6591f98bcaf229",
+          "before": "a32309bee49a3cb7f518cd748e2b2f2c0dd680de0bc19e1533e2182913567c04"
+        }
+      }
+    },
+    "ohos-provider-body-timeout.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
+          "after": "d9eca90d93cba3585fa214373eff02628a1b53838659d88aee7e776468f9621c",
+          "before": "f10502eab12993c68c1f886e5de5d3aa707604f504660cb861fc1b45faffecaf"
+        }
+      }
+    },
+    "ohos-provider-stream-body-timeout.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js": {
+          "after": "276c5ebde22e17f298a68e4a15e6153f44eb9a5cf1877abef3c74d07488cfee2",
+          "before": "26430731ff87ce6cd3b7fa038784dbbffd7fcab072bdf70e4ef9132c2af6764b"
+        },
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js": {
+          "after": "d169e03e6f98dbb461d029ec4dd92e18e4e8306a0856e84733559bd61fbf180b",
+          "before": "904b218cb90ab1d2a3ba98ef1f2791660484e8444d358601d33156949b121b2b"
+        }
+      }
+    },
+    "ohos-virtual-process.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js": {
+          "after": "1774c13dca648dbffc7449f226de9a2f11a696eae3dbc18aaf729d996438d74d",
+          "before": "7f5a2c438a9b32eb5c7beac97a6e589e1908b3df79b18abebb22ea192300cad1"
+        },
+        "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
+          "after": "30ca4f076ea12e9b2fbaadd2f0e555186a56e495993db9bd401a1c2e4d7aaffc",
+          "before": "0429499bcac92b481d769dbe2164bb48c08bcd215df0dd6195d44699d2d258ce"
+        }
+      }
+    },
+    "ohos-workspace-changes.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js": {
+          "after": "0640af53762c8b2ebbdc5c38412fcd75badfe36edef12875d8d87969415f04ed",
+          "before": "b73138187c8b251cf1da086fddf959fe3cca46df9c68d3aaca95bad01f3e9a62"
+        }
+      }
+    },
     "piai-anthropic-opus55-thinking.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js": {
@@ -866,6 +954,14 @@
         }
       }
     },
+    "zzzzzzz-ohos-session-publication.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "59ff6185416c5bcb6b58b642ea2f13968cbf8ea9c9bbaa00970539beb8123399",
+          "before": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3"
+        }
+      }
+    },
     "zzzzzzz-piai-developer-tools.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
@@ -1098,6 +1194,18 @@
         }
       }
     },
+    "zzzzzzzz-ohos-atomic-publication.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "3f08d6bb69885e33024923fb66fc13213e94783e2dd9c13299be7e1a27e30d41",
+          "before": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b"
+        },
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "b1b5477d800903b32fe042d7d7c92814f854d0acc29eb3ccb5c1b37fbe383861",
+          "before": "59ff6185416c5bcb6b58b642ea2f13968cbf8ea9c9bbaa00970539beb8123399"
+        }
+      }
+    },
     "zzzzzzzz-schedule-authorization.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-schedule/lib/index.js": {
@@ -1181,6 +1289,14 @@
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
           "after": "cc1902a25ff5e1e4c66cef2ee26f97c0543a35687eac0159c4cb9f0bd5d5c25d",
           "before": "0c742ac1ed6b17e46e173af8e56abb2829c1ac66cc30b598c7e5a23f15b11e79"
+        }
+      }
+    },
+    "zzzzzzzzz-ohos-search-confinement.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
+          "after": "d73a434a74ee2a74aa2f0662350cd95c8211bf852ea17a24bc378a0bf871746e",
+          "before": "30ca4f076ea12e9b2fbaadd2f0e555186a56e495993db9bd401a1c2e4d7aaffc"
         }
       }
     },
@@ -1362,6 +1478,14 @@
         }
       }
     },
+    "zzzzzzzzzz-ohos-shell-limit-description.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js": {
+          "after": "165a6be735c9268d1918a7345f975e2b47c90f452457388dbeef48dceff9c8a7",
+          "before": "1774c13dca648dbffc7449f226de9a2f11a696eae3dbc18aaf729d996438d74d"
+        }
+      }
+    },
     "zzzzzzzzzz-plugin-manager-log-write-all.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
@@ -1406,6 +1530,14 @@
         }
       }
     },
+    "zzzzzzzzzzz-ohos-search-ignore-description.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
+          "after": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee",
+          "before": "d73a434a74ee2a74aa2f0662350cd95c8211bf852ea17a24bc378a0bf871746e"
+        }
+      }
+    },
     "zzzzzzzzzzz-plugin-operations-log-utf8.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js": {
@@ -1419,6 +1551,34 @@
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "be7a7d95482424bd9edacf5d057e203672651e0f4647e422c9b10fb5264fb1e3",
           "before": "b06115d4be25870377f887dcad715f388414d3284198a51ad58e7d96bdc189f1"
+        }
+      }
+    },
+    "zzzzzzzzzzzz-ohos-composition.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "dd15efce9b5bbd0d896728f22bb3e9dd4643176555174f5bfcb39adfc75074df",
+          "before": "3f08d6bb69885e33024923fb66fc13213e94783e2dd9c13299be7e1a27e30d41"
+        },
+        "node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js": {
+          "after": "cc5bc09cf6a034694788b04980c4f9fe2c3ceaf532d7d7179ded47fe417f496e",
+          "before": "286792bd82085586fbb0869aa32b3e3733425b4059a517465abed97dd710a15a"
+        },
+        "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js": {
+          "after": "3cc19074929316c8d511ab757fbfd76eb6019de7e13de8dea0999b371c593f0e",
+          "before": "74cf9df9ab605a7675797ee1304d7af7059e97e90c3728ce4e40fbd2333fd7b8"
+        },
+        "node_modules/@deepseek-ai/dsh-skill-office/lib/index.js": {
+          "after": "906e88075e67bdda47d9d5e13686d44dc3a1d332eef2c3df4af1d1be5f15df42",
+          "before": "3fb0b9f3151fc6da8f10d9d2f89b6496234ad302346bc5d28c5feefea572bb14"
+        }
+      }
+    },
+    "zzzzzzzzzzzz-ohos-runtime-capabilities.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "d8ef44093428788514c38d924fa60cd768114244ff8db7ef157ce1e352e8d622",
+          "before": "b1b5477d800903b32fe042d7d7c92814f854d0acc29eb3ccb5c1b37fbe383861"
         }
       }
     },
@@ -1438,6 +1598,46 @@
         }
       }
     },
+    "zzzzzzzzzzzzz-ohos-lifecycle.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
+          "after": "bb12e297f91e801268b1e280bdde2df428c2f6cf45471d267be84ecfd98a4ceb",
+          "before": "bd6312f32ed51becac225e349061817c4c27ca0cf587124f923ce0fa860e94b1"
+        },
+        "node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js": {
+          "after": "61254bcefd6a84084c021ca83b69834790347d56ee8f154554cb86b74869ba4d",
+          "before": "a7fc14bf0adad3d4dedaa391296ecbbaf1075baf3d23dfdc4eb6ff53b7a3f650"
+        },
+        "node_modules/@deepseek-ai/dsh-spill-policy/lib/index.js": {
+          "after": "02c489f249c5a8ac4a43f526daa800d0e3a7d49d96d30a33829bc7426e21c1ee",
+          "before": "970dc4c00c488f11d96cd25ad3bbdc4d034ed754506b2c0c46563b75102291ac"
+        },
+        "node_modules/@deepseek-ai/dsh-timeout/lib/index.js": {
+          "after": "5fdd1b252b3df7ba09db2b9f84ac1e8737d3fd094104c7e9a832fdcf42df5e92",
+          "before": "f9a79fd5194bb4d6321e6d2d5b5eb72f99c683452e1defbb75fad52f76aed667"
+        },
+        "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
+          "after": "ffdac06d530134e35a4ea2182f09ace344fcf48e2fa0e312419f69e3e73db255",
+          "before": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee"
+        },
+        "node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js": {
+          "after": "a959fc8d55a2e2de80ed9c37908096e5804517202b56e67d85213ece75a6eb65",
+          "before": "ffc614ba600aaf9f3c2a4497dff441c8e8c228c22212741b9de43a0958b0b907"
+        }
+      }
+    },
+    "zzzzzzzzzzzzz-ohos-plugin-install-refusal.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
+          "after": "470da55b6e18886fbcba3aec0b2461d09776cbf09fc127389b823080fadb2fec",
+          "before": "b3aae8aed987887d9c43c1f9c0ddd0c70e69d084fc35780589dd2d59fdfafe76"
+        },
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js": {
+          "after": "5f14ea0b1663c40f3107b4ba8537f5c28c4750917c57f808ee3e951a4a89c47f",
+          "before": "c7d72b35b81443a16f6a57f91087ba2f88812d0e5db7b9cdf131d852adcff9c8"
+        }
+      }
+    },
     "zzzzzzzzzzzzz-plan-failed-command-pending.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plan-mode/lib/index.js": {
@@ -1451,6 +1651,22 @@
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "d793a2eee744a2f0e183d2193933bad38425787854a0eaf67a40406ad42ad59a",
           "before": "9ceed37dfa542629510bff823c7da5002ed2981971cae627237bea2268152dac"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzz-ohos-composition-imports.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/openai/providers/bedrock/aws.js": {
+          "after": "25ddac1d081f1e5ea264301f888c96c1950b26eb3be3c063f3a23c3da19b2a66",
+          "before": "1db40e808c3b48a83b159f4237ba21f86f6b328226034e3623b9466a25c52a71"
+        },
+        "node_modules/openai/providers/bedrock/aws.mjs": {
+          "after": "f4334a997fd108e44d0b0281b5a4cbed8fbaba9db748dad4e47e35acc2c41c04",
+          "before": "635cfbbc0fbc24ef9b776bfacbc626089d8e472530aba75a44bf254ba8ac799a"
+        },
+        "node_modules/proxy-agent-negotiate/dist/index.js": {
+          "after": "d5317cfa41996c379958f5fbb9d90a282edc30bf9f8d67981f1b06d37e2131f6",
+          "before": "56f33d231c16933054a0dddc665abdc8514d952c84fa96b245e841875d05f5e5"
         }
       }
     },
@@ -1887,5 +2103,330 @@
       }
     }
   },
-  "schema": 1
+  "schema": 2,
+  "targetSets": {
+    "android": [
+      "cordis-effect-dispose-completion.diff",
+      "credentials-decimal-refs.diff",
+      "fs-create-exclusive.diff",
+      "install-log-redaction.diff",
+      "piai-anthropic-opus55-thinking.diff",
+      "piai-google-openai-store.diff",
+      "plugin-manager-active-run-guard.diff",
+      "plugin-manager-cancel-tree-confirmation.diff",
+      "preset-legacy-delegation.diff",
+      "route-guard.diff",
+      "client-hmr-closed-response.diff",
+      "schemastery-json-context.diff",
+      "session-title-word-prefix.diff",
+      "str-editor-view-prefix.diff",
+      "web-composer-mobile-newline.diff",
+      "z-plugin-install-log-utf8.diff",
+      "zz-direct-runtime.diff",
+      "zzz-config-editor-path.diff",
+      "zzz-fs-replace-all-count.diff",
+      "zzz-title-cache-refresh.diff",
+      "zzzz-plugin-config-readability.diff",
+      "zzzzz-plugin-config-bundles.diff",
+      "zzzzzz-session-deletion.diff",
+      "zzzzzzz-atomic-claim-write-failure.diff",
+      "zzzzzzz-atomic-lock-write-failure.diff",
+      "zzzzzzz-bundle-membership.diff",
+      "zzzzzzz-domain-owner-dispose.diff",
+      "zzzzzzz-file-query-normalization.diff",
+      "zzzzzzz-file-reference-owner-dispose.diff",
+      "zzzzzzz-grep-retention-preview.diff",
+      "zzzzzzz-input-recovery.diff",
+      "zzzzzzz-job-follow-removal.diff",
+      "zzzzzzz-job-ring-trim.diff",
+      "zzzzzzz-jsonl-root-check-retry.diff",
+      "zzzzzzz-mcp-resource-lookup.diff",
+      "zzzzzzz-piai-developer-tools.diff",
+      "zzzzzzz-plugin-list-index.diff",
+      "zzzzzzz-preset-owner-dispose.diff",
+      "zzzzzzz-prompt-tool-order.diff",
+      "zzzzzzz-query-open-retry.diff",
+      "zzzzzzz-reference-drop-size.diff",
+      "zzzzzzz-reference-encoding.diff",
+      "zzzzzzz-retainer-decode-copy.diff",
+      "zzzzzzz-settings-local-redaction.diff",
+      "zzzzzzz-skill-watcher-recheck.diff",
+      "zzzzzzz-spill-write-cleanup.diff",
+      "zzzzzzz-terminal-byte-length.diff",
+      "zzzzzzz-time-zone-dedup.diff",
+      "zzzzzzz-web-fetch-redirect-cleanup.diff",
+      "zzzzzzz-workspace-observation-queue.diff",
+      "zzzzzzzz-model-defaults.diff",
+      "zzzzzzzz-schedule-authorization.diff",
+      "zzzzzzzzz-credentials-disposal.diff",
+      "zzzzzzzzz-developer-header-lookup.diff",
+      "zzzzzzzzz-job-result-bytes.diff",
+      "zzzzzzzzz-materialize-temp.diff",
+      "zzzzzzzzz-plugin-detail-body-cancel.diff",
+      "zzzzzzzzz-plugin-manager-metadata-inventory.diff",
+      "zzzzzzzzz-prompt-admission.diff",
+      "zzzzzzzzz-schedule-run-cancel.diff",
+      "zzzzzzzzz-session-event-admission.diff",
+      "zzzzzzzzz-session-id-membership.diff",
+      "zzzzzzzzz-session-live-fingerprint.diff",
+      "zzzzzzzzz-stats-attempt-token.diff",
+      "zzzzzzzzz-subprocess-idle-read.diff",
+      "zzzzzzzzz-subprocess-utf8-cursor.diff",
+      "zzzzzzzzz-subprocess-zsingle-read.diff",
+      "zzzzzzzzz-subprocess-zzspill-write-all.diff",
+      "zzzzzzzzz-subprocess-zzzero-tail.diff",
+      "zzzzzzzzz-terminal-tail.diff",
+      "zzzzzzzzz-tool-history-lookup.diff",
+      "zzzzzzzzz-workspace-domain-close.diff",
+      "zzzzzzzzzz-agent-team-input-recovery.diff",
+      "zzzzzzzzzz-plugin-manager-log-write-all.diff",
+      "zzzzzzzzzz-plugin-update-selection.diff",
+      "zzzzzzzzzz-session-export-descendant-refs.diff",
+      "zzzzzzzzzz-terminal-readiness-clock.diff",
+      "zzzzzzzzzz-workspace-watch-error.diff",
+      "zzzzzzzzzzz-plugin-operations-log-utf8.diff",
+      "zzzzzzzzzzz-plugin-update-precondition.diff",
+      "zzzzzzzzzzzz-plan-pending-restore.diff",
+      "zzzzzzzzzzzz-plugin-update-hmr-selection.diff",
+      "zzzzzzzzzzzzz-plan-failed-command-pending.diff",
+      "zzzzzzzzzzzzz-plugin-update-hmr-precondition.diff",
+      "zzzzzzzzzzzzzz-plugin-manager-lock-lifetime.diff",
+      "zzzzzzzzzzzzzzz-read-line-surrogate.diff",
+      "zzzzzzzzzzzzzzz-workflow-result-unicode.diff",
+      "zzzzzzzzzzzzzzzz-read-line-cr-truncation.diff",
+      "zzzzzzzzzzzzzzzzz-web-fetch-unicode.diff",
+      "zzzzzzzzzzzzzzzzzz-skill-catalog-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzz-fs-text-bom.diff",
+      "zzzzzzzzzzzzzzzzzzzz-session-list-isolation.diff",
+      "zzzzzzzzzzzzzzzzzzzzz-turn-outline-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzz-context-summary-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzz-image-display-name-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzz-ralph-result-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzz-repeat-json-own-key.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzz-repeat-preview-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzz-json-equality-own-keys.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzz-workspace-recovery-index.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzz-tool-result-codepoint-count.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzz-attachment-staging-error.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-reference-retention-size.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-search-snippet-window.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-workspace-capture-recovery.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-parent-kind.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-line-style.diff",
+      "fs-create-link-denial.diff",
+      "fs-publication-short-names.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-patch-equal-width.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
+      "jsonl-materialize-rename.diff",
+      "jsonl-migration-link-fallback.diff",
+      "attachment-link-fallback.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-entry-lifecycle.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-group-own-key.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller-bundle.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-storage-json-postpublish.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-credentials-record-own-key.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-piai-credential-wait-cancel.diff",
+      "piai-discovery-response-cancel.diff",
+      "attachment-direct-boundary.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-recall-gates.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
+      "terminal-job-cancel.diff",
+      "provider-discovery-headers.diff",
+      "session-format-error.diff",
+      "session-queue-steer-deletion.diff",
+      "webserver-resource-abort.diff",
+      "rrule-negative-position-range.diff",
+      "rrule-weekly-first-period.diff",
+      "rrule-mixed-byday.diff",
+      "input-trigger-source-recovery.diff",
+      "web-preset-save-freshness.diff",
+      "web-search-key-write-result.diff",
+      "deepseek-attachment-error.diff",
+      "fork-default-effort.diff",
+      "config-editor-lock-order.diff",
+      "piai-overflow-output-limit.diff",
+      "schedule-authorization-availability.diff"
+    ],
+    "ohos": [
+      "cordis-effect-dispose-completion.diff",
+      "credentials-decimal-refs.diff",
+      "fs-create-exclusive.diff",
+      "install-log-redaction.diff",
+      "piai-anthropic-opus55-thinking.diff",
+      "piai-google-openai-store.diff",
+      "plugin-manager-active-run-guard.diff",
+      "plugin-manager-cancel-tree-confirmation.diff",
+      "preset-legacy-delegation.diff",
+      "route-guard.diff",
+      "client-hmr-closed-response.diff",
+      "schemastery-json-context.diff",
+      "session-title-word-prefix.diff",
+      "str-editor-view-prefix.diff",
+      "web-composer-mobile-newline.diff",
+      "z-plugin-install-log-utf8.diff",
+      "zz-direct-runtime.diff",
+      "zzz-config-editor-path.diff",
+      "zzz-fs-replace-all-count.diff",
+      "zzz-title-cache-refresh.diff",
+      "zzzz-plugin-config-readability.diff",
+      "zzzzz-plugin-config-bundles.diff",
+      "zzzzzz-session-deletion.diff",
+      "zzzzzzz-atomic-claim-write-failure.diff",
+      "zzzzzzz-atomic-lock-write-failure.diff",
+      "zzzzzzz-bundle-membership.diff",
+      "zzzzzzz-domain-owner-dispose.diff",
+      "zzzzzzz-file-query-normalization.diff",
+      "zzzzzzz-file-reference-owner-dispose.diff",
+      "zzzzzzz-grep-retention-preview.diff",
+      "zzzzzzz-input-recovery.diff",
+      "zzzzzzz-job-follow-removal.diff",
+      "zzzzzzz-job-ring-trim.diff",
+      "zzzzzzz-jsonl-root-check-retry.diff",
+      "zzzzzzz-mcp-resource-lookup.diff",
+      "zzzzzzz-piai-developer-tools.diff",
+      "zzzzzzz-plugin-list-index.diff",
+      "zzzzzzz-preset-owner-dispose.diff",
+      "zzzzzzz-prompt-tool-order.diff",
+      "zzzzzzz-query-open-retry.diff",
+      "zzzzzzz-reference-drop-size.diff",
+      "zzzzzzz-reference-encoding.diff",
+      "zzzzzzz-retainer-decode-copy.diff",
+      "zzzzzzz-settings-local-redaction.diff",
+      "zzzzzzz-skill-watcher-recheck.diff",
+      "zzzzzzz-spill-write-cleanup.diff",
+      "zzzzzzz-terminal-byte-length.diff",
+      "zzzzzzz-time-zone-dedup.diff",
+      "zzzzzzz-web-fetch-redirect-cleanup.diff",
+      "zzzzzzz-workspace-observation-queue.diff",
+      "zzzzzzzz-model-defaults.diff",
+      "zzzzzzzz-schedule-authorization.diff",
+      "zzzzzzzzz-credentials-disposal.diff",
+      "zzzzzzzzz-developer-header-lookup.diff",
+      "zzzzzzzzz-job-result-bytes.diff",
+      "zzzzzzzzz-materialize-temp.diff",
+      "zzzzzzzzz-plugin-detail-body-cancel.diff",
+      "zzzzzzzzz-plugin-manager-metadata-inventory.diff",
+      "zzzzzzzzz-prompt-admission.diff",
+      "zzzzzzzzz-schedule-run-cancel.diff",
+      "zzzzzzzzz-session-event-admission.diff",
+      "zzzzzzzzz-session-id-membership.diff",
+      "zzzzzzzzz-session-live-fingerprint.diff",
+      "zzzzzzzzz-stats-attempt-token.diff",
+      "zzzzzzzzz-subprocess-idle-read.diff",
+      "zzzzzzzzz-subprocess-utf8-cursor.diff",
+      "zzzzzzzzz-subprocess-zsingle-read.diff",
+      "zzzzzzzzz-subprocess-zzspill-write-all.diff",
+      "zzzzzzzzz-subprocess-zzzero-tail.diff",
+      "zzzzzzzzz-terminal-tail.diff",
+      "zzzzzzzzz-tool-history-lookup.diff",
+      "zzzzzzzzz-workspace-domain-close.diff",
+      "zzzzzzzzzz-agent-team-input-recovery.diff",
+      "zzzzzzzzzz-plugin-manager-log-write-all.diff",
+      "zzzzzzzzzz-plugin-update-selection.diff",
+      "zzzzzzzzzz-session-export-descendant-refs.diff",
+      "zzzzzzzzzz-terminal-readiness-clock.diff",
+      "zzzzzzzzzz-workspace-watch-error.diff",
+      "zzzzzzzzzzz-plugin-operations-log-utf8.diff",
+      "zzzzzzzzzzz-plugin-update-precondition.diff",
+      "zzzzzzzzzzzz-plan-pending-restore.diff",
+      "zzzzzzzzzzzz-plugin-update-hmr-selection.diff",
+      "zzzzzzzzzzzzz-plan-failed-command-pending.diff",
+      "zzzzzzzzzzzzz-plugin-update-hmr-precondition.diff",
+      "zzzzzzzzzzzzzz-plugin-manager-lock-lifetime.diff",
+      "zzzzzzzzzzzzzzz-read-line-surrogate.diff",
+      "zzzzzzzzzzzzzzz-workflow-result-unicode.diff",
+      "zzzzzzzzzzzzzzzz-read-line-cr-truncation.diff",
+      "zzzzzzzzzzzzzzzzz-web-fetch-unicode.diff",
+      "zzzzzzzzzzzzzzzzzz-skill-catalog-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzz-fs-text-bom.diff",
+      "zzzzzzzzzzzzzzzzzzzz-session-list-isolation.diff",
+      "zzzzzzzzzzzzzzzzzzzzz-turn-outline-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzz-context-summary-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzz-image-display-name-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzz-ralph-result-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzz-repeat-json-own-key.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzz-repeat-preview-unicode.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzz-json-equality-own-keys.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzz-workspace-recovery-index.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzz-tool-result-codepoint-count.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzz-attachment-staging-error.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-reference-retention-size.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-search-snippet-window.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-workspace-capture-recovery.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-parent-kind.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-line-style.diff",
+      "fs-create-link-denial.diff",
+      "fs-publication-short-names.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-patch-equal-width.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
+      "jsonl-materialize-rename.diff",
+      "jsonl-migration-link-fallback.diff",
+      "attachment-link-fallback.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-entry-lifecycle.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-group-own-key.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller-bundle.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-storage-json-postpublish.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-credentials-record-own-key.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-piai-credential-wait-cancel.diff",
+      "piai-discovery-response-cancel.diff",
+      "attachment-direct-boundary.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-recall-gates.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
+      "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
+      "terminal-job-cancel.diff",
+      "provider-discovery-headers.diff",
+      "session-format-error.diff",
+      "session-queue-steer-deletion.diff",
+      "webserver-resource-abort.diff",
+      "rrule-negative-position-range.diff",
+      "rrule-weekly-first-period.diff",
+      "rrule-mixed-byday.diff",
+      "input-trigger-source-recovery.diff",
+      "web-preset-save-freshness.diff",
+      "web-search-key-write-result.diff",
+      "deepseek-attachment-error.diff",
+      "fork-default-effort.diff",
+      "config-editor-lock-order.diff",
+      "piai-overflow-output-limit.diff",
+      "schedule-authorization-availability.diff",
+      "ohos-attachment-publication.diff",
+      "ohos-hap-native-libraries.diff",
+      "ohos-mcp-stdio-unavailable.diff",
+      "ohos-network-transport.diff",
+      "ohos-output-utf8.diff",
+      "ohos-provider-body-timeout.diff",
+      "ohos-provider-stream-body-timeout.diff",
+      "ohos-virtual-process.diff",
+      "ohos-workspace-changes.diff",
+      "zzzzzzz-ohos-session-publication.diff",
+      "zzzzzzzz-ohos-atomic-publication.diff",
+      "zzzzzzzzz-ohos-search-confinement.diff",
+      "zzzzzzzzzz-ohos-shell-limit-description.diff",
+      "zzzzzzzzzzz-ohos-search-ignore-description.diff",
+      "zzzzzzzzzzzz-ohos-composition.diff",
+      "zzzzzzzzzzzz-ohos-runtime-capabilities.diff",
+      "zzzzzzzzzzzzz-ohos-lifecycle.diff",
+      "zzzzzzzzzzzzz-ohos-plugin-install-refusal.diff",
+      "zzzzzzzzzzzzzz-ohos-composition-imports.diff"
+    ]
+  }
 }

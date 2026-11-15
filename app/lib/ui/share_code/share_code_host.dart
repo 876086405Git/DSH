@@ -40,7 +40,11 @@ Future<bool> openShareLink(BuildContext context, ShareLink link) async {
   try {
     final text = await fetchShareLinkText(link, container.read(shareNetProvider));
     if (!context.mounted) return true;
-    final decoded = await compute(_decodeText, (text, context.l10n.pluginsChat));
+    // A short inline code is already on the device. Starting an isolate for a
+    // few hundred bytes delays the share sheet (and can outlive a quick route
+    // change); keep Gists and larger imports off the UI isolate.
+    final input = (text, context.l10n.pluginsChat);
+    final decoded = !link.isGist && text.length <= 512 ? _decodeText(input) : await compute(_decodeText, input);
     if (!context.mounted) return true;
     await _open(context, decoded, origin: link.isGist ? ShareOrigin.gist : ShareOrigin.link);
   } catch (e) {

@@ -1,0 +1,8 @@
+{
+  "symbols": {
+    "speechRecognizer": {
+      "source": "@hms.ai.speechRecognizer.d.ts",
+      "bindings": "default"
+    }
+  }
+}

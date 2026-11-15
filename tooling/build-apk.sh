@@ -141,6 +141,8 @@ if ! command -v flutter >/dev/null 2>&1; then
   [[ -f $ROOT/tooling/env.sh ]] && source "$ROOT/tooling/env.sh"
   command -v flutter >/dev/null 2>&1 || die "flutter is not on PATH"
 fi
+# A HarmonyOS build's plugin overrides must never reach an APK.
+[[ ! -e "$ROOT/app/pubspec_overrides.yaml" ]] || die "app/pubspec_overrides.yaml is left over from a HarmonyOS build; remove it"
 
 stop_daemon() {
   ((keep_daemon)) && return 0

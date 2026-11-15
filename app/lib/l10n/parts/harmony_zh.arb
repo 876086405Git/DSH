@@ -1,0 +1,47 @@
+{
+  "@@locale": "zh",
+  "harmonyUnknownResults": "有工具调用没等到结果，可能已经执行，也可能没有。处理之前，这个对话不能再调用工具。",
+  "harmonyUnknownResultsReview": "处理",
+  "harmonyUnknownResultsTitle": "这些工具调用的结果未知",
+  "harmonyUnknownResultsBody": "{tools}\n\n应用在等结果时中断了，它们可能已经执行，也可能没有。可以先看看实际情况，比如文件改了没有。\n\n继续之后，这些调用不会重新运行，记录也不会改成成功。",
+  "@harmonyUnknownResultsBody": {
+    "placeholders": {
+      "tools": {
+        "type": "String"
+      }
+    }
+  },
+  "harmonyUnknownResultsContinue": "继续这个对话",
+  "harmonyUnknownResultsChanged": "情况变了，请再看一遍。",
+  "harmonyUnknownResultsFailed": "没有确认成功，请再试一次。",
+  "harmonyCallsNotRecorded": "本机引擎记不下工具调用的状态，工具调用已暂停。重启引擎后再试。",
+  "harmonyAccessSubtitle": "各项功能用到的系统权限",
+  "harmonyNotifyWhy": "应用在运行时，回复跑完、需要确认会提醒你",
+  "harmonyKwSystemAccess": "权限一览,授权,麦克风,通知权限,回复提醒,语音输入,补开权限",
+  "harmonyBackgroundSubtitle": "应用离开屏幕后，本机的对话会暂停",
+  "harmonyBackgroundAway": "离开屏幕后",
+  "harmonyBackgroundLocal": "系统几秒内就会挂起应用，正在跑的对话跟着暂停，回到应用后会尽量接着跑",
+  "harmonyBackgroundRemoteTitle": "已连接的远程主机",
+  "harmonyBackgroundRemote": "上面的回复继续跑，不受影响",
+  "harmonyBackgroundLong": "长任务",
+  "harmonyBackgroundStay": "把应用留在屏幕上",
+  "harmonyBackgroundUseRemote": "或者放到已连接的远程主机上跑",
+  "harmonyEngineBackgroundHint": "离开屏幕后本机引擎会暂停",
+  "harmonyKwBackground": "后台,保活,挂起,暂停,被杀,杀后台",
+  "harmonyPausedInBackground": "对话在后台暂停过",
+  "harmonyAlertsRequirement": "提醒要应用在运行才发得出：离开屏幕几秒后系统会挂起应用，挂起期间没有提醒",
+  "harmonyLiveUnavailable": "这个版本暂时没有实时活动",
+  "harmonySchedulesLocal": "本机的任务只在应用运行时触发：应用被系统挂起时，到点不会运行",
+  "harmonyPageUnavailable": "这个版本暂时没有这个页面",
+  "harmonyNotificationSettingsFailed": "没能打开系统设置。到「设置 → 通知和状态栏 → DSH Go」里开启",
+  "harmonySearchUnavailable": "这个版本暂时没有这项功能",
+  "harmonyCredentialsSection": "密钥",
+  "harmonyCredentialsUnreadable": "已保存的密钥无法读取",
+  "harmonyCredentialsUnreadableHint": "已保存的密钥无法读取。到「设置 → 隐私与分享」清除后再试",
+  "harmonyCredentialsClear": "清除已保存的密钥",
+  "harmonyCredentialsClearBody": "重试没有用。清除后，App 保存的 API key、DSH Remote 登录、SSH 密码和私钥、论坛登录都会被删除，需要重新填写或登录。已发布的分享链接还在，但这台手机上删不掉了。对话和主机列表会保留。此操作无法撤销。",
+  "harmonyCredentialsClearAction": "清除密钥",
+  "harmonyCredentialsCleared": "已清除，请重新填写或登录",
+  "harmonyCredentialsClearFailed": "没能清除，再试一次",
+  "harmonyIconChangeFailed": "没能更换。使用自定义主题或应用分身时不能换桌面图标"
+}

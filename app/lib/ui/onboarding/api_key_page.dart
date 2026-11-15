@@ -8,6 +8,7 @@ import '../../state/app_info.dart';
 import '../../state/onboarding_state.dart';
 import '../../state/settings_state.dart';
 import '../providers/provider_widgets.dart' show FormBottomBar;
+import '../settings/credential_recovery_dialog.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
@@ -97,9 +98,11 @@ class _ApiKeyPageState extends ConsumerState<ApiKeyPage> {
     try {
       await ref.read(settingsProvider.notifier).setApiKey(key);
       await ref.read(onboardingPrefsProvider.notifier).setKeySkipped(false);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
+      // Not saved again by itself after clearing: the field still has the key.
+      if (await offerCredentialRecovery(context, ref, e) || !mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.shellSaveTryAgain)));
       return;
     }

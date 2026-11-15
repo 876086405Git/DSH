@@ -40,9 +40,14 @@ VERSION_LINE = re.compile(r'^> dsh-go (\S+)$', re.MULTILINE)
 BANNED = {'zh': ('会话', '实验'), 'en': ()}
 
 
+def source_files(directory: Path, pattern: str):
+    """Exclude macOS metadata on external disks from source/generated inputs."""
+    return (path for path in directory.glob(pattern) if not path.name.startswith('._'))
+
+
 def read_arb(directory: Path, locale: str) -> dict[str, str]:
     labels: dict[str, str] = {}
-    files = sorted(directory.glob(f'*_{locale}.arb'))
+    files = sorted(source_files(directory, f'*_{locale}.arb'))
     if not files:
         raise ValueError(f'{directory}: no *_{locale}.arb')
     for file in files:
@@ -58,7 +63,7 @@ def read_arb(directory: Path, locale: str) -> dict[str, str]:
 def read_android(res: Path, locale: str) -> set[str]:
     folder = res / ('values-zh' if locale == 'zh' else 'values')
     out: set[str] = set()
-    for file in sorted(folder.glob('*.xml')):
+    for file in sorted(source_files(folder, '*.xml')):
         for node in ET.parse(file).getroot().iter('string'):
             text = ''.join(node.itertext())
             out.add(text.replace("\\'", "'").replace('\\"', '"'))
@@ -176,7 +181,7 @@ def check_skill(text: str) -> list[str]:
 def guide_files(guide: Path) -> dict[str, Path]:
     files = {'SKILL.md': guide / 'SKILL.md', 'README.md': guide / 'README.md'}
     for locale in LOCALES:
-        for page in sorted((guide / locale).glob('*.md')):
+        for page in sorted(source_files(guide / locale, '*.md')):
             files[f'{locale}/{page.name}'] = page
     return files
 
@@ -186,13 +191,15 @@ def check(repo: Path, guide: Path) -> list[str]:
     for required in ('SKILL.md', 'README.md'):
         if not (guide / required).is_file():
             return [f'{guide}: missing {required}']
-    pages = {locale: {p.name for p in (guide / locale).glob('*.md')} for locale in LOCALES}
+    pages = {locale: {p.name for p in source_files(guide / locale, '*.md')} for locale in LOCALES}
     if not pages['zh']:
         errors.append(f'{guide}/zh: no pages')
     if pages['zh'] != pages['en']:
         errors.append(f'zh/en pages differ: only zh {sorted(pages["zh"] - pages["en"])}, '
                       f'only en {sorted(pages["en"] - pages["zh"])}')
     for other in guide.rglob('*'):
+        if other.name.startswith('._'):
+            continue
         rel = other.relative_to(guide).as_posix()
         if other.is_file() and rel not in guide_files(guide):
             errors.append(f'{rel}: not part of the guide (SKILL.md, README.md, zh/*.md, en/*.md)')
@@ -206,7 +213,7 @@ def check(repo: Path, guide: Path) -> list[str]:
     for locale in LOCALES:
         arb = read_arb(repo / 'app/lib/l10n/parts', locale)
         labels = set(arb.values()) | read_android(res, locale)
-        for page in sorted((guide / locale).glob('*.md')):
+        for page in sorted(source_files(guide / locale, '*.md')):
             errors += check_page(page, guide, locale, arb, labels, ids)
     for name in ('SKILL.md', 'README.md'):
         errors += check_links(guide / name, guide, ids)
@@ -223,7 +230,7 @@ def assets(guide: Path) -> dict[str, bytes]:
 
 
 def sync(directory: Path, files: dict[str, bytes], write: bool) -> list[str]:
-    current = {p.name for p in directory.glob('*') if p.is_file()} if directory.is_dir() else set()
+    current = {p.name for p in source_files(directory, '*') if p.is_file()} if directory.is_dir() else set()
     stale = sorted(current - files.keys())
     changed = sorted(n for n, data in files.items()
                      if not (directory / n).is_file() or (directory / n).read_bytes() != data)

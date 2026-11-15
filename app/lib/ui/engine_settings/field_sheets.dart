@@ -1542,7 +1542,7 @@ class _ObjectItemPageState extends State<_ObjectItemPage> {
           padding: EdgeInsets.zero,
           child: EngineFieldRow(
             title: label,
-            trailing: Switch(
+            trailing: Switch.adaptive(
               value: _draft[key] == true || (_draft[key] == null && node.effective.meta.defaultValue == true),
               onChanged: (v) => setState(() => _draft = {..._draft, key: v}),
             ),

@@ -21,7 +21,7 @@ String diagnosticsStepText(DiagnosticsStep step) => switch (step) {
   DiagnosticsStep.collecting => appL10n.phoneDiagnosticsCollecting,
   DiagnosticsStep.packing => appL10n.phoneDiagnosticsPacking,
   DiagnosticsStep.sharing => appL10n.phoneDiagnosticsSharing,
-  DiagnosticsStep.saving => appL10n.phoneDiagnosticsSaving,
+  DiagnosticsStep.saving => wordsForIos ? appL10n.iosSavingToFiles : appL10n.phoneDiagnosticsSaving,
 };
 
 /// The two ways out for a diagnostics bundle — 「分享诊断包」 and
@@ -129,8 +129,8 @@ class _DiagnosticsExportCardState extends ConsumerState<DiagnosticsExportCard> {
         ),
         ListPageRow(
           icon: AppIcons.download,
-          title: l10n.phoneDiagnosticsSave,
-          subtitle: _subtitle(_Action.save, l10n.phoneDiagnosticsSaveHint),
+          title: wordsForIos ? l10n.iosSaveToFiles : l10n.phoneDiagnosticsSave,
+          subtitle: _subtitle(_Action.save, wordsForIos ? l10n.iosFilesFolderHint : l10n.phoneDiagnosticsSaveHint),
           trailing: _ring(_Action.save),
           chevron: _busy != _Action.save,
           onTap: idle ? () => unawaited(_run(_Action.save)) : null,

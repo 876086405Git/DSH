@@ -950,7 +950,7 @@ class _PluginToggleState extends State<_PluginToggle> {
       ),
     );
     final label = Text(widget.label, style: theme.textTheme.bodyLarge?.copyWith(color: colors.onSurface));
-    final toggle = Switch(
+    final toggle = Switch.adaptive(
       key: const ValueKey('plugin-toggle-switch'),
       value: widget.value,
       onChanged: widget.onChanged,

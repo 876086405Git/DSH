@@ -1,0 +1,8 @@
+{
+  "@@locale": "en",
+  "phoneGateCleanupTitle": "Probe cleanup not confirmed",
+  "phoneGateCleanupUnknown": "New background resources are blocked. Retry only the original cleanup if its channel is still available. This does not rerun the probe.",
+  "phoneGateCleanupRunning": "Waiting for the original probe and its cleanup. The channel stays pinned until cleanup is confirmed.",
+  "phoneGateCleanupRetry": "Retry cleanup only",
+  "phoneGateCleanupDone": "Cleanup confirmed. Choose the channel again explicitly to run a fresh check."
+}

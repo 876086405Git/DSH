@@ -7,6 +7,7 @@ import '../../l10n/l10n.dart';
 import '../../runtime/local_footprint.dart';
 import '../../runtime/runtime_state.dart';
 import '../../state/account_state.dart';
+import '../../state/android_features.dart';
 import '../../state/ask_ai.dart' show askAiAvailableProvider;
 import '../../state/balance_state.dart';
 import '../../state/connection_state.dart';
@@ -92,6 +93,8 @@ class SettingsScreen extends ConsumerWidget {
     final engine = EngineStatusView.of(runtime);
     final colors = DshColors.of(context);
     final notifier = ref.read(settingsProvider.notifier);
+    final android = ref.watch(androidSystemFeaturesProvider);
+    final ios = ref.watch(operatingSystemProvider) == 'ios';
     final uiMode = ref.watch(uiModeProvider.select((s) => s.mode));
     final host = ref.watch(activeHostProvider);
     Widget? text(String? value, {Color? color}) =>
@@ -103,12 +106,12 @@ class SettingsScreen extends ConsumerWidget {
         ? (replyPrefsSummary(ref) == null ? l10n.commonNotSet : l10n.hubValueSet)
         : null;
     // 能力.
-    final phone = ref.watch(phoneProvider);
-    final phoneValue = !phone.loaded || !phone.status.ready
+    final phone = android || ios ? ref.watch(phoneProvider) : null;
+    final phoneValue = phone == null || !phone.loaded || !phone.status.ready
         ? null
         : !phone.status.enabled
         ? l10n.hubValueOff
-        : phone.status.a11y.ok
+        : (ios ? phone.status.bridgeListening : phone.status.a11y.ok)
         ? l10n.pluginsTurnedOn
         : l10n.hubValueOneStep;
     final plugins = ref.watch(installedPluginsProvider.select((s) => s.value?.length));
@@ -117,8 +120,8 @@ class SettingsScreen extends ConsumerWidget {
     final newApi = search == null
         ? null
         : search.valueOf(const FieldRef(WebSearchSettingsPage.webNs, ['searchProvider'])) == 'deepseek-search-api';
-    // 通用.
-    final exempt = ref.watch(batteryExemptProvider).value;
+    // 通用. HarmonyOS has no battery exemption to report.
+    final exempt = android ? ref.watch(batteryExemptProvider).value : null;
     // 主机.
     final ssh = ref.watch(hostsProvider.select((s) => s.ssh.length));
     final hostName = host.isLocal ? l10n.commonThisPhone : ref.watch(hostNameProvider(host)) ?? l10n.commonRemoteHost;
@@ -166,13 +169,14 @@ class SettingsScreen extends ConsumerWidget {
         SettingsSection(
           title: l10n.hubGroupCapabilities,
           children: [
-            SettingsTile(
-              icon: AppIcons.phoneControl,
-              tint: SettingsHues.abilities,
-              spot: SettingsIndex.entry(SettingsPageId.phone),
-              value: text(phoneValue, color: phoneValue == l10n.hubValueOneStep ? colors.warning : null),
-              onTap: () => _push(context, const PhoneControlScreen()),
-            ),
+            if (android || ios)
+              SettingsTile(
+                icon: AppIcons.phoneControl,
+                tint: SettingsHues.abilities,
+                spot: SettingsIndex.entry(SettingsPageId.phone),
+                value: text(phoneValue, color: phoneValue == l10n.hubValueOneStep ? colors.warning : null),
+                onTap: () => _push(context, const PhoneControlScreen()),
+              ),
             SettingsTile(
               icon: AppIcons.webSearch,
               tint: SettingsHues.abilities,

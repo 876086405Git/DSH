@@ -1,0 +1,54 @@
+diff --git a/node_modules/openai/providers/bedrock/aws.mjs b/node_modules/openai/providers/bedrock/aws.mjs
+--- a/node_modules/openai/providers/bedrock/aws.mjs
++++ b/node_modules/openai/providers/bedrock/aws.mjs
+@@ -1,5 +1,5 @@
+ import { defaultProvider } from '@aws-sdk/credential-provider-node';
+-import { Hash } from '@smithy/hash-node';
++import { Sha256 } from '@smithy/core/checksum';
+ import { SignatureV4 } from '@smithy/signature-v4';
+ import * as Errors from "../../error.mjs";
+ import { assertBedrockRequestOrigin, assertProviderOwnsAuthorization, normalizeOptionalString, parseBedrockEndpointHostname, prepareBedrockAuth, resolveBedrockBearerAuth, resolveBedrockEndpoint, } from "../../internal/bedrock.mjs";
+@@ -93,7 +93,7 @@
+             credentials: this.credentialsProvider(),
+             region: this.options.region,
+             service: this.options.endpoint === 'runtime' ? 'bedrock' : 'bedrock-mantle',
+-            sha256: Hash.bind(null, 'sha256'),
++            sha256: Sha256,
+         })));
+     }
+     async prepareRequest(request, context) {
+diff --git a/node_modules/openai/providers/bedrock/aws.js b/node_modules/openai/providers/bedrock/aws.js
+--- a/node_modules/openai/providers/bedrock/aws.js
++++ b/node_modules/openai/providers/bedrock/aws.js
+@@ -3,7 +3,7 @@
+ exports.bedrock = bedrock;
+ const tslib_1 = require("../../internal/tslib.js");
+ const credential_provider_node_1 = require("@aws-sdk/credential-provider-node");
+-const hash_node_1 = require("@smithy/hash-node");
++const hash_node_1 = require("@smithy/core/checksum");
+ const signature_v4_1 = require("@smithy/signature-v4");
+ const Errors = tslib_1.__importStar(require("../../error.js"));
+ const bedrock_1 = require("../../internal/bedrock.js");
+@@ -97,7 +97,7 @@
+             credentials: this.credentialsProvider(),
+             region: this.options.region,
+             service: this.options.endpoint === 'runtime' ? 'bedrock' : 'bedrock-mantle',
+-            sha256: hash_node_1.Hash.bind(null, 'sha256'),
++            sha256: hash_node_1.Sha256,
+         })));
+     }
+     async prepareRequest(request, context) {
+diff --git a/node_modules/proxy-agent-negotiate/dist/index.js b/node_modules/proxy-agent-negotiate/dist/index.js
+--- a/node_modules/proxy-agent-negotiate/dist/index.js
++++ b/node_modules/proxy-agent-negotiate/dist/index.js
+@@ -2,6 +2,10 @@
+     return async ({ response, scheme }) => {
+         if (scheme.toLowerCase() !== 'negotiate') {
+             throw new Error(`Expected Negotiate scheme but got "${scheme}"`);
++        }
++        if (process.platform === 'openharmony') {
++            throw Object.assign(new Error('鸿蒙不提供 Kerberos 原生认证；请使用其他代理认证方式或连接电脑。'),
++                { code: 'OHOS_PROXY_NEGOTIATE_UNAVAILABLE' });
+         }
+         let kerberos;
+         try {

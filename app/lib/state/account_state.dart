@@ -11,6 +11,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui' show Brightness;
 
 import 'package:dsh_client/dsh_client.dart';
@@ -55,7 +56,11 @@ class SystemAccountBrowser implements AccountBrowser {
 
   @override
   Future<bool> open(Uri url) async {
-    for (final mode in const [LaunchMode.inAppBrowserView, LaunchMode.externalApplication]) {
+    // HarmonyOS's url_launcher answers the in-app mode with a developer's toast.
+    final modes = Platform.operatingSystem == 'ohos'
+        ? const [LaunchMode.externalApplication]
+        : const [LaunchMode.inAppBrowserView, LaunchMode.externalApplication];
+    for (final mode in modes) {
       try {
         if (await launchUrl(url, mode: mode)) return true;
       } catch (_) {

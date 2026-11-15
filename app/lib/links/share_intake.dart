@@ -9,6 +9,7 @@
 // conversation link to its replay, everything else into a new conversation's
 // composer (lib/state/compose_inbox.dart).
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -74,7 +75,12 @@ class IncomingShare {
   ShareLink? get shareLink {
     final body = text;
     if (body == null || files.isNotEmpty || skipped.isNotEmpty) return null;
-    return ShareLink.find(body);
+    // A forwarded Chinese sentence may put punctuation right next to its
+    // link. Split only the extraction copy; the original chat text stays intact.
+    final input = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+        ? body.replaceAll(RegExp(r'[。！？；，、（）【】「」“”‘’]'), ' ')
+        : body;
+    return ShareLink.find(input);
   }
 
   /// What goes into the composer: the text, and over a bare link the page

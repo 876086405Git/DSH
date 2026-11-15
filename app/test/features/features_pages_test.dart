@@ -4,7 +4,10 @@
 // `flutter test --update-goldens test/features/features_pages_test.dart`.
 
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/features_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
@@ -28,6 +31,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chat/support/harness.dart';
+import '../phone/support.dart' show FixedActiveHost;
 import '../plugins/support/fake_plugin_host.dart';
 import '../shell/golden_harness.dart' show FakeRuntime, runningStatus;
 
@@ -206,6 +210,35 @@ Future<void> _pump(
 
 void main() {
   setUpAll(loadTestFonts);
+
+  group('自动化任务 on HarmonyOS', () {
+    final note = lookupL10n(AppLocale.zhCN).harmonySchedulesLocal;
+
+    Future<void> schedules(WidgetTester tester, {required String os, HostRef host = HostRef.local}) => _pump(
+      tester,
+      SchedulesPage(now: _now),
+      overrides: [
+        ..._fixed(),
+        operatingSystemProvider.overrideWithValue(os),
+        activeHostProvider.overrideWith(() => FixedActiveHost(host)),
+      ],
+    );
+
+    testWidgets('on-device tasks only fire while the app runs, and it says so', (tester) async {
+      await schedules(tester, os: 'ohos');
+      expect(find.text(note), findsOneWidget);
+    });
+
+    testWidgets('a remote host\'s tasks run regardless', (tester) async {
+      await schedules(tester, os: 'ohos', host: const HostRef.relay('r1'));
+      expect(find.text(note), findsNothing);
+    });
+
+    testWidgets('Android has nothing to add', (tester) async {
+      await schedules(tester, os: 'android');
+      expect(find.text(note), findsNothing);
+    });
+  });
 
   group('全部功能', () {
     testWidgets('native items push their page; web items deep-link', (tester) async {

@@ -1,0 +1,8 @@
+{
+  "@@locale": "zh",
+  "phoneResourceRecoveryTitle": "后台资源待核验",
+  "phoneResourceRecoveryRunning": "正在核对原资源记录，完成前不能开始新的手机任务。",
+  "phoneResourceRecoveryStorage": "无法读取或保存资源记录。可重试保存或读取；已确认的释放不会重复执行，也不会重放旧操作。",
+  "phoneResourceRecoveryPending": "旧后台资源尚未核验，新的手机任务暂被阻止。请选择原授权通道后重试；仍无法核验时，可重启设备后再次检查。旧操作结果可能已经发生。确认任务中断提示不会清除这些资源。",
+  "phoneResourceRecoveryRetry": "重试资源核验"
+}

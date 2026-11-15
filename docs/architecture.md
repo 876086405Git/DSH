@@ -24,14 +24,25 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-技术栈（2026-10 定稿）：
+iOS 复用同一套 Flutter 页面、Riverpod 状态、`dsh_client` 和引擎桥协议，宿主实现不同：
+
+```text
+Flutter Dart ── MethodChannel ──> Swift（DshPlugin / EngineChannel）
+      │                                  ├─ 同进程 NodeMobile + 专门生成的 runtime.zip
+      │                                  ├─ 可选 iSH Linux guest（DshGuest.framework）
+      │                                  ├─ CoreDevice / XCTest PhoneRunner 手机操控
+      │                                  └─ WidgetKit 伙伴小组件、语音、可选宠物 PiP
+      └──────── DshClient ── 127.0.0.1 本机引擎或远程 Host
+```
+
+技术栈：
 
 | 层 | 选型 | 说明 |
 |---|---|---|
 | UI | Flutter 3.47（Dart 3.13）+ Riverpod 3 | 玻璃质感用 `BackdropFilter`；手写 Notifier，无 codegen |
-| 原生层 | Kotlin，Flutter 插件形式写在 `app/android/` | 解压运行时、管理 proot 进程、前台服务、手机操控 |
+| 原生层 | Android Kotlin（`app/android/`）；iOS Swift（`app/ios/Runner/`） | 各自管理运行时、系统接口和手机操控；Dart 通道需逐平台实现 |
 | DSH 客户端 | 纯 Dart `packages/dsh_client` | 无 Flutter 依赖，可单测；本机与远程共用 |
-| 本地运行时 | Ubuntu 24.04 + Node + `@deepseek-ai/dsh`，经 proot 运行 | 免 Root、免 Termux |
+| 本地运行时 | Android：Ubuntu 24.04 + Node，经 PRoot；iOS：NodeMobile + iOS 专用运行时包，可选 iSH Linux guest | 两端共用上游 DSH/桥协议，但不能把 iOS just-bash 当成 Linux |
 
 五条贯穿主线：
 
@@ -39,20 +50,20 @@
 |---|---|---|
 | 对话 | UI 订阅 session/follow 事件流，ChatTranscript 折叠成 ChatState | `state/chat_state.dart` → `dsh_client` `watch()` |
 | 插件 | 引擎桥 /dsh-go/v1/* 提供 contributions/invoke/stream，App 只读渲染 | `state/plugins_state.dart`、`plugins/` |
-| 手机操控 | 引擎发工具调用 → 原生 phone/ 驱动无障碍/Shizuku/ADB | `phone/`（Kotlin）、`state/phone_state.dart` |
+| 手机操控 | 引擎发工具调用 → 各平台原生执行并按任务所有者结算结果 | Android `phone/`；iOS `IOSPhoneBridge`/`IOSPhoneRunner`；`state/phone_state.dart` |
 | 远程 | 另开一条加密隧道（SSH 或 WebRTC/中继），复用同一个 DshClient | `packages/dsh_remote`、`remote/` |
-| 自更新 | 检查→下载→校验→安装（可走 Shizuku/ADB 特权） | `state/update_state.dart`、`update/`（Kotlin） |
+| 自更新 | Android 检查→下载→校验→安装（可走 Shizuku/ADB 特权） | `state/update_state.dart`、`update/`（Kotlin）；iOS 不复用 APK 安装器 |
 
 ## 1. 仓库地图
 
 | 路径 | 是什么 | 关键入口 | 备注 |
 |---|---|---|---|
-| `app/` | Flutter App + Android 原生实现 | `lib/main.dart`、`android/.../MainActivity.kt` | 4789 文件，本仓库主体 |
+| `app/` | Flutter App + Android/iOS 原生实现 | `lib/main.dart`、`android/.../MainActivity.kt`、`ios/Runner/AppDelegate.swift` | 本仓库主体 |
 | `packages/dsh_client/` | DSH Web API 纯 Dart 客户端（连接/RPC/mux/事件/各域 API） | `lib/dsh_client.dart`（barrel） | 不依赖 Flutter，可单测 |
 | `packages/dsh_remote/` | 远程传输：账号、SSH 宿主、Noise IK 加密通道、WebRTC/中继、隧道 carrier | `lib/dsh_remote.dart` | 依赖 dsh_client 的 carrier 抽象 |
 | `packages/dsh_tavern/` | SillyTavern 兼容酒馆引擎（纯 Dart，191 个测试文件） | `lib/dsh_tavern.dart` | 与 AGPL 上游同许可，来源见 NOTICES |
 | `packages/dartssh2/` | vendored dartssh2 4.1.0 + 补丁 | `VENDORED.md` | app 的 SSH 链路用它 |
-| `runtime/` | 引擎运行时：构建脚本、补丁（139 个）、桥、boot/direct 启动、测试 | `build-runtime.sh`、`patches/series`、`bridge/` | 产物在 `runtime/out/<abi>/` |
+| `runtime/` | 引擎运行时：构建脚本、锁定补丁、桥、boot/direct 启动、iOS 特化与测试 | `build-runtime.sh`、`patches/series`、`bridge/`、`ios/` | Android 产物在 `runtime/out/<abi>/`；iOS 构建输出不入库 |
 | `sdk/plugin-kit/` | 原生插件作者 SDK（schema、checker、视图解析 JS 孪生、技能） | `bin/check.mjs`、`schema/` | private 包，不发 npm |
 | `examples/plugins/` | 10 个插件示例 + e2e（只覆盖 weather/usage/quick） | 各 `package.json` `scripts.check` | |
 | `services/share-worker/` | Cloudflare Worker：分享链接、下载、市场/工坊、统计 | `src/index.ts` | sparse-checkout 外 |
@@ -167,9 +178,9 @@ HomeShell = [ChatScreen] + [SessionsDrawer 左] + [QuickPanel 右] + [SystemEntr
 - l10n 链路：改 `parts/*_{zh,en}.arb`（中英同步、key 全局唯一 lowerCamel、占位符一致）
   → `python3 app/tool/l10n_merge.py` → 产物入库；CI 用 `git diff --exit-code -- lib/l10n` 防手改。
 
-## 3. Android 原生层（Kotlin）
+## 3. 原生层
 
-> 主源码 315 个 `.kt`（另有 278 个测试 `.kt`），集中四大块：引擎运行时、手机操控、外设/通知、自更新。
+以下 §3.1–§3.5 是 Android Kotlin 实现，集中四大块：引擎运行时、手机操控、外设/通知、自更新。
 
 ### 3.1 注册与入口
 
@@ -221,6 +232,22 @@ HomeShell = [ChatScreen] + [SessionsDrawer 左] + [QuickPanel 右] + [SystemEntr
 
 > `dsh/runtime` 的方法/状态模型以 `app/lib/runtime/runtime_bridge.dart` 为准
 > （`RuntimeStatus`/`RuntimePhase`/事件类型都在那里；本文不再复制方法表）。
+
+### 3.6 iOS 原生层（Swift）
+
+`app/ios/Runner/AppDelegate.swift` 注册 `DshPlugin`，后者把文件、通知、相册、语音等通道接到同一 Flutter 引擎。`EngineChannel.swift` 实现 `dsh/runtime`：在 App 沙盒安装运行时，启动同进程 NodeMobile 的 `dsh web`，把本机地址与状态交给 Dart；Dart 的 `LocalPaths.load()` 在首帧前向它读取 `guestRoot`，新会话才会使用真实的 iOS 工作目录。iOS 工程用 Swift Package Manager，包含单独签名的 NodeHost、原生 addon 和可选 `DshGuest.framework`，见 [`app/ios/README.md`](../app/ios/README.md)。
+
+| 入口 | 职责与边界 |
+|---|---|
+| `runtime/ios/`、`tooling/ios/prepare-engine.sh`、`specialize-runtime.py` | 在验证过的共享运行时组合上做 iOS 特化，生成 `Engine/runtime.zip`；NodeMobile 24.22.1 与 framework 随 App 签名，不把 Android PRoot/APK 产物直接放进 IPA |
+| `tooling/ios/ish/`、`GuestChannel.swift` | 可选 Linux guest。未安装时用 just-bash；安装 guest 后才有真实 Linux 环境，Python 等包还取决于 guest 内实际安装情况 |
+| `runtime/ios/phone/`、`IOSPhoneBridge.swift`、`IOSPhoneRunner.swift` | 引擎的手机工具请求以运行代/会话所有者绑定，经原生任务授权后选择 CoreDevice 或已启用的 XCTest；失败结果不自动跨路线重放 |
+| `IOSPhoneCoreDevice.swift`、`IOSPhoneSelfRunner.swift`、`PhoneRunner/` | CoreDevice 负责可用的应用控制和观察；本机缺少输入服务时，已签名的独立 PhoneRunner 承担 XCTest 元素观察与点按。能力以设备实际服务和用户设置为准 |
+| `IOSPhoneTaskConsent.swift`、`ContinuedRun.swift` | 每个手机任务首次在前台授权，最长 30 分钟；后续普通动作可在目标 App 前台继续。离开 DSH Go 时才请求 iOS 26 持续任务，系统可拒绝、过期或中止；画中画不是手机操控准入条件 |
+| `CompanionWidget/`、`IOSCompanionWidget.swift` | WidgetKit 小/中尺寸伙伴卡；主 App 写有限展示快照到专用 Keychain，扩展只读快照，不分享 Host 凭据 |
+| `PetOverlay/IOSPetOverlay.swift`、`VoiceChannel.swift`、`IOSAudioSessionCoordinator.swift` | 像素宠物 PiP 默认关闭且可选；`dsh/voice` 负责系统听写/录音，`dsh/speech` 负责通话与朗读 PCM，音频会话由原生协调器管理 |
+
+iOS 仍有明确缺口：内置视频预览、通话实时 PCM 字幕、网页伙伴画中画渲染和 APK 式自更新没有等价原生实现；相关入口须降级或隐藏。每次共享 Flutter 新增平台通道，都要核对 iOS 注册及方法返回类型；当前清单和轻量 CI 检查在 [`tooling/ios/CHANNEL_COVERAGE.md`](../tooling/ios/CHANNEL_COVERAGE.md)。真机上的后台持续执行、XCTest 输入与可选 guest 软件包不能由模拟器编译推断。
 
 ## 4. 包
 
@@ -294,12 +321,14 @@ UI 输入 ─> ChatController.send() ─> DshClient.prompt(sessionId, text)
 ### 5.4 运行时构建与分层升级
 
 ```text
-DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（pins 双哈希校验）
+DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用目标平台的补丁（pins 双哈希校验）
   → 加 bridge/boot/direct/patch.yml → assemble → runtime/out/<abi>/assets/runtime/
        ├─ manifest.json（版本/baseId/分层或单包）
        └─ rootfs-<abi>.tar.xz（schema 1）或 base+engine 两层（RUNTIME_LAYERS=1，schema 2）
 → Gradle flavor 打为 APK 资产
 ```
+
+上图是 Android 构建链。iOS 则从同一 DSH 版本和桥出发：`runtime/ohos/package/prepare-inputs.py` 先准备隔离的 npm 前缀，`compose-runtime.py` 组合共享运行时，再由 `tooling/ios/specialize-runtime.py` 换入 iOS 的图像、存储与原生 addon 路径；`tooling/ios/prepare-engine.sh` 把 `runtime.zip`、NodeMobile 和 addon/framework 输入放到 `app/ios/Engine/`。Xcode 编译 iOS framework 并嵌入 App，产物与缓存不进 git。可选 iSH guest 单独构建，不是共享运行时 ZIP 的替代。
 
 升级：`manifest.upgrade` → `RuntimeInstaller` 解 staging → `EngineUpgrade` 事务
 （`engine.prepare` → `engine.upgrade` → 换入 → `rootfs.version`）→ 只替换固定引擎路径，
@@ -308,21 +337,25 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 ### 5.5 补丁（runtime/patches）
 
 - `series` 定序；`pins.json` 记录每个 DSH 版本的 before/after 哈希链；无 fuzz，
-  每个 hunk 必须唯一匹配。
+  每个 hunk 必须唯一匹配。`targetSets` 显式列出 Android 与 OHOS 公共/平台补丁；
+  iOS 消费验证过的共享组合后另做特化，改 `series` 时要复核 iOS 组合链。
 - 改一个补丁 = 改 `.diff` + `pins.json --record` + 同名 `runtime/tests/<name>.test.mjs`
   + `docs/maintenance/<name>-contract.md`。改 `DSH_VERSION` 要全量重 pin。
 - `zzzzzz-session-deletion.diff` 文件名是 rtbuild 的硬编码开关，别改。
 
 ### 5.6 打包与本地连接
 
-- Gradle 产品风味 `abi`：`arm64`（真机）/ `x64`（模拟器）；各风味只带自己的
+- Android Gradle 产品风味 `abi`：`arm64`（真机）/ `x64`（模拟器）；各风味只带自己的
   `runtime/out/<abi>` 资产与 jniLibs，并设 `abiFilters`；`targetSdk = 28`（与 Termux 同，避开
   Android 10+ 对私有目录 exec 的限制），`minSdk = 26`。
 - 构建：`tooling/build-apk.sh`（默认 release arm64，`-f x64` / `-f all`），versionCode 按构建时间生成。
 - proot 等可执行文件以 `lib*.so` 放 jniLibs，`useLegacyPackaging = true` 使其解压到 `nativeLibraryDir`。
-- 本地连接：原生层启动 `dsh web --host 127.0.0.1 --port 3080 --no-open`，从 stdout 解析 token；
+- Android 本地连接：原生层启动 `dsh web --host 127.0.0.1 --port 3080 --no-open`，从 stdout 解析 token；
   Dart 侧 `dsh_client` 用 token 换 cookie（`dsh-auth-<base64url(sha256(authority))>`，30 天，绑定 host:port），
   之后 HTTP/WS 带 cookie、不带 Origin；WebView 兜底直接打开 `http://127.0.0.1:3080/?token=…`。
+- iOS Xcode 用 `Runner.xcworkspace`、Swift Package Manager；带本机引擎的构建必须先运行
+  `tooling/ios/prepare-engine.sh`。`EngineChannel` 在 App 内启动 NodeMobile 和本机 `dsh web`，
+  通过实际端口与 token 建立本机连接；不能把 Android 的固定端口或 APK 安装器带过来。
 
 ## 6. 关键约束速查
 
@@ -332,7 +365,8 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 4. **危险操作**：删会话/权限/凭据以 Host 实际回答为准；失败给稳定错误码，不静默吞。
 5. **协议改动**：客户端/桥/插件协议改一处要查另一端的调用方与旧版本兼容。
 6. **验证边界**：手机操控、PRoot、直接启动、更新安装必须真机验证；桌面/CI 不能替代。
-7. **本机限制**：这台开发机是手机，默认不跑全量测试/编译，见 `AGENTS.local.md`。
+7. **iOS 准入**：共享 Dart 通道编译通过不代表 Swift 已注册；查看
+   `tooling/ios/CHANNEL_COVERAGE.md`，并在实际 iPhone 上验收手机操控、可选 guest 与覆盖安装。
 
 ## 7. 改哪儿：任务导航
 
@@ -348,6 +382,9 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 | 引擎补丁/升级 | §5.4/§5.5、`docs/maintenance/*-contract.md` | `runtime/patches/**`、`runtime/build-runtime.sh` | `python3 -I runtime/tests/test_patch_dsh.py`（构建需 x86_64 主机） |
 | 本机引擎生命周期 | `docs/design/runtime-cold-start.md` | Kotlin `runtime/`、`state/engine_control.dart` | 真机 + `gradle :app:testArm64DebugUnitTest` |
 | 手机操控 | `docs/design/phone-*.md` | Kotlin `phone/`、`state/phone_state.dart` | 真机 |
+| iOS 引擎 / guest | §3.6、`app/ios/README.md` | `EngineChannel.swift`、`runtime/ios/`、`tooling/ios/prepare-engine.sh` | iOS compile/guest CI + 真机启动 |
+| iOS 手机操控 | §3.6、`tooling/ios/phone-self-runner/README.md` | `IOSPhoneRunner.swift`、`IOSPhoneCoreDevice.swift`、`PhoneRunner/` | CoreDevice 服务探测、真机截图/输入/返回，逐项核对 |
+| iOS 小组件 / 语音 / PiP | §3.6、`tooling/ios/CHANNEL_COVERAGE.md` | `CompanionWidget/`、`VoiceChannel.swift`、`PetOverlay/` | 对应原生/Flutter 测试 + 真机行为 |
 | 远程连接 | `docs/testing/remote-*.md` | `packages/dsh_remote`、`app/lib/remote/` | `cd packages/dsh_remote && dart test` |
 | 自更新 | `docs/design/self-update-installation.md` | `state/update_state.dart`、Kotlin `update/` | `dart test` + 真机 |
 | 插件 SDK | `docs/plugins/README.md`、`sdk/plugin-kit/README.md` | `sdk/plugin-kit/**` | 按序生成链（§9） |
@@ -384,7 +421,8 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 | 文案 / 指南 / 教学技能 | `l10n_merge.py --check`、`guide_sync.py --check`、`sync-skill.mjs --check` |
 | Android JVM | `gradle :app:testArm64DebugUnitTest`（需 JDK17） |
 | 真机 | `tooling/dev-run.sh`（热重载）/ `tooling/build-apk.sh`；真机结论不能由桌面替代 |
+| iOS | `python3 -B tooling/ios/test-channel-contract.py`；`iOS compile`/`iOS guest`/`iOS UI tour` CI；Xcode unsigned 编译和签名后的真机安装分别记录 |
 
-CI：`.github/workflows/ci.yml` 按 paths-filter 在 PR 上跑改动涉及部分，push `main` 全量，唯一看 `CI OK`；
-`pr-gate.yml` 关闭外部 PR；`goldens.yml` 手动渲染 golden。
-本机（手机）默认只做静态阅读/轻量检查，不跑全量测试/编译（`AGENTS.local.md`）。
+CI：`.github/workflows/ci.yml` 按 paths-filter 在 PR 上跑改动涉及部分，push `main` 全量，看 `CI OK`；
+`ios-compile.yml`、`ios-guest.yml`、`ios-ui-tour.yml` 在相关路径改动时检查 iOS 编译、运行时与界面（含 `main`），
+不能代替签名和 iPhone 真机结果；`pr-gate.yml` 关闭外部 PR；`goldens.yml` 手动渲染 golden。

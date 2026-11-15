@@ -150,6 +150,27 @@ void main() {
       expect(http.urls, [m1], reason: 'starts where it worked last time');
     });
 
+    test('a build without the APK installer (HarmonyOS) never checks or offers', () async {
+      // A real channel with no handler behind it, as on HarmonyOS.
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final c = ProviderContainer(
+        overrides: [
+          updateHttpProvider.overrideWithValue(http),
+          updateInstallerProvider.overrideWithValue(const ChannelUpdateInstaller()),
+          updateSourcesProvider.overrideWithValue(_sources),
+          updateClockProvider.overrideWithValue(() => now),
+          updateDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      addTearDown(c.dispose);
+      final controller = await ready(c);
+      expect(c.read(appUpdateProvider).loaded, isTrue);
+      expect(c.read(appUpdateProvider).installable, isFalse);
+      expect(await controller.autoCheckIfDue(), isFalse);
+      expect(await controller.check(), UpdateCheckPhase.idle);
+      expect(http.requests, isEmpty);
+    });
+
     test('switched off: no automatic check', () async {
       final c = container();
       final controller = await ready(c);

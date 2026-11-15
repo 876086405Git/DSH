@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  DeepSeek Harness 的 Android 客户端。手机上直接跑，也能遥控你电脑上的 DSH。
+  DeepSeek Harness 的手机应用：Android 版已发布；iOS 版仍在开发和真机测试，需在 Mac 上自行签名编译（<a href="app/ios/README.md">iOS 工程</a> · <a href="docs/architecture.md">架构</a>）。
 </p>
 
 <p align="center">
@@ -51,7 +51,7 @@
 </p>
 
 <p align="center">
-  <b>感谢大家对 DSH Go 的支持和喜爱，我将尽快适配 iOS 和鸿蒙！大家 Star 点得越多，我适配得越快哦 hhh</b>
+  <b>感谢大家对 DSH Go 的支持和喜爱！当前下载页提供 Android APK；iOS 版还在开发和真机测试，没有公开安装包，鸿蒙版也在继续推进。</b>
 </p>
 
 <p align="center">
@@ -294,15 +294,15 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 
 | 路径 | 内容 |
 | --- | --- |
-| `app/` | Flutter 界面与 Android Kotlin 平台实现 |
+| `app/` | Flutter 界面、Android Kotlin 实现与开发中的 iOS Swift/WidgetKit 实现 |
 | `packages/dsh_client/` | DSH Web API 的 Dart 客户端 |
 | `packages/dsh_remote/` | DSH Remote 的 Dart 客户端 |
-| `runtime/` | Linux 运行时打包、引擎补丁与 App 桥接 |
+| `runtime/` | Android Linux 运行时、iOS 运行时特化、引擎补丁与 App 桥接 |
 | `sdk/plugin-kit/` | 原生插件作者工具包；在仓库中使用，未发布到 npm |
 | `examples/plugins/` | 插件示例 |
 | `docs/guide/`、`docs/plugins/`、`docs/pets/`、`docs/live2d/` | 用户指南、插件开发、宠物包与 Live2D 伙伴制作 |
 | `docs/assets/` | 本页用到的展示图、桌宠动图和社群二维码 |
-| `tooling/` | 工具链、APK 构建与诊断脚本 |
+| `tooling/` | 工具链、Android APK/iOS 开发构建与诊断脚本 |
 | `services/`、`site/`、`infra/` | 配套分享服务、网站和部署材料 |
 
 ## 参与贡献

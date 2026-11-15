@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../launch/launch_state.dart';
+import '../../launch/startup_trace.dart';
 import '../../runtime/local_footprint.dart';
 import '../../diagnostics/diagnostics_publish.dart';
 import '../../diagnostics/automatic_diagnostics.dart';
@@ -327,6 +328,7 @@ class _RootGateState extends ConsumerState<RootGate> {
 
     final Widget child;
     if (!settings.loaded || !runtime.loaded || !prefs.loaded) {
+      StartupTrace.mark('waiting: settings ${settings.loaded}, engine ${runtime.loaded}, setup ${prefs.loaded}');
       child = const _Splash();
     } else {
       if (!_decided) {
@@ -373,9 +375,12 @@ class _RootGateState extends ConsumerState<RootGate> {
       // 启动画面: the first page is up. A warm start's launch screen goes now; a cold start of
       // this phone's engine finishes its motion first (or goes when the engine is up).
       _launchReady = true;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => LaunchController.active.value?.ready(waitsForEngine: ref.read(activeHostProvider).isLocal),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        StartupTrace.mark('first page');
+        final launch = LaunchController.active.value;
+        if (launch == null) return StartupTrace.finished();
+        launch.ready(waitsForEngine: ref.read(activeHostProvider).isLocal);
+      });
     }
     return AnimatedSwitcher(
       duration: AppMotion.of(context, AppMotion.page),

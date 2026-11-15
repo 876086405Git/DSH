@@ -1,0 +1,8 @@
+{
+  "name": "dsh-go-ohos-node-build-tools",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "esbuild": "0.27.3"
+  }
+}

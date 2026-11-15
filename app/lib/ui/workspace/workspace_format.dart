@@ -4,13 +4,14 @@
 import 'package:dsh_client/dsh_client.dart';
 
 import '../../l10n/l10n.dart';
+import '../../runtime/local_paths.dart';
 
 /// Where the phone's shared storage appears inside the engine
 /// (`PhoneStorage.GUEST_PATH`).
 const phoneStorageRoot = '/sdcard';
 
-/// Home of the engine's Linux user on the phone.
-const localHome = '/root';
+/// Home of the engine's user on the phone.
+String get localHome => LocalPaths.home;
 
 /// [path] for display: the phone's storage as 「手机存储」, the home folder as
 /// `~` (the engine's `/root` on the phone, [home] elsewhere when known).

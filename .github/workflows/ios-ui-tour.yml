@@ -1,0 +1,78 @@
+name: iOS UI tour
+
+# Screenshots and a video of the main screens on the Simulator, for looking at them without a Mac.
+# Much quicker than iOS compile: no engine.
+on:
+  push:
+    branches:
+      - main
+      - feat/ios-foundation
+    paths:
+      - 'app/lib/ui/**'
+      - 'app/test/ios_tour/**'
+      - 'tooling/ios/ui-tour.mjs'
+      - '.github/workflows/ios-ui-tour.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ui-tour-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tour:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      FLUTTER_VERSION: 3.47.7
+      FLUTTER_SHA256: dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Flutter
+        run: |
+          archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
+          echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve dependencies
+        run: |
+          python3 app/tool/l10n_merge.py --no-gen
+          cd app
+          flutter pub get --enforce-lockfile
+          flutter gen-l10n
+
+      - name: Build the tour for the simulator
+        working-directory: app
+        run: bash ../tooling/ios/build.sh --simulator --debug -t test/ios_tour/tour_main.dart
+
+      - name: Run the tour
+        run: |
+          udid="$(python3 tooling/ios/engine-smoke/pick-simulator.py)"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid"
+          node tooling/ios/ui-tour.mjs --simulator "$udid" --app app/build/ios/iphonesimulator/Runner.app --out "$RUNNER_TEMP/ui-tour" --video "$RUNNER_TEMP/ui-tour-video"
+
+      - name: Keep what it saw
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ui-tour
+          path: ${{ runner.temp }}/ui-tour
+          if-no-files-found: ignore
+
+      - name: Keep the video
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ui-tour-video
+          path: ${{ runner.temp }}/ui-tour-video
+          if-no-files-found: ignore

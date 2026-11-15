@@ -1,0 +1,8 @@
+{
+  "@@locale": "zh",
+  "phoneGateCleanupTitle": "探针清理尚未确认",
+  "phoneGateCleanupUnknown": "新后台资源已被阻止。原通道仍可用时，只能重试原清理，不会重跑探针。",
+  "phoneGateCleanupRunning": "正在等待原探针及清理完成；清理确认前保留原通道。",
+  "phoneGateCleanupRetry": "仅重试清理",
+  "phoneGateCleanupDone": "清理已确认。请再次明确选择通道，重新检查。"
+}

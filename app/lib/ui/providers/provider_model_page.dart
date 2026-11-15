@@ -524,7 +524,7 @@ class FieldSwitch extends StatelessWidget {
     offset: const Offset(trackInset, 0),
     child: SwitchTheme(
       data: SwitchTheme.of(context).copyWith(materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
-      child: Switch(value: value, onChanged: onChanged),
+      child: Switch.adaptive(value: value, onChanged: onChanged),
     ),
   );
 }

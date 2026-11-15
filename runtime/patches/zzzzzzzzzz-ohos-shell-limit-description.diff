@@ -1,0 +1,12 @@
+diff --git a/node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js b/node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js
+@@ -242,7 +242,7 @@
+ }
+ function bashDescription(ctx) {
+ 	const capabilities = process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true ? ctx.get("subprocess")?.capabilities : void 0;
+-	const ohos = capabilities?.kind === "virtual" ? `\n鸿蒙本机使用虚拟 shell，可用命令：${capabilities.commands.join(", ")}。没有系统进程、PTY、Python 或 WASM；其它命令请连接电脑执行。当前 shell 输出在命令完成后返回，只支持批量 stdin，超出工作区或私有临时目录的路径会被拒绝。rg 的 include glob、复杂 glob 和部分 Unicode 正则仍不可用，会明确报错。` : "";
++	const ohos = capabilities?.kind === "virtual" ? `\n鸿蒙本机使用虚拟 shell，可用命令：${capabilities.commands.join(", ")}。没有系统进程、PTY、Python 或 WASM；其它命令请连接电脑执行。${capabilities.streamingOutput === true ? "当前 shell 在外层语句完成后交付输出；单个命令、管道和复合语句内部仍有缓冲。" : "当前 shell 输出在命令完成后返回。"}只支持批量 stdin，超出工作区或私有临时目录的路径会被拒绝。单次调用的命令执行计数上限为 100000；超过时以退出码 126 结束，已经完成的写入不会回滚。长循环请拆成独立任务，或连接电脑执行。` : "";
+ 	return `Execute a bash command (\`bash -c\`) and return its stdout/stderr. Each call runs in a fresh shell; pass \`workdir\` instead of using \`cd\`. Managed \`$${DSH_ENV_PREFIX}*\` variables expose current harness environment facts. Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. Provide \`description\` before \`command\` in the arguments. Before any delete or move, verify that the resolved absolute target path is the intended one; never run it against a computed path you have not checked. An unset variable expands to an empty string, so guard variables in such paths with \`\${VAR:?}\`. Commands may run under a file sandbox; a blocked file operation is reported as \`[sandbox: file access denied under <mode> mode]\`, a policy denial: do not retry another way.` + ohos;
+ }
+ function presentBashCall(args) {

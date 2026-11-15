@@ -4,6 +4,7 @@
 // [NotifyChannel.status] says so without flagging anything as blocked.
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart';
@@ -258,7 +259,11 @@ class NotifyChannel {
     } on MissingPluginException {
       return const NotifySystemStatus.unavailable();
     } on PlatformException {
-      return const NotifySystemStatus();
+      // Android's answer is only ever a stale one; a failure on HarmonyOS or iOS
+      // means it doesn't know, which mustn't read as every switch on.
+      return Platform.operatingSystem == 'ohos' || Platform.isIOS
+          ? const NotifySystemStatus.unavailable()
+          : const NotifySystemStatus();
     }
   }
 
@@ -288,6 +293,19 @@ class NotifyChannel {
   Future<void> cancelGroup(String group) => _call('cancelGroup', {'group': group});
 
   Future<void> cancelAll() => _call('cancelAll');
+
+  /// The system's permission dialog on HarmonyOS and iOS; true when notifications
+  /// are on afterwards.
+  /// It comes up once: after a refusal only [openSettings] can turn them on.
+  Future<bool> requestPermission() async {
+    try {
+      return await _methods.invokeMethod<bool>('requestPermission') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
 
   /// Opens the system notification settings; [channel] (`done` / `attention`)
   /// goes straight to that channel when the app-level switch is on.

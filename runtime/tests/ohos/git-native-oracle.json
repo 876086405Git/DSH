@@ -1,0 +1,28 @@
+{
+  "gitVersion": "git version 2.51.1",
+  "results": {
+    "common-diff": "1\t1\t中文.txt\u0000",
+    "common-status": " M 中文.txt\u0000",
+    "snapshot-before": "7e2e3366a6504697eadacba1b4b7b1e9844c4dbf\n",
+    "snapshot-before-ls-tree": "100644 blob 397b4a7624e35fa60563a9c03b1213d93f7b6546\t.gitignore\u0000100644 blob 2c3f0b3406a2d85464dd9071b6dda85e855261d6\tdelete.txt\u0000100644 blob 856c4a5362401d9e6638e96d9f3e41dfa76df2ea\tkept.log\u0000100644 blob f384549cbeb481e437091320de6d1f2e15e11b4a\trename.txt\u0000100644 blob 0ab00efb87c2213b83192cf563cc91b337bab1db\ttracked.txt\u0000100644 blob 669e7f6873326c062c85147f07a9c459566e802c\t原名.txt\u0000",
+    "snapshot-after": "5ce041e22e755aa75cfaaed3979562c27aa4569c\n",
+    "snapshot-after-ls-tree": "100644 blob 397b4a7624e35fa60563a9c03b1213d93f7b6546\t.gitignore\u0000100644 blob d37e1894e786b61ae2a719184aaffa9a4110ffdb\tkept.log\u0000120000 blob 77bf644f019ab6f771f288270bcd7ba6a374b63f\tlink\u0000100644 blob c66e4bd6779b8a13bb6993d114c1dc12716e0ae2\tnew.bin\u0000100644 blob 6284eba9e83fac9a92b35b163dde7bdf374ae123\trenamed.txt\u0000100644 blob ee1a376b99d21bf954706de94df90aa5b859546a\ttracked.txt\u0000100644 blob d5f7fc3f74f7dec08280f370a975b112e8f60818\t中文\t含制表\n换行.txt\u0000100644 blob 669e7f6873326c062c85147f07a9c459566e802c\t新名.txt\u0000",
+    "snapshot-numstat": "0\t1\tdelete.txt\u00001\t1\tkept.log\u00001\t0\tlink\u0000-\t-\tnew.bin\u00001\t1\t\u0000rename.txt\u0000renamed.txt\u00002\t1\ttracked.txt\u00001\t0\t中文\t含制表\n换行.txt\u00000\t0\t\u0000原名.txt\u0000新名.txt\u0000",
+    "unmerged-ls-stage": "100644 ba4a88ad62826fd070a4eede32a3832af5e5a7b8 1\tconflict.txt\u0000100644 ba7220151c971f16d1c42ef77e3130d5ada03597 2\tconflict.txt\u0000100644 12ca13501e11e87b175321a6a5fe5844b079df7a 3\tconflict.txt\u0000",
+    "unmerged-status": "UU conflict.txt\u0000",
+    "unmerged-snapshot": "ee99845a74539f0179afb0ac4858507b04a727aa\n",
+    "unmerged-snapshot-ls-tree": "100644 blob 82f68bdd54f2fe8ed7a8bcca0e9fd80622d329a1\tconflict.txt\u0000",
+    "inside-snapshot": "4d4b853a23a6b38d72866cdea6ab59a613c48472\n",
+    "inside-snapshot-ls-tree": "100644 blob 397b4a7624e35fa60563a9c03b1213d93f7b6546\t.gitignore\u0000100644 blob 2c3f0b3406a2d85464dd9071b6dda85e855261d6\tdelete.txt\u0000100644 blob 856c4a5362401d9e6638e96d9f3e41dfa76df2ea\tkept.log\u0000100644 blob f384549cbeb481e437091320de6d1f2e15e11b4a\trename.txt\u0000100644 blob 9c55860e39051e3369b14c67c05408590cb75185\ttracked.txt\u0000100644 blob 669e7f6873326c062c85147f07a9c459566e802c\t原名.txt\u0000",
+    "gitlink-snapshot": "d6358f1487104ba046143924681326f353e8598d\n",
+    "gitlink-snapshot-ls-tree": "160000 commit d5411f1bfe71486b84b2acc0f46f3d06d548684e\tsub\u0000",
+    "packed-snapshot": "478c6f625f1545723bccf4dec26086e52af1e755\n",
+    "packed-snapshot-ls-tree": "100644 blob 397b4a7624e35fa60563a9c03b1213d93f7b6546\t.gitignore\u0000100644 blob 2c3f0b3406a2d85464dd9071b6dda85e855261d6\tdelete.txt\u0000100644 blob 856c4a5362401d9e6638e96d9f3e41dfa76df2ea\tkept.log\u0000100644 blob f384549cbeb481e437091320de6d1f2e15e11b4a\trename.txt\u0000100644 blob 8aae02dd8614ec06cab8ed3d01e2334e0f7e368f\ttracked.txt\u0000100644 blob 669e7f6873326c062c85147f07a9c459566e802c\t原名.txt\u0000",
+    "mode-status-work": " M tracked.txt\u0000",
+    "mode-status-index": "M  tracked.txt\u0000",
+    "symlinks-false-snapshot": "3f8f120586c17259c24c055b6347eebb4192e572\n",
+    "symlinks-false-snapshot-ls-tree": "100644 blob 397b4a7624e35fa60563a9c03b1213d93f7b6546\t.gitignore\u0000100644 blob 2c3f0b3406a2d85464dd9071b6dda85e855261d6\tdelete.txt\u0000100644 blob 856c4a5362401d9e6638e96d9f3e41dfa76df2ea\tkept.log\u0000120000 blob 77bf644f019ab6f771f288270bcd7ba6a374b63f\tlink\u0000100644 blob f384549cbeb481e437091320de6d1f2e15e11b4a\trename.txt\u0000100755 blob 9c55860e39051e3369b14c67c05408590cb75185\ttracked.txt\u0000100644 blob 669e7f6873326c062c85147f07a9c459566e802c\t原名.txt\u0000",
+    "clone-head": "2c10283d6ea80d4ab199e6976eb3c54002ec84ad\n"
+  },
+  "testSHA256": "7b7cf0757cd235681819f57c10545239e4a3cca5e3b15709f2ffeb726f152d82"
+}

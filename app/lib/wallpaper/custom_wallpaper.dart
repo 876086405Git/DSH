@@ -10,6 +10,8 @@ import 'dart:ui';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../runtime/container_paths.dart';
+
 /// The user's wallpaper and how it sits.
 class CustomWallpaper {
   const CustomWallpaper({
@@ -166,8 +168,25 @@ class CustomWallpaper {
       final store = prefs ?? await SharedPreferences.getInstance();
       final raw = store.getString(prefsKey);
       if (raw == null) return null;
-      final wallpaper = fromJson(jsonDecode(raw));
+      var json = Map<String, Object?>.from(jsonDecode(raw) as Map);
+      final paths = ContainerPaths.enabled ? await ContainerPaths.load() : null;
+      if (paths != null) {
+        final relocated = await paths.decodeOwned(json, 'wallpaper');
+        if (relocated == null) return null;
+        json = relocated;
+      }
+      final wallpaper = fromJson(json);
       if (wallpaper == null || !File(wallpaper.path).existsSync()) return null;
+      if (paths != null) {
+        final saved = jsonEncode(await paths.encodeOwned(wallpaper.toJson(), 'wallpaper'));
+        if (saved != raw) {
+          try {
+            await store.setString(prefsKey, saved);
+          } catch (_) {
+            // A migrated in-memory value remains usable if preferences cannot be written.
+          }
+        }
+      }
       return wallpaper;
     } catch (_) {
       return null;
@@ -176,7 +195,10 @@ class CustomWallpaper {
 
   static Future<void> save(CustomWallpaper wallpaper) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefsKey, jsonEncode(wallpaper.toJson()));
+    final json = ContainerPaths.enabled
+        ? await (await ContainerPaths.load()).encodeOwned(wallpaper.toJson(), 'wallpaper')
+        : wallpaper.toJson();
+    await prefs.setString(prefsKey, jsonEncode(json));
   }
 
   @override

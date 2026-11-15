@@ -1,0 +1,47 @@
+{
+  "@@locale": "en",
+  "harmonyUnknownResults": "Some tool calls never got a result. They may or may not have run. This conversation can't call tools until you deal with them.",
+  "harmonyUnknownResultsReview": "Review",
+  "harmonyUnknownResultsTitle": "These tool calls have unknown results",
+  "harmonyUnknownResultsBody": "{tools}\n\nThe app was interrupted while waiting for them, so they may or may not have run. You can check first, for example whether a file changed.\n\nIf you continue, they won't run again, and they won't be recorded as successful.",
+  "@harmonyUnknownResultsBody": {
+    "placeholders": {
+      "tools": {
+        "type": "String"
+      }
+    }
+  },
+  "harmonyUnknownResultsContinue": "Continue this conversation",
+  "harmonyUnknownResultsChanged": "Something changed. Please look again.",
+  "harmonyUnknownResultsFailed": "Couldn't confirm that. Try again.",
+  "harmonyCallsNotRecorded": "The local engine can't record the state of tool calls, so they're paused. Restart the engine and try again.",
+  "harmonyAccessSubtitle": "What each feature needs from HarmonyOS",
+  "harmonyNotifyWhy": "While the app is running, tells you when a reply ends or needs you",
+  "harmonyKwSystemAccess": "permissions,grant,microphone,notification permission,reply alerts,voice input",
+  "harmonyBackgroundSubtitle": "On-device chats pause when the app leaves the screen",
+  "harmonyBackgroundAway": "When the app leaves the screen",
+  "harmonyBackgroundLocal": "The system suspends the app within seconds, and a running conversation pauses with it. It tries to pick up when you come back",
+  "harmonyBackgroundRemoteTitle": "Connected remote host",
+  "harmonyBackgroundRemote": "Replies there keep running",
+  "harmonyBackgroundLong": "Long tasks",
+  "harmonyBackgroundStay": "Keep the app on screen",
+  "harmonyBackgroundUseRemote": "Or run them on a connected remote host",
+  "harmonyEngineBackgroundHint": "The on-device engine pauses when the app leaves the screen",
+  "harmonyKwBackground": "background activity,keep alive,suspended,paused,killed",
+  "harmonyPausedInBackground": "Paused while in the background",
+  "harmonyAlertsRequirement": "Alerts need the app running: the system suspends it seconds after it leaves the screen, and none go out then",
+  "harmonyLiveUnavailable": "Live activities aren't available in this version yet",
+  "harmonySchedulesLocal": "Tasks on this phone only fire while the app is running: they won't run on time while the system has it suspended",
+  "harmonyPageUnavailable": "This page isn't available in this version yet",
+  "harmonyNotificationSettingsFailed": "Couldn’t open system settings. Turn on notifications in Settings → Notifications & status bar → DSH Go.",
+  "harmonySearchUnavailable": "This isn't available in this version yet",
+  "harmonyCredentialsSection": "Keys",
+  "harmonyCredentialsUnreadable": "Saved keys can’t be read",
+  "harmonyCredentialsUnreadableHint": "Saved keys can’t be read. Clear them in Settings → Privacy and sharing, then try again.",
+  "harmonyCredentialsClear": "Clear saved keys",
+  "harmonyCredentialsClearBody": "Trying again won’t help. Clearing removes the API keys, DSH Remote sign-in, SSH passwords and private keys, and forum sign-in the app has saved, and you’ll need to enter them or sign in again. Links you’ve already shared stay up, but this phone can no longer delete them. Conversations and the host list stay. This can’t be undone.",
+  "harmonyCredentialsClearAction": "Clear keys",
+  "harmonyCredentialsCleared": "Cleared. Enter them or sign in again.",
+  "harmonyCredentialsClearFailed": "Couldn’t clear. Try again.",
+  "harmonyIconChangeFailed": "Couldn’t change it. The launcher icon can’t change under a custom theme or in an app twin."
+}

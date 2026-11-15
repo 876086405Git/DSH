@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../secrets/secure_storage.dart';
 import 'hosted_client.dart';
 import 'hosted_link.dart';
 
@@ -18,10 +19,11 @@ abstract class HostedLinkStore {
 }
 
 class SecureHostedLinkStore implements HostedLinkStore {
-  const SecureHostedLinkStore([this._storage = const FlutterSecureStorage()]);
+  const SecureHostedLinkStore([this._injected]);
 
   static const storageKey = 'hosted_links';
-  final FlutterSecureStorage _storage;
+  final FlutterSecureStorage? _injected;
+  AppSecureStorage get _storage => AppSecureStorage(_injected);
 
   @override
   Future<List<HostedLink>> load() async {

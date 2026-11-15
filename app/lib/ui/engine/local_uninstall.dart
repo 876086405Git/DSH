@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
+import '../../state/android_features.dart';
 import '../../state/hosts_state.dart';
 import '../../state/onboarding_state.dart';
 import '../../state/sessions_state.dart';
@@ -23,12 +24,14 @@ import '../theme/theme.dart';
 abstract final class LocalUninstall {
   static Future<void> run(ProviderContainer container) async {
     final prefs = container.read(onboardingPrefsProvider.notifier);
+    final restoreDeclined =
+        container.read(operatingSystemProvider) == 'ios' && container.read(onboardingPrefsProvider).localDeclined;
     // Before the phase reads 未安装, so the root gate stays home.
     await prefs.setLocalDeclined(true);
     try {
       await container.read(localRuntimeProvider.notifier).resetKeeping(const ResetKeep());
     } catch (_) {
-      await prefs.setLocalDeclined(false);
+      await prefs.setLocalDeclined(restoreDeclined);
       rethrow;
     }
     // Its conversations went with it: don't reopen one of them.

@@ -61,6 +61,9 @@ class FakeSettings extends SettingsController {
   Future<void> setApiKey(String key) async => state = state.copyWith(apiKey: key);
 
   @override
+  Future<void> reloadCredentials() async {}
+
+  @override
   Future<void> setThemeMode(ThemeMode mode) async => state = state.copyWith(themeMode: mode);
 
   @override

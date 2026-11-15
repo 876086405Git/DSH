@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -14,6 +15,7 @@ import 'state/locale_state.dart';
 import 'state/star_prompt.dart' show starPromptGateProvider, starPromptProvider;
 import 'state/tile_style_state.dart';
 import 'ui/chat/dsh_ui/dsh_ui_model.dart' show DshUiAppAccent;
+import 'ui/common/keyboard_motion.dart';
 import 'ui/common/side_insets.dart';
 import 'ui/launch/launch_overlay.dart';
 import 'ui/shell/root_gate.dart';
@@ -49,6 +51,13 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   /// The stored palette arrives a moment after launch; that first switch
   /// lands without a cross-fade, later ones fade (切换配色).
   bool _settled = false;
+
+  /// MaterialApp builds Theme for AnimationStyle.noAnimation and AnimatedTheme for anything else,
+  /// so the cross-fade coming on or off replaces everything above the builder. The navigator has a
+  /// global key to survive that; what the builder holds needs one too, or the launch screen and
+  /// the theme reveal start again from nothing, and a launch screen waiting for its motion to end
+  /// never leaves.
+  final _layers = GlobalKey(debugLabel: 'app layers');
 
   @override
   void initState() {
@@ -186,6 +195,7 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
       builder: (context, child) {
         final media = MediaQuery.of(context);
         return MediaQuery(
+          key: _layers,
           data: media.copyWith(disableAnimations: media.disableAnimations || performance.reduceMotion),
           child: AppMotionScope(
             fluid: fluid,
@@ -193,7 +203,10 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  MirroredSideInsets(child: child!),
+                  if (Platform.operatingSystem == 'ohos')
+                    EasedKeyboardInset(child: MirroredSideInsets(child: child!))
+                  else
+                    MirroredSideInsets(child: child!),
                   const LaunchLayer(),
                 ],
               ),

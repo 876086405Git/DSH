@@ -318,6 +318,18 @@ const lastRev = p2.rev;
 ws.close();
 await ws.closed;
 await get(`/native-fixture/emit?scope=${encodeURIComponent('{"sessionId":"s1"}')}&n=2`);
+// The fixture's emit is coalesced asynchronously. Observe the new revision
+// before reconnecting, or a fast runner can legitimately receive sync for the
+// old revision while the timer has not published the requested count yet.
+let published;
+const publishDeadline = Date.now() + 2000;
+do {
+  published = await get(`/dsh-go/v1/views/${USAGE}/usage?${CAPS.replace("zh-CN", "en")}&sessionId=s1`);
+  if (published.status === 200 && published.json?.data?.count === 8 && published.json.rev !== lastRev) break;
+  await sleep(20);
+} while (Date.now() < publishDeadline);
+check(published.status === 200 && published.json?.data?.count === 8 && published.json.rev !== lastRev,
+  "fixture publish did not reach the view before reconnect");
 const ws2 = await wsConnect(C);
 ws2.send({ t: "hello", v: [1], locale: "en" });
 await ws2.next((m) => m.t === "welcome");

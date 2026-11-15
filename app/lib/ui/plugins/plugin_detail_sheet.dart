@@ -12,6 +12,7 @@ import '../../share_code/plugin_share.dart' show sharedPluginFromBundle;
 import '../../state/plugin_config/plugin_config_state.dart';
 import '../../links/plugin_links.dart' show marketPluginLink;
 import '../../state/plugins_state.dart';
+import '../../state/runtime_capabilities_state.dart';
 import '../../update/version.dart';
 import '../common/app_sheet.dart';
 import '../common/list_page_row.dart';
@@ -237,7 +238,15 @@ class MarketPluginSheet extends ConsumerWidget {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: _primaryAction(context, host, status, job, installed, needsApp),
+            child: _primaryAction(
+              context,
+              host,
+              status,
+              job,
+              installed,
+              needsApp,
+              ref.watch(marketInstallRefusedProvider),
+            ),
           ),
         ),
       ],
@@ -251,6 +260,7 @@ class MarketPluginSheet extends ConsumerWidget {
     PluginInstallJob? job,
     PluginBundle? installed,
     AppVersion? needsApp,
+    bool installRefused,
   ) {
     final l10n = context.l10n;
     final plugin = entry.plugin;
@@ -282,12 +292,16 @@ class MarketPluginSheet extends ConsumerWidget {
     if (manageable && (status == MarketInstallStatus.installed || host.safeMode || !host.canInstall)) {
       return manage();
     }
-    // Listed, but this app is too old for it: shown, not installed.
-    if (needsApp != null) {
+    // Listed, but this app is too old for it or the engine takes no market
+    // installs: shown, not installed.
+    final barred = needsApp != null
+        ? l10n.marketNeedsApp(needsApp.name)
+        : (installRefused ? l10n.marketInstallRefused : null);
+    if (barred != null) {
       final reason = FilledButton(
         style: FilledButton.styleFrom(minimumSize: size),
         onPressed: null,
-        child: Text(l10n.marketNeedsApp(needsApp.name), maxLines: 1, overflow: TextOverflow.ellipsis),
+        child: Text(barred, maxLines: 1, overflow: TextOverflow.ellipsis),
       );
       if (!manageable) return reason;
       return Row(
@@ -464,7 +478,7 @@ class BundleSheet extends ConsumerWidget {
                         icon: AppIcons.power,
                         title: l10n.commonEnable,
                         onTap: () => unawaited(togglePluginBundle(context, bundle, !bundle.enabled)),
-                        trailing: Switch(
+                        trailing: Switch.adaptive(
                           value: bundle.enabled,
                           onChanged: (v) => unawaited(togglePluginBundle(context, bundle, v)),
                         ),

@@ -74,7 +74,7 @@ class PatchDsh(unittest.TestCase):
 
     def run_cli(self, *extra):
         return subprocess.run([sys.executable, "-I", RTBUILD, "patch-dsh", "--prefix", self.prefix,
-                               "--patches", self.patches, *extra],
+                               "--patches", self.patches, "--target", "android", *extra],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                               env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
 
@@ -126,7 +126,7 @@ class PatchDsh(unittest.TestCase):
         previous = pins_path.read_bytes()
         previous_pins = load(pins_path)
         args = SimpleNamespace(prefix=self.prefix, patches=self.patches,
-                               dsh_version="2.0.0", record=True, out=None)
+                               dsh_version="2.0.0", target="android", record=True, out=None)
 
         def interrupted_dump(value, output, **options):
             # Fault injection after a real partial write; this does not fill the disk.
@@ -144,7 +144,7 @@ class PatchDsh(unittest.TestCase):
             self.prefix = os.path.join(self.tmp.name, name)
             target = Path(self.prefix, REL)
             target.parent.mkdir(parents=True)
-            target.write_text(ORIGINAL, newline="\n")
+            target.write_text(ORIGINAL)
             return target
 
         # Recording requires original input: never retry --record on the patched tree.
@@ -222,7 +222,8 @@ class PatchDsh(unittest.TestCase):
                 raise OSError("interrupted third patch replace")
             replace(source, target)
 
-        args = SimpleNamespace(prefix=self.prefix, patches=self.patches, dsh_version="1.0.0", record=False, out=None)
+        args = SimpleNamespace(prefix=self.prefix, patches=self.patches,
+                               dsh_version="1.0.0", target="android", record=False, out=None)
         with mock.patch.object(rtbuild.os, "replace", side_effect=interrupt_third):
             with self.assertRaisesRegex(OSError, "interrupted third patch replace"):
                 rtbuild.cmd_patch_dsh(args)

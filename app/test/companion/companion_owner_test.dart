@@ -53,6 +53,8 @@ class _Bridge extends DshConnection {
     Map<String, String>? query,
     Map<String, String>? headers,
     Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
   }) async {
     final handler = nextGet;
     nextGet = null;

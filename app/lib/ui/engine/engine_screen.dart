@@ -7,7 +7,9 @@ import '../../l10n/l10n.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
 import '../../runtime/local_footprint.dart';
+import '../../state/android_features.dart';
 import '../../state/engine_control.dart';
+import '../../state/runtime_capabilities_state.dart';
 import '../../state/safe_mode_state.dart';
 import '../../state/settings_state.dart';
 import '../common/app_dialog.dart';
@@ -24,6 +26,8 @@ import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import '../web/local_web_screen.dart';
 import 'engine_status.dart';
+import 'engine_capabilities.dart';
+import 'linux_section.dart';
 import 'local_uninstall.dart';
 import 'log_view.dart';
 import 'workspace_recovery_settings.dart';
@@ -78,6 +82,7 @@ class EngineScreen extends ConsumerWidget {
     final l10n = context.l10n;
     final state = ref.watch(localRuntimeProvider);
     final status = state.status;
+    final guest = ref.watch(androidSystemFeaturesProvider);
     final view = EngineStatusView.of(state);
     final settings = ref.watch(settingsProvider);
     final colors = DshColors.of(context);
@@ -126,7 +131,15 @@ class EngineScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 child: EngineActions(phase: status.phase),
               ),
+            // iOS gives each run a new Environment, so only HarmonyOS has this limit.
+            if (ref.watch(operatingSystemProvider) == 'ohos' && !missing)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: Text(l10n.engineStartReopensApp, style: Theme.of(context).textTheme.bodySmall),
+              ),
             const EngineFailureCard(padding: EdgeInsets.fromLTRB(16, 0, 16, 16)),
+            for (final issue in state.relocation)
+              Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: _RelocationNote(issue.text)),
             const SafeModeCard(padding: EdgeInsets.fromLTRB(16, 0, 16, 16)),
             SettingsSection(
               title: l10n.hubEngineStartup,
@@ -136,8 +149,10 @@ class EngineScreen extends ConsumerWidget {
                   value: settings.autoStartLocal,
                   onChanged: (v) => unawaited(ref.read(settingsProvider.notifier).setAutoStartLocal(v)),
                 ),
-                const SafeModeAutoSwitch(icon: null),
-                const SafeModeSettingsTiles(showAutoSwitch: false, icon: false),
+                if (guest) ...[
+                  const SafeModeAutoSwitch(icon: null),
+                  const SafeModeSettingsTiles(showAutoSwitch: false, icon: false),
+                ],
               ],
             ),
             if (!missing)
@@ -155,7 +170,7 @@ class EngineScreen extends ConsumerWidget {
               children: [
                 SettingsTile(
                   spot: SettingsIndex.entry(SettingsPageId.background),
-                  subtitle: l10n.phoneEngineKeepAliveHint,
+                  subtitle: guest ? l10n.phoneEngineKeepAliveHint : l10n.harmonyEngineBackgroundHint,
                   onTap: () => _push(context, const BackgroundGuidePage()),
                 ),
                 SettingsTile(
@@ -165,6 +180,8 @@ class EngineScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            // iOS runs what the virtual shell can't in Linux, installed here on demand.
+            if (Theme.of(context).platform == TargetPlatform.iOS) const LinuxSection(),
             SettingsSection(
               title: l10n.phoneEngineRuntime,
               children: [
@@ -174,11 +191,12 @@ class EngineScreen extends ConsumerWidget {
                   mono: true,
                 ),
                 InfoRow(label: l10n.phoneEngineArchitecture, value: status.abi ?? '—', mono: true),
+                ...engineCapabilityRows(l10n, ref.watch(runtimeCapabilitiesProvider).value),
               ],
             ),
             // A way around a broken index, next to the other ways out of trouble.
             if (!missing) const WorkspaceRecoverySettings(),
-            if (!missing)
+            if (!missing && ref.watch(engineResetProvider))
               SettingsSection(
                 children: [
                   _ResetRow(enabled: !status.phase.isBusy),
@@ -229,10 +247,17 @@ class EngineActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final container = ProviderScope.containerOf(context, listen: false);
-    if (phase == RuntimePhase.notInstalled) {
+    // iOS can retain a native/reset error after the installed runtime is gone.
+    // Keep the error visible, but offer installation instead of another start.
+    final iosNeedsInstall =
+        phase == RuntimePhase.error &&
+        ref.watch(operatingSystemProvider) == 'ios' &&
+        ref.watch(localRuntimeProvider.select((s) => s.status.installedVersion)) == null;
+    if (phase == RuntimePhase.notInstalled || iosNeedsInstall) {
+      final available = ref.watch(localRuntimeProvider.select((s) => s.available));
       return _Capsule(
-        icon: AppIcons.download,
-        label: l10n.phoneEngineInstallRuntime,
+        icon: available ? AppIcons.download : AppIcons.computer,
+        label: localMissingCopy(l10n, available: available).action,
         primary: true,
         onTap: () => unawaited(openLocalInstall(context)),
       );
@@ -501,6 +526,36 @@ class _KeepOption extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A lasting note beside the engine's controls: the toast is gone by the time someone comes
+/// looking for old conversations here. It offers nothing to press, since the data is safe as it is.
+class _RelocationNote extends StatelessWidget {
+  const _RelocationNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = DshColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ShapeDecoration(color: colors.warningContainer, shape: AppShape.card),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(AppIcons.warning, size: 20, color: colors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onWarningContainer, height: 1.6),
+            ),
+          ),
+        ],
       ),
     );
   }

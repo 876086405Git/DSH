@@ -13,6 +13,7 @@ import '../../l10n/l10n.dart';
 import '../../plugins/native/native_icons.dart';
 import '../../plugins/native/native_state.dart';
 import '../../plugins/seams/seams.dart';
+import '../../state/android_features.dart';
 import '../../state/plugins_state.dart';
 import '../common/feature_tile.dart';
 import '../agents/team_page.dart';
@@ -416,15 +417,29 @@ final featureSections = <FeatureSection>[
   ], id: settingsFeatureSection),
 ];
 
+/// [featureSections] where 手机操控 isn't there (androidSystemFeaturesProvider).
+final _sectionsWithoutAndroid = <FeatureSection>[
+  for (final section in featureSections)
+    section.items.any((item) => item.id == 'phone')
+        ? FeatureSection.localized(
+            section.titleIn,
+            section.items.where((item) => item.id != 'phone').toList(),
+            note: section.note,
+            id: section.id,
+          )
+        : section,
+];
+
 /// The section the host's plugin panels join.
 String get pluginFeatureSection => appL10n.catalogPlugins;
 
 /// 全部功能's sections, with an entry per plugin panel the host has (`main`)
-/// at the end of 插件. Exactly [featureSections] without one.
+/// at the end of 插件. Exactly [featureSections] without one (on Android).
 final featureSectionsProvider = Provider.autoDispose<List<FeatureSection>>((ref) {
+  final sections = ref.watch(androidSystemFeaturesProvider) ? featureSections : _sectionsWithoutAndroid;
   final plan = ref.watch(seatPlanProvider(const SeatRequest(slot: Slots.main, placement: SeatPlacement.page)));
   final items = plan.visible;
-  if (items.isEmpty) return featureSections;
+  if (items.isEmpty) return sections;
   final bundles = ref.watch(installedPluginsProvider.select((s) => s.value));
   final inventory = ref.watch(seatInventoryProvider);
   final panels = [
@@ -438,7 +453,7 @@ final featureSectionsProvider = Provider.autoDispose<List<FeatureSection>>((ref)
       ),
   ];
   return [
-    for (final section in featureSections)
+    for (final section in sections)
       section.items.any((item) => item.id == 'plugins')
           ? FeatureSection.localized(
               (l10n) => l10n.catalogPlugins,

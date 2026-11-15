@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart' show appFlavor;
+import 'package:flutter/services.dart' show MissingPluginException, appFlavor;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -85,6 +85,7 @@ class AppUpdateState {
   const AppUpdateState({
     required this.current,
     this.loaded = false,
+    this.installable = true,
     this.autoCheck = true,
     this.flavor,
     this.check = UpdateCheckPhase.idle,
@@ -109,6 +110,10 @@ class AppUpdateState {
 
   /// Preferences were read; nothing automatic runs before that.
   final bool loaded;
+
+  /// False on a build with no APK installer (`dsh/update`): HarmonyOS updates
+  /// come from its app store, so nothing here checks, downloads or offers.
+  final bool installable;
   final bool autoCheck;
 
   /// Installed version (native versionName + versionCode).
@@ -173,6 +178,7 @@ class AppUpdateState {
 
   AppUpdateState copyWith({
     bool? loaded,
+    bool? installable,
     bool? autoCheck,
     AppVersion? current,
     ApkFlavor? flavor,
@@ -196,6 +202,7 @@ class AppUpdateState {
     bool? loadingInstallStatus,
   }) => AppUpdateState(
     loaded: loaded ?? this.loaded,
+    installable: installable ?? this.installable,
     autoCheck: autoCheck ?? this.autoCheck,
     current: current ?? this.current,
     flavor: flavor ?? this.flavor,
@@ -335,10 +342,14 @@ class AppUpdateController extends Notifier<AppUpdateState> {
       return; // No preferences (widget tests): stay unloaded, nothing automatic.
     }
     InstalledApp? app;
+    var installable = true;
     try {
       app = await _installer.installedApp();
+    } on MissingPluginException {
+      // No APK installer on this build (HarmonyOS, desktop): no updates here.
+      installable = false;
     } catch (_) {
-      // No native side (tests, desktop): fall back to the compiled-in version.
+      // Native side failed: fall back to the compiled-in version.
     }
     if (!ref.mounted) return;
     _prefs = prefs;
@@ -363,6 +374,7 @@ class AppUpdateController extends Notifier<AppUpdateState> {
     int? ms(String key) => prefs.getInt(key);
     state = state.copyWith(
       loaded: true,
+      installable: installable,
       autoCheck: prefs.getBool(_autoKey) ?? true,
       current: current,
       flavor: flavor,
@@ -533,7 +545,7 @@ class AppUpdateController extends Notifier<AppUpdateState> {
   Future<bool> autoCheckIfDue() async {
     await ready;
     final prefs = _prefs;
-    if (!ref.mounted || prefs == null || !state.autoCheck || state.busy) return false;
+    if (!ref.mounted || prefs == null || !state.installable || !state.autoCheck || state.busy) return false;
     DateTime? at(String key) {
       final ms = prefs.getInt(key);
       return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
@@ -549,7 +561,7 @@ class AppUpdateController extends Notifier<AppUpdateState> {
   /// a running download keeps its release.
   Future<UpdateCheckPhase> check() async {
     await ready;
-    if (!ref.mounted) return UpdateCheckPhase.idle;
+    if (!ref.mounted || !state.installable) return UpdateCheckPhase.idle;
     if (state.busy) return state.check;
     return _checking ??= _check().whenComplete(() => _checking = null);
   }

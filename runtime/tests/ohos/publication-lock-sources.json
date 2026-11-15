@@ -1,0 +1,94 @@
+{
+  "reference": "OpenHarmony-v6.1-Release source and upstream Linux man-pages; no target-device claim",
+  "scope": "No upstream source body is shipped. Fixed source identities only.",
+  "files": [
+    {
+      "name": "musl-aarch64-syscall.h.in",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/arch/aarch64/bits/syscall.h.in",
+      "status": 200,
+      "bytes": 8106,
+      "sha256": "0cf2ce52a191ae36b768b932197e31d5c9b0c6980e0d4f132a5b194d2f013e14",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app.seccomp.policy",
+      "status": 200,
+      "bytes": 5387,
+      "sha256": "83a5a0d0a835b1dc3593bdb5507d2e76f18e22027c5b05bfb400807979bbdfd5",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app-atomic.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app_atomic.seccomp.policy",
+      "status": 200,
+      "bytes": 5792,
+      "sha256": "04e8412bbe402348fd80fa33bd5c5c6f22550620f7de9a90e716d042cabfdc65",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app-custom.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app_custom.seccomp.policy",
+      "status": 200,
+      "bytes": 5609,
+      "sha256": "d860aff88a029e66255e153b7b35d72508be3c6839b33fc9f75c6b210b92c743",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "musl-sys-file.h",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/include/sys/file.h",
+      "status": 200,
+      "bytes": 261,
+      "sha256": "f4a67f7000a8519b9ec76f781db389242ae2e03a3f3fe2abe38e55753d0c1fe2"
+    },
+    {
+      "name": "linux-flock.2.html",
+      "url": "https://man7.org/linux/man-pages/man2/flock.2.html",
+      "status": 200,
+      "bytes": 17333,
+      "sha256": "f46b6eb4cb7c9da8cbe5d7a425943323140da0d4b2b766b6e54d6bc436e6ba09"
+    },
+    {
+      "name": "src--linux--flock.c",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/src/linux/flock.c",
+      "status": 200,
+      "bytes": 225,
+      "sha256": "06e43800a04a5d5a70b21f9c82004165ab9d621e3d6ac8a23342994575f16a76"
+    },
+    {
+      "name": "porting--linux--user--src--linux--flock.c",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/porting/linux/user/src/linux/flock.c",
+      "status": 200,
+      "bytes": 785,
+      "sha256": "3543307185c06ba4502318b33b05013432777150db0f2455a6d74eb3945d6396"
+    },
+    {
+      "name": "musl-xattr.c",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/src/linux/xattr.c",
+      "status": 200,
+      "bytes": 1599,
+      "sha256": "6f898345b3e1bcc56ed2584277f29b017be5752e4da4b1bdf35f2d3df78f9256"
+    },
+    {
+      "name": "musl-sys-xattr.h",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/include/sys/xattr.h",
+      "status": 200,
+      "bytes": 921,
+      "sha256": "4f1e3d3b75fe34805cc1d95566dc10630947c16cd5239413a80fa9f54ab78de5"
+    },
+    {
+      "name": "linux-setxattr.2.html",
+      "url": "https://man7.org/linux/man-pages/man2/setxattr.2.html",
+      "status": 200,
+      "bytes": 13135,
+      "sha256": "86504ea6fe52a3d056a40f1a7aab750c2732cdaeced0bf40658b3367430b80c1"
+    },
+    {
+      "name": "linux-getxattr.2.html",
+      "url": "https://man7.org/linux/man-pages/man2/getxattr.2.html",
+      "status": 200,
+      "bytes": 13027,
+      "sha256": "93bcd9e3e2f0365e5b4238e1f8d742c95ce892d2a65833ab040a92c51ffa8fb4"
+    }
+  ]
+}

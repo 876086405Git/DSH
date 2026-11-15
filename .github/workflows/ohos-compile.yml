@@ -1,0 +1,94 @@
+# Compiles the whole app for HarmonyOS arm64 up to libapp.so on a macOS runner,
+# where oh-flutter publishes its AOT tools (app/ohos/README.md). Needs no secrets:
+# packaging and signing a HAP is a later job, once Command Line Tools and a
+# signing profile exist.
+name: OHOS compile
+
+on:
+  push:
+    branches: ['claude/harmonyos-ohos', 'ohos/**']
+    paths:
+      - 'app/**'
+      - 'packages/**'
+      - 'tooling/ohos/**'
+      - '.github/workflows/ohos-compile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohos-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      FLUTTER_OHOS_TAG: 3.47.9-ohos-1.0.0
+      FLUTTER_OHOS_COMMIT: e5f752df3e25ec897da3c98a74bcced7c21b0bd3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install oh-flutter
+        run: |
+          sdk="$RUNNER_TEMP/flutter-ohos"
+          git clone --depth 1 --branch "$FLUTTER_OHOS_TAG" https://atomgit.com/oh-flutter/flutter_flutter.git "$sdk"
+          test "$(git -C "$sdk" rev-parse HEAD)" = "$FLUTTER_OHOS_COMMIT"
+          echo "$sdk/bin" >> "$GITHUB_PATH"
+
+      - name: Patch the framework's HarmonyOS branches
+        run: python3 tooling/ohos/patch_framework.py "$RUNNER_TEMP/flutter-ohos"
+
+      - name: Fetch the SDK's own tools
+        run: |
+          flutter --version
+          flutter precache --ohos
+
+      # dart pub, not flutter pub: the latter goes on to refresh the ohos project,
+      # which needs the HarmonyOS SDK this job does without.
+      - name: Resolve dependencies with the OHOS plugins
+        working-directory: app
+        run: |
+          cp ohos/pubspec_overrides.ohos.yaml pubspec_overrides.yaml
+          dart pub get
+          python3 ../tooling/ohos/vendor_platform_switches.py
+          dart pub get
+
+      # No icon tree shaking: oh-flutter's const_finder snapshot fails on its own Dart
+      # with "Invalid SDK hash".
+      - name: Compile to libapp.so
+        working-directory: app
+        run: |
+          # dDartDefines is ENABLE_FLEX_OVERFLOW=false in base64, see tooling/ohos/build-hap.sh.
+          flutter assemble \
+            -dTargetPlatform=ohos-arm64 \
+            -dBuildMode=release \
+            -dTargetFile=lib/main.dart \
+            -dTreeShakeIcons=false \
+            -dDartDefines=RU5BQkxFX0ZMRVhfT1ZFUkZMT1c9ZmFsc2U= \
+            --output=build/ohos-aot \
+            ohos_aot_bundle_release_ohos-arm64
+
+      - name: Report the result
+        working-directory: app
+        run: |
+          find build/ohos-aot -maxdepth 2 | head -20
+          lib="$(find build/ohos-aot .dart_tool/flutter_build \( -name app.so -o -name libapp.so \) | head -1)"
+          test -n "$lib"
+          file "$lib"
+          echo "$(basename "$lib"): $(wc -c < "$lib") bytes" >> "$GITHUB_STEP_SUMMARY"
+          wc -c "$lib"
+
+      # The Dart half of a HAP. tooling/ohos/check-arkts.sh --full packages it with
+      # the native libraries, which are cross-compiled on Linux.
+      - name: Keep the compiled app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ohos-aot-${{ github.sha }}
+          path: app/build/ohos-aot
+          if-no-files-found: error
+          retention-days: 14

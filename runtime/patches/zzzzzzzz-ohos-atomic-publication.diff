@@ -1,0 +1,102 @@
+diff --git a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+@@ -8,42 +8,12 @@
+ import { createLazyRequire } from "@deepseek-ai/dsh-lazy-require";
+ // OpenHarmony has no no-replace link publication; keep the source and never clobber.
+ // Serialize this engine's publishers so EEXIST readers do not inspect an active copy.
+-const ohosPublications = new Map();
+ async function publishOhosExclusive(source, target, fs = { link, open }) {
+-	const previous = ohosPublications.get(target);
+-	let release;
+-	const completed = new Promise((resolve) => { release = resolve; });
+-	ohosPublications.set(target, completed);
+-	if (previous) await previous;
+-	try {
+-		try {
+-			await fs.link(source, target);
+-			return;
+-		} catch (error) {
+-			if (!["EACCES", "EPERM", "EXDEV", "ENOTSUP", "EMLINK"].includes(error?.code)) throw error;
+-		}
+-		const input = await fs.open(source, "r");
+-		try {
+-			const output = await fs.open(target, "wx", 384);
+-			try {
+-				const buffer = Buffer.allocUnsafe(65536);
+-				for (;;) {
+-					const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
+-					if (bytesRead === 0) break;
+-					await output.writeFile(buffer.subarray(0, bytesRead));
+-				}
+-				await output.sync();
+-			} finally {
+-				// Failed copies stay visible; unlinking by name could delete a replacement.
+-				await output.close();
+-			}
+-		} finally {
+-			await input.close();
+-		}
+-	} finally {
+-		release();
+-		if (ohosPublications.get(target) === completed) ohosPublications.delete(target);
+-	}
++	const service = globalThis[Symbol.for("dsh.go.ohos.publication")];
++	if (service?.protocolVersion !== 1 || typeof service.publish !== "function") {
++		throw Object.assign(new Error("OpenHarmony publication preload is required"), { code: "ERR_OHOS_PUBLICATION_PRELOAD_MISSING" });
++	}
++	return service.publish(source, target, { fs });
+ }
+ 
+ //#region lib/types/compression-limiter.js
+diff --git a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -648,42 +648,12 @@
+ /** Base name of the kernel lock file inside a session's directory. */
+ // OpenHarmony has no no-replace link publication; keep the source and never clobber.
+ // Serialize this engine's publishers so EEXIST readers do not inspect an active copy.
+-const ohosPublications = new Map();
+ async function publishOhosExclusive(source, target, fs = { link, open }) {
+-	const previous = ohosPublications.get(target);
+-	let release;
+-	const completed = new Promise((resolve) => { release = resolve; });
+-	ohosPublications.set(target, completed);
+-	if (previous) await previous;
+-	try {
+-		try {
+-			await fs.link(source, target);
+-			return;
+-		} catch (error) {
+-			if (!["EACCES", "EPERM", "EXDEV", "ENOTSUP", "EMLINK"].includes(error?.code)) throw error;
+-		}
+-		const input = await fs.open(source, "r");
+-		try {
+-			const output = await fs.open(target, "wx", 384);
+-			try {
+-				const buffer = Buffer.allocUnsafe(65536);
+-				for (;;) {
+-					const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
+-					if (bytesRead === 0) break;
+-					await output.writeFile(buffer.subarray(0, bytesRead));
+-				}
+-				await output.sync();
+-			} finally {
+-				// Failed copies stay visible; unlinking by name could delete a replacement.
+-				await output.close();
+-			}
+-		} finally {
+-			await input.close();
+-		}
+-	} finally {
+-		release();
+-		if (ohosPublications.get(target) === completed) ohosPublications.delete(target);
+-	}
++	const service = globalThis[Symbol.for("dsh.go.ohos.publication")];
++	if (service?.protocolVersion !== 1 || typeof service.publish !== "function") {
++		throw Object.assign(new Error("OpenHarmony publication preload is required"), { code: "ERR_OHOS_PUBLICATION_PRELOAD_MISSING" });
++	}
++	return service.publish(source, target, { fs });
+ }
+ 
+ // Temporary main-engine lock until the signed OpenHarmony native binding is validated.

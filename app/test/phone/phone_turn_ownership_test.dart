@@ -69,6 +69,27 @@ void main() {
     await notify.settle();
   }
 
+  test('authenticated iOS owner finishes its task without an ambiguous session snapshot', () async {
+    await start(viewed: 'unrelated');
+    final status = phoneStatus(taskActive: true, taskId: 31);
+    (status['task'] as Map)['ownerSessionId'] = 'ios-owner';
+    native.push(status);
+    await notify.settle();
+    expect(client.requests, isEmpty);
+    expect(phone.onTurnEnd(_end('unrelated')), isNull);
+    final completion = phone.onTurnEnd(_end('ios-owner'));
+    expect(completion, isNotNull);
+    await completion;
+    expect(native.callsOf('finishTask').single.arguments, containsPair('sessionId', 'ios-owner'));
+
+    final next = phoneStatus(taskActive: true, taskId: 32);
+    (next['task'] as Map)['ownerSessionId'] = 'next-owner';
+    native.push(next);
+    await notify.settle();
+    expect(phone.onTurnEnd(_end('ios-owner')), isNull);
+    expect(client.requests, isEmpty);
+  });
+
   test('unknown owner while a snapshot is pending never finishes another conversation', () async {
     await start();
     await begin();

@@ -1,0 +1,12 @@
+{
+  "nodeVersion": "24.22.1",
+  "nodeBinarySHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+  "nodeHeaders": {
+    "node.h": "c35691764bac5a82c4139348ca57f5676163afe563a40ad78457cef8bfb57012",
+    "node_api.h": "2d4560831e525b47b060ec8a0864ab73993df9e20215ce9f0fe7b24cd31af32a",
+    "node_api_types.h": "a25356630d3058f0a0c8937d9f297e9471e037fda58c2696d8a505c2bd99cb00",
+    "node_version.h": "0f37dafb4917e62582daa0dc51ee3e3f9d0636dc1d822c23a1a23af112ddbfad",
+    "v8.h": "e27a005daa45f342845ffb9b33409686c380b1d5a97f46f3ab4749517a213d25",
+    "v8config.h": "7454d35a34b52b23a50f9ef2742dc0c57025cd9eb1f85c27b7618fe2b269bacf"
+  }
+}

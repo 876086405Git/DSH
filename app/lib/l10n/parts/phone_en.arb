@@ -483,7 +483,13 @@
   "phonePreviewDescription": "Frames are read only while the preview is visible and stay on this device. The preview is view-only.",
   "phonePreviewOpen": "View background screen",
   "phonePreviewTask": "Preview task {taskId}",
-  "@phonePreviewTask": {"placeholders": {"taskId": {"type": "String"}}},
+  "@phonePreviewTask": {
+    "placeholders": {
+      "taskId": {
+        "type": "String"
+      }
+    }
+  },
   "phonePreviewInUse": "Another task is being previewed",
   "phonePreviewOff": "The task ended or preview is off",
   "phonePreviewUnavailable": "Preview is unavailable or the screen is protected",
@@ -657,15 +663,32 @@
   "phoneSkillBundlePublishedUnverified": "The files were published, but full verification has not succeeded. Do not save again.",
   "phoneSkillBundleUnknown": "The save result is not confirmed. Files may already have been written. Do not save again.",
   "phoneSkillBundleRevision": "Route revision: {revision}",
-  "@phoneSkillBundleRevision": {"placeholders": {"revision": {"type": "String"}}},
+  "@phoneSkillBundleRevision": {
+    "placeholders": {
+      "revision": {
+        "type": "String"
+      }
+    }
+  },
   "phoneSkillReplayReview": "Review phone route",
   "phoneSkillReplaySourceChanged": "The local session or connection changed. Select the route again from the current local conversation.",
   "phoneSkillReplayUnavailable": "This route is not available for controlled execution on this phone. The ordinary skill template remains available.",
   "phoneSkillReplayConfirm": "I have reviewed this route and the app selected for this use.",
   "phoneSkillReplayToComposer": "Insert into this conversation",
   "phoneSkillReplayStartText": "A phone route has been selected and reviewed locally. Call only mcp__phone__replay with {request}. If unavailable or refused, hand back to the user/model; do not replay it as ordinary actions.",
-  "@phoneSkillReplayStartText": {"placeholders": {"request": {"type": "String"}}},
+  "@phoneSkillReplayStartText": {
+    "placeholders": {
+      "request": {
+        "type": "String"
+      }
+    }
+  },
   "phoneSkillReplayQueue": "Send route (queue)",
   "phoneSkillReplayQueued": "The route message was accepted or queued. This does not mean the route has executed successfully.",
-  "phoneSkillReplaySendUncertain": "Delivery of the route message was not confirmed. It has not been prepared or replayed again. Check the original conversation."
+  "phoneSkillReplaySendUncertain": "Delivery of the route message was not confirmed. It has not been prepared or replayed again. Check the original conversation.",
+  "phoneIosServiceTitle": "iOS automation service",
+  "phoneIosServiceHint": "Starts on demand after approval and stops when the task ends, closing the system’s “Automation Running” indicator.",
+  "phoneIosSetupHint": "Keep LocalDevVPN connected. On first use, allow control for 30 minutes.",
+  "phoneIosReturnHint": "Return to this conversation when the task finishes, then stop the phone-control service.",
+  "phoneIosNeedsSetup": "The runner is not ready. Check the local engine and developer setup."
 }

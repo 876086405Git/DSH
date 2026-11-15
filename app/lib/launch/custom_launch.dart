@@ -8,6 +8,8 @@ import 'dart:ui';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../runtime/container_paths.dart';
+
 /// What the file is.
 enum LaunchMediaKind {
   /// PNG, JPEG or a still WebP.
@@ -204,8 +206,25 @@ class CustomLaunch {
       final store = prefs ?? await SharedPreferences.getInstance();
       final raw = store.getString(prefsKey);
       if (raw == null) return null;
-      final custom = fromJson(jsonDecode(raw));
+      var json = Map<String, Object?>.from(jsonDecode(raw) as Map);
+      final paths = ContainerPaths.enabled ? await ContainerPaths.load() : null;
+      if (paths != null) {
+        final relocated = await paths.decodeOwned(json, 'launch');
+        if (relocated == null) return null;
+        json = relocated;
+      }
+      final custom = fromJson(json);
       if (custom == null || !File(custom.path).existsSync()) return null;
+      if (paths != null) {
+        final saved = jsonEncode(await paths.encodeOwned(custom.toJson(), 'launch'));
+        if (saved != raw) {
+          try {
+            await store.setString(prefsKey, saved);
+          } catch (_) {
+            // A migrated in-memory value remains usable if preferences cannot be written.
+          }
+        }
+      }
       return custom;
     } catch (_) {
       return null;
@@ -214,7 +233,10 @@ class CustomLaunch {
 
   static Future<void> save(CustomLaunch custom) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefsKey, jsonEncode(custom.toJson()));
+    final json = ContainerPaths.enabled
+        ? await (await ContainerPaths.load()).encodeOwned(custom.toJson(), 'launch')
+        : custom.toJson();
+    await prefs.setString(prefsKey, jsonEncode(json));
   }
 
   static Future<void> clear() async {

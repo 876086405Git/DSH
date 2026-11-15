@@ -1,0 +1,65 @@
+--- a/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
+@@ -2,11 +2,11 @@
+ import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { extname, isAbsolute, join } from "node:path";
+-import { createConverter } from "@deepseek-ai/libreoffice-kit";
+ import z from "@deepseek-ai/schemastery";
+ import { brandString } from "@deepseek-ai/dsh-brand";
+ import { Remote, RemoteError, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
+ import { constants } from "node:fs";
++const createConverter = async (options) => (await import("@deepseek-ai/libreoffice-kit")).createConverter(options);
+ //#region lib/types/errors.js
+ /** Classified conversion failure; engine details stay in the cause. */
+ var OfficeToPdfError = class extends Error {
+@@ -582,12 +582,13 @@
+ 				};
+ 			} catch (cause) {
+ 				if (signal.aborted) throw new RemoteError("gateway/cancelled", "The document preview was cancelled.", {}, { cause });
+-				if (cause instanceof OfficeToPdfError) throw new RemoteError("document-render/failed", "Office conversion failed.", { reason: cause.code }, { cause });
++				if (cause instanceof OfficeToPdfError) throw new RemoteError("document-render/failed", cause.code === "unavailable" ? cause.message : "Office conversion failed.", { reason: cause.code }, { cause });
+ 				throw cause;
+ 			}
+ 		}
+ 		async convertBytes(bytes, extension, signal) {
+ 			signal.throwIfAborted();
++			if (process.platform === "openharmony") throw new OfficeToPdfError("unavailable", "鸿蒙本机不支持 Office 转换；可打开原文档、已有 PDF，或连接电脑转换。");
+ 			let slot = this.slots.find((candidate) => !candidate.busy);
+ 			if (slot === void 0) {
+ 				slot = { busy: false };
+--- a/node_modules/@deepseek-ai/dsh-skill-office/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-skill-office/lib/index.js
+@@ -39,6 +39,7 @@
+ 	};
+ }
+ function officeRuntime(config) {
++	if (process.platform === "openharmony") return "\n\n鸿蒙本机不提供 LibreOffice 转换、重算或渲染运行时；请连接电脑执行这些步骤，已有文档与 PDF 仍可打开或保存。";
+ 	if (config.cli === false) return "\n\nLibreOffice Kit is disabled in this deployment.";
+ 	if (config.node === void 0 && (isSea() || process.versions.electron !== void 0)) throw new Error("skill-office: packaged applications must supply a standalone Node executable");
+ 	const node = config.node ?? process.execPath;
+--- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+@@ -125,7 +125,11 @@
+ //#region lib/types/sharp.js
+ /** Process-realm lazy access to Sharp's CommonJS-compatible entry. */
+ /** Load Sharp on the first raster operation and retain its callable export. */
+-const requireSharp = createLazyRequire("sharp", import.meta.url);
++const loadSharp = createLazyRequire("sharp", import.meta.url);
++function requireSharp() {
++	if (process.platform === "openharmony") throw new AttachmentError("鸿蒙本机尚无可用的图像解码/重编码库；请连接电脑处理图像。普通文件仍可上传或保存。", "OHOS_IMAGE_CODEC_UNAVAILABLE");
++	return loadSharp();
++}
+ //#endregion
+ //#region lib/types/image.js
+ /** Raster inspection: full decode at admission, header-only probe on verified reads. */
+--- a/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js
+@@ -198,6 +198,7 @@
+ 	}
+ }
+ function resolveRuntime(config) {
++	if (process.platform === "openharmony") throw Object.assign(new Error("鸿蒙本机不提供 Sherpa 语音模型；可使用系统输入法语音输入，或连接电脑处理音频。"), { code: "ERR_OHOS_LOCAL_SPEECH_UNAVAILABLE" });
+ 	if (![
+ 		"darwin-arm64",
+ 		"darwin-x64",

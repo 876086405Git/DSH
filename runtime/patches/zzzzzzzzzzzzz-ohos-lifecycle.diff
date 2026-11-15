@@ -1,0 +1,216 @@
+--- a/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js
+@@ -532,6 +532,11 @@
+ 		/* v8 ignore next -- cancel accepts the closed AgentCancelCause union */
+ 		default: return assertNever(cause);
+ 	}
++}
++const ohosLifecycleProtocol = 1;
++function ohosLifecycle() {
++	if (process.platform !== "openharmony" && globalThis[Symbol.for("dsh.go.ohos.sim")] !== true) return;
++	return globalThis[Symbol.for("dsh.go.ohos.lifecycle")];
+ }
+ /** Drives one session through turn and step boundaries. */
+ var ReactLoopAgent = class {
+@@ -718,6 +723,10 @@
+ 		/* v8 ignore next -- private callers establish the running phase before proposing a step */
+ 		if (this.phase.kind !== "running") throw new Error(`agent "${this.id}": pre-step outside running phase`);
+ 		const signal = this.phase.abort.signal;
++		const lifecycle = ohosLifecycle();
++		if (lifecycle) {
++			await lifecycle.gate(this.session.id, signal);
++		}
+ 		const claimed = this.inbox.claim(target, position.turn);
+ 		const recall = await dshGoRecall.prepare(this.loopCtx, this, position, claimed, signal);
+ 		const selection = this.model.current();
+@@ -1833,8 +1842,14 @@
+ 					fused.throwIfAborted();
+ 					const persisted = coldRead.events;
+ 					dshGoRecall.guardSession(this.runtime.ctx, { sessionId: id, operation: "resume", recallHistory: dshGoRecall.hasHistory(persisted) });
+-					const closers = interruptedTurnClosers(persisted);
++					const lifecycle = ohosLifecycle();
++					const originalClosers = interruptedTurnClosers(persisted);
++					const closers = lifecycle ? await lifecycle.reconcileCold(id, persisted, originalClosers) : originalClosers;
+ 					if (closers.length > 0) await handle.append(closers);
++					if (lifecycle) {
++						await handle.flush();
++						await lifecycle.recoveredCommitted(id, (await handle.read(0, void 0, { signal: fused })).events);
++					}
+ 					preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(id, {
+ 						seed: [...persisted, ...closers],
+ 						meta: structuredClone(handle.header),
+@@ -1872,4 +1887,4 @@
+ 	}
+ };
+ //#endregion
+-export { AgentLoop, AgentLoop as default, CONFIGURED_AGENT_IDENTITIES_KEY, DEFAULT_MAX_PARALLEL_TOOL_CALLS };
++export { ohosLifecycleProtocol, AgentLoop, AgentLoop as default, CONFIGURED_AGENT_IDENTITIES_KEY, DEFAULT_MAX_PARALLEL_TOOL_CALLS };
+--- a/node_modules/@deepseek-ai/dsh-timeout/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-timeout/lib/index.js
+@@ -60,6 +60,8 @@
+ 		[Symbol.dispose]() {}
+ 	};
+ 	assertTimerDelay(timeoutMs, "deadline timeoutMs");
++	const lifecycle = (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) && globalThis[Symbol.for("dsh.go.ohos.lifecycle")];
++	if (lifecycle && (code === "TOOL_TIMEOUT" || code === "BASH_TIMEOUT")) return lifecycle.clock.deadline(upstream, timeoutMs, new TimeoutReason(code, timeoutMs));
+ 	const timer = new AbortController();
+ 	const id = setTimeout(() => {
+ 		timer.abort(new TimeoutReason(code, timeoutMs));
+@@ -146,4 +148,5 @@
+ 	return code === void 0 || reason.code === code ? reason : void 0;
+ }
+ //#endregion
+-export { MAX_TIMER_DELAY_MS, TimeoutReason, clampTimeout, deadline, idleWatchdog, timeoutOf };
++const ohosLifecycleBudgetProtocol = 1;
++export { ohosLifecycleBudgetProtocol, MAX_TIMER_DELAY_MS, TimeoutReason, clampTimeout, deadline, idleWatchdog, timeoutOf };
+--- a/node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js
+@@ -395,8 +395,28 @@
+ 	const network = ohosNetwork();
+ 	if (network) {
+ 		const dispatchers = new Map();
++		const retiring = new Map();
++		const retirementFailures = [];
+ 		let closed = false;
+ 		return {
++			[Symbol.for("dsh.go.ohos.lifecycle.transport")]: {
++				protocolVersion: 1,
++				renew() {
++					if (closed) throw Object.assign(new Error("HTTP policy owner is closed"), { code: "UND_ERR_CLOSED" });
++					const previous = [...dispatchers.values()];
++					dispatchers.clear();
++					for (const dispatcher of previous) {
++						const completion = dispatcher.close();
++						retiring.set(dispatcher, completion);
++						completion.then(() => retiring.delete(dispatcher), (error) => {
++							retiring.delete(dispatcher);
++							retirementFailures.push(typeof error?.code === "string" ? error.code : "ERR_OHOS_TRANSPORT_CLOSE");
++							if (retirementFailures.length > 16) retirementFailures.shift();
++						});
++					}
++				},
++				status: () => ({ retiredInFlight: retiring.size, retirementFailures: [...retirementFailures] })
++			},
+ 			dispatch(options, handler) {
+ 				if (closed) {
+ 					const error = Object.assign(new Error("HTTP transport is closed"), { code: "UND_ERR_CLOSED" });
+@@ -414,8 +434,8 @@
+ 				}
+ 				return dispatcher.dispatch(options, handler);
+ 			},
+-			close() { closed = true; return Promise.all([...dispatchers.values()].map((dispatcher) => dispatcher.close())); },
+-			destroy(error) { closed = true; return Promise.all([...dispatchers.values()].map((dispatcher) => dispatcher.destroy(error))); }
++			close() { closed = true; return Promise.all([...dispatchers.values()].map((dispatcher) => dispatcher.close()).concat([...retiring.values()])); },
++			destroy(error) { closed = true; return Promise.all([...dispatchers.values(), ...retiring.keys()].map((dispatcher) => dispatcher.destroy(error))); }
+ 		};
+ 	}
+ 	const { Agent, Pool, ProxyAgent } = await import("undici");
+--- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+@@ -312,7 +312,9 @@
+ 		content
+ 	};
+ 	try {
+-		return await spillStore.saveText(save);
++		const reference = await spillStore.saveText(save);
++		if (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) globalThis[Symbol.for("dsh.go.ohos.lifecycle")]?.externalResource("spill-reference");
++		return reference;
+ 	} catch (error) {
+ 		ctx.logger.warn(`tool-fs-search: saveText failed for ${exec.name}: ${String(error)}; complete result not saved`);
+ 		return;
+--- a/node_modules/@deepseek-ai/dsh-spill-policy/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-spill-policy/lib/index.js
+@@ -228,6 +228,7 @@
+ 				if (block.type === "text" && previous?.type === "text") previous.text += block.text;
+ 				else merged.push(block.type === "text" ? { ...block } : block);
+ 			}
++			if (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) globalThis[Symbol.for("dsh.go.ohos.lifecycle")]?.externalResource("spill-reference");
+ 			return merged;
+ 		} catch (error) {
+ 			ctx.logger.warn(`spill-policy: ${String(error)}; keeping the inline content`);
+--- a/node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js
++++ b/node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js
+@@ -102,7 +102,15 @@
+ * returns an aborted outcome. Scheduler failure drains dispatches and rejects
+ * for the owning step to record recovery results.
+ */
++function ohosLifecycle() {
++	if (process.platform !== "openharmony" && globalThis[Symbol.for("dsh.go.ohos.sim")] !== true) return;
++	return globalThis[Symbol.for("dsh.go.ohos.lifecycle")];
++}
+ async function runGroup(pipeline, settlement, maxParallelToolCalls, group, mode, signal) {
++	const owner = settlement.input.log === void 0 ? void 0 : settlement.input;
++	const lifecycle = owner ? ohosLifecycle() : void 0;
++	const session = owner?.agent.session;
++	const metaFor = (index) => ({ session, block: group[index].block, callSeq: callSeqs[index], turn: owner.log.turn, step: owner.log.step, signal });
+ 	const slots = group.map(() => void 0);
+ 	const callSeqs = group.map(() => void 0);
+ 	let nextToStart = 0;
+@@ -119,22 +127,32 @@
+ 			const slot = slots[committed];
+ 			if (slot === void 0) break;
+ 			const call = group[committed];
+-			const result = await pipeline.complete(slot.exec, slot);
+-			settlement.commit(call.block, result, callSeqs[committed]);
++			const finish = () => pipeline.complete(slot.exec, slot);
++			let result = await (lifecycle ? lifecycle.withinCall(metaFor(committed), finish) : finish());
++			if (lifecycle) result = settlement.prepareCommit(call.block, result);
++			const durableSessionData = lifecycle ? await lifecycle.outcome(metaFor(committed), result) : void 0;
++			settlement.commit(call.block, result, callSeqs[committed], durableSessionData);
+ 			concluded ||= result.concludesTurn === true;
++			if (lifecycle) await lifecycle.committed(metaFor(committed));
+ 			committed++;
+ 		}
+ 	};
+ 	const inFlight = /* @__PURE__ */ new Map();
+ 	const startCall = async (index) => {
++		if (lifecycle) {
++			await lifecycle.gate(session.id, signal);
++		}
+ 		const call = group[index];
+ 		callSeqs[index] = settlement.start(call.block);
+ 		started++;
+-		const prepared = await pipeline.prepare(call.exec);
++		if (lifecycle) await lifecycle.prepared(metaFor(index));
++		const prepare = () => pipeline.prepare(call.exec);
++		const prepared = await (lifecycle ? lifecycle.withinCall(metaFor(index), prepare) : prepare());
+ 		throwSchedulerFailure();
+ 		switch (prepared.kind) {
+ 			case "dispatch": {
+-				const promise = pipeline.dispatch(prepared.exec).then((outcome) => {
++				const dispatch = () => pipeline.dispatch(prepared.exec);
++				const promise = (lifecycle ? lifecycle.run(metaFor(index), dispatch) : dispatch()).then((outcome) => {
+ 					slots[index] = {
+ 						...outcome,
+ 						exec: prepared.exec
+@@ -181,6 +199,7 @@
+ 	} catch (error) {
+ 		schedulerFailure ??= { error };
+ 		await Promise.allSettled(inFlight.values());
++		if (lifecycle) lifecycle.failedGroup(session.id, callSeqs);
+ 		throw schedulerFailure.error;
+ 	}
+ 	if (aborted) {
+@@ -219,12 +238,19 @@
+ 			arguments: block.arguments
+ 		}).seq;
+ 	}
+-	commit(block, result, callSeq) {
++	// Freeze the same sanitized result into both lifecycle and session storage.
++	// Companion metadata must be checked before the durable outcome is written.
++	prepareCommit(block, result) {
++		if (this.input.log === void 0) return result;
++		const { agent } = this.input;
++		return this.companionResults?.beforeCommit(agent, agent.session, block, result) ?? result;
++	}
++	commit(block, result, callSeq, durableSessionData) {
+ 		if (this.input.log !== void 0) {
+ 			const { agent, log: { turn, step } } = this.input;
+ 			const session = agent.session;
+-			result = this.companionResults?.beforeCommit(agent, session, block, result) ?? result;
+-			const event = session.append("tool/result", {
++			if (durableSessionData === void 0) result = this.prepareCommit(block, result);
++			const event = session.append("tool/result", durableSessionData ?? {
+ 				turn,
+ 				step,
+ 				message: createToolResultMessage({

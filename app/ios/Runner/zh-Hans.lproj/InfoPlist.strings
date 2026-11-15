@@ -1,0 +1,14 @@
+/* Info.plist in Chinese; English is in Info.plist itself. */
+"NSLocalNetworkUsageDescription" = "连接你选择的 DSH 主机；启用端上手机操控时，也用于连接这台 iPhone 自身的开发者服务。";
+"NSRemindersFullAccessUsageDescription" = "你批准本机引擎的请求时，读取或修改提醒事项。";
+"NSRemindersUsageDescription" = "你批准本机引擎的请求时，读取或修改提醒事项。";
+"NSContactsUsageDescription" = "你批准本机引擎的请求时，查找或新建联系人。";
+"NSLocationWhenInUseUsageDescription" = "你批准本机引擎的请求时，读取一次当前位置。";
+"NSCameraUsageDescription" = "拍照后作为附件发给 DSH。";
+"NSCalendarsUsageDescription" = "你同意添加日程时打开日历编辑器。";
+"NSMicrophoneUsageDescription" = "语音输入时使用麦克风。";
+"NSSpeechRecognitionUsageDescription" = "把语音输入转成文字。手机不能在本机识别时，音频会交给 Apple 的语音服务处理。";
+"NSPhotoLibraryUsageDescription" = "选择图片作为附件发给 DSH。";
+"NSPhotoLibraryAddUsageDescription" = "把生成的图片存到相册。";
+"New chat" = "新对话";
+"Voice input" = "语音输入";

@@ -1,0 +1,11 @@
+# O6: report only the actually installed OHOS JSONL lock branch. Android target excludes this patch.
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -2460,6 +2460,7 @@
+ 	migrationPreparations = /* @__PURE__ */ new Map();
+ 	constructor(ctx, config, tracker) {
+ 		super(ctx);
++		if (process.platform === "openharmony") this.dshGoRuntimeCapabilities = Object.freeze({ sessionLock: "main-thread" });
+ 		this.config = config;
+ 		this.tracker = tracker;
+ 		/* v8 ignore next 5 -- generated catalog and Session source share one build-time version owner. */

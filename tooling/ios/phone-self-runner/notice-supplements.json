@@ -1,0 +1,44 @@
+{
+  "ns-keyed-archive@0.1.5": {
+    "license": "MIT OR Apache-2.0",
+    "commit": "f8cec65e865cb48301d33b2244bec45a2f3d2bc2",
+    "manifest_sha256": "5602b9730a332fb3606724314747e1eeda5ce97175e61ec879a80926d37fee3e",
+    "originals": [
+      "Cargo.toml.orig",
+      "README.md"
+    ],
+    "documents": [
+      {
+        "file": "ns-keyed-archive-LICENSE-APACHE.txt",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "provenance": "upstream supplement; https://api.github.com/repos/jkcoxson/ns_keyed_archive/git/blobs/d645695673349e3947e8e5ae42332d0ac3164cd7"
+      },
+      {
+        "file": "ns-keyed-archive-LICENSE-MIT.txt",
+        "sha256": "5e62a3ee000015ce675a2b18691720fc48e575ac9a21dfa8ce141d642905e224",
+        "provenance": "upstream supplement; https://api.github.com/repos/jkcoxson/ns_keyed_archive/git/blobs/426c380e5c583b61fa8bc75434e573483016d8de"
+      }
+    ]
+  },
+  "plist-macro@0.1.6": {
+    "license": "MIT",
+    "commit": "d1d48559ddc8e9bd263f36180bbe1d4f2a3d55e5",
+    "manifest_sha256": "3e8a15176277d7d4c968f47438ba8bcf2562a70170bd6fc74e20d962d1c7e7e4",
+    "originals": [
+      "Cargo.toml.orig",
+      "README.md"
+    ],
+    "documents": [
+      {
+        "file": "plist-macro-SOURCE-NOTE.txt",
+        "sha256": "39434850c22b53b83b681d5129a29f09836928db2086ec4c267a088b184a68f6",
+        "provenance": "source-gap explanation; not an upstream copyright notice"
+      },
+      {
+        "file": "SPDX-MIT.txt",
+        "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+        "provenance": "standard declared-license text; SPDX v3.27.0 d46e94e2c78ceede1cfc63cfa0396472d2798d4c; no inferred copyright holder"
+      }
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "openharmony_release": "OpenHarmony-v6.1-Release",
+  "startup_init_commit": "08addb7868567eed729072efa93b59380366cf22",
+  "files": [
+    {
+      "name": "interfaces__kits__syscap__include__deviceinfo.h",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/08addb7868567eed729072efa93b59380366cf22/interfaces/kits/syscap/include/deviceinfo.h",
+      "bytes": 9283,
+      "sha256": "3dbf1c80762cd50ddec5a152fd55267087f5d844e44da109334fdc839d34621f"
+    },
+    {
+      "name": "interfaces__kits__syscap__src__deviceinfo.c",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/08addb7868567eed729072efa93b59380366cf22/interfaces/kits/syscap/src/deviceinfo.c",
+      "bytes": 2849,
+      "sha256": "7c5fd466b54c16be60777d3d86812586d0e90ac06e172137cf0bc9d443d490d6"
+    },
+    {
+      "name": "interfaces__kits__syscap__libdeviceinfo.ndk.json",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/08addb7868567eed729072efa93b59380366cf22/interfaces/kits/syscap/libdeviceinfo.ndk.json",
+      "bytes": 1315,
+      "sha256": "e4a897e44b1875dbd447f7219982c1ba5cdb173e07cb3eeaae6c87d11be8db46"
+    },
+    {
+      "name": "interfaces__kits__syscap__BUILD.gn",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/08addb7868567eed729072efa93b59380366cf22/interfaces/kits/syscap/BUILD.gn",
+      "bytes": 945,
+      "sha256": "2029c1bc7d64508a0d5783000ee586474a0736b73adf5e8e1f7463bef9d7af15"
+    },
+    {
+      "name": "interfaces__innerkits__syspara__parameter.c",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/08addb7868567eed729072efa93b59380366cf22/interfaces/innerkits/syspara/parameter.c",
+      "bytes": 12560,
+      "sha256": "2719af315a10e8200f8b83c16f0c75c8f3a404b36185d326e035418c29ada3f3"
+    },
+    {
+      "name": "interfaces__innerkits__syspara__sysversion.c",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/08addb7868567eed729072efa93b59380366cf22/interfaces/innerkits/syspara/sysversion.c",
+      "bytes": 2923,
+      "sha256": "0ac83e36c10859dddfe203ac0eb030a3ce7417e61377cbd3392e635bbf96a989"
+    },
+    {
+      "name": "deviceinfo-api.md",
+      "url": "https://raw.githubusercontent.com/openharmony/docs/OpenHarmony-v6.1-Release/zh-cn/application-dev/reference/apis-basic-services-kit/capi-deviceinfo-h.md",
+      "bytes": 10925,
+      "sha256": "7b3c2e428a940e93012a90e126a6d2c5063e5ccc368389da507343048a15cc71"
+    }
+  ]
+}

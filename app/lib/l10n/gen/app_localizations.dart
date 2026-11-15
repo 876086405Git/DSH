@@ -272,6 +272,18 @@ abstract class L10n {
   /// **'需要麦克风权限'**
   String get accessFeatureVoiceNeeds;
 
+  /// No description provided for @accessFeatureAlerts.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复提醒'**
+  String get accessFeatureAlerts;
+
+  /// No description provided for @accessFeatureAlertsNeeds.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要通知权限'**
+  String get accessFeatureAlertsNeeds;
+
   /// No description provided for @accessVoiceModel.
   ///
   /// In zh, this message translates to:
@@ -15488,6 +15500,228 @@ abstract class L10n {
   /// **'没能传到电脑'**
   String get fileUploadFailed;
 
+  /// No description provided for @harmonyUnknownResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'有工具调用没等到结果，可能已经执行，也可能没有。处理之前，这个对话不能再调用工具。'**
+  String get harmonyUnknownResults;
+
+  /// No description provided for @harmonyUnknownResultsReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理'**
+  String get harmonyUnknownResultsReview;
+
+  /// No description provided for @harmonyUnknownResultsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'这些工具调用的结果未知'**
+  String get harmonyUnknownResultsTitle;
+
+  /// No description provided for @harmonyUnknownResultsBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'{tools}\n\n应用在等结果时中断了，它们可能已经执行，也可能没有。可以先看看实际情况，比如文件改了没有。\n\n继续之后，这些调用不会重新运行，记录也不会改成成功。'**
+  String harmonyUnknownResultsBody(String tools);
+
+  /// No description provided for @harmonyUnknownResultsContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续这个对话'**
+  String get harmonyUnknownResultsContinue;
+
+  /// No description provided for @harmonyUnknownResultsChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'情况变了，请再看一遍。'**
+  String get harmonyUnknownResultsChanged;
+
+  /// No description provided for @harmonyUnknownResultsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有确认成功，请再试一次。'**
+  String get harmonyUnknownResultsFailed;
+
+  /// No description provided for @harmonyCallsNotRecorded.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机引擎记不下工具调用的状态，工具调用已暂停。重启引擎后再试。'**
+  String get harmonyCallsNotRecorded;
+
+  /// No description provided for @harmonyAccessSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'各项功能用到的系统权限'**
+  String get harmonyAccessSubtitle;
+
+  /// No description provided for @harmonyNotifyWhy.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用在运行时，回复跑完、需要确认会提醒你'**
+  String get harmonyNotifyWhy;
+
+  /// No description provided for @harmonyKwSystemAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'权限一览,授权,麦克风,通知权限,回复提醒,语音输入,补开权限'**
+  String get harmonyKwSystemAccess;
+
+  /// No description provided for @harmonyBackgroundSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用离开屏幕后，本机的对话会暂停'**
+  String get harmonyBackgroundSubtitle;
+
+  /// No description provided for @harmonyBackgroundAway.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开屏幕后'**
+  String get harmonyBackgroundAway;
+
+  /// No description provided for @harmonyBackgroundLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统几秒内就会挂起应用，正在跑的对话跟着暂停，回到应用后会尽量接着跑'**
+  String get harmonyBackgroundLocal;
+
+  /// No description provided for @harmonyBackgroundRemoteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接的远程主机'**
+  String get harmonyBackgroundRemoteTitle;
+
+  /// No description provided for @harmonyBackgroundRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'上面的回复继续跑，不受影响'**
+  String get harmonyBackgroundRemote;
+
+  /// No description provided for @harmonyBackgroundLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'长任务'**
+  String get harmonyBackgroundLong;
+
+  /// No description provided for @harmonyBackgroundStay.
+  ///
+  /// In zh, this message translates to:
+  /// **'把应用留在屏幕上'**
+  String get harmonyBackgroundStay;
+
+  /// No description provided for @harmonyBackgroundUseRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'或者放到已连接的远程主机上跑'**
+  String get harmonyBackgroundUseRemote;
+
+  /// No description provided for @harmonyEngineBackgroundHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开屏幕后本机引擎会暂停'**
+  String get harmonyEngineBackgroundHint;
+
+  /// No description provided for @harmonyKwBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台,保活,挂起,暂停,被杀,杀后台'**
+  String get harmonyKwBackground;
+
+  /// No description provided for @harmonyPausedInBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话在后台暂停过'**
+  String get harmonyPausedInBackground;
+
+  /// No description provided for @harmonyAlertsRequirement.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒要应用在运行才发得出：离开屏幕几秒后系统会挂起应用，挂起期间没有提醒'**
+  String get harmonyAlertsRequirement;
+
+  /// No description provided for @harmonyLiveUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个版本暂时没有实时活动'**
+  String get harmonyLiveUnavailable;
+
+  /// No description provided for @harmonySchedulesLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机的任务只在应用运行时触发：应用被系统挂起时，到点不会运行'**
+  String get harmonySchedulesLocal;
+
+  /// No description provided for @harmonyPageUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个版本暂时没有这个页面'**
+  String get harmonyPageUnavailable;
+
+  /// No description provided for @harmonyNotificationSettingsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开系统设置。到「设置 → 通知和状态栏 → DSH Go」里开启'**
+  String get harmonyNotificationSettingsFailed;
+
+  /// No description provided for @harmonySearchUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个版本暂时没有这项功能'**
+  String get harmonySearchUnavailable;
+
+  /// No description provided for @harmonyCredentialsSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'密钥'**
+  String get harmonyCredentialsSection;
+
+  /// No description provided for @harmonyCredentialsUnreadable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存的密钥无法读取'**
+  String get harmonyCredentialsUnreadable;
+
+  /// No description provided for @harmonyCredentialsUnreadableHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存的密钥无法读取。到「设置 → 隐私与分享」清除后再试'**
+  String get harmonyCredentialsUnreadableHint;
+
+  /// No description provided for @harmonyCredentialsClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除已保存的密钥'**
+  String get harmonyCredentialsClear;
+
+  /// No description provided for @harmonyCredentialsClearBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试没有用。清除后，App 保存的 API key、DSH Remote 登录、SSH 密码和私钥、论坛登录都会被删除，需要重新填写或登录。已发布的分享链接还在，但这台手机上删不掉了。对话和主机列表会保留。此操作无法撤销。'**
+  String get harmonyCredentialsClearBody;
+
+  /// No description provided for @harmonyCredentialsClearAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除密钥'**
+  String get harmonyCredentialsClearAction;
+
+  /// No description provided for @harmonyCredentialsCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'已清除，请重新填写或登录'**
+  String get harmonyCredentialsCleared;
+
+  /// No description provided for @harmonyCredentialsClearFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能清除，再试一次'**
+  String get harmonyCredentialsClearFailed;
+
+  /// No description provided for @harmonyIconChangeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能更换。使用自定义主题或应用分身时不能换桌面图标'**
+  String get harmonyIconChangeFailed;
+
   /// No description provided for @hostDetailsConnectionType.
   ///
   /// In zh, this message translates to:
@@ -16514,6 +16748,726 @@ abstract class L10n {
   /// **'没有选择，左滑不会打开'**
   String get hubQuickPanelItemsNone;
 
+  /// No description provided for @iosSaveToFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'存到「文件」'**
+  String get iosSaveToFiles;
+
+  /// No description provided for @iosFilesFolderHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件 App 的 DSH Go 文件夹'**
+  String get iosFilesFolderHint;
+
+  /// No description provided for @iosSavingToFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在存到「文件」…'**
+  String get iosSavingToFiles;
+
+  /// No description provided for @iosCommandExportDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'把这个对话的完整记录打包成 ZIP，分享或存到「文件」'**
+  String get iosCommandExportDescription;
+
+  /// No description provided for @iosEnableBanners.
+  ///
+  /// In zh, this message translates to:
+  /// **'横幅不弹时，到系统设置打开「横幅」'**
+  String get iosEnableBanners;
+
+  /// No description provided for @iosNotificationSettingsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开系统设置。到「设置 → DSH Go → 通知」里开启'**
+  String get iosNotificationSettingsFailed;
+
+  /// No description provided for @iosVoiceSystemHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用系统的语音识别'**
+  String get iosVoiceSystemHint;
+
+  /// No description provided for @iosVoiceAllowSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在系统设置里允许语音识别'**
+  String get iosVoiceAllowSystem;
+
+  /// No description provided for @iosPluginsPermissionLocalThirdParty.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件以 DSH 的权限运行：能读写文件、执行命令、读取 API Key，不受工作区沙箱限制。由第三方提供，DSH 官方未审核。'**
+  String get iosPluginsPermissionLocalThirdParty;
+
+  /// No description provided for @iosPluginsPermissionLocalTrusted.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件以 DSH 的权限运行：能读写文件、执行命令、读取 API Key，不受工作区沙箱限制。只装你信任的插件。'**
+  String get iosPluginsPermissionLocalTrusted;
+
+  /// No description provided for @iosIconChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'桌面图标已更换'**
+  String get iosIconChanged;
+
+  /// No description provided for @iosPhotosDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有相册权限，未能保存'**
+  String get iosPhotosDenied;
+
+  /// No description provided for @iosRelocationOriginUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现旧对话，但找不到它们原来的位置。原数据都还在，这些对话暂时不能继续。'**
+  String get iosRelocationOriginUnavailable;
+
+  /// No description provided for @iosRelocationSessionIsolated.
+  ///
+  /// In zh, this message translates to:
+  /// **'有些对话没能迁移，已经单独保留。原文件和原因都还在，可以在诊断里导出后反馈。'**
+  String get iosRelocationSessionIsolated;
+
+  /// No description provided for @iosAccessSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'各项功能用到的系统权限'**
+  String get iosAccessSubtitle;
+
+  /// No description provided for @iosLinuxTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Linux 环境'**
+  String get iosLinuxTitle;
+
+  /// No description provided for @iosLinuxIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'装好并重启本机引擎后，普通命令会在 Linux 里运行。Python 等软件需用 apk 另装；修改 Linux 系统仍需本次审批。App 文件只开放工作区和临时目录。'**
+  String get iosLinuxIntro;
+
+  /// No description provided for @iosLinuxInstall.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装 Linux 环境'**
+  String get iosLinuxInstall;
+
+  /// No description provided for @iosLinuxDownloadSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'约 4 MB'**
+  String get iosLinuxDownloadSize;
+
+  /// No description provided for @iosLinuxDownloading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在下载'**
+  String get iosLinuxDownloading;
+
+  /// No description provided for @iosLinuxVerifying.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在校验'**
+  String get iosLinuxVerifying;
+
+  /// No description provided for @iosLinuxExtracting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在解压'**
+  String get iosLinuxExtracting;
+
+  /// No description provided for @iosLinuxFinishing.
+  ///
+  /// In zh, this message translates to:
+  /// **'即将完成'**
+  String get iosLinuxFinishing;
+
+  /// No description provided for @iosLinuxSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get iosLinuxSystem;
+
+  /// No description provided for @iosLinuxStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'占用空间'**
+  String get iosLinuxStorage;
+
+  /// No description provided for @iosLinuxUninstall.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载 Linux 环境'**
+  String get iosLinuxUninstall;
+
+  /// No description provided for @iosLinuxUninstallBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'会删除 Linux 环境和在里面装的所有软件。工作区里的文件不受影响。'**
+  String get iosLinuxUninstallBody;
+
+  /// No description provided for @iosLinuxUninstallConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载'**
+  String get iosLinuxUninstallConfirm;
+
+  /// No description provided for @iosLinuxUninstalling.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在卸载…'**
+  String get iosLinuxUninstalling;
+
+  /// No description provided for @iosLinuxRestartEngine.
+  ///
+  /// In zh, this message translates to:
+  /// **'已装好。重启本机引擎后，命令才会用上它。'**
+  String get iosLinuxRestartEngine;
+
+  /// No description provided for @iosLinuxErrorNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载没成功。检查网络后再试一次。'**
+  String get iosLinuxErrorNetwork;
+
+  /// No description provided for @iosLinuxErrorDamaged.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载的文件不完整，已经丢掉了，再试一次。'**
+  String get iosLinuxErrorDamaged;
+
+  /// No description provided for @iosLinuxErrorNoSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机存储空间不够了。'**
+  String get iosLinuxErrorNoSpace;
+
+  /// No description provided for @iosLinuxErrorInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'Linux 环境正在使用，重新打开 App 后才能卸载。'**
+  String get iosLinuxErrorInUse;
+
+  /// No description provided for @iosLinuxErrorOther.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有完成，再试一次。'**
+  String get iosLinuxErrorOther;
+
+  /// No description provided for @iosLinuxState.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get iosLinuxState;
+
+  /// No description provided for @iosLinuxStatePaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get iosLinuxStatePaused;
+
+  /// No description provided for @iosLinuxSuspendedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次 App 退出时，Linux 里还有命令没跑完，App 可能就是因为它闪退的。为免再闪退，Linux 环境先暂停，其他功能照常。想再用就重新启用。'**
+  String get iosLinuxSuspendedBody;
+
+  /// No description provided for @iosLinuxResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新启用 Linux 环境'**
+  String get iosLinuxResume;
+
+  /// No description provided for @iosLinuxResumed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已重新启用。重启本机引擎后，命令才会用上它。'**
+  String get iosLinuxResumed;
+
+  /// No description provided for @iosLinuxErrorBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'Linux 环境还在使用。等命令停下再试，不行就重新打开 App。'**
+  String get iosLinuxErrorBusy;
+
+  /// No description provided for @iosPhoneLinkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机连接'**
+  String get iosPhoneLinkTitle;
+
+  /// No description provided for @iosPhoneLinkIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'用这台 iPhone 自己的开发者服务读屏、点按和输入，不用一直连着电脑。先打开开发者模式，并确认用于本机连接的 LocalDevVPN 已接通。每个任务首次授权一次，最多 30 分钟，可随时暂停。'**
+  String get iosPhoneLinkIntro;
+
+  /// No description provided for @iosPhoneLinkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 iOS 17 或更高版本。'**
+  String get iosPhoneLinkUnavailable;
+
+  /// No description provided for @iosPhoneLinkStepPairing.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入配对凭据'**
+  String get iosPhoneLinkStepPairing;
+
+  /// No description provided for @iosPhoneLinkPairingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'用 Mac 或 Windows 电脑生成的远程配对文件（.plist）'**
+  String get iosPhoneLinkPairingHint;
+
+  /// No description provided for @iosPhoneLinkPairingDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'已记住在这台手机上'**
+  String get iosPhoneLinkPairingDevice;
+
+  /// No description provided for @iosPhoneLinkPairingSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'只用这一次，退出 App 后清除'**
+  String get iosPhoneLinkPairingSession;
+
+  /// No description provided for @iosPhoneLinkPairingLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机解锁后才能读取保存的凭据'**
+  String get iosPhoneLinkPairingLocked;
+
+  /// No description provided for @iosPhoneLinkPairingUnreadable.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存的凭据读不出来，重新导入一次'**
+  String get iosPhoneLinkPairingUnreadable;
+
+  /// No description provided for @iosPhoneLinkImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入'**
+  String get iosPhoneLinkImport;
+
+  /// No description provided for @iosPhoneLinkReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'更换'**
+  String get iosPhoneLinkReplace;
+
+  /// No description provided for @iosPhoneLinkLegacy.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现旧版本留下的配对文件'**
+  String get iosPhoneLinkLegacy;
+
+  /// No description provided for @iosPhoneLinkLegacyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'迁移时按你选的方式保存，然后删掉旧文件。迁移前不会用它。'**
+  String get iosPhoneLinkLegacyHint;
+
+  /// No description provided for @iosPhoneLinkMigrate.
+  ///
+  /// In zh, this message translates to:
+  /// **'迁移'**
+  String get iosPhoneLinkMigrate;
+
+  /// No description provided for @iosPhoneLinkStepEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开开发者连接'**
+  String get iosPhoneLinkStepEnable;
+
+  /// No description provided for @iosPhoneLinkEnableHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认关闭。关掉会立刻停下正在进行的手机任务。'**
+  String get iosPhoneLinkEnableHint;
+
+  /// No description provided for @iosPhoneLinkStepCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查连接'**
+  String get iosPhoneLinkStepCheck;
+
+  /// No description provided for @iosPhoneLinkCheckHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认 VPN、配对和开发者服务都通'**
+  String get iosPhoneLinkCheckHint;
+
+  /// No description provided for @iosPhoneLinkCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查'**
+  String get iosPhoneLinkCheck;
+
+  /// No description provided for @iosPhoneLinkChecked.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正常'**
+  String get iosPhoneLinkChecked;
+
+  /// No description provided for @iosPhoneLinkReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正常，可读屏和打开应用；点按、滚动和输入需使用 XCTest 增强'**
+  String get iosPhoneLinkReadOnly;
+
+  /// No description provided for @iosPhoneLinkErrorServices.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前开发者服务不支持这条 CoreDevice 连接。已有镜像时重新下载不一定有用；可启用 XCTest 增强，或交还自己操作。'**
+  String get iosPhoneLinkErrorServices;
+
+  /// No description provided for @iosPhoneLinkDdi.
+  ///
+  /// In zh, this message translates to:
+  /// **'开发者镜像'**
+  String get iosPhoneLinkDdi;
+
+  /// No description provided for @iosPhoneLinkDdiHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分功能需要。约 17 MB，来自第三方 DeveloperDiskImage 镜像仓库（不是 Apple 下载站），按固定哈希校验，再由 Apple 为这台手机个性化。'**
+  String get iosPhoneLinkDdiHint;
+
+  /// No description provided for @iosPhoneLinkDdiPrepare.
+  ///
+  /// In zh, this message translates to:
+  /// **'准备'**
+  String get iosPhoneLinkDdiPrepare;
+
+  /// No description provided for @iosPhoneLinkDdiMounted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已挂载'**
+  String get iosPhoneLinkDdiMounted;
+
+  /// No description provided for @iosPhoneLinkWorking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在处理…'**
+  String get iosPhoneLinkWorking;
+
+  /// No description provided for @iosPhoneLinkDownloading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在下载 {done} / {total}'**
+  String iosPhoneLinkDownloading(String done, String total);
+
+  /// No description provided for @iosPhoneLinkClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除配对凭据'**
+  String get iosPhoneLinkClear;
+
+  /// No description provided for @iosPhoneLinkClearHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'同时关掉开发者连接。电脑和「文件」里的原文件需要你自己删。'**
+  String get iosPhoneLinkClearHint;
+
+  /// No description provided for @iosPhoneLinkClearConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除配对凭据？'**
+  String get iosPhoneLinkClearConfirm;
+
+  /// No description provided for @iosPhoneLinkEnhanceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选增强'**
+  String get iosPhoneLinkEnhanceTitle;
+
+  /// No description provided for @iosPhoneLinkXctest.
+  ///
+  /// In zh, this message translates to:
+  /// **'XCTest 增强'**
+  String get iosPhoneLinkXctest;
+
+  /// No description provided for @iosPhoneLinkXctestHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要另外安装并签名 PhoneRunner，能读取界面元素。部分 App 可能要求重新登录或拒绝使用。不开时用本机连接。'**
+  String get iosPhoneLinkXctestHint;
+
+  /// No description provided for @iosPhoneLinkClipboardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'回到 App 恢复原剪贴板'**
+  String get iosPhoneLinkClipboardTitle;
+
+  /// No description provided for @iosPhoneLinkClipboardHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入时临时借用了剪贴板。先核对目标 App 已经完成或取消粘贴，再恢复。'**
+  String get iosPhoneLinkClipboardHint;
+
+  /// No description provided for @iosPhoneLinkClipboardRestore.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复'**
+  String get iosPhoneLinkClipboardRestore;
+
+  /// No description provided for @iosPhoneLinkClipboardOverwrite.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍要恢复，覆盖现在的剪贴板'**
+  String get iosPhoneLinkClipboardOverwrite;
+
+  /// No description provided for @iosPhoneLinkClipboardDiscard.
+  ///
+  /// In zh, this message translates to:
+  /// **'丢弃保存的旧剪贴板'**
+  String get iosPhoneLinkClipboardDiscard;
+
+  /// No description provided for @iosPhoneLinkErrorBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接设置仍在处理另一项准备。回到「本机连接」点取消，确认 LocalDevVPN 已接通后再检查。'**
+  String get iosPhoneLinkErrorBusy;
+
+  /// No description provided for @iosPhoneLinkErrorForeground.
+  ///
+  /// In zh, this message translates to:
+  /// **'要在 App 打开、手机解锁时操作。'**
+  String get iosPhoneLinkErrorForeground;
+
+  /// No description provided for @iosPhoneLinkErrorPairingInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个文件不是可用的远程配对凭据。'**
+  String get iosPhoneLinkErrorPairingInvalid;
+
+  /// No description provided for @iosPhoneLinkErrorStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存没成功。「记住在这台手机上」需要手机设了解锁密码。'**
+  String get iosPhoneLinkErrorStorage;
+
+  /// No description provided for @iosPhoneLinkErrorPairingRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'先导入配对凭据。'**
+  String get iosPhoneLinkErrorPairingRequired;
+
+  /// No description provided for @iosPhoneLinkErrorTunnel.
+  ///
+  /// In zh, this message translates to:
+  /// **'连不上本机服务。先确认用于本机连接的 LocalDevVPN 已接通、开发者模式已打开，再检查连接。'**
+  String get iosPhoneLinkErrorTunnel;
+
+  /// No description provided for @iosSpeechCallEndNoRecognizer.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音通话需要能识别录音的方式：登录 DeepSeek 账号、填写 API Key，或配置其他可用的云端识别。iOS 暂不提供本地语音模型下载。'**
+  String get iosSpeechCallEndNoRecognizer;
+
+  /// No description provided for @iosSpeechCallEndNoRecognizerSignedIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前连接不能用已登录账号识别通话录音（例如经 DSH Remote 中继）；请填写 DeepSeek API Key 或配置其他可用的云端识别。iOS 暂不提供本地语音模型下载。'**
+  String get iosSpeechCallEndNoRecognizerSignedIn;
+
+  /// No description provided for @iosPhoneLinkErrorPairingRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机不认这份配对凭据。重新生成一份再导入。'**
+  String get iosPhoneLinkErrorPairingRejected;
+
+  /// No description provided for @iosPhoneLinkErrorDdiNeeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要先准备开发者镜像。'**
+  String get iosPhoneLinkErrorDdiNeeded;
+
+  /// No description provided for @iosPhoneLinkErrorDdiDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'镜像下载没成功。检查网络后再试。'**
+  String get iosPhoneLinkErrorDdiDownload;
+
+  /// No description provided for @iosPhoneLinkErrorDdiIntegrity.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载的镜像没通过校验，已经丢掉了。'**
+  String get iosPhoneLinkErrorDdiIntegrity;
+
+  /// No description provided for @iosPhoneLinkErrorDdiUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有适合这台手机型号或系统版本的镜像。'**
+  String get iosPhoneLinkErrorDdiUnsupported;
+
+  /// No description provided for @iosPhoneLinkErrorDdiMount.
+  ///
+  /// In zh, this message translates to:
+  /// **'挂载没成功。已经在用的其他镜像不会被替换。'**
+  String get iosPhoneLinkErrorDdiMount;
+
+  /// No description provided for @iosPhoneLinkErrorClipboardChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'之后又复制过别的内容，所以没有恢复。'**
+  String get iosPhoneLinkErrorClipboardChanged;
+
+  /// No description provided for @iosPhoneLinkFaulted.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一次连接没能确认已经关掉'**
+  String get iosPhoneLinkFaulted;
+
+  /// No description provided for @iosPhoneLinkFaultedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'为了不让两条连接同时操作手机，先不再连接。如果上一次连接稍后确认关掉了，这里会自动恢复；一直没恢复的话，在后台彻底关掉 App 再重新打开。'**
+  String get iosPhoneLinkFaultedHint;
+
+  /// No description provided for @iosPhoneLinkErrorOther.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有完成（{code}）。'**
+  String iosPhoneLinkErrorOther(String code);
+
+  /// No description provided for @iosPetPipTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'宠物画中画'**
+  String get iosPetPipTitle;
+
+  /// No description provided for @iosPetPipHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选的宠物小窗，可以辅助后台运行。手机操控使用系统持续任务，不需要先开启画中画或选择宠物。'**
+  String get iosPetPipHint;
+
+  /// No description provided for @iosPetPipRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选，默认关闭'**
+  String get iosPetPipRequired;
+
+  /// No description provided for @iosPetPipReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已就绪，手机任务开始时出现'**
+  String get iosPetPipReady;
+
+  /// No description provided for @iosPetPipKeepingAlive.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在让 App 在后台继续运行'**
+  String get iosPetPipKeepingAlive;
+
+  /// No description provided for @iosPetPipAlways.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务结束后也留着'**
+  String get iosPetPipAlways;
+
+  /// No description provided for @iosPetPipStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始画中画'**
+  String get iosPetPipStart;
+
+  /// No description provided for @iosPetPipStartHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'画中画没有自己出现时，点这里打开'**
+  String get iosPetPipStartHint;
+
+  /// No description provided for @iosPetPipPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机任务在画中画里暂停了'**
+  String get iosPetPipPaused;
+
+  /// No description provided for @iosPetPipReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续或停止'**
+  String get iosPetPipReview;
+
+  /// No description provided for @iosPetPipResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复'**
+  String get iosPetPipResume;
+
+  /// No description provided for @iosPetPipChoosePet.
+  ///
+  /// In zh, this message translates to:
+  /// **'选宠物'**
+  String get iosPetPipChoosePet;
+
+  /// No description provided for @iosPetPipErrorNoPet.
+  ///
+  /// In zh, this message translates to:
+  /// **'先选一只宠物'**
+  String get iosPetPipErrorNoPet;
+
+  /// No description provided for @iosPetPipErrorUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台手机不支持画中画'**
+  String get iosPetPipErrorUnsupported;
+
+  /// No description provided for @iosPetPipErrorLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'锁屏时画中画停了'**
+  String get iosPetPipErrorLocked;
+
+  /// No description provided for @iosPetPipErrorAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音、通话或别的声音占用时，画中画停了'**
+  String get iosPetPipErrorAudio;
+
+  /// No description provided for @iosPetPipErrorPack.
+  ///
+  /// In zh, this message translates to:
+  /// **'这只宠物的素材有问题，换一只试试'**
+  String get iosPetPipErrorPack;
+
+  /// No description provided for @iosPetPipErrorStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'画中画没能打开'**
+  String get iosPetPipErrorStart;
+
+  /// No description provided for @iosPetPipErrorClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'画中画被关掉了'**
+  String get iosPetPipErrorClosed;
+
+  /// No description provided for @iosPetPipErrorOther.
+  ///
+  /// In zh, this message translates to:
+  /// **'画中画停了（{code}）'**
+  String iosPetPipErrorOther(String code);
+
+  /// No description provided for @iosPetPipChoosePetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在宠物设置里选一只'**
+  String get iosPetPipChoosePetHint;
+
+  /// No description provided for @iosPetPipReopen.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新准备画中画'**
+  String get iosPetPipReopen;
+
   /// No description provided for @launchScreenTitle.
   ///
   /// In zh, this message translates to:
@@ -16952,6 +17906,18 @@ abstract class L10n {
   /// **'连接电脑或服务器上的 DSH'**
   String get localEnvRemoteDetail;
 
+  /// No description provided for @localEnvUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台设备暂时不能在本机运行 DSH'**
+  String get localEnvUnavailable;
+
+  /// No description provided for @localEnvUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂不支持'**
+  String get localEnvUnsupported;
+
   /// No description provided for @localEnvRecommended.
   ///
   /// In zh, this message translates to:
@@ -17047,6 +18013,84 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'安装后即可登录'**
   String get localEnvSignInInstallFirst;
+
+  /// No description provided for @engineStartReopensApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎每次打开 App 只能启动一次，再启动会重新打开 App。'**
+  String get engineStartReopensApp;
+
+  /// No description provided for @engineReopenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎要重新打开 App 才能再启动，请手动重开一次。'**
+  String get engineReopenFailed;
+
+  /// No description provided for @engineCapShell.
+  ///
+  /// In zh, this message translates to:
+  /// **'命令行'**
+  String get engineCapShell;
+
+  /// No description provided for @engineCapShellBuiltin.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置 {count} 个命令'**
+  String engineCapShellBuiltin(int count);
+
+  /// No description provided for @engineCapShellSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get engineCapShellSystem;
+
+  /// No description provided for @engineCapNodeScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'Node 脚本'**
+  String get engineCapNodeScripts;
+
+  /// No description provided for @engineCapMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装市场插件'**
+  String get engineCapMarket;
+
+  /// No description provided for @engineCapBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'切到后台时'**
+  String get engineCapBackground;
+
+  /// No description provided for @engineCapMayFreeze.
+  ///
+  /// In zh, this message translates to:
+  /// **'可能被系统暂停'**
+  String get engineCapMayFreeze;
+
+  /// No description provided for @engineCapKeepsRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续运行'**
+  String get engineCapKeepsRunning;
+
+  /// No description provided for @engineCapYes.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以'**
+  String get engineCapYes;
+
+  /// No description provided for @engineCapNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'不可用'**
+  String get engineCapNone;
+
+  /// No description provided for @marketInstallRefused.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个引擎不能安装市场插件'**
+  String get marketInstallRefused;
 
   /// No description provided for @marketSectionOfficial.
   ///
@@ -18325,6 +19369,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'无法在 App 内播放此视频，请重试或使用其他应用打开。'**
   String get mediaVideoCannotPlay;
+
+  /// No description provided for @mediaVideoUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'此版本暂不支持在 App 内播放视频，可保存到相册或在其他应用中打开。'**
+  String get mediaVideoUnsupported;
 
   /// No description provided for @mediaVideoPlay.
   ///
@@ -21938,6 +22988,36 @@ abstract class L10n {
   /// **'路线消息未确认发送成功；没有自动重新准备或重放。请核对原对话结果。'**
   String get phoneSkillReplaySendUncertain;
 
+  /// No description provided for @phoneIosServiceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'iOS 自动化服务'**
+  String get phoneIosServiceTitle;
+
+  /// No description provided for @phoneIosServiceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权后按需启动。任务结束会停止服务，系统的“Automation Running”提示也会结束。'**
+  String get phoneIosServiceHint;
+
+  /// No description provided for @phoneIosSetupHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持 LocalDevVPN 已连接，首次使用时允许 30 分钟操控。'**
+  String get phoneIosSetupHint;
+
+  /// No description provided for @phoneIosReturnHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务完成后回到当前对话，并停止手机操控服务。'**
+  String get phoneIosReturnHint;
+
+  /// No description provided for @phoneIosNeedsSetup.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行器尚未就绪，请确认本机引擎和开发者环境已配置。'**
+  String get phoneIosNeedsSetup;
+
   /// No description provided for @phoneTaskResultReady.
   ///
   /// In zh, this message translates to:
@@ -22076,6 +23156,36 @@ abstract class L10n {
   /// **'root 管理器（Magisk、KernelSU 或 APatch）会弹窗问你。允许后，DSH Go 以 root 运行自己的后台服务；只有打开「保持 root 通道」，断开或重启后才会自己再去申请。'**
   String get phonePrivilegedRootRiskBody;
 
+  /// No description provided for @phoneGateCleanupTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'探针清理尚未确认'**
+  String get phoneGateCleanupTitle;
+
+  /// No description provided for @phoneGateCleanupUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'新后台资源已被阻止。原通道仍可用时，只能重试原清理，不会重跑探针。'**
+  String get phoneGateCleanupUnknown;
+
+  /// No description provided for @phoneGateCleanupRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在等待原探针及清理完成；清理确认前保留原通道。'**
+  String get phoneGateCleanupRunning;
+
+  /// No description provided for @phoneGateCleanupRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅重试清理'**
+  String get phoneGateCleanupRetry;
+
+  /// No description provided for @phoneGateCleanupDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'清理已确认。请再次明确选择通道，重新检查。'**
+  String get phoneGateCleanupDone;
+
   /// No description provided for @phoneKeepTitle.
   ///
   /// In zh, this message translates to:
@@ -22141,6 +23251,36 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'没连上；下次打开 App 或开始操控时再试'**
   String get phoneKeepFailed;
+
+  /// No description provided for @phoneResourceRecoveryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台资源待核验'**
+  String get phoneResourceRecoveryTitle;
+
+  /// No description provided for @phoneResourceRecoveryRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在核对原资源记录，完成前不能开始新的手机任务。'**
+  String get phoneResourceRecoveryRunning;
+
+  /// No description provided for @phoneResourceRecoveryStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取或保存资源记录。可重试保存或读取；已确认的释放不会重复执行，也不会重放旧操作。'**
+  String get phoneResourceRecoveryStorage;
+
+  /// No description provided for @phoneResourceRecoveryPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧后台资源尚未核验，新的手机任务暂被阻止。请选择原授权通道后重试；仍无法核验时，可重启设备后再次检查。旧操作结果可能已经发生。确认任务中断提示不会清除这些资源。'**
+  String get phoneResourceRecoveryPending;
+
+  /// No description provided for @phoneResourceRecoveryRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试资源核验'**
+  String get phoneResourceRecoveryRetry;
 
   /// No description provided for @phoneSkillSectionTitle.
   ///
@@ -27955,6 +29095,18 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'只保存在这台手机上，由 Android Keystore 加密。支持 Ed25519、RSA、ECDSA'**
   String get remoteKeyStorageHelp;
+
+  /// No description provided for @remotePasswordStorageHelpIos.
+  ///
+  /// In zh, this message translates to:
+  /// **'只保存在这台手机上，由系统钥匙串加密'**
+  String get remotePasswordStorageHelpIos;
+
+  /// No description provided for @remoteKeyStorageHelpIos.
+  ///
+  /// In zh, this message translates to:
+  /// **'只保存在这台手机上，由系统钥匙串加密。支持 Ed25519、RSA、ECDSA'**
+  String get remoteKeyStorageHelpIos;
 
   /// No description provided for @remotePrivateKey.
   ///

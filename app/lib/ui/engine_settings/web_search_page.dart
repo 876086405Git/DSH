@@ -109,7 +109,7 @@ class _ApiSwitch extends ConsumerWidget {
         badge: layer == FieldLayer.user && enabled ? modifiedBadge : null,
         enabled: enabled,
         onTap: enabled ? () => toggle(!api) : null,
-        trailing: Switch(value: api, onChanged: enabled ? toggle : null),
+        trailing: Switch.adaptive(value: api, onChanged: enabled ? toggle : null),
       ),
     );
   }

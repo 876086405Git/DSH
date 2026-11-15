@@ -266,7 +266,7 @@ class SettingsSwitchTile extends StatelessWidget {
         tint: tint,
         tinted: tinted,
         onTap: onChanged == null ? null : () => change(!value),
-        trailing: Switch(value: value, onChanged: onChanged == null ? null : change),
+        trailing: Switch.adaptive(value: value, onChanged: onChanged == null ? null : change),
       ),
     );
   }

@@ -25,6 +25,7 @@ class EngineStatusView {
 
   factory EngineStatusView.of(LocalRuntimeState state) {
     final status = state.status;
+    if (!state.available) return EngineStatusView(StatusTone.idle, appL10n.localEnvUnsupported);
     final startupFailure = isLocalStartupFailure(status);
     return switch (status.phase) {
       RuntimePhase.notInstalled => EngineStatusView(StatusTone.idle, appL10n.phoneEngineNotInstalled),

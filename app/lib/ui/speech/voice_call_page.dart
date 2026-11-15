@@ -332,9 +332,13 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
           CallEnd.permission => l10n.speechCallEndPermission,
           CallEnd.microphone => l10n.speechCallEndMicrophone,
           CallEnd.noRecognizer =>
-            ref.read(accountProvider).signedIn
-                ? l10n.speechCallEndNoRecognizerSignedIn
-                : l10n.speechCallEndNoRecognizer,
+            wordsForIos
+                ? (ref.read(accountProvider).signedIn
+                      ? l10n.iosSpeechCallEndNoRecognizerSignedIn
+                      : l10n.iosSpeechCallEndNoRecognizer)
+                : (ref.read(accountProvider).signedIn
+                      ? l10n.speechCallEndNoRecognizerSignedIn
+                      : l10n.speechCallEndNoRecognizer),
           CallEnd.background => l10n.speechCallEndBackground,
           CallEnd.failed => l10n.speechCallEndFailed,
           CallEnd.hungUp || null => l10n.speechCallEnded,

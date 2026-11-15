@@ -1,0 +1,33 @@
+# OH-only: retain direct body timeout classification, rc.1 catch-block contexts.
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+@@ -173,7 +173,13 @@
+         }
+         catch (error) {
+             output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+-            const errorMessage = formatProviderError(normalizeProviderError(error), `${model.provider === "openai" ? "OpenAI" : model.provider} API error`);
++            const normalizedError = normalizeProviderError(error);
++            let errorMessage = formatProviderError(normalizedError, `${model.provider === "openai" ? "OpenAI" : model.provider} API error`);
++            // OH-only composition: preserve the proven direct body timeout.
++            if (output.stopReason === "error" && error instanceof TypeError && error.message === "terminated" &&
++                error.cause?.code === "UND_ERR_BODY_TIMEOUT" && normalizedError.status === undefined && normalizedError.body === undefined) {
++                errorMessage += " (HTTP response body timeout)";
++            }
+             // Sign in with ChatGPT shares the subscription's usage limit with other apps.
+             // On ChatGPT Business plans, the workspace admin also sets a per-user limit.
+             if (errorMessage.includes("subscription_sharing_usage_limit_exceeded")) {
+--- a/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+@@ -702,6 +702,12 @@
+         catch (error) {
+             output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+             output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
++            // OH-only composition: do not discard the proven direct body timeout.
++            if (output.stopReason === "error" && error instanceof TypeError && error.message === "terminated" &&
++                error.cause?.code === "UND_ERR_BODY_TIMEOUT" && error.status === undefined && error.statusCode === undefined &&
++                error.body === undefined && error.error === undefined) {
++                output.errorMessage += " (HTTP response body timeout)";
++            }
+             stream.push({ type: "error", reason: output.stopReason, error: output });
+             stream.end();
+         }

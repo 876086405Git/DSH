@@ -104,7 +104,12 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     // phone, first run) the look and what DSH Go should do, then the
     // connection.
     final steps = widget.chooseRuntime || widget.beside
-        ? const [OnboardingStep.runtime, OnboardingStep.appearance, OnboardingStep.access, OnboardingStep.apiKey]
+        ? const [
+            OnboardingStep.runtime,
+            OnboardingStep.appearance,
+            OnboardingStep.access,
+            OnboardingStep.apiKey,
+          ]
         : const [OnboardingStep.runtime, OnboardingStep.apiKey];
     final index = steps.indexOf(step);
     return OnboardingSwitcher(

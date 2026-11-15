@@ -1,0 +1,25 @@
+# OHOS-only: bind grep/glob to the immutable Session workspace root.
+--- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+@@ -169,12 +169,16 @@
+ 	const workdir = exec.agent === void 0 ? process.cwd() : await ctx.workingDirectory.ensure(exec.agent, exec.signal);
+ 	let handle;
+ 	try {
++		let command = [await resolveRgPath(), "--no-config", ...argv];
++		if (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) {
++			// The mutable current directory does not grant another Session's roots.
++			const workspaceRoot = exec.agent === void 0 ? workdir : exec.agent.session?.header?.cwd;
++			if (typeof workspaceRoot !== "string" || !isAbsolute(workspaceRoot)) throw Object.assign(new Error("EACCES: OHOS_SANDBOX_DENIED: 搜索缺少明确的会话工作区根"), { code: "EACCES" });
++			if (typeof ctx.subprocess.prepare !== "function") throw Object.assign(new Error("鸿蒙搜索需要提供受限执行票据的 subprocess 后端"), { code: "ERR_OHOS_CONFINEMENT_UNAVAILABLE" });
++			command = await ctx.subprocess.prepare(command, { mode: "read-only", workspaceRoot }, exec.signal);
++		}
+ 		handle = ctx.subprocess.spawn({
+-			argv: [
+-				await resolveRgPath(),
+-				"--no-config",
+-				...argv
+-			],
++			argv: command,
+ 			cwd: workdir,
+ 			stdio: {
+ 				stdin: "ignore",

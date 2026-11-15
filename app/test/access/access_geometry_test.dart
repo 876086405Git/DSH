@@ -108,7 +108,7 @@ void main() {
           scale: scale,
         );
         final card = tester.getRect(find.byKey(const ValueKey('access-pick-card')));
-        for (final feature in AccessFeature.values) {
+        for (final feature in accessFeaturesFor('android')) {
           final row = find.byKey(ValueKey('access-feature-${feature.name}'));
           final rowRect = tester.getRect(row);
           final icon = tester.getRect(find.descendant(of: row, matching: find.byType(SettingsLineIcon)));

@@ -5,6 +5,8 @@
   "localEnvThisPhoneDetailShort": "{memory} MB memory while running",
   "localEnvLowStorage": "Needs about {needed} MB free",
   "localEnvRemoteDetail": "Use DSH on your computer or server",
+  "localEnvUnavailable": "DSH can't run on this device yet",
+  "localEnvUnsupported": "Not supported",
   "localEnvRecommended": "Recommended",
   "localEnvInstallTitle": "Install on this phone",
   "localEnvInstallMessage": "Run DSH right on this phone",
@@ -20,5 +22,18 @@
   "localEnvUninstallFailed": "Couldn’t uninstall. Try again.",
   "localEnvPhoneNeedsRuntime": "Available after installing on this phone",
   "localEnvSignInNeedsRuntime": "Needs DSH on this phone",
-  "localEnvSignInInstallFirst": "Install it to sign in"
+  "localEnvSignInInstallFirst": "Install it to sign in",
+  "engineStartReopensApp": "The engine starts once each time the app opens, so starting it again reopens the app.",
+  "engineReopenFailed": "The engine needs the app reopened before it can start again. Please reopen it.",
+  "engineCapShell": "Command line",
+  "engineCapShellBuiltin": "{count} built-in commands",
+  "engineCapShellSystem": "System",
+  "engineCapNodeScripts": "Node scripts",
+  "engineCapMarket": "Market plugins",
+  "engineCapBackground": "In the background",
+  "engineCapMayFreeze": "May be paused by the system",
+  "engineCapKeepsRunning": "Keeps running",
+  "engineCapYes": "Available",
+  "engineCapNone": "Unavailable",
+  "marketInstallRefused": "This engine can't install market plugins"
 }

@@ -55,6 +55,7 @@ class _Video extends MediaVideoChannel {
   int position = 0;
   bool playing = false;
   bool failOpen = false;
+  String failCode = 'failed';
   Completer<MediaVideoHandle>? delayedOpen;
   @override
   Future<Uint8List?> poster(String path) async {
@@ -65,7 +66,7 @@ class _Video extends MediaVideoChannel {
   @override
   Future<MediaVideoHandle> open(String path) async {
     opens++;
-    if (failOpen) throw PlatformException(code: 'unsupported');
+    if (failOpen) throw PlatformException(code: failCode);
     return delayedOpen == null ? _handle : delayedOpen!.future;
   }
 
@@ -115,6 +116,15 @@ Future<void> _pumpViewer(WidgetTester tester, _Files files, _Video video) async 
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('missing native video decoder is reported as unsupported', () async {
+    const video = MediaVideoChannel(MethodChannel('dsh/test-unregistered-video'));
+    await expectLater(
+      video.open('/phone/movie.mp4'),
+      throwsA(isA<PlatformException>().having((e) => e.code, 'code', 'unsupported')),
+    );
+    expect(await video.poster('/phone/movie.mp4'), isNull);
+  });
 
   test('channel rejects URL and relative paths without platform invocation', () async {
     const video = MediaVideoChannel();
@@ -261,14 +271,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('unsupported playback can retry or open original Host externally', (tester) async {
+  testWidgets('unsupported native playback offers saving or opening elsewhere without a futile retry', (tester) async {
+    final files = _Files();
+    final video = _Video()
+      ..failOpen = true
+      ..failCode = 'unsupported';
+    await _pumpViewer(tester, files, video);
+    expect(find.text(appL10n.mediaVideoUnsupported), findsOneWidget);
+    expect(find.text(appL10n.commonRetry), findsNothing);
+    await tester.tap(find.text(appL10n.mediaOpenElsewhere));
+    await tester.pump();
+    expect(files.external, 1);
+  });
+
+  testWidgets('temporary playback failure can retry', (tester) async {
     final files = _Files();
     final video = _Video()..failOpen = true;
     await _pumpViewer(tester, files, video);
     expect(find.text(appL10n.mediaVideoCannotPlay), findsOneWidget);
-    await tester.tap(find.text(appL10n.mediaOpenElsewhere));
-    await tester.pump();
-    expect(files.external, 1);
     video.failOpen = false;
     await tester.tap(find.text(appL10n.commonRetry));
     await tester.pump();

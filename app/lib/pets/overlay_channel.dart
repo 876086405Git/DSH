@@ -48,6 +48,13 @@ class PetOverlayStatus {
     this.sdk = 0,
     this.manufacturer = '',
     this.refused = false,
+    this.ios = false,
+    this.usable = false,
+    this.keepingAlive = false,
+    this.pipActive = false,
+    this.phoneTaskActive = false,
+    this.taskPaused = false,
+    this.errorCode,
     this.companionRendering = false,
     this.companionFallback = false,
     this.companionProblem,
@@ -64,6 +71,13 @@ class PetOverlayStatus {
     showing: m['showing'] == true,
     sdk: (m['sdk'] as num?)?.toInt() ?? 0,
     manufacturer: m['manufacturer'] is String ? m['manufacturer']! as String : '',
+    ios: m['platform'] == 'ios',
+    usable: m['usable'] == true,
+    keepingAlive: m['keepingAlive'] == true,
+    pipActive: m['active'] == true,
+    phoneTaskActive: m['phoneTaskActive'] == true,
+    taskPaused: m['paused'] == true || m['needsStopConfirmation'] == true,
+    errorCode: m['errorCode'] is String ? m['errorCode']! as String : null,
     companionRendering: m['companionRendering'] == true,
     companionFallback: m['companionFallback'] == true,
     companionProblem: m['companionProblem'] is String ? m['companionProblem'] as String : null,
@@ -97,6 +111,26 @@ class PetOverlayStatus {
   final bool companionFallback;
   final String? companionProblem;
 
+  // iOS: the pet in picture-in-picture, which keeps phone control alive in the background
+  // (tooling/ios/pet-overlay-tests/README.md). Android sends none of these.
+
+  /// The native side is the iOS picture-in-picture one.
+  final bool ios;
+
+  /// Switched on, supported, a valid pet chosen, not stopped by an error: phone control may run.
+  final bool usable;
+
+  /// Picture-in-picture is actually showing and holding the app up right now.
+  final bool keepingAlive;
+  final bool pipActive;
+  final bool phoneTaskActive;
+
+  /// The phone task was paused from picture-in-picture and waits for 继续 or 停止 in the app.
+  final bool taskPaused;
+
+  /// Why it stopped (`overlay_...`), or null.
+  final String? errorCode;
+
   PetOverlayStatus copyWith({bool? refused}) => PetOverlayStatus(
     native: native,
     enabled: enabled,
@@ -107,6 +141,13 @@ class PetOverlayStatus {
     sdk: sdk,
     manufacturer: manufacturer,
     refused: refused ?? this.refused,
+    ios: ios,
+    usable: usable,
+    keepingAlive: keepingAlive,
+    pipActive: pipActive,
+    phoneTaskActive: phoneTaskActive,
+    taskPaused: taskPaused,
+    errorCode: errorCode,
     companionRendering: companionRendering,
     companionFallback: companionFallback,
     companionProblem: companionProblem,
@@ -126,15 +167,40 @@ class PetOverlayStatus {
       other.showing == showing &&
       other.sdk == sdk &&
       other.manufacturer == manufacturer &&
+      other.refused == refused &&
+      other.ios == ios &&
+      other.usable == usable &&
+      other.keepingAlive == keepingAlive &&
+      other.pipActive == pipActive &&
+      other.phoneTaskActive == phoneTaskActive &&
+      other.taskPaused == taskPaused &&
+      other.errorCode == errorCode &&
       other.companionRendering == companionRendering &&
       other.companionFallback == companionFallback &&
-      other.companionProblem == companionProblem &&
-      other.refused == refused;
+      other.companionProblem == companionProblem;
 
   @override
-  int get hashCode =>
-      Object.hash(native, enabled, alwaysShow, permission, snoozed, showing, sdk, manufacturer,
-          refused, companionRendering, companionFallback, companionProblem);
+  int get hashCode => Object.hash(
+    native,
+    enabled,
+    alwaysShow,
+    permission,
+    snoozed,
+    showing,
+    sdk,
+    manufacturer,
+    refused,
+    ios,
+    usable,
+    keepingAlive,
+    pipActive,
+    phoneTaskActive,
+    taskPaused,
+    errorCode,
+    companionRendering,
+    companionFallback,
+    companionProblem,
+  );
 
   @override
   String toString() =>
@@ -188,10 +254,7 @@ class PetOverlayChannel {
   /// native WebView might still read it. Unlike optional pixel pushes, this
   /// call propagates an unavailable/failed native endpoint to its owner.
   Future<PetOverlayStatus> configureCompanion({Uri? page, String? notice}) async {
-    final raw = await channel.invokeMethod<Object?>('configureCompanion', {
-      'url': page?.toString(),
-      'notice': notice,
-    });
+    final raw = await channel.invokeMethod<Object?>('configureCompanion', {'url': page?.toString(), 'notice': notice});
     if (raw is! Map) throw PlatformException(code: 'companion_native_unavailable');
     return PetOverlayStatus.fromMap(raw);
   }
@@ -212,6 +275,23 @@ class PetOverlayChannel {
 
   /// Opens the app's system info page (restricted settings, vendor switches).
   Future<bool> openAppDetails() => _bool('openAppDetails');
+
+  /// iOS: a switch or step whose native confirmation may be refused (app in the background,
+  /// another dialog up). Then the status is read again rather than taken as no native side.
+  Future<PetOverlayStatus> iosStep(String method, [Map<String, Object?>? args]) async {
+    try {
+      final raw = await channel.invokeMethod<Object?>(method, args);
+      if (raw is Map) return PetOverlayStatus.fromMap(raw);
+    } on MissingPluginException {
+      return const PetOverlayStatus.unavailable();
+    } on PlatformException {
+      // Not done; what is true now follows.
+    }
+    return status();
+  }
+
+  /// iOS: starts picture-in-picture now. Only from the person's own tap in the app.
+  Future<bool> startPictureInPicture() => _bool('startPictureInPicture');
 
   /// The native status whenever it changes (switched from the pet's menu,
   /// a permission found out, the pet shown or gone).
@@ -355,4 +435,20 @@ class PetOverlayController extends Notifier<PetOverlayStatus> {
   }
 
   Future<bool> openAppDetails() => _channel.openAppDetails();
+
+  /// iOS: on or off (the native side explains and asks before on), and 一直显示.
+  Future<void> iosSetEnabled(bool on) async => _set(await _channel.iosStep('setEnabled', {'enabled': on}));
+
+  Future<void> iosSetAlwaysShow(bool on) async => _set(await _channel.iosStep('setAlwaysShow', {'on': on}));
+
+  /// iOS: back after a stop (system closed it, the phone locked, audio taken over).
+  Future<void> iosResume() async => _set(await _channel.iosStep('unsnooze'));
+
+  /// iOS: the native 继续 / 停止 question for a phone task paused from picture-in-picture.
+  Future<void> iosReviewPausedTask() async => _set(await _channel.iosStep('reviewPausedTask'));
+
+  Future<void> iosStart() async {
+    await _channel.startPictureInPicture();
+    _set(await _channel.status());
+  }
 }

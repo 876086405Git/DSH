@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -300,6 +301,10 @@ class _Line extends StatelessWidget {
   final Duration? elapsed;
   final String? stats;
 
+  // Leave the transition unkeyed so AnimatedSwitcher assigns each fade its own key.
+  // The same activity can return while an older copy is still fading out.
+  static Widget _fade(Widget child, Animation<double> animation) => FadeTransition(opacity: animation, child: child);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -350,6 +355,9 @@ class _Line extends StatelessWidget {
         Expanded(
           child: AnimatedSwitcher(
             duration: AppMotion.of(context, AppMotion.quick),
+            transitionBuilder: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                ? _fade
+                : AnimatedSwitcher.defaultTransitionBuilder,
             layoutBuilder: (current, previous) =>
                 Stack(alignment: Alignment.centerLeft, children: [...previous, ?current]),
             child: Row(

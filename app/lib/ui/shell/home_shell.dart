@@ -15,6 +15,7 @@ import '../../links/app_links.dart';
 import '../../pets/overlay_channel.dart' show petOverlayChannelProvider;
 import '../../pets/pet_overlay_bridge.dart';
 import '../../state/adaptive_layout_state.dart';
+import '../../state/android_features.dart';
 import '../../state/drawer_view_state.dart' show drawerSelectionProvider;
 import '../../state/quick_panel_state.dart';
 import '../../state/sessions_state.dart' show currentSessionProvider;
@@ -25,6 +26,7 @@ import '../engine/engine_screen.dart';
 import '../features/all_features_page.dart';
 import '../forum/forum_link_host.dart';
 import '../notify/background_net_host.dart';
+import '../notify/background_pause_host.dart';
 import '../notify/chat_alert_host.dart';
 import '../notify/voice_model_host.dart';
 import '../plugins/plugins_screen.dart';
@@ -339,8 +341,12 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                     children: [
                       // Notifications: routes taps, raises the in-app banner (draws nothing here).
                       ChatAlertHost(onReveal: _revealChat),
-                      // Background running cut off by the phone: one line under the header (draws nothing here).
-                      const BackgroundNetHost(),
+                      // Background running cut off by the phone, or on HarmonyOS suspended with the app:
+                      // one line under the header (draws nothing here).
+                      if (ref.watch(androidSystemFeaturesProvider))
+                        const BackgroundNetHost()
+                      else
+                        const BackgroundPauseHost(),
                       // Daily update check + install resume (draws nothing).
                       const UpdateLaunchCheck(),
                       // The voice model chosen during setup: download, resume, ready / failed notices (draws nothing).

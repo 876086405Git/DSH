@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/access_state.dart';
+import '../../state/android_features.dart';
 import '../../state/app_info.dart';
 import '../theme/app_icons.dart';
 
@@ -16,6 +17,7 @@ extension AccessFeatureText on AccessFeature {
     AccessFeature.phone => AppIcons.phoneControl,
     AccessFeature.background => AppIcons.keepAlive,
     AccessFeature.voice => AppIcons.voice,
+    AccessFeature.alerts => AppIcons.notifications,
   };
 
   String title(L10n l10n) => switch (this) {
@@ -24,6 +26,7 @@ extension AccessFeatureText on AccessFeature {
     AccessFeature.phone => l10n.accessFeaturePhone,
     AccessFeature.background => l10n.accessFeatureBackground,
     AccessFeature.voice => l10n.accessFeatureVoice,
+    AccessFeature.alerts => l10n.accessFeatureAlerts,
   };
 
   /// What it needs, in one line.
@@ -33,6 +36,7 @@ extension AccessFeatureText on AccessFeature {
     AccessFeature.phone => l10n.accessFeaturePhoneNeeds,
     AccessFeature.background => l10n.accessFeatureBackgroundNeeds,
     AccessFeature.voice => l10n.accessFeatureVoiceNeeds,
+    AccessFeature.alerts => l10n.accessFeatureAlertsNeeds,
   };
 }
 
@@ -67,11 +71,12 @@ extension AccessItemText on AccessItem {
     AccessItem.overlay => l10n.accessOverlayTitle,
   };
 
-  /// Why, in one line.
-  String why(L10n l10n) => switch (this) {
+  /// Why, in one line. On HarmonyOS and iOS an alert can only go out while the
+  /// app runs.
+  String why(L10n l10n, {required String os}) => switch (this) {
     AccessItem.mic => l10n.accessMicWhy,
     AccessItem.storage => l10n.accessStorageWhy,
-    AccessItem.notifications => l10n.accessNotifyWhy,
+    AccessItem.notifications => androidSystemFeaturesOn(os) ? l10n.accessNotifyWhy : l10n.harmonyNotifyWhy,
     AccessItem.battery => l10n.accessBatteryWhy,
     AccessItem.vendorBackground => l10n.accessVendorBackgroundWhy,
     AccessItem.autostart => l10n.accessAutostartWhy,

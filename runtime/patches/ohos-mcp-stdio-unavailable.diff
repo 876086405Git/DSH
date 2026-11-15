@@ -1,0 +1,14 @@
+--- a/node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js
+@@ -808,6 +808,11 @@
+ * @returns startup readiness after connection and initial tool discovery settle.
+ */
+ async function apply(ctx, config) {
++	if (process.platform === "openharmony" && config.transport === "stdio") {
++		throw Object.assign(new Error(`mcp-client(${config.serverName}): [ERR_OHOS_NO_SPAWN] 鸿蒙本机不支持 stdio MCP 子进程；请改用 streamable-http MCP 服务（本机 HTTP 或远程服务）。`), {
++			code: "ERR_OHOS_NO_SPAWN"
++		});
++	}
+ 	const reconnect = resolveReconnectPolicy(config.reconnect, `mcp-client(${config.serverName}): reconnect`);
+ 	ctx.effect(() => {
+ 		const owner = scopeOf(ctx) ?? ctx.root;

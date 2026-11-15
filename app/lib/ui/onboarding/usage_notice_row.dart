@@ -71,7 +71,7 @@ class _UsageNoticeRowState extends ConsumerState<UsageNoticeRow> {
               const SizedBox(width: 12),
               SwitchTheme(
                 data: SwitchTheme.of(context).copyWith(materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: Switch(key: const ValueKey('usage-notice-switch'), value: enabled, onChanged: _set),
+                child: Switch.adaptive(key: const ValueKey('usage-notice-switch'), value: enabled, onChanged: _set),
               ),
             ],
           ),

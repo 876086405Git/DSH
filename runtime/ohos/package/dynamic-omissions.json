@@ -1,0 +1,88 @@
+[
+  {
+    "importer": "runtime/ohos/process/build/just-bash/index.js",
+    "specifier": "./chunks/python3-SDFCGIU4.js",
+    "occurrences": 2,
+    "reason": "The only production Bash constructor is process/worker.mjs with python:false; the shell command allowlist omits python and python3. This is not a promise about arbitrary use of the private Bash library API."
+  },
+  {
+    "importer": "runtime/ohos/process/build/just-bash/index.js",
+    "specifier": "./chunks/sqlite3-7MBPFI6W.js",
+    "occurrences": 1,
+    "reason": "The fixed production shell command allowlist omits sqlite3. Node built-in node:sqlite remains separately available."
+  },
+  {
+    "importer": "runtime/ohos/process/build/just-bash/index.js",
+    "specifier": "./chunks/js-exec-NDLXDUBN.js",
+    "occurrences": 2,
+    "reason": "The production Bash constructor has javascript:false; js-exec and the upstream node stub are not used. The separately registered Node command uses the approved real Worker."
+  },
+  {
+    "importer": "runtime/ohos/process/build/just-bash/index.js",
+    "specifier": "./chunks/flag-coverage-EDO3VM43.js",
+    "occurrences": 1,
+    "reason": "The production Bash constructor never supplies coverage. The development flag-coverage collector imports SQLite metadata and is entirely omitted with it."
+  },
+  {
+    "importer": "runtime/ohos/process/build/just-bash/index.js",
+    "specifier": "./chunks/tar-BNHPWTOY.js",
+    "occurrences": 1,
+    "reason": "The fixed production shellCommands never registers tar; actual shell invocations already return 127 with a desktop alternative. Its archive codec chunk is referenced only by this omitted tar entry and omitted development flag coverage."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js",
+    "specifier": "koffi",
+    "occurrences": 1,
+    "importerSha256": "4f36f666d2b2e707d795fa2b9c1b673926fd7609d3bea99dd0e2e105f9ce06f4",
+    "reason": "The fixed filesystem implementation enters Win32 ACL helpers only when process.platform is win32; OHOS takes the POSIX/publication branch."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-host-directory-picker-native/lib/index.js",
+    "specifier": "koffi",
+    "occurrences": 1,
+    "importerSha256": "ba6332090bdfbe262d7f3b38b03c9702c09df508ca65a9ee0ec3030f17663c50",
+    "reason": "The fixed driver selector creates the Windows dialog/abort path only for win32; OHOS does not start that dialog worker."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-host-directory-picker-native/lib/worker.cjs",
+    "specifier": "koffi",
+    "occurrences": 1,
+    "importerSha256": "434946b4a825fb5c510757fffc14ac4103130f92174903bb83ad2376cfb61ba1",
+    "reason": "This is the Win32 dialog worker, started only by the win32 driver selector. Arbitrarily importing this private worker is outside the product entrypoint contract."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js",
+    "specifier": "@deepseek-ai/libreoffice-kit",
+    "occurrences": 1,
+    "importerSha256": "3cc19074929316c8d511ab757fbfd76eb6019de7e13de8dea0999b371c593f0e",
+    "reason": "convertBytes throws the explicit OHOS unavailable error before constructing or loading the converter; tested through its real consumer."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js",
+    "specifier": "koffi",
+    "occurrences": 1,
+    "importerSha256": "d8ef44093428788514c38d924fa60cd768114244ff8db7ef157ce1e352e8d622",
+    "reason": "The fixed session implementation selects Win32 semaphore/MoveFileEx only for win32; OHOS uses the linked publication owner and main-thread lock path."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/worker.cjs",
+    "specifier": "koffi",
+    "occurrences": 1,
+    "importerSha256": "c5c8ccb7a661ef343e9d0c792d8d5cba376ed783ea48c6489fe90eab264ae321",
+    "reason": "Win32 helpers in this worker are selected only by its fixed platform branches; OHOS does not enter them."
+  },
+  {
+    "importer": "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js",
+    "specifier": "@vscode/ripgrep",
+    "occurrences": 1,
+    "importerSha256": "ffdac06d530134e35a4ea2182f09ace344fcf48e2fa0e312419f69e3e73db255",
+    "reason": "getRgPath returns the virtual rg token immediately on openharmony, before the native binary import; the actual strict grep round covers this path."
+  },
+  {
+    "importer": "node_modules/proxy-agent-negotiate/dist/index.js",
+    "specifier": "kerberos",
+    "occurrences": 1,
+    "importerSha256": "d5317cfa41996c379958f5fbb9d90a282edc30bf9f8d67981f1b06d37e2131f6",
+    "reason": "The OH-only patch throws OHOS_PROXY_NEGOTIATE_UNAVAILABLE before this import on openharmony; real hook invocation is covered by the composition test."
+  }
+]

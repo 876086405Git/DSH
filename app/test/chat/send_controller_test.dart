@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dsh_app/state/attachments.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -18,6 +20,7 @@ class _FakeClient extends DshClient {
 
   final events = StreamController<DshEvent>.broadcast();
   final prompts = <({int images, List<String> receipts, String? requestId, PromptMode mode})>[];
+  final imageData = <List<Map<String, Object?>>>[];
   final uploads = <String?>[];
   final queue = <(String itemId, bool remove, bool steer)>[];
   var cancels = 0;
@@ -66,6 +69,7 @@ class _FakeClient extends DshClient {
     PromptMode mode = PromptMode.queue,
     String? timeZone,
   }) async {
+    imageData.add(images.map((image) => image.toJson()).toList());
     calls.add('prompt:${mode.wire}:$text');
     prompts.add((images: images.length, receipts: [...fileReceiptIds], requestId: requestId, mode: mode));
     if (textOnlyModel && images.isNotEmpty) {
@@ -136,6 +140,7 @@ void main() {
     client = _FakeClient();
     container = ProviderContainer(
       overrides: [
+        operatingSystemProvider.overrideWithValue('ios'),
         activeConnectionProvider.overrideWithValue(
           AsyncData<HostConnection?>(HostConnection(client: client, label: '本机', isLocal: true)),
         ),
@@ -450,6 +455,40 @@ void main() {
     expect(client.prompts, hasLength(1));
     expect(state().pending, isEmpty);
     expect(state().error, '当前模型未声明支持图片。请换模型，或把自定义模型的输入类型设为「文本和图片」再发');
+  });
+
+
+  test('P179 iOS same-named replacement image is a new request', () async {
+    final before = DraftAttachment.sniff('photo.png', base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAFUlEQVR4nGO8IyfHwMDAwMDAxAADABSqARxxpky/AAAAAElFTkSuQmCC'));
+    final after = DraftAttachment.sniff('photo.png', base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAFUlEQVR4nGMUMbrDwMDAwMDAxAADABPYASZj9RzdAAAAAElFTkSuQmCC'));
+    expect(before.bytes, isNot(orderedEquals(after.bytes)));
+    expect(before.mediaType, 'image/png');
+    expect(after.mediaType, 'image/png');
+    client.promptError = const DshCarrierLostException('synthetic lost response');
+    expect(await chat().send('看看这张照片', attachments: [before]), isFalse);
+    final firstId = client.prompts.single.requestId;
+    client.promptError = null;
+    expect(await chat().send('看看这张照片', attachments: [after]), isTrue);
+    final observation = {
+      'case': 'same_name_replacement',
+      'requestIds': client.prompts.map((p) => p.requestId).toList(),
+      'images': client.imageData,
+    };
+    // A complete synthetic-only line for the separate Node admission check.
+    // ignore: avoid_print
+    print('P179_RESULT ${jsonEncode(observation)}');
+    expect(client.prompts.last.requestId, isNot(firstId),
+        reason: 'A different selected photo must not reuse the uncertain old submission.');
+  });
+
+  test('P179 iOS same selected image retains uncertain retry identity', () async {
+    final image = DraftAttachment.sniff('photo.png', base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAFUlEQVR4nGO8IyfHwMDAwMDAxAADABSqARxxpky/AAAAAElFTkSuQmCC'));
+    client.promptError = const DshCarrierLostException('synthetic lost response');
+    expect(await chat().send('看看这张照片', attachments: [image]), isFalse);
+    final firstId = client.prompts.single.requestId;
+    client.promptError = null;
+    expect(await chat().send('看看这张照片', attachments: [image]), isTrue);
+    expect(client.prompts.last.requestId, firstId);
   });
 
   group('unknown outcome', () {

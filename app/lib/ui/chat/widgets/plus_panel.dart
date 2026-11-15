@@ -304,7 +304,7 @@ class _ThisChatCardState extends ConsumerState<_ThisChatCard> {
           child: ListPageRow(
             title: l10n.hubSessionPlanMode,
             onTap: _busy ? null : () => unawaited(_togglePlan(!plan)),
-            trailing: Switch(value: plan, onChanged: _busy ? null : (v) => unawaited(_togglePlan(v))),
+            trailing: Switch.adaptive(value: plan, onChanged: _busy ? null : (v) => unawaited(_togglePlan(v))),
           ),
         ),
       ],

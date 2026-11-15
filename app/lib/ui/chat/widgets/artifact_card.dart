@@ -234,7 +234,7 @@ class _ArtifactTileState extends ConsumerState<ArtifactTile> {
       _Busy.fetching =>
         _progress == null ? appL10n.chatDownloading : appL10n.chatDownloadingPercent((_progress! * 100).round()),
       _Busy.opening => appL10n.chatOpening,
-      _Busy.saving => appL10n.chatSavingToDownloads,
+      _Busy.saving => wordsForIos ? appL10n.iosSavingToFiles : appL10n.chatSavingToDownloads,
       null =>
         _note ??
             artifact.description ??
@@ -425,13 +425,13 @@ enum ArtifactAction {
     ArtifactAction.open => appL10n.commonOpen,
     ArtifactAction.openWith => appL10n.commonOpenWith,
     ArtifactAction.share => appL10n.commonShare,
-    ArtifactAction.save => appL10n.chatSaveToDownloads,
+    ArtifactAction.save => wordsForIos ? appL10n.iosSaveToFiles : appL10n.chatSaveToDownloads,
     ArtifactAction.copyPath => appL10n.chatCopyPath,
   };
 
   String? get hint => switch (this) {
     ArtifactAction.open => appL10n.chatOpenInDefaultApp,
-    ArtifactAction.save => appL10n.chatDownloadsFolderHint,
+    ArtifactAction.save => wordsForIos ? appL10n.iosFilesFolderHint : appL10n.chatDownloadsFolderHint,
     _ => null,
   };
 }
@@ -509,11 +509,7 @@ Future<ArtifactAction?> showArtifactMenu(
       final dsh = DshColors.of(sheet);
       final actions = [
         if (canFetch && artifactPreviewable(artifact, officeToPdf: officeToPdf)) ArtifactAction.preview,
-        if (canFetch) ...[
-          ArtifactAction.open,
-          ArtifactAction.openWith,
-          ArtifactAction.share,
-        ],
+        if (canFetch) ...[ArtifactAction.open, ArtifactAction.openWith, ArtifactAction.share],
         if (canFetch && !artifact.inPhoneDownloads) ArtifactAction.save,
         ArtifactAction.copyPath,
       ];

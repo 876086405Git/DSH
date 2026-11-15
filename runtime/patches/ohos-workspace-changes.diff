@@ -1,0 +1,26 @@
+diff --git a/node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js b/node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js
+@@ -994,6 +994,13 @@
+ * @param ctx - host context with `subprocess` and `fs`.
+ * @param config - validated bounds.
+ */
++/** Use only the private root granted by the OHOS subprocess backend. */
++function workspaceTemporaryRoot(ctx) {
++	if (process.platform !== "openharmony" && globalThis[Symbol.for("dsh.go.ohos.sim")] !== true) return tmpdir();
++	const root = ctx.subprocess.temporaryRoot;
++	if (typeof root !== "string" || !isAbsolute(root)) throw new Error("OHOS workspace snapshots require the subprocess private temporaryRoot");
++	return root;
++}
+ function apply(ctx, config) {
+ 	for (const [field, value] of [
+ 		["timeoutMs", config.timeoutMs],
+@@ -1039,7 +1046,7 @@
+ 		if (recorder === void 0) {
+ 			recorder = new TurnRecorder(session, cwd, {
+ 				git: gitRunner(),
+-				tempRoot: tmpdir(),
++				tempRoot: workspaceTemporaryRoot(ctx),
+ 				maxFiles: config.maxFiles,
+ 				maxFileBytes: config.maxFileBytes,
+ 				diffTimeoutMs: config.diffTimeoutMs,

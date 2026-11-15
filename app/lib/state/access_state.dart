@@ -14,6 +14,7 @@
 //   手机操控        accessibility · notifications · popup (vivo, Xiaomi)
 //   后台持续运行     notifications · battery · vendorBackground · autostart (vivo, Xiaomi)
 //   语音输入        mic
+//   回复提醒        notifications (HarmonyOS, which has no other way to them)
 
 import 'dart:async';
 import 'dart:convert';
@@ -28,6 +29,7 @@ import '../runtime/background_net.dart' show backgroundSettingsProvider;
 import '../runtime/runtime_bridge.dart' show RuntimePhase;
 import '../runtime/runtime_state.dart';
 import '../ui/chat/voice/voice_bridge.dart' show VoicePermission;
+import 'android_features.dart';
 import 'engine_control.dart';
 import 'notify_state.dart';
 import 'phone_state.dart';
@@ -46,7 +48,26 @@ final voiceModelApproxMb = (voiceModelDefaultBytes / 1000000).round();
 const onboardingWantsVoiceKey = VoiceModelController.onboardingKey;
 
 /// What a person picks on first run: things DSH Go does, not permission names.
-enum AccessFeature { files, pet, phone, background, voice }
+/// What [os] offers is [accessFeaturesFor]'s, never all of these.
+enum AccessFeature { files, pet, phone, background, voice, alerts }
+
+/// What first run and 系统权限 offer on [os], in their order. HarmonyOS and iOS
+/// have only what works there: their files, windows over other apps and the
+/// phone aren't reachable, and nothing keeps a turn running in the background
+/// (后台运行 says so), which leaves notifications their own feature.
+List<AccessFeature> accessFeaturesFor(String os) => androidSystemFeaturesOn(os)
+    ? const [
+        AccessFeature.files,
+        AccessFeature.pet,
+        AccessFeature.phone,
+        AccessFeature.background,
+        AccessFeature.voice,
+      ]
+    : const [AccessFeature.alerts, AccessFeature.voice];
+
+/// Whether 语音输入 on [os] means the offline model's download: HarmonyOS and
+/// iOS use the system's recogniser and have no model.
+bool accessVoiceDownloads(String os) => androidSystemFeaturesOn(os);
 
 /// One system permission or maker's switch, in the order first run walks
 /// them: the system's own dialogs first, then settings pages, the makers'
@@ -74,8 +95,11 @@ enum AccessItem {
     _ => null,
   };
 
-  /// Asked for with a system dialog: the answer is back when the call returns.
-  bool get dialog => this == mic || this == storage || this == battery;
+  /// Asked for on [os] with a system dialog: the answer is back when the call
+  /// returns. HarmonyOS and iOS ask for notifications that way; Android's come
+  /// with their channels, and this opens their settings page.
+  bool dialogOn(String os) =>
+      this == mic || this == storage || this == battery || (this == notifications && !androidSystemFeaturesOn(os));
 }
 
 /// Where an item stands.
@@ -122,6 +146,7 @@ List<AccessItem> accessItemsFor(AccessFeature feature, String? vendor) {
       AccessItem.autostart,
     ],
     AccessFeature.voice => [AccessItem.mic],
+    AccessFeature.alerts => [AccessItem.notifications],
   };
   return [
     for (final item in AccessItem.values)
@@ -260,22 +285,36 @@ class SystemAccessDriver implements AccessDriver {
     }
   }
 
+  Future<bool?> _readMic() => _safe(() async => switch (await _voice.invokeMethod<String>('permission')) {
+    'granted' => true,
+    'denied' => false,
+    _ => null,
+  });
+
+  Future<bool?> _readNotifications() => _safe(() async {
+    final s = await ref.read(notifyChannelProvider).status();
+    return s.native ? s.enabled : null;
+  });
+
   @override
   Future<AccessReadings> read() async {
+    // Only what [accessFeaturesFor] offers there: the runtime's storage and
+    // battery answers on HarmonyOS and iOS aren't readings (always not granted,
+    // an error) and the rest has no native side. Unread, none can show as off.
+    if (!androidSystemFeaturesOn(ref.read(operatingSystemProvider))) {
+      final mic = _readMic();
+      final notify = _readNotifications();
+      final readings = AccessReadings(mic: await mic, notifications: await notify);
+      ref.invalidate(notifySystemStatusProvider);
+      return readings;
+    }
     final bridge = ref.read(runtimeBridgeProvider);
     final phone = ref.read(phoneProvider.notifier);
     final pet = ref.read(petOverlayProvider.notifier);
     final info = _safe(() => ref.read(backgroundSettingsProvider.future));
-    final mic = _safe(() async => switch (await _voice.invokeMethod<String>('permission')) {
-      'granted' => true,
-      'denied' => false,
-      _ => null,
-    });
+    final mic = _readMic();
     final storage = _safe(() async => (await bridge.storageStatus()).granted);
-    final notify = _safe(() async {
-      final s = await ref.read(notifyChannelProvider).status();
-      return s.native ? s.enabled : null;
-    });
+    final notify = _readNotifications();
     final battery = _safe(bridge.batteryExempt);
     final metered = _safe(bridge.networkMetered);
     final phoneRead = _safe(() async {
@@ -327,7 +366,12 @@ class SystemAccessDriver implements AccessDriver {
           if (again) return ref.read(phoneProvider.notifier).openAppDetails();
           return true;
         case AccessItem.notifications:
-          return ref.read(notifyChannelProvider).openSettings();
+          final notify = ref.read(notifyChannelProvider);
+          if (again || androidSystemFeaturesOn(ref.read(operatingSystemProvider))) return notify.openSettings();
+          // The system's dialog; refused, the step says so and 重试 comes back
+          // here with [again], for the settings a dialog can no longer reach.
+          await notify.requestPermission();
+          return true;
         case AccessItem.battery:
           return await bridge.requestBatteryExempt() ?? false;
         case AccessItem.vendorBackground || AccessItem.autostart || AccessItem.popup:
@@ -474,7 +518,8 @@ class AccessSetupController extends Notifier<AccessSetup> {
   }
 
   /// 「开启所选」: the walk starts, and the voice answer is written for the
-  /// voice feature to pick up. [phoneMode], picked with 手机操控, goes to the
+  /// voice feature to pick up (never yes where there is no model to fetch,
+  /// [accessVoiceDownloads]). [phoneMode], picked with 手机操控, goes to the
   /// phone's policies now, or as soon as they can be written
   /// ([PhoneController.chooseConfirmMode]).
   Future<void> choose(Set<AccessFeature> features, {PhoneConfirmMode? phoneMode}) async {
@@ -482,7 +527,8 @@ class AccessSetupController extends Notifier<AccessSetup> {
     await _save();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(onboardingWantsVoiceKey, features.contains(AccessFeature.voice));
+      final os = ref.read(operatingSystemProvider);
+      await prefs.setBool(onboardingWantsVoiceKey, features.contains(AccessFeature.voice) && accessVoiceDownloads(os));
     } catch (_) {}
     if (phoneMode != null && features.contains(AccessFeature.phone)) {
       try {

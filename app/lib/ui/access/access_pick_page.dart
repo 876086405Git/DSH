@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/access_state.dart';
+import '../../state/android_features.dart';
 import '../../state/phone_state.dart';
 import '../common/risk_notice.dart';
 import '../onboarding/onboarding_scaffold.dart';
@@ -39,7 +40,8 @@ import 'phone_mode_sheet.dart';
 /// Picking 手机操控 shows its disclosure and then asks how it confirms
 /// (关键步骤先问我 / 全程自动), and 读写手机里的文件 what AI may then do, right
 /// there, the way their switches in settings do; declining either leaves the
-/// box empty.
+/// box empty. HarmonyOS lists fewer ([accessFeaturesFor]), and its voice input
+/// has nothing to download.
 class AccessPickPage extends ConsumerStatefulWidget {
   const AccessPickPage({super.key, required this.onPicked, required this.onSkip});
 
@@ -102,6 +104,7 @@ class _AccessPickPageState extends ConsumerState<AccessPickPage> {
     final l10n = context.l10n;
     final colors = DshColors.of(context);
     final metered = ref.watch(accessReadingsProvider.select((r) => r.value?.metered == true));
+    final os = ref.watch(operatingSystemProvider);
     return OnboardingScaffold(
       children: [
         const Spacer(),
@@ -111,12 +114,12 @@ class _AccessPickPageState extends ConsumerState<AccessPickPage> {
           key: const ValueKey('access-pick-card'),
           margin: EdgeInsets.zero,
           children: [
-            for (final feature in AccessFeature.values)
+            for (final feature in accessFeaturesFor(os))
               AccessFeatureRow(
                 feature: feature,
                 selected: _picked.contains(feature),
                 onTap: () => unawaited(_toggle(feature)),
-                lines: feature == AccessFeature.voice
+                lines: feature == AccessFeature.voice && accessVoiceDownloads(os)
                     ? [
                         (text: l10n.accessFeatureVoiceNeeds, color: null),
                         (text: l10n.accessVoiceModel(voiceModelApproxMb), color: null),

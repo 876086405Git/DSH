@@ -1,0 +1,9 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+// The below is a compiled copy of https://github.com/angular/angular/blob/92e41e9cb417223d9888a4c23b4c0e73188f87d0/packages/compiler/src/render3/view/style_parser.ts

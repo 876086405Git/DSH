@@ -14,6 +14,8 @@
   "accessFeatureBackgroundNeeds": "Tells you when tasks finish; needs notifications and background access",
   "accessFeatureVoice": "Voice input",
   "accessFeatureVoiceNeeds": "Needs the microphone",
+  "accessFeatureAlerts": "Reply alerts",
+  "accessFeatureAlertsNeeds": "Needs notifications",
   "accessVoiceModel": "Works offline; downloads a voice model of about {size} MB",
   "@accessVoiceModel": {
     "placeholders": {

@@ -345,14 +345,24 @@ class DshConnection {
 
   /// Authenticated GET returning the raw response (any status), e.g. the
   /// Host's `/api/file?path=…` file route. [headers] adds request headers
-  /// (`if-none-match`).
+  /// (`if-none-match`). Optional limits keep this connection's custom client
+  /// and proxy/TLS policy; existing callers retain the same defaults.
   Future<DshHttpResponse> get(
     String path, {
     Map<String, String>? query,
     Map<String, String>? headers,
     Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
   }) {
-    return _exchange('GET', resolve(path, query), headers: headers, timeout: timeout);
+    return _exchange(
+      'GET',
+      resolve(path, query),
+      headers: headers,
+      timeout: timeout,
+      followRedirects: followRedirects,
+      maxResponseBytes: maxResponseBytes,
+    );
   }
 
   /// A bounded authenticated GET for media: no redirects (not even same

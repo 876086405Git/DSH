@@ -701,6 +701,8 @@
   "remoteAuthentication": "登录方式",
   "remotePasswordStorageHelp": "只保存在这台手机上，由 Android Keystore 加密",
   "remoteKeyStorageHelp": "只保存在这台手机上，由 Android Keystore 加密。支持 Ed25519、RSA、ECDSA",
+  "remotePasswordStorageHelpIos": "只保存在这台手机上，由系统钥匙串加密",
+  "remoteKeyStorageHelpIos": "只保存在这台手机上，由系统钥匙串加密。支持 Ed25519、RSA、ECDSA",
   "remotePrivateKey": "私钥",
   "remoteShow": "显示",
   "remoteImportKeyFile": "从文件导入",

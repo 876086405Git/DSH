@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
 import '../performance/performance_state.dart';
+import '../secrets/secure_storage.dart';
 import 'provider_keys.dart';
 import 'read_list_epoch.dart';
 
@@ -139,7 +139,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _chatTextScaleKey = 'chat_text_scale';
   static const _foldTurnsKey = 'fold_completed_turns';
   static const _visualRepliesKey = 'visual_replies';
-  static const _secure = FlutterSecureStorage();
+  static const _secure = AppSecureStorage();
   late Future<void> _loaded;
 
   @override
@@ -190,6 +190,24 @@ class SettingsController extends Notifier<AppSettings> {
       customProviderIds: providerIds,
       loaded: true,
     );
+  }
+
+  /// Takes the keys in again once the saved credentials were cleared
+  /// (credential_recovery.dart). Only the keys: invalidating this provider would
+  /// drop [AppSettings.loaded] and the whole app back to the splash.
+  Future<void> reloadCredentials() async {
+    await _loaded;
+    if (!ref.mounted) return;
+    var apiKey = '';
+    var providerIds = const <String>{};
+    try {
+      apiKey = await _secure.read(key: _apiKeyKey) ?? '';
+      providerIds = (await ref.read(providerKeyVaultProvider).readAll()).keys.toSet();
+    } catch (_) {
+      // As in [_load]: the user can re-enter them.
+    }
+    if (!ref.mounted) return;
+    state = state.copyWith(apiKey: apiKey, customProviderIds: providerIds);
   }
 
   /// Keeps [key] for the local engine's custom provider [id] (see

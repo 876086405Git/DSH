@@ -107,10 +107,18 @@ class CompanionServer {
 
     switch (segments[1]) {
       case 'app' when _appFiles.contains(path):
-        final data = await _assets.load('assets/companion/$path');
+        final asset = await _assets.load('assets/companion/$path');
         if (_closed) return response.close();
-        _headers(response, type, data.lengthInBytes);
-        if (request.method == 'GET') response.add(Uint8List.sublistView(data));
+        var data = Uint8List.sublistView(asset);
+        // WebKit must see the low GPU budget before its first paint. Applying
+        // it later from stage.js can allocate full-screen blur surfaces first.
+        if (path == 'index.html' && request.uri.queryParameters['gpuBudget'] == 'low') {
+          data = Uint8List.fromList(
+            utf8.encode(utf8.decode(data).replaceFirst('<html ', '<html data-gpu-budget="low" ')),
+          );
+        }
+        _headers(response, type, data.length);
+        if (request.method == 'GET') response.add(data);
         await response.close();
       case 'pack':
         final file = File('${_pack.path}/$path');

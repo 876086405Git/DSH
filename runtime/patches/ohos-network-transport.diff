@@ -1,0 +1,101 @@
+# dsh-go OHOS: native HTTP transport through the rc.1 request/proxy paths.
+# Only openharmony or the explicit test preload marker uses the adapter; Android stays on its original path.
+# Ported from @deepseek-ai/dsh 0.2.1-rc.4 to 0.2.2-rc.1. 未在鸿蒙真机核实。
+--- a/node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js
+@@ -385,7 +385,39 @@
+ * @param policy - the policy to route by; it must proxy at least one scheme.
+ * @returns the dispatcher to install, owning every per-origin agent its factory created.
+ */
++function ohosNetwork() {
++	if (process.platform !== "openharmony" && globalThis[Symbol.for("dsh.go.ohos.sim")] !== true) return void 0;
++	const network = globalThis[Symbol.for("dsh.go.ohos.net")];
++	if (!network) throw Object.assign(new Error("OHOS network preload is required"), { code: "ERR_OHOS_NET_PRELOAD_MISSING" });
++	return network;
++}
+ async function createPolicyDispatcher(policy) {
++	const network = ohosNetwork();
++	if (network) {
++		const dispatchers = new Map();
++		let closed = false;
++		return {
++			dispatch(options, handler) {
++				if (closed) {
++					const error = Object.assign(new Error("HTTP transport is closed"), { code: "UND_ERR_CLOSED" });
++					queueMicrotask(() => {
++						if (typeof handler.onResponseError === "function") handler.onResponseError(null, error);
++						else handler.onError(error);
++					});
++					return false;
++				}
++				const proxy = proxyForUrl(policy, new URL(options.origin));
++				let dispatcher = dispatchers.get(proxy);
++				if (!dispatcher) {
++					dispatcher = network.createDispatcher({ proxyEnv: proxy === void 0 ? {} : { http_proxy: proxy, https_proxy: proxy, no_proxy: "" } });
++					dispatchers.set(proxy, dispatcher);
++				}
++				return dispatcher.dispatch(options, handler);
++			},
++			close() { closed = true; return Promise.all([...dispatchers.values()].map((dispatcher) => dispatcher.close())); },
++			destroy(error) { closed = true; return Promise.all([...dispatchers.values()].map((dispatcher) => dispatcher.destroy(error))); }
++		};
++	}
+ 	const { Agent, Pool, ProxyAgent } = await import("undici");
+ 	return new Agent({ factory(origin, options) {
+ 		const passed = options;
+@@ -413,6 +445,31 @@
+ * @returns a disposer restoring the previous dispatcher, policy, and environment, then closing the agent.
+ */
+ async function installGlobalProxy(policy) {
++	const network = ohosNetwork();
++	if (network) {
++		if (!network.globalDispatcherApi) throw Object.assign(new Error("OHOS DSH network bootstrap is required before proxy installation"), { code: "ERR_OHOS_NET_BOOTSTRAP_REQUIRED" });
++		const { getGlobalDispatcher, setGlobalDispatcher } = network.globalDispatcherApi;
++		const previousDispatcher = getGlobalDispatcher();
++		const previousNetworkDispatcher = network.dispatcher;
++		const previousPolicy = active;
++		const previousInstalled = installed;
++		const restoreEnv = policy.source === "none"
++			? inheritedProxyEnv === void 0 ? void 0 : writeProxyEnv(inheritedProxyEnv)
++			: applyPolicyEnv(policy);
++		const agent = await createPolicyDispatcher(policy);
++		setGlobalDispatcher(agent);
++		network.dispatcher = agent;
++		active = policy;
++		installed = agent;
++		return async () => {
++			setGlobalDispatcher(previousDispatcher);
++			network.dispatcher = previousNetworkDispatcher;
++			active = previousPolicy;
++			installed = previousInstalled;
++			restoreEnv?.();
++			await agent.close();
++		};
++	}
+ 	const previousPolicy = active;
+ 	if (policy.source === "none") {
+ 		if (previousPolicy === void 0) {
+--- a/node_modules/@deepseek-ai/dsh-web-fetch-http/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-web-fetch-http/lib/index.js
+@@ -173,6 +173,12 @@
+ 	return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+ });
+ /** Stable id this provider registers under. */
++function ohosNetwork() {
++	if (process.platform !== "openharmony" && globalThis[Symbol.for("dsh.go.ohos.sim")] !== true) return void 0;
++	const network = globalThis[Symbol.for("dsh.go.ohos.net")];
++	if (!network) throw Object.assign(new Error("OHOS network preload is required"), { code: "ERR_OHOS_NET_PRELOAD_MISSING" });
++	return network;
++}
+ const LOCAL_FETCH_PROVIDER_ID = "http";
+ /** The anonymous HTTP(S) fetch provider. */
+ var HttpFetchProvider = class {
+@@ -243,7 +249,7 @@
+ 			"accept": "text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8"
+ 		};
+ 		try {
+-			const { fetch } = await import("undici");
++			const { fetch } = ohosNetwork() ?? await import("undici");
+ 			return await fetch(url, {
+ 				method: "GET",
+ 				redirect: "manual",

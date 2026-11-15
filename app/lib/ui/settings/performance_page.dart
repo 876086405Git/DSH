@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../performance/performance_state.dart';
+import '../../state/android_features.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import 'settings_widgets.dart';
@@ -67,22 +68,23 @@ class PerformancePage extends ConsumerWidget {
               ),
           ],
         ),
-        SettingsSection(
-          footer: Text(l10n.performanceRefreshHint),
-          children: [
-            SettingsSegmentTile<RefreshRateMode>(
-              key: const ValueKey('performance-refresh-rate'),
-              spot: Spots.refreshRate,
-              segments: [
-                PillSegment(RefreshRateMode.auto, l10n.performanceAuto),
-                PillSegment(RefreshRateMode.max, l10n.performanceRefreshMax),
-                PillSegment(RefreshRateMode.system, l10n.performanceRefreshSystem),
-              ],
-              selected: prefs.refreshRate,
-              onChanged: (mode) => unawaited(notifier.setRefreshRate(mode)),
-            ),
-          ],
-        ),
+        if (ref.watch(androidSystemFeaturesProvider))
+          SettingsSection(
+            footer: Text(l10n.performanceRefreshHint),
+            children: [
+              SettingsSegmentTile<RefreshRateMode>(
+                key: const ValueKey('performance-refresh-rate'),
+                spot: Spots.refreshRate,
+                segments: [
+                  PillSegment(RefreshRateMode.auto, l10n.performanceAuto),
+                  PillSegment(RefreshRateMode.max, l10n.performanceRefreshMax),
+                  PillSegment(RefreshRateMode.system, l10n.performanceRefreshSystem),
+                ],
+                selected: prefs.refreshRate,
+                onChanged: (mode) => unawaited(notifier.setRefreshRate(mode)),
+              ),
+            ],
+          ),
         SettingsSection(
           title: l10n.performanceEffects,
           children: [

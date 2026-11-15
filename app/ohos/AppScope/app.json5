@@ -1,0 +1,25 @@
+{
+  "app": {
+    "bundleName": "io.github.ccch1mneyyy.dsh_app",
+    "vendor": "ccch1mneyyy",
+    "versionCode": 1000000,
+    "versionName": "1.0.0",
+    "icon": "$media:layered_image",
+    "alternateIcons": [
+      {
+        "name": "night",
+        "icon": "$media:icon_night"
+      },
+      {
+        "name": "frost",
+        "icon": "$media:icon_frost"
+      },
+      {
+        "name": "ink",
+        "icon": "$media:icon_ink"
+      }
+    ],
+    "label": "$string:app_name",
+    "configuration": "$profile:configuration"
+  }
+}

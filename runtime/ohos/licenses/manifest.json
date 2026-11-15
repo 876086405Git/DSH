@@ -1,0 +1,3827 @@
+{
+  "schemaVersion": 1,
+  "scope": "OpenHarmony 虚拟进程固定 npm 非可选依赖闭包、已识别嵌入通知与本次实际构建工具；不代表最终 HAP 或全仓库版权审计通过。",
+  "roots": [
+    "just-bash",
+    "isomorphic-git",
+    "re2js"
+  ],
+  "processManifestSHA256": "d10b875f57b2a499717ffde7ec1b969aeda4aed385d76b06f71d47968f675cfa",
+  "processLockSHA256": "5a815fc00cafc62fca834fe3e2abf6792bd3263c1a386cb2948d6a4063ed8f30",
+  "packageCount": 91,
+  "packages": [
+    {
+      "name": "@borewit/text-codec",
+      "version": "0.2.3",
+      "path": "node_modules/@borewit/text-codec",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/@borewit/text-codec/-/text-codec-0.2.3.tgz",
+      "integrity": "sha512-49CycTz1aAZmvFcwkeFyhud1HUmRIB5Tabf7ALV+VA4Iu85MTfz2cUwzPagMFAdVBvrWdkCxG67I30tUwwpKsw==",
+      "packageJSONSHA256": "8e95c7e8716b82d250ce7e3493aee18827de61890c6a9527e9c3755c9ec1151b",
+      "documents": [
+        "texts/borewit--text-codec-0.2.3/LICENSE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "@mixmark-io/domino",
+      "version": "2.2.0",
+      "path": "node_modules/@mixmark-io/domino",
+      "declaredLicense": "BSD-2-Clause",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/@mixmark-io/domino/-/domino-2.2.0.tgz",
+      "integrity": "sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==",
+      "packageJSONSHA256": "2190c3aeea2de40b2a9afcbee22d0603e91b1a490ab2e24387b251e75a5ab77a",
+      "documents": [
+        "texts/mixmark-io--domino-2.2.0/LICENSE",
+        "texts/mixmark-io--domino-2.2.0/ANGULAR-LICENSE.txt",
+        "texts/mixmark-io--domino-2.2.0/ANGULAR-STYLE-PARSER-NOTICE.txt"
+      ],
+      "registration": "TEXT_RECORDED_WITH_EMBEDDED_MIT"
+    },
+    {
+      "name": "@nodable/entities",
+      "version": "3.1.0",
+      "path": "node_modules/@nodable/entities",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/@nodable/entities/-/entities-3.1.0.tgz",
+      "integrity": "sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ==",
+      "packageJSONSHA256": "81fc13661f9431f9f72ae5a1723482a1bcb473af463b93ca0b27c42461a6c6c9",
+      "documents": [
+        "texts/nodable--entities-3.1.0/UPSTREAM-LICENSE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "@tokenizer/inflate",
+      "version": "0.4.1",
+      "path": "node_modules/@tokenizer/inflate",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/@tokenizer/inflate/-/inflate-0.4.1.tgz",
+      "integrity": "sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA==",
+      "packageJSONSHA256": "4ba101b9622ea114524755490b2172aa622308e7bfe6c0f4483c9f2c7c8862e1",
+      "documents": [
+        "texts/tokenizer--inflate-0.4.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "@tokenizer/token",
+      "version": "0.3.0",
+      "path": "node_modules/@tokenizer/token",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/@tokenizer/token/-/token-0.3.0.tgz",
+      "integrity": "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==",
+      "packageJSONSHA256": "a677763aaed22462b4f9df2526b1038cef3a90bc6cf80be27b4e65d0f14472a9",
+      "documents": [
+        "texts/tokenizer--token-0.3.0/README-LICENSE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "abort-controller",
+      "version": "3.0.0",
+      "path": "node_modules/abort-controller",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz",
+      "integrity": "sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==",
+      "packageJSONSHA256": "3d64dcdcf9d0a1d045eb6bcaa5013d486f15527a3668e64b1155839a797da164",
+      "documents": [
+        "texts/abort-controller-3.0.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "anynum",
+      "version": "1.0.1",
+      "path": "node_modules/anynum",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/anynum/-/anynum-1.0.1.tgz",
+      "integrity": "sha512-N6//FLET/tXYNM/F6ABca1oH6fWB+KlTt909Le28WMDBk8oaT4vY17DCrwg2MvmuqUKt3Ni4N5dGJ/EoBgcO6A==",
+      "packageJSONSHA256": "41c5d60f0aa8b5f4133aeff56573a8c4130d4d1c19dc240398ff806b40a4470e",
+      "documents": [
+        "texts/anynum-1.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "async-lock",
+      "version": "1.4.1",
+      "path": "node_modules/async-lock",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/async-lock/-/async-lock-1.4.1.tgz",
+      "integrity": "sha512-Az2ZTpuytrtqENulXwO3GGv1Bztugx6TT37NIo7imr/Qo0gsYiGtSdBa2B6fsXhTpVZDNfu1Qn3pk531e3q+nQ==",
+      "packageJSONSHA256": "263125206ad1c4350b49af17f6e0cc113c447d0d6cf16aec5461dec8e7e3201f",
+      "documents": [
+        "texts/async-lock-1.4.1/LICENSE",
+        "texts/async-lock-1.4.1/AUTHORS"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "available-typed-arrays",
+      "version": "1.0.7",
+      "path": "node_modules/available-typed-arrays",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.7.tgz",
+      "integrity": "sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==",
+      "packageJSONSHA256": "ffce2bbb0b85b9a20bcc674e4c78307ead42af0299e1d28a9dfb249566e0a319",
+      "documents": [
+        "texts/available-typed-arrays-1.0.7/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "path": "node_modules/base64-js",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz",
+      "integrity": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
+      "packageJSONSHA256": "9758f3ab8c45e07bb9a368e32f9a8b3729623bbf47cbbb205b32d674ab2a91f0",
+      "documents": [
+        "texts/base64-js-1.5.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "buffer",
+      "version": "6.0.3",
+      "path": "node_modules/buffer",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/buffer/-/buffer-6.0.3.tgz",
+      "integrity": "sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==",
+      "packageJSONSHA256": "5b105ac0abbf5985cbe62ad28a34032d85c7ef623e0eb01f39441b0feb419004",
+      "documents": [
+        "texts/buffer-6.0.3/LICENSE",
+        "texts/buffer-6.0.3/AUTHORS.md"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "call-bind",
+      "version": "1.0.9",
+      "path": "node_modules/call-bind",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.9.tgz",
+      "integrity": "sha512-a/hy+pNsFUTR+Iz8TCJvXudKVLAnz/DyeSUo10I5yvFDQJBFU2s9uqQpoSrJlroHUKoKqzg+epxyP9lqFdzfBQ==",
+      "packageJSONSHA256": "c11be8b7f9bbe367c27d42fba734b8226c0b15e1e5e1c2d842822d9791f053c7",
+      "documents": [
+        "texts/call-bind-1.0.9/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "path": "node_modules/call-bind-apply-helpers",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
+      "packageJSONSHA256": "59639b628c6846f674857c6a613fd47e2e4d2a24036cdf0f7a62ac634f4c8a5f",
+      "documents": [
+        "texts/call-bind-apply-helpers-1.0.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "call-bound",
+      "version": "1.0.4",
+      "path": "node_modules/call-bound",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
+      "integrity": "sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==",
+      "packageJSONSHA256": "dcc8abb3c4ad3774234272149020cb36d7b1a3d377a419454d1e7adb368dd9c3",
+      "documents": [
+        "texts/call-bound-1.0.4/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "clean-git-ref",
+      "version": "2.0.1",
+      "path": "node_modules/clean-git-ref",
+      "declaredLicense": "Apache-2.0",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/clean-git-ref/-/clean-git-ref-2.0.1.tgz",
+      "integrity": "sha512-bLSptAy2P0s6hU4PzuIMKmMJJSE6gLXGH1cntDu7bWJUksvuM+7ReOK61mozULErYvP6a15rnYl0zFDef+pyPw==",
+      "packageJSONSHA256": "85c489423a88038349e92f2515e9f2d38dac5a2319a467357a1e8141b46613be",
+      "documents": [
+        "texts/clean-git-ref-2.0.1/APACHE-2.0.txt",
+        "texts/clean-git-ref-2.0.1/PACKAGE-DECLARATIONS.txt"
+      ],
+      "registration": "DECLARED_APACHE_STANDARD_AND_EXISTING_ATTRIBUTION_RECORDED",
+      "attributionFields": {
+        "author": "Eli White <github@eli-white.com>",
+        "license": "Apache-2.0"
+      },
+      "attributionBoundary": "逐字保留 package.json 的 author/license 字段；不是从 author 推定新增 copyright 行或年份。",
+      "distributionFiles": [
+        {
+          "path": "node_modules/clean-git-ref/README.md",
+          "bytes": 514,
+          "sha256": "a12b8a4c89710e2fef75a02985b3e018bda77e19e170c8af29555ffeeba47098"
+        },
+        {
+          "path": "node_modules/clean-git-ref/lib/index.js",
+          "bytes": 994,
+          "sha256": "2cc0dedd73dce9009c145c9797418a4a14effa9f53fa757401ab6cf295f36167"
+        },
+        {
+          "path": "node_modules/clean-git-ref/package.json",
+          "bytes": 818,
+          "sha256": "85c489423a88038349e92f2515e9f2d38dac5a2319a467357a1e8141b46613be"
+        }
+      ]
+    },
+    {
+      "name": "commander",
+      "version": "6.2.1",
+      "path": "node_modules/commander",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/commander/-/commander-6.2.1.tgz",
+      "integrity": "sha512-U7VdrJFnJgo4xjrHpTzu0yrHPGImdsmD95ZlgYSEajAn2JKzDhDTPG9kBTefmObL2w/ngeZnilk+OV9CG3d7UA==",
+      "packageJSONSHA256": "3aee5b0ead441baada8f6de90ac02d42948044a80db50f4c559a18dbc68e4de4",
+      "documents": [
+        "texts/commander-6.2.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "crc-32",
+      "version": "1.2.2",
+      "path": "node_modules/crc-32",
+      "declaredLicense": "Apache-2.0",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/crc-32/-/crc-32-1.2.2.tgz",
+      "integrity": "sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==",
+      "packageJSONSHA256": "2a96a3fe106da3dffa3479e8983c01c745f0f8c8f961ec9b6af5fb7ff35ce05d",
+      "documents": [
+        "texts/crc-32-1.2.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "path": "node_modules/debug",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+      "packageJSONSHA256": "ea8e33d63fe5f3a4c36609b6c3df8e2ef1f8b8ba2fc3a2e1e53cb27291f384af",
+      "documents": [
+        "texts/debug-4.4.3/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "decompress-response",
+      "version": "6.0.0",
+      "path": "node_modules/decompress-response",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/decompress-response/-/decompress-response-6.0.0.tgz",
+      "integrity": "sha512-aW35yZM6Bb/4oJlZncMH2LCoZtJXTRxES17vE3hoRiowU2kWHaJKFkSBDnDR+cm9J+9QhXmREyIfv0pji9ejCQ==",
+      "packageJSONSHA256": "8fb6b0b19d09cc1c5b2caad128ae39b2fd693a35bb3d440c4e1143bfb9d10080",
+      "documents": [
+        "texts/decompress-response-6.0.0/license"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "define-data-property",
+      "version": "1.1.4",
+      "path": "node_modules/define-data-property",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz",
+      "integrity": "sha512-rBMvIzlpA8v6E+SJZoo++HAYqsLrkg7MSfIinMPFhmkorw7X+dOXVJQs+QT69zGkzMyfDnIMN2Wid1+NbL3T+A==",
+      "packageJSONSHA256": "bde7f1465b344a24da2b10d2ee99f87edf8e0ecd177c28370b60ad9595de730e",
+      "documents": [
+        "texts/define-data-property-1.1.4/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "diff",
+      "version": "8.0.4",
+      "path": "node_modules/diff",
+      "declaredLicense": "BSD-3-Clause",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/diff/-/diff-8.0.4.tgz",
+      "integrity": "sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==",
+      "packageJSONSHA256": "372a1ad33bcaded0234d5d327d1164c18968ee3f2e9f362ddd22e4489e91e369",
+      "documents": [
+        "texts/diff-8.0.4/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "diff3",
+      "version": "0.0.3",
+      "path": "node_modules/diff3",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/diff3/-/diff3-0.0.3.tgz",
+      "integrity": "sha512-iSq8ngPOt0K53A6eVr4d5Kn6GNrM2nQZtC740pzIriHtn4pOQ2lyzEXQMBeVcWERN0ye7fhBsk9PbLLQOnUx/g==",
+      "packageJSONSHA256": "c73baaf5f0de24083e0101e7dd6fb7ac30a3373e10850e6a04adfcca6185bc5a",
+      "documents": [
+        "texts/diff3-0.0.3/diff3.js-LICENSE.txt",
+        "texts/diff3-0.0.3/onp.js-LICENSE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "path": "node_modules/dunder-proto",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
+      "packageJSONSHA256": "24df71008e4225c858f389dd2728b76cf66b752256d42a38ed7930aacae7fe2b",
+      "documents": [
+        "texts/dunder-proto-1.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "path": "node_modules/es-define-property",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
+      "packageJSONSHA256": "3a2cb30dae30a96705dcd9aa2d5fb190cf8200f27badccfa5a81a4374e5708b4",
+      "documents": [
+        "texts/es-define-property-1.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "es-errors",
+      "version": "1.3.0",
+      "path": "node_modules/es-errors",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
+      "packageJSONSHA256": "1a0a0bcccc76b915cb64073317312840cf6363e9144b96f406d0059774dd5278",
+      "documents": [
+        "texts/es-errors-1.3.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "es-object-atoms",
+      "version": "1.1.2",
+      "path": "node_modules/es-object-atoms",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz",
+      "integrity": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
+      "packageJSONSHA256": "e4b7882975d10c68457945c883e1060d0b058af5b1216215c872263f42e12fc9",
+      "documents": [
+        "texts/es-object-atoms-1.1.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "event-target-shim",
+      "version": "5.0.1",
+      "path": "node_modules/event-target-shim",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz",
+      "integrity": "sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==",
+      "packageJSONSHA256": "980bdd7706c72d04a4df2e3ee2c8ffccf3bc72bd8e7cd13ca38be00cafc6e8db",
+      "documents": [
+        "texts/event-target-shim-5.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "events",
+      "version": "3.3.0",
+      "path": "node_modules/events",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/events/-/events-3.3.0.tgz",
+      "integrity": "sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==",
+      "packageJSONSHA256": "878ad3687fef7efe3757c1872a3af998c95197129a7445d632486a9591ee542e",
+      "documents": [
+        "texts/events-3.3.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "fast-xml-builder",
+      "version": "1.3.1",
+      "path": "node_modules/fast-xml-builder",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/fast-xml-builder/-/fast-xml-builder-1.3.1.tgz",
+      "integrity": "sha512-pIM/1n3ntFXKYrUZwW7QCK0gAW7XY+wzj1YMIV3tLDvPj/V+zTGJK5e3/4WJfwj0qWw2ElNXiTixda/R+3YSug==",
+      "packageJSONSHA256": "304416f412412cd967ee1139f0eadfebaa263e92bfbfa264bedbb37055d5c27e",
+      "documents": [
+        "texts/fast-xml-builder-1.3.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "fast-xml-parser",
+      "version": "5.11.2",
+      "path": "node_modules/fast-xml-parser",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/fast-xml-parser/-/fast-xml-parser-5.11.2.tgz",
+      "integrity": "sha512-R9iDuNrQYeQut46cn2r2wHKn4HYzVDvDm5J1wW+koZewykv0yuO2HChTYeZtrULyHIDM9cj9TUXloCsueCQUog==",
+      "packageJSONSHA256": "6e37d7f4edb7ead1c89dbd645f336e3dab813e0a4bf6164411ada9c693b40052",
+      "documents": [
+        "texts/fast-xml-parser-5.11.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "file-type",
+      "version": "21.3.4",
+      "path": "node_modules/file-type",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/file-type/-/file-type-21.3.4.tgz",
+      "integrity": "sha512-Ievi/yy8DS3ygGvT47PjSfdFoX+2isQueoYP1cntFW1JLYAuS4GD7NUPGg4zv2iZfV52uDyk5w5Z0TdpRS6Q1g==",
+      "packageJSONSHA256": "1f3a56f9acc26acb7aa40d79e23d7489bdbb795e41d5baed24d104ab49fe6e65",
+      "documents": [
+        "texts/file-type-21.3.4/license"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "for-each",
+      "version": "0.3.5",
+      "path": "node_modules/for-each",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz",
+      "integrity": "sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==",
+      "packageJSONSHA256": "789a488ade1ea7535497f7c86fded54281c4e7ff861fe8e0e667772a00680711",
+      "documents": [
+        "texts/for-each-0.3.5/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "function-bind",
+      "version": "1.1.2",
+      "path": "node_modules/function-bind",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
+      "packageJSONSHA256": "edb1c4faf4148e6e3d74ed8dbac1a1dc359a647ff4207aad4851396dc7a3559a",
+      "documents": [
+        "texts/function-bind-1.1.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "path": "node_modules/get-intrinsic",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
+      "packageJSONSHA256": "45b14763baacc59b0fd7b39e3ad983d5d2aaf7f5ed682f2fce9edb469826c999",
+      "documents": [
+        "texts/get-intrinsic-1.3.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "get-proto",
+      "version": "1.0.1",
+      "path": "node_modules/get-proto",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
+      "packageJSONSHA256": "73839e012ac7134a632c9d9fc6bdb700ac9ab5553cce39eb789ba2b65663e734",
+      "documents": [
+        "texts/get-proto-1.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "gopd",
+      "version": "1.2.0",
+      "path": "node_modules/gopd",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
+      "packageJSONSHA256": "33ace32dc861f6da9d1fd9d0a44c66e8c6ff3b13358d070683c1c2978ff5f19f",
+      "documents": [
+        "texts/gopd-1.2.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "guarded-fetch",
+      "version": "0.1.3",
+      "path": "node_modules/guarded-fetch",
+      "declaredLicense": "Apache-2.0",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/guarded-fetch/-/guarded-fetch-0.1.3.tgz",
+      "integrity": "sha512-PSaNyJk8VJlUVEhMHPXT/Z/WgNrLBh43WaYQJiu1qvyCuPQA+kgFMNmAOxI3GU3uXrCkO/xRW11XjcswrksYOA==",
+      "packageJSONSHA256": "1d08913c396689745f10db3ca54bdbcc14fc6455337ba7505b14edf2e5774855",
+      "documents": [
+        "texts/guarded-fetch-0.1.3/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "has-property-descriptors",
+      "version": "1.0.2",
+      "path": "node_modules/has-property-descriptors",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz",
+      "integrity": "sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==",
+      "packageJSONSHA256": "59a91e2cf32e4303d248708999a9ec3afd8e3649a87ba7abcf2177dc1984e3d5",
+      "documents": [
+        "texts/has-property-descriptors-1.0.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "path": "node_modules/has-symbols",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
+      "packageJSONSHA256": "5190268c0e3308d7446d1f7c036238f329f786938453e6017cb90980b3612e7a",
+      "documents": [
+        "texts/has-symbols-1.1.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "has-tostringtag",
+      "version": "1.0.2",
+      "path": "node_modules/has-tostringtag",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+      "integrity": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
+      "packageJSONSHA256": "30ab773c52021a6b800ea48f251abeeb1f6e378300f819204dfbb38d6e43f3ad",
+      "documents": [
+        "texts/has-tostringtag-1.0.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "hasown",
+      "version": "2.0.4",
+      "path": "node_modules/hasown",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz",
+      "integrity": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
+      "packageJSONSHA256": "40b750c55a8bacf2c5ac316f5299dd44d48acc101c189a00cd59d39376b5eb89",
+      "documents": [
+        "texts/hasown-2.0.4/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "path": "node_modules/ieee754",
+      "declaredLicense": "BSD-3-Clause",
+      "roots": [
+        "isomorphic-git",
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz",
+      "integrity": "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==",
+      "packageJSONSHA256": "a8004b9c8dffe2e1b01a058ecf968a5d50beabcabc43cc98c655184ba6afc050",
+      "documents": [
+        "texts/ieee754-1.2.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "ignore",
+      "version": "5.3.2",
+      "path": "node_modules/ignore",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/ignore/-/ignore-5.3.2.tgz",
+      "integrity": "sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==",
+      "packageJSONSHA256": "a9f40bd310889f21ed824bc19ce140714b7459d658f6708041af53e9855258a6",
+      "documents": [
+        "texts/ignore-5.3.2/LICENSE-MIT"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "inherits",
+      "version": "2.0.4",
+      "path": "node_modules/inherits",
+      "declaredLicense": "ISC",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+      "integrity": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==",
+      "packageJSONSHA256": "be645800bc94fd8de29c8ae91690549b316cc437100108aeea7b2f347693cc80",
+      "documents": [
+        "texts/inherits-2.0.4/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "ini",
+      "version": "6.0.0",
+      "path": "node_modules/ini",
+      "declaredLicense": "ISC",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/ini/-/ini-6.0.0.tgz",
+      "integrity": "sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==",
+      "packageJSONSHA256": "194169a21afe2614accc960627c62621704ccfbe64ecbde4d7a65847fbaa4d56",
+      "documents": [
+        "texts/ini-6.0.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "ipaddr.js",
+      "version": "2.2.0",
+      "path": "node_modules/ipaddr.js",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-2.2.0.tgz",
+      "integrity": "sha512-Ag3wB2o37wslZS19hZqorUnrnzSkpOVy+IiiDEiTqNubEYpYuHWIf6K4psgN2ZWKExS4xhVCrRVfb/wfW8fWJA==",
+      "packageJSONSHA256": "fa44e1fd8e7cccd8471b75e4f801d3cfc328d5ff4acf914cf136e7d2fd4604b9",
+      "documents": [
+        "texts/ipaddr.js-2.2.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "is-callable",
+      "version": "1.2.7",
+      "path": "node_modules/is-callable",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/is-callable/-/is-callable-1.2.7.tgz",
+      "integrity": "sha512-1BC0BVFhS/p0qtw6enp8e+8OD0UrK0oFLztSjNzhcKA3WDuJxxAPXzPuPtKkjEY9UUoEWlX/8fgKeu2S8i9JTA==",
+      "packageJSONSHA256": "0d0981565f03ca488d263c94d038717ec4face8b129b8ff18e792dabae2af755",
+      "documents": [
+        "texts/is-callable-1.2.7/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "is-typed-array",
+      "version": "1.1.15",
+      "path": "node_modules/is-typed-array",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/is-typed-array/-/is-typed-array-1.1.15.tgz",
+      "integrity": "sha512-p3EcsicXjit7SaskXHs1hA91QxgTw46Fv6EFKKGS5DRFLD8yKnohjF3hxoju94b/OcMZoQukzpPpBE9uLVKzgQ==",
+      "packageJSONSHA256": "51dcf15ccc424ce76b36bef2ef64df7a53e75294cbddf08b4f7e639133145cc5",
+      "documents": [
+        "texts/is-typed-array-1.1.15/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "is-unsafe",
+      "version": "2.0.2",
+      "path": "node_modules/is-unsafe",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/is-unsafe/-/is-unsafe-2.0.2.tgz",
+      "integrity": "sha512-HgbIHPBH0KHHCcjLfGsCvhtPTVxjaAZlXjwdz7/GQC40SjSe4sfQsar8J5VFo8JOSbarkpV0OLG95bbaNd9aAQ==",
+      "packageJSONSHA256": "0fb03fbe6e0df6090d778679929c7c34c9fca298bc72190468217171e8154943",
+      "documents": [
+        "texts/is-unsafe-2.0.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "isarray",
+      "version": "2.0.5",
+      "path": "node_modules/isarray",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/isarray/-/isarray-2.0.5.tgz",
+      "integrity": "sha512-xHjhDr3cNBK0BzdUJSPXZntQUx/mwMS5Rw4A7lPJ90XGAO6ISP/ePDNuo0vhqOZU+UD5JoodwCAAoZQd3FeAKw==",
+      "packageJSONSHA256": "b0802c09bce6bf067d3e5f52390ea26972e11c88bb6ae38991316ac83ca14127",
+      "documents": [
+        "texts/isarray-2.0.5/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "isomorphic-git",
+      "version": "1.44.9",
+      "path": "node_modules/isomorphic-git",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/isomorphic-git/-/isomorphic-git-1.44.9.tgz",
+      "integrity": "sha512-9d0iA5pLPJwgm1d3L4XVdFj0frJd9DCX/1xqzDZ8D09eeSui24pluf8r+RJbHyVd2lfRPbyjhdJI+v6ead1RgA==",
+      "packageJSONSHA256": "5d121f92ac5b4ae5e6ace0863abc68f720ce14d91d45d4530616619acfca83b3",
+      "documents": [
+        "texts/isomorphic-git-1.44.9/LICENSE.md",
+        "texts/isomorphic-git-1.44.9/models/index.umd.min.js.LICENSE.txt",
+        "texts/isomorphic-git-1.44.9/managers/index.umd.min.js.LICENSE.txt",
+        "texts/isomorphic-git-1.44.9/IS-GIT-REF-NAME-VALID-NOTICE.txt",
+        "texts/isomorphic-git-1.44.9/ZENFS-NOTICE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "just-bash",
+      "version": "3.6.0",
+      "path": "node_modules/just-bash",
+      "declaredLicense": "Apache-2.0",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/just-bash/-/just-bash-3.6.0.tgz",
+      "integrity": "sha512-2COjEgcHdqKXeQSiNfPAHmpwQx4S8wATaIwog83g2t645U5tom6FED4CBBdr3M+0ioX4xZ26eODw3/nD6RQ6xw==",
+      "packageJSONSHA256": "f72d75389d49043e91be80b48928fd3ed7fe37a941fbed1e160872fd2377ba3e",
+      "documents": [
+        "texts/just-bash-3.6.0/LICENSE",
+        "texts/just-bash-3.6.0/ANGULAR-BUNDLED-NOTICE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "path": "node_modules/math-intrinsics",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
+      "packageJSONSHA256": "39d74aa5a354153130706286dd60a2d8409ce0c8f66546eff2edcac0afff17e1",
+      "documents": [
+        "texts/math-intrinsics-1.1.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "mimic-response",
+      "version": "3.1.0",
+      "path": "node_modules/mimic-response",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/mimic-response/-/mimic-response-3.1.0.tgz",
+      "integrity": "sha512-z0yWI+4FDrrweS8Zmt4Ej5HdJmky15+L2e6Wgn3+iK5fWzb6T3fhNFq2+MeTRb064c6Wr4N/wv0DzQTjNzHNGQ==",
+      "packageJSONSHA256": "ff358428a418a46fb2431a2c48b396fb01c8291fec9e1f14434ade01196c8e9c",
+      "documents": [
+        "texts/mimic-response-3.1.0/license"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "minimist",
+      "version": "1.2.8",
+      "path": "node_modules/minimist",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz",
+      "integrity": "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==",
+      "packageJSONSHA256": "252881f6a068a3e70386706d88a694b5e8e9e053b6d9f309fd9a329e651bbf81",
+      "documents": [
+        "texts/minimist-1.2.8/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "minimisted",
+      "version": "2.0.1",
+      "path": "node_modules/minimisted",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/minimisted/-/minimisted-2.0.1.tgz",
+      "integrity": "sha512-1oPjfuLQa2caorJUM8HV8lGgWCc0qqAO1MNv/k05G4qslmsndV/5WdNZrqCiyqiz3wohia2Ij2B7w2Dr7/IyrA==",
+      "packageJSONSHA256": "d1355aac6eac8eaa4077ad92a03ef7b9884b89ba3225ced3e46582192262aa0d",
+      "documents": [
+        "texts/minimisted-2.0.1/PACKAGE-DECLARATIONS.txt"
+      ],
+      "registration": "BLOCKED_MISSING_CORRESPONDING_NOTICE",
+      "attributionFields": {
+        "author": "Yoshiya Hinosawa <stibium121@gmail.com> (https://twitter.com/kt3k)",
+        "license": "MIT"
+      },
+      "attributionBoundary": "逐字保留 package.json 的 author/license 字段；不是从 author 推定新增 copyright 行或年份。"
+    },
+    {
+      "name": "modern-tar",
+      "version": "0.7.7",
+      "path": "node_modules/modern-tar",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/modern-tar/-/modern-tar-0.7.7.tgz",
+      "integrity": "sha512-t9VmxaqrmANnEOBhpSDI6HD192Ge48k8vmWqQQL7hSFEqHEYwZbbsu49+aKLWZeRvFs3j1pMhXOqqF4kPlvjkQ==",
+      "packageJSONSHA256": "1630dfdeca687f4feb7bd4e663ae933ae4e100602833917c9a8c471c15da9f7d",
+      "documents": [
+        "texts/modern-tar-0.7.7/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "path": "node_modules/ms",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+      "packageJSONSHA256": "1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40",
+      "documents": [
+        "texts/ms-2.1.3/license.md"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "once",
+      "version": "1.4.0",
+      "path": "node_modules/once",
+      "declaredLicense": "ISC",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
+      "integrity": "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==",
+      "packageJSONSHA256": "33840d74c14c94bfb75c76374765b635531b1eacb88d7f1f2f380c94d0ea1328",
+      "documents": [
+        "texts/once-1.4.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "pako",
+      "version": "1.0.11",
+      "path": "node_modules/pako",
+      "declaredLicense": "(MIT AND Zlib)",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
+      "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==",
+      "packageJSONSHA256": "0014f350a6834ed6a2d1211e0a2e3aa471cb426edf63379c785f9647ea2b4e01",
+      "documents": [
+        "texts/pako-1.0.11/LICENSE",
+        "texts/pako-1.0.11/ZLIB-NOTICE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "papaparse",
+      "version": "5.7.0",
+      "path": "node_modules/papaparse",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/papaparse/-/papaparse-5.7.0.tgz",
+      "integrity": "sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==",
+      "packageJSONSHA256": "9277b27ee67eb8314909560b6cca5a7850d044618a5fa62c6bf67781f90aa218",
+      "documents": [
+        "texts/papaparse-5.7.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "path-expression-matcher",
+      "version": "1.6.2",
+      "path": "node_modules/path-expression-matcher",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/path-expression-matcher/-/path-expression-matcher-1.6.2.tgz",
+      "integrity": "sha512-enSlaiat05iasnzmgNxRj8reFdj3puY2QpNgP1aPIaVfT6nn9ICuPoFlKHk8EN22HcwewshO+mN2DGbkCEOtqQ==",
+      "packageJSONSHA256": "625ca3a27a289160508a79773ddfd7bf678a6401bd96321cac0bc43ebebe01f8",
+      "documents": [
+        "texts/path-expression-matcher-1.6.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "pify",
+      "version": "4.0.1",
+      "path": "node_modules/pify",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/pify/-/pify-4.0.1.tgz",
+      "integrity": "sha512-uB80kBFb/tfd68bVleG9T5GGsGPjJrLAUpR5PZIrhBnIaRTQRjqdJSsIKkOP6OAIFbj7GOrcudc5pNjZ+geV2g==",
+      "packageJSONSHA256": "6f3beed79477c32ec1533609a75bef5cc3998e96657277519b3d66bfcc6d046d",
+      "documents": [
+        "texts/pify-4.0.1/license"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "possible-typed-array-names",
+      "version": "1.1.0",
+      "path": "node_modules/possible-typed-array-names",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz",
+      "integrity": "sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==",
+      "packageJSONSHA256": "0ff73753495cfff4556a5f8b7847ba1c06530341986e642a8637c6db74d87894",
+      "documents": [
+        "texts/possible-typed-array-names-1.1.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "process",
+      "version": "0.11.10",
+      "path": "node_modules/process",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/process/-/process-0.11.10.tgz",
+      "integrity": "sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==",
+      "packageJSONSHA256": "8501b4909630e60c9e9f68c4ca8ccb1964688500e61c60408a26d5480a9dd3d4",
+      "documents": [
+        "texts/process-0.11.10/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "re2js",
+      "version": "1.3.3",
+      "path": "node_modules/re2js",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash",
+        "re2js"
+      ],
+      "resolved": "https://registry.npmjs.org/re2js/-/re2js-1.3.3.tgz",
+      "integrity": "sha512-s/I5zEAo79SUK0Qw4dpZKpiMwbQ6Gz0KU2NRr7eaO4x/p2g7Vvmn3hdeXDg8VsaUjfj/ora+e9oi27LX/C9+mw==",
+      "packageJSONSHA256": "9bd7968b370962d366cf8a5c239332019f606f7d71d7b264d4132b306cc8b34f",
+      "documents": [
+        "texts/re2js-1.3.3/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "readable-stream",
+      "version": "4.8.0",
+      "path": "node_modules/readable-stream",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/readable-stream/-/readable-stream-4.8.0.tgz",
+      "integrity": "sha512-2jhTTU3Eilp/2DMT71gbcoqC35eQHasMJH0RHkYxwlxIv3+FR6Y5xAFZIwEGLxKkjZYEFlsiMNIdwUqjK2lLHQ==",
+      "packageJSONSHA256": "556669bd6ac945c4ecc6bf4886aaa26b0b9a65d79446a33f44c31857362be62f",
+      "documents": [
+        "texts/readable-stream-4.8.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "run",
+      "version": "2.1.3",
+      "path": "node_modules/run",
+      "declaredLicense": "Apache-2.0",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/run/-/run-2.1.3.tgz",
+      "integrity": "sha512-KUurW05zgjtZ2su0cBURC1q2RG/Uq0uzV3qURDsXqiKh03p9IXABQK4Qem56cFMqjT8TdQ2iTWsePrMprQWIRA==",
+      "packageJSONSHA256": "b424c510dbd2894161da914dd212eb0f25498f5fe1f552e6524542c831131ce6",
+      "documents": [
+        "texts/run-2.1.3/LICENSE",
+        "texts/run-2.1.3/THIRD_PARTY_NOTICES.md"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "path": "node_modules/safe-buffer",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
+      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
+      "packageJSONSHA256": "e4018fdbfe625433371f48274fee26f520bbe865e0d8c85bf3aa07424134b90c",
+      "documents": [
+        "texts/safe-buffer-5.2.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "seek-bzip",
+      "version": "2.0.0",
+      "path": "node_modules/seek-bzip",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/seek-bzip/-/seek-bzip-2.0.0.tgz",
+      "integrity": "sha512-SMguiTnYrhpLdk3PwfzHeotrcwi8bNV4iemL9tx9poR/yeaMYwB9VzR1w7b57DuWpuqR8n6oZboi0hj3AxZxQg==",
+      "packageJSONSHA256": "225bd158f4af2dfce074a14d1890ec6d24be0e0926ee9443b0c19ac0fa95ded5",
+      "documents": [
+        "texts/seek-bzip-2.0.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "set-function-length",
+      "version": "1.2.2",
+      "path": "node_modules/set-function-length",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz",
+      "integrity": "sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==",
+      "packageJSONSHA256": "2c81bab7f7a60d625164bd840d863548e3f9d4d1aa976b9d2966e5e1e36132a7",
+      "documents": [
+        "texts/set-function-length-1.2.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "sha.js",
+      "version": "2.4.12",
+      "path": "node_modules/sha.js",
+      "declaredLicense": "(MIT AND BSD-3-Clause)",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/sha.js/-/sha.js-2.4.12.tgz",
+      "integrity": "sha512-8LzC5+bvI45BjpfXU8V5fdU2mfeKiQe1D1gIMn7XUlF3OTUrpdJpPPH4EMAnF0DsHHdSZqCdSss5qCmJKuiO3w==",
+      "packageJSONSHA256": "de7af2f085793d09119bf049f5bec4cf81e68d751d13d90fe027c85ccc31b125",
+      "documents": [
+        "texts/sha.js-2.4.12/LICENSE",
+        "texts/sha.js-2.4.12/SHA1-NOTICE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "simple-concat",
+      "version": "1.0.1",
+      "path": "node_modules/simple-concat",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/simple-concat/-/simple-concat-1.0.1.tgz",
+      "integrity": "sha512-cSFtAPtRhljv69IK0hTVZQ+OfE9nePi/rtJmw5UjHeVyVroEqJXP1sFztKUy1qU+xvz3u/sfYJLa947b7nAN2Q==",
+      "packageJSONSHA256": "d6ae2e35a0c64b4469f1e531a3244efd50be7c115ef42d1422e54d14d9359e99",
+      "documents": [
+        "texts/simple-concat-1.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "simple-get",
+      "version": "4.0.1",
+      "path": "node_modules/simple-get",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/simple-get/-/simple-get-4.0.1.tgz",
+      "integrity": "sha512-brv7p5WgH0jmQJr1ZDDfKDOSeWWg+OVypG99A/5vYGPqJ6pxiaHLy8nxtFjBA7oMa01ebA9gfh1uMCFqOuXxvA==",
+      "packageJSONSHA256": "8337ba9774d6d8199a5861c6dfa57058f162bfb6210362c01db38f0a593f96d6",
+      "documents": [
+        "texts/simple-get-4.0.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "smol-toml",
+      "version": "1.9.1",
+      "path": "node_modules/smol-toml",
+      "declaredLicense": "BSD-3-Clause",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/smol-toml/-/smol-toml-1.9.1.tgz",
+      "integrity": "sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==",
+      "packageJSONSHA256": "d7ad6488e35b31d46bac6412d2d35225db4d693f02a415d872714ceb7e3d7138",
+      "documents": [
+        "texts/smol-toml-1.9.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "sprintf-js",
+      "version": "1.1.3",
+      "path": "node_modules/sprintf-js",
+      "declaredLicense": "BSD-3-Clause",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/sprintf-js/-/sprintf-js-1.1.3.tgz",
+      "integrity": "sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA==",
+      "packageJSONSHA256": "c97349295cae4e40a6f16a26096330997257c00be67bd8fd0ac3391719e4ee5f",
+      "documents": [
+        "texts/sprintf-js-1.1.3/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "sql.js",
+      "version": "1.15.2",
+      "path": "node_modules/sql.js",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/sql.js/-/sql.js-1.15.2.tgz",
+      "integrity": "sha512-ZmMYFsZPZWDKIJUh3A5rdnpRV3hB/r7AijwAzSzLnfv/9CSx4obUmDtA8brAjWJWjGtUVh43nIEJ+6nl6HuOUg==",
+      "packageJSONSHA256": "384c3c1048b0d35ee8f09bbf8dfac4d62cbba4cb7082e3f1c549254e4f124405",
+      "documents": [
+        "texts/sql.js-1.15.2/LICENSE",
+        "texts/sql.js-1.15.2/AUTHORS"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "string_decoder",
+      "version": "1.3.0",
+      "path": "node_modules/string_decoder",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
+      "integrity": "sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==",
+      "packageJSONSHA256": "31984c85cd4f3df0aa75075acdec98c25961496897d1f46d04ed4a701f129c54",
+      "documents": [
+        "texts/string_decoder-1.3.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "strnum",
+      "version": "2.5.1",
+      "path": "node_modules/strnum",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/strnum/-/strnum-2.5.1.tgz",
+      "integrity": "sha512-UM4nTLWzQiDBseVxUGxN0wJzIk0UU89Qi7pKXz9qISo+lhviJikTuikBsK/oFRlpvYHvSdz0TVoLyQ+sEpYwxA==",
+      "packageJSONSHA256": "7efcf7c2b83b9d0054dd637da0b15983a4f43b9aedb999ae895ff9c0b23c7170",
+      "documents": [
+        "texts/strnum-2.5.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "strtok3",
+      "version": "10.6.3",
+      "path": "node_modules/strtok3",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/strtok3/-/strtok3-10.6.3.tgz",
+      "integrity": "sha512-MD8mENgyXMr2mDaDfzP3RWYDSyYQxIIou7HhCiCJiBekrsoDtUG0id3vYnjDfY9ndOEbazFXe13Qw6u/1AB8ew==",
+      "packageJSONSHA256": "4d86c8095694ba9af9c4689cc45db1298432bcc3529e755cce099b6b1a060705",
+      "documents": [
+        "texts/strtok3-10.6.3/LICENSE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "to-buffer",
+      "version": "1.2.2",
+      "path": "node_modules/to-buffer",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/to-buffer/-/to-buffer-1.2.2.tgz",
+      "integrity": "sha512-db0E3UJjcFhpDhAF4tLo03oli3pwl3dbnzXOUIlRKrp+ldk/VUxzpWYZENsw2SZiuBjHAk7DfB0VU7NKdpb6sw==",
+      "packageJSONSHA256": "b9a28e593c952536fd850edc56098bf40679a21e7d1aa6e64a762921af663ef7",
+      "documents": [
+        "texts/to-buffer-1.2.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "token-types",
+      "version": "6.1.2",
+      "path": "node_modules/token-types",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/token-types/-/token-types-6.1.2.tgz",
+      "integrity": "sha512-dRXchy+C0IgK8WPC6xvCHFRIWYUbqqdEIKPaKo/AcTUNzwLTK6AH7RjdLWsEZcAN/TBdtfUw3PYEgPr5VPr6ww==",
+      "packageJSONSHA256": "06babe096a16765225ef908ce63e13c213ea6a32374f43eae2ce7e52e03e2767",
+      "documents": [
+        "texts/token-types-6.1.2/LICENSE.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "turndown",
+      "version": "7.2.4",
+      "path": "node_modules/turndown",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/turndown/-/turndown-7.2.4.tgz",
+      "integrity": "sha512-I8yFsfRzmzK0WV1pNNOA4A7y4RDfFxPRxb3t+e3ui14qSGOxGtiSP6GjeX+Y6CHb7HYaFj7ECUD7VE5kQMZWGQ==",
+      "packageJSONSHA256": "333b1738ad3079742aaf7be7d8b0f0bec2661c44fb49cfeff80b66ce4cb3e040",
+      "documents": [
+        "texts/turndown-7.2.4/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "typed-array-buffer",
+      "version": "1.0.3",
+      "path": "node_modules/typed-array-buffer",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/typed-array-buffer/-/typed-array-buffer-1.0.3.tgz",
+      "integrity": "sha512-nAYYwfY3qnzX30IkA6AQZjVbtK6duGontcQm1WSG1MD94YLqK0515GNApXkoxKOWMusVssAHWLh9SeaoefYFGw==",
+      "packageJSONSHA256": "f0f933ad37d3be61efcb8c4fe64088cd97a4bc86038d5bc19f33df1e995bac56",
+      "documents": [
+        "texts/typed-array-buffer-1.0.3/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "path": "node_modules/typescript",
+      "declaredLicense": "Apache-2.0",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+      "packageJSONSHA256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6",
+      "documents": [
+        "texts/typescript-5.9.3/LICENSE.txt",
+        "texts/typescript-5.9.3/ThirdPartyNoticeText.txt"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "uint8array-extras",
+      "version": "1.6.0",
+      "path": "node_modules/uint8array-extras",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/uint8array-extras/-/uint8array-extras-1.6.0.tgz",
+      "integrity": "sha512-8iAasVS4wUx0gPLjH8Xtz2PeDzTSiy8QiLGu2DT3X5GU+egFEQhpnbtkehbAwjvDcxIERmCYcysiODFmE3Ud0Q==",
+      "packageJSONSHA256": "883937367ce5be56870e5bb6b064c55c9ce758af40b7dd884d5a7a3261d93013",
+      "documents": [
+        "texts/uint8array-extras-1.6.0/license"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "undici",
+      "version": "7.29.0",
+      "path": "node_modules/undici",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/undici/-/undici-7.29.0.tgz",
+      "integrity": "sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==",
+      "packageJSONSHA256": "d2fb5736b5adad6a74c3fba9345d756258e1e953a3a2a13c03fca1bd6c9f6c52",
+      "documents": [
+        "texts/undici-7.29.0/LICENSE",
+        "texts/undici-7.29.0/lib/web/fetch/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "which-typed-array",
+      "version": "1.1.24",
+      "path": "node_modules/which-typed-array",
+      "declaredLicense": "MIT",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.24.tgz",
+      "integrity": "sha512-wk4Mf4pR5mRP7eYuuTBCIQ9d0ud2Fv2jRLQpfgnRjbOxAFHmjKFValgTpitVKzJJS8ajnYQV2Du1SZ8j6b/EUQ==",
+      "packageJSONSHA256": "e175b4177a92cd5f7ae31bc7954edd57369dd059d6faf5f1100f1ab962c6ef01",
+      "documents": [
+        "texts/which-typed-array-1.1.24/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "wrappy",
+      "version": "1.0.2",
+      "path": "node_modules/wrappy",
+      "declaredLicense": "ISC",
+      "roots": [
+        "isomorphic-git"
+      ],
+      "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
+      "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
+      "packageJSONSHA256": "712ac9c4c3cef8bc79f42cf6075ff18551f4cb768f35158214fd643853ad7abc",
+      "documents": [
+        "texts/wrappy-1.0.2/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "xml-naming",
+      "version": "0.3.0",
+      "path": "node_modules/xml-naming",
+      "declaredLicense": "MIT",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/xml-naming/-/xml-naming-0.3.0.tgz",
+      "integrity": "sha512-ghig2TBE/H11aOVgmahA3MhimvkBr6JIYknH/Dhdk10nXwdbIqBJsbfMxpvFPG8bAw77gN29aQWvKpmVoPlvPQ==",
+      "packageJSONSHA256": "e6ff1758837bca3ca6877308c0d51f9e3e47efd07497fa62c8291fd88ab8216f",
+      "documents": [
+        "texts/xml-naming-0.3.0/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    },
+    {
+      "name": "yaml",
+      "version": "2.9.1",
+      "path": "node_modules/yaml",
+      "declaredLicense": "ISC",
+      "roots": [
+        "just-bash"
+      ],
+      "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
+      "integrity": "sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==",
+      "packageJSONSHA256": "1c6441703d8204a23ded0d37ddf57c3b69d821dc392f20852d1f605bb9b8861c",
+      "documents": [
+        "texts/yaml-2.9.1/LICENSE"
+      ],
+      "registration": "TEXT_RECORDED"
+    }
+  ],
+  "excludedOptionalEdges": [
+    [
+      "node_modules/just-bash",
+      "@mongodb-js/zstd"
+    ],
+    [
+      "node_modules/just-bash",
+      "node-liblzma"
+    ]
+  ],
+  "edges": [
+    [
+      "node_modules/@tokenizer/inflate",
+      "debug",
+      "node_modules/debug"
+    ],
+    [
+      "node_modules/@tokenizer/inflate",
+      "token-types",
+      "node_modules/token-types"
+    ],
+    [
+      "node_modules/abort-controller",
+      "event-target-shim",
+      "node_modules/event-target-shim"
+    ],
+    [
+      "node_modules/available-typed-arrays",
+      "possible-typed-array-names",
+      "node_modules/possible-typed-array-names"
+    ],
+    [
+      "node_modules/buffer",
+      "base64-js",
+      "node_modules/base64-js"
+    ],
+    [
+      "node_modules/buffer",
+      "ieee754",
+      "node_modules/ieee754"
+    ],
+    [
+      "node_modules/call-bind",
+      "call-bind-apply-helpers",
+      "node_modules/call-bind-apply-helpers"
+    ],
+    [
+      "node_modules/call-bind",
+      "es-define-property",
+      "node_modules/es-define-property"
+    ],
+    [
+      "node_modules/call-bind",
+      "get-intrinsic",
+      "node_modules/get-intrinsic"
+    ],
+    [
+      "node_modules/call-bind",
+      "set-function-length",
+      "node_modules/set-function-length"
+    ],
+    [
+      "node_modules/call-bind-apply-helpers",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/call-bind-apply-helpers",
+      "function-bind",
+      "node_modules/function-bind"
+    ],
+    [
+      "node_modules/call-bound",
+      "call-bind-apply-helpers",
+      "node_modules/call-bind-apply-helpers"
+    ],
+    [
+      "node_modules/call-bound",
+      "get-intrinsic",
+      "node_modules/get-intrinsic"
+    ],
+    [
+      "node_modules/debug",
+      "ms",
+      "node_modules/ms"
+    ],
+    [
+      "node_modules/decompress-response",
+      "mimic-response",
+      "node_modules/mimic-response"
+    ],
+    [
+      "node_modules/define-data-property",
+      "es-define-property",
+      "node_modules/es-define-property"
+    ],
+    [
+      "node_modules/define-data-property",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/define-data-property",
+      "gopd",
+      "node_modules/gopd"
+    ],
+    [
+      "node_modules/dunder-proto",
+      "call-bind-apply-helpers",
+      "node_modules/call-bind-apply-helpers"
+    ],
+    [
+      "node_modules/dunder-proto",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/dunder-proto",
+      "gopd",
+      "node_modules/gopd"
+    ],
+    [
+      "node_modules/es-object-atoms",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/fast-xml-builder",
+      "path-expression-matcher",
+      "node_modules/path-expression-matcher"
+    ],
+    [
+      "node_modules/fast-xml-builder",
+      "xml-naming",
+      "node_modules/xml-naming"
+    ],
+    [
+      "node_modules/fast-xml-parser",
+      "@nodable/entities",
+      "node_modules/@nodable/entities"
+    ],
+    [
+      "node_modules/fast-xml-parser",
+      "fast-xml-builder",
+      "node_modules/fast-xml-builder"
+    ],
+    [
+      "node_modules/fast-xml-parser",
+      "is-unsafe",
+      "node_modules/is-unsafe"
+    ],
+    [
+      "node_modules/fast-xml-parser",
+      "path-expression-matcher",
+      "node_modules/path-expression-matcher"
+    ],
+    [
+      "node_modules/fast-xml-parser",
+      "strnum",
+      "node_modules/strnum"
+    ],
+    [
+      "node_modules/fast-xml-parser",
+      "xml-naming",
+      "node_modules/xml-naming"
+    ],
+    [
+      "node_modules/file-type",
+      "@tokenizer/inflate",
+      "node_modules/@tokenizer/inflate"
+    ],
+    [
+      "node_modules/file-type",
+      "strtok3",
+      "node_modules/strtok3"
+    ],
+    [
+      "node_modules/file-type",
+      "token-types",
+      "node_modules/token-types"
+    ],
+    [
+      "node_modules/file-type",
+      "uint8array-extras",
+      "node_modules/uint8array-extras"
+    ],
+    [
+      "node_modules/for-each",
+      "is-callable",
+      "node_modules/is-callable"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "call-bind-apply-helpers",
+      "node_modules/call-bind-apply-helpers"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "es-define-property",
+      "node_modules/es-define-property"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "es-object-atoms",
+      "node_modules/es-object-atoms"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "function-bind",
+      "node_modules/function-bind"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "get-proto",
+      "node_modules/get-proto"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "gopd",
+      "node_modules/gopd"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "has-symbols",
+      "node_modules/has-symbols"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "hasown",
+      "node_modules/hasown"
+    ],
+    [
+      "node_modules/get-intrinsic",
+      "math-intrinsics",
+      "node_modules/math-intrinsics"
+    ],
+    [
+      "node_modules/get-proto",
+      "dunder-proto",
+      "node_modules/dunder-proto"
+    ],
+    [
+      "node_modules/get-proto",
+      "es-object-atoms",
+      "node_modules/es-object-atoms"
+    ],
+    [
+      "node_modules/guarded-fetch",
+      "ipaddr.js",
+      "node_modules/ipaddr.js"
+    ],
+    [
+      "node_modules/guarded-fetch",
+      "undici",
+      "node_modules/undici"
+    ],
+    [
+      "node_modules/has-property-descriptors",
+      "es-define-property",
+      "node_modules/es-define-property"
+    ],
+    [
+      "node_modules/has-tostringtag",
+      "has-symbols",
+      "node_modules/has-symbols"
+    ],
+    [
+      "node_modules/hasown",
+      "function-bind",
+      "node_modules/function-bind"
+    ],
+    [
+      "node_modules/is-typed-array",
+      "which-typed-array",
+      "node_modules/which-typed-array"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "async-lock",
+      "node_modules/async-lock"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "clean-git-ref",
+      "node_modules/clean-git-ref"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "crc-32",
+      "node_modules/crc-32"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "diff3",
+      "node_modules/diff3"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "ignore",
+      "node_modules/ignore"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "minimisted",
+      "node_modules/minimisted"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "pako",
+      "node_modules/pako"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "pify",
+      "node_modules/pify"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "readable-stream",
+      "node_modules/readable-stream"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "sha.js",
+      "node_modules/sha.js"
+    ],
+    [
+      "node_modules/isomorphic-git",
+      "simple-get",
+      "node_modules/simple-get"
+    ],
+    [
+      "node_modules/just-bash",
+      "diff",
+      "node_modules/diff"
+    ],
+    [
+      "node_modules/just-bash",
+      "fast-xml-parser",
+      "node_modules/fast-xml-parser"
+    ],
+    [
+      "node_modules/just-bash",
+      "file-type",
+      "node_modules/file-type"
+    ],
+    [
+      "node_modules/just-bash",
+      "guarded-fetch",
+      "node_modules/guarded-fetch"
+    ],
+    [
+      "node_modules/just-bash",
+      "ini",
+      "node_modules/ini"
+    ],
+    [
+      "node_modules/just-bash",
+      "modern-tar",
+      "node_modules/modern-tar"
+    ],
+    [
+      "node_modules/just-bash",
+      "papaparse",
+      "node_modules/papaparse"
+    ],
+    [
+      "node_modules/just-bash",
+      "re2js",
+      "node_modules/re2js"
+    ],
+    [
+      "node_modules/just-bash",
+      "run",
+      "node_modules/run"
+    ],
+    [
+      "node_modules/just-bash",
+      "seek-bzip",
+      "node_modules/seek-bzip"
+    ],
+    [
+      "node_modules/just-bash",
+      "smol-toml",
+      "node_modules/smol-toml"
+    ],
+    [
+      "node_modules/just-bash",
+      "sprintf-js",
+      "node_modules/sprintf-js"
+    ],
+    [
+      "node_modules/just-bash",
+      "sql.js",
+      "node_modules/sql.js"
+    ],
+    [
+      "node_modules/just-bash",
+      "turndown",
+      "node_modules/turndown"
+    ],
+    [
+      "node_modules/just-bash",
+      "typescript",
+      "node_modules/typescript"
+    ],
+    [
+      "node_modules/just-bash",
+      "yaml",
+      "node_modules/yaml"
+    ],
+    [
+      "node_modules/minimisted",
+      "minimist",
+      "node_modules/minimist"
+    ],
+    [
+      "node_modules/once",
+      "wrappy",
+      "node_modules/wrappy"
+    ],
+    [
+      "node_modules/readable-stream",
+      "abort-controller",
+      "node_modules/abort-controller"
+    ],
+    [
+      "node_modules/readable-stream",
+      "buffer",
+      "node_modules/buffer"
+    ],
+    [
+      "node_modules/readable-stream",
+      "events",
+      "node_modules/events"
+    ],
+    [
+      "node_modules/readable-stream",
+      "process",
+      "node_modules/process"
+    ],
+    [
+      "node_modules/readable-stream",
+      "string_decoder",
+      "node_modules/string_decoder"
+    ],
+    [
+      "node_modules/seek-bzip",
+      "commander",
+      "node_modules/commander"
+    ],
+    [
+      "node_modules/set-function-length",
+      "define-data-property",
+      "node_modules/define-data-property"
+    ],
+    [
+      "node_modules/set-function-length",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/set-function-length",
+      "function-bind",
+      "node_modules/function-bind"
+    ],
+    [
+      "node_modules/set-function-length",
+      "get-intrinsic",
+      "node_modules/get-intrinsic"
+    ],
+    [
+      "node_modules/set-function-length",
+      "gopd",
+      "node_modules/gopd"
+    ],
+    [
+      "node_modules/set-function-length",
+      "has-property-descriptors",
+      "node_modules/has-property-descriptors"
+    ],
+    [
+      "node_modules/sha.js",
+      "inherits",
+      "node_modules/inherits"
+    ],
+    [
+      "node_modules/sha.js",
+      "safe-buffer",
+      "node_modules/safe-buffer"
+    ],
+    [
+      "node_modules/sha.js",
+      "to-buffer",
+      "node_modules/to-buffer"
+    ],
+    [
+      "node_modules/simple-get",
+      "decompress-response",
+      "node_modules/decompress-response"
+    ],
+    [
+      "node_modules/simple-get",
+      "once",
+      "node_modules/once"
+    ],
+    [
+      "node_modules/simple-get",
+      "simple-concat",
+      "node_modules/simple-concat"
+    ],
+    [
+      "node_modules/string_decoder",
+      "safe-buffer",
+      "node_modules/safe-buffer"
+    ],
+    [
+      "node_modules/strnum",
+      "anynum",
+      "node_modules/anynum"
+    ],
+    [
+      "node_modules/strtok3",
+      "@tokenizer/token",
+      "node_modules/@tokenizer/token"
+    ],
+    [
+      "node_modules/to-buffer",
+      "isarray",
+      "node_modules/isarray"
+    ],
+    [
+      "node_modules/to-buffer",
+      "safe-buffer",
+      "node_modules/safe-buffer"
+    ],
+    [
+      "node_modules/to-buffer",
+      "typed-array-buffer",
+      "node_modules/typed-array-buffer"
+    ],
+    [
+      "node_modules/token-types",
+      "@borewit/text-codec",
+      "node_modules/@borewit/text-codec"
+    ],
+    [
+      "node_modules/token-types",
+      "@tokenizer/token",
+      "node_modules/@tokenizer/token"
+    ],
+    [
+      "node_modules/token-types",
+      "ieee754",
+      "node_modules/ieee754"
+    ],
+    [
+      "node_modules/turndown",
+      "@mixmark-io/domino",
+      "node_modules/@mixmark-io/domino"
+    ],
+    [
+      "node_modules/typed-array-buffer",
+      "call-bound",
+      "node_modules/call-bound"
+    ],
+    [
+      "node_modules/typed-array-buffer",
+      "es-errors",
+      "node_modules/es-errors"
+    ],
+    [
+      "node_modules/typed-array-buffer",
+      "is-typed-array",
+      "node_modules/is-typed-array"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "available-typed-arrays",
+      "node_modules/available-typed-arrays"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "call-bind",
+      "node_modules/call-bind"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "call-bound",
+      "node_modules/call-bound"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "for-each",
+      "node_modules/for-each"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "get-proto",
+      "node_modules/get-proto"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "gopd",
+      "node_modules/gopd"
+    ],
+    [
+      "node_modules/which-typed-array",
+      "has-tostringtag",
+      "node_modules/has-tostringtag"
+    ]
+  ],
+  "documents": [
+    {
+      "path": "texts/borewit--text-codec-0.2.3/LICENSE.txt",
+      "sha256": "d55209d49c97d162829baf379dfcf841e47c98528d2d50baeb922ac2983a1e47",
+      "bytes": 1073,
+      "source": {
+        "package": "@borewit/text-codec",
+        "version": "0.2.3",
+        "sha256": "d55209d49c97d162829baf379dfcf841e47c98528d2d50baeb922ac2983a1e47",
+        "bytes": 1073,
+        "kind": "process-prefix",
+        "path": "node_modules/@borewit/text-codec/LICENSE.txt"
+      }
+    },
+    {
+      "path": "texts/mixmark-io--domino-2.2.0/LICENSE",
+      "sha256": "9672b5ea831c360425e95b806b302e502582dd9718b056f29c40cf241daecb68",
+      "bytes": 1340,
+      "source": {
+        "package": "@mixmark-io/domino",
+        "version": "2.2.0",
+        "sha256": "9672b5ea831c360425e95b806b302e502582dd9718b056f29c40cf241daecb68",
+        "bytes": 1340,
+        "kind": "process-prefix",
+        "path": "node_modules/@mixmark-io/domino/LICENSE"
+      }
+    },
+    {
+      "path": "texts/tokenizer--inflate-0.4.1/LICENSE",
+      "sha256": "5bb0e8b566dee0e946cafd9bbed359eb0494580df86457876b4f41bba5c77b25",
+      "bytes": 1072,
+      "source": {
+        "package": "@tokenizer/inflate",
+        "version": "0.4.1",
+        "sha256": "5bb0e8b566dee0e946cafd9bbed359eb0494580df86457876b4f41bba5c77b25",
+        "bytes": 1072,
+        "kind": "process-prefix",
+        "path": "node_modules/@tokenizer/inflate/LICENSE"
+      }
+    },
+    {
+      "path": "texts/abort-controller-3.0.0/LICENSE",
+      "sha256": "dbbf03317f0101fed5643cd87ca80fb769e358fa4f428445bf2315deeb23a154",
+      "bytes": 1071,
+      "source": {
+        "package": "abort-controller",
+        "version": "3.0.0",
+        "sha256": "dbbf03317f0101fed5643cd87ca80fb769e358fa4f428445bf2315deeb23a154",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/abort-controller/LICENSE"
+      }
+    },
+    {
+      "path": "texts/anynum-1.0.1/LICENSE",
+      "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+      "bytes": 1077,
+      "source": {
+        "package": "anynum",
+        "version": "1.0.1",
+        "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+        "bytes": 1077,
+        "kind": "process-prefix",
+        "path": "node_modules/anynum/LICENSE"
+      }
+    },
+    {
+      "path": "texts/async-lock-1.4.1/LICENSE",
+      "sha256": "11e9f9acdfdfce6caa7b304c6ebb1a3269a61bb03d74bfcce629cc1462c06ddc",
+      "bytes": 1110,
+      "source": {
+        "package": "async-lock",
+        "version": "1.4.1",
+        "sha256": "11e9f9acdfdfce6caa7b304c6ebb1a3269a61bb03d74bfcce629cc1462c06ddc",
+        "bytes": 1110,
+        "kind": "process-prefix",
+        "path": "node_modules/async-lock/LICENSE"
+      }
+    },
+    {
+      "path": "texts/async-lock-1.4.1/AUTHORS",
+      "sha256": "4a58098622464e8b64ba775912e65c6b208a1356747c92efb0f5fb7efd0eba50",
+      "bytes": 858,
+      "source": {
+        "package": "async-lock",
+        "version": "1.4.1",
+        "sha256": "4a58098622464e8b64ba775912e65c6b208a1356747c92efb0f5fb7efd0eba50",
+        "bytes": 858,
+        "kind": "process-prefix",
+        "path": "node_modules/async-lock/AUTHORS"
+      }
+    },
+    {
+      "path": "texts/available-typed-arrays-1.0.7/LICENSE",
+      "sha256": "6d0917530cf3b3dca12c1ab7798e4d38ad0a6798ecc1bd27849a3048ba91d265",
+      "bytes": 1067,
+      "source": {
+        "package": "available-typed-arrays",
+        "version": "1.0.7",
+        "sha256": "6d0917530cf3b3dca12c1ab7798e4d38ad0a6798ecc1bd27849a3048ba91d265",
+        "bytes": 1067,
+        "kind": "process-prefix",
+        "path": "node_modules/available-typed-arrays/LICENSE"
+      }
+    },
+    {
+      "path": "texts/base64-js-1.5.1/LICENSE",
+      "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1",
+      "bytes": 1081,
+      "source": {
+        "package": "base64-js",
+        "version": "1.5.1",
+        "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1",
+        "bytes": 1081,
+        "kind": "process-prefix",
+        "path": "node_modules/base64-js/LICENSE"
+      }
+    },
+    {
+      "path": "texts/buffer-6.0.3/LICENSE",
+      "sha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6",
+      "bytes": 1106,
+      "source": {
+        "package": "buffer",
+        "version": "6.0.3",
+        "sha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6",
+        "bytes": 1106,
+        "kind": "process-prefix",
+        "path": "node_modules/buffer/LICENSE"
+      }
+    },
+    {
+      "path": "texts/buffer-6.0.3/AUTHORS.md",
+      "sha256": "ca3d96437f69ceb38df1972db017fcd6303b02f57ea1f838ab9f9c3db3e789e0",
+      "bytes": 2788,
+      "source": {
+        "package": "buffer",
+        "version": "6.0.3",
+        "sha256": "ca3d96437f69ceb38df1972db017fcd6303b02f57ea1f838ab9f9c3db3e789e0",
+        "bytes": 2788,
+        "kind": "process-prefix",
+        "path": "node_modules/buffer/AUTHORS.md"
+      }
+    },
+    {
+      "path": "texts/call-bind-1.0.9/LICENSE",
+      "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416",
+      "bytes": 1071,
+      "source": {
+        "package": "call-bind",
+        "version": "1.0.9",
+        "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/call-bind/LICENSE"
+      }
+    },
+    {
+      "path": "texts/call-bind-apply-helpers-1.0.2/LICENSE",
+      "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+      "bytes": 1071,
+      "source": {
+        "package": "call-bind-apply-helpers",
+        "version": "1.0.2",
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/call-bind-apply-helpers/LICENSE"
+      }
+    },
+    {
+      "path": "texts/call-bound-1.0.4/LICENSE",
+      "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+      "bytes": 1071,
+      "source": {
+        "package": "call-bound",
+        "version": "1.0.4",
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/call-bound/LICENSE"
+      }
+    },
+    {
+      "path": "texts/commander-6.2.1/LICENSE",
+      "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b",
+      "bytes": 1098,
+      "source": {
+        "package": "commander",
+        "version": "6.2.1",
+        "sha256": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b",
+        "bytes": 1098,
+        "kind": "process-prefix",
+        "path": "node_modules/commander/LICENSE"
+      }
+    },
+    {
+      "path": "texts/crc-32-1.2.2/LICENSE",
+      "sha256": "c542ba7851b5d39a5face477e47a27cb7c00a9759e321b66824e79718bffe1ac",
+      "bytes": 11355,
+      "source": {
+        "package": "crc-32",
+        "version": "1.2.2",
+        "sha256": "c542ba7851b5d39a5face477e47a27cb7c00a9759e321b66824e79718bffe1ac",
+        "bytes": 11355,
+        "kind": "process-prefix",
+        "path": "node_modules/crc-32/LICENSE"
+      }
+    },
+    {
+      "path": "texts/debug-4.4.3/LICENSE",
+      "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95",
+      "bytes": 1139,
+      "source": {
+        "package": "debug",
+        "version": "4.4.3",
+        "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95",
+        "bytes": 1139,
+        "kind": "process-prefix",
+        "path": "node_modules/debug/LICENSE"
+      }
+    },
+    {
+      "path": "texts/decompress-response-6.0.0/license",
+      "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+      "bytes": 1117,
+      "source": {
+        "package": "decompress-response",
+        "version": "6.0.0",
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+        "bytes": 1117,
+        "kind": "process-prefix",
+        "path": "node_modules/decompress-response/license"
+      }
+    },
+    {
+      "path": "texts/define-data-property-1.1.4/LICENSE",
+      "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c",
+      "bytes": 1071,
+      "source": {
+        "package": "define-data-property",
+        "version": "1.1.4",
+        "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/define-data-property/LICENSE"
+      }
+    },
+    {
+      "path": "texts/diff-8.0.4/LICENSE",
+      "sha256": "eda81a415869e67809f6a9f3fd6056062cb83a462118e07eec5e92b2e0c40ce9",
+      "bytes": 1546,
+      "source": {
+        "package": "diff",
+        "version": "8.0.4",
+        "sha256": "eda81a415869e67809f6a9f3fd6056062cb83a462118e07eec5e92b2e0c40ce9",
+        "bytes": 1546,
+        "kind": "process-prefix",
+        "path": "node_modules/diff/LICENSE"
+      }
+    },
+    {
+      "path": "texts/dunder-proto-1.0.1/LICENSE",
+      "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1",
+      "bytes": 1073,
+      "source": {
+        "package": "dunder-proto",
+        "version": "1.0.1",
+        "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1",
+        "bytes": 1073,
+        "kind": "process-prefix",
+        "path": "node_modules/dunder-proto/LICENSE"
+      }
+    },
+    {
+      "path": "texts/es-define-property-1.0.1/LICENSE",
+      "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+      "bytes": 1071,
+      "source": {
+        "package": "es-define-property",
+        "version": "1.0.1",
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/es-define-property/LICENSE"
+      }
+    },
+    {
+      "path": "texts/es-errors-1.3.0/LICENSE",
+      "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+      "bytes": 1071,
+      "source": {
+        "package": "es-errors",
+        "version": "1.3.0",
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/es-errors/LICENSE"
+      }
+    },
+    {
+      "path": "texts/es-object-atoms-1.1.2/LICENSE",
+      "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+      "bytes": 1071,
+      "source": {
+        "package": "es-object-atoms",
+        "version": "1.1.2",
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/es-object-atoms/LICENSE"
+      }
+    },
+    {
+      "path": "texts/event-target-shim-5.0.1/LICENSE",
+      "sha256": "97d87142793695cd73243de7258694abe85b3b6060fca7f247b0a2afa8219678",
+      "bytes": 1082,
+      "source": {
+        "package": "event-target-shim",
+        "version": "5.0.1",
+        "sha256": "97d87142793695cd73243de7258694abe85b3b6060fca7f247b0a2afa8219678",
+        "bytes": 1082,
+        "kind": "process-prefix",
+        "path": "node_modules/event-target-shim/LICENSE"
+      }
+    },
+    {
+      "path": "texts/events-3.3.0/LICENSE",
+      "sha256": "631987b7616a325a5b97566c232418481ddf7dbb5ecadefb991e791876cc2599",
+      "bytes": 1081,
+      "source": {
+        "package": "events",
+        "version": "3.3.0",
+        "sha256": "631987b7616a325a5b97566c232418481ddf7dbb5ecadefb991e791876cc2599",
+        "bytes": 1081,
+        "kind": "process-prefix",
+        "path": "node_modules/events/LICENSE"
+      }
+    },
+    {
+      "path": "texts/fast-xml-builder-1.3.1/LICENSE",
+      "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+      "bytes": 1077,
+      "source": {
+        "package": "fast-xml-builder",
+        "version": "1.3.1",
+        "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+        "bytes": 1077,
+        "kind": "process-prefix",
+        "path": "node_modules/fast-xml-builder/LICENSE"
+      }
+    },
+    {
+      "path": "texts/fast-xml-parser-5.11.2/LICENSE",
+      "sha256": "7883225d5e84a6bbb9b170c3d891b4bf6d6259cee869c86bd86381a927071745",
+      "bytes": 1073,
+      "source": {
+        "package": "fast-xml-parser",
+        "version": "5.11.2",
+        "sha256": "7883225d5e84a6bbb9b170c3d891b4bf6d6259cee869c86bd86381a927071745",
+        "bytes": 1073,
+        "kind": "process-prefix",
+        "path": "node_modules/fast-xml-parser/LICENSE"
+      }
+    },
+    {
+      "path": "texts/file-type-21.3.4/license",
+      "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+      "bytes": 1117,
+      "source": {
+        "package": "file-type",
+        "version": "21.3.4",
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+        "bytes": 1117,
+        "kind": "process-prefix",
+        "path": "node_modules/file-type/license"
+      }
+    },
+    {
+      "path": "texts/for-each-0.3.5/LICENSE",
+      "sha256": "d07913d776eef217a95d7ee3ee83577fc3c365b9c870f5a3411f785b81090614",
+      "bytes": 1075,
+      "source": {
+        "package": "for-each",
+        "version": "0.3.5",
+        "sha256": "d07913d776eef217a95d7ee3ee83577fc3c365b9c870f5a3411f785b81090614",
+        "bytes": 1075,
+        "kind": "process-prefix",
+        "path": "node_modules/for-each/LICENSE"
+      }
+    },
+    {
+      "path": "texts/function-bind-1.1.2/LICENSE",
+      "sha256": "773e131a7684726005a7e4688a80b4620033bc08499bc1404dd1a1eb3bca725e",
+      "bytes": 1052,
+      "source": {
+        "package": "function-bind",
+        "version": "1.1.2",
+        "sha256": "773e131a7684726005a7e4688a80b4620033bc08499bc1404dd1a1eb3bca725e",
+        "bytes": 1052,
+        "kind": "process-prefix",
+        "path": "node_modules/function-bind/LICENSE"
+      }
+    },
+    {
+      "path": "texts/get-intrinsic-1.3.0/LICENSE",
+      "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416",
+      "bytes": 1071,
+      "source": {
+        "package": "get-intrinsic",
+        "version": "1.3.0",
+        "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/get-intrinsic/LICENSE"
+      }
+    },
+    {
+      "path": "texts/get-proto-1.0.1/LICENSE",
+      "sha256": "be46ce1e3b0479af9ce82d22b465a6d7d2ff084fca0aaf3d54172da2b5eb5781",
+      "bytes": 1071,
+      "source": {
+        "package": "get-proto",
+        "version": "1.0.1",
+        "sha256": "be46ce1e3b0479af9ce82d22b465a6d7d2ff084fca0aaf3d54172da2b5eb5781",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/get-proto/LICENSE"
+      }
+    },
+    {
+      "path": "texts/gopd-1.2.0/LICENSE",
+      "sha256": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5",
+      "bytes": 1071,
+      "source": {
+        "package": "gopd",
+        "version": "1.2.0",
+        "sha256": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/gopd/LICENSE"
+      }
+    },
+    {
+      "path": "texts/guarded-fetch-0.1.3/LICENSE",
+      "sha256": "b070d77bfb2c52a1dd6996de0ce5f64c49a0ca55c889b163a963ddf5cb001ee2",
+      "bytes": 11343,
+      "source": {
+        "package": "guarded-fetch",
+        "version": "0.1.3",
+        "sha256": "b070d77bfb2c52a1dd6996de0ce5f64c49a0ca55c889b163a963ddf5cb001ee2",
+        "bytes": 11343,
+        "kind": "process-prefix",
+        "path": "node_modules/guarded-fetch/LICENSE"
+      }
+    },
+    {
+      "path": "texts/has-property-descriptors-1.0.2/LICENSE",
+      "sha256": "0f0ca96f50793990031ebc488a38f7292ff70bce8ab6a8e5eeda674abc32ccdf",
+      "bytes": 1067,
+      "source": {
+        "package": "has-property-descriptors",
+        "version": "1.0.2",
+        "sha256": "0f0ca96f50793990031ebc488a38f7292ff70bce8ab6a8e5eeda674abc32ccdf",
+        "bytes": 1067,
+        "kind": "process-prefix",
+        "path": "node_modules/has-property-descriptors/LICENSE"
+      }
+    },
+    {
+      "path": "texts/has-symbols-1.1.0/LICENSE",
+      "sha256": "206c1adcf206dc0031b11232f5b054ec5f1662407ab1ca415247921cab2068ab",
+      "bytes": 1071,
+      "source": {
+        "package": "has-symbols",
+        "version": "1.1.0",
+        "sha256": "206c1adcf206dc0031b11232f5b054ec5f1662407ab1ca415247921cab2068ab",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/has-symbols/LICENSE"
+      }
+    },
+    {
+      "path": "texts/has-tostringtag-1.0.2/LICENSE",
+      "sha256": "e2560e002e13281578c75c850061d9255c33d16d732939e8c2db64c2506642fa",
+      "bytes": 1067,
+      "source": {
+        "package": "has-tostringtag",
+        "version": "1.0.2",
+        "sha256": "e2560e002e13281578c75c850061d9255c33d16d732939e8c2db64c2506642fa",
+        "bytes": 1067,
+        "kind": "process-prefix",
+        "path": "node_modules/has-tostringtag/LICENSE"
+      }
+    },
+    {
+      "path": "texts/hasown-2.0.4/LICENSE",
+      "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a",
+      "bytes": 1083,
+      "source": {
+        "package": "hasown",
+        "version": "2.0.4",
+        "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a",
+        "bytes": 1083,
+        "kind": "process-prefix",
+        "path": "node_modules/hasown/LICENSE"
+      }
+    },
+    {
+      "path": "texts/ieee754-1.2.1/LICENSE",
+      "sha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1",
+      "bytes": 1465,
+      "source": {
+        "package": "ieee754",
+        "version": "1.2.1",
+        "sha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1",
+        "bytes": 1465,
+        "kind": "process-prefix",
+        "path": "node_modules/ieee754/LICENSE"
+      }
+    },
+    {
+      "path": "texts/ignore-5.3.2/LICENSE-MIT",
+      "sha256": "9c94db23dc4b1e9aaee5d195668b916afc71efed54af226b66cf0ccc4389c1c0",
+      "bytes": 1095,
+      "source": {
+        "package": "ignore",
+        "version": "5.3.2",
+        "sha256": "9c94db23dc4b1e9aaee5d195668b916afc71efed54af226b66cf0ccc4389c1c0",
+        "bytes": 1095,
+        "kind": "process-prefix",
+        "path": "node_modules/ignore/LICENSE-MIT"
+      }
+    },
+    {
+      "path": "texts/inherits-2.0.4/LICENSE",
+      "sha256": "5ffe28e7ade7d8f10d85d5337a73fd793dac5c462fb9a28fbf8c5046c7fbca3b",
+      "bytes": 749,
+      "source": {
+        "package": "inherits",
+        "version": "2.0.4",
+        "sha256": "5ffe28e7ade7d8f10d85d5337a73fd793dac5c462fb9a28fbf8c5046c7fbca3b",
+        "bytes": 749,
+        "kind": "process-prefix",
+        "path": "node_modules/inherits/LICENSE"
+      }
+    },
+    {
+      "path": "texts/ini-6.0.0/LICENSE",
+      "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+      "bytes": 765,
+      "source": {
+        "package": "ini",
+        "version": "6.0.0",
+        "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "bytes": 765,
+        "kind": "process-prefix",
+        "path": "node_modules/ini/LICENSE"
+      }
+    },
+    {
+      "path": "texts/ipaddr.js-2.2.0/LICENSE",
+      "sha256": "62568a2d1337b77171ecca9db10579163446de1ba6151678e81f06cdc199971b",
+      "bytes": 1087,
+      "source": {
+        "package": "ipaddr.js",
+        "version": "2.2.0",
+        "sha256": "62568a2d1337b77171ecca9db10579163446de1ba6151678e81f06cdc199971b",
+        "bytes": 1087,
+        "kind": "process-prefix",
+        "path": "node_modules/ipaddr.js/LICENSE"
+      }
+    },
+    {
+      "path": "texts/is-callable-1.2.7/LICENSE",
+      "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+      "bytes": 1082,
+      "source": {
+        "package": "is-callable",
+        "version": "1.2.7",
+        "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+        "bytes": 1082,
+        "kind": "process-prefix",
+        "path": "node_modules/is-callable/LICENSE"
+      }
+    },
+    {
+      "path": "texts/is-typed-array-1.1.15/LICENSE",
+      "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+      "bytes": 1082,
+      "source": {
+        "package": "is-typed-array",
+        "version": "1.1.15",
+        "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+        "bytes": 1082,
+        "kind": "process-prefix",
+        "path": "node_modules/is-typed-array/LICENSE"
+      }
+    },
+    {
+      "path": "texts/is-unsafe-2.0.2/LICENSE",
+      "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+      "bytes": 1077,
+      "source": {
+        "package": "is-unsafe",
+        "version": "2.0.2",
+        "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+        "bytes": 1077,
+        "kind": "process-prefix",
+        "path": "node_modules/is-unsafe/LICENSE"
+      }
+    },
+    {
+      "path": "texts/isarray-2.0.5/LICENSE",
+      "sha256": "68f12f6e2c33688699249c01d8f9623c534da20aa71989c57b061b7bc1676d14",
+      "bytes": 1096,
+      "source": {
+        "package": "isarray",
+        "version": "2.0.5",
+        "sha256": "68f12f6e2c33688699249c01d8f9623c534da20aa71989c57b061b7bc1676d14",
+        "bytes": 1096,
+        "kind": "process-prefix",
+        "path": "node_modules/isarray/LICENSE"
+      }
+    },
+    {
+      "path": "texts/isomorphic-git-1.44.9/LICENSE.md",
+      "sha256": "b916888fb16893c3a1df138543f994b96bb6892d74b6777c3a080d9cd2520c48",
+      "bytes": 1073,
+      "source": {
+        "package": "isomorphic-git",
+        "version": "1.44.9",
+        "sha256": "b916888fb16893c3a1df138543f994b96bb6892d74b6777c3a080d9cd2520c48",
+        "bytes": 1073,
+        "kind": "process-prefix",
+        "path": "node_modules/isomorphic-git/LICENSE.md"
+      }
+    },
+    {
+      "path": "texts/isomorphic-git-1.44.9/models/index.umd.min.js.LICENSE.txt",
+      "sha256": "1306df91151061d73fd49455df881076f852c46d3bc69b953ada8f96b4349030",
+      "bytes": 910,
+      "source": {
+        "package": "isomorphic-git",
+        "version": "1.44.9",
+        "sha256": "1306df91151061d73fd49455df881076f852c46d3bc69b953ada8f96b4349030",
+        "bytes": 910,
+        "kind": "process-prefix",
+        "path": "node_modules/isomorphic-git/models/index.umd.min.js.LICENSE.txt"
+      }
+    },
+    {
+      "path": "texts/isomorphic-git-1.44.9/managers/index.umd.min.js.LICENSE.txt",
+      "sha256": "21e371e59f24622318dd11ccda43df003ed70e44cf993958244562e87eea7f85",
+      "bytes": 1286,
+      "source": {
+        "package": "isomorphic-git",
+        "version": "1.44.9",
+        "sha256": "21e371e59f24622318dd11ccda43df003ed70e44cf993958244562e87eea7f85",
+        "bytes": 1286,
+        "kind": "process-prefix",
+        "path": "node_modules/isomorphic-git/managers/index.umd.min.js.LICENSE.txt"
+      }
+    },
+    {
+      "path": "texts/just-bash-3.6.0/LICENSE",
+      "sha256": "014bb31e83d5c2e76aea1cc6e82217346ab41362f32cb355ad0f5c10aa0aeaff",
+      "bytes": 10931,
+      "source": {
+        "package": "just-bash",
+        "version": "3.6.0",
+        "sha256": "014bb31e83d5c2e76aea1cc6e82217346ab41362f32cb355ad0f5c10aa0aeaff",
+        "bytes": 10931,
+        "kind": "process-prefix",
+        "path": "node_modules/just-bash/LICENSE"
+      }
+    },
+    {
+      "path": "texts/math-intrinsics-1.1.0/LICENSE",
+      "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1",
+      "bytes": 1073,
+      "source": {
+        "package": "math-intrinsics",
+        "version": "1.1.0",
+        "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1",
+        "bytes": 1073,
+        "kind": "process-prefix",
+        "path": "node_modules/math-intrinsics/LICENSE"
+      }
+    },
+    {
+      "path": "texts/mimic-response-3.1.0/license",
+      "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+      "bytes": 1117,
+      "source": {
+        "package": "mimic-response",
+        "version": "3.1.0",
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+        "bytes": 1117,
+        "kind": "process-prefix",
+        "path": "node_modules/mimic-response/license"
+      }
+    },
+    {
+      "path": "texts/minimist-1.2.8/LICENSE",
+      "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b",
+      "bytes": 1073,
+      "source": {
+        "package": "minimist",
+        "version": "1.2.8",
+        "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b",
+        "bytes": 1073,
+        "kind": "process-prefix",
+        "path": "node_modules/minimist/LICENSE"
+      }
+    },
+    {
+      "path": "texts/modern-tar-0.7.7/LICENSE",
+      "sha256": "dbcbef54fa7e111b69b12a9787051f31f5378b40711b6c57c5a82d99dc8a9e0d",
+      "bytes": 1064,
+      "source": {
+        "package": "modern-tar",
+        "version": "0.7.7",
+        "sha256": "dbcbef54fa7e111b69b12a9787051f31f5378b40711b6c57c5a82d99dc8a9e0d",
+        "bytes": 1064,
+        "kind": "process-prefix",
+        "path": "node_modules/modern-tar/LICENSE"
+      }
+    },
+    {
+      "path": "texts/ms-2.1.3/license.md",
+      "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
+      "bytes": 1079,
+      "source": {
+        "package": "ms",
+        "version": "2.1.3",
+        "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
+        "bytes": 1079,
+        "kind": "process-prefix",
+        "path": "node_modules/ms/license.md"
+      }
+    },
+    {
+      "path": "texts/once-1.4.0/LICENSE",
+      "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+      "bytes": 765,
+      "source": {
+        "package": "once",
+        "version": "1.4.0",
+        "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "bytes": 765,
+        "kind": "process-prefix",
+        "path": "node_modules/once/LICENSE"
+      }
+    },
+    {
+      "path": "texts/pako-1.0.11/LICENSE",
+      "sha256": "a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539",
+      "bytes": 1104,
+      "source": {
+        "package": "pako",
+        "version": "1.0.11",
+        "sha256": "a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539",
+        "bytes": 1104,
+        "kind": "process-prefix",
+        "path": "node_modules/pako/LICENSE"
+      }
+    },
+    {
+      "path": "texts/papaparse-5.7.0/LICENSE",
+      "sha256": "99aa68e4b42758b09828a46515f70369e5463458ab7a990189f641af2b8d9b4e",
+      "bytes": 1079,
+      "source": {
+        "package": "papaparse",
+        "version": "5.7.0",
+        "sha256": "99aa68e4b42758b09828a46515f70369e5463458ab7a990189f641af2b8d9b4e",
+        "bytes": 1079,
+        "kind": "process-prefix",
+        "path": "node_modules/papaparse/LICENSE"
+      }
+    },
+    {
+      "path": "texts/path-expression-matcher-1.6.2/LICENSE",
+      "sha256": "75486ea0af9309140ca6e2c401d7e67bea8f4892344e5707f6394dc5e83dfc44",
+      "bytes": 1056,
+      "source": {
+        "package": "path-expression-matcher",
+        "version": "1.6.2",
+        "sha256": "75486ea0af9309140ca6e2c401d7e67bea8f4892344e5707f6394dc5e83dfc44",
+        "bytes": 1056,
+        "kind": "process-prefix",
+        "path": "node_modules/path-expression-matcher/LICENSE"
+      }
+    },
+    {
+      "path": "texts/pify-4.0.1/license",
+      "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+      "bytes": 1109,
+      "source": {
+        "package": "pify",
+        "version": "4.0.1",
+        "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+        "bytes": 1109,
+        "kind": "process-prefix",
+        "path": "node_modules/pify/license"
+      }
+    },
+    {
+      "path": "texts/possible-typed-array-names-1.1.0/LICENSE",
+      "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+      "bytes": 1071,
+      "source": {
+        "package": "possible-typed-array-names",
+        "version": "1.1.0",
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/possible-typed-array-names/LICENSE"
+      }
+    },
+    {
+      "path": "texts/process-0.11.10/LICENSE",
+      "sha256": "59a400d04c5078579acc27ddd6452c1bdf763f9506e01364700935fbb1a7c91b",
+      "bytes": 1098,
+      "source": {
+        "package": "process",
+        "version": "0.11.10",
+        "sha256": "59a400d04c5078579acc27ddd6452c1bdf763f9506e01364700935fbb1a7c91b",
+        "bytes": 1098,
+        "kind": "process-prefix",
+        "path": "node_modules/process/LICENSE"
+      }
+    },
+    {
+      "path": "texts/re2js-1.3.3/LICENSE",
+      "sha256": "46b087b030414ec0af1adfd5940c72eaf67d2610bb8f71269b841c7601936b83",
+      "bytes": 1072,
+      "source": {
+        "package": "re2js",
+        "version": "1.3.3",
+        "sha256": "46b087b030414ec0af1adfd5940c72eaf67d2610bb8f71269b841c7601936b83",
+        "bytes": 1072,
+        "kind": "process-prefix",
+        "path": "node_modules/re2js/LICENSE"
+      }
+    },
+    {
+      "path": "texts/readable-stream-4.8.0/LICENSE",
+      "sha256": "ec62dc96da0099b87f4511736c87309335527fb7031639493e06c95728dc8c54",
+      "bytes": 2337,
+      "source": {
+        "package": "readable-stream",
+        "version": "4.8.0",
+        "sha256": "ec62dc96da0099b87f4511736c87309335527fb7031639493e06c95728dc8c54",
+        "bytes": 2337,
+        "kind": "process-prefix",
+        "path": "node_modules/readable-stream/LICENSE"
+      }
+    },
+    {
+      "path": "texts/run-2.1.3/LICENSE",
+      "sha256": "4bd6464daafb3cc689d914b91952313b69be04138e83c3cfc47a486835c06e83",
+      "bytes": 553,
+      "source": {
+        "package": "run",
+        "version": "2.1.3",
+        "sha256": "4bd6464daafb3cc689d914b91952313b69be04138e83c3cfc47a486835c06e83",
+        "bytes": 553,
+        "kind": "process-prefix",
+        "path": "node_modules/run/LICENSE"
+      }
+    },
+    {
+      "path": "texts/run-2.1.3/THIRD_PARTY_NOTICES.md",
+      "sha256": "2f9a406c7f1779c22edf78634cf39f1e0608d8745a8d5e7fcb1f276f0f65fb29",
+      "bytes": 3995,
+      "source": {
+        "package": "run",
+        "version": "2.1.3",
+        "sha256": "2f9a406c7f1779c22edf78634cf39f1e0608d8745a8d5e7fcb1f276f0f65fb29",
+        "bytes": 3995,
+        "kind": "process-prefix",
+        "path": "node_modules/run/THIRD_PARTY_NOTICES.md"
+      }
+    },
+    {
+      "path": "texts/safe-buffer-5.2.1/LICENSE",
+      "sha256": "c7cc929b57080f4b9d0c6cf57669f0463fc5b39906344dfc8d3bc43426b30eac",
+      "bytes": 1081,
+      "source": {
+        "package": "safe-buffer",
+        "version": "5.2.1",
+        "sha256": "c7cc929b57080f4b9d0c6cf57669f0463fc5b39906344dfc8d3bc43426b30eac",
+        "bytes": 1081,
+        "kind": "process-prefix",
+        "path": "node_modules/safe-buffer/LICENSE"
+      }
+    },
+    {
+      "path": "texts/seek-bzip-2.0.0/LICENSE",
+      "sha256": "d14894ed4184c6a1ce6d0ad5a091c24e0552b08dda48562f3fae97812321f650",
+      "bytes": 1164,
+      "source": {
+        "package": "seek-bzip",
+        "version": "2.0.0",
+        "sha256": "d14894ed4184c6a1ce6d0ad5a091c24e0552b08dda48562f3fae97812321f650",
+        "bytes": 1164,
+        "kind": "process-prefix",
+        "path": "node_modules/seek-bzip/LICENSE"
+      }
+    },
+    {
+      "path": "texts/set-function-length-1.2.2/LICENSE",
+      "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a",
+      "bytes": 1083,
+      "source": {
+        "package": "set-function-length",
+        "version": "1.2.2",
+        "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a",
+        "bytes": 1083,
+        "kind": "process-prefix",
+        "path": "node_modules/set-function-length/LICENSE"
+      }
+    },
+    {
+      "path": "texts/sha.js-2.4.12/LICENSE",
+      "sha256": "58dcf38be1438f739412b87eb70d64bf00e9976d529bb119f700d8b3167924f0",
+      "bytes": 2557,
+      "source": {
+        "package": "sha.js",
+        "version": "2.4.12",
+        "sha256": "58dcf38be1438f739412b87eb70d64bf00e9976d529bb119f700d8b3167924f0",
+        "bytes": 2557,
+        "kind": "process-prefix",
+        "path": "node_modules/sha.js/LICENSE"
+      }
+    },
+    {
+      "path": "texts/simple-concat-1.0.1/LICENSE",
+      "sha256": "d4c2065e2b936e62a4eb400efb4576edec9ca1388a9f78aa288e147275e7bc8b",
+      "bytes": 1081,
+      "source": {
+        "package": "simple-concat",
+        "version": "1.0.1",
+        "sha256": "d4c2065e2b936e62a4eb400efb4576edec9ca1388a9f78aa288e147275e7bc8b",
+        "bytes": 1081,
+        "kind": "process-prefix",
+        "path": "node_modules/simple-concat/LICENSE"
+      }
+    },
+    {
+      "path": "texts/simple-get-4.0.1/LICENSE",
+      "sha256": "d4c2065e2b936e62a4eb400efb4576edec9ca1388a9f78aa288e147275e7bc8b",
+      "bytes": 1081,
+      "source": {
+        "package": "simple-get",
+        "version": "4.0.1",
+        "sha256": "d4c2065e2b936e62a4eb400efb4576edec9ca1388a9f78aa288e147275e7bc8b",
+        "bytes": 1081,
+        "kind": "process-prefix",
+        "path": "node_modules/simple-get/LICENSE"
+      }
+    },
+    {
+      "path": "texts/smol-toml-1.9.1/LICENSE",
+      "sha256": "fa5659948374d4f555594f47f6da073b40dc503e921aeeece30df4362b3051a5",
+      "bytes": 1499,
+      "source": {
+        "package": "smol-toml",
+        "version": "1.9.1",
+        "sha256": "fa5659948374d4f555594f47f6da073b40dc503e921aeeece30df4362b3051a5",
+        "bytes": 1499,
+        "kind": "process-prefix",
+        "path": "node_modules/smol-toml/LICENSE"
+      }
+    },
+    {
+      "path": "texts/sprintf-js-1.1.3/LICENSE",
+      "sha256": "f8287e4dd9480be58c56aca4a55c23b782c43a86e69aabad78fff4df0d29edef",
+      "bytes": 1513,
+      "source": {
+        "package": "sprintf-js",
+        "version": "1.1.3",
+        "sha256": "f8287e4dd9480be58c56aca4a55c23b782c43a86e69aabad78fff4df0d29edef",
+        "bytes": 1513,
+        "kind": "process-prefix",
+        "path": "node_modules/sprintf-js/LICENSE"
+      }
+    },
+    {
+      "path": "texts/sql.js-1.15.2/LICENSE",
+      "sha256": "60a3f6e4d7b29b4321359e683b36cf198d24f58e24582070f56e6fa89d5ee2be",
+      "bytes": 2199,
+      "source": {
+        "package": "sql.js",
+        "version": "1.15.2",
+        "sha256": "60a3f6e4d7b29b4321359e683b36cf198d24f58e24582070f56e6fa89d5ee2be",
+        "bytes": 2199,
+        "kind": "process-prefix",
+        "path": "node_modules/sql.js/LICENSE"
+      }
+    },
+    {
+      "path": "texts/sql.js-1.15.2/AUTHORS",
+      "sha256": "2bb11c65286bd0f2919022e119671036ff8d85c6cd1522b6ebcc1362e67f2ce5",
+      "bytes": 133,
+      "source": {
+        "package": "sql.js",
+        "version": "1.15.2",
+        "sha256": "2bb11c65286bd0f2919022e119671036ff8d85c6cd1522b6ebcc1362e67f2ce5",
+        "bytes": 133,
+        "kind": "process-prefix",
+        "path": "node_modules/sql.js/AUTHORS"
+      }
+    },
+    {
+      "path": "texts/string_decoder-1.3.0/LICENSE",
+      "sha256": "11f2aafb37d06b3ee5bdaf06e9811141d0da05263c316f3d627f45c20d43261b",
+      "bytes": 2338,
+      "source": {
+        "package": "string_decoder",
+        "version": "1.3.0",
+        "sha256": "11f2aafb37d06b3ee5bdaf06e9811141d0da05263c316f3d627f45c20d43261b",
+        "bytes": 2338,
+        "kind": "process-prefix",
+        "path": "node_modules/string_decoder/LICENSE"
+      }
+    },
+    {
+      "path": "texts/strnum-2.5.1/LICENSE",
+      "sha256": "2aa16be0f4fad003a352a955a43314e9d1d8deef7034060a82ac9c49f32b81e2",
+      "bytes": 1077,
+      "source": {
+        "package": "strnum",
+        "version": "2.5.1",
+        "sha256": "2aa16be0f4fad003a352a955a43314e9d1d8deef7034060a82ac9c49f32b81e2",
+        "bytes": 1077,
+        "kind": "process-prefix",
+        "path": "node_modules/strnum/LICENSE"
+      }
+    },
+    {
+      "path": "texts/strtok3-10.6.3/LICENSE.txt",
+      "sha256": "c33959fabde25a1b6161d8e0fdc6fdcea1fc48095fe0bd51043247bfd214287f",
+      "bytes": 1063,
+      "source": {
+        "package": "strtok3",
+        "version": "10.6.3",
+        "sha256": "c33959fabde25a1b6161d8e0fdc6fdcea1fc48095fe0bd51043247bfd214287f",
+        "bytes": 1063,
+        "kind": "process-prefix",
+        "path": "node_modules/strtok3/LICENSE.txt"
+      }
+    },
+    {
+      "path": "texts/to-buffer-1.2.2/LICENSE",
+      "sha256": "6a134e51aa31496c15a741592fc5d782b2dbf8d8b6b8524e15c8520ae0cd6374",
+      "bytes": 1079,
+      "source": {
+        "package": "to-buffer",
+        "version": "1.2.2",
+        "sha256": "6a134e51aa31496c15a741592fc5d782b2dbf8d8b6b8524e15c8520ae0cd6374",
+        "bytes": 1079,
+        "kind": "process-prefix",
+        "path": "node_modules/to-buffer/LICENSE"
+      }
+    },
+    {
+      "path": "texts/token-types-6.1.2/LICENSE.txt",
+      "sha256": "eb0bff8faaba4581e0f09c962e0f795f1f8810191c9d616f3f66f36be4b3a5dc",
+      "bytes": 1082,
+      "source": {
+        "package": "token-types",
+        "version": "6.1.2",
+        "sha256": "eb0bff8faaba4581e0f09c962e0f795f1f8810191c9d616f3f66f36be4b3a5dc",
+        "bytes": 1082,
+        "kind": "process-prefix",
+        "path": "node_modules/token-types/LICENSE.txt"
+      }
+    },
+    {
+      "path": "texts/turndown-7.2.4/LICENSE",
+      "sha256": "a055e3a15db4b4cbb5af381230eba085603126d7d5d8c4dae45ee85b877a9729",
+      "bytes": 1069,
+      "source": {
+        "package": "turndown",
+        "version": "7.2.4",
+        "sha256": "a055e3a15db4b4cbb5af381230eba085603126d7d5d8c4dae45ee85b877a9729",
+        "bytes": 1069,
+        "kind": "process-prefix",
+        "path": "node_modules/turndown/LICENSE"
+      }
+    },
+    {
+      "path": "texts/typed-array-buffer-1.0.3/LICENSE",
+      "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c",
+      "bytes": 1071,
+      "source": {
+        "package": "typed-array-buffer",
+        "version": "1.0.3",
+        "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/typed-array-buffer/LICENSE"
+      }
+    },
+    {
+      "path": "texts/typescript-5.9.3/LICENSE.txt",
+      "sha256": "a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47",
+      "bytes": 9197,
+      "source": {
+        "package": "typescript",
+        "version": "5.9.3",
+        "sha256": "a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47",
+        "bytes": 9197,
+        "kind": "process-prefix",
+        "path": "node_modules/typescript/LICENSE.txt"
+      }
+    },
+    {
+      "path": "texts/typescript-5.9.3/ThirdPartyNoticeText.txt",
+      "sha256": "1af3c68039c57e539422da82a4faada506ce6d0ea6f90e0b699d02dbcdb7a90c",
+      "bytes": 37824,
+      "source": {
+        "package": "typescript",
+        "version": "5.9.3",
+        "sha256": "1af3c68039c57e539422da82a4faada506ce6d0ea6f90e0b699d02dbcdb7a90c",
+        "bytes": 37824,
+        "kind": "process-prefix",
+        "path": "node_modules/typescript/ThirdPartyNoticeText.txt"
+      }
+    },
+    {
+      "path": "texts/uint8array-extras-1.6.0/license",
+      "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+      "bytes": 1117,
+      "source": {
+        "package": "uint8array-extras",
+        "version": "1.6.0",
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+        "bytes": 1117,
+        "kind": "process-prefix",
+        "path": "node_modules/uint8array-extras/license"
+      }
+    },
+    {
+      "path": "texts/undici-7.29.0/LICENSE",
+      "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+      "bytes": 1090,
+      "source": {
+        "package": "undici",
+        "version": "7.29.0",
+        "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+        "bytes": 1090,
+        "kind": "process-prefix",
+        "path": "node_modules/undici/LICENSE"
+      }
+    },
+    {
+      "path": "texts/undici-7.29.0/lib/web/fetch/LICENSE",
+      "sha256": "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+      "bytes": 1071,
+      "source": {
+        "package": "undici",
+        "version": "7.29.0",
+        "sha256": "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+        "bytes": 1071,
+        "kind": "process-prefix",
+        "path": "node_modules/undici/lib/web/fetch/LICENSE"
+      }
+    },
+    {
+      "path": "texts/which-typed-array-1.1.24/LICENSE",
+      "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+      "bytes": 1082,
+      "source": {
+        "package": "which-typed-array",
+        "version": "1.1.24",
+        "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+        "bytes": 1082,
+        "kind": "process-prefix",
+        "path": "node_modules/which-typed-array/LICENSE"
+      }
+    },
+    {
+      "path": "texts/wrappy-1.0.2/LICENSE",
+      "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+      "bytes": 765,
+      "source": {
+        "package": "wrappy",
+        "version": "1.0.2",
+        "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "bytes": 765,
+        "kind": "process-prefix",
+        "path": "node_modules/wrappy/LICENSE"
+      }
+    },
+    {
+      "path": "texts/xml-naming-0.3.0/LICENSE",
+      "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+      "bytes": 1077,
+      "source": {
+        "package": "xml-naming",
+        "version": "0.3.0",
+        "sha256": "8e75fc0e776c62ccadb8178ece8d3daa9ba7601fb0a49b2dfb0ea9a7a5c0aa07",
+        "bytes": 1077,
+        "kind": "process-prefix",
+        "path": "node_modules/xml-naming/LICENSE"
+      }
+    },
+    {
+      "path": "texts/yaml-2.9.1/LICENSE",
+      "sha256": "5bba27375d93e9119f76c1015f7672cf9ad5f70952296e0842fb2243d6376869",
+      "bytes": 738,
+      "source": {
+        "package": "yaml",
+        "version": "2.9.1",
+        "sha256": "5bba27375d93e9119f76c1015f7672cf9ad5f70952296e0842fb2243d6376869",
+        "bytes": 738,
+        "kind": "process-prefix",
+        "path": "node_modules/yaml/LICENSE"
+      }
+    },
+    {
+      "path": "texts/nodable--entities-3.1.0/UPSTREAM-LICENSE.txt",
+      "sha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40",
+      "bytes": 1064,
+      "source": {
+        "package": "@nodable/entities",
+        "version": "3.1.0",
+        "sha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40",
+        "bytes": 1064,
+        "kind": "public-url",
+        "path": "nodable-entities-LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/nodable/val-parsers/ac48e7ea591da372be023a481875c747535812b3/LICENSE"
+      }
+    },
+    {
+      "path": "texts/tokenizer--token-0.3.0/README-LICENSE.txt",
+      "sha256": "eaed8ff4331bbb2f724ca2a39cec5fa95b407ca0eee2c25f0f1d7e3951c3007b",
+      "bytes": 1081,
+      "source": {
+        "package": "@tokenizer/token",
+        "version": "0.3.0",
+        "sha256": "a88c936c259cc261d5b37a2433735e9819e01f824bdc26e644d46ccd3055c8d7",
+        "bytes": 1451,
+        "kind": "process-prefix",
+        "path": "node_modules/@tokenizer/token/README.md",
+        "byteRange": [
+          370,
+          1451
+        ]
+      }
+    },
+    {
+      "path": "texts/diff3-0.0.3/diff3.js-LICENSE.txt",
+      "sha256": "fe03717258c4c5b24750d6f82265c3922bb47dabde538917836de91c4b6b7220",
+      "bytes": 1206,
+      "source": {
+        "package": "diff3",
+        "version": "0.0.3",
+        "sha256": "a2cf76d0acfaae0e098434307a1180d24ebf86451b70cbfc81704df55c54896f",
+        "bytes": 7851,
+        "kind": "process-prefix",
+        "path": "node_modules/diff3/diff3.js",
+        "byteRange": [
+          0,
+          1206
+        ]
+      }
+    },
+    {
+      "path": "texts/diff3-0.0.3/onp.js-LICENSE.txt",
+      "sha256": "f043a08344db7241e39935802eec8d989b0d0e40f38a33c46cac4b0a09ae1ca4",
+      "bytes": 1201,
+      "source": {
+        "package": "diff3",
+        "version": "0.0.3",
+        "sha256": "6970cf6907e5f3e62a95cf6942eb4199858ce9d42af866e064901f6183319a70",
+        "bytes": 5393,
+        "kind": "process-prefix",
+        "path": "node_modules/diff3/onp.js",
+        "byteRange": [
+          0,
+          1201
+        ]
+      }
+    },
+    {
+      "path": "texts/pako-1.0.11/ZLIB-NOTICE.txt",
+      "sha256": "4125652cdbd6fdba9b60c839df6abeb3fc9da98fca00b4cab15157951e080804",
+      "bytes": 959,
+      "source": {
+        "package": "pako",
+        "version": "1.0.11",
+        "sha256": "4b9b71ae7f42e506fe1fb134f1c21b944ef2b7ef79667ba1fe59eb963c353d22",
+        "bytes": 61184,
+        "kind": "process-prefix",
+        "path": "node_modules/pako/lib/zlib/deflate.js",
+        "byteRange": [
+          15,
+          974
+        ]
+      }
+    },
+    {
+      "path": "texts/isomorphic-git-1.44.9/IS-GIT-REF-NAME-VALID-NOTICE.txt",
+      "sha256": "f31b7cf801ec9794502ec93f22bffc04e4570dc5220c3c7ee06667efdc566963",
+      "bytes": 98,
+      "source": {
+        "package": "isomorphic-git",
+        "version": "1.44.9",
+        "sha256": "12d11cd47d8c9ee67ef05fdc609e1472f707d92c12b5da47a5be89654d16159f",
+        "bytes": 574950,
+        "kind": "process-prefix",
+        "path": "node_modules/isomorphic-git/index.cjs",
+        "byteRange": [
+          50713,
+          50811
+        ]
+      }
+    },
+    {
+      "path": "texts/isomorphic-git-1.44.9/ZENFS-NOTICE.txt",
+      "sha256": "84c4c05187ca74c751c9ba0499f8d415f88966158fe3a9a449630999452bc048",
+      "bytes": 909,
+      "source": {
+        "package": "isomorphic-git",
+        "version": "1.44.9",
+        "sha256": "12d11cd47d8c9ee67ef05fdc609e1472f707d92c12b5da47a5be89654d16159f",
+        "bytes": 574950,
+        "kind": "process-prefix",
+        "path": "node_modules/isomorphic-git/index.cjs",
+        "byteRange": [
+          51131,
+          52040
+        ]
+      }
+    },
+    {
+      "path": "texts/sha.js-2.4.12/SHA1-NOTICE.txt",
+      "sha256": "83964f60670698b7a44a7eb98b5ff6be8ed250d119d939fef2afabe3e133701c",
+      "bytes": 313,
+      "source": {
+        "package": "sha.js",
+        "version": "2.4.12",
+        "sha256": "aa22b7aeab6cb36171515be7de16b17bdfc71ece3decdbdce003cf9d6a4983d2",
+        "bytes": 2066,
+        "kind": "process-prefix",
+        "path": "node_modules/sha.js/sha1.js",
+        "byteRange": [
+          15,
+          328
+        ]
+      }
+    },
+    {
+      "path": "texts/GNU-LGPL-3.0/LGPL-3.0.txt",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
+      "bytes": 7652,
+      "source": {
+        "package": "GNU-LGPL",
+        "version": "3.0",
+        "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
+        "bytes": 7652,
+        "kind": "public-url",
+        "path": "LGPL-3.0.txt",
+        "url": "https://www.gnu.org/licenses/lgpl-3.0.txt"
+      }
+    },
+    {
+      "path": "texts/GNU-GPL-3.0/GPL-3.0.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "bytes": 35149,
+      "source": {
+        "package": "GNU-GPL",
+        "version": "3.0",
+        "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+        "bytes": 35149,
+        "kind": "public-url",
+        "path": "GPL-3.0.txt",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.txt"
+      }
+    },
+    {
+      "path": "texts/esbuild-0.27.3/LICENSE.md",
+      "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681",
+      "bytes": 1069,
+      "source": {
+        "package": "esbuild",
+        "version": "0.27.3",
+        "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681",
+        "bytes": 1069,
+        "kind": "esbuild-prefix",
+        "path": "node_modules/esbuild/LICENSE.md"
+      }
+    },
+    {
+      "path": "texts/mixmark-io--domino-2.2.0/ANGULAR-LICENSE.txt",
+      "sha256": "1d65ce0e0d6f0f237eeeb8fa186402ec8c6169d05ddadac6bcf9fa683eb5b34b",
+      "bytes": 1104,
+      "source": {
+        "package": "Angular/style_parser",
+        "version": "92e41e9cb417223d9888a4c23b4c0e73188f87d0",
+        "sha256": "1d65ce0e0d6f0f237eeeb8fa186402ec8c6169d05ddadac6bcf9fa683eb5b34b",
+        "bytes": 1104,
+        "kind": "public-url",
+        "path": "angular-license.txt",
+        "url": "https://raw.githubusercontent.com/angular/angular/92e41e9cb417223d9888a4c23b4c0e73188f87d0/LICENSE"
+      }
+    },
+    {
+      "path": "texts/mixmark-io--domino-2.2.0/ANGULAR-STYLE-PARSER-NOTICE.txt",
+      "sha256": "51d6d8c6451d353ab79c0ab05857067db56284f53694aeff9990f3edbd82ba4a",
+      "bytes": 379,
+      "source": {
+        "package": "@mixmark-io/domino",
+        "version": "2.2.0",
+        "sha256": "b41b215a146a119303d052223216207ca4cbc48a14b122eda966094a56610f10",
+        "bytes": 3446,
+        "kind": "process-prefix",
+        "path": "node_modules/@mixmark-io/domino/lib/style_parser.js",
+        "byteRange": [
+          15,
+          394
+        ]
+      }
+    },
+    {
+      "path": "texts/just-bash-3.6.0/ANGULAR-BUNDLED-NOTICE.txt",
+      "sha256": "f97045b4972b6bc87c6aa83d3740e53fe8242144d5e5f284d859782ef546567b",
+      "bytes": 293,
+      "source": {
+        "package": "just-bash",
+        "version": "3.6.0",
+        "sha256": "1da8061bec7f16f2ca625c36d5c4daf8810148627e9bda9fdf6a396ac8f184f7",
+        "bytes": 250280,
+        "kind": "process-prefix",
+        "path": "node_modules/just-bash/dist/bin/chunks/chunk-DTGQQKI2.js",
+        "byteRange": [
+          249987,
+          250280
+        ]
+      }
+    },
+    {
+      "path": "texts/clean-git-ref-2.0.1/APACHE-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358,
+      "source": {
+        "package": "Apache-standard",
+        "version": "2.0",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "bytes": 11358,
+        "kind": "public-url",
+        "path": "apache-standard.txt",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+      }
+    },
+    {
+      "path": "texts/clean-git-ref-2.0.1/PACKAGE-DECLARATIONS.txt",
+      "sha256": "0518e11870e0cc1a0407a7512dc64bb21f837e88554442cf9353fc760470beec",
+      "bytes": 75,
+      "source": {
+        "package": "clean-git-ref",
+        "version": "2.0.1",
+        "sha256": "85c489423a88038349e92f2515e9f2d38dac5a2319a467357a1e8141b46613be",
+        "bytes": 818,
+        "kind": "process-prefix",
+        "path": "node_modules/clean-git-ref/package.json",
+        "byteRange": [
+          115,
+          190
+        ]
+      }
+    },
+    {
+      "path": "texts/minimisted-2.0.1/PACKAGE-DECLARATIONS.txt",
+      "sha256": "88b62613ad1332f0885f9480f50527b79e2dc4b6dee75ded7bcc31c427277613",
+      "bytes": 102,
+      "source": {
+        "package": "minimisted",
+        "version": "2.0.1",
+        "sha256": "d1355aac6eac8eaa4077ad92a03ef7b9884b89ba3225ced3e46582192262aa0d",
+        "bytes": 737,
+        "kind": "process-prefix",
+        "path": "node_modules/minimisted/package.json",
+        "byteRange": [
+          503,
+          605
+        ]
+      }
+    }
+  ],
+  "pakoZlibIdenticalHeaders": [
+    {
+      "path": "node_modules/pako/lib/zlib/adler32.js",
+      "sha256": "99618eb68a96858148e2dd56f478aa7e4321c434f5f2ee6c57f59c0c568f0596",
+      "byteRange": [
+        174,
+        1133
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/constants.js",
+      "sha256": "e0c4148ed267a27f03aba9f9a34cba4bade2090c0f12905907539e38c842abbc",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/crc32.js",
+      "sha256": "213f85e8b2e52e2cf6f7634897197400f7ddaed587274f160045f0b548ec21da",
+      "byteRange": [
+        160,
+        1119
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/deflate.js",
+      "sha256": "4b9b71ae7f42e506fe1fb134f1c21b944ef2b7ef79667ba1fe59eb963c353d22",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/gzheader.js",
+      "sha256": "8fa0b4995cea477be96b8783a7d6c7cf5fec96765c2108c3bd52e77104bfdbd3",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/inffast.js",
+      "sha256": "b1beb3b55270e8338f23fc397132d179942d5866153ca4e9be264200b00c0d44",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/inflate.js",
+      "sha256": "d31799a23f2ae87f0c52d21241c92278b41d23bb5365b452f2706d41b00c4245",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/inftrees.js",
+      "sha256": "75f75d8ae4a7bed86f90a4a38f70c5d95e807515e9326801f9a073a7f2bf8bc7",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/messages.js",
+      "sha256": "eec5f5d6b8120ada9cd48a3ca0a253c64777906e835477b090e053434d38cf6c",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/trees.js",
+      "sha256": "718adbbf68f4343bf17d61edffd9d0788a96a93e4e191d857459d95257e614cf",
+      "byteRange": [
+        15,
+        974
+      ]
+    },
+    {
+      "path": "node_modules/pako/lib/zlib/zstream.js",
+      "sha256": "5fa10c7a59ca99113cf92d1260e56cbd6282e15afa85dc8a0eb8e8d6d2321298",
+      "byteRange": [
+        15,
+        974
+      ]
+    }
+  ],
+  "buildTools": [
+    {
+      "name": "esbuild",
+      "version": "0.27.3",
+      "declaredLicense": "MIT",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.27.3.tgz",
+      "integrity": "sha512-8VwMnyGCONIs6cWue2IdpHxHnAjzxnw2Zr7MkVxB2vjmQ2ivqGFb4LEG3SMnv0Gb2F/G/2yA8zUaiL1gywDCCg==",
+      "documents": [
+        "texts/esbuild-0.27.3/LICENSE.md"
+      ],
+      "scope": "HOST_BUILD_TOOL_NOT_HAP_CONTENT",
+      "sharedTerms": false
+    },
+    {
+      "name": "@esbuild/linux-x64",
+      "version": "0.27.3",
+      "declaredLicense": "MIT",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.27.3.tgz",
+      "integrity": "sha512-Czi8yzXUWIQYAtL/2y6vogER8pvcsOsk5cpwL4Gk5nJqH5UZiVByIY8Eorm5R13gq+DQKYg0+JyQoytLQas4dA==",
+      "documents": [
+        "texts/esbuild-0.27.3/LICENSE.md"
+      ],
+      "scope": "HOST_BUILD_TOOL_NOT_HAP_CONTENT",
+      "sharedTerms": true
+    }
+  ],
+  "standardTerms": [
+    "texts/GNU-LGPL-3.0/LGPL-3.0.txt",
+    "texts/GNU-GPL-3.0/GPL-3.0.txt",
+    "texts/clean-git-ref-2.0.1/APACHE-2.0.txt"
+  ],
+  "embeddedComponents": [
+    {
+      "parent": "isomorphic-git@1.44.9",
+      "component": "@zenfs/core/path 的 join/normalizeString 片段",
+      "declaration": "LGPL-3.0-or-later",
+      "notice": "Copyright (c) James Prevett and other ZenFS contributors.",
+      "source": "https://raw.githubusercontent.com/isomorphic-git/isomorphic-git/86df2db391962c8690a7550c6887ca0e87798542/src/utils/join.js",
+      "sourceSHA256": "748dfaa1d7b2871912c447b0cd8616d083d22e52a0c62d43de81c5b45096c242",
+      "nodeEntrySHA256": "12d11cd47d8c9ee67ef05fdc609e1472f707d92c12b5da47a5be89654d16159f",
+      "releaseBoundary": "已收录 SPDX 原通知及 LGPL/GPL 全文；最终发行仍须记录实际包含范围与适用对应源码/重链接等要求，不能用包顶层 MIT 或复制通知代替。"
+    },
+    {
+      "parent": "isomorphic-git@1.44.9",
+      "component": "is-git-ref-name-valid 适配片段",
+      "declaration": "MIT",
+      "notice": "Copyright © Vincent Weevers",
+      "source": "index.cjs 的原始注释，全文条款使用本目录 MIT 文本；未推测年份。"
+    },
+    {
+      "parent": "run@2.1.3",
+      "component": "devalue 5.8.2 / quickjs-wasi 3.6.0 / QuickJS",
+      "declaration": "MIT",
+      "source": "随包 THIRD_PARTY_NOTICES.md 原样保留；版本和作者按该文件逐项记录。"
+    },
+    {
+      "parent": "just-bash@3.6.0",
+      "component": "CPython/Emscripten 三个 vendor 文件",
+      "status": "BLOCKED_MISSING_EXACT_NOTICES",
+      "source": "https://github.com/vercel-labs/just-bash/tree/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/vendor/cpython-emscripten"
+    },
+    {
+      "id": "angular-style-parser",
+      "parent": "@mixmark-io/domino@2.2.0; just-bash@3.6.0 的实际捆绑副本",
+      "component": "Angular style_parser.ts 的编译副本",
+      "declaration": "MIT",
+      "notice": "Copyright Google LLC All Rights Reserved.",
+      "fullLicenseCopyright": "Copyright (c) 2010-2022 Google LLC.",
+      "source": "https://raw.githubusercontent.com/angular/angular/92e41e9cb417223d9888a4c23b4c0e73188f87d0/packages/compiler/src/render3/view/style_parser.ts",
+      "sourceSHA256": "159817c3fa48dcc5b271280bb83adeecb0ca259f065feec6ac57e9a25bfe37ac",
+      "sourceBytes": 3838,
+      "documents": [
+        "texts/mixmark-io--domino-2.2.0/ANGULAR-LICENSE.txt",
+        "texts/mixmark-io--domino-2.2.0/ANGULAR-STYLE-PARSER-NOTICE.txt",
+        "texts/just-bash-3.6.0/ANGULAR-BUNDLED-NOTICE.txt"
+      ],
+      "registration": "EXACT_UPSTREAM_TERMS_AND_BOTH_DISTRIBUTED_NOTICES_RECORDED",
+      "releaseBoundary": "保持 domino 顶层 BSD-2-Clause，同时登记源内 MIT；验证范围为这两个已识别发行文件，不推断已穷尽 91 包的所有内嵌许可。"
+    }
+  ],
+  "blockers": [
+    {
+      "id": "minimisted-terms",
+      "package": "minimisted",
+      "version": "2.0.1",
+      "status": "BLOCKED",
+      "reason": "MIT 许可声明已知，README 与 package.json 一致，实际 author/license 字段已原样收录；尚未取得精确版本对应的完整版权/许可通知。此状态不表示授权名称未知，不由 author 字段补造版权人或年份。",
+      "sourceCommit": "95fdfb8d6efb9546c1117854fe3a58105f6332ce",
+      "resolution": "取得发布者适用于该版本的对应完整通知，或由主线明确登记替代依据；也可经批准替换/排除并核验最终制品。保持本项证据缺口，不把通用模板冒充原文。"
+    },
+    {
+      "id": "cpython-embedded-notices",
+      "package": "just-bash/vendor/cpython-emscripten",
+      "version": "observed 3.13.2-dirty",
+      "status": "BLOCKED",
+      "reason": "三个发行文件已与 just-bash@3.6.0 精确 Git/LFS 记录绑定；所给文件未附 CPython/Emscripten/其嵌入组件的完整通知，dirty 源修订与构建工具链未确定。",
+      "sourceCommit": "7537a260e38648e8998db7a95504102ad80b0194",
+      "resolution": "取得实际二进制对应源码/构建/许可汇编，或 O2 按明确允许列表排除并证明最终 HAP 没有这些字节。独立 shadow 实验不能代替制品核验。"
+    }
+  ],
+  "artifactVerification": "NOT_RUN：尚无最终 HAP；发行前验证许可文本、对应源码信息和实际内容清单。裁剪实验不修改此清单。",
+  "resolvedBlockers": [
+    {
+      "id": "clean-git-ref-terms",
+      "status": "REGISTRATION_GAP_RESOLVED",
+      "reason": "精确 npm metadata 已声明 Apache-2.0；补入 Apache 官方未改写标准全文，并保留发行物实际 author/license 字段。已核全部三个发行文件及原精确上游树，无附带 NOTICE；§4(d) 的条件不能被改写为必须创造新 NOTICE。",
+      "sourceCommit": "bf3c8afc8032bcdc6a53634c18b601dc6df478fb",
+      "scope": "只解除原先因缺少独立 LICENSE/NOTICE 而设的登记阻断；不构成最终制品或一般法律完备性保证。"
+    }
+  ]
+}

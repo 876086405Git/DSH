@@ -1,7 +1,9 @@
 // 启动画面：系统的启动窗口（Android 12+ 的启动画面，或 8–11 的启动窗口背景）交给
 // App 自己的启动画面，中间看不出切换；再在界面可用时收起，不为动画多等一刻。
 //
-// 原生侧：android/.../launch/LaunchScreen.kt（MethodChannel `dsh/launch`）。
+// 原生侧：android/.../launch/LaunchScreen.kt（MethodChannel `dsh/launch`）；鸿蒙是
+// ohos/.../LaunchPlugin.ets，只有默认动画，系统启动页自己淡出（systemSplash 为 false）；iOS 是
+// Runner/LaunchChannel.swift，系统启动页是一页空白的系统底色，首帧画同一页，图标随动画进来。
 //
 //   main()             begin：系统画了什么（图标像素、方块大小、底色）→ 首帧原样画出
 //   首帧               Android 12+：系统启动画面盖在首帧上，原生量出它的图标位置送来
@@ -28,6 +30,7 @@ import 'package:flutter/services.dart';
 
 import 'custom_launch.dart';
 import 'launch_media.dart';
+import 'startup_trace.dart';
 
 /// What the launch window shows, as `begin` reports it.
 class LaunchSnapshot {
@@ -263,6 +266,16 @@ class LaunchController extends ChangeNotifier {
   /// motion starts).
   bool get systemIcon => _systemIcon;
 
+  static bool _gaveUp = false;
+
+  /// main(): [begin] took too long and the app has gone on without it. An answer that still comes
+  /// is ignored: the launch screen would lie over a page that has already said it's ready, and
+  /// nothing would ever take it away.
+  static void giveUp() => _gaveUp = true;
+
+  @visibleForTesting
+  static void resetGaveUp() => _gaveUp = false;
+
   /// main(): asks the native side what the launch window shows. Null when there's no launch
   /// screen this time (no native side, a warm start).
   static Future<LaunchController?> begin({LaunchChannel channel = const LaunchChannel(), Size? screen}) async {
@@ -271,6 +284,10 @@ class LaunchController extends ChangeNotifier {
       if (snapshot == null) return null;
       final stored = await CustomLaunch.load();
       final custom = stored != null && stored.on ? stored : null;
+      if (_gaveUp) {
+        snapshot.icon?.dispose();
+        return null;
+      }
       final controller = LaunchController(snapshot: snapshot, custom: custom, channel: channel);
       channel.listen(controller.handOver);
       if (custom != null) unawaited(controller.openMedia(screen ?? _screen()));
@@ -436,6 +453,8 @@ class LaunchController extends ChangeNotifier {
     if (native) {
       channel.stopListening();
       unawaited(channel.done());
+      // Tapped away before the first page: RootGate says so when that comes.
+      if (_ready) StartupTrace.finished();
     }
     if (identical(active.value, this)) active.value = null;
     notifyListeners();

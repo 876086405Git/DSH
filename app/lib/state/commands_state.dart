@@ -65,7 +65,7 @@ List<SlashCommand> get appSlashCommands => [
   SlashCommand(
     name: 'export',
     label: appL10n.stateCommandExportLabel,
-    description: appL10n.stateCommandExportDescription,
+    description: wordsForIos ? appL10n.iosCommandExportDescription : appL10n.stateCommandExportDescription,
     kind: SlashCommandKind.app,
   ),
   SlashCommand(

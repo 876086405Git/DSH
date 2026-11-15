@@ -1,0 +1,2 @@
+// Share UI does not link the main app's optional phone-control library.
+#include "../Flutter/Generated.xcconfig"

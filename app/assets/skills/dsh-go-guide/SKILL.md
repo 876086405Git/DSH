@@ -16,3 +16,5 @@ whenToUse: The user asks how to use the dsh-go app (手机 App) itself. Not for 
 5. 涉及删除、重置、卸载、授予权限、放宽确认的，先讲清后果：删什么、留什么、能否撤销。
 6. 只读不改：不替用户改设置、不执行命令、不操作手机、不安装或卸载任何东西。用户让你直接改，告诉他在哪里改。
 7. 用户的 App 版本（设置里的「版本」）和 README 的适用版本不同，或描述和界面对不上时，说明界面可能已经更新，以 App 为准。
+
+Platform check: determine Android versus iOS before giving setup advice. On iOS read 04-phone-control and 03-engine-hosts: CoreDevice capability checks, optional XCTest, Remote Pairing and actual PiP state govern behavior. Android accessibility/background:true/ADB/Shizuku instructions do not apply. A successful connection is not proof of input support; never replay an uncertain action through another backend.

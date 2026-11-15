@@ -514,8 +514,9 @@ class ChatController extends Notifier<ChatState> {
   final _commands = CommandLog();
   var _localCommands = 0;
 
-  /// A send whose outcome is unknown (the connection dropped mid-call):
-  /// sending the same content again reuses its request id, which DSH dedups.
+  /// A send whose outcome is unknown (the connection dropped mid-call).
+  /// Retrying its draft reuses the request id, which DSH dedups; on iOS a
+  /// replacement attachment is a new submission even with the same name.
   ({String content, String requestId})? _unsettled;
 
   /// Device minus Host clock; null until a live event was seen (and always

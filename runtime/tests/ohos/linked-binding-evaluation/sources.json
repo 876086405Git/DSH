@@ -1,0 +1,64 @@
+{
+  "nodeTag": "v24.22.1",
+  "sourceBodiesExcludedFromDelivery": true,
+  "records": [
+    {
+      "name": "embedding.md",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/doc/api/embedding.md",
+      "httpStatus": 200,
+      "bytes": 7586,
+      "sha256": "ff249f5c0b5557b75a7140a096df42372454448a5ea5e010c7b28bdaef4ad1cb",
+      "retrievedAtUTC": "2026-11-02T00:01:46.667022+00:00"
+    },
+    {
+      "name": "node_binding.cc",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/src/node_binding.cc",
+      "httpStatus": 200,
+      "bytes": 27027,
+      "sha256": "b1d9a6e2b13a63b58c741d48b108e1e658ebd0a82593280b452f776b1e89dc75",
+      "retrievedAtUTC": "2026-11-02T00:01:46.831692+00:00"
+    },
+    {
+      "name": "node_main_instance.cc",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/src/node_main_instance.cc",
+      "httpStatus": 200,
+      "bytes": 4780,
+      "sha256": "bcca3565964f27ebd14028e6f58857dc37938d9f3ea942ad4cebb9fd44325145",
+      "retrievedAtUTC": "2026-11-02T00:01:46.967773+00:00"
+    },
+    {
+      "name": "api-environment.cc",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/src/api/environment.cc",
+      "httpStatus": 200,
+      "bytes": 41225,
+      "sha256": "58206afd59c1e161bc892bf9aa67714fa1e997395d96ceeb23eccd334b08b470",
+      "retrievedAtUTC": "2026-11-02T00:02:22.879401+00:00"
+    },
+    {
+      "name": "node_api.cc",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/src/node_api.cc",
+      "httpStatus": 200,
+      "bytes": 50153,
+      "sha256": "4c76a71e04fc4b5201fc83fffc68e724db9bd660951d098ba50f04909b00b4da",
+      "retrievedAtUTC": "2026-11-02T00:02:22.870089+00:00"
+    },
+    {
+      "name": "node.h",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/src/node.h",
+      "httpStatus": 200,
+      "bytes": 76086,
+      "sha256": "c35691764bac5a82c4139348ca57f5676163afe563a40ad78457cef8bfb57012",
+      "retrievedAtUTC": "2026-11-02T00:20:12.347876+00:00",
+      "identicalToInstalledOfficialHeader": true
+    },
+    {
+      "name": "node_api.h",
+      "url": "https://raw.githubusercontent.com/nodejs/node/v24.22.1/src/node_api.h",
+      "httpStatus": 200,
+      "bytes": 10370,
+      "sha256": "2d4560831e525b47b060ec8a0864ab73993df9e20215ce9f0fe7b24cd31af32a",
+      "retrievedAtUTC": "2026-11-02T00:20:12.347766+00:00",
+      "identicalToInstalledOfficialHeader": true
+    }
+  ]
+}

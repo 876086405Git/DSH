@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../runtime/local_paths.dart';
 import '../../state/connection_state.dart';
 import '../../state/sessions_state.dart' show localWorkspaceDir;
 import '../../state/settings_state.dart';
@@ -68,7 +69,8 @@ List<DirectoryShortcut> directoryShortcuts({required bool local, required bool p
         localWorkspaceDir,
         subtitle: displayPath(localWorkspaceDir, local: true),
       ),
-      DirectoryShortcut(AppIcons.home, appL10n.remoteDirectoryHome, localHome, subtitle: '~'),
+      // HarmonyOS: the sandbox lets the engine at its default folder and no further.
+      if (!LocalPaths.noGuest) DirectoryShortcut(AppIcons.home, appL10n.remoteDirectoryHome, localHome, subtitle: '~'),
       if (phoneStorage) ...[
         DirectoryShortcut(AppIcons.phoneStorage, appL10n.remoteDirectoryPhoneStorage, phoneStorageRoot),
         DirectoryShortcut(
@@ -205,7 +207,7 @@ Future<String?> askFolderPath(BuildContext context) async {
   final path = await showTextPrompt(
     context,
     title: l10n.remoteDirectoryEnterPath,
-    hint: '/root/workspace',
+    hint: localWorkspaceDir,
     confirm: l10n.remoteDirectoryGo,
     mono: true,
     keyboardType: TextInputType.url,

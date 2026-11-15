@@ -38,6 +38,8 @@
   var STORE = 'dsh.sessions.current';
   // A hop's one-off query (see hop); gone from the address once it landed.
   var HOP_PARAM = 'dsh-go-hop';
+  // How long a blank conversation has to stay as it is after New before it counts as the new one.
+  var BLANK_SETTLE_MS = 1500;
   // How long an open may keep looking once the page has booted.
   var STEPS_MS = 15000;
   // Where the Plugins page marks a card: a bundle's package name, an
@@ -280,16 +282,54 @@
     return press(r, await waitFor(entryOf, 4000, r));
   }
 
-  async function startNewSession(r) {
+  async function startNewSession(r, confirm) {
     var button = await waitFor(function () {
       var side = sidebar();
       if (!side) return null;
       return side.querySelector('button[class*="_newSession"]') || byName(side, 'button', LABELS.newSession);
     }, 8000, r);
+    var previous = confirm ? composerSession(composerEditor()) : null;
+    var stored = confirm ? storedSession() : null;
+    var blank = confirm && !!previous && blankConversation(composerEditor());
     if (!press(r, button)) return false;
+    if (confirm) {
+      var blankSince = null;
+      var editor = await waitFor(function () {
+        var candidate = composerEditor();
+        var id = composerSession(candidate);
+        if (id && id !== previous && id !== stored) {
+          r.confirmedSession = id;
+          return candidate;
+        }
+        // New stays on a conversation that's already blank, so no other id is coming. If this is
+        // wrong, a draft sits in the box in front of the person, unsent.
+        if (!blank || id !== previous || !blankConversation(candidate)) {
+          blankSince = null;
+          return null;
+        }
+        if (blankSince === null) blankSince = Date.now();
+        if (Date.now() - blankSince < BLANK_SETTLE_MS) return null;
+        r.confirmedSession = id;
+        return candidate;
+      }, 10000, r);
+      return !!editor;
+    }
     // Let the new conversation's composer replace the old one.
     await sleep(500);
     return true;
+  }
+
+  // The public conversation wrapper binds this editor to a session.
+  function composerSession(editor) {
+    var conversation = editor && editor.closest('[data-conversation-content][data-conversation-session]');
+    return conversation && conversation.getAttribute('data-conversation-session');
+  }
+
+  // The client's own word for a conversation with nothing in it, with nothing typed or attached.
+  function blankConversation(editor) {
+    var conversation = editor && editor.closest('[data-conversation-content][data-conversation-session]');
+    return !!conversation && conversation.getAttribute('data-content-phase') === 'hero' &&
+      !(editor.textContent || '').trim() && attachmentCount(editor) === 0;
   }
 
   // The composer's editor (Lexical: one contenteditable root) that is on
@@ -308,21 +348,49 @@
     } catch (e) {}
   }
 
-  function attachmentCount() {
+  function attachmentCount(editor) {
+    if (editor) {
+      var card = editor.closest('[data-composer-card]');
+      if (!card) return 0;
+      // rc.4 renders one direct rail child per image or file. Keep the
+      // count inside this editor's composer, away from conversation history.
+      var rails = card.querySelectorAll('[role="group"][aria-label="Pending attachments"], [role="group"][aria-label="待发送附件"]');
+      var count = 0;
+      for (var i = 0; i < rails.length; i++) count += rails[i].children.length;
+      return count;
+    }
     return document.querySelectorAll('[data-attachment-id], [data-file-reference], [data-lexical-decorator="true"]').length;
   }
 
+  // Read only: background recovery asks about this editor, never chat history.
+  window.__dshAppPendingAttachmentCount = function () {
+    var editor = composerEditor();
+    return editor ? attachmentCount(editor) : 0;
+  };
+
   window.__dshAppCompose = async function (draft) {
     var result = { text: false, files: 0 };
+    // iOS correlates overlapping replies; legacy callers keep the same shape.
+    if (draft && typeof draft.requestId === 'string') result.requestId = draft.requestId;
     // After whatever the app opened just before (a new conversation).
-    try { await window.__dshAppOpening; } catch (e) {}
+    var opening = window.__dshAppOpening;
+    var opened;
+    try { opened = await opening; } catch (e) { opened = false; }
+    if (draft && draft.requireOpenedTarget === true) {
+      // That opening is answered for now: one that failed mustn't refuse every later compose.
+      if (window.__dshAppOpening === opening) window.__dshAppOpening = undefined;
+      if (opening !== undefined && opened !== true) return post('DshAppCompose', result);
+    }
     var editor = await waitFor(composerEditor, 10000);
     if (!editor) return post('DshAppCompose', result);
+    if (draft && draft.requireOpenedTarget === true && opening && opening.newSessionBinding &&
+        composerSession(editor) !== opening.newSessionBinding.confirmedSession) return post('DshAppCompose', result);
     var text = (draft && draft.text) || '';
     var files = (draft && draft.files) || [];
     editor.focus();
     var before = editor.textContent || '';
-    var beforeFiles = attachmentCount();
+    var attachmentEditor = draft && draft.composerAttachmentCount === true ? editor : null;
+    var beforeFiles = attachmentCount(attachmentEditor);
     try {
       var data = new DataTransfer();
       if (text) data.setData('text/plain', text);
@@ -337,13 +405,15 @@
     await sleep(400);
     var probe = text.trim().slice(0, 24);
     var landed = function () { return !probe || (editor.textContent || '').indexOf(probe) >= 0; };
-    if (text && !landed() && (editor.textContent || '') === before) {
+    var canFallback = !draft || draft.guardTextFallback !== true ||
+      (editor.isConnected && document.activeElement === editor);
+    if (text && !landed() && (editor.textContent || '') === before && canFallback) {
       // No paste handling for text: type it in instead.
       try { document.execCommand('insertText', false, text); } catch (e) {}
       await sleep(200);
     }
     result.text = !!text && landed();
-    result.files = Math.max(0, attachmentCount() - beforeFiles);
+    result.files = Math.max(0, attachmentCount(attachmentEditor) - beforeFiles);
     post('DshAppCompose', result);
   };
 
@@ -382,13 +452,16 @@
   function finish(r, ok, step) {
     if (current === r) current = null;
     if (!r.stopped) report(ok, ok ? null : step);
+    return !r.stopped && ok;
   }
 
   // [target] as the one open that acts from now on.
   function start(target) {
     if (current) current.stopped = true;
     var r = (current = { booted: false, stopped: false, until: Infinity });
-    return run(r, target);
+    var opening = run(r, target);
+    if (target.newSession && target.confirmNewSession === true) opening.newSessionBinding = r;
+    return opening;
   }
 
   async function run(r, target) {
@@ -427,7 +500,7 @@
       ok = await openRightbar(r, target.rightbar);
     } else if (target.newSession) {
       step = 'newSession';
-      ok = await startNewSession(r);
+      ok = await startNewSession(r, target.confirmNewSession === true);
     } else if (target.sidebar) {
       step = 'sidebar';
       await sleep(400); // after the phone layout's collapse-on-arrival
@@ -439,7 +512,7 @@
         press(r, byName(sidebar(), 'button', LABELS.openSidebar));
       }
     }
-    finish(r, ok, step);
+    return finish(r, ok, step);
   }
 
   window.__dshAppOpen = function (target) {

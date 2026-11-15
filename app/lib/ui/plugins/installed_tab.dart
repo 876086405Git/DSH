@@ -225,7 +225,7 @@ class BundleTile extends ConsumerWidget {
         },
       );
     } else if (switchable || readOnly && (bundle.installed || bundle.optional)) {
-      trailing = Switch(
+      trailing = Switch.adaptive(
         value: bundle.enabled,
         onChanged: readOnly
             ? null

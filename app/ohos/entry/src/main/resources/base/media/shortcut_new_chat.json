@@ -1,0 +1,6 @@
+{
+  "layered-image": {
+    "background": "$media:shortcut_background",
+    "foreground": "$media:shortcut_new_chat_foreground"
+  }
+}

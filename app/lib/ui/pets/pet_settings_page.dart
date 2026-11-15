@@ -13,6 +13,7 @@ import '../../pets/pet_pack.dart';
 import '../../pets/pet_prefs.dart';
 import '../../pets/pet_signals.dart';
 import '../../pets/pet_state.dart';
+import '../../state/android_features.dart';
 import '../../state/compose_inbox.dart';
 import '../../state/ui_mode_state.dart';
 import '../../state/web_target.dart';
@@ -59,6 +60,7 @@ class PetSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
+    final hasOutsideOverlay = ref.watch(androidSystemFeaturesProvider) || ref.watch(operatingSystemProvider) == 'ios';
     final prefs = ref.watch(petPrefsProvider);
     final now = ref.watch(petClockProvider)();
     final hidden = prefs.hiddenAt(now) ? prefs.hiddenUntil : null;
@@ -128,7 +130,7 @@ class PetSettingsPage extends ConsumerWidget {
                 ],
               ),
               // App 外显示 (the overlay).
-              const PetOverlaySettingsSection(),
+              if (hasOutsideOverlay) const PetOverlaySettingsSection(),
             ],
           ),
         ),

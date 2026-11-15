@@ -1,0 +1,34 @@
+--- a/node_modules/@deepseek-ai/node-addon-system/lib/flock.js
++++ b/node_modules/@deepseek-ai/node-addon-system/lib/flock.js
+@@ -7,6 +7,11 @@
+     if (binding)
+         return binding;
+     const { platform, arch } = process;
++    if (platform === 'openharmony') {
++        const require = createRequire(import.meta.url);
++        binding = require('@dsh-go/ohos-native').load('flock').binding;
++        return binding;
++    }
+     if (platform !== 'linux' && platform !== 'darwin') {
+         throw Object.assign(new Error(`flock is not supported on ${platform}-${arch}`), {
+             code: 'ERR_FLOCK_UNSUPPORTED_PLATFORM',
+--- a/node_modules/node-addon-native-custom-loader/lib/index.js
++++ b/node_modules/node-addon-native-custom-loader/lib/index.js
+@@ -510,6 +510,17 @@
+     const packagePrefix = options.packagePrefix;
+     const product = productForPackage(packagePrefix);
+     const backendPreference = normalizeBackend(options.backend || process.env.NARB_BACKEND);
++    if (process.platform === 'openharmony') {
++        if (backendPreference !== BACKEND_AUTO && backendPreference !== BACKEND_NAPI) {
++            throw Object.assign(new Error('OpenHarmony packages only the pinned N-API backend'), {
++                code: 'ERR_OHOS_NATIVE_BACKEND',
++            });
++        }
++        const loaded = require('@dsh-go/ohos-native').load(product);
++        const binary = { backend: BACKEND_NAPI, abi: 'napi-v9' };
++        const binding = validatePrebuiltBinding(loaded.binding, binary, loaded.path, product);
++        return { binding, path: loaded.path, source: 'ohos-hap-libs', attempts: [] };
++    }
+     const attempts = [];
+     if (process.env.NARB_DISABLE_OPTIONAL_PACKAGE !== '1') {
+         for (const candidate of optionalPackageCandidates(packageDir, packagePrefix)) {

@@ -172,7 +172,7 @@ class _MediaServiceDetailBody extends ConsumerWidget {
       child: EngineFieldRow(
         title: l10n.engineFieldEnabled,
         subtitle: l10n.mediaSettingsEnabledHint,
-        trailing: Switch(
+        trailing: Switch.adaptive(
           value: service.enabled,
           onChanged: editable ? (on) => unawaited(save(service.copyWith(enabled: on))) : null,
         ),
@@ -202,7 +202,7 @@ class _MediaServiceDetailBody extends ConsumerWidget {
         child: EngineFieldRow(
           title: title,
           subtitle: note,
-          trailing: Switch(
+          trailing: Switch.adaptive(
             value: on,
             onChanged: editable && !last ? (value) => unawaited(save(service.withModel(id, on: value))) : null,
           ),

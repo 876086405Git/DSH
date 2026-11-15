@@ -1,0 +1,2448 @@
+diff --git a/idevice/src/xpc/bounds.rs b/idevice/src/xpc/bounds.rs
+new file mode 100644
+--- /dev/null
++++ b/idevice/src/xpc/bounds.rs
+@@ -0,0 +1,81 @@
++//! Local control-message limits. File-transfer data is a separate stream path.
++use crate::IdeviceError;
++
++pub(super) const XPC_WRAPPER_LEN: usize = 24;
++pub(super) const MAX_XPC_BODY: usize = 16 * 1024 * 1024;
++pub(super) const MAX_BUFFERED_XPC: usize = XPC_WRAPPER_LEN + MAX_XPC_BODY;
++
++fn limit_error() -> IdeviceError {
++    IdeviceError::UnexpectedResponse("RemoteXPC control message exceeds limit".into())
++}
++
++/// Check the u64 declaration as soon as bytes 8..16 exist. No allocation or
++/// unchecked integer conversion/addition is based on a peer's declaration.
++pub(super) fn frame_len(bytes: &[u8]) -> Result<Option<usize>, IdeviceError> {
++    if bytes.len() < 16 { return Ok(None); }
++    let body = u64::from_le_bytes([
++        bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
++    ]);
++    if body > MAX_XPC_BODY as u64 { return Err(limit_error()); }
++    let body = usize::try_from(body).map_err(|_| limit_error())?;
++    body.checked_add(XPC_WRAPPER_LEN).map(Some).ok_or_else(limit_error)
++}
++
++/// A channel's whole pending buffer also has a cap, including coalesced messages
++/// and incomplete headers. Reject before extending the Vec.
++pub(super) fn append(buffer: &mut Vec<u8>, chunk: &[u8]) -> Result<(), IdeviceError> {
++    if buffer.len().checked_add(chunk.len()).is_none_or(|size| size > MAX_BUFFERED_XPC) {
++        return Err(limit_error());
++    }
++    let existing = buffer.len().min(16);
++    let added = chunk.len().min(16 - existing);
++    if existing + added == 16 {
++        let mut prefix = [0u8; 16];
++        prefix[..existing].copy_from_slice(&buffer[..existing]);
++        prefix[existing..existing + added].copy_from_slice(&chunk[..added]);
++        frame_len(&prefix)?;
++    }
++    buffer.extend_from_slice(chunk);
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn header(body: u64) -> Vec<u8> {
++        let mut bytes = vec![0; XPC_WRAPPER_LEN];
++        bytes[..4].copy_from_slice(&0x29b00b92u32.to_le_bytes());
++        bytes[8..16].copy_from_slice(&body.to_le_bytes());
++        bytes
++    }
++
++    #[test]
++    fn declaration_accepts_exact_limit_and_rejects_overflow() {
++        assert_eq!(frame_len(&header(0)).unwrap(), Some(XPC_WRAPPER_LEN));
++        assert_eq!(frame_len(&header(MAX_XPC_BODY as u64)).unwrap(), Some(MAX_BUFFERED_XPC));
++        assert!(frame_len(&header(MAX_XPC_BODY as u64 + 1)).is_err());
++        assert!(frame_len(&header(u64::MAX)).is_err());
++    }
++
++    #[test]
++    fn split_length_is_rejected_before_the_buffer_grows() {
++        let bytes = header(u64::MAX);
++        let mut buffer = bytes[..15].to_vec();
++        let before = buffer.clone();
++        assert!(append(&mut buffer, &bytes[15..]).is_err());
++        assert_eq!(buffer, before);
++        assert_eq!(frame_len(&bytes[..15]).unwrap(), None);
++    }
++
++    #[test]
++    fn pending_buffer_exact_cap_is_accepted_then_one_more_byte_is_rejected() {
++        let mut buffer = vec![0; MAX_BUFFERED_XPC];
++        buffer[..XPC_WRAPPER_LEN].copy_from_slice(&header(MAX_XPC_BODY as u64));
++        assert!(append(&mut buffer, &[]).is_ok());
++        let capacity = buffer.capacity();
++        assert!(append(&mut buffer, &[0]).is_err());
++        assert_eq!(buffer.len(), MAX_BUFFERED_XPC);
++        assert_eq!(buffer.capacity(), capacity);
++    }
++}
+diff --git a/idevice/src/xpc/format.rs b/idevice/src/xpc/format.rs
+--- a/idevice/src/xpc/format.rs
++++ b/idevice/src/xpc/format.rs
+@@ -1,6 +1,4 @@
+-use plist_macro::plist;
+ use std::{
+-    ffi::CString,
+     io::{BufRead, Cursor, Read},
+     ops::{BitOr, BitOrAssign},
+ };
+@@ -10,6 +8,7 @@
+ use tracing::{debug, warn};
+ 
+ use super::errors::XpcError;
++use super::object_limits::{self, Budget};
+ use crate::{CdTunnelError, IdeviceError};
+ 
+ #[derive(Clone, Copy, Debug)]
+@@ -151,32 +150,50 @@
+ }
+ 
+ impl XPCObject {
+-    pub fn to_plist(&self) -> plist::Value {
+-        match self {
++    pub fn to_plist(&self) -> Result<plist::Value, IdeviceError> {
++        self.to_plist_bounded(1, &mut Budget::new())
++    }
++
++    fn to_plist_bounded(&self, depth: usize, budget: &mut Budget) -> Result<plist::Value, IdeviceError> {
++        budget.enter(depth)?;
++        Ok(match self {
+             Self::Null => plist::Value::String("".into()),
+             Self::Bool(v) => plist::Value::Boolean(*v),
+-            Self::Uuid(uuid) => plist::Value::String(uuid.to_string()),
++            Self::Uuid(uuid) => { budget.bytes(36)?; plist::Value::String(uuid.to_string()) },
+             Self::Double(f) => plist::Value::Real(*f),
+             Self::UInt64(v) => plist::Value::Integer({ *v }.into()),
+             Self::Int64(v) => plist::Value::Integer({ *v }.into()),
+             Self::Date(d) => plist::Value::Date(plist::Date::from(*d)),
+-            Self::String(v) => plist::Value::String(v.clone()),
+-            Self::Data(v) => plist::Value::Data(v.clone()),
+-            Self::Array(v) => plist::Value::Array(v.iter().map(|item| item.to_plist()).collect()),
++            Self::String(v) => { budget.bytes(v.len())?; plist::Value::String(v.clone()) },
++            Self::Data(v) => { budget.bytes(v.len())?; plist::Value::Data(v.clone()) },
++            Self::Array(v) => {
++                budget.children(v.len())?;
++                let mut values = Vec::new();
++                for item in v { values.push(item.to_plist_bounded(depth + 1, budget)?); }
++                plist::Value::Array(values)
++            }
+             Self::Dictionary(v) => {
++                budget.children(v.len())?;
+                 let mut dict = plist::Dictionary::new();
+                 for (k, v) in v.into_iter() {
+-                    dict.insert(k.clone(), v.to_plist());
++                    budget.bytes(k.len())?;
++                    let value = v.to_plist_bounded(depth + 1, budget)?;
++                    dict.insert(k.clone(), value);
+                 }
+                 plist::Value::Dictionary(dict)
+             }
+             Self::FileTransfer { msg_id, data } => {
+-                plist!({
+-                    "msg_id": *msg_id,
+-                    "data": data.to_plist(),
+-                })
+-            }
+-        }
++                // Conversion adds a dictionary and a scalar beside the child.
++                budget.children(2)?;
++                budget.bytes("msg_id".len() + "data".len())?;
++                budget.enter(depth + 1)?;
++                let value = data.to_plist_bounded(depth + 1, budget)?;
++                let mut dict = plist::Dictionary::new();
++                dict.insert("msg_id".into(), plist::Value::Integer((*msg_id).into()));
++                dict.insert("data".into(), value);
++                plist::Value::Dictionary(dict)
++            }
++        })
+     }
+ 
+     pub fn encode(&self) -> Result<Vec<u8>, IdeviceError> {
+@@ -273,6 +290,7 @@
+     }
+ 
+     pub fn decode(buf: &[u8]) -> Result<Self, IdeviceError> {
++        if buf.len() > super::bounds::MAX_XPC_BODY { return Err(object_limits::limit("wire bytes")); }
+         if buf.len() < 8 {
+             return Err(IdeviceError::NotEnoughBytes(buf.len(), 8));
+         }
+@@ -288,10 +306,33 @@
+             return Err(XpcError::UnexpectedXpcVersion.into());
+         }
+ 
+-        Self::decode_object(&mut Cursor::new(&buf[8..]))
+-    }
+-
+-    fn decode_object(mut cursor: &mut Cursor<&[u8]>) -> Result<Self, IdeviceError> {
++        Self::decode_object(&mut Cursor::new(&buf[8..]), 1, &mut Budget::new())
++    }
++
++    fn require_remaining(cursor: &Cursor<&[u8]>, length: usize) -> Result<(), IdeviceError> {
++        let position = usize::try_from(cursor.position())
++            .map_err(|_| IdeviceError::NotEnoughBytes(0, length))?;
++        let remaining = cursor.get_ref().len().saturating_sub(position);
++        if length > remaining { return Err(IdeviceError::NotEnoughBytes(remaining, length)); }
++        Ok(())
++    }
++
++    fn read_string(cursor: &mut Cursor<&[u8]>, length: usize, budget: &mut Budget) -> Result<String, IdeviceError> {
++        if length == 0 { return Err(XpcError::InvalidCString.into()); }
++        let padding = Self::calculate_padding(length);
++        let padded = length.checked_add(padding).ok_or_else(|| object_limits::limit("payload bytes"))?;
++        Self::require_remaining(cursor, padded)?;
++        let start = usize::try_from(cursor.position()).map_err(|_| object_limits::limit("payload bytes"))?;
++        let raw = &cursor.get_ref()[start..start + length];
++        if raw.last() != Some(&0) || raw[..length - 1].contains(&0) { return Err(XpcError::InvalidCString.into()); }
++        budget.bytes(length - 1)?;
++        let value = std::str::from_utf8(&raw[..length - 1]).map_err(|_| XpcError::InvalidCString)?.to_owned();
++        cursor.set_position((start + padded) as u64);
++        Ok(value)
++    }
++
++    fn decode_object(cursor: &mut Cursor<&[u8]>, depth: usize, budget: &mut Budget) -> Result<Self, IdeviceError> {
++        budget.enter(depth)?;
+         let mut buf_32: [u8; 4] = Default::default();
+         cursor.read_exact(&mut buf_32)?;
+         let xpc_type = u32::from_le_bytes(buf_32);
+@@ -305,22 +346,13 @@
+                 let _l = u32::from_le_bytes(buf_32);
+                 cursor.read_exact(&mut buf_32)?;
+                 let num_entries = u32::from_le_bytes(buf_32);
++                budget.children(num_entries as usize)?;
+                 for _ in 0..num_entries {
+-                    let mut key_buf = Vec::new();
+-                    BufRead::read_until(&mut cursor, 0, &mut key_buf)?;
+-                    let key = match CString::from_vec_with_nul(key_buf)
+-                        .ok()
+-                        .and_then(|x| x.to_str().ok().map(|x| x.to_string()))
+-                    {
+-                        Some(k) => k,
+-                        None => {
+-                            return Err(XpcError::InvalidCString.into());
+-                        }
+-                    };
+-                    let padding = Self::calculate_padding(key.len() + 1);
+-
+-                    BufRead::consume(&mut cursor, padding);
+-                    ret.insert(key, Self::decode_object(cursor)?);
++                    let start = usize::try_from(cursor.position()).map_err(|_| object_limits::limit("payload bytes"))?;
++                    let remaining = cursor.get_ref().get(start..).ok_or(XpcError::InvalidCString)?;
++                    let length = remaining.iter().position(|byte| *byte == 0).ok_or(XpcError::InvalidCString)? + 1;
++                    let key = Self::read_string(cursor, length, budget)?;
++                    ret.insert(key, Self::decode_object(cursor, depth + 1, budget)?);
+                 }
+                 Ok(XPCObject::Dictionary(ret))
+             }
+@@ -329,10 +361,11 @@
+                 let _l = u32::from_le_bytes(buf_32);
+                 cursor.read_exact(&mut buf_32)?;
+                 let num_entries = u32::from_le_bytes(buf_32);
++                budget.children(num_entries as usize)?;
+ 
+                 let mut ret = Vec::new();
+                 for _i in 0..num_entries {
+-                    ret.push(Self::decode_object(cursor)?);
++                    ret.push(Self::decode_object(cursor, depth + 1, budget)?);
+                 }
+                 Ok(XPCObject::Array(ret))
+             }
+@@ -365,19 +398,7 @@
+                 // 'l' includes utf8 '\0' character.
+                 cursor.read_exact(&mut buf_32)?;
+                 let l = u32::from_le_bytes(buf_32) as usize;
+-                let padding = Self::calculate_padding(l);
+-
+-                let mut key_buf = vec![0; l];
+-                cursor.read_exact(&mut key_buf)?;
+-                let key = match CString::from_vec_with_nul(key_buf)
+-                    .ok()
+-                    .and_then(|x| x.to_str().ok().map(|x| x.to_string()))
+-                {
+-                    Some(k) => k,
+-                    None => return Err(XpcError::InvalidCString.into()),
+-                };
+-                BufRead::consume(&mut cursor, padding);
+-                Ok(XPCObject::String(key))
++                Ok(XPCObject::String(Self::read_string(cursor, l, budget)?))
+             }
+             XPCType::Bool => {
+                 let mut buf: [u8; 4] = Default::default();
+@@ -388,10 +409,13 @@
+                 cursor.read_exact(&mut buf_32)?;
+                 let l = u32::from_le_bytes(buf_32) as usize;
+                 let padding = Self::calculate_padding(l);
++                Self::require_remaining(cursor, l.checked_add(padding)
++                    .ok_or(IdeviceError::NotEnoughBytes(0, l))?)?;
++                budget.bytes(l)?;
+ 
+                 let mut data = vec![0; l];
+                 cursor.read_exact(&mut data)?;
+-                BufRead::consume(&mut cursor, padding);
++                BufRead::consume(cursor, padding);
+                 Ok(XPCObject::Data(data))
+             }
+             XPCType::Uuid => {
+@@ -405,7 +429,7 @@
+                 let msg_id = u64::from_le_bytes(id_buf);
+ 
+                 // The next thing in the stream is a full XPC object
+-                let inner = Self::decode_object(cursor)?;
++                let inner = Self::decode_object(cursor, depth + 1, budget)?;
+                 Ok(XPCObject::FileTransfer {
+                     msg_id,
+                     data: Box::new(inner),
+@@ -508,16 +532,14 @@
+         }
+ 
+         let flags = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+-        let body_len = u64::from_le_bytes([
+-            data[8], data[9], data[10], data[11], data[12], data[13], data[14], data[15],
+-        ]);
+-        debug!("Body_len: {body_len}");
++        let total = super::bounds::frame_len(data)?
++            .ok_or(IdeviceError::NotEnoughBytes(data.len(), 24))?;
+         let message_id = u64::from_le_bytes([
+             data[16], data[17], data[18], data[19], data[20], data[21], data[22], data[23],
+         ]);
+-        if body_len + 24 > data.len() as u64 {
++        if total > data.len() {
+             debug!(
+-                "Body length is {body_len}, but received bytes is {}",
++                "Wrapper length is {total}, but received bytes is {}",
+                 data.len()
+             );
+             Err(CdTunnelError::SizeMismatch)?
+@@ -525,8 +547,8 @@
+ 
+         let res = XPCMessage {
+             flags,
+-            message: if body_len > 0 {
+-                Some(XPCObject::decode(&data[24..24 + body_len as usize])?)
++            message: if total > 24 {
++                Some(XPCObject::decode(&data[24..total])?)
+             } else {
+                 None
+             },
+diff --git a/idevice/src/xpc/http2/frame.rs b/idevice/src/xpc/http2/frame.rs
+--- a/idevice/src/xpc/http2/frame.rs
++++ b/idevice/src/xpc/http2/frame.rs
+@@ -6,6 +6,8 @@
+ /// Fixed HTTP/2 frame header size: 3-byte length, 1-byte type, 1-byte flags,
+ /// 4-byte stream id.
+ const FRAME_HEADER_LEN: usize = 9;
++// We never advertise a larger SETTINGS_MAX_FRAME_SIZE.
++pub(super) const MAX_FRAME_PAYLOAD: usize = 16384;
+ 
+ pub trait HttpFrame {
+     fn serialize(&self) -> Vec<u8>;
+@@ -28,16 +30,28 @@
+     /// caller should read more bytes and retry). On success returns the frame
+     /// and how many bytes it consumed, so the caller can drain exactly that much
+     /// — this keeps frame reassembly cancellation-safe: a partially-received
+-    /// frame stays buffered until it is whole. RST_STREAM and GOAWAY surface as
+-    /// errors (they consume no bytes; the connection is finished either way).
++    /// frame stays buffered until it is whole. RST_STREAM is handled by the
++    /// connection state; GOAWAY is terminal.
+     pub fn parse(buf: &[u8]) -> Result<Option<(Self, usize)>, IdeviceError> {
+         if buf.len() < FRAME_HEADER_LEN {
+             return Ok(None);
+         }
+         let frame_len = u32::from_be_bytes([0x00, buf[0], buf[1], buf[2]]) as usize;
++        if frame_len > MAX_FRAME_PAYLOAD {
++            return Err(IdeviceError::UnexpectedResponse("HTTP/2 frame payload exceeds limit".into()));
++        }
+         let frame_type = buf[3];
+         let flags = buf[4];
+-        let stream_id = u32::from_be_bytes([buf[5], buf[6], buf[7], buf[8]]);
++        let stream_id = u32::from_be_bytes([buf[5], buf[6], buf[7], buf[8]]) & 0x7fff_ffff;
++        if matches!(frame_type, 0x00 | 0x01 | 0x03) && stream_id == 0 {
++            return Err(IdeviceError::UnexpectedResponse("HTTP/2 frame requires a stream".into()));
++        }
++        if (frame_type == 0x03 || frame_type == 0x08) && frame_len != 4 {
++            return Err(IdeviceError::UnexpectedResponse("HTTP/2 control frame must be 4 bytes".into()));
++        }
++        if frame_type == 0x04 && (stream_id != 0 || frame_len % 6 != 0 || (flags & 1 != 0 && frame_len != 0)) {
++            return Err(IdeviceError::UnexpectedResponse("HTTP/2 invalid settings frame".into()));
++        }
+ 
+         let total = FRAME_HEADER_LEN + frame_len;
+         if buf.len() < total {
+@@ -46,12 +60,18 @@
+         let body = &buf[FRAME_HEADER_LEN..total];
+ 
+         let frame = match frame_type {
+-            0x00 => Self::Data(DataFrame {
+-                stream_id,
+-                payload: body.to_vec(),
+-                end_stream: flags & 0x01 != 0,
+-            }),
+-            0x01 => Self::Headers(HeadersFrame { stream_id }),
++            0x00 => {
++                let payload = if flags & 0x08 != 0 {
++                    let padding = *body.first().ok_or_else(|| IdeviceError::UnexpectedResponse("HTTP/2 missing pad length".into()))? as usize;
++                    if padding >= body.len() {
++                        return Err(IdeviceError::UnexpectedResponse("HTTP/2 invalid DATA padding".into()));
++                    }
++                    &body[1..body.len() - padding]
++                } else { body };
++                Self::Data(DataFrame { stream_id, payload: payload.to_vec(),
++                    flow_control_len: frame_len, end_stream: flags & 0x01 != 0 })
++            }
++            0x01 => Self::Headers(HeadersFrame { stream_id, end_stream: flags & 0x01 != 0 }),
+             0x03 => Self::RstStream(RstStreamFrame { stream_id }),
+             0x04 => {
+                 // settings: a sequence of (u16 identifier, u32 value) entries
+@@ -88,7 +108,10 @@
+                         "HTTP/2 window update frame body was not 4 bytes".into(),
+                     ));
+                 }
+-                let window = u32::from_be_bytes([body[0], body[1], body[2], body[3]]);
++                let window = u32::from_be_bytes([body[0], body[1], body[2], body[3]]) & 0x7fff_ffff;
++                if window == 0 {
++                    return Err(IdeviceError::UnexpectedResponse("HTTP/2 zero window increment".into()));
++                }
+                 Self::WindowUpdate(WindowUpdateFrame {
+                     increment_size: window,
+                     stream_id,
+@@ -172,11 +195,12 @@
+ /// We don't actually care about this frame according to spec. This is just to open new channels.
+ pub struct HeadersFrame {
+     pub stream_id: u32,
++    pub end_stream: bool,
+ }
+ 
+ impl HttpFrame for HeadersFrame {
+     fn serialize(&self) -> Vec<u8> {
+-        let mut res = vec![0x00, 0x00, 0x00, 0x01, 0x04];
++        let mut res = vec![0x00, 0x00, 0x00, 0x01, 0x04 | if self.end_stream { 1 } else { 0 }];
+         res.extend(self.stream_id.to_be_bytes());
+         res
+     }
+@@ -191,6 +215,8 @@
+ pub struct DataFrame {
+     pub stream_id: u32,
+     pub payload: Vec<u8>,
++    /// Inbound wire payload length, including the pad length byte and padding.
++    pub flow_control_len: usize,
+     /// Sets END_STREAM, marking this as the last frame we send on the stream.
+     pub end_stream: bool,
+ }
+diff --git a/idevice/src/xpc/http2/mod.rs b/idevice/src/xpc/http2/mod.rs
+--- a/idevice/src/xpc/http2/mod.rs
++++ b/idevice/src/xpc/http2/mod.rs
+@@ -1,319 +1,516 @@
+ // Jackson Coxson
+ 
+ use frame::HttpFrame;
+-use std::collections::{HashMap, VecDeque};
++use std::collections::{HashMap, HashSet, VecDeque};
+ use tokio::io::{AsyncReadExt, AsyncWriteExt};
+-use tracing::{debug, warn};
+ 
+ use crate::{IdeviceError, ReadWrite};
+ 
+ pub mod frame;
+ pub use frame::Setting;
+ 
+-const HTTP2_MAGIC: &[u8] = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".as_bytes();
+-
+-/// HTTP/2 default initial flow-control window for both the connection and each
+-/// stream (RFC 7540 §6.9.2). The peer can raise the per-stream default via a
+-/// SETTINGS `InitialWindowSize`.
++const HTTP2_MAGIC: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+ const DEFAULT_WINDOW: i64 = 65535;
++const MAX_WINDOW: i64 = 0x7fff_ffff;
++pub(super) const MAX_STREAM_BYTES: usize = 1024 * 1024;
++pub(super) const MAX_CACHE_BYTES: usize = 4 * 1024 * 1024;
++pub(super) const MAX_STREAMS: usize = 128;
++pub(super) const MAX_STREAM_FRAMES: usize = 1024;
++pub(super) const MAX_CACHE_FRAMES: usize = 4096;
++const READ_CHUNK: usize = 16384;
++const MAX_RECV_BUFFER: usize = frame::MAX_FRAME_PAYLOAD + 9 + READ_CHUNK;
++
++fn error(message: &'static str) -> IdeviceError {
++    IdeviceError::UnexpectedResponse(message.into())
++}
++
++#[derive(Debug)]
++struct CachedData {
++    bytes: Vec<u8>,
++    // Includes DATA pad length and padding, which also consume receive credit.
++    flow_bytes: usize,
++}
++#[derive(Debug)]
++struct StreamState {
++    cache: VecDeque<CachedData>,
++    cached_bytes: usize,
++    recv_window: i64,
++    send_window: i64,
++    pending_credit: u32,
++    local_ended: bool,
++    remote_ended: bool,
++}
++#[derive(Debug)]
++enum WriteAction {
++    None,
++    ConnectionCredit(u32),
++    StreamCredit(u32, u32),
++    InitialWindow(u32),
++    LocalEnd(u32),
++}
++#[derive(Debug)]
++struct PendingWrite {
++    bytes: Vec<u8>,
++    offset: usize,
++    action: WriteAction,
++}
+ 
+ #[derive(Debug)]
+ pub struct Http2Client<R: ReadWrite> {
+-    inner: R,
+-    cache: HashMap<u32, VecDeque<Vec<u8>>>,
+-    /// How many payload octets we may still send on the connection as a whole
+-    /// before the peer must replenish it with a connection-level WINDOW_UPDATE.
++    // A protocol/resource failure drops this transport immediately and is sticky.
++    inner: Option<R>,
++    streams: HashMap<u32, StreamState>,
++    cached_bytes: usize,
++    cached_frames: usize,
+     conn_send_window: i64,
+-    /// Per-stream remaining send window. Lazily seeded to `peer_initial_window`.
+-    stream_send_windows: HashMap<u32, i64>,
+-    /// The peer's current SETTINGS `InitialWindowSize` — the window each *new*
+-    /// stream starts with.
++    conn_recv_window: i64,
+     peer_initial_window: i64,
+-    /// Raw inbound bytes not yet parsed into a whole frame. Persisting this
+-    /// across reads keeps [`Self::pump`] cancellation-safe: a partially-received
+-    /// frame survives a dropped read.
++    local_initial_window: i64,
++    pending_conn_credit: u32,
++    // At most one serialized frame. Partial writes survive cancellation.
++    pending_write: Option<PendingWrite>,
+     recv_buf: Vec<u8>,
+-    /// Streams we finished pushing an outbound file transfer on. The device
+-    /// resets them once it has the payload, so a RST_STREAM for one of these is
+-    /// normal completion rather than an error.
+-    finished_file_transfer_streams: std::collections::HashSet<u32>,
++    finished_file_transfer_streams: HashSet<u32>,
++    // Closed IDs need no growing tombstone set. Existing lower IDs remain live;
++    // a new ID cannot reuse an earlier closed stream of the same parity.
++    retired_through: [u32; 2],
+ }
+ 
+ impl<R: ReadWrite> Http2Client<R> {
+-    /// Writes the magic and inits the caches
+     pub async fn new(mut inner: R) -> Result<Self, IdeviceError> {
++        // Cancellation here drops the not-yet-returned connection.
+         inner.write_all(HTTP2_MAGIC).await?;
+         inner.flush().await?;
+         Ok(Self {
+-            inner,
+-            cache: HashMap::new(),
+-            conn_send_window: DEFAULT_WINDOW,
+-            stream_send_windows: HashMap::new(),
+-            peer_initial_window: DEFAULT_WINDOW,
+-            recv_buf: Vec::new(),
+-            finished_file_transfer_streams: std::collections::HashSet::new(),
++            inner: Some(inner), streams: HashMap::new(), cached_bytes: 0, cached_frames: 0,
++            conn_send_window: DEFAULT_WINDOW, conn_recv_window: DEFAULT_WINDOW,
++            peer_initial_window: DEFAULT_WINDOW, local_initial_window: DEFAULT_WINDOW,
++            pending_conn_credit: 0, pending_write: None,
++            recv_buf: Vec::with_capacity(MAX_RECV_BUFFER),
++            finished_file_transfer_streams: HashSet::new(), retired_through: [0; 2],
+         })
+     }
+ 
+-    /// Read the next whole frame, buffering raw bytes in `recv_buf` until one is
+-    /// complete. Cancellation-safe: the single `read` is cancel-safe (no bytes
+-    /// lost if the future is dropped on `Pending`), and any bytes already
+-    /// buffered persist in `self` for the next call.
++    pub(super) fn close(&mut self) {
++        self.inner.take();
++        self.streams.clear();
++        self.cached_bytes = 0;
++        self.cached_frames = 0;
++        self.pending_conn_credit = 0;
++        self.pending_write = None;
++        self.recv_buf.clear();
++        self.finished_file_transfer_streams.clear();
++    }
++    fn fail<T>(&mut self, reason: IdeviceError) -> Result<T, IdeviceError> {
++        self.close();
++        Err(reason)
++    }
++    fn check_open(&self) -> Result<(), IdeviceError> {
++        if self.inner.is_none() { return Err(error("HTTP/2 connection is closed")); }
++        Ok(())
++    }
++    fn is_retired(&self, id: u32) -> bool {
++        id != 0 && !self.streams.contains_key(&id) && id <= self.retired_through[(id & 1) as usize]
++    }
++    fn ensure_stream(&mut self, id: u32) -> Result<(), IdeviceError> {
++        self.check_open()?;
++        if id == 0 || id > MAX_WINDOW as u32 { return self.fail(error("HTTP/2 invalid stream ID")); }
++        if self.streams.contains_key(&id) { return Ok(()); }
++        if self.is_retired(id) { return Err(error("HTTP/2 stream is closed")); }
++        if self.streams.len() >= MAX_STREAMS { return self.fail(error("HTTP/2 tracked stream limit")); }
++        self.streams.insert(id, StreamState {
++            cache: VecDeque::new(), cached_bytes: 0,
++            recv_window: self.local_initial_window, send_window: self.peer_initial_window,
++            pending_credit: 0, local_ended: false, remote_ended: false,
++        });
++        Ok(())
++    }
++
++    fn retire(&mut self, id: u32) -> Result<(), IdeviceError> {
++        if let Some(stream) = self.streams.remove(&id) {
++            let Some(bytes) = self.cached_bytes.checked_sub(stream.cached_bytes) else {
++                return self.fail(error("HTTP/2 cache accounting failure"));
++            };
++            let Some(frames) = self.cached_frames.checked_sub(stream.cache.len()) else {
++                return self.fail(error("HTTP/2 cache accounting failure"));
++            };
++            let Some(credit) = self.pending_conn_credit.checked_add(stream.cached_bytes as u32)
++                .filter(|credit| *credit as usize <= MAX_CACHE_BYTES) else {
++                return self.fail(error("HTTP/2 receive credit limit"));
++            };
++            self.cached_bytes = bytes;
++            self.cached_frames = frames;
++            // Discarding queued bytes releases connection space. A closed
++            // stream receives no further stream WINDOW_UPDATE.
++            self.pending_conn_credit = credit;
++            self.finished_file_transfer_streams.remove(&id);
++            let watermark = &mut self.retired_through[(id & 1) as usize];
++            *watermark = (*watermark).max(id);
++        }
++        Ok(())
++    }
++    fn retire_if_closed(&mut self, id: u32) -> Result<(), IdeviceError> {
++        if self.streams.get(&id).is_some_and(|s| s.local_ended && s.remote_ended && s.cache.is_empty()) {
++            self.retire(id)?;
++        }
++        Ok(())
++    }
++
++    fn queue_write(&mut self, bytes: Vec<u8>, action: WriteAction) -> Result<(), IdeviceError> {
++        if self.pending_write.is_some() || bytes.len() > frame::MAX_FRAME_PAYLOAD + 9 {
++            return self.fail(error("HTTP/2 output frame limit"));
++        }
++        self.pending_write = Some(PendingWrite { bytes, offset: 0, action });
++        Ok(())
++    }
++    fn written(&mut self, action: WriteAction) -> Result<(), IdeviceError> {
++        match action {
++            WriteAction::None => {},
++            WriteAction::ConnectionCredit(increment) => {
++                let next = self.conn_recv_window + increment as i64;
++                if next < 0 || next as usize + self.cached_bytes > MAX_CACHE_BYTES {
++                    return self.fail(error("HTTP/2 connection receive credit limit"));
++                }
++                self.conn_recv_window = next;
++            }
++            WriteAction::StreamCredit(id, increment) => {
++                let Some(stream) = self.streams.get_mut(&id) else {
++                    return self.fail(error("HTTP/2 missing receive stream"));
++                };
++                let next = stream.recv_window + increment as i64;
++                if next < 0 || next as usize + stream.cached_bytes > MAX_STREAM_BYTES {
++                    return self.fail(error("HTTP/2 stream receive credit limit"));
++                }
++                stream.recv_window = next;
++            }
++            WriteAction::InitialWindow(size) => {
++                let delta = size as i64 - self.local_initial_window;
++                for stream in self.streams.values() {
++                    let next = stream.recv_window + delta;
++                    if next < 0 || next as usize + stream.cached_bytes > MAX_STREAM_BYTES {
++                        return self.fail(error("HTTP/2 initial receive window limit"));
++                    }
++                }
++                for stream in self.streams.values_mut() { stream.recv_window += delta; }
++                self.local_initial_window = size as i64;
++            }
++            WriteAction::LocalEnd(id) => {
++                let Some(stream) = self.streams.get_mut(&id) else {
++                    return self.fail(error("HTTP/2 missing ended stream"));
++                };
++                stream.local_ended = true;
++                self.retire_if_closed(id)?;
++            }
++        }
++        Ok(())
++    }
++
++    async fn flush_write(&mut self) -> Result<(), IdeviceError> {
++        self.check_open()?;
++        while self.pending_write.is_some() {
++            let complete = self.pending_write.as_ref().is_some_and(|p| p.offset == p.bytes.len());
++            if complete {
++                let pending = self.pending_write.take().ok_or_else(|| error("HTTP/2 missing output frame"))?;
++                self.written(pending.action)?;
++                continue;
++            }
++            let pending = self.pending_write.as_ref().ok_or_else(|| error("HTTP/2 missing output frame"))?;
++            let remaining = pending.bytes.len() - pending.offset;
++            let io = self.inner.as_mut().ok_or_else(|| error("HTTP/2 connection is closed"))?;
++            let result = io.write(&pending.bytes[pending.offset..]).await;
++            let count = match result { Ok(count) => count, Err(reason) => return self.fail(reason.into()) };
++            if count == 0 || count > remaining { return self.fail(error("HTTP/2 output made invalid progress")); }
++            // No await between a successful write and persisting its offset.
++            let pending = self.pending_write.as_mut().ok_or_else(|| error("HTTP/2 missing output frame"))?;
++            pending.offset += count;
++        }
++        Ok(())
++    }
++
++    async fn flush_output(&mut self) -> Result<(), IdeviceError> {
++        loop {
++            self.flush_write().await?;
++            if self.pending_conn_credit != 0 {
++                let increment = self.pending_conn_credit;
++                let bytes = frame::WindowUpdateFrame { increment_size: increment, stream_id: 0 }.serialize();
++                self.queue_write(bytes, WriteAction::ConnectionCredit(increment))?;
++                self.pending_conn_credit = 0;
++                continue;
++            }
++            let credit = self.streams.iter().find_map(|(id, stream)|
++                (stream.pending_credit != 0).then_some((*id, stream.pending_credit)));
++            if let Some((id, increment)) = credit {
++                let bytes = frame::WindowUpdateFrame { increment_size: increment, stream_id: id }.serialize();
++                self.queue_write(bytes, WriteAction::StreamCredit(id, increment))?;
++                if let Some(stream) = self.streams.get_mut(&id) { stream.pending_credit = 0; }
++                continue;
++            }
++            let io = self.inner.as_mut().ok_or_else(|| error("HTTP/2 connection is closed"))?;
++            if let Err(reason) = io.flush().await { return self.fail(reason.into()); }
++            return Ok(());
++        }
++    }
++
+     async fn next_frame(&mut self) -> Result<frame::Frame, IdeviceError> {
++        self.check_open()?;
+         loop {
+-            if let Some((frame, consumed)) = frame::Frame::parse(&self.recv_buf)? {
+-                self.recv_buf.drain(..consumed);
+-                return Ok(frame);
+-            }
+-            let mut tmp = [0u8; 16384];
+-            let n = self.inner.read(&mut tmp).await?;
+-            if n == 0 {
+-                return Err(IdeviceError::UnexpectedResponse(
+-                    "HTTP/2 connection closed by peer".into(),
+-                ));
+-            }
+-            self.recv_buf.extend_from_slice(&tmp[..n]);
+-        }
+-    }
+-
+-    pub async fn set_settings(
+-        &mut self,
+-        settings: Vec<frame::Setting>,
+-        stream_id: u32,
+-    ) -> Result<(), IdeviceError> {
+-        let frame = frame::SettingsFrame {
+-            settings,
+-            stream_id,
+-            flags: 0,
+-        }
+-        .serialize();
+-        self.inner.write_all(&frame).await?;
+-        self.inner.flush().await?;
+-        Ok(())
+-    }
+-
+-    pub async fn window_update(
+-        &mut self,
+-        increment_size: u32,
+-        stream_id: u32,
+-    ) -> Result<(), IdeviceError> {
+-        let frame = frame::WindowUpdateFrame {
+-            increment_size,
+-            stream_id,
+-        }
+-        .serialize();
+-        self.inner.write_all(&frame).await?;
+-        self.inner.flush().await?;
+-        Ok(())
++            match frame::Frame::parse(&self.recv_buf) {
++                Ok(Some((frame, consumed))) => { self.recv_buf.drain(..consumed); return Ok(frame); },
++                Ok(None) => {}, Err(reason) => return self.fail(reason),
++            }
++            let mut bytes = [0u8; READ_CHUNK];
++            let io = self.inner.as_mut().ok_or_else(|| error("HTTP/2 connection is closed"))?;
++            let count = match io.read(&mut bytes).await {
++                Ok(0) => return self.fail(error("HTTP/2 connection closed by peer")),
++                Ok(count) => count, Err(reason) => return self.fail(reason.into()),
++            };
++            if self.recv_buf.len().checked_add(count).is_none_or(|size| size > MAX_RECV_BUFFER) {
++                return self.fail(error("HTTP/2 frame buffer limit"));
++            }
++            self.recv_buf.extend_from_slice(&bytes[..count]);
++        }
++    }
++
++    pub async fn set_settings(&mut self, settings: Vec<frame::Setting>, stream_id: u32) -> Result<(), IdeviceError> {
++        self.flush_output().await?;
++        if stream_id != 0 || settings.len() > frame::MAX_FRAME_PAYLOAD / 6 {
++            return self.fail(error("HTTP/2 settings frame limit"));
++        }
++        let mut action = WriteAction::None;
++        for setting in &settings {
++            match setting {
++                Setting::InitialWindowSize(size) => {
++                    // This RemoteXPC client only raises its local initial window
++                    // at handshake; it does not advertise a shrink in flight.
++                    if *size as usize > MAX_STREAM_BYTES || (*size as i64) < self.local_initial_window {
++                        return self.fail(error("HTTP/2 local initial window limit"));
++                    }
++                    action = WriteAction::InitialWindow(*size);
++                }
++                Setting::MaxConcurrentStreams(size) if *size as usize > MAX_STREAMS =>
++                    return self.fail(error("HTTP/2 advertised stream limit")),
++                _ => {},
++            }
++        }
++        self.queue_write(frame::SettingsFrame { settings, stream_id, flags: 0 }.serialize(), action)?;
++        self.flush_output().await
++    }
++
++    pub async fn window_update(&mut self, increment: u32, stream_id: u32) -> Result<(), IdeviceError> {
++        self.flush_output().await?;
++        if increment == 0 || increment > MAX_WINDOW as u32 { return self.fail(error("HTTP/2 invalid receive credit")); }
++        let action = if stream_id == 0 {
++            if self.conn_recv_window + increment as i64 + self.cached_bytes as i64 > MAX_CACHE_BYTES as i64 {
++                return self.fail(error("HTTP/2 connection receive credit limit"));
++            }
++            WriteAction::ConnectionCredit(increment)
++        } else {
++            self.ensure_stream(stream_id)?;
++            let stream = &self.streams[&stream_id];
++            if stream.recv_window + increment as i64 + stream.cached_bytes as i64 > MAX_STREAM_BYTES as i64 {
++                return self.fail(error("HTTP/2 stream receive credit limit"));
++            }
++            WriteAction::StreamCredit(stream_id, increment)
++        };
++        self.queue_write(frame::WindowUpdateFrame { increment_size: increment, stream_id }.serialize(), action)?;
++        self.flush_output().await
+     }
+ 
+     pub async fn open_stream(&mut self, stream_id: u32) -> Result<(), IdeviceError> {
+-        // Sometimes Apple is silly and sends data to a stream that isn't open
+-        self.cache.entry(stream_id).or_default();
+-        let frame = frame::HeadersFrame { stream_id }.serialize();
+-        self.inner.write_all(&frame).await?;
+-        self.inner.flush().await?;
+-        Ok(())
+-    }
+-
++        self.flush_output().await?;
++        self.ensure_stream(stream_id)?;
++        if self.streams[&stream_id].local_ended { return Err(error("HTTP/2 local stream is closed")); }
++        self.queue_write(frame::HeadersFrame { stream_id, end_stream: false }.serialize(), WriteAction::None)?;
++        self.flush_output().await
++    }
+     pub async fn send(&mut self, payload: Vec<u8>, stream_id: u32) -> Result<(), IdeviceError> {
+         self.send_inner(payload, stream_id, false).await
+     }
+-
+-    /// Sends `payload` and closes our half of the stream with END_STREAM.
+-    ///
+-    /// Used to finish an outbound file transfer: the device resets the stream
+-    /// once it has the payload, and [`Self::pump`] treats that reset as normal
+-    /// completion rather than an error.
+-    pub async fn send_end_stream(
+-        &mut self,
+-        payload: Vec<u8>,
+-        stream_id: u32,
+-    ) -> Result<(), IdeviceError> {
+-        self.finished_file_transfer_streams.insert(stream_id);
++    pub async fn send_end_stream(&mut self, payload: Vec<u8>, stream_id: u32) -> Result<(), IdeviceError> {
+         self.send_inner(payload, stream_id, true).await
+     }
+-
+-    async fn send_inner(
+-        &mut self,
+-        payload: Vec<u8>,
+-        stream_id: u32,
+-        end_stream: bool,
+-    ) -> Result<(), IdeviceError> {
+-        const MAX_FRAME_SIZE: usize = 16384;
+-        let mut chunks = payload.chunks(MAX_FRAME_SIZE).peekable();
+-        // Always send at least one frame, even for an empty payload. An empty
+-        // DATA frame costs no flow-control window, so send it directly.
+-        if chunks.peek().is_none() {
+-            let frame = frame::DataFrame {
+-                stream_id,
+-                payload: Vec::new(),
+-                end_stream,
+-            }
+-            .serialize();
+-            self.inner.write_all(&frame).await?;
+-            self.inner.flush().await?;
+-            return Ok(());
+-        }
+-        while let Some(chunk) = chunks.next() {
+-            let need = chunk.len() as i64;
+-            // Respect the peer's flow-control window: a DATA frame must not exceed
+-            // either the connection-level or the stream-level send window, or the
+-            // peer aborts the connection with a GOAWAY (FLOW_CONTROL_ERROR). When
+-            // either window is exhausted, pump inbound frames until the peer grants
+-            // more room with a WINDOW_UPDATE. (Matters for large payloads like
+-            // pasteboard images; small ones fit in the initial 64 KiB window.)
+-            while self.conn_send_window < need || self.stream_send_window(stream_id) < need {
++    async fn send_inner(&mut self, payload: Vec<u8>, stream_id: u32, end_stream: bool) -> Result<(), IdeviceError> {
++        self.flush_output().await?;
++        self.ensure_stream(stream_id)?;
++        if self.streams[&stream_id].local_ended { return Err(error("HTTP/2 local stream is closed")); }
++        let mut offset = 0;
++        loop {
++            let length = (payload.len() - offset).min(frame::MAX_FRAME_PAYLOAD);
++            let need = length as i64;
++            // Empty DATA (including END_STREAM) costs no credit, even when
++            // a peer SETTINGS shrink has made a stream send window negative.
++            while need > 0 && (self.conn_send_window < need || self.streams[&stream_id].send_window < need) {
+                 self.pump().await?;
+-            }
+-            let frame = frame::DataFrame {
+-                stream_id,
+-                payload: chunk.to_vec(),
+-                // Only the last chunk carries END_STREAM.
+-                end_stream: end_stream && chunks.peek().is_none(),
+-            }
+-            .serialize();
+-            self.inner.write_all(&frame).await?;
++                self.ensure_stream(stream_id)?;
++            }
++            let last = offset + length == payload.len();
++            let ending = end_stream && last;
++            let bytes = frame::DataFrame { stream_id, payload: payload[offset..offset + length].to_vec(),
++                flow_control_len: length, end_stream: ending }.serialize();
++            let action = if ending { WriteAction::LocalEnd(stream_id) } else { WriteAction::None };
++            self.queue_write(bytes, action)?;
+             self.conn_send_window -= need;
+-            *self
+-                .stream_send_windows
+-                .get_mut(&stream_id)
+-                .expect("seeded by stream_send_window above") -= need;
+-        }
+-        self.inner.flush().await?;
+-        Ok(())
+-    }
+-
+-    /// The remaining send window for `stream_id`, seeding it to the peer's current
+-    /// initial window size the first time we touch the stream.
+-    fn stream_send_window(&mut self, stream_id: u32) -> i64 {
+-        *self
+-            .stream_send_windows
+-            .entry(stream_id)
+-            .or_insert(self.peer_initial_window)
+-    }
+-
+-    /// Reads the next buffered payload from whichever of `stream_ids` produces
+-    /// one first, returning it with the stream it came from.
++            self.streams.get_mut(&stream_id).ok_or_else(|| error("HTTP/2 missing send stream"))?.send_window -= need;
++            if ending { self.finished_file_transfer_streams.insert(stream_id); }
++            self.flush_output().await?;
++            offset += length;
++            if last { return Ok(()); }
++        }
++    }
++
++    fn pop_cached(&mut self, stream_id: u32) -> Result<Option<Vec<u8>>, IdeviceError> {
++        let Some(stream) = self.streams.get_mut(&stream_id) else { return Ok(None); };
++        let Some(data) = stream.cache.pop_front() else { return Ok(None); };
++        let Some(stream_bytes) = stream.cached_bytes.checked_sub(data.flow_bytes) else {
++            return self.fail(error("HTTP/2 cache accounting failure"));
++        };
++        let Some(total_bytes) = self.cached_bytes.checked_sub(data.flow_bytes) else {
++            return self.fail(error("HTTP/2 cache accounting failure"));
++        };
++        let Some(frames) = self.cached_frames.checked_sub(1) else {
++            return self.fail(error("HTTP/2 cache accounting failure"));
++        };
++        let Some(conn_credit) = self.pending_conn_credit.checked_add(data.flow_bytes as u32)
++            .filter(|v| *v as usize <= MAX_CACHE_BYTES) else {
++            return self.fail(error("HTTP/2 receive credit limit"));
++        };
++        let stream_credit = if stream.remote_ended { 0 } else {
++            let Some(credit) = stream.pending_credit.checked_add(data.flow_bytes as u32)
++                .filter(|v| *v as usize <= MAX_STREAM_BYTES) else {
++                return self.fail(error("HTTP/2 receive credit limit"));
++            };
++            credit
++        };
++        stream.cached_bytes = stream_bytes;
++        stream.pending_credit = stream_credit;
++        self.cached_bytes = total_bytes;
++        self.cached_frames = frames;
++        self.pending_conn_credit = conn_credit;
++        self.retire_if_closed(stream_id)?;
++        Ok(Some(data.bytes))
++    }
+     pub async fn read_any(&mut self, stream_ids: &[u32]) -> Result<(u32, Vec<u8>), IdeviceError> {
+-        for id in stream_ids {
+-            self.cache.entry(*id).or_default();
+-        }
++        self.read_any_inner(stream_ids, None).await
++    }
++    /// Drain cooperating streams while waiting for one required route. Its
++    /// final queued DATA remains readable, but another open stream must not
++    /// hide EOF after that DATA has been consumed.
++    pub(super) async fn read_any_while_open(&mut self, stream_ids: &[u32], required: u32)
++        -> Result<(u32, Vec<u8>), IdeviceError>
++    {
++        if !stream_ids.contains(&required) { return self.fail(error("HTTP/2 read stream limit")); }
++        self.read_any_inner(stream_ids, Some(required)).await
++    }
++    async fn read_any_inner(&mut self, stream_ids: &[u32], required: Option<u32>)
++        -> Result<(u32, Vec<u8>), IdeviceError>
++    {
++        self.flush_output().await?;
++        if stream_ids.is_empty() || stream_ids.len() > MAX_STREAMS { return self.fail(error("HTTP/2 read stream limit")); }
++        for id in stream_ids { if !self.is_retired(*id) { self.ensure_stream(*id)?; } }
+         loop {
++            if required.is_some_and(|id| self.is_retired(id)
++                || self.streams.get(&id).is_some_and(|s| s.remote_ended && s.cache.is_empty())) {
++                return Err(error("HTTP/2 requested streams have ended"));
++            }
+             for id in stream_ids {
+-                if let Some(d) = self.cache.get_mut(id).and_then(|c| c.pop_front()) {
+-                    return Ok((*id, d));
+-                }
++                if let Some(data) = self.pop_cached(*id)? {
++                    // No await after consumption: cancellation cannot lose data.
++                    return Ok((*id, data));
++                }
++            }
++            if stream_ids.iter().all(|id| self.is_retired(*id)
++                || self.streams.get(id).is_some_and(|s| s.remote_ended)) {
++                return Err(error("HTTP/2 requested streams have ended"));
+             }
+             self.pump().await?;
+         }
+     }
+-
+     pub async fn read(&mut self, stream_id: u32) -> Result<Vec<u8>, IdeviceError> {
+-        self.cache.entry(stream_id).or_default();
+-        loop {
+-            // Return any frame already buffered for this stream.
+-            if let Some(d) = self.cache.get_mut(&stream_id).and_then(|c| c.pop_front()) {
+-                return Ok(d);
+-            }
+-            self.pump().await?;
+-        }
+-    }
+-
+-    /// Read and handle a single inbound frame: ack SETTINGS (applying any
+-    /// `InitialWindowSize` change), apply WINDOW_UPDATEs to our send windows,
+-    /// replenish the peer's receive window for inbound DATA and buffer that DATA
+-    /// by stream. GOAWAY / RST_STREAM surface as errors via [`frame::Frame::next`].
++        self.read_any(&[stream_id]).await.map(|(_, data)| data)
++    }
++
++    fn cache_data(&mut self, data: frame::DataFrame) -> Result<(), IdeviceError> {
++        if let Err(reason) = self.ensure_stream(data.stream_id) { return self.fail(reason); }
++        let stream = &self.streams[&data.stream_id];
++        let length = data.flow_control_len;
++        if stream.remote_ended { return self.fail(error("HTTP/2 DATA after END_STREAM")); }
++        if length as i64 > self.conn_recv_window || length as i64 > stream.recv_window {
++            return self.fail(error("HTTP/2 receive flow-control limit"));
++        }
++        if stream.cached_bytes.checked_add(length).is_none_or(|n| n > MAX_STREAM_BYTES)
++            || self.cached_bytes.checked_add(length).is_none_or(|n| n > MAX_CACHE_BYTES)
++            || stream.cache.len() >= MAX_STREAM_FRAMES || self.cached_frames >= MAX_CACHE_FRAMES {
++            return self.fail(error("HTTP/2 cached DATA limit"));
++        }
++        let stream = self.streams.get_mut(&data.stream_id).ok_or_else(|| error("HTTP/2 missing receive stream"))?;
++        self.conn_recv_window -= length as i64;
++        stream.recv_window -= length as i64;
++        stream.cached_bytes += length;
++        self.cached_bytes += length;
++        self.cached_frames += 1;
++        stream.remote_ended = data.end_stream;
++        if data.end_stream { stream.pending_credit = 0; }
++        stream.cache.push_back(CachedData { bytes: data.payload, flow_bytes: length });
++        Ok(())
++    }
++
+     async fn pump(&mut self) -> Result<(), IdeviceError> {
+-        let frame = self.next_frame().await?;
+-        match frame {
+-            frame::Frame::Settings(settings_frame) if settings_frame.flags != 1 => {
+-                // Adjust every existing stream's send window by the delta in the
+-                // new InitialWindowSize (RFC 7540 §6.9.2), then ack.
+-                for setting in &settings_frame.settings {
+-                    if let frame::Setting::InitialWindowSize(new) = setting {
+-                        let delta = *new as i64 - self.peer_initial_window;
+-                        self.peer_initial_window = *new as i64;
+-                        for w in self.stream_send_windows.values_mut() {
+-                            *w += delta;
++        self.flush_output().await?;
++        match self.next_frame().await? {
++            frame::Frame::Settings(settings) if settings.flags & 1 == 0 => {
++                for setting in &settings.settings {
++                    if let Setting::InitialWindowSize(size) = setting {
++                        if *size > MAX_WINDOW as u32 { return self.fail(error("HTTP/2 peer initial window limit")); }
++                        let delta = *size as i64 - self.peer_initial_window;
++                        if self.streams.values().any(|s| !(-MAX_WINDOW..=MAX_WINDOW).contains(&(s.send_window + delta))) {
++                            return self.fail(error("HTTP/2 send window overflow"));
+                         }
++                        for stream in self.streams.values_mut() { stream.send_window += delta; }
++                        self.peer_initial_window = *size as i64;
+                     }
+                 }
+-                let ack = frame::SettingsFrame {
+-                    settings: Vec::new(),
+-                    stream_id: settings_frame.stream_id,
+-                    flags: 1,
+-                }
+-                .serialize();
+-                self.inner.write_all(&ack).await?;
+-                self.inner.flush().await?;
+-            }
+-            frame::Frame::WindowUpdate(w) => {
+-                if w.stream_id == 0 {
+-                    self.conn_send_window += w.increment_size as i64;
+-                } else {
+-                    let initial = self.peer_initial_window;
+-                    *self
+-                        .stream_send_windows
+-                        .entry(w.stream_id)
+-                        .or_insert(initial) += w.increment_size as i64;
+-                }
+-            }
+-            frame::Frame::RstStream(rst) => {
+-                if self.finished_file_transfer_streams.remove(&rst.stream_id) {
+-                    debug!(
+-                        "Device reset finished file transfer stream {}",
+-                        rst.stream_id
+-                    );
+-                } else {
+-                    return Err(crate::xpc::errors::XpcError::HttpStreamReset.into());
+-                }
+-            }
+-            frame::Frame::Data(data_frame) => {
+-                debug!(
+-                    "Got data frame for {} with {} bytes",
+-                    data_frame.stream_id,
+-                    data_frame.payload.len()
+-                );
+-
+-                let len = data_frame.payload.len() as u32;
+-                let stream_id = data_frame.stream_id;
+-                // Cache the payload BEFORE any await so a cancelled pump (the poll
+-                // tick interrupting `recv_push`) can never drop it.
+-                self.cache
+-                    .entry(stream_id)
+-                    .or_insert_with(|| {
+-                        // Apple sometimes sends data before the stream is "open".
+-                        warn!("Received message for stream ID {stream_id} not in cache");
+-                        VecDeque::new()
+-                    })
+-                    .push_back(data_frame.payload);
+-                if len > 0 {
+-                    // Replenish the peer's view of our receive window so it keeps
+-                    // sending (e.g. the rest of a large pasteboard image). Queue
+-                    // both WINDOW_UPDATE frames, then flush once: write_all on the
+-                    // tunnel stream queues a whole frame without suspending, so a
+-                    // cancellation can only land on the flush — by which point both
+-                    // frames are already queued (never a torn or dropped update).
+-                    let conn = frame::WindowUpdateFrame {
+-                        increment_size: len,
+-                        stream_id: 0,
++                self.queue_write(frame::SettingsFrame { settings: Vec::new(), stream_id: 0, flags: 1 }.serialize(), WriteAction::None)?;
++                self.flush_output().await?;
++            }
++            frame::Frame::WindowUpdate(update) => {
++                if update.increment_size == 0 || update.increment_size > MAX_WINDOW as u32 {
++                    return self.fail(error("HTTP/2 invalid peer window update"));
++                }
++                if update.stream_id == 0 {
++                    let next = self.conn_send_window + update.increment_size as i64;
++                    if next > MAX_WINDOW { return self.fail(error("HTTP/2 send window overflow")); }
++                    self.conn_send_window = next;
++                } else if let Some(stream) = self.streams.get_mut(&update.stream_id) {
++                    let next = stream.send_window + update.increment_size as i64;
++                    if next > MAX_WINDOW { return self.fail(error("HTTP/2 send window overflow")); }
++                    stream.send_window = next;
++                } else if !self.is_retired(update.stream_id) {
++                    return self.fail(error("HTTP/2 window update for idle stream"));
++                }
++            }
++            frame::Frame::RstStream(reset) => {
++                if self.finished_file_transfer_streams.contains(&reset.stream_id) {
++                    self.retire(reset.stream_id)?;
++                } else if !self.is_retired(reset.stream_id) {
++                    return self.fail(crate::xpc::errors::XpcError::HttpStreamReset.into());
++                }
++            }
++            frame::Frame::Headers(headers) => {
++                if let Err(reason) = self.ensure_stream(headers.stream_id) { return self.fail(reason); }
++                if headers.end_stream {
++                    if let Some(stream) = self.streams.get_mut(&headers.stream_id) {
++                        stream.remote_ended = true;
++                        stream.pending_credit = 0;
+                     }
+-                    .serialize();
+-                    let stream = frame::WindowUpdateFrame {
+-                        increment_size: len,
+-                        stream_id,
+-                    }
+-                    .serialize();
+-                    self.inner.write_all(&conn).await?;
+-                    self.inner.write_all(&stream).await?;
+-                    self.inner.flush().await?;
+-                }
+-            }
+-            _ => {
+-                // SETTINGS ack / HEADERS — nothing to do.
+-            }
+-        }
+-        Ok(())
+-    }
+-}
++                    self.retire_if_closed(headers.stream_id)?;
++                }
++            }
++            frame::Frame::Data(data) => self.cache_data(data)?,
++            frame::Frame::Settings(_) => {},
++        }
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/idevice/src/xpc/http2/tests.rs b/idevice/src/xpc/http2/tests.rs
+new file mode 100644
+--- /dev/null
++++ b/idevice/src/xpc/http2/tests.rs
+@@ -0,0 +1,352 @@
++//! Synthetic memory transport only. No sockets, devices, files or timer sleeps.
++use super::*;
++use std::future::Future;
++use std::pin::Pin;
++use std::sync::{Arc, Mutex};
++use std::task::{Context, Poll, Waker};
++use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
++
++#[derive(Debug)]
++struct State {
++    incoming: VecDeque<u8>,
++    written: Vec<u8>,
++    write_budget: Option<usize>,
++    flush_ready: bool,
++    dropped: bool,
++}
++#[derive(Debug)]
++struct MemoryIo(Arc<Mutex<State>>);
++impl Drop for MemoryIo {
++    fn drop(&mut self) { self.0.lock().unwrap().dropped = true; }
++}
++impl AsyncRead for MemoryIo {
++    fn poll_read(self: Pin<&mut Self>, _: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
++        let mut state = self.0.lock().unwrap();
++        if state.incoming.is_empty() { return Poll::Pending; }
++        let count = buf.remaining().min(state.incoming.len());
++        for _ in 0..count { buf.put_slice(&[state.incoming.pop_front().unwrap()]); }
++        Poll::Ready(Ok(()))
++    }
++}
++impl AsyncWrite for MemoryIo {
++    fn poll_write(self: Pin<&mut Self>, _: &mut Context<'_>, bytes: &[u8]) -> Poll<std::io::Result<usize>> {
++        let mut state = self.0.lock().unwrap();
++        let count = bytes.len().min(state.write_budget.unwrap_or(usize::MAX));
++        if count == 0 { return Poll::Pending; }
++        state.written.extend_from_slice(&bytes[..count]);
++        if let Some(budget) = &mut state.write_budget { *budget -= count; }
++        Poll::Ready(Ok(count))
++    }
++    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
++        if self.0.lock().unwrap().flush_ready { Poll::Ready(Ok(())) } else { Poll::Pending }
++    }
++    fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++}
++async fn new_client() -> (Http2Client<MemoryIo>, Arc<Mutex<State>>) {
++    let state = Arc::new(Mutex::new(State {
++        incoming: VecDeque::new(), written: Vec::new(), write_budget: None,
++        flush_ready: true, dropped: false,
++    }));
++    let client = Http2Client::new(MemoryIo(state.clone())).await.unwrap();
++    assert_eq!(state.lock().unwrap().written, HTTP2_MAGIC);
++    state.lock().unwrap().written.clear();
++    (client, state)
++}
++fn wire(kind: u8, flags: u8, stream: u32, body: &[u8]) -> Vec<u8> {
++    let mut bytes = (body.len() as u32).to_be_bytes()[1..].to_vec();
++    bytes.extend_from_slice(&[kind, flags]);
++    bytes.extend_from_slice(&stream.to_be_bytes());
++    bytes.extend_from_slice(body);
++    bytes
++}
++fn input(state: &Arc<Mutex<State>>, bytes: &[u8]) {
++    state.lock().unwrap().incoming.extend(bytes);
++}
++fn pending(future: impl Future) {
++    let mut future = Box::pin(future);
++    let mut context = Context::from_waker(Waker::noop());
++    assert!(future.as_mut().poll(&mut context).is_pending());
++    // Dropping the future here is the tested cancellation boundary.
++}
++fn data(stream_id: u32, count: usize, end_stream: bool) -> frame::DataFrame {
++    frame::DataFrame { stream_id, payload: vec![7; count], flow_control_len: count, end_stream }
++}
++fn increments(bytes: &[u8]) -> Vec<(u32, u32)> {
++    assert_eq!(bytes.len() % 13, 0);
++    bytes.chunks_exact(13).map(|frame| {
++        assert_eq!(&frame[..5], &[0, 0, 4, 8, 0]);
++        (u32::from_be_bytes(frame[5..9].try_into().unwrap()),
++         u32::from_be_bytes(frame[9..13].try_into().unwrap()))
++    }).collect()
++}
++
++#[test]
++fn frame_header_limit_padding_and_reserved_bits() {
++    let mut oversized = wire(0, 0, 1, &[]);
++    oversized[..3].copy_from_slice(&[0, 0x40, 1]);
++    assert!(frame::Frame::parse(&oversized).unwrap_err().to_string().contains("payload exceeds"));
++    let exact = wire(0, 0, 1, &vec![0; frame::MAX_FRAME_PAYLOAD]);
++    assert!(matches!(frame::Frame::parse(&exact).unwrap(), Some((frame::Frame::Data(_), _))));
++    let padded = wire(0, 8, 0x8000_0001, &[2, b'a', b'b', 0, 0]);
++    let Some((frame::Frame::Data(parsed), count)) = frame::Frame::parse(&padded).unwrap() else { panic!() };
++    assert_eq!(parsed.stream_id, 1);
++    assert_eq!(parsed.payload, b"ab");
++    assert_eq!(parsed.flow_control_len, 5);
++    assert_eq!(count, 14);
++    assert!(frame::Frame::parse(&wire(0, 8, 1, &[])).is_err());
++    assert!(frame::Frame::parse(&wire(0, 8, 1, &[1])).is_err());
++    assert!(frame::Frame::parse(&wire(0, 0, 0, &[])).is_err());
++    assert!(frame::Frame::parse(&wire(8, 0, 1, &[0; 4])).is_err());
++    assert!(frame::Frame::parse(&wire(4, 1, 0, &[0; 6])).is_err());
++}
++
++#[tokio::test]
++async fn padded_data_gets_credit_only_when_consumed_and_for_full_wire_payload() {
++    let (mut client, state) = new_client().await;
++    input(&state, &wire(0, 8, 1, &[2, b'a', b'b', 0, 0]));
++    client.pump().await.unwrap();
++    assert!(state.lock().unwrap().written.is_empty());
++    assert_eq!(client.cached_bytes, 5);
++    assert_eq!(client.conn_recv_window, DEFAULT_WINDOW - 5);
++    assert_eq!(client.streams[&1].recv_window, DEFAULT_WINDOW - 5);
++    assert_eq!(client.read(1).await.unwrap(), b"ab");
++    assert!(state.lock().unwrap().written.is_empty());
++    assert_eq!(client.cached_bytes, 0);
++    client.flush_output().await.unwrap();
++    assert_eq!(increments(&state.lock().unwrap().written), vec![(0, 5), (1, 5)]);
++    assert_eq!(client.conn_recv_window, DEFAULT_WINDOW);
++    assert_eq!(client.streams[&1].recv_window, DEFAULT_WINDOW);
++}
++
++#[tokio::test]
++async fn connection_and_stream_receive_windows_are_independent() {
++    let (mut streams_only, stream_state) = new_client().await;
++    streams_only.set_settings(vec![Setting::InitialWindowSize(MAX_STREAM_BYTES as u32)], 0).await.unwrap();
++    assert_eq!(streams_only.conn_recv_window, DEFAULT_WINDOW);
++    streams_only.ensure_stream(1).unwrap();
++    assert_eq!(streams_only.streams[&1].recv_window, MAX_STREAM_BYTES as i64);
++    for _ in 0..3 { streams_only.cache_data(data(1, 16384, false)).unwrap(); }
++    streams_only.cache_data(data(1, 16383, false)).unwrap();
++    assert_eq!(streams_only.conn_recv_window, 0);
++    assert!(streams_only.cache_data(data(1, 1, false)).is_err());
++    assert!(stream_state.lock().unwrap().dropped);
++
++    let (mut connection_only, conn_state) = new_client().await;
++    connection_only.window_update(983041, 0).await.unwrap();
++    connection_only.ensure_stream(1).unwrap();
++    assert_eq!(connection_only.conn_recv_window, MAX_STREAM_BYTES as i64);
++    assert_eq!(connection_only.streams[&1].recv_window, DEFAULT_WINDOW);
++    for _ in 0..3 { connection_only.cache_data(data(1, 16384, false)).unwrap(); }
++    connection_only.cache_data(data(1, 16383, false)).unwrap();
++    assert!(connection_only.cache_data(data(1, 1, false)).is_err());
++    assert!(conn_state.lock().unwrap().dropped);
++}
++
++#[tokio::test]
++async fn stream_and_total_byte_caps_cannot_be_widened_by_window_updates() {
++    let (mut client, state) = new_client().await;
++    client.set_settings(vec![Setting::InitialWindowSize(MAX_STREAM_BYTES as u32)], 0).await.unwrap();
++    client.window_update(MAX_CACHE_BYTES as u32 - DEFAULT_WINDOW as u32, 0).await.unwrap();
++    for id in [1, 3, 5, 7] {
++        for _ in 0..64 { client.cache_data(data(id, 16384, false)).unwrap(); }
++        assert_eq!(client.streams[&id].cached_bytes, MAX_STREAM_BYTES);
++    }
++    assert_eq!(client.cached_bytes, MAX_CACHE_BYTES);
++    assert_eq!(client.conn_recv_window, 0);
++    assert_eq!(client.cached_frames, 256);
++    assert!(client.window_update(1, 0).await.is_err());
++    assert!(state.lock().unwrap().dropped);
++    assert!(client.streams.is_empty());
++    assert!(client.read(1).await.is_err());
++
++    let (mut client, state) = new_client().await;
++    client.set_settings(vec![Setting::InitialWindowSize(MAX_STREAM_BYTES as u32)], 0).await.unwrap();
++    client.window_update(983041, 0).await.unwrap();
++    for _ in 0..64 { client.cache_data(data(1, 16384, false)).unwrap(); }
++    assert!(client.window_update(1, 1).await.is_err());
++    assert!(state.lock().unwrap().dropped);
++}
++
++#[tokio::test]
++async fn empty_frames_and_idle_streams_still_consume_bounded_metadata() {
++    let (mut client, state) = new_client().await;
++    for _ in 0..MAX_STREAM_FRAMES { client.cache_data(data(1, 0, false)).unwrap(); }
++    assert_eq!(client.cached_bytes, 0);
++    assert_eq!(client.cached_frames, MAX_STREAM_FRAMES);
++    assert!(client.cache_data(data(1, 0, false)).is_err());
++    assert!(state.lock().unwrap().dropped);
++
++    let (mut client, state) = new_client().await;
++    for id in [1, 3, 5, 7] {
++        for _ in 0..MAX_STREAM_FRAMES { client.cache_data(data(id, 0, false)).unwrap(); }
++    }
++    assert_eq!(client.cached_frames, MAX_CACHE_FRAMES);
++    assert!(client.cache_data(data(9, 0, false)).is_err());
++    assert!(state.lock().unwrap().dropped);
++
++    let (mut client, state) = new_client().await;
++    for id in 1..=MAX_STREAMS as u32 { client.ensure_stream(id).unwrap(); }
++    assert_eq!(client.streams.len(), MAX_STREAMS);
++    assert!(client.ensure_stream(MAX_STREAMS as u32 + 1).is_err());
++    assert!(state.lock().unwrap().dropped);
++}
++
++#[tokio::test]
++async fn cancelled_partial_window_updates_resume_once_including_flush_cancellation() {
++    let (mut client, state) = new_client().await;
++    client.cache_data(data(1, 4, false)).unwrap();
++    assert_eq!(client.read(1).await.unwrap(), vec![7; 4]);
++    state.lock().unwrap().write_budget = Some(7);
++    pending(client.flush_output());
++    assert_eq!(state.lock().unwrap().written.len(), 7);
++    assert_eq!(client.conn_recv_window, DEFAULT_WINDOW - 4);
++    assert_eq!(client.pending_conn_credit, 0);
++    assert_eq!(client.pending_write.as_ref().unwrap().offset, 7);
++
++    state.lock().unwrap().write_budget = Some(6);
++    pending(client.flush_output());
++    assert_eq!(state.lock().unwrap().written.len(), 13);
++    assert_eq!(client.conn_recv_window, DEFAULT_WINDOW);
++    assert_eq!(client.streams[&1].recv_window, DEFAULT_WINDOW - 4);
++    assert_eq!(client.streams[&1].pending_credit, 0);
++
++    state.lock().unwrap().write_budget = Some(7);
++    pending(client.flush_output());
++    assert_eq!(state.lock().unwrap().written.len(), 20);
++    assert_eq!(client.streams[&1].recv_window, DEFAULT_WINDOW - 4);
++    {
++        let mut state = state.lock().unwrap();
++        state.write_budget = Some(6);
++        state.flush_ready = false;
++    }
++    pending(client.flush_output());
++    assert_eq!(client.streams[&1].recv_window, DEFAULT_WINDOW);
++    assert!(client.pending_write.is_none());
++    assert_eq!(increments(&state.lock().unwrap().written), vec![(0, 4), (1, 4)]);
++    pending(client.flush_output());
++    assert_eq!(state.lock().unwrap().written.len(), 26);
++    state.lock().unwrap().flush_ready = true;
++    client.flush_output().await.unwrap();
++    assert_eq!(state.lock().unwrap().written.len(), 26);
++    assert_eq!(client.conn_recv_window, DEFAULT_WINDOW);
++    assert_eq!(client.streams[&1].recv_window, DEFAULT_WINDOW);
++}
++
++#[tokio::test]
++async fn cancelled_read_keeps_partial_frame_and_unselected_stream_data() {
++    let (mut client, state) = new_client().await;
++    let bytes = wire(0, 0, 3, b"kept");
++    input(&state, &bytes[..5]);
++    pending(client.read(1));
++    assert_eq!(client.recv_buf, bytes[..5]);
++    input(&state, &bytes[5..]);
++    pending(client.read(1));
++    assert_eq!(client.streams[&3].cached_bytes, 4);
++    assert!(state.lock().unwrap().written.is_empty());
++    assert_eq!(client.read(3).await.unwrap(), b"kept");
++    client.flush_output().await.unwrap();
++    assert_eq!(increments(&state.lock().unwrap().written), vec![(0, 4), (3, 4)]);
++}
++
++#[tokio::test]
++async fn cancelled_data_write_resumes_its_frame_without_charging_credit_twice() {
++    let (mut client, state) = new_client().await;
++    state.lock().unwrap().write_budget = Some(7);
++    pending(client.send(vec![1, 2, 3, 4], 1));
++    assert_eq!(client.conn_send_window, DEFAULT_WINDOW - 4);
++    assert_eq!(client.streams[&1].send_window, DEFAULT_WINDOW - 4);
++    assert_eq!(client.pending_write.as_ref().unwrap().offset, 7);
++    state.lock().unwrap().write_budget = None;
++    client.flush_output().await.unwrap();
++    assert_eq!(state.lock().unwrap().written, wire(0, 0, 1, &[1, 2, 3, 4]));
++    assert_eq!(client.conn_send_window, DEFAULT_WINDOW - 4);
++    assert_eq!(client.streams[&1].send_window, DEFAULT_WINDOW - 4);
++    client.send(vec![5, 6], 1).await.unwrap();
++    let mut expected = wire(0, 0, 1, &[1, 2, 3, 4]);
++    expected.extend(wire(0, 0, 1, &[5, 6]));
++    assert_eq!(state.lock().unwrap().written, expected);
++    assert_eq!(client.conn_send_window, DEFAULT_WINDOW - 6);
++    assert_eq!(client.streams[&1].send_window, DEFAULT_WINDOW - 6);
++}
++
++#[tokio::test]
++async fn ended_and_reset_streams_release_metadata_without_recreation() {
++    let (mut client, state) = new_client().await;
++    client.send_end_stream(Vec::new(), 5).await.unwrap();
++    state.lock().unwrap().written.clear();
++    client.cache_data(data(5, 3, false)).unwrap();
++    input(&state, &wire(3, 0, 5, &[0; 4]));
++    client.pump().await.unwrap();
++    assert!(!client.streams.contains_key(&5));
++    assert!(!client.finished_file_transfer_streams.contains(&5));
++    assert_eq!(client.cached_bytes, 0);
++    assert_eq!(client.cached_frames, 0);
++    client.flush_output().await.unwrap();
++    assert_eq!(increments(&state.lock().unwrap().written), vec![(0, 3)]);
++    input(&state, &wire(8, 0, 5, &7u32.to_be_bytes()));
++    client.pump().await.unwrap();
++    input(&state, &wire(3, 0, 5, &[0; 4]));
++    client.pump().await.unwrap();
++    assert!(client.streams.is_empty());
++    assert!(client.open_stream(5).await.is_err());
++    assert!(!state.lock().unwrap().dropped);
++
++    client.send_end_stream(Vec::new(), 7).await.unwrap();
++    client.cache_data(data(7, 2, true)).unwrap();
++    assert!(client.streams.contains_key(&7)); // Unconsumed final data stays available.
++    assert_eq!(client.read(7).await.unwrap(), vec![7; 2]);
++    assert!(!client.streams.contains_key(&7));
++    client.send_end_stream(Vec::new(), 9).await.unwrap();
++    input(&state, &wire(1, 5, 9, &[])); // END_HEADERS | END_STREAM.
++    client.pump().await.unwrap();
++    assert!(!client.streams.contains_key(&9));
++    client.cache_data(data(11, 0, true)).unwrap();
++    assert_eq!(client.read(11).await.unwrap(), Vec::<u8>::new());
++    assert!(client.streams.contains_key(&11)); // Half-closed, not falsely expired.
++    assert!(client.streams[&11].remote_ended);
++    assert_eq!(client.streams[&11].pending_credit, 0);
++}
++
++#[tokio::test]
++async fn protocol_failure_drops_transport_and_clears_all_local_caches() {
++    let (mut client, state) = new_client().await;
++    client.cache_data(data(1, 3, false)).unwrap();
++    let mut header = wire(0, 0, 3, &[]);
++    header[..3].copy_from_slice(&[0, 0x40, 1]);
++    input(&state, &header); // No oversized body is ever constructed or sent.
++    assert!(client.pump().await.is_err());
++    assert!(state.lock().unwrap().dropped);
++    assert!(client.streams.is_empty());
++    assert!(client.recv_buf.is_empty());
++    assert_eq!(client.cached_bytes, 0);
++    assert_eq!(client.cached_frames, 0);
++    assert!(client.read(1).await.is_err());
++    assert!(client.send(Vec::new(), 1).await.is_err());
++}
++
++#[tokio::test]
++async fn peer_window_changes_obey_31_bit_limits_and_empty_end_costs_no_credit() {
++    let (mut client, state) = new_client().await;
++    client.send(vec![1], 1).await.unwrap();
++    let mut setting = vec![0, 4];
++    setting.extend_from_slice(&0u32.to_be_bytes());
++    input(&state, &wire(4, 0, 0, &setting));
++    client.pump().await.unwrap();
++    assert_eq!(client.streams[&1].send_window, -1);
++    client.send_end_stream(Vec::new(), 1).await.unwrap();
++    assert!(client.streams[&1].local_ended);
++    assert_eq!(client.streams[&1].send_window, -1);
++    assert_eq!(client.conn_send_window, DEFAULT_WINDOW - 1);
++
++    let (mut client, state) = new_client().await;
++    input(&state, &wire(8, 0, 0, &(MAX_WINDOW as u32).to_be_bytes()));
++    assert!(client.pump().await.is_err());
++    assert!(state.lock().unwrap().dropped);
++    let (mut client, state) = new_client().await;
++    input(&state, &wire(8, 0, 99, &1u32.to_be_bytes()));
++    assert!(client.pump().await.is_err());
++    assert!(state.lock().unwrap().dropped);
++    assert!(client.streams.is_empty());
++}
+diff --git a/idevice/src/xpc/mod.rs b/idevice/src/xpc/mod.rs
+--- a/idevice/src/xpc/mod.rs
++++ b/idevice/src/xpc/mod.rs
+@@ -5,8 +5,10 @@
+ use http2::Setting;
+ use tracing::debug;
+ 
+-use crate::{CdTunnelError, IdeviceError, ReadWrite, xpc};
+-
++use crate::{IdeviceError, ReadWrite, xpc};
++
++mod bounds;
++mod object_limits;
+ pub mod errors;
+ mod format;
+ mod http2;
+@@ -21,8 +23,6 @@
+ /// streams must be odd, and 1/3 are taken by the root and reply channels.
+ const FIRST_OUTBOUND_FILE_STREAM: u32 = 5;
+ 
+-/// Fixed XPC message-wrapper header: magic + flags + body length + message id.
+-const XPC_WRAPPER_LEN: usize = 24;
+ 
+ #[derive(Debug)]
+ pub struct RemoteXpcClient<R: ReadWrite> {
+@@ -114,18 +114,27 @@
+     }
+ 
+     pub async fn recv_any(&mut self) -> Result<plist::Value, IdeviceError> {
++        let result = self.recv_any_inner().await;
++        if result.is_err() { self.h2_client.close(); self.partial.clear(); }
++        result
++    }
++
++    async fn recv_any_inner(&mut self) -> Result<plist::Value, IdeviceError> {
+         const CHANNELS: [u32; 2] = [ROOT_CHANNEL, REPLY_CHANNEL];
+         loop {
+             for channel in CHANNELS {
+-                if let Some(msg) = self.take_buffered(channel)?
+-                    && let Some(inner) = msg.message
+-                    && !inner.as_dictionary().is_some_and(|d| d.is_empty())
+-                {
+-                    return Ok(inner.to_plist());
++                // A different receive route may already have buffered several
++                // keepalives followed by a body. Drain those before awaiting IO.
++                while let Some(msg) = self.take_buffered(channel)? {
++                    if let Some(inner) = msg.message
++                        && !inner.as_dictionary().is_some_and(|d| d.is_empty())
++                    {
++                        return inner.to_plist();
++                    }
+                 }
+             }
+             let (channel, chunk) = self.h2_client.read_any(&CHANNELS).await?;
+-            self.partial.entry(channel).or_default().extend(chunk);
++            bounds::append(self.partial.entry(channel).or_default(), &chunk)?;
+         }
+     }
+ 
+@@ -135,20 +144,22 @@
+     /// message yet.
+     fn take_buffered(&mut self, channel: u32) -> Result<Option<XPCMessage>, IdeviceError> {
+         let buf = self.partial.entry(channel).or_default();
+-        match XPCMessage::decode(buf) {
+-            Ok(msg) => {
+-                let consumed = (XPC_WRAPPER_LEN + xpc_body_len(buf)).min(buf.len());
+-                buf.drain(..consumed);
+-                Ok(Some(msg))
+-            }
+-            // Not enough bytes yet.
+-            Err(IdeviceError::CdTunnel(CdTunnelError::SizeMismatch))
+-            | Err(IdeviceError::NotEnoughBytes(..)) => Ok(None),
+-            Err(e) => Err(e),
+-        }
++        let Some(total) = bounds::frame_len(buf)? else { return Ok(None); };
++        if buf.len() < total { return Ok(None); }
++        // Decode only the declared complete frame. A malformed complete body is
++        // an error, never a reason to keep accumulating unrelated later bytes.
++        let msg = XPCMessage::decode(&buf[..total])?;
++        buf.drain(..total);
++        Ok(Some(msg))
+     }
+ 
+     async fn recv_from_channel(&mut self, channel: u32) -> Result<plist::Value, IdeviceError> {
++        let result = self.recv_from_channel_inner(channel).await;
++        if result.is_err() { self.h2_client.close(); self.partial.clear(); }
++        result
++    }
++
++    async fn recv_from_channel_inner(&mut self, channel: u32) -> Result<plist::Value, IdeviceError> {
+         loop {
+             // Try to decode a whole message from what's already buffered before
+             // reading more, so a message split across earlier reads completes.
+@@ -161,13 +172,21 @@
+                         {
+                             continue;
+                         }
+-                        return Ok(inner.to_plist());
++                        return inner.to_plist();
+                     }
+                     None => continue,
+                 },
+                 None => {
+-                    let chunk = self.h2_client.read(channel).await?;
+-                    self.partial.entry(channel).or_default().extend(chunk);
++                    // Consume both control channels so an unread root/reply
++                    // stream cannot retain the shared HTTP/2 receive window.
++                    // Prefer the requested route, but keep the other bytes for
++                    // recv_root/recv/recv_any under the existing per-channel cap.
++                    let other = if channel == ROOT_CHANNEL { REPLY_CHANNEL } else { ROOT_CHANNEL };
++                    let (received, chunk) = self.h2_client
++                        .read_any_while_open(&[channel, other], channel).await?;
++                    // No await after DATA consumption and before persistence:
++                    // cancelling this receive cannot lose another route's bytes.
++                    bounds::append(self.partial.entry(received).or_default(), &chunk)?;
+                 }
+             }
+         }
+@@ -309,10 +328,3 @@
+     }
+ }
+ 
+-/// The XPC message body length from a decoded-OK wrapper: the little-endian u64
+-/// at bytes 8..16. `buf` is known to hold a full wrapper (≥ 24 bytes) here.
+-fn xpc_body_len(buf: &[u8]) -> usize {
+-    u64::from_le_bytes([
+-        buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15],
+-    ]) as usize
+-}
+diff --git a/idevice/src/xpc/object_limits.rs b/idevice/src/xpc/object_limits.rs
+new file mode 100644
+--- /dev/null
++++ b/idevice/src/xpc/object_limits.rs
+@@ -0,0 +1,67 @@
++//! Shared, cumulative bounds for decoded XPC objects and plist conversion.
++use crate::IdeviceError;
++
++pub(super) const MAX_DEPTH: usize = 64;
++pub(super) const MAX_OBJECTS: usize = 65_536;
++pub(super) const MAX_DYNAMIC_BYTES: usize = 16 * 1024 * 1024;
++
++pub(super) fn limit(kind: &str) -> IdeviceError {
++    IdeviceError::UnexpectedResponse(format!("RemoteXPC object {kind} exceeds limit"))
++}
++
++pub(super) struct Budget {
++    objects_left: usize,
++    bytes_left: usize,
++}
++impl Budget {
++    pub(super) fn new() -> Self {
++        Self { objects_left: MAX_OBJECTS, bytes_left: MAX_DYNAMIC_BYTES }
++    }
++    pub(super) fn enter(&mut self, depth: usize) -> Result<(), IdeviceError> {
++        if depth > MAX_DEPTH { return Err(limit("depth")); }
++        if self.objects_left == 0 { return Err(limit("count")); }
++        self.objects_left -= 1;
++        Ok(())
++    }
++    /// Reject an impossible container width before iterating. Do not reserve
++    /// storage based on this declaration: children consume the shared counter
++    /// as they are actually decoded or converted.
++    pub(super) fn children(&self, count: usize) -> Result<(), IdeviceError> {
++        if count > self.objects_left { return Err(limit("count")); }
++        Ok(())
++    }
++    pub(super) fn bytes(&mut self, count: usize) -> Result<(), IdeviceError> {
++        if count > self.bytes_left { return Err(limit("payload bytes")); }
++        self.bytes_left -= count;
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn cumulative_objects_include_containers_and_nulls() {
++        let mut budget = Budget::new();
++        budget.enter(1).unwrap();
++        budget.children(MAX_OBJECTS - 1).unwrap();
++        assert!(budget.children(MAX_OBJECTS).is_err());
++        for _ in 1..MAX_OBJECTS { budget.enter(2).unwrap(); }
++        assert!(budget.enter(2).is_err());
++    }
++    #[test]
++    fn byte_budget_cannot_wrap_and_includes_prior_siblings() {
++        let mut budget = Budget::new();
++        budget.bytes(MAX_DYNAMIC_BYTES - 7).unwrap();
++        budget.bytes(7).unwrap();
++        assert!(budget.bytes(1).is_err());
++        assert!(budget.bytes(usize::MAX).is_err());
++    }
++    #[test]
++    fn depth_is_checked_before_the_next_descent() {
++        let mut budget = Budget::new();
++        for depth in 1..=MAX_DEPTH { budget.enter(depth).unwrap(); }
++        assert!(budget.enter(MAX_DEPTH + 1).is_err());
++    }
++}
+diff --git a/idevice/Cargo.toml b/idevice/Cargo.toml
+--- a/idevice/Cargo.toml
++++ b/idevice/Cargo.toml
+@@ -163,6 +163,7 @@
+ installcoordination_proxy = ["xpc"]
+ xctest = [
+   "dvt",
++  "device_info",
+   "installation_proxy",
+   "afc",
+   "dep:uuid",
+diff --git a/idevice/src/remote_pairing/rp_pairing_file.rs b/idevice/src/remote_pairing/rp_pairing_file.rs
+--- a/idevice/src/remote_pairing/rp_pairing_file.rs
++++ b/idevice/src/remote_pairing/rp_pairing_file.rs
+@@ -89,7 +89,7 @@
+     /// Parse from plist bytes (XML or binary).
+     pub fn from_bytes(bytes: &[u8]) -> Result<Self, IdeviceError> {
+         let mut p: Dictionary = plist::from_bytes(bytes)?;
+-        debug!("Read dictionary for rppairingfile: {p:#?}");
++        debug!("Loaded remote pairing record");
+
+         let public_key = match p
+             .remove("public_key")
+diff --git a/idevice/src/services/dvt/device_info.rs b/idevice/src/services/dvt/device_info.rs
+--- a/idevice/src/services/dvt/device_info.rs
++++ b/idevice/src/services/dvt/device_info.rs
+@@ -108,17 +108,15 @@
+
+     /// Returns whether the given PID is currently running
+     pub async fn is_running_pid(&mut self, pid: u32) -> Result<bool, IdeviceError> {
+-        self.channel
+-            .call_method(
+-                Some(Value::String("isRunningPid:".into())),
+-                Some(vec![AuxValue::archived_value(Value::Integer(
+-                    (pid as i64).into(),
+-                ))]),
+-                true,
+-            )
+-            .await?;
+-        let data = self.read_reply().await?;
+-        Ok(data.as_boolean().unwrap_or(false))
++        let reply = self.channel.call_method_with_reply(
++            Some(Value::String("isRunningPid:".into())),
++            Some(vec![AuxValue::archived_value(Value::Integer((pid as i64).into()))]),
++        ).await?;
++        let data = reply.data.ok_or_else(|| IdeviceError::UnexpectedResponse("isRunningPid missing data".into()))?;
++        data.as_boolean().ok_or_else(|| {
++            let kind = match data { Value::Integer(_) => "integer", Value::Dictionary(_) => "dictionary", Value::Array(_) => "array", Value::String(_) => "string", _ => "other" };
++            IdeviceError::UnexpectedResponse(format!("isRunningPid returned {kind}"))
++        })
+     }
+
+     /// Returns hardware information about the device
+diff --git a/idevice/src/services/dvt/process_control.rs b/idevice/src/services/dvt/process_control.rs
+--- a/idevice/src/services/dvt/process_control.rs
++++ b/idevice/src/services/dvt/process_control.rs
+@@ -295,6 +295,19 @@
+         Ok(())
+     }
+
++    /// Send SIGKILL and wait for the matching DTX reply before closing anything.
++    /// The caller still must independently confirm this exact PID has exited.
++    pub(crate) async fn kill_app_roundtrip(&mut self, pid: u64) -> Result<(), IdeviceError> {
++        self.channel.call_method_with_reply(
++            Some(Value::String("sendSignal:toPid:".into())),
++            Some(vec![
++                AuxValue::archived_value(Value::Integer(9.into())),
++                AuxValue::archived_value(Value::Integer((pid as i64).into())),
++            ]),
++        ).await?;
++        Ok(())
++    }
++
+     /// Disables memory limits for a process
+     ///
+     /// # Arguments
+diff --git a/idevice/src/services/dvt/xctest/listener.rs b/idevice/src/services/dvt/xctest/listener.rs
+--- a/idevice/src/services/dvt/xctest/listener.rs
++++ b/idevice/src/services/dvt/xctest/listener.rs
+@@ -37,6 +37,9 @@
+ /// The default implementation is a no-op for every method.
+ #[allow(async_fn_in_trait)]
+ pub trait XCUITestListener: Send {
++    /// Local RSD bootstrap progress; contains only static phase identifiers.
++    fn bootstrap_stage(&mut self, _stage: &'static str) {}
++
+     // --- test plan ----------------------------------------------------------
+
+     /// Invoked when the runner begins executing the test plan.
+diff --git a/idevice/src/services/dvt/xctest/mod.rs b/idevice/src/services/dvt/xctest/mod.rs
+--- a/idevice/src/services/dvt/xctest/mod.rs
++++ b/idevice/src/services/dvt/xctest/mod.rs
+@@ -1100,8 +1100,28 @@
+
+ fn decode_aux_archive(aux: &AuxValue) -> Result<Value, IdeviceError> {
+     match aux {
+-        AuxValue::Array(bytes) => ns_keyed_archive::decode::from_bytes(bytes)
+-            .map_err(|_| IdeviceError::UnexpectedResponse("unexpected response".into())),
++        AuxValue::Array(bytes) => {
++            let failure = || IdeviceError::UnexpectedResponse("Invalid XCTest archive".into());
++            let mut value = ns_keyed_archive::decode::from_bytes(bytes).map_err(|_| failure())?;
++            // The decoder resolves Foundation collections, but leaves fields of custom
++            // XCTest classes as archive UIDs. Decode each field through the same pool.
++            // In particular XCTTestIdentifier.c and XCActivityRecord.title are UIDs.
++            if let Value::Dictionary(fields) = &mut value {
++                let archive = Value::from_reader(std::io::Cursor::new(bytes)).map_err(|_| failure())?;
++                for (name, field) in fields.iter_mut() {
++                    if name == "$class" || !matches!(field, Value::Uid(_)) { continue; }
++                    let mut referenced = archive.clone();
++                    let top = referenced.as_dictionary_mut()
++                        .and_then(|d| d.get_mut("$top"))
++                        .and_then(Value::as_dictionary_mut).ok_or_else(failure)?;
++                    top.insert("root".into(), field.clone());
++                    let mut encoded = Vec::new();
++                    referenced.to_writer_binary(&mut encoded).map_err(|_| failure())?;
++                    *field = ns_keyed_archive::decode::from_bytes(&encoded).map_err(|_| failure())?;
++                }
++            }
++            Ok(value)
++        },
+         _ => Err(IdeviceError::UnexpectedResponse(
+             "unexpected response".into(),
+         )),
+@@ -1959,6 +1979,139 @@
+     }
+ }
+
++/// DSH pre-launch boundary: cancellation is safe before a launch RPC is sent.
++pub async fn run_rsd_prelaunch<T>(
++    cancel: &mut tokio::sync::watch::Receiver<bool>,
++    limit: std::time::Duration,
++    work: impl std::future::Future<Output = Result<T, IdeviceError>>,
++) -> Result<Option<T>, IdeviceError> {
++    tokio::select! {
++        biased;
++        _ = async { if !*cancel.borrow() { let _ = cancel.changed().await; } } => Ok(None),
++        result = tokio::time::timeout(limit, work) =>
++            result.map_err(|_| IdeviceError::TestRunnerTimeout)?.map(Some),
++    }
++}
++
++/// DSH launch boundary: never infer that cancellation undid a submitted launch.
++pub async fn run_rsd_launch(
++    limit: std::time::Duration,
++    work: impl std::future::Future<Output = Result<u64, IdeviceError>>,
++) -> Result<u64, IdeviceError> {
++    let pid = tokio::time::timeout(limit, work).await
++        .map_err(|_| IdeviceError::UnexpectedResponse("DSH_RUNNER_EXIT_UNCONFIRMED".into()))?
++        .map_err(|_| IdeviceError::UnexpectedResponse("DSH_RUNNER_EXIT_UNCONFIRMED".into()))?;
++    if pid == 0 || pid > u32::MAX as u64 {
++        return Err(IdeviceError::UnexpectedResponse("DSH_RUNNER_EXIT_UNCONFIRMED".into()));
++    }
++    Ok(pid)
++}
++
++/// Run an already authenticated RPPairing/RSD tunnel without a USB/lockdown host.
++/// DSH addition: keep the original session helpers and launch only the requested
++/// signed runner. Cancellation kills only the PID returned by this launch.
++pub async fn run_rsd<L: XCUITestListener>(
++    mut handle: crate::tcp::handle::AdapterHandle,
++    handshake: RsdHandshake,
++    cfg: TestConfig,
++    ios_major_version: u8,
++    listener: &mut L,
++    mut cancel: tokio::sync::watch::Receiver<bool>,
++) -> Result<(), IdeviceError> {
++    if ios_major_version < 17 {
++        return Err(IdeviceError::ServiceNotFound);
++    }
++    let connections = async {
++        listener.bootstrap_stage("CONNECT_DVT");
++        let dvt = rsd_connect(&mut handle, &handshake, "com.apple.instruments.dtservicehub", "dsh-dvt", true).await?;
++        listener.bootstrap_stage("CONNECT_CONTROL");
++        let ctrl = rsd_connect(&mut handle, &handshake, TESTMANAGERD_RSD_SERVICE, "dsh-ctrl", false).await?;
++        listener.bootstrap_stage("CONNECT_MAIN");
++        let main = rsd_connect(&mut handle, &handshake, TESTMANAGERD_RSD_SERVICE, "dsh-main", false).await?;
++        Ok::<_, IdeviceError>(TestManagerConnections { ctrl, main, dvt, rsd_handles: vec![handle] })
++    };
++    let Some(mut conns) = run_rsd_prelaunch(&mut cancel, std::time::Duration::from_secs(90), connections).await?
++        else { return Ok(()); };
++    let session_id = uuid::Uuid::new_v4();
++    let xctest_path = format!("/tmp/{}.xctestconfiguration", session_id.to_string().to_uppercase());
++    let xctest_config = cfg.build_xctest_configuration(session_id, ios_major_version)?;
++    let initialize = async {
++        listener.bootstrap_stage("OPEN_CONTROL_PROXY");
++        let mut ctrl = TestManagerProxy::open(&mut conns.ctrl, ios_major_version).await?;
++        listener.bootstrap_stage("OPEN_MAIN_PROXY");
++        let mut main = TestManagerProxy::open(&mut conns.main, ios_major_version).await?;
++        listener.bootstrap_stage("INITIALIZE_SESSIONS");
++        initialize_testmanager_sessions(&mut ctrl, &mut main, &xctest_config).await?;
++        listener.bootstrap_stage("REGISTER_DRIVER");
++        register_early_driver_channel_handler(&mut conns.main, &xctest_config).await;
++        listener.bootstrap_stage("INITIALIZE_DAEMONS");
++        initialize_testmanager_daemon_sessions(&mut ctrl, &mut main, ios_major_version,
++                                              &session_id, &xctest_config).await?;
++        Ok::<_, IdeviceError>((ctrl, main))
++    };
++    let Some((mut ctrl_proxy, mut main_proxy)) = run_rsd_prelaunch(&mut cancel,
++        std::time::Duration::from_secs(90), initialize).await? else { return Ok(()); };
++    listener.bootstrap_stage("OPEN_PROCESS_CONTROL");
++    let Some(mut process_control) = run_rsd_prelaunch(&mut cancel,
++        std::time::Duration::from_secs(10), XCTestProcessControlChannel::open(&mut conns.dvt)).await?
++        else { return Ok(()); };
++    if *cancel.borrow() { return Ok(()); }
++    let (launch_args, launch_env, launch_options) = build_launch_env(
++        ios_major_version, &session_id, &cfg.runner_app_path, &cfg.runner_app_container,
++        cfg.config_name(), &xctest_path, cfg.runner_env.as_ref(), cfg.runner_args.as_deref());
++    // Once launch is sent, retain the owner until it yields a PID or an error.
++    // Do not cancel a partially sent launch then let a new owner race its cleanup.
++    listener.bootstrap_stage("LAUNCH_RUNNER");
++    let pid = run_rsd_launch(std::time::Duration::from_secs(30),
++        process_control.launch_suspended_process(&cfg.runner_bundle_id, launch_args,
++                                                launch_env, launch_options)).await?;
++    listener.bootstrap_stage("RUNNER_LAUNCHED");
++    let execution = async {
++        listener.bootstrap_stage("AUTHORIZE_RUNNER");
++        ctrl_proxy.authorize_test(ios_major_version, pid).await?;
++        listener.bootstrap_stage("START_TEST_PLAN");
++        let driver = start_test_plan_session(&mut conns.main, &mut main_proxy).await?;
++        listener.bootstrap_stage("DISPATCH_TEST_PLAN");
++        run_dispatch_loop_until_done_or_disconnect(&mut conns.main, driver, &xctest_config,
++                                                   listener, None).await
++    };
++    let result = tokio::select! {
++        biased;
++        _ = async { if !*cancel.borrow() { let _ = cancel.changed().await; } } => Ok(()),
++        result = execution => result,
++    };
++    // The single native owner is not released until this cleanup and the tunnel
++    // have completed. Never look up a bundle PID: it could belong to a newer run.
++    listener.bootstrap_stage("STOP_RUNNER");
++    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
++    let _ = tokio::time::timeout_at(deadline, process_control.service.kill_app_roundtrip(pid)).await;
++    listener.bootstrap_stage("KILL_REQUESTED");
++    drop(process_control);
++    let cleanup = async {
++        let pid = u32::try_from(pid).map_err(|_| IdeviceError::TestRunnerTimeout)?;
++        let mut info = crate::services::dvt::device_info::DeviceInfoClient::new(&mut conns.dvt).await?;
++        listener.bootstrap_stage("PROCESS_STATUS_OPEN");
++        while info.is_running_pid(pid).await? {
++            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
++        }
++        Ok::<_, IdeviceError>(())
++    };
++    match tokio::time::timeout_at(deadline, cleanup).await {
++        Ok(Ok(())) => { listener.bootstrap_stage("PROCESS_EXIT_CONFIRMED"); result },
++        Ok(Err(error)) => {
++            let detail = format!("{error:?}");
++            let variant = detail.split(['(', '{']).next().unwrap_or("unknown");
++            let _ = listener.log_debug_message(&format!("PROCESS_STATUS_ERROR {variant}")).await;
++            if let IdeviceError::UnexpectedResponse(message) = &error {
++                if message.starts_with("isRunningPid") { let _ = listener.log_debug_message(message).await; }
++            }
++            listener.bootstrap_stage("PROCESS_STATUS_FAILED");
++            Err(IdeviceError::UnexpectedResponse("DSH_RUNNER_EXIT_UNCONFIRMED".into()))
++        },
++        _ => { listener.bootstrap_stage("PROCESS_STATUS_TIMEOUT"); Err(IdeviceError::UnexpectedResponse("DSH_RUNNER_EXIT_UNCONFIRMED".into())) },
++    }
++}
++
+ impl XCUITestService {
+     /// Creates a new `XCUITestService` backed by the given provider.
+     pub fn new(provider: Arc<dyn IdeviceProvider>) -> Self {
+@@ -2208,3 +2361,44 @@
+         assert!(wda_port_overrides_from_runner_environment(Some(&runner_env)).is_err());
+     }
+ }
++
++#[cfg(test)]
++mod archive_reference_tests {
++    use super::*;
++
++    fn archive(objects: Vec<Value>) -> AuxValue {
++        let mut top = plist::Dictionary::new();
++        top.insert("root".into(), Value::Uid(plist::Uid::new(1)));
++        let mut root = plist::Dictionary::new();
++        root.insert("$archiver".into(), Value::String("NSKeyedArchiver".into()));
++        root.insert("$version".into(), Value::Integer(100000.into()));
++        root.insert("$top".into(), Value::Dictionary(top));
++        root.insert("$objects".into(), Value::Array(objects));
++        let mut bytes = Vec::new();
++        Value::Dictionary(root).to_writer_binary(&mut bytes).unwrap();
++        AuxValue::Array(bytes)
++    }
++
++    #[test]
++    fn resolves_custom_xctest_object_fields() {
++        let mut activity = plist::Dictionary::new();
++        activity.insert("title".into(), Value::Uid(plist::Uid::new(2)));
++        activity.insert("$class".into(), Value::Uid(plist::Uid::new(3)));
++        let mut class = plist::Dictionary::new();
++        class.insert("$classname".into(), Value::String("XCActivityRecord".into()));
++        let value = decode_aux_archive(&archive(vec![Value::String("$null".into()),
++            Value::Dictionary(activity), Value::String("ready-example".into()),
++            Value::Dictionary(class)])).unwrap();
++        assert_eq!(XCActivityRecord::from_plist(&value).unwrap().title, "ready-example");
++
++        let mut identifier = plist::Dictionary::new();
++        identifier.insert("c".into(), Value::Uid(plist::Uid::new(2)));
++        let value = decode_aux_archive(&archive(vec![Value::String("$null".into()),
++            Value::Dictionary(identifier), Value::Array(vec![Value::Uid(plist::Uid::new(3)),
++                Value::Uid(plist::Uid::new(4))]), Value::String("PhoneRunnerUITests".into()),
++            Value::String("testServe".into())])).unwrap();
++        let id = XCTTestIdentifier::from_plist(&value).unwrap();
++        assert_eq!(id.test_class(), "PhoneRunnerUITests");
++        assert_eq!(id.test_method(), Some("testServe"));
++    }
++}
+diff --git a/idevice/src/http.rs b/idevice/src/http.rs
+--- a/idevice/src/http.rs
++++ b/idevice/src/http.rs
+@@ -14,6 +14,8 @@
+
+ /// Maximum number of redirects to follow before giving up
+ const MAX_REDIRECTS: usize = 10;
++/// Header budget for the bounded one-shot path (including the final CRLF).
++const MAX_BOUNDED_HEAD: usize = 16 * 1024;
+
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub enum Method {
+@@ -77,7 +79,7 @@
+         let mut body = self.body;
+
+         for _ in 0..=MAX_REDIRECTS {
+-            let resp = send_once(method, &url, &headers, &body).await?;
++            let resp = send_once(method, &url, &headers, &body, None).await?;
+             match resp.status {
+                 301 | 302 | 303 | 307 | 308 => {
+                     let Some(location) = resp.header("location") else {
+@@ -103,6 +105,32 @@
+             "too many redirects (>{MAX_REDIRECTS})"
+         )))
+     }
++
++    /// Sends exactly once with a cap on all received HTTP bytes (headers,
++    /// framing, trailers and body) and one deadline covering DNS, connection,
++    /// TLS, request write and response read. Does not follow redirects, so a
++    /// sensitive POST cannot move to another authority or downgrade to HTTP.
++    pub async fn send_bounded(
++        self,
++        maximum_response: usize,
++        deadline: std::time::Duration,
++    ) -> Result<HttpResponse, IdeviceError> {
++        if maximum_response == 0 || deadline.is_zero() {
++            return Err(IdeviceError::Http("invalid HTTP response budget".into()));
++        }
++        response_deadline(
++            deadline,
++            send_once(self.method, &self.url, &self.headers, &self.body, Some(maximum_response)),
++        ).await
++    }
++}
++
++async fn response_deadline<T>(
++    deadline: std::time::Duration,
++    operation: impl std::future::Future<Output = Result<T, IdeviceError>>,
++) -> Result<T, IdeviceError> {
++    tokio::time::timeout(deadline, operation).await
++        .map_err(|_| IdeviceError::Http("HTTP request deadline exceeded".into()))?
+ }
+
+ pub async fn get(url: impl Into<String>) -> Result<HttpResponse, IdeviceError> {
+@@ -234,6 +262,7 @@
+     url: &str,
+     headers: &[(String, String)],
+     body: &[u8],
++    maximum_response: Option<usize>,
+ ) -> Result<HttpResponse, IdeviceError> {
+     let parsed = parse_url(url)?;
+     debug!("{} {} ({} body bytes)", method.as_str(), url, body.len());
+@@ -270,7 +299,7 @@
+     stream.write_all(&req).await?;
+     stream.flush().await?;
+
+-    read_response(&mut stream).await
++    read_response(&mut stream, maximum_response).await
+ }
+
+ fn push_header(buf: &mut Vec<u8>, name: &str, value: &str) {
+@@ -280,15 +309,24 @@
+     buf.extend_from_slice(b"\r\n");
+ }
+
+-async fn read_response(stream: &mut Box<dyn ReadWrite>) -> Result<HttpResponse, IdeviceError> {
++async fn read_response(
++    stream: &mut Box<dyn ReadWrite>,
++    maximum: Option<usize>,
++) -> Result<HttpResponse, IdeviceError> {
+     let mut buf = Vec::new();
+
+     // Read until the end of the header block.
+     let head_end = loop {
+         if let Some(pos) = find_subsequence(&buf, b"\r\n\r\n") {
++            if maximum.is_some() && pos + 4 > MAX_BOUNDED_HEAD {
++                return Err(IdeviceError::Http("HTTP response headers exceed limit".into()));
++            }
+             break pos;
+         }
+-        if !read_more(stream, &mut buf).await? {
++        if maximum.is_some() && buf.len() >= MAX_BOUNDED_HEAD {
++            return Err(IdeviceError::Http("HTTP response headers exceed limit".into()));
++        }
++        if !read_more(stream, &mut buf, maximum).await? {
+             return Err(IdeviceError::Http(
+                 "connection closed before HTTP headers were complete".into(),
+             ));
+@@ -302,27 +340,53 @@
+         .iter()
+         .find(|(k, _)| k.eq_ignore_ascii_case("transfer-encoding"))
+         .is_some_and(|(_, v)| v.to_ascii_lowercase().contains("chunked"));
+-    let content_length = headers
++    let content_length_header = headers
+         .iter()
+-        .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+-        .and_then(|(_, v)| v.trim().parse::<usize>().ok());
++        .find(|(k, _)| k.eq_ignore_ascii_case("content-length"));
++    let content_length = if maximum.is_some() {
++        if headers.iter().filter(|(key, _)| key.eq_ignore_ascii_case("content-length")).count() > 1
++            || headers.iter().filter(|(key, _)| key.eq_ignore_ascii_case("transfer-encoding")).count() > 1
++            || (chunked && content_length_header.is_some()) {
++            return Err(IdeviceError::Http("ambiguous HTTP response framing".into()));
++        }
++        if headers.iter().any(|(key, value)| key.eq_ignore_ascii_case("transfer-encoding")
++            && !value.eq_ignore_ascii_case("chunked")) {
++            return Err(IdeviceError::Http("unsupported HTTP transfer encoding".into()));
++        }
++        match content_length_header {
++            Some((_, value)) if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) =>
++                Some(value.parse::<usize>().map_err(|_| IdeviceError::Http("HTTP content length exceeds limit".into()))?),
++            Some(_) => return Err(IdeviceError::Http("invalid HTTP content length".into())),
++            None => None,
++        }
++    } else {
++        content_length_header.and_then(|(_, value)| value.trim().parse::<usize>().ok())
++    };
+
+     let body = if chunked {
+         // Connection: close means the peer closes after the final chunk, so read
+         // to end-of-stream and decode the complete chunked body.
+-        while read_more(stream, &mut buf).await? {}
++        while read_more(stream, &mut buf, maximum).await? {}
+         decode_chunked(&buf[body_start..])?
+     } else if let Some(len) = content_length {
+-        while buf.len() < body_start + len {
+-            if !read_more(stream, &mut buf).await? {
++        let expected_end = body_start.checked_add(len)
++            .ok_or_else(|| IdeviceError::Http("HTTP content length exceeds limit".into()))?;
++        if maximum.is_some_and(|maximum| expected_end > maximum) {
++            return Err(IdeviceError::Http("HTTP response exceeds limit".into()));
++        }
++        while buf.len() < expected_end {
++            if !read_more(stream, &mut buf, maximum).await? {
++                if maximum.is_some() {
++                    return Err(IdeviceError::Http("truncated HTTP response body".into()));
++                }
+                 break; // truncated; return what we have
+             }
+         }
+-        let end = (body_start + len).min(buf.len());
++        let end = expected_end.min(buf.len());
+         buf[body_start..end].to_vec()
+     } else {
+         // No framing info: read until the peer closes.
+-        while read_more(stream, &mut buf).await? {}
++        while read_more(stream, &mut buf, maximum).await? {}
+         buf[body_start..].to_vec()
+     };
+
+@@ -337,11 +401,18 @@
+ async fn read_more(
+     stream: &mut Box<dyn ReadWrite>,
+     buf: &mut Vec<u8>,
++    maximum: Option<usize>,
+ ) -> Result<bool, IdeviceError> {
+     let mut tmp = [0u8; 16384];
+-    let n = stream.read(&mut tmp).await?;
++    let remaining = maximum.map(|maximum| maximum.saturating_sub(buf.len()));
++    // A one-byte EOF probe is allowed at the limit; it is never appended.
++    let wanted = remaining.map_or(tmp.len(), |left| left.saturating_add(1).min(tmp.len()));
++    let n = stream.read(&mut tmp[..wanted]).await?;
+     if n == 0 {
+         return Ok(false);
++    }
++    if remaining.is_some_and(|left| n > left) {
++        return Err(IdeviceError::Http("HTTP response exceeds limit".into()));
+     }
+     buf.extend_from_slice(&tmp[..n]);
+     Ok(true)
+@@ -392,17 +463,21 @@
+         let size = usize::from_str_radix(size_hex, 16).map_err(|_| err())?;
+         data = &data[line_end + 2..];
+         if size == 0 {
+-            break; // last chunk; ignore any trailers
+-        }
+-        if data.len() < size + 2 {
++            // The terminal chunk still needs its empty line (or a complete
++            // trailer block); a truncated zero-size line is not a full body.
++            if data == b"\r\n" || data.ends_with(b"\r\n\r\n") { break; }
++            return Err(err());
++        }
++        let end = size.checked_add(2).ok_or_else(err)?;
++        if data.len() < end {
+             return Err(err());
+         }
+         out.extend_from_slice(&data[..size]);
+         // Each chunk's data is followed by a CRLF.
+-        if &data[size..size + 2] != b"\r\n" {
++        if &data[size..end] != b"\r\n" {
+             return Err(err());
+         }
+-        data = &data[size + 2..];
++        data = &data[end..];
+     }
+     Ok(out)
+ }
+@@ -534,3 +609,110 @@
+         assert_eq!(decode_chunked(body).unwrap(), b"abc");
+     }
+ }
++
++
++#[cfg(test)]
++mod dsh_tss_bounds_tests {
++    use super::*;
++    use std::time::Duration;
++
++    async fn response(bytes: &[u8], maximum: usize) -> Result<HttpResponse, IdeviceError> {
++        // Memory-only transport: there is no socket, DNS, server or TSS request.
++        let (mut writer, reader) = tokio::io::duplex(bytes.len() + 1);
++        writer.write_all(bytes).await.unwrap();
++        drop(writer);
++        let mut stream: Box<dyn ReadWrite> = Box::new(reader);
++        read_response(&mut stream, Some(maximum)).await
++    }
++
++    #[tokio::test]
++    async fn exact_wire_limit_and_one_byte_over() {
++        let wire = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
++        assert_eq!(response(wire, wire.len()).await.unwrap().body, b"hello");
++        assert!(response(wire, wire.len() - 1).await.is_err());
++    }
++
++    #[tokio::test]
++    async fn declared_length_overflow_and_truncation_are_errors() {
++        for wire in [
++            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", usize::MAX),
++            "HTTP/1.1 200 OK\r\nContent-Length: 1048577\r\n\r\n".into(),
++            "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhey".into(),
++        ] {
++            assert!(response(wire.as_bytes(), 1024 * 1024).await.is_err());
++        }
++    }
++
++    #[tokio::test]
++    async fn eof_body_is_bounded_including_headers() {
++        let wire = b"HTTP/1.1 200 OK\r\n\r\nhello";
++        assert_eq!(response(wire, wire.len()).await.unwrap().body, b"hello");
++        assert!(response(wire, wire.len() - 1).await.is_err());
++    }
++
++    #[tokio::test]
++    async fn chunked_total_includes_framing_and_requires_terminal() {
++        let wire = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhe\r\n3\r\nllo\r\n0\r\n\r\n";
++        assert_eq!(response(wire, wire.len()).await.unwrap().body, b"hello");
++        assert!(response(wire, wire.len() - 1).await.is_err());
++        assert!(response(&wire[..wire.len() - 2], wire.len()).await.is_err());
++        let overflow = format!("{:x}\r\n", usize::MAX);
++        assert!(decode_chunked(overflow.as_bytes()).is_err());
++    }
++
++    #[tokio::test]
++    async fn headers_have_a_separate_small_limit() {
++        let wire = format!("HTTP/1.1 200 OK\r\nX-Large: {}\r\nContent-Length: 0\r\n\r\n", "a".repeat(MAX_BOUNDED_HEAD));
++        let error = response(wire.as_bytes(), 1024 * 1024).await.unwrap_err();
++        assert!(error.to_string().contains("headers exceed limit"));
++    }
++
++    #[tokio::test]
++    async fn ambiguous_or_invalid_framing_is_rejected() {
++        for headers in [
++            "Content-Length: 0\r\nContent-Length: 0",
++            "Transfer-Encoding: chunked\r\nContent-Length: 0",
++            "Transfer-Encoding: chunked\r\nTransfer-Encoding: chunked",
++            "Transfer-Encoding: gzip, chunked",
++            "Content-Length: -1",
++            "Content-Length: invalid",
++        ] {
++            let wire = format!("HTTP/1.1 200 OK\r\n{headers}\r\n\r\n0\r\n\r\n");
++            assert!(response(wire.as_bytes(), 1024).await.is_err(), "{headers}");
++        }
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn whole_operation_uses_one_deadline() {
++        let started = tokio::time::Instant::now();
++        let result: Result<(), IdeviceError> = response_deadline(Duration::from_secs(30), async {
++            // Independent phases cannot each restart the 30-second budget.
++            tokio::time::sleep(Duration::from_secs(20)).await;
++            tokio::time::sleep(Duration::from_secs(20)).await;
++            Ok(())
++        }).await;
++        assert!(result.unwrap_err().to_string().contains("deadline exceeded"));
++        assert_eq!(started.elapsed(), Duration::from_secs(30));
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn stalled_read_timeout_drops_the_owned_stream() {
++        let (mut peer, reader) = tokio::io::duplex(16);
++        let result = response_deadline(Duration::from_secs(30), async move {
++            let mut stream: Box<dyn ReadWrite> = Box::new(reader);
++            read_response(&mut stream, Some(1024)).await
++        }).await;
++        assert!(result.unwrap_err().to_string().contains("deadline exceeded"));
++        // The timeout cancels the operation by dropping its stream owner.
++        assert!(peer.write_all(b"x").await.is_err());
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn operation_within_deadline_succeeds() {
++        let result = response_deadline(Duration::from_secs(30), async {
++            tokio::time::sleep(Duration::from_secs(29)).await;
++            response(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", 128).await
++        }).await.unwrap();
++        assert_eq!(result.body, b"ok");
++    }
++}
+diff --git a/idevice/src/tss.rs b/idevice/src/tss.rs
+--- a/idevice/src/tss.rs
++++ b/idevice/src/tss.rs
+@@ -14,7 +14,10 @@
+ /// TSS client version string sent in requests
+ const TSS_CLIENT_VERSION_STRING: &str = "libauthinstall-1033.0.2";
+ /// Apple's TSS endpoint URL
+-const TSS_CONTROLLER_ACTION_URL: &str = "http://gs.apple.com/TSS/controller?action=2";
++const TSS_CONTROLLER_ACTION_URL: &str = "https://gs.apple.com/TSS/controller?action=2";
++/// Full encoded HTTP response, including headers and transfer framing.
++const TSS_MAX_RESPONSE_BYTES: usize = 1024 * 1024;
++const TSS_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+
+ /// Represents a TSS request to Apple's signing server
+ #[derive(Debug)]
+@@ -73,15 +76,20 @@
+             "Sending TSS request: {}",
+             crate::pretty_print_dictionary(&self.inner)
+         );
+-        // The TSS controller is plain HTTP, so no TLS/crypto provider is needed.
++        // A single authenticated HTTPS request. No redirect or HTTP fallback;
++        // the deadline includes DNS/TCP/TLS and bounds every response read.
+         let res = crate::http::HttpRequest::post(TSS_CONTROLLER_ACTION_URL)
+             .header("Cache-Control", "no-cache")
+             .header("Content-type", "text/xml; charset=\"utf-8\"")
+             .header("User-Agent", "InetURL/1.0")
+             .body(plist_to_xml_bytes(&self.inner))
+-            .send()
+-            .await?
+-            .text();
++            .send_bounded(TSS_MAX_RESPONSE_BYTES, TSS_REQUEST_DEADLINE)
++            .await?;
++        if res.status != 200 {
++            return Err(IdeviceError::Http("TSS HTTP status was not 200".into()));
++        }
++        let res = String::from_utf8(res.body)
++            .map_err(|_| IdeviceError::Http("TSS response was not UTF-8".into()))?;
+
+         debug!("Apple responded with {res}");
+         let trimmed = res.trim_start_matches("STATUS=0&");

@@ -1,0 +1,92 @@
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
+@@ -13,6 +13,10 @@
+ import { scrubbedParentEnv } from "@deepseek-ai/dsh-subprocess";
+ import { homedir } from "node:os";
+ import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument, visit } from "yaml";
++const OHOS_PLUGIN_INSTALL_MESSAGE = "[OHOS_PLUGIN_INSTALL_UNAVAILABLE] 鸿蒙本机不支持安装、更新或卸载插件包；可启停随包插件，或连接电脑管理插件。";
++function requirePackageManager() {
++	if (process.platform === "openharmony") throw Object.assign(new Error(OHOS_PLUGIN_INSTALL_MESSAGE), { code: "ERR_OHOS_PLUGIN_INSTALL_UNAVAILABLE" });
++}
+ import hostedGitInfo from "hosted-git-info";
+ //#region lib/types/bundle-detail.js
+ /**
+@@ -610,6 +614,7 @@
+ * The diagnostic file is closed on return or rejection, including preparation and spawn failures.
+ */
+ async function runProfilePnpm(context, args, options) {
++	requirePackageManager();
+ 	const env_1 = {
+ 		stack: [],
+ 		error: void 0,
+@@ -1950,7 +1955,7 @@
+ 			return {
+ 				...this.configuredRegistries,
+ 				fallbackRegistries: [...this.configuredRegistries.fallbackRegistries],
+-				resolved: await readProfileRegistry(this.profile.dir, {
++				resolved: process.platform === "openharmony" ? null : await readProfileRegistry(this.profile.dir, {
+ 					...this.profile.packageManager ?? { command: this.pnpmCommand },
+ 					timeoutMs: this.inspectTimeoutMs
+ 				})
+@@ -1963,6 +1968,7 @@
+ 		* @returns The package the spec names, or why it is refused.
+ 		*/
+ 		async inspect(spec, options, signal) {
++			if (process.platform === "openharmony") return refused("unknown", OHOS_PLUGIN_INSTALL_MESSAGE);
+ 			let parsed;
+ 			try {
+ 				parsed = parseInstallSpec(spec);
+@@ -2886,7 +2892,12 @@
+ 		* @returns Package-manager diagnostics, the registries asked, and the observed activation outcome.
+ 		*/
+ 		// expectedInstalled is an internal update precondition, not a Remote option.
+ 		installBundle(spec, options, expectedInstalled) {
++			if (process.platform === "openharmony") return Promise.resolve({
++				stage: "install", target: spec, enabled: options?.enabled !== false,
++				changed: false, application: "failed",
++				error: { code: "operation-error", diagnostic: OHOS_PLUGIN_INSTALL_MESSAGE }
++			});
+ 			const requestId = options?.requestId;
+ 			const control = {
+ 				abort: new AbortController(),
+@@ -3102,7 +3113,11 @@
+ 		* @returns Removal diagnostics and the remaining profile state.
+ 		*/
+ 		// selection is owned by this update only; capture it before HMR deselects.
+ 		removeBundle(name, selection) {
++			if (process.platform === "openharmony") return Promise.resolve({
++				stage: "remove", target: name, changed: false, application: "failed",
++				error: { code: "operation-error", diagnostic: OHOS_PLUGIN_INSTALL_MESSAGE }
++			});
+ 			return this.change(async (result) => {
+ 				if (!await this.configure(async () => {
+ 					const bundle = (await this.listBundles()).find((item) => item.name === name);
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js
+@@ -51,6 +51,10 @@
+     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+ });
+ /** Shared profile package operations used by dsh plugin and the running manager. */
++const OHOS_PLUGIN_INSTALL_MESSAGE = "[OHOS_PLUGIN_INSTALL_UNAVAILABLE] 鸿蒙本机不支持安装、更新或卸载插件包；可启停随包插件，或连接电脑管理插件。";
++function requirePackageManager() {
++	if (process.platform === "openharmony") throw Object.assign(new Error(OHOS_PLUGIN_INSTALL_MESSAGE), { code: "ERR_OHOS_PLUGIN_INSTALL_UNAVAILABLE" });
++}
+ import { once } from 'node:events';
+ import { StringDecoder } from 'node:string_decoder';
+ import { existsSync, readFileSync } from 'node:fs';
+@@ -297,6 +301,7 @@
+  * The diagnostic file is closed on return or rejection, including preparation and spawn failures.
+  */
+ export async function runProfilePnpm(context, args, options) {
++    requirePackageManager();
+     const env_1 = { stack: [], error: void 0, hasError: false };
+     try {
+         const dir = context.dir ?? resolveProfileDir(context.profile, context.home);
+@@ -589,6 +594,7 @@
+  * @returns Completed package-manager result.
+  */
+ export async function runPluginCommand(context, args, options) {
++    requirePackageManager();
+     const dir = context.dir ?? resolveProfileDir(context.profile, context.home);
+     await mkdir(dir, { recursive: true });
+     return withFileLock(join(dir, 'package.json'), async () => {

@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DSH Go"
+    },
+    {
+      "name": "mic_reason",
+      "value": "用于您主动开始的语音输入和录音。"
+    },
+    {
+      "name": "shortcut_new_chat",
+      "value": "New chat"
+    },
+    {
+      "name": "shortcut_voice_input",
+      "value": "Voice input"
+    }
+  ]
+}

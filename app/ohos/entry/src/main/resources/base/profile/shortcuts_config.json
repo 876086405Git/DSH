@@ -1,0 +1,34 @@
+{
+  "shortcuts": [
+    {
+      "shortcutId": "new_chat",
+      "label": "$string:shortcut_new_chat",
+      "icon": "$media:shortcut_new_chat",
+      "wants": [
+        {
+          "bundleName": "io.github.ccch1mneyyy.dsh_app",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "dshShortcut": "new"
+          }
+        }
+      ]
+    },
+    {
+      "shortcutId": "voice_input",
+      "label": "$string:shortcut_voice_input",
+      "icon": "$media:shortcut_voice",
+      "wants": [
+        {
+          "bundleName": "io.github.ccch1mneyyy.dsh_app",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "dshShortcut": "voice"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,9 @@
 // the way iOS hands out landscape safe areas, so a centred layout stays
 // centred on the glass and left / right keys stay mirror images.
 
+import 'dart:io' show Platform;
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeatureType;
 
 import 'package:flutter/widgets.dart';
 
@@ -60,16 +62,31 @@ class MirroredSideInsets extends StatelessWidget {
 
   final Widget child;
 
-  static EdgeInsets mirror(EdgeInsets e) {
-    final side = sideInsetFor(e);
+  static EdgeInsets mirror(EdgeInsets e, [double cutout = 0]) {
+    final side = math.max(sideInsetFor(e), cutout);
     return EdgeInsets.fromLTRB(side, e.top, side, e.bottom);
+  }
+
+  /// How far a cutout reaches in from the side of a phone held on its side.
+  /// HarmonyOS reports it only as a display feature, never in the padding.
+  static double cutoutInset(MediaQueryData media) {
+    final width = media.size.width;
+    if (width <= media.size.height) return 0;
+    var inset = 0.0;
+    for (final feature in media.displayFeatures) {
+      if (feature.type != DisplayFeatureType.cutout) continue;
+      final bounds = feature.bounds;
+      inset = math.max(inset, bounds.center.dx < width / 2 ? bounds.right : width - bounds.left);
+    }
+    return inset;
   }
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final cutout = Platform.operatingSystem == 'ohos' ? cutoutInset(media) : 0.0;
     return MediaQuery(
-      data: media.copyWith(padding: mirror(media.padding), viewPadding: mirror(media.viewPadding)),
+      data: media.copyWith(padding: mirror(media.padding, cutout), viewPadding: mirror(media.viewPadding, cutout)),
       child: child,
     );
   }

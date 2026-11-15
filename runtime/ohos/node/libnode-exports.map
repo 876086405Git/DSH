@@ -1,0 +1,19 @@
+/* Everything else in libnode stays private: V8, Node internals, libuv, OpenSSL, zlib, ICU, SQLite and the
+   static C++ runtime. Other libraries in the app process can carry the same names. */
+{
+  global:
+    /* N-API under the names napi-rename.h gives it; Ark's libace_napi owns the plain napi_* names. */
+    dsh_napi_*;
+    dsh_node_api_*;
+    /* The C ABI libdsh_host.so imports; defined by runtime/ohos/host/node_runner.cpp, linked into libnode. */
+    dsh_node_start;
+    dsh_node_stop;
+    /* What the require-builtin addon reads with dlsym(RTLD_DEFAULT, ...): native/loader/source-pins.json. */
+    _ZN2v82V810GetVersionEv;
+    _ZN2v87Context29GetNumberOfEmbedderDataFieldsEv;
+    _ZN2v87Context37SlowGetAlignedPointerFromEmbedderDataEi;
+    _ZN2v87Isolate10GetCurrentEv;
+    _ZN2v87Isolate17GetCurrentContextEv;
+    _ZNK4node14PrincipalRealm22builtin_module_requireEv;
+  local: *;
+};

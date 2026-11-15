@@ -1,0 +1,133 @@
+# dsh-go: OpenHarmony exclusive publication; Android/Linux branches remain unchanged.
+# Base: DSH 0.2.2-rc.1 (ported from rc.4), following the existing pinned patch chain.
+# 未在真机核实。Exclusive copies preserve source/no-clobber, not atomic read visibility.
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -17,7 +17,7 @@
+ import { constants, createZstdCompress, createZstdDecompress, zstdCompress, zstdDecompress, zstdDecompressSync } from "node:zlib";
+ import { isDeepStrictEqual, promisify } from "node:util";
+ import { constants as constants$1 } from "node:buffer";
+-import { Worker } from "node:worker_threads";
++import { Worker, isMainThread } from "node:worker_threads";
+ import { currentSessionMessageProjections } from "@deepseek-ai/dsh-session-format-catalog/message-projections";
+ import { Readable, pipeline } from "node:stream";
+ /**
+@@ -646,6 +646,66 @@
+ * @module @deepseek-ai/dsh-session-persistence-jsonl/lease
+ */
+ /** Base name of the kernel lock file inside a session's directory. */
++// OpenHarmony has no no-replace link publication; keep the source and never clobber.
++// Serialize this engine's publishers so EEXIST readers do not inspect an active copy.
++const ohosPublications = new Map();
++async function publishOhosExclusive(source, target, fs = { link, open }) {
++	const previous = ohosPublications.get(target);
++	let release;
++	const completed = new Promise((resolve) => { release = resolve; });
++	ohosPublications.set(target, completed);
++	if (previous) await previous;
++	try {
++		try {
++			await fs.link(source, target);
++			return;
++		} catch (error) {
++			if (!["EACCES", "EPERM", "EXDEV", "ENOTSUP", "EMLINK"].includes(error?.code)) throw error;
++		}
++		const input = await fs.open(source, "r");
++		try {
++			const output = await fs.open(target, "wx", 384);
++			try {
++				const buffer = Buffer.allocUnsafe(65536);
++				for (;;) {
++					const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
++					if (bytesRead === 0) break;
++					await output.writeFile(buffer.subarray(0, bytesRead));
++				}
++				await output.sync();
++			} finally {
++				// Failed copies stay visible; unlinking by name could delete a replacement.
++				await output.close();
++			}
++		} finally {
++			await input.close();
++		}
++	} finally {
++		release();
++		if (ohosPublications.get(target) === completed) ohosPublications.delete(target);
++	}
++}
++
++// Temporary main-engine lock until the signed OpenHarmony native binding is validated.
++const ohosWriteLocks = new Map();
++async function tryLockOhos(handle) {
++	if (!isMainThread) throw Object.assign(new Error("OpenHarmony session storage must run in the main Node thread"), { code: "ERR_OHOS_LOCK_MAIN_THREAD_ONLY" });
++	const { dev, ino } = await handle.stat({ bigint: true });
++	if (handle.fd < 0) throw Object.assign(new Error("flock: file handle is closed"), { code: "EBADF", syscall: "flock" });
++	const key = `${dev}:${ino}`;
++	const held = ohosWriteLocks.get(key);
++	if (held === handle) return;
++	if (held) throw Object.assign(new Error("EAGAIN: flock failed"), { code: "EAGAIN", errno: 11, syscall: "flock" });
++	ohosWriteLocks.set(key, handle);
++	const close = handle.close;
++	handle.close = () => close().finally(() => {
++		if (handle.fd < 0) {
++			if (ohosWriteLocks.get(key) === handle) ohosWriteLocks.delete(key);
++			handle.close = close;
++		}
++	});
++}
++
+ const LEASE_FILENAME = "session.lock";
+ /** Whether a flock failure means another descriptor holds the lock. */
+ function isLockContention(error) {
+@@ -694,7 +754,8 @@
+ 			const handle = await open(path, "w");
+ 			try {
+ 				try {
+-					await tryLockExclusive(handle.fd);
++					if (process.platform === "openharmony") await tryLockOhos(handle);
++					else await tryLockExclusive(handle.fd);
+ 				} catch (error) {
+ 					if (isLockContention(error)) throw new SessionAlreadyOwnedError(id);
+ 					throw error;
+@@ -2038,7 +2099,8 @@
+ 		throw error;
+ 	}
+ 	try {
+-		await internals.fs.link(staged, currentPath);
++		if (internals.platform === "openharmony") await publishOhosExclusive(staged, currentPath, internals.fs);
++		else await internals.fs.link(staged, currentPath);
+ 	} catch (error) {
+ 		if (isEEXIST(error)) return false;
+ 		if (error?.code !== "EPERM" && error?.code !== "EACCES") throw error;
+@@ -3283,17 +3345,20 @@
+ 		const tmp = await this.writeSyncedTempFile(finalPath, content);
+ 		let linked = false;
+ 		try {
+-			try {
+-				await link(tmp, finalPath);
+-			} catch (error) {
+-				if (error?.code !== "EACCES" && error?.code !== "EPERM") throw error;
+-				// Current first publishers hold the mutation lease. Keep link's
+-				// no-replace semantics wherever hard links are available.
+-				const existing = await lstat(finalPath).catch((statError) => {
+-					if (statError?.code !== "ENOENT") throw statError;
+-				});
+-				if (existing !== void 0) throw error;
+-				await rename(tmp, finalPath);
++			if (process.platform === "openharmony") await publishOhosExclusive(tmp, finalPath);
++			else {
++				try {
++					await link(tmp, finalPath);
++				} catch (error) {
++					if (error?.code !== "EACCES" && error?.code !== "EPERM") throw error;
++					// Current first publishers hold the mutation lease. Keep link's
++					// no-replace semantics wherever hard links are available.
++					const existing = await lstat(finalPath).catch((statError) => {
++						if (statError?.code !== "ENOENT") throw statError;
++					});
++					if (existing !== void 0) throw error;
++					await rename(tmp, finalPath);
++				}
+ 			}
+ 			linked = true;
+ 		} finally {

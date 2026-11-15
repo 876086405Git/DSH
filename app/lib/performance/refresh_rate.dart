@@ -16,6 +16,7 @@ import 'performance_policy.dart';
 /// Some ROMs (HyperOS, OriginOS, ColorOS) cap third-party apps at 60 Hz unless the app
 /// asks, and once it does they show the per-app refresh-rate switch as an in-app setting
 /// — so the app has to offer the choice itself, including handing the decision back.
+/// HarmonyOS has no such cap to ask past, so there this does nothing.
 class RefreshRateService {
   RefreshRateService._();
 
@@ -37,7 +38,7 @@ class RefreshRateService {
 
   /// Registers the frame listener and sends the initial mode. Safe to call twice.
   void start() {
-    if (_started) return;
+    if (_started || _systemDecides) return;
     _started = true;
     // Widget tests have no platform side and must not leave timers behind; the mode is
     // still sent so a test can assert the channel traffic.
@@ -47,9 +48,11 @@ class RefreshRateService {
 
   static bool get _testing => Platform.environment.containsKey('FLUTTER_TEST');
 
+  static bool get _systemDecides => Platform.operatingSystem == 'ohos' || Platform.isIOS;
+
   /// Called by the settings row and by the stored preference after launch.
   Future<void> setMode(RefreshRateMode mode) async {
-    if (_mode == mode) return;
+    if (_mode == mode || _systemDecides) return;
     _mode = mode;
     _idle?.cancel();
     if (mode != RefreshRateMode.auto) _active = false;

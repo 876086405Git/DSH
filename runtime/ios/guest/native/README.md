@@ -1,0 +1,23 @@
+# iOS guest 原生后端（I2）
+
+**未在 Apple 上编译 / 运行。** 固定 iSH c5c264da19148512167aa493d7bd4e50aae1b74e，先应用 I1 build.patch，再应用 job-runtime.patch，并给所有kernel/glue单元定义 DSH_IOS_GUEST_CONFINED=1。JIT保持关闭；不注册native offload handler或host代码路径。此目录为本项目自己的胶水，未复制上游App主程序。
+
+对外合同见 guest_backend.h。一个进程只有一个kernel和PID1 bookkeeping supervisor。initialize只接受安装fakefs容器，真正mount源为该容器/data，旁边meta.db。PID1不运行guest线程，也不会被guest信号触发pthread_kill。每个job创建PID1子进程，argv/env同步打包，cwd仅允许规范化/workspace路径，env不从宿主继承。并发start返回EBUSY；正常收尾后复用同一kernel，失败则永久quarantine直到App重启，禁止第二kernel绕过。
+
+workspace/temp均经bound_admission；安装根与完整宿主protected_paths始终拒绝双向路径交叠。temp还拒绝与workspace交叠。request.workspace_readonly按批准的mode落实到/workspace能力，temp仍受控可写；重复initialize必须保持最初保护路径多重集合完全相同（允许顺序变动，不允许缩减/替换）。只有/workspace与/tmp映射宿主能力目录；/proc和/dev/pts是guest伪文件系统。guest mount/umount被拒绝，workspace硬链接限制与MAP_PRIVATE私有copy实现沿用已验证C构件。fakefs保持guest root元数据，不能用realfs取代。权限批准由调用方完成，本C入口不是批准验证器；不得将任意用户路径当已批准能力。
+
+输出为两个专用reader，每stream最多一个同步callback；callback必须消费/安排JS消费后明确ACK，不能把排队当消费。Env消失时调用方先唤醒callback返回ECANCELED，再abandon。abandoned独立标记且排空剩余输出，绝不伪加delivered计数；正常wait要求真实ACK，abandoned wait只报告资源回收完成，另返回abandoned=1。正常任务无运行总时限，cancel/abandon才启动cleanup_timeout_ms窗口；TERM立即，200ms后KILL，kill入口则立即KILL。超时quarantine并继续保持原生context生命，不阻塞JS Env退出。
+
+start失败保证没有guest线程成功启动、不会再通过output借用context。初始阶段错误可能保留quarantine内核分配，这是上游缺乏完整初始化回滚的保守选择。start成功后wait成功保证所有guest/output pthread join、root退出、task reaping、挂载卸除完成；失败不保证context已退役，调用方必须保留独立于Env的原生owner。不能在JS cleanup/loop线程调用wait。
+
+begin_install_change/end_install_change提供进程级安装修改lease，仅COLD时可获得；持有期间initialize拒绝。启动过的kernel不支持卸载/重装，要重启App；这样不把status快照检查冒充与删除互斥。
+
+中断防护（W1）：在安装rootfs的父目录（`dsh-guest`）保存`active-task`，只含格式版本、执行代次和`initialize`/`task`阶段，不含命令、目录、环境或凭据。首次`initialize`在`mount_root`之前写入并对文件、父目录分别fsync，正常返回后清理；初始化不启动guest/output线程，返回的失败也可清理。每次`start`在DNS同步和挂载之前另写一代标记，只有`wait`确认线程、输出、reaping和卸载全部settled才删除并fsync目录。DNS前置失败没有任务可继续运行，正常清理；进入挂载/任务构造后的失败以及收尾超时无法证明settled，保留记录并quarantine。持久化失败不开内核；清理失败也quarantine，不伪称记录已可靠删除。
+
+`dsh_guest_crash_status(directory, &suspended)`和`dsh_guest_crash_resume(directory)`接受可信的`dsh-guest`目录，返回0或正host errno；它们与任务、安装lease共用native gate，不初始化kernel。活跃任务凭打开的目录/记录inode和代次认领记录，不使用PID；旧记录、空/损坏记录和quarantine残留都保守暂停。resume是用户显式动作；正在运行、quarantine或安装lease占用时返回EBUSY，清理成功后由Swift在下一次引擎启动重新生成快照。它不重置内核、不清安装；记录在rootfs旁，卸载/重装不能顺便清它。一个App进程共享一个native gate；这不是给多个独立宿主同时复用同一安装目录的跨进程协调协议。
+
+旧快照尝试初始化时，残留记录使native返回本平台的EOWNERDEAD；创建记录后的write/fsync失败也在持锁期间固定为EOWNERDEAD，原始I/O errno不跨这个ABI附带。这样即使用户在N-API事件派发前resume删掉文件，该调用的暂停分类也不会消失。记录创建之前的失败仍返回原errno。N-API exit额外带稳定`errorCode: "ios_guest_suspended"`，JS不可硬编码Darwin/Linux errno数值，并须锁存旧owner的暂停直到下次引擎启动。标记证明任务没有完成收尾，系统终止、jetsam或持久化失败也可能留下，不能把`suspendedReason: crashed`当成已证实的内核崩溃根因。没有信号跳转恢复逻辑。
+
+信号：不更改进程全局SIGPIPE处置。专用job pthread生命周期阻塞SIGPIPE并显式解除SIGUSR1屏蔽，覆盖guest自建pipe/socket；宿主stdin写在Darwin依赖其私有OFD的F_SETNOSIGPIPE，Linux采用局部mask与新生成pending信号消费。iSH初始化仍安装全局SIGUSR1唤醒handler，须在Apple CI核与NodeMobile宿主的共存；不可称没有全局信号副作用。
+
+Linux已实际clang交叉编译并whole-link，随后在QEMU AArch64 Linux用户态运行同源kernel+固定Alpine3.24.4：uname/release、workspace读写、exit7、stdin、正常sleep超过cleanup窗口、忽略TERM后KILL、输出放弃及普通guest管道、只读workspace拒写且temp可写全部通过。这不是Apple执行或App批准链端到端的替代。测例/日志由补丁交付包附带。

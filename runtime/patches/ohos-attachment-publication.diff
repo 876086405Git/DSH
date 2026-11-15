@@ -1,0 +1,72 @@
+# dsh-go: OpenHarmony exclusive publication; Android/Linux branches remain unchanged.
+# Base: DSH 0.2.2-rc.1 (ported from rc.4), following the existing pinned patch chain.
+# 未在真机核实。Exclusive copies preserve source/no-clobber, not atomic read visibility.
+--- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+@@ -6,6 +6,46 @@
+ import { constants, createReadStream } from "node:fs";
+ import { chmod, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+ import { createLazyRequire } from "@deepseek-ai/dsh-lazy-require";
++// OpenHarmony has no no-replace link publication; keep the source and never clobber.
++// Serialize this engine's publishers so EEXIST readers do not inspect an active copy.
++const ohosPublications = new Map();
++async function publishOhosExclusive(source, target, fs = { link, open }) {
++	const previous = ohosPublications.get(target);
++	let release;
++	const completed = new Promise((resolve) => { release = resolve; });
++	ohosPublications.set(target, completed);
++	if (previous) await previous;
++	try {
++		try {
++			await fs.link(source, target);
++			return;
++		} catch (error) {
++			if (!["EACCES", "EPERM", "EXDEV", "ENOTSUP", "EMLINK"].includes(error?.code)) throw error;
++		}
++		const input = await fs.open(source, "r");
++		try {
++			const output = await fs.open(target, "wx", 384);
++			try {
++				const buffer = Buffer.allocUnsafe(65536);
++				for (;;) {
++					const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
++					if (bytesRead === 0) break;
++					await output.writeFile(buffer.subarray(0, bytesRead));
++				}
++				await output.sync();
++			} finally {
++				// Failed copies stay visible; unlinking by name could delete a replacement.
++				await output.close();
++			}
++		} finally {
++			await input.close();
++		}
++	} finally {
++		release();
++		if (ohosPublications.get(target) === completed) ohosPublications.delete(target);
++	}
++}
++
+ //#region lib/types/compression-limiter.js
+ /** Instance-owned concurrency bound for native image transformations. */
+ /**
+@@ -486,7 +526,8 @@
+ 	try {
+ 		await ensureDurableDirectory(parent, await ensureDurableHome(dirname(dirname(resolve(root)))));
+ 		try {
+-			await link(source, target);
++			if (process.platform === "openharmony") await publishOhosExclusive(source, target);
++			else await link(source, target);
+ 		} catch (error) {
+ 			if (error?.code === "EACCES" || error?.code === "EPERM") {
+ 				const staged = await stageImmutableObject(root, (async function* () {
+@@ -560,7 +601,8 @@
+ 	try {
+ 		await ensureDurableDirectory(parent, staged.boundary);
+ 		try {
+-			await link(staged.path, target);
++			if (process.platform === "openharmony") await publishOhosExclusive(staged.path, target);
++			else await link(staged.path, target);
+ 		} catch (error) {
+ 			if (!(error instanceof Error && ["EEXIST", "EACCES", "EPERM"].includes(error.code))) throw error;
+ 			try {

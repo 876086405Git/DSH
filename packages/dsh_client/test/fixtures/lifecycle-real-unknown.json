@@ -1,0 +1,245 @@
+{
+  "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+  "unknown": {
+    "v": 1,
+    "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230",
+    "state": "result-unknown",
+    "closed": false,
+    "paused": false,
+    "confirmedPause": false,
+    "manualPaused": false,
+    "blocked": false,
+    "corruption": null,
+    "controlVersion": 1,
+    "activeBudgetCount": 0,
+    "calls": [
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 15,
+        "callId": "call-ios-6-0",
+        "name": "write",
+        "turn": 1,
+        "step": 1,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "a8dfb217ed2b4d5013fb86ede32e33458628d6d417e89028d178d679f80c06dd",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 22,
+        "callId": "call-ios-7-1",
+        "name": "edit",
+        "turn": 1,
+        "step": 2,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "1d9bcc2c5f313c0078455a36909f0876a2ad8cbb3579e5914cad3c79e553f51e",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 27,
+        "callId": "call-ios-8-2",
+        "name": "read",
+        "turn": 1,
+        "step": 3,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "e3981b61ca7d7125dbeaa3c72ddc781f13b2fa8d17d0b91079a06a830b3f50e2",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 32,
+        "callId": "call-ios-9-3",
+        "name": "grep",
+        "turn": 1,
+        "step": 4,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "11210af6df9132dfdf8c8bb1bdf7f4173df9e6574afdfb25e26452434f91616b",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 37,
+        "callId": "call-ios-10-4",
+        "name": "bash",
+        "turn": 1,
+        "step": 5,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "13550416e855bd484b430d87170fcf1f3a0aec8ec984606f98998db06ae32f24",
+        "phase": "dispatch",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": false,
+        "hasFinalOutcome": false
+      }
+    ],
+    "host": {
+      "revision": 5,
+      "foreground": true,
+      "computePermission": "denied"
+    },
+    "transport": {
+      "generation": 1,
+      "retiredInFlight": 0,
+      "policy": "replace-owned-default-for-new-requests",
+      "credentials": "original-wall-clock-validation",
+      "defaultDispatcher": "policy-connections-renewed",
+      "globalDispatcher": "same-policy-owner",
+      "retirementFailures": []
+    }
+  },
+  "resultAbsent": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "ERR_OHOS_LIFECYCLE_RESULT_ABSENT",
+        "message": "Not Found"
+      }
+    }
+  },
+  "acknowledged": {
+    "v": 1,
+    "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230",
+    "state": "completed",
+    "closed": false,
+    "paused": false,
+    "confirmedPause": false,
+    "manualPaused": false,
+    "blocked": false,
+    "corruption": null,
+    "controlVersion": 1,
+    "activeBudgetCount": 0,
+    "calls": [
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 15,
+        "callId": "call-ios-6-0",
+        "name": "write",
+        "turn": 1,
+        "step": 1,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "a8dfb217ed2b4d5013fb86ede32e33458628d6d417e89028d178d679f80c06dd",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true,
+        "reconciliation": {
+          "basis": "durable-session-result",
+          "blocking": false,
+          "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230"
+        }
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 22,
+        "callId": "call-ios-7-1",
+        "name": "edit",
+        "turn": 1,
+        "step": 2,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "1d9bcc2c5f313c0078455a36909f0876a2ad8cbb3579e5914cad3c79e553f51e",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true,
+        "reconciliation": {
+          "basis": "durable-session-result",
+          "blocking": false,
+          "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230"
+        }
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 27,
+        "callId": "call-ios-8-2",
+        "name": "read",
+        "turn": 1,
+        "step": 3,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "e3981b61ca7d7125dbeaa3c72ddc781f13b2fa8d17d0b91079a06a830b3f50e2",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true,
+        "reconciliation": {
+          "basis": "durable-session-result",
+          "blocking": false,
+          "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230"
+        }
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 32,
+        "callId": "call-ios-9-3",
+        "name": "grep",
+        "turn": 1,
+        "step": 4,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "11210af6df9132dfdf8c8bb1bdf7f4173df9e6574afdfb25e26452434f91616b",
+        "phase": "committed",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": true,
+        "hasFinalOutcome": true,
+        "reconciliation": {
+          "basis": "durable-session-result",
+          "blocking": false,
+          "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230"
+        }
+      },
+      {
+        "sessionId": "session-623d2cab-6831-43f2-a24b-ffbb43fca012",
+        "callSeq": 37,
+        "callId": "call-ios-10-4",
+        "name": "bash",
+        "turn": 1,
+        "step": 5,
+        "originBootId": "8fef61ed-3de9-45fb-bd51-baf176587324",
+        "callHash": "13550416e855bd484b430d87170fcf1f3a0aec8ec984606f98998db06ae32f24",
+        "phase": "dispatch",
+        "active": false,
+        "dispatchActive": false,
+        "hasReturned": false,
+        "hasFinalOutcome": false,
+        "reconciliation": {
+          "basis": "explicit-abandon-unknown-without-replay",
+          "blocking": false,
+          "bootId": "05727a55-1577-4c16-bf51-447bdb1f2230"
+        }
+      }
+    ],
+    "host": {
+      "revision": 5,
+      "foreground": true,
+      "computePermission": "denied"
+    },
+    "transport": {
+      "generation": 1,
+      "retiredInFlight": 0,
+      "policy": "replace-owned-default-for-new-requests",
+      "credentials": "original-wall-clock-validation",
+      "defaultDispatcher": "policy-connections-renewed",
+      "globalDispatcher": "same-policy-owner",
+      "retirementFailures": []
+    }
+  }
+}

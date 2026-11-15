@@ -1,0 +1,36 @@
+# Copied to app/pubspec_overrides.yaml for a HarmonyOS build only (tooling/ohos),
+# so the Android dependency graph and pubspec.lock stay as they are.
+# OHOS implementations from oh-flutter on AtomGit, pinned by tag.
+dependency_overrides:
+  file_picker:
+    git:
+      url: https://atomgit.com/oh-flutter/file_picker.git
+      ref: 13.1.0-ohos.2
+  flutter_secure_storage:
+    git:
+      url: https://atomgit.com/oh-flutter/flutter_secure_storage.git
+      path: flutter_secure_storage
+      ref: 11.2.0-ohos.1
+  image_picker:
+    git:
+      url: https://atomgit.com/oh-flutter/flutter_packages.git
+      path: packages/image_picker/image_picker
+      ref: image_picker-v1.2.1-ohos-1.0.1
+  path_provider:
+    git:
+      url: https://atomgit.com/oh-flutter/path_provider.git
+      ref: 2.1.6-ohos.2
+  shared_preferences:
+    git:
+      url: https://atomgit.com/oh-flutter/shared_preferences.git
+      ref: 2.5.6-ohos.1
+  url_launcher:
+    git:
+      url: https://atomgit.com/oh-flutter/flutter_packages.git
+      path: packages/url_launcher/url_launcher
+      ref: url_launcher_v6.3.2-ohos-1.0.2
+  webview_flutter:
+    git:
+      url: https://atomgit.com/oh-flutter/flutter_packages.git
+      path: packages/webview_flutter/webview_flutter
+      ref: webview_flutter-v4.13.1-ohos-1.0.2

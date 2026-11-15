@@ -1,5 +1,9 @@
 import 'package:dsh_app/runtime/runtime_bridge.dart';
+import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/notify/notify_channel.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/state/notify_state.dart' show notifyChannelProvider;
 import 'package:dsh_app/ui/settings/background_guide_page.dart';
 import 'package:dsh_app/ui/settings/settings_widgets.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +36,23 @@ class _VendorBridge extends _BatteryBridge {
   Future<String?> openBackgroundSettings() async {
     opened++;
     return 'vendor';
+  }
+}
+
+class _Notify extends NotifyChannel {
+  _Notify(this.system);
+
+  NotifySystemStatus system;
+  bool opens = true;
+  int opened = 0;
+
+  @override
+  Future<NotifySystemStatus> status() async => system;
+
+  @override
+  Future<bool> openSettings({String? channel}) async {
+    opened++;
+    return opens;
   }
 }
 
@@ -143,5 +164,96 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('系统电池优化'), findsNothing);
+  });
+
+  group('on HarmonyOS', () {
+    final zh = lookupL10n(AppLocale.zhCN);
+    const row = ValueKey('background-notifications');
+
+    Future<void> pump(WidgetTester tester, _Notify notify, {String os = 'ohos'}) async {
+      usePhoneSurface(tester);
+      await tester.pumpWidget(
+        goldenApp(
+          home: const BackgroundGuidePage(),
+          brightness: Brightness.light,
+          overrides: [
+            operatingSystemProvider.overrideWithValue(os),
+            // A phone that would say "not exempt", and a maker to name: none of it shows.
+            runtimeBridgeProvider.overrideWithValue(_VendorBridge('huawei')),
+            notifyChannelProvider.overrideWithValue(notify),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('says what happens: nothing about batteries or makers', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()));
+      for (final text in [
+        zh.harmonyBackgroundSubtitle,
+        zh.harmonyBackgroundLocal,
+        zh.harmonyBackgroundRemote,
+        zh.harmonyBackgroundStay,
+        zh.harmonyBackgroundUseRemote,
+      ]) {
+        expect(find.text(text), findsOneWidget, reason: text);
+      }
+      for (final text in [
+        zh.pluginsSystemBatteryOptimization,
+        zh.pluginsStayOnline,
+        zh.pluginsOtherBrands,
+        zh.pluginsBackgroundDescription,
+      ]) {
+        expect(find.text(text), findsNothing, reason: text);
+      }
+    });
+
+    testWidgets('iOS suspends the same way: the same page', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()), os: 'ios');
+      expect(find.text(zh.harmonyBackgroundSubtitle), findsOneWidget);
+      expect(find.text(zh.pluginsSystemBatteryOptimization), findsNothing);
+    });
+
+    testWidgets('the notifications row shows where they stand', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()));
+      expect(find.descendant(of: find.byKey(row), matching: find.text(zh.accessStateOn)), findsOneWidget);
+    });
+
+    testWidgets('off, or a slot closed: it says off', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus(enabled: false)));
+      expect(find.descendant(of: find.byKey(row), matching: find.text(zh.accessStateOff)), findsOneWidget);
+    });
+
+    testWidgets('unknown: no value rather than a wrong one', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus.unavailable()));
+      expect(find.descendant(of: find.byKey(row), matching: find.text(zh.accessStateOn)), findsNothing);
+      expect(find.descendant(of: find.byKey(row), matching: find.text(zh.accessStateOff)), findsNothing);
+    });
+
+    testWidgets('a tap opens settings, and what came of it shows without a resume', (tester) async {
+      final notify = _Notify(const NotifySystemStatus(enabled: false));
+      await pump(tester, notify);
+      notify.system = const NotifySystemStatus();
+      await tester.tap(find.byKey(row));
+      await tester.pumpAndSettle();
+      expect(notify.opened, 1);
+      expect(find.descendant(of: find.byKey(row), matching: find.text(zh.accessStateOn)), findsOneWidget);
+    });
+
+    testWidgets('settings that won\'t open say so', (tester) async {
+      final notify = _Notify(const NotifySystemStatus())..opens = false;
+      await pump(tester, notify);
+      await tester.tap(find.byKey(row));
+      await tester.pump();
+      expect(find.text(zh.accessOpenFailed), findsOneWidget);
+    });
+
+    testWidgets('on Android the same page is still the guide', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()), os: 'android');
+      expect(find.text(zh.harmonyBackgroundSubtitle), findsNothing);
+      expect(find.byKey(row), findsNothing);
+      expect(find.text(zh.pluginsSystemBatteryOptimization), findsOneWidget);
+      expect(find.text(zh.pluginsBackgroundDescription), findsOneWidget);
+    });
   });
 }

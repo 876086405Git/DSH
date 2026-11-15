@@ -1,0 +1,12 @@
+diff --git a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+@@ -1093,7 +1093,7 @@
+ 	});
+ 	const tool = defineTool({
+ 		name: "grep",
+-		description: `Search file contents with a ripgrep regular expression. Returns matching lines with line numbers, grouped by file. Returns up to ${caps.maxMatches} matches; a larger result reports where the complete match list was saved.`,
++		description: `Search file contents with a ripgrep regular expression. Returns matching lines with line numbers, grouped by file. Returns up to ${caps.maxMatches} matches; a larger result reports where the complete match list was saved.` + (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true ? " 鸿蒙本机不读取全局 gitignore 或 core.excludesFile；外部排除和反向放行规则均不参与，结果可能与桌面不同。" : ""),
+ 		parameters: {
+ 			pattern: {
+ 				type: "string",

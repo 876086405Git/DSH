@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/access_state.dart';
+import '../../state/android_features.dart';
 import '../access/access_pick_page.dart';
 import '../access/access_summary_page.dart';
 import '../access/access_walk.dart';
@@ -90,7 +91,7 @@ class _AccessStepPageState extends ConsumerState<AccessStepPage> {
           ? AccessSummaryPage(
               key: const ValueKey('summary'),
               items: items,
-              voice: features.contains(AccessFeature.voice),
+              voice: features.contains(AccessFeature.voice) && accessVoiceDownloads(ref.watch(operatingSystemProvider)),
               onDone: () => unawaited(_finish()),
             )
           : AccessWalk(

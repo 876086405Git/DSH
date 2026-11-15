@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
+import '../runtime/local_paths.dart';
 import 'chat_state.dart';
 import 'connection_state.dart';
 import 'settings_state.dart';
@@ -516,8 +517,9 @@ class FilesChannel {
 final filesChannelProvider = Provider<FilesChannel>((ref) => const FilesChannel());
 
 /// The local engine's output folder ([phoneOutputDir]); empty unless the
-/// engine is on this phone with "访问手机文件" on. Scanned when first needed
-/// and again whenever a turn ends ([refresh]).
+/// engine is on this phone with "访问手机文件" on (on HarmonyOS the folder is in
+/// the app's own files and needs no such access). Scanned when first needed and
+/// again whenever a turn ends ([refresh]).
 class PhoneOutputsController extends Notifier<List<PhoneOutput>> {
   bool _enabled = false;
 
@@ -525,7 +527,7 @@ class PhoneOutputsController extends Notifier<List<PhoneOutput>> {
   List<PhoneOutput> build() {
     final local = ref.watch(activeConnectionProvider.select((c) => c.value?.isLocal ?? false));
     final storage = ref.watch(settingsProvider.select((s) => s.phoneStorage));
-    _enabled = local && storage;
+    _enabled = local && (storage || LocalPaths.noGuest);
     if (_enabled) unawaited(refresh());
     return const [];
   }

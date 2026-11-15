@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "baseline": "16cb44b7fd652d3545cfe6596a127a7968c18eb3",
+  "target": "android",
+  "sources": {
+    "build-runtime.sh": {
+      "sha256": "bcb01e4db6feb3327703f03c0a1e7aec8a6857f598d33b65a79e0335bae3828e",
+      "legacySha256": "1ddfc945b7a59fe9243178303d982b04caf6f4178787a5b09a4a5dc1bbfb88ab"
+    },
+    "lib/rtbuild.py": {
+      "sha256": "6ac8fceedd0e9fc38f6e09c4f606f05c0bd7b20d2ba8fb0915ebe5419dacaed6",
+      "legacySha256": "235370e7cfd7173a34cd71a348a909b083cc49d118e5ac8ed27a298d6aa821aa"
+    }
+  },
+  "helperSha256": "bae82a36e20ea0ff8938b8aa94a005dfc485c0e2a910dba75251d5e67ea7b7e8",
+  "pinsCanonicalSha256": "d46db070796faee975029c19de7a1270d07e9073003b2fae1e4816a9e97d7451",
+  "pinsLegacySha256": "2bb2760d1383fd60017ea606258490a88bdd877c581873e52fec698804d9cb0f",
+  "companionSha256": "85d4678533627422d4c00cd7a92b6e5c1a97172a40b3b432338e0ffa579bcfe8"
+}

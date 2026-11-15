@@ -104,22 +104,29 @@ const searchLimit = 20;
 /// The results for [query]: settings ([spots], pages and rows) and
 /// 全部功能's cards ([features]), scored by how they matched plus how often
 /// people come for them, best first, [searchLimit] at most. Matches in [zh]
-/// and [en] alike.
+/// and [en] alike. Without [androidFeatures], nothing that is Android's own
+/// ([SettingsIndex.androidOnly]), nor a word for what is only there
+/// ([SettingSpot.ohosKeywords]); on [ios], what it has too stays
+/// ([SettingSpot.iosToo]).
 List<SearchHit> searchSettings(
   String query, {
   required Iterable<SettingSpot> spots,
   required List<FeatureSection> features,
   required L10n zh,
   required L10n en,
+  bool androidFeatures = true,
+  bool ios = false,
 }) {
   final q = normalizeQuery(query);
   if (q.isEmpty) return const [];
   final hits = <SearchHit>[];
   for (final spot in spots) {
+    if (!androidFeatures && SettingsIndex.androidOnly(spot) && !(ios && spot.iosToo)) continue;
+    if (ios && identical(spot, Spots.notifyLive)) continue;
     final langs = [
       for (final l in [zh, en])
         _Words(spot.title(l), [
-          ..._split(spot.keywords?.call(l)),
+          ..._split((androidFeatures ? spot.keywords : spot.ohosKeywords ?? spot.keywords)?.call(l)),
           ?spot.altTitle?.call(l),
         ], SettingsIndex.path(spot, l).join(' ')),
     ];

@@ -7,11 +7,15 @@
 // Strings live in lib/l10n/parts/<area>_{zh,en}.arb; tool/l10n_merge.py
 // merges them and regenerates lib/l10n/gen/.
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import 'gen/app_localizations.dart';
 
 export 'gen/app_localizations.dart';
+
+/// Some things are called something else on iOS: 「文件」, not 「下载」.
+bool get wordsForIos => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
 /// The language the app shows: what [AppLocale.resolve] picked from the
 /// user's choice and the system languages.

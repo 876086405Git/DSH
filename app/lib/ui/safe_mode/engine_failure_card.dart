@@ -207,7 +207,8 @@ class EngineFailureCard extends ConsumerWidget {
                   : () => run(model.primary),
               secondary: [
                 for (final action in model.secondary)
-                  if (action != FailureAction.showLog) (label: action.label, onPressed: () => run(action)),
+                  if (action != FailureAction.showLog)
+                    (label: action.label, onPressed: () => run(action)),
               ],
               onLog: () => run(FailureAction.showLog),
               onExport: () => unawaited(showDiagnosticsExportSheet(context)),

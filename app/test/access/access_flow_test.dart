@@ -408,7 +408,7 @@ void main() {
       await _pump(tester, const SystemAccessPage(), driver);
       expect(find.text('系统权限'), findsWidgets);
       final list = find.byType(Scrollable).first;
-      for (final feature in AccessFeature.values) {
+      for (final feature in accessFeaturesFor('android')) {
         final section = find.byKey(ValueKey('access-section-${feature.name}'));
         await tester.scrollUntilVisible(section, 120, scrollable: list);
         expect(section, findsOneWidget, reason: feature.name);

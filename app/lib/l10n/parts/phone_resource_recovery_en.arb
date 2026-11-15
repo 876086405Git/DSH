@@ -1,0 +1,8 @@
+{
+  "@@locale": "en",
+  "phoneResourceRecoveryTitle": "Background resources need verification",
+  "phoneResourceRecoveryRunning": "Checking the original resource records. New phone tasks will wait until this finishes.",
+  "phoneResourceRecoveryStorage": "The resource record could not be read or saved. Retry saving or reading it. A confirmed release is not repeated, and past actions are not replayed.",
+  "phoneResourceRecoveryPending": "Old background resources have not been verified. New phone tasks are blocked. Choose the original authorized channel and retry; if verification remains unavailable, restart the device and check again. Past actions may already have happened. Reading the task interruption notice does not clear these resources.",
+  "phoneResourceRecoveryRetry": "Retry resource verification"
+}

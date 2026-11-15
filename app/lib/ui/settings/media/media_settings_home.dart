@@ -198,7 +198,7 @@ class MediaSettingsHome extends ConsumerWidget {
       return EngineFieldRow(
         title: mediaServiceTitle(service, presets, english: AppLocale.isEnglish),
         subtitle: keySet ? summary : '$summary · ${l10n.mediaSettingsKeyMissing}',
-        trailing: Switch(
+        trailing: Switch.adaptive(
           value: service.enabled,
           onChanged: editable
               ? (on) => unawaited(mediaWriteService(editor, servicesField, services, service.copyWith(enabled: on)))

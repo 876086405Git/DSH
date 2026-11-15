@@ -175,6 +175,7 @@ class RuntimeStatus {
     this.launchSpawned = false,
     this.launchFailureReason,
     this.tidyingFiles = false,
+    this.continuedRun = false,
   });
 
   const RuntimeStatus.unknown() : this(phase: RuntimePhase.notInstalled);
@@ -249,6 +250,9 @@ class RuntimeStatus {
   /// files for more than a moment (once per install, before Direct launch).
   final bool tidyingFiles;
 
+  /// iOS: the system is letting the engine keep running while the app is away.
+  final bool continuedRun;
+
   Map<String, Object?> get launchDiagnostics => {
     'directEngineEnabled': directEngineEnabled,
     'directEngineAvailable': directEngineAvailable,
@@ -318,6 +322,7 @@ class RuntimeStatus {
     launchSpawned: map['launchSpawned'] == true,
     launchFailureReason: map['launchFailureReason'] as String?,
     tidyingFiles: map['tidyingFiles'] == true,
+    continuedRun: map['continuedRun'] == true,
   );
 }
 
@@ -713,6 +718,12 @@ class RuntimeBridge {
   }
 
   Future<void> stop() => _methods.invokeMethod<void>('stop');
+
+  /// HarmonyOS: closes the app and opens it again, the only way to another engine start.
+  Future<void> reopenApp() => _methods.invokeMethod<void>('reopenApp');
+
+  /// iOS: whether a local turn is running, which is what asks the system to let it go on.
+  Future<void> setTurnRunning(bool running) => _methods.invokeMethod<void>('turnRunning', {'running': running});
 
   /// Deletes the runtime with everything in /root except [keep].
   Future<void> reset({ResetKeep keep = const ResetKeep()}) => _methods.invokeMethod<void>('reset', {'keep': keep.wire});

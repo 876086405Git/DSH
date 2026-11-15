@@ -105,6 +105,13 @@ class ComposeRequest {
     return ComposeRequest(text: share.composedText, attachments: attachments, problems: problems);
   }
 
+  /// Deletes a share's cached copies unread, when nothing will take them.
+  static void discardShare(IncomingShare share) {
+    for (final file in share.files) {
+      _discard(file.path);
+    }
+  }
+
   /// A file opened with the app (not a share code), already in the cache.
   static Future<ComposeRequest> fromFile(
     String path, {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -57,18 +58,22 @@ final class IslandTrimMemory extends IslandPlatformEvent {
   bool get low => level >= 10;
 }
 
-/// The Android side of the islands (`islands/IslandsPlugin.kt`): what
-/// webview_flutter doesn't do. Every call is best effort and never throws.
+/// The platform side of the islands (Android `islands/IslandsPlugin.kt`,
+/// HarmonyOS `plugins/IslandsPlugin.ets`, iOS `Runner/IslandsChannel.swift`):
+/// what webview_flutter doesn't do.
+/// Every call is best effort and never throws.
 abstract class IslandPlatform {
   static IslandPlatform instance = MethodChannelIslandPlatform();
 
   Future<IslandDevice> device();
 
   /// Takes over the WebView behind [webViewId] (webview_flutter's
-  /// `AndroidWebViewController.webViewIdentifier`): follows [dark] for
+  /// `AndroidWebViewController.webViewIdentifier`, the fork's
+  /// `OhosWebViewController.webViewIdentifier` or
+  /// `WebKitWebViewController.webViewIdentifier`): follows [dark] for
   /// `prefers-color-scheme`, zooms text to [textZoom] percent and survives
   /// a renderer crash instead of taking the app down. False when there's no
-  /// such WebView (or not on Android).
+  /// such WebView (or no platform side).
   Future<bool> attach(int webViewId, {required bool dark, required int textZoom});
 
   Future<void> setDark(int webViewId, bool dark);
@@ -89,9 +94,19 @@ abstract class IslandPlatform {
 }
 
 class MethodChannelIslandPlatform extends IslandPlatform {
-  MethodChannelIslandPlatform([MethodChannel? channel]) : _channel = channel ?? const MethodChannel('dsh/islands');
+  MethodChannelIslandPlatform([MethodChannel? channel, String? operatingSystem])
+    : _channel = channel ?? const MethodChannel('dsh/islands'),
+      _ohos = (operatingSystem ?? (kIsWeb ? 'web' : Platform.operatingSystem)) == 'ohos';
 
   final MethodChannel _channel;
+
+  /// Asks the OS: stock Flutter has no `TargetPlatform.ohos`.
+  final bool _ohos;
+
+  bool get _hasPlatformSide =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS || _ohos);
+
   final _events = StreamController<IslandPlatformEvent>.broadcast();
   bool _listening = false;
 
@@ -115,11 +130,13 @@ class MethodChannelIslandPlatform extends IslandPlatform {
     return null;
   }
 
-  Future<T?> _call<T>(String method, [Map<String, Object?>? args]) async {
-    if (defaultTargetPlatform != TargetPlatform.android || kIsWeb) return null;
+  /// Each caller names its method itself: tooling/ohos checks literal calls
+  /// against the ArkTS handlers.
+  Future<T?> _call<T>(Future<T?> Function() invoke) async {
+    if (!_hasPlatformSide) return null;
     _listen();
     try {
-      return await _channel.invokeMethod<T>(method, args);
+      return await invoke();
     } on PlatformException {
       return null;
     } on MissingPluginException {
@@ -128,34 +145,39 @@ class MethodChannelIslandPlatform extends IslandPlatform {
   }
 
   @override
-  Future<IslandDevice> device() async => IslandDevice.fromJson(await _call<Object>('device'));
+  Future<IslandDevice> device() async =>
+      IslandDevice.fromJson(await _call<Object>(() => _channel.invokeMethod<Object>('device')));
 
   @override
   Future<bool> attach(int webViewId, {required bool dark, required int textZoom}) async =>
-      await _call<bool>('attach', {'id': webViewId, 'dark': dark, 'textZoom': textZoom}) ?? false;
+      await _call<bool>(
+        () => _channel.invokeMethod<bool>('attach', {'id': webViewId, 'dark': dark, 'textZoom': textZoom}),
+      ) ??
+      false;
 
   @override
-  Future<void> setDark(int webViewId, bool dark) => _call<void>('setDark', {'id': webViewId, 'dark': dark});
+  Future<void> setDark(int webViewId, bool dark) =>
+      _call<void>(() => _channel.invokeMethod<void>('setDark', {'id': webViewId, 'dark': dark}));
 
   @override
   Future<void> setTextZoom(int webViewId, int percent) =>
-      _call<void>('setTextZoom', {'id': webViewId, 'zoom': percent});
+      _call<void>(() => _channel.invokeMethod<void>('setTextZoom', {'id': webViewId, 'zoom': percent}));
 
   @override
-  Future<void> pause(int webViewId) => _call<void>('pause', {'id': webViewId});
+  Future<void> pause(int webViewId) => _call<void>(() => _channel.invokeMethod<void>('pause', {'id': webViewId}));
 
   @override
-  Future<void> resume(int webViewId) => _call<void>('resume', {'id': webViewId});
+  Future<void> resume(int webViewId) => _call<void>(() => _channel.invokeMethod<void>('resume', {'id': webViewId}));
 
   @override
-  Future<void> destroy(int webViewId) => _call<void>('destroy', {'id': webViewId});
+  Future<void> destroy(int webViewId) => _call<void>(() => _channel.invokeMethod<void>('destroy', {'id': webViewId}));
 
   @override
-  Future<int?> appPss() => _call<int>('appPss');
+  Future<int?> appPss() => _call<int>(() => _channel.invokeMethod<int>('appPss'));
 
   @override
   Stream<IslandPlatformEvent> get events {
-    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) _listen();
+    if (_hasPlatformSide) _listen();
     return _events.stream;
   }
 }

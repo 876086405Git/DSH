@@ -1,0 +1,91 @@
+diff --git a/configure.py b/configure.py
+--- a/configure.py
++++ b/configure.py
+@@ -1846,7 +1846,7 @@
+   o['variables']['libdir'] = options.libdir
+   node_module_version = getmoduleversion.get_version()
+ 
+-  if options.dest_os == 'android':
++  if options.dest_os in ('android', 'openharmony'):
+     shlib_suffix = 'so'
+   elif sys.platform == 'darwin':
+     shlib_suffix = '%s.dylib'
+diff --git a/deps/uv/src/unix/linux.c b/deps/uv/src/unix/linux.c
+--- a/deps/uv/src/unix/linux.c
++++ b/deps/uv/src/unix/linux.c
+@@ -453,7 +453,7 @@
+ 
+ 
+ static int uv__use_io_uring(uint32_t flags) {
+-#if defined(__ANDROID_API__)
++#if defined(__ANDROID_API__) || (defined(__OHOS__) && defined(DSH_GO_EMBEDDED_RUNTIME))
+   return 0;  /* Possibly available but blocked by seccomp. */
+ #elif defined(__arm__) && __SIZEOF_POINTER__ == 4
+   /* See https://github.com/libuv/libuv/issues/4158. */
+diff --git a/deps/v8/src/wasm/pgo.h b/deps/v8/src/wasm/pgo.h
+--- a/deps/v8/src/wasm/pgo.h
++++ b/deps/v8/src/wasm/pgo.h
+@@ -9,6 +9,9 @@
+ #error This header should only be included if WebAssembly is enabled.
+ #endif  // !V8_ENABLE_WEBASSEMBLY
+ 
++#if defined(__OHOS__) && defined(DSH_GO_EMBEDDED_RUNTIME)
++#include <atomic>  // libc++ 23 no longer provides it transitively.
++#endif
+ #include <vector>
+ 
+ #include "src/base/vector.h"
+diff --git a/src/node.cc b/src/node.cc
+--- a/src/node.cc
++++ b/src/node.cc
+@@ -1581,9 +1581,19 @@
+   // Hack around with the argv pointer. Used for process.title = "blah".
+   argv = uv_setup_args(argc, argv);
+ 
++#if defined(__OHOS__) && defined(DSH_GO_EMBEDDED_RUNTIME)
++  std::shared_ptr<InitializationResultImpl> result =
++      InitializeOncePerProcessInternal(
++          std::vector<std::string>(argv, argv + argc),
++          static_cast<ProcessInitializationFlags::Flags>(
++              ProcessInitializationFlags::kNoStdioInitialization |
++              ProcessInitializationFlags::kNoDefaultSignalHandling |
++              ProcessInitializationFlags::kNoAdjustResourceLimits));
++#else
+   std::shared_ptr<InitializationResultImpl> result =
+       InitializeOncePerProcessInternal(
+           std::vector<std::string>(argv, argv + argc));
++#endif
+   for (const std::string& error : result->errors()) {
+     FPrintF(stderr, "%s: %s\n", result->args().at(0), error);
+   }
+diff --git a/src/node_main_instance.cc b/src/node_main_instance.cc
+--- a/src/node_main_instance.cc
++++ b/src/node_main_instance.cc
+@@ -101,13 +101,27 @@
+ }
+ 
+ void NodeMainInstance::Run(ExitCode* exit_code, Environment* env) {
++#if defined(__OHOS__) && defined(DSH_GO_EMBEDDED_RUNTIME)
++  bool exit_requested = false;
++  SetProcessExitHandler(env, [exit_code, &exit_requested](Environment* target, int code) {
++    *exit_code = static_cast<ExitCode>(code);
++    exit_requested = true;
++    Stop(target);
++  });
++#endif
+   if (*exit_code == ExitCode::kNoFailure) {
+     if (!sea::MaybeLoadSingleExecutableApplication(env)) {
+       LoadEnvironment(env, StartExecutionCallbackWithModule{});
+     }
+ 
++#if defined(__OHOS__) && defined(DSH_GO_EMBEDDED_RUNTIME)
++    const auto loop_result = SpinEventLoopInternal(env);
++    if (!exit_requested)
++      *exit_code = loop_result.FromMaybe(ExitCode::kGenericUserError);
++#else
+     *exit_code =
+         SpinEventLoopInternal(env).FromMaybe(ExitCode::kGenericUserError);
++#endif
+   }
+ 
+ #if defined(LEAK_SANITIZER)

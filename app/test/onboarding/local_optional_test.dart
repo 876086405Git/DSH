@@ -2,6 +2,7 @@
 // without the runtime opens home, every 本机 entry offers to install, the
 // runtime can be uninstalled, and the auto start setting holds.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/remote/secret_store.dart';
@@ -120,9 +121,10 @@ void main() {
       RuntimeStatus status = missingStatus,
       VoidCallback? onRemote,
       bool choose = true,
+      bool available = true,
       OnboardingPrefs prefs = const OnboardingPrefs(loaded: true, welcomeSeen: true),
     }) async {
-      final runtime = RecordingLocalRuntime(LocalRuntimeState(loaded: true, status: status));
+      final runtime = RecordingLocalRuntime(LocalRuntimeState(loaded: true, status: status, available: available));
       usePhoneSurface(tester);
       await tester.pumpWidget(
         goldenApp(
@@ -215,6 +217,26 @@ void main() {
       await pump(tester, phone: fullPhone, onRemote: () {});
       expect(find.text('存储空间不足，需要约 900 MB'), findsOneWidget);
       expect(tester.getSemantics(find.byKey(_remote)), isSemantics(isSelected: true));
+    });
+
+    testWidgets('a build without the runtime only goes on with the remote host', (tester) async {
+      var remote = 0;
+      final (runtime, _) = await pump(tester, available: false, onRemote: () => remote++);
+      expect(find.text('这台设备暂时不能在本机运行 DSH'), findsOneWidget);
+      expect(find.text('推荐'), findsNothing);
+      expect(
+        tester.getSemantics(find.byKey(_local)),
+        isSemantics(isSelected: false, isEnabled: false, hasEnabledState: true),
+      );
+      expect(tester.getSemantics(find.byKey(_remote)), isSemantics(isSelected: true));
+
+      await tester.tap(find.byKey(_local));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getSemantics(find.byKey(_remote)), isSemantics(isSelected: true));
+      await tester.tap(find.widgetWithText(FilledButton, '继续'));
+      await tester.pump();
+      expect(remote, 1);
+      expect(runtime.calls, isEmpty);
     });
 
     testWidgets('installing clears a past 「远程主机」', (tester) async {
@@ -605,6 +627,47 @@ void main() {
       await tester.tap(find.text('安装运行环境'));
       await _frames(tester, 8);
       expect(find.byType(LocalInstallPage), findsOneWidget);
+    });
+
+    testWidgets('a build without the runtime: no 本机 row, the drawer offers a remote host', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        HostsController.prefsKey: jsonEncode([sampleSsh.toJson()]),
+      });
+      usePhoneSurface(tester);
+      final runtime = RecordingLocalRuntime(
+        const LocalRuntimeState(loaded: true, status: missingStatus, available: false),
+      );
+      await tester.pumpWidget(
+        goldenApp(
+          home: HomeShell(chatBuilder: (_) => const SizedBox.expand(), initiallyOpen: true),
+          brightness: Brightness.light,
+          overrides: [
+            localRuntimeProvider.overrideWith(() => runtime),
+            settingsProvider.overrideWith(() => FakeSettings(const AppSettings(loaded: true))),
+            sessionsProvider.overrideWith(() => FakeSessions(const [])),
+            secretStoreProvider.overrideWithValue(MemorySecretStore()),
+            relayBackendProvider.overrideWithValue(FakeRelayBackend()),
+            networkKicksProvider.overrideWithValue(const Stream.empty()),
+            hostLinkStatusProvider.overrideWith((ref, host) => Stream.value(HostLinkStatus.idle)),
+            footprint(roomyPhone),
+          ],
+        ),
+      );
+      await _frames(tester, 6);
+      expect(find.text('这台设备暂时不能在本机运行 DSH'), findsOneWidget);
+      expect(find.text('安装运行环境'), findsNothing);
+      await tester.tap(find.text('改用远程主机'));
+      await _frames(tester, 8);
+      expect(find.byType(RemoteScreen), findsOneWidget);
+      expect(find.byType(LocalInstallPage), findsNothing);
+      expect(runtime.calls, isEmpty);
+
+      final context = tester.element(find.byType(RemoteScreen));
+      unawaited(showHostSheet(context, onManage: () {}));
+      await _frames(tester, 6);
+      expect(find.byType(HostSheet), findsOneWidget);
+      expect(find.text('这台手机上的 DSH'), findsNothing);
+      expect(find.text(sampleSsh.name), findsWidgets);
     });
 
     testWidgets('web page: install instead of 启动', (tester) async {

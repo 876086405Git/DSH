@@ -10,6 +10,7 @@ import 'package:flutter/services.dart' show PredictiveBackEvent;
 
 import 'motion.dart';
 import 'shapes.dart';
+import 'sheet_recede.dart';
 
 /// Secondary pages push in from the right, iOS style: the new page slides over
 /// with a soft shadow on its leading edge while the page underneath drifts a
@@ -66,13 +67,15 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
     final origin = CardOrigin._claim(route);
     return _BackGesture(
       route: route,
-      child: _Recede(
-        animation: secondaryAnimation,
-        linear: linear,
-        route: route,
-        child: origin == null
-            ? _PushIn(animation: animation, linear: linear, child: child)
-            : _CardMorph(animation: animation, linear: linear, origin: origin, child: child),
+      child: SheetRecedePage(
+        child: _Recede(
+          animation: secondaryAnimation,
+          linear: linear,
+          route: route,
+          child: origin == null
+              ? _PushIn(animation: animation, linear: linear, child: child)
+              : _CardMorph(animation: animation, linear: linear, origin: origin, child: child),
+        ),
       ),
     );
   }

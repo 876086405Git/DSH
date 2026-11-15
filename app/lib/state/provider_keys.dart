@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../secrets/secure_storage.dart';
 import 'provider_backend.dart';
 
 /// The API keys of custom providers created on the **local** engine, kept in
@@ -25,9 +26,10 @@ abstract class ProviderKeyVault {
 }
 
 class SecureProviderKeyVault implements ProviderKeyVault {
-  const SecureProviderKeyVault([this._storage = const FlutterSecureStorage()]);
+  const SecureProviderKeyVault([this._injected]);
 
-  final FlutterSecureStorage _storage;
+  final FlutterSecureStorage? _injected;
+  AppSecureStorage get _storage => AppSecureStorage(_injected);
 
   @override
   Future<Map<String, String>> readAll() async {

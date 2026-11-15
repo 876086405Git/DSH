@@ -19,7 +19,12 @@ class MediaVideoChannel {
 
   Future<MediaVideoHandle> open(String path) async {
     _localPath(path);
-    final value = await channel.invokeMapMethod<String, dynamic>('open', {'path': path});
+    final Map<String, dynamic>? value;
+    try {
+      value = await channel.invokeMapMethod<String, dynamic>('open', {'path': path});
+    } on MissingPluginException {
+      throw PlatformException(code: 'unsupported');
+    }
     if (value == null) throw PlatformException(code: 'unsupported');
     return MediaVideoHandle(
       texture: (value['texture'] as num).toInt(),
@@ -31,7 +36,13 @@ class MediaVideoChannel {
 
   Future<Uint8List?> poster(String path) {
     _localPath(path);
-    final request = _posterTail.then((_) => channel.invokeMethod<Uint8List>('poster', {'path': path}));
+    final request = _posterTail.then((_) async {
+      try {
+        return await channel.invokeMethod<Uint8List>('poster', {'path': path});
+      } on MissingPluginException {
+        return null;
+      }
+    });
     _posterTail = request.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return request;
   }

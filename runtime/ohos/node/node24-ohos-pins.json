@@ -1,0 +1,22 @@
+{
+  "configure.py": {
+    "before": "c406158e940307a57828349e1d995890e7f7fa981078c36c6af2170871ba2602",
+    "after": "fff34f6665ff417d424113633d0d4b792aee7d0195211800a022cf7c6ba17fc4"
+  },
+  "deps/uv/src/unix/linux.c": {
+    "before": "215185d94697e05cd75ba9466bb9ea93076769a7767218d4183eaf0723ccf2d2",
+    "after": "d32fffa080f5db15c637da762d3bdcfc9db7b7ebc03476af23a8ba2dfe51af57"
+  },
+  "deps/v8/src/wasm/pgo.h": {
+    "before": "e80c3fcfecbcd535355cafcb111fcab4536c607fca7f79ca895f687161a8126d",
+    "after": "fa31b35cd6a031e6c67874df13d83a9f4d06c3ce62677729d73edfb848cd03a0"
+  },
+  "src/node.cc": {
+    "before": "2965f4436e22e8d38baffc66d54e718d2ca6394993acd355830a98f5b6130bf3",
+    "after": "50444011a358b843c65ef16bf670959cc48912211a96a72ea85f62898b6334c3"
+  },
+  "src/node_main_instance.cc": {
+    "before": "bcca3565964f27ebd14028e6f58857dc37938d9f3ea942ad4cebb9fd44325145",
+    "after": "6eb56bf21805195a9e438d98107d948cc8b5ca55f30c64d3a235f67adab8ed28"
+  }
+}

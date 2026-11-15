@@ -1,0 +1,110 @@
+{
+  "gitVersion": "git version 2.51.1",
+  "testSHA256": "a141379ef5de459a748fb353630bdbd80337b6fc1d5a56702c590238e972e5fc",
+  "scope": "Native Git control starts from an exact recursive copy of the product fixture",
+  "results": {
+    "update-only": {
+      "args": [
+        "add",
+        "-u"
+      ],
+      "exitCode": 0,
+      "index": "100644 4c8aa06902d5b1c16d8cca92accb3e65aa622617 0\ttracked.txt\n"
+    },
+    "ignored-all": {
+      "args": [
+        "add",
+        "--all"
+      ],
+      "exitCode": 0,
+      "index": "100644 87bdaee93272e0b7873f1b7187e08fb6811e31c9 0\t.gitignore\n100644 4c8aa06902d5b1c16d8cca92accb3e65aa622617 0\ttracked.txt\n"
+    },
+    "ignored-explicit": {
+      "args": [
+        "add",
+        "--",
+        "nested"
+      ],
+      "exitCode": 1,
+      "index": "100644 87bdaee93272e0b7873f1b7187e08fb6811e31c9 0\t.gitignore\n100644 28186c6f4f734dfd501abd3548c5e27bf35aefee 0\ttracked.txt\n"
+    },
+    "ignored-force": {
+      "args": [
+        "add",
+        "--force",
+        "--all"
+      ],
+      "exitCode": 0,
+      "index": "100644 87bdaee93272e0b7873f1b7187e08fb6811e31c9 0\t.gitignore\n160000 0a8b4c000c6a575b10a4978f8c22922b30f231c5 0\tnested\n100644 4c8aa06902d5b1c16d8cca92accb3e65aa622617 0\ttracked.txt\n"
+    },
+    "tracked-descendant--u": {
+      "args": [
+        "add",
+        "-u"
+      ],
+      "exitCode": 0,
+      "index": "100644 9ea35bf02ca4f8519adb21fb4084ccc52be1a1e5 0\tnested/tracked.txt\n100644 28186c6f4f734dfd501abd3548c5e27bf35aefee 0\ttracked.txt\n"
+    },
+    "tracked-descendant---all": {
+      "args": [
+        "add",
+        "--all"
+      ],
+      "exitCode": 0,
+      "index": "100644 87bdaee93272e0b7873f1b7187e08fb6811e31c9 0\t.gitignore\n100644 9ea35bf02ca4f8519adb21fb4084ccc52be1a1e5 0\tnested/tracked.txt\n100644 28186c6f4f734dfd501abd3548c5e27bf35aefee 0\ttracked.txt\n"
+    },
+    "tracked-gitlink": {
+      "args": [
+        "add",
+        "-u"
+      ],
+      "exitCode": 0,
+      "index": "100644 87bdaee93272e0b7873f1b7187e08fb6811e31c9 0\t.gitignore\n160000 11fd6e509bcb4439879da2d62e7a35e8c5342085 0\tnested\n100644 28186c6f4f734dfd501abd3548c5e27bf35aefee 0\ttracked.txt\n"
+    },
+    "nul-binary": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "control-binary": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "bare-cr": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "non-utf8-text": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "text-lf": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "legacy-index-crlf": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "input-lf": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": "warning: in the working copy of 'content.dat', CRLF will be replaced by LF the next time Git touches it\n"
+    },
+    "changed-text": {
+      "exitCode": 0,
+      "stdout": "2\t1\tcontent.dat\n",
+      "stderr": ""
+    },
+    "symlink-as-file": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  }
+}

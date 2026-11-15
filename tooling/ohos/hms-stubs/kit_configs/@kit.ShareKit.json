@@ -1,0 +1,8 @@
+{
+  "symbols": {
+    "systemShare": {
+      "source": "@hms.collaboration.systemShare.d.ts",
+      "bindings": "default"
+    }
+  }
+}

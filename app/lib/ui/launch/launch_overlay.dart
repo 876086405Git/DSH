@@ -91,7 +91,11 @@ class _LaunchOverlayState extends State<LaunchOverlay> with TickerProviderStateM
     super.initState();
     _c.addListener(_sync);
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _c.firstFrame();
+      if (!mounted) return;
+      _c.firstFrame();
+      // A layer remounted under a controller already past the cover won't hear of the phase it
+      // missed, and the motion's first frame is a blank page.
+      if (_c.phase != LaunchPhase.cover) _sync();
     });
   }
 

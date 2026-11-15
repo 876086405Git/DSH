@@ -119,10 +119,13 @@ class SettingsPageMeta {
     this.parent = SettingsPageId.hub,
     this.group,
     this.keywords,
+    this.ohosKeywords,
     this.freq = Freq.low,
     this.links = const [],
     this.condition,
     this.row = true,
+    this.androidOnly = false,
+    this.iosToo = false,
   });
 
   final SettingsPageId id;
@@ -136,6 +139,9 @@ class SettingsPageMeta {
 
   /// Comma-separated synonyms and old names (search_{zh,en}.arb).
   final Label? keywords;
+
+  /// In place of [keywords] where they name what HarmonyOS doesn't have.
+  final Label? ohosKeywords;
   final Freq freq;
 
   /// `dshgo://open/<id>` names, old ones included.
@@ -146,6 +152,12 @@ class SettingsPageMeta {
   /// it, and search still finds it.
   final bool row;
 
+  /// Android's own (androidSystemFeaturesProvider), and so is all that is on
+  /// or under it ([SettingsIndex.androidOnly]).
+  final bool androidOnly;
+
+  final bool iosToo;
+
   /// The row on [parent] that opens this page.
   late final SettingSpot entry = SettingSpot(
     'page:${id.name}',
@@ -153,9 +165,12 @@ class SettingsPageMeta {
     title: title,
     group: group,
     keywords: keywords,
+    ohosKeywords: ohosKeywords,
     freq: freq,
     opens: id,
     condition: condition,
+    androidOnly: androidOnly,
+    iosToo: iosToo,
   );
 }
 
@@ -167,12 +182,15 @@ class SettingSpot {
     required this.title,
     this.group,
     this.keywords,
+    this.ohosKeywords,
     this.freq = Freq.low,
     this.link,
     this.condition,
     this.opens,
     this.field,
     this.altTitle,
+    this.androidOnly = false,
+    this.iosToo = false,
   });
 
   /// Stable, unique: `phone-confirm`, `page:phone`.
@@ -187,6 +205,9 @@ class SettingSpot {
 
   /// Comma-separated synonyms and old names (search_{zh,en}.arb).
   final Label? keywords;
+
+  /// In place of [keywords] where they name what HarmonyOS doesn't have.
+  final Label? ohosKeywords;
   final Freq freq;
 
   /// `dshgo://open/<link>` opens [page] at this row.
@@ -202,6 +223,12 @@ class SettingSpot {
   /// The title the row shows in its other state (安全模式: 以安全模式启动 /
   /// 恢复正常模式).
   final Label? altTitle;
+
+  /// Android's own, on a page that isn't ([SettingsIndex.androidOnly]).
+  final bool androidOnly;
+
+  /// One of [androidOnly]'s that iOS has as well: only HarmonyOS goes without.
+  final bool iosToo;
 
   bool get isEntry => opens != null;
 }
@@ -243,6 +270,16 @@ abstract final class SettingsIndex {
 
   /// Every link id the index answers.
   static Set<String> get linkIds => {for (final p in _pages) ...p.links, for (final s in _rows) ?s.link};
+
+  /// Whether [spot] is Android's own: it says so, or a page on its way does.
+  /// Search leaves these out on HarmonyOS (androidSystemFeaturesProvider).
+  static bool androidOnly(SettingSpot spot) => spot.androidOnly || chain(spot.page).any((p) => page(p).androidOnly);
+
+  /// Whether the `dshgo://open/<id>` link [id] leads to something [androidOnly].
+  static bool androidOnlyLink(String id, {bool ios = false}) {
+    final spot = pageForLink(id)?.entry ?? spotForLink(id);
+    return spot != null && androidOnly(spot) && !(ios && spot.iosToo);
+  }
 
   /// Pages from the hub down to [id], both included.
   static List<SettingsPageId> chain(SettingsPageId id) {
@@ -351,6 +388,8 @@ final _pages = <SettingsPageMeta>[
     keywords: (l) => l.searchKwPhone,
     freq: Freq.medium,
     links: const ['phone'],
+    androidOnly: true,
+    iosToo: true,
   ),
   SettingsPageMeta(
     SettingsPageId.phoneAppRules,
@@ -468,6 +507,7 @@ final _pages = <SettingsPageMeta>[
     title: (l) => l.phoneEngineKeepAlive,
     group: _general,
     keywords: (l) => l.searchKwBackground,
+    ohosKeywords: (l) => l.harmonyKwBackground,
     freq: Freq.medium,
     links: const ['background'],
   ),
@@ -476,6 +516,7 @@ final _pages = <SettingsPageMeta>[
     title: (l) => l.accessPageTitle,
     group: _general,
     keywords: (l) => l.searchKwSystemAccess,
+    ohosKeywords: (l) => l.harmonyKwSystemAccess,
     freq: Freq.medium,
     links: const ['system-permissions'],
   ),
@@ -652,12 +693,14 @@ abstract final class Spots {
     keywords: (l) => l.searchKwPhoneFiles,
     link: 'phone-files',
     condition: SpotCondition.localHost,
+    androidOnly: true,
   );
   static final permissionPhoneConfirm = SettingSpot(
     'permission-phone-confirm',
     page: SettingsPageId.permission,
     title: (l) => l.hubPermissionPhoneConfirm,
     keywords: (l) => l.searchKwPhoneConfirmEntry,
+    androidOnly: true,
   );
 
   // 个性化.
@@ -698,6 +741,7 @@ abstract final class Spots {
     title: (l) => l.phoneReturnAfterDone,
     keywords: (l) => l.searchKwPhoneReturn,
     condition: SpotCondition.phoneControlOn,
+    iosToo: true,
   );
   static final phoneBackgroundGuide = SettingSpot(
     'phone-background-guide',
@@ -757,12 +801,15 @@ abstract final class Spots {
     page: SettingsPageId.appearance,
     title: (l) => l.iconShortcutRow,
     keywords: (l) => l.searchKwIconShortcut,
+    androidOnly: true,
   );
   static final launchScreen = SettingSpot(
     'launch-screen',
     page: SettingsPageId.appearance,
     title: (l) => l.launchScreenTitle,
     keywords: (l) => l.searchKwLaunchScreen,
+    androidOnly: true,
+    iosToo: true,
   );
   static final wallpaper = SettingSpot(
     'wallpaper',
@@ -789,24 +836,30 @@ abstract final class Spots {
     page: SettingsPageId.pets,
     title: (l) => l.botsPetOutsideApp,
     keywords: (l) => l.searchKwPetOutside,
+    androidOnly: true,
+    iosToo: true,
   );
   static final petDisplayWhen = SettingSpot(
     'pet-display-when',
     page: SettingsPageId.pets,
     title: (l) => l.botsPetDisplayWhen,
     keywords: (l) => l.searchKwPetDisplayWhen,
+    androidOnly: true,
+    iosToo: true,
   );
   static final petOverlayShows = SettingSpot(
     'pet-overlay-shows',
     page: SettingsPageId.pets,
     title: (l) => l.botsPetOverlayShows,
     keywords: (l) => l.searchKwPetOverlayShows,
+    androidOnly: true,
   );
   static final petOverlayFraming = SettingSpot(
     'pet-overlay-framing',
     page: SettingsPageId.pets,
     title: (l) => l.botsPetOverlayFraming,
     keywords: (l) => l.searchKwPetOverlayFraming,
+    androidOnly: true,
   );
   static final petMake = SettingSpot(
     'pet-make',
@@ -904,6 +957,7 @@ abstract final class Spots {
     page: SettingsPageId.performance,
     title: (l) => l.performanceRefresh,
     keywords: (l) => l.searchKwRefreshRate,
+    androidOnly: true,
   );
   static final blur = SettingSpot(
     'blur',
@@ -1004,6 +1058,7 @@ abstract final class Spots {
     page: SettingsPageId.engine,
     title: (l) => l.phoneSafeAutoSettings,
     keywords: (l) => l.searchKwAutoSafe,
+    androidOnly: true,
   );
   static final safeMode = SettingSpot(
     'safe-mode',
@@ -1011,6 +1066,7 @@ abstract final class Spots {
     title: (l) => l.phoneSafeStartSettings,
     altTitle: (l) => l.phoneSafeLeave,
     keywords: (l) => l.searchKwSafeMode,
+    androidOnly: true,
   );
   static final workspaceRecovery = SettingSpot(
     'workspace-recovery',
@@ -1024,12 +1080,16 @@ abstract final class Spots {
     page: SettingsPageId.engine,
     title: (l) => l.phoneEngineReset,
     keywords: (l) => l.searchKwEngineReset,
+    androidOnly: true,
+    iosToo: true,
   );
   static final engineUninstall = SettingSpot(
     'engine-uninstall',
     page: SettingsPageId.engine,
     title: (l) => l.localEnvUninstall,
     keywords: (l) => l.searchKwEngineUninstall,
+    androidOnly: true,
+    iosToo: true,
   );
 
   // 远程主机.

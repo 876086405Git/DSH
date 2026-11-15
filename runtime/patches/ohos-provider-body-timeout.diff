@@ -1,0 +1,19 @@
+# OH-only: preserve a proven direct native-fetch body timeout in provider classification (rc.1 context).
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+@@ -484,7 +484,14 @@
+                 }
+             }
+             output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+-            output.errorMessage = formatProviderError(normalizeProviderError(error));
++            const normalizedError = normalizeProviderError(error);
++            output.errorMessage = formatProviderError(normalizedError);
++            // OH-only composition: retain the known native fetch body timeout
++            // before provider formatting discards its direct transport cause.
++            if (output.stopReason === "error" && error instanceof TypeError && error.message === "terminated" &&
++                error.cause?.code === "UND_ERR_BODY_TIMEOUT" && normalizedError.status === undefined && normalizedError.body === undefined) {
++                output.errorMessage += " (HTTP response body timeout)";
++            }
+             // Some providers via OpenRouter give additional information in this field.
+             // normalizeProviderError already stringifies the parsed body (error.error)
+             // into errorMessage, so only append the raw metadata when it is not already

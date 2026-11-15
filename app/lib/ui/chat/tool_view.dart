@@ -469,7 +469,7 @@ class ToolView {
 
 /// 工作区内的路径去掉工作区前缀,其余原样。
 String displayPath(String path) {
-  const prefix = '$localWorkspaceDir/';
+  final prefix = '$localWorkspaceDir/';
   if (path.startsWith(prefix)) return path.substring(prefix.length);
   if (path == localWorkspaceDir) return '.';
   return path;
