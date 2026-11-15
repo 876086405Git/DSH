@@ -15,8 +15,9 @@ enum WorkspaceNativeGrant { unattached, ready, draining, drained, quarantined }
 enum WorkspacePersistencePermission { unknown, granted, denied }
 
 Map<Object?, Object?> _map(Object? value) {
-  if (value is! Map)
+  if (value is! Map) {
     throw const FormatException('Invalid authorized workspace response');
+  }
   return Map<Object?, Object?>.from(value);
 }
 
@@ -122,6 +123,24 @@ class AuthorizedWorkspace {
 
   /// Identity only: cannot create a native lease or bypass task policy.
   final String? nativeKey;
+
+  /// Coordinates for DSH's existing FD-backed file provider, never a host path
+  /// or an authorization token. The engine still checks the current native
+  /// generation and each task's policy; a saved snapshot cannot renew a lease.
+  String? get logicalRoot {
+    if (nativeGrant != WorkspaceNativeGrant.ready ||
+        generation <= 0 ||
+        generation != nativeGeneration ||
+        (authorization != WorkspaceAuthorization.selected &&
+            authorization != WorkspaceAuthorization.activated) ||
+        !RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        ).hasMatch(id)) {
+      return null;
+    }
+    return '/workspaces/$id';
+  }
+
   bool get engineAttached => false;
   String get nodeAccess => 'unverified';
 }

@@ -127,6 +127,9 @@
         "name": "ohos.permission.VIBRATE"
       },
       {
+        "name": "ohos.permission.FILE_ACCESS_PERSIST"
+      },
+      {
         "name": "ohos.permission.MICROPHONE",
         "reason": "$string:mic_reason",
         "usedScene": {

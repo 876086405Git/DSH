@@ -1,4 +1,4 @@
-// API 26 folder authorization protocol. Not connected to Node tools; not device-verified.
+// API 26 folder authorization and native FD handoff; device verification remains separate.
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
 import { loadNativeHost, peekNativeHost } from '../runtime/NativeHost';
@@ -210,7 +210,7 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     try {
       if (error instanceof WorkspaceError) result.error(error.code, error.message, error.details);
       else if (error instanceof NativeFileError) result.error(error.code, error.message, null);
-      else result.error('failed', '工作区操作未完成，请重试；尚未接入引擎文件工具。', null);
+      else result.error('failed', '工作区操作未完成，请重试。', null);
     } catch (_) { /* Retired messenger. */ }
   }
   private cancel(): void {

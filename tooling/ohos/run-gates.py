@@ -42,6 +42,8 @@ WRAPPED_TEST_LOGS = {
     'tinyemu-event-wake': ['tinyemu-event-wake/test.log'],
     'linux-startup-close': ['linux-startup-close/test.log'],
     'speech-channel-*': ['{name}/test.log'],
+    'picture-shortcut-*': ['{name}/test.log'],
+    'media-video-*': ['{name}/test.log'],
     'call-capture-*': ['{name}/test.log'],
     'system-tts-*': ['{name}/test.log'],
     'git-*': ['{name}/stdout.log'], 'owned-*': ['{name}/stdout.log'],
@@ -669,6 +671,7 @@ def main():
     g.node_tests('authorized-workspaces', [rt + 'authorized-workspaces.test.mjs', rt + 'entry-ability-fixture.test.mjs'], needs=('workspace-grants-addon',), extra=lambda: {'OHOS_TYPESCRIPT_PREFIX': str(p('typescript_prefix')), 'OHOS_WORKSPACE_GRANTS_ADDON': str(o / 'workspace-grants.node'), 'OHOS_WORKSPACE_CASES': str(o / 'workspace-cases.json')})
     g.run('authorized-workspaces-dart', lambda: [p('dart'), s / (rt + 'authorized-workspaces-consumer.dart'), o / 'workspace-cases.json'], needs=('authorized-workspaces', 'dart-tools'))
     g.run('authorized-workspaces-channel', lambda: g.py(rt + 'authorized-workspaces-channel.test.py', '--dart', p('dart'), '--output', o / 'authorized-workspaces-channel'), needs=('tools', 'dart-tools'), tests=[rt + 'authorized-workspaces-channel.test.py'], scope='Actual Dart MethodChannel switch and decoder; Flutter transport double only, no device claim')
+    g.node_tests('phone-folder-permission', [rt + 'phone-folders.test.mjs'], needs=('tools',), extra=lambda: {'OHOS_TYPESCRIPT_PREFIX': str(p('typescript_prefix'))})
     g.run('linux-runtime-dart', lambda: g.py(rt + 'linux-runtime-dart.py', '--dart', p('dart'), '--out', o / 'linux-runtime-dart'), needs=('tools', 'dart-tools'), tests=[rt + 'linux-runtime-dart.py', rt + 'linux-runtime-probe.dart'], scope='Actual OH Linux Dart protocol and channel consumer; explicit Flutter transport boundary, not device')
     g.run('file-access-build', lambda: [p('cxx'), '-std=c++17', '-pthread', '-Wall', '-Wextra', '-Werror', '-I', s / 'app/ohos/entry/src/main/cpp', s / (rt + 'user-file-access.cc'), '-o', o / 'user-file-access-test'], needs=('tools',))
     g.run('file-access', lambda: [o / 'user-file-access-test', o / 'user-file-access-fixture'], needs=('file-access-build',))
@@ -809,6 +812,20 @@ def main():
         return {'scope': 'Test double of the Ark-hosted library; not a Host build', 'libdshHostSha256': sha(target / 'libdsh_host.so')}
     g.internal('round-native-libraries', round_libraries, needs=('native-tools',))
     g.run('workspace-authority-entry', lambda: g.py(rt + 'workspace-authority-entry.py', '--node', node(), '--assembled-payload', payload(), '--typescript-prefix', p('typescript_prefix'), '--publication-fixture', native() / 'libpublication-test-linked.so', '--round-native-directory', o / 'round-native', '--node-headers', headers(), '--cxx', p('cxx'), '--out', o / 'workspace-authority-entry'), needs=('compose', 'native-publication-build', 'round-native-libraries', 'native-tools'), timeout=240, tests=[rt + name for name in ['workspace-authority-entry.py', 'workspace-authority-entry.mjs', 'workspace-authority-instrumentation.mjs', 'workspace-authority-owner-probe.mjs']], scope='Actual DSH bin/sole product preload/public shell factory and shared native FD authority; explicit SDK and retirement-confirmation fixtures; no Linux guest, SDK, device or complete user-session claim')
+    for phone_folder_mode in ('plain', 'jitless'):
+        g.run('phone-folders-' + phone_folder_mode,
+              lambda m=phone_folder_mode: g.py(rt + 'phone-folders-linux.py',
+                  '--source', s, '--payload', payload(),
+                  '--manifest', o / 'composed/expanded/dsh-runtime/manifest.json',
+                  '--node', node(), '--typescript-prefix', p('typescript_prefix'),
+                  '--native-directory', o / 'workspace-authority-entry/native',
+                  '--publication-fixture', native() / 'libpublication-test-linked.so',
+                  '--out', o / ('phone-folders-' + m),
+                  *(['--jitless'] if m == 'jitless' else [])),
+              needs=('compose', 'workspace-authority-entry', 'native-publication-build'),
+              timeout=120, tests=[rt + name for name in
+                  ['phone-folders-linux.py', 'phone-folders-entry.mjs', 'phone-folders-instrumentation.mjs']],
+              scope='Actual composed DSH preload/public Node file provider and native FD leases after actual ETS grants; explicit picker/permission/fileShare OS boundaries; no SDK/HAP/device claim')
     # Insert after the existing workspace-authority-entry registration.
     # Reuse that group's actual host/consumer/publisher output. No new SDK fixture
     # input and no duplicate native build are introduced by these two frontend runs.
@@ -1418,14 +1435,22 @@ def main():
     g.run('deletion-directory-sync', lambda: g.node('--jitless', '--import', s / 'runtime/ohos/sim/preload.mjs', '--import', s / 'runtime/ohos/publication/preload.mjs', '--test', '--test-isolation=none', s / (rt + 'session-deletion-sync/directory-sync.test.mjs')), needs=('compose', 'native-publication-build'), env=lambda: {**g.common(), **linked_env(), 'DSH_GO_OHOS_SIM_PLATFORM': 'openharmony', 'DSH_HOME': str(o / 'groups/deletion-directory-sync/home'), 'DSH_DELETION_SYNC_SOURCE': str(o / 'composed/generated/ohos-deletion/core.mjs'), 'DSH_DELETION_SYNC_TRACE': str(o / 'directory-sync-trace.json')}, tests=[rt + 'session-deletion-sync/directory-sync.test.mjs'])
     for name in ['native-files', 'voice']:
         g.run(name, lambda n=name: g.py(rt + n + '-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / n), needs=('tools',), timeout=240)
+    for mode in ['plain', 'jitless']:
+        g.run('picture-shortcut-' + mode, lambda m=mode: g.py(rt + 'picture-shortcut-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--mode', m, '--out', o / ('picture-shortcut-' + m)), needs=('tools',), timeout=180, tests=[rt + 'picture-shortcut.test.mjs', rt + 'entry-ability-fixture.test.mjs'], scope='Actual picture-shortcut ETS and Entry registration with real host files; explicit ImageKit/AppGallery/Flutter boundaries, no device permission or launcher proof')
     for name in ['pdf', 'hms-share']:
         g.run(name, lambda n=name: g.py(rt + n + '-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--out', o / n, '--cxx', p('cxx')), needs=('tools',), timeout=240)
     g.run('native-media', lambda: g.py(rt + 'native-media-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--path-provider-source', p('path_provider_source'), '--cxx', p('cxx'), '--out', o / 'native-media'), needs=('tools',), timeout=240)
+    for mode in ['plain', 'jitless']:
+        g.run('media-video-' + mode, lambda m=mode: g.py(rt + 'media-video-linux.py', '--node', node(), '--node-headers', headers(), '--typescript-prefix', p('typescript_prefix'), '--embedding-har', p('embedding_har'), '--cxx', p('cxx'), '--mode', m, '--out', o / ('media-video-' + m)), needs=('tools',), timeout=180, tests=[rt + 'media-video.test.mjs'])
     g.run('system-asr-native', lambda: g.py(rt + 'system-asr-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'system-asr-native'), needs=('tools',), timeout=300,
           tests=[rt + 'system-asr-native.test.mjs', rt + 'system-asr-channel.test.mjs', rt + 'system-asr-capture.test.mjs'], scope='Real external-PCM ASR ETS, channel, lease and EntryAbility; explicit HMS/Flutter/clock host boundaries; not SDK/device')
     g.run('pcm-stream-native', lambda: g.py(rt + 'pcm-stream-native.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'pcm-stream-native'), needs=('tools',), timeout=240, tests=[rt + 'pcm-stream.test.mjs', rt + 'pcm-stream-call.test.mjs'], scope='Actual PCM ETS: communication usage, 40ms levels from hardware-frame-position doubles, ownership/drain barriers; not SDK or device audio')
     g.run('performance-dart', lambda: g.py(rt + 'performance-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--out', o / 'performance-dart'), needs=('tools', 'dart-tools'), timeout=180)
     g.run('diagnostics-dart', lambda: g.py(rt + 'diagnostics-linux.py', '--node', node(), '--dart', p('dart'), '--typescript-prefix', p('typescript_prefix'), '--zlib-addon', o / 'zlib.node', '--output', o / 'diagnostics-dart'), needs=('tools', 'dart-tools', 'native-zlib-build'), timeout=240)
+    g.run('diagnostic-evidence', lambda: g.py(rt + 'diagnostic-evidence-linux.py', '--node', node(), '--typescript-prefix', p('typescript_prefix'), '--zlib-addon', o / 'zlib.node', '--out', o / 'diagnostic-evidence'),
+          needs=('tools', 'native-zlib-build'), timeout=240,
+          tests=[rt + name for name in ['diagnostic-evidence.test.mjs', 'diagnostic-evidence-cold.mjs', 'diagnostic-evidence-linux.py']],
+          scope='Actual ETS record/fault channel and real Linux FD persistence; explicit HiAppEvent SDK boundary; strict host types and separate cold write/read processes; no device delivery claim')
     g.internal('dart-consumer-evidence', lambda _: verify_dart_consumers(o), needs=('diagnostics-dart', 'performance-dart'))
     channels = ['app-links-channel', 'frame-rate-channel', 'keyboard-log', 'connectivity-channel', 'notify-channel', 'paste-channel', 'voice-stop-control', 'liveview-fallback', 'files-media-channel', 'usage-channel', 'launch-channel', 'launcher-icon-channel', 'shortcuts-channel', 'entry-ability-fixture']
     g.node_tests('ets-channels', [rt + n + '.test.mjs' for n in channels], needs=('native-opener-build',), extra=lambda: {'OHOS_USER_FILE_ADDON': str(o / 'user-file-access.node')}, timeout=240)
@@ -1515,6 +1540,13 @@ def main():
         return {'source': verify_flutter_inputs(g.flutter_source, g.flutter_original_inputs),
                 'localPackages': verify_flutter_packages(g.flutter_source)}
     g.internal('flutter-input-identity', flutter_identity, needs=('flutter-l10n', 'install-record-wire'))
+    g.run('flutter-phone-folders', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', '../runtime/tests/ohos/phone-folders-data_test.dart'),
+          cwd=g.flutter_source / 'app', env={**g.flutter_env, 'OHOS_PHONE_FOLDERS_WIRE': str(o / 'phone-folders-plain/wire.json')},
+          needs=('flutter-input-identity', 'phone-folders-plain'), timeout=180,
+          tests=[rt + 'phone-folders-data_test.dart'], scope='Actual Linux Flutter MethodChannel/decoder using actual ETS grant lifecycle wire; logical coordinates do not grant authority; no device claim')
+    g.run('flutter-phone-folders-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/runtime/authorized_workspaces.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
+          tests=['app/lib/runtime/authorized_workspaces.dart'], scope='Actual Flutter analyzer for the changed data-layer file; no UI or SDK claim')
     g.run('speech-upper-host', lambda: g.py(rt + 'speech-upper.py', '--source', s, '--dart', p('dart'),
           '--node', node(), '--typescript-prefix', p('typescript_prefix'),
           '--deps-config', g.flutter_source / 'app/.dart_tool/package_config.json',
@@ -1543,6 +1575,19 @@ def main():
                      'test/chat/attachment_file_budget_test.dart', 'test/remote/private_key_file_budget_test.dart',
                      'test/chat/attachment_owner_test.dart', 'test/remote/ssh_key_callback_lifetime_test.dart', 'test/share_hosted', 'test/share/share_panel_test.dart']
     g.run('flutter-consumers', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', *flutter_tests), cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=300, tests=['app/' + x for x in flutter_tests], scope='Actual Linux Flutter engine and Dart consumers; not OHOS AOT/device')
+    g.run('flutter-diagnostic-evidence', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '--concurrency=1', '../runtime/tests/ohos/diagnostic-evidence-data_test.dart',
+          'test/diagnostics/automatic_diagnostics_test.dart', 'test/diagnostics/diagnostics_sections_test.dart',
+          'test/diagnostics/automatic_diagnostics_provider_test.dart', 'test/diagnostics/voice_diagnostics_test.dart'),
+          cwd=g.flutter_source / 'app', env=lambda: {**g.flutter_env, 'OHOS_DIAGNOSTIC_EVIDENCE_WIRE': str(o / 'diagnostic-evidence/wire.json')},
+          needs=('flutter-input-identity', 'diagnostic-evidence'), timeout=300,
+          tests=[rt + 'diagnostic-evidence-data_test.dart'] + ['app/test/diagnostics/' + name for name in
+          ['automatic_diagnostics_test.dart', 'diagnostics_sections_test.dart', 'automatic_diagnostics_provider_test.dart', 'voice_diagnostics_test.dart']],
+          scope='Actual Flutter MethodChannel, OH fault facts, automatic-analysis checkpoint and existing Android diagnostics contracts; real ETS wire; no phone fault delivery or model request')
+    g.run('flutter-diagnostic-evidence-analyze', lambda: g.flutter('analyze', '--no-pub', 'lib/diagnostics/diagnostics_channel.dart',
+          'lib/diagnostics/automatic_diagnostics.dart', 'lib/diagnostics/diagnostics_sections.dart'),
+          cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=180,
+          scope='Real Flutter analyzer for the three changed diagnostic data/protocol files')
+    g.run('flutter-picture-shortcut-data', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', '../runtime/tests/ohos/picture_shortcut_data_test.dart'), cwd=g.flutter_source / 'app', env=g.flutter_env, needs=('flutter-input-identity',), timeout=120, tests=[rt + 'picture_shortcut_data_test.dart'], scope='Actual unchanged Dart picture-shortcut consumer and channel serialization; explicit native boundary, no UI enablement or phone result')
     g.run('flutter-clipboard-consumer', lambda: g.flutter('test', '--no-pub', '--reporter', 'json', 'test/runtime/ohos_clipboard_consumer_test.dart'), cwd=g.flutter_source / 'app',
           env={**g.flutter_env, 'OHOS_CLIPBOARD_WIRE': str(o / 'clipboard-settlement/after-observations.json')}, needs=('flutter-input-identity', 'clipboard-settlement'), timeout=120,
           tests=['app/test/runtime/ohos_clipboard_consumer_test.dart'], scope='Actual HAR replies consumed by Flutter Clipboard, ApiKeyPage and EditableText; not device clipboard permission')

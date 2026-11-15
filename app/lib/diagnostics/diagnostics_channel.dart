@@ -124,8 +124,17 @@ Map<String, Object?> diagnosticEvidenceFacts(Object? raw) {
         fields['backend'] = row['backend'];
         if (row['code'] is int) fields['code'] = row['code'];
       } else {
-        for (final key in const ['reason', 'status', 'importance', 'pssKb', 'rssKb']) {
-          if (row[key] is int) fields[key] = row[key];
+        if (row['source'] == 'hiAppEvent') {
+          if (!const {'APP_CRASH', 'APP_FREEZE'}.contains(row['event'])) continue;
+          fields['source'] = 'hiAppEvent';
+          fields['event'] = row['event'];
+          if (row['event'] == 'APP_CRASH' && const {'NativeCrash', 'JsError'}.contains(row['crashType'])) {
+            fields['crashType'] = row['crashType'];
+          }
+        } else {
+          for (final key in const ['reason', 'status', 'importance', 'pssKb', 'rssKb']) {
+            if (row[key] is int) fields[key] = row[key];
+          }
         }
       }
       final size = utf8.encode(jsonEncode(fields)).length + 1;

@@ -42,6 +42,8 @@ export async function diagnosticsFixture(t, options = {}) {
   const nativeModule = { getState:() => ({...native.state}), drainEvents:() => native.events.splice(0) };
   const root = opt.persistRoot ?? await fsp.mkdtemp(join(process.env.DIAGNOSTICS_TMP_PARENT ?? tmpdir(), 'dsh-diagnostics-'));
   let rawHandle = null, rawSequence = 0;
+  const faults = { queue:[], watchers:new Map(), operations:[] };
+  const faultDirectory = join(root, 'fault-logs');
   const app = { filesDir:join(root,'files'), applicationInfo:{accessTokenId:42}, resourceManager:{
     async getRawFd(name) {
       operations.push({op:'resource',name}); assert.equal(name,'dsh-runtime/runtime.zip');
@@ -97,11 +99,25 @@ export async function diagnosticsFixture(t, options = {}) {
       const fd = typeof file === 'number' ? file : file.fd;
       await promisify(fs.close)(fd); fds.delete(fd);
     }),
-    unlink:path => io('unlink',{path},() => fsp.unlink(path)),
+    unlink:path => io('unlink',{path},() => fsp.unlink(path.startsWith('/data/storage/el2/log/hiappevent/') ?
+      join(faultDirectory, path.slice('/data/storage/el2/log/hiappevent/'.length)) : path)),
     rename:(from,to) => io('rename',{from,to},() => fsp.rename(from,to))
   };
   class MethodChannel { constructor(messenger,name) { this.name=name; channels.push(this); } setMethodCallHandler(value) { this.handler=value; } }
   const boundaries = {
+    '@ohos.hiviewdfx.hiAppEvent':{default:{domain:{OS:'OS'}, event:{APP_CRASH:'APP_CRASH',APP_FREEZE:'APP_FREEZE'},
+      addWatcher(watcher) {
+        faults.operations.push({op:'add',name:watcher.name,filters:watcher.appEventFilters,trigger:watcher.triggerCondition});
+        if(opt.addWatcherError)throw Error('watcher unavailable');
+        faults.watchers.set(watcher.name, watcher);
+        return {setRow(rows){assert.equal(rows,1);faults.operations.push({op:'setRow',rows});},
+          takeNext(){faults.operations.push({op:'takeNext'});if(opt.takeFaultError)throw Error('takeNext unavailable');
+            const value=faults.queue.shift();return value===undefined ? null : {packageId:1,row:1,size:1,data:[],appEventInfos:[value]};}};
+      },
+      removeWatcher(watcher){faults.operations.push({op:'remove',name:watcher.name});faults.watchers.delete(watcher.name);},
+      clearData(){throw Error('global HiAppEvent clear forbidden');},
+      configure(){throw Error('global HiAppEvent config forbidden');}
+    }},
     '@ohos.file.fs':{default:api},
     '@ohos.hilog':{default:{info(){},warn(){}}},
     '@ohos.app.ability.common':{default:{}},
@@ -163,7 +179,9 @@ export async function diagnosticsFixture(t, options = {}) {
   }
   const current=runtime();
   const controller=() => { const Controller=load(resolve(repo,'app/ohos/entry/src/main/ets/runtime/RuntimeController.ets')).RuntimeController;return new Controller(app); };
-  return {...current,root,app,operations,fds,api,native,timers,controller,attach:plugin => attach(current.Plugin,plugin),call,
+  return {...current,root,app,operations,fds,api,native,timers,controller,faults,faultDirectory,
+    emitFault:info=>{faults.queue.push(info);for(const watcher of faults.watchers.values())watcher.onTrigger(faults.queue.length,1,{});},
+    attach:plugin => attach(current.Plugin,plugin),call,
     path:join(app.filesDir,'dsh-runtime','engine.log'),directory:join(app.filesDir,'dsh-runtime'),
     reload:() => {modules=new Map();return runtime();},
     change:next => {opt={...opt,...next};},maxConcurrentIO:() => maxActiveIO,

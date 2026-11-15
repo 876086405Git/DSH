@@ -13,7 +13,7 @@ import {promisify} from 'node:util';
 import { entryAbilityImports } from './entry-ability-fixture.mjs';
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const ts = createRequire(resolve(process.env.OHOS_TYPESCRIPT_PREFIX, 'package.json'))('typescript');
-assert.equal(ts.version, '5.9.3');
+assert.match(ts.version, /^5\.9\./);
 export const plain = value => value instanceof Map ? Object.fromEntries([...value].map(([key, val]) => [key, plain(val)])) :
   Array.isArray(value) ? Array.from(value, plain) : value;
 export const deferred = () => Promise.withResolvers();

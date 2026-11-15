@@ -19,7 +19,15 @@ Map<String, Object?> diagnosticsAnalysisFacts(DiagnosticsSnapshot s) {
   return {
     'generatedAt': s.at.toUtc().toIso8601String(),
     'app': fields(s.native.app, ['versionName', 'versionCode', 'abi']),
-    'device': fields(s.native.device, ['manufacturer', 'model', 'android', 'sdkInt']),
+    'device': fields(s.native.device, [
+      'manufacturer',
+      'model',
+      'android',
+      'sdkInt',
+      'platform',
+      'osVersion',
+      'apiVersion',
+    ]),
     'runtime': {
       'phase': s.status.phase.name,
       'mode': s.status.mode.name,

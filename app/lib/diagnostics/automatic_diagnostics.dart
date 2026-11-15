@@ -311,7 +311,10 @@ bool _isFailure(String key, Map row) => switch (key) {
   // A model/session error could be our own failed analysis.
   'appErrors' => row['source'] == 'flutter' || row['source'] == 'platform',
   'voiceStages' => row['stage'] == 'error' || row['stage'] == 'failed',
-  'processExits' => const [3, 4, 5, 6].contains(row['reason']),
+  'processExits' =>
+    row['source'] == 'hiAppEvent'
+        ? const ['APP_CRASH', 'APP_FREEZE'].contains(row['event'])
+        : const [3, 4, 5, 6].contains(row['reason']),
   _ => false,
 };
 
@@ -332,7 +335,10 @@ Set<String> diagnosticFailureFingerprints(DiagnosticsSnapshot snapshot, Map<Stri
       final fields = switch (key) {
         'appErrors' => [row['source'], row['errorType'], row['stack']],
         'voiceStages' => [row['stage'], row['backend'], row['code']],
-        _ => [row['reason'], row['status'], lastVoice['stage'], lastVoice['backend']],
+        _ =>
+          row['source'] == 'hiAppEvent'
+              ? [row['source'], row['event'], row['crashType'], lastVoice['stage'], lastVoice['backend']]
+              : [row['reason'], row['status'], lastVoice['stage'], lastVoice['backend']],
       };
       result.add(sha256.convert(utf8.encode(jsonEncode([version, key, fields]))).toString());
     }

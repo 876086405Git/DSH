@@ -47,6 +47,8 @@ def run(argv, name, extra_env=None):
 sources = [
     'app/ohos/entry/src/main/ets/runtime/PersistedRuntimeLog.ets',
     'app/ohos/entry/src/main/ets/plugins/DiagnosticsPlugin.ets',
+    'app/ohos/entry/src/main/ets/plugins/OhosDiagnosticEvidence.ets',
+    'app/ohos/entry/src/main/ets/plugins/OhosFaultEvents.ets',
     'app/ohos/entry/src/main/ets/plugins/OhosDeviceFacts.ets',
     'app/ohos/entry/src/main/ets/runtime/RuntimeCore.ets',
     'app/ohos/entry/src/main/ets/runtime/RuntimeController.ets',
