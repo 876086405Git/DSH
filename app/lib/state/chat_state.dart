@@ -1188,11 +1188,15 @@ class ChatController extends Notifier<ChatState> {
     // A fresh baseline that carries the inbox is the Host saying what it
     // holds. A prompt that is neither there nor echoed, and is not waiting on
     // its own prompt answer, did not make it: stop showing it as on its way.
+    // A claimed one left the inbox for the agent; its turn end settles it.
     if (freshSnapshot && _delivering.isEmpty && _pending.isNotEmpty && _transcript.projections.has('inbox')) {
       final inbox = _inboxIds();
       _pending = List.unmodifiable([
         for (final prompt in _pending)
-          if (!prompt.failed && !_isMoving(prompt.requestId) && !inbox.contains(prompt.requestId))
+          if (!prompt.failed &&
+              !_isMoving(prompt.requestId) &&
+              !inbox.contains(prompt.requestId) &&
+              !_claimedAt.containsKey(prompt.requestId))
             prompt.failedAt(_transcript.cursor)
           else
             prompt,
