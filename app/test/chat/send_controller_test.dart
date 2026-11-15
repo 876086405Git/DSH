@@ -581,6 +581,46 @@ void main() {
       'source': {'kind': 'user', 'rpcId': rpcId},
     };
 
+    test('a fresh snapshot keeps a claimed prompt on its way until its echo', () async {
+      var seq = 0;
+      void emit(String type, Map<String, Object?> data) => client.events.add(
+        SessionLogEvent.fromJson({'seq': ++seq, 'time': 1792700000000 + seq, 'type': type, 'data': data}),
+      );
+      void splice({int removed = 0, List<Map<String, Object?>> inserted = const []}) => emit('agent/inbox/spliced', {
+        'target': 'next-turn',
+        'start': 0,
+        'removedCount': removed,
+        'inserted': inserted,
+      });
+
+      emit('turn/start', {'turn': 1});
+      await settle();
+      await chat().send('接着做', mode: SendMode.queue);
+      final claimed = client.prompts.last.requestId!;
+      splice(inserted: [msg('claimed', '接着做', claimed)]);
+      splice(removed: 1);
+      await settle();
+
+      // Reconnected before the agent wrote it down: the Host's baseline has an
+      // empty inbox, because the claim moved the prompt into the agent.
+      client.events.add(
+        SessionSnapshotEvent.fromJson('s1', {
+          'header': {'id': 's1'},
+          'cursor': seq,
+          'records': <Object?>[],
+          'projections': {
+            'asOfSeq': seq,
+            'values': {
+              'inbox': {'next-turn': <Object?>[], 'next-step': <Object?>[]},
+            },
+          },
+        }),
+      );
+      await settle();
+      expect(state().pending.single.requestId, claimed);
+      expect(state().pending.single.failed, isFalse, reason: 'held by the agent, not lost');
+    });
+
     for (final terminal in ['live', 'resync', 'requeued']) {
       test('a claimed prompt settles without a user echo: $terminal', () async {
         var seq = 0;
