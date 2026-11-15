@@ -1192,7 +1192,10 @@ class ChatController extends Notifier<ChatState> {
       final inbox = _inboxIds();
       _pending = List.unmodifiable([
         for (final prompt in _pending)
-          if (!prompt.failed && !inbox.contains(prompt.requestId)) prompt.failedAt(_transcript.cursor) else prompt,
+          if (!prompt.failed && !_isMoving(prompt.requestId) && !inbox.contains(prompt.requestId))
+            prompt.failedAt(_transcript.cursor)
+          else
+            prompt,
       ]);
     }
     final pending = _placePending();
