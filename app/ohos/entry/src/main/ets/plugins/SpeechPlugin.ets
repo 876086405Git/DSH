@@ -133,11 +133,11 @@ export default class SpeechPlugin implements FlutterPlugin, AbilityAware {
   private retire(): void { this.stop().catch((): void => {}); }
 
   private async open(call: MethodCall, engine: FlutterPluginBinding): Promise<boolean> {
-    const id = call.argument('id');
-    const rateValue = call.argument('rate');
-    const rate = rateValue === null || rateValue === undefined ? 24000 : rateValue;
-    const forCall = call.argument('call');
-    const levels = call.argument('levels');
+    const id: Any = call.argument('id');
+    const rateValue: Any = call.argument('rate');
+    const rate: Any = rateValue === null || rateValue === undefined ? 24000 : rateValue;
+    const forCall: Any = call.argument('call');
+    const levels: Any = call.argument('levels');
     if (typeof id !== 'string' || id.length === 0 || typeof rate !== 'number' || !Number.isInteger(rate) || rate !== 24000 ||
       (forCall !== null && forCall !== undefined && typeof forCall !== 'boolean') ||
       (levels !== null && levels !== undefined && typeof levels !== 'boolean') || forCall === true || levels === true) return false;
@@ -199,7 +199,7 @@ export default class SpeechPlugin implements FlutterPlugin, AbilityAware {
     const backend = owner.backend;
     if (call.method === 'waiting') return backend.waiting();
     if (call.method === 'write') {
-      const bytes = call.argument('bytes');
+      const bytes: Any = call.argument('bytes');
       if (!(bytes instanceof Uint8Array)) {
         this.ended(owner, PcmTerminalKind.Error);
         try { await this.closeOwner(owner); } catch (_) {}

@@ -12,8 +12,8 @@ export enum PcmTerminalKind {
 }
 
 export interface PcmStreamListener {
-  started(): void;
-  terminal(kind: PcmTerminalKind, reason: string): void;
+  started: () => void;
+  terminal: (kind: PcmTerminalKind, reason: string) => void;
 }
 
 export interface PcmStreamBackend {
