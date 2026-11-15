@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { renameSync, symlinkSync } from 'node:fs';
-import fsSync from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -16,7 +14,7 @@ const { SkillRegistry } = await load('dsh-skill');
 const filesystem = await load('dsh-skill-filesystem');
 const { default: chokidar } = await import(pathToFileURL(join(prefix, 'node_modules/chokidar/index.js')));
 
-async function fixture(t, transition) {
+async function fixture(t, transition, config = {}) {
   const temp = await fs.mkdtemp(join(tmpdir(), 'skill-watcher-recheck-'));
   const root = join(temp, 'skills'), moved = join(temp, 'moved');
   await fs.mkdir(root);
@@ -49,7 +47,7 @@ async function fixture(t, transition) {
     await fs.rm(temp, { recursive: true, force: true });
   });
   await ctx.plugin(SkillRegistry);
-  const plugin = ctx.plugin(filesystem, { includeDefaultRoots: false, customSkillDirs: [root], watch: true });
+  const plugin = ctx.plugin(filesystem, { includeDefaultRoots: false, customSkillDirs: [root], watch: true, ...config });
   await plugin.await();
   return { ctx, plugin, root, moved, opened };
 }
@@ -107,23 +105,21 @@ test('stable mode retains its watcher until normal provider disposal', async t =
 });
 
 test('a missing-root polling handle is also released when the second probe sees a real symlink loop', async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, undefined, { watchUsePolling: true });
   await fs.rename(f.root, f.moved);
-  const watchFile = fsSync.watchFile, unwatchFile = fsSync.unwatchFile;
+  const manager = f.ctx.skills.layers.global.providers.get('filesystem').provider.watchManager;
+  const open = manager.openAncestorWatcher;
   const records = [];
-  fsSync.watchFile = function (path, options, listener) {
-    const watcher = watchFile.call(this, path, options, listener);
-    if (path === f.root) {
-      records.push({ path, listener, closes: 0 });
-      symlinkSync(f.root, f.root);
-    }
-    return watcher;
+  // Scope the ordering fixture to this owned provider instance. The actual
+  // watchFile/unwatchFile calls run; no Node builtin is replaced process-wide.
+  manager.openAncestorWatcher = function (...args) {
+    const handle = open.apply(this, args), close = handle.close.bind(handle);
+    const record = { handle, closes: 0 };
+    records.push(record);
+    handle.close = () => { record.closes++; return close(); };
+    symlinkSync(f.root, f.root);
+    return handle;
   };
-  fsSync.unwatchFile = function (path, listener) {
-    for (const record of records) if (record.path === path && record.listener === listener) record.closes++;
-    return unwatchFile.call(this, path, listener);
-  };
-  syncBuiltinESMExports();
   try {
     assert.equal((await f.ctx.skills.snapshot()).complete, false);
     await assert.rejects(fs.stat(f.root), { code: 'ELOOP' });
@@ -135,9 +131,7 @@ test('a missing-root polling handle is also released when the second probe sees 
     assert.equal(records[0].closes, 1);
   } finally {
     // Explicit harness rescue for the original-product orphan, after assertions.
-    for (const record of records) unwatchFile.call(fsSync, record.path, record.listener);
-    fsSync.watchFile = watchFile;
-    fsSync.unwatchFile = unwatchFile;
-    syncBuiltinESMExports();
+    for (const record of records) if (record.closes === 0) record.handle.close();
+    manager.openAncestorWatcher = open;
   }
 });

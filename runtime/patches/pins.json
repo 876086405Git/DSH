@@ -340,6 +340,14 @@
         }
       }
     },
+    "ohos-skill-root-events.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
+          "after": "50e84da42c878ee5da57032b8766309c00d18d1e676deb43071c0da4aece2353",
+          "before": "5000e40f6eb3b6416c741c8a7300d8427fb10a9a995649d3ed3cbe2e7d8bff5d"
+        }
+      }
+    },
     "ohos-virtual-process.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js": {
@@ -2610,7 +2618,8 @@
       "ohos-api-gateway-idle.diff",
       "ohos-image-codec.diff",
       "ohos-web-converter-lazy.diff",
-      "ohos-cordis-catalog-lazy.diff"
+      "ohos-cordis-catalog-lazy.diff",
+      "ohos-skill-root-events.diff"
     ]
   }
 }

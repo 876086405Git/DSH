@@ -1,0 +1,16 @@
+--- a/temu.c
++++ b/temu.c
+@@ -695,5 +695,5 @@
+     struct timeval tv;
+ #ifndef _WIN32
+-    int stdin_fd;
++    int stdin_fd = -1;
+ #endif
+     
+@@ -753,5 +753,5 @@
+     if (ret > 0) {
+ #ifndef _WIN32
+-        if (m->console_dev && FD_ISSET(stdin_fd, &rfds)) {
++        if (m->console_dev && stdin_fd >= 0 && FD_ISSET(stdin_fd, &rfds)) {
+             uint8_t buf[128];
+             int ret, len;

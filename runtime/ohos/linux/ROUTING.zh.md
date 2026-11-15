@@ -43,7 +43,15 @@ bash -c '<脚本>'（虚拟 shell Worker）
 
 agent 变了（mounts、opened 里 `mounts:true`），六件资产必须重建；931 资产代际的已装实例会以 `ERR_OHOS_LINUX_ASSET_GENERATION` 拒绝恢复，需要用户在 设置 · 能力 · Linux 环境 点「重新安装 Linux」（控制动作 `discardRetained`，见 [CONTROL.zh.md](CONTROL.zh.md)）删掉旧数据再开启（本期没有迁移）。新 host 配旧 agent：无 mounts 的作业照常，带 mounts 的明确拒绝。`libdsh_linux.so` 需要用含 `fs_export.c` 与补丁 0016 的源码重建（宿主测试与 OH arm64 两份）。
 
+## 命令适配器的最终关闭
+
+`LinuxCommandBackend.dispose()` 封闭该适配器并取消存活作业，也放弃该适配器尚未消费的输出：先解除自有 pipe 到调用方 sink 的连接，再排空自有 stdout/stderr 和实际 guest 输出流。它不关闭或销毁调用方的 Writable，也不操作全局 stdout/stderr。这样，已停止读取输出的插件不会仅因宿主背压而阻断 guest EOF/ACK 收尾。每个存活 handle 的排空函数在 settle 时移除；`spawnRouted` 晚于 dispose 返回 raw handle 时，也在接好流后排空，重复 dispose 仍返回同一完成 Promise。
+
+这只适用于适配器的最终 dispose。普通 `terminate()` 保留原有背压和输出消费合同；最终排空也不会替代 guest 的双 EOF、全部 ACK 和真实 complete。只收到 EOF/ACK、未确认客体任务树退出时，原取消宽限仍产生 UNKNOWN，并保留原错误、隔离状态及未确认的 raw owner。此处没有改变 VM stop/join、普通 Linux 开关或 native FD 生命周期。
+
 ## 验证
+
+- `runtime/tests/ohos/linux-routed-disposal.test.mjs`（linux-routed-disposal-plain/strict）：实际控制器、路由适配器、底层 backend/流与 TCP 协议；客体及 native owner 为明确夹具。覆盖两路背压、最终关闭/普通取消的区别、外部 sink 所有权、晚到准入、排队取消及 EOF/ACK 不得冒充 complete；不代表真实 VM、SDK 或设备结果。
 
 - `runtime/tests/ohos/linux-command-routing.test.mjs`（command-router-plain/strict）：生产 router、虚拟 shell Worker、LinuxCommandBackend、LinuxControl、LinuxRuntimeBackend，客体为真实 socket 上按协议应答的替身。
 - `tooling/ohos/tests/guest-mounts.test.py`（linux-guest-mounts）：真实 agent 的 mounts 校验与挂载序列，在宿主内核的非特权 user+mount 命名空间里执行；9P 由 tmpfs 代替。

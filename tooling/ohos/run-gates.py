@@ -1087,6 +1087,7 @@ def main():
     g.run('python-production', lambda: g.py(rt + 'python-native.py', '--production', '--node-headers', p('node_source') / 'src', '--output', o / 'python-production'), needs=('tools',), timeout=120, tests=[rt + 'python-production.test.mjs', rt + 'python-owner.test.mjs', rt + 'python-native-symbols.test.mjs', rt + 'python-link-probe.c', rt + 'python-test-observation.mjs'], scope='Host shared-library production source, real subinterpreter/cwd/env/SQLite/SSL/stream/cancel/owner-exit and separately loaded CPython extension ABI; HAP and device NOT_RUN')
     g.node_tests('python-backend', [rt + 'python-backend.test.mjs'], needs=('tools',))
     g.run('python-native', lambda: g.py(rt + 'python-native.py', '--node-headers', p('node_source') / 'src', '--output', o / 'python-native'), needs=('tools',), timeout=120, tests=[rt + 'python-native.test.cjs', rt + 'python-host.test.mjs'], scope='Actual host libpython Node-API probe; streamed text output, cooperative cancellation, no device claim')
+    g.run('tinyemu-console-ready', lambda: g.py('tooling/ohos/research/tinyemu-console-ready/run.py', '--source-archive', p('tinyemu_source_archive'), '--node-headers', headers(), '--cc', p('cc'), '--out', o / 'tinyemu-console-ready'), needs=('native-tools',), timeout=240, tests=['tooling/ohos/research/tinyemu-console-ready/' + name for name in ['run.py', 'console-ready.c']], scope='Actual product loop, slirp UDP reply and initialized VirtIO console; explicit CPU packet/ring/IRQ fixtures, diagnostic old/new and normal candidate controls; no guest instructions, SDK/device or performance claim')
     g.run('tinyemu-retire', lambda: g.py('tooling/ohos/research/tinyemu-retire/run.py', '--source-archive', p('tinyemu_source_archive'), '--diskimage', p('tinyemu_diskimage_archive'), '--alpine', p('tinyemu_alpine_archive'), '--output', o / 'tinyemu-retire', '--cc', p('cc')), needs=('tools',), timeout=600, tests=['tooling/ohos/research/tinyemu-retire/' + name for name in ['run.py', 'build-image.py', 'install-call.c', 'retire-call.c', 'fault-wrap.c', 'semantic-core.c', 'clock-cpu.c']], scope='Real owned disk FD retirement including flush/close failures and Linux install; VM remains quarantined; no HAP/device')
     g.node_tests('spawn-boundary', [rt + 'child-process-boundary.test.mjs'], needs=('tools',))
     for mode in ['jit', 'strict']:
@@ -1115,6 +1116,8 @@ def main():
               needs=('prepared-inputs',), timeout=60,
               tests=[rt + 'linux-routed-budget.py', rt + 'linux-routed-budget-probe.mjs'],
               scope='Actual LinuxControl with real async timers and isolated child wall-clock offsets; explicit owner/backend; no VM, suspend, SDK or scheduler upper-bound claim')
+        g.node_tests('linux-routed-disposal-' + mode, [rt + 'linux-routed-disposal.test.mjs'],
+                     mode=mode, needs=('prepared-inputs', 'android-targets'))
         g.node_tests('command-router-' + mode,
                      [rt + 'node-streaming-stdin.test.mjs', rt + 'plugin-process.test.mjs', rt + 'mcp-command-router.test.mjs', rt + 'python-command-router.test.mjs', rt + 'command-router-ownership.test.mjs', rt + 'linux-command-routing.test.mjs'],
                      mode=mode, imports=(["runtime/ohos/sim/marker.mjs"] if mode == 'plain' else []) + ['runtime/ohos/process/node-worker-preload.mjs'],
@@ -1158,6 +1161,10 @@ def main():
     for mode in ['plain', 'jitless']:
         g.node_tests('plugin-store-recovery-' + mode, [rt + 'plugin-store.test.mjs', rt + 'plugin-linkless-recovery.test.mjs'], mode=mode, needs=('prepared-inputs',))
     g.node_tests('provider-body-timeout', [rt + 'provider-body-timeout.test.mjs'], needs=('android-targets',))
+    for mode in ['plain', 'jitless']:
+        g.node_tests('skill-root-events-' + mode,
+                     [rt + 'skill-root-events.test.mjs', rt + 'skill-root-events-fault.test.mjs', 'runtime/tests/skill-watcher-recheck.test.mjs'],
+                     mode=mode, needs=('android-targets',), extra=lambda: {'DSH_PREFIX': str(prefix())})
     for mode in ['plain', 'jitless']:
         g.node_tests('client-hmr-idle-' + mode,
                      [rt + 'client-hmr-idle.test.mjs', rt + 'client-hmr-disposal.test.mjs',

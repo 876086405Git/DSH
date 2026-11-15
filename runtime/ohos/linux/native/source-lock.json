@@ -32,6 +32,7 @@
     "patches/0018-clint-unsigned-deadline.patch": "9025c5b53c8d90631651a9c54ac5ea9781eb419f0273457386763d9d6df997cd",
     "patches/0019-embedded-riscv-sleep-micros.patch": "23de511e7358653d1e0fac7a40767320dc4e418f40e63c7b41893fc60b1923a4",
     "patches/0020-embedded-udp-expiry.patch": "dd9dff1328c5e3b28f9847bd3aed94c8575e5f1f69cf42e21ac19acd61fb3844",
-    "patches/0021-embedded-fasttimo-zero.patch": "885ee34234818adc7865c4c7df3c916205ffdb1254de82345aa70aa96c568b9a"
+    "patches/0021-embedded-fasttimo-zero.patch": "885ee34234818adc7865c4c7df3c916205ffdb1254de82345aa70aa96c568b9a",
+    "patches/0022-console-input-ready.patch": "7fd05336bcbe005b519bbfe13b0ffbe64e271c743fd1420943fda014b835fb04"
   }
 }

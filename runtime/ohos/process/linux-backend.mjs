@@ -46,6 +46,8 @@ export class LinuxCommandBackend {
   #control;
   #waitMs;
   #disposal;
+  // One final-output drain per live handle; removed by that handle's settle.
+  #outputDrains = new Set();
   // Jobs whose guest exit was never confirmed; dispose reports them.
   #failures = new Set();
 
@@ -108,6 +110,13 @@ export class LinuxCommandBackend {
         maxBytes: mode.spill.maxBytes, dir: this.temporaryRoot, onFailure: this.onSpillFailure });
     }
     let job, stopSignal, settled = false;
+    const drainOutput = () => {
+      // Final disposal abandons this adapter's output. Detach caller-owned
+      // sinks without closing them, then consume both our pipes and the raw
+      // guest streams (which may already have been unpiped by a closed sink).
+      for (const stream of Object.values(output)) { stream.unpipe(); stream.resume(); }
+      if (job) for (const label of ['stdout', 'stderr']) { job[label].unpipe(); job[label].resume(); }
+    };
     const settle = (outcome, error) => {
       if (settled) return;
       settled = true;
@@ -117,6 +126,7 @@ export class LinuxCommandBackend {
       for (const stream of Object.values(output)) stream.end();
       started.reject(Object.assign(new Error('任务在启动前已结束'), { code: 'ERR_OHOS_NOT_STARTED' }));
       this.live.delete(handle);
+      this.#outputDrains.delete(drainOutput);
       if (error) { this.#failures.add(error); done.reject(error); } else done.resolve(outcome);
     };
     const handle = {
@@ -140,6 +150,7 @@ export class LinuxCommandBackend {
       },
     };
     this.live.add(handle);
+    this.#outputDrains.add(drainOutput);
     spec.signal?.addEventListener('abort', handle.terminate, { once: true });
     (async () => {
       try {
@@ -169,6 +180,8 @@ export class LinuxCommandBackend {
         drain.catch(() => {});
         return drain;
       });
+      // dispose may have run while spawnRouted was still returning this job.
+      if (this.closed) drainOutput();
       try {
         const outcome = await job.done;
         await Promise.allSettled(drained);
@@ -208,12 +221,15 @@ export class LinuxCommandBackend {
     if (this.#disposal) return this.#disposal;
     this.closed = true;
     const jobs = [...this.live];
-    for (const job of jobs) job.terminate();
-    return this.#disposal = Promise.allSettled(jobs.map(job => job.done)).then(() => {
+    // Publish before unpipe can synchronously reenter from a caller's sink.
+    this.#disposal = Promise.allSettled(jobs.map(job => job.done)).then(() => {
       const errors = [...this.#failures];
       if (errors.length === 1) throw errors[0];
       if (errors.length) throw new AggregateError(errors, 'Linux 命令资源未全部确认退出');
     });
+    for (const job of jobs) job.terminate();
+    for (const drain of this.#outputDrains) drain();
+    return this.#disposal;
   }
 }
 
