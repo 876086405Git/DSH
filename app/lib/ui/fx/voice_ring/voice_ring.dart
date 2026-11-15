@@ -97,7 +97,6 @@ class VoiceRing extends StatefulWidget {
     this.direction,
     this.palette,
     this.paused = false,
-    this.lean = false,
     this.semanticLabel,
   });
 
@@ -131,9 +130,6 @@ class VoiceRing extends StatefulWidget {
 
   /// 停在当前帧。
   final bool paused;
-
-  /// 光晕不走模糊图层，直接叠宽笔画：给每帧跑不起大模糊的渲染器（鸿蒙、轻量模式）。
-  final bool lean;
 
   final String? semanticLabel;
 
@@ -263,7 +259,7 @@ class _VoiceRingState extends State<VoiceRing> with SingleTickerProviderStateMix
     final ring = RepaintBoundary(
       child: CustomPaint(
         size: Size.square(widget.size),
-        painter: _RingPainter(_engine, dark: _dark, dpr: _dpr, lean: widget.lean),
+        painter: _RingPainter(_engine, dark: _dark, dpr: _dpr),
       ),
     );
     final label = widget.semanticLabel;
@@ -414,7 +410,7 @@ class _RingEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  void paint(Canvas canvas, {required bool dark, required double dpr, bool lean = false}) {
+  void paint(Canvas canvas, {required bool dark, required double dpr}) {
     final f = frame;
     if (f == null) return;
     // the canvas reaches on into the margin, so a glow fades out there
@@ -427,7 +423,7 @@ class _RingEngine extends ChangeNotifier {
         ..clipRect(box)
         ..saveLayer(box, _isolate);
       if (f.light != null) {
-        _light.paint(c, f, dark: dark, bounds: box, tint: _tint, glow: _glow, soft: !lean);
+        _light.paint(c, f, dark: dark, bounds: box, tint: _tint, glow: _glow);
       } else {
         _tube.paint(c, f, dark: dark, tint: _tint, glow: _glow);
       }
@@ -454,17 +450,15 @@ class _RingEngine extends ChangeNotifier {
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter(this.engine, {required this.dark, required this.dpr, required this.lean}) : super(repaint: engine);
+  _RingPainter(this.engine, {required this.dark, required this.dpr}) : super(repaint: engine);
 
   final _RingEngine engine;
   final bool dark;
   final double dpr;
-  final bool lean;
 
   @override
-  void paint(Canvas canvas, Size size) => engine.paint(canvas, dark: dark, dpr: dpr, lean: lean);
+  void paint(Canvas canvas, Size size) => engine.paint(canvas, dark: dark, dpr: dpr);
 
   @override
-  bool shouldRepaint(_RingPainter old) =>
-      old.engine != engine || old.dark != dark || old.dpr != dpr || old.lean != lean;
+  bool shouldRepaint(_RingPainter old) => old.engine != engine || old.dark != dark || old.dpr != dpr;
 }

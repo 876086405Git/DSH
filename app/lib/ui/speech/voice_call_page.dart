@@ -117,7 +117,6 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// The system asks for less motion (read each build): the light holds still
   /// and the page comes in without its staggered rise.
   bool _still = false;
-  bool _lean = false;
 
   @override
   void initState() {
@@ -369,7 +368,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// listening to the person, speaking with her voice, turning while it thinks; or the glass orb.
   Widget _light(CallVisual visual, CallPalette palette, bool dark, double size) {
     if (visual == CallVisual.glass) {
-      return CallLight(key: const ValueKey('glass'), scene: _scene, palette: palette, size: size, lean: _lean);
+      return CallLight(key: const ValueKey('glass'), scene: _scene, palette: palette, size: size);
     }
     final phase = _call.phase;
     return VoiceRing(
@@ -384,7 +383,6 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
       size: size * 0.82,
       theme: dark ? VoiceRingTheme.dark : VoiceRingTheme.light,
       paused: phase == CallPhase.ended,
-      lean: _lean,
       level: () => switch (_call.phase) {
         CallPhase.hearing when !_call.muted => VoiceRingLevel.mic(_call.micLevel),
         CallPhase.speaking => VoiceRingLevel.playback(_call.voiceLevel),
@@ -463,10 +461,9 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final settings = ref.watch(callSettingsProvider);
     final performance = ref.watch(performanceDefaultsProvider);
     final blur = performance.blur;
-    // HarmonyOS's renderer, or the light mode, can't redo wide blurs every frame: the light,
-    // the screen's edge and the keys over a moving field are drawn without them there.
-    final lean = _lean = ref.watch(operatingSystemProvider) == 'ohos' || performance.lightweight;
-    final keyBlur = blur && !lean;
+    // The keys sit over a field that moves every frame, so their frosting is redone every
+    // frame too: more than HarmonyOS's renderer, or the light mode, can spare.
+    final keyBlur = blur && !performance.lightweight && ref.watch(operatingSystemProvider) != 'ohos';
     final ended = _call.phase == CallPhase.ended;
     final image =
         settings.backdrop == CallBackdrop.image && settings.image.isNotEmpty && File(settings.image).existsSync()
@@ -499,7 +496,6 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
           backgroundColor: palette.field,
           body: CallClock(
             onTick: _tick,
-            lean: lean,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -532,7 +528,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
                   },
                 ),
                 // The screen's edge glows only with the glass orb; the ring is light enough on its own.
-                if (settings.visual == CallVisual.glass) CallEdgeGlow(scene: _scene, palette: palette, lean: lean),
+                if (settings.visual == CallVisual.glass) CallEdgeGlow(scene: _scene, palette: palette),
                 if (her)
                   // Her feet fade into the water so the words below stay readable.
                   const IgnorePointer(
