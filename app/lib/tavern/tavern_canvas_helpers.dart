@@ -92,7 +92,9 @@ const _js = r'''
   // what the engine says went wrong is told.
   function mvuStart(){
     if(!mvuWanted)return Promise.resolve();
-    return call('setMvuEnabled',{enabled:true}).then(function(r){reportIssues(r.issues);},function(e){
+    // Not kept for an event's answer: the engine's MVU events it starts
+    // come back here, and their answers would wait on it.
+    return ask('setMvuEnabled',{enabled:true}).then(function(r){reportIssues(r.issues);},function(e){
       reportIssues([{code:e.code||'mvu_update_failed',message:String(e.message||e)}]);
     }).then(function(){initializeGlobal('Mvu',Mvu);});
   }
@@ -541,9 +543,13 @@ const _js = r'''
   function replaceWorldbook(name,entries){return attempt(function(){
     return readBookNamed(name).then(function(s){return writeBook(s,merged(s,[].concat(entries||[]),fromHelperEntry));}).then(function(){});
   });}
+  // Written with the version it was read at: changed meanwhile, refused.
   function updateWorldbookWith(name,updater){return attempt(function(){
-    return getWorldbook(name).then(function(now){
-      return Promise.resolve(updater(now)).then(function(n){n=n===undefined?now:n;return replaceWorldbook(name,n).then(function(){return getWorldbook(name);});});
+    return readBookNamed(name).then(function(s){
+      var now=entriesOf(s.book).map(function(x){return toHelperEntry(x.flat);});
+      return Promise.resolve(updater(now)).then(function(n){
+        return writeBook(s,merged(s,[].concat(n===undefined?now:n),fromHelperEntry));
+      }).then(function(w){return entriesOf(w.book).map(function(x){return toHelperEntry(x.flat);});});
     });
   });}
   function createWorldbookEntries(name,fresh){return attempt(function(){
@@ -671,10 +677,17 @@ const _js = r'''
     var unused=(raw.prompts||[]).filter(function(p){return p&&!used[p.identifier];}).map(function(p){return helperPrompt(p,false);});
     return {settings:settings,prompts:prompts,prompts_unused:unused,extensions:clone(raw.extensions||{})};
   }
+  // The prompts are written back only when they changed: a preset that
+  // keeps ST's default order (no prompt_order) keeps it through a change of
+  // its settings.
+  function samePrompts(raw,h){
+    var was=helperPreset(raw);
+    return JSON.stringify([was.prompts,was.prompts_unused])===JSON.stringify([h.prompts,h.prompts_unused||[]]);
+  }
   function rawPreset(raw,h){
     var out=clone(raw);
     for(var k in h.settings||{})if(SETTINGS[k])out[SETTINGS[k]]=clone(h.settings[k]);
-    if(h.prompts){
+    if(h.prompts&&!samePrompts(raw,h)){
       var byId={};(out.prompts||[]).forEach(function(p){if(p&&p.identifier)byId[p.identifier]=p;});
       out.prompts=[].concat(h.prompts,h.prompts_unused||[]).map(function(x){
         var p=Object.assign({},byId[x.id]||{identifier:x.id,system_prompt:false,marker:false}),pos=x.position||{};
@@ -688,7 +701,7 @@ const _js = r'''
       var list=h.prompts.map(function(x){return {identifier:x.id,enabled:x.enabled!==false};}),order=promptOrder(out);
       if(order)order.order=list;else out.prompt_order=[{character_id:100001,order:list}];
     }
-    if(h.extensions)out.extensions=clone(h.extensions);
+    if(h.extensions&&JSON.stringify(h.extensions)!==JSON.stringify(raw.extensions||{}))out.extensions=clone(h.extensions);
     return out;
   }
   function presetId(name){
@@ -730,15 +743,19 @@ const _js = r'''
     return 'in_use';
   }
   function getPreset(name){return helperPreset(presetNow(name).raw);}
+  // Written with the version it was read at: changed meanwhile, refused.
+  function writePreset(s,preset){
+    return call('replacePreset',{ref:s.ref,raw:rawPreset(s.raw,preset||{}),expectedVersion:s.version}).then(function(r){
+      if(r.ref.kind==='stored')storedPresets[r.ref.presetId]=r;else res.preset=r;
+    });
+  }
   function replacePreset(name,preset){return attempt(function(){
-    return presetRead(name).then(function(s){
-      return call('replacePreset',{ref:s.ref,raw:rawPreset(s.raw,preset||{}),expectedVersion:s.version});
-    }).then(function(s){if(s.ref.kind==='stored')storedPresets[s.ref.presetId]=s;else res.preset=s;});
+    return presetRead(name).then(function(s){return writePreset(s,preset);});
   });}
   function updatePresetWith(name,updater){return attempt(function(){
     return presetRead(name).then(function(s){
       var now=helperPreset(s.raw);
-      return Promise.resolve(updater(now)).then(function(n){n=n===undefined?now:n;return replacePreset(name,n).then(function(){return n;});});
+      return Promise.resolve(updater(now)).then(function(n){n=n===undefined?now:n;return writePreset(s,n).then(function(){return n;});});
     });
   });}
   function setPreset(name,partial){return updatePresetWith(name,function(p){

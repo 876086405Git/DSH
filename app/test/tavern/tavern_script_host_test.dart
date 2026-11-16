@@ -135,6 +135,24 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     pages.acknowledge('m2', {'status': 'completed'});
     expect((await plain).mvu, isNull);
+    // A listener left a command that is not one: not taken, the event failed.
+    final bad = pages.dispatch(
+      TavernScriptDispatch(kind: TavernScriptDispatchKind.lifecycle, eventId: 'm3', contextId: 'ctx', seq: 3),
+      _Never(),
+    );
+    await Future<void>.delayed(Duration.zero);
+    pages.acknowledge('m3', {
+      'status': 'completed',
+      'mvu': {
+        'data': <String, Object?>{},
+        'commands': [null],
+      },
+    });
+    final refused = await bad;
+    expect(
+      (refused.status, refused.mvu, refused.issues.single.code),
+      (TavernScriptAckStatus.failed, null, 'invalidArgument'),
+    );
   });
 
   test("a lifecycle event waits for the page's handlers, and says how they went", () async {

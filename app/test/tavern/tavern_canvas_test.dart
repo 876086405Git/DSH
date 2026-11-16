@@ -328,7 +328,7 @@ void main() {
       },
     );
     expect(mvu, contains('var mvuWanted=true;'));
-    expect(mvu, contains("call('setMvuEnabled',{enabled:true})"));
+    expect(mvu, contains("ask('setMvuEnabled',{enabled:true})"));
     expect(mvu, contains("initializeGlobal('Mvu',Mvu)"));
     expect(mvu, contains('function runCardScripts(){mvuStart().then(startCardScripts);}'));
     // Its events answered with the candidate; the engine's resources kept

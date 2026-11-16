@@ -391,11 +391,16 @@ $preload
   // dsh.call(method, params): a Promise of what the engine answers (the
   // result, or an Error carrying code/committed/fieldPath).
   var calls={},callSeq=0;
-  function call(method,params){
-    var p=new Promise(function(ok,no){
+  // Asked, not kept for any event's answer: what starts the engine's own
+  // events (setMvuEnabled) must not have their answers wait on it.
+  function ask(method,params){
+    return new Promise(function(ok,no){
       var id=++callSeq;calls[id]={ok:ok,no:no};
       post({type:'call',id:id,method:method,params:params===undefined?{}:params});
     });
+  }
+  function call(method,params){
+    var p=ask(method,params);
     // Kept until answered: an event's answer waits for the writes its
     // handlers started.
     inflight.push(p);
