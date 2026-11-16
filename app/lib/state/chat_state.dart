@@ -1400,7 +1400,12 @@ class ChatController extends Notifier<ChatState> {
       state = state.copyWith(error: stopFailed, notice: notice);
       return true;
     } catch (e) {
-      if (!_currentOperation(operation)) return _retireSend(requestId);
+      if (!_currentOperation(operation)) {
+        // The connection dropped mid-call: it may have landed. The text still comes back,
+        // and sending it again keeps this request id, so the Host takes it once.
+        if (_outcomeUnknown(e)) _unsettled = (content: content, requestId: requestId);
+        return _retireSend(requestId);
+      }
       // Durable inbox/claim/end feedback also proves acceptance when a
       // preparation failure never writes a user/message echo.
       if (!_pending.any((p) => p.requestId == requestId) ||
