@@ -48,6 +48,9 @@ try:
         'fresh-default-alias', 'prior-direct-alias', 'carried-direct-alias', 'symlink-config-no-alias',
     ]]
     cases += [('PidHintProbeKt', case) for case in ['stale-hint', 'captured-hidden', 'visible-owned']]
+    cases += [('StartupObservationProbeKt', case) for case in [
+        'direct-ambient', 'tawc-ambient', 'direct-captured', 'tawc-captured', 'proot-links-ambient',
+    ]]
     cases += [('ProcessRetryProbeKt', case) for case in ['ambient-retry', 'captured-retry']]
     cases += [('ProcessScopeProbeKt', case) for case in [
         'alias-captured', 'other-root-isolated', 'exited-retry', 'foreign-uid-retired',
@@ -72,6 +75,9 @@ try:
         records.append(record)
         (out / 'commands.json').write_text(json.dumps(records, indent=2) + '\n')
         print(json.dumps({'case': case, 'exit': result.returncode}), flush=True)
+        if result.returncode != 0:
+            print(result.stdout, flush=True)
+            print(result.stderr, flush=True)
     summary = {'scope': 'production start/cleanup; actual non-root JVM; injected Android API faults; launcher records argv, not a complete PRoot engine',
                'passed': sum(r['exit'] == 0 for r in records), 'failed': sum(r['exit'] != 0 for r in records)}
     (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')

@@ -94,7 +94,7 @@ class DshProcess(
             else DirectLaunch.select(rootfs, directEngine, safe, directFailed)
         // Only PRoot's fake hard links stand in the way: tidy them once no runtime process is left.
         val tidy = selection.fallbackReason == DirectLaunch.INCOMPATIBLE
-        val cleanup = reapStrays(allowObservationGap = !selection.direct && !tidy)
+        val cleanup = reapStrays(allowObservationGap = true)
         if (tidy && cleanup.complete) selection = tidyLinks(binds)
         tawc = tawcReady && selection.direct
         direct = selection.direct && !tawcReady
@@ -105,8 +105,8 @@ class DshProcess(
             else -> null
         }
         launchDiagnostics.selected(if (tawc) "tawcroot" else if (direct) "direct" else "proot", directFallbackReason)
-        check(cleanup.complete || (!direct && !tawc && !cleanup.ownedRemaining)) { "runtime cleanup incomplete; stop the engine and retry" }
-        if (!cleanup.complete) listener.onLog("[dsh-app] starting proot with incomplete process observation; no captured runtime identities remain", "system")
+        check(!cleanup.ownedRemaining) { "runtime cleanup incomplete; stop the engine and retry" }
+        if (!cleanup.complete) listener.onLog("[dsh-app] starting with incomplete process observation; no captured runtime identities remain", "system")
         val pidFile = File(rootfs, "tmp/dsh-web.pid")
         pidFile.delete() // also removes a stale/dangling symlink; never reuse a previous run's PID
         check(!java.nio.file.Files.exists(pidFile.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) { "cannot remove stale runtime pid file" }
@@ -459,8 +459,8 @@ class DshProcess(
 
     internal data class CleanupResult(val complete: Boolean, val ownedRemaining: Boolean, val canPruneTemp: Boolean = false)
 
-    /** Unknown ambient processes are not proof of ownership. The default-mode
-     * startup policy may continue after reaping every captured identity, while
+    /** Unknown ambient processes are not proof of ownership. Startup may
+     * continue after reaping every captured identity, while
      * killStrays itself still reports the observation as incomplete. */
     @Synchronized internal fun reapStrays(allowObservationGap: Boolean = false): CleanupResult = synchronized(cleanupState) {
         reapStraysLocked(allowObservationGap)

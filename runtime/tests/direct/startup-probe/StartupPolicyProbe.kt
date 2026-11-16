@@ -87,7 +87,9 @@ fun main(args: Array<String>) {
             if (case == "l2s-fallback-unknown") expect(runtime.directFallbackReason == "incompatibleFiles", "fallback lost its reason")
         }
         if (!shouldLaunch) {
-            expect(failure?.message == "runtime cleanup incomplete; stop the engine and retry", "wrong refusal")
+            val expectedFailure = if (case == "direct-unknown") "direct engine: runtimeUpdateRequired"
+                else "runtime cleanup incomplete; stop the engine and retry"
+            expect(failure?.message == expectedFailure, "wrong refusal: $failure")
             expect(methods.isEmpty() && captured.isEmpty(), "a blocked launch reached its callback or child")
         }
         if (!owned) expect(child.isAlive && Os.sentSignals == 0, "unrelated process was signalled")
