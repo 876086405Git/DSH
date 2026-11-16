@@ -8,6 +8,7 @@ import 'dart:math';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../companion/companion_keeper.dart';
@@ -25,6 +26,24 @@ import '../theme/semantic_colors.dart';
 
 /// The bridge's limit for one memory, in code points.
 const _maxLength = 512;
+
+/// At most [max] code points, as the Host checks a memory's text.
+class _CodePointLimit extends TextInputFormatter {
+  const _CodePointLimit(this.max);
+
+  final int max;
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.runes.length <= max) return newValue;
+    if (oldValue.text.runes.length >= max) return oldValue;
+    final text = String.fromCharCodes(newValue.text.runes.take(max));
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
 
 /// A v4 UUID: memories are named by the client so a retried save can't add two.
 String companionMemoryId() {
@@ -194,6 +213,9 @@ class _CompanionMemoryPageState extends ConsumerState<CompanionMemoryPage> {
           minLines: 2,
           maxLines: 5,
           maxLength: _maxLength,
+          // The Host counts code points (👍🏽 is two), the field what shows as one.
+          maxLengthEnforcement: MaxLengthEnforcement.none,
+          inputFormatters: const [_CodePointLimit(_maxLength)],
           decoration: InputDecoration(hintText: l10n.companionMemoryHint),
         ),
         actions: [
