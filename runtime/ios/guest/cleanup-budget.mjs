@@ -1,5 +1,8 @@
-// The lifecycle owner is already installed by the product. Reading its class
-// creates no binding probe, guest boot, or timer. This is not a config surface.
+import { ActiveBudgetClock } from '../../ohos/lifecycle/budget.mjs';
+
+// iOS owns its cleanup budget independently of the OHOS lifecycle plugin.
+// The specialized clock uses the native activity clock and never pauses for
+// logical tool pauses, so a cancelled guest still has a bounded exit wait.
 export function createCleanupBudget() {
   let clock;
   let closed = false;
@@ -7,13 +10,7 @@ export function createCleanupBudget() {
     deadline(ms, reason) {
       if (closed) throw new Error('Guest cleanup budget owner is closed');
       if (!clock) {
-        const source = globalThis[Symbol.for('dsh.go.ohos.lifecycle')]?.clock;
-        if (!source || typeof source.bootId !== 'string' || typeof source.deadline !== 'function') {
-          throw new Error('iOS lifecycle activity budget owner is unavailable');
-        }
-        // This is the trusted, iOS-generated ActiveBudgetClock class, with a
-        // fresh never-paused instance: logical tool pause must not stall cleanup.
-        clock = new source.constructor(source.bootId);
+        clock = new ActiveBudgetClock('ios-guest-cleanup');
       }
       return clock.deadline(undefined, ms, reason);
     },
