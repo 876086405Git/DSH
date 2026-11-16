@@ -20,6 +20,7 @@ import 'package:dsh_app/ui/plugins/native/composer_capsules.dart';
 import 'package:dsh_app/ui/plugins/native/native_composer_bar.dart';
 import 'package:dsh_app/ui/plugins/seats/seat_links.dart' show seatWebOpenerProvider;
 import 'package:dsh_app/ui/plugins/view/plugin_view.dart';
+import 'package:dsh_app/ui/theme/glass.dart';
 import 'package:dsh_app/ui/web/web_target.dart';
 import 'package:dsh_app/ui_config/ui_config.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -340,6 +341,14 @@ void main() {
         Slots.main: [seats.occupant(Slots.main, seats.probe, 'k4-panel')],
       });
       expect(otherPages(), findsOneWidget);
+      // Same width as the card above it, one card gap below (#1389).
+      Rect glass(String key) =>
+          tester.getRect(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(GlassSurface)).first);
+      final above = glass('chat-plugins-ways-in');
+      final card = glass('chat-plugins-other-pages');
+      expect(card.left, moreOrLessEquals(above.left, epsilon: 0.5));
+      expect(card.right, moreOrLessEquals(above.right, epsilon: 0.5));
+      expect(card.top - above.bottom, moreOrLessEquals(ChatPluginsMetrics.gap, epsilon: 0.5));
     });
 
     testWidgets('global pages keep a way on beside a conversation view from the same web plugin', (tester) async {
