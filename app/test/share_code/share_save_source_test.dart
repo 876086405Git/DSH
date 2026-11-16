@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dsh_app/share_code/share_codec.dart';
 import 'package:dsh_app/share_code/share_models.dart';
 import 'package:dsh_app/state/artifacts.dart';
+import 'package:dsh_app/ui/common/pressable.dart';
 import 'package:dsh_app/ui/share_code/share_code_panel.dart';
 import 'package:dsh_app/ui/share_code/share_out.dart';
 import 'package:flutter/material.dart';
@@ -108,12 +109,17 @@ void main() {
         overrides: [shareOutProvider.overrideWithValue(out)],
       ),
     );
+    // The save does real file I/O: wait until its key is back, not a fixed time (a busy CI
+    // runner can take longer than any guess).
+    final key = find.byKey(const ValueKey('share-code-save'));
     Future<void> save() async {
-      await tester.runAsync(() async {
-        await tester.tap(find.byKey(const ValueKey('share-code-save')));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
+      await tester.runAsync(() => tester.tap(key));
       await tester.pump();
+      for (var i = 0; i < 250 && !tester.widget<Pressable>(key).enabled; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+      expect(tester.widget<Pressable>(key).enabled, isTrue, reason: 'the save never finished');
       await tester.pump(const Duration(milliseconds: 300));
     }
 
