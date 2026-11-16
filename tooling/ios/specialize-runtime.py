@@ -168,12 +168,22 @@ def attachments_for_ios(original):
         if text.count(before) != 1:
             raise ValueError('iOS attachment edit differs from the composed store: ' + before[:60])
         text = text.replace(before, after)
-    # Node reports OpenHarmony on iOS for the shared command/runtime layer, but
-    # this artifact uses the ImageIO-backed ios-sharp shim for image operations.
+    # Node reports OpenHarmony on iOS for the shared runtime. Keep its atomic
+    # publication path while sending images through the ImageIO-backed shim.
+    publication_gates = (
+        'if (process.platform === "openharmony") await publishOhosExclusive(source, target);',
+        'if (process.platform === "openharmony") await publishOhosExclusive(staged.path, target);',
+    )
+    for index, gate in enumerate(publication_gates):
+        if text.count(gate) != 1:
+            raise ValueError('iOS publication route differs from the composed store')
+        text = text.replace(gate, f'__DSH_IOS_PUBLICATION_GATE_{index}__')
     image_gate = 'process.platform === "openharmony"'
     if text.count(image_gate) != 12:
         raise ValueError('iOS image routes differ from the composed store')
     text = text.replace(image_gate, 'false')
+    for index, gate in enumerate(publication_gates):
+        text = text.replace(f'__DSH_IOS_PUBLICATION_GATE_{index}__', gate)
     return text.encode()
 
 
