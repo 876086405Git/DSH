@@ -35,6 +35,7 @@ jobs:
       app: ${{ github.event_name != 'pull_request' || steps.filter.outputs.app == 'true' }}
       packages: ${{ github.event_name != 'pull_request' || steps.filter.outputs.packages == 'true' }}
       runtime: ${{ github.event_name != 'pull_request' || steps.filter.outputs.runtime == 'true' }}
+      ios_runtime: ${{ steps.filter.outputs.ios_runtime }}
     steps:
       - id: filter
         if: github.event_name == 'pull_request'
@@ -46,6 +47,24 @@ jobs:
             app: [*ci, 'app/**', 'packages/**', 'sdk/plugin-kit/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
             packages: [*ci, 'packages/**']
             runtime: [*ci, 'runtime/**', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt']
+            ios_runtime:
+              - *ci
+              - '.github/workflows/ios-compile.yml'
+              - 'runtime/**'
+              - 'tooling/ios/**'
+              - 'app/ohos/entry/src/main/cpp/**'
+              - 'app/ohos/entry/src/main/ets/runtime/RuntimeCore.ets'
+              - 'app/ios/**'
+              - 'app/integration_test/ios_engine_check.dart'
+              - 'packages/dsh_client/**'
+
+  ios-runtime:
+    name: iOS runtime regression
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.ios_runtime == 'true'
+    uses: ./.github/workflows/ios-compile.yml
+    with:
+      regression_only: true
 
   checks:
     name: Generated files, tooling, SDK, web
@@ -305,9 +324,12 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [changes, checks, flutter, dart, runtime, android]
+    needs: [changes, checks, flutter, dart, runtime, android, ios-runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - if: needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      - if: >-
+          needs.changes.result != 'success' || contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled') ||
+          (github.event_name == 'pull_request' && needs.changes.outputs.ios_runtime == 'true' && needs.ios-runtime.result != 'success')
         run: exit 1

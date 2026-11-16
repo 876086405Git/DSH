@@ -132,13 +132,13 @@ export async function apply(ctx, config = {}) {
   const transport = createLifecycleTransport();
   const coordinator = new BoundaryCoordinator({ journal, bootId: publication.ownerId ?? randomUUID(),
     flushSession: session => ctx.sessions.flush(session),
-    async readEvents(id, from = 0, to) {
+    async readEvents(id, offset = 0, length) {
       const handle = await ctx.sessionPersistence.open(id, 'read');
-      try { return (await handle.read(from, to)).events; }
+      try { return (await handle.read(offset, length)).events; }
       finally { await handle.close(); }
     },
     resolveAgent: id => ctx.agents.get(id), hasActiveRounds: () => ctx.agents.list().some(agent => agent.status === 'running'),
-    hasActiveWork: () => jobs.hasActiveJobs() || ctx.subprocess.backend.live.size > 0 || ctx.subprocess.linux.hasActiveWork(),
+    hasActiveWork: () => jobs.hasActiveJobs() || ctx.subprocess.backend.live.size > 0 || ctx.subprocess.linux?.hasActiveWork() === true,
     revalidateTransport: () => transport.revalidate() });
   // After teardown a patched scheduler sees a closed owner and fails closed;
   // it must not fall back to unjournaled dispatch because a plugin unloaded.

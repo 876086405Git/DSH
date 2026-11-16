@@ -63,6 +63,29 @@ test('actual pinned AgentLoop, ToolRuntime and JSONL persist all four boundaries
   assert.equal(f.coordinator.status(owner.session.id).calls[0].active, false);
 });
 
+test('a durable title after the tool call does not invalidate its checkpoint', async t => {
+  let firstFlush = true, f;
+  f = await fixture(t, {
+    async flushSession(session) {
+      if (firstFlush) {
+        firstFlush = false;
+        session.append('session/title', { title: 'Updated title', messageSeqs: [], source: { kind: 'user' } });
+      }
+      return f.ctx.sessions.flush(session);
+    },
+  });
+  const owner = await f.create();
+  f.register('effect', async () => [{ type: 'text', text: 'committed after title' }]);
+  await owner.run([{ id: 'call-before-title' }]);
+  const events = await f.readEvents(owner.session.id);
+  const callIndex = events.findIndex(event => event.type === 'tool/call');
+  assert.equal(events[callIndex + 1].type, 'session/title');
+  const result = events.find(event => event.type === 'tool/result');
+  assert.deepEqual(result.sourceEventSeqs, [events[callIndex].seq]);
+  assert.equal(result.data.message.content[0].text, 'committed after title');
+  assert.equal(f.coordinator.status(owner.session.id).state, 'completed');
+});
+
 test('fast B remains live while original ordered finalization waits for A; C is admitted without a false unknown', async t => {
   const aEntered = Promise.withResolvers(), releaseA = Promise.withResolvers(), cEntered = Promise.withResolvers();
   const stages = [];

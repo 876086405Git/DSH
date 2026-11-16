@@ -1,5 +1,4 @@
 #include "publication_binding.h"
-#include "lifecycle_snapshot.h"
 #include "phone_contract.h"
 #include "dsh_node_version.h"
 
@@ -16,7 +15,6 @@
 #include <dlfcn.h>
 #include <cstdlib>
 #include <limits.h>
-#include <thread>
 #include <cmath>
 #include <cstring>
 #include <fcntl.h>
@@ -238,7 +236,7 @@ napi_value ThrowAttributeError(napi_env env, int error_number, const char* opera
   return nullptr;
 }
 
-std::thread::id& CloneOwnerThread() { static std::thread::id value; return value; }
+thread_local bool clone_owner_thread = false;
 
 // Narrow Git-clone cleanup: all traversal is anchored to descriptors retained
 // by the main job owner. Never recursively remove a pathname after checking it.
@@ -281,7 +279,7 @@ int EmptyCloneDirectory(int descriptor, unsigned depth) {
   return error;
 }
 napi_value ClearOwnedClone(napi_env env, napi_callback_info info) {
-  if (std::this_thread::get_id() != CloneOwnerThread()) {
+  if (!clone_owner_thread) {
     napi_throw_error(env, "ERR_OHOS_OWNERSHIP_MAIN_THREAD", "Clone cleanup belongs to the main engine"); return nullptr;
   }
   size_t argc = 5; napi_value argv[5];
@@ -377,16 +375,16 @@ napi_value GetOwnershipMarker(napi_env env, napi_callback_info info) {
 }
 
 struct LifecycleReader {
-  std::thread::id thread;
+  bool bound = false;
   std::string library;
   void* handle = nullptr;
   DshReadHostLifecycleV1 read = nullptr;
   DshHostPhoneV1 phone = nullptr;
 };
-LifecycleReader& HostReader() { static LifecycleReader reader; return reader; }
+LifecycleReader& HostReader() { static thread_local LifecycleReader reader; return reader; }
 
 napi_value GetHostLifecycleSnapshot(napi_env env, napi_callback_info) {
-  if (std::this_thread::get_id() != HostReader().thread) {
+  if (!HostReader().bound) {
     napi_throw_error(env,"ERR_OHOS_LIFECYCLE_MAIN_THREAD","Host lifecycle belongs to the main engine");return nullptr;
   }
   if (!HostReader().read && !HostReader().library.empty()) {
@@ -450,7 +448,7 @@ napi_value PhoneCall(napi_env env,napi_callback_info info) {
   const auto operation=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(data));
   // This also performs the main-registration-thread and fixed NOLOAD checks.
   if(!GetHostLifecycleSnapshot(env,nullptr))return nullptr;
-  if(!HostReader().phone) {
+  if(!HostReader().phone && HostReader().handle) {
     auto call=reinterpret_cast<DshHostPhoneV1>(dlsym(HostReader().handle,"dsh_host_phone_v1"));
     Dl_info symbol{};char actual[PATH_MAX];
     if(call&&dladdr(reinterpret_cast<void*>(call),&symbol)&&symbol.dli_fname&&
@@ -498,7 +496,7 @@ napi_value PhoneCall(napi_env env,napi_callback_info info) {
 napi_value Initialize(napi_env env, napi_value exports) {
 #ifdef DSH_PUBLICATION_TEST_ADDON
   // Standalone Linux test-addon entry; production is set at pre-Start registration.
-  if (syscall(SYS_gettid) == getpid()) CloneOwnerThread() = std::this_thread::get_id();
+  if (syscall(SYS_gettid) == getpid()) clone_owner_thread = true;
 #endif
   const napi_node_version* version;
   if (napi_get_node_version(env, &version) != napi_ok) return nullptr;
@@ -547,14 +545,21 @@ napi_module publication_module = {
 
 }  // namespace
 
+void BindPublicationHost(DshReadHostLifecycleV1 read) {
+  clone_owner_thread = true;
+  HostReader().bound = true;
+  HostReader().read = read;
+}
+
 void RegisterPublicationBinding() {
-  CloneOwnerThread() = std::this_thread::get_id();
-  HostReader().thread=std::this_thread::get_id();
+  BindPublicationHost(nullptr);
+#if !defined(__APPLE__)
   const char* root=std::getenv("DSH_GO_OHOS_NATIVE_LIBRARY_DIR");char canonical[PATH_MAX];
   if(root && root[0]=='/') {
     const std::string path=std::string(root)+"/libdsh_host.so";
     if(realpath(path.c_str(),canonical) && path==canonical) HostReader().library=path;
   }
+#endif
   napi_module_register(&publication_module);
 }
 

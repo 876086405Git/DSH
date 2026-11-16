@@ -11,11 +11,19 @@ on:
       - 'app/**'
       - 'packages/**'
       - 'tooling/ios/**'
-      - 'runtime/ios/**'
-      - 'runtime/ohos/**'
-      - 'runtime/patches/**'
+      - 'runtime/**'
       - '.github/workflows/ios-compile.yml'
   workflow_dispatch:
+    inputs:
+      regression_only:
+        description: Run the embedded-engine regression in the simulator app
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      regression_only:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +34,7 @@ concurrency:
 
 jobs:
   phone-protocol:
+    if: ${{ !inputs.regression_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -39,6 +48,7 @@ jobs:
           python3 -B tooling/ios/test-channel-contract.py -v
 
   compile:
+    if: ${{ !inputs.regression_only }}
     runs-on: macos-26
     timeout-minutes: 90
     env:
@@ -118,6 +128,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Check the shared host profiles
+        if: inputs.regression_only
+        run: |
+          python3 -B runtime/tests/ohos/host-core.py --ios --out "$RUNNER_TEMP/host-core-ios"
+          python3 -B runtime/tests/ohos/host-core.py --out "$RUNNER_TEMP/host-core-hap"
 
       - name: Prepare the engine
         id: prepare
@@ -199,6 +215,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Compile the native pieces for the simulator
+        if: ${{ !inputs.regression_only }}
         run: |
           log="$(mktemp)"
           if ! bash tooling/ios/build-engine-native.sh iphonesimulator "$RUNNER_TEMP/sim" -DDSH_IOS_ENGINE_SMOKE 2>&1 | tee "$log"; then
@@ -213,6 +230,7 @@ jobs:
           xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator             tooling/ios/engine-smoke/smoke.c -o "$RUNNER_TEMP/smoke"
 
       - name: Compile the native pieces for a device
+        if: ${{ !inputs.regression_only }}
         run: |
           log="$(mktemp)"
           if ! bash tooling/ios/build-engine-native.sh iphoneos "$RUNNER_TEMP/device" 2>&1 | tee "$log"; then
@@ -225,14 +243,20 @@ jobs:
             test -f "$RUNNER_TEMP/device/$name.framework/Info.plist"
           done
 
-      - name: Run a round on the simulator
+      - name: Boot the simulator
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          mkdir -p "$RUNNER_TEMP/tree"
-          unzip -q app/ios/Engine/runtime.zip 'files/*' -d "$RUNNER_TEMP/tree"
           udid="$(python3 tooling/ios/engine-smoke/pick-simulator.py)"
           xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid"
           echo "DSH_SIMULATOR=$udid" >> "$GITHUB_ENV"
+
+      - name: Run a round on the simulator
+        if: ${{ !inputs.regression_only }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/tree"
+          unzip -q app/ios/Engine/runtime.zip 'files/*' -d "$RUNNER_TEMP/tree"
+          udid="$DSH_SIMULATOR"
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           status=0
           "$node" tooling/ios/engine-smoke/drive.mjs --simulator "$udid" --smoke "$RUNNER_TEMP/smoke"             --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/smoke-work"             --ws "$RUNNER_TEMP/tree/files" || status=$?
@@ -240,12 +264,14 @@ jobs:
           exit "$status"
 
       - name: Cache the fixed Alpine guest fixture
+        if: ${{ !inputs.regression_only }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/guest-archive/alpine-minirootfs-3.24.4-aarch64.tar.gz
           key: ios-guest-alpine-3.24.4-aarch64-4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de
 
       - name: Run real guest tools through the simulator approval chain
+        if: ${{ !inputs.regression_only }}
         run: |
           mkdir -p "$RUNNER_TEMP/guest-archive"
           archive="$RUNNER_TEMP/guest-archive/alpine-minirootfs-3.24.4-aarch64.tar.gz"
@@ -266,7 +292,7 @@ jobs:
           "$node" tooling/ios/engine-smoke/guest-drive.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/guest-smoke" --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/guest-smoke-work" --ws "$RUNNER_TEMP/tree/files" --rootfs "$RUNNER_TEMP/guest-installation/rootfs"
 
       - name: Keep real guest approval evidence
-        if: always()
+        if: ${{ !inputs.regression_only && always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-guest-smoke
@@ -276,7 +302,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Check whose file descriptors a stop closes
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           bash tooling/ios/engine-smoke/build-fd.sh "$RUNNER_TEMP/fd-smoke"
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
@@ -291,7 +317,7 @@ jobs:
           exit "$status"
 
       - name: Check the engine comes back from the heap limit
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           bash tooling/ios/engine-smoke/build-heap.sh "$RUNNER_TEMP/heap-smoke"
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
@@ -306,7 +332,7 @@ jobs:
           exit "$status"
 
       - name: Check images on Apple's decoder, through the real store
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           xcrun --sdk iphonesimulator clang -std=c11 -target arm64-apple-ios15.0-simulator -O2 -pthread tooling/ios/engine-smoke/image-smoke.c -o "$RUNNER_TEMP/image-smoke"
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
@@ -321,7 +347,7 @@ jobs:
           exit "$status"
 
       - name: Record what this Node build has
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/env-probe.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/image-smoke" --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/env-probe-work" || echo "::warning title=node env::the probe itself failed"
@@ -351,27 +377,27 @@ jobs:
           "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode engine
 
       - name: Launch the real app
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           (cd app && bash ../tooling/ios/build.sh --simulator --debug)
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode launch --shot "$RUNNER_TEMP/launch.png"
 
       - name: Drive other apps with the phone runner
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/phone-runner-check.mjs --simulator "$DSH_SIMULATOR" --work "$RUNNER_TEMP/phone-runner"
 
       - name: Call the browser and system tools inside the app
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/tools-check.mjs --simulator "$DSH_SIMULATOR" --app app/build/ios/iphonesimulator/Runner.app --work "$RUNNER_TEMP/tools-check"
 
       - name: Exercise Swift phone and companion voice contracts
         id: swift
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: app
         run: |
           suites="IOSPhoneSelfRunnerTests IOSPhonePairingStoreTests IOSPhoneCoreDeviceTests IOSPhoneScreenTests
@@ -433,11 +459,11 @@ jobs:
           retention-days: 7
 
       - name: Capture the native pet renderer in the simulator
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: bash tooling/ios/pet-overlay-tests/capture-simulator.sh "$DSH_SIMULATOR" "$RUNNER_TEMP/pet-overlay"
 
       - name: Keep the native pet frames and capture receipt
-        if: always()
+        if: ${{ !inputs.regression_only && always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-pet-overlay
@@ -445,7 +471,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Keep what the tools answered
-        if: always()
+        if: ${{ !inputs.regression_only && always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-native-tools
@@ -453,11 +479,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Archive as for TestFlight, and look inside
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         run: bash tooling/ios/check-archive.sh
 
       - name: Keep the unsigned app
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-unsigned-ipa
@@ -467,7 +493,7 @@ jobs:
           retention-days: 14
 
       - name: Keep the launch screenshot
-        if: always()
+        if: ${{ !inputs.regression_only && always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-launch-screenshot

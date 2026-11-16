@@ -19,6 +19,9 @@ extern "C" int dsh_node_stop();
 namespace {
 std::mutex host_mutex;
 std::unique_ptr<dsh::Host> host;
+uint64_t lifecycle_owner = 0;
+bool app_foreground = false;
+bool app_continued = false;
 
 char* Copy(const std::string& text) {
   char* copy = static_cast<char*>(std::malloc(text.size() + 1));
@@ -45,6 +48,26 @@ std::string ExitCode(const std::optional<int>& code) {
   return "\"exitCode\":" + (code ? std::to_string(*code) : std::string("null"));
 }
 }  // namespace
+
+// UIKit owns these observations. Keep the latest state between engine runs.
+extern "C" __attribute__((visibility("default")))
+void dsh_host_set_lifecycle(int foreground, int continued) {
+  std::lock_guard<std::mutex> lock(host_mutex);
+  const bool was_continued = !app_foreground && app_continued;
+  app_foreground = foreground != 0;
+  app_continued = continued != 0;
+  if (!host || !host->Lifecycle().Foreground(lifecycle_owner, app_foreground)) return;
+  const bool is_continued = !app_foreground && app_continued;
+  if (!app_foreground && was_continued != is_continued) {
+    host->Lifecycle().SetContinuous(lifecycle_owner, is_continued);
+  }
+}
+
+extern "C" __attribute__((visibility("default")))
+int dsh_host_lifecycle_snapshot_v1(DshHostLifecycleSnapshotV1* output, uint32_t size) noexcept {
+  std::lock_guard<std::mutex> lock(host_mutex);
+  return host ? host->Lifecycle().Snapshot(output, size) : -1;
+}
 
 // Called only by the App before engine start; no JS or environment setter exists.
 extern "C" __attribute__((visibility("default")))
@@ -90,6 +113,9 @@ int dsh_host_start(const char* runtime_root, const char* guest_root, const char*
     dsh::ios::PreserveRelocationOrigin(options);
     auto next = std::make_unique<dsh::Host>();
     next->Start(std::move(options), dsh_node_start, dsh_node_stop);
+    // Snapshot reads take host_mutex, so the new run sees its owner from the first read.
+    lifecycle_owner = next->Lifecycle().BeginOwner(app_foreground);
+    if (!app_foreground && app_continued) next->Lifecycle().SetContinuous(lifecycle_owner, true);
     host = std::move(next);
     return 0;
   } catch (const dsh::HostError& error) {

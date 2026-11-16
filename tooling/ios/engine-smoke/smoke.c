@@ -16,6 +16,7 @@
 typedef int (*StartFn)(const char*, const char*, const char*, const char*, const char*, const char*, const char*, int, const char**,
                        const char**, char**, char**);
 typedef void (*StopFn)(void);
+typedef void (*LifecycleFn)(int, int);
 typedef char* (*TextFn)(void);
 typedef void (*FreeFn)(char*);
 
@@ -102,12 +103,13 @@ int main(int argc, char** argv) {
   if (host == NULL) die("dlopen", dlerror());
   start_engine = (StartFn)dlsym(host, "dsh_host_start");
   stop_engine = (StopFn)dlsym(host, "dsh_host_stop");
+  LifecycleFn set_lifecycle = (LifecycleFn)dlsym(host, "dsh_host_set_lifecycle");
   host_state = (TextFn)dlsym(host, "dsh_host_state");
   host_drain = (TextFn)dlsym(host, "dsh_host_drain");
   host_free = (FreeFn)dlsym(host, "dsh_host_free");
   phone_arm = (ArmFn)dlsym(host, "dsh_ios_phone_arm");
   phone_clear = (ClearFn)dlsym(host, "dsh_ios_phone_clear");
-  if (!start_engine || !stop_engine || !host_state || !host_drain || !host_free || !phone_arm || !phone_clear) {
+  if (!start_engine || !stop_engine || !set_lifecycle || !host_state || !host_drain || !host_free || !phone_arm || !phone_clear) {
     die("dlsym", dlerror());
   }
   snprintf(dsh_home, sizeof dsh_home, "%s/root/.dsh", argv[3]);
@@ -119,6 +121,7 @@ int main(int argc, char** argv) {
     die("linux directory", "Cannot prepare the private Linux directory");
   }
 
+  set_lifecycle(1, 0);
   begin(argv);
   for (;;) {
     drain();

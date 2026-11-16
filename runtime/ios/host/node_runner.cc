@@ -24,6 +24,8 @@
 #include "activity_clock_binding.h"
 #include "guest_config_binding.h"
 
+extern "C" int dsh_host_lifecycle_snapshot_v1(DshHostLifecycleSnapshotV1*, uint32_t) noexcept;
+
 namespace {
 // Secondary threads get 512 KiB by default here, less than V8's stack limit assumes.
 constexpr size_t kEngineStackBytes = 16 * 1024 * 1024;
@@ -217,6 +219,7 @@ void* RunOnEngineThread(void* raw) {
     run->result = initialization->exit_code();
     return nullptr;
   }
+  BindPublicationHost(dsh_host_lifecycle_snapshot_v1);
   // Application arguments (including this run's patches) are not process options.
   std::vector<std::string> args{run->arguments.front()};
   args.insert(args.end(), run->arguments.begin() + 9, run->arguments.end());
