@@ -63,7 +63,7 @@ extension _DeepSeekImportOperations on TavernEngine {
         result.add(TavernDeepSeekImported(sessionId: session.id, characterId: chat.characterId, chatId: chat.chatId));
         continue;
       }
-      final character = await importCard(utf8.encode(jsonEncode(_deepSeekCard(session))));
+      final character = await _importCard(utf8.encode(jsonEncode(_deepSeekCard(session))));
       final String chatId;
       try {
         chatId = await _libraryOperation(() async => _deepSeekChat(session, character));
