@@ -108,7 +108,7 @@ void main() {
   group('本机: set up while it unpacks', () {
     testWidgets('starts the unpack once, then 外观 with the unpack in a capsule', (tester) async {
       final rig = await pumpGate(tester);
-      expect(find.text('DSH 在哪里运行？'), findsOneWidget);
+      expect(find.text('想怎么用 dsh-Go？'), findsOneWidget);
       expect(find.byKey(_capsule), findsNothing);
 
       await chooseThisPhone(tester);
@@ -142,9 +142,7 @@ void main() {
       expect(rig.runtime.calls, ['install']);
     });
 
-    testWidgets('after 外观, what DSH Go should do: step 3 of 4, beside the unpack, kept on a relaunch', (
-      tester,
-    ) async {
+    testWidgets('after 外观, what DSH Go should do: step 3 of 4, beside the unpack, kept on a relaunch', (tester) async {
       final rig = await pumpGate(tester);
       await chooseThisPhone(tester);
       rig.runtime.unpack(0.3);
@@ -492,9 +490,7 @@ void main() {
     Future<GateRig> pumpLow(WidgetTester tester, DeviceTier tier) async {
       final rig = await pumpGate(
         tester,
-        overrides: [
-          performanceChannelProvider.overrideWithValue(FakePerformanceChannel(Future.value(snapshot(tier)))),
-        ],
+        overrides: [performanceChannelProvider.overrideWithValue(FakePerformanceChannel(Future.value(snapshot(tier))))],
       );
       // A low-end phone suggests the remote host: pick this phone.
       await tester.tap(find.byKey(const ValueKey('runtime-option-local')));

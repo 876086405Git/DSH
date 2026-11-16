@@ -940,6 +940,13 @@ class PreviewTavern implements Tavern, TavernPreview {
   Future<List<TavernChatFile>> exportChat(String chatId, {String? fileName}) async => throw UnsupportedError('preview');
 
   @override
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath) async => throw UnsupportedError('preview');
+
+  @override
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds) async =>
+      throw UnsupportedError('preview');
+
+  @override
   Future<void> deleteChat(String chatId) async {
     _chats.remove(chatId);
     _listChanged.add(null);

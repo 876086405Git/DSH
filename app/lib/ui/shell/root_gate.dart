@@ -15,6 +15,7 @@ import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
 import '../../share_code/guest_fs.dart';
 import '../../state/android_features.dart';
+import '../../state/app_mode_state.dart';
 import '../../state/engine_control.dart';
 import '../../state/hosts_state.dart';
 import '../../state/notify_state.dart';
@@ -236,6 +237,18 @@ class _RootGateState extends ConsumerState<RootGate> {
     _goTo(null);
   }
 
+  /// 「和角色聊天」: 酒馆 talks to the model itself, so it needs neither the
+  /// runtime nor a key before the first message (it asks then). The app runs
+  /// without the runtime, as on a remote host, until 工作 installs it; every
+  /// launch opens in 酒馆 until the person picks another mode.
+  void _chooseTavern() {
+    if (_beside) _leaveBeside();
+    unawaited(ref.read(appModeProvider.notifier).setStartup(AppMode.tavern));
+    unawaited(_prefs.setLocalDeclined(true));
+    _autoStartDone = true;
+    _goTo(null);
+  }
+
   /// Writes the diagnostics snapshot once per engine run, after the frame that saw it.
   /// Widget tests have no rootfs and must not leave diagnostics timeouts behind.
   void _publishDiagnostics() {
@@ -355,6 +368,7 @@ class _RootGateState extends ConsumerState<RootGate> {
           chooseRuntime: _chooseRuntime,
           beside: _beside,
           onLocal: _chooseRuntime ? _chooseLocal : null,
+          onTavern: _chooseRuntime ? _chooseTavern : null,
           onAppearanceDone: _afterAppearance,
           onAccessDone: _afterAccess,
           onFinished: _afterFinishing,

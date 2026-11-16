@@ -74,5 +74,8 @@
   "engineCapKeepsRunning": "继续运行",
   "engineCapYes": "可以",
   "engineCapNone": "不可用",
-  "marketInstallRefused": "这个引擎不能安装市场插件"
+  "marketInstallRefused": "这个引擎不能安装市场插件",
+  "localEnvChooseUseTitle": "想怎么用 dsh-Go？",
+  "localEnvTavernTitle": "和角色聊天",
+  "localEnvTavernDetail": "接回 DeepSeek 的对话也在这里 · 不用安装"
 }

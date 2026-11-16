@@ -38,6 +38,7 @@ import 'io/authoring_image.dart';
 import 'io/card_codec.dart'
     show CardCodec, DecodedCardSeed, TavernCard, embeddedCardAssetPath, isSafeCardAssetPath, cardAssetDataUri;
 import 'io/chat_jsonl.dart';
+import 'io/deepseek_export.dart';
 import 'io/gameplay_pack_codec.dart';
 import 'io/import_intake.dart';
 import 'io/preset_codec.dart';
@@ -146,6 +147,7 @@ part 'engine_script_presets.dart';
 part 'engine_script_avatars.dart';
 part 'engine_script_book_directory.dart';
 part 'engine_script_book_bindings.dart';
+part 'engine_deepseek_import.dart';
 part 'slash/st_name_matching.dart';
 part 'slash/st_message_bias.dart';
 
@@ -466,6 +468,9 @@ class TavernEngine implements Tavern {
   final _characterDetails = <String, Future<StoredCharacter?>>{};
   static const _detailCacheCapacity = 8;
   Future<void> _libraryQueue = Future.value();
+
+  /// DeepSeek imports, one after another (engine_deepseek_import.dart).
+  Future<void> _deepSeekImports = Future.value();
   Future<void> _personaQueue = Future.value();
   Future<void> _presetQueue = Future.value();
   Map<String?, _PresetWorkingSlot> _presetWorkingSlots = {};
@@ -1078,29 +1083,32 @@ class TavernEngine implements Tavern {
       });
 
   @override
-  Future<TavernCharacter> importCard(Uint8List bytes, {String? fileName}) => _operation(
-    () => _libraryOperation(() async {
-      var diagnostics = <TavernRegexDiagnostic>[];
-      final stored = await _library.importCard(
-        bytes,
-        fileName: fileName,
-        inspect: (card) async {
-          diagnostics = await _checkCardRegex(card.data);
-          return assessImport(
-            kind: TavernImportKind.character,
-            document: card.json,
-            embeddedAssetPaths: card.assets.keys,
-            regexDiagnostics: diagnostics,
-            checkedAt: _clock().toUtc(),
-          );
-        },
-      );
-      _characterCache = null;
-      _cacheCharacterDetail(stored.id, Future.value(stored));
-      _notifyLists();
-      return stored.toCharacter(regexDiagnostics: diagnostics);
-    }),
-  );
+  Future<TavernCharacter> importCard(Uint8List bytes, {String? fileName}) =>
+      _operation(() => _importCard(bytes, fileName: fileName));
+
+  /// [importCard] for an operation already admitted: one that began before a
+  /// backup closed admission still takes its cards in.
+  Future<TavernCharacter> _importCard(Uint8List bytes, {String? fileName}) => _libraryOperation(() async {
+    var diagnostics = <TavernRegexDiagnostic>[];
+    final stored = await _library.importCard(
+      bytes,
+      fileName: fileName,
+      inspect: (card) async {
+        diagnostics = await _checkCardRegex(card.data);
+        return assessImport(
+          kind: TavernImportKind.character,
+          document: card.json,
+          embeddedAssetPaths: card.assets.keys,
+          regexDiagnostics: diagnostics,
+          checkedAt: _clock().toUtc(),
+        );
+      },
+    );
+    _characterCache = null;
+    _cacheCharacterDetail(stored.id, Future.value(stored));
+    _notifyLists();
+    return stored.toCharacter(regexDiagnostics: diagnostics);
+  });
 
   @override
   Future<Uint8List> exportCard(String characterId, {TavernCardFormat format = TavernCardFormat.png}) =>
@@ -1507,6 +1515,12 @@ class TavernEngine implements Tavern {
       );
     });
   });
+
+  @override
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath) => _inspectDeepSeekExport(zipPath);
+  @override
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds) =>
+      _importDeepSeekSessions(zipPath, sessionIds);
 
   @override
   Future<List<TavernChatFile>> exportChat(String chatId, {String? fileName}) => _operation(() {

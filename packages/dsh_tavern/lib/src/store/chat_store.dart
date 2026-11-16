@@ -1061,6 +1061,19 @@ class ChatStore {
     };
   }
 
+  /// The chats taken in from a DeepSeek export, by the conversation each came
+  /// from (its id in the export).
+  Map<String, ({String chatId, String characterId})> deepSeekChats() {
+    _ensureOpen();
+    return {
+      for (final row in _db.select(
+        r'''SELECT id, character_id, json_extract(metadata, '$.dshgo.deepseek.sessionId') AS source
+          FROM chats WHERE 'text' = json_type(metadata, '$.dshgo.deepseek.sessionId')''',
+      ))
+        row['source'] as String: (chatId: row['id'] as String, characterId: row['character_id'] as String),
+    };
+  }
+
   List<TavernChatSummary> listChats({String? characterId}) {
     _ensureOpen();
     final rows = _db.select(

@@ -34,6 +34,7 @@ class OnboardingFlow extends StatefulWidget {
     this.chooseRuntime = false,
     this.onRemote,
     this.onLocal,
+    this.onTavern,
     this.onAppearanceDone,
     this.onAccessDone,
     this.onFinished,
@@ -55,6 +56,9 @@ class OnboardingFlow extends StatefulWidget {
   /// Picked 「本机」: the caller starts the unpack and moves on to
   /// [OnboardingStep.appearance]. Null: the runtime page installs itself.
   final VoidCallback? onLocal;
+
+  /// Picked 和角色聊天: 酒馆, with nothing installed and no key asked for yet.
+  final VoidCallback? onTavern;
 
   final VoidCallback? onAppearanceDone;
 
@@ -90,6 +94,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         choose: widget.chooseRuntime,
         onRemote: widget.onRemote,
         onLocal: widget.onLocal,
+        onTavern: widget.onTavern,
       ),
       OnboardingStep.appearance => AppearanceStepPage(onDone: widget.onAppearanceDone ?? () {}),
       OnboardingStep.access => AccessStepPage(onDone: widget.onAccessDone ?? () {}),
@@ -104,12 +109,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     // phone, first run) the look and what DSH Go should do, then the
     // connection.
     final steps = widget.chooseRuntime || widget.beside
-        ? const [
-            OnboardingStep.runtime,
-            OnboardingStep.appearance,
-            OnboardingStep.access,
-            OnboardingStep.apiKey,
-          ]
+        ? const [OnboardingStep.runtime, OnboardingStep.appearance, OnboardingStep.access, OnboardingStep.apiKey]
         : const [OnboardingStep.runtime, OnboardingStep.apiKey];
     final index = steps.indexOf(step);
     return OnboardingSwitcher(

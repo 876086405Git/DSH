@@ -44,6 +44,7 @@ class RuntimeSetupPage extends ConsumerStatefulWidget {
     this.choose = false,
     this.onRemote,
     this.onLocal,
+    this.onTavern,
     this.waiting = false,
     this.leading,
   });
@@ -61,6 +62,9 @@ class RuntimeSetupPage extends ConsumerStatefulWidget {
   /// Picked 「本机」 in the choice: the caller starts the unpack and moves on
   /// while it runs. Null: this page installs and shows the progress.
   final VoidCallback? onLocal;
+
+  /// 和角色聊天 in the choice (first run): 酒馆 without the runtime.
+  final VoidCallback? onTavern;
 
   /// Set up while unpacking and done with it: the progress says it will go
   /// on by itself (and, when it can, that a notification will say so).
@@ -165,6 +169,7 @@ class _RuntimeSetupPageState extends ConsumerState<RuntimeSetupPage> {
               leading: widget.leading,
               onLocal: widget.onLocal ?? () => _install(),
               onRemote: widget.onRemote!,
+              onTavern: widget.onTavern,
             )
           : KeyedSubtree(key: const ValueKey('progress'), child: _progress(context, state, view)),
     );

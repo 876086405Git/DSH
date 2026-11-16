@@ -10,6 +10,7 @@ import 'package:dsh_app/runtime/local_footprint.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/account_state.dart';
+import 'package:dsh_app/state/app_mode_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/onboarding_state.dart';
@@ -332,7 +333,7 @@ void main() {
 
     testWidgets('远程主机 → pick a host → home, nothing installed', (tester) async {
       final (runtime, container) = await pumpGate(tester);
-      expect(find.text('DSH 在哪里运行？'), findsOneWidget);
+      expect(find.text('想怎么用 dsh-Go？'), findsOneWidget);
       await chooseRemote(tester);
       expect(find.byType(RemoteScreen), findsOneWidget);
 
@@ -351,8 +352,20 @@ void main() {
       await tester.binding.handlePopRoute();
       await _frames(tester);
       expect(find.byType(RemoteScreen), findsNothing);
-      expect(find.text('DSH 在哪里运行？'), findsOneWidget);
+      expect(find.text('想怎么用 dsh-Go？'), findsOneWidget);
       expect(container.read(onboardingPrefsProvider).localDeclined, isFalse);
+      expect(runtime.calls, isEmpty);
+    });
+
+    testWidgets('和角色聊天 → home in 酒馆, nothing installed and no key asked for', (tester) async {
+      final (runtime, container) = await pumpGate(tester);
+      await tester.tap(find.byKey(const ValueKey('runtime-option-tavern')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(FilledButton, '继续'));
+      await _frames(tester);
+      expect(find.text('home'), findsOneWidget);
+      expect(container.read(onboardingPrefsProvider).localDeclined, isTrue);
+      expect(container.read(appModeProvider).startup, AppMode.tavern);
       expect(runtime.calls, isEmpty);
     });
 

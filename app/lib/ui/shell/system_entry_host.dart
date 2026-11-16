@@ -22,6 +22,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dsh_tavern/dsh_tavern.dart' show isDeepSeekExport;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,6 +38,7 @@ import '../../state/draft_store.dart';
 import '../../state/hosts_state.dart';
 import '../../state/sessions_state.dart';
 import '../common/discard_guard.dart';
+import '../tavern/tavern_deepseek_import.dart';
 import '../tavern/tavern_intake.dart';
 
 /// Draws nothing. Put it once in the home shell's stack, next to [LinkHost].
@@ -95,6 +98,16 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
       final ui = ref.read(linkRouterProvider).context ?? (mounted ? context : null);
       if (ui != null && ui.mounted) await openTavernCardFile(ui, ref, File(file.path), file.name);
       // HarmonyOS's inbox holds the batch until it is used: the card has been read.
+      if (share.consumption case final consumption?) unawaited(consumption.finish());
+      return;
+    }
+    // DeepSeek's chat export goes to 酒馆 too, to be continued there.
+    if (share.files case [final file]
+        when share.skipped.isEmpty &&
+            file.name.toLowerCase().endsWith('.zip') &&
+            await compute(isDeepSeekExport, file.path)) {
+      final ui = ref.read(linkRouterProvider).context ?? (mounted ? context : null);
+      if (ui != null && ui.mounted) await takeInDeepSeekExport(ui, ref, path: file.path);
       if (share.consumption case final consumption?) unawaited(consumption.finish());
       return;
     }
