@@ -25004,6 +25004,58 @@ class L10nEn extends L10n {
   String get tavernDraftTrialUnsupported => 'This draft can\'t be tried yet';
 
   @override
+  String get tavernImportFromDeepSeek => 'Bring over from DeepSeek';
+
+  @override
+  String get tavernImportFromDeepSeekSubtitle => 'Export all chats in DeepSeek\'s settings, then pick that ZIP';
+
+  @override
+  String get tavernDeepSeekTitle => 'Bring chats over from DeepSeek';
+
+  @override
+  String tavernDeepSeekFound(int count) {
+    return '$count chats found, the longest first. Tick the ones to continue.';
+  }
+
+  @override
+  String tavernDeepSeekMessages(int count) {
+    return '$count messages';
+  }
+
+  @override
+  String get tavernDeepSeekUntitled => 'Untitled chat';
+
+  @override
+  String get tavernDeepSeekAlready => 'Already here; tap to open';
+
+  @override
+  String tavernDeepSeekMore(int count) {
+    return 'Show more ($count left)';
+  }
+
+  @override
+  String tavernDeepSeekTake(int count) {
+    return 'Bring over ($count)';
+  }
+
+  @override
+  String get tavernDeepSeekTaking => 'Bringing over…';
+
+  @override
+  String get tavernDeepSeekNotExport => 'This isn\'t a DeepSeek chat export';
+
+  @override
+  String get tavernDeepSeekNotExportMessage => 'Pick the ZIP DeepSeek gives you when you export all chats';
+
+  @override
+  String get tavernDeepSeekFailed => 'Couldn\'t bring it over; try again';
+
+  @override
+  String tavernDeepSeekTaken(int count) {
+    return '$count chats brought over; the rest are in the chat list';
+  }
+
+  @override
   String get tavernPacks => 'Gameplay packs';
 
   @override

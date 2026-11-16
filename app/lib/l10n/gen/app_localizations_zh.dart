@@ -23727,6 +23727,58 @@ class L10nZh extends L10n {
   String get tavernDraftTrialUnsupported => '这份草稿暂时没法试玩';
 
   @override
+  String get tavernImportFromDeepSeek => '从 DeepSeek 接回来';
+
+  @override
+  String get tavernImportFromDeepSeekSubtitle => '在 DeepSeek 的设置里导出全部历史对话，再选那个 ZIP';
+
+  @override
+  String get tavernDeepSeekTitle => '接回 DeepSeek 的对话';
+
+  @override
+  String tavernDeepSeekFound(int count) {
+    return '找到 $count 段对话，聊得最多的排在前面。勾上想接着聊的。';
+  }
+
+  @override
+  String tavernDeepSeekMessages(int count) {
+    return '$count 条';
+  }
+
+  @override
+  String get tavernDeepSeekUntitled => '没有标题的对话';
+
+  @override
+  String get tavernDeepSeekAlready => '已经接回来了，点开继续';
+
+  @override
+  String tavernDeepSeekMore(int count) {
+    return '显示更多（还有 $count 段）';
+  }
+
+  @override
+  String tavernDeepSeekTake(int count) {
+    return '接回来（$count）';
+  }
+
+  @override
+  String get tavernDeepSeekTaking => '正在接回…';
+
+  @override
+  String get tavernDeepSeekNotExport => '这不是 DeepSeek 导出的对话';
+
+  @override
+  String get tavernDeepSeekNotExportMessage => '要选在 DeepSeek 里导出全部历史对话后得到的那个 ZIP';
+
+  @override
+  String get tavernDeepSeekFailed => '没接回来，再试一次';
+
+  @override
+  String tavernDeepSeekTaken(int count) {
+    return '接回了 $count 段，其余的在对话列表里';
+  }
+
+  @override
   String get tavernPacks => '玩法包';
 
   @override

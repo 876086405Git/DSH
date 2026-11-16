@@ -38,6 +38,7 @@ import 'io/authoring_image.dart';
 import 'io/card_codec.dart'
     show CardCodec, DecodedCardSeed, TavernCard, embeddedCardAssetPath, isSafeCardAssetPath, cardAssetDataUri;
 import 'io/chat_jsonl.dart';
+import 'io/deepseek_export.dart';
 import 'io/gameplay_pack_codec.dart';
 import 'io/import_intake.dart';
 import 'io/preset_codec.dart';
@@ -137,6 +138,7 @@ part 'engine_slash_output.dart';
 part 'engine_slash_host.dart';
 part 'engine_slash_generation_lock.dart';
 part 'engine_script_resources.dart';
+part 'engine_deepseek_import.dart';
 part 'slash/st_name_matching.dart';
 part 'slash/st_message_bias.dart';
 
@@ -1491,6 +1493,12 @@ class TavernEngine implements Tavern {
       );
     });
   });
+
+  @override
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath) => _inspectDeepSeekExport(zipPath);
+  @override
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds) =>
+      _importDeepSeekSessions(zipPath, sessionIds);
 
   @override
   Future<List<TavernChatFile>> exportChat(String chatId, {String? fileName}) => _operation(() {

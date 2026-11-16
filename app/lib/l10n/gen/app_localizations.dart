@@ -43526,6 +43526,90 @@ abstract class L10n {
   /// **'这份草稿暂时没法试玩'**
   String get tavernDraftTrialUnsupported;
 
+  /// No description provided for @tavernImportFromDeepSeek.
+  ///
+  /// In zh, this message translates to:
+  /// **'从 DeepSeek 接回来'**
+  String get tavernImportFromDeepSeek;
+
+  /// No description provided for @tavernImportFromDeepSeekSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 DeepSeek 的设置里导出全部历史对话，再选那个 ZIP'**
+  String get tavernImportFromDeepSeekSubtitle;
+
+  /// No description provided for @tavernDeepSeekTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'接回 DeepSeek 的对话'**
+  String get tavernDeepSeekTitle;
+
+  /// No description provided for @tavernDeepSeekFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'找到 {count} 段对话，聊得最多的排在前面。勾上想接着聊的。'**
+  String tavernDeepSeekFound(int count);
+
+  /// No description provided for @tavernDeepSeekMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条'**
+  String tavernDeepSeekMessages(int count);
+
+  /// No description provided for @tavernDeepSeekUntitled.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有标题的对话'**
+  String get tavernDeepSeekUntitled;
+
+  /// No description provided for @tavernDeepSeekAlready.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经接回来了，点开继续'**
+  String get tavernDeepSeekAlready;
+
+  /// No description provided for @tavernDeepSeekMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示更多（还有 {count} 段）'**
+  String tavernDeepSeekMore(int count);
+
+  /// No description provided for @tavernDeepSeekTake.
+  ///
+  /// In zh, this message translates to:
+  /// **'接回来（{count}）'**
+  String tavernDeepSeekTake(int count);
+
+  /// No description provided for @tavernDeepSeekTaking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在接回…'**
+  String get tavernDeepSeekTaking;
+
+  /// No description provided for @tavernDeepSeekNotExport.
+  ///
+  /// In zh, this message translates to:
+  /// **'这不是 DeepSeek 导出的对话'**
+  String get tavernDeepSeekNotExport;
+
+  /// No description provided for @tavernDeepSeekNotExportMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'要选在 DeepSeek 里导出全部历史对话后得到的那个 ZIP'**
+  String get tavernDeepSeekNotExportMessage;
+
+  /// No description provided for @tavernDeepSeekFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没接回来，再试一次'**
+  String get tavernDeepSeekFailed;
+
+  /// No description provided for @tavernDeepSeekTaken.
+  ///
+  /// In zh, this message translates to:
+  /// **'接回了 {count} 段，其余的在对话列表里'**
+  String tavernDeepSeekTaken(int count);
+
   /// No description provided for @tavernPacks.
   ///
   /// In zh, this message translates to:

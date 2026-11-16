@@ -27,6 +27,7 @@ import '../theme/theme.dart';
 import 'tavern_character_edit_page.dart';
 import 'tavern_character_page.dart';
 import 'tavern_chat_page.dart';
+import 'tavern_deepseek_import.dart';
 import 'tavern_drafts_page.dart';
 import 'tavern_packs_page.dart';
 import 'tavern_group_new_page.dart';
@@ -234,6 +235,12 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
                   key: const ValueKey('tavern-try-sample'),
                   onPressed: () => unawaited(_trySample()),
                   child: Text(l10n.tavernTrySample),
+                ),
+                // A conversation DeepSeek's own app won't continue, carried over.
+                TextButton(
+                  key: const ValueKey('tavern-empty-deepseek'),
+                  onPressed: () => unawaited(takeInDeepSeekExport(context, ref)),
+                  child: Text(l10n.tavernImportFromDeepSeek),
                 ),
                 TextButton(
                   key: const ValueKey('tavern-write-own'),

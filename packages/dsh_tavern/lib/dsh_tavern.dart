@@ -25,6 +25,7 @@ export 'src/inspection.dart';
 export 'src/lorebook_library.dart';
 export 'src/io/card_codec.dart' hide DecodedCardSeed, cardAssetDataUri;
 export 'src/io/chat_jsonl.dart';
+export 'src/io/deepseek_export.dart' show isDeepSeekExport;
 export 'src/io/st_chat_document.dart';
 export 'src/llm/model_client.dart';
 export 'src/macros/macro_engine.dart'

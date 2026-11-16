@@ -24,6 +24,7 @@ import '../common/app_sheet.dart';
 import '../settings/settings_widgets.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
+import 'tavern_deepseek_import.dart';
 import 'tavern_import_files.dart';
 
 /// The card picture, or — for a card without one — a quiet field in the
@@ -219,7 +220,7 @@ final tavernHttpClientProvider = Provider<http.Client>((ref) {
   return client;
 });
 
-enum _ImportFrom { file, link, blank }
+enum _ImportFrom { file, link, deepSeek, blank }
 
 /// 导入: from a file, from a link to a card file, or a blank card of your
 /// own. Returns the character so the caller can open it ([blank]: open it
@@ -252,6 +253,15 @@ Future<({TavernCharacter character, bool blank})?> showTavernImport(BuildContext
             onTap: () => Navigator.of(sheet).pop(_ImportFrom.link),
           ),
           SettingsTile(
+            key: const ValueKey('tavern-import-deepseek'),
+            icon: AppIcons.history,
+            tinted: false,
+            title: l10n.tavernImportFromDeepSeek,
+            subtitle: l10n.tavernImportFromDeepSeekSubtitle,
+            chevron: false,
+            onTap: () => Navigator.of(sheet).pop(_ImportFrom.deepSeek),
+          ),
+          SettingsTile(
             key: const ValueKey('tavern-import-blank'),
             icon: AppIcons.edit,
             tinted: false,
@@ -265,9 +275,15 @@ Future<({TavernCharacter character, bool blank})?> showTavernImport(BuildContext
     ),
   );
   if (from == null || !context.mounted) return null;
+  // A conversation carried over opens as a chat, not as a card's page.
+  if (from == _ImportFrom.deepSeek) {
+    await takeInDeepSeekExport(context, ref);
+    return null;
+  }
   final character = await switch (from) {
     _ImportFrom.file => importTavernFiles(context, ref),
     _ImportFrom.link => importTavernCardFromLink(context, ref),
+    _ImportFrom.deepSeek => null,
     _ImportFrom.blank => createBlankTavernCharacter(context, ref),
   };
   return character == null ? null : (character: character, blank: from == _ImportFrom.blank);

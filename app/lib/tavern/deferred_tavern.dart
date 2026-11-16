@@ -117,6 +117,14 @@ class DeferredTavern implements Tavern {
       (await _ready).exportChat(chatId, fileName: fileName);
 
   @override
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath) async =>
+      (await _ready).inspectDeepSeekExport(zipPath);
+
+  @override
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds) async =>
+      (await _ready).importDeepSeekSessions(zipPath, sessionIds);
+
+  @override
   Future<void> deleteChat(String chatId) async => (await _ready).deleteChat(chatId);
 
   @override
