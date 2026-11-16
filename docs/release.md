@@ -83,7 +83,7 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
    tooling/build-apk.sh
    ```
 
-   脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`，它只影响诊断信息里的版本（`lib/state/app_info.dart` 是编译期常量）；更新检查读的是系统里真实的 versionName / versionCode，不依赖它。
+   脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`（`app/lib/state/app_info.dart`），作为诊断信息和更新状态的编译期默认版本。设置和关于页读取更新状态中的版本；原生版本读取成功且版本名可解析时，更新状态改用系统提供的 `versionName` / `versionCode`，读取失败或版本名无法解析时保留默认值。
 
    **公测起**（GitHub Release 和公开渠道的包）打开求 star 提示，内测包不加：
 
