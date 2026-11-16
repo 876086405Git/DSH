@@ -138,7 +138,13 @@ List<state_core.SecretRelease> _secretReleasesFromFacts(
   }
   final result = <state_core.SecretRelease>[];
   for (final binding in protection.ledger.bindings) {
-    final release = _secretReleaseForBinding(characterId, input, protection, binding);
+    final release = _secretReleaseForBinding(
+      characterId,
+      input,
+      protection,
+      binding,
+      resolveBoundDefinition: () => proofs.boundDefinition(binding),
+    );
     if (release == null) {
       continue;
     }

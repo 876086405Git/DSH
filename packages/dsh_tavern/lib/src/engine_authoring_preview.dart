@@ -264,6 +264,8 @@ extension _AuthoringPromptPreviews on TavernEngine {
       groupNotMuted: turn.groupView?.enabledNames,
       preset: preset,
       packRegex: turn.gameplayResources.regex,
+      messageVariables: turn.state['messageVariables'],
+      messageVariablesExists: turn.state.containsKey('messageVariables'),
     );
     turn.environment = environment;
     if (turn.kind == _TurnKind.send && turn.input.isNotEmpty) {

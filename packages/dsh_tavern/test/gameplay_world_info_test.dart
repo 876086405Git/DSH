@@ -277,6 +277,22 @@ void main() {
     expect(malformed.activated, isEmpty);
     expect(malformed.packIssues.map((issue) => issue['code']), contains('pack_world_info_shape'));
     expect(malformed.packWorldInfo.isEmpty, isTrue);
+    for (final type in const ['sticky', 'cooldown']) {
+      final savedTimer = jsonDecode(jsonEncode(old)) as Json;
+      _map(_map(_world(savedTimer, 'a')['entries'])['lore'])['entry'] = {type: <String, Object?>{}};
+      final beforeTimer = jsonEncode(savedTimer);
+      final missingDeadline = await _evaluate([book], sources: _sources(book, a, '1'), saved: savedTimer, count: 3);
+      expect(missingDeadline.activated, isEmpty);
+      expect(missingDeadline.packIssues, hasLength(1));
+      expect(missingDeadline.packIssues.single['code'], 'pack_world_info_shape');
+      expect(
+        missingDeadline.packIssues.single['path'],
+        '/dshgoPackRuntime/bindings/a/worldInfo/entries/lore/entry/$type',
+      );
+      expect(missingDeadline.packWorldInfo.isEmpty, isTrue);
+      expect(_merge(savedTimer, missingDeadline.packWorldInfo), savedTimer);
+      expect(jsonEncode(savedTimer), beforeTimer);
+    }
     final reset = await _evaluate([book], sources: _sources(book, a2, '2'), saved: old, count: 2);
     expect(reset.packIssues, isEmpty);
     expect(reset.activated, hasLength(1));

@@ -22749,6 +22749,12 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get tavernMvuIssues => '这张卡的变量更新有问题';
+
+  @override
+  String get tavernMvuUnfinished => '这一层的变量没有更新完，正文已经保留';
+
+  @override
   String get tavernRegexEdit => '编辑规则';
 
   @override

@@ -2,24 +2,41 @@ part of 'engine.dart';
 
 extension _ScriptRegexBridge on _ScriptCoordinator {
   Future<List<TavernScriptRegex>> queryTavernRegexes(String contextId, TavernScriptRegexQuery query) async {
+    final view = await _captureScriptRegexView(contextId, query: query);
+    return view.rules;
+  }
+
+  Future<_ScriptRegexView> _captureScriptRegexView(
+    String contextId, {
+    TavernScriptRegexQuery? query,
+    Map<String, Object?>? characterData,
+    bool forCache = false,
+  }) async {
+    final requested = query ?? TavernScriptRegexQuery();
     final context = _context(contextId);
     final chatId = context.value.chatId;
     final chat = chatId == null ? null : engine._store.chat(chatId);
     final metadata = chat == null ? null : engine._chatCodec.metadataForNode(engine._store, chat.id);
     final settings = _runtimeCopy(engine._effectiveSettings(chat, metadata));
-    final selection = engine._resolvePreset(chat);
-    final selectedPreset = query.presetId == null ? selection.preset : engine._requirePreset(query.presetId!);
-    final presetRaw = query.presetId == null ? _map(settings['preset']) : selectedPreset!.raw;
-    final presetSettings = (presetRaw.isEmpty ? ChatPreset.stDefault() : ChatPreset(presetRaw)).settings;
+    final rootSettings = _map(engine._document['settings']);
+    final chatSettings = chat?.settings;
+    final settingsVersion = _scriptRegexSettingsVersion(rootSettings, chatSettings, settings);
+    final presetRef = requested.presetId == null
+        ? const TavernScriptPresetRef.current()
+        : TavernScriptPresetRef.stored(requested.presetId!);
+    final preset = _scriptPresetViewNow(context, presetRef);
+    final presetSettings = (preset.raw.isEmpty ? ChatPreset.stDefault() : ChatPreset(preset.raw)).settings;
     final managed = engine._regexLibrary.scripts;
+    final managedVersion = _scriptManagedRegexVersion(managed);
     final group = chat == null ? null : engine._store.groupChat(chat.id);
-    final actorId = query.characterId ?? context.value.characterId ?? (group == null ? chat?.characterId : null);
+    final actorId = requested.characterId ?? context.value.characterId ?? (group == null ? chat?.characterId : null);
+    final actorRevision = actorId == null ? null : engine._directors._cardRevisions[actorId] ?? 0;
     final packBuckets = <String>{
-      if (query.sources.contains(TavernScriptRegexSource.global)) 'global',
-      if (query.sources.contains(TavernScriptRegexSource.character) && actorId != null) 'character',
-      if (query.sources.contains(TavernScriptRegexSource.chat) && chatId != null) 'chat',
+      if (requested.sources.contains(TavernScriptRegexSource.global)) 'global',
+      if (requested.sources.contains(TavernScriptRegexSource.character) && actorId != null) 'character',
+      if (requested.sources.contains(TavernScriptRegexSource.chat) && chatId != null) 'chat',
     };
-    final gameplayCapture = packBuckets.isEmpty
+    final gameplay = packBuckets.isEmpty
         ? null
         : _captureGameplayResources(
             engine,
@@ -28,11 +45,14 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
             kinds: const {'regex'},
             deferResourceErrors: true,
           );
-    final result = <TavernScriptRegex>[];
+    final rules = <TavernScriptRegex>[];
+    final sources = <Map<String, Object?>>[];
+    final issues = <Map<String, Object?>>[];
+    Map<String, Object?>? actorView;
     final enabledGlobally = settings['regexEnabled'] != false;
 
     void checkGameplay() {
-      if (gameplayCapture != null && !_gameplayResourcesCurrent(engine, gameplayCapture)) {
+      if (gameplay != null && !_gameplayResourcesCurrent(engine, gameplay)) {
         throw _scriptError(
           TavernScriptErrorCode.revisionConflict,
           'getTavernRegexes',
@@ -42,46 +62,90 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       }
     }
 
-    void addPacks(TavernScriptRegexSource source) {
-      if (gameplayCapture == null || !packBuckets.contains(source.name)) {
+    void addPacks(TavernScriptRegexSource bucket) {
+      if (gameplay == null || !packBuckets.contains(bucket.name)) {
         return;
       }
       checkGameplay();
-      // Resolve only the bucket reached here. Errors from an unrequested
-      // bucket, or a character whose original lookup fails, stay unconsumed.
-      final packRules = _resolveGameplayResources(
-        gameplayCapture,
-        settings,
-        actorId: actorId,
-        kinds: const {'regex'},
-        regexBuckets: {source.name},
-      ).regex;
-      for (final rule in packRules) {
-        if (!query.effectiveOnly || rule.effective) {
-          result.add(rule);
+      final source = <String, Object?>{
+        'kind': 'pack',
+        'bucket': bucket.name,
+        'readonly': true,
+        'scopes': [
+          for (final scope in gameplay.snapshot.scopeSnapshots)
+            if (scope.scope.kind.name == bucket.name &&
+                (bucket != TavernScriptRegexSource.character || scope.scope.targetId == actorId))
+              scope.toJson(),
+        ],
+      };
+      source['version'] = _scriptRegexVersion(source);
+      sources.add(source);
+      try {
+        // The same real loader and bucket gate serve query and ready-cache views.
+        final packed = _resolveGameplayResources(
+          gameplay,
+          settings,
+          actorId: actorId,
+          kinds: const {'regex'},
+          regexBuckets: {bucket.name},
+        ).regex;
+        for (final rule in packed) {
+          if (!requested.effectiveOnly || rule.effective) {
+            rules.add(rule);
+          }
         }
+      } catch (error) {
+        if (!forCache || !_scriptRegexResourceDataError(error)) {
+          rethrow;
+        }
+        issues.add(_scriptRegexCacheIssue(error, source));
       }
     }
 
     void addArray(
       Object? value,
-      TavernScriptRegexSource source,
+      TavernScriptRegexSource bucket,
       Map<String, Object?> location, {
       required bool sourceEnabled,
+      required bool present,
     }) {
-      if (value is! List<Object?>) return;
       final version = _scriptRegexVersion(value);
+      sources.add({
+        ...location,
+        'bucket': bucket.name,
+        'version': version,
+        'present': present,
+        'isNull': value == null,
+      });
+      if (value is! List<Object?>) {
+        if (forCache && value != null) {
+          issues.add({'code': 'shapeMismatch', 'source': location, 'message': 'The regex source is not an array.'});
+        }
+        return;
+      }
       for (final (index, item) in value.indexed) {
-        // This is the same execution projection as RegexEngine.readScripts.
-        // A non-object member is not an executable rule and has no rule DTO.
-        if (item is! Map<String, Object?>) continue;
+        // A query keeps its established non-executable-member projection.
+        // read-for-write separately requires the complete physical array.
+        if (item is! Map<String, Object?>) {
+          if (forCache) {
+            issues.add({
+              'code': 'shapeMismatch',
+              'source': location,
+              'index': index,
+              'message': 'This regex array member is not an object.',
+            });
+          }
+          continue;
+        }
         final raw = _captureScriptObject(item);
         final execution = RegexScript.fromJson(raw);
         final effective = enabledGlobally && sourceEnabled && !execution.disabled;
-        if (query.effectiveOnly && !effective) continue;
-        result.add(
+        if (requested.effectiveOnly && !effective) {
+          continue;
+        }
+        rules.add(
           TavernScriptRegex(
-            source: source,
+            source: bucket,
             sourceRef: {...location, 'index': index, 'version': version},
             raw: raw,
             stId: execution.id,
@@ -94,22 +158,38 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       }
     }
 
-    if (query.sources.contains(TavernScriptRegexSource.global)) {
-      addArray(settings['globalRegexScripts'] ?? settings['regex'], TavernScriptRegexSource.global, {
-        'kind': 'inlineGlobal',
-      }, sourceEnabled: true);
+    if (requested.sources.contains(TavernScriptRegexSource.global)) {
+      final inline = _scriptInlineRegexLocation(rootSettings, chatSettings, settings, chatId);
+      final field = inline['field']! as String;
+      addArray(
+        settings[field],
+        TavernScriptRegexSource.global,
+        inline,
+        sourceEnabled: true,
+        present: inline['scope'] == 'chat' ? chatSettings!.containsKey(field) : rootSettings.containsKey(field),
+      );
+      sources.add({
+        'kind': 'managedGlobal',
+        'bucket': 'global',
+        'version': managedVersion,
+        'writeTarget': const TavernScriptRegexWriteTarget.globalLibrary().toJson(),
+      });
       for (final (index, item) in managed.indexed) {
         final raw = item.raw;
         final execution = RegexScript.fromJson({...raw, if (!item.compatible) 'disabled': true});
         final effective = enabledGlobally && !execution.disabled;
-        if (query.effectiveOnly && !effective) continue;
-        result.add(
+        if (requested.effectiveOnly && !effective) {
+          continue;
+        }
+        rules.add(
           TavernScriptRegex(
             source: TavernScriptRegexSource.global,
             sourceRef: {
               'kind': 'managedGlobal',
               'resourceId': item.id,
               'index': index,
+              'libraryVersion': managedVersion,
+              'writeTarget': const TavernScriptRegexWriteTarget.globalLibrary().toJson(),
               'version': _scriptRegexVersion({
                 'raw': raw,
                 'diagnostics': [for (final diagnostic in item.diagnostics) diagnostic.toJson()],
@@ -127,38 +207,124 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       }
       addPacks(TavernScriptRegexSource.global);
     }
-    if (query.sources.contains(TavernScriptRegexSource.preset)) {
-      addArray(_map(presetSettings['extensions'])['regex_scripts'], TavernScriptRegexSource.preset, {
-        'kind': 'preset',
-        'resourceId': selectedPreset?.id,
-        'selection': query.presetId == null ? selection.selection.source.name : 'explicit',
-      }, sourceEnabled: settings['presetRegexEnabled'] != false);
-    }
-    if (query.sources.contains(TavernScriptRegexSource.character) && actorId != null) {
-      final actor = await engine._record(actorId);
-      _context(contextId);
-      if (actor == null) {
-        throw _scriptError(
-          TavernScriptErrorCode.notFound,
-          'getTavernRegexes',
-          'The selected character is unavailable.',
-          contextId: contextId,
-        );
-      }
-      final card = _effectiveCard(actor.card.data, settings);
+    if (requested.sources.contains(TavernScriptRegexSource.preset)) {
+      final extensions = _map(presetSettings['extensions']);
       addArray(
-        _map(card['extensions'])['regex_scripts'],
-        TavernScriptRegexSource.character,
-        {'kind': 'character', 'resourceId': actorId},
-        sourceEnabled:
-            settings['characterRegexEnabled'] != false &&
-            !_strings(settings['disabledCharacterRegex']).contains(actorId),
+        extensions['regex_scripts'],
+        TavernScriptRegexSource.preset,
+        {
+          'kind': 'preset',
+          'presetSource': preset.source,
+          'presetVersion': preset.version,
+          'resourceId': ?(presetRef.presetId ?? preset.source['loadedPresetId']),
+          'selection': requested.presetId == null ? preset.source['loadedSource'] : 'explicit',
+          'writeTarget': TavernScriptRegexWriteTarget.preset(preset: presetRef).toJson(),
+        },
+        sourceEnabled: settings['presetRegexEnabled'] != false,
+        present: extensions.containsKey('regex_scripts'),
       );
+    }
+    if (requested.sources.contains(TavernScriptRegexSource.character) && actorId != null) {
+      try {
+        actorView = characterData?['characterId'] == actorId
+            ? characterData
+            : await engine._libraryOperation(() => _scriptCharacterDataView(actorId));
+        _context(contextId);
+        if (actorView == null) {
+          throw _scriptError(
+            TavernScriptErrorCode.notFound,
+            'getTavernRegexes',
+            'The selected character is unavailable.',
+            contextId: contextId,
+          );
+        }
+        final card = actorView['data']! as Map<String, Object?>;
+        final extensions = _map(card['extensions']);
+        addArray(
+          extensions['regex_scripts'],
+          TavernScriptRegexSource.character,
+          {
+            'kind': 'character',
+            'resourceId': actorId,
+            'resourceVersion': actorView['version'],
+            'writeTarget': TavernScriptRegexWriteTarget.character(characterId: actorId).toJson(),
+          },
+          sourceEnabled:
+              settings['characterRegexEnabled'] != false &&
+              !_strings(settings['disabledCharacterRegex']).contains(actorId),
+          present: extensions.containsKey('regex_scripts'),
+        );
+      } catch (error) {
+        final missing = error is TavernScriptException && error.code == TavernScriptErrorCode.notFound;
+        if (!forCache || !missing && !_scriptRegexResourceDataError(error)) {
+          rethrow;
+        }
+        final source = <String, Object?>{'kind': 'character', 'resourceId': actorId};
+        sources.add({...source, 'available': false});
+        issues.add(_scriptRegexCacheIssue(error, source));
+      }
       addPacks(TavernScriptRegexSource.character);
     }
     addPacks(TavernScriptRegexSource.chat);
+    _context(contextId);
     checkGameplay();
-    return List.unmodifiable(result);
+
+    bool current() {
+      if (context.closed || _closed || engine._closed || engine._closing || !identical(contexts[contextId], context)) {
+        return false;
+      }
+      final latest = chatId == null ? null : engine._store.chat(chatId);
+      final currentMetadata = latest == null ? null : engine._chatCodec.metadataForNode(engine._store, latest.id);
+      final currentSettings = engine._effectiveSettings(latest, currentMetadata);
+      if (settingsVersion !=
+              _scriptRegexSettingsVersion(_map(engine._document['settings']), latest?.settings, currentSettings) ||
+          managedVersion != _scriptManagedRegexVersion(engine._regexLibrary.scripts) ||
+          preset.version != _scriptPresetViewNow(context, presetRef).version) {
+        return false;
+      }
+      if (actorId != null && actorRevision != (engine._directors._cardRevisions[actorId] ?? 0)) {
+        return false;
+      }
+      if (actorView != null && !_scriptCharacterDataViewCurrent(actorView)) {
+        return false;
+      }
+      return gameplay == null || _gameplayResourcesCurrent(engine, gameplay);
+    }
+
+    final view = _ScriptRegexView(rules: rules, sources: sources, issues: issues, current: current);
+    if (!current()) {
+      throw _scriptError(
+        TavernScriptErrorCode.revisionConflict,
+        'getTavernRegexes',
+        'The captured regex sources changed.',
+        contextId: contextId,
+      );
+    }
+    return view;
+  }
+
+  bool _scriptRegexViewCurrent(_ScriptRegexView view) => view.current();
+
+  Map<String, Object?> _scriptRegexViewJson(_ScriptRegexView view) {
+    final value = <String, Object?>{
+      'sources': view.sources,
+      'rules': [
+        for (final rule in view.rules)
+          {
+            'source': rule.source.name,
+            'sourceRef': rule.sourceRef,
+            'raw': rule.raw,
+            'engineId': ?rule.engineId,
+            'stId': rule.stId,
+            'enabled': rule.enabled,
+            'effective': rule.effective,
+            'diagnostics': [for (final issue in rule.diagnostics) issue.toJson()],
+          },
+      ],
+      'issues': view.issues,
+    };
+    // This is an execution-cache token. It is not a physical write CAS.
+    return {'version': _scriptRegexVersion(value), ...value};
   }
 
   Future<TavernDisplayResult> formatScriptText(
@@ -290,6 +456,8 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       characterId: actorId ?? '',
       groupNames: groupView?.names,
       groupNotMuted: groupView?.enabledNames,
+      messageVariables: state['messageVariables'],
+      messageVariablesExists: state.containsKey('messageVariables'),
       packRegex: packRegex,
     );
     var resourceConflict = false;
@@ -376,3 +544,93 @@ List<TavernRegexDiagnostic> _scriptRegexShapeDiagnostics(Map<String, Object?> ra
     ),
   ];
 }
+
+final class _ScriptRegexView {
+  _ScriptRegexView({
+    required List<TavernScriptRegex> rules,
+    required List<Map<String, Object?>> sources,
+    required List<Map<String, Object?>> issues,
+    required this.current,
+  }) : rules = List.unmodifiable(rules),
+       sources = List.unmodifiable(sources),
+       issues = List.unmodifiable(issues);
+  final List<TavernScriptRegex> rules;
+  final List<Map<String, Object?>> sources, issues;
+  final bool Function() current;
+}
+
+String _scriptManagedRegexVersion(List<TavernRegexScript> records) => _scriptRegexVersion([
+  for (final record in records)
+    {
+      'id': record.id,
+      'raw': record.raw,
+      'diagnostics': [for (final issue in record.diagnostics) issue.toJson()],
+    },
+]);
+
+String _scriptRegexSettingsVersion(
+  Map<String, Object?> global,
+  Map<String, Object?>? chat,
+  Map<String, Object?> effective,
+) => _scriptRegexVersion({
+  'global': _inlineRegexBefore(global),
+  'chat': chat == null ? null : _inlineRegexBefore(chat),
+  'effective': {
+    for (final key in const [
+      'globalRegexScripts',
+      'regex',
+      'regexEnabled',
+      'presetRegexEnabled',
+      'characterRegexEnabled',
+      'disabledCharacterRegex',
+    ])
+      key: {'present': effective.containsKey(key), 'value': effective[key]},
+  },
+});
+
+Map<String, Object?> _scriptInlineRegexLocation(
+  Map<String, Object?> global,
+  Map<String, Object?>? chat,
+  Map<String, Object?> effective,
+  String? chatId,
+) {
+  final rootField = _rootInlineRegexField(global);
+  final String field;
+  if (effective['globalRegexScripts'] != null) {
+    field = 'globalRegexScripts';
+  } else if (effective['regex'] != null ||
+      chat != null && (chat.containsKey('globalRegexScripts') || chat.containsKey('regex'))) {
+    field = 'regex';
+  } else {
+    field = rootField;
+  }
+  final chatOwned = chat?.containsKey(field) == true;
+  return {
+    'kind': 'inlineGlobal', 'scope': chatOwned ? 'chat' : 'global', 'field': field,
+    if (chatOwned) 'chatId': chatId,
+    // A root shadow alias can be selected only by a chat's null override.
+    // Its physical globalInline target still selects the other root field.
+    if (!chatOwned && field == rootField) 'writeTarget': const TavernScriptRegexWriteTarget.globalInline().toJson(),
+  };
+}
+
+bool _scriptRegexResourceDataError(Object error) =>
+    error is FormatException ||
+    error is StateError && error.message == 'A stored gameplay resource file is missing.' ||
+    error is TavernGameplayException && error.code == 'resource_identity_conflict';
+
+Map<String, Object?> _scriptRegexCacheIssue(Object error, Map<String, Object?> source) => {
+  'source': source,
+  'code': error is TavernGameplayException
+      ? error.code
+      : error is TavernScriptException
+      ? error.code.name
+      : 'invalidResource',
+  'message': error is TavernGameplayException
+      ? error.message
+      : error is TavernScriptException
+      ? error.message
+      : error is FormatException
+      ? error.message
+      : error.toString(),
+};

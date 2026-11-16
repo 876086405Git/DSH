@@ -12,6 +12,7 @@ final class _AuthoringSimulationSeed {
     required this.personas,
     required this.presetRows,
     required this.defaultPresetId,
+    required this.presetWorking,
     required this.chat,
     required this.history,
     required this.state,
@@ -23,6 +24,7 @@ final class _AuthoringSimulationSeed {
   final Map<String, Object?> settingsDocument, global, personas, state;
   final Map<String, Map<String, Object?>?> presetRows;
   final String? defaultPresetId;
+  final _PresetWorkingCapture presetWorking;
   final StoredChat chat;
   final List<StoredNode> history;
   final StoredGameplaySimulationData gameplay;
@@ -159,5 +161,6 @@ String _bootstrapAuthoringSimulationStore(TavernEngine engine, _AuthoringSimulat
     leaf: seed.history.lastOrNull?.message.nodeId,
     values: _runtimeCopy(seed.chat.variables),
   );
+  engine._restoreCapturedPresetWorking(seed.presetWorking, chatId);
   return chatId;
 }

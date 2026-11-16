@@ -13,16 +13,30 @@ import 'tavern_provider.dart';
 
 /// One script that runs: its id and name as the card gives them, and its
 /// code. [buttons] are the names of the buttons it shows (for the composer's
-/// row, once there is one).
+/// row); [buttonList] all it has, shown or not, as getScriptButtons gives
+/// them.
 final class TavernCardScript {
-  const TavernCardScript({required this.id, required this.name, required this.content, this.buttons = const []});
+  const TavernCardScript({
+    required this.id,
+    required this.name,
+    required this.content,
+    this.buttons = const [],
+    this.buttonList = const [],
+  });
 
   final String id;
   final String name;
   final String content;
   final List<String> buttons;
+  final List<TavernScriptButton> buttonList;
 
-  Map<String, Object?> toJson() => {'id': id, 'name': name, 'content': content, 'buttons': buttons};
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'content': content,
+    'buttons': buttons,
+    'buttonList': [for (final b in buttonList) b.toJson()],
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -30,13 +44,23 @@ final class TavernCardScript {
       other.id == id &&
       other.name == name &&
       other.content == content &&
-      _sameList(other.buttons, buttons);
+      _sameList(other.buttons, buttons) &&
+      _sameList(
+        [for (final b in other.buttonList) (b.name, b.visible)],
+        [for (final b in buttonList) (b.name, b.visible)],
+      );
 
   @override
-  int get hashCode => Object.hash(id, name, content, Object.hashAll(buttons));
+  int get hashCode => Object.hash(
+    id,
+    name,
+    content,
+    Object.hashAll(buttons),
+    Object.hashAll([for (final b in buttonList) (b.name, b.visible)]),
+  );
 }
 
-bool _sameList(List<String> a, List<String> b) {
+bool _sameList<T>(List<T> a, List<T> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
     if (a[i] != b[i]) return false;
@@ -66,6 +90,14 @@ List<TavernCardScript> tavernCardScripts(Object? card) {
       final content = node['content'];
       if (node['enabled'] != true || content is! String || content.trim().isEmpty) continue;
       final button = object(node['button']);
+      final listed = [
+        for (final b in switch (button?['buttons']) {
+          final List<Object?> list => list,
+          _ => const <Object?>[],
+        })
+          if (object(b) case {'name': final String name} when name.isNotEmpty)
+            TavernScriptButton(name: name, visible: object(b)!['visible'] != false),
+      ];
       out.add(
         TavernCardScript(
           id: switch (node['id']) {
@@ -79,13 +111,10 @@ List<TavernCardScript> tavernCardScripts(Object? card) {
           content: content,
           buttons: [
             if (button?['enabled'] != false)
-              for (final b in switch (button?['buttons']) {
-                final List<Object?> list => list,
-                _ => const <Object?>[],
-              })
-                if (object(b) case {'name': final String name} when object(b)!['visible'] != false && name.isNotEmpty)
-                  name,
+              for (final b in listed)
+                if (b.visible) b.name,
           ],
+          buttonList: listed,
         ),
       );
     }
@@ -93,6 +122,14 @@ List<TavernCardScript> tavernCardScripts(Object? card) {
 
   visit(tree);
   return out;
+}
+
+/// Whether [card] (its fields) uses MVU: it says so (extensions.dshgo.mvu),
+/// or something in it — a script, a regex, a greeting — loads MagVarUpdate.
+bool tavernUsesMvu(Map<String, Object?>? card) {
+  if (card == null) return false;
+  if (card['extensions'] case {'dshgo': {'mvu': {'enabled': true}}}) return true;
+  return jsonEncode(card).contains('MagVarUpdate');
 }
 
 /// A character's card as the engine exports it, its fields (V2/V3 data, or a
@@ -127,6 +164,9 @@ final tavernCardScriptsProvider = FutureProvider.autoDispose.family<List<TavernC
   final data = await ref.watch(tavernCardDataProvider(characterId).future);
   return data == null ? const [] : tavernCardScripts({'data': data});
 });
+
+/// Where it is kept, per chat, that the engine's MVU was turned on for it.
+const tavernMvuOnKey = 'tavern.mvuOn.';
 
 /// Where it is kept, per character, that the word over the composer about
 /// its card's scripts waiting on 整页画布 was put away.

@@ -43,6 +43,7 @@ class TavernCard {
     required this.json,
     this.assets = const {},
     this.png,
+    this.avatar,
     this.originalBytes,
     this.sourceFormat = TavernCardFormat.json,
   });
@@ -54,6 +55,10 @@ class TavernCard {
 
   /// The original PNG/APNG, including its non-card chunks and animation.
   final Uint8List? png;
+
+  /// The library's current PNG avatar, separate from the original container.
+  /// Explicit resource URIs continue to resolve the original [png]/[assets].
+  final Uint8List? avatar;
   final Uint8List? originalBytes;
   final TavernCardFormat sourceFormat;
 
@@ -91,6 +96,9 @@ class TavernCard {
   }
 
   Uint8List? get iconBytes {
+    if (avatar != null) {
+      return avatar;
+    }
     final value = data['assets'];
     if (value is List<Object?>) {
       final icons = value.whereType<Map<String, Object?>>().where((asset) => asset['type'] == 'icon').toList();
@@ -174,6 +182,24 @@ class TavernCard {
 class CardCodec {
   const CardCodec();
 
+  /// Decodes an image directly, without reading or adopting card metadata.
+  /// Callers run this CPU work in the existing image isolate boundary.
+  static Uint8List avatarPng(Uint8List bytes) {
+    try {
+      final decoded = image.decodeImage(bytes);
+      if (decoded == null) {
+        throw const FormatException('The avatar is not a supported image.');
+      }
+      if (_startsWith(bytes, _pngSignature)) {
+        _pngChunks(bytes);
+        return Uint8List.fromList(bytes);
+      }
+      return Uint8List.fromList(image.encodePng(decoded));
+    } on image.ImageException catch (error) {
+      throw FormatException(error.message);
+    }
+  }
+
   /// Internal authoritative library JSON route. Validation uses a detached
   /// runtime projection; it must not adopt `_upgrade` defaults into the stored
   /// V3 data or replace the import container/media retained by the library.
@@ -243,11 +269,15 @@ class CardCodec {
     final json = _cloneMap(card.json);
     final data = json['data'] as Map<String, Object?>;
     data['modification_date'] = (modifiedAt ?? DateTime.now()).toUtc().millisecondsSinceEpoch ~/ 1000;
+    final avatar = card.avatar;
+    if (avatar != null) {
+      _projectAvatar(data, avatar);
+    }
     if (format == TavernCardFormat.charx) return _encodeCharx(card, json);
     _inlineAssets(card, data, inlinePortrait: format == TavernCardFormat.json);
     if (format == TavernCardFormat.json) return Uint8List.fromList(utf8.encode(jsonEncode(json)));
 
-    final cover = card.png ?? portraitPng(card) ?? _blankPng();
+    final cover = avatar ?? card.png ?? portraitPng(card) ?? _blankPng();
     final chunks = _pngChunks(cover);
     final output = BytesBuilder(copy: false)..add(_pngSignature);
     for (final chunk in chunks) {
@@ -262,6 +292,30 @@ class CardCodec {
       output.add(chunk.bytes);
     }
     return output.takeBytes();
+  }
+
+  /// Project only the export copy. Every declared main icon points at the
+  /// same new image, so decoding cannot select an older embedded main instead
+  /// of the new PNG cover. Existing resource bytes and unknown fields remain.
+  void _projectAvatar(Map<String, Object?> data, Uint8List avatar) {
+    final original = data['assets'];
+    if (original != null && original is! List<Object?>) {
+      throw const FormatException('The character assets cannot hold an avatar icon.');
+    }
+    final assets = original is List<Object?> ? original : <Object?>[];
+    final uri = Uri.dataFromBytes(avatar, mimeType: 'image/png').toString();
+    var replaced = false;
+    for (final value in assets) {
+      if (value is Map<String, Object?> && value['type'] == 'icon' && value['name'] == 'main') {
+        value['uri'] = uri;
+        value['ext'] = 'png';
+        replaced = true;
+      }
+    }
+    if (!replaced) {
+      assets.add({'type': 'icon', 'name': 'main', 'uri': uri, 'ext': 'png'});
+    }
+    data['assets'] = assets;
   }
 
   /// A PNG thumbnail without changing or discarding the source asset.

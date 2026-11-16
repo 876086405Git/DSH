@@ -45,10 +45,35 @@ Iterable<Map<String, Object?>> gameplayPackResources(Map<String, Object?> manife
   }
 }
 
+const _maxGameplayPackEntries = 4096;
+const _maxGameplayPackBytes = 128 * 1024 * 1024;
+
+/// Check central-directory metadata before ZipDecoder can read any content,
+/// including its eager symlink decoding. archive 4.6 also limits each actual
+/// decode to that entry's declared uncompressed size.
+void _checkGameplayPackSize(Uint8List bytes) {
+  var count = 0;
+  var remaining = _maxGameplayPackBytes;
+  for (final header in ZipDirectory().headers(InputMemoryStream(bytes), verify: true, files: false)) {
+    if (++count > _maxGameplayPackEntries) {
+      throw const FormatException('A gameplay pack cannot contain more than 4096 ZIP entries.');
+    }
+    if (((header.externalFileAttributes >> 16) & 0xf000) == 0xa000) {
+      throw const FormatException('A gameplay pack cannot contain symbolic links.');
+    }
+    final size = header.uncompressedSize;
+    if (size < 0 || size > remaining) {
+      throw const FormatException('A gameplay pack exceeds the 128 MiB uncompressed limit.');
+    }
+    remaining -= size;
+  }
+}
+
 /// dshpack v1: root pack.json plus exact relative-path files.
 /// castCard resources are complete CCv3 JSON envelopes; images or other
 /// containers can be retained as asset/opaque resources, without card import.
 DecodedGameplayPack decodeGameplayPack(Uint8List bytes) {
+  _checkGameplayPackSize(bytes);
   final names = <String>{};
   final archive = ZipDecoder().decodeBytes(
     bytes,
