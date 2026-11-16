@@ -100,9 +100,6 @@ DIAGNOSTIC_EDITS = {
     'node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js': (
         ('鸿蒙本机使用虚拟 shell', 'iOS 本机使用虚拟 shell'),
     ),
-    'node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js': (
-        ('鸿蒙本机不支持 stdio MCP 子进程', 'iOS 本机不支持 stdio MCP 子进程'),
-    ),
     'node_modules/@deepseek-ai/dsh-skill-office/lib/index.js': (
         ('鸿蒙本机不提供 LibreOffice 转换、重算或渲染运行时', 'iOS 本机不提供 LibreOffice 转换、重算或渲染运行时'),
     ),

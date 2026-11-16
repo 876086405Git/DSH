@@ -3,16 +3,27 @@
 #include <limits>
 #include <mutex>
 #include <time.h>
+#if defined(__APPLE__)
+#include <mach/mach_time.h>
+#endif
 #include "../../../../../../runtime/ohos/host/lifecycle_snapshot.h"
 
 namespace dsh {
-// BOOTTIME includes suspend. Failure never falls back to wall/active/process time.
+// Both platform clocks include suspend. Failure never falls back to wall/active/process time.
 inline int64_t LifecycleBootTimeMs() noexcept {
+#if defined(__APPLE__)
+  mach_timebase_info_data_t timebase{};
+  if (mach_timebase_info(&timebase) != KERN_SUCCESS || timebase.denom == 0) return -1;
+  const auto nanos = static_cast<__uint128_t>(mach_continuous_time()) * timebase.numer / timebase.denom;
+  const auto millis = nanos / 1000000;
+  return millis > 9007199254740991ULL ? -1 : static_cast<int64_t>(millis);
+#else
   timespec value{};
   if (clock_gettime(CLOCK_BOOTTIME, &value) != 0 || value.tv_sec < 0 ||
       value.tv_nsec < 0 || value.tv_nsec >= 1000000000 ||
       value.tv_sec > (9007199254740991LL - 999) / 1000) return -1;
   return value.tv_sec * 1000LL + value.tv_nsec / 1000000;
+#endif
 }
 class LifecycleState {
  public:
