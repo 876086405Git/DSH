@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "title": "Restart button",
+    "description": "Adds a Restart control at the sidebar foot. It asks for confirmation, relaunches the whole desktop app, and shows a readable error when the relaunch cannot start.",
+    "detail": "docs/DETAIL.md"
+  },
+  "button": {
+    "label": "Restart",
+    "aria": "Restart DeepSeek Harness",
+    "title": "Restart DeepSeek Harness"
+  },
+  "confirm": {
+    "title": "Restart DeepSeek Harness?",
+    "body": "The app will close and reopen. Anything still running in this window will be interrupted.",
+    "cancel": "Cancel",
+    "ok": "Restart"
+  },
+  "progress": {
+    "title": "Restarting…",
+    "body": "The app is closing. It reopens on its own; if it does not, open it again from the Start menu."
+  },
+  "error": {
+    "title": "Restart failed",
+    "retry": "Try again",
+    "close": "Close",
+    "unsupported": "This is not a desktop window, so there is nothing to restart."
+  },
+  "log": {
+    "title": "What happened",
+    "copy": "Copy",
+    "copied": "Copied",
+    "empty": "No restart record yet."
+  }
+}

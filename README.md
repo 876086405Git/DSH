@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/876086405Git/DSH?display_name=tag&label=release&color=2ea44f)](https://github.com/876086405Git/DSH/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/876086405Git/DSH/total?label=downloads)](https://github.com/876086405Git/DSH/releases)
 [![Last commit](https://img.shields.io/github/last-commit/876086405Git/DSH/main)](https://github.com/876086405Git/DSH/commits/main)
-[![Plugins](https://img.shields.io/badge/plugins-3-blue)](#插件列表)
+[![Plugins](https://img.shields.io/badge/plugins-4-blue)](#插件列表)
 
 DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。另附一个配套工具：DSH 全自动升级工具。
 
@@ -14,6 +14,7 @@ DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。另�
 | [`dsh-checkup`](#dsh-checkup--dsh体检中心) | 装插件 / skill / MCP **之前先预检**，不兼容直接拦下；装完还能体检、救场、看军械库四类 |
 | `dsh-prompt-enhance` | 会话输入框的「提示词增强」按钮，生成后自动填入并可一键撤回 |
 | [`dsh-session-watchdog`](#dsh-session-watchdog--会话哨兵) | 实时监控会话；异常停止提醒并按**真实会话内容**自动续跑；任务完成弹窗 + 6 种叮咚提示音 |
+| [`dsh-restart-button`](#dsh-restart-button--重启按钮) | 侧栏底部一键重启桌面端，**全程无控制台闪窗**；设置面板里自动隐藏 |
 
 ## 配套工具
 
@@ -27,6 +28,7 @@ DeepSeek Harness（DSH）插件源码仓库，每个插件一个独立包。另�
 plugins/
 ├─ dsh-checkup/            DSH体检中心：安装前预检 + 环境体检 + 军械库四类检查
 ├─ dsh-prompt-enhance/     提示词增强：一键把输入框内容改写成结构化提示词
+├─ dsh-restart-button/     重启按钮：侧栏一键重启桌面端，无控制台闪窗
 └─ dsh-session-watchdog/   会话哨兵：异常停止提醒 + 真实上下文续跑 + 任务完成铃声
 
 tools/
@@ -328,6 +330,85 @@ node test/client-sound.selftest.mjs        # 完成提醒与铃声 11 项断言
 - [设计说明](plugins/dsh-session-watchdog/docs/01-设计说明.md)
 - [实现方案](plugins/dsh-session-watchdog/docs/02-实现方案.md)
 - 真机截图：[基础设置](plugins/dsh-session-watchdog/docs/preview/截图1-提醒开关.png)、[完成提醒与提示音](plugins/dsh-session-watchdog/docs/preview/截图6-任务完成提醒与提示音.png)、[续跑指令生成方式](plugins/dsh-session-watchdog/docs/preview/截图7-续跑指令生成方式.png)、[完成卡片右下角真机验证](plugins/dsh-session-watchdog/docs/preview/实测-完成卡片右下角.png)
+
+---
+
+# dsh-restart-button — 重启按钮
+
+侧栏底部一键重启桌面端，**全程无控制台闪窗**。
+
+## 它解决什么问题
+
+桌面端改了插件、配置或主题之后，必须重启才能生效。原来只能「右键任务栏图标退出 → 再从开始菜单打开」，
+手动两步还容易忘了退出——安装目录被占用时连升级都会失败。这个插件把两步合成一次点击。
+
+## 主要功能
+
+- 按钮在侧栏底部、账号行右侧，透明背景，与侧栏其它图标按钮同风格
+- **打开设置面板时自动隐藏**，不干扰设置界面
+- 点击先确认（说明当前任务会被中断），确认后显示「正在重启…」，应用关闭并自动重开
+- 失败时弹错误框：具体原因 + HTTP 状态 + 日志尾部，可「重试一次」或「复制日志」
+
+## 为什么重启要绕一圈
+
+桌面端的进程结构是 `Electron 主进程 → Host 子进程（插件在这里）`。直接在主进程里「杀掉自己再拉起」，
+杀掉那一刻发起重启的代码也一起死了，动作断在半路。所以必须交给**脱离进程树**的进程：
+
+```text
+插件（Host 子进程）
+  └─ schtasks /Create + /Run        创建并触发计划任务（父进程变为 svchost，与 DSH 无父子关系）
+       └─ wscript.exe               Windows 脚本宿主（GUI 子系统，本身无控制台）
+            └─ powershell.exe -WindowStyle Hidden
+                 └─ restart.ps1     等 3 秒 → 杀进程 → 等退干净 → 原路径拉起
+```
+
+### 为什么中间要夹一层 wscript
+
+最早让计划任务直接跑 `powershell.exe`，实测会**闪一个黑窗**：powershell 是控制台程序，
+即使加了 `-WindowStyle Hidden`，进程启动瞬间 conhost 仍会先创建控制台窗口，窗口留到脚本结束（约 3 秒）。
+
+改成 `wscript.exe` 后，它用 `WshShell.Run(cmd, 0, False)` 隐藏着拉起 powershell
+（`0` = 窗口隐藏，`False` = 不等待），整条链路不再出现任何可见窗口。
+
+## 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api-restart-button/state` | 当前环境是否支持重启、上一次重启回执 |
+| POST | `/api-restart-button/restart` | 触发一次重启（确认由前端完成）|
+| GET | `/api-restart-button/log` | 上一次重启的日志尾部 |
+
+安全栅栏：只接受无 `Origin`（同源导航）、回环地址或 `dsh-app://` 的请求，跨源一律 403。
+
+## 失败排查
+
+脚本与日志落在 `%TEMP%\dsh-restart-<随机>\`：`restart.ps1`（重启脚本）、`launch.vbs`（无窗口启动器）、`restart.log`（日志）。
+
+| 现象 | 原因 |
+| --- | --- |
+| 当前不是桌面端环境 | 在 `dsh web` 或 CLI 里点了按钮，没有桌面应用可重启 |
+| 找不到桌面端可执行文件路径 | `DSH_NODE_EXECUTABLE` 缺失且 `process.execPath` 不是 `.exe` |
+| 创建/启动重启任务失败 | 受管控的机器不允许建计划任务，错误框里有 `schtasks` 原始输出 |
+| 重启后没起来 | 应用已退出不会再弹提示，看日志里的 `FAILED` 行 |
+
+## 限制
+
+**仅支持 Windows**（依赖 `schtasks` / `wscript`，macOS / Linux 会明确拒绝并提示）。
+重启会中断当前正在执行的任务，包括正在跑的 Agent 回合。
+
+## 验证情况
+
+| 验证项 | 状态 |
+| --- | --- |
+| 按钮位置 / 透明背景 / 与账号行对齐 | ✅ 实测（截图确认）|
+| 设置面板打开时隐藏 | ✅ 实测 |
+| 确认框与文案 | ✅ 实测 |
+| 主按钮对比度（原白底白字已修）| ✅ 实测 |
+| `wscript → powershell` 无窗口执行 | ✅ 实测（进程无窗口，日志正常）|
+| `schtasks → wscript → powershell` 整链无窗口 | ✅ 实测 |
+| 端到端真实重启（点按钮 → 应用关闭重开）| ✅ 实机验证通过 |
+
+详细说明见 [插件 README](plugins/dsh-restart-button/README.md)。
 
 ---
 

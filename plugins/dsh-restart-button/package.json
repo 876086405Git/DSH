@@ -1,0 +1,66 @@
+{
+  "name": "dsh-restart-button",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adds a Restart button to the DSH desktop sidebar foot that relaunches the whole app without a console flash. | 在 DSH 桌面端侧边栏底部新增「重启」按钮：确认后无感重启整个桌面端，异常时给出可读错误。",
+  "license": "MIT",
+  "author": "876086405Git",
+  "homepage": "https://github.com/876086405Git/dsh-restart-button",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/876086405Git/dsh-restart-button.git"
+  },
+  "bugs": {
+    "url": "https://github.com/876086405Git/dsh-restart-button/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "plugin",
+    "restart",
+    "relaunch",
+    "desktop",
+    "electron",
+    "schtasks",
+    "cordis"
+  ],
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "icon": "icon.svg",
+  "files": [
+    "lib",
+    "locale",
+    "docs",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc <5"
+  },
+  "engines": {
+    "node": "^22.15.0 || >=24.0.0"
+  }
+}
