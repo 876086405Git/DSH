@@ -1334,7 +1334,7 @@ class ChatController extends Notifier<ChatState> {
     // Retired on the same Host: the text comes back. A send that may have landed (or a retry of
     // one) keeps its request id for the next try, so the Host takes it once.
     bool retire({bool uncertain = false}) {
-      if ((uncertain || retrying) && identical(_client, operation.client)) {
+      if ((uncertain || retrying) && ref.mounted && identical(_client, operation.client)) {
         _unsettled = (content: content, requestId: requestId);
       }
       return _retireSend(requestId);
@@ -1411,7 +1411,8 @@ class ChatController extends Notifier<ChatState> {
     } catch (e) {
       // The echo or durable inbox/claim/end feedback proves acceptance (also when a preparation
       // failure never writes a user/message echo, and across a reconnect of the same Host).
-      if (identical(_client, operation.client) &&
+      if (ref.mounted &&
+          identical(_client, operation.client) &&
           (!_pending.any((p) => p.requestId == requestId) ||
               _pending.any((p) => p.requestId == requestId && p.failed) ||
               _claimedAt.containsKey(requestId) ||
