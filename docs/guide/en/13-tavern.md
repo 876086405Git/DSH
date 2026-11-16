@@ -7,7 +7,7 @@ The Tavern is the app's role-play area: import SillyTavern character cards and c
 <!-- nav: chatChats,modeKeyTooltip,tavernTitle -->
 `Chats › Switch mode › Tavern`
 
-Tap the **Switch mode** key at the top of the chat list and pick **Tavern** under **Mode**; Back returns to Work. Set **Open on launch** to Tavern and the app opens straight into it.
+Tap the **Switch mode** key at the top of the chat list and pick **Tavern** under **Mode**; Back returns to Work. Set **Open on launch** to Tavern and the app opens straight into it. Picking **Chat with characters** the first time you open the app skips installing, goes straight to the tavern and sets this for you.
 
 ## Importing
 

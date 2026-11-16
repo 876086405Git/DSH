@@ -2,7 +2,7 @@
   "tavernTitle": "酒馆",
   "tavernImport": "导入",
   "tavernEmptyTitle": "还没有角色",
-  "tavernEmptyMessage": "导入一张角色卡：PNG、JSON 或 CHARX",
+  "tavernEmptyMessage": "接回 DeepSeek 里的对话，或导入一张角色卡",
   "tavernContinue": "继续",
   "tavernCharacters": "角色",
   "tavernImported": "已导入「{name}」",

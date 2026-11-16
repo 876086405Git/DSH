@@ -4,10 +4,11 @@ DSH can run right on this phone (this phone's engine), or on your computer or se
 
 ## This phone or remote
 
-The first time you open the app, choose where DSH runs:
+The first time you open the app, choose how to use it:
 
 - **This phone**: installs the runtime on your phone; everything runs on this phone. The option shows the storage and memory it needs.
 - **Remote host**: uses DSH on your computer or server, with nothing installed on the phone. Recommended when the phone is short on memory or storage.
+- **Chat with characters**: the tavern only, with nothing installed; the app opens straight into the tavern, now and on later launches. Bringing chats over from DeepSeek starts here too.
 
 You can add DSH to this phone anytime: tap **Install runtime** on the engine page, or tap **This phone** when switching hosts. Stay on that page while it installs; it starts once installed.
 

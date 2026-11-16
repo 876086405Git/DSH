@@ -220,27 +220,28 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
             action: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // A conversation DeepSeek's own app won't continue, carried
+                // over: what most people arriving at an empty shelf came for.
                 OutlinedButton(
-                  key: const ValueKey('tavern-empty-import'),
-                  onPressed: () => unawaited(_import()),
+                  key: const ValueKey('tavern-empty-deepseek'),
+                  onPressed: () => unawaited(takeInDeepSeekExport(context, ref)),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 44),
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                   ),
-                  child: Text(l10n.tavernImport),
+                  child: Text(l10n.tavernImportFromDeepSeek),
                 ),
                 const SizedBox(height: 8),
+                TextButton(
+                  key: const ValueKey('tavern-empty-import'),
+                  onPressed: () => unawaited(_import()),
+                  child: Text(l10n.tavernImport),
+                ),
                 // A card to start from before you have your own.
                 TextButton(
                   key: const ValueKey('tavern-try-sample'),
                   onPressed: () => unawaited(_trySample()),
                   child: Text(l10n.tavernTrySample),
-                ),
-                // A conversation DeepSeek's own app won't continue, carried over.
-                TextButton(
-                  key: const ValueKey('tavern-empty-deepseek'),
-                  onPressed: () => unawaited(takeInDeepSeekExport(context, ref)),
-                  child: Text(l10n.tavernImportFromDeepSeek),
                 ),
                 TextButton(
                   key: const ValueKey('tavern-write-own'),

@@ -10161,6 +10161,15 @@ class L10nZh extends L10n {
   String get marketInstallRefused => '这个引擎不能安装市场插件';
 
   @override
+  String get localEnvChooseUseTitle => '想怎么用 dsh-Go？';
+
+  @override
+  String get localEnvTavernTitle => '和角色聊天';
+
+  @override
+  String get localEnvTavernDetail => '接回 DeepSeek 的对话也在这里 · 不用安装';
+
+  @override
   String get marketSectionOfficial => '官方';
 
   @override
@@ -20360,7 +20369,7 @@ class L10nZh extends L10n {
   String get tavernEmptyTitle => '还没有角色';
 
   @override
-  String get tavernEmptyMessage => '导入一张角色卡：PNG、JSON 或 CHARX';
+  String get tavernEmptyMessage => '接回 DeepSeek 里的对话，或导入一张角色卡';
 
   @override
   String get tavernContinue => '继续';

@@ -2,7 +2,7 @@
   "tavernTitle": "Tavern",
   "tavernImport": "Import",
   "tavernEmptyTitle": "No characters yet",
-  "tavernEmptyMessage": "Import a character card: PNG, JSON or CHARX",
+  "tavernEmptyMessage": "Bring a chat over from DeepSeek, or import a character card",
   "tavernContinue": "Continue",
   "tavernCharacters": "Characters",
   "tavernImported": "Imported “{name}”",

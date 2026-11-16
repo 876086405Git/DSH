@@ -18860,6 +18860,24 @@ abstract class L10n {
   /// **'这个引擎不能安装市场插件'**
   String get marketInstallRefused;
 
+  /// No description provided for @localEnvChooseUseTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'想怎么用 dsh-Go？'**
+  String get localEnvChooseUseTitle;
+
+  /// No description provided for @localEnvTavernTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'和角色聊天'**
+  String get localEnvTavernTitle;
+
+  /// No description provided for @localEnvTavernDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'接回 DeepSeek 的对话也在这里 · 不用安装'**
+  String get localEnvTavernDetail;
+
   /// No description provided for @marketSectionOfficial.
   ///
   /// In zh, this message translates to:
@@ -37439,7 +37457,7 @@ abstract class L10n {
   /// No description provided for @tavernEmptyMessage.
   ///
   /// In zh, this message translates to:
-  /// **'导入一张角色卡：PNG、JSON 或 CHARX'**
+  /// **'接回 DeepSeek 里的对话，或导入一张角色卡'**
   String get tavernEmptyMessage;
 
   /// No description provided for @tavernContinue.

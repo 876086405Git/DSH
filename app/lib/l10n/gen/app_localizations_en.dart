@@ -10721,6 +10721,15 @@ class L10nEn extends L10n {
   String get marketInstallRefused => 'This engine can\'t install market plugins';
 
   @override
+  String get localEnvChooseUseTitle => 'How will you use dsh-Go?';
+
+  @override
+  String get localEnvTavernTitle => 'Chat with characters';
+
+  @override
+  String get localEnvTavernDetail => 'Bring DeepSeek chats over here too · nothing to install';
+
+  @override
   String get marketSectionOfficial => 'Official';
 
   @override
@@ -21489,7 +21498,7 @@ class L10nEn extends L10n {
   String get tavernEmptyTitle => 'No characters yet';
 
   @override
-  String get tavernEmptyMessage => 'Import a character card: PNG, JSON or CHARX';
+  String get tavernEmptyMessage => 'Bring a chat over from DeepSeek, or import a character card';
 
   @override
   String get tavernContinue => 'Continue';
