@@ -1401,9 +1401,11 @@ class ChatController extends Notifier<ChatState> {
       return true;
     } catch (e) {
       if (!_currentOperation(operation)) {
-        // The connection dropped mid-call: it may have landed. The text still comes back,
-        // and sending it again keeps this request id, so the Host takes it once.
-        if (_outcomeUnknown(e)) _unsettled = (content: content, requestId: requestId);
+        // The connection dropped mid-call: it may have landed. On the same Host the text comes
+        // back, and sending it again keeps this request id, so the Host takes it once.
+        if (_outcomeUnknown(e) && identical(_client, operation.client)) {
+          _unsettled = (content: content, requestId: requestId);
+        }
         return _retireSend(requestId);
       }
       // Durable inbox/claim/end feedback also proves acceptance when a
