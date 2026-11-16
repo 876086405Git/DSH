@@ -240,6 +240,8 @@ if (passed) {
 } else {
   fail('engine in the app', problem ?? 'The app produced a crash report.');
   if (summary) notice('engine in the app, as far as it got', summary);
+  notice('fake model requests', JSON.stringify(model.requests.map(({ scenario, requestedTool, toolResults }) =>
+    ({ scenario, requestedTool, toolResults }))));
   explain(pid);
 }
 quietly(() => simctl('terminate', values.simulator, bundleId));

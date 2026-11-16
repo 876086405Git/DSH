@@ -16,7 +16,6 @@ const _events = EventChannel('dsh/runtime/events');
 
 final _reports = File('${Directory.systemTemp.path}/dsh-app-check.jsonl');
 final _client = HttpClient();
-const _fixtureKey = 'DSH_IOS_APP_CHECK_KEY';
 const _toolMarker = 'iOS lifecycle tool fixture';
 
 Future<void> _report(String step, Map<String, Object?> data) =>
@@ -61,11 +60,7 @@ Future<Map<String, Object?>> _engineJson(String baseUrl, String cookie, String e
 
 Future<void> _start(String label) => _answer(
   label,
-  _runtime.invokeMethod<void>('start', {
-    'env': {_fixtureKey: 'local-simulator-fixture'},
-    'phoneStorage': false,
-    'visualReplies': true,
-  }),
+  _runtime.invokeMethod<void>('start', {'env': <String, String>{}, 'phoneStorage': false, 'visualReplies': true}),
 );
 
 Future<int> _foreground(String token, {int afterRevision = 0}) async {
@@ -129,7 +124,12 @@ Future<void> _round(DshClient client, String sessionId, String step) async {
         case ToolResultEvent(:final callId, :final message, :final isError) when callId == readCall:
           toolRead = !isError && message.text.contains(_toolMarker);
         case TurnEndedEvent(:final reason):
-          if (!reason.isCompleted) throw StateError('$step ended with ${reason.kind}');
+          if (!reason.isCompleted) {
+            throw StateError(
+              '$step ended with ${reason.kind}: ${reason.error ?? reason.cancelCause ?? 'no detail'} '
+              '(dequeued=$dequeued streamed=${streamed.length} toolRead=$toolRead)',
+            );
+          }
           if (!dequeued || streamed.toString() != 'iOS app round complete.' || !toolRead) {
             throw StateError(
               '$step missed observations: dequeued=$dequeued streamed=${streamed.length} toolRead=$toolRead',
@@ -205,18 +205,20 @@ Future<void> _check() async {
   late final String sessionId;
   const provider = 'custom-ios-app-check';
   const model = 'ohos-script';
+  final keyRef = deriveProviderKeyRef(provider);
   try {
     await client.saveProvider(
       ProviderProfile(
         route: provider,
         api: ProviderApi.openaiCompletions.wire,
         baseUrl: modelUrl,
-        apiKeyEnv: _fixtureKey,
+        apiKeyEnv: keyRef,
         models: const [
           ProviderModelSpec(id: model, contextWindow: 32768, maxTokens: 4096, extra: {'reasoningEfforts': false}),
         ],
       ),
     );
+    await client.setProviderKey('local-simulator-fixture', ref: keyRef);
     sessionId = (await client.createSession(cwd: workspace, agentPreset: 'standard')).sessionId;
     await client.setModel(sessionId, provider: provider, model: model);
     // The first queued prompt can expose a closed gate even if HTTP startup works.
