@@ -447,10 +447,6 @@ class DshProcess(
     private fun processSnapshot(known: Set<Int> = emptySet()): RuntimeProcessSnapshot =
         RuntimeProcessOwnership.scan(processReader, AndroidProcess.myUid(), AndroidProcess.myPid(), known)
 
-    private fun pidHint(): Int? = try {
-        File(rootfs, "tmp/dsh-web.pid").readText().trim().toIntOrNull()?.takeIf { it > 0 }
-    } catch (_: Exception) { null }
-
     private fun remember(snapshot: RuntimeProcessSnapshot) {
         snapshot.retired.forEach { cleanupKnown.remove(it) }
         for (record in snapshot.records) {
@@ -473,11 +469,12 @@ class DshProcess(
     private fun reapStraysLocked(allowObservationGap: Boolean): CleanupResult {
         val myPid = AndroidProcess.myPid()
         val roots = setOf(rootfs.absolutePath, rootfs.canonicalPath)
-        val hinted = pidHint()?.let { setOf(it) }.orEmpty()
         val deadline = System.nanoTime() + 2_000_000_000L
         var first = true
         while (true) {
-            val snapshot = processSnapshot(cleanupKnown.keys + hinted)
+            // A persisted bare PID can be reused by a hidden, unrelated process.
+            // Only captured identities supplement the current /proc enumeration.
+            val snapshot = processSnapshot(cleanupKnown.keys)
             remember(snapshot)
             val owned = RuntimeProcessOwnership.owned(snapshot.records, roots, myPid, cleanupKnown)
             owned.forEach { cleanupKnown[it.pid] = it.started }
