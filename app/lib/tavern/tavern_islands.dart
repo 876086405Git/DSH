@@ -109,14 +109,14 @@ String _htmlOf(String segment) => [
 bool tavernIslandReadsStory(String html) => _readsStory.hasMatch(html);
 
 final _readsStory = RegExp(
-  r'<script[\s\S]*\b(getVariables|Mvu|getChatMessages|getCurrentMessageId|getLastMessageId|waitGlobalInitialized)\b',
+  r'(<script\b|\son[a-z]+\s*=)[\s\S]*\b(getVariables|Mvu|getChatMessages|getCurrentMessageId|getLastMessageId|waitGlobalInitialized)\b',
   caseSensitive: false,
 );
 
-/// Whether [html] carries a script of its own.
+/// Whether [html] carries a script of its own, or an inline handler.
 bool tavernIslandHasScript(String html) => _script.hasMatch(html);
 
-final _script = RegExp(r'<script\b', caseSensitive: false);
+final _script = RegExp(r'<script\b|\son[a-z]+\s*=', caseSensitive: false);
 
 /// The page an island loads: [html] in the story's colours and size on a
 /// see-through ground, and a small script of ours (allowed by [nonce]) that

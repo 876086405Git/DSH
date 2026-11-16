@@ -87,7 +87,9 @@ final tavernIslandStoryProvider = StreamProvider.autoDispose.family<TavernIsland
       final snapshot = await scripts.snapshot(id);
       if (!out.isClosed) out.add(TavernIslandStory.of(snapshot));
     } on Object catch (e, stack) {
+      final opened = context;
       context = null;
+      if (opened != null) unawaited(opened.then(scripts.closeContext).catchError((_) {}));
       if (!out.isClosed) out.addError(e, stack);
     } finally {
       reading = false;

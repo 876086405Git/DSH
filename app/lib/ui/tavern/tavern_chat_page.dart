@@ -205,6 +205,15 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   /// Whether this page has looked at the card for MVU.
   bool _mvuAsked = false;
 
+  /// MVU being turned on for this chat; a reply starts after it, so its
+  /// variables are counted from the first.
+  Future<void>? _mvuOn;
+
+  Stream<TavernEvent> _afterMvu(Stream<TavernEvent> Function() start) {
+    final on = _mvuOn;
+    return on == null ? start() : Stream.fromFuture(on.catchError((_) {})).asyncExpand((_) => start());
+  }
+
   /// Turns the engine's MVU on for this chat, once: the card's [initvar]
   /// read in, and its replies' variable updates kept from then on.
   Future<void> _turnOnMvu() async {
@@ -931,7 +940,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       _runGroup(() => _tavern.sendGroup(widget.chatId, text), draft: text);
       return;
     }
-    _run(() => _tavern.send(widget.chatId, text), draft: text);
+    _run(() => _afterMvu(() => _tavern.send(widget.chatId, text)), draft: text);
   }
 
   /// /continue, /regen, /imp: as the message menu and 帮我写 do them, on the
@@ -1053,7 +1062,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       _runGroup(() => _tavern.sendGroup(widget.chatId, text), draft: text);
       return;
     }
-    _run(() => _tavern.send(widget.chatId, text), draft: text);
+    _run(() => _afterMvu(() => _tavern.send(widget.chatId, text)), draft: text);
   }
 
   /// Long-press: the quick reply goes into the box to change first.
@@ -1551,7 +1560,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       final card = ref.watch(tavernCardDataProvider(characterId));
       if (card.hasValue || card.hasError) {
         _mvuAsked = true;
-        if (tavernUsesMvu(card.value)) unawaited(_turnOnMvu());
+        if (tavernUsesMvu(card.value)) _mvuOn = _turnOnMvu();
       }
     }
     // The buttons the card's own scripts show: only where those scripts run
