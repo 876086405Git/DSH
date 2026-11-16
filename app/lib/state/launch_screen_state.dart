@@ -22,6 +22,8 @@ class CustomLaunchController extends AsyncNotifier<CustomLaunch?> {
     final (custom, problem) = await ref.read(launchImportProvider).pick(previous: previous);
     if (custom == null) return problem ?? LaunchImportProblem.unreadable;
     await _store(custom);
+    // Only now: until the new choice is saved, the old files are the one the next launch reads.
+    await LaunchImport.removeFiles(previous, except: custom);
     return null;
   }
 

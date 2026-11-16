@@ -42,8 +42,8 @@ class WallpaperImport {
     return _adopt(launch, problem, previous);
   }
 
-  /// Copies [bytes] into the wallpaper folder and checks them; [previous]'s file goes once the
-  /// new one is in place (its look comes along, its framing doesn't).
+  /// Copies [bytes] into the wallpaper folder and checks them; [previous]'s look comes along, its
+  /// framing doesn't (its file stays until the new one is saved).
   Future<(CustomWallpaper?, LaunchImportProblem?)> keep(Stream<List<int>> bytes, {CustomWallpaper? previous}) async {
     final (launch, problem) = await _launch.keep(bytes);
     return _adopt(launch, problem, previous);
@@ -60,7 +60,6 @@ class WallpaperImport {
     final wallpaper =
         previous?.replacedBy(path: launch.path, width: launch.width, height: launch.height, edge: launch.edge) ??
         CustomWallpaper(path: launch.path, width: launch.width, height: launch.height, edge: launch.edge);
-    if (previous != null && previous.path != launch.path) await removeFile(previous.path);
     return (wallpaper, null);
   }
 

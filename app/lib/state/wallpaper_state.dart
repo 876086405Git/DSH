@@ -38,6 +38,8 @@ class CustomWallpaperController extends AsyncNotifier<CustomWallpaper?> {
     final (wallpaper, problem) = await ref.read(wallpaperImportProvider).pick(previous: previous);
     if (wallpaper == null) return problem ?? LaunchImportProblem.unreadable;
     await _store(wallpaper);
+    // Only now: until the new one is saved, the old file is the one the next launch reads.
+    if (previous != null && previous.path != wallpaper.path) await WallpaperImport.removeFile(previous.path);
     return null;
   }
 
