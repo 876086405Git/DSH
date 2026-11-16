@@ -53,7 +53,13 @@ class _ChangeDiffPageState extends State<ChangeDiffPage> {
 
   void _select(int index) {
     if (index == _index) return;
-    _pages.animateToPage(index, duration: AppMotion.of(context, AppMotion.standard), curve: AppMotion.std);
+    // A scroll can't animate over zero (reduced motion): it jumps.
+    final duration = AppMotion.of(context, AppMotion.standard);
+    if (duration == Duration.zero) {
+      _pages.jumpToPage(index);
+    } else {
+      _pages.animateToPage(index, duration: duration, curve: AppMotion.std);
+    }
   }
 
   void _onPage(int index) {
