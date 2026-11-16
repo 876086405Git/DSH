@@ -12,12 +12,14 @@ import 'package:dsh_app/state/account_state.dart';
 import 'package:dsh_app/state/balance_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/state/update_state.dart';
 import 'package:dsh_app/ui/settings/about_page.dart';
 import 'package:dsh_app/ui/settings/interface_page.dart';
 import 'package:dsh_app/ui/settings/personalization_page.dart';
 import 'package:dsh_app/ui/settings/privacy_page.dart';
 import 'package:dsh_app/ui/settings/reply_prefs_page.dart';
 import 'package:dsh_app/ui/settings/settings_screen.dart';
+import 'package:dsh_app/update/version.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +32,14 @@ import '../engine_settings/support.dart' as engine;
 import '../phone/support.dart' show FixedActiveHost, FixedHosts;
 import '../shell/golden_harness.dart';
 
+/// Pins the shown version so the baselines don't change with every release.
+class _FixedVersion extends AppUpdateController {
+  @override
+  AppUpdateState build() => super.build().copyWith(current: const AppVersion(1, 0, 2, build: 1));
+}
+
 List<Override> _local({bool autoApprove = false}) => [
+  appUpdateProvider.overrideWith(_FixedVersion.new),
   activeHostProvider.overrideWith(() => FixedActiveHost(HostRef.local)),
   hostsProvider.overrideWith(FixedHosts.new),
   localRuntimeProvider.overrideWith(() => FakeRuntime(const LocalRuntimeState(loaded: true, status: runningStatus))),
