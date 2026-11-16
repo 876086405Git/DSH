@@ -1409,17 +1409,18 @@ class ChatController extends Notifier<ChatState> {
       state = state.copyWith(error: stopFailed, notice: notice);
       return true;
     } catch (e) {
-      if (!_currentOperation(operation)) return retire(uncertain: _outcomeUnknown(e));
-      // Durable inbox/claim/end feedback also proves acceptance when a
-      // preparation failure never writes a user/message echo.
-      if (!_pending.any((p) => p.requestId == requestId) ||
-          _pending.any((p) => p.requestId == requestId && p.failed) ||
-          _claimedAt.containsKey(requestId) ||
-          _withdrawn.contains(requestId) ||
-          _inboxIds().contains(requestId)) {
+      // The echo or durable inbox/claim/end feedback proves acceptance (also when a preparation
+      // failure never writes a user/message echo, and across a reconnect of the same Host).
+      if (identical(_client, operation.client) &&
+          (!_pending.any((p) => p.requestId == requestId) ||
+              _pending.any((p) => p.requestId == requestId && p.failed) ||
+              _claimedAt.containsKey(requestId) ||
+              _withdrawn.contains(requestId) ||
+              _inboxIds().contains(requestId))) {
         _sent();
         return true;
       }
+      if (!_currentOperation(operation)) return retire(uncertain: _outcomeUnknown(e));
       _recordSendFailure(operation, e);
       if (_outcomeUnknown(e)) {
         _unsettled = (content: content, requestId: requestId);
