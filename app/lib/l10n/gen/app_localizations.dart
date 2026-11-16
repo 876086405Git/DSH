@@ -41762,6 +41762,18 @@ abstract class L10n {
   /// **'{name}回复了'**
   String tavernCanvasReplied(String name);
 
+  /// No description provided for @tavernMvuIssues.
+  ///
+  /// In zh, this message translates to:
+  /// **'这张卡的变量更新有问题'**
+  String get tavernMvuIssues;
+
+  /// No description provided for @tavernMvuUnfinished.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一层的变量没有更新完，正文已经保留'**
+  String get tavernMvuUnfinished;
+
   /// No description provided for @tavernRegexEdit.
   ///
   /// In zh, this message translates to:

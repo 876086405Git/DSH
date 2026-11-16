@@ -202,6 +202,7 @@ MVU（MagVarUpdate，MIT）是中文卡里最常见的变量框架。它是一�
 - **原先的打算是让 MVU 自己的脚本跑**，取了 master 的构建看过后放弃：它运行时 import 51 个远程模块（各家模型的适配、mathjs 等），还直接读写 ST 的内部对象（`SillyTavern.chat`、`saveChat`、`registerMacro`、`loadWorldInfo` 等 22 种），离线做不到，要模拟的东西太多，还跟着上游变。
 - **改成引擎原生实现 MVU 的变量协议**（MIT，照它的源码移植语义，版权与来源记进 THIRD_PARTY_NOTICES.md）：`[initvar]` 初始值、楼层里的 `stat_data`、`<UpdateVariable>` 和 `<JSONPatch>` 的解析、相关的宏和事件。MVU 的「额外模型解析」和它的设置面板不做。
 - 卡脚本 import MVU 的地址时，App 换成本地的小模块，挂出全局 `Mvu`（`getMvuData`、`replaceMvuData`、`parseMessage`、事件名），接到引擎上。前端块照常用 `getVariables` 或 `Mvu.getMvuData` 读。
+- **App 怎么接（2026-11 阶段四）**：卡里（脚本、正则、开场白）出现 MagVarUpdate，或 `extensions.dshgo.mvu.enabled` 为真，就算用 MVU。聊天页对这类卡调一次 `setMvuEnabled` 打开这段对话的原生 MVU（不管用哪种显示方式），之后每条回复由引擎算变量。整页画布里卡脚本照常跑：MVU 的 import 换成本地 `Mvu`，事件监听改过的候选随 Ack 交回引擎。默认的岛屿不跑卡脚本，但状态栏这类读变量的前端块会拿到本楼层的只读变量（`getVariables`、`Mvu.getMvuData`、`getCurrentMessageId`、`waitGlobalInitialized('Mvu')`），写操作会被拒绝并说明要去整页画布；岛屿里也带上 jQuery 和 lodash。
 - **原生状态面板**能直接读 `stat_data`（ui §8 的变量树视图），整理者也能读。
 - **zod 版**（`StageDog/tavern_resource` 的 `mvu_zod`）是 PolyForm NonCommercial：卡自己引入时照常从网上加载（能不能跑看它用到的接口），我们不打包；它的 schema 校验先不支持。
 

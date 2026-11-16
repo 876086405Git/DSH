@@ -129,6 +129,17 @@ class TavernScriptPages implements TavernScriptHost {
                 stage: 'handler',
               ),
         ],
+        mvu: switch (answer['mvu']) {
+          {'data': final Map<String, Object?> data} && final Map<Object?, Object?> mvu => TavernScriptMvuFeedback(
+            data: data,
+            commands: switch (mvu['commands']) {
+              final List<Object?> list => [for (final c in list) c as Map<String, Object?>],
+              _ => null,
+            },
+            beforeData: mvu['beforeData'] as Map<String, Object?>?,
+          ),
+          _ => null,
+        },
       ),
     );
   }

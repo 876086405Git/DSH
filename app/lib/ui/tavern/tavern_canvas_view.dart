@@ -21,6 +21,7 @@ import '../../l10n/l10n.dart';
 import '../../tavern/tavern_canvas.dart';
 import '../../tavern/tavern_canvas_audio.dart';
 import '../../tavern/tavern_canvas_calls.dart';
+import '../../tavern/tavern_canvas_helpers.dart' show tavernMvuIssueText;
 import '../../tavern/tavern_card_scripts.dart';
 import '../../tavern/tavern_provider.dart';
 import '../../tavern/tavern_settings.dart';
@@ -295,6 +296,23 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         if (messenger != null) _toasts.show(messenger, data);
       case 'toastClear':
         _toasts.clear(data);
+      // A card script's buttons changed: the composer's row shows them.
+      case 'buttons':
+        if (data case {'scriptId': final String id, 'names': final List<Object?> names}) {
+          widget.calls?.showButtons(id, [for (final n in names) '$n']);
+        }
+      // What the engine said went wrong with the card's variables (MVU),
+      // said as a notice: the page went on.
+      case 'issues':
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        final issues = data['issues'];
+        if (messenger != null && issues is List && issues.isNotEmpty) {
+          _toasts.show(messenger, {
+            'level': 'warning',
+            'title': context.l10n.tavernMvuIssues,
+            'message': tavernMvuIssueText(issues, unfinished: context.l10n.tavernMvuUnfinished),
+          });
+        }
       case 'audio':
         if (widget.calls?.chatId case final chat?) unawaited(tavernSaveAudio(chat, data['state']).catchError((_) {}));
       case 'audioNow':

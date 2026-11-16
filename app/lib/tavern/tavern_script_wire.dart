@@ -18,6 +18,9 @@
 // function stays in the page (read, call it once, replace with the version
 // it read).
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dsh_tavern/dsh_tavern.dart';
 
 class TavernScriptWire {
@@ -246,26 +249,176 @@ class TavernScriptWire {
       case 'stopScript':
         return bridge.stopScript(p.string('executionId'));
       // The regexes in play for this context, as 酒馆助手's getTavernRegexes
-      // hands them out, by where each comes from (global, the chat's
-      // character, the preset in use), in the order they apply. 酒馆助手 has
-      // no chat-scoped type, so a gameplay pack's chat regexes are not asked for.
+      // hands them out, by where each comes from (global, the preset in use,
+      // the chat's character, the chat's own), in the order they apply.
       case 'getTavernRegexes':
-        const helperSources = {
-          TavernScriptRegexSource.global,
-          TavernScriptRegexSource.preset,
-          TavernScriptRegexSource.character,
-        };
         final regexes = await bridge.getTavernRegexes(
           p.string('contextId'),
-          TavernScriptRegexQuery(sources: helperSources),
+          TavernScriptRegexQuery(
+            effectiveOnly: p.boolOr('effectiveOnly', false),
+            characterId: p.stringOrNull('characterId'),
+            presetId: p.stringOrNull('presetId'),
+          ),
         );
         return {
-          for (final source in helperSources)
+          for (final source in TavernScriptRegexSource.values)
             source.name: [
               for (final r in regexes)
                 if (r.source == source) tavernHelperRegexJson(r),
             ],
         };
+      // Stage 4 (STAGE4-APP-INTEGRATION §2): MVU, world info, books and their
+      // bindings, presets, regex sources, a script's buttons, a character's
+      // picture. Each answer is the engine's snapshot as it gives it.
+      case 'setMvuEnabled':
+        final init = await bridge.setMvuEnabled(p.string('contextId'), p.boolean('enabled'));
+        return {
+          'chatId': init.chatId,
+          'enabled': init.enabled,
+          'initializedRefs': [for (final r in init.initializedRefs) tavernScriptRefJson(r)],
+          'issues': [for (final x in init.issues) _issueJson(x)],
+        };
+      case 'parseMvuMessage':
+        final parsed = await bridge.parseMvuMessage(
+          p.string('contextId'),
+          p.string('message'),
+          p.object('previousData'),
+        );
+        return {
+          'data': parsed.data,
+          'issues': [for (final x in parsed.issues) _issueJson(x)],
+        };
+      case 'updateWorldInfoSettings':
+        return (await bridge.updateWorldInfoSettings(
+          p.string('contextId'),
+          p.object('patch'),
+          expectedVersion: p.stringOrNull('expectedVersion'),
+        )).toJson();
+      case 'replaceScriptButtons':
+        return (await bridge.replaceScriptButtons(p.string('contextId'), [
+          for (final (i, x) in p.list('buttons').indexed) _button(x, i, p.method),
+        ], expectedVersion: p.stringOrNull('expectedVersion'))).toJson();
+      case 'getBookDirectory':
+        final directory = await bridge.getBookDirectory(p.string('contextId'));
+        return {
+          'version': directory.version,
+          'books': [for (final b in directory.books) b.toJson()],
+          'issues': [for (final x in directory.issues) _issueJson(x)],
+        };
+      case 'resolveBook':
+        return (await bridge.resolveBook(p.string('contextId'), p.string('nameOrHandle'))).toJson();
+      case 'createBook':
+        return _book(await bridge.createBook(p.string('contextId'), p.string('name'), p.object('raw')));
+      case 'deleteBook':
+        await bridge.deleteBook(
+          p.string('contextId'),
+          TavernScriptBookRef.fromJson(p.object('ref')),
+          expectedVersion: p.string('expectedVersion'),
+        );
+        return null;
+      case 'getContextBooks':
+        return [
+          for (final b in await bridge.getContextBooks(p.string('contextId')))
+            {
+              'ref': b.ref.toJson(),
+              'source': b.source.name,
+              'chatId': b.chatId,
+              'personaId': b.personaId,
+              'characterId': b.characterId,
+            },
+        ];
+      case 'readBook':
+        return _book(await bridge.readBook(p.string('contextId'), TavernScriptBookRef.fromJson(p.object('ref'))));
+      case 'replaceBook':
+        return _book(
+          await bridge.replaceBook(
+            p.string('contextId'),
+            TavernScriptBookRef.fromJson(p.object('ref')),
+            p.object('book'),
+            expectedVersion: p.stringOrNull('expectedVersion'),
+          ),
+        );
+      case 'readBookBindings':
+        final target = _Params(p.method, p.object('target'));
+        return _bindings(
+          await bridge.readBookBindings(
+            p.string('contextId'),
+            TavernScriptBookBindingsTarget(
+              scope: _enum(TavernScriptBookBindingScope.values, target.string('scope'), 'target.scope', p.method),
+              targetId: target.stringOrNull('targetId'),
+            ),
+          ),
+        );
+      case 'updateBookBindings':
+        final edit = _Params(p.method, p.object('edit'));
+        return _bindings(
+          await bridge.updateBookBindings(
+            p.string('contextId'),
+            TavernScriptBookBindingsEdit(
+              scope: _enum(TavernScriptBookBindingScope.values, edit.string('scope'), 'edit.scope', p.method),
+              targetId: edit.stringOrNull('targetId'),
+              primary: edit.has('primary') ? TavernScriptBookRef.fromJson(edit.object('primary')) : null,
+              additional: [
+                if (edit.has('additional'))
+                  for (final (i, x) in edit.list('additional').indexed)
+                    TavernScriptBookRef.fromJson(_asObject(x, 'edit.additional[$i]', p.method)),
+              ],
+            ),
+            expectedVersion: p.string('expectedVersion'),
+          ),
+        );
+      case 'readPreset':
+        return (await bridge.readPreset(p.string('contextId'), _presetRef(p.object('ref'), p.method))).toJson();
+      case 'replacePreset':
+        return (await bridge.replacePreset(
+          p.string('contextId'),
+          _presetRef(p.object('ref'), p.method),
+          p.object('raw'),
+          expectedVersion: p.string('expectedVersion'),
+        )).toJson();
+      case 'readTavernRegexesForWrite':
+        return (await bridge.readTavernRegexesForWrite(
+          p.string('contextId'),
+          _regexTarget(p.object('target'), p.method),
+        )).toJson();
+      case 'replaceTavernRegexes':
+        return (await bridge.replaceTavernRegexes(p.string('contextId'), _regexTarget(p.object('target'), p.method), [
+          for (final (i, x) in p.list('items').indexed)
+            switch (_asObject(x, 'items[$i]', p.method)) {
+              final item => TavernScriptRegexWriteItem(
+                engineId: _Params(p.method, item).stringOrNull('engineId'),
+                raw: _asObject(item['raw'], 'items[$i].raw', p.method),
+              ),
+            },
+        ], expectedVersion: p.string('expectedVersion'))).toJson();
+      // A picture goes both ways as base64 (null: the character has none).
+      case 'readCharacterAvatar':
+        return _avatar(await bridge.readCharacterAvatar(p.string('contextId'), p.string('characterId')));
+      case 'replaceCharacterAvatar':
+        final Uint8List bytes;
+        try {
+          bytes = base64Decode(p.string('bytes'));
+        } on FormatException {
+          throw _bad(p.method, 'bytes is the picture in base64.', fieldPath: 'bytes');
+        }
+        return _avatar(
+          await bridge.replaceCharacterAvatar(
+            p.string('contextId'),
+            p.string('characterId'),
+            bytes,
+            expectedVersion: p.string('expectedVersion'),
+          ),
+        );
+      case 'replaceCharacterData':
+        final character = await bridge.replaceCharacterData(
+          p.string('contextId'),
+          p.string('characterId'),
+          p.object('data'),
+          expectedVersion: p.stringOrNull('expectedVersion'),
+        );
+        return {'id': character.id, 'name': character.name};
+      case 'substituteMacros':
+        return bridge.substituteMacros(p.string('contextId'), p.string('text'));
     }
     throw TavernScriptException(
       code: TavernScriptErrorCode.unsupportedCapability,
@@ -324,6 +477,7 @@ Map<String, Object?> tavernScriptErrorJson(TavernScriptException e) => {
   'contextId': e.contextId,
   'nodeId': e.nodeId,
   'fieldPath': e.fieldPath,
+  'issues': [for (final x in e.issues) _issueJson(x)],
 };
 
 /// A request's params, read strictly: the wrong type is the caller's error,
@@ -355,6 +509,11 @@ class _Params {
   int integer(String key) => switch (_need(key)) {
     final int n => n,
     _ => throw _bad(method, '$key is a whole number.', fieldPath: key),
+  };
+
+  bool boolean(String key) => switch (_need(key)) {
+    final bool b => b,
+    _ => throw _bad(method, '$key is true or false.', fieldPath: key),
   };
 
   bool boolOr(String key, bool otherwise) => switch (_map[key]) {
@@ -437,6 +596,51 @@ TavernVariableChange _change(Object? json, int at, String method) {
       ? TavernVariableChange(kind: kind, pathTokens: path, value: change['value'])
       : TavernVariableChange(kind: kind, pathTokens: path);
 }
+
+TavernScriptButton _button(Object? json, int at, String method) {
+  final p = _Params(method, _asObject(json, 'buttons[$at]', method));
+  return TavernScriptButton(name: p.string('name'), visible: p.boolOr('visible', true));
+}
+
+TavernScriptPresetRef _presetRef(Map<String, Object?> json, String method) {
+  final p = _Params(method, json);
+  return switch (p.string('kind')) {
+    'stored' => TavernScriptPresetRef.stored(p.string('presetId')),
+    'current' => const TavernScriptPresetRef.current(),
+    _ => throw _bad(method, 'A preset is {kind: stored, presetId} or {kind: current}.', fieldPath: 'ref.kind'),
+  };
+}
+
+TavernScriptRegexWriteTarget _regexTarget(Map<String, Object?> json, String method) {
+  final p = _Params(method, json);
+  return switch (p.string('kind')) {
+    'globalInline' => const TavernScriptRegexWriteTarget.globalInline(),
+    'globalLibrary' => const TavernScriptRegexWriteTarget.globalLibrary(),
+    'character' => TavernScriptRegexWriteTarget.character(characterId: p.string('characterId')),
+    'preset' => TavernScriptRegexWriteTarget.preset(preset: _presetRef(p.object('preset'), method)),
+    _ => throw _bad(method, 'kind is globalInline, globalLibrary, character or preset.', fieldPath: 'target.kind'),
+  };
+}
+
+Map<String, Object?> _book(TavernScriptBookSnapshot b) => {'ref': b.ref.toJson(), 'version': b.version, 'book': b.book};
+
+Map<String, Object?> _bindings(TavernScriptBookBindingsSnapshot b) => {
+  'scope': b.scope.name,
+  'targetId': b.targetId,
+  'version': b.version,
+  'primary': b.primary?.toJson(),
+  'additional': [for (final r in b.additional) r.toJson()],
+  'inherited': [for (final r in b.inherited) r.toJson()],
+};
+
+Map<String, Object?> _avatar(TavernScriptCharacterAvatarSnapshot a) => {
+  'characterId': a.characterId,
+  'version': a.version,
+  'bytes': switch (a.bytes) {
+    final bytes? => base64Encode(bytes),
+    null => null,
+  },
+};
 
 /// A write's options: the path revision it expects (opaque) and what to redraw.
 TavernScriptWriteOptions _write(_Params p) {
@@ -554,6 +758,8 @@ Map<String, Object?> _issueJson(TavernScriptIssue i) => {
   'code': i.code,
   'message': i.message,
   'committed': i.committed,
+  'stage': i.stage,
+  'details': i.details,
 };
 
 Map<String, Object?> _context(TavernScriptContext c) => {
