@@ -64,21 +64,23 @@ Android 不接受 OHOS 最终摘要。对被排除的 OHOS diff，如果它触�
 
 ## 命令与维护
 
+以下示例使用 `runtime/locks/dsh-0.2.2-rc.1/` 中的 `package.json` 和 `package-lock.json` 准备的干净前缀，安装的 DSH 版本与 `--dsh-version` 一致。
+
 ```sh
 python3 -I runtime/lib/rtbuild.py patch-dsh \
   --prefix /absolute/pristine-dsh-prefix \
-  --dsh-version 0.2.1-rc.4 --target android \
+  --dsh-version 0.2.2-rc.1 --target android \
   --out /absolute/android-patches.json \
   --target-report /absolute/android-target.json
 
 python3 -I runtime/lib/rtbuild.py patch-dsh \
   --prefix /absolute/other-pristine-dsh-prefix \
-  --dsh-version 0.2.1-rc.4 --target ohos \
+  --dsh-version 0.2.2-rc.1 --target ohos \
   --out /absolute/ohos-patches.json \
   --target-report /absolute/ohos-target.json
 ```
 
-记录新版本时，先审源码/差分并登记 targetSets，再从相应原始版本的前缀运行 `--record --target ...`。它记录的是明确选中集合，不能拿一棵未知修改状态的树作为新基线。当前完整发行链仍只为 rc.4 配齐；保留的 rc.2 单项 pins 不代表整套 rc.4 功能都支持 rc.2。
+记录新版本时，先审源码/差分并登记 targetSets，再从相应原始版本的前缀运行 `--record --target ...`。它记录的是明确选中集合，不能拿一棵未知修改状态的树作为新基线。当前两个目标集合的完整 pins 为 0.2.2-rc.1 配齐；保留的 0.2.1-rc.2、0.2.1-rc.4 部分 pins 不代表这些版本支持当前完整补丁链。
 
 ## 验证
 

@@ -1,13 +1,13 @@
 # 自有 package 进程组的取消确认
 
-本组测试针对 service/POSIX 路径；实际运行 rc4 `runCli()`、正式 HTTP RPC 和真实本地进程。包管理器是自写的受控夹具，不运行 pnpm，不下载任何依赖，不访问外部 registry；`.invalid` 地址只是参数和分类输入。测试不是 Android/PRoot 或完整 ABI 运行时构建证明。
+本组测试针对 service/POSIX 路径；运行给定 prefix 的 `runCli()`，使用正式 HTTP RPC 和真实本地进程。包管理器是自写的受控夹具，不运行 pnpm，不下载任何依赖，不访问外部 registry；`.invalid` 地址只是参数和分类输入。测试不是 Android/PRoot 或完整 ABI 运行时构建证明。
 
 ## 准备与命令
 
-在仓库根目录准备一个打过补丁的 DSH 0.2.1-rc.4 prefix，做法与 `runtime/build-runtime.sh` 的 `install_dsh` 和打补丁步骤相同：
+在仓库根目录准备一个打过补丁的 DSH 0.2.2-rc.1 prefix，做法与 `runtime/build-runtime.sh` 的 `install_dsh` 和打补丁步骤相同：
 
-1. 把 `runtime/locks/dsh-0.2.1-rc.4/package.json` 和 `package-lock.json` 复制到一个新的空目录（下称 prefix），在其中执行 `npm ci --ignore-scripts --no-audit --no-fund`。build-runtime.sh 另外传 `--cpu`、`--os=linux`、`--libc=glibc` 选目标 ABI；在 Linux 宿主上跑本测试时用宿主平台即可。
-2. `python3 -I runtime/lib/rtbuild.py patch-dsh --prefix /absolute/own/prefix --dsh-version 0.2.1-rc.4 --target android`。它按 `runtime/patches/series` 的显式顺序应用 `runtime/patches/pins.json` 里 `targetSets.android` 登记的补丁链（与 build-runtime.sh 相同），并按 `runtime/patches/pins.json` 核对每个文件补丁前后的 SHA-256。改动 `dsh-plugin-manager` 的是 `install-log-redaction.diff`、`plugin-manager-active-run-guard.diff` 和本测试对应的 `plugin-manager-cancel-tree-confirmation.diff`。
+1. 把 `runtime/locks/dsh-0.2.2-rc.1/package.json` 和 `package-lock.json` 复制到一个新的空目录（下称 prefix），在其中执行 `npm ci --ignore-scripts --no-audit --no-fund`。build-runtime.sh 另外传 `--cpu`、`--os=linux`、`--libc=glibc` 选目标 ABI；在 Linux 宿主上跑本测试时用宿主平台即可。
+2. `python3 -I runtime/lib/rtbuild.py patch-dsh --prefix /absolute/own/prefix --dsh-version 0.2.2-rc.1 --target android`。它按 `runtime/patches/series` 的显式顺序应用 `runtime/patches/pins.json` 里 `targetSets.android` 登记的补丁链（与 build-runtime.sh 相同），并按 `runtime/patches/pins.json` 核对每个文件补丁前后的 SHA-256。改动 `dsh-plugin-manager` 的是 `install-log-redaction.diff`、`plugin-manager-active-run-guard.diff` 和本测试对应的 `plugin-manager-cancel-tree-confirmation.diff`。
 
 不要用修改 pins 或跳过校验的方式接受补丁链中间状态的文件。对已完整打过补丁的 prefix 重复执行第 2 步是幂等的。
 
