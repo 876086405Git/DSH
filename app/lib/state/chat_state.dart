@@ -1331,6 +1331,15 @@ class ChatController extends Notifier<ChatState> {
     final retrying = _unsettled?.content == content;
     final requestId = retrying ? _unsettled!.requestId : _requestId();
     _unsettled = null;
+    // Retired on the same Host: the text comes back. A send that may have landed (or a retry of
+    // one) keeps its request id for the next try, so the Host takes it once.
+    bool retire({bool uncertain = false}) {
+      if ((uncertain || retrying) && ref.mounted && identical(_client, operation.client)) {
+        _unsettled = (content: content, requestId: requestId);
+      }
+      return _retireSend(requestId);
+    }
+
     final running = state.running;
     final effective = running ? (mode == SendMode.now ? SendMode.steer : mode) : SendMode.now;
     _pending = List.unmodifiable([
@@ -1355,7 +1364,7 @@ class ChatController extends Notifier<ChatState> {
     try {
       if (beforeDeliver != null) {
         final go = await beforeDeliver(requestId);
-        if (!_currentOperation(operation)) return _retireSend(requestId);
+        if (!_currentOperation(operation)) return retire();
         if (!go) {
           // The caller let it go (伙伴小屋 left this conversation meanwhile):
           // nothing went out, so nothing waits and nothing failed.
@@ -1365,7 +1374,7 @@ class ChatController extends Notifier<ChatState> {
         }
       }
       final receipts = await _stageFiles(operation, attachments);
-      if (!_currentOperation(operation)) return _retireSend(requestId);
+      if (!_currentOperation(operation)) return retire();
       var promptMode = effective == SendMode.steer ? PromptMode.steer : PromptMode.queue;
       String? stopFailed;
       // Interrupt stops first, then sends: DSH keeps the inbox across a stop
@@ -1374,7 +1383,7 @@ class ChatController extends Notifier<ChatState> {
       if (effective == SendMode.interrupt) {
         final stopped = await _stop(operation);
         // Retirement is not a failed cancel: it must never fall back to steer.
-        if (!_currentOperation(operation)) return _retireSend(requestId);
+        if (!_currentOperation(operation)) return retire();
         if (!stopped) {
           // The turn goes on: the message joins it instead.
           promptMode = PromptMode.steer;
@@ -1395,21 +1404,24 @@ class ChatController extends Notifier<ChatState> {
         deliveryAllowed: deliveryAllowed,
       );
       _sent();
-      if (!_currentOperation(operation)) return false;
+      // Delivered: sent, even if the watch moved on meanwhile (its echo comes on the new one).
+      if (!_currentOperation(operation)) return true;
       state = state.copyWith(error: stopFailed, notice: notice);
       return true;
     } catch (e) {
-      if (!_currentOperation(operation)) return _retireSend(requestId);
-      // Durable inbox/claim/end feedback also proves acceptance when a
-      // preparation failure never writes a user/message echo.
-      if (!_pending.any((p) => p.requestId == requestId) ||
-          _pending.any((p) => p.requestId == requestId && p.failed) ||
-          _claimedAt.containsKey(requestId) ||
-          _withdrawn.contains(requestId) ||
-          _inboxIds().contains(requestId)) {
+      // The echo or durable inbox/claim/end feedback proves acceptance (also when a preparation
+      // failure never writes a user/message echo, and across a reconnect of the same Host).
+      if (ref.mounted &&
+          identical(_client, operation.client) &&
+          (!_pending.any((p) => p.requestId == requestId) ||
+              _pending.any((p) => p.requestId == requestId && p.failed) ||
+              _claimedAt.containsKey(requestId) ||
+              _withdrawn.contains(requestId) ||
+              _inboxIds().contains(requestId))) {
         _sent();
         return true;
       }
+      if (!_currentOperation(operation)) return retire(uncertain: _outcomeUnknown(e));
       _recordSendFailure(operation, e);
       if (_outcomeUnknown(e)) {
         _unsettled = (content: content, requestId: requestId);
