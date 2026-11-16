@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-provider-headers-') as directory:
     record.mkdir()
     (record / NAME).write_text(''.join(diff))
     (record / 'series').write_text(NAME + '\n')
-    subprocess.run([sys.executable, '-I', str(RUNTIME / 'lib/rtbuild.py'), 'patch-dsh',
+    subprocess.run([sys.executable, '-I', str(RUNTIME / 'lib/rtbuild.py'), 'patch-dsh', '--target', 'android',
                     '--prefix', str(temp / 'prefix'), '--patches', str(record),
                     '--dsh-version', '0.2.2-rc.1', '--record'], check=True)
     publish_patch(patches / NAME, ''.join(diff))
