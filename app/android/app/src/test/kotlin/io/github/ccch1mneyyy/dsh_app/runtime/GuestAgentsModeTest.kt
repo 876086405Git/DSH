@@ -8,6 +8,64 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class GuestAgentsModeTest {
+    @Test fun managedInstructionsUseTheSelectedLocale() {
+        val root = kotlin.io.path.createTempDirectory("agents-locale").toFile()
+        try {
+            val file = File(root, "root/.dsh/AGENTS.md")
+            GuestSetup.writeAgentsMd(root, phoneStorage = true, phoneControl = true)
+            val original = file.readBytes()
+            assertTrue(file.readText().contains("# 运行环境（DSH 手机版）"))
+
+            GuestSetup.writeAgentsMd(root, phoneStorage = true, phoneControl = true, nativeLocale = "en")
+            val english = file.readText()
+            assertTrue(english.contains("# Runtime environment (DSH mobile app)"))
+            assertTrue(english.contains("## Interface and skills"))
+            assertTrue(english.contains("## Visual replies (dsh-ui)"))
+            assertTrue(english.contains("## Phone control"))
+            assertTrue(english.contains("## Local diagnostics"))
+            assertTrue(english.contains("Ubuntu 24.04 environment (proot, no root required)"))
+            assertTrue(english.contains("`/sdcard/Download/DSH-Go/`"))
+            assertFalse(english.contains("# 运行环境（DSH 手机版）"))
+
+            GuestSetup.writeAgentsMd(root, phoneStorage = true, phoneControl = true, directEngine = true, nativeLocale = "en")
+            val direct = file.readText()
+            assertTrue(direct.contains("the engine starts directly; bash/git/python/apt tools still run through proot"))
+            assertTrue(direct.contains("`${root.canonicalPath}/root/workspace`"))
+            assertTrue(direct.contains("`${root.canonicalPath}/root/.dsh/dsh-app/diagnostics.md`"))
+
+            GuestSetup.writeAgentsMd(root, phoneStorage = true, phoneControl = true, nativeLocale = "zh-CN")
+            assertArrayEquals(original, file.readBytes())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun identicalEnglishInstructionsAreNotRewritten() {
+        val root = kotlin.io.path.createTempDirectory("agents-locale-unchanged").toFile()
+        try {
+            val file = File(root, "root/.dsh/AGENTS.md")
+            GuestSetup.writeAgentsMd(root, phoneStorage = false, nativeLocale = "en")
+            val original = file.readBytes()
+            assertTrue(file.setLastModified(1_234_567_000L))
+            val modified = file.lastModified()
+            GuestSetup.writeAgentsMd(root, phoneStorage = false, nativeLocale = "en")
+            assertArrayEquals(original, file.readBytes())
+            assertEquals(modified, file.lastModified())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun aLocaleChangeLeavesUserOwnedInstructionsUntouched() {
+        val root = kotlin.io.path.createTempDirectory("agents-locale-user").toFile()
+        try {
+            val file = File(root, "root/.dsh/AGENTS.md").apply { parentFile!!.mkdirs() }
+            val original = "# My own instructions\nKeep this exact text.\n".toByteArray()
+            file.writeBytes(original)
+            assertTrue(file.setLastModified(1_234_567_000L))
+            val modified = file.lastModified()
+            GuestSetup.writeAgentsMd(root, phoneStorage = true, phoneControl = true, directEngine = true, nativeLocale = "en")
+            assertArrayEquals(original, file.readBytes())
+            assertEquals(modified, file.lastModified())
+        } finally { root.deleteRecursively() }
+    }
+
     private fun tawcBackup(root: File, file: File): File {
         val obj = File(root.parentFile, "tawcroot/link/123").apply { parentFile!!.mkdirs() }
         Files.move(file.toPath(), obj.toPath())

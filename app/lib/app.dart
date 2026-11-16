@@ -9,6 +9,8 @@ import 'companion/companion_initiative_owner.dart' show companionInitiativeProvi
 import 'l10n/l10n.dart';
 import 'performance/performance_state.dart';
 import 'performance/refresh_rate.dart';
+import 'plugins/native/native_state.dart' show nativeLocaleProvider;
+import 'runtime/runtime_state.dart' show syncRuntimeNativeLocale;
 import 'state/app_info.dart';
 import 'state/appearance_state.dart';
 import 'state/locale_state.dart';
@@ -66,6 +68,12 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Keep the resolved language for the next native engine start.
+    ref.listenManual(
+      nativeLocaleProvider,
+      (_, locale) => unawaited(syncRuntimeNativeLocale(locale)),
+      fireImmediately: true,
+    );
     // Start loading the stored tile style now, so 全部功能 opens in it rather
     // than flashing the default first.
     ref.read(tileStyleProvider);
