@@ -139,7 +139,7 @@ void main() {
       expect(custom.edge, isNull);
     });
 
-    test('replacing removes the old file, keeps the old fit and background choice', () async {
+    test('replacing keeps the old fit and background choice, and the old file until it is saved', () async {
       final first = (await importer([
         _file(await _png(100, 100, edge: const Color(0xFF000000))),
       ]).pick()).$1!.copyWith(backdrop: LaunchBackdrop.white);
@@ -148,7 +148,7 @@ void main() {
         directory: () async => dir,
         now: () => DateTime(2030),
       ).pick(previous: first);
-      expect(File(first.path).existsSync(), isFalse);
+      expect(File(first.path).existsSync(), isTrue, reason: 'the controller removes it once the new one is saved');
       expect(File(second!.path).existsSync(), isTrue);
       expect(second.backdrop, LaunchBackdrop.white);
     });
@@ -263,12 +263,7 @@ void main() {
       await CustomLaunch.save(framed);
       expect(await CustomLaunch.load(), framed);
 
-      final clamped = CustomLaunch.fromJson({
-        ...framed.toJson(),
-        'zoom': 99,
-        'alignX': -5,
-        'alignY': 3,
-      })!;
+      final clamped = CustomLaunch.fromJson({...framed.toJson(), 'zoom': 99, 'alignX': -5, 'alignY': 3})!;
       expect((clamped.zoom, clamped.alignX, clamped.alignY), (CustomLaunch.maxZoom, -1.0, 1.0));
     });
 

@@ -167,7 +167,7 @@ class LaunchImport {
   }
 
   /// Copies [bytes] into the launch folder, checks it and returns the launch screen it makes
-  /// (old files of [previous] are removed once the new one is in place).
+  /// ([previous] lends its fit and background; its files stay until the new one is saved).
   Future<(CustomLaunch?, LaunchImportProblem?)> keep(Stream<List<int>> bytes, {CustomLaunch? previous}) async {
     final dir = await directory();
     final stamp = now().microsecondsSinceEpoch;
@@ -236,7 +236,6 @@ class LaunchImport {
         );
       }
       created.clear();
-      await removeFiles(previous, except: custom);
       return (custom, null);
     } finally {
       for (final f in created) {
