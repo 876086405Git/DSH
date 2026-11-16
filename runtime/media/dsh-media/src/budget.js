@@ -94,7 +94,10 @@ export async function recoverAdmission(rid, context) {
         if (!isAbsolute(item.path) || isAbsolute(rel) || rel === '..' || rel.startsWith('..' + sep) || await realpath(item.path) !== item.path) fail('permission');
       }
       completed = { meta: index.media, text: '已恢复此前保存的媒体：\n' + index.media.items.map(item => item.path).join('\n') };
-    } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      if (handle) fail('storage');
+    }
     finally { await handle?.close(); }
   }
   return { completed, request: record.payload, keyRef: record.request.keyRef, providerTaskId: record.providerTaskId,

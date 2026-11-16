@@ -347,6 +347,18 @@ test('settled-but-unpublished video recovers after process-local state loss with
   assert.equal(completed.completed.meta.items[0].path, result.meta.items[0].path);
   await assert.rejects(recoverAdmission(original.rid, { ...f.context, sessionId: 'foreign' }), { code: 'permission' });
 });
+test('completed video recovery rejects a missing original without changing its index', async t => {
+  const f = await fixture(t, 'ark-video'), req = request('ark-video');
+  f.context.admission = await admitGeneration(req, f.context);
+  const result = await generateMedia(req, f.context);
+  const indexPath = join(f.context.hostStateDir, 'works', f.context.admission.outputDate, result.meta.rid + '.json');
+  const index = await readFile(indexPath), original = await readFile(result.meta.items[0].path);
+  const movedPath = result.meta.items[0].path + '.moved';
+  await rename(result.meta.items[0].path, movedPath);
+  await assert.rejects(recoverAdmission(result.meta.rid, f.context), { code: 'storage' });
+  assert.deepEqual(await readFile(indexPath), index);
+  assert.deepEqual(await readFile(movedPath), original);
+});
 test('submission_unknown without a task id never becomes a new create on recovery', async t => {
   const f = await fixture(t, 'ark-video'), admission = await admitGeneration(request('ark-video'), f.context); await admission.begin();
   await assert.rejects(recoverAdmission(admission.rid, f.context), { code: 'recovery_unavailable' }); assert.equal(f.wires.length, 0);
