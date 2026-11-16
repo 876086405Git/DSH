@@ -44,7 +44,7 @@ jobs:
           # The paths outside each area's own are files its tests read.
           filters: |
             ci: &ci .github/workflows/ci.yml
-            app: [*ci, 'app/**', 'packages/**', 'sdk/plugin-kit/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
+            app: [*ci, 'app/**', 'packages/**', 'sdk/plugin-kit/**', 'runtime/tests/direct/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
             packages: [*ci, 'packages/**']
             runtime: [*ci, 'runtime/**', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt']
             ios_runtime:
@@ -318,6 +318,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
+      - name: Runtime process cleanup and startup policy
+        run: python3 runtime/tests/direct/startup-policy.py --output "$RUNNER_TEMP/startup-policy"
       - working-directory: app/android
         run: gradle --stacktrace :app:testArm64DebugUnitTest
 
