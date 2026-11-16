@@ -218,6 +218,29 @@ void main() {
       expect(find.text('已复制路径'), findsOneWidget);
     });
 
+    testWidgets('diff page with animations off: another file is a jump, not a zero-length scroll (#798)', (
+      tester,
+    ) async {
+      usePhoneView(tester);
+      final files = turnChanges(_fixture().items).first.files;
+      expect(files.length, greaterThan(1));
+      await tester.pumpWidget(
+        testApp(
+          Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: ChangeDiffPage(files: files),
+            ),
+          ),
+        ),
+      );
+      await pumpFrames(tester);
+      await tester.tap(find.descendant(of: find.byType(ListView), matching: find.text(files[1].fileName)).first);
+      await pumpFrames(tester);
+      expect(tester.takeException(), isNull);
+      expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
+    });
+
     testWidgets('tool group summary expands to the individual rows', (tester) async {
       usePhoneView(tester);
       final tools = _fixture().items.whereType<ToolChatItem>().take(6).toList();

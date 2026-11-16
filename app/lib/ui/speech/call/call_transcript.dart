@@ -53,13 +53,13 @@ class _CallTranscriptState extends State<CallTranscript> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // The reader may have scrolled away since.
       if (!mounted || !_following || !_scroll.hasClients) return;
-      unawaited(
-        _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
-          duration: AppMotion.of(context, AppMotion.standard),
-          curve: AppMotion.std,
-        ),
-      );
+      final end = _scroll.position.maxScrollExtent;
+      final duration = AppMotion.of(context, AppMotion.standard);
+      if (duration == Duration.zero) {
+        _scroll.jumpTo(end);
+      } else {
+        unawaited(_scroll.animateTo(end, duration: duration, curve: AppMotion.std));
+      }
     });
   }
 
