@@ -25,7 +25,15 @@ case "${1:-}" in
     echo "$SHOTS/$2.png" ;;
   log) adb logcat -d -v time | grep -E "flutter|DshService|dsh|AndroidRuntime|$PKG" | tail -n "${2:-200}" ;;
   tap) adb shell input tap "$2" "$3" ;;
-  text) adb shell input text "'$(printf '%s' "$2" | sed "s/'/'\\\\''/g; s/ /%s/g")'" ;;
+  text)
+    send_text() { adb shell input text "'$(printf '%s' "$1" | sed "s/'/'\\\\''/g; s/ /%s/g")'"; }
+    remaining=$2
+    # Android input turns %s into a space; split a literal pair between calls.
+    while [[ $remaining == *%s* ]]; do
+      send_text "${remaining%%\%s*}%"
+      remaining="s${remaining#*%s}"
+    done
+    send_text "$remaining" ;;
   wait-boot)
     adb wait-for-device
     until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do sleep 2; done
