@@ -581,7 +581,10 @@ class RuntimeController private constructor(private val app: Context) : DshProce
                 p.start(env, if (storage) PhoneStorage.binds() else emptyList(), safe, phone, direct.requested, direct.failed, searchOverlay, authOverlay, speechOverlay,
                     tawcEngine = tawc.saved == true, tawcFailed = tawc.failed) { actualDirect ->
                     // SafeMode.prepare writes its own briefing; leave the original home untouched.
-                    if (!safe) GuestSetup.writeAgentsMd(installer.rootfs, storage, phone && PhoneControl.switchedOn(app), pendingVisualReplies, actualDirect)
+                    if (!safe) GuestSetup.writeAgentsMd(
+                        installer.rootfs, storage, phone && PhoneControl.switchedOn(app), pendingVisualReplies, actualDirect,
+                        nativeLocale = if (AppStrings.isEnglish(app)) "en" else "zh-CN",
+                    )
                 }
                 if (phone) PhoneControl.get(app).launched(p.phoneMounted)
             } catch (e: Throwable) {
