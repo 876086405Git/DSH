@@ -6,6 +6,7 @@ import 'package:dsh_app/state/draft_store.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/ui/chat/chat_screen.dart';
+import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -100,6 +101,7 @@ class _Rig {
       );
 
   final picker = _PendingPicker();
+  late final ChatHarness ui;
   final HostConnection first;
   final second = HostConnection(client: DshClient.withCarrier(FakeRpcCarrier({})), isLocal: true);
   late ProviderContainer container;
@@ -108,7 +110,7 @@ class _Rig {
     usePhoneView(tester);
     mockClipboard(tester);
     SharedPreferences.setMockInitialValues({});
-    final ui = ChatHarness(session: 'A', picker: picker);
+    ui = ChatHarness(session: 'A', picker: picker);
     await tester.pumpWidget(
       testApp(
         const ChatScreen(),
@@ -301,6 +303,33 @@ void main() {
     expect(rig.first.client.mux.generation!.number, 2);
     await rig.finish(tester);
     rig.noAttachment();
+  });
+
+  testWidgets('a send that did not go out comes back after a new mux generation on the same client', (tester) async {
+    // #1416: the upload settled after the reconnect, so the prompt was never sent.
+    final carrier = _HistoryCarrier();
+    final rig = _Rig(carrier: carrier);
+    await rig.pump(tester);
+    final started = rig.first.client.mux.ready();
+    await tester.pump();
+    carrier.latest!.ready();
+    await tester.pump();
+    await started;
+    final result = Completer<bool>();
+    rig.ui.controllers['A']!.sendResult = result.future;
+    await tester.enterText(find.byType(TextField), '没发出去的那句');
+    await tester.pump();
+    await tester.tap(find.byIcon(AppIcons.send));
+    await tester.pump();
+    String composer() => tester.widget<TextField>(find.byType(TextField)).controller!.text;
+    expect(composer(), isEmpty);
+    rig.first.client.mux.reconnect();
+    await tester.pump(const Duration(milliseconds: 1));
+    carrier.latest!.ready();
+    expect(rig.first.client.mux.generation!.number, 2);
+    result.complete(false);
+    await pumpFrames(tester);
+    expect(composer(), '没发出去的那句');
   });
 
   testWidgets('null to ready to null cannot hide a mux generation change', (tester) async {

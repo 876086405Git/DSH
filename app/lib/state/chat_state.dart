@@ -1395,7 +1395,8 @@ class ChatController extends Notifier<ChatState> {
         deliveryAllowed: deliveryAllowed,
       );
       _sent();
-      if (!_currentOperation(operation)) return false;
+      // Delivered: sent, even if the watch moved on meanwhile (its echo comes on the new one).
+      if (!_currentOperation(operation)) return true;
       state = state.copyWith(error: stopFailed, notice: notice);
       return true;
     } catch (e) {

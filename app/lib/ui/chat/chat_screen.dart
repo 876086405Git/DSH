@@ -789,7 +789,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       // A generation request, counted on top of its turn.
       if (ok && generate != null && mounted) ref.read(usageStatsProvider.notifier).count(UsageCount.gen);
     }
-    if (!ok && _sameConnection(client, generation)) _giveBack(sessionId, typed, drafts, quote: quote);
+    if (!ok && _sameHost(client)) _giveBack(sessionId, typed, drafts, quote: quote);
   }
 
   // A failed send belongs to the Host that accepted it. The controller may
@@ -799,6 +799,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       mounted &&
       identical(ref.read(activeConnectionProvider).value?.client, client) &&
       identical(client.mux.generation, generation);
+
+  /// A send that did not go out (`send` is false only then) comes back on the Host that had
+  /// it, over a reconnect too (#1416); never into a replacement Host.
+  bool _sameHost(DshClient client) => mounted && identical(ref.read(activeConnectionProvider).value?.client, client);
 
   /// 没发出去:把字、附件和引用还给那个对话(用户还没开始打新的才还)。
   void _giveBack(String sessionId, String text, List<DraftAttachment> attachments, {String? quote}) {
@@ -828,9 +832,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   Future<void> _resend(String sessionId, String text, List<DraftAttachment> images) async {
     final client = ref.read(activeConnectionProvider).value?.client;
     if (client == null) return;
-    final generation = client.mux.generation;
     final ok = await ref.read(chatProvider(sessionId).notifier).send(text, attachments: images);
-    if (ok || !_sameConnection(client, generation)) return;
+    if (ok || !_sameHost(client)) return;
     final (:quote, :body) = splitQuote(text);
     _giveBack(sessionId, quote == null ? text : body, images, quote: quote);
   }
