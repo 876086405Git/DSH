@@ -458,6 +458,9 @@ class TavernEngine implements Tavern {
   final _characterDetails = <String, Future<StoredCharacter?>>{};
   static const _detailCacheCapacity = 8;
   Future<void> _libraryQueue = Future.value();
+
+  /// DeepSeek imports, one after another (engine_deepseek_import.dart).
+  Future<void> _deepSeekImports = Future.value();
   Future<void> _personaQueue = Future.value();
   Future<void> _presetQueue = Future.value();
   Future<void> _fileQueue = Future.value();

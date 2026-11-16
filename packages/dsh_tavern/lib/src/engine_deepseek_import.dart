@@ -45,30 +45,37 @@ extension _DeepSeekImportOperations on TavernEngine {
     ];
   });
 
-  Future<List<TavernDeepSeekImported>> _importDeepSeekSessions(String zipPath, List<String> sessionIds) => _operation(
-    () async {
-      final ids = List<String>.of(sessionIds);
-      final sessions = await _deepSeekSessions(zipPath, ids);
-      final result = <TavernDeepSeekImported>[];
-      for (final session in sessions) {
-        if (_store.deepSeekChats()[session.id] case final chat?) {
-          result.add(TavernDeepSeekImported(sessionId: session.id, characterId: chat.characterId, chatId: chat.chatId));
-          continue;
-        }
-        final character = await importCard(utf8.encode(jsonEncode(_deepSeekCard(session))));
-        final String chatId;
-        try {
-          chatId = await _libraryOperation(() async => _deepSeekChat(session, character));
-        } on Object {
-          await deleteCharacter(character.id);
-          rethrow;
-        }
-        result.add(TavernDeepSeekImported(sessionId: session.id, characterId: character.id, chatId: chatId));
+  Future<List<TavernDeepSeekImported>> _importDeepSeekSessions(String zipPath, List<String> sessionIds) =>
+      _operation(() {
+        final ids = List<String>.of(sessionIds);
+        // One at a time: an import asked for while another runs finds what
+        // that one took in, instead of taking the same conversation in twice.
+        final result = _deepSeekImports.then((_) => _deepSeekImport(zipPath, ids));
+        _deepSeekImports = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+        return result;
+      });
+
+  Future<List<TavernDeepSeekImported>> _deepSeekImport(String zipPath, List<String> ids) async {
+    final sessions = await _deepSeekSessions(zipPath, ids);
+    final result = <TavernDeepSeekImported>[];
+    for (final session in sessions) {
+      if (_store.deepSeekChats()[session.id] case final chat?) {
+        result.add(TavernDeepSeekImported(sessionId: session.id, characterId: chat.characterId, chatId: chat.chatId));
+        continue;
       }
-      _notifyLists();
-      return result;
-    },
-  );
+      final character = await importCard(utf8.encode(jsonEncode(_deepSeekCard(session))));
+      final String chatId;
+      try {
+        chatId = await _libraryOperation(() async => _deepSeekChat(session, character));
+      } on Object {
+        await deleteCharacter(character.id);
+        rethrow;
+      }
+      result.add(TavernDeepSeekImported(sessionId: session.id, characterId: character.id, chatId: chatId));
+    }
+    _notifyLists();
+    return result;
+  }
 
   String _deepSeekChat(DeepSeekSession session, TavernCharacter character) {
     final userName = _personaSettings(_effectiveSettings(), _personas.resolve())['userName'];
@@ -117,7 +124,11 @@ extension _DeepSeekImportOperations on TavernEngine {
         chatId,
         selectedRootId: path.isEmpty ? null : nodes[path.first.id],
         selectedChildren: {
-          for (final message in session.messages) nodes[message.id]!: nodes[next[message.id] ?? newest[message.id]],
+          for (final message in session.messages)
+            // The branch last on screen ends where the export says it did,
+            // even when something was said after that line.
+            nodes[message.id]!:
+                nodes[next[message.id] ?? (message.id == session.currentId ? null : newest[message.id])],
         },
       );
       return chatId;

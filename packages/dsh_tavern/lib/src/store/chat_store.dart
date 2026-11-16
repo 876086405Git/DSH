@@ -1068,7 +1068,7 @@ class ChatStore {
     return {
       for (final row in _db.select(
         r'''SELECT id, character_id, json_extract(metadata, '$.dshgo.deepseek.sessionId') AS source
-          FROM chats WHERE json_extract(metadata, '$.dshgo.deepseek.sessionId') IS NOT NULL''',
+          FROM chats WHERE 'text' = json_type(metadata, '$.dshgo.deepseek.sessionId')''',
       ))
         row['source'] as String: (chatId: row['id'] as String, characterId: row['character_id'] as String),
     };

@@ -15,7 +15,7 @@ void main() {
     zip = '${directory.path}/deepseek_data-2026-11-16.zip';
     File(zip).writeAsBytesSync(
       _export({
-        'short': _session('闲聊', [
+        'short': _session('闲聊', current: 1, [
           _message(1, null, 'USER', [_text('REQUEST', '今天几号')]),
           _message(2, 1, 'ASSISTANT', [_text('RESPONSE', '十六号')]),
         ]),
@@ -77,11 +77,18 @@ void main() {
     expect((await engine.watchCharacters().first).single.name, '小满');
     expect([for (final m in await engine.path(taken.chatId)) m.text], ['你以后叫小满', '好，我是小满', '在吗', '在的', '晚安', '还在吗']);
 
-    // Taking it in again makes nothing new.
+    // Taking it in again makes nothing new, nor do two imports asked for at once.
     final again = (await engine.importDeepSeekSessions(zip, ['long'])).single;
     expect(again.chatId, taken.chatId);
+    final both = await Future.wait([
+      engine.importDeepSeekSessions(zip, ['short']),
+      engine.importDeepSeekSessions(zip, ['short']),
+    ]);
+    expect(both.first.single.chatId, both.last.single.chatId);
+    // 「闲聊」was left on its first line though a reply follows it: it opens there.
+    expect([for (final m in await engine.path(both.first.single.chatId)) m.text], ['今天几号']);
     expect((await engine.inspectDeepSeekExport(zip)).first.imported?.chatId, taken.chatId);
-    expect(await engine.watchCharacters().first, hasLength(1));
+    expect(await engine.watchCharacters().first, hasLength(2));
 
     await engine.send(taken.chatId, '我回来了').toList();
     final body = model.bodies.single;
