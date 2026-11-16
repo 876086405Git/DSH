@@ -24006,6 +24006,12 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get tavernMvuIssues => 'This card\'s variables hit a problem';
+
+  @override
+  String get tavernMvuUnfinished => 'This message\'s variables were not fully updated; its text is kept';
+
+  @override
   String get tavernRegexEdit => 'Edit rule';
 
   @override

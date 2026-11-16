@@ -90,7 +90,40 @@ void main() {
       'name': '状态栏',
       'content': 'console.log(1);',
       'buttons': ['前往'],
+      'buttonList': [
+        {'name': '前往', 'visible': true},
+        {'name': '藏起来的', 'visible': false},
+      ],
     });
+    // Off as a whole, its buttons are still the script's (getScriptButtons).
+    expect([for (final b in scripts.last.buttonList) b.name], ['不显示']);
+  });
+
+  test('a card uses MVU when it says so, or anything in it loads MagVarUpdate', () {
+    expect(tavernUsesMvu(null), isFalse);
+    expect(tavernUsesMvu({'name': '林晚'}), isFalse);
+    expect(
+      tavernUsesMvu({
+        'extensions': {
+          'dshgo': {
+            'mvu': {'enabled': true},
+          },
+        },
+      }),
+      isTrue,
+    );
+    expect(
+      tavernUsesMvu({
+        'extensions': {
+          'tavern_helper': {
+            'scripts': [
+              {'content': "import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js';"},
+            ],
+          },
+        },
+      }),
+      isTrue,
+    );
   });
 
   test('the older place for them is read too; a card without any has none', () {

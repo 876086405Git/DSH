@@ -313,7 +313,46 @@ void main() {
     expect(opener, contains(r'"description":"\u003c!--\u003cscript>"'));
     expect(withScripts(noScripts: true), contains('var card=null,cardId=null;'));
     expect(open, contains('var card=null,cardId=null;'));
-    expect(open, contains(r"el.textContent=s.content+'\n//# sourceURL=dsh-script-'+n+'.js';"));
+    expect(open, contains(r"el.textContent=withoutMvuImport(s.content)+'\n//# sourceURL=dsh-script-'+n+'.js';"));
+    // MVU: on for a card that uses it, Mvu shared once the engine has it on;
+    // off otherwise, and when scripts do not run.
+    expect(open, contains('var mvuWanted=false;'));
+    final mvu = withScripts(
+      card: const {
+        'name': '林晚',
+        'extensions': {
+          'dshgo': {
+            'mvu': {'enabled': true},
+          },
+        },
+      },
+    );
+    expect(mvu, contains('var mvuWanted=true;'));
+    expect(mvu, contains("ask('setMvuEnabled',{enabled:true})"));
+    expect(mvu, contains("initializeGlobal('Mvu',Mvu)"));
+    expect(mvu, contains('function runCardScripts(){mvuStart().then(startCardScripts);}'));
+    // Its events answered with the candidate; the engine's resources kept
+    // from the snapshot and each delivery, before a same-revision return.
+    expect(mvu, contains('if(mvu)ack.mvu=mvu;'));
+    expect(mvu, contains('adoptResources(s.resourceRefs,s.context);'));
+    expect(
+      mvu.indexOf('adoptResources(x.resourceRefs);'),
+      lessThan(mvu.indexOf('if(x.baseRevision===x.newRevision)return;')),
+    );
+    for (final name in [
+      'getWorldbook',
+      'replaceWorldbook',
+      'getLorebookEntries',
+      'getPreset',
+      'replaceTavernRegexes',
+      'replaceScriptButtons',
+      'substitudeMacros',
+      'formatAsTavernRegexedString',
+      'replaceCharacter',
+      'waitGlobalInitialized',
+    ]) {
+      expect(mvu, matches(RegExp("share\\('$name'|\\['$name',")), reason: name);
+    }
     expect(page(noScripts: true), contains("script-src 'nonce-n0nce'"));
     expect(page(offline: true), contains("default-src 'none'"));
     // Offline with scripts on: no nonce beside 'unsafe-inline', or a card's

@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
+import 'package:flutter/foundation.dart';
 
 import 'tavern_script_host.dart';
 import 'tavern_script_wire.dart';
@@ -74,6 +75,32 @@ class TavernCanvasCalls {
     return id;
   }
 
+  /// A card script's own contexts (its buttons are kept on its script), by
+  /// script id: each opened on the first call made as it ({asScript}). Not
+  /// the page's: what the engine delivers goes to the page's context.
+  final _scriptContexts = <String, Future<String>>{};
+
+  Future<String> _openScript(String scriptId) async {
+    final character = characterId();
+    final context = await _bridge.openContext(
+      TavernScriptContextSpec(
+        instanceId: '$instanceId:$scriptId',
+        chatId: chatId,
+        characterId: character,
+        script: TavernScriptOwner(kind: TavernScriptOwnerKind.character, scriptId: scriptId, assetId: character),
+      ),
+    );
+    return context.id;
+  }
+
+  /// The buttons each card script shows now, by script id, as the page last
+  /// said (replaceScriptButtons…); a script not here shows its card's.
+  final liveButtons = ValueNotifier<Map<String, List<String>>>(const {});
+
+  /// The page saying what [scriptId]'s buttons are now.
+  void showButtons(String scriptId, List<String> names) =>
+      liveButtons.value = {...liveButtons.value, scriptId: List.unmodifiable(names)};
+
   void _forget() {
     _released++;
     if (_registered case final id?) pages?.remove(id);
@@ -98,14 +125,16 @@ class TavernCanvasCalls {
     }
     final params = request['params'] ?? const <Object?, Object?>{};
     if (params is! Map || params.containsKey('contextId')) return _wire.handle(request);
+    final asScript = params['asScript'];
+    void drop() => asScript is String ? _scriptContexts.remove(asScript) : _context = null;
     final String context;
     try {
-      context = await (_context ??= _open());
+      context = await (asScript is String ? _scriptContexts[asScript] ??= _openScript(asScript) : _context ??= _open());
     } on TavernScriptException catch (e) {
-      _context = null;
+      drop();
       return {'id': request['id'], 'ok': false, 'error': tavernScriptErrorJson(e)};
     } on Object catch (e) {
-      _context = null;
+      drop();
       return {
         'id': request['id'],
         'ok': false,
@@ -117,7 +146,13 @@ class TavernCanvasCalls {
       'params': {...params, 'contextId': context, ..._filters(params, context), ..._scriptOwner(params)},
     });
     // The engine let it go (reopened, closed): the next call opens anew.
-    if (reply['error'] case {'code': 'closedContext' || 'noContext'}) _forget();
+    if (reply['error'] case {'code': 'closedContext' || 'noContext'}) {
+      if (asScript is String) {
+        _scriptContexts.remove(asScript);
+      } else {
+        _forget();
+      }
+    }
     return reply;
   }
 
@@ -177,10 +212,19 @@ class TavernCanvasCalls {
     if (_registered case final id?) pages?.drop(id);
   }
 
-  /// The page is gone: its context goes with it.
+  /// The page is gone: its contexts go with it.
   Future<void> close() async {
     final context = _context;
+    final scripts = [..._scriptContexts.values];
+    _scriptContexts.clear();
     _forget();
+    for (final script in scripts) {
+      try {
+        await _bridge.closeContext(await script);
+      } on Object {
+        // Never opened, or already closed.
+      }
+    }
     if (context == null) return;
     try {
       await _bridge.closeContext(await context);

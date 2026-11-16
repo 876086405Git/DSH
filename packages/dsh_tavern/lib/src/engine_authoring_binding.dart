@@ -54,6 +54,8 @@ final class _PreviewSecretFrame {
   final List<Map<String, Object?>> changes;
 }
 
+typedef _AuthoringSecretDefinitionRead = ({state_core.SecretDefinition? definition, Object? error, StackTrace? stack});
+
 /// Real rows were read from the origin chat before the seal. Local proof is
 /// visible only through the single published frame. Neither path has a live
 /// fallback, and the native verifier never takes this private reader.
@@ -62,13 +64,16 @@ final class _AuthoringSecretProofs {
     required this.captureId,
     required this.chatId,
     required Map<String, StoredAgentRun> captured,
+    required Map<String, _AuthoringSecretDefinitionRead> capturedDefinitions,
     required Set<String> reservedIds,
   }) : _captured = captured,
+       _capturedDefinitions = capturedDefinitions,
        _reservedIds = reservedIds;
   final String captureId;
   final String? chatId;
   final Object _scope = Object();
   final Map<String, StoredAgentRun> _captured;
+  final Map<String, _AuthoringSecretDefinitionRead> _capturedDefinitions;
   final Set<String> _reservedIds;
   _PreviewSecretFrame? _frame;
   _PreviewSecretFrame? get frame => _frame;
@@ -79,6 +84,31 @@ final class _AuthoringSecretProofs {
       return local.matches(_scope, chatId, binding);
     }
     return _secretProofMatches(_captured[binding['bindReceiptId']], binding);
+  }
+
+  state_core.SecretDefinition? boundDefinition(Map<String, Object?> binding) {
+    if (!matches(binding)) {
+      return null;
+    }
+    // Local frames authorize only their actual published bindings. They are
+    // never substituted for a persisted proposal or an immutable config row.
+    final receipt = _captured[binding['bindReceiptId']];
+    final proposalId = receipt?.result['proposalRunId'];
+    if (proposalId is! String || proposalId != binding['proposalRunId']) {
+      return null;
+    }
+    final configId = _secretBindingConfigId(binding, _captured[proposalId]);
+    if (configId == null) {
+      return null;
+    }
+    final read = _capturedDefinitions[configId];
+    if (read == null) {
+      return null;
+    }
+    if (read.error case final error?) {
+      Error.throwWithStackTrace(error, read.stack!);
+    }
+    return read.definition;
   }
 
   void adopt(_Turn turn, _AuthoringSecretPreparation preparation, List<StoredNode> history) {

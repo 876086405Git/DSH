@@ -2,6 +2,7 @@ part of 'engine.dart';
 
 class _ScriptResourceState {
   final observations = <String, _ScriptObservedValue>{};
+  final directory = _ScriptBookDirectoryState();
 }
 
 class _ScriptStandaloneBook {
@@ -24,22 +25,26 @@ extension _ScriptRawResources on _ScriptCoordinator {
   void scriptResourceCardCommitted(String id, Map<String, Object?> actualData) {
     _resourceVersion('characterData:$id', actualData);
     _resourceVersion('embedded:$id', actualData['character_book'], present: actualData.containsKey('character_book'));
+    scriptBookDirectoryCardCommitted(id, actualData);
     engine._characterCache = null;
     unawaited(engine._characterDetails.remove(id));
   }
 
   void scriptResourceBookCommitted(String id, Map<String, Object?>? actualRaw) {
     _resourceVersion('standalone:$id', actualRaw, present: actualRaw != null);
+    _observeStandaloneDirectory(id, actualRaw, engine._bookSourceNames[id]);
+    resourcesChanged();
   }
 
-  Future<Map<String, Object?>?> _scriptCharacterDataView(String characterId) => engine._library.readAuthority(
-    characterId,
-    (data) => {
-      'characterId': characterId,
-      'version': _resourceVersion('characterData:$characterId', data),
-      'data': _captureScriptObject(data),
-    },
-  );
+  Future<Map<String, Object?>?> _scriptCharacterDataView(String characterId) =>
+      engine._library.readAuthority(characterId, (data) {
+        scriptBookDirectoryCardCommitted(characterId, data);
+        return {
+          'characterId': characterId,
+          'version': _resourceVersion('characterData:$characterId', data),
+          'data': _captureScriptObject(data),
+        };
+      });
 
   bool _scriptCharacterDataViewCurrent(Map<String, Object?> view) {
     final id = view['characterId'];
@@ -141,18 +146,19 @@ extension _ScriptRawResources on _ScriptCoordinator {
   Future<_ScriptStandaloneBook?> _scriptReadStandaloneNow(String id) async {
     _requireBookId(id);
     final file = File('${engine.directory.path}/lorebooks/$id.json');
-    final String text;
+    final List<int> bytes;
     try {
-      text = await file.readAsString();
+      bytes = await file.readAsBytes();
     } on PathNotFoundException catch (error) {
       final code = error.osError?.errorCode;
       if (code != 2 && (!Platform.isWindows || code != 3)) rethrow;
       _resourceVersion('standalone:$id', null, present: false);
+      _observeStandaloneDirectory(id, null, null);
       return null;
     }
     final Object? decoded;
     try {
-      decoded = jsonDecode(text);
+      decoded = jsonDecode(utf8.decode(bytes));
     } on FormatException {
       throw _scriptError(TavernScriptErrorCode.invalidJson, 'readBook', 'The book file is not valid JSON.');
     }
@@ -173,6 +179,7 @@ extension _ScriptRawResources on _ScriptCoordinator {
       source = decoded['stWorldName'] as String?;
     }
     final captured = _captureScriptObject(raw);
+    _observeStandaloneDirectory(id, captured, source);
     return _ScriptStandaloneBook(
       id,
       captured,
@@ -202,6 +209,7 @@ extension _ScriptRawResources on _ScriptCoordinator {
         });
       case TavernScriptEmbeddedBookRef(:final characterId):
         final result = await engine._library.readAuthority(characterId, (data) {
+          scriptBookDirectoryCardCommitted(characterId, data);
           final version = _resourceVersion(
             'embedded:$characterId',
             data['character_book'],
@@ -379,13 +387,13 @@ extension _ScriptRawResources on _ScriptCoordinator {
     for (final id in actors) {
       final source = group == null ? TavernScriptBookSource.character : TavernScriptBookSource.groupMember;
       standalone(bindings['character'], source, characterId: id, chatId: group == null ? null : chatId);
+      final embedded = await engine._library.readAuthority(id, (data) => data.containsKey('character_book'));
       standalone(
-        _map(settings['characterLorebooks'])[id],
+        _characterLinkedBookIds(settings, id, embedded: embedded == true),
         source,
         characterId: id,
         chatId: group == null ? null : chatId,
       );
-      final embedded = await engine._library.readAuthority(id, (data) => data.containsKey('character_book'));
       if (embedded == true) {
         add(
           TavernScriptBookRef.embedded(characterId: id),

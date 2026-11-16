@@ -4,6 +4,7 @@
 // builder (no platform web view there).
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -11,15 +12,44 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../tavern/tavern_island_story.dart';
 import '../../tavern/tavern_islands.dart';
 import '../../tavern/tavern_settings.dart';
 import '../web/web_view_guard.dart';
+import 'tavern_canvas_view.dart' show tavernCanvasLibrariesProvider;
 
 /// Builds the island for a part's HTML. Tests swap it.
 final tavernIslandBuilderProvider = Provider<Widget Function(String html)>(
   (ref) =>
       (html) => TavernHtmlIsland(key: ValueKey(html), html: html),
 );
+
+/// The message the islands under it are in: what their scripts read of the
+/// story starts there (its floor, its variables).
+class TavernIslandMessage extends InheritedWidget {
+  const TavernIslandMessage({
+    super.key,
+    required this.chatId,
+    required this.nodeId,
+    required this.text,
+    required this.name,
+    required this.user,
+    required super.child,
+  });
+
+  final String chatId;
+  final String nodeId;
+  final String text;
+  final String name;
+  final bool user;
+
+  static TavernIslandMessage? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TavernIslandMessage>();
+
+  @override
+  bool updateShouldNotify(TavernIslandMessage old) =>
+      old.chatId != chatId || old.nodeId != nodeId || old.text != text || old.name != name || old.user != user;
+}
 
 class TavernHtmlIsland extends ConsumerStatefulWidget {
   const TavernHtmlIsland({super.key, required this.html});
@@ -40,7 +70,13 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   late final WebViewGuard _guard = WebViewGuard(onGone: _onGone);
   double _height = 48;
   bool _gone = false;
-  (String, bool, bool, Brightness)? _loaded;
+  (String, bool, bool, Brightness, int, String?)? _loaded;
+
+  /// What its scripts get (build works it out): jQuery and lodash, what
+  /// they may read of the story; not loaded while either is on its way.
+  List<String> _libraries = const [];
+  Map<String, Object?>? _story;
+  bool _waiting = true;
 
   @override
   void didChangeDependencies() {
@@ -57,8 +93,10 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   /// Loads the page, again when what it shows or how it is guarded changes.
   void _open() {
     final theme = Theme.of(context);
+    if (_waiting) return;
     final (noScripts, offline) = ref.read(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)));
-    final key = (widget.html, noScripts, offline, theme.brightness);
+    final story = _story == null ? null : jsonEncode(_story);
+    final key = (widget.html, noScripts, offline, theme.brightness, _libraries.length, story);
     if (key == _loaded) return;
     _loaded = key;
     final document = tavernIslandDocument(
@@ -69,6 +107,8 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
       nonce: _nonce(),
       noScripts: noScripts,
       offline: offline,
+      libraries: _libraries,
+      story: _story,
     );
     final controller = _controller ??= WebViewController();
     final textZoom = MediaQuery.textScalerOf(context).scale(100).round().clamp(50, 300);
@@ -113,6 +153,27 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     return NavigationDecision.prevent;
   }
 
+  /// Works out what its scripts get; loads again when that changed. A
+  /// library or the story that could not be had: it goes without.
+  void _prepare() {
+    final scripted =
+        !ref.watch(tavernSettingsProvider.select((s) => s.islandNoScripts)) && tavernIslandHasScript(widget.html);
+    final libraries = scripted ? ref.watch(tavernCanvasLibrariesProvider) : null;
+    final at = scripted && tavernIslandReadsStory(widget.html) ? TavernIslandMessage.maybeOf(context) : null;
+    final story = at == null ? null : ref.watch(tavernIslandStoryProvider(at.chatId));
+    final waiting = (libraries?.isLoading ?? false) || (story?.isLoading ?? false);
+    final libs = libraries?.value ?? const <String>[];
+    final read = at == null ? null : story?.value?.forMessage(at.nodeId, text: at.text, name: at.name, user: at.user);
+    if (waiting == _waiting && libs.length == _libraries.length && jsonEncode(read) == jsonEncode(_story)) return;
+    _waiting = waiting;
+    _libraries = libs;
+    _story = read;
+    // Built since: the page loads, and the view it is in is drawn.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(_open);
+    });
+  }
+
   void _onGone(bool crashed) {
     if (_gone || !mounted) return;
     setState(() => _gone = true);
@@ -129,6 +190,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   Widget build(BuildContext context) {
     // Its guards changed: load again.
     ref.listen(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)), (_, _) => _open());
+    _prepare();
     final controller = _controller;
     if (_gone || controller == null) return const SizedBox(height: TavernHtmlIsland.minHeight);
     return AnimatedSize(

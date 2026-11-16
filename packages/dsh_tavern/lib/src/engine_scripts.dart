@@ -64,6 +64,8 @@ class _ScriptCoordinator implements TavernScriptBridge {
   final _events = StreamController<TavernScriptEvent>.broadcast();
   final _deliveries = <Future<void>>{};
   final _nativeDirty = <String>{};
+  int _presetLibraryRevision = 0;
+  TavernJsonObject? _presetLibraryMetadata;
   final _variableVersions = <String, _ScriptVariableVersion>{};
   final _generations = <String, _ScriptGenerationRecord>{};
   final _generationDrains = <Future<void>>{};
@@ -220,9 +222,25 @@ class _ScriptCoordinator implements TavernScriptBridge {
       'stopScript',
       'substituteMacros',
       'replaceCharacterData',
+      'readCharacterAvatar',
+      'replaceCharacterAvatar',
       'getContextBooks',
       'readBook',
       'replaceBook',
+      'setMvuEnabled',
+      'parseMvuMessage',
+      'updateWorldInfoSettings',
+      'replaceScriptButtons',
+      'getBookDirectory',
+      'resolveBook',
+      'createBook',
+      'deleteBook',
+      'readBookBindings',
+      'updateBookBindings',
+      'readPreset',
+      'replacePreset',
+      'readTavernRegexesForWrite',
+      'replaceTavernRegexes',
     },
     scopes: TavernVariableScope.values.toSet(),
     slashCommands: slashDescriptors.keys.toSet(),
@@ -576,6 +594,14 @@ class _ScriptCoordinator implements TavernScriptBridge {
   @override
   Future<String> substituteMacros(String contextId, String text) => _substitutePublicMacros(contextId, text);
   @override
+  Future<TavernMvuInitialization> setMvuEnabled(String contextId, bool enabled) =>
+      _bridgeOperation(() => _setMvuEnabled(contextId, enabled));
+  @override
+  Future<TavernMvuParseResult> parseMvuMessage(String contextId, String message, TavernJsonObject previousData) =>
+      _bridgeOperation(
+        () => _parseMvuMessage(contextId, message, _captureScriptJson(previousData)! as TavernJsonObject),
+      );
+  @override
   Future<TavernCharacter> replaceCharacterData(
     String contextId,
     String characterId,
@@ -594,6 +620,87 @@ class _ScriptCoordinator implements TavernScriptBridge {
     TavernJsonObject book, {
     String? expectedVersion,
   }) => replaceScriptBook(contextId, ref, book, expectedVersion: expectedVersion);
+  @override
+  Future<TavernScriptWorldInfoSettingsSnapshot> updateWorldInfoSettings(
+    String contextId,
+    TavernJsonObject patch, {
+    String? expectedVersion,
+  }) => _bridgeOperation(() => _updateWorldInfoSettings(contextId, patch, expectedVersion: expectedVersion));
+  @override
+  Future<TavernScriptButtonsSnapshot> replaceScriptButtons(
+    String contextId,
+    List<TavernScriptButton> buttons, {
+    String? expectedVersion,
+  }) => _bridgeOperation(() => _replaceScriptButtons(contextId, buttons, expectedVersion: expectedVersion));
+  @override
+  Future<TavernScriptBookDirectorySnapshot> getBookDirectory(String contextId) =>
+      _bridgeOperation(() => _getBookDirectory(contextId));
+  @override
+  Future<TavernScriptBookRef> resolveBook(String contextId, String nameOrHandle) =>
+      _bridgeOperation(() => _resolveBook(contextId, nameOrHandle));
+  @override
+  Future<TavernScriptBookSnapshot> createBook(String contextId, String name, TavernJsonObject raw) =>
+      _bridgeOperation(() => _createScriptBook(contextId, name, raw));
+  @override
+  Future<void> deleteBook(String contextId, TavernScriptBookRef ref, {required String expectedVersion}) =>
+      _bridgeOperation(() => _deleteScriptBook(contextId, ref, expectedVersion: expectedVersion));
+  @override
+  Future<TavernScriptBookBindingsSnapshot> readBookBindings(String contextId, TavernScriptBookBindingsTarget target) =>
+      _bridgeOperation(() => _readBookBindings(contextId, target));
+  @override
+  Future<TavernScriptBookBindingsSnapshot> updateBookBindings(
+    String contextId,
+    TavernScriptBookBindingsEdit edit, {
+    required String expectedVersion,
+  }) => _bridgeOperation(() => _updateBookBindings(contextId, edit, expectedVersion: expectedVersion));
+
+  @override
+  Future<TavernScriptCharacterAvatarSnapshot> readCharacterAvatar(String contextId, String characterId) =>
+      _bridgeOperation(() => _readScriptCharacterAvatar(contextId, characterId));
+  @override
+  Future<TavernScriptCharacterAvatarSnapshot> replaceCharacterAvatar(
+    String contextId,
+    String characterId,
+    Uint8List bytes, {
+    required String expectedVersion,
+  }) => _bridgeOperation(
+    () => _replaceScriptCharacterAvatar(contextId, characterId, bytes, expectedVersion: expectedVersion),
+  );
+
+  @override
+  Future<TavernScriptPresetSnapshot> readPreset(String contextId, TavernScriptPresetRef ref) =>
+      _bridgeOperation(() => _readScriptPreset(contextId, ref));
+  @override
+  Future<TavernScriptPresetSnapshot> replacePreset(
+    String contextId,
+    TavernScriptPresetRef ref,
+    TavernJsonObject raw, {
+    required String expectedVersion,
+  }) => _bridgeOperation(() => _replaceScriptPreset(contextId, ref, raw, expectedVersion: expectedVersion));
+  @override
+  Future<TavernScriptRegexWriteSnapshot> readTavernRegexesForWrite(
+    String contextId,
+    TavernScriptRegexWriteTarget target,
+  ) => _bridgeOperation(() => _readTavernRegexesForWrite(contextId, target));
+  @override
+  Future<TavernScriptRegexWriteSnapshot> replaceTavernRegexes(
+    String contextId,
+    TavernScriptRegexWriteTarget target,
+    List<TavernScriptRegexWriteItem> items, {
+    required String expectedVersion,
+  }) => _bridgeOperation(() => _replaceTavernRegexes(contextId, target, items, expectedVersion: expectedVersion));
+
+  TavernJsonObject _scriptPresetLibraryViewNow() => _presetLibraryMetadata ??= {
+    'version': '$epoch:presets:$_presetLibraryRevision',
+    'presets': [
+      for (final preset in engine._store.listPresets()) {'id': preset.id, 'name': preset.name},
+    ],
+  };
+
+  void _scriptPresetLibraryCommitted() {
+    _presetLibraryRevision++;
+    _presetLibraryMetadata = null;
+  }
 
   Future<T> _structureWrite<T>(_ScriptChatCapture capture, FutureOr<T> Function() action) {
     _context(capture.context.value.id);
@@ -693,9 +800,78 @@ class _ScriptCoordinator implements TavernScriptBridge {
           });
         }
       }
+      final scriptButtons = await _scriptButtonsView(context);
       final characterData = context.value.characterId == null
           ? null
           : await engine._libraryOperation(() => _scriptCharacterDataView(context.value.characterId!));
+      final _ScriptRegexView regexView;
+      try {
+        regexView = await _captureScriptRegexView(context.value.id, characterData: characterData, forCache: true);
+      } on TavernScriptException catch (error) {
+        if (error.code == TavernScriptErrorCode.revisionConflict) {
+          continue rebuildView;
+        }
+        rethrow;
+      }
+      final bookDirectory = await _scriptBookDirectoryView(context);
+      final characterAvatars = <_ScriptCharacterAvatarView>[];
+      for (final id in bookDirectory.characterIds) {
+        characterAvatars.add(await _scriptCharacterAvatarView(id));
+      }
+      final bindingChat = capture == null ? null : engine._store.chat(capture.chatId);
+      final bindingPersonaId = engine._personas.resolve(personaId: bindingChat?.personaId).persona?.id;
+      final bindingViews = <_ScriptBookBindingView>[];
+      final bindingIssues = <Map<String, Object?>>[];
+      final bindingTargets = <TavernScriptBookBindingsTarget>[
+        const TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.global),
+        for (final id in bookDirectory.characterIds)
+          TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.character, targetId: id),
+        if (capture != null)
+          TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.chat, targetId: capture.chatId),
+        if (bindingPersonaId != null)
+          TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.persona, targetId: bindingPersonaId),
+      ];
+      for (final target in bindingTargets) {
+        try {
+          bindingViews.add(await _captureBookBindingView(context.value.id, target, characterData: characterData));
+        } on FormatException catch (error) {
+          if (target.scope != TavernScriptBookBindingScope.character) {
+            rethrow;
+          }
+          bindingIssues.add({
+            'scope': target.scope.name,
+            'targetId': target.targetId,
+            'code': 'invalidJson',
+            'message': error.message,
+          });
+        } on JsonUnsupportedObjectError {
+          if (target.scope != TavernScriptBookBindingScope.character) {
+            rethrow;
+          }
+          bindingIssues.add({
+            'scope': target.scope.name,
+            'targetId': target.targetId,
+            'code': 'invalidJson',
+            'message': 'The character authority contains a non-JSON value.',
+          });
+        } on TavernScriptException catch (error) {
+          if (error.code == TavernScriptErrorCode.revisionConflict) {
+            continue rebuildView;
+          }
+          if (target.scope != TavernScriptBookBindingScope.character ||
+              error.code != TavernScriptErrorCode.notFound &&
+                  error.code != TavernScriptErrorCode.invalidJson &&
+                  error.code != TavernScriptErrorCode.shapeMismatch) {
+            rethrow;
+          }
+          bindingIssues.add({
+            'scope': target.scope.name,
+            'targetId': target.targetId,
+            'code': error.code.name,
+            'message': error.message,
+          });
+        }
+      }
       if (context.closed) {
         return null;
       }
@@ -708,7 +884,20 @@ class _ScriptCoordinator implements TavernScriptBridge {
       if (observedVersions.entries.any((entry) => _currentVariableVersion(entry.key) != entry.value)) {
         continue;
       }
+      if (scriptButtons != null && !_scriptButtonsViewCurrent(scriptButtons)) {
+        continue;
+      }
+      if (!_scriptBookDirectoryViewCurrent(context, bookDirectory) ||
+          bindingViews.any((view) => !_bookBindingViewCurrent(view))) {
+        continue;
+      }
       if (characterData != null && !_scriptCharacterDataViewCurrent(characterData)) continue;
+      if (!_scriptRegexViewCurrent(regexView)) {
+        continue;
+      }
+      if (characterAvatars.any((view) => !_scriptCharacterAvatarViewCurrent(view))) {
+        continue;
+      }
       final latest = capture == null ? null : _captureChat(context.value.id);
       if (capture != null &&
           latest != null &&
@@ -723,8 +912,14 @@ class _ScriptCoordinator implements TavernScriptBridge {
       final messages = latest == null ? <TavernScriptMessage>[] : _projectMessages(latest, includeSwipes: true);
       final chat = capture == null ? null : engine._store.chat(capture.chatId);
       final group = chat == null ? null : engine._store.groupChat(chat.id);
+      if (bindingPersonaId != engine._personas.resolve(personaId: chat?.personaId).persona?.id) {
+        continue;
+      }
       final preset = engine._resolvePreset(chat).selection.effectivePresetId;
       final memberIds = group == null ? <String>[] : [for (final member in group.members) member.characterId];
+      final worldInfoSettings = _scriptWorldInfoSettingsView(engine._document);
+      final currentPreset = _scriptPresetViewNow(context, const TavernScriptPresetRef.current());
+      final presetLibrary = _scriptPresetLibraryViewNow();
       return TavernScriptSnapshot(
         context: context.value,
         engineEpoch: epoch,
@@ -746,6 +941,15 @@ class _ScriptCoordinator implements TavernScriptBridge {
           'memberCharacterIds': memberIds,
           'hostVersion': '$epoch:host:$_hostVersion',
           'characterData': ?characterData,
+          'characterAvatars': [for (final view in characterAvatars) view.toJson()],
+          'worldInfoSettings': worldInfoSettings.toJson(),
+          'preset': currentPreset.toJson(),
+          'presetLibrary': presetLibrary,
+          'regex': _scriptRegexViewJson(regexView),
+          'scriptButtons': ?scriptButtons?.toJson(),
+          'bookDirectory': _scriptBookDirectoryJson(bookDirectory.snapshot),
+          'bookBindings': [for (final view in bindingViews) _scriptBookBindingsJson(view.snapshot)],
+          if (bindingIssues.isNotEmpty) 'bookBindingIssues': bindingIssues,
           if (shapeIssues.isNotEmpty) 'variableIssues': shapeIssues,
         },
         capabilities: capabilities,
@@ -944,6 +1148,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
     ModelCancellation? cancellation,
     _ScriptCancellation? pendingToken,
     void Function(TavernScriptDispatch request, List<TavernScriptIssue> issues, bool committed)? onObservedIssues,
+    void Function(TavernScriptMvuFeedback feedback)? onMvuFeedback,
   }) {
     return _ownDelivery(
       () => _deliverCaptured(
@@ -953,6 +1158,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
         cancellation: cancellation,
         pendingToken: pendingToken,
         onObservedIssues: onObservedIssues,
+        onMvuFeedback: onMvuFeedback,
       ),
     );
   }
@@ -988,6 +1194,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
     ModelCancellation? cancellation,
     _ScriptCancellation? pendingToken,
     void Function(TavernScriptDispatch request, List<TavernScriptIssue> issues, bool committed)? onObservedIssues,
+    void Function(TavernScriptMvuFeedback feedback)? onMvuFeedback,
   }) async {
     final host = _host;
     _observe(request, 'published', committed);
@@ -1048,13 +1255,30 @@ class _ScriptCoordinator implements TavernScriptBridge {
         } else if (ack.eventId != request.eventId) {
           issues = failure('hookFailure', 'Host acknowledged a different event identity.');
         } else {
-          issues = ack.status == TavernScriptAckStatus.completed
-              ? knownIssues
-              : failure(
-                  ack.status == TavernScriptAckStatus.cancelled ? 'cancelled' : 'hookFailure',
-                  'Host handler did not complete.',
-                  cancelled: ack.status == TavernScriptAckStatus.cancelled,
-                );
+          if (ack.status != TavernScriptAckStatus.completed) {
+            issues = failure(
+              ack.status == TavernScriptAckStatus.cancelled ? 'cancelled' : 'hookFailure',
+              'Host handler did not complete.',
+              cancelled: ack.status == TavernScriptAckStatus.cancelled,
+            );
+          } else if (ack.mvu case final feedback?) {
+            if (onMvuFeedback == null) {
+              issues = failure('hookFailure', 'MVU feedback is not valid for this delivery.');
+            } else if (_closed ||
+                engine._closing ||
+                engine._closed ||
+                !identical(contexts[context.value.id], context) ||
+                !identical(host, _host)) {
+              issues = failure('hostUnavailable', 'The MVU feedback owner is no longer current.', cancelled: true);
+            } else {
+              if (knownIssues.isEmpty) {
+                onMvuFeedback(feedback);
+              }
+              issues = knownIssues;
+            }
+          } else {
+            issues = knownIssues;
+          }
         }
       }
     } catch (error) {
@@ -1072,6 +1296,152 @@ class _ScriptCoordinator implements TavernScriptBridge {
     }
     _observe(request, issues.isEmpty ? 'acknowledged' : 'failed', knownCommitted, issues: issues);
     return issues;
+  }
+
+  /// Dispatches one pre-adoption MVU phase through the existing host owner.
+  /// Each active context sees the fully validated candidate from its predecessor.
+  Future<void> _dispatchMvuPhase(
+    String chatId,
+    mvu_core.MvuPhase phase, {
+    TavernScriptMessageRef? nodeRef,
+    String? generationId,
+    ModelCancellation? cancellation,
+  }) async {
+    void checkOwner() {
+      if (_closed || engine._closing || engine._closed) {
+        throw _scriptError(TavernScriptErrorCode.closedContext, 'mvuPhase', 'The script engine is closed.');
+      }
+      if (cancellation?.isCancelled == true) {
+        throw _scriptError(TavernScriptErrorCode.cancelled, 'mvuPhase', 'The MVU phase was cancelled.');
+      }
+    }
+
+    checkOwner();
+    final active = contexts.values.where((item) => !item.closed && item.value.chatId == chatId).toList();
+    final name = switch (phase.kind) {
+      mvu_core.MvuPhaseKind.initialized => 'mag_variable_initialized',
+      mvu_core.MvuPhaseKind.started => 'mag_variable_update_started',
+      mvu_core.MvuPhaseKind.parsed => 'mag_command_parsed',
+      mvu_core.MvuPhaseKind.ended => 'mag_variable_update_ended',
+    };
+    for (final context in active) {
+      checkOwner();
+      if (context.closed || !identical(contexts[context.value.id], context)) {
+        continue;
+      }
+      final List<Object?> args = switch (phase.kind) {
+        mvu_core.MvuPhaseKind.initialized => [phase.data, phase.swipeId],
+        mvu_core.MvuPhaseKind.started => [phase.data],
+        mvu_core.MvuPhaseKind.parsed => [
+          phase.data,
+          [
+            for (final command in phase.commands)
+              {'type': command.type, 'full_match': command.fullMatch, 'args': command.args, 'reason': command.reason},
+          ],
+          phase.originalMessage,
+        ],
+        mvu_core.MvuPhaseKind.ended => [phase.data, phase.beforeData],
+      };
+      final request = _dispatch(
+        context,
+        kind: TavernScriptDispatchKind.lifecycle,
+        name: name,
+        ref: nodeRef,
+        generationId: generationId,
+        args: args,
+      );
+      final issues = await _deliver(
+        context,
+        request,
+        committed: false,
+        cancellation: cancellation,
+        onMvuFeedback: (feedback) => _applyMvuFeedback(phase, feedback, request),
+      );
+      if (issues.isNotEmpty) {
+        throw _scriptError(
+          issues.any((issue) => issue.cancelled) ? TavernScriptErrorCode.cancelled : TavernScriptErrorCode.hookFailure,
+          'mvuPhase',
+          'The MVU phase $name did not complete.',
+          contextId: context.value.id,
+          generationId: generationId,
+          committed: issues.any((issue) => issue.committed),
+          issues: issues,
+        );
+      }
+      checkOwner();
+    }
+  }
+
+  void _applyMvuFeedback(mvu_core.MvuPhase phase, TavernScriptMvuFeedback feedback, TavernScriptDispatch request) {
+    Never invalid(String field, String message) => throw _scriptError(
+      TavernScriptErrorCode.shapeMismatch,
+      'mvuFeedback',
+      message,
+      contextId: request.contextId,
+      generationId: request.generationId,
+      fieldPath: field,
+      issues: [
+        TavernScriptIssue(
+          code: 'shapeMismatch',
+          message: message,
+          committed: false,
+          contextId: request.contextId,
+          eventId: request.eventId,
+          generationId: request.generationId,
+          nodeRef: request.nodeRef,
+          stage: 'mvuFeedback',
+          details: {'field': field},
+        ),
+      ],
+    );
+    final commandRows = feedback.commands;
+    final before = feedback.beforeData;
+    if (commandRows != null && phase.kind != mvu_core.MvuPhaseKind.parsed) {
+      invalid('commands', 'Command feedback is only valid during COMMAND_PARSED.');
+    }
+    if (before != null && phase.kind != mvu_core.MvuPhaseKind.ended) {
+      invalid('beforeData', 'Before-data feedback is only valid during VARIABLE_UPDATE_ENDED.');
+    }
+    final data = feedback.data;
+    List<mvu_core.MvuCommand>? commands;
+    if (commandRows != null) {
+      commands = [];
+      const fields = {'type', 'full_match', 'args', 'reason'};
+      for (var index = 0; index < commandRows.length; index++) {
+        final row = commandRows[index];
+        final args = row['args'];
+        if (row.keys.any((key) => !fields.contains(key)) ||
+            row['type'] is! String ||
+            row['full_match'] is! String ||
+            row['reason'] is! String ||
+            args is! List<Object?> ||
+            args.isEmpty ||
+            args.first is! String) {
+          invalid(
+            'commands[$index]',
+            'MVU command feedback requires type, full_match, reason and JSON args beginning with a string path.',
+          );
+        }
+        // Feedback order is execution order. No source identity or offset is
+        // inferred after a listener replaces or reorders command records.
+        commands.add(
+          mvu_core.MvuCommand(
+            type: row['type']! as String,
+            fullMatch: row['full_match']! as String,
+            args: args,
+            reason: row['reason']! as String,
+          ),
+        );
+      }
+    }
+    // No candidate field changes until the complete feedback is valid.
+    phase.data = data;
+    if (commands != null) {
+      phase.commands = commands;
+    }
+    if (before != null) {
+      phase.beforeData = before;
+    }
   }
 
   void _observe(
@@ -1426,6 +1796,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
   Future<void> beforeTurn(_Turn turn) async {
     turn.scriptWritesAllowed = true;
     try {
+      await _ensureMvuTurn(turn);
       final active = contexts.values.where((item) => !item.closed && item.value.chatId == turn.chat.id).toList();
       for (final context in active) {
         turn.cancellation.check();
@@ -1490,6 +1861,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
       return;
     }
     try {
+      await _afterMvuMessage(turn);
       for (final context
           in contexts.values.where((item) => !item.closed && item.value.chatId == turn.chat.id).toList()) {
         try {

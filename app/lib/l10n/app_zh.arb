@@ -13626,6 +13626,8 @@
       }
     }
   },
+  "tavernMvuIssues": "这张卡的变量更新有问题",
+  "tavernMvuUnfinished": "这一层的变量没有更新完，正文已经保留",
   "tavernRegexEdit": "编辑规则",
   "tavernRegexFieldName": "名字",
   "tavernRegexFieldFindHelp": "SillyTavern 的写法：/规则/标志，比如 /(早安|晚安)/gi",

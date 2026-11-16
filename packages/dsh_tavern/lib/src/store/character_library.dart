@@ -8,6 +8,8 @@ import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 import '../api.dart';
 import '../authoring.dart';
 import '../authoring_authority.dart';
@@ -25,13 +27,32 @@ final class AuthoringCardMedia {
     required this.originalBytes,
     this.assets = const {},
     this.png,
+    this.avatar,
     this.fileName,
   });
   final TavernCardFormat sourceFormat;
   final Uint8List originalBytes;
   final Map<String, Uint8List> assets;
   final Uint8List? png;
+  final Uint8List? avatar;
   final String? fileName;
+}
+
+/// The selected avatar declaration without reading image bytes or observing
+/// an authority revision. A missing character remains distinct from no avatar.
+final class CharacterAvatarMetadata {
+  const CharacterAvatarMetadata({required this.snapshot, this.file, this.sha256});
+  final AuthoringResourceSnapshot snapshot;
+  final String? file;
+  final String? sha256;
+  bool get hasAvatar => file != null;
+}
+
+/// Owned bytes of the image selected by [metadata], or explicit absence.
+final class CharacterAvatarCapture {
+  const CharacterAvatarCapture({required this.metadata, this.bytes});
+  final CharacterAvatarMetadata metadata;
+  final Uint8List? bytes;
 }
 
 /// A queued, read-only preview dependency. [snapshot] is what the files said;
@@ -227,6 +248,161 @@ class CharacterLibrary {
     return AuthoringResourceSnapshot(present: true, rawText: raw.rawText, identityText: identity.rawText);
   }
 
+  /// Reads only raw card/identity text and the selected image declaration.
+  /// It neither tidies files nor creates an authoring observation.
+  Future<CharacterAvatarMetadata> readAvatarMetadata(String id) => _exclusive(() async {
+    _requireId(id);
+    return _avatarMetadata(await _readAuthoringResource(id));
+  });
+
+  /// Reads only the actual selected avatar, without loading original imports
+  /// or walking the resource manifest. The returned bytes belong to this read.
+  Future<CharacterAvatarCapture> readAvatar(String id) => _exclusive(() async {
+    _requireId(id);
+    return _readAvatar(id);
+  });
+
+  Future<CharacterAvatarCapture> _readAvatar(String id) async {
+    final metadata = _avatarMetadata(await _readAuthoringResource(id));
+    final file = metadata.file;
+    return CharacterAvatarCapture(
+      metadata: metadata,
+      bytes: file == null ? null : await _readAvatarFile('${_characters.path}/$id', file, metadata.sha256),
+    );
+  }
+
+  Future<bool> _avatarStillCurrent(String id, CharacterAvatarCapture before) async {
+    try {
+      if (!(await _readAuthoringResource(id)).sameAs(before.metadata.snapshot)) {
+        return false;
+      }
+      final file = before.metadata.file;
+      if (file == null) {
+        return true;
+      }
+      final actual = await File('${_characters.path}/$id/$file').readAsBytes();
+      return _sameAuthoringCaptureBytes(before.bytes!, actual);
+    } on PathNotFoundException catch (error) {
+      final code = error.osError?.errorCode;
+      if (code == 2 || (Platform.isWindows && code == 3)) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  /// [png] is the caller's detached, validated PNG. [prepare] checks its
+  /// expected token once against the fresh physical capture in this queue.
+  /// Notifications are synchronous; callers wait for host/cache work outside.
+  Future<CharacterAvatarCapture> replaceAvatar(
+    String id,
+    Uint8List png, {
+    required void Function(CharacterAvatarCapture current) prepare,
+    void Function()? check,
+    void Function(CharacterAvatarCapture adopted)? onCommitted,
+  }) => _exclusive(() async {
+    _requireId(id);
+    _checkManagedWriter(id);
+    final before = await _readAvatar(id);
+    check?.call();
+    prepare(before);
+    if (!before.metadata.snapshot.present) {
+      throw const TavernImportError('角色不存在。');
+    }
+    final digest = crypto.sha256.convert(png).toString();
+    final avatarFile = 'avatar-$digest.png';
+    if (before.metadata.file == avatarFile &&
+        before.metadata.sha256 == digest &&
+        _sameAuthoringCaptureBytes(before.bytes!, png)) {
+      return before;
+    }
+    final original = before.metadata.snapshot;
+    final metadata = jsonDecode(decodeAuthoringText(utf8.encode(original.identityText!)).text) as Map<String, Object?>;
+    metadata['avatar'] = {'file': avatarFile, 'sha256': digest};
+    final after = AuthoringResourceSnapshot(
+      present: true,
+      rawText: original.rawText,
+      identityText: jsonEncode(metadata),
+    );
+    final adopted = CharacterAvatarCapture(
+      metadata: CharacterAvatarMetadata(snapshot: after, file: avatarFile, sha256: digest),
+      bytes: png,
+    );
+    final document = const CardCodec().decodeAuthority(Uint8List.fromList(utf8.encode(original.rawText!)));
+    final importedAtValue = metadata['importedAt'];
+    final importedAt = importedAtValue is String ? DateTime.tryParse(importedAtValue) : null;
+    if (importedAt == null) {
+      throw const TavernImportError('资料库导入时间无效。');
+    }
+    final directory = '${_characters.path}/$id';
+    final pending = File('$directory/library.json.writing');
+    final summary = _summarize(
+      StoredCharacter(
+        id: id,
+        importedAt: importedAt,
+        avatarPath: '$directory/$avatarFile',
+        card: TavernCard(json: document, avatar: png),
+      ),
+    );
+    final owner = authority;
+    final ticket = owner == null
+        ? null
+        : AuthoringWriteTicket(
+            request: owner.newRequest('character:$id', {'method': 'replaceCharacterAvatar', 'after': after.toJson()}),
+            before: original,
+            after: after,
+            artifacts: ['characters/$id/$avatarFile', 'characters/$id/library.json.writing'],
+          );
+    try {
+      await _writeImmutableAvatar(File('$directory/$avatarFile'), png);
+      if (!await _avatarStillCurrent(id, before)) {
+        throw TavernAuthoringException(
+          'authority_conflict',
+          'The captured character avatar changed.',
+          physicalResourceId: 'character:$id',
+        );
+      }
+      check?.call();
+      if (ticket != null) {
+        owner!.prepare(ticket, check: check);
+      }
+      // A readable summary must not describe the old avatar after adoption.
+      await _invalidateSummary(id);
+      await pending.writeAsString(after.identityText!, flush: true);
+      if (!await _avatarStillCurrent(id, before)) {
+        throw TavernAuthoringException(
+          'authority_conflict',
+          'The captured character avatar changed.',
+          physicalResourceId: 'character:$id',
+        );
+      }
+      check?.call();
+      ticket?.enteredEffect = true;
+      await pending.rename('$directory/library.json');
+      ticket?.knownAdopted = true;
+      try {
+        cardCommitted?.call(id, document['data']! as Map<String, Object?>);
+      } finally {
+        onCommitted?.call(adopted);
+      }
+      if (ticket != null) {
+        owner!.adopted(ticket);
+      }
+      await _writeSummary(summary);
+      if (ticket != null) {
+        owner!.publish(ticket);
+      }
+      return adopted;
+    } catch (error, stack) {
+      if (ticket != null) {
+        owner!.fail(ticket, error, stack);
+      }
+      rethrow;
+    }
+    // Keep immutable bytes and any pending metadata as real recovery evidence.
+    // Neither a failed notification nor an unconfirmed rename restores a pointer.
+  });
+
   Future<void> _observeCharacter(String id) async {
     final owner = authority;
     if (owner != null) owner.observe('character:$id', await _readAuthoringResource(id));
@@ -315,6 +491,7 @@ class CharacterLibrary {
           assets: assets,
           originalBytes: await File('$sourceDirectory/original.${format.name}').readAsBytes(),
           png: metadata['hasPng'] == true ? await File('$sourceDirectory/source.png').readAsBytes() : null,
+          avatar: await _readAvatarOverride(sourceDirectory, metadata),
           fileName: metadata['sourceFileName'] is String ? metadata['sourceFileName']! as String : null,
         );
     }
@@ -322,6 +499,7 @@ class CharacterLibrary {
       json: projection,
       assets: selected.assets,
       png: selected.png,
+      avatar: selected.avatar,
       originalBytes: selected.originalBytes,
       sourceFormat: selected.sourceFormat,
     );
@@ -331,6 +509,7 @@ class CharacterLibrary {
         json: document,
         assets: selected.assets,
         png: selected.png,
+        avatar: selected.avatar,
         originalBytes: selected.originalBytes,
         sourceFormat: selected.sourceFormat,
       ),
@@ -340,6 +519,7 @@ class CharacterLibrary {
         : [
             'original.${selected.sourceFormat.name}',
             if (selected.png != null) 'source.png',
+            if (selected.avatar != null) _avatarFileName(selected.avatar!),
             for (final path in selected.assets.keys) 'resources/$path',
           ];
     final missing = <String>{...mediaRefs, if (sourceFormat == 'png') 'ccdefault:'};
@@ -417,6 +597,9 @@ class CharacterLibrary {
     void Function()? check,
   }) async {
     final rawText = exactText ?? jsonEncode(card.json);
+    final avatar = card.avatar;
+    final avatarDigest = avatar == null ? null : crypto.sha256.convert(avatar).toString();
+    final avatarFile = avatarDigest == null ? null : 'avatar-$avatarDigest.png';
     final identityText = jsonEncode({
       'version': 1,
       'importedAt': importedAt.toIso8601String(),
@@ -424,6 +607,7 @@ class CharacterLibrary {
       'sourceFileName': fileName,
       'hasPng': card.png != null,
       'hasPortrait': portrait != null,
+      if (avatarFile != null) 'avatar': {'file': avatarFile, 'sha256': avatarDigest},
       'resources': card.assets.keys.toList(),
     });
     final staging = await _characters.createTemp('.staging-');
@@ -440,6 +624,9 @@ class CharacterLibrary {
       await File('${staging.path}/original.${card.sourceFormat.name}').writeAsBytes(card.originalBytes!, flush: true);
       if (card.png != null) await File('${staging.path}/source.png').writeAsBytes(card.png!, flush: true);
       if (portrait != null) await File('${staging.path}/portrait.png').writeAsBytes(portrait, flush: true);
+      if (avatar != null) {
+        await File('${staging.path}/$avatarFile').writeAsBytes(avatar, flush: true);
+      }
       for (final entry in card.assets.entries) {
         if (!isSafeCardAssetPath(entry.key)) throw const TavernImportError('角色卡资源路径无效。');
         final file = File('${staging.path}/resources/${entry.key}');
@@ -505,7 +692,11 @@ class CharacterLibrary {
         id: id,
         card: card,
         importedAt: importedAt,
-        avatarPath: portrait == null ? null : '${destination.path}/portrait.png',
+        avatarPath: avatarFile != null
+            ? '${destination.path}/$avatarFile'
+            : portrait == null
+            ? null
+            : '${destination.path}/portrait.png',
         directoryPath: destination.absolute.path,
       );
       await _writeSummary(_summarize(record));
@@ -687,13 +878,27 @@ class CharacterLibrary {
     }
     final original = await File('$directory/original.${format.name}').readAsBytes();
     media['original.${format.name}'] = original;
+    final avatarSelection = _avatarSelection(metadata);
+    final selectedAvatar = avatarSelection.file == null
+        ? null
+        : await _readAvatarFile(directory, avatarSelection.file!, avatarSelection.sha256);
+    if (selectedAvatar != null) {
+      media[avatarSelection.file!] = selectedAvatar;
+    }
     return AuthoringCharacterCapture(
       snapshot: snapshot,
       document: document,
       character: StoredCharacter(
         id: id,
         importedAt: importedAt,
-        card: TavernCard(json: parsed.json, assets: assets, png: png, originalBytes: original, sourceFormat: format),
+        card: TavernCard(
+          json: parsed.json,
+          assets: assets,
+          png: png,
+          avatar: avatarSelection.sha256 == null ? null : selectedAvatar,
+          originalBytes: original,
+          sourceFormat: format,
+        ),
       ),
       mediaRefs: paths.cast<String>().toList(),
       media: media,
@@ -1003,6 +1208,7 @@ class CharacterLibrary {
         json: runtimeJson,
         assets: record.card.assets,
         png: record.card.png,
+        avatar: record.card.avatar,
         originalBytes: record.card.originalBytes,
         sourceFormat: record.card.sourceFormat,
       ),
@@ -1201,12 +1407,13 @@ class CharacterLibrary {
     final importedAt = DateTime.tryParse(importedAtValue);
     if (importedAt == null) throw const TavernImportError('资料库导入时间无效。');
     final card = await _decodeStored(await File('${directory.path}/card.json').readAsBytes());
+    final avatarFile = _avatarSelection(value).file;
     final summary = _summarize(
       StoredCharacter(
         id: id,
         card: card,
         importedAt: importedAt,
-        avatarPath: value['hasPortrait'] == true ? '${directory.path}/portrait.png' : null,
+        avatarPath: avatarFile == null ? null : '${directory.path}/$avatarFile',
       ),
     );
     await _writeSummary(summary);
@@ -1308,10 +1515,12 @@ class CharacterLibrary {
     if (importedAtValue is! String) throw const TavernImportError('资料库导入时间无效。');
     final importedAt = DateTime.tryParse(importedAtValue);
     if (importedAt == null) throw const TavernImportError('资料库导入时间无效。');
+    final avatarSelection = _avatarSelection(metadataValue);
     final card = TavernCard(
       json: parsed.json,
       assets: assets,
       png: metadataValue['hasPng'] == true ? await File('${directory.path}/source.png').readAsBytes() : null,
+      avatar: await _readAvatarOverride(directory.path, metadataValue),
       originalBytes: await File('${directory.path}/original.${sourceFormat.name}').readAsBytes(),
       sourceFormat: sourceFormat,
     );
@@ -1319,7 +1528,7 @@ class CharacterLibrary {
       id: id,
       card: card,
       importedAt: importedAt,
-      avatarPath: metadataValue['hasPortrait'] == true ? '${directory.path}/portrait.png' : null,
+      avatarPath: avatarSelection.file == null ? null : '${directory.path}/${avatarSelection.file}',
       directoryPath: directory.absolute.path,
     );
   }
@@ -1336,6 +1545,89 @@ class CharacterLibrary {
       }
     }
   }
+}
+
+final _avatarFilePattern = RegExp(r'^avatar-[0-9a-f]{64}\.png$');
+final _avatarDigestPattern = RegExp(r'^[0-9a-f]{64}$');
+
+({String? file, String? sha256}) _avatarSelection(Map<String, Object?> metadata) {
+  if (!metadata.containsKey('avatar')) {
+    return (file: metadata['hasPortrait'] == true ? 'portrait.png' : null, sha256: null);
+  }
+  final avatar = metadata['avatar'];
+  if (avatar is! Map<String, Object?>) {
+    throw const TavernImportError('资料库头像元数据无效。');
+  }
+  final file = avatar['file'];
+  final digest = avatar['sha256'];
+  if (file is! String ||
+      !_avatarFilePattern.hasMatch(file) ||
+      digest is! String ||
+      !_avatarDigestPattern.hasMatch(digest) ||
+      file != 'avatar-$digest.png') {
+    throw const TavernImportError('资料库头像元数据无效。');
+  }
+  return (file: file, sha256: digest);
+}
+
+CharacterAvatarMetadata _avatarMetadata(AuthoringResourceSnapshot snapshot) {
+  if (!snapshot.present) {
+    return CharacterAvatarMetadata(snapshot: snapshot);
+  }
+  final metadata = jsonDecode(decodeAuthoringText(utf8.encode(snapshot.identityText!)).text);
+  if (metadata is! Map<String, Object?> || metadata['version'] != 1) {
+    throw const TavernImportError('资料库元数据版本无效。');
+  }
+  final selected = _avatarSelection(metadata);
+  return CharacterAvatarMetadata(snapshot: snapshot, file: selected.file, sha256: selected.sha256);
+}
+
+Future<Uint8List> _readAvatarFile(String directory, String file, String? digest) async {
+  final bytes = await File('$directory/$file').readAsBytes();
+  if (digest != null && crypto.sha256.convert(bytes).toString() != digest) {
+    throw const TavernImportError('资料库头像内容摘要不匹配。');
+  }
+  return bytes;
+}
+
+Future<Uint8List?> _readAvatarOverride(String directory, Map<String, Object?> metadata) async {
+  final selected = _avatarSelection(metadata);
+  if (selected.sha256 == null) {
+    return null;
+  }
+  return _readAvatarFile(directory, selected.file!, selected.sha256);
+}
+
+String _avatarFileName(Uint8List bytes) => 'avatar-${crypto.sha256.convert(bytes)}.png';
+
+Future<void> _writeImmutableAvatar(File file, Uint8List bytes) async {
+  final type = await FileSystemEntity.type(file.path, followLinks: false);
+  if (type == FileSystemEntityType.file) {
+    if (!_sameAuthoringCaptureBytes(await file.readAsBytes(), bytes)) {
+      throw FileSystemException('An immutable avatar path already contains different bytes.', file.path);
+    }
+    return;
+  }
+  if (type != FileSystemEntityType.notFound) {
+    throw FileSystemException('The immutable avatar path is not a regular file.', file.path);
+  }
+  final pending = File('${file.path}.${_newId()}.writing');
+  await pending.create(exclusive: true);
+  await pending.writeAsBytes(bytes, flush: true);
+  // Do not expose a partially written content-addressed filename. A failed
+  // staging write remains unreferenced and cannot poison a later retry.
+  final current = await FileSystemEntity.type(file.path, followLinks: false);
+  if (current == FileSystemEntityType.file) {
+    if (!_sameAuthoringCaptureBytes(await file.readAsBytes(), bytes)) {
+      throw FileSystemException('An immutable avatar path already contains different bytes.', file.path);
+    }
+    await pending.delete();
+    return;
+  }
+  if (current != FileSystemEntityType.notFound) {
+    throw FileSystemException('The immutable avatar path is not a regular file.', file.path);
+  }
+  await pending.rename(file.path);
 }
 
 bool _sameAuthoringCaptureBytes(List<int> left, List<int> right) {
@@ -1381,6 +1673,8 @@ Map<String, Object?> _summaryJson(StoredCharacterSummary summary) => {
   // Derive the path from the current root when loading, so moving a complete
   // library does not leave absolute paths pointing at its previous location.
   'hasPortrait': summary.avatarPath != null,
+  if (summary.avatarPath != null && _name(File(summary.avatarPath!)) != 'portrait.png')
+    'avatarFile': _name(File(summary.avatarPath!)),
   'regexCount': summary.regexCount,
   'scriptCount': summary.scriptCount,
   'hasLorebook': summary.hasLorebook,
@@ -1432,6 +1726,11 @@ StoredCharacterSummary _summaryFromJson(Object? value, String id, String directo
   }
   final importedAt = DateTime.tryParse(importedAtValue);
   if (importedAt == null) throw const FormatException('Invalid character summary time.');
+  final avatarFile = value['avatarFile'];
+  if (value.containsKey('avatarFile') &&
+      (avatarFile is! String || !_avatarFilePattern.hasMatch(avatarFile) || !hasPortrait)) {
+    throw const FormatException('Invalid character summary avatar.');
+  }
   return StoredCharacterSummary(
     id: id,
     name: name,
@@ -1439,7 +1738,7 @@ StoredCharacterSummary _summaryFromJson(Object? value, String id, String directo
     creator: creator as String?,
     tags: List<String>.from(tags),
     importedAt: importedAt,
-    avatarPath: hasPortrait ? '$directoryPath/portrait.png' : null,
+    avatarPath: hasPortrait ? '$directoryPath/${avatarFile ?? 'portrait.png'}' : null,
     regexCount: regexCount,
     scriptCount: scriptCount,
     hasLorebook: hasLorebook,
