@@ -13,6 +13,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import java.util.Calendar
 
 /**
@@ -63,8 +64,8 @@ class CompanionWidgetProvider : AppWidgetProvider() {
             val busy = activity != null && activity != "idle" && prefs.getLong("untilMs", 0) > now
             val status = when {
                 busy -> prefs.getString("status", null)
-                night -> prefs.getString("statusAsleep", null) ?: context.getString(R.string.companion_widget_asleep)
-                else -> prefs.getString("statusWaiting", null) ?: context.getString(R.string.companion_widget_waiting)
+                night -> prefs.getString("statusAsleep", null) ?: AppStrings.get(context, R.string.companion_widget_asleep)
+                else -> prefs.getString("statusWaiting", null) ?: AppStrings.get(context, R.string.companion_widget_waiting)
             } ?: ""
             val line = prefs.getString("line", null)?.takeIf { now - prefs.getLong("saidAt", 0) < LINE_MS } ?: ""
             val bond = prefs.getLong("bond", -1).coerceIn(-1, 3)
@@ -86,7 +87,7 @@ class CompanionWidgetProvider : AppWidgetProvider() {
                 val views = RemoteViews(context.packageName, R.layout.companion_widget)
                 views.setTextViewText(
                     R.id.companion_widget_name,
-                    prefs.getString("name", null) ?: context.getString(R.string.companion_widget_name),
+                    prefs.getString("name", null) ?: AppStrings.get(context, R.string.companion_widget_name),
                 )
                 views.setTextViewText(R.id.companion_widget_bond, pearls)
                 views.setTextViewText(R.id.companion_widget_status, status)
