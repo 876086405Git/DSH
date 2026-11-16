@@ -340,6 +340,12 @@ void main() {
         Slots.main: [seats.occupant(Slots.main, seats.probe, 'k4-panel')],
       });
       expect(otherPages(), findsOneWidget);
+      // Same width as the card above it, one card gap below (#1389).
+      final above = tester.getRect(find.byKey(const ValueKey('chat-plugins-ways-in')));
+      final card = tester.getRect(find.byKey(const ValueKey('chat-plugins-other-pages')));
+      expect(card.left, moreOrLessEquals(above.left, epsilon: 0.5));
+      expect(card.right, moreOrLessEquals(above.right, epsilon: 0.5));
+      expect(card.top - above.bottom, moreOrLessEquals(ChatPluginsMetrics.gap, epsilon: 0.5));
     });
 
     testWidgets('global pages keep a way on beside a conversation view from the same web plugin', (tester) async {
