@@ -208,9 +208,9 @@ const _js = r'''
     if(!place)throw new TypeError('source is one of '+Object.keys(placements).join(', '));
     if(destination!=='display'&&destination!=='prompt')throw new TypeError('destination is display or prompt');
     ((res.regex||{}).rules||[]).forEach(function(rule){
-      var x=rule.raw||{};
-      if(!rule.effective||[].concat(x.placement||[]).indexOf(place)<0)return;
-      if(destination==='display'?!x.markdownOnly:!x.promptOnly)return;
+      var x=rule.raw||{},pl=[].concat(x.placement||[]),legacy=pl.indexOf(0)>=0;
+      if(!rule.effective||(!legacy&&pl.indexOf(place)<0))return;
+      if(!legacy&&(destination==='display'?!x.markdownOnly:!x.promptOnly))return;
       if(depth!==null&&((typeof x.minDepth==='number'&&x.minDepth>=-1&&depth<x.minDepth)||
         (typeof x.maxDepth==='number'&&x.maxDepth>=0&&depth>x.maxDepth)))return;
       var find=regexFrom(x.substituteRegex?substitudeMacros(x.findRegex||''):x.findRegex||'');
@@ -324,9 +324,13 @@ const _js = r'''
   }
   function getScriptButtons(id){return clone(buttons[buttonScript(id).id]);}
   function setButtons(s,list){
-    var mine=buttons[s.id]=list;tellButtons(s.id);
+    var before=buttons[s.id],mine=buttons[s.id]=list;tellButtons(s.id);
     return call('replaceScriptButtons',{asScript:s.id,buttons:list}).then(function(r){
       if(buttons[s.id]===mine){buttons[s.id]=r.buttons;tellButtons(s.id);}
+    },function(e){
+      // Not kept: the ones that were, back.
+      if(buttons[s.id]===mine){buttons[s.id]=before;tellButtons(s.id);}
+      throw e;
     });
   }
   function replaceScriptButtons(a,b){return attempt(function(){

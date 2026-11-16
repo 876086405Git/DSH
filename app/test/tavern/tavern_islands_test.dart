@@ -103,6 +103,9 @@ void main() {
     expect(tavernIslandReadsStory("<script>getVariables({type:'message'})</script>"), isTrue);
     expect(tavernIslandReadsStory('<div>Mvu</div>'), isFalse);
     expect(tavernIslandHasScript('<p>x</p>'), isFalse);
+    // An inline handler runs as a script does.
+    expect(tavernIslandReadsStory('<button onclick="getVariables()">看</button>'), isTrue);
+    expect(tavernIslandHasScript('<p onclick="go()">x</p>'), isTrue);
     String page({bool noScripts = false}) => tavernIslandDocument(
       _status,
       text: const Color(0xff112233),
