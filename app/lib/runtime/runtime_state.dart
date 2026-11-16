@@ -3,21 +3,13 @@ import 'dart:collection';
 
 import 'package:flutter/services.dart' show MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
-import '../plugins/native/native_state.dart' show nativeLocaleProvider;
 import '../state/settings_state.dart';
 import '../state/read_list_epoch.dart';
 import 'runtime_bridge.dart';
 
 final runtimeBridgeProvider = Provider<RuntimeBridge>((ref) => RuntimeBridge());
-
-/// Retains the resolved language for the next start, including native restarts.
-Future<void> syncRuntimeNativeLocale(String locale) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('app_native_locale', locale);
-}
 
 /// [RuntimeBridge.batteryExempt]; invalidate to read it again.
 final batteryExemptProvider = FutureProvider<bool?>((ref) => ref.watch(runtimeBridgeProvider).batteryExempt());
@@ -189,24 +181,18 @@ class LocalRuntimeController extends Notifier<LocalRuntimeState> {
   /// The API key is not passed here: it is written to DSH's own credential store
   /// after connecting (see connection_state.dart), so it can change without a restart.
   /// Keeps the current mode: in safe mode this starts safe mode again.
-  Future<void> start() async {
+  Future<void> start() {
     final settings = ref.read(settingsProvider);
-    final locale = ref.read(nativeLocaleProvider);
-    final bridge = _bridge;
-    await syncRuntimeNativeLocale(locale);
     return _startOrReopen(
-      () => bridge.start(phoneStorage: settings.phoneStorage, visualReplies: settings.visualReplies),
+      () => _bridge.start(phoneStorage: settings.phoneStorage, visualReplies: settings.visualReplies),
     );
   }
 
   /// Starts in [mode]; [EngineMode.normal] from safe mode begins the two-minute trial.
-  Future<void> startIn(EngineMode mode) async {
+  Future<void> startIn(EngineMode mode) {
     final settings = ref.read(settingsProvider);
-    final locale = ref.read(nativeLocaleProvider);
-    final bridge = _bridge;
-    await syncRuntimeNativeLocale(locale);
     return _startOrReopen(
-      () => bridge.start(phoneStorage: settings.phoneStorage, visualReplies: settings.visualReplies, mode: mode),
+      () => _bridge.start(phoneStorage: settings.phoneStorage, visualReplies: settings.visualReplies, mode: mode),
     );
   }
 

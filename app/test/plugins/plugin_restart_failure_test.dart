@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../chat/support/harness.dart';
 import 'support/fake_plugin_host.dart';
@@ -124,7 +123,6 @@ const restartFailureText = '未能重启内核，请查看引擎日志';
 
 void main() {
   setUpAll(loadTestFonts);
-  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('declining the install restart leaves native runtime untouched', (tester) async {
     final bridge = await installAndOfferRestart(tester, RestartOutcome.success);
