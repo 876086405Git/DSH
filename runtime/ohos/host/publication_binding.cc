@@ -448,7 +448,7 @@ napi_value PhoneCall(napi_env env,napi_callback_info info) {
   const auto operation=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(data));
   // This also performs the main-registration-thread and fixed NOLOAD checks.
   if(!GetHostLifecycleSnapshot(env,nullptr))return nullptr;
-  if(!HostReader().phone) {
+  if(!HostReader().phone && HostReader().handle) {
     auto call=reinterpret_cast<DshHostPhoneV1>(dlsym(HostReader().handle,"dsh_host_phone_v1"));
     Dl_info symbol{};char actual[PATH_MAX];
     if(call&&dladdr(reinterpret_cast<void*>(call),&symbol)&&symbol.dli_fname&&

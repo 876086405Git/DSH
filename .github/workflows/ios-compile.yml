@@ -129,6 +129,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check the shared host profiles
+        if: inputs.regression_only
+        run: |
+          python3 -B runtime/tests/ohos/host-core.py --ios --out "$RUNNER_TEMP/host-core-ios"
+          python3 -B runtime/tests/ohos/host-core.py --out "$RUNNER_TEMP/host-core-hap"
+
       - name: Prepare the engine
         id: prepare
         run: |

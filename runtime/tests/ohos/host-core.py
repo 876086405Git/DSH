@@ -50,6 +50,9 @@ def main():
             assert config[3]['config'] == {'mode': 'workspace-write', 'workspaceRoot': roots[0]}
             assert config[0] == {'id': 'subprocess', 'disabled': True}
             assert config[1] == {'id': 'sandbox', 'disabled': True}
+            plugins = {plugin['id'] for plugin in config[-1]['insert']}
+            assert ('ohos-phone' in plugins) == (not args.ios)
+            assert 'ohos-lifecycle' in plugins
         rows.append({'case': name, 'passed': passed, 'code': result.returncode,
                      'stdout': result.stdout, 'stderr': result.stderr})
         print(name, 'PASS' if passed else 'FAIL', flush=True)

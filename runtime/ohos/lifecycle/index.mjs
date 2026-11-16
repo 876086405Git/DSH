@@ -138,7 +138,7 @@ export async function apply(ctx, config = {}) {
       finally { await handle.close(); }
     },
     resolveAgent: id => ctx.agents.get(id), hasActiveRounds: () => ctx.agents.list().some(agent => agent.status === 'running'),
-    hasActiveWork: () => jobs.hasActiveJobs() || ctx.subprocess.backend.live.size > 0 || ctx.subprocess.linux.hasActiveWork(),
+    hasActiveWork: () => jobs.hasActiveJobs() || ctx.subprocess.backend.live.size > 0 || ctx.subprocess.linux?.hasActiveWork() === true,
     revalidateTransport: () => transport.revalidate() });
   // After teardown a patched scheduler sees a closed owner and fails closed;
   // it must not fall back to unjournaled dispatch because a plugin unloaded.
