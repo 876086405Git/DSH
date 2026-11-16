@@ -35,7 +35,8 @@ if (mode === 'normal') {
 }
 `);
   const command = "node 'Worker 脚本.mjs' '中文 参数' && git init 'git 项目' && " +
-    "git -C 'git 项目' add '中文 文件.txt' && git -C 'git 项目' status --porcelain > 'git-status.txt' && " +
+    "git -C 'git 项目' config core.quotePath false && git -C 'git 项目' add '中文 文件.txt' && " +
+    "git -C 'git 项目' status --porcelain > 'git-status.txt' && " +
     "rg --fixed-strings 'needle-中文' 'git 项目/中文 文件.txt' > 'rg-result.txt' && printf 'shell-ok\\n'";
   return startFakeModel(workspace, { bashCommand: command });
 }
