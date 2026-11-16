@@ -6,13 +6,14 @@
 // Prints each host event as a JSON line. A file named `restart` in the guest root makes
 // it stop the engine and start it again in this process; `quit` ends the run.
 #include <dlfcn.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-typedef int (*StartFn)(const char*, const char*, const char*, const char*, const char*, const char*, int, const char**,
+typedef int (*StartFn)(const char*, const char*, const char*, const char*, const char*, const char*, const char*, int, const char**,
                        const char**, char**, char**);
 typedef void (*StopFn)(void);
 typedef char* (*TextFn)(void);
@@ -25,6 +26,7 @@ static TextFn host_drain;
 static FreeFn host_free;
 static char dsh_home[4096];
 static char workspace[4096];
+static char linux_directory[4096];
 // The engine takes over fds 1 and 2 while it runs, so this has its own copy of stdout.
 static FILE* out;
 
@@ -77,7 +79,7 @@ static void begin(char** argv) {
   const char* values[] = {"ohos-local-fixture-only", "workspace-write"};
   char* code = NULL;
   char* message = NULL;
-  if (start_engine(argv[2], argv[3], dsh_home, argv[4], argv[1], workspace, 2, keys, values, &code, &message) != 0) {
+  if (start_engine(argv[2], argv[3], dsh_home, argv[4], argv[1], linux_directory, workspace, 2, keys, values, &code, &message) != 0) {
     die(code ? code : "start refused", message);
   }
 }
@@ -110,6 +112,12 @@ int main(int argc, char** argv) {
   }
   snprintf(dsh_home, sizeof dsh_home, "%s/root/.dsh", argv[3]);
   snprintf(workspace, sizeof workspace, "%s/root/workspace", argv[3]);
+  char linux_path[4096];
+  const int linux_length = snprintf(linux_path, sizeof linux_path, "%s/linux-tools", argv[4]);
+  if (linux_length < 0 || (size_t)linux_length >= sizeof linux_path ||
+      (mkdir(linux_path, 0700) != 0 && errno != EEXIST) || !realpath(linux_path, linux_directory)) {
+    die("linux directory", "Cannot prepare the private Linux directory");
+  }
 
   begin(argv);
   for (;;) {

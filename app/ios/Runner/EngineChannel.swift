@@ -77,7 +77,7 @@ private struct GuestStartupTemporary {
 private final class NativeEngine {
   private typealias Start = @convention(c) (
     UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>,
-    UnsafePointer<CChar>, Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?,
+    UnsafePointer<CChar>, UnsafePointer<CChar>, Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?,
     UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
   ) -> Int32
   private typealias GuestConfig = @convention(c) (Int32, UnsafePointer<CChar>) -> Int32
@@ -119,7 +119,8 @@ private final class NativeEngine {
     free = try symbol("dsh_host_free", as: Free.self)
   }
 
-  func begin(runtime: String, guest: String, home: String, cache: String, workspace: String, env: [String: String]) throws {
+  func begin(runtime: String, guest: String, home: String, cache: String, linuxDirectory: String,
+             workspace: String, env: [String: String]) throws {
     let keys = env.keys.map { strdup($0) }
     let values = env.keys.map { strdup(env[$0] ?? "") }
     defer {
@@ -133,7 +134,7 @@ private final class NativeEngine {
     let result = keyPointers.withUnsafeBufferPointer { keyBuffer in
       valuePointers.withUnsafeBufferPointer { valueBuffer in
         start(
-          runtime, guest, home, cache, frameworks, workspace, Int32(env.count), keyBuffer.baseAddress,
+          runtime, guest, home, cache, frameworks, linuxDirectory, workspace, Int32(env.count), keyBuffer.baseAddress,
           valueBuffer.baseAddress, &code, &message)
       }
     }
@@ -1050,6 +1051,8 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
       // Installation changes take effect at the next engine start. This is an
       // App-owned snapshot, never a user environment/configuration override.
       let linux = GuestRootfsInstaller(base: filesDirectory.appendingPathComponent("dsh-guest", isDirectory: true))
+      let linuxDirectory = EngineChannel.prepared(filesDirectory.appendingPathComponent("linux-tools", isDirectory: true))
+      excludeFromBackup(linuxDirectory)
       let linuxStartup = GuestStartupState(installer: linux, kernel: NativeGuestKernelAccess.shared)
       if let failure = linuxStartup.failure {
         // A storage/protocol failure disables guest admission while the ordinary
@@ -1070,7 +1073,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
       try native?.configureGuest(linuxSnapshot)
       try native?.begin(
         runtime: installer.root.path, guest: guestRoot.path, home: dshHome.path, cache: cache.path,
-        workspace: workspace.path, env: launchEnvironment)
+        linuxDirectory: linuxDirectory.path, workspace: workspace.path, env: launchEnvironment)
       // Native begin accepted an asynchronous start, not a successfully loaded
       // JS owner. Keep a fallback ticket until this generation has fully joined.
       if guestStartupTemporary != nil {

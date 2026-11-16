@@ -63,7 +63,8 @@ int dsh_host_guest_config(int enabled, const char* json) {
 
 extern "C" __attribute__((visibility("default")))
 int dsh_host_start(const char* runtime_root, const char* guest_root, const char* dsh_home, const char* cache_dir,
-                   const char* native_library_dir, const char* workspace, int env_count, const char** env_keys,
+                   const char* native_library_dir, const char* linux_directory, const char* workspace,
+                   int env_count, const char** env_keys,
                    const char** env_values, char** error_code, char** error_message) {
   dsh::HostOptions options;
   options.runtime_root = runtime_root;
@@ -71,6 +72,7 @@ int dsh_host_start(const char* runtime_root, const char* guest_root, const char*
   options.dsh_home = dsh_home;
   options.cache_dir = cache_dir;
   options.native_library_dir = native_library_dir;
+  options.linux_directory = linux_directory;
   options.workspace_roots = {workspace};
   for (int i = 0; i < env_count; ++i) options.env[env_keys[i]] = env_values[i];
   // The virtual shell finds its commands through this, in its own filesystem. What the

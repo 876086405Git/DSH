@@ -168,6 +168,12 @@ def attachments_for_ios(original):
         if text.count(before) != 1:
             raise ValueError('iOS attachment edit differs from the composed store: ' + before[:60])
         text = text.replace(before, after)
+    # Node reports OpenHarmony on iOS for the shared command/runtime layer, but
+    # this artifact uses the ImageIO-backed ios-sharp shim for image operations.
+    image_gate = 'process.platform === "openharmony"'
+    if text.count(image_gate) != 12:
+        raise ValueError('iOS image routes differ from the composed store')
+    text = text.replace(image_gate, 'false')
     return text.encode()
 
 
