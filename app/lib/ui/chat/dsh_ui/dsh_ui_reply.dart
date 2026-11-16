@@ -227,19 +227,38 @@ DshUiState dshUiStateFor({
 }) {
   final index = items.indexWhere((item) => item is AssistantChatItem && item.id == messageId);
   if (index < 0) return DshUiState.expired;
+  final message = items[index] as AssistantChatItem;
+  return dshUiStateAfter(
+    items
+        .skip(index + 1)
+        .map(
+          (item) => switch (item) {
+            UserChatItem() => (user: true, text: item.text),
+            AssistantChatItem() => (user: false, text: item.text),
+            _ => null,
+          },
+        )
+        .nonNulls,
+    running: running || message.streaming,
+    pending: pending,
+  );
+}
+
+/// [dshUiStateFor] for any transcript (a DS Bot's too): [later] is what came after the
+/// message, in order, the person's and the assistant's.
+DshUiState dshUiStateAfter(
+  Iterable<({bool user, String text})> later, {
+  required bool running,
+  List<String> pending = const [],
+}) {
   var laterReply = false;
-  for (var i = index + 1; i < items.length; i++) {
-    final item = items[i];
-    if (item is UserChatItem) return _after(item.text);
-    if (item is AssistantChatItem && item.text.trim().isNotEmpty) {
-      laterReply = true;
-    }
+  for (final item in later) {
+    if (item.user) return _after(item.text);
+    if (item.text.trim().isNotEmpty) laterReply = true;
   }
   if (pending.isNotEmpty) return _after(pending.first);
   if (laterReply) return DshUiState.expired;
-  final message = items[index] as AssistantChatItem;
-  if (running || message.streaming) return DshUiState.running;
-  return DshUiState.live;
+  return running ? DshUiState.running : DshUiState.live;
 }
 
 DshUiState _after(String userText) {

@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/bots_state.dart';
+import '../chat/dsh_ui/dsh_ui.dart';
 import '../chat/render/markdown_body.dart';
 import '../chat/widgets/chat_card.dart';
 import '../chat/widgets/message_actions.dart';
@@ -686,6 +687,7 @@ class BotUserMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (dshUiReplyChip(text) case final label?) return DshUiReplyChip(label: label, pending: pending);
     final l10n = context.l10n;
     final shown = images > 0 && text.isEmpty ? l10n.botsImagePlaceholder : text;
     return Align(
