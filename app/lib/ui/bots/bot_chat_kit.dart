@@ -687,7 +687,7 @@ class BotUserMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (dshUiReplyChip(text) case final label?) return DshUiReplyChip(label: label);
+    if (dshUiReplyChip(text) case final label?) return DshUiReplyChip(label: label, pending: pending);
     final l10n = context.l10n;
     final shown = images > 0 && text.isEmpty ? l10n.botsImagePlaceholder : text;
     return Align(
