@@ -119,6 +119,7 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
         await tester.pump();
       }
+      expect(tester.widget<Pressable>(key).enabled, isTrue, reason: 'the save never finished');
       await tester.pump(const Duration(milliseconds: 300));
     }
 
