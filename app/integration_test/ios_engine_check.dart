@@ -63,9 +63,9 @@ Future<void> _start(String label) => _answer(
   _runtime.invokeMethod<void>('start', {'env': <String, String>{}, 'phoneStorage': false, 'visualReplies': true}),
 );
 
-Future<int> _foreground(String token, {int afterRevision = 0}) async {
+Future<int> _foreground(String token, {int afterRevision = 0, Duration timeout = const Duration(seconds: 15)}) async {
   final limit = Stopwatch()..start();
-  while (limit.elapsed < const Duration(seconds: 15)) {
+  while (limit.elapsed < timeout) {
     final status = await _status();
     if (status['token'] != token) throw StateError('Foreground restored a different engine');
     final lifecycle = status['lifecycle'] as Map?;
@@ -83,17 +83,15 @@ Future<int> _foreground(String token, {int afterRevision = 0}) async {
 }
 
 class _BackgroundCycle with WidgetsBindingObserver {
-  final resumed = Completer<void>();
-  bool _paused = false;
+  final paused = Completer<void>();
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && !_paused) {
-      _paused = true;
+    if (state == AppLifecycleState.paused && !paused.isCompleted) {
       // Write before iOS can suspend Dart. The driver then activates this same app.
       _reports.writeAsStringSync('{"step":"background paused"}\n', mode: FileMode.append, flush: true);
+      paused.complete();
     }
-    if (state == AppLifecycleState.resumed && _paused && !resumed.isCompleted) resumed.complete();
   }
 }
 
@@ -228,11 +226,11 @@ Future<void> _check() async {
     WidgetsBinding.instance.addObserver(cycle);
     try {
       await _report('background ready', {});
-      await cycle.resumed.future.timeout(const Duration(seconds: 30));
+      await cycle.paused.future.timeout(const Duration(seconds: 90));
     } finally {
       WidgetsBinding.instance.removeObserver(cycle);
     }
-    await _foreground(firstToken, afterRevision: revision + 1);
+    await _foreground(firstToken, afterRevision: revision + 1, timeout: const Duration(seconds: 90));
     await _round(client, sessionId, 'foreground round');
   } finally {
     await client.close();

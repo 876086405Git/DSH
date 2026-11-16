@@ -222,7 +222,12 @@ while (!last) {
     if (step.step === 'background ready') {
       simctl('launch', '--terminate-running-process', values.simulator, 'com.apple.Preferences');
     }
-    if (step.step === 'background paused') simctl('openurl', values.simulator, 'dshgo://open/workspaces');
+    if (step.step === 'background paused') {
+      const activated = simctl('launch', values.simulator, bundleId);
+      if (Number(activated.trim().split(': ').pop()) !== pid) {
+        last = { step: 'failed', error: 'Foregrounding the app replaced the running process' };
+      }
+    }
   }
   // The app's own limits are shorter, so these only end a check that nothing else will.
   const quiet = Date.now() - lastStepAt;
