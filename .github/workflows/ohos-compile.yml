@@ -4,9 +4,11 @@
 # signing profile exist.
 name: OHOS compile
 
+# On main it runs after a merge, not on pull requests, so no PR waits for the macOS runner;
+# a change to the shared app that breaks the HarmonyOS build shows up on main's run.
 on:
   push:
-    branches: ['claude/harmonyos-ohos', 'ohos/**']
+    branches: [main, 'claude/harmonyos-ohos', 'ohos/**']
     paths:
       - 'app/**'
       - 'packages/**'
@@ -36,9 +38,9 @@ jobs:
       # oh-flutter comes from atomgit, its tools from Huawei's OBS and the OHOS plugins
       # from gitcode, and each of them drops connections from GitHub's runners now and
       # then (three failed runs in a row on 2026-11-06). Cached, a run fetches none of
-      # them; when it has to, it tries five times a minute apart. The cache is per
-      # branch, so a first run on an ohos/ branch always fetches, and a runner's DNS
-      # failure can outlast a minute (2026-11-15, twice).
+      # them; when it has to, it tries five times a minute apart. A branch reads its own
+      # cache and main's, so a new ohos/ branch fetches only while main has none, and a
+      # runner's DNS failure can outlast a minute (2026-11-15, twice).
       - name: Restore oh-flutter
         id: sdk
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
