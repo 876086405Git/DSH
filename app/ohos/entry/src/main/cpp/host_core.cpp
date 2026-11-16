@@ -115,18 +115,47 @@ class Environment {
   std::map<std::string, std::optional<std::string>> previous_;
 };
 
+// The app's WebView (ArkWeb, Chromium's "[../../file.cc:12]") and the Flutter
+// engine ("[WARNING:flutter/file.cpp(12)]") write to the same process-wide stderr
+// while Node runs. On a phone they buried the engine's own lines.
+bool ForeignLine(const std::string& line) {
+  if (line.empty() || line[0] != '[') return false;
+  const auto close = line.find(']');
+  if (close == std::string::npos) return false;
+  const auto tag = line.substr(1, close - 1);
+  if (tag.rfind("../../", 0) == 0) return tag.find(".cc:") != std::string::npos || tag.find(".cpp:") != std::string::npos;
+  for (const char* level : {"VERBOSE", "INFO:", "WARNING:", "ERROR:", "FATAL:"}) {
+    if (tag.rfind(level, 0) == 0) return tag.find(".cc(") != std::string::npos || tag.find(".cpp(") != std::string::npos;
+  }
+  return false;
+}
+
 // File descriptors 1/2 are process-wide. Capture is deliberately scoped to the
 // single engine lifetime; no raw bytes are forwarded to hilog or Ark.
+void WakeCapture(int fd) {
+  if (fd < 0) return;
+  const char byte = 1;
+  // Nonblocking writes coalesce when a wake is already pending. The read end
+  // remains open until its reader has joined, and Host unregisters under mutex.
+  while (write(fd, &byte, 1) < 0 && errno == EINTR) {}
+}
+
 class Capture {
  public:
-  Capture(std::function<void(const std::string&, std::string)> line, std::function<void()> check_stop)
-      : line_(std::move(line)), check_stop_(std::move(check_stop)) {
+  Capture(std::function<void(const std::string&, std::string)> line,
+          std::function<bool()> check_stop, std::function<void(int)> set_stop_wake)
+      : line_(std::move(line)), check_stop_(std::move(check_stop)), set_stop_wake_(std::move(set_stop_wake)) {
     try {
       for (int i = 0; i != 2; ++i) {
         Require(pipe(pipes_[i]) == 0, "ERR_OHOS_HOST_STDIO", "Cannot open runtime output pipe");
         for (int fd : pipes_[i]) fcntl(fd, F_SETFD, FD_CLOEXEC);
         Require(fcntl(pipes_[i][0], F_SETFL, O_NONBLOCK) == 0,
                 "ERR_OHOS_HOST_STDIO", "Cannot configure runtime output pipe");
+        Require(pipe(wakes_[i]) == 0, "ERR_OHOS_HOST_STDIO", "Cannot open runtime output wake pipe");
+        for (int fd : wakes_[i]) {
+          Require(fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 && fcntl(fd, F_SETFL, O_NONBLOCK) == 0,
+                  "ERR_OHOS_HOST_STDIO", "Cannot configure runtime output wake pipe");
+        }
         saved_[i] = dup(i + 1);
         Require(saved_[i] >= 0, "ERR_OHOS_HOST_STDIO", "Cannot preserve application output");
       }
@@ -137,22 +166,40 @@ class Capture {
         close(pipes_[i][1]); pipes_[i][1] = -1;
         readers_[i] = std::thread([this, i] { Read(i); });
       }
+      set_stop_wake_(wakes_[0][1]);
     } catch (...) { Close(); throw; }
   }
   ~Capture() { Close(); }
  private:
   void Close() {
+    // Prevent Stop from writing to a descriptor after it can be closed/reused.
+    set_stop_wake_(-1);
     std::fflush(stdout);
     std::fflush(stderr);
     for (int i = 0; i != 2; ++i) {
-      if (saved_[i] >= 0) { dup2(saved_[i], i + 1); close(saved_[i]); saved_[i] = -1; }
+      if (saved_[i] >= 0) dup2(saved_[i], i + 1);
       if (pipes_[i][1] >= 0) { close(pipes_[i][1]); pipes_[i][1] = -1; }
     }
     ending_ = true;
+    for (int i = 0; i != 2; ++i) WakeCapture(wakes_[i][1]);
     for (int i = 0; i != 2; ++i) {
       if (readers_[i].joinable()) readers_[i].join();
       if (pipes_[i][0] >= 0) { close(pipes_[i][0]); pipes_[i][0] = -1; }
+      for (int& fd : wakes_[i]) if (fd >= 0) { close(fd); fd = -1; }
     }
+    // Readers hand foreign lines back to these until they have finished.
+    for (int i = 0; i != 2; ++i) {
+      if (saved_[i] >= 0) { close(saved_[i]); saved_[i] = -1; }
+    }
+  }
+  void Emit(int index, const std::string& stream, const std::string& line, bool overflow) {
+    if (!overflow && ForeignLine(line)) {
+      // Back to wherever the app's output went before the capture.
+      const auto out = line + "\n";
+      if (saved_[index] >= 0 && write(saved_[index], out.data(), out.size()) < 0) {}
+      return;
+    }
+    line_(stream, overflow ? "[OHOS host: oversized log line discarded]" : line);
   }
   void Read(int index) {
     const std::string stream = index == 0 ? "stdout" : "stderr";
@@ -160,12 +207,15 @@ class Capture {
     bool overflow = false;
     char bytes[4096];
     for (;;) {
-      if (index == 0) check_stop_();
+      // Only an unacknowledged cancellation needs a timed retry: the runner
+      // cannot accept stop until it has set its active flag. Normal idle waits
+      // are event-driven, including stderr, and Close has its own wake source.
+      const bool retry_stop = index == 0 && !ending_ && check_stop_();
       const auto count = read(pipes_[index][0], bytes, sizeof(bytes));
       if (count > 0) {
         for (ssize_t n = 0; n < count; ++n) {
           if (bytes[n] == '\n') {
-            line_(stream, overflow ? "[OHOS host: oversized log line discarded]" : pending);
+            Emit(index, stream, pending, overflow);
             pending.clear(); overflow = false;
           } else if (!overflow) {
             if (pending.size() == kMaximumLine) { pending.clear(); overflow = true; }
@@ -176,20 +226,29 @@ class Capture {
       else if (errno == EINTR) continue;
       else if (errno == EAGAIN) {
         if (ending_) break;
-        pollfd fd{pipes_[index][0], POLLIN, 0};
-        poll(&fd, 1, 50);
+        pollfd fds[2]{{pipes_[index][0], POLLIN, 0}, {wakes_[index][0], POLLIN, 0}};
+        const int result = poll(fds, 2, retry_stop ? 50 : -1);
+        if (result < 0 && errno != EINTR) break;
+        if (fds[1].revents & POLLIN) {
+          char notices[64];
+          for (;;) {
+            const auto count = read(wakes_[index][0], notices, sizeof(notices));
+            if (count > 0 || (count < 0 && errno == EINTR)) continue;
+            break;
+          }
+        }
       } else break;
     }
-    if (overflow || !pending.empty()) {
-      line_(stream, overflow ? "[OHOS host: oversized log line discarded]" : pending);
-    }
+    if (overflow || !pending.empty()) Emit(index, stream, pending, overflow);
   }
   int pipes_[2][2]{{-1, -1}, {-1, -1}};
+  int wakes_[2][2]{{-1, -1}, {-1, -1}};
   int saved_[2]{-1, -1};
   std::thread readers_[2];
   std::atomic<bool> ending_{false};
   std::function<void(const std::string&, std::string)> line_;
-  std::function<void()> check_stop_;
+  std::function<bool()> check_stop_;
+  std::function<void(int)> set_stop_wake_;
 };
 }  // namespace
 
@@ -204,6 +263,13 @@ void Host::Start(HostOptions options, StartNode start_node, StopNode stop_node) 
   options.dsh_home = Directory(options.dsh_home);
   options.cache_dir = Directory(options.cache_dir);
   options.native_library_dir = NativeDirectory(options.native_library_dir);
+  Require(Directory(options.linux_directory, "ERR_OHOS_LINUX_DIRECTORY") == options.linux_directory,
+          "ERR_OHOS_LINUX_DIRECTORY", "Linux data must not be redirected by symlinks");
+  for (const auto& root : {options.runtime_root, options.guest_root}) {
+    Require(options.linux_directory != root && options.linux_directory.rfind(root + "/", 0) != 0 &&
+                root.rfind(options.linux_directory + "/", 0) != 0,
+            "ERR_OHOS_LINUX_DIRECTORY", "Linux data must be separate from the runtime and host workspace");
+  }
   Require(options.workspace_roots.size() == 1, "ERR_OHOS_HOST_WORKSPACES", "The single authorized guest workspace is required");
   for (auto& root : options.workspace_roots) root = Directory(root);
   const auto user_home = options.guest_root + "/root";
@@ -230,6 +296,7 @@ void Host::Start(HostOptions options, StartNode start_node, StopNode stop_node) 
   File(options.runtime_root, "runtime/ohos/process/index.mjs");
   File(options.runtime_root, "runtime/ohos/process/sandbox.mjs");
   File(options.runtime_root, "runtime/ohos/lifecycle/index.mjs");
+  File(options.runtime_root, "runtime/ohos/phone/index.mjs");
   File(options.runtime_root, "runtime/ohos/capabilities/index.mjs");
   File(options.runtime_root, "runtime/bridge/dsh-go-bridge/lib/index.js");
   File(options.runtime_root, "runtime/ohos/process/child-process.mjs");
@@ -250,11 +317,12 @@ void Host::Start(HostOptions options, StartNode start_node, StopNode stop_node) 
       }
     }
   }
+  lifecycle_.BeginEngine();
   state_.phase = "starting";
   state_.consumed = true;
   stop_node_ = stop_node;
   try { engine_ = std::thread([this, options = std::move(options), start_node]() mutable { Run(std::move(options), start_node); }); }
-  catch (...) { state_.phase = "idle"; state_.consumed = false; stop_node_ = nullptr; secrets_.clear(); throw; }
+  catch (...) { lifecycle_.Stop(); state_.phase = "idle"; state_.consumed = false; stop_node_ = nullptr; secrets_.clear(); throw; }
 }
 
 void Host::Run(HostOptions options, StartNode start_node) {
@@ -271,13 +339,16 @@ void Host::Run(HostOptions options, StartNode start_node) {
     for (const auto& root : options.workspace_roots) { if (!roots.empty()) roots += ','; roots += Json(root); }
     const std::string mode = options.env.count("DSH_PERMISSION_MODE") ? options.env.at("DSH_PERMISSION_MODE") : "workspace-write";
     const std::string profile = options.dsh_home + "/ohos-host.patch.json";
-    WriteProfile(profile, "[{\"id\":\"subprocess\",\"disabled\":true},{\"id\":\"sandbox\",\"disabled\":true},"
+    const std::string safe_patch = options.safe_mode
+        ? "{\"id\":\"hmr\",\"disabled\":true}," : "";
+    WriteProfile(profile, "[" + safe_patch + "{\"id\":\"subprocess\",\"disabled\":true},{\"id\":\"sandbox\",\"disabled\":true},"
         "{\"id\":\"working-directory\",\"config\":{\"defaultDirectory\":" + Json(options.workspace_roots[0]) + "}},"
         "{\"id\":\"sandbox-policy\",\"config\":{\"mode\":" + Json(mode) + ",\"workspaceRoot\":" + Json(options.workspace_roots[0]) + "}},"
         "{\"insert\":[{\"id\":\"ohos-subprocess\",\"name\":" + Json(File(options.runtime_root, "runtime/ohos/process/index.mjs")) +
         ",\"config\":{\"workspaceRoots\":[" + roots + "],\"temporaryRoot\":" + Json(temporary) + "}},"
         "{\"id\":\"ohos-sandbox\",\"name\":" + Json(File(options.runtime_root, "runtime/ohos/process/sandbox.mjs")) + "},"
         "{\"id\":\"ohos-lifecycle\",\"name\":" + Json(File(options.runtime_root, "runtime/ohos/lifecycle/index.mjs")) + "},"
+        "{\"id\":\"ohos-phone\",\"name\":" + Json(File(options.runtime_root, "runtime/ohos/phone/index.mjs")) + "},"
         "{\"id\":\"ohos-capabilities\",\"name\":" + Json(File(options.runtime_root, "runtime/ohos/capabilities/index.mjs")) + "},"
         "{\"id\":\"dsh-go-bridge\",\"name\":" + Json(File(options.runtime_root, "runtime/bridge/dsh-go-bridge/lib/index.js")) + "}]}]\n");
     int code;
@@ -291,20 +362,31 @@ void Host::Run(HostOptions options, StartNode start_node) {
       environment.Set("NODE_COMPILE_CACHE", cache);
       environment.Set("NARB_DISABLE_NATIVE_CACHE", "1");
       environment.Set("DSH_GO_OHOS_NATIVE_LIBRARY_DIR", options.native_library_dir);
+      environment.Set("DSH_GO_OHOS_LINUX_DIRECTORY", options.linux_directory);
       environment.Set("DSH_PERMISSION_MODE", mode);
       std::vector<std::string> argv{"dsh-node", "--jitless", "--import",
         File(options.runtime_root, "runtime/ohos/preload.mjs"),
-        File(options.runtime_root, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "web", "--patch", profile,
-        "--host", "127.0.0.1", "--port", "0", "--no-open"};
+        File(options.runtime_root, "node_modules/@deepseek-ai/dsh/lib/bin.js")};
+      if (options.safe_mode) {
+        argv.insert(argv.end(), {"--profile", "dsh-app-safe", "--from-default-profile", "web"});
+      } else {
+        argv.push_back("web");
+      }
+      argv.insert(argv.end(), {"--patch", profile, "--host", "127.0.0.1", "--port", "0", "--no-open"});
       std::vector<char*> pointers;
       for (auto& value : argv) pointers.push_back(value.data());
       pointers.push_back(nullptr);
       {
         Capture capture([this](const std::string& stream, std::string line) { Line(stream, std::move(line)); }, [this] {
           // Covers stop between the cancellation check and dsh_node_start's
-          // active flag. The existing stdout reader retries without another thread.
+          // active flag. Once accepted, the runner remembers the request.
           std::lock_guard<std::mutex> lock(mutex_);
-          if (stop_requested_) stop_node_();
+          if (stop_requested_ && !stop_delivered_) stop_delivered_ = stop_node_() != 0;
+          return stop_requested_ && !stop_delivered_;
+        }, [this](int fd) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          capture_wake_ = fd;
+          if (stop_requested_) WakeCapture(capture_wake_);
         });
         // If stop arrived before the runner became active, do not initialize Node.
         bool canceled;
@@ -313,6 +395,7 @@ void Host::Run(HostOptions options, StartNode start_node) {
       }
     }
     std::lock_guard<std::mutex> lock(mutex_);
+    lifecycle_.Stop();
     state_.phase = "exited";
     state_.exit_code = code;
     state_.base_url.clear(); state_.token.clear();
@@ -320,6 +403,7 @@ void Host::Run(HostOptions options, StartNode start_node) {
   } catch (const std::exception& error) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto* known = dynamic_cast<const HostError*>(&error);
+    lifecycle_.Stop();
     state_.phase = "error";
     state_.error_code = known ? known->code : "ERR_OHOS_HOST_START";
     state_.error_message = known ? error.what() : "The embedded runtime could not be started";
@@ -330,11 +414,13 @@ void Host::Run(HostOptions options, StartNode start_node) {
 }
 
 void Host::Stop() {
+  lifecycle_.Stop();
   std::lock_guard<std::mutex> lock(mutex_);
   if (state_.phase != "starting" && state_.phase != "running" && state_.phase != "stopping") return;
   stop_requested_ = true;
   state_.phase = "stopping";
-  stop_node_();
+  if (!stop_delivered_) stop_delivered_ = stop_node_() != 0;
+  WakeCapture(capture_wake_);
 }
 
 HostState Host::State() {

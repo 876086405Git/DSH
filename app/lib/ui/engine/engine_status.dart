@@ -66,7 +66,8 @@ class EngineStatusView {
                 FailureKind.launchFailed => appL10n.phoneFailureLaunch,
                 FailureKind.startupFailed => appL10n.phoneEngineStartupFailed,
                 FailureKind.crashedEarly || FailureKind.crashedLate => appL10n.phoneEngineCrashed,
-                FailureKind.killed => appL10n.phoneEngineKilled,
+                FailureKind.killed =>
+                  status.failure!.causeUnknown ? appL10n.harmonyEngineUnclean : appL10n.phoneEngineKilled,
                 FailureKind.noSpace => appL10n.commonStorageFull,
                 null => appL10n.phoneEngineError,
               },

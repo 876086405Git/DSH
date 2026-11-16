@@ -16,7 +16,14 @@ import 'performance_policy.dart';
 /// Some ROMs (HyperOS, OriginOS, ColorOS) cap third-party apps at 60 Hz unless the app
 /// asks, and once it does they show the per-app refresh-rate switch as an in-app setting
 /// — so the app has to offer the choice itself, including handing the decision back.
-/// HarmonyOS has no such cap to ask past, so there this does nothing.
+///
+/// HarmonyOS has no such switch, but its Flutter engine votes its own rate: 120 under a
+/// finger, 60 from 3 s after, and only scrolls and routes vote in between, so springs, sheets
+/// and streaming output run at what that leaves. There active asks the engine for 120, which
+/// is a real cost rather than a preference, so it follows motion and not any frame: several
+/// frames in a row at animation cadence. A blinking cursor, two frames a second, doesn't
+/// start it or hold it up. The price is about [motionFrames] frames at the old rate at the
+/// start of a motion that no finger began.
 class RefreshRateService {
   RefreshRateService._();
 
@@ -26,13 +33,31 @@ class RefreshRateService {
   @visibleForTesting
   static MethodChannel channel = const MethodChannel('dsh/app');
 
+  /// The OS by Dart's name for it, so a test can be on another one.
+  @visibleForTesting
+  static String operatingSystem = Platform.operatingSystem;
+
   /// How long after the last frame the preference is released.
   static const idleAfter = Duration(milliseconds: 700);
+
+  /// HarmonyOS: frames this close together are animating. 20 fps, so a panel the system
+  /// has lowered to 30 Hz still counts, and a cursor's half-second blink never does.
+  static const motionGap = Duration(milliseconds: 50);
+
+  /// HarmonyOS: this many such gaps in a row are motion.
+  static const motionFrames = 3;
+
+  /// HarmonyOS: how often motion says so again. The native side stops by itself without it,
+  /// so a UI thread that stops answering can't leave 120 running.
+  static const renewEvery = Duration(seconds: 1);
 
   RefreshRateMode _mode = RefreshRateMode.auto;
   bool _active = false;
   bool _started = false;
   Timer? _idle;
+  Duration _lastFrame = Duration.zero;
+  Duration _renewedAt = Duration.zero;
+  int _motionRun = 0;
 
   RefreshRateMode get mode => _mode;
 
@@ -48,7 +73,10 @@ class RefreshRateService {
 
   static bool get _testing => Platform.environment.containsKey('FLUTTER_TEST');
 
-  static bool get _systemDecides => Platform.operatingSystem == 'ohos' || Platform.isIOS;
+  static bool get _motionOnly => operatingSystem == 'ohos';
+
+  /// iOS paces frames itself (ProMotion); nothing to ask for.
+  static bool get _systemDecides => operatingSystem == 'ios';
 
   /// Called by the settings row and by the stored preference after launch.
   Future<void> setMode(RefreshRateMode mode) async {
@@ -59,12 +87,25 @@ class RefreshRateService {
     _sendMode();
   }
 
-  void _onFrame(Duration _) {
+  void _onFrame(Duration timeStamp) {
     if (_mode != RefreshRateMode.auto) return;
+    if (_motionOnly) return _onMotionFrame(timeStamp);
     _idle?.cancel();
     _idle = Timer(idleAfter, _release);
     if (_active) return;
     _active = true;
+    _sendActive(true);
+  }
+
+  void _onMotionFrame(Duration timeStamp) {
+    _motionRun = timeStamp - _lastFrame <= motionGap ? _motionRun + 1 : 0;
+    _lastFrame = timeStamp;
+    if (_motionRun < motionFrames) return;
+    _idle?.cancel();
+    _idle = Timer(idleAfter, _release);
+    if (_active && timeStamp - _renewedAt < renewEvery) return;
+    _active = true;
+    _renewedAt = timeStamp;
     _sendActive(true);
   }
 
@@ -82,6 +123,10 @@ class RefreshRateService {
     unawaited(channel.invokeMethod<void>(method, arguments).catchError((Object _) {}));
   }
 
+  /// Test seam: a frame, since tests don't register the listener.
+  @visibleForTesting
+  void frameForTest(Duration timeStamp) => _onFrame(timeStamp);
+
   /// Test seam: forget the listener, the timer and the current mode.
   @visibleForTesting
   void resetForTest() {
@@ -90,5 +135,8 @@ class RefreshRateService {
     _mode = RefreshRateMode.auto;
     _active = false;
     _started = false;
+    _lastFrame = Duration.zero;
+    _renewedAt = Duration.zero;
+    _motionRun = 0;
   }
 }

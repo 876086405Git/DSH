@@ -73,6 +73,8 @@ enum SettingsPageId {
   phoneAndroidShell,
   phoneDnd,
   phoneUnlocks,
+  systemActions,
+  linuxEnvironment,
   webSearch,
   media,
   plugins,
@@ -125,6 +127,7 @@ class SettingsPageMeta {
     this.condition,
     this.row = true,
     this.androidOnly = false,
+    this.ohosOnly = false,
     this.iosToo = false,
   });
 
@@ -156,6 +159,8 @@ class SettingsPageMeta {
   /// or under it ([SettingsIndex.androidOnly]).
   final bool androidOnly;
 
+  /// HarmonyOS's own, where Android has a page of its own for the same idea.
+  final bool ohosOnly;
   final bool iosToo;
 
   /// The row on [parent] that opens this page.
@@ -170,6 +175,7 @@ class SettingsPageMeta {
     opens: id,
     condition: condition,
     androidOnly: androidOnly,
+    ohosOnly: ohosOnly,
     iosToo: iosToo,
   );
 }
@@ -189,8 +195,11 @@ class SettingSpot {
     this.opens,
     this.field,
     this.altTitle,
+    this.ohosTitle,
     this.androidOnly = false,
+    this.ohosOnly = false,
     this.iosToo = false,
+    this.iosLacks = false,
   });
 
   /// Stable, unique: `phone-confirm`, `page:phone`.
@@ -224,11 +233,24 @@ class SettingSpot {
   /// 恢复正常模式).
   final Label? altTitle;
 
+  /// In place of [title] where the row has another name on HarmonyOS.
+  final Label? ohosTitle;
+
+  /// The title on this OS, for what lists the spot away from its row.
+  Label titleOn({required bool harmony}) => harmony ? ohosTitle ?? title : title;
+
   /// Android's own, on a page that isn't ([SettingsIndex.androidOnly]).
   final bool androidOnly;
 
+  /// HarmonyOS's own ([SettingsPageMeta.ohosOnly]).
+  final bool ohosOnly;
+
   /// One of [androidOnly]'s that iOS has as well: only HarmonyOS goes without.
   final bool iosToo;
+
+  /// What Android and HarmonyOS have and iOS doesn't (a picture shortcut, the
+  /// refresh rate, the rescue profile).
+  final bool iosLacks;
 
   bool get isEntry => opens != null;
 }
@@ -275,11 +297,26 @@ abstract final class SettingsIndex {
   /// Search leaves these out on HarmonyOS (androidSystemFeaturesProvider).
   static bool androidOnly(SettingSpot spot) => spot.androidOnly || chain(spot.page).any((p) => page(p).androidOnly);
 
-  /// Whether the `dshgo://open/<id>` link [id] leads to something [androidOnly].
+  /// Whether the `dshgo://open/<id>` link [id] leads to something [androidOnly]
+  /// (on [ios], also to what it lacks: [SettingSpot.iosLacks]).
   static bool androidOnlyLink(String id, {bool ios = false}) {
     final spot = pageForLink(id)?.entry ?? spotForLink(id);
-    return spot != null && androidOnly(spot) && !(ios && spot.iosToo);
+    return spot != null && (androidOnly(spot) && !(ios && spot.iosToo) || ios && spot.iosLacks);
   }
+
+  /// Whether the `dshgo://open/<id>` link [id] leads to what only HarmonyOS has.
+  static bool ohosOnlyLink(String id) => pageForLink(id)?.ohosOnly ?? false;
+
+  /// The link to follow on HarmonyOS for [id]: 系统操作 stands in for 手机操控
+  /// and its 解除限制, whose hard rules it hasn't got, and the permission page
+  /// for 确认方式, which follows it there. Anything else is itself.
+  static String ohosLink(String id) => _ohosLinks[id] ?? id;
+
+  static const _ohosLinks = {
+    'phone': 'system-actions',
+    'phone-unlocks': 'system-actions',
+    'phone-confirm': 'permission',
+  };
 
   /// Pages from the hub down to [id], both included.
   static List<SettingsPageId> chain(SettingsPageId id) {
@@ -392,6 +429,24 @@ final _pages = <SettingsPageMeta>[
     iosToo: true,
   ),
   SettingsPageMeta(
+    SettingsPageId.systemActions,
+    title: (l) => l.systemActionsTitle,
+    group: _abilities,
+    keywords: (l) => l.searchKwSystemActions,
+    freq: Freq.medium,
+    links: const ['system-actions'],
+    ohosOnly: true,
+  ),
+  SettingsPageMeta(
+    SettingsPageId.linuxEnvironment,
+    title: (l) => l.linuxTitle,
+    group: _abilities,
+    keywords: (l) => l.searchKwLinux,
+    freq: Freq.low,
+    links: const ['linux'],
+    ohosOnly: true,
+  ),
+  SettingsPageMeta(
     SettingsPageId.phoneAppRules,
     title: (l) => l.phoneAppRulesTitle,
     parent: SettingsPageId.phone,
@@ -462,6 +517,7 @@ final _pages = <SettingsPageMeta>[
     title: (l) => l.botsPets,
     group: _look,
     keywords: (l) => l.searchKwPets,
+    ohosKeywords: (l) => l.harmonyKwPets,
     freq: Freq.medium,
     links: const ['pets'],
   ),
@@ -486,6 +542,7 @@ final _pages = <SettingsPageMeta>[
     title: (l) => l.voiceSettingsTitle,
     group: _general,
     keywords: (l) => l.searchKwVoice,
+    ohosKeywords: (l) => l.harmonyKwVoice,
     links: const ['voice'],
   ),
   SettingsPageMeta(
@@ -783,6 +840,7 @@ abstract final class Spots {
     page: SettingsPageId.appearance,
     title: (l) => l.pluginsColors,
     keywords: (l) => l.searchKwAccent,
+    ohosKeywords: (l) => l.harmonyKwAccent,
   );
   static final tileStyle = SettingSpot(
     'tile-style',
@@ -801,15 +859,13 @@ abstract final class Spots {
     page: SettingsPageId.appearance,
     title: (l) => l.iconShortcutRow,
     keywords: (l) => l.searchKwIconShortcut,
-    androidOnly: true,
+    iosLacks: true,
   );
   static final launchScreen = SettingSpot(
     'launch-screen',
     page: SettingsPageId.appearance,
     title: (l) => l.launchScreenTitle,
     keywords: (l) => l.searchKwLaunchScreen,
-    androidOnly: true,
-    iosToo: true,
   );
   static final wallpaper = SettingSpot(
     'wallpaper',
@@ -957,7 +1013,7 @@ abstract final class Spots {
     page: SettingsPageId.performance,
     title: (l) => l.performanceRefresh,
     keywords: (l) => l.searchKwRefreshRate,
-    androidOnly: true,
+    iosLacks: true,
   );
   static final blur = SettingSpot(
     'blur',
@@ -1014,7 +1070,9 @@ abstract final class Spots {
     'notify-live',
     page: SettingsPageId.notifications,
     title: (l) => l.liveSettingsSwitch,
+    ohosTitle: (l) => l.harmonyLiveSwitch,
     keywords: (l) => l.searchKwNotifyLive,
+    ohosKeywords: (l) => l.harmonyKwNotifyLive,
   );
   static final notifySystem = SettingSpot(
     'notify-system',
@@ -1066,7 +1124,7 @@ abstract final class Spots {
     title: (l) => l.phoneSafeStartSettings,
     altTitle: (l) => l.phoneSafeLeave,
     keywords: (l) => l.searchKwSafeMode,
-    androidOnly: true,
+    iosLacks: true,
   );
   static final workspaceRecovery = SettingSpot(
     'workspace-recovery',
@@ -1080,16 +1138,13 @@ abstract final class Spots {
     page: SettingsPageId.engine,
     title: (l) => l.phoneEngineReset,
     keywords: (l) => l.searchKwEngineReset,
-    androidOnly: true,
-    iosToo: true,
   );
   static final engineUninstall = SettingSpot(
     'engine-uninstall',
     page: SettingsPageId.engine,
     title: (l) => l.localEnvUninstall,
     keywords: (l) => l.searchKwEngineUninstall,
-    androidOnly: true,
-    iosToo: true,
+    ohosKeywords: (l) => l.harmonyKwEngineUninstall,
   );
 
   // 远程主机.

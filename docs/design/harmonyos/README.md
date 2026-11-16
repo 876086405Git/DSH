@@ -1,5 +1,30 @@
 # 鸿蒙本机运行时总览
 
+## 当前状态（2026-11-16）
+
+- **在真机上跑。** 2026-11-06 起，测试包旁加载在 HBN-AL00（HarmonyOS 7.0.0.111）上，本机引擎、远程主机、系统操作和 Linux 环境都在用；构建与安装步骤见 [`app/ohos/README.md`](../../../app/ohos/README.md)，第一次上机见 [first-device](first-device.md)。还没有上架应用市场（[distribution-builds](distribution-builds.md)）。
+- **和 Android 对齐。** 目标是功能一致、界面优先。下表是 11-02 之后接上的通道；每项哪些边界还待真机确认，以各专题文档为准。
+
+| 功能 | 通道 / 组件 | 专题 |
+|---|---|---|
+| 朗读（系统 TTS 与 DeepSeek） | `dsh/speech`（`SpeechPlugin.ets`） | [speech-channel](speech-channel.md)、[speech-pcm](speech-pcm.md) |
+| 语音通话：采集、能量判停、播放与输出路由、静音 | `OhosSpeechCall.ets`、`OhosCallCapture.ets`、`OhosCallRoute.ets` | [speech-call-capture](speech-call-capture.md)、[speech-call-playback](speech-call-playback.md) |
+| 实时字幕（系统流式识别） | `StreamingAsrPlugin.ets`、Dart `voice/live_words_model.dart` | [system-captions](system-captions.md) |
+| 伙伴的声音 | `CompanionVoicePlugin.ets` | [speech-channel](speech-channel.md) |
+| 聊天视频 | `MediaVideoPlugin.ets` | [media-video](media-video.md) |
+| 图片桌面快捷方式 | `PictureShortcutPlugin.ets`（AppGallery Kit） | [picture-shortcut](picture-shortcut.md) |
+| 伙伴桌面卡片 | `CompanionFormAbility`、`widget/pages/CompanionCard.ets` | [companion-widget](companion-widget.md) |
+| 本应用键盘几何诊断、自动故障分析 | `OhosKeyboardLog.ets`、`OhosFaultEvents.ets` | [keyboard-geometry](keyboard-geometry.md)、[diagnostics-channel](diagnostics-channel.md) |
+| Linux 环境（TinyEMU 客体，关闭后需重开 App） | `LinuxControl.ets`、`runtime/ohos/linux/` | [app-linux-control-930](app-linux-control-930.md) |
+
+- **仍然没有的。** 手机操控（换成系统操作，`ets/phone/`）、App 外的宠物和悬浮条、无障碍、通知里的审批、App 内更新。用户看到的差别写在 `docs/guide/harmony/`。
+- **引擎补丁。** `runtime/patches/series` 是唯一顺序，`pins.json` 的 `targetSets.android` 等于 main 的整条链，`targetSets.ohos` 是公共链加 `ohos-*` 覆盖补丁；Android 的运行时字节由门禁对照 main 保证不变。
+- **检查。** 严格 ArkTS 用 `tooling/ohos/check-arkts.sh`；全量门禁用 `tooling/ohos/run-gates.sh`（[GATES.zh.md](../../../tooling/ohos/GATES.zh.md)）。
+
+下面第 1–6 节是 2026-11-02 的证据截面，保留原样作为历史：其中「还没有在设备上跑过」「UNCOMPILED_HMS」「`dsh/speech` 未实现」等说法以上面的当前状态为准。
+
+---
+
 本总览对应 **530f183906be2a218b1b09000400e01c9a572dba** 及 2026-11-02 的后继交付。它说明当前架构、能力差异、应用关系和仍需验证的边界，不替代各个精确补丁的独立报告。
 
 目前有证据支持的是：固定运行时组成物在 Linux 的实际安装、宿主预检和严格 DSH 回合；多组精确源代码的公开 SDK 严格 ArkTS 编译；部分公开原生模块的离线构建与符号审计。**这些都不等于目标手机上的完整功能通过。** 主线在追加 10 中报告过 530 基底的完整未签名 `--full` HAP 和审计 0 问题，但没有签名、安装或设备运行；本轮后继组合也不能直接沿用该旧完整 HAP 的结论。[证据 E01](evidence-20261102.md#e01)
@@ -110,7 +135,7 @@ flowchart TD
 |---|---|---|
 | `dsh/runtime` | status/install/start/stop/logs/events、guestRoot、reopenApp、托管技能 | 一进程一次 Node；目标装载/重启/后台真实行为待设备 |
 | `dsh/files`、`dsh/media` | 安全 FD 后复制，系统打开/保存、相册确认、DSH-Go 产出列表 | 强制选择打开 App 不支持；URI 提供方写入无跨提供方原子回滚保证 |
-| `dsh/app`、`dsh/links` | 时区、固定自身 Ability 回前台、冷/热深链及外来文件及时复制 | 强制高刷新率不支持，采用 system；后台拉起不绕过系统限制 |
+| `dsh/app`、`dsh/links` | 时区、固定自身 Ability 回前台、冷/热深链及外来文件及时复制 | 刷新率的 auto/max 靠引擎的 `LTPODispatchHighFrameRate`，真实帧率待设备；后台拉起不绕过系统限制 |
 | connectivity_plus | 承载类型列表和事件，失败不伪装 none | 有网络不等于互联网可达；真实 observer 回收待设备 |
 | `dsh/notify` | 普通锁屏安全文字提醒、HMAC 导航点击、串行取消 | 通知外审批/拒绝、实况窗不支持；publish 成功不证明已展示 |
 | `dsh/web-files` | 系统文档选择、accept 后缀提示、owner 取消与迟到结果隔离 | 无已证的原生可见 WebView 校验；回调取消不等于关闭系统 picker；ArkWeb 临时 URI 上传待设备 |
@@ -122,10 +147,12 @@ flowchart TD
 | share_plus、`dsh/share` | HMS 发出及冷/热接收候选、URI 即时复制、owner/物理面板归属 | v2 已关闭不同 Context 缓存路径错拒；整体仍 **BLOCKED（UNCOMPILED_HMS）**；dismiss 先到不能猜成功 |
 | `dsh/voice` | HMS 识别与公开录音候选，权限生命周期、16 kHz 单声道 16 bit WAV | **UNCOMPILED_HMS**；离线模型接口 unsupported，地区/语言/真实麦克风待验证 |
 | `pdfInfo/pdfPage/pdfClose` | HMS PDF 候选、安全副本、renderer/fd/缓存归属，缓存消失可退休 | **UNCOMPILED_HMS**；真实 PDFKit 解码与页图未测；已审公开 fallback 仍可系统打开 |
+| `dsh/app.scanQrCode` | 扫码配对电脑：Scan Kit 默认界面扫码（系统页面带相册入口），取消返回 null | **UNCOMPILED_HMS**；模块名依据华为文档离线镜像，真实扫码页、取消码与相册识码待设备 |
 | 输入法粘贴 | 39 修复 helper 拒绝/异常路径的 Promise 结算，空值不删除选区 | 主线必须实际采用 prepared HAR；ACL 待项目账号，未加 READ_PASTEBOARD，未接原生 PasteButton fallback |
 | `dsh/usage` | 当前不填造假 OH 事实 | **协议 BLOCKED**；v1 sdk 是 Android level、无 platform，需客户端/服务端共同版本化决定 |
+| `dsh/speech`、`dsh/voice.streamingPcm` | 11-02 时未实现；之后已接上朗读、语音通话和实时字幕，见文首「当前状态」 | 见 [speech-channel](speech-channel.md)、[system-captions](system-captions.md) |
 
-通道行为与状态来源分别见 E03、E06、E11–E21；专题入口见末节。三个公开原生主包的编译结论分别绑定各自最小 Entry；顺序增量合成的共享 Entry 只有源码应用证明，不能直接继承为新的完整组合编译结论。HMS 声明占位的严格 ArkTS 0 错误只检查调用方，不能改写上述三个 **UNCOMPILED_HMS**。[证据表](evidence-20261102.md)
+通道行为与状态来源分别见 E03、E06、E11–E21；专题入口见末节。三个公开原生主包的编译结论分别绑定各自最小 Entry；顺序增量合成的共享 Entry 只有源码应用证明，不能直接继承为新的完整组合编译结论。HMS 声明占位的严格 ArkTS 0 错误只检查调用方，不能改写上述四个 **UNCOMPILED_HMS**。[证据表](evidence-20261102.md)
 
 ## 4. 异步所有权与恢复的共同规则
 

@@ -4918,6 +4918,9 @@ class L10nEn extends L10n {
   String get chatErrApiKey => 'API key is invalid or expired';
 
   @override
+  String get chatErrForbidden => 'Credentials unavailable or permission denied';
+
+  @override
   String get chatErrBalance => 'Insufficient balance';
 
   @override
@@ -6160,7 +6163,7 @@ class L10nEn extends L10n {
 
   @override
   String get automaticDiagnosticsConsent =>
-      'On a failure, the app sends redacted versions, Android system facts, runtime state, error categories, voice stages and its own process exit reasons to the model provider configured on your local engine. Model charges may apply. No chat text, recordings, credentials or raw logs are included. Reports stay in a separate read-only analysis conversation without changing your current chat. No automatic repairs or GitHub publication. Disabling or switching hosts blocks new analyses and attempts to stop existing analysis; data already sent cannot be retracted.';
+      'On a failure, the app sends redacted versions, device and system facts, runtime state, error categories, voice stages and its own process exit reasons to the model provider configured on your local engine. Model charges may apply. No chat text, recordings, credentials or raw logs are included. Reports stay in a separate read-only analysis conversation without changing your current chat. No automatic repairs or GitHub publication. Disabling or switching hosts blocks new analyses and attempts to stop existing analysis; data already sent cannot be retracted.';
 
   @override
   String get automaticDiagnosticsEnable => 'Agree and enable';
@@ -6207,6 +6210,19 @@ class L10nEn extends L10n {
 
   @override
   String get systemImeTitle => 'System input-method diagnostics';
+
+  @override
+  String get systemImeOhosTitle => 'This app\'s keyboard geometry';
+
+  @override
+  String get systemImeOhosCollect => 'Export recent keyboard geometry';
+
+  @override
+  String get systemImeOhosPrivacy =>
+      'Reproduce first, then export. Only the last 120 seconds of this app\'s main window: the keyboard showing, its height and the area it covers (64 entries at most); no typed text, no system IME log.';
+
+  @override
+  String get systemImeOhosUnavailable => 'The main window is not available right now; go back to a chat and try again';
 
   @override
   String get systemImeCollect => 'Capture recent events';
@@ -8892,14 +8908,14 @@ class L10nEn extends L10n {
   String get harmonyKwSystemAccess => 'permissions,grant,microphone,notification permission,reply alerts,voice input';
 
   @override
-  String get harmonyBackgroundSubtitle => 'On-device chats pause when the app leaves the screen';
+  String get harmonyBackgroundSubtitle => 'On-device chats pause soon after the app leaves the screen';
 
   @override
   String get harmonyBackgroundAway => 'When the app leaves the screen';
 
   @override
   String get harmonyBackgroundLocal =>
-      'The system suspends the app within seconds, and a running conversation pauses with it. It tries to pick up when you come back';
+      'A running conversation may go on for a short while, as long as the system allows. Then it pauses with the app, and tries to pick up when you come back';
 
   @override
   String get harmonyBackgroundRemoteTitle => 'Connected remote host';
@@ -8917,34 +8933,34 @@ class L10nEn extends L10n {
   String get harmonyBackgroundUseRemote => 'Or run them on a connected remote host';
 
   @override
-  String get harmonyEngineBackgroundHint => 'The on-device engine pauses when the app leaves the screen';
+  String get harmonyEngineBackgroundHint => 'The on-device engine pauses soon after the app leaves the screen';
 
   @override
   String get harmonyKwBackground => 'background activity,keep alive,suspended,paused,killed';
 
   @override
-  String get harmonyPausedInBackground => 'Paused while in the background';
+  String get harmonyPausedInBackground => 'May have paused in the background';
 
   @override
   String get harmonyAlertsRequirement =>
-      'Alerts need the app running: the system suspends it seconds after it leaves the screen, and none go out then';
+      'Alerts need the app running: the system suspends it soon after it leaves the screen, and none go out then';
 
   @override
-  String get harmonyLiveUnavailable => 'Live activities aren\'t available in this version yet';
+  String get harmonyLiveUnavailable => 'This version has no progress notification';
 
   @override
   String get harmonySchedulesLocal =>
       'Tasks on this phone only fire while the app is running: they won\'t run on time while the system has it suspended';
 
   @override
-  String get harmonyPageUnavailable => 'This page isn\'t available in this version yet';
+  String get harmonyPageUnavailable => 'This page isn\'t available in this version';
 
   @override
   String get harmonyNotificationSettingsFailed =>
       'Couldn’t open system settings. Turn on notifications in Settings → Notifications & status bar → DSH Go.';
 
   @override
-  String get harmonySearchUnavailable => 'This isn\'t available in this version yet';
+  String get harmonySearchUnavailable => 'This isn\'t available in this version';
 
   @override
   String get harmonyCredentialsSection => 'Keys';
@@ -8975,6 +8991,264 @@ class L10nEn extends L10n {
   @override
   String get harmonyIconChangeFailed =>
       'Couldn’t change it. The launcher icon can’t change under a custom theme or in an app twin.';
+
+  @override
+  String get harmonyEngineUnclean => 'Didn\'t exit cleanly';
+
+  @override
+  String get harmonyFailureUnclean => 'The engine didn\'t exit cleanly';
+
+  @override
+  String get harmonyFailureUncleanHint =>
+      'The cause isn\'t known: the system may have reclaimed the app, the app may have been closed, or the engine may have hit an error.';
+
+  @override
+  String get harmonyFailureHeld =>
+      'This has happened several times in a row, so the engine won\'t start by itself. Try again, or start another way.';
+
+  @override
+  String get harmonyResetKept =>
+      'Your host list, app settings and saved keys aren\'t affected. The app reopens and finishes the reset as it opens.';
+
+  @override
+  String get harmonyResetReopening => 'Reset saved. The app is reopening';
+
+  @override
+  String get harmonyResetCommittedTitle => 'The app still needs to reopen';
+
+  @override
+  String get harmonyResetCommittedBody =>
+      'The reset is saved and finishes the next time the app opens. Reopen now, or close and open it yourself.';
+
+  @override
+  String get harmonyResetUnknownTitle => 'Not sure the reset was saved';
+
+  @override
+  String get harmonyResetUnknownBody =>
+      'Reopen the app. If it was saved, the reset finishes then. If not, your chats and files are still there.';
+
+  @override
+  String get harmonyResetNotCommittedTitle => 'Nothing was reset';
+
+  @override
+  String get harmonyResetNotCommittedBody =>
+      'Your chats and files are still there. The engine has stopped and comes back when the app reopens.';
+
+  @override
+  String get harmonyResetInstalling => 'The runtime is installing. Try again once it\'s done';
+
+  @override
+  String get harmonyResetOlderPendingTitle => 'A reset is already waiting';
+
+  @override
+  String get harmonyResetOlderPendingBody => 'Reopen the app to finish it. These choices weren\'t applied.';
+
+  @override
+  String get harmonyReopenApp => 'Reopen';
+
+  @override
+  String get harmonyResetPendingTitle => 'The reset isn\'t finished';
+
+  @override
+  String get harmonyResetPendingBody => 'Reopen the app to go on. The local engine won\'t start until then.';
+
+  @override
+  String get harmonyResetFinishing => 'Finishing the reset';
+
+  @override
+  String get harmonyResetDone => 'The runtime has been reset';
+
+  @override
+  String get harmonyResetMaybeDone =>
+      'The app reopened. If your chats are still there, this reset didn\'t take effect and you can try again.';
+
+  @override
+  String get harmonyUninstallHint => 'Deletes the unpacked runtime and local data';
+
+  @override
+  String get harmonyUninstallBody =>
+      'This phone\'s chats, workspaces, plugins, settings, interface config and skills are deleted too, and the app reopens. The copy of the runtime inside the app package stays; only uninstalling the app frees it.';
+
+  @override
+  String get harmonyKwEngineUninstall => 'uninstall,remove runtime,clear local data';
+
+  @override
+  String get harmonyUpdateNoticeTitle => 'See the release page for how to get it';
+
+  @override
+  String get harmonyUpdateNoticeText =>
+      'HarmonyOS can\'t update inside the app, and the release page may not have a HarmonyOS package yet.';
+
+  @override
+  String get harmonyUpdateNoticeNoPage => 'This version has no download page yet. Check again later.';
+
+  @override
+  String get harmonyLiveTitle => 'Progress notification';
+
+  @override
+  String get harmonyLiveSwitch => 'Show a progress notification';
+
+  @override
+  String get harmonyLiveSubtitle => 'Keeps one status notification while a conversation runs';
+
+  @override
+  String get harmonyLiveFooter => 'This is a plain notification. It stops updating once the system suspends the app.';
+
+  @override
+  String get harmonyLockScreenPrivacy =>
+      'Whether the lock screen shows chat content is up to the system: check its lock screen notification setting';
+
+  @override
+  String get harmonyLiveBlockedTitle => 'The system isn\'t allowing progress notifications';
+
+  @override
+  String get harmonyLiveBlockedText => 'Turn on notifications for DSH Go in system settings';
+
+  @override
+  String get harmonyAlertsOffTitle => 'Alert notifications are off';
+
+  @override
+  String get harmonyAlertsOffText => 'You won\'t be alerted when a reply finishes or needs your approval';
+
+  @override
+  String get harmonyEnableBanner => 'Banners are off by default. To see them, turn on banner notifications';
+
+  @override
+  String get harmonyKwNotifyLive => 'progress notification,notification progress,status bar progress';
+
+  @override
+  String get harmonyTerminalNoPty => 'This engine has no interactive terminal. Connect to an SSH host for one';
+
+  @override
+  String get harmonyTerminalSupportedHosts => 'Available on SSH hosts';
+
+  @override
+  String get harmonyPluginRemoveRefused => 'This engine can\'t remove plugins';
+
+  @override
+  String get harmonyPluginRefusedHint =>
+      'You can turn bundled plugins on or off, or connect a computer to manage plugins';
+
+  @override
+  String get harmonyVoiceLocalLine => 'On-device HarmonyOS has no voice model';
+
+  @override
+  String get harmonyPasswordStorageHelp => 'Saved only on this phone, encrypted by the system keystore';
+
+  @override
+  String get harmonyKeyStorageHelp =>
+      'Saved only on this phone, encrypted by the system keystore. Supports Ed25519, RSA and ECDSA.';
+
+  @override
+  String get harmonyUsageNotSent => 'Usage statistics aren\'t sent on HarmonyOS for now';
+
+  @override
+  String get harmonyVoiceSystemHint => 'Uses the system\'s speech recognition';
+
+  @override
+  String get harmonyVoiceSystemHintChinese => 'Uses the system\'s speech recognition, Chinese only';
+
+  @override
+  String get harmonyVoiceAutoHint =>
+      'Uses DeepSeek when you\'re signed in or have an API key, otherwise the system\'s speech recognition';
+
+  @override
+  String get harmonyVoiceSystemUnavailable => 'The system\'s speech recognition isn\'t available';
+
+  @override
+  String get harmonyNetworkRelayOnly => 'This version goes through the relay, end-to-end encrypted the whole way.';
+
+  @override
+  String get harmonyNetworkFallbackRelayOnly => 'This version only uses the relay';
+
+  @override
+  String get harmonySetupStay => 'Stay on this page while it installs';
+
+  @override
+  String get harmonyLaunchEmbedded => 'Inside the app';
+
+  @override
+  String get harmonyLaunchNodeExited => 'The engine exited';
+
+  @override
+  String get harmonyKwAccent => 'color,colour,accent,palette';
+
+  @override
+  String get harmonyKwPets => 'pet,pets,companion,whale';
+
+  @override
+  String get harmonyKwVoice => 'speech recognition,dictation,microphone,mic,voice';
+
+  @override
+  String get harmonyBackgroundSubtitleLong =>
+      'A running conversation tries to keep going after the app leaves the screen';
+
+  @override
+  String get harmonyBackgroundLocalLong =>
+      'This version can ask for a long-running task: the conversation goes on in the background, with a notice in the notification bar. If the system says no or takes it back, it pauses with the app, and tries to pick up when you come back';
+
+  @override
+  String get harmonyEngineBackgroundHintLong => 'A running conversation tries to keep going after you leave the screen';
+
+  @override
+  String get harmonyAlertsRequirementLong =>
+      'Alerts need the app running: they go out while a conversation carries on in the background, and stop once the system suspends the app';
+
+  @override
+  String get harmonySaveToFile => 'Save to file';
+
+  @override
+  String get harmonySaveChooseLocation => 'Choose where to save';
+
+  @override
+  String get harmonySaving => 'Saving…';
+
+  @override
+  String get harmonySaved => 'Saved';
+
+  @override
+  String get harmonyCommandExportDescription => 'Export this chat’s full history as a ZIP to share or save to a file';
+
+  @override
+  String get harmonySafeEnterTitle => 'Start in Safe mode?';
+
+  @override
+  String get harmonySafeEnterBody =>
+      'Starts with the default configuration that comes with the app, without the plugins you installed. Your chats stay, and your own configuration isn\'t changed.';
+
+  @override
+  String get harmonySafeReopenNote => 'Replies in progress stop, and the app reopens.';
+
+  @override
+  String get harmonyRestoredReopening => 'Restored the last good configuration. The app is reopening';
+
+  @override
+  String harmonySafeRepairPrompt(String what) {
+    return 'My DSH has a problem in normal mode ($what). It\'s in Safe mode now, on the default configuration that comes with the app, and my own configuration is untouched. Find the cause, and tell me what you\'d change before changing it.';
+  }
+
+  @override
+  String get harmonyRemindersTitle => 'Alarms and timers';
+
+  @override
+  String get harmonyRemindersCanHint =>
+      'The system reminds you when it\'s time; the engine doesn\'t run for it. The system can still say no, and the AI is told';
+
+  @override
+  String get harmonyRemindersNoBuild => 'This version doesn\'t have system reminders';
+
+  @override
+  String get harmonyRemindersNoDevice => 'This device doesn\'t have system reminders';
+
+  @override
+  String get harmonyReminderSet => 'Reminder set';
+
+  @override
+  String get harmonyReminderRefused =>
+      'The system didn\'t accept the reminder, so nothing was set. It may be at its limit, or this version may not have the service.';
+
+  @override
+  String get harmonyPluginVoiceUnavailable => 'This device can\'t listen for you';
 
   @override
   String get hostDetailsConnectionType => 'Connection type';
@@ -10082,6 +10356,151 @@ class L10nEn extends L10n {
   String get searchKwIconShortcut => 'shortcut,custom icon,home screen picture';
 
   @override
+  String get linuxTitle => 'Linux environment';
+
+  @override
+  String get linuxSubtitle => 'Run gh, Python, git and other command-line tools on this phone';
+
+  @override
+  String get linuxSwitch => 'Turn on Linux';
+
+  @override
+  String get linuxStatus => 'Status';
+
+  @override
+  String get linuxFirstHint =>
+      'The first time downloads a 3.5 MB base system and installs it, which takes a minute or two. After that it starts in seconds.';
+
+  @override
+  String get linuxMemoryNote =>
+      'While Linux is on, the app uses roughly 100 MB more memory. Turning it off gives that back; turning it on again then needs the app reopened.';
+
+  @override
+  String get linuxStateOn => 'On';
+
+  @override
+  String get linuxStateOff => 'Off';
+
+  @override
+  String get linuxStateInstalling => 'Getting ready';
+
+  @override
+  String get linuxStateStopping => 'Turning off';
+
+  @override
+  String get linuxStateFailed => 'Failed';
+
+  @override
+  String get linuxStateUnavailable => 'Unavailable';
+
+  @override
+  String get linuxStageDownload => 'Downloading the base system';
+
+  @override
+  String get linuxStageDisk => 'Preparing disks';
+
+  @override
+  String get linuxStageBoot => 'Starting';
+
+  @override
+  String get linuxStageTools => 'Installing tools';
+
+  @override
+  String get linuxEngineOffline => 'The on-device engine isn’t running. Start it, then turn Linux on.';
+
+  @override
+  String get linuxRequestFailed => 'Couldn’t reach the engine. Try again in a moment.';
+
+  @override
+  String get linuxRestartRequired => 'Linux has stopped. Reopen the app to turn it on again.';
+
+  @override
+  String get linuxReopenApp => 'Reopen app';
+
+  @override
+  String get linuxReopenFailed => 'Couldn\'t reopen the app. Quit it and open it again.';
+
+  @override
+  String linuxErrorWithCode(String code) {
+    return 'Couldn’t turn on: $code';
+  }
+
+  @override
+  String get linuxReinstall => 'Reinstall Linux';
+
+  @override
+  String get linuxReinstallHint => 'Deletes everything inside Linux; turning it on again installs it fresh';
+
+  @override
+  String get linuxReinstallAfterRestart =>
+      'Linux already started in this run of the app. Quit and reopen the app to reinstall';
+
+  @override
+  String get linuxReinstallTitle => 'Reinstall Linux?';
+
+  @override
+  String get linuxReinstallBody =>
+      'This deletes everything inside Linux: installed software and Python packages, files that exist only inside Linux, and accounts signed in there (such as gh). Files in your chat workspaces aren’t touched.\n\nThe switch stays off; turning it on afterwards downloads and installs Linux again.';
+
+  @override
+  String linuxRetainedRefused(String code) {
+    return 'The existing Linux data can’t be used any more (usually after an app update), and the app won’t overwrite it on its own. Tap Reinstall Linux to delete it, then turn Linux on for a fresh install. ($code)';
+  }
+
+  @override
+  String get linuxReinstallRestart =>
+      'Linux already started in this run of the app, so its data may still be in use. Quit and reopen the app, then tap Reinstall Linux.';
+
+  @override
+  String linuxReinstallFailed(String code) {
+    return 'Couldn’t reinstall: $code';
+  }
+
+  @override
+  String get linuxProxyTitle => 'Network proxy';
+
+  @override
+  String get linuxProxyFooter =>
+      'Applies only to commands inside Linux. Gitee, Huawei Cloud and other mirrors in China always connect directly.';
+
+  @override
+  String get linuxProxyMode => 'Mode';
+
+  @override
+  String get linuxProxyInherit => 'Same as app';
+
+  @override
+  String get linuxProxyDirect => 'No proxy';
+
+  @override
+  String get linuxProxyManual => 'Manual';
+
+  @override
+  String get linuxProxyHttp => 'HTTP proxy';
+
+  @override
+  String get linuxProxyHttps => 'HTTPS proxy';
+
+  @override
+  String get linuxProxyNoProxy => 'Bypass for';
+
+  @override
+  String get linuxProxyUnset => 'Not set';
+
+  @override
+  String get linuxProxySameAsHttp => 'Same as HTTP';
+
+  @override
+  String get linuxProxyLoopbackNote => '127.0.0.1 means this phone, not your computer.';
+
+  @override
+  String get linuxProxyUrlInvalid =>
+      'Enter an address starting with http:// or https://, such as http://127.0.0.1:7890';
+
+  @override
+  String get searchKwLinux => 'Linux,terminal,command line,virtual machine,gh,GitHub CLI,python,pip,proxy';
+
+  @override
   String get liveThinking => 'Thinking';
 
   @override
@@ -11151,6 +11570,16 @@ class L10nEn extends L10n {
   @override
   String get performanceRefreshHint =>
       'Auto: fastest while drawing, handed back when still; System: the system decides.';
+
+  @override
+  String get performanceRefreshHintOhos =>
+      'Auto: fastest while things move, handed back when still; Max: always fastest, more battery and heat; System: asks for nothing extra.';
+
+  @override
+  String get performanceFrameCache => 'Frame cache';
+
+  @override
+  String get performanceFrameCacheHint => 'Smoother, with slightly more touch delay';
 
   @override
   String get searchKwRefreshRate => 'refresh rate high refresh 120Hz 90Hz smooth';
@@ -13214,23 +13643,6 @@ class L10nEn extends L10n {
       'Your root manager (Magisk, KernelSU or APatch) will ask you. If you allow it, DSH Go runs its own background service as root. It asks again on its own after a disconnect or restart only with “Keep root channel” on.';
 
   @override
-  String get phoneGateCleanupTitle => 'Probe cleanup not confirmed';
-
-  @override
-  String get phoneGateCleanupUnknown =>
-      'New background resources are blocked. Retry only the original cleanup if its channel is still available. This does not rerun the probe.';
-
-  @override
-  String get phoneGateCleanupRunning =>
-      'Waiting for the original probe and its cleanup. The channel stays pinned until cleanup is confirmed.';
-
-  @override
-  String get phoneGateCleanupRetry => 'Retry cleanup only';
-
-  @override
-  String get phoneGateCleanupDone => 'Cleanup confirmed. Choose the channel again explicitly to run a fresh check.';
-
-  @override
   String phoneKeepTitle(String mode) {
     String _temp0 = intl.Intl.selectLogic(mode, {
       'shizuku': 'Keep Shizuku channel',
@@ -13274,24 +13686,6 @@ class L10nEn extends L10n {
 
   @override
   String get phoneKeepFailed => 'Couldn’t reconnect. Tries again when you open the app or start a task.';
-
-  @override
-  String get phoneResourceRecoveryTitle => 'Background resources need verification';
-
-  @override
-  String get phoneResourceRecoveryRunning =>
-      'Checking the original resource records. New phone tasks will wait until this finishes.';
-
-  @override
-  String get phoneResourceRecoveryStorage =>
-      'The resource record could not be read or saved. Retry saving or reading it. A confirmed release is not repeated, and past actions are not replayed.';
-
-  @override
-  String get phoneResourceRecoveryPending =>
-      'Old background resources have not been verified. New phone tasks are blocked. Choose the original authorized channel and retry; if verification remains unavailable, restart the device and check again. Past actions may already have happened. Reading the task interruption notice does not clear these resources.';
-
-  @override
-  String get phoneResourceRecoveryRetry => 'Retry resource verification';
 
   @override
   String get phoneSkillSectionTitle => 'Completed tasks and skills';
@@ -17185,6 +17579,29 @@ class L10nEn extends L10n {
   String get remoteNetworkObservedAt => 'Last checked';
 
   @override
+  String get remoteHostedLoadFailed => 'Couldn’t read saved links. Please retry.';
+
+  @override
+  String get remoteHostedSaveFailed => 'Changes to your shared links haven’t been saved. Please retry.';
+
+  @override
+  String get remoteHostedDeleteSaveFailed => 'Deletion wasn’t scheduled. The link is still active. Please retry.';
+
+  @override
+  String get remoteHostedUndoUnsaved =>
+      'Deletion is cancelled for this session, but the undo wasn’t saved. It may resume after restart. Retry saving in My shared links.';
+
+  @override
+  String get remoteHostedUndoFailed => 'Couldn’t restore sharing. Deletion may have started. Check My shared links.';
+
+  @override
+  String get remoteHostedCreatedUnsaved =>
+      'Your link is ready to copy and use, but wasn’t saved on this device. Keep a copy and retry saving in My shared links.';
+
+  @override
+  String get remoteHostedStopFailed => 'Couldn’t stop sharing. The link is still active. Please retry.';
+
+  @override
   String get remoteNetworkLocalIpVersion => 'Phone ICE IP version';
 
   @override
@@ -17258,6 +17675,12 @@ class L10nEn extends L10n {
 
   @override
   String get remotePairCameraFailed => 'The camera didn’t open. Use From photos or Paste pairing link.';
+
+  @override
+  String get remotePairSystemScan => 'Scan';
+
+  @override
+  String get remotePairSystemScanHint => 'Opens the system scanner; it can also read a screenshot from your photos';
 
   @override
   String get remotePairReading => 'Reading the pairing code…';
@@ -19259,6 +19682,27 @@ class L10nEn extends L10n {
   String get speechLiveName => 'Streaming recognizer';
 
   @override
+  String get speechLiveSystemName => 'System recognizer (Mandarin)';
+
+  @override
+  String get speechLiveSystemReadyNote => 'Provided by HarmonyOS, no model to download; calls use it automatically';
+
+  @override
+  String get speechLiveSystemBusy => 'In use';
+
+  @override
+  String get speechLiveSystemBusyNote => 'Voice input or another recognition is using it; tap Retry when it is done';
+
+  @override
+  String speechLiveSystemFailedNote(String reason) {
+    return 'System recognition isn\'t available on this phone now: $reason';
+  }
+
+  @override
+  String get speechLiveSystemFooter =>
+      'Captions and barge-in detection run on the phone through the HarmonyOS recognizer; the text sent to the AI still comes from the recognition chosen above, and a cloud choice uploads the recording.';
+
+  @override
   String speechLiveAbsentNote(String mb) {
     return 'Download it and calls show your words as you speak, and stop sooner when you cut in. About $mb; it runs on the phone';
   }
@@ -20796,6 +21240,244 @@ class L10nEn extends L10n {
 
   @override
   String get appSlogan => 'Anytime, anywhere. Just Go!';
+
+  @override
+  String get statePasteEmpty => 'The clipboard has no text to paste.';
+
+  @override
+  String get statePasteDenied => 'Paste was not authorized. Tap the Paste button again.';
+
+  @override
+  String get statePasteBusy => 'The paste window is still active or closing. Finish or cancel it, then try again.';
+
+  @override
+  String get statePasteFailed => 'Could not read the clipboard. Try again or enter the text manually.';
+
+  @override
+  String get systemActionsTitle => 'System actions';
+
+  @override
+  String get systemActionsSubtitle => 'Let the AI open apps and system pages for you. Turn it off anytime';
+
+  @override
+  String get systemActionsReady => 'On';
+
+  @override
+  String get systemActionsWaitingEngine => 'On, waiting for the local engine';
+
+  @override
+  String get systemActionsOffScreen => 'On, works once you\'re back in DSH Go';
+
+  @override
+  String get systemActionsConnecting => 'Connecting';
+
+  @override
+  String get systemActionsUnavailable => 'On, can\'t connect right now, retrying';
+
+  @override
+  String get systemActionsUnsupported => 'Not available in this version';
+
+  @override
+  String get systemActionsToggleFailed => 'Couldn\'t save. Try again';
+
+  @override
+  String get systemActionsRemoteTitle => 'You\'re connected to a remote host';
+
+  @override
+  String get systemActionsRemoteHint => 'System actions only work in the local engine\'s chats';
+
+  @override
+  String get systemActionsOnScreenTitle => 'Only works with DSH Go on screen';
+
+  @override
+  String get systemActionsOnScreenBody =>
+      'The system doesn\'t let background apps do these. After the AI opens another app, it can\'t go on until you\'re back in DSH Go.';
+
+  @override
+  String get systemActionsCanTitle => 'What it can do';
+
+  @override
+  String get systemActionsCanOpen => 'Open an app or link';
+
+  @override
+  String get systemActionsCanOpenHint => 'Apps by package name, not by display name';
+
+  @override
+  String get systemActionsCanPages => 'Calendar, dialer, share, navigation';
+
+  @override
+  String get systemActionsCanPagesHint => 'Opens the system page; the last step is yours';
+
+  @override
+  String get systemActionsCanSettings => 'Some system settings pages';
+
+  @override
+  String get systemActionsCanSettingsHint => 'Mobile network, display, sound, NFC and this app\'s notifications';
+
+  @override
+  String get systemActionsCanNotify => 'Send a notification';
+
+  @override
+  String get systemActionsCanNotifyHint => 'Sending it doesn\'t mean you\'ve seen it';
+
+  @override
+  String get systemActionsCanClipboard => 'Write the clipboard';
+
+  @override
+  String get systemActionsCanClipboardHint => 'Write only, never read';
+
+  @override
+  String get systemActionsCanHandoff => 'Hand back to you';
+
+  @override
+  String get systemActionsCanHandoffHint => 'You do steps like sign-in or codes, then press Continue';
+
+  @override
+  String get systemActionsCannotTitle => 'What it can\'t do';
+
+  @override
+  String get systemActionsCannotScreen => 'See the screen or tap inside other apps';
+
+  @override
+  String get systemActionsCannotScreenHint => 'The system doesn\'t allow it';
+
+  @override
+  String get systemActionsCannotOther => 'Read the clipboard, find apps by name, SMS';
+
+  @override
+  String get systemActionsCannotOtherHint => 'No reliable public API; the AI is told it\'s not supported';
+
+  @override
+  String get systemActionsConfirmTitle => 'Confirmation';
+
+  @override
+  String get systemActionsConfirmValue => 'Follows permissions';
+
+  @override
+  String get systemActionsConfirmHint =>
+      'Follows the chat\'s permissions: it usually asks each time, and not with full access';
+
+  @override
+  String get systemActionsPermissionNote =>
+      'System actions follow these permissions too: no asking with full access, otherwise it asks each time.';
+
+  @override
+  String get systemActionsLogHint => 'Records what ran and how it ended, not the content';
+
+  @override
+  String get systemActionsLogEmptyHint => 'System actions the AI uses are listed here';
+
+  @override
+  String get systemActionsOpenedUi => 'Page opened';
+
+  @override
+  String get systemActionsResultUnknown => 'Outcome unknown';
+
+  @override
+  String get systemActionsNotSupported => 'Not supported';
+
+  @override
+  String get systemActionsNotRun => 'Didn\'t run';
+
+  @override
+  String get systemActionsDisclosureTitle => 'Before turning on system actions';
+
+  @override
+  String get systemActionsDisclosureIntro =>
+      'Once on, the AI can open apps and system pages for you from a chat. Worth knowing first:';
+
+  @override
+  String get systemActionsDisclosureWhatTitle => 'What it does';
+
+  @override
+  String get systemActionsDisclosureWhatBody =>
+      'Opens apps or links, opens the calendar, dialer, share and navigation pages, sends notifications, writes the clipboard and hands steps back to you. Where this version has system reminders, it can also set alarms and timers.';
+
+  @override
+  String get systemActionsDisclosureWhenTitle => 'When';
+
+  @override
+  String get systemActionsDisclosureWhenBody =>
+      'Only when a chat calls for it and DSH Go is on screen. It asks each time by default, and not in chats with full access.';
+
+  @override
+  String get systemActionsDisclosureWhoTitle => 'Who gets what';
+
+  @override
+  String get systemActionsDisclosureWhoBody => 'The outcome goes back into the chat and to the model you picked.';
+
+  @override
+  String get systemActionsDisclosureNeverTitle => 'What it never does';
+
+  @override
+  String get systemActionsDisclosureNeverBody =>
+      'It doesn\'t see the screen, tap in other apps or read the clipboard. Placing a call, sharing and saving an event are yours to confirm.';
+
+  @override
+  String get systemActionsDisclosureStopTitle => 'How to stop';
+
+  @override
+  String get systemActionsDisclosureStopBody => 'Turn it off here anytime. A hand-back prompt has a Stop button.';
+
+  @override
+  String get systemActionsHandoffTitle => 'Your turn';
+
+  @override
+  String get systemActionsHandoffNote =>
+      'When you\'re done, come back to DSH Go and press Continue. That only says you confirmed; the AI can\'t see what happened in other apps.';
+
+  @override
+  String get systemActionsHandoffFailed => 'That didn\'t count. If the prompt is still here, press it again';
+
+  @override
+  String get systemActionsResultOpened => 'The page opened. Whether the job got done there isn\'t known.';
+
+  @override
+  String get systemActionsResultContinued =>
+      'You pressed Continue. That only says you confirmed, not that anything in another app finished.';
+
+  @override
+  String get systemActionsResultNotified => 'The notification was sent. Whether you saw it isn\'t known.';
+
+  @override
+  String get systemActionsResultReminder =>
+      'Handed to the system\'s reminders, which go off on their own. The engine doesn\'t run for it.';
+
+  @override
+  String get systemActionsResultClipboard => 'The text is on the clipboard.';
+
+  @override
+  String get systemActionsResultUnknownDetail =>
+      'The system call may have gone out and the outcome is unknown. It won\'t be retried, so check for yourself.';
+
+  @override
+  String get systemActionsResultUnsupported => 'HarmonyOS doesn\'t support this action. Nothing ran.';
+
+  @override
+  String get systemActionsResultOffScreen => 'DSH Go wasn\'t on screen. Nothing ran.';
+
+  @override
+  String get systemActionsResultUnavailable =>
+      'System actions are off or can\'t connect right now. Nothing ran. See Settings > System actions.';
+
+  @override
+  String get systemActionsResultStopped => 'Stopped.';
+
+  @override
+  String get systemActionsResultTimeout => 'Timed out with no outcome.';
+
+  @override
+  String get systemActionsResultNotRun => 'Nothing ran.';
+
+  @override
+  String get catalogSystemActions => 'System actions';
+
+  @override
+  String get catalogSystemActionsSummary => 'Open apps and system pages';
+
+  @override
+  String get searchKwSystemActions =>
+      'phone control,control phone,open app,open link,calendar,dialer,share,navigation,notification,clipboard,hand back,alarm,timer';
 
   @override
   String get tavernTitle => 'Tavern';

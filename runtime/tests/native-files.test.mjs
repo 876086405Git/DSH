@@ -594,3 +594,31 @@ test('panel callback names must be registered own actions, never inherited Objec
   assert.equal(response.status, 200); assert.deepEqual(result.effects, []);
   assert.ok(result.issues.some(i => i.code === 'bad-effect'));
 });
+
+// This one needs the OH ETS fixture's TypeScript, so only the OH gate runs it.
+if (process.env.OHOS_TYPESCRIPT_PREFIX) {
+ const {filesFixture,args,owner,until}=await import('./ohos/native-files-fixture.mjs');
+ const {truncateChars}=await import('../bridge/dsh-go-bridge/lib/native/util.js');
+ async function selection(t,name){
+  const f=await filesFixture(t), bytes=Buffer.from('synthetic selection bytes'), file=await f.file(name,bytes);
+  const result=f.call(f.methods,'pick',args());f.select([file.uri]);const reply=await result.done;
+  assert(!reply.error,JSON.stringify(reply));const [entry]=reply.value;const chunks=[];
+  while(true){const chunk=await f.call(f.methods,'read',{owner,handle:entry.handle}).done;assert(!chunk.error,JSON.stringify(chunk));if(chunk.value===null)break;chunks.push(Buffer.from(chunk.value));}
+  const actual=Buffer.concat(chunks);assert.deepEqual(actual,bytes);
+  await f.call(f.methods,'cancel',{owner}).done;await until(()=>f.fds.size===0);
+  return {entry,bytes:actual};
+ }
+ test('real bridge callback receives MIME inferred before OH display truncation',async t=>{
+  assert.equal([...truncateChars('😀'.repeat(30)+'a'.repeat(98)+'.jpg',128)].length,128);
+  const declaration=JSON.parse(readFileSync(new URL('../../examples/plugins/dsh-go-example-files/package.json',import.meta.url))).dshGo;
+  const f=await fixture(t,declaration);applyFileExample({inject:(_,fn)=>fn({dshGo:f.service})});const w=await f.ws(['files']);
+  const response=await f.request('invoke',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({v:1,pkg:'file-test',id:'files',surface:'panel',action:'chooseFiles',scope:{sessionId:'s1'},stream:w.welcome.conn,userGesture:true})});
+  assert.equal(response.status,200);const effect=(await response.json()).effects[0];
+  const {entry,bytes}=await selection(t,'😀'.repeat(30)+'a'.repeat(98)+'.jpg');
+  const sent=await f.request(filePath(w,effect,'upload',{name:entry.name,mediaType:entry.mediaType}),{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
+  assert.equal(sent.status,200);const receipt=await sent.json();assert.equal(receipt.file.name,entry.name);assert.equal(receipt.file.mediaType,entry.mediaType);
+  const done=await complete(f,w,effect);assert.equal(done.status,200);const shown=done.effects[0].data.files[0];
+  assert.equal(shown.subtitle,createHash('sha256').update(bytes).digest('hex'));
+  t.diagnostic(JSON.stringify({oh:entry,receipt,shown}));assert.equal(shown.icon,'image');
+ });
+}

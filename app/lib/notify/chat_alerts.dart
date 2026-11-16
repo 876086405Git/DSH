@@ -187,7 +187,7 @@ class TurnOutcome {
         // The chat's short line for the code; the model's own message stays out of notifications.
         final code = reason.error?.code;
         if (code == 'MISSING_CREDENTIAL') return appL10n.stateAlertMissingKey;
-        final text = turnFailureText(code);
+        final text = turnFailureText(code, message: reason.error?.message);
         return text == turnFailureText(null) ? appL10n.stateAlertTurnFailed : appL10n.stateAlertErrorDetail(text);
     }
   }

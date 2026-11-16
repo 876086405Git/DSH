@@ -18,6 +18,56 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
 
+# Exact reviewed main/tip/OH plumbing differences, never a directory exemption.
+APPROVED_SOURCE_DIFFERENCES = {'app/pubspec.yaml': {'main': {'mode': 420,
+                               'kind': 'file',
+                               'bytes': 9357,
+                               'sha256': '1a248aa49073f9428bca75681d910f3a5a9affd7efb0fe825620c0b44279a221'},
+                      'tipSHA256': '709f42d5afbb7c5f0a5a94086cd13d567d2c02a5f39e6b357326d7f7fdb053b7',
+                      'candidate': {'mode': 420,
+                                    'kind': 'file',
+                                    'bytes': 9357,
+                                    'sha256': '709f42d5afbb7c5f0a5a94086cd13d567d2c02a5f39e6b357326d7f7fdb053b7'}},
+ 'runtime/build-runtime.sh': {'main': {'mode': 493,
+                                       'kind': 'file',
+                                       'bytes': 30570,
+                                       'sha256': '71918e114d6f9a80392cc63410b4b65751c6f815d741d48066b2e401aff83bd4'},
+                              'tipSHA256': 'beab81526f3a3a7a3f291b585d4ebd7e8d7ad343f4d456371c6d8b20be82efd0',
+                              'candidate': {'mode': 493,
+                                            'kind': 'file',
+                                            'bytes': 30619,
+                                            'sha256': 'beab81526f3a3a7a3f291b585d4ebd7e8d7ad343f4d456371c6d8b20be82efd0'}},
+ 'runtime/lib/rtbuild.py': {'main': {'mode': 420,
+                                     'kind': 'file',
+                                     'bytes': 85020,
+                                     'sha256': '904e61535a38a9a4464ab56f9ae444af538b91251f06bc73280fa35481bb972e'},
+                            'tipSHA256': '3b31f7d71574300ac8984597d264cc98ad65a345621cf6119bb326a536212917',
+                            'candidate': {'mode': 420,
+                                          'kind': 'file',
+                                          'bytes': 91043,
+                                          'sha256': '3b31f7d71574300ac8984597d264cc98ad65a345621cf6119bb326a536212917'}},
+ 'runtime/lib/android_recipe.py': {'main': None,
+                                   'tipSHA256': '4246d329dfbafc92906a5aa4dac3efa2d0f2bd4af43b15506d6f81597ada5d46',
+                                   'candidate': {'mode': 420,
+                                                 'kind': 'file',
+                                                 'bytes': 3797,
+                                                 'sha256': '4246d329dfbafc92906a5aa4dac3efa2d0f2bd4af43b15506d6f81597ada5d46'}},
+ 'runtime/locks/android-recipe-compat.json': {'main': None,
+                                              'tipSHA256': '6800505351990003a26525c16cbf492ade72d883da89cea48c050691eb8144ae',
+                                              'candidate': {'mode': 420,
+                                                            'kind': 'file',
+                                                            'bytes': 1170,
+                                                            'sha256': '6800505351990003a26525c16cbf492ade72d883da89cea48c050691eb8144ae'}},
+ 'runtime/session-deletion/generate.py': {'main': {'mode': 420,
+                                                   'kind': 'file',
+                                                   'bytes': 14969,
+                                                   'sha256': '44aab75244ef5035d58ba2e03f4976fee514bf531bf7ca5abe5f854f889991a7'},
+                                          'tipSHA256': '3464c520c643eba3ae5fb88ceac803b8b5852ee4ba40c5bb1333d35ccd8a62b1',
+                                          'candidate': {'mode': 420,
+                                                        'kind': 'file',
+                                                        'bytes': 15066,
+                                                        'sha256': '3464c520c643eba3ae5fb88ceac803b8b5852ee4ba40c5bb1333d35ccd8a62b1'}}}
+
 
 def load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -63,31 +113,54 @@ def main():
     out.mkdir(parents=True, exist_ok=False)
     protected = ['app/android', 'runtime/bridge', 'runtime/boot', 'runtime/direct', 'runtime/session-deletion', 'runtime/locks']
     sources = []
+    observed_differences = {}
+    def check_sources(scope, before, after):
+        for rel in sorted(set(before) | set(after)):
+            if before.get(rel) == after.get(rel):
+                continue
+            full = scope + '/' + rel if scope else rel
+            approved = APPROVED_SOURCE_DIFFERENCES.get(full)
+            assert approved is not None, 'Unreviewed protected source change: ' + full
+            assert before.get(rel) == approved['main'] and after.get(rel) == approved['candidate'], 'Reviewed source identity drift: ' + full
+            observed_differences[full] = approved
     for name in protected:
         before, after = inventory(baseline / name), inventory(ROOT / name)
-        assert before == after, 'Protected source changed: ' + name
-        sources.append({'path': name, 'entries': len(before),
-                        'inventorySha256': sha(json.dumps(before, sort_keys=True).encode())})
+        check_sources(name, before, after)
+        sources.append({'path': name, 'baselineEntries': len(before), 'candidateEntries': len(after),
+                        'baselineInventorySha256': sha(json.dumps(before, sort_keys=True).encode()),
+                        'candidateInventorySha256': sha(json.dumps(after, sort_keys=True).encode())})
+    def file_item(path):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(info.st_mode):
+            return {'kind': 'symlink', 'mode': stat.S_IMODE(info.st_mode), 'target': os.readlink(path)}
+        assert stat.S_ISREG(info.st_mode), 'Protected source must be a regular file: ' + str(path)
+        data = path.read_bytes()
+        return {'kind': 'file', 'mode': stat.S_IMODE(info.st_mode), 'bytes': len(data), 'sha256': sha(data)}
     for name in ['app/pubspec.yaml', 'runtime/build-runtime.sh', 'runtime/lib/rtbuild.py', 'runtime/lib/android_recipe.py']:
-        assert (baseline / name).read_bytes() == (ROOT / name).read_bytes(), 'Protected source changed: ' + name
-        sources.append({'path': name, 'sha256': sha((ROOT / name).read_bytes())})
+        before, after = file_item(baseline / name), file_item(ROOT / name)
+        check_sources('', {name: before}, {name: after})
+        sources.append({'path': name, 'baseline': before, 'candidate': after})
+    # A later authoritative baseline may already contain all reviewed plumbing.
+    assert not observed_differences or set(observed_differences) == set(APPROVED_SOURCE_DIFFERENCES), 'Reviewed difference set changed'
     save(out / 'protected-source.json', sources)
+    save(out / 'approved-source-differences.json', observed_differences)
 
+    adapter = load('real_android_target_adapter', ROOT / 'runtime/tests/ohos/current-android-targets.py')
     selected = {}
     paths = set()
     commands = []
     targets = {}
     for name, tree in [('before', baseline), ('after', ROOT)]:
-        runtime = tree / 'runtime'
-        module = load('rtbuild_' + name, runtime / 'lib/rtbuild.py')
-        pins = json.loads((runtime / 'patches/pins.json').read_text())
-        names, _ = module.select_dsh_patches(pins, str(runtime / 'patches'), 'android')
-        selected[name], identity = module.dsh_patch_inputs(pins, str(runtime / 'patches'), names, 'android', '0.2.1-rc.4')
+        pins, names, selected[name], identity, legacy = adapter.android_inputs(tree)
+        if name == 'after': assert not legacy
         for patch in pins['patches'].values():
-            paths.update(patch['0.2.1-rc.4'])
-        targets[name] = {'tree': tree, 'identity': identity}
+            paths.update(patch['0.2.2-rc.1'])
+        targets[name] = {'tree': tree, 'identity': identity, 'legacy': legacy, 'names': names}
     assert selected['before'] == selected['after'], 'Android target inputs changed'
-    assert sha((prefix / 'package-lock.json').read_bytes()) == sha((ROOT / 'runtime/locks/dsh-0.2.1-rc.4/package-lock.json').read_bytes())
+    assert sha((prefix / 'package-lock.json').read_bytes()) == sha((ROOT / 'runtime/locks/dsh-0.2.2-rc.1/package-lock.json').read_bytes())
     original = inventory(prefix)
     save(out / 'original-full-tree.json', original)
     logical_trees = {}
@@ -98,9 +171,8 @@ def main():
             file = sparse / relative
             file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(prefix / relative, file)
-        argv = ['python3', '-I', '-B', str(target['tree'] / 'runtime/lib/rtbuild.py'), 'patch-dsh',
-                '--prefix', str(sparse), '--dsh-version', '0.2.1-rc.4', '--target', 'android',
-                '--target-report', str(out / (name + '-target.json'))]
+        argv, legacy = adapter.patch_argv(target['tree'], sparse, 'android',
+                                          out / (name + '-patches.json'), out / (name + '-target.json'))
         result = subprocess.run(argv, capture_output=True, text=True)
         (out / (name + '.stdout.log')).write_text(result.stdout)
         (out / (name + '.stderr.log')).write_text(result.stderr)
@@ -110,7 +182,9 @@ def main():
         changed = {path: item for path, item in inventory(sparse).items() if item['kind'] != 'directory'}
         logical_trees[name] = {**original, **changed}
         save(out / (name + '-actual-patched-files.json'), changed)
-        assert json.loads((out / (name + '-target.json')).read_text())['inputSha256'] == target['identity']
+        assert json.loads((out / (name + '-patches.json')).read_text()) == target['names']
+        if not legacy:
+            assert json.loads((out / (name + '-target.json')).read_text())['inputSha256'] == target['identity']
     assert logical_trees['before'] == logical_trees['after'], 'Android target logical trees differ'
     save(out / 'logical-target-tree.json', logical_trees['after'])
 
@@ -131,7 +205,9 @@ def main():
         (out / (abi + '-recipe-inputs.txt')).write_bytes(after.stdout)
         cases.append({'abi': abi, 'inputBytes': len(after.stdout), 'inputSha256': sha(after.stdout),
                       'versionSuffix': new_suffix.stdout.decode().strip()})
-    save(out / 'report.json', {'scope': __doc__, 'passed': True, 'protectedSourceUnchanged': True,
+    assert inventory(prefix) == original, 'Read-only pristine source changed'
+    save(out / 'report.json', {'scope': __doc__, 'passed': True, 'protectedSourceUnchangedExceptReviewed': True,
+        'approvedSourceDifferences': sorted(observed_differences), 'baselineLegacySchema1': targets['before']['legacy'],
         'androidTargetInputSha256': targets['after']['identity'], 'actualVendorInputFiles': len(paths),
         'logicalTargetTreeEntries': len(logical_trees['after']),
         'logicalTargetTreeSha256': sha((out / 'logical-target-tree.json').read_bytes()),

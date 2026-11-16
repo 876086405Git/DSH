@@ -16,6 +16,7 @@ import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
 import '../common/discard_guard.dart';
 import '../common/expand_reveal.dart';
+import '../common/field_paste.dart';
 import '../common/sheet_title_bar.dart';
 import '../common/smooth_size.dart';
 import '../settings/settings_widgets.dart';
@@ -56,7 +57,7 @@ class _HeaderDraft {
   String value;
 }
 
-class _ProviderFormPageState extends ConsumerState<ProviderFormPage> {
+class _ProviderFormPageState extends ConsumerState<ProviderFormPage> with FieldPaste<ProviderFormPage> {
   late final _name = TextEditingController(text: widget.existing?.displayName ?? '');
   late final _baseUrl = TextEditingController(text: widget.existing?.baseUrl ?? '');
   final _key = TextEditingController();
@@ -199,8 +200,7 @@ class _ProviderFormPageState extends ConsumerState<ProviderFormPage> {
   }
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = normalizeProviderKey(data?.text ?? '');
+    final text = normalizeProviderKey(await readClipboard() ?? '');
     if (text.isEmpty || !mounted) return;
     _key.value = TextEditingValue(
       text: text,

@@ -125,7 +125,12 @@ const env = {
   DSH_OHOS_TEST_KEY: 'ohos-local-fixture-only', DSH_PERMISSION_MODE: 'workspace-write',
   DSH_OHOS_MEASURE_LOADER: '1',
 };
-if (linkedPublicationFixture) env.LD_PRELOAD = linkedPublicationFixture.path;
+if (linkedPublicationFixture) {
+  env.LD_PRELOAD = linkedPublicationFixture.path;
+  // On Linux no Ark module hosts the engine, so a fixture in the native directory stands in.
+  const host = nativeLibraryDirectory && join(nativeLibraryDirectory, 'libdsh_host.so');
+  if (host && await stat(host).then(() => true, () => false)) env.LD_PRELOAD += ':' + host;
+}
 if (nativeLibraryDirectory) env.DSH_GO_OHOS_NATIVE_LIBRARY_DIR = nativeLibraryDirectory;
 if (compileCacheDirectory) env.NODE_COMPILE_CACHE = compileCacheDirectory;
 if (values.mode === 'sim') {

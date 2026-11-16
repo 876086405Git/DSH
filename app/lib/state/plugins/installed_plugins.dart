@@ -5,10 +5,21 @@ part of '../plugins_state.dart';
 /// What plugins can be managed on: the active host's client and what its
 /// carrier allows.
 class PluginHost {
-  const PluginHost({required this.client, required this.label, required this.kind, this.safeMode = false});
+  const PluginHost({
+    required this.client,
+    required this.label,
+    required this.kind,
+    this.safeMode = false,
+    this.installRefused = false,
+  });
 
-  factory PluginHost.of(HostConnection connection, {bool safeMode = false}) =>
-      PluginHost(client: connection.client, label: connection.label, kind: connection.kind, safeMode: safeMode);
+  factory PluginHost.of(HostConnection connection, {bool safeMode = false, bool installRefused = false}) => PluginHost(
+    client: connection.client,
+    label: connection.label,
+    kind: connection.kind,
+    safeMode: safeMode,
+    installRefused: installRefused,
+  );
 
   final DshClient client;
   final String label;
@@ -20,9 +31,13 @@ class PluginHost {
   /// no installs or removals until it's back to normal.
   final bool safeMode;
 
+  /// The engine says it takes no market installs, updates or removals
+  /// (HarmonyOS's own), so there is nothing to offer and no command to show.
+  final bool installRefused;
+
   /// The relay's allow-list has no install/remove; there the app shows the
   /// command to run on that computer instead.
-  bool get canInstall => !safeMode && client.canInstallPlugins;
+  bool get canInstall => !safeMode && !installRefused && client.canInstallPlugins;
 }
 
 /// The on-device engine runs in safe mode. A seam of its own so plugin state
@@ -35,7 +50,8 @@ final pluginHostProvider = Provider<PluginHost?>((ref) {
   final connection = ref.watch(readListLiveConnectionProvider);
   if (connection == null) return null;
   final safeMode = connection.isLocal && ref.watch(localSafeModeProvider);
-  return PluginHost.of(connection, safeMode: safeMode);
+  final installRefused = ref.watch(operatingSystemProvider) == 'ohos' && ref.watch(marketInstallRefusedProvider);
+  return PluginHost.of(connection, safeMode: safeMode, installRefused: installRefused);
 });
 
 // ── Installed bundles ────────────────────────────────────────────────────────

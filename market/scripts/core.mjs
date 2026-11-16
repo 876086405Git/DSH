@@ -8,6 +8,7 @@ import parseSpdx from 'spdx-expression-parse';
 import licenses from 'spdx-license-list';
 import { Parser } from 'tar';
 import { parseMarketIndex } from '@deepseek-ai/dsh-plugin-market-index';
+import { scanOhos, ohosSummary } from './ohos-scan.mjs';
 
 export const MAX_BYTES = 50 * 1024 * 1024;
 export const REGISTRY = 'https://registry.npmjs.org/';
@@ -233,6 +234,7 @@ export function scan(files, pkg) {
     },
     evidence,
     dshGo: { adapted, ...(manifestOk && manifest.minApp ? { minApp: manifest.minApp } : {}), features },
+    platforms: { ohos: scanOhos(files, pkg) },
   };
 }
 export function makeIndex(rows) {
@@ -247,7 +249,7 @@ export function makeIndex(rows) {
       title: entry.title,
       description: entry.summary,
       ...(entry.homepage ? { homepage: entry.homepage } : {}),
-      metadata: { category: entry.category },
+      metadata: { category: entry.category, platforms: { ohos: ohosSummary(report.platforms.ohos) } },
       versions: [
         {
           version: entry.version,

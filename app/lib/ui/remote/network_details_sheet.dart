@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../remote/link_status.dart';
+import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../common/app_sheet.dart';
@@ -62,6 +63,8 @@ class _RemoteNetworkDetailsSheetState extends ConsumerState<RemoteNetworkDetails
     final status = ref.watch(hostLinkStatusProvider(widget.host)).value ?? HostLinkStatus.idle;
     final name = ref.watch(hostNameProvider(widget.host)) ?? l10n.commonRemoteHost;
     final relay = widget.host.kind == HostKind.relay;
+    // No WebRTC there (hostsProvider's peer connector): the relay isn't a fallback.
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     final connected = status.isConnected;
     final network = connected && relay ? status.network : null;
     final path = connected && relay ? network?.path ?? status.path : null;
@@ -89,7 +92,7 @@ class _RemoteNetworkDetailsSheetState extends ConsumerState<RemoteNetworkDetails
               padding: const EdgeInsets.fromLTRB(kSheetGutter, 0, kSheetGutter, 12),
               child: Text(
                 relay
-                    ? '${l10n.remoteNetworkAutomatic}\n${l10n.remoteNetworkSnapshotHint}'
+                    ? '${ohos ? l10n.harmonyNetworkRelayOnly : l10n.remoteNetworkAutomatic}\n${l10n.remoteNetworkSnapshotHint}'
                     : l10n.hostDetailsSshNetworkHint,
                 style: TextStyle(color: colors.textTertiary),
               ),
@@ -119,7 +122,7 @@ class _RemoteNetworkDetailsSheetState extends ConsumerState<RemoteNetworkDetails
                 if (network?.fallbackReason != null)
                   _NetworkValue(
                     label: l10n.remoteNetworkFallback,
-                    value: _fallbackLabel(l10n, network!.fallbackReason!),
+                    value: _fallbackLabel(l10n, network!.fallbackReason!, ohos: ohos),
                   ),
               ],
             ),
@@ -175,7 +178,8 @@ class _NetworkValue extends StatelessWidget {
   );
 }
 
-String _fallbackLabel(L10n l10n, String code) => switch (code) {
+String _fallbackLabel(L10n l10n, String code, {required bool ohos}) => switch (code) {
+  'webrtcUnavailable' when ohos => l10n.harmonyNetworkFallbackRelayOnly,
   'webrtcUnavailable' => l10n.remoteNetworkFallbackWebrtcUnavailable,
   'directFailed' => l10n.remoteNetworkFallbackDirectFailed,
   'directTimeout' => l10n.remoteNetworkFallbackDirectTimeout,

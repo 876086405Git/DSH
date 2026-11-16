@@ -21,6 +21,13 @@
       "beforeSha256": "6ffecb1d0d5b6b28e1018e9be7d823f7a6ba23d126ca85fc2c442ff97368d1a5",
       "afterSha256": "938829683d527ce8e0c4f2f76895122c36b0992633596dc0e7b196890e2882a9",
       "patchSha256": "0915da9b4618de10276bf7e3828304f7f2bc5e056454e33bd1c3fbc7e6b24dc4"
+    },
+    {
+      "patch": "clipboard-query-settlement.patch",
+      "target": "package/src/main/ets/embedding/engine/systemchannels/PlatformChannel.ets",
+      "beforeSha256": "60c4756d1a3eaffbda8431fa1bf0effd9d06d56b9356212dabfdb624df9d1fd6",
+      "afterSha256": "3eef8ffd2f497112e867be0241b7eb6e79cc1676dae9ed8ea2e75e3afdd15c69",
+      "patchSha256": "6270e9f3d33410b1b26c02ae6ef929a8f3bc471451636df8504b3e95efbe174d"
     }
   ],
   "licenses": {

@@ -39,6 +39,7 @@ function fixture({ webViewPlugin = true, memory = {} } = {}) {
   const appManager = { isRamConstrainedDevice: memory.lowRam ?? (async () => false) };
   const facts = loadEts(source('OhosDeviceFacts.ets'), {
     '@ohos.hidebug': { default: hidebug }, '@ohos.deviceInfo': { default: {} },
+    '@ohos.process': { default: {} }, '@ohos.display': { default: {} },
   }, { canIUse: () => memory.capable ?? true });
   const { default: IslandsPlugin } = loadEts(source('IslandsPlugin.ets'), {
     '@ohos.hidebug': { default: hidebug },

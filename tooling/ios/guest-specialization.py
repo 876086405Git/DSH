@@ -6,7 +6,18 @@ EDITS = {'runtime/ohos/process/index.mjs': (('  get temporaryRoot() { return thi
                                      'path.startsWith(root + "/")); }'),
                                     ('  get temporaryRoot() { return this.backend.temporaryRoot; }',
                                      '  get temporaryRoot() { return this.backend.temporaryRoot; }\n'
-                                     '  get guestMetadata() { return this.backend.guestMetadata; }')),
+                                     '  get guestMetadata() { return this.backend.virtual.guestMetadata; }'),
+                                    # HarmonyOS's own Linux (TinyEMU) isn't on iOS: gh, python3 and pip
+                                    # stay with the virtual shell, whose routing hands them to the iOS guest.
+                                    ('    this.linux = createLinuxControl();\n'
+                                     '    // Agent and plugin commands such as gh, python3 and pip run in the App\'s Linux.\n'
+                                     '    this.backend = new CommandRouter({ ...config, onSpillFailure },\n'
+                                     '      { linux: roots => createLinuxCommandBackend({ control: this.linux, ...roots, onSpillFailure }) });',
+                                     '    // iOS: its own Linux guest takes gh, python3 and pip through the virtual shell.\n'
+                                     '    this.backend = new CommandRouter({ ...config, onSpillFailure });'),
+                                    ("    ctx.inject(['webServer'], webCtx => registerLinuxControlRoutes(webCtx, this.linux));\n"
+                                     "    ctx.effect(() => () => this.linux.shutdown(), 'ohos Linux joined shutdown');\n",
+                                     '')),
  'node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js': (('\t\t...cwd !== void 0 ? { cwd } : {},\n'
                                                          '\t\tsignal: exec.signal',
                                                          '\t\t...cwd !== void 0 ? { cwd } : {},\n'
@@ -72,11 +83,11 @@ EDITS = {'runtime/ohos/process/index.mjs': (('  get temporaryRoot() { return thi
                                       '  bash.registerTransformPlugin(routing.plugin);\n'
                                       '}\n'
                                       'filesystem.seal();'),
-                                     ("  if (result.exitCode === 127) result.stderr += result.stderrKind === 'bytes'",
+                                     ("  if (result.exitCode === 127 && !linuxClient.unavailable) result.stderr += result.stderrKind === 'bytes'",
                                       "  if (routing?.decision && routing.decision.route !== 'virtual') {\n"
                                       '    parentPort.postMessage({ guestRoute: routing.decision });\n'
                                       '  } else {\n'
-                                      "  if (result.exitCode === 127) result.stderr += result.stderrKind === 'bytes'"),
+                                      "  if (result.exitCode === 127 && !linuxClient.unavailable) result.stderr += result.stderrKind === 'bytes'"),
                                      ('  parentPort.postMessage({ exitCode: result.exitCode });',
                                       '  parentPort.postMessage({ exitCode: result.exitCode });\n  }'),
                                      ('const filesystem = createFilesystem(roots, policy);',
@@ -108,10 +119,10 @@ EDITS = {'runtime/ohos/process/index.mjs': (('  get temporaryRoot() { return thi
                                        '    if (this.#guestTemporaryRoot) this.roots = distinctRoots([...this.roots, '
                                        'this.#guestTemporaryRoot]);\n'
                                        '    this.#guestOutput = internals.deliverGuestOutput ?? owner?.deliverOutput;'),
-                                      ('      Promise.resolve().then(() => state.resources?.finish({ cancelled: '
-                                       'state.stopped })).then(() => settle(), settle);',
-                                       '      Promise.resolve().then(() => state.resources?.finish({ cancelled: '
-                                       'state.stopped })).then(async () => {\n'
+                                      ("        if (failures.length) throw new AggregateError(failures, 'Virtual process resources did not retire');\n"
+                                       '      }).then(() => settle(), settle);',
+                                       "        if (failures.length) throw new AggregateError(failures, 'Virtual process resources did not retire');\n"
+                                       '      }).then(async () => {\n'
                                        '        if (!state.guestRoute || state.stopped || state.failure || '
                                        'state.providerFailure) return;\n'
                                        '        state.worker = undefined;\n'
@@ -137,20 +148,20 @@ EDITS = {'runtime/ohos/process/index.mjs': (('  get temporaryRoot() { return thi
                                        '          state.failure = error;\n'
                                        '        }\n'
                                        '      }).then(() => settle(), settle);'),
-                                      ('        state.stopped = true;\n        state.resources?.stop();',
+                                      ('        state.stopped = true;\n        try { state.workspace?.retire(); }',
                                        '        state.stopped = true;\n'
                                        '        state.guestAbort?.abort();\n'
-                                       '        state.resources?.stop();'),
-                                      ('          } else {\n            state.resources = this.#createOwnedGitServer({',
+                                       '        try { state.workspace?.retire(); }'),
+                                      ('          } else {\n            const send = message => state.worker.postMessage(message);',
                                        '          } else {\n'
                                        '            state.guestContext = { argv: [name, ...argv.slice(1)], cwd, '
                                        'policy, env,\n'
                                        "              stdin: typeof spec.stdio.stdin === 'object' ? "
                                        "spec.stdio.stdin.data : '' };\n"
-                                       '            state.resources = this.#createOwnedGitServer({'),
-                                      ('            if (state.resources.handle(message)) return;\n'
+                                       '            const send = message => state.worker.postMessage(message);'),
+                                      ('            if (state.resources?.handle(message)) return;\n'
                                        '            if (message.failure)',
-                                       '            if (state.resources.handle(message)) return;\n'
+                                       '            if (state.resources?.handle(message)) return;\n'
                                        '            if (message.guestRoute) { state.guestRoute = message.guestRoute; '
                                        'return; }\n'
                                        '            if (message.failure)'),
@@ -163,16 +174,16 @@ EDITS = {'runtime/ohos/process/index.mjs': (('  get temporaryRoot() { return thi
                                        'handle.waitForExit()));',
                                        '      const observations = await Promise.allSettled([...handles.map(handle => '
                                        'handle.waitForExit()), this.#guest?.dispose()]);'),
-                                      ('                roots,\n                env, stdin:',
+                                      ('                roots, linuxCommands: linux?.commands ?? [],\n                env, stdin:',
                                        # A paused Linux (a run that did not finish) hands ordinary
                                        # scripts back to the virtual shell, as if it were not installed.
-                                       '                roots, iosGuestRouting: !!this.#guest && '
+                                       '                roots, linuxCommands: linux?.commands ?? [], iosGuestRouting: !!this.#guest && '
                                        'this.#guest.metadata?.suspended !== true, iosGuestTemporaryRoot: '
                                        'this.#guestTemporaryRoot,\n'
                                        '                env, stdin:'),
-                                      ('const roots = distinctRoots([policy?.workspaceRoot ?? cwd, '
+                                      (': distinctRoots([policy?.workspaceRoot ?? cwd, '
                                        'this.temporaryRoot]);',
-                                       'const roots = distinctRoots([policy?.workspaceRoot ?? cwd, '
+                                       ': distinctRoots([policy?.workspaceRoot ?? cwd, '
                                        'this.#guestTemporaryRoot ?? this.temporaryRoot]);'),
                                       ('...spec.env, TMPDIR: this.temporaryRoot',
                                        '...spec.env, TMPDIR: this.#guestTemporaryRoot ? "/tmp" : this.temporaryRoot'),
@@ -218,15 +229,15 @@ EDITS['node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js'] += (
 )
 EDITS['runtime/ohos/process/runtime.mjs'] += (
     ('    const token = randomUUID();', '    const rootGrant = this.#guestOwner?.prepareRootGrant(argv, policy, signal);\n    const token = randomUUID();'),
-    ('{ argv: [...argv], policy: { ...policy, workspaceRoot }, signal, cancel }', '{ argv: [...argv], policy: { ...policy, workspaceRoot }, rootGrant, signal, cancel }'),
-    ('    let policy;', '    let policy;\n    let rootPermission;'),
+    ('{ argv: [...argv], policy: { ...policy, workspaceRoot }, grant, signal, cancel }', '{ argv: [...argv], policy: { ...policy, workspaceRoot }, grant, rootGrant, signal, cancel }'),
+    ('    let policy, grant;', '    let policy, grant;\n    let rootPermission;'),
     ('      policy = prepared.policy;', '      policy = prepared.policy;\n      rootPermission = this.#guestOwner?.activateRootGrant(prepared.rootGrant, argv, policy, realpathSync(resolve(spec.cwd)), spec.signal);'),
     ('state.guestContext = { argv: [name, ...argv.slice(1)], cwd, policy, env,', 'state.guestContext = { argv: [name, ...argv.slice(1)], cwd, policy, rootPermission, env,'),
 )
-INPUT_GUARDS = {'runtime/ohos/lifecycle/budget.mjs': ('export class ActiveBudgetClock {', '  constructor(bootId) {'),
+INPUT_GUARDS = {'runtime/ohos/lifecycle/budget.mjs': ('export class ActiveBudgetClock {', '  constructor(bootId, onPendingChange = () => {}) {'),
  'runtime/ohos/lifecycle/coordinator.mjs': ("import { ActiveBudgetClock } from './budget.mjs';",
                                             '    this.bootId = bootId;\n'
-                                            '    this.clock = new ActiveBudgetClock(bootId);'),
+                                            '    this.clock = new ActiveBudgetClock(bootId, () => this.#updateNativePolling());'),
  'runtime/ohos/lifecycle/index.mjs': ('Object.defineProperty(globalThis, lifecycleSymbol, { value: coordinator, '
                                       'configurable: false, writable: false });',)}
 def specialize(name, original):

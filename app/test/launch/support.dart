@@ -106,6 +106,7 @@ LaunchSnapshot snapshotFor({
   int iconPx = 320,
   bool coldEngine = false,
   bool systemIcon = true,
+  bool motionAfterReady = false,
   Color? background,
 }) => LaunchSnapshot(
   sdk: sdk,
@@ -117,6 +118,7 @@ LaunchSnapshot snapshotFor({
   dark: dark,
   coldEngine: coldEngine,
   systemIcon: systemIcon,
+  motionAfterReady: motionAfterReady,
 );
 
 /// The phone the goldens are drawn on: 390 × 844 at 2× (the shell goldens' surface).

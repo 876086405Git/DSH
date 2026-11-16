@@ -1,16 +1,6 @@
---- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
-+++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
-@@ -118,6 +118,7 @@
- *   when the platform package cannot be resolved.
- */
- function resolveRgPath() {
-+	if (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) return Promise.resolve("/dsh-go/ohos/bin/rg");
- 	rgPathPromise ??= Promise.resolve().then(async () => {
- 		const executable = parse(process.execPath);
- 		const executableSidecar = process.platform === "win32" ? join(executable.dir, `${executable.name}-rg.exe`) : `${process.execPath}-rg`;
 --- a/node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js
-@@ -240,8 +240,10 @@
+@@ -241,8 +241,10 @@
  	const justification = args.sandbox_permissions === void 0 && args.justification?.trim() === "" ? void 0 : args.justification;
  	validateEscalationArgs(args.sandbox_permissions, justification);
  }
@@ -23,7 +13,7 @@
  }
  function presentBashCall(args) {
  	if (args.run_in_background === true) return {
-@@ -491,7 +493,7 @@
+@@ -492,7 +494,7 @@
  		};
  		const definition = defineTool({
  			name: "bash",
@@ -32,3 +22,13 @@
  			parameters: {
  				description: {
  					type: "string",
+--- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+@@ -118,6 +118,7 @@
+ *   when the platform package cannot be resolved.
+ */
+ function resolveRgPath() {
++	if (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) return Promise.resolve("/dsh-go/ohos/bin/rg");
+ 	rgPathPromise ??= Promise.resolve().then(async () => {
+ 		const executable = parse(process.execPath);
+ 		const executableSidecar = process.platform === "win32" ? join(executable.dir, `${executable.name}-rg.exe`) : `${process.execPath}-rg`;

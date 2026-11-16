@@ -6,10 +6,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../companion/companion_voice_source.dart';
+import '../secrets/secure_storage.dart';
+import '../state/android_features.dart';
 import 'speech_audio.dart';
 
 const speechVoiceKeys = VoiceSettingsKeys(
@@ -35,9 +36,14 @@ final speechVoiceSettingsProvider = NotifierProvider<SpeechVoiceSettingsControll
 );
 
 /// Her voice as it is used: her own settings, or 朗读's when she follows them
-/// (still only when she is switched on, and never cloned).
+/// (still only when she is switched on, and never cloned). On HarmonyOS the
+/// room's speaker plays only the phone's own voice: an external one would be
+/// fetched (and paid for) and then have no player.
 final companionEffectiveVoiceProvider = Provider<CompanionVoiceSettings?>((ref) {
   final own = ref.watch(companionVoiceSettingsProvider);
+  if (own != null && ref.watch(operatingSystemProvider) == 'ohos') {
+    return own.copyWith(source: CompanionVoiceSource.system, follow: false, cloneOn: false);
+  }
   if (own == null || !own.follow) return own;
   final shared = ref.watch(speechVoiceSettingsProvider);
   if (shared == null) return null;
@@ -64,7 +70,7 @@ class CloudAsrSettings {
 class CloudAsrController extends Notifier<CloudAsrSettings> {
   static const _plainKey = 'speech_asr_cloud_v1';
   static const _secretKey = 'speech_asr_cloud_key';
-  static const _secure = FlutterSecureStorage();
+  static const _secure = AppSecureStorage();
   late Future<void> _loaded;
 
   @override

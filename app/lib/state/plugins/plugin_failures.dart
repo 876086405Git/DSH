@@ -73,6 +73,9 @@ String _requirementText(List<PluginIncompatibility> incompatible) {
   return appL10n.statePluginRequiredVersion(wanted, first.runtimeVersion);
 }
 
+PluginFailure _installRefusedFailure() =>
+    PluginFailure(PluginFailureKind.unsupported, appL10n.marketInstallRefused, appL10n.harmonyPluginRefusedHint);
+
 /// Maps a failed (or cancelled) [result] to user copy. [published] is the
 /// version's index publish time, used to explain pnpm's 24-hour cooldown.
 PluginFailure describeOperationFailure(
@@ -84,6 +87,8 @@ PluginFailure describeOperationFailure(
   final run = result.packageResult;
   final detail = [?result.error?.diagnostic, if (run != null && run.output.trim().isNotEmpty) run.output].join('\n\n');
   final d = detail.isEmpty ? null : detail;
+  // The engine refused before doing anything: its diagnostic isn't a message.
+  if (d != null && d.contains('OHOS_PLUGIN_INSTALL_UNAVAILABLE')) return _installRefusedFailure();
   if (result.application == PluginApplication.cancelled) {
     // The host stopped an operation that had already started, so it may have
     // written something. Only a job cancelled before it ran (the queue's

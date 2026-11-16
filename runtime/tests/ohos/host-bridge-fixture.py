@@ -17,6 +17,29 @@ def prepare_bridge_fixture(runtime, dsh, out):
     asset = native / 'assets/proof.png'
     asset.write_bytes((here / 'host-bridge-fixture/proof.png').read_bytes())
 
+    # Pre-existing private durable objects, not an OH image upload/codec success.
+    image = asset.read_bytes()
+    image_hash = hashlib.sha256(image).hexdigest()
+    assert image[:8] == b'\x89PNG\r\n\x1a\n' and image[12:16] == b'IHDR' and image[16:24] == b'\0\0\0\x01\0\0\0\x01'
+    object_root = dsh / 'attachments/v1/objects'
+    corrupt_hash = hashlib.sha256(b'declared-object-with-different-content').hexdigest()
+    missing_hash = hashlib.sha256(b'object-not-created').hexdigest()
+    objects = []
+    for object_hash in [image_hash, corrupt_hash]:
+        target = object_root / object_hash[:2] / object_hash
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('xb') as stream:
+            stream.write(image)
+        objects.append({'path': str(target), 'bytes': len(image), 'sha256': image_hash})
+    missing = object_root / missing_hash[:2] / missing_hash
+    assert not missing.exists()
+    reference = {'attachmentId': 'sha256:' + image_hash, 'mediaType': 'image/png',
+                 'bytes': len(image), 'width': 1, 'height': 1,
+                 'name': '完整引用.png', 'originalDimensions': {'width': 1, 'height': 1}}
+    attachments = {'reference': reference, 'corruptId': 'sha256:' + corrupt_hash,
+                   'missingId': 'sha256:' + missing_hash, 'missingPath': str(missing),
+                   'objects': objects, 'origin': 'seeded-private-durable-object-not-image-admission'}
+
     def save(path, value):
         path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
 
@@ -74,6 +97,7 @@ def prepare_bridge_fixture(runtime, dsh, out):
                 files[str(path)] = {'bytes': path.stat().st_size,
                                     'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     save(out / 'bridge-fixture-input.json', files)
+    save(out / 'attachment-fixture-input.json', attachments)
     return {'pkg': 'dsh-go-fixture-host-bridge', 'entryId': 'add12-owned-config',
-            'nativeEntryId': 'add12-owned-fixture',
-            'assetSHA256': hashlib.sha256(asset.read_bytes()).hexdigest()}
+            'nativeEntryId': 'add12-owned-fixture', 'attachments': attachments,
+            'assetSHA256': hashlib.sha256(asset.read_bytes()).hexdigest(), 'assetBytes': len(image)}

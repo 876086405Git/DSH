@@ -1,9 +1,11 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as promises from 'node:fs/promises';
 import childProcess from 'node:child_process';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import { createNodeScriptWorker, nodeScriptAvailable } from '../../ohos/process/node-script.mjs';
 import { assertNodeFsInventory, fsPathTable, promisesPathTable } from '../../ohos/process/node-path-table.mjs';
@@ -14,7 +16,7 @@ const plainCwd = process.cwd, plainRead = fs.readFileSync, plainSpawn = childPro
 const plainChildSpawn = childProcess.ChildProcess.prototype.spawn;
 
 async function fixture(t) {
-  const root = await promises.mkdtemp('/tmp/ohos-node-worker-');
+  const root = await promises.mkdtemp(join(tmpdir(), 'ohos-node-worker-'));
   const workspace = join(root, '工作区'), temporary = join(root, '临时区');
   await promises.mkdir(workspace); await promises.mkdir(temporary);
   const active = new Set(), parentFds = new Set();
@@ -70,8 +72,13 @@ test('every fixed path-table entry executes against real files at the private cw
   const f = await fixture(t);
   const requests = [...Object.entries(fsPathTable).map(([name, value]) => ({ kind: 'fs', name, ...value })),
     ...Object.entries(promisesPathTable).map(([name, value]) => ({ kind: 'promises', name, ...value }))];
+  for (const { kind, name, operation } of requests) if (operation === 'readlink') {
+    const stem = `${kind}-${name}-中文`;
+    await symlinkFixture(`${stem}.txt`, join(f.workspace, `${stem}-dest.txt`));
+  }
   const source = await promises.readFile(new URL('./node-script-api-fixture.mjs', import.meta.url), 'utf8');
-  const result = successful(await (await f.launch(source, { args: [JSON.stringify(requests)] })).done);
+  const mode = process.execArgv.some(value => value.endsWith('/sim/preload.mjs')) ? 'strict' : 'native';
+  const result = successful(await (await f.launch(source, { args: [JSON.stringify(requests), mode] })).done);
   assert.equal(result.status, 'PASS_SCOPED'); assert.equal(result.cwd, f.workspace);
   assert.deepEqual(result.observations.map(row => row.kind + '.' + row.name), requests.map(row => row.kind + '.' + row.name));
   assert.equal(result.nested.length, 3);
@@ -116,11 +123,11 @@ test('two cwd values, process.chdir, path.resolve and Chinese paths stay within 
 test('only this Worker denies child_process, inherited descriptors and paths through an outside symlink', async t => {
   const f = await fixture(t);
   await promises.writeFile(join(f.temporary, 'outside.txt'), 'temporary is not a chdir workspace');
-  await promises.symlink(f.root, join(f.workspace, 'escape'));
+  await symlinkFixture(f.root, join(f.workspace, 'escape'));
   await promises.mkdir(join(f.root, 'outside/deep'), { recursive: true });
   await promises.writeFile(join(f.root, 'outside/secret'), 'OUTSIDE');
   await promises.mkdir(join(f.workspace, 'tricky'));
-  await promises.symlink(join(f.root, 'outside/deep'), join(f.workspace, 'tricky/link'));
+  await symlinkFixture(join(f.root, 'outside/deep'), join(f.workspace, 'tricky/link'));
   const source = `import assert from 'node:assert/strict';import fs from 'node:fs';import cp from 'node:child_process';
     for(const fd of [0,1,2])assert.throws(()=>fs.closeSync(fd),{code:'ERR_OHOS_NODE_FD_UNAVAILABLE'});
     assert.throws(()=>fs.readFileSync(0),{code:'ERR_OHOS_NODE_FD_UNAVAILABLE'});
@@ -242,4 +249,63 @@ test('fd wrappers preserve native customPromisifyArgs results and buffer identit
     assert.deepEqual(Object.keys(writev),['bytesWritten','buffer']);assert.equal(writev.bytesWritten,2);assert.equal(writev.buffer,inputs);
     fs.closeSync(fd);console.log(JSON.stringify({promisify:true}));`;
   assert.equal(successful(await (await f.launch(source)).done).promisify, true);
+});
+
+test('inline Node expressions, print, version and stdin use the inherited guarded Worker', async t => {
+  const f = await fixture(t);
+  const run = async (args, stdin = '') => {
+    const worker = createNodeScriptWorker({args,cwd:f.workspace,roots:[f.workspace,f.temporary],workspaceRoots:[f.workspace],env:{CHECK_ENV:'环境值'},stdin});
+    const stdout=[],stderr=[],errors=[];
+    worker.stdout.on('data',b=>stdout.push(b));worker.stderr.on('data',b=>stderr.push(b));worker.on('error',e=>errors.push(e));
+    const exitCode=await new Promise(resolve=>worker.once('exit',resolve));
+    return {exitCode,stdout:Buffer.concat(stdout).toString(),stderr:Buffer.concat(stderr).toString(),errors};
+  };
+  await promises.writeFile(join(f.workspace,'relative.cjs'),'module.exports="相对模块";');
+  const inline=await run(['-e', 'console.log(JSON.stringify({cwd:process.cwd(),env:process.env.CHECK_ENV,arg:process.argv[1],value:require("./relative.cjs")}));process.exitCode=7;', '--', '参数']);
+  assert.equal(inline.exitCode,7,JSON.stringify({stderr:inline.stderr,errors:inline.errors.map(e=>({message:e.message,stack:e.stack,code:e.code}))}));assert.deepEqual(inline.errors,[]);
+  assert.deepEqual(JSON.parse(inline.stdout),{cwd:f.workspace,env:'环境值',arg:'参数',value:'相对模块'});
+  for(const [expression,expected] of [['1+2','3\n'],['undefined','undefined\n'],['({x:"中文",n:2})',"{ x: '中文', n: 2 }\n"]]){
+    const result=await run(['-p',expression]);assert.equal(result.exitCode,0);assert.equal(result.stdout,expected);
+  }
+  assert.equal((await run(['--version'])).stdout,process.version+'\n');
+  assert.equal((await run(['-p','(setTimeout(()=>console.log("later"),0),42)'])).stdout,'later\n42\n');
+  for(const code of ['const console=null;42','(setTimeout(()=>{console.log=()=>{}},0),42)']) assert.equal((await run(['-p',code])).stdout,'42\n');
+  assert.equal((await run(['-e','console.log(import.meta.main)'])).stdout,'false\n');
+  for(const args of [[],['-']]) assert.equal((await run(args,'console.log("管道中文")')).stdout,'管道中文\n');
+  assert.equal((await run(['-e','"use strict";console.log((function(){return this})()===undefined)'])).stdout,'true\n');
+  assert.equal((await run(['-e','import path from "node:path";console.log(await Promise.resolve(path.basename(process.cwd())))'])).stdout,'工作区\n');
+});
+
+test('inline ESM resource URLs preserve special cwd, real same-name modules and path guards', { timeout: 30000 }, async t => {
+  const f = await fixture(t), cwd = join(f.workspace, '目录 #%');
+  await promises.mkdir(cwd);
+  await promises.writeFile(join(cwd, '资料 #%.txt'), '资源355');
+  await promises.writeFile(join(cwd, '[eval].mjs'), 'export default "real-eval";');
+  await promises.writeFile(join(cwd, '[stdin].mjs'), 'export default "real-stdin";');
+  await promises.writeFile(join(f.root, 'outside.txt'), 'outside');
+  for (const mode of ['eval', 'stdin']) for (const readOnly of [false, true]) {
+    const source = `#!/usr/bin/env node
+import assert from 'node:assert/strict';import fs from 'node:fs';import {pathToFileURL} from 'node:url';
+import a from './[eval].mjs';import b from './[stdin].mjs';
+const resource=new URL('./资料%20%23%25.txt',import.meta.url);
+assert.equal(fs.readFileSync(resource,'utf8'),'资源355');assert.equal(a,'real-eval');assert.equal(b,'real-stdin');
+assert.equal(import.meta.main,false);assert.equal(import.meta.dirname,${JSON.stringify(cwd)});
+assert.equal(Object.getPrototypeOf(import.meta),null);assert.equal(Object.getOwnPropertyDescriptor(import.meta,'url').writable,true);
+assert.equal(fs.readFileSync(new URL(import.meta.url),'utf8'),${JSON.stringify(`export default "real-${mode}";`)});
+assert.throws(()=>fs.readFileSync(${JSON.stringify(join(f.root, 'outside.txt'))},'utf8'),{code:'EACCES'});
+assert.throws(()=>fs.readFileSync(new URL('./missing355',import.meta.url),'utf8'),{code:'ENOENT'});
+const output=new URL('./output%20%23%25.txt',import.meta.url);
+${readOnly ? "assert.throws(()=>fs.writeFileSync(output,'x'),{code:'EACCES'});" : "fs.writeFileSync(output,'ok');assert.equal(fs.readFileSync(output,'utf8'),'ok');"}
+const resolved=import.meta.resolve('./资料%20%23%25.txt');import.meta.url='file:///changed/no.mjs';
+assert.equal(import.meta.resolve('./资料%20%23%25.txt'),resolved);
+console.log(JSON.stringify({mode:${JSON.stringify(mode)},readOnly:${readOnly},value:fs.readFileSync(resource,'utf8'),sameName:[a,b]}));`;
+    const worker = createNodeScriptWorker({ args: mode === 'eval' ? ['-e', source] : ['-'],
+      cwd, roots: [f.workspace, f.temporary], workspaceRoots: [f.workspace], readOnly, env: {}, stdin: mode === 'stdin' ? source : '' });
+    const output = [], errors = [];
+    worker.stdout.on('data', bytes => output.push(bytes));worker.on('error', error => errors.push({code:error.code,message:error.message}));
+    worker.stderr.resume();const timer=setTimeout(()=>worker.terminate(),10000);
+    const exit = await new Promise(resolve => worker.once('exit', resolve));clearTimeout(timer);
+    assert.equal(exit,0,JSON.stringify(errors));assert.deepEqual(errors,[]);
+    assert.deepEqual(JSON.parse(Buffer.concat(output).toString()),{mode,readOnly,value:'资源355',sameName:['real-eval','real-stdin']});
+  }
 });

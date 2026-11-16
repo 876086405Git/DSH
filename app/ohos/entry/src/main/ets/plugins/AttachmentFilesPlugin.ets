@@ -88,7 +88,11 @@ export default class AttachmentFilesPlugin implements FlutterPlugin, AbilityAwar
 
   private cancel(request: AttachmentPickPending): void {
     request.cancelled = true;
-    if (!request.responded) { request.responded = true; request.result.success([]); }
+    if (!request.responded) {
+      request.responded = true;
+      try { request.result.success([]); }
+      catch (_) { /* A retired reply transport must not retain picker ownership. */ }
+    }
   }
 
   private retire(): void {

@@ -36,12 +36,17 @@ afterEach(() => {
 });
 const observation = (revision, foreground, computePermission = 'denied') => ({ revision, foreground, computePermission });
 const body = data => JSON.stringify({ operation: 'host', ...data });
+const nativeSnapshot = foreground => ({version:1,engineGeneration:1,ownerGeneration:1,revision:1,grantGeneration:0,
+  nowMs:1000,deadlineMs:0,drainAtMs:0,phase:0,available:1,foreground:foreground?1:0,clockFailed:0});
 async function fixture(t, options = {}) {
+  const native = nativeSnapshot(false);
+  const foreground = value => { native.foreground = value ? 1 : 0; native.revision++; };
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-host-http-'));
   const journal = await openBoundaryJournal({ directory: path.join(directory, 'journal'),
     lockExclusive: process._linkedBinding('dsh_ohos_publication').lockExclusive, ...options.journal });
+  await options.seedHistory?.(journal);
   const coordinator = new BoundaryCoordinator({ journal, bootId: 'actual-host-http-test',
-    flushSession: async () => true, readEvents: async () => [], ...options.coordinator });
+    flushSession: async () => true, readEvents: async () => [], readHost: () => native, ...options.coordinator });
   const routes = new Map(), ctx = new Context();
   ctx.provide('webServer', { host: '127.0.0.1', protocol: 'http:', register(route) {
     routes.set(route.path, route.handler); return () => routes.delete(route.path);
@@ -69,7 +74,7 @@ async function fixture(t, options = {}) {
   const post = (cookie, value, extraHeaders = {}) => request(origin + '/dsh-go/v1/lifecycle', {
     method: 'POST', headers: { cookie, 'content-type': 'application/json', ...extraHeaders }, body: JSON.stringify(value),
   });
-  return { directory, journal, coordinator, ctx, connection, auth, origin, seen, login, post };
+  return { directory, journal, coordinator, ctx, connection, auth, origin, seen, login, post, native, foreground };
 }
 
 test('actual signed-cookie login drives durable pause/resume through production ETS and backend routes', async t => {
@@ -78,12 +83,13 @@ test('actual signed-cookie login drives durable pause/resume through production 
   assert.equal(f.coordinator.status().paused, true); assert.equal(f.coordinator.status().confirmedPause, true);
   const rows = (await fs.readFile(path.join(f.directory, 'journal/boundary.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(rows.map(row => row.body.kind), ['header', 'pause']);
+  f.foreground(true);
   await client.send(f.origin, f.auth.launchToken, observation(2, true, 'granted'));
   assert.equal(f.coordinator.status().paused, false);
   assert.deepEqual(f.seen, [{ method: 'GET', path: '/' }, { method: 'POST', path: '/dsh-go/v1/lifecycle' },
     { method: 'POST', path: '/dsh-go/v1/lifecycle' }]);
   const capabilities = runtimeCapabilities(f.ctx, 'cap-test');
-  assert.deepEqual(capabilities.background, { policy: 'may-freeze', computePermission: 'granted', resume: 'reconcile' });
+  assert.deepEqual(capabilities.background, { policy: 'may-freeze', computePermission: 'unknown', resume: 'reconcile' });
   assert.deepEqual(f.journal.records.map(row => row.body.kind), ['header', 'pause', 'resume']);
   t.diagnostic(JSON.stringify({ actualAuthSourceSHA256: createHash('sha256').update(authSource).digest('hex'),
     realJournalRecords: f.journal.records.length, deviceHTTP: 'NOT_RUN' }));
@@ -121,14 +127,16 @@ test('malformed host observations fail closed, bounded acknowledgement omits eve
   assert.equal(f.journal.records.length, 1);
   const result = await f.post(cookie, valid); assert.equal(result.status, 200);
   const ack = JSON.parse(result.text);
-  assert.deepEqual(Object.keys(ack).sort(), ['v', 'host', 'closed', 'blocked', 'paused', 'confirmedPause', 'controlVersion'].sort());
-  assert(result.text.length < 512); assert.equal(ack.host.revision, 4);
+  assert.deepEqual(Object.keys(ack).sort(), ['v', 'host', 'nativeHost', 'busy', 'manualPaused', 'observationRevision', 'closed', 'blocked', 'paused', 'confirmedPause', 'controlVersion'].sort());
+  assert(result.text.length < 1024); assert.equal(ack.observationRevision, 4); assert.equal(ack.host.revision, f.native.revision);
 });
-test('duplicate/out-of-order host revisions join the original durable control without replaying resume', async t => {
+test('duplicate/out-of-order wakeups cannot override native changes or replay resume', async t => {
   const entered = Promise.withResolvers(), release = Promise.withResolvers(); let rotations = 0;
   const f = await fixture(t, { coordinator: { async revalidateTransport() { rotations++; entered.resolve(); await release.promise; } } });
+  await f.coordinator.observeHost(observation(1, false)); f.foreground(true);
   const first = f.coordinator.observeHost(observation(10, true)); await entered.promise;
   const duplicate = f.coordinator.observeHost(observation(10, true));
+  f.foreground(false);
   const newer = f.coordinator.observeHost(observation(11, false));
   const old = f.coordinator.observeHost(observation(9, true));
   assert.equal(f.coordinator.status().paused, true, 'new background closes admission immediately');
@@ -136,7 +144,7 @@ test('duplicate/out-of-order host revisions join the original durable control wi
   const gated = f.coordinator.gate('session-without-replay', abort.signal).then(() => { enteredTool = true; }, () => {});
   release.resolve(); await Promise.all([first, duplicate, newer, old]);
   assert.equal(rotations, 1); assert.equal(enteredTool, false); assert.equal(f.coordinator.status().confirmedPause, true);
-  assert.deepEqual(f.journal.records.map(row => row.body.kind), ['header', 'resume', 'pause']);
+  assert.deepEqual(f.journal.records.map(row => row.body.kind), ['header', 'pause', 'resume', 'pause']);
   abort.abort(); await gated;
 });
 test('cancelling a held login settles immediately and its late response never starts a POST', async t => {
@@ -155,13 +163,15 @@ test('cancelled response can already have applied: newer revision wins without r
   httpState.beforeReply = async (_reply, url) => {
     if (url.endsWith('/dsh-go/v1/lifecycle') && !heldOnce) { heldOnce = true; held.resolve(); await release.promise; }
   };
+  f.foreground(true);
   const old = client.send(f.origin, f.auth.launchToken, observation(1, true));
   const rejected = assert.rejects(old, { code: 'ohos_lifecycle_cancelled' });
   await held.promise; client.cancel(); await rejected;
+  f.foreground(false);
   await client.send(f.origin, f.auth.launchToken, observation(2, false)); release.resolve();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.coordinator.status().paused, true); assert.equal(f.coordinator.status().host.revision, 2);
-  assert.deepEqual(f.journal.records.map(row => row.body.kind), ['header', 'resume', 'pause']);
+  assert.equal(f.coordinator.status().paused, true); assert.equal(f.coordinator.status().host.revision, f.native.revision);
+  assert.deepEqual(f.journal.records.map(row => row.body.kind), ['header', 'pause']);
 });
 test('a redirect is intercepted before following; unavailable guard closes the client before any request', async t => {
   let leaked = 0;
@@ -170,7 +180,7 @@ test('a redirect is intercepted before following; unavailable guard closes the c
     if (req.method === 'GET') { res.writeHead(303, { location: victim.origin + '/leak', 'set-cookie': 'dsh-auth-test=fake.cookie; Path=/' }); res.end(); }
     else { const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const data = JSON.parse(Buffer.concat(chunks)); res.end(JSON.stringify({ v: 1, host: {
-        revision: data.revision, foreground: data.foreground, computePermission: data.computePermission }, closed: false, blocked: false })); }
+        revision: data.revision, foreground: false, computePermission: 'unknown' }, observationRevision:data.revision, nativeHost:nativeSnapshot(false), busy:false, manualPaused:false, confirmedPause:true, closed: false, blocked: false })); }
   });
   const client = new OhosLifecycleTransport(); await client.send(attacker.origin, 'fixture-redirect-token', observation(1, false));
   assert.equal(leaked, 0);
@@ -196,16 +206,19 @@ test('manual and host pauses retain independent ownership through a foreground/b
   const f = await fixture(t), cookie = await f.login();
   assert.equal((await f.post(cookie, { operation: 'pause' })).status, 200);
   await f.coordinator.observeHost(observation(1, false));
+  f.foreground(true);
   await f.coordinator.observeHost(observation(2, true));
   assert.equal(f.coordinator.status().paused, true); assert.equal(f.coordinator.status().manualPaused, true);
   assert.equal((await f.post(cookie, { operation: 'resume' })).status, 200);
   assert.equal(f.coordinator.status().paused, false);
+  f.foreground(false);
   await f.coordinator.observeHost(observation(3, false));
   assert.equal((await f.post(cookie, { operation: 'resume' })).status, 200);
   assert.equal(f.coordinator.status().paused, true); assert.equal(f.coordinator.status().manualPaused, false);
   const duplicate = await f.coordinator.observeHost(observation(3, false));
   assert.equal(duplicate.controlVersion, f.coordinator.status().controlVersion);
   assert.equal(duplicate.paused, true);
+  f.foreground(true);
   await f.coordinator.observeHost(observation(4, true)); assert.equal(f.coordinator.status().paused, false);
 });
 
@@ -216,11 +229,75 @@ test('durable pause reasons restore manual intent, while a host-only pause can r
     await f.coordinator.observeHost(observation(1, false)); await f.coordinator.close();
     const journal = await openBoundaryJournal({ directory: path.join(f.directory, 'journal'),
       lockExclusive: process._linkedBinding('dsh_ohos_publication').lockExclusive });
-    const restored = new BoundaryCoordinator({ journal, bootId: 'next-process', flushSession: async () => true, readEvents: async () => [] });
+    const restored = new BoundaryCoordinator({ journal, bootId: 'next-process', flushSession: async () => true, readEvents: async () => [], readHost: () => nativeSnapshot(true) });
     try {
       assert.equal(restored.status().manualPaused, manual); assert.equal(restored.status().paused, true);
       await restored.observeHost(observation(1, true)); assert.equal(restored.status().paused, manual);
       await restored.resume(); assert.equal(restored.status().paused, false);
     } finally { await restored.close(); }
   }
+});
+
+test('malformed native ACK cannot reach the owner callback as valid authority', async t => {
+  const f = await fixture(t), client = new OhosLifecycleTransport();
+  for (const bad of [undefined, null, {}, { ...nativeSnapshot(false), nowMs: -2 },
+    { ...nativeSnapshot(false), ownerGeneration: '1' }, { ...nativeSnapshot(false), foreground: true }]) {
+    httpState.beforeReply = (reply, url) => {
+      if (!url.endsWith('/dsh-go/v1/lifecycle')) return;
+      const ack = JSON.parse(reply.result); ack.nativeHost = bad; reply.result = JSON.stringify(ack);
+    };
+    await assert.rejects(client.send(f.origin, f.auth.launchToken, observation(1, false)), { code: 'ohos_lifecycle_native' });
+  }
+});
+
+
+// The heartbeat is not a request for the per-call diagnostics view.
+test('steady host heartbeat avoids detailed history projection while full queries retain it', async t => {
+  const hash = '0'.repeat(64);
+  const f = await fixture(t, { async seedHistory(journal) {
+    for (let i = 0; i < 4; i++) {
+      const identity = { sessionId: 'history-session', callId: 'history-call-' + i, name: 'fixture-tool',
+        originBootId: 'history-boot', callSeq: i * 2, turn: 1, step: 1, callHash: hash };
+      for (const part of [{ kind: 'prepared' }, { kind: 'outcome', result: { path: 'results/' + hash + '.json', sha256: hash, bytes: 2 } },
+        { kind: 'committed', sessionResultSeq: i * 2 + 1, sessionResultHash: hash }])
+        await journal.append({ bootId: 'history-boot', identity, ...part });
+    }
+  } });
+  f.foreground(true);
+  const cookie = await f.login();
+  await f.post(cookie, { operation: 'host', ...observation(500, true) });
+  const fullStatus = f.coordinator.status.bind(f.coordinator);
+  let detailedReads = 0;
+  f.coordinator.status = (...args) => { detailedReads++; return fullStatus(...args); };
+  const expected = fullStatus();
+  for (const revision of [501, 502, 503]) {
+    const response = await f.post(cookie, { operation: 'host', ...observation(revision, false, 'granted') });
+    assert.equal(response.status, 200);
+    const ack = JSON.parse(response.text);
+    const { v, host, nativeHost, busy, manualPaused, closed, blocked, paused, confirmedPause, controlVersion } = expected;
+    assert.deepEqual(ack, { v, host, nativeHost, busy, manualPaused, observationRevision: revision, closed, blocked, paused, confirmedPause, controlVersion });
+  }
+  assert.equal(detailedReads, 0, 'a stable host heartbeat must not rebuild historical call diagnostics');
+  const direct = await f.coordinator.observeHost(observation(504, true));
+  assert.equal(direct.calls.length, 4, 'the default service API remains a full status view');
+  assert.equal(detailedReads, 1);
+  const get = await request(f.origin + '/dsh-go/v1/lifecycle', { headers: { cookie } });
+  assert.equal(get.status, 200); assert.equal(JSON.parse(get.text).calls.length, 4);
+  assert.equal(detailedReads, 2, 'an explicit GET still obtains detailed history');
+});
+
+test('host heartbeat waits for native control completion before acknowledging', async t => {
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  t.after(() => release.resolve());
+  const f = await fixture(t, { coordinator: { async revalidateTransport() { entered.resolve(); await release.promise; } } });
+  const cookie = await f.login();
+  await f.post(cookie, { operation: 'host', ...observation(600, false) });
+  f.foreground(true); let settled = false;
+  const response = f.post(cookie, { operation: 'host', ...observation(601, false) }).then(value => { settled = true; return value; });
+  await entered.promise; assert.equal(settled, false);
+  release.resolve();
+  const ack = JSON.parse((await response).text);
+  assert.equal(ack.observationRevision, 601); assert.equal(ack.host.revision, f.native.revision);
+  assert.equal(ack.host.foreground, true); assert.equal(ack.paused, false);
+  assert.equal(ack.confirmedPause, false);
 });

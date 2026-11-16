@@ -17,7 +17,7 @@ if (strict) {
   assert.throws(() => process.dlopen({}, '/dsh-probe-no-addon.node'), { code: 'ERR_OHOS_SIM_DLOPEN' });
 }
 const binding = process._linkedBinding('dsh_ohos_publication');
-assert.deepEqual(Object.keys(binding), ['renameNoReplace', 'lockExclusive', 'setOwnershipMarker', 'getOwnershipMarker', 'getSystemBuildIdentity']);
+assert.deepEqual(Object.keys(binding), ['clearOwnedClone', 'bindPhoneEngine', 'getPhoneSnapshot', 'claimPhonePermit', 'revokePhonePermit', 'completePhonePermit', 'renameNoReplace', 'lockExclusive', 'setOwnershipMarker', 'getOwnershipMarker', 'getSystemBuildIdentity', 'getHostLifecycleSnapshot']);
 assert.equal(process._linkedBinding('dsh_ohos_publication'), binding);
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-linked-publication-'));
 try {

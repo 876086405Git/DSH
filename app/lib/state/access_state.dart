@@ -34,6 +34,7 @@ import 'engine_control.dart';
 import 'notify_state.dart';
 import 'phone_state.dart';
 import 'settings_state.dart';
+import 'system_actions_state.dart';
 import 'voice_model_state.dart' show VoiceModelController, voiceModelDefaultBytes;
 import 'voice_state.dart';
 
@@ -49,21 +50,24 @@ const onboardingWantsVoiceKey = VoiceModelController.onboardingKey;
 
 /// What a person picks on first run: things DSH Go does, not permission names.
 /// What [os] offers is [accessFeaturesFor]'s, never all of these.
-enum AccessFeature { files, pet, phone, background, voice, alerts }
+enum AccessFeature { files, pet, phone, background, voice, alerts, systemActions }
 
 /// What first run and 系统权限 offer on [os], in their order. HarmonyOS and iOS
-/// have only what works there: their files, windows over other apps and the
-/// phone aren't reachable, and nothing keeps a turn running in the background
-/// (后台运行 says so), which leaves notifications their own feature.
-List<AccessFeature> accessFeaturesFor(String os) => androidSystemFeaturesOn(os)
-    ? const [
-        AccessFeature.files,
-        AccessFeature.pet,
-        AccessFeature.phone,
-        AccessFeature.background,
-        AccessFeature.voice,
-      ]
-    : const [AccessFeature.alerts, AccessFeature.voice];
+/// have only what works there: their files and windows over other apps aren't
+/// reachable, and nothing keeps a turn running in the background (后台运行 says
+/// so), which leaves notifications their own feature. HarmonyOS reaches the
+/// phone only through 系统操作, which needs no permission of its own.
+List<AccessFeature> accessFeaturesFor(String os) => switch (os) {
+  'ohos' => const [AccessFeature.alerts, AccessFeature.systemActions, AccessFeature.voice],
+  _ when androidSystemFeaturesOn(os) => const [
+    AccessFeature.files,
+    AccessFeature.pet,
+    AccessFeature.phone,
+    AccessFeature.background,
+    AccessFeature.voice,
+  ],
+  _ => const [AccessFeature.alerts, AccessFeature.voice],
+};
 
 /// Whether 语音输入 on [os] means the offline model's download: HarmonyOS and
 /// iOS use the system's recogniser and have no model.
@@ -147,6 +151,7 @@ List<AccessItem> accessItemsFor(AccessFeature feature, String? vendor) {
     ],
     AccessFeature.voice => [AccessItem.mic],
     AccessFeature.alerts => [AccessItem.notifications],
+    AccessFeature.systemActions => <AccessItem>[],
   };
   return [
     for (final item in AccessItem.values)
@@ -157,7 +162,10 @@ List<AccessItem> accessItemsFor(AccessFeature feature, String? vendor) {
 /// Everything [features] need, each item once, in walk order.
 List<AccessItem> accessWalk(Iterable<AccessFeature> features, String? vendor) {
   final wanted = {for (final f in features) ...accessItemsFor(f, vendor)};
-  return [for (final item in AccessItem.values) if (wanted.contains(item)) item];
+  return [
+    for (final item in AccessItem.values)
+      if (wanted.contains(item)) item,
+  ];
 }
 
 /// What the phone says right now. A null grant: this phone can't tell (no
@@ -217,8 +225,8 @@ class AccessReadings {
   };
 
   /// Android's 「受限制的设置」 may stand in front of the accessibility switch.
-  bool get mayNeedRestricted => PhoneDevice(sdkInt: sdk, sideloaded: sideloaded, restricted: restricted)
-      .mayNeedRestrictedSettings;
+  bool get mayNeedRestricted =>
+      PhoneDevice(sdkInt: sdk, sideloaded: sideloaded, restricted: restricted).mayNeedRestrictedSettings;
 }
 
 /// [item]'s state from [readings]; null when this phone can't tell (the
@@ -285,11 +293,13 @@ class SystemAccessDriver implements AccessDriver {
     }
   }
 
-  Future<bool?> _readMic() => _safe(() async => switch (await _voice.invokeMethod<String>('permission')) {
-    'granted' => true,
-    'denied' => false,
-    _ => null,
-  });
+  Future<bool?> _readMic() => _safe(
+    () async => switch (await _voice.invokeMethod<String>('permission')) {
+      'granted' => true,
+      'denied' => false,
+      _ => null,
+    },
+  );
 
   Future<bool?> _readNotifications() => _safe(() async {
     final s = await ref.read(notifyChannelProvider).status();
@@ -414,9 +424,7 @@ class AccessReadingsController extends AsyncNotifier<AccessReadings> {
 
 /// The makers' switches the person went to and said are set: no API reports
 /// them, so this is the only record (`system_access_visited`).
-final accessVisitedProvider = NotifierProvider<AccessVisitedController, Set<AccessItem>>(
-  AccessVisitedController.new,
-);
+final accessVisitedProvider = NotifierProvider<AccessVisitedController, Set<AccessItem>>(AccessVisitedController.new);
 
 class AccessVisitedController extends Notifier<Set<AccessItem>> {
   static const prefsKey = 'system_access_visited';
@@ -581,7 +589,9 @@ class AccessSetupController extends Notifier<AccessSetup> {
     }
 
     var restart = false;
-    if (features.contains(AccessFeature.files) && readings.storage == true && !ref.read(settingsProvider).phoneStorage) {
+    if (features.contains(AccessFeature.files) &&
+        readings.storage == true &&
+        !ref.read(settingsProvider).phoneStorage) {
       await attempt(() => ref.read(settingsProvider.notifier).setPhoneStorage(true));
       restart = true;
     }
@@ -593,6 +603,9 @@ class AccessSetupController extends Notifier<AccessSetup> {
       // The pick's 确认方式, if it didn't go in then; still pending after this,
       // it goes in on the next read of the policies.
       await attempt(ref.read(phoneProvider.notifier).applyPendingConfirmMode);
+    }
+    if (features.contains(AccessFeature.systemActions)) {
+      await attempt(() => ref.read(systemActionsProvider.notifier).setEnabled(true));
     }
     final phase = ref.read(localRuntimeProvider).status.phase;
     if (restart && !restarting && (phase == RuntimePhase.running || phase == RuntimePhase.starting)) {

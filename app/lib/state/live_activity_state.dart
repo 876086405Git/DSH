@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../notify/live_activity.dart';
 import '../pets/pet_signals.dart';
 import '../pets/pet_state.dart';
+import 'android_features.dart';
 import 'notify_state.dart';
 
 export '../notify/live_activity.dart';
@@ -47,6 +48,12 @@ final livePushProvider = Provider<LivePush>((ref) {
 /// Watch it to keep the live activity fed (with the pet overlay's bridge, in
 /// both 原生 and 网页 modes). Equal pushes are not sent twice.
 final liveActivityBridgeProvider = Provider<void>((ref) {
+  // Only OH owns an ordinary fallback here. Android keeps its original
+  // native live-activity lifecycle and receives no extra disposal message.
+  if (ref.read(operatingSystemProvider) == 'ohos') {
+    final channel = ref.read(notifyChannelProvider);
+    ref.onDispose(() => unawaited(channel.live(const LivePush(enabled: false))));
+  }
   ref.listen<LivePush>(livePushProvider, (previous, next) {
     if (previous == next) return;
     unawaited(ref.read(notifyChannelProvider).live(next));

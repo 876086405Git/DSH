@@ -24,7 +24,7 @@ test('Android plus the obsolete environment switch leaves native fetch unchanged
 });
 
 for (const [name, prefix] of [['base', process.env.OHOS_TEST_BASE_PREFIX], ['patched', process.env.OHOS_TEST_DSH_PREFIX]]) {
-  test(`${name} uses the original Android proxy and pinned-fetch path`, async () => {
+  test(`${name} uses the main Android global dispatcher and direct loopback path`, async () => {
     const { installProxyFromEnvironment, proxyRouteFor } = await load(prefix, 'dsh-http-proxy');
     const { HttpFetchProvider } = await load(prefix, 'dsh-web-fetch-http');
     const seen = [];
@@ -42,10 +42,15 @@ for (const [name, prefix] of [['base', process.env.OHOS_TEST_BASE_PREFIX], ['pat
       assert.equal(result.body.content, 'same behavior');
       assert.equal(proxyRouteFor(new URL('http://child.skip.invalid/')).proxied, false);
       assert.equal(proxyRouteFor(new URL('http://127.0.0.1/')).proxied, false);
-      await assert.rejects(provider.fetch({ url: proxyUrl }), (error) => error.code === 'WEB_BLOCKED_URL');
-      const local = new HttpFetchProvider({ maxResponseBytes: 1000, maxBodyChars: 1000, timeoutMs: 1000, maxRedirects: 2, userAgent: 'android-test' }, async () => [{ address: '127.0.0.1', family: 4 }]);
-      const pinned = await local.fetch({ url: `http://pin.skip.invalid:${server.address().port}/pinned` });
-      assert.equal(pinned.body.content, 'same behavior');
+      // rc.1 main deliberately delegates all HTTP(S) addresses to the dispatcher.
+      const direct = await provider.fetch({ url: `${proxyUrl}/direct` });
+      assert.equal(direct.body.content, 'same behavior');
+      assert.equal(seen.length, 2);
+      assert.equal(seen[0].url, 'http://public-fixture.invalid/document');
+      assert.equal(seen[1].url, '/direct');
+      await assert.rejects(provider.fetch({ url: proxyUrl.replace('://', '://user:secret@') }),
+        error => error.code === 'WEB_BLOCKED_URL');
+      assert.equal(seen.length, 2);
       traces.push(seen.map((entry) => ({ ...entry, host: entry.host.replace(/:[0-9]+$/, ':PORT') })));
     } finally {
       await dispose();
@@ -56,6 +61,7 @@ for (const [name, prefix] of [['base', process.env.OHOS_TEST_BASE_PREFIX], ['pat
 }
 
 test('Android traces are equal and never invoke the OHOS adapter', () => {
+  assert.equal(traces.length, 2);
   assert.deepEqual(traces[1], traces[0]);
   assert.equal(ohosCalls, 0);
 });

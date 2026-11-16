@@ -23,7 +23,9 @@ const plain=value=>JSON.parse(JSON.stringify(value));
 const defaults=value=>({__esModule:true,default:value});
 
 function fixture(options={}){
-  const state={requests:0,reads:0,conversions:0,logs:[]},modules=new Map();
+  const state={requests:0,reads:0,queries:0,conversions:0,logs:[]},modules=new Map();
+  let methodCallHandler;
+  class MethodChannel {setMethodCallHandler(value){methodCallHandler=value;}}
   const log={e:(...args)=>state.logs.push(args),w:(...args)=>state.logs.push(args),i(){},d(){},v(){}};
   const permission={createAtManager(){
     if(options.createThrow)throw Error('fixture manager throw');
@@ -41,7 +43,9 @@ function fixture(options={}){
     getData(type){if(options.recordReject)return Promise.reject(Error('fixture record reject'));return Promise.resolve(type==='text/plain'?'': '<b>fixture-html</b>');}}];
   const pasteboard={MIMETYPE_TEXT_PLAIN:'text/plain',MIMETYPE_TEXT_HTML:'text/html',getSystemPasteboard(){
     if(options.systemThrow)throw Error('fixture pasteboard throw');
-    return {getData(){state.reads++;if(options.readThrow)throw Error('fixture read throw');
+    return {hasData(){state.queries++;if(options.queryThrow)throw Error('fixture query throw');
+      return options.queryReject?Promise.reject(Error('fixture query reject')):Promise.resolve(options.hasData??true);
+    },getData(){state.reads++;if(options.readThrow)throw Error('fixture read throw');
       if(options.readReject)return Promise.reject(Error('fixture read reject'));
       return Promise.resolve({getRecordCount(){if(options.countThrow)throw Error('fixture count throw');return records.length;},
         getRecord(index){if(options.recordThrow)throw Error('fixture record throw');return records[index];}});
@@ -66,6 +70,8 @@ function fixture(options={}){
     function boundary(name){
       if(name in boundaries)return boundaries[name];
       if(name.endsWith('/Log'))return defaults(log);
+      if(name.endsWith('/MethodChannel'))return defaults(MethodChannel);
+      if(name.endsWith('/JSONMethodCodec'))return defaults({INSTANCE:{}});
       if(name.endsWith('/FlutterManager'))return defaults({getInstance:()=>({getUIAbility:()=>({context:{}})})});
       if(name.endsWith('/PasteboardUtils')||name==='./TextEditingDelta')return load(resolve(dirname(path),name+'.ets'));
       // These other imported dependencies are not exercised by PASTE. Fail if one is used.
@@ -79,7 +85,17 @@ function fixture(options={}){
   const helper=load(helperPath).PasteboardUtils;
   const Editing=load(resolve(embedding,'src/main/ets/plugin/editing/ListenableEditingState.ets')).ListenableEditingState;
   const Platform=load(resolve(embedding,'src/main/ets/plugin/PlatformPlugin.ets')).PlatformPluginCallback;
-  return {helper,Editing,Platform,state,inputMethod};
+  function channelCall(method){
+    const Channel=load(resolve(embedding,'src/main/ets/embedding/engine/systemchannels/PlatformChannel.ets')).default;
+    const channel=new Channel({},{}),callback=Object.create(Platform.prototype),replies=[];
+    callback.uiAbilityContext={};channel.setPlatformMessageHandler(callback);
+    methodCallHandler.onMethodCall({method,args:null},{
+      success:value=>replies.push({value:value instanceof Map?Object.fromEntries(value):value}),
+      error:(...error)=>replies.push({error}),notImplemented:()=>replies.push({notImplemented:true}),
+    });
+    return replies;
+  }
+  return {helper,Editing,Platform,state,inputMethod,channelCall};
 }
 async function turns(){for(let i=0;i<3;i++)await nextTurn();}
 async function observeCase(name,options,expected,rejected=false){
@@ -124,5 +140,32 @@ test('unchanged flutter/platform INVALID_REQ still returns exactly one null with
   callback.getClipboardData({success:value=>replies.push({value}),error:(...error)=>replies.push({error})});await turns();
   assert.deepEqual(replies,[{value:null}]);assert.equal(f.state.reads,0);observations.push({name:'unchanged-platform-null',replies,state:plain(f.state)});
 });
+for(const [name,options,expected]of [
+  ['channel-has-text',{},true],['channel-has-no-text',{hasData:false},false],
+  ['channel-query-rejected',{queryReject:true},false],
+])test(name,async()=>{
+  const f=fixture(options),replies=f.channelCall('Clipboard.hasStrings');await turns();
+  observations.push({name,method:'Clipboard.hasStrings',replies,state:plain(f.state)});
+  assert.deepEqual(replies,[{value:{value:expected}}]);
+  assert.equal(f.state.queries,1);assert.equal(f.state.requests,0);assert.equal(f.state.reads,0);
+});
+for(const [name,options,expected]of [
+  ['channel-read-plain',{},'粘贴💡'],['channel-read-html',{legacyHtml:true},'fixture-html'],
+  ['channel-read-denied',{auth:-1},null],['channel-read-invalid',{auth:2},null],
+])test(name,async()=>{
+  const f=fixture(options),replies=f.channelCall('Clipboard.getData');await turns();
+  observations.push({name,method:'Clipboard.getData',replies,state:plain(f.state)});
+  assert.deepEqual(replies,[{value:expected===null?null:{text:expected}}]);
+  assert.equal(f.state.requests,1);assert.equal(f.state.reads,expected===null?0:1);
+});
+for(const [name,method,options]of [
+  ['channel-query-synchronous-error','Clipboard.hasStrings',{queryThrow:true}],
+  ['channel-permission-error','Clipboard.getData',{requestReject:true}],
+  ['channel-read-error','Clipboard.getData',{readReject:true}],
+])test(name,async()=>{
+  const f=fixture(options),replies=f.channelCall(method);await turns();
+  observations.push({name,method,replies,state:plain(f.state)});
+  assert.equal(replies.length,1);assert.equal(replies[0].error[0],'error');
+});
 after(()=>writeFileSync(outputValue,JSON.stringify({compiler:ts.version,node:process.version,helperHash,sourceHashes:hashes,observations,
-  scope:'Actual pinned HAR helper, PlatformPluginCallback, ListenableEditingState and TextEditingDelta. Permission, pasteboard, HTML converter, ArrayList and FlutterManager are explicit boundaries; no device permission/clipboard access.'},null,2)+'\n'));
+  scope:'Actual pinned HAR helper, PlatformChannel, PlatformPluginCallback, ListenableEditingState and TextEditingDelta. MethodChannel transport, permission, pasteboard, HTML converter, ArrayList and FlutterManager are explicit boundaries; no device permission/clipboard access.'},null,2)+'\n'));

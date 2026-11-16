@@ -155,7 +155,7 @@
         "subagents", "reference", "schedules", "permission", "agent-presets", "models", "subagent-settings",
         "agent-loop", "shell-settings", "web-search", "plugins", "plugin-inventory", "cordis", "agent-team",
         "cot-translation", "voice-input", "forum", "community", "ds-bot", "share-profile", "search",
-        "notifications", "workspaces", "general", "account", "remote", "phone", "engine", "diagnostics", "web",
+        "notifications", "workspaces", "general", "account", "remote", "phone", "system-actions", "engine", "diagnostics", "web",
         "new-chat", "settings"
       ]
     },

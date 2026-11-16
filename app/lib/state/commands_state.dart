@@ -4,6 +4,7 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
+import 'android_features.dart';
 import 'connection_state.dart';
 import 'features_state.dart';
 import 'hosts_state.dart';
@@ -49,7 +50,7 @@ class SlashCommand {
 }
 
 /// App-level commands, always available.
-List<SlashCommand> get appSlashCommands => [
+List<SlashCommand> appSlashCommands({bool harmony = false}) => [
   SlashCommand(
     name: 'new',
     label: appL10n.commonNewChat,
@@ -65,7 +66,11 @@ List<SlashCommand> get appSlashCommands => [
   SlashCommand(
     name: 'export',
     label: appL10n.stateCommandExportLabel,
-    description: wordsForIos ? appL10n.iosCommandExportDescription : appL10n.stateCommandExportDescription,
+    description: harmony
+        ? appL10n.harmonyCommandExportDescription
+        : wordsForIos
+        ? appL10n.iosCommandExportDescription
+        : appL10n.stateCommandExportDescription,
     kind: SlashCommandKind.app,
   ),
   SlashCommand(
@@ -163,11 +168,16 @@ List<SlashCommand> parseCommandList(Object? value) {
 
 /// App commands + [host] + [skills], in palette order; a host command never
 /// shadows an app one with the same name, and a skill never shadows either.
-List<SlashCommand> mergeSlashCommands(List<SlashCommand> host, {List<SlashCommand> skills = const []}) {
-  final appNames = {for (final c in appSlashCommands) c.name};
+List<SlashCommand> mergeSlashCommands(
+  List<SlashCommand> host, {
+  List<SlashCommand> skills = const [],
+  bool harmony = false,
+}) {
+  final app = appSlashCommands(harmony: harmony);
+  final appNames = {for (final c in app) c.name};
   final hostNames = {for (final c in host) c.name};
   final all = [
-    ...appSlashCommands,
+    ...app,
     for (final c in host)
       if (!appNames.contains(c.name)) c,
     for (final c in skills)
@@ -296,5 +306,9 @@ final skillCommandsProvider = Provider.autoDispose.family<List<SlashCommand>, St
 /// Everything the palette offers for [sessionId].
 final slashCommandsProvider = Provider.autoDispose.family<List<SlashCommand>, String?>((ref, sessionId) {
   final host = ref.watch(hostCommandsProvider(sessionId)).value ?? const [];
-  return mergeSlashCommands(host, skills: ref.watch(skillCommandsProvider(sessionId)));
+  return mergeSlashCommands(
+    host,
+    skills: ref.watch(skillCommandsProvider(sessionId)),
+    harmony: ref.watch(operatingSystemProvider) == 'ohos',
+  );
 });

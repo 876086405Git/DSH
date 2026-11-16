@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
+import '../../state/android_features.dart' show operatingSystemProvider;
 import '../../state/engine_control.dart';
 import '../../state/safe_mode_state.dart';
 import '../common/app_dialog.dart';
@@ -24,11 +25,38 @@ DateTime Function() safeModeClock = DateTime.now;
 abstract final class SafeModeActions {
   static ProviderContainer _container(BuildContext context) => ProviderScope.containerOf(context, listen: false);
 
+  static bool _harmony(ProviderContainer container) => container.read(operatingSystemProvider) == 'ohos';
+
+  /// HarmonyOS, once this process has used its one engine start: what a change of
+  /// mode or configuration costs, for the dialog that asks. Null where it costs a
+  /// restart and no more, or the engine hasn't started yet.
+  static String? _reopenNote(ProviderContainer container) =>
+      _harmony(container) && container.read(localRuntimeProvider).status.launchSpawned
+      ? appL10n.harmonySafeReopenNote
+      : null;
+
   /// Checks the home-level files that would also break safe mode, offers to move them
-  /// aside, then restarts in safe mode.
+  /// aside, then restarts in safe mode. On HarmonyOS it asks first: there is nothing
+  /// to move aside there, and it can mean reopening the app.
   static Future<void> enter(BuildContext context) async {
     final container = _container(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
+    if (_harmony(container)) {
+      final l10n = context.l10n;
+      final note = _reopenNote(container);
+      final ok = await showAppDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(l10n.harmonySafeEnterTitle),
+          content: Text([l10n.harmonySafeEnterBody, ?note].join('\n\n')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
+            FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.phoneFailureEnterSafe)),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+    }
     List<SafeHazard> hazards;
     try {
       hazards = await container.read(runtimeBridgeProvider).safePreflight();
@@ -92,6 +120,7 @@ abstract final class SafeModeActions {
       lkg = const LastKnownGood.none();
     }
     if (!context.mounted) return;
+    final note = _reopenNote(container);
     if (!lkg.useful) {
       messenger?.showSnackBar(
         SnackBar(content: Text(lkg.available ? l10n.phoneSafeNoRestoreNeeded : l10n.phoneSafeNoRestoreRecord)),
@@ -102,7 +131,7 @@ abstract final class SafeModeActions {
       context: context,
       builder: (dialog) => AlertDialog(
         title: Text(l10n.phoneSafeRestoreTitle),
-        content: SingleChildScrollView(child: Text(describeRestore(lkg))),
+        content: SingleChildScrollView(child: Text([describeRestore(lkg), ?note].join('\n\n'))),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
           FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.phoneSafeRestoreStart)),
@@ -113,7 +142,9 @@ abstract final class SafeModeActions {
     try {
       await EngineControl.restoreLastKnownGood(container);
       if (messenger != null && messenger.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(l10n.phoneSafeRestoredStarting)));
+        messenger.showSnackBar(
+          SnackBar(content: Text(note == null ? l10n.phoneSafeRestoredStarting : l10n.harmonyRestoredReopening)),
+        );
       }
     } catch (error) {
       if (messenger != null && messenger.mounted) {
@@ -146,11 +177,12 @@ abstract final class SafeModeActions {
   static Future<void> leave(BuildContext context) async {
     final l10n = context.l10n;
     final container = _container(context);
+    final note = _reopenNote(container);
     final ok = await showAppDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
         title: Text(l10n.phoneSafeLeaveTitle),
-        content: Text(l10n.phoneSafeLeaveBody),
+        content: Text([l10n.phoneSafeLeaveBody, ?note].join('\n\n')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
           FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.phoneSafeLeave)),
@@ -164,8 +196,12 @@ abstract final class SafeModeActions {
   static Future<void> retry(BuildContext context) => EngineControl.restart(_container(context));
 
   /// Starts normally from a failed safe mode (the two-minute trial applies).
-  static Future<void> startNormal(BuildContext context) =>
-      EngineControl.restart(_container(context), mode: EngineMode.normal);
+  static Future<void> startNormal(BuildContext context) {
+    final container = _container(context);
+    // HarmonyOS can't change mode without reopening the app, so it asks.
+    if (_harmony(container)) return leave(context);
+    return EngineControl.restart(container, mode: EngineMode.normal);
+  }
 
   /// The button for [moveAsideAndRetry]: names what it moves.
   static String moveAsideLabel(List<SafeHazard> hazards) =>
@@ -205,7 +241,7 @@ abstract final class SafeModeActions {
   static void requestRepair(BuildContext context, {bool popToRoot = true}) {
     final container = _container(context);
     final status = container.read(localRuntimeProvider).status;
-    container.read(repairDraftProvider.notifier).request(repairPrompt(status));
+    container.read(repairDraftProvider.notifier).request(repairPrompt(status, harmony: _harmony(container)));
     if (popToRoot) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 

@@ -94,10 +94,21 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
         when share.skipped.isEmpty && await isTavernCardFile(File(file.path), file.name)) {
       final ui = ref.read(linkRouterProvider).context ?? (mounted ? context : null);
       if (ui != null && ui.mounted) await openTavernCardFile(ui, ref, File(file.path), file.name);
+      // HarmonyOS's inbox holds the batch until it is used: the card has been read.
+      if (share.consumption case final consumption?) unawaited(consumption.finish());
       return;
     }
-    // Read after the answer: shares arriving behind an unanswered 「放弃修改？」
-    // wait in the cache, not in memory.
+    // Android's native side keeps only a few unread shares, dropping the oldest
+    // as the next arrives, with no way to say one is still wanted: read it now.
+    final os = ref.read(operatingSystemProvider);
+    if (os != 'ohos' && os != 'ios') {
+      final request = await ComposeRequest.fromShare(share, heldBytes: _heldDraftBytes);
+      if (mounted) await _compose(request);
+      return;
+    }
+    // HarmonyOS's and iOS's inboxes hold a batch until it is used. Read after
+    // the answer: shares arriving behind an unanswered 「放弃修改？」 wait in the
+    // cache, not in memory.
     await _showChat();
     if (!mounted) return ComposeRequest.discardShare(share);
     final request = await ComposeRequest.fromShare(share, heldBytes: _heldDraftBytes);

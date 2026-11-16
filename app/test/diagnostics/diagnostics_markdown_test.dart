@@ -52,6 +52,24 @@ void main() {
     appErrors: errors,
   );
 
+  group('the device line', () {
+    String line(Map<String, Object?> device) =>
+        diagnosticsMarkdown(snapshot(device: device)).split('\n').singleWhere((l) => l.startsWith('- 设备：'));
+
+    test('on Android as ever', () {
+      expect(line({'manufacturer': 'vivo', 'android': '16', 'sdkInt': 36}), contains('Android 16 (SDK 36)'));
+    });
+
+    test('on HarmonyOS its own version and API', () {
+      expect(
+        line({'manufacturer': 'HUAWEI', 'osVersion': 'HarmonyOS 6.0.0', 'apiVersion': 26}),
+        contains('HarmonyOS 6.0.0 (API 26)'),
+      );
+      expect(line({'manufacturer': 'HUAWEI', 'apiVersion': 26}), contains('API 26'));
+      expect(line({'manufacturer': 'HUAWEI'}), isNot(contains('API')));
+    });
+  });
+
   test('the report has the sections a support skill needs', () {
     final text = diagnosticsMarkdown(snapshot());
     expect(text, contains('# DSH Go 本机诊断'));

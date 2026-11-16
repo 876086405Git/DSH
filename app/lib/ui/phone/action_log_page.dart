@@ -45,7 +45,14 @@ String phoneDecisionLabel(PhoneLogEntry e) => switch (e.decision) {
     'stale' => appL10n.phoneDecisionScreenChanged,
     _ => appL10n.phoneDecisionFailed,
   },
-  PhoneDecision.unknown => e.rawDecision ?? '',
+  // 系统操作's own words, for what isn't simply done or failed (HarmonyOS).
+  PhoneDecision.unknown => switch (e.rawDecision) {
+    'opened_ui' => appL10n.systemActionsOpenedUi,
+    'reminder_scheduled' => appL10n.harmonyReminderSet,
+    'result_unknown' => appL10n.systemActionsResultUnknown,
+    'unsupported' => appL10n.systemActionsNotSupported,
+    final raw => raw ?? '',
+  },
 };
 
 String formatLogTime(DateTime? t, {DateTime? now}) {

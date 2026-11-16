@@ -19,7 +19,7 @@ export async function until(check,description='condition'){
  const end=Date.now()+5000;while(!check()){if(Date.now()>end)throw Error('timed out: '+description);await new Promise(r=>setImmediate(r));}
 }
 export async function filesFixture(t,options={}){
- let opt=options,timerNext=0;const channels=[],pickers=[],operations=[],fds=new Set(),uris=new Map(),timers=new Map(),modules=new Map();
+ let opt=options,timerNext=0;const channels=[],pickers=[],operations=[],fds=new Set(),uris=new Map(),timers=new Map(),modules=new Map(),utd=[];
  const root=await fsp.mkdtemp(join(tmpdir(),'dsh-native-files-'));t.after(async()=>{
   for(const fd of fds){try{await promisify(fs.close)(fd);}catch{}}
   await fsp.rm(root,{recursive:true,force:true});
@@ -44,8 +44,8 @@ export async function filesFixture(t,options={}){
   '@ohos.file.fs':{default:api},'@ohos.file.picker':{default:{DocumentViewPicker:DocumentPicker,DocumentSelectOptions:class{},DocumentSelectMode:{FILE:0}}},
   '@ohos.file.photoAccessHelper':{default:{PhotoViewPicker:PhotoPicker,PhotoSelectOptions:class{},PhotoViewMIMETypes:{IMAGE_TYPE:'image/*',IMAGE_VIDEO_TYPE:'*/*'}}},
   '@ohos.file.fileuri':{default:{FileUri:class{constructor(value){this.name=decodeURIComponent(new URL(value).pathname.split('/').at(-1));}}}},
-  '@ohos.uri':{default:{URI:Uri}},'@ohos.data.uniformTypeDescriptor':{default:{getUniformDataTypeByFilenameExtension:value=>value,
-   getTypeDescriptor:value=>({mimeTypes:[({'.txt':'text/plain','.jpg':'image/jpeg','.mp4':'video/mp4'})[value]??'application/octet-stream']})}},
+  '@ohos.uri':{default:{URI:Uri}},'@ohos.data.uniformTypeDescriptor':{default:{getUniformDataTypeByFilenameExtension:value=>{utd.push(value);if(opt.utdThrow)throw Error('UTD unavailable');return value;},
+   getTypeDescriptor:value=>({mimeTypes:[opt.utdMime??({'.txt':'text/plain','.jpg':'image/jpeg','.mp4':'video/mp4'})[value]??'application/octet-stream']})}},
   '@ohos.util':{default:{generateRandomUUID:()=>randomUUID()}},'@ohos.hilog':{default:{warn(){operations.push({op:'warning'});}}},
   '@ohos/flutter_ohos':{MethodChannel}
  };
@@ -71,7 +71,7 @@ export async function filesFixture(t,options={}){
  async function file(name,bytes,kind='docs'){const path=join(root,'source-'+uris.size);await fsp.writeFile(path,bytes);
   const uri=`file://${kind}/storage/${uris.size}/${encodeURIComponent(name)}`;uris.set(uri,path);return{uri,path};}
  function select(values,picker=pickers.at(-1)){picker.wait.resolve(picker.kind==='photo'?{photoUris:values}:values);}
- return{...attach(),Plugin,policy,attach,call,file,select,root,app,uris,pickers,operations,fds,timers,
+ return{...attach(),Plugin,policy,attach,call,file,select,root,app,uris,pickers,operations,fds,timers,utd,
   change:next=>{opt={...opt,...next};},expire:()=>{for(const [id,timer]of timers){timers.delete(id);timer.callback();}},
   before:()=>({fds:fds.size,operations:operations.length})};
 }

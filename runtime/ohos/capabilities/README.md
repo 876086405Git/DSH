@@ -39,7 +39,7 @@
 | `publication.systemVersion` | 经验证的系统版本元组身份；缺失/非法为 null；不是 Node 版本，也不暴露原始四字段或设备标识 |
 | `shell` / `processSpawn` / `nodeScripts` / `python` | 实际 shell/subprocess 服务，命令表与执行器和工具说明同源；具有可继承预加载器的 Node 脚本后端报 worker-rebased，缺该入口报 none |
 | `wasm` | 当前实例缺 WebAssembly 为 unsupported，存在对象但未经执行验证为 unknown |
-| `plugins` | bundle 已实际装配的证据，以及 OHOS 第一阶段禁止市场安装的策略；不在 GET 中发现/安装插件 |
+| `plugins` | bundle 已实际装配的证据；OH 平台已注册纯 JS 安装后端且真实 pluginManager 服务存在时，marketInstall 为 supported，否则 unsupported。安装仍限注册表纯 JS 包，实际请求逐项验包；GET 不发现、安装或恢复插件 |
 | `nativeModules` | null，宿主尚无已签名清单及逐模块实际加载观测 |
 | `storage.sessionLock` | 真实 JSONL OHOS 分支的 main-thread 标记；服务缺失或不识别为 unknown |
 | `background` | may-freeze / unknown / none，不外推设备授权或 O8 恢复实现 |

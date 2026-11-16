@@ -3,6 +3,8 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { spawnSync } from 'node:child_process';
 import { linkSync } from 'node:fs';
 const network = globalThis[Symbol.for('dsh.go.ohos.net')];
+const { linuxHostPaths } = await import('../../ohos/linux/host-paths.mjs');
+assert.equal(linuxHostPaths(), undefined, 'Workers cannot inherit Linux owner paths');
 assert.ok(network);
 assert.equal(network.globalDispatcherApi, undefined);
 assert.equal(globalThis[Symbol.for('dsh.go.ohos.publication')], undefined);
@@ -15,4 +17,4 @@ if (workerData.strict) {
 }
 const body = await (await fetch(workerData.url)).text();
 await network.dispatcher.destroy();
-parentPort.postMessage({ body, network: true, publication: false, simulated: true });
+parentPort.postMessage({ body, network: true, publication: false, simulated: true, linuxOwnerPaths: false });

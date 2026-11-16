@@ -16,7 +16,7 @@ p = argparse.ArgumentParser()
 p.add_argument('--node', required=True)
 p.add_argument('--typescript-prefix', required=True)
 p.add_argument('--output', required=True)
-p.add_argument('--dart')
+p.add_argument('--dart', required=True)
 p.add_argument('--zlib-addon', required=True)
 a = p.parse_args()
 repo = Path(__file__).resolve().parents[3]
@@ -47,6 +47,10 @@ def run(argv, name, extra_env=None):
 sources = [
     'app/ohos/entry/src/main/ets/runtime/PersistedRuntimeLog.ets',
     'app/ohos/entry/src/main/ets/plugins/DiagnosticsPlugin.ets',
+    'app/ohos/entry/src/main/ets/plugins/OhosDiagnosticEvidence.ets',
+    'app/ohos/entry/src/main/ets/plugins/OhosFaultEvents.ets',
+    'app/ohos/entry/src/main/ets/plugins/OhosKeyboardLog.ets',
+    'app/lib/state/android_features.dart',
     'app/ohos/entry/src/main/ets/plugins/OhosDeviceFacts.ets',
     'app/ohos/entry/src/main/ets/runtime/RuntimeCore.ets',
     'app/ohos/entry/src/main/ets/runtime/RuntimeController.ets',
@@ -56,6 +60,7 @@ sources = [
     'app/ohos/entry/src/main/ets/runtime/OhosRuntimeStorage.ets',
     'tooling/ohos/tests/runtime-archive-fixture.mjs',
     'app/lib/diagnostics/diagnostics_channel.dart',
+    'app/lib/diagnostics/system_ime_evidence.dart',
     'runtime/tests/ohos/diagnostics-fixture.mjs',
     'runtime/tests/ohos/diagnostics.test.mjs',
     'runtime/tests/ohos/diagnostics-cold.mjs',
@@ -77,21 +82,28 @@ if status == 0:
         status = run([node, 'runtime/tests/ohos/diagnostics-cold.mjs', mode, str(out / 'cold-root'), str(out)], 'cold-' + mode)
         if status != 0:
             break
-if status == 0 and a.dart:
+if status == 0:
     stubs = out / 'dart-stubs'
     for name in ['flutter', 'flutter_riverpod']:
         (stubs / name / 'lib').mkdir(parents=True)
     (stubs / 'flutter/lib/services.dart').write_text('''
 class MissingPluginException implements Exception {}
+class PlatformException implements Exception {
+  PlatformException({required this.code, this.message});
+  final String code;
+  final String? message;
+}
 class MethodChannel {
   const MethodChannel(this.name);
   final String name;
+  Future<T?> invokeMethod<T>(String method, [Object? arguments]) async => throw MissingPluginException();
   Future<Map<K,V>?> invokeMapMethod<K,V>(String method, [Object? arguments]) async => throw MissingPluginException();
   Future<List<T>?> invokeListMethod<T>(String method, [Object? arguments]) async => throw MissingPluginException();
 }
 ''')
     (stubs / 'flutter_riverpod/lib/flutter_riverpod.dart').write_text('''
-class Provider<T> { const Provider(T Function(Object) create); }
+class Ref { T watch<T>(Provider<T> provider) => throw StateError('unused provider fixture'); }
+class Provider<T> { const Provider(T Function(Ref) create); }
 ''')
     config = out / 'package_config.json'
     config.write_text(json.dumps({'configVersion': 2, 'packages': [
@@ -124,11 +136,16 @@ Future<void> main(List<String> args) async {
   final info=await channel.info();
   check(raw.method=='info' && info.app['versionCode']==42, 'actual native info maps into real Dart consumer');
   check(info.device['platform']=='ohos' && info.device['apiVersion']==26 && !info.device.containsKey('sdkInt') && !info.device.containsKey('android'), 'OH facts never become Android SDK metadata');
-  check(info.manifest['files']==8 && info.manifest['uncompressedBytes']==116, 'actual validated manifest summary survives the codec');
+  check(info.manifest['files']==9 && info.manifest['uncompressedBytes']==135, 'actual validated manifest summary survives the codec');
   final lines=await channel.engineLog(maxBytes:12345);
   check(raw.method=='engineLog' && (raw.arguments as Map)['maxBytes']==12345 && lines.join('|')=='第一行|tail', 'engineLog method, byte argument and UTF-8 list');
   final empty=await const DiagnosticsChannel().info();
   check(empty.app.isEmpty && empty.device.isEmpty && (await const DiagnosticsChannel().engineLog()).isEmpty, 'missing plugin retains existing fallback');
+  // This isolated legacy channel fixture deliberately has no keyboard invokeMethod.
+  // Actual OH collect/cancel and Flutter consumption have their own geometry gate.
+  final ime=await channel.collectSystemIme();
+  await channel.cancelSystemIme();
+  check(ime.code=='unsupported' && ime.events.isEmpty, 'missing legacy method retains unsupported fallback, not a native capability claim');
   final redacted=NativeDiagnostics.fromMap({'voice': {'transcript':'hidden', 'audio':'hidden', 'recognizerAvailable':true, 'recentFailures':[{'code':42,'transcript':'hidden'}]}}).voice;
   check(!jsonEncode(redacted).contains('hidden') && redacted['recognizerAvailable']==true, 'real Dart voice allowlist rejects content');
 }
@@ -138,7 +155,7 @@ Future<void> main(List<String> args) async {
     (out / 'dart-inputs.json').write_text(json.dumps({
         'executable': dart, 'sha256': hashlib.sha256(Path(dart).read_bytes()).hexdigest(),
         'actualConsumer': consumer, 'fixtures': [str(stubs), str(driver), str(config)],
-        'scope': 'Actual unmodified Dart consumer. MethodChannel and Provider are declared API doubles; no Flutter engine.'
+        'scope': 'Actual unmodified Dart consumer. MethodChannel, PlatformException and Provider are declared API doubles; no Flutter engine.'
     }, indent=2) + '\n')
 (out / 'report.json').write_text(json.dumps({'exit': status, 'commands': len(commands),
     'notRun': ['HarmonyOS SDK / ArkTS', 'device lifecycle', 'real OH filesystem API', 'Flutter engine transport']}, indent=2) + '\n')

@@ -23,6 +23,7 @@ void main() {
         expect(response.statusCode, HttpStatus.ok);
         return utf8.decoder.bind(response).join();
       }
+
       final low = await read({'gpuBudget': 'low'});
       expect(low, contains('<html data-gpu-budget="low" lang="zh">'));
       expect(low, isNot(contains('<script')));

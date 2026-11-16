@@ -1,0 +1,17 @@
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
+@@ -3448,9 +3448,13 @@
+ 							result.error = managementError(error);
+ 							if (previousPatches !== void 0) {
+ 								try {
++									if (reason === "remove") {
++										try { ohosPluginPackages()?.recoverProfile(this.profile.dir); }
++										catch (diskError) { result.error = managementError(new Error(`${messageOf(error)}\nDisk plugin rollback failed: ${messageOf(diskError)}`)); }
++									}
+ 									result.warnings = await this.configure(() => reconcileProfilePatches(this.ownerContext.root, previousPatches, "dsh", previousActiveIds));
+ 								} catch (rollbackError) {
+-									result.error = managementError(new Error(`${messageOf(error)}\nLive plugin rollback failed: ${messageOf(rollbackError)}`));
++									result.error = managementError(new Error(`${result.error?.diagnostic ?? messageOf(error)}\nLive plugin rollback failed: ${messageOf(rollbackError)}`));
+ 								}
+ 							}
+ 						}

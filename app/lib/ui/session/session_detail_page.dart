@@ -21,6 +21,7 @@ import '../chat/chat_header.dart';
 import '../chat/diff_page.dart';
 import '../chat/run_info.dart';
 import '../chat/step_detail_page.dart';
+import '../chat/tool_view.dart' show PhoneResultText;
 import '../chat/trajectory_sheet.dart';
 import '../chat/turn_summary.dart';
 import '../chat/usage_sheet.dart';
@@ -1410,6 +1411,7 @@ class SubagentsTab extends ConsumerWidget {
                       final span = spanOf(call.callId);
                       final turn = turnOf(call.callId);
                       final status = switch (call.status) {
+                        _ when view.phoneResult != null => view.phoneResult!.word,
                         ToolStatus.succeeded => l10n.commonCompleted,
                         ToolStatus.failed => l10n.commonFailed,
                         ToolStatus.cancelled => l10n.commonCancelled,
@@ -1425,7 +1427,9 @@ class SubagentsTab extends ConsumerWidget {
                           if (span?.duration case final d?) formatSpan(d),
                           if (turn != null) l10n.hubSessionTurn(turn),
                         ].join(' · '),
-                        subtitleColor: call.status == ToolStatus.failed ? dsh.danger : null,
+                        subtitleColor: call.status == ToolStatus.failed && (view.phoneResult?.isFault ?? true)
+                            ? dsh.danger
+                            : null,
                         chevron: span != null && turn != null,
                         onTap: span == null || turn == null
                             ? null

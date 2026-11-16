@@ -1,12 +1,15 @@
 // Public OH implementation of the existing Dart performance protocol.
 import {
-  Any, EventChannel, EventSink, FlutterPlugin, FlutterPluginBinding,
+  Any, EventChannel, EventSink, FlutterManager, FlutterPlugin, FlutterPluginBinding, FlutterView,
   MethodCall, MethodChannel, MethodResult
 } from '@ohos/flutter_ohos';
 import { performanceDeviceFacts } from './OhosDeviceFacts';
 import { ohosThermal } from './OhosThermalState';
 
 let performanceSequence: number = 0;
+// Null until Dart chooses. Dart can answer before the window exists, so this outlives the
+// call and EntryAbility applies it to the view it just created.
+let frameCacheChoice: boolean | null = null;
 
 export default class PerformancePlugin implements FlutterPlugin {
   private binding: FlutterPluginBinding | null = null;
@@ -17,6 +20,15 @@ export default class PerformancePlugin implements FlutterPlugin {
   private observer: (() => void) | null = null;
   private sequence: number = 0;
 
+  // The engine's own frame cache, on by default: smoother, at slightly more touch delay.
+  static applyFrameCache(): void {
+    const enabled = frameCacheChoice;
+    if (enabled === null) return;
+    FlutterManager.getInstance().getFlutterViewList().forEach((view: FlutterView): void => {
+      view.enableFrameCache(enabled);
+    });
+  }
+
   getUniqueClassName(): string { return 'DshPerformancePlugin'; }
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     if (this.binding !== null) this.onDetachedFromEngine(this.binding);
@@ -25,9 +37,14 @@ export default class PerformancePlugin implements FlutterPlugin {
     this.events = new EventChannel(binding.getBinaryMessenger(), 'dsh/performance/events');
     this.methods.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
       if (this.binding !== binding) { this.fail(result); return; }
-      if (call.method !== 'snapshot') { try { result.notImplemented(); } catch (_) {} return; }
-      this.ensure(binding); ohosThermal.refresh();
-      try { result.success(this.snapshot()); } catch (_) {}
+      switch (call.method) {
+        case 'snapshot':
+          this.ensure(binding); ohosThermal.refresh();
+          try { result.success(this.snapshot()); } catch (_) {}
+          return;
+        case 'setFrameCache': this.setFrameCache(call, result); return;
+        default: try { result.notImplemented(); } catch (_) {}
+      }
     } });
     this.events.setStreamHandler({
       onListen: (_args: Any, sink: EventSink): void => {
@@ -60,5 +77,14 @@ export default class PerformancePlugin implements FlutterPlugin {
     return value;
   }
   private emit(): void { try { this.sink?.success(this.snapshot()); } catch (_) {} }
+  private setFrameCache(call: MethodCall, result: MethodResult): void {
+    const enabled: Any = call.argument('enabled');
+    try {
+      if (typeof enabled !== 'boolean') { result.error('bad_args', '帧缓存参数无效。', null); return; }
+      frameCacheChoice = enabled;
+      PerformancePlugin.applyFrameCache();
+      result.success(null);
+    } catch (_) { try { result.error('frame_cache', '帧缓存设置未生效。', null); } catch (_) {} }
+  }
   private fail(result: MethodResult): void { try { result.error('detached', '性能通道已关闭。', null); } catch (_) {} }
 }

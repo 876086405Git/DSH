@@ -1,3 +1,28 @@
+--- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+@@ -125,7 +125,11 @@
+ //#region lib/types/sharp.js
+ /** Process-realm lazy access to Sharp's CommonJS-compatible entry. */
+ /** Load Sharp on the first raster operation and retain its callable export. */
+-const requireSharp = createLazyRequire("sharp", import.meta.url);
++const loadSharp = createLazyRequire("sharp", import.meta.url);
++function requireSharp() {
++	if (process.platform === "openharmony") throw new AttachmentError("鸿蒙本机尚无可用的图像解码/重编码库；请连接电脑处理图像。普通文件仍可上传或保存。", "OHOS_IMAGE_CODEC_UNAVAILABLE");
++	return loadSharp();
++}
+ //#endregion
+ //#region lib/types/image.js
+ /** Raster inspection: full decode at admission, header-only probe on verified reads. */
+--- a/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js
+@@ -198,6 +198,7 @@
+ 	}
+ }
+ function resolveRuntime(config) {
++	if (process.platform === "openharmony") throw Object.assign(new Error("鸿蒙本机不提供 Sherpa 语音模型；可使用系统输入法语音输入，或连接电脑处理音频。"), { code: "ERR_OHOS_LOCAL_SPEECH_UNAVAILABLE" });
+ 	if (![
+ 		"darwin-arm64",
+ 		"darwin-x64",
 --- a/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
 @@ -2,11 +2,11 @@
@@ -38,28 +63,3 @@
  	if (config.cli === false) return "\n\nLibreOffice Kit is disabled in this deployment.";
  	if (config.node === void 0 && (isSea() || process.versions.electron !== void 0)) throw new Error("skill-office: packaged applications must supply a standalone Node executable");
  	const node = config.node ?? process.execPath;
---- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
-+++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
-@@ -125,7 +125,11 @@
- //#region lib/types/sharp.js
- /** Process-realm lazy access to Sharp's CommonJS-compatible entry. */
- /** Load Sharp on the first raster operation and retain its callable export. */
--const requireSharp = createLazyRequire("sharp", import.meta.url);
-+const loadSharp = createLazyRequire("sharp", import.meta.url);
-+function requireSharp() {
-+	if (process.platform === "openharmony") throw new AttachmentError("鸿蒙本机尚无可用的图像解码/重编码库；请连接电脑处理图像。普通文件仍可上传或保存。", "OHOS_IMAGE_CODEC_UNAVAILABLE");
-+	return loadSharp();
-+}
- //#endregion
- //#region lib/types/image.js
- /** Raster inspection: full decode at admission, header-only probe on verified reads. */
---- a/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js
-+++ b/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/lib/index.js
-@@ -198,6 +198,7 @@
- 	}
- }
- function resolveRuntime(config) {
-+	if (process.platform === "openharmony") throw Object.assign(new Error("鸿蒙本机不提供 Sherpa 语音模型；可使用系统输入法语音输入，或连接电脑处理音频。"), { code: "ERR_OHOS_LOCAL_SPEECH_UNAVAILABLE" });
- 	if (![
- 		"darwin-arm64",
- 		"darwin-x64",

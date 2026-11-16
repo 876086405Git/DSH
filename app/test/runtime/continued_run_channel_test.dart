@@ -32,10 +32,12 @@ void main() {
         calls.add(call);
         return null;
       });
-      final container = ProviderContainer(overrides: [
-        operatingSystemProvider.overrideWithValue(platform),
-        localTurnRunningProvider.overrideWith((ref) => ref.watch(_running)),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          operatingSystemProvider.overrideWithValue(platform),
+          localTurnRunningProvider.overrideWith((ref) => ref.watch(_running)),
+        ],
+      );
       addTearDown(() {
         container.dispose();
         messenger.setMockMethodCallHandler(channel, null);
@@ -67,10 +69,12 @@ void main() {
         }
         return null;
       });
-      final container = ProviderContainer(overrides: [
-        operatingSystemProvider.overrideWithValue('ios'),
-        localTurnRunningProvider.overrideWith((ref) => ref.watch(_running)),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          operatingSystemProvider.overrideWithValue('ios'),
+          localTurnRunningProvider.overrideWith((ref) => ref.watch(_running)),
+        ],
+      );
       addTearDown(() {
         container.dispose();
         messenger.setMockMethodCallHandler(channel, null);

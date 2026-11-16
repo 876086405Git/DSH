@@ -160,6 +160,7 @@ abstract final class UiSchema {
     'account',
     'remote',
     'phone',
+    'system-actions',
     'engine',
     'diagnostics',
     'web',

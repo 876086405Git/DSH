@@ -14,7 +14,7 @@ function revive(record, depth = 0) {
   return error;
 }
 
-/** Worker-side five-operation facade. The parent determines every authority. */
+/** Worker-side job-bound facade. The parent determines every authority. */
 export function createOwnedGitClient(port) {
   const pending = new Map();
   let sequence = 0, closed = false;
@@ -53,6 +53,9 @@ export function createOwnedGitClient(port) {
   };
   return Object.freeze({
     api: Object.freeze({
+      createClone: payload => request('createClone', payload),
+      commitClone: id => request('commitClone', { id }),
+      releaseClone: id => request('releaseClone', { id }),
       createIndex: payload => request('createIndex', payload),
       writeIndex: (id, content) => request('writeIndex', { id, content }),
       writeMetadata: payload => request('writeMetadata', payload),

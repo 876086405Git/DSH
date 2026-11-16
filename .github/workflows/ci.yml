@@ -45,7 +45,7 @@ jobs:
             ci: &ci .github/workflows/ci.yml
             app: [*ci, 'app/**', 'packages/**', 'sdk/plugin-kit/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
             packages: [*ci, 'packages/**']
-            runtime: [*ci, 'runtime/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt']
+            runtime: [*ci, 'runtime/**', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt']
 
   checks:
     name: Generated files, tooling, SDK, web
@@ -76,6 +76,8 @@ jobs:
           for dir in tooling runtime/tests app/tool; do
             "$RUNNER_TEMP/venv/bin/python" -m unittest discover -s "$dir" -p 'test_*.py'
           done
+      - name: OHOS gate runner contract
+        run: python3 tooling/ohos/tests/run-gates.test.py
       - name: Plugin SDK
         working-directory: sdk/plugin-kit
         run: |

@@ -36,7 +36,7 @@ def run(name, argv, env=None):
 addon = out / 'user-file-access.node'
 assert run('native-build', [a.cxx,'-std=c++17','-shared','-fPIC','-Wall','-Wextra','-Werror','-I',str(a.node_headers.resolve()),
                            str(repo/'runtime/tests/ohos/user-file-access-addon.cc'),'-o',str(addon)]) == 0
-sources = [repo/'app/ohos/entry/src/main/ets/plugins'/name for name in ['NativeMediaPlugin.ets','NativeMediaPolicy.ets','OhosClipPlayer.ets']]
+sources = [repo/'app/ohos/entry/src/main/ets/plugins'/name for name in ['NativeMediaPlugin.ets','NativeMediaPolicy.ets','OhosClipPlayer.ets','OhosSpeechActivity.ets','VoiceMicLease.ets','VoicePlugin.ets','VoiceTypes.ets','OhosVoiceRecorder.ets','VoicePcm.ets','HmsVoiceRecognizer.ets','HmsKits.ets']]
 sources += [repo/'app/ohos/entry/src/main/cpp/file_access.h',repo/'runtime/tests/ohos/user-file-access-addon.cc',
             *sorted((repo/'runtime/tests/ohos').glob('native-media*'))]
 for source in sources:

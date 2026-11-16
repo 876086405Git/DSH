@@ -14,6 +14,8 @@
   "remotePairImageNoCode": "No QR code found in that image",
   "remotePairCameraDenied": "No camera access. Turn it on in system settings, or use From photos or Paste pairing link.",
   "remotePairCameraFailed": "The camera didn’t open. Use From photos or Paste pairing link.",
+  "remotePairSystemScan": "Scan",
+  "remotePairSystemScanHint": "Opens the system scanner; it can also read a screenshot from your photos",
   "remotePairReading": "Reading the pairing code…",
   "remotePairConfirmTitle": "Connect to this computer?",
   "remotePairComputer": "Computer",

@@ -1,0 +1,42 @@
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -36,4 +36,7 @@
+ #include "iomem.h"
+ #include "riscv_cpu.h"
+ #include "virtio.h"
++#ifdef TEMU_EMBED
++#include "embed-ram.h"
++#endif
+ #include "machine.h"
+@@ -882,7 +885,12 @@
+     }
+     /* RAM */
+     ram_flags = 0;
++#ifdef TEMU_EMBED
++    PhysMemoryRange *guest_ram = cpu_register_ram(s->mem_map, RAM_BASE_ADDR, p->ram_size, ram_flags);
++    dsh_temu_ram_capture(guest_ram->phys_mem, p->ram_size);
++#else
+     cpu_register_ram(s->mem_map, RAM_BASE_ADDR, p->ram_size, ram_flags);
++#endif
+     cpu_register_ram(s->mem_map, 0x00000000, LOW_RAM_SIZE, 0);
+     s->rtc_real_time = p->rtc_real_time;
+     if (p->rtc_real_time) {
+--- a/temu.c
++++ b/temu.c
+@@ -24,6 +24,7 @@
+ #include <stdlib.h>
+ #ifdef TEMU_EMBED
+ #include "embed-fatal.h"
++#include "embed-ram.h"
+ #endif
+ #include <stdio.h>
+ #include <poll.h>
+@@ -1133,5 +1134,8 @@
+     embed_controlled = 0;
+     embed_should_stop = NULL;
+     embed_control_opaque = NULL;
++    if (!dsh_temu_fatal_reason &&
++        (result == TEMU_EMBED_STOPPED_UNRELEASED || result == TEMU_EMBED_CANCELLED_UNRELEASED))
++        dsh_temu_ram_allow_retirement();
+     return result;
+ }

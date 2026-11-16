@@ -190,7 +190,10 @@ class HostsController extends Notifier<HostsState> {
     }
     // A failure writing the credential the person just entered must be
     // reported as that failure, not hidden behind unrelated token cleanup.
-    await put(SshSecrets.attachTokenKey(id), config.dshMode == SshDshMode.attachOnly ? secrets.attachToken?.trim() : null);
+    await put(
+      SshSecrets.attachTokenKey(id),
+      config.dshMode == SshDshMode.attachOnly ? secrets.attachToken?.trim() : null,
+    );
   }
 
   Future<SshSecrets> loadSecrets(String id) async {
@@ -214,7 +217,12 @@ class HostsController extends Notifier<HostsState> {
   Future<void> removeSsh(String id) async {
     await _loaded;
     await _persist([...state.ssh.where((h) => h.id != id)]);
-    for (final key in [SshSecrets.passwordKey(id), SshSecrets.privateKeyKey(id), SshSecrets.passphraseKey(id), SshSecrets.attachTokenKey(id)]) {
+    for (final key in [
+      SshSecrets.passwordKey(id),
+      SshSecrets.privateKeyKey(id),
+      SshSecrets.passphraseKey(id),
+      SshSecrets.attachTokenKey(id),
+    ]) {
       try {
         await _secrets.delete(key);
       } catch (_) {}

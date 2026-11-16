@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -77,9 +78,9 @@ test('直接和上级越界读写均拒绝；外部文件保持原内容', async
 });
 
 test('预植符号链接越界不能读写，内部符号链接正常', async () => {
-  await fs.symlink(outside, join(work, 'escape'));
+  await symlinkFixture(outside, join(work, 'escape'));
   await fs.writeFile(join(work, 'inside'), 'inside');
-  await fs.symlink('inside', join(work, 'safe-link'));
+  await symlinkFixture('inside', join(work, 'safe-link'));
   const internal = await run(['bash', '-c', 'cat safe-link']);
   assert.equal(internal.stdout, 'inside');
   for (const command of ['cat escape/secret', 'echo changed > escape/secret', 'mkdir escape/new-dir']) {

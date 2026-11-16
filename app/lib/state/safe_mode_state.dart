@@ -54,9 +54,11 @@ String failureOneLiner(RuntimeFailure f) {
     FailureKind.startupFailed => appL10n.stateSafeStartupFailed,
     FailureKind.crashedEarly => appL10n.stateSafeCrashedEarly,
     FailureKind.crashedLate => appL10n.stateSafeCrashedLate,
-    FailureKind.killed => appL10n.stateSafeKilled,
+    FailureKind.killed => f.causeUnknown ? appL10n.harmonyEngineUnclean : appL10n.stateSafeKilled,
     FailureKind.noSpace => appL10n.commonStorageFull,
   };
+  // Its summary only says this again, in the native side's language.
+  if (f.causeUnknown) return what;
   final culprits = f.culprits;
   if (f.kind != FailureKind.launchFailed && culprits.isNotEmpty) {
     return appL10n.stateSafeSuspectPlugins(what, culprits.take(3).join(appL10n.stateListSeparator));
@@ -72,9 +74,10 @@ String failureOneLiner(RuntimeFailure f) {
 }
 
 /// The text 「帮我修复」 pre-fills. The agent's briefing (written natively on every safe
-/// start) has the details; this only points it there.
-String repairPrompt(RuntimeStatus status) {
+/// start) has the details; this only points it there. HarmonyOS writes no briefing
+/// and has no `dsh-app-plugins`, so its words name neither.
+String repairPrompt(RuntimeStatus status, {bool harmony = false}) {
   final f = status.mainFailure ?? status.failure;
   final what = f == null ? appL10n.stateSafeManualEntry : failureOneLiner(f);
-  return appL10n.stateSafeRepairPrompt(what);
+  return harmony ? appL10n.harmonySafeRepairPrompt(what) : appL10n.stateSafeRepairPrompt(what);
 }

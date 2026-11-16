@@ -7,6 +7,7 @@ import '../../l10n/l10n.dart';
 import '../../state/app_info.dart';
 import '../../state/onboarding_state.dart';
 import '../../state/settings_state.dart';
+import '../common/field_paste.dart';
 import '../providers/provider_widgets.dart' show FormBottomBar;
 import '../settings/credential_recovery_dialog.dart';
 import '../shell/page_frame.dart';
@@ -53,7 +54,7 @@ class ApiKeyPage extends ConsumerStatefulWidget {
   ConsumerState<ApiKeyPage> createState() => _ApiKeyPageState();
 }
 
-class _ApiKeyPageState extends ConsumerState<ApiKeyPage> {
+class _ApiKeyPageState extends ConsumerState<ApiKeyPage> with FieldPaste<ApiKeyPage> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
   bool _obscure = true;
@@ -75,9 +76,8 @@ class _ApiKeyPageState extends ConsumerState<ApiKeyPage> {
   }
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = normalizeApiKey(data?.text ?? '');
-    if (text.isEmpty) return;
+    final text = normalizeApiKey(await readClipboard() ?? '');
+    if (text.isEmpty || !mounted) return;
     _controller.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),

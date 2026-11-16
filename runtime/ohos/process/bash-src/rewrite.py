@@ -418,6 +418,50 @@ function ohosReadCharEnd(s,count){let end=0,characters=0;while(end<s.length&&cha
     change(index, 'if(g){let I=Ls(e,u);',
            'if(g){if(y?.kind==="readwrite"&&(l>=0?l:a)!==0){try{y.content=await In(e.fs,y.path)}catch(ohosError){return L("",`bash: read: ${u}: ${ohosError.message}\n`,1)}}let I=Ls(e,u);')
 
+    # wc -m and -c are independent columns, including combined options and totals.
+    wc = 'chunks/chunk-P5BOIHWV.js'
+    change(wc, 'x(r,o,n,c,"",0)', 'x(r,o,n,c,"",0,l,e)')
+    change(wc, 'let d=[],m=0,g=0,u=0;', 'let d=[],m=0,g=0,u=0,ohosBytes=0;')
+    change(wc, 'u+=p.third,d.push', 'u+=p.third,ohosBytes+=p.bytes,d.push')
+    change(wc, 'h=t.length>1?3:0;o&&', 'h=t.length>1?3:0;l&&(B=Math.max(B,t.length>1?ohosBytes:Math.max(...d.map(r=>r.stats.bytes))));o&&')
+    change(wc, 'x(y,o,n,c,r,h)', 'x(y,o,n,c,r,h,l,e)')
+    change(wc, 'x({lines:m,words:g,third:u},o,n,c,"total",h)', 'x({lines:m,words:g,third:u,bytes:ohosBytes},o,n,c,"total",h,l,e)')
+    change(wc, '{lines:l,words:e,third:n}', '{lines:l,words:e,third:n,bytes:o}')
+    change(wc, 'function x(a,f,s,o,n,l){', 'function x(a,f,s,o,n,l,ohosBytes,ohosChars){')
+    change(wc, 'o&&e.push(String(a.third).padStart(l))', 'o&&ohosChars&&e.push(String(a.third).padStart(l)),o&&ohosBytes&&e.push(String(a.bytes).padStart(l))')
+
+    # MountableFs routes the link location and target in the same virtual
+    # namespace. ReadWriteFs confines a link to one root; another mounted
+    # filesystem is not a path alias into that root.
+    change(index,
+           'async symlink(t,n){let{fs:r,relativePath:s}=this.routePath(n);return r.symlink(t,s)}',
+           'async symlink(t,n){let{fs:r,relativePath:s}=this.routePath(n),ohosTarget=this.routePath(this.resolvePath(yt(n),t));if(ohosTarget.fs!==r)throw new Error(`EXDEV: cross-mount symlink is not supported, symlink \'${n}\'`);return r.symlink(t.startsWith("/")?ohosTarget.relativePath:t,s)}')
+    # A stored absolute link inside the real root has an absolute virtual
+    # first hop. Keep the existing resolved-target check before exposing it;
+    # relative first hops stay byte-exact after that check; external redaction stays intact.
+    change(index,
+           'if(Ie(l,this.canonicalRoot)){let c=l.slice(this.canonicalRoot.length)||"/";return o==="/"?',
+           'if(Ie(l,this.canonicalRoot)){if(!H.isAbsolute(s))return s;if(H.isAbsolute(s)&&Ie(s,this.canonicalRoot))return s.slice(this.canonicalRoot.length)||"/";let c=l.slice(this.canonicalRoot.length)||"/";return o==="/"?')
+    change(index,
+           'async readlink(t){let{fs:n,relativePath:r}=this.routePath(t);return n.readlink(r)}',
+           'async readlink(t){let{fs:n,relativePath:r}=this.routePath(t),ohosTarget=await n.readlink(r);if(ohosTarget.startsWith("/")){let ohosPath=W(t);for(let ohosMount of this.mounts.keys())if(ohosPath===ohosMount||ohosPath.startsWith(`${ohosMount}/`))return ohosTarget==="/"?ohosMount:`${ohosMount}${ohosTarget}`}return ohosTarget}')
+
+    # -u selects UTC for a naive -d input as well as its formatted output.
+    # Explicit offsets and epochs retain their existing absolute-time path.
+    change('chunks/chunk-5ATEFZLC.js', 'p=t!==null?b(t,l):new Date',
+           'p=t!==null?b(t,i?"UTC":l):new Date')
+
+    # Avoid one cons-string node per output byte: large valid UTF-8 output
+    # otherwise exhausts the fixed Worker heap before reaching its 64 MiB cap.
+    # Keep the original length checks before allocating and alter only this
+    # verified OH-private module, never global built-ins or the npm package.
+    codec = 'chunks/chunk-GN6CQ3J4.js'
+    change(codec, 'var u=new TextDecoder', 'import{Buffer as ohosBuffer}from"node:buffer";var u=new TextDecoder')
+    change(codec, 'let e=y.encode(t),o="";for(let r=0;r<e.length;r++)o+=String.fromCharCode(e[r]);return o',
+           'return ohosBuffer.from(t,"utf8").toString("latin1")')
+    change(codec, 'let e="";for(let o=0;o<t.length;o++)e+=String.fromCharCode(t[o]);return e',
+           'return ohosBuffer.from(t).toString("latin1")')
+
     notice = ('/* Modified for dsh-go OHOS: permission diagnostics, typed output and statement delivery.\n'
               ' * Derived from just-bash 3.6.0; Apache-2.0. See LICENSE and PROVENANCE.json. */\n')
     return {name: (notice + text).encode('utf-8') for name, text in texts.items()}

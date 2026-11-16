@@ -1,7 +1,8 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link as nativeLink, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, link as nativeLink, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { VirtualSubprocessRuntime } from '../../ohos/process/runtime.mjs';
@@ -61,7 +62,7 @@ async function fixture(t, spec = {}) {
   await mkdir(cwd); await mkdir(temporaryRoot);
   for (const [name, value] of Object.entries(independentOpenFiles)) await writeFile(join(cwd, name), value);
   if (spec.initial !== undefined) await writeFile(join(cwd, spec.output ?? 'result.bin'), spec.initial);
-  if (spec.symlink) await symlink('result.bin', join(cwd, 'alias.bin'));
+  if (spec.symlink) await symlinkFixture('result.bin', join(cwd, 'alias.bin'));
   t.after(() => rm(root, { recursive: true, force: true }));
   return { root, cwd, temporaryRoot };
 }
@@ -106,7 +107,7 @@ test('scoped overwrite keeps the read-only policy denial', async t => {
 
 test('scoped overwrite cannot follow an escaping symlink', async t => {
   const f = await fixture(t), outside = join(f.root, 'outside.bin'); await writeFile(outside, 'outside-unchanged');
-  await symlink(outside, join(f.cwd, 'result.bin'));
+  await symlinkFixture(outside, join(f.cwd, 'result.bin'));
   const filesystem = createFilesystem([f.cwd]), bash = shell(filesystem.fs, f.cwd); filesystem.seal();
   await assertDenied(() => execute(bash, f.cwd, '{ printf ABCDEFGHI; printf 123 >&2; } > result.bin 2> result.bin'), /EACCES|cannot open redirect target/);
   assert.equal(await readFile(outside, 'utf8'), 'outside-unchanged');

@@ -28,6 +28,20 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def embedded_copies(library, bundle):
+    """How many copies of a built-in JS file the library holds, as Node embeds it.
+
+    js2c stores a source in Latin-1 when every character fits and in UTF-16 when not, so the
+    file's own UTF-8 bytes only match a pure ASCII source. undici.js isn't one: its licence
+    comment names Jimmy Wärting.
+    """
+    data = bundle.read_bytes()
+    text = data.decode('utf-8')
+    encoding = 'latin-1' if max(map(ord, text), default=0) <= 0xFF else 'utf-16-le'
+    return {'bundleSha256': hashlib.sha256(data).hexdigest(), 'encoding': encoding,
+            'copies': library.read_bytes().count(text.encode(encoding))}
+
+
 def apply_patches(source):
     pins = json.loads((HERE / 'node24-ohos-pins.json').read_text())
     for name, pin in pins.items():
@@ -262,12 +276,16 @@ esac
         library = source / 'out/Release/lib.target/libnode.so'
     elf, audit = audit_library(library, sdk, source / 'src')
     unstripped = {'bytes': library.stat().st_size, 'sha256': digest(library)}
+    # The patched bundle, not Node's own, is what the library has to run.
+    embedded = embedded_copies(library, source / 'deps/undici/undici.js')
+    if embedded['copies'] != 1:
+        raise RuntimeError(f'libnode must hold the prepared Undici bundle exactly once: {embedded}')
     shutil.copyfile(library, output / 'libnode.so')
     subprocess.run([str(sdk / 'llvm/bin/llvm-strip'), '--strip-unneeded', str(output / 'libnode.so')], check=True)
     shutil.copyfile(source / 'LICENSE', output / 'NODE-LICENSE.txt')
     shutil.copyfile(runtimes / 'LLVM-LICENSE.txt', output / 'LLVM-LICENSE.txt')
     plan.update({'scope': 'OHOS cross-build; HAP load and device behavior NOT_RUN',
-                 'unstripped': unstripped, 'elf': elf, 'audit': audit,
+                 'unstripped': unstripped, 'elf': elf, 'audit': audit, 'embeddedUndici': embedded,
                  'buildSeconds': round(time.monotonic() - started),
                  'workBytes': sum(p.stat().st_size for p in work.rglob('*') if p.is_file() and not p.is_symlink()),
                  'artifacts': {p.name: {'bytes': p.stat().st_size, 'sha256': digest(p)}

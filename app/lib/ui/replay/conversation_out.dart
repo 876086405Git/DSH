@@ -141,7 +141,10 @@ enum LinkExpiry {
 
 /// A hosted link: `https://<host>/c/<id>#k=<key>`.
 class ConversationLink {
-  const ConversationLink({required this.url, this.expiresAt, this.id});
+  const ConversationLink({required this.url, this.expiresAt, this.id, this.locallySaved = true});
+
+  /// False when upload succeeded but the local secure list could not be saved.
+  final bool locallySaved;
 
   final Uri url;
 
@@ -160,6 +163,11 @@ class ConversationLink {
 /// (`app/lib/share_hosted/`, adapted in ui/share_hosted/hosted_link_maker.dart,
 /// which also keeps every link in 「我的分享链接」); null leaves 「链接」 out of
 /// the share sheet.
+/// The live delete was cancelled, but its persistent restart marker remains.
+class ConversationLinkRestoreUnsaved implements Exception {
+  const ConversationLinkRestoreUnsaved();
+}
+
 abstract class ConversationLinkMaker {
   /// [fileBytes] is the `.dshgo` file's UTF-8 text; [title] names it in
   /// 「我的分享链接」. Throws [HostedShareException] (its `message` is for the

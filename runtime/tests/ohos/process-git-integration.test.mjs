@@ -1,6 +1,7 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, lstat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, lstat, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -18,7 +19,7 @@ const dependency = createRequire(new URL('../../ohos/process/package.json', impo
 const isomorphicGit = dependency('isomorphic-git');
 const providerPath = require.resolve('@deepseek-ai/dsh-workspace-changes');
 const providerSource = await readFile(providerPath, 'utf8');
-assert.equal(createHash('sha256').update(providerSource).digest('hex'), '027c3246d8174ad2c519fd989e0ab157eedbe3535a5afa41121dc05e5e5615d3');
+assert.equal(createHash('sha256').update(providerSource).digest('hex'), '0640af53762c8b2ebbdc5c38412fcd75badfe36edef12875d8d87969415f04ed');
 const instrumented = join(dirname(providerPath), `.ohos-worker-test-${randomUUID()}.mjs`);
 await writeFile(instrumented, providerSource + '\nexport { GitRunner, TurnRecorder, workspaceTemporaryRoot };\n', { flag: 'wx' });
 let provider;
@@ -247,3 +248,107 @@ for (const stage of ['reserved', 'created', 'identified', 'before-write', 'after
       foreignPreserved: true, queueReleasedAfterCleanup: true }));
   }));
 }
+
+async function served(f, fn) {
+  await seed(f);
+  const head = (await f.git(['rev-parse', 'HEAD'])).stdout.trim(), oids = [];
+  for (const prefix of await readdir(join(f.work, '.git/objects'))) if (/^[a-f0-9]{2}$/.test(prefix))
+    for (const suffix of await readdir(join(f.work, '.git/objects', prefix))) if (/^[a-f0-9]{38}$/.test(suffix)) oids.push(prefix + suffix);
+  const { packfile } = await isomorphicGit.packObjects({ fs: nodeFs, dir: f.work, oids });
+  const packet = content => { const bytes = Buffer.from(content); return Buffer.concat([Buffer.from((bytes.length + 4).toString(16).padStart(4, '0')), bytes]); };
+  const calls = [];
+  let interceptor;
+  const server = createServer(async (request, response) => {
+    calls.push(request.method + ' ' + new URL(request.url, 'http://fixture').pathname);
+    for await (const _ of request) { /* consume negotiation */ }
+    if (await interceptor?.(request, response)) return;
+    if (request.url === '/repo/info/refs?service=git-upload-pack') {
+      response.writeHead(200, { 'content-type': 'application/x-git-upload-pack-advertisement' });
+      response.end(Buffer.concat([packet('# service=git-upload-pack\n'), Buffer.from('0000'),
+        packet(`${head} HEAD\0multi_ack_detailed side-band-64k ofs-delta symref=HEAD:refs/heads/main\n`),
+        packet(`${head} refs/heads/main\n`), Buffer.from('0000')]));
+    } else if (request.url === '/repo/git-upload-pack') {
+      response.writeHead(200, { 'content-type': 'application/x-git-upload-pack-result' });
+      response.end(Buffer.concat([packet('NAK\n'), packet(Buffer.concat([Buffer.from([1]), Buffer.from(packfile)])), Buffer.from('0000')]));
+    } else { response.writeHead(404); response.end(); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const target = join(f.temp, 'clone'), url = `http://127.0.0.1:${server.address().port}/repo`;
+  try { await fn({target, url, head, calls, intercept: value => { interceptor = value; }}); }
+  finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+}
+
+for (const existing of [false, true]) for (const cancel of ['terminate', 'timeout', 'transport-error']) {
+  test(`clone ${cancel} 收束后同目标重试成功 existing=${existing}`, {timeout: 20000}, async () => fixture(async f => served(f, async s => {
+    let identity;
+    if (existing) { await mkdir(s.target, {mode: 0o700}); identity = await lstat(s.target); }
+    const entered = Promise.withResolvers();
+    s.intercept((request, response) => { entered.resolve(); if (cancel === 'transport-error') { response.writeHead(500); response.end(); } return true; });
+    const handle = f.runtime.spawn({...f.spec, argv: ['git', 'clone', s.url, s.target], ...(cancel === 'timeout' ? {signal: AbortSignal.timeout(1500)} : {})});
+    await entered.promise;
+    if (cancel === 'terminate') handle.terminate();
+    const outcome = await handle.done;
+    assert.notEqual(outcome.exitCode, 0);
+    assert.equal(await handle.waitForExit(), true);
+    for (const name of (await readdir(f.temp)).filter(name=>name !== 'clone')) {
+      assert(name.startsWith('.dsh-git-clone-')); assert.deepEqual(await readdir(join(f.temp,name)), []);
+    }
+    if (existing) {
+      assert.equal((await lstat(s.target)).ino, identity.ino);
+      assert.deepEqual(await readdir(s.target), []);
+    } else await assert.rejects(lstat(s.target), {code: 'ENOENT'});
+    s.intercept(undefined);
+    await f.git(['clone', s.url, s.target]);
+    assert.equal((await f.git(['rev-parse', 'HEAD'], {cwd: s.target})).stdout.trim(), s.head);
+    assert.equal(await readFile(join(s.target, '中文.txt'), 'utf8'), '第一行\nsecond\n');
+    if (existing) assert.equal((await lstat(s.target)).mode & 0o777, 0o700);
+    assert.deepEqual(s.calls.slice(-2), ['GET /repo/info/refs', 'POST /repo/git-upload-pack']);
+  })));
+}
+
+for (const mutation of ['new-file', 'replace-empty', 'replace-symlink', 'new-directory']) {
+  test(`clone commit 拒绝目标变化且保留用户内容 ${mutation}`, {timeout: 20000}, async () => fixture(async f => served(f, async s => {
+    if (mutation !== 'new-directory') await mkdir(s.target);
+    let saved;
+    f.hooks.stage = async phase => {
+      if (phase !== 'clone-before-commit') return;
+      if (mutation === 'new-file') await writeFile(join(s.target, 'user.txt'), 'user-content');
+      else if (mutation === 'new-directory') await mkdir(s.target);
+      else {
+        saved = s.target + '-original'; await rename(s.target, saved);
+        if (mutation === 'replace-empty') await mkdir(s.target);
+        else { await writeFile(join(f.outside, 'user.txt'), 'outside-content'); await symlinkFixture(f.outside, s.target); }
+      }
+    };
+    const result = await f.run(['git', 'clone', s.url, s.target]);
+    assert.notEqual(result.exitCode, 0);
+    assert.equal((await lstat(s.target)).isSymbolicLink(), mutation === 'replace-symlink');
+    if (mutation === 'new-file') assert.equal(await readFile(join(s.target, 'user.txt'), 'utf8'), 'user-content');
+    else if (mutation === 'replace-symlink') assert.equal(await readFile(join(f.outside, 'user.txt'), 'utf8'), 'outside-content');
+    else assert.deepEqual(await readdir(s.target), []);
+    for (const name of (await readdir(f.temp)).filter(name=>name.startsWith('.dsh-git-clone-'))) assert.deepEqual(await readdir(join(f.temp,name)), []);
+    if (saved) assert.deepEqual(await readdir(saved), []);
+  })));
+}
+
+test('clone hard terminate 等待在途主线程metadata写入，才清理stage和放行', {timeout: 20000}, async () => fixture(async f => served(f, async s => {
+  const entered = Promise.withResolvers(), resume = Promise.withResolvers(); let gated = false, stagePath;
+  f.hooks.stage = async (phase, row) => {
+    if (phase === 'clone-created') stagePath = row.path;
+    if (!gated && phase === 'before-write' && stagePath && row.target.startsWith(stagePath + '/')) {
+      gated = true; entered.resolve(); await resume.promise;
+    }
+  };
+  const handle = f.runtime.spawn({...f.spec, argv: ['git', 'clone', s.url, s.target]});
+  await entered.promise;
+  handle.terminate();
+  let done = false; handle.done.then(()=> {done=true;});
+  await new Promise(resolve=>setTimeout(resolve, 50));
+  assert.equal(done, false, 'owner must join accepted metadata before settlement');
+  assert((await lstat(stagePath)).isDirectory());
+  resume.resolve();
+  assert.equal((await handle.done).signal, 'SIGTERM');
+  assert.deepEqual(await readdir(stagePath), []);
+  await assert.rejects(lstat(s.target), {code: 'ENOENT'});
+  await f.git(['clone', s.url, s.target]);
+})));

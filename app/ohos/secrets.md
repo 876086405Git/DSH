@@ -21,7 +21,7 @@
 
 Dart 的 `write(value: null)` 使用 `delete`，不会向原生发送空值。无效回包或原生错误是
 失败，不被适配器转换成空串或空 Map。错误消息不包含键名、凭据、密文或系统路径。
-插件支持 `secrets_invalid`、`secrets_unavailable`、`secrets_key_missing`、`secrets_unreadable`、`secrets_io`、`secrets_recovery_failed`
+插件支持 `secrets_invalid`、`secrets_unavailable`、`secrets_key_missing`、`secrets_key_unusable`、`secrets_unreadable`、`secrets_io`、`secrets_recovery_failed`
 和 `cancelled`。
 
 ## 为什么使用 HUKS
@@ -78,11 +78,15 @@ rename 到最终路径，再 fsync 仓库目录。队列不是跨进程锁；没
 但 HUKS 明确报告 alias 不存在。`secrets_unavailable` 仍表示系统密钥暂不可用，不把
 IPC 等错误误认成密钥丢失。所有错误原样穿过 Dart；读取或写入失败从不自动恢复。
 
-这两类错误（`credentialsUnreadable`）只在这些地方有出口，仅鸿蒙：
+`secrets_key_unusable` 表示已经没有密文，但 alias 还在、用它加密失败，比如恢复时密文
+删了而 alias 没删掉。读写都先探测，所以读也报这个错，不会读成空库、写时才失败。这时
+库已经空了，清除不丢数据。HUKS 查询或随机数失败仍是 `secrets_unavailable`。
+
+这三类错误（`credentialsUnreadable`）只在这些地方有出口，仅鸿蒙：
 
 | 位置 | 看到什么 |
 | --- | --- |
-| 设置 › 隐私与分享 | “清除已保存的密钥”一行，只在一次探测读取报这两类错误时出现 |
+| 设置 › 隐私与分享 | “清除已保存的密钥”一行，只在一次探测读取报这三类错误时出现 |
 | API key 页、清除 API key、SSH 主机表单 | 直接弹确认框，不再说“再试一次”；表单内容保留 |
 | DSH Remote 登录、论坛登录 | 错误文案说明无法读取并指向隐私页；DSH Remote 不再当网络错误重连 |
 

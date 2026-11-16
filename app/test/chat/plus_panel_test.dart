@@ -4,15 +4,18 @@
 // through `setPolicies`; and the permission pill on the composer's edge.
 
 import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/features_state.dart';
 import 'package:dsh_app/state/risk_notice_store.dart';
 import 'package:dsh_app/state/session_modes.dart';
+import 'package:dsh_app/state/system_actions_state.dart';
 import 'package:dsh_app/ui/chat/chat_screen.dart';
 import 'package:dsh_app/ui/chat/composer.dart';
 import 'package:dsh_app/ui/chat/widgets/permission_pill.dart';
 import 'package:dsh_app/ui/chat/widgets/plus_panel.dart';
 import 'package:dsh_app/ui/common/list_page_row.dart';
+import 'package:dsh_app/ui/phone/system_actions_page.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +24,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../phone/support.dart';
 import 'support/harness.dart';
+
+final _zh = lookupL10n(AppLocale.zhCN);
+
+class _Actions extends SystemActionsController {
+  _Actions(this.enabled);
+  final bool enabled;
+
+  @override
+  SystemActionsState build() => SystemActionsState(loaded: true, enabled: enabled);
+}
 
 class _NoRiskStore implements RiskNoticeStore {
   @override
@@ -58,6 +71,7 @@ Future<ChatHarness> _openPanel(
   String? session = 's1',
   Brightness brightness = Brightness.light,
   SessionModes modes = const SessionModes(preset: 'workspace-write'),
+  List<Override> more = const [],
 }) async {
   tester.view.devicePixelRatio = 2;
   tester.view.physicalSize = Size(width * 2, 844 * 2);
@@ -88,6 +102,7 @@ Future<ChatHarness> _openPanel(
       overrides: [
         ...harness.overrides,
         ..._extra(modes: modes),
+        ...more,
       ],
     ),
   );
@@ -221,6 +236,32 @@ void main() {
         matching: find.byType(Switch),
       );
       expect(tester.widget<Switch>(toggle).value, isTrue);
+    });
+  });
+
+  group('系统操作', () {
+    List<Override> on(String os, {required bool enabled}) => [
+      operatingSystemProvider.overrideWithValue(os),
+      systemActionsProvider.overrideWith(() => _Actions(enabled)),
+    ];
+
+    testWidgets('on HarmonyOS while it is on: follows the permissions, and the row opens its page', (tester) async {
+      await _openPanel(tester, more: on('ohos', enabled: true));
+      expect(find.text(_zh.systemActionsTitle), findsOneWidget);
+      expect(find.text(_zh.systemActionsConfirmValue), findsOneWidget);
+      await tester.tap(find.text(_zh.systemActionsConfirmTitle));
+      await pumpFrames(tester);
+      expect(find.byType(SystemActionsPage), findsOneWidget);
+    });
+
+    testWidgets('hidden while it is off', (tester) async {
+      await _openPanel(tester, more: on('ohos', enabled: false));
+      expect(find.text(_zh.systemActionsTitle), findsNothing);
+    });
+
+    testWidgets('never on Android', (tester) async {
+      await _openPanel(tester, more: on('android', enabled: true));
+      expect(find.text(_zh.systemActionsTitle), findsNothing);
     });
   });
 

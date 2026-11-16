@@ -63,6 +63,61 @@ void main() {
 
   String textOf(String package) => entries.singleWhere((e) => e.packages.contains(package)).text;
 
+  group('on HarmonyOS', () {
+    late List<LicenseEntryWithLineBreaks> harmony;
+    const gradle = [
+      'Google ML Kit Text Recognition (Chinese)',
+      'Shizuku-API',
+      'libadb-android',
+      'spake2-android',
+      'Conscrypt',
+      'Bouncy Castle',
+      'XZ for Java',
+      'AndroidX WebKit',
+      'ONNX Runtime',
+      'Silero VAD',
+      'smart-turn',
+      'tawcroot (tawc)',
+      'flutter_webrtc',
+      'AudioSwitch',
+      'WebRTC',
+      'Streaming Zipformer zh-en (sherpa-onnx)',
+    ];
+
+    setUp(() async {
+      LicenseRegistry.reset();
+      registerThirdPartyLicenses(os: 'ohos');
+      harmony = (await LicenseRegistry.licenses.toList()).cast<LicenseEntryWithLineBreaks>();
+    });
+    tearDown(() async {
+      LicenseRegistry.reset();
+      registerThirdPartyLicenses();
+      registerFontLicenses();
+    });
+
+    test('what Gradle bundles for the APK isn\'t listed, and what the HAP carries is', () {
+      final names = {for (final entry in harmony) ...entry.packages};
+      for (final name in gradle) {
+        expect(names, isNot(contains(name)), reason: name);
+      }
+      expect(names, containsAll(['Node.js', 'HarmonyOS runtime packages', 'DS Bot', 'Libraries.dev', 'Phosphor Icons']));
+    });
+
+    test('Node says whose it is and its terms; each package once', () {
+      final node = harmony.singleWhere((e) => e.packages.contains('Node.js')).text;
+      expect(node, contains('Copyright Node.js contributors'));
+      expect(node, contains(_mit));
+      final names = [for (final entry in harmony) ...entry.packages];
+      expect(names.toSet(), hasLength(names.length));
+    });
+
+    test('the packages\' texts it points at are in the source', () {
+      final runtime = harmony.singleWhere((e) => e.packages.contains('HarmonyOS runtime packages')).text;
+      expect(runtime, contains('runtime/ohos/licenses/texts'));
+      expect(Directory('../runtime/ohos/licenses/texts').existsSync(), isTrue);
+    });
+  });
+
   test('WebRTC entry exposes the complete upstream asset without truncation', () {
     final file = File('assets/licenses/webrtc-150.7871.04.md');
     final bundle = file.readAsStringSync();

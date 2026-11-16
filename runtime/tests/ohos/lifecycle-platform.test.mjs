@@ -1,27 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as fs from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import * as lifecyclePlugin from '../../ohos/lifecycle/index.mjs';
+import { loadActualScheduler } from './lifecycle-engine-fixture.mjs';
 
 const require = createRequire(join(resolve(process.env.DSH_LIFECYCLE_TEST_PREFIX), 'package.json'));
 const load = name => import(pathToFileURL(require.resolve('@deepseek-ai/' + name)));
-const [{ Context }, { SystemPrompt }, { ToolRuntime, defineContentToolFixture }, { SessionStore }, { AgentRegistry }, { createAssistantMessage }, timeout] = await Promise.all([
-  'cordis', 'dsh-system-prompt', 'dsh-tools', 'dsh-session', 'dsh-agent', 'dsh-llm', 'dsh-timeout',
+const [{ Context }, { SystemPrompt }, { ToolRuntime, defineTool }, { SessionStore }, { AgentRegistry }, { createAssistantMessage }, timeout, { SessionProjectionRegistry }] = await Promise.all([
+  'cordis', 'dsh-system-prompt', 'dsh-tools', 'dsh-session', 'dsh-agent', 'dsh-llm', 'dsh-timeout', 'dsh-session-projection',
 ].map(load));
-async function scheduler(path) {
-  const source = await fs.readFile(path, 'utf8');
-  const temp = join(dirname(require.resolve('@deepseek-ai/dsh-agent-loop')), '.lifecycle-platform-' + randomUUID() + '.mjs');
-  await fs.writeFile(temp, source + '\nexport { executeToolCalls };\n');
-  try { return (await import(pathToFileURL(temp))).executeToolCalls; }
-  finally { await fs.unlink(temp); }
-}
-const original = await scheduler(resolve(process.env.DSH_LIFECYCLE_BASE_AGENT_LOOP));
-const changed = await scheduler(require.resolve('@deepseek-ai/dsh-agent-loop'));
+// Same real executor and sibling dependencies, different public pipeline bytes.
+const { NativeToolExecutor: original } = await loadActualScheduler({ sourcePath: resolve(process.env.DSH_LIFECYCLE_BASE_PIPELINE) });
+const { NativeToolExecutor: changed } = await loadActualScheduler();
 const key = Symbol.for('dsh.go.ohos.lifecycle');
 const platform = Object.getOwnPropertyDescriptor(process, 'platform');
 assert.equal(globalThis[Symbol.for('dsh.go.ohos.sim')], undefined, 'platform test must run without the simulation marker');
@@ -30,20 +23,34 @@ function normalized(value) {
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'time' && key !== 'id').map(([key, child]) => [key, normalized(child)]));
 }
-async function run(execute) {
+async function run(NativeToolExecutor) {
   const ctx = new Context(), events = [];
-  await ctx.plugin(SystemPrompt, {}); await ctx.plugin(ToolRuntime, { mode: 'native' });
-  await ctx.plugin(SessionStore); await ctx.plugin(AgentRegistry);
-  ctx.provide('agentLoop', { config: { maxParallelToolCalls: { get: () => 2 } } });
+  await ctx.plugin(SystemPrompt, {}); await ctx.plugin(ToolRuntime, {});
+  await ctx.plugin(SessionStore); await ctx.plugin(SessionProjectionRegistry); await ctx.plugin(AgentRegistry);
+  ctx.tools.setExecutor(new NativeToolExecutor(ctx, () => 2));
   ctx.on('session/event', (_session, event) => events.push(event));
-  ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'platform path', parameters: {},
+  ctx.tools.register(defineTool({ name: 'echo', description: 'platform path', parameters: {},
+    output: {
+      schema: { type: 'array', items: { type: 'object', additionalProperties: false,
+        properties: { type: { type: 'string', const: 'text', required: true }, text: { type: 'string', required: true } } } },
+      render: (_args, value) => value,
+    },
     execute: async () => [{ type: 'text', text: 'original behavior 中文' }] }));
   const session = ctx.sessions.create('platform-session', { meta: { cwd: process.cwd() } });
   const agent = { id: session.id, ctx, session, inject() {} };
   const calls = [{ type: 'tool-call', id: 'call', name: 'echo', arguments: '{}' }];
   session.append('turn/start', { turn: 1 }); session.append('step/start', { turn: 1, step: 1 });
   session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({ content: calls, source: { provider: 'fixture', model: 'fixture' } }) }, { surfaceOp: 'append' });
-  try { await ctx.agents.withInitiator(agent, () => execute(ctx, 1, 1, calls, new AbortController().signal, () => {})); return normalized(events); }
+  try {
+    const result = await ctx.agents.withInitiator(agent, () => ctx.tools.execute({
+      calls, signal: new AbortController().signal, agent, log: { turn: 1, step: 1 }, maxParallelToolCalls: 2,
+    }));
+    assert.equal(result.results.length, 1);
+    assert.equal(result.results[0].result.content[0].text, 'original behavior 中文');
+    assert.equal(events.filter(event => event.type === 'tool/call').length, 1);
+    assert.equal(events.filter(event => event.type === 'tool/result').length, 1);
+    return normalized(events);
+  }
   finally { await ctx.fiber.dispose(); }
 }
 for (const value of ['linux', 'android']) test(`${value}: environment string cannot install lifecycle; exact scheduler trace and wall timeout stay on original path`, async () => {

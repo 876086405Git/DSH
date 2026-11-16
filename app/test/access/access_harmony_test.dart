@@ -8,8 +8,11 @@ import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/access_state.dart';
 import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/state/system_actions_state.dart';
 import 'package:dsh_app/state/voice_model_state.dart';
 import 'package:dsh_app/ui/access/access_walk.dart';
+import 'package:dsh_app/ui/access/phone_mode_sheet.dart';
+import 'package:dsh_app/ui/phone/phone_disclosure_sheet.dart';
 import 'package:dsh_app/ui/features/feature_catalog.dart';
 import 'package:dsh_app/ui/onboarding/access_step.dart';
 import 'package:dsh_app/ui/settings/index/spots.dart';
@@ -196,10 +199,11 @@ void main() {
       expect(accessFeaturesFor('linux'), accessFeaturesFor('android'));
     });
 
-    test('HarmonyOS: 回复提醒 and 语音输入, which ask for notifications and the microphone', () {
-      expect(accessFeaturesFor('ohos'), [AccessFeature.alerts, AccessFeature.voice]);
-      expect(accessFeaturesFor('ios'), accessFeaturesFor('ohos'));
+    test('HarmonyOS: 回复提醒 and 语音输入, which ask for notifications and the microphone, and 系统操作', () {
+      expect(accessFeaturesFor('ohos'), [AccessFeature.alerts, AccessFeature.systemActions, AccessFeature.voice]);
+      expect(accessFeaturesFor('ios'), [AccessFeature.alerts, AccessFeature.voice]);
       expect(accessItemsFor(AccessFeature.alerts, null), [AccessItem.notifications]);
+      expect(accessItemsFor(AccessFeature.systemActions, null), isEmpty, reason: 'no permission of its own');
       // A maker's name changes nothing: none of its switches belong to these.
       expect(accessWalk(accessFeaturesFor('ohos'), 'huawei'), [AccessItem.mic, AccessItem.notifications]);
     });
@@ -283,10 +287,12 @@ void main() {
       return phone;
     }
 
-    testWidgets('on HarmonyOS: two rows, and no model promised', (tester) async {
+    testWidgets('on HarmonyOS: three rows, and no model promised', (tester) async {
       await pick(tester, 'ohos', metered: true);
       expect(find.text(_zh.accessFeatureAlerts), findsOneWidget);
       expect(find.text(_zh.accessFeatureAlertsNeeds), findsOneWidget);
+      expect(find.text(_zh.systemActionsTitle), findsOneWidget);
+      expect(find.text(_zh.catalogSystemActionsSummary), findsOneWidget);
       expect(find.text(_zh.accessFeatureVoice), findsOneWidget);
       expect(find.text(_zh.accessFeatureVoiceNeeds), findsOneWidget);
       for (final other in [
@@ -301,11 +307,41 @@ void main() {
       expect(find.text(_zh.accessVoiceMetered), findsNothing);
     });
 
+    testWidgets('on HarmonyOS: 系统操作 shows its disclosure; turned down, the box stays empty', (tester) async {
+      await pick(tester, 'ohos');
+      await tester.tap(find.text(_zh.systemActionsTitle));
+      await _frames(tester);
+      expect(find.byType(PhoneDisclosureSheet), findsOneWidget);
+      expect(find.text(_zh.systemActionsDisclosureNeverBody), findsOneWidget);
+      await tester.tap(find.text(_zh.phoneDisclosureNotNow));
+      await _frames(tester);
+      expect(tester.widget<FilledButton>(find.byKey(_primary)).onPressed, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(SystemActionsController.enabledKey), isNull);
+    });
+
+    testWidgets('on HarmonyOS: 系统操作 alone asks the phone for nothing, and is on when the step ends', (tester) async {
+      final phone = await pick(tester, 'ohos');
+      await tester.tap(find.text(_zh.systemActionsTitle));
+      await _frames(tester);
+      await tester.tap(find.text(_zh.phoneDisclosureAgreeEnable));
+      await _frames(tester);
+      await tester.tap(find.byKey(_primary));
+      await _frames(tester, 12);
+      expect(phone.opened, isEmpty);
+      expect(find.byType(PhoneModeSheet), findsNothing);
+      expect(find.byKey(const ValueKey('access-summary-card')), findsNothing);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(SystemActionsController.enabledKey), isTrue);
+      expect(prefs.getBool(SystemActionsController.disclosureKey), isTrue);
+    });
+
     testWidgets('on Android: voice still says its download, and never 回复提醒', (tester) async {
       await pick(tester, 'android', metered: true);
       expect(find.text(_zh.accessVoiceModel(voiceModelApproxMb)), findsOneWidget);
       expect(find.text(_zh.accessVoiceMetered), findsOneWidget);
       expect(find.text(_zh.accessFeatureAlerts), findsNothing);
+      expect(find.text(_zh.systemActionsTitle), findsNothing);
       expect(find.text(_zh.accessFeatureFiles), findsOneWidget);
     });
 
@@ -368,7 +404,8 @@ void main() {
       await page(tester, 'ohos');
       expect(find.byKey(const ValueKey('access-section-alerts')), findsOneWidget);
       expect(find.byKey(const ValueKey('access-section-voice')), findsOneWidget);
-      for (final other in ['files', 'pet', 'phone', 'background']) {
+      // 系统操作 included: it has no permission to list here.
+      for (final other in ['files', 'pet', 'phone', 'background', 'systemActions']) {
         expect(find.byKey(ValueKey('access-section-$other')), findsNothing, reason: other);
       }
       expect(

@@ -46,6 +46,14 @@ bridge、boot、direct 仍逐个散列实际普通文件。所有路径用字节
 
 映射表中影响运算的字段也有实际变更测试：源当前摘要、旧摘要、helper 摘要、pins 两个摘要、companion 摘要任一被改，均能改变当前输出。schema、baseline、target 是审核说明字段；实际目标在 helper 调用中固定为 android。代码没有尝试从源码文本推测语义等价。
 
+### 合入 main-2cd33b59 后的输入
+
+main 的 recipe 现在散列 `find patches bridge boot direct session-deletion`，`patches/` 里多了显式应用顺序 `series`。helper 照此重放：`session-deletion/` 下的文件逐个散列（companion 不再单列），`series` 只取 Android 选中补丁的顺序做规范摘要，等于已审基线时映射为 main 的 `series` 原文摘要，所以只在 `series` 末尾增删 OH 覆盖行不改 Android 身份。映射表升为 schema 2：`sources` 多了 `session-deletion/generate.py`，新增 `seriesCanonicalSha256` / `seriesLegacySha256`，去掉 `companionSha256`。`android-recipe-compat.test.py` 以 main-2cd33b59 为基线复跑两 ABI 完整输入流逐字节相同，上面表里的旧摘要只是历史。
+
+### 合入 main-dd130b31 后的输入
+
+main 改了 `lib/rtbuild.py`（pins 原子写入、`stream_digest`）、`patches/pins.json` 和 `series`（新增四个公共补丁），`build-runtime.sh` 与 `session-deletion/generate.py` 没变。映射表的 `baseline` 改为 `dd130b31`，`lib/rtbuild.py` 两个摘要、pins 与 series 的规范/原文摘要按新基线重算，其余不变。`android-recipe-compat.test.py` 以 main-dd130b31 为基线 39 项全过，两 ABI 夹具后缀与 main 相同（x86_64 `2378759b83cf`，arm64-v8a `dec0d4429b28`）；`composition-android.py` 的已审差异表同步更新，Android 逻辑树与 main 的补丁器输出一致。
+
 ## 证据与复跑
 
 ```sh

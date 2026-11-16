@@ -84,11 +84,22 @@ Widget? pageForId(String id, String? sessionId) {
 typedef PageResolver = Widget? Function(String id, String? sessionId);
 
 /// [pageForId] (tests swap in light pages); on HarmonyOS, Android's own pages
-/// have none ([registerPageLinks] says so).
+/// lead to its form of them ([SettingsIndex.ohosLink]) or have none
+/// ([registerPageLinks] says so). Android and iOS have nothing of HarmonyOS's own;
+/// iOS has none of Android's own but what it has too ([SettingSpot.iosToo]).
 final pageLinkResolverProvider = Provider<PageResolver>((ref) {
-  if (ref.watch(androidSystemFeaturesProvider)) return pageForId;
-  final ios = ref.watch(operatingSystemProvider) == 'ios';
-  return (id, sessionId) => SettingsIndex.androidOnlyLink(id, ios: ios) ? null : pageForId(id, sessionId);
+  final os = ref.watch(operatingSystemProvider);
+  if (os == 'ohos') {
+    return (id, sessionId) {
+      final target = SettingsIndex.ohosLink(id);
+      return SettingsIndex.androidOnlyLink(target) ? null : pageForId(target, sessionId);
+    };
+  }
+  final android = ref.watch(androidSystemFeaturesProvider);
+  return (id, sessionId) =>
+      SettingsIndex.ohosOnlyLink(id) || (!android && SettingsIndex.androidOnlyLink(id, ios: os == 'ios'))
+      ? null
+      : pageForId(id, sessionId);
 });
 
 /// Routes `dshgo://open/…` to its page, pushed over the home route. [session]

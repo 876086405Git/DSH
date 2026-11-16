@@ -22,7 +22,7 @@
      } finally { await rm(temporary, { force: true }); }
      await syncMarkerDirectories(id);
    };
-@@ -107,6 +119,12 @@
+@@ -195,6 +207,12 @@
    };
    return {
      version: 2, pending, deleted, assertAdmit, assertParent, withMutation: mutation,
@@ -37,7 +37,16 @@
      async acquireWriter(id, dir, header) {
 --- a/runtime/bridge/dsh-go-bridge/lib/session-deletion.js
 +++ b/runtime/bridge/dsh-go-bridge/lib/session-deletion.js
-@@ -32,7 +32,12 @@
+@@ -43,6 +43,8 @@
+       await services.cache.dshGoForget(sessionId);
+       await services.query.dshGoForget(sessionId);
+       await services.workspace.dshGoForget(sessionId);
++      const { cleanupSessionResources } = await import("@earendil-works/pi-ai");
++      cleanupSessionResources(sessionId);
+     },
+   });
+   return {
+@@ -50,7 +52,12 @@
        if (path !== `${ROOT}/deletion` && path !== `${ROOT}/delete`) return false;
        if (path === `${ROOT}/deletion`) {
          if (req.method !== "GET") send(res, 405, errorBody("unavailable", "Use GET."));

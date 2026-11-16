@@ -62,6 +62,7 @@ class PerformancePrefs {
     this.animations,
     this.fluid,
     this.refreshRate = RefreshRateMode.auto,
+    this.frameCache = true,
     this.loaded = false,
   });
 
@@ -72,6 +73,10 @@ class PerformancePrefs {
   /// 灵动动效(见 `AppMotion.fluid`)。
   final bool? fluid;
   final RefreshRateMode refreshRate;
+
+  /// HarmonyOS's engine holds back one frame to smooth rate changes, at slightly more touch
+  /// delay. A switch because the difference can only be judged on a device.
+  final bool frameCache;
   final bool loaded;
 
   PerformancePrefs copyWith({
@@ -80,6 +85,7 @@ class PerformancePrefs {
     bool? animations,
     bool? fluid,
     RefreshRateMode? refreshRate,
+    bool? frameCache,
     bool? loaded,
     bool resetEffects = false,
   }) => PerformancePrefs(
@@ -88,6 +94,7 @@ class PerformancePrefs {
     animations: resetEffects ? null : animations ?? this.animations,
     fluid: resetEffects ? null : fluid ?? this.fluid,
     refreshRate: refreshRate ?? this.refreshRate,
+    frameCache: frameCache ?? this.frameCache,
     loaded: loaded ?? this.loaded,
   );
 }

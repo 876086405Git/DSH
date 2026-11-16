@@ -255,7 +255,12 @@ export function createHttpDispatcher({
           } catch (error) { socket.destroy(); fail(error); }
         });
         let written = 0;
-        upload = Readable.from(options.body ?? [], { objectMode: false });
+        const body = options.body;
+        // Match Undici's byte view normalization, including offset and length.
+        const source = ArrayBuffer.isView(body)
+          ? Buffer.from(body.buffer, body.byteOffset, body.byteLength)
+          : body instanceof ArrayBuffer ? Buffer.from(body) : body;
+        upload = Readable.from(source ?? [], { objectMode: false });
         const lengthCheck = new Transform({
           transform(chunk, _encoding, next) {
             written += chunk.length;

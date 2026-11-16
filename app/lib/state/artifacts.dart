@@ -491,7 +491,9 @@ class FilesChannel {
       channel.invokeMethod<void>('open', {'path': hostPath, 'name': name, 'mime': mime, 'chooser': chooser});
 
   /// Copies an Android file into the public Downloads (`Download/DSH-Go`);
-  /// returns where it landed (`Download/DSH-Go/report.pdf`).
+  /// returns where it landed (`Download/DSH-Go/report.pdf`). On HarmonyOS the
+  /// system's save window asks where: see [savedInChosenPlace] and
+  /// [saveWindowDismissed].
   Future<String> saveToDownloads(String hostPath, {required String name, required String mime}) async =>
       await channel.invokeMethod<String>('saveToDownloads', {'path': hostPath, 'name': name, 'mime': mime}) ??
       'Download/DSH-Go/$name';
@@ -515,6 +517,16 @@ class FilesChannel {
 }
 
 final filesChannelProvider = Provider<FilesChannel>((ref) => const FilesChannel());
+
+/// Whether [where], from [FilesChannel.saveToDownloads], is the URI the system's
+/// save window answered with (HarmonyOS): the person chose the place, and a
+/// `file://…` means nothing to read, so a note only says it's saved.
+bool savedInChosenPlace(String where) => where.contains('://');
+
+/// Whether [error], from [FilesChannel.saveToDownloads], is the person backing
+/// out of the system's save window (HarmonyOS): nothing saved and nothing wrong,
+/// so nothing to say. Android has no such window and never answers this.
+bool saveWindowDismissed(Object error) => error is PlatformException && error.code == 'cancelled';
 
 /// The local engine's output folder ([phoneOutputDir]); empty unless the
 /// engine is on this phone with "访问手机文件" on (on HarmonyOS the folder is in

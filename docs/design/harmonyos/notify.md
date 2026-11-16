@@ -1,13 +1,13 @@
 # P3d：普通通知与点击回到会话
 
-基底 `c818155`。本包新增 `dsh/notify`、`dsh/notify/taps`、`dsh/notify/actions` 的 ArkTS 插件，在 `configureFlutterEngine` 注册。**未编译、未在真机核实**；当前证据是 Linux 上执行真实产品 ETS 经 TypeScript 擦除后的行为、真实 HMAC/文件持久化，以及固定公开声明的 TypeScript 语义检查。不能据此宣布 hvigor、ArkTS、HAP 或设备通过。
+初版基底 `c818155`；通知内容初次更新基于 `751db9d`，本轮在 `718c06a` 重放。本包新增 `dsh/notify`、`dsh/notify/taps`、`dsh/notify/actions` 的 ArkTS 插件，在 `configureFlutterEngine` 注册。**未编译、未在真机核实**；当前证据是 Linux 上执行真实产品 ETS 经 TypeScript 擦除后的行为、真实 HMAC/文件持久化，以及固定公开声明的 TypeScript 语义检查。不能据此宣布 hvigor、ArkTS、HAP 或设备通过。
 
 ## 协议与体验
 
 | 方法或流 | 当前行为 |
 | --- | --- |
 | `status` | 查询应用通知总开关及 `SERVICE_INFORMATION` 槽位；缺槽位时创建该槽位。`enabled` 是应用开关，`done`/`attention` 是同一个槽位当前可用性；总开关关时二者保守为 false。不弹申请窗口，不把查询失败说成允许。 |
-| `show` | 再查实际允许状态；用 `publicText` 发布普通文字提醒，固定标题「DSH Go」。同一 group/key 使用稳定的 SHA256 标签更新同一通知。返回成功只表示系统 publish Promise 完成，不证明系统实际展示。 |
+| `show` | 再查实际允许状态；使用 Dart 与 Android 共有的 `title`/`text`；非空 `fullText` 用公开长文本内容展示，折叠仍为 `title`/`text`。同一 group/key 使用稳定的 SHA256 标签更新同一通知。返回成功只表示系统 publish Promise 完成，不证明系统实际展示。 |
 | `cancel` / `cancelGroup` | 与发送操作串行，使用相同的稳定标签/分组，防止后到的发送复活已取消项。 |
 | `cancelAll` | 只取消本插件 id=0 且带 `dsh-chat:` 标签的普通会话提醒，不调用全应用 cancelAll。 |
 | `requestPermission` | 调用 `requestEnableNotification` 弹一次系统授权窗口，之后返回 `isNotificationEnabled`；用户拒绝（1600004）返回 false，其余错误走错误通道。需要活着的 Ability。拒绝后窗口不会再弹，只能走 `openSettings`。该窗口 Promise 同样不阻塞发通知的队列。 |
@@ -20,9 +20,15 @@
 
 两类会话提醒使用同一个系统槽位；Dart 现有两类偏好仍分别决定是否请求发送。`openSettings(channel)` 也只能打开应用通知设置，不声称有两条独立的系统渠道。
 
-### 为什么只显示 publicText
+### 通知正文与锁屏显示
 
-现有 Dart `NotifyPost` 明确将 publicText 定义为锁屏安全文字，title/text/fullText 可能包含私有对话或工具参数。当前公开 API 中没有核实到与 Android `publicVersion` 等价的「解锁详细、锁屏删减」双内容契约；槽位 lockscreenVisibility 标为保留且暂不支持。故本插件从不把三种私有文字放进 NotificationRequest、Want 或日志。解锁后也显示简短提醒，点入应用查看详细内容。
+通知接收现有 `title`、`text`、`fullText` 参数，不另设 `body` 键；有 `fullText` 时映射 `NotificationLongTextContent`，折叠为 `title`/`text`，展开为同一标题与 `fullText`。SDK26 要求标题和正文非空，所以缺失或空标题回退「DSH Go」，缺失或空正文依次回退 `publicText`、通用提醒；真实非空内容不做替换。错误类型以 `bad_args` 拒绝。SDK声明标题超过1024字节、正文/长文本超过3072字节的部分由系统截断，实际样式与显示长度待设备核实。
+
+这里将真实内容交给系统通知服务。Android 端另外实现了 `VISIBILITY_PRIVATE`/`publicVersion` 和锁定期间主动改发公开内容、解锁后静默更新；OHOS 本次没有等价的应用侧强制删减实现，不声称锁屏必定只显示 `publicText`。`publicText` 只作空正文兼容回退。正文不进入点击 Want、HMAC 路由或诊断日志。
+
+锁屏能否显示及是否展示内容由用户的系统设置控制。[华为官方 HarmonyOS 6.0/6.1 说明](https://consumer.huawei.com/cn/support/content/zh-cn16090725/)列出：应用的「允许通知」「锁屏通知」开关控制是否展示；系统「通知和状态栏 → 锁屏通知 → 显示锁屏通知内容」可选始终或已解锁时。[官方 HarmonyOS 5及以上排障说明](https://consumer.huawei.com/cn/support/content/zh-cn00445086/)还说明应用锁会隐藏锁屏内容，智能提醒/人脸识别也会影响内容展示。具体菜单与机型/版本相关。应用内现有提醒偏好控制是否发送，本包不新增隐私开关，也不改变用户的系统设置。
+
+本次核对固定SDK `26.0.0.38` 的公开声明：`NotificationSlot.lockscreenVisibility` 仍标为保留、暂不支持；`NotificationSetting.lockScreenEnabled` 只报告是否启用锁屏通知，不能据它推断内容是否隐藏。没有设置这些字段来模拟 Android publicVersion，没有调用系统应用权限或HMS私有权益。锁定/解锁、人脸验证、应用锁、各内容显示选项及长文本展开均需真机验证。
 
 当前 API 的 ActionButton 没有核实到 Android 通知审批所需的强制解锁契约，因此不把批准或拒绝映射成未经验证的系统按钮。公开 `LIVE_VIEW`/`SYSTEM_LIVE_VIEW` 亦说明第三方应用不能自行创建相应槽位/内容，需系统代理；另一路普通 LIVE_VIEW 的公开说明要求系统应用。`downloadTemplate` 是文件传输进度，不能用伪造百分比冒充 AI 执行进度。本包没有使用系统应用 API、假装有前台服务，或新增权限。
 
@@ -38,12 +44,12 @@ Want 固定指向当前 Ability 的 bundleName/name，不接受 Dart 给定的�
 
 ## 已运行验证
 
-`runtime/tests/ohos/notify-channel.test.mjs` 执行产品 ETS，系统通知/WantAgent/Flutter 是显式替身，HMAC/SHA256、随机密钥与私有目录 JSON 持久化使用真实 Node/Linux。共 **16 项通过**，覆盖：
+`runtime/tests/ohos/notify-channel.test.mjs` 执行产品 ETS，系统通知/WantAgent/Flutter 是显式替身，HMAC/SHA256、随机密钥与私有目录 JSON 持久化使用真实 Node/Linux。内容更新后共 **19 项通过**，覆盖：
 
 - 精确三通道、未知方法、unsupported 边界、设置窗口错误及非阻塞性；
 - 授权窗口需要活着的 Ability、用系统状态作答、拒绝不算失败、其余错误走错误通道、等待时不阻塞其他调用；
 - 应用总开关/槽位关闭/最低级别/未知/查询失败、缺槽位创建、发送再次检查；
-- 固定目标、不可变 Want、公开文字限定、真实持久密钥与 HMAC，不泄露私有正文/密钥；
+- 真实标题/正文/展开文字、空字段回退和错误类型；固定目标、不可变 Want、真实持久密钥与 HMAC，点击路由不携带正文或密钥；
 - 标签的分组/键边界、更新、单项/组取消、本插件范围内 cancelAll；
 - 待完成 publish 后的取消顺序、失败后队列恢复；
 - 新 VM 模拟进程重启后验证持久密钥，冷/热点击、篡改/错误签名/超长/畸形输入；
@@ -59,7 +65,7 @@ Want 固定指向当前 Ability 的 bundleName/name，不接受 Dart 给定的�
 
 - 不需要 P1/P2 才能使用普通通知；与它们及 P3a/b/c 一起注册时，应保留所有插件。补丁在纯基底及已交包顺序组合中核验普通 `git apply`。
 - `NotifyChannel.status()` 在现有 Dart 中捕获 PlatformException 后返回乐观的全 true。这是既有 UI/协议消费门：主线应为 OHOS 的查询失败显示未知或可重试状态。本插件仍返回明确错误，且 `show` 再查权限、`tryShow` 接收失败；没有用虚假的成功状态迁就该 fallback。
-- 需要主线确认目标 API26 的公开类型/ArkTS 编译、设备 `Preferences.flush` 和 HMAC 算法、通知槽位的 enabled 返回、通知发布频率与系统展示、锁屏简短内容、WantAgent 冷/热点击、后台冻结/恢复后的回调。
+- 需要主线确认目标 API26 的公开类型/ArkTS 编译、设备 `Preferences.flush` 和 HMAC 算法、通知槽位的 enabled 返回、通知发布频率与系统展示、锁屏系统隐藏策略及展开正文、WantAgent 冷/热点击、后台冻结/恢复后的回调。
 - 进度提醒在本包没有普通通知伪装成实况窗。若产品要另设明确标注的「普通进度提醒」fallback，需主线调整能力/UI契约后另包接入。
 - 本包不改变 Flutter UI、Android 源、权限、构建版本串或运行时依赖。
 

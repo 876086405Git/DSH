@@ -23,6 +23,7 @@ import '../cordis/cordis_page.dart';
 import '../files/files_page.dart';
 import '../forum/forum_home_page.dart';
 import '../phone/phone_control_screen.dart';
+import '../phone/system_actions_page.dart';
 import '../plugins/plugin_detail_sheet.dart';
 import '../plugins/plugins_screen.dart';
 import '../plugins/seats/plugin_seat_page.dart';
@@ -417,13 +418,27 @@ final featureSections = <FeatureSection>[
   ], id: settingsFeatureSection),
 ];
 
-/// [featureSections] where 手机操控 isn't there (androidSystemFeaturesProvider).
+/// [featureSections] with HarmonyOS's own page where 手机操控 isn't there
+/// (androidSystemFeaturesProvider).
 final _sectionsWithoutAndroid = <FeatureSection>[
   for (final section in featureSections)
     section.items.any((item) => item.id == 'phone')
         ? FeatureSection.localized(
             section.titleIn,
-            section.items.where((item) => item.id != 'phone').toList(),
+            [
+              for (final item in section.items)
+                if (item.id != 'phone')
+                  item
+                else
+                  FeatureItem.localized(
+                    id: 'system-actions',
+                    title: (l10n) => l10n.catalogSystemActions,
+                    summary: (l10n) => l10n.catalogSystemActionsSummary,
+                    icon: AppIcons.phoneControl,
+                    tile: FeatureKind.phone,
+                    native: (_) => const SystemActionsPage(),
+                  ),
+            ],
             note: section.note,
             id: section.id,
           )

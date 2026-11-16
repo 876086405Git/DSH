@@ -263,8 +263,11 @@ void main() {
     await tester.pump();
     expect(find.byType(LaunchOverlay), findsOneWidget);
     expect(c.phase, LaunchPhase.playing);
-    // A tap skips the launch screen, and doesn't reach the page under it.
-    await tester.tap(find.text('taps 0'), warnIfMissed: false);
+    // The page is there but not painted under it. A tap skips the launch screen, and doesn't
+    // reach the page.
+    expect(find.text('taps 0'), findsNothing);
+    expect(find.text('taps 0', skipOffstage: false), findsOneWidget);
+    await tester.tap(find.byKey(LaunchOverlay.skipKey));
     await tester.pump();
     expect(find.text('taps 0'), findsOneWidget);
     expect(c.phase, LaunchPhase.leaving);

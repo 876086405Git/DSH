@@ -1,0 +1,455 @@
+--- a/machine.h
++++ b/machine.h
+@@ -140,6 +140,10 @@
+ #ifdef TEMU_EMBED
+ /* Embedded RISC-V only; cap and result are in microseconds. */
+ int riscv_machine_get_sleep_duration_us(VirtMachine *s, int delay_us);
++/* Internal event-wait path: same fresh host sample as the network deadlines. */
++struct timespec;
++int riscv_machine_get_sleep_duration_us_at(VirtMachine *s, int delay_us,
++                                           const struct timespec *host_now);
+ #endif
+ 
+ void __attribute__((format(printf, 1, 2))) vm_error(const char *fmt, ...);
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -1050,6 +1050,36 @@
+     return riscv_machine_get_sleep_duration_unit(s1, delay_us,
+                                                  RTC_FREQ / 1000000);
+ }
++
++int riscv_machine_get_sleep_duration_us_at(VirtMachine *s1, int delay_us,
++                                           const struct timespec *host_now)
++{
++    RISCVMachine *m = (RISCVMachine *)s1;
++    RISCVCPUState *s = m->cpu_state;
++    uint64_t now, remaining;
++
++    /* Preserve unsigned mtime, floor, masked-MTIP and non-WFI semantics.
++       The legacy public wrapper above keeps its original sampling behavior. */
++    if (!(riscv_cpu_get_mip(s) & MIP_MTIP)) {
++        if (m->rtc_real_time) {
++            now = (uint64_t)host_now->tv_sec * RTC_FREQ +
++                host_now->tv_nsec / (1000000000 / RTC_FREQ) - m->rtc_start_time;
++        } else {
++            now = riscv_cpu_get_cycles(s) / RTC_FREQ_DIV;
++        }
++        if (m->timecmp <= now) {
++            riscv_cpu_set_mip(s, MIP_MTIP);
++            delay_us = 0;
++        } else {
++            remaining = (m->timecmp - now) / (RTC_FREQ / 1000000);
++            if (delay_us > 0 && remaining < (uint64_t)delay_us)
++                delay_us = remaining;
++        }
++    }
++    if (!riscv_cpu_get_power_down(s))
++        delay_us = 0;
++    return delay_us;
++}
+ #endif
+ 
+ static void riscv_machine_interp(VirtMachine *s1, int max_exec_cycle)
+--- a/slirp/libslirp.h
++++ b/slirp/libslirp.h
+@@ -23,6 +23,13 @@
+ void slirp_select_poll(Slirp *slirp,
+                        fd_set *readfds, fd_set *writefds, fd_set *xfds,
+                        int select_error);
++
++#ifdef TEMU_EMBED
++/* Called after fill; host_now is shared with the CPU deadline calculation. */
++struct timespec;
++int slirp_get_sleep_duration_us(Slirp *slirp, int cap_us,
++                                 const struct timespec *host_now);
++#endif
+ 
+ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len);
+ 
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -40,7 +40,11 @@
+ #ifdef TEMU_EMBED
+ uint64_t udp_curtime_ms;
+ #endif
++#ifdef TEMU_EMBED
++static uint64_t time_fasttimo, last_slowtimo;
++#else
+ static u_int time_fasttimo, last_slowtimo;
++#endif
+ static int do_slowtimo;
+ #ifdef TEMU_EMBED
+ static int fasttimo_pending; /* Zero is also a valid curtime at wrap. */
+@@ -276,7 +280,7 @@
+ 			 */
+ #ifdef TEMU_EMBED
+ 			if (!fasttimo_pending && so->so_tcpcb->t_flags & TF_DELACK) {
+-			   time_fasttimo = curtime;
++			   time_fasttimo = udp_curtime_ms;
+ 			   fasttimo_pending = 1;
+ 			}
+ #else
+@@ -367,6 +371,40 @@
+         *pnfds = nfds;
+ }
+ 
++#ifdef TEMU_EMBED
++static int slirp_deadline_remaining_us(uint64_t now_us, uint64_t started_ms,
++                                        uint32_t duration_ms, int cap_us)
++{
++    uint64_t elapsed_ms = now_us / 1000 - started_ms;
++    uint64_t remaining_us;
++    if (elapsed_ms >= duration_ms) return 0;
++    remaining_us = ((uint64_t)duration_ms - elapsed_ms) * 1000 - now_us % 1000;
++    return remaining_us < (uint64_t)cap_us ? (int)remaining_us : cap_us;
++}
++
++int slirp_get_sleep_duration_us(Slirp *slirp, int cap_us,
++                                 const struct timespec *host_now)
++{
++    struct socket *so;
++    uint64_t now_us = (uint64_t)host_now->tv_sec * 1000000 + host_now->tv_nsec / 1000;
++    int delay = cap_us;
++    if (delay <= 0) return 0;
++    if (fasttimo_pending)
++        delay = slirp_deadline_remaining_us(now_us, time_fasttimo, 2, delay);
++    /* Existing slow activation covers every TCP timer and IP fragment TTL,
++       including the historical UDP-only activation. Never catch up ticks. */
++    if (do_slowtimo)
++        delay = slirp_deadline_remaining_us(now_us, last_slowtimo, 499, delay);
++    for (so = slirp->udb.so_next; so != &slirp->udb; so = so->so_next)
++        if (so_has_expiry(so))
++            delay = slirp_deadline_remaining_us(now_us, so->so_expire_started_ms,
++                                                 so->so_expire_duration_ms, delay);
++    /* Pending guest output may become writable without new host readiness. */
++    if (slirp->if_queued && slirp_can_output(slirp->opaque)) return 0;
++    return delay;
++}
++#endif
++
+ void slirp_select_poll(Slirp *slirp,
+                        fd_set *readfds, fd_set *writefds, fd_set *xfds,
+                        int select_error)
+@@ -390,7 +428,7 @@
+ 	 * See if anything has timed out
+ 	 */
+ #ifdef TEMU_EMBED
+-		if (fasttimo_pending && ((curtime - time_fasttimo) >= 2)) {
++		if (fasttimo_pending && ((udp_curtime_ms - time_fasttimo) >= 2)) {
+ #else
+ 		if (time_fasttimo && ((curtime - time_fasttimo) >= 2)) {
+ #endif
+@@ -400,10 +438,18 @@
+ 			fasttimo_pending = 0;
+ #endif
+ 		}
++#ifdef TEMU_EMBED
++		if (do_slowtimo && ((udp_curtime_ms - last_slowtimo) >= 499)) {
++#else
+ 		if (do_slowtimo && ((curtime - last_slowtimo) >= 499)) {
++#endif
+ 			ip_slowtimo(slirp);
+ 			tcp_slowtimo(slirp);
++#ifdef TEMU_EMBED
++			last_slowtimo = udp_curtime_ms;
++#else
+ 			last_slowtimo = curtime;
++#endif
+ 		}
+ 
+ 	/*
+--- a/temu.c
++++ b/temu.c
+@@ -25,6 +25,8 @@
+ #ifdef TEMU_EMBED
+ #include "embed-fatal.h"
+ #include "embed-ram.h"
++#include "temu_embed.h"
++#include <limits.h>
+ #endif
+ #include <stdio.h>
+ #include <poll.h>
+@@ -112,6 +114,11 @@
+ static _Thread_local int embed_output_failed;
+ static _Thread_local int embed_input_failed;
+ static _Thread_local int embed_controlled;
++static _Thread_local int embed_wake_fd = -1;
++_Thread_local int dsh_temu_wait_error;
++/* Representation bound for the existing int microsecond CPU interface,
++   not a timeout policy or a wall-clock scheduling guarantee. */
++#define EMBED_EVENT_MAX_MS (INT_MAX / 1000)
+ static _Thread_local BlockDevice *embed_owned_drives[MAX_DRIVE_DEVICE];
+ static _Thread_local int embed_owned_drive_count;
+ static atomic_flag embed_control_claimed = ATOMIC_FLAG_INIT;
+@@ -119,6 +126,25 @@
+ {
+     return embed_should_stop && embed_should_stop(embed_control_opaque);
+ }
++
++static int embed_wake_ready(void)
++{
++    uint8_t byte;
++    int count, error;
++    if (embed_stopping()) return 1;
++    count = recv(embed_wake_fd, &byte, 1, MSG_PEEK | MSG_DONTWAIT);
++    error = errno;
++    if (count < 0 && error != EINTR && error != EAGAIN && error != EWOULDBLOCK) {
++        dsh_temu_wait_error = error;
++        return 1;
++    }
++    /* The owner publishes stop before shutdown. Recheck across the syscall. */
++    if (embed_stopping()) return 1;
++    if (count < 0 && (error == EINTR || error == EAGAIN || error == EWOULDBLOCK))
++        return 0;
++    dsh_temu_wait_error = count < 0 ? error : EPROTO;
++    return 1;
++}
+ #endif
+ 
+ static void console_write(void *opaque, const uint8_t *buf, int len)
+@@ -127,14 +153,33 @@
+     while (len > 0) {
+         int k;
+         if (embed_controlled) {
+-            struct pollfd pfd = { embed_out_fd, POLLOUT, 0 };
++            struct pollfd pfd[2] = {
++                { embed_out_fd, POLLOUT, 0 },
++                { embed_wake_fd, POLLIN, 0 }
++            };
+             if (embed_stopping()) return;
++            if (embed_wake_fd >= 0 && dsh_temu_wait_error) return;
+             /* Per-call nonblocking/no-SIGPIPE: never modify the caller's OFD
+                flags or install a process-global signal handler. */
+             k = send(embed_out_fd, buf, len, MSG_DONTWAIT | MSG_NOSIGNAL);
+             if (k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+-                int ready = poll(&pfd, 1, 10);
+-                if (ready >= 0 || errno == EINTR) continue;
++                int ready = poll(pfd, embed_wake_fd >= 0 ? 2 : 1,
++                                 embed_wake_fd >= 0 ? -1 : 10);
++                int wait_error = errno;
++                if (embed_wake_fd >= 0) {
++                    if (ready < 0 && wait_error != EINTR) {
++                        dsh_temu_wait_error = wait_error;
++                        return;
++                    }
++                    if (ready > 0 && (pfd[1].revents & POLLNVAL)) {
++                        dsh_temu_wait_error = EBADF;
++                        return;
++                    }
++                    if (embed_stopping()) return;
++                    if (ready > 0 && pfd[1].revents && embed_wake_ready())
++                        return;
++                }
++                if (ready >= 0 || wait_error == EINTR) continue;
+             }
+         } else {
+             k = write(embed_out_fd, buf, len);
+@@ -699,23 +744,38 @@
+     
+ #ifdef TEMU_EMBED
+     /* Keep the device budget in ms; do not truncate the CPU deadline here. */
+-    if (m->vmc == &riscv_machine_class)
+-        delay = MAX_SLEEP_TIME;
+-    else
+-#endif
++    if (embed_wake_fd >= 0 && (embed_stopping() || dsh_temu_wait_error))
++        return;
++    if (m->vmc == &riscv_machine_class) {
++        delay = embed_wake_fd >= 0 ? EMBED_EVENT_MAX_MS : MAX_SLEEP_TIME;
++    } else {
+         delay = virt_machine_get_sleep_duration(m, MAX_SLEEP_TIME);
++    }
++#else
++        delay = virt_machine_get_sleep_duration(m, MAX_SLEEP_TIME);
++#endif
+     
+     /* wait for an event */
+     FD_ZERO(&rfds);
+     FD_ZERO(&wfds);
+     FD_ZERO(&efds);
+     fd_max = -1;
++#ifdef TEMU_EMBED
++    if (embed_wake_fd >= 0) {
++        FD_SET(embed_wake_fd, &rfds);
++        fd_max = embed_wake_fd;
++    }
++#endif
+ #ifndef _WIN32
+     if (m->console_dev && virtio_console_can_write_data(m->console_dev)) {
+         STDIODevice *s = m->console->opaque;
+         stdin_fd = s->stdin_fd;
+         FD_SET(stdin_fd, &rfds);
++#ifdef TEMU_EMBED
++        fd_max = max_int(fd_max, stdin_fd);
++#else
+         fd_max = stdin_fd;
++#endif
+ 
+         if (s->resize_pending) {
+             int width, height;
+@@ -732,7 +792,25 @@
+     fs_net_set_fdset(&fd_max, &rfds, &wfds, &efds, &delay);
+ #endif
+ #ifdef TEMU_EMBED
+-    if (m->vmc == &riscv_machine_class) {
++    if (embed_wake_fd >= 0) {
++        struct timespec host_now;
++        int delay_us;
++        /* One fresh sample, after every fd/device fill, for both domains. */
++        if (clock_gettime(CLOCK_MONOTONIC, &host_now) < 0) {
++            dsh_temu_wait_error = errno;
++            return;
++        }
++        delay = max_int(0, min_int(delay, EMBED_EVENT_MAX_MS));
++        delay_us = delay * 1000;
++        if (m->vmc == &riscv_machine_class)
++            delay_us = riscv_machine_get_sleep_duration_us_at(m, delay_us, &host_now);
++#ifdef CONFIG_SLIRP
++        if (m->net && m->net->select_fill == slirp_select_fill1)
++            delay_us = slirp_get_sleep_duration_us(m->net->opaque, delay_us, &host_now);
++#endif
++        tv.tv_sec = delay_us / 1000000;
++        tv.tv_usec = delay_us % 1000000;
++    } else if (m->vmc == &riscv_machine_class) {
+         int delay_us;
+         /* select_fill still uses ms. Apply the CPU cap at the last boundary,
+            keeping the existing 10 ms maximum and floor (not ceil) semantics. */
+@@ -747,6 +825,18 @@
+         tv.tv_usec = (delay % 1000) * 1000;
+     }
+     ret = select(fd_max + 1, &rfds, &wfds, &efds, &tv);
++#ifdef TEMU_EMBED
++    if (embed_wake_fd >= 0) {
++        int wait_error = errno;
++        if (ret < 0 && wait_error != EINTR) {
++            dsh_temu_wait_error = wait_error;
++            return;
++        }
++        if (embed_stopping()) return;
++        if (ret > 0 && FD_ISSET(embed_wake_fd, &rfds) && embed_wake_ready())
++            return;
++    }
++#endif
+     if (m->net) {
+         m->net->select_poll(m->net, &rfds, &wfds, &efds, ret);
+     }
+@@ -1089,7 +1179,7 @@
+         s->net->device_set_carrier(s->net, TRUE);
+     if (initialized)
+         initialized(opaque);
+-    while (!s->embed_poweroff && !embed_stopping() && !embed_output_failed && !embed_input_failed)
++    while (!s->embed_poweroff && !embed_stopping() && !embed_output_failed && !embed_input_failed && !dsh_temu_wait_error)
+         virt_machine_run(s);
+     /* CPU dispatch ended; device teardown is not implemented. Keep the owner
+        quarantined, never classify this as a reusable successful shutdown. */
+@@ -1100,6 +1190,7 @@
+                 failed = 1;
+         if (failed) return -8; /* drive retirement failed; owner quarantined */
+     }
++    if (dsh_temu_wait_error) return TEMU_EMBED_WAIT_UNRELEASED;
+     if (embed_output_failed) return TEMU_EMBED_OUTPUT_UNRELEASED;
+     if (embed_input_failed) return TEMU_EMBED_INPUT_UNRELEASED;
+     if (s->embed_poweroff) return TEMU_EMBED_STOPPED_UNRELEASED;
+@@ -1119,13 +1210,14 @@
+ 
+ /* New controlled ABI: caller owns a stream socket writer, and serializes the
+    one global VM. Return does not release VM devices or authorize another run. */
+-int temu_embed_run_controlled(const char *path, int in_fd, int out_fd,
+-                             TemuInitialized initialized, TemuShouldStop stop,
+-                             void *opaque)
++static int temu_embed_run_controlled_impl(const char *path, int in_fd, int out_fd,
++                                          int wake_read_fd, TemuInitialized initialized,
++                                          TemuShouldStop stop, void *opaque)
+ {
+     int type;
+     socklen_t size = sizeof(type);
+     int result;
++    dsh_temu_wait_error = 0;
+     if (!stop || in_fd < 0 || in_fd >= FD_SETSIZE ||
+         getsockopt(in_fd, SOL_SOCKET, SO_TYPE, &type, &size) < 0 ||
+         type != SOCK_STREAM || getsockopt(out_fd, SOL_SOCKET, SO_TYPE, &type, &size) < 0 ||
+@@ -1134,6 +1226,7 @@
+     if (atomic_flag_test_and_set(&embed_control_claimed))
+         return TEMU_EMBED_OWNER_UNRELEASED;
+     embed_controlled = 1;
++    embed_wake_fd = wake_read_fd;
+     embed_should_stop = stop;
+     embed_control_opaque = opaque;
+     embed_output_failed = 0;
+@@ -1151,6 +1244,7 @@
+     }
+     dsh_temu_fatal_active = 0;
+     embed_controlled = 0;
++    embed_wake_fd = -1;
+     embed_should_stop = NULL;
+     embed_control_opaque = NULL;
+     if (!dsh_temu_fatal_reason &&
+@@ -1159,6 +1253,32 @@
+     return result;
+ }
+ 
++int temu_embed_run_controlled(const char *path, int in_fd, int out_fd,
++                             TemuInitialized initialized, TemuShouldStop stop,
++                             void *opaque)
++{
++    return temu_embed_run_controlled_impl(path, in_fd, out_fd, -1, initialized, stop, opaque);
++}
++
++int temu_embed_run_controlled_wake(const char *path, int in_fd, int out_fd,
++                                  int wake_read_fd, TemuInitialized initialized,
++                                  TemuShouldStop stop, void *opaque)
++{
++    int type;
++    struct sockaddr_storage peer;
++    socklen_t type_size = sizeof(type), peer_size = sizeof(peer);
++    dsh_temu_wait_error = 0;
++    if (wake_read_fd < 0 || wake_read_fd >= FD_SETSIZE ||
++        wake_read_fd == in_fd || wake_read_fd == out_fd ||
++        getsockopt(wake_read_fd, SOL_SOCKET, SO_TYPE, &type, &type_size) < 0 ||
++        type != SOCK_STREAM ||
++        getpeername(wake_read_fd, (struct sockaddr *)&peer, &peer_size) < 0 ||
++        peer.ss_family != AF_UNIX)
++        return TEMU_EMBED_RETRYABLE_START_FAILURE;
++    return temu_embed_run_controlled_impl(path, in_fd, out_fd, wake_read_fd,
++                                          initialized, stop, opaque);
++}
++
+ /* Preserve the original public return convention for existing callers. */
+ int temu_embed_run(const char *path, int in_fd, int out_fd)
+ {
+--- a/temu_embed.h
++++ b/temu_embed.h
+@@ -15,7 +15,11 @@
+     TEMU_EMBED_CANCELLED_UNRELEASED = -4,
+     TEMU_EMBED_OUTPUT_UNRELEASED = -5,
+     TEMU_EMBED_OWNER_UNRELEASED = -6,
+-    TEMU_EMBED_INPUT_UNRELEASED = -7
++    TEMU_EMBED_INPUT_UNRELEASED = -7,
++    TEMU_EMBED_RETIRE_FAILED_UNRELEASED = -8,
++    TEMU_EMBED_FATAL_UNRELEASED = -9,
++    /* Dedicated wake/wait failure; distinct from drive retirement failure. */
++    TEMU_EMBED_WAIT_UNRELEASED = -10
+ };
+ 
+ /* Callback runs synchronously on the machine thread after initialization and
+@@ -32,4 +36,20 @@
+ int temu_embed_run_controlled(const char *path, int in_fd, int out_fd,
+                              TemuInitialized initialized, TemuShouldStop stop,
+                              void *opaque);
++
++/* Opt-in event wait ABI. wake_read_fd is a distinct, connected AF_UNIX stream
++ * socket, below FD_SETSIZE. The caller keeps it open throughout this call.
++ * After publishing stop, its unique peer writer is shutdown(SHUT_WR) once;
++ * persistent EOF wakes both the machine select and blocked console output.
++ * This function borrows every fd: it never closes or changes its OFD flags.
++ * It does not fall back to the legacy 10 ms entry when wake validation fails.
++ * Return/join does not authorize VM reuse. Blocking disk IO and OS scheduling
++ * have no wall-clock completion guarantee. */
++int temu_embed_run_controlled_wake(const char *path, int in_fd, int out_fd,
++                                  int wake_read_fd, TemuInitialized initialized,
++                                  TemuShouldStop stop, void *opaque);
++/* Machine-thread detail, reset on entry. Read on that same thread after return
++ * and publish only after real join. EPROTO denotes unexpected wake data/EOF
++ * without stop; actual syscall failures retain errno. This is not close debt. */
++extern _Thread_local int dsh_temu_wait_error;
+ #endif

@@ -10,9 +10,11 @@ export class ActiveBudgetClock {
   #excluded = 0;
   #deadlines = new Set();
   #closed = false;
-  constructor(bootId) {
+  #onPendingChange;
+  constructor(bootId, onPendingChange = () => {}) {
     if (typeof bootId !== 'string' || !bootId) throw new TypeError('Clock boot identity is required');
     this.bootId = bootId;
+    this.#onPendingChange = onPendingChange;
   }
   now() { return (this.#pauseStart ?? performance.now()) - this.#excluded; }
   get paused() { return this.#pauseStart !== undefined; }
@@ -46,6 +48,7 @@ export class ActiveBudgetClock {
       clearTimeout(timer);
       upstream?.removeEventListener('abort', cancelled);
       this.#deadlines.delete(entry);
+      if (this.#deadlines.size === 0) this.#onPendingChange();
     };
     const cancelled = () => { controller.abort(upstream.reason); remove(); };
     const entry = {
@@ -61,6 +64,7 @@ export class ActiveBudgetClock {
       },
     };
     this.#deadlines.add(entry);
+    if (this.#deadlines.size === 1) this.#onPendingChange();
     if (upstream?.aborted) cancelled();
     else {
       upstream?.addEventListener('abort', cancelled, { once: true });

@@ -1,0 +1,367 @@
+--- a/virtio.c
++++ b/virtio.c
+@@ -31,6 +31,9 @@
+ #include "cutils.h"
+ #include "list.h"
+ #include "virtio.h"
++#ifdef CONFIG_FS_GRANT
++#include "fs_grant.h"
++#endif
+ 
+ //#define DEBUG_VIRTIO
+ 
+@@ -1661,6 +1664,10 @@
+     BOOL req_in_progress;
+ } VIRTIO9PDevice;
+ 
++#ifdef CONFIG_FS_GRANT
++static VIRTIO9PDevice *grant_device;
++#endif
++
+ static FIDDesc *fid_find1(VIRTIO9PDevice *s, uint32_t fid)
+ {
+     struct list_head *el;
+@@ -1696,7 +1703,7 @@
+     }
+ }
+ 
+-static void fid_set(VIRTIO9PDevice *s, uint32_t fid, FSFile *fd)
++static int fid_set(VIRTIO9PDevice *s, uint32_t fid, FSFile *fd)
+ {
+     FIDDesc *f;
+ 
+@@ -1706,10 +1713,12 @@
+         f->fd = fd;
+     } else {
+         f = malloc(sizeof(*f));
++        if (!f) return -1;
+         f->fid = fid;
+         f->fd = fd;
+         list_add(&f->link, &s->fid_list);
+     }
++    return 0;
+ }
+ 
+ #ifdef DEBUG_VIRTIO
+@@ -1870,6 +1879,8 @@
+     va_list ap;
+     int offset, c;
+     uint8_t buf[16];
++    char **allocated[2];
++    unsigned allocated_count = 0;
+ 
+     offset = *poffset;
+     va_start(ap, fmt);
+@@ -1882,7 +1893,7 @@
+             {
+                 uint8_t *ptr;
+                 if (memcpy_from_queue(s1, buf, queue_idx, desc_idx, offset, 1))
+-                    return -1;
++                    goto fail;
+                 ptr = va_arg(ap, uint8_t *);
+                 *ptr = buf[0];
+                 offset += 1;
+@@ -1896,7 +1907,7 @@
+             {
+                 uint16_t *ptr;
+                 if (memcpy_from_queue(s1, buf, queue_idx, desc_idx, offset, 2))
+-                    return -1;
++                    goto fail;
+                 ptr = va_arg(ap, uint16_t *);
+                 *ptr = get_le16(buf);
+                 offset += 2;
+@@ -1910,7 +1921,7 @@
+             {
+                 uint32_t *ptr;
+                 if (memcpy_from_queue(s1, buf, queue_idx, desc_idx, offset, 4))
+-                    return -1;
++                    goto fail;
+                 ptr = va_arg(ap, uint32_t *);
+                 *ptr = get_le32(buf);
+                 offset += 4;
+@@ -1924,7 +1935,7 @@
+             {
+                 uint64_t *ptr;
+                 if (memcpy_from_queue(s1, buf, queue_idx, desc_idx, offset, 8))
+-                    return -1;
++                    goto fail;
+                 ptr = va_arg(ap, uint64_t *);
+                 *ptr = get_le64(buf);
+                 offset += 8;
+@@ -1940,16 +1951,27 @@
+                 int len;
+ 
+                 if (memcpy_from_queue(s1, buf, queue_idx, desc_idx, offset, 2))
+-                    return -1;
++                    goto fail;
+                 len = get_le16(buf);
+                 offset += 2;
+                 str = malloc(len + 1);
+-                if (memcpy_from_queue(s1, str, queue_idx, desc_idx, offset, len))
+-                    return -1;
++                if (!str) goto fail;
++                if (memcpy_from_queue(s1, str, queue_idx, desc_idx, offset, len)) {
++                    free(str);
++                    goto fail;
++                }
++#ifdef CONFIG_FS_GRANT
++                if (memchr(str, '\0', len)) {
++                    free(str);
++                    goto fail;
++                }
++#endif
+                 str[len] = '\0';
+                 offset += len;
+                 ptr = va_arg(ap, char **);
+                 *ptr = str;
++                assert(allocated_count < 2);
++                allocated[allocated_count++] = ptr;
+ #ifdef DEBUG_VIRTIO
+                 if (s->common.debug & VIRTIO_DEBUG_9P)
+                     printf(" s=\"%s\"", *ptr);
+@@ -1963,6 +1985,14 @@
+     va_end(ap);
+     *poffset = offset;
+     return 0;
++ fail:
++    while (allocated_count) {
++        char **ptr = allocated[--allocated_count];
++        free(*ptr);
++        *ptr = NULL;
++    }
++    va_end(ap);
++    return -1;
+ }
+ 
+ static void virtio_9p_send_reply(VIRTIO9PDevice *s, int queue_idx,
+@@ -2051,6 +2081,9 @@
+     uint8_t buf[1024];
+     int buf_len, err;
+     FSDevice *fs = s->fs;
++#ifdef CONFIG_FS_GRANT
++    BOOL lease_entered = FALSE;
++#endif
+ 
+     if (queue_idx != 0)
+         return 0;
+@@ -2079,6 +2112,13 @@
+         else
+             printf("%d", id);
+     }
++#endif
++#ifdef CONFIG_FS_GRANT
++    if (read_size < 7 || read_size > 8192 || get_le32(buf) != (uint32_t)read_size || write_size < 11)
++        goto protocol_error;
++    err = fs_grant_request_begin(fs, id);
++    if (err) goto error;
++    lease_entered = TRUE;
+ #endif
+     /* Note: same subset as JOR1K */
+     switch(id) {
+@@ -2295,10 +2335,18 @@
+             f = fid_find(s, fid);
+             if (!f)
+                 goto fid_not_found;
++#ifdef CONFIG_FS_GRANT
++            if (count > (uint32_t)(s->msize - 11) || count > (uint32_t)(write_size - 11)) {
++                err = -P9_EINVAL;
++                goto error;
++            }
++#endif
+             buf = malloc(count + 4);
++            if (!buf) { err=-P9_EIO; goto error; }
+             n = fs->fs_readdir(fs, f, offs, buf + 4, count);
+             if (n < 0) {
+                 err = n;
++                free(buf);
+                 goto error;
+             }
+             put_le32(buf, n);
+@@ -2312,7 +2360,7 @@
+             if (unmarshall(s, queue_idx, desc_idx, &offset,
+                            "w", &fid))
+                 goto protocol_error;
+-            /* ignored */
++            /* Synchronous grant IO: prior request has completed before Rflush. */
+             virtio_9p_send_reply(s, queue_idx, desc_idx, id, tag, NULL, 0);
+         }
+         break;
+@@ -2460,6 +2508,17 @@
+             if (unmarshall(s, queue_idx, desc_idx, &offset, 
+                            "ws", &msize, &version))
+                 goto protocol_error;
++#ifdef CONFIG_FS_GRANT
++            if (msize < 256 || msize > 8192) {
++                free(version);
++                err = -P9_EINVAL;
++                goto error;
++            }
++#endif
++            while (!list_empty(&s->fid_list)) {
++                FIDDesc *old = list_entry(s->fid_list.next, FIDDesc, link);
++                fid_delete(s, old->fid);
++            }
+             s->msize = msize;
+             //            printf("version: msize=%d version=%s\n", msize, version);
+             free(version);
+@@ -2478,11 +2537,11 @@
+                            "wwssw", &fid, &afid, &uname, &aname, &uid))
+                 goto protocol_error;
+             err = fs->fs_attach(fs, &f, &qid, uid, uname, aname);
++            free(uname);
++            free(aname);
+             if (err != 0)
+                 goto error;
+-            fid_set(s, fid, f);
+-            free(uname);
+-            free(aname);
++            if (fid_set(s, fid, f)) { fs->fs_delete(fs, f); err=-P9_EIO; goto error; }
+             buf_len = marshall(s, buf, sizeof(buf), "Q", &qid);
+             virtio_9p_send_reply(s, queue_idx, desc_idx, id, tag, buf, buf_len);
+         }
+@@ -2493,7 +2552,7 @@
+             if (unmarshall(s, queue_idx, desc_idx, &offset, 
+                            "h", &oldtag))
+                 goto protocol_error;
+-            /* ignored */
++            /* Synchronous grant IO: prior request has completed before Rflush. */
+             virtio_9p_send_reply(s, queue_idx, desc_idx, id, tag, NULL, 0);
+         }
+         break;
+@@ -2512,8 +2571,12 @@
+             f = fid_find(s, fid);
+             if (!f)
+                 goto fid_not_found;
++#ifdef CONFIG_FS_GRANT
++            if (nwname > 16) { err = -P9_EINVAL; goto error; }
++#endif
+             names = mallocz(sizeof(names[0]) * nwname);
+             qids = malloc(sizeof(qids[0]) * nwname);
++            if (nwname && (!names || !qids)) { free(names); free(qids); err=-P9_EIO; goto error; }
+             for(i = 0; i < nwname; i++) {
+                 if (unmarshall(s, queue_idx, desc_idx, &offset, 
+                                "s", &names[i])) {
+@@ -2537,7 +2600,7 @@
+                                     "Q", &qids[i]);
+             }
+             free(qids);
+-            fid_set(s, newfid, f);
++            if (fid_set(s, newfid, f)) { fs->fs_delete(fs, f); err=-P9_EIO; goto error; }
+             virtio_9p_send_reply(s, queue_idx, desc_idx, id, tag, buf, buf_len);
+         }
+         break;
+@@ -2555,7 +2618,14 @@
+             f = fid_find(s, fid);
+             if (!f)
+                 goto fid_not_found;
++#ifdef CONFIG_FS_GRANT
++            if (count > (uint32_t)(s->msize - 11) || count > (uint32_t)(write_size - 11)) {
++                err = -P9_EINVAL;
++                goto error;
++            }
++#endif
+             buf = malloc(count + 4);
++            if (!buf) { err=-P9_EIO; goto error; }
+             n = fs->fs_read(fs, f, offs, buf + 4, count);
+             if (n < 0) {
+                 err = n;
+@@ -2581,7 +2651,11 @@
+             f = fid_find(s, fid);
+             if (!f)
+                 goto fid_not_found;
+-            buf1 = malloc(count);
++            if (count > (uint32_t)(s->msize - 23) || read_size < 23 || count > (uint32_t)(read_size - 23)) {
++                err = -P9_EINVAL; goto error;
++            }
++            buf1 = malloc(count ? count : 1);
++            if (!buf1) { err=-P9_EIO; goto error; }
+             if (memcpy_from_queue(s1, buf1, queue_idx, desc_idx, offset,
+                                   count)) {
+                 free(buf1);
+@@ -2612,9 +2686,15 @@
+         printf("9p: unsupported operation id=%d\n", id);
+         goto protocol_error;
+     }
++#ifdef CONFIG_FS_GRANT
++    if (lease_entered) fs_grant_request_end(fs);
++#endif
+     return 0;
+  error:
+     virtio_9p_send_error(s, queue_idx, desc_idx, tag, err);
++#ifdef CONFIG_FS_GRANT
++    if (lease_entered) fs_grant_request_end(fs);
++#endif
+     return 0;
+  protocol_error:
+  fid_not_found:
+@@ -2622,6 +2702,19 @@
+     goto error;
+ }
+ 
++#ifdef CONFIG_FS_GRANT
++/* Trusted owner ONLY after machine thread join. No transport callback may run. */
++int virtio_9p_grant_quiesced(FSDevice *fs) {
++    VIRTIO9PDevice *s=grant_device;
++    if (!s || s->fs!=fs || s->req_in_progress) return -1;
++    while (!list_empty(&s->fid_list)) {
++        FIDDesc *old=list_entry(s->fid_list.next,FIDDesc,link);
++        fid_delete(s,old->fid);
++    }
++    return 0;
++}
++#endif
++
+ VIRTIODevice *virtio_9p_init(VIRTIOBusDef *bus, FSDevice *fs,
+                              const char *mount_tag)
+ 
+@@ -2645,6 +2738,9 @@
+     s->fs = fs;
+     s->msize = 8192;
+     init_list_head(&s->fid_list);
++#ifdef CONFIG_FS_GRANT
++    grant_device=s;
++#endif
+     
+     return (VIRTIODevice *)s;
+ }
+--- a/temu.c
++++ b/temu.c
+@@ -982,6 +982,16 @@
+ 
+ #ifdef TEMU_EMBED
+ #include "temu_embed.h"
++#ifdef CONFIG_FS_GRANT
++#include "fs_grant.h"
++static FSDevice *dsh_fixed_grant;
++__attribute__((visibility("default"))) int temu_test_set_grant(FSDevice *fs) {
++    if (dsh_fixed_grant) return -1;
++    dsh_fixed_grant=fs; return 0;
++}
++
++#endif
++
+ /* Runs the machine described by the config file at path on the calling thread, with its
+    console on in_fd/out_fd. Disk images open read-write. Returns only if setup fails. */
+ int temu_embed_run_initialized(const char *path, int in_fd, int out_fd,
+@@ -1009,6 +1019,13 @@
+             goto drive_fail;
+         if (embed_controlled) embed_owned_drives[embed_owned_drive_count++] = p->tab_drive[i].block_dev;
+     }
++#ifdef CONFIG_FS_GRANT
++    for(i = 0; i < p->fs_count; i++) {
++        if (i != 0 || !dsh_fixed_grant || strcmp(p->tab_fs[i].filename, "dsh-ticket") || strcmp(p->tab_fs[i].tag, "dsh-workspace"))
++            return TEMU_EMBED_UNRECOVERED_START_FAILURE;
++        p->tab_fs[i].fs_dev=dsh_fixed_grant;
++    }
++#else
+     for(i = 0; i < p->fs_count; i++) {
+         char *fname = get_file_path(p->cfg_filename, p->tab_fs[i].filename);
+         p->tab_fs[i].fs_dev = fs_disk_init(fname);
+@@ -1016,6 +1033,7 @@
+         if (!p->tab_fs[i].fs_dev)
+             return TEMU_EMBED_UNRECOVERED_START_FAILURE;
+     }
++#endif
+     for(i = 0; i < p->eth_count; i++) {
+ #ifdef CONFIG_SLIRP
+         if (!strcmp(p->tab_eth[i].driver, "user"))

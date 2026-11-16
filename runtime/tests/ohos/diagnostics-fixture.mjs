@@ -11,7 +11,7 @@ import vm from 'node:vm';
 import { createHash } from 'node:crypto';
 import { zipBytes, nativeZlib } from '../../../tooling/ohos/tests/runtime-archive-fixture.mjs';
 
-const repo = fileURLToPath(new URL('../../../', import.meta.url));
+const repo = process.env.OHOS_DIAGNOSTIC_SOURCE_ROOT ?? fileURLToPath(new URL('../../../', import.meta.url));
 assert(process.env.OHOS_TYPESCRIPT_PREFIX);
 const ts = createRequire(resolve(process.env.OHOS_TYPESCRIPT_PREFIX, 'package.json'))('typescript');
 export const deferred = () => Promise.withResolvers();
@@ -24,7 +24,7 @@ export async function until(check, description = 'condition') {
 export const manifestFixture = () => ({ schema:1, runtimeVersion:'fixture-runtime', dshVersion:'0.0.fixture', nodeVersion:'24.22.1',
   files: ['node_modules/@deepseek-ai/dsh/lib/bin.js', 'runtime/ohos/preload.mjs',
     'runtime/ohos/process/index.mjs', 'runtime/ohos/process/sandbox.mjs',
-    'runtime/ohos/lifecycle/index.mjs', 'runtime/ohos/capabilities/index.mjs',
+    'runtime/ohos/lifecycle/index.mjs', 'runtime/ohos/phone/index.mjs', 'runtime/ohos/capabilities/index.mjs',
     'runtime/bridge/dsh-go-bridge/lib/index.js', 'runtime/ohos/process/child-process.mjs'].map((path,i) => ({path,size:i+11,
       sha256:createHash('sha256').update(Buffer.alloc(i+11, i+1)).digest('hex')})) });
 function publicError(error) {
@@ -42,6 +42,8 @@ export async function diagnosticsFixture(t, options = {}) {
   const nativeModule = { getState:() => ({...native.state}), drainEvents:() => native.events.splice(0) };
   const root = opt.persistRoot ?? await fsp.mkdtemp(join(process.env.DIAGNOSTICS_TMP_PARENT ?? tmpdir(), 'dsh-diagnostics-'));
   let rawHandle = null, rawSequence = 0;
+  const faults = { queue:[], watchers:new Map(), operations:[] };
+  const faultDirectory = join(root, 'fault-logs');
   const app = { filesDir:join(root,'files'), applicationInfo:{accessTokenId:42}, resourceManager:{
     async getRawFd(name) {
       operations.push({op:'resource',name}); assert.equal(name,'dsh-runtime/runtime.zip');
@@ -97,18 +99,40 @@ export async function diagnosticsFixture(t, options = {}) {
       const fd = typeof file === 'number' ? file : file.fd;
       await promisify(fs.close)(fd); fds.delete(fd);
     }),
-    unlink:path => io('unlink',{path},() => fsp.unlink(path)),
+    unlink:path => io('unlink',{path},() => fsp.unlink(path.startsWith('/data/storage/el2/log/hiappevent/') ?
+      join(faultDirectory, path.slice('/data/storage/el2/log/hiappevent/'.length)) : path)),
     rename:(from,to) => io('rename',{from,to},() => fsp.rename(from,to))
   };
   class MethodChannel { constructor(messenger,name) { this.name=name; channels.push(this); } setMethodCallHandler(value) { this.handler=value; } }
   const boundaries = {
+    '@ohos.hiviewdfx.hiAppEvent':{default:{domain:{OS:'OS'}, event:{APP_CRASH:'APP_CRASH',APP_FREEZE:'APP_FREEZE'},
+      addWatcher(watcher) {
+        faults.operations.push({op:'add',name:watcher.name,filters:watcher.appEventFilters,trigger:watcher.triggerCondition});
+        if(opt.addWatcherError)throw Error('watcher unavailable');
+        faults.watchers.set(watcher.name, watcher);
+        return {setRow(rows){assert.equal(rows,1);faults.operations.push({op:'setRow',rows});},
+          takeNext(){faults.operations.push({op:'takeNext'});if(opt.takeFaultError)throw Error('takeNext unavailable');
+            const value=faults.queue.shift();return value===undefined ? null : {packageId:1,row:1,size:1,data:[],appEventInfos:[value]};}};
+      },
+      removeWatcher(watcher){faults.operations.push({op:'remove',name:watcher.name});faults.watchers.delete(watcher.name);},
+      clearData(){throw Error('global HiAppEvent clear forbidden');},
+      configure(){throw Error('global HiAppEvent config forbidden');}
+    }},
     '@ohos.file.fs':{default:api},
+    '@ohos.window':{default:{AvoidAreaType:{TYPE_KEYBOARD:3}}},
+    '@ohos.hilog':{default:{info(){},warn(){}}},
+    '@ohos.app.ability.common':{default:{}},
+    '@ohos.app.ability.wantAgent':{default:{}},
     '@ohos.zlib':{default:nativeZlib},
     '@ohos.file.hash':{default:{hash(){throw Error('hash outside diagnostics test scope');}}},
+    // Diagnostics never requests an OS background grant; actual task-owner code is loaded.
+    '@ohos.resourceschedule.backgroundTaskManager':{default:{requestSuspendDelay(){throw Error('background grant outside diagnostics scope');},cancelSuspendDelay(){throw Error('background cancel outside diagnostics scope');}}},
     '@ohos.net.connection':{default:{getDefaultNet(){throw Error('network outside diagnostics test scope');}}},
+    '@ohos.net.http':{default:{createHttp(){throw Error('http outside diagnostics test scope');}}},
     '@ohos.util':{default:{TextEncoder:class {encodeInto(value){return new TextEncoder().encode(value);}},
       TextDecoder:{create:(label,options) => ({decodeToString:bytes => new TextDecoder(label,options).decode(bytes)})}}},
     '@ohos.hidebug':{default:{getSystemMemInfo(){operations.push({op:'memory'});if(opt.memoryError)throw Error('memory');return {totalMem:opt.memoryKb ?? 8n*1024n*1024n};}}},
+    '@ohos.process':{default:{ProcessManager:class {getSystemConfig(){throw Error('sysconf outside diagnostics scope');}}}},
     '@ohos.deviceInfo':{default:{manufacture:'fixture maker',brand:'fixture brand',productModel:'fixture model',
       osFullName:'OpenHarmony fixture',sdkApiVersion:26,abiList:'arm64-v8a,x86_64'}},
     '@ohos.display':{default:{getDefaultDisplaySync(){operations.push({op:'display'});if(opt.displayError)throw Error('display');
@@ -126,7 +150,7 @@ export async function diagnosticsFixture(t, options = {}) {
     vm.runInNewContext(source,{module,exports:module.exports,Map,Set,ArrayBuffer,Uint8Array,Promise,Error,console,
       setInterval:callback => { const timer={callback};timers.add(timer);return timer; },clearInterval:timer => timers.delete(timer),
       canIUse:cap => !(opt.missingCaps ?? []).includes(cap),
-      require(name){if(name==='./NativeHost')return {nativeHostState:()=>({...native.state}),peekNativeHost:()=>nativeModule,loadNativeHost:()=>{native.loads++;throw Error('native load forbidden');}};
+      require(name){if(name==='./NativeHost')return {configureNativeRecovery(){},nativeHostTouched:()=>false,nativeHostState:()=>({...native.state}),peekNativeHost:()=>nativeModule,loadNativeHost:()=>{native.loads++;throw Error('native load forbidden');}};
         // Lifecycle transport has its own real-socket suite. Keep this log test
         // local while executing the actual lifecycle model and Controller.
         if(name==='./OhosLifecycleTransport')return {OhosLifecycleTransport:class {cancel(){} async send(){}}};
@@ -156,7 +180,9 @@ export async function diagnosticsFixture(t, options = {}) {
   }
   const current=runtime();
   const controller=() => { const Controller=load(resolve(repo,'app/ohos/entry/src/main/ets/runtime/RuntimeController.ets')).RuntimeController;return new Controller(app); };
-  return {...current,root,app,operations,fds,api,native,timers,controller,attach:plugin => attach(current.Plugin,plugin),call,
+  return {...current,root,app,operations,fds,api,native,timers,controller,faults,faultDirectory,load,
+    emitFault:info=>{faults.queue.push(info);for(const watcher of faults.watchers.values())watcher.onTrigger(faults.queue.length,1,{});},
+    attach:plugin => attach(current.Plugin,plugin),call,
     path:join(app.filesDir,'dsh-runtime','engine.log'),directory:join(app.filesDir,'dsh-runtime'),
     reload:() => {modules=new Map();return runtime();},
     change:next => {opt={...opt,...next};},maxConcurrentIO:() => maxActiveIO,

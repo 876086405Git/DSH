@@ -2,7 +2,7 @@ import fs from '@ohos.file.fs';
 import resourceManager from '@ohos.resourceManager';
 import zlib from '@ohos.zlib';
 import { RuntimeChannelError, RuntimeFile, RuntimeManifest } from './RuntimeCore';
-import { RuntimeArchiveSource, RuntimeZip, RuntimeZipEntry, runtimeCrc32 } from './RuntimeZip';
+import { RuntimeArchiveSource, RuntimeZip, RuntimeZipEntry } from './RuntimeZip';
 
 export const RUNTIME_ARCHIVE_ASSET: string = 'dsh-runtime/runtime.zip';
 const CHUNK: number = 256 * 1024;
@@ -64,11 +64,13 @@ export class OhosRuntimeArchive {
   // instances so a diagnostics query cannot close an installer's descriptor.
   private static queue: Promise<void> = Promise.resolve();
   private static pendingRaw: resourceManager.ResourceManager | null = null;
-  private static pendingInflate: PendingInflate | null = null;
+  // Several members inflate at once during an install; each keeps its own stream.
+  private static pendingInflates: Set<PendingInflate> = new Set<PendingInflate>();
   private resources: resourceManager.ResourceManager;
   private source: RawArchiveSource | null = null;
   private index: RuntimeZip | null = null;
-  private extracting: boolean = false;
+  private checksum: zlib.Checksum | null = null;
+  private opening: number = 0;
 
   constructor(resources: resourceManager.ResourceManager) {
     // guestRoot and remote-only queries must remain free of resource/file I/O.
@@ -88,10 +90,10 @@ export class OhosRuntimeArchive {
 
   async withBundledRuntime(work: () => Promise<void>): Promise<void> {
     const operation = OhosRuntimeArchive.queue.then(async () => {
-      if (OhosRuntimeArchive.pendingInflate !== null) {
-        const status = await OhosRuntimeArchive.pendingInflate.zip.inflateEnd({});
+      for (const pending of Array.from(OhosRuntimeArchive.pendingInflates)) {
+        const status = await pending.zip.inflateEnd({});
         if (status !== zlib.ReturnStatus.OK) throw new RuntimeChannelError('ohos_archive_close', '运行时解压状态未成功释放。');
-        OhosRuntimeArchive.pendingInflate = null;
+        OhosRuntimeArchive.pendingInflates.delete(pending);
       }
       if (OhosRuntimeArchive.pendingRaw !== null) {
         await OhosRuntimeArchive.pendingRaw.closeRawFd(RUNTIME_ARCHIVE_ASSET);
@@ -123,27 +125,35 @@ export class OhosRuntimeArchive {
   }
 
   async extract(file: RuntimeFile, write: (buffer: ArrayBuffer, length: number) => Promise<void>): Promise<void> {
-    if (this.source === null) {
-      await this.withBundledRuntime(async () => { await this.extract(file, write); });
+    // Concurrent members share an open session only when a caller holds it for the
+    // whole install. Members that open their own session take turns, so none closes
+    // the descriptor under another or reads before the index is ready.
+    if (this.source === null || this.opening > 0) {
+      this.opening++;
+      try {
+        await this.withBundledRuntime(async () => {
+          await this.inflate(this.source as RawArchiveSource, this.requireIndex().file(file), write);
+        });
+      } finally {
+        this.opening--;
+      }
       return;
     }
-    if (this.extracting) throw new RuntimeChannelError('ohos_archive_busy', '运行时归档正在读取另一文件。');
-    this.extracting = true;
-    try {
-      await this.inflate(this.source, this.requireIndex().file(file), write);
-    } finally {
-      this.extracting = false;
-    }
+    await this.inflate(this.source, this.requireIndex().file(file), write);
   }
 
   private async inflate(source: RawArchiveSource, entry: RuntimeZipEntry,
     write: (buffer: ArrayBuffer, length: number) => Promise<void>): Promise<void> {
+    if (this.checksum === null) this.checksum = await zlib.createChecksum();
+    const checksum: zlib.Checksum = this.checksum;
     const zip = await zlib.createZip();
     let input: ArrayBuffer = new ArrayBuffer(0);
-    const output = new ArrayBuffer(CHUNK);
+    // Keep one extra byte to detect an oversized first block before writing it.
+    const outputCapacity: number = Math.min(CHUNK, entry.size + 1);
+    const output = new ArrayBuffer(outputCapacity);
     let initialized = false;
     try {
-      const init = await zip.inflateInit2({ nextIn: input, availableIn: 0, nextOut: output, availableOut: CHUNK }, -15);
+      const init = await zip.inflateInit2({ nextIn: input, availableIn: 0, nextOut: output, availableOut: outputCapacity }, -15);
       if (init !== zlib.ReturnStatus.OK) throw new RuntimeChannelError('ohos_archive_inflate', '运行时解压初始化失败。');
       initialized = true;
       let loaded = 0;
@@ -153,7 +163,7 @@ export class OhosRuntimeArchive {
       let crc = 0;
       const magic = new Uint8Array(4);
       while (true) {
-        const request: zlib.ZStream = { nextOut: output, availableOut: CHUNK };
+        const request: zlib.ZStream = { nextOut: output, availableOut: outputCapacity };
         if (available === 0 && loaded < entry.packedSize) {
           input = await source.read(entry.dataOffset + loaded, Math.min(CHUNK, entry.packedSize - loaded));
           loaded += input.byteLength;
@@ -169,11 +179,11 @@ export class OhosRuntimeArchive {
             state.totalIn === undefined || state.totalOut === undefined ||
             !Number.isSafeInteger(state.availableIn) || !Number.isSafeInteger(state.availableOut) ||
             state.availableIn < 0 || state.availableIn > available ||
-            state.availableOut < 0 || state.availableOut > CHUNK) {
+            state.availableOut < 0 || state.availableOut > outputCapacity) {
           throw new RuntimeChannelError('ohos_archive_inflate', '运行时解压状态无效。');
         }
         const used = available - state.availableIn;
-        const count = CHUNK - state.availableOut;
+        const count = outputCapacity - state.availableOut;
         if (state.totalIn !== consumed + used || state.totalOut !== produced + count ||
             produced + count > entry.size) {
           throw new RuntimeChannelError('ohos_size_mismatch', '运行时解压长度超过清单或内部计数不一致。');
@@ -184,8 +194,13 @@ export class OhosRuntimeArchive {
             throw new RuntimeChannelError('ohos_native_payload', '原生 ELF 必须随 HAP 的 libs 交付，不能落地到可写目录。');
           }
         }
-        crc = runtimeCrc32(new Uint8Array(output, 0, count), crc);
-        if (count > 0) await write(output, count);
+        if (count > 0) {
+          // The native checksum consumes the complete buffer. Retain exactly
+          // the valid bytes across its await and write those same bytes next.
+          const chunk: ArrayBuffer = count === outputCapacity ? output : output.slice(0, count);
+          crc = (await checksum.crc32(crc, chunk)) >>> 0;
+          await write(chunk, count);
+        }
         consumed += used;
         produced += count;
         available = state.availableIn;
@@ -197,17 +212,17 @@ export class OhosRuntimeArchive {
           return;
         }
         if (status !== zlib.ReturnStatus.OK || (used === 0 && count === 0) ||
-            (available === 0 && loaded === entry.packedSize && count < CHUNK)) {
+            (available === 0 && loaded === entry.packedSize && count < outputCapacity)) {
           throw new RuntimeChannelError('ohos_archive_inflate', '运行时压缩流未正常结束。');
         }
       }
     } finally {
       if (initialized) {
         const pending = new PendingInflate(zip, input, output);
-        OhosRuntimeArchive.pendingInflate = pending;
+        OhosRuntimeArchive.pendingInflates.add(pending);
         const status = await zip.inflateEnd({});
         if (status !== zlib.ReturnStatus.OK) throw new RuntimeChannelError('ohos_archive_close', '运行时解压状态未成功释放。');
-        OhosRuntimeArchive.pendingInflate = null;
+        OhosRuntimeArchive.pendingInflates.delete(pending);
       }
     }
   }

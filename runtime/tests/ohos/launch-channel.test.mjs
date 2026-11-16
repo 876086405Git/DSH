@@ -18,7 +18,7 @@ const plain = value => value instanceof Map || Object.prototype.toString.call(va
 const never = () => new Promise(() => {});
 
 function fixture({ side = 2, width = side, height = side, bytes, media, decode, dark = false, phase = 'idle', colour = 0xFFEBF1FE, wait = 40 } = {}) {
-  const channels = [], asked = [], released = [];
+  const channels = [], asked = [], released = [], logged = [];
   class Channel {
     constructor(_messenger, name) { this.name = name; channels.push(this); }
     setMethodCallHandler(handler) { this.handler = handler; }
@@ -57,6 +57,7 @@ function fixture({ side = 2, width = side, height = side, bytes, media, decode, 
       if (name === '@ohos.multimedia.image') return { default: imageApi };
       if (name === '@ohos.resourceManager') return { default: { ColorMode: { DARK: 0, LIGHT: 1 } } };
       if (name === '@ohos.deviceInfo') return { default: { sdkApiVersion: 26 } };
+      if (name === '@ohos.hilog') return { default: { info: (...line) => logged.push(line) } };
       if (name === '../runtime/NativeHost') return { nativeHostState: () => ({ phase }) };
       throw new Error(`Unexpected runtime import ${name}`);
     },
@@ -87,10 +88,11 @@ test('begin says what the start window shows, in the shape LaunchSnapshot.fromMa
   assert.deepEqual(rest, {
     active: true, sdk: 26, systemSplash: false, systemIcon: true, iconPx: 3,
     background: 0xFFEBF1FE, backgroundBottom: 0xFFEBF1FE, dark: false, coldEngine: true,
+    motionAfterReady: true,
   });
   assert.equal(Object.prototype.toString.call(icon), '[object Uint8Array]');
   assert.deepEqual([...icon], f.pixels);
-  assert.deepEqual(f.asked.filter(v => typeof v === 'string').sort(), ['icon', 'start_window_background']);
+  assert.deepEqual(f.asked.filter(v => typeof v === 'string').sort(), ['start_icon', 'start_window_background']);
   assert.equal(f.asked.find(v => typeof v === 'object').desiredPixelFormat, 3);
 });
 

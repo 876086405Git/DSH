@@ -33,8 +33,9 @@ class WebViewGuard {
 
   IslandPlatform get _platform => IslandPlatform.instance;
 
-  /// webview_flutter_android's `AndroidWebViewController.webViewIdentifier`,
-  /// without depending on the platform package. Null off Android.
+  /// The platform controller's `webViewIdentifier` (webview_flutter_android's
+  /// and webview_flutter_ohos's alike), without depending on either package.
+  /// Null where a controller has none, as in tests.
   static int? identifierOf(WebViewController controller) {
     try {
       final Object? id = (controller.platform as dynamic).webViewIdentifier;

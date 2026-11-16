@@ -60,6 +60,7 @@ try:
     cache = SLOT / 'cache'
     for path in [dsh, agents, workspace, cache]:
         path.mkdir(parents=True)
+    shutil.copy2(F / 'owned-stdio.mjs', workspace / 'stdio-server.mjs')
     driver = H / 'host-profile'
     core = S / 'app/ohos/entry/src/main/cpp'
     build = [os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-I',str(core),str(core/'host_core.cpp'),str(S/'runtime/tests/ohos/host-profile.cc'),'-pthread','-o',str(driver)]
@@ -121,9 +122,9 @@ cp.ChildProcess.prototype.spawn = function () {
     replace("for (const name of [...profilePatches, overlay]) args.push('--patch', resolve(name));\nargs.push('--host', '127.0.0.1', '--port', '0', '--no-open');", "args.splice(args.indexOf('--host'), 0, ...[...profilePatches, overlay].flatMap(name => ['--patch', resolve(name)]));")
     replace("report.profilePatches = profilePatches.map((name) => resolve(name));", "report.profilePatches = [hostArgv[7], ...profilePatches.map((name) => resolve(name))];\nreport.hostGenerated = {argv:hostArgv, environment:hostEnvironment, sessionCreateOmitsCwd:true};\nreport.add13Expectation=values['add13-expect'];")
     replace("{ request: { cwd: workspace, agentPreset: 'standard' } }", "{ request: { agentPreset: 'standard' } }")
-    replace("const model = await modelFactory(workspace);", "const model = await modelFactory(workspace);\nconst mcp = await startOwnedMcpFixture({ output:join(out,'mcp-server'), host:values['mcp-host'] });\nconst stdioMarker=join(out,'stdio-process-markers.jsonl');")
+    replace("const model = await modelFactory(workspace);", "const model = await modelFactory(workspace);\nconst mcp = await startOwnedMcpFixture({ output:join(out,'mcp-server'), host:values['mcp-host'] });\nconst stdioMarker=join(workspace,'stdio-process-markers.jsonl');")
     rows = [
-      {'id':'add13-stdio','name':str(runtime/'node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js'),'config':{'transport':'stdio','serverName':'add13_stdio','command':str(NODE),'args':['--jitless',str(F/'owned-stdio.mjs'),'MARKER_SENTINEL']}},
+      {'id':'add13-stdio','name':str(runtime/'node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js'),'config':{'transport':'stdio','serverName':'add13_stdio','command':'node','args':[str(workspace/'stdio-server.mjs'),'MARKER_SENTINEL'],'cwd':str(workspace),'failOnStartupError':args.expect == 'complete','reconnect':{'enabled':False}}},
       {'id':'add13-http','name':str(runtime/'node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js'),'config':{'transport':'streamable-http','serverName':'add13_http','url':'URL_SENTINEL','failOnStartupError':True,'toolCallTimeoutMs':10000}},
       {'id':'add13-cp-observer','name':str(F/'host-child-observer.mjs'),'config':{'directory':'DIRECTORY_SENTINEL','child':str(F/'owned-child.mjs'),'ordinaryWorker':str(F/'ordinary-worker.mjs'),'output':'OUTPUT_SENTINEL'}},
       {'id':'add13-mcp-observer','name':str(HERE/'host-mcp-observer.mjs'),'config':{'payloadRoot':str(runtime),'output':'MCP_OUTPUT_SENTINEL','serverName':'add13_http'}},

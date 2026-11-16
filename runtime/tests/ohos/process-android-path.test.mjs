@@ -43,7 +43,7 @@ test('Android原工具真实注册的description/schema逐字相同，virtual同
     const ctx = new Context();
     try {
       await ctx.plugin(SystemPrompt, {});
-      await ctx.plugin(ToolRuntime, { mode: 'native' });
+      await ctx.plugin(ToolRuntime, {});
       await ctx.plugin(SessionProjectionRegistry);
       await ctx.plugin(LocalFileSystem, { cwd: process.cwd() });
       await ctx.plugin(WorkingDirectoryService, { defaultDirectory: process.cwd() });

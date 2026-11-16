@@ -666,6 +666,7 @@
   "chatOutputToEnd": "跳到末尾",
   "chatOutputToStart": "回到开头",
   "chatErrApiKey": "API Key 无效或已过期",
+  "chatErrForbidden": "凭据不可用或权限不足",
   "chatErrBalance": "余额不足",
   "chatErrAccountQuota": "账号额度已用完",
   "chatErrRateLimit": "请求太频繁，稍后再试",

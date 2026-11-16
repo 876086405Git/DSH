@@ -1,0 +1,87 @@
+--- a/temu.c
++++ b/temu.c
+@@ -22,6 +22,9 @@
+  * THE SOFTWARE.
+  */
+ #include <stdlib.h>
++#ifdef TEMU_EMBED
++#include "embed-fatal.h"
++#endif
+ #include <stdio.h>
+ #include <poll.h>
+ #include <stdatomic.h>
+@@ -108,6 +111,8 @@
+ static _Thread_local int embed_output_failed;
+ static _Thread_local int embed_input_failed;
+ static _Thread_local int embed_controlled;
++static _Thread_local BlockDevice *embed_owned_drives[MAX_DRIVE_DEVICE];
++static _Thread_local int embed_owned_drive_count;
+ static atomic_flag embed_control_claimed = ATOMIC_FLAG_INIT;
+ static int embed_stopping(void)
+ {
+@@ -1002,6 +1007,7 @@
+         errno = error;
+         if (!p->tab_drive[i].block_dev)
+             goto drive_fail;
++        if (embed_controlled) embed_owned_drives[embed_owned_drive_count++] = p->tab_drive[i].block_dev;
+     }
+     for(i = 0; i < p->fs_count; i++) {
+         char *fname = get_file_path(p->cfg_filename, p->tab_fs[i].filename);
+@@ -1047,6 +1053,7 @@
+  drive_fail:
+     {
+         int error = errno;
++        embed_owned_drive_count = 0;
+         while (i > 0)
+             block_device_file_close(p->tab_drive[--i].block_dev);
+         virt_machine_free_config(p);
+@@ -1076,7 +1083,18 @@
+     embed_control_opaque = opaque;
+     embed_output_failed = 0;
+     embed_input_failed = 0;
+-    result = temu_embed_run_initialized(path, in_fd, out_fd, initialized, opaque);
++    embed_owned_drive_count = 0;
++    dsh_temu_fatal_reason = 0;
++    dsh_temu_fatal_active = 1;
++    if (setjmp(dsh_temu_fatal_jump) == 0) {
++        result = temu_embed_run_initialized(path, in_fd, out_fd, initialized, opaque);
++    } else {
++        int i;
++        result = -9; /* explicit TinyEMU exit/abort/assert: unreleased owner */
++        for (i = 0; i < embed_owned_drive_count; i++)
++            if (block_device_file_retire(embed_owned_drives[i]) < 0) result = -8;
++    }
++    dsh_temu_fatal_active = 0;
+     embed_controlled = 0;
+     embed_should_stop = NULL;
+     embed_control_opaque = NULL;
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -795,11 +795,11 @@
+         else
+             align = 2 << 20; /* 2 MB page align */
+         kernel_base = (buf_len + align - 1) & ~(align - 1);
+-        memcpy(ram_ptr + kernel_base, kernel_buf, kernel_buf_len);
+-        if (kernel_buf_len + kernel_base > s->ram_size) {
++        if (kernel_base > s->ram_size || (uint64_t)kernel_buf_len > s->ram_size - kernel_base) {
+             vm_error("kernel too big");
+             exit(1);
+         }
++        memcpy(ram_ptr + kernel_base, kernel_buf, kernel_buf_len);
+     }
+ 
+     initrd_base = 0;
+@@ -808,11 +808,11 @@
+         initrd_base = s->ram_size / 2;
+         if (initrd_base > (128 << 20))
+             initrd_base = 128 << 20;
+-        memcpy(ram_ptr + initrd_base, initrd_buf, initrd_buf_len);
+-        if (initrd_buf_len + initrd_base > s->ram_size) {
++        if (initrd_base > s->ram_size || (uint64_t)initrd_buf_len > s->ram_size - initrd_base) {
+             vm_error("initrd too big");
+             exit(1);
+         }
++        memcpy(ram_ptr + initrd_base, initrd_buf, initrd_buf_len);
+     }
+     
+     ram_ptr = get_ram_ptr(s, 0, TRUE);

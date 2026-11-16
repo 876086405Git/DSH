@@ -43,17 +43,15 @@ test('OpenHarmony EACCES creates Chinese text and cleans staging', async () => {
   assert.deepEqual(await readdir(directory), ['中文 文件.txt']);
 });
 
+// The common chain (fs-create-link-denial.diff) now takes EACCES this way everywhere;
+// OpenHarmony no longer carries a platform condition of its own for it.
 for (const platform of ['linux', 'android']) {
-  test(`${platform} keeps rejecting EACCES without exclusive creation`, async () => {
+  test(`${platform} takes the same exclusive creation after EACCES`, async () => {
     const other = await provider(platform);
-    const failure = errno('EACCES');
-    other.internals.linkFile = async () => { throw failure; };
-    other.internals.openPublicationFile = async () => { assert.fail('Android behavior changed'); };
-    const target = await other.resolve('unchanged.txt');
-    await assert.rejects(other.writeText(target, 'ours', { kind: 'createIfAbsent' }), {
-      code: 'FS_IO_ERROR', cause: failure,
-    });
-    await assert.rejects(stat(target.targetKey), { code: 'ENOENT' });
+    const target = await other.resolve('shared.txt');
+    await other.writeText(target, 'ours', { kind: 'createIfAbsent' });
+    assert.equal(await readFile(target.targetKey, 'utf8'), 'ours');
+    assert.equal((await stat(target.targetKey)).mode & 0o777, 0o600);
   });
 }
 

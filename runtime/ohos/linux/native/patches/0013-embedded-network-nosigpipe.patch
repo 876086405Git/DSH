@@ -1,0 +1,65 @@
+--- a/slirp/slirp.h
++++ b/slirp/slirp.h
+@@ -1,5 +1,11 @@
+ #ifndef __COMMON_H__
+ #define __COMMON_H__
++
++#ifdef TEMU_EMBED
++#define SLIRP_SEND_FLAGS(flags) ((flags) | MSG_NOSIGNAL)
++#else
++#define SLIRP_SEND_FLAGS(flags) (flags)
++#endif
+ 
+ #include <stdlib.h>
+ #include "../cutils.h"
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -435,7 +435,7 @@
+ 			    /* Connected */
+ 			    so->so_state &= ~SS_ISFCONNECTING;
+ 
+-			    ret = send(so->s, (const void *) &ret, 0, 0);
++			    ret = send(so->s, (const void *) &ret, 0, SLIRP_SEND_FLAGS(0));
+ 			    if (ret < 0) {
+ 			      /* XXXXX Must fix, zero bytes is a NOP */
+ 			      if (errno == EAGAIN || errno == EWOULDBLOCK ||
+@@ -483,7 +483,7 @@
+ 
+ 			    /* tcp_input will take care of it */
+ 			  } else {
+-			    ret = send(so->s, &ret, 0,0);
++			    ret = send(so->s, &ret, 0, SLIRP_SEND_FLAGS(0));
+ 			    if (ret < 0) {
+ 			      /* XXX */
+ 			      if (errno == EAGAIN || errno == EWOULDBLOCK ||
+@@ -778,7 +778,7 @@
+ 		return len;
+ 	}
+ #endif
+-	return send(so->s, buf, len, flags);
++	return send(so->s, buf, len, SLIRP_SEND_FLAGS(flags));
+ }
+ 
+ static struct socket *
+--- a/slirp/socket.c
++++ b/slirp/socket.c
+@@ -556,7 +556,7 @@
+ 	DEBUG_MISC((dfd, " sendto()ing, addr.sin_port=%d, addr.sin_addr.s_addr=%.16s\n", ntohs(addr.sin_port), inet_ntoa(addr.sin_addr)));
+ 
+ 	/* Don't care what port we get */
+-	ret = sendto(so->s, m->m_data, m->m_len, 0,
++	ret = sendto(so->s, m->m_data, m->m_len, SLIRP_SEND_FLAGS(0),
+ 		     (struct sockaddr *)&addr, sizeof (struct sockaddr));
+ 	if (ret < 0)
+ 		return -1;
+--- a/slirp/ip_icmp.c
++++ b/slirp/ip_icmp.c
+@@ -136,7 +136,7 @@
+ 	addr.sin_addr = so->so_faddr;
+       }
+       addr.sin_port = so->so_fport;
+-      if(sendto(so->s, icmp_ping_msg, strlen(icmp_ping_msg), 0,
++      if(sendto(so->s, icmp_ping_msg, strlen(icmp_ping_msg), SLIRP_SEND_FLAGS(0),
+ 		(struct sockaddr *)&addr, sizeof(addr)) == -1) {
+ 	DEBUG_MISC((dfd,"icmp_input udp sendto tx errno = %d-%s\n",
+ 		    errno,strerror(errno)));

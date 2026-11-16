@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import argparse, subprocess, os, json, hashlib, datetime, tempfile, shutil, re
+import argparse, subprocess, os, json, hashlib, datetime, tempfile, shutil, re, sys
 ap=argparse.ArgumentParser()
 ap.add_argument('--node',required=True);ap.add_argument('--native',required=True)
 ap.add_argument('--linked',required=True);ap.add_argument('--sim-preload',required=True)
@@ -14,11 +14,13 @@ argv=[str(Path(a.node).resolve())]
 if a.mode=='strict':argv+=['--jitless','--import',str(Path(a.sim_preload).resolve())]
 else:argv+=['--import',str(Path(a.marker_preload).resolve())]
 argv+=['--test','--test-isolation=none','--test-reporter=tap',str(test)]
+if a.mode=='strict':argv=[sys.executable,str(root/'runtime/tests/ohos/process-link-fixture.py'),'--evidence',str(out/'host-link-fixture.json'),'--',*argv]
 overrides={'NODE_OPTIONS':'','DSH_TEST_PUBLICATION_BINDING':str(Path(a.native).resolve())}
 if a.mode=='strict':overrides.update({'DSH_GO_OHOS_SIM_PLATFORM':'openharmony','DSH_GO_OHOS_SIM_ADDONS':json.dumps([str(Path(a.native).resolve())])})
 home=None
 if a.suite=='share':
  home=Path(tempfile.mkdtemp(prefix='dsh-owned-share-'));overrides.update({'DSH_HOME':str(home),'LD_PRELOAD':str(Path(a.linked).resolve())})
+if a.mode=='strict' and 'LD_PRELOAD' in overrides:overrides['OHOS_TEST_LINK_LD_PRELOAD']=overrides.pop('LD_PRELOAD')
 record={'scope':'AUTHOR_RUN Linux real native/ledger/Worker tests; target ABI NOT_RUN',
  'suite':a.suite,'mode':a.mode,'startedUTC':datetime.datetime.now(datetime.timezone.utc).isoformat(),
  'argv':argv,'environmentOverrides':overrides,

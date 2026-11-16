@@ -211,11 +211,12 @@ def transforms():
 
 def build(prefix):
     changes = {}
-    names = rt.patch_names(RUNTIME / 'patches')
+    pins = json.loads((RUNTIME / 'patches/pins.json').read_text())
+    names, _ = rt.select_dsh_patches(pins, str(RUNTIME / 'patches'), 'android')
     preceding = names[:names.index(PATCH_NAME)]
     for rel, edits in transforms().items():
         raw = (prefix / rel).read_text()
-        # Input is the untouched rc1 npm prefix; replay the same explicit order as the build.
+        # Input is the untouched rc1 npm prefix; replay the Android build's explicit order.
         package = prefix / Path(rel).parent.parent / 'package.json'
         if json.loads(package.read_text())['version'] != '0.2.2-rc.1':
             raise ValueError('expected unpatched 0.2.2-rc.1 input: ' + rel)

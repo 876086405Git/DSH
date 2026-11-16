@@ -170,6 +170,7 @@ def main():
     expected = {'HOME': str(guest / 'root'), 'DSH_HOME': str(dsh), 'DSH_AGENTS_HOME': str(agents),
         'TMPDIR': str(cache / 'ohos-process'), 'NODE_COMPILE_CACHE': str(cache / 'node-compile-cache'),
         'NARB_DISABLE_NATIVE_CACHE': '1', 'DSH_GO_OHOS_NATIVE_LIBRARY_DIR': str(args.native_library_dir),
+        'DSH_GO_OHOS_LINUX_DIRECTORY': str(guest.parent.parent / 'linux-tools'),
         'DSH_PERMISSION_MODE': 'workspace-write'}
     assert captured == expected
     assert len(argv) == 13 and argv[1] == '--jitless' and argv.count('--import') == 1
@@ -242,10 +243,20 @@ def main():
     report = json.loads((out / 'round/report.json').read_text())
     assert report['status'] == 'PASS' and report['approvals'] == 2 and report['loader']['observedRoute'] == 'native-addon'
     assert report['routes']['status'] == 'PASS_HOST_BRIDGE_ROUTE_CONTRACT' and report['routes']['requiredTemplates'] == 15
+    assert report['routes']['attachments']['status'] == 'PASS_OH_FULL_REFERENCE_CONTRACT'
+    assert len(report['routes']['attachments']['cases']) == 7
+    assert all(row['passed'] for row in report['routes']['attachments']['cases'])
     assert report['engineLifecycle']['closeObserved'] is True
     assert report['engineLifecycle']['exit']['code'] == 0
     assert report['engineLifecycle']['exit']['signal'] is None
     assert not any(item['signal'] == 'SIGKILL' for item in report['engineLifecycle']['requested'])
+    # Read-only image lookup must not mutate its durable inputs, including after
+    # the unrelated disposable Session is actually deleted and Host is closed.
+    for row in fixture['attachments']['objects']:
+        path = Path(row['path'])
+        assert path.stat().st_size == row['bytes'] and sha(path) == row['sha256']
+    assert not Path(fixture['attachments']['missingPath']).exists()
+
     for name, expected_module in runtime_modules.items():
         assert (runtime / name).stat().st_size == expected_module['bytes'] and sha(runtime / name) == expected_module['sha256']
     assert 'changed-label' in (dsh / 'profiles/web/cordis.patch.yml').read_text()
@@ -255,6 +266,9 @@ def main():
     write_json(out / 'report.json', {'scope': 'Linux actual pinned DSH, strict simulation; no SDK/Ark/HAP/device claim',
         'assertionsPassed': True, 'tools': 5, 'approvals': report['approvals'], 'profileUnchanged': True,
         'bridgeRouteContract': report['routes']['status'], 'bridgeConsumerTemplates': 15,
+        'attachmentContract': report['routes']['attachments'],
+        'attachmentFixtureSha256': sha(out / 'attachment-fixture-input.json'),
+        'attachmentObjectsUnchangedAfterHostExit': True,
         'engineLifecycle': report['engineLifecycle'], 'runtimeDeletionModules': runtime_modules,
         'isolatedBridgeSource': str(runtime / 'runtime/bridge/dsh-go-bridge'),
         'bridgeFixtureSha256': sha(out / 'bridge-fixture-input.json'),

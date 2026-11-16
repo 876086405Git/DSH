@@ -20,7 +20,15 @@ export const fileIo = {
       throw error;
     }
   },
-  lstat: fsp.lstat, rename: fsp.rename, unlink: fsp.unlink,
+  async lstat(path) {
+    try { return await fsp.lstat(path); } catch (error) {
+      // Actual OH file.fs lstat uses BusinessError numeric errno values.
+      if (error.code === 'ENOENT') error.code = 13900002;
+      if (error.code === 'ENOTDIR') error.code = 13900018;
+      throw error;
+    }
+  },
+  rename: fsp.rename, unlink: fsp.unlink,
   stat: fd => promisify(fs.fstat)(fd), truncate: (fd, length) => promisify(fs.ftruncate)(fd, length),
   async mkdir(path) {
     try { await fsp.mkdir(path); } catch (error) {

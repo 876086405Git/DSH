@@ -1,0 +1,168 @@
+--- a/node_modules/@deepseek-ai/dsh-tool-web/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-web/lib/index.js
+@@ -1,8 +1,7 @@
+ import z from "@deepseek-ai/schemastery";
+ import { defineTool } from "@deepseek-ai/dsh-tools";
+ import { truncateWithoutSplittingSurrogatePair } from "@deepseek-ai/dsh-output-retention";
+-import TurndownService from "turndown";
+-import { gfm } from "@joplin/turndown-plugin-gfm";
++import { createRequire } from "node:module";
+ import { assertNever } from "@deepseek-ai/dsh-util-values";
+ //#region lib/types/trust.js
+ /**
+@@ -360,72 +359,83 @@
+ * elements wholesale — turndown's default keeps their text. The instance is
+ * stateless across `turndown()` calls and safe to share.
+ */
+-const turndown = new TurndownService({
+-	headingStyle: "atx",
+-	codeBlockStyle: "fenced",
+-	bulletListMarker: "-"
+-});
+-turndown.use(gfm);
+-turndown.addRule("removeNonVisibleContent", {
+-	filter(node) {
+-		if ([
+-			"SCRIPT",
+-			"STYLE",
+-			"NOSCRIPT",
+-			"TEMPLATE",
+-			"IFRAME",
+-			"OBJECT",
+-			"EMBED"
+-		].includes(node.nodeName)) return true;
+-		if (node.hasAttribute("hidden") || node.getAttribute("aria-hidden")?.toLowerCase() === "true") return true;
+-		if (node.nodeName === "INPUT" && node.getAttribute("type")?.toLowerCase() === "hidden") return true;
+-		return (node.getAttribute("style")?.split(";") ?? []).some((declaration) => {
+-			const separator = declaration.indexOf(":");
+-			if (separator === -1) return false;
+-			const property = declaration.slice(0, separator).trim().toLowerCase();
+-			const value = declaration.slice(separator + 1).trim().toLowerCase().replace(/\s*!important\s*$/u, "");
+-			return property === "display" && value === "none" || property === "visibility" && (value === "hidden" || value === "collapse");
+-		});
+-	},
+-	replacement() {
+-		return "";
++// OH-only: registration, text and rejected deep HTML need no DOM parser.
++// Publish the shared converter only after every original rule is installed.
++const requireHtmlConverter = createRequire(import.meta.url);
++let turndown;
++function getTurndown() {
++	if (turndown !== void 0) return turndown;
++	const TurndownService = requireHtmlConverter("turndown");
++	const { gfm } = requireHtmlConverter("@joplin/turndown-plugin-gfm");
++	const converter = new TurndownService({
++		headingStyle: "atx",
++		codeBlockStyle: "fenced",
++		bulletListMarker: "-"
++	});
++	converter.use(gfm);
++	converter.addRule("removeNonVisibleContent", {
++		filter(node) {
++			if ([
++				"SCRIPT",
++				"STYLE",
++				"NOSCRIPT",
++				"TEMPLATE",
++				"IFRAME",
++				"OBJECT",
++				"EMBED"
++			].includes(node.nodeName)) return true;
++			if (node.hasAttribute("hidden") || node.getAttribute("aria-hidden")?.toLowerCase() === "true") return true;
++			if (node.nodeName === "INPUT" && node.getAttribute("type")?.toLowerCase() === "hidden") return true;
++			return (node.getAttribute("style")?.split(";") ?? []).some((declaration) => {
++				const separator = declaration.indexOf(":");
++				if (separator === -1) return false;
++				const property = declaration.slice(0, separator).trim().toLowerCase();
++				const value = declaration.slice(separator + 1).trim().toLowerCase().replace(/\s*!important\s*$/u, "");
++				return property === "display" && value === "none" || property === "visibility" && (value === "hidden" || value === "collapse");
++			});
++		},
++		replacement() {
++			return "";
++		}
++	});
++	/** Render one GFM table cell without interpreting HTML span counts. */
++	function renderTableCell(content, index) {
++		return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|+/g, "\\|").padEnd(3, " ")} |`;
+ 	}
+-});
+-/** Render one GFM table cell without interpreting HTML span counts. */
+-function renderTableCell(content, index) {
+-	return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|+/g, "\\|").padEnd(3, " ")} |`;
+-}
+-/** Whether a row is the table's Markdown heading row. */
+-function isTableHeadingRow(row) {
+-	const cells = Array.from(row.cells);
+-	const section = row.parentElement;
+-	const table = section.parentElement;
+-	return (section.nodeName === "THEAD" || table.rows[0] === row) && cells.every((cell) => cell.nodeName === "TH");
+-}
+-/** Map an HTML table-cell alignment to the GFM separator marker. */
+-function tableBorder(cell) {
+-	const alignment = (cell.getAttribute("align") || cell.style.textAlign || "").toLowerCase();
+-	if (alignment === "left") return ":---";
+-	if (alignment === "right") return "---:";
+-	if (alignment === "center") return ":---:";
+-	return "---";
+-}
+-turndown.addRule("tableCellWithoutSpanExpansion", {
+-	filter: ["th", "td"],
+-	replacement(content, node) {
+-		const cell = node;
+-		const row = cell.parentNode;
+-		return renderTableCell(content, Array.prototype.indexOf.call(row.childNodes, cell));
++	/** Whether a row is the table's Markdown heading row. */
++	function isTableHeadingRow(row) {
++		const cells = Array.from(row.cells);
++		const section = row.parentElement;
++		const table = section.parentElement;
++		return (section.nodeName === "THEAD" || table.rows[0] === row) && cells.every((cell) => cell.nodeName === "TH");
+ 	}
+-});
+-turndown.addRule("tableRowWithoutSpanExpansion", {
+-	filter: "tr",
+-	replacement(content, node) {
+-		const row = node;
+-		const border = isTableHeadingRow(row) ? Array.from(row.cells, (cell, index) => renderTableCell(tableBorder(cell), index)).join("") : "";
+-		return `\n${content}${border.length > 0 ? `\n${border}` : ""}`;
++	/** Map an HTML table-cell alignment to the GFM separator marker. */
++	function tableBorder(cell) {
++		const alignment = (cell.getAttribute("align") || cell.style.textAlign || "").toLowerCase();
++		if (alignment === "left") return ":---";
++		if (alignment === "right") return "---:";
++		if (alignment === "center") return ":---:";
++		return "---";
+ 	}
+-});
++	converter.addRule("tableCellWithoutSpanExpansion", {
++		filter: ["th", "td"],
++		replacement(content, node) {
++			const cell = node;
++			const row = cell.parentNode;
++			return renderTableCell(content, Array.prototype.indexOf.call(row.childNodes, cell));
++		}
++	});
++	converter.addRule("tableRowWithoutSpanExpansion", {
++		filter: "tr",
++		replacement(content, node) {
++			const row = node;
++			const border = isTableHeadingRow(row) ? Array.from(row.cells, (cell, index) => renderTableCell(tableBorder(cell), index)).join("") : "";
++			return `\n${content}${border.length > 0 ? `\n${border}` : ""}`;
++		}
++	});
++	turndown = converter;
++	return turndown;
++}
+ /**
+ * Validate value constraints the schema DSL can't express: a non-blank `url`.
+ * Throws a plain `Error` otherwise. No timeout parameter — the tool-call budget
+@@ -575,7 +585,7 @@
+ 			};
+ 			try {
+ 				return {
+-					text: turndown.turndown(content),
++					text: getTurndown().turndown(content),
+ 					sourceTruncated
+ 				};
+ 			} catch {

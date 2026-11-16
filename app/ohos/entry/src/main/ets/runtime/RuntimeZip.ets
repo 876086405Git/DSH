@@ -28,6 +28,7 @@ const MAX_DIRECTORY: number = 32 * 1024 * 1024;
 const MAX_MANIFEST: number = 16 * 1024 * 1024;
 const MAX_NAME: number = 4096;
 const MAX_FILE: number = 512 * 1024 * 1024;
+const HEADER_WINDOW: number = 4 * 1024 * 1024;
 
 function invalid(): never {
   throw new RuntimeChannelError('ohos_archive_invalid', '随包运行时归档的格式、索引或清单不一致。');
@@ -144,10 +145,20 @@ export class RuntimeZip {
 
     // Check every local header, including files that an incremental install will
     // skip. There can be no hidden prefix, gaps, duplicate local records or extras.
+    // Headers are read a window at a time: ~12k separate reads held every start of
+    // the app on a phone for about 4 s.
+    let window = new Uint8Array(0);
+    let windowStart = 0;
     for (const entry of ordered) {
-      const headerBytes = new Uint8Array(await source.read(entry.headerOffset, 30 + entry.nameLength));
-      if (headerBytes.byteLength !== 30 + entry.nameLength) invalid();
-      const header = new DataView(headerBytes.buffer);
+      const length = 30 + entry.nameLength;
+      if (entry.headerOffset < windowStart || entry.headerOffset + length > windowStart + window.byteLength) {
+        windowStart = entry.headerOffset;
+        window = new Uint8Array(await source.read(windowStart,
+          Math.max(length, Math.min(HEADER_WINDOW, directoryOffset - windowStart))));
+        if (window.byteLength < length) invalid();
+      }
+      const headerBytes = window.subarray(entry.headerOffset - windowStart, entry.headerOffset - windowStart + length);
+      const header = new DataView(headerBytes.buffer, headerBytes.byteOffset, headerBytes.byteLength);
       if (header.getUint32(0, true) !== 0x04034b50 || header.getUint16(4, true) !== entry.version ||
           header.getUint16(6, true) !== entry.flags || header.getUint16(8, true) !== entry.method ||
           header.getUint16(10, true) !== entry.time || header.getUint16(12, true) !== entry.date ||

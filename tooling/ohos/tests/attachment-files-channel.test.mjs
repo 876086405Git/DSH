@@ -383,3 +383,36 @@ test('failed startup cleanup diagnoses retained cache but does not prevent a fre
   f.change({ unlink: undefined });
   assert.deepEqual(await f.invoke('release', { owner: 'test-1' }).done, { value: null });
 });
+
+for (const retirement of ['ability','engine']) test(`throwing retired reply cannot retain global picker slot (${retirement})`, async t=>{
+ const f=await attachmentFixture(t); let replyAttempts=0;
+ const args=new Map(Object.entries(request('old')));
+ f.channel.handler.onMethodCall({method:'pick',args}, {
+  success(){replyAttempts++;throw new Error('retired transport');},
+  error(){replyAttempts++;throw new Error('retired transport');},
+  notImplemented(){assert.fail('pick must be implemented');}
+ });
+ await until(()=>f.pickers.length===1);
+ let detachError;
+ try { if(retirement==='ability')f.plugin.onDetachedFromAbility(); else f.plugin.onDetachedFromEngine(f.engine); }
+ catch(error){detachError=error;}
+ let channel=f.channel;
+ if(retirement==='ability') f.plugin.onAttachedToAbility({getAbility:()=>({context:f.context})});
+ else channel=f.attach().channel;
+ const next=f.invoke('pick',request('new'),channel);
+ await until(()=>f.pickers.length===2||next.replies.length>0);
+ assert.equal(next.replies.length,0,'new Ability must acquire picker before the retired picker returns');
+ assert.equal(detachError,undefined,'transport reply failure must not abort detach');
+ assert.equal(f.pickers[0].settled,false);
+ f.pickers[1].wait.resolve([await f.file('new.txt','actual new bytes')]);
+ const reply=await next.done; assert.equal(reply.value.length,1);
+ const path=reply.value[0].path;
+ assert.equal(await fsp.readFile(path,'utf8'),'actual new bytes');
+ f.pickers[0].wait.resolve([await f.file('old.txt','old bytes')]);
+ await until(()=>f.pickers[0].settled);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(replyAttempts,1,'retired result receives no second logical reply');
+ assert.equal(await fsp.readFile(path,'utf8'),'actual new bytes');
+ assert.equal(f.operations.filter(v=>v.op==='open'&&v.path.startsWith('file:')).length,1);
+ await f.invoke('release',{owner:'new'},channel).done;
+ assert.deepEqual(await f.cached(),[]);assert.equal(f.descriptors.size,0);
+});

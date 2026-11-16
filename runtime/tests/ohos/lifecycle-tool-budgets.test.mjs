@@ -12,9 +12,9 @@ import { ActiveBudgetClock } from '../../ohos/lifecycle/budget.mjs';
 const require = createRequire(join(resolve(process.env.DSH_LIFECYCLE_TEST_PREFIX), 'package.json'));
 const load = name => import(pathToFileURL(require.resolve('@deepseek-ai/' + name)));
 const [{ Context }, { SystemPrompt }, { ToolRuntime }, { LocalBashExecutor }, { Session }, { SessionProjectionRegistry },
-  { LocalFileSystem }, { WorkingDirectoryService }, timeoutPolicy, search] = await Promise.all([
+  { LocalFileSystem }, { WorkingDirectoryService }, timeoutPolicy, search, nativeExecutor] = await Promise.all([
   'cordis', 'dsh-system-prompt', 'dsh-tools', 'dsh-bash-local', 'dsh-session', 'dsh-session-projection',
-  'dsh-fs-local', 'dsh-working-directory', 'dsh-tool-call-timeout-policy', 'dsh-tool-fs-search',
+  'dsh-fs-local', 'dsh-working-directory', 'dsh-tool-call-timeout-policy', 'dsh-tool-fs-search', 'dsh-tool-executor-native',
 ].map(load));
 const key = Symbol.for('dsh.go.ohos.lifecycle');
 async function fixture(t, enabled) {
@@ -25,7 +25,8 @@ async function fixture(t, enabled) {
   const ctx = new Context(), clock = new ActiveBudgetClock('actual-tool-budget');
   clock.pause();
   if (enabled) { assert.equal(globalThis[key], undefined); globalThis[key] = { clock }; }
-  await ctx.plugin(SystemPrompt, {}); await ctx.plugin(ToolRuntime, { mode: 'native' });
+  await ctx.plugin(SystemPrompt, {}); await ctx.plugin(ToolRuntime, {});
+  await ctx.plugin(nativeExecutor);
   await ctx.plugin(SessionProjectionRegistry);
   await ctx.plugin(LocalFileSystem, { cwd: work }); await ctx.plugin(WorkingDirectoryService, { defaultDirectory: work });
   await ctx.plugin(OhSubprocessRuntime, { workspaceRoots: [work], temporaryRoot: temp });
@@ -49,7 +50,7 @@ for (const enabled of [false, true]) test(`actual LocalBashExecutor BASH_TIMEOUT
   assert.equal(clock.pendingCount, 0);
   if (enabled) {
     assert(performance.now() - start > 80);
-    assert.equal(result.stdout.text, 'complete'); assert.equal(result.exitCode, 0);
+    assert.equal(result.stdout.text, 'complete', JSON.stringify(result)); assert.equal(result.exitCode, 0);
     assert.equal(await fs.readFile(join(work, 'marker'), 'utf8'), 'complete');
   } else assert.equal(await fs.stat(join(work, 'marker')).then(() => true, () => false), false);
 });
@@ -57,8 +58,13 @@ for (const enabled of [false, true]) test(`actual LocalBashExecutor BASH_TIMEOUT
 for (const enabled of [false, true]) test(`actual fs-search and timeout policy TOOL_TIMEOUT ${enabled ? 'uses the same logical clock' : 'original wall-time control times out'}`, async t => {
   const { ctx, clock, agent } = await fixture(t, enabled);
   assert.equal(ctx.tools.get('grep').timeoutMs, 80);
-  const result = await ctx.tools.execute({ name: 'grep', callId: 'grep-budget', agent,
-    signal: new AbortController().signal, arguments: { pattern: 'needle', path: '中文.txt' } });
+  const batch = await ctx.tools.execute({
+    calls: [{ type: 'tool-call', name: 'grep', id: 'grep-budget', arguments: JSON.stringify({ pattern: 'needle', path: '中文.txt' }) }],
+    agent, signal: new AbortController().signal,
+  });
+  assert.equal(batch.results.length, 1);
+  assert.equal(batch.results[0].callId, 'grep-budget');
+  const result = batch.results[0].result;
   assert.equal(result.isError, !enabled, JSON.stringify(result));
   if (enabled) assert.match(JSON.stringify(result), /needle 中文/);
   else assert.equal(result.error.info.code, 'TOOL_TIMEOUT');

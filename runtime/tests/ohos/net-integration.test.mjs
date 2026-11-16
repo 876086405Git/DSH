@@ -84,57 +84,85 @@ test('v8 controller preserves the first explicit abort reason and never sends th
   assert.equal(requests, 0);
 });
 
-test('web-fetch-http uses its verified lookup once and preserves Host', async (t) => {
+// rc.1 removed provider-owned DNS pinning. Inject only the real transport
+// factory's lookup boundary; the provider still uses its public requestOnce.
+async function transportPolicy(t, options, values = {}) {
+  const create = network.createDispatcher;
+  network.createDispatcher = policyOptions => create({ ...policyOptions, ...options });
+  t.after(() => { network.createDispatcher = create; });
+  await policy(t, values);
+}
+
+test('web-fetch-http uses the installed dispatcher lookup once and preserves Host', async (t) => {
   let count = 0;
   let host;
-  const { url } = await serve(t, (q, r) => { host = q.headers.host; r.setHeader('content-type', 'text/plain'); r.end('pinned'); });
-  await policy(t);
-  const provider = new HttpFetchProvider(limits, async () => { count++; return [{ address: '127.0.0.1', family: 4 }]; });
+  const { url } = await serve(t, (q, r) => { host = q.headers.host; r.setHeader('content-type', 'text/plain'); r.end('dispatched'); });
+  await transportPolicy(t, { lookup: (hostname, options, callback) => {
+    count++;
+    assert.equal(hostname, 'public-fixture.invalid');
+    if (options.all) callback(null, [{ address: '127.0.0.1', family: 4 }]);
+    else callback(null, '127.0.0.1', 4);
+  } });
+  const provider = new HttpFetchProvider(limits);
   const target = url.replace('127.0.0.1', 'public-fixture.invalid');
   const response = await provider.fetch({ url: target });
-  assert.equal(response.body.content, 'pinned');
+  assert.equal(response.body.content, 'dispatched');
   assert.equal(host, new URL(target).host);
   assert.equal(count, 1);
 });
 
-test('web-fetch-http production resolver still refuses loopback and local targets', async (t) => {
+test('web-fetch-http follows main loopback access while refusing embedded credentials before I/O', async (t) => {
   let sent = 0;
-  const { url } = await serve(t, (_q, r) => { sent++; r.end(); });
+  const { url } = await serve(t, (_q, r) => { sent++; r.setHeader('content-type', 'text/plain'); r.end('local'); });
   await policy(t);
   const provider = new HttpFetchProvider(limits);
-  await assert.rejects(provider.fetch({ url }), (error) => error.code === 'WEB_BLOCKED_URL');
-  assert.equal(sent, 0);
+  const response = await provider.fetch({ url });
+  assert.equal(response.body.content, 'local');
+  assert.equal(sent, 1);
+  await assert.rejects(provider.fetch({ url: url.replace('://', '://user:secret@') }), (error) => error.code === 'WEB_BLOCKED_URL');
+  assert.equal(sent, 1);
 });
 
-test('pinned HTTP retains the provider\'s explicit IPv4/IPv6 fallback policy', async (t) => {
+test('the public dispatcher retains explicit IPv4/IPv6 family selection', async (t) => {
   const { url } = await serve(t, (_q, r) => { r.setHeader('content-type', 'text/plain'); r.end('fallback'); });
-  await policy(t);
   const previous = net.getDefaultAutoSelectFamily();
   net.setDefaultAutoSelectFamily(false);
   t.after(() => net.setDefaultAutoSelectFamily(previous));
-  const provider = new HttpFetchProvider(limits, async () => [
-    { address: '::1', family: 6 }, { address: '127.0.0.1', family: 4 },
-  ]);
+  let lookups = 0;
+  await transportPolicy(t, { autoSelectFamily: true, lookup: (_host, options, callback) => {
+    lookups++;
+    assert.equal(options.all, true);
+    callback(null, [{ address: '::1', family: 6 }, { address: '127.0.0.1', family: 4 }]);
+  } });
+  const provider = new HttpFetchProvider(limits);
   const response = await provider.fetch({ url: url.replace('127.0.0.1', 'public-fixture.invalid') });
   assert.equal(response.body.content, 'fallback');
+  assert.equal(lookups, 1);
 });
 
 test('web-fetch-http keeps its cross-origin redirect refusal', async (t) => {
-  const { url } = await serve(t, (_q, r) => { r.writeHead(302, { location: 'http://other.invalid/' }); r.end(); });
+  let followed = 0;
+  const other = await serve(t, (_q, r) => { followed++; r.end('must not follow'); });
+  const { url } = await serve(t, (_q, r) => { r.writeHead(302, { location: other.url }); r.end(); });
   await policy(t);
-  const provider = new HttpFetchProvider(limits, async () => [{ address: '127.0.0.1', family: 4 }]);
-  await assert.rejects(provider.fetch({ url: url.replace('127.0.0.1', 'public-fixture.invalid') }), (error) => error.code === 'WEB_REDIRECT_BLOCKED');
+  const provider = new HttpFetchProvider(limits);
+  await assert.rejects(provider.fetch({ url }), (error) => error.code === 'WEB_REDIRECT_BLOCKED');
+  assert.equal(followed, 0);
 });
 
 test('a routed proxy resolves the origin; the public fetch provider does not resolve again', async (t) => {
   let target;
+  let lookups = 0;
   const proxy = await serve(t, (q, r) => { target = q.url; r.setHeader('content-type', 'text/plain'); r.end('proxied'); });
-  await policy(t, { HTTP_PROXY: proxy.url });
-  const provider = new HttpFetchProvider(limits, async () => { throw new Error('direct resolver must not run for a proxy hop'); });
+  await transportPolicy(t, { lookup: (_host, _options, callback) => {
+    lookups++; callback(new Error('origin DNS must remain at the proxy'));
+  } }, { HTTP_PROXY: proxy.url });
+  const provider = new HttpFetchProvider(limits);
   const response = await provider.fetch({ url: 'http://public-fixture.invalid/document' });
   assert.equal(response.body.content, 'proxied');
   assert.equal(target, 'http://public-fixture.invalid/document');
   assert.equal(proxyRouteFor(new URL('http://public-fixture.invalid/document')).proxied, true);
+  assert.equal(lookups, 0);
 });
 
 test('loopback bypass and no_proxy suffix rules continue to use DSH policy', async (t) => {

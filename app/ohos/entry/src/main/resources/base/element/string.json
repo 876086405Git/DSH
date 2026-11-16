@@ -1,6 +1,10 @@
 {
   "string": [
     {
+      "name": "phone_reminder_close",
+      "value": "关闭"
+    },
+    {
       "name": "module_desc",
       "value": "module description"
     },
@@ -23,6 +27,54 @@
     {
       "name": "shortcut_voice_input",
       "value": "Voice input"
+    },
+    {
+      "name": "dsh_pasteboard_reason",
+      "value": "用于您主动点击粘贴时读取剪贴板内容。"
+    },
+    {
+      "name": "dsh_paste_prompt",
+      "value": "请点击系统粘贴按钮，允许本次读取剪贴板。"
+    },
+    {
+      "name": "dsh_paste_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "dsh_voice_stop",
+      "value": "插件在听，点这里停止"
+    },
+    {
+      "name": "dsh_paste_denied",
+      "value": "系统未授予粘贴权限，请重新点击粘贴按钮。"
+    },
+    {
+      "name": "dsh_paste_empty",
+      "value": "剪贴板中没有可粘贴的文本。"
+    },
+    {
+      "name": "dsh_paste_failed",
+      "value": "无法读取剪贴板，请重试或手动输入。"
+    },
+    {
+      "name": "companion_widget_label",
+      "value": "伙伴小屋"
+    },
+    {
+      "name": "companion_widget_description",
+      "value": "她在你的桌面上，点一下去看她"
+    },
+    {
+      "name": "companion_widget_name",
+      "value": "鲸鱼娘"
+    },
+    {
+      "name": "companion_widget_waiting",
+      "value": "在小屋里等你"
+    },
+    {
+      "name": "companion_widget_asleep",
+      "value": "睡着了"
     }
   ]
 }

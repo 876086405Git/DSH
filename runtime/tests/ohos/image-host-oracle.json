@@ -1,0 +1,245 @@
+{
+  "schema": 1,
+  "scope": "Frozen finite host component assertions; no real SDK codec, device, attachment chain or production NAPI-link claim",
+  "container": {
+    "passNames": [
+      "PNG RGB declaration",
+      "PNG truncated IEND (no partial facts)",
+      "PNG CRC mismatch (no partial facts)",
+      "PNG transparency key",
+      "PNG bounded Exif orientation 6",
+      "PNG unknown ancillary remains unknown",
+      "PNG sRGB is an explicit convention",
+      "PNG unparsed Exif is not orientation 1",
+      "PNG cICP prevents sRGB inference",
+      "JPEG baseline structural subset",
+      "JPEG missing final EOI byte (no partial facts)",
+      "JPEG trailing byte (no partial facts)",
+      "JPEG bounded Exif orientation 6",
+      "JPEG unknown APP not clean metadata",
+      "JPEG metadata after entropy is visited",
+      "WebP lossy header subset",
+      "WebP RIFF truncated (no partial facts)",
+      "WebP trailing byte (no partial facts)",
+      "WebP unknown chunk remains unknown",
+      "WebP Exif orientation 6",
+      "WebP two declared frames not a single image",
+      "WebP ALPH declaration",
+      "WebP lossless hint zero is still unknown alpha",
+      "GIF one image no transparency declaration",
+      "GIF truncated image sub-block terminator (no partial facts)",
+      "GIF GCE transparency scope",
+      "GIF two images",
+      "GIF application extension orientation unknown"
+    ],
+    "summary": "container facts: 28 finite checks; no pixel decoding"
+  },
+  "ladder": {
+    "cases": [
+      {
+        "case": "first-fit",
+        "status": "PASS",
+        "packCalls": 1
+      },
+      {
+        "case": "second-fit",
+        "status": "PASS",
+        "packCalls": 2
+      },
+      {
+        "case": "smallest-last",
+        "status": "PASS",
+        "packCalls": 3
+      },
+      {
+        "case": "smallest-first",
+        "status": "PASS",
+        "packCalls": 3
+      },
+      {
+        "case": "smallest-middle",
+        "status": "PASS",
+        "packCalls": 3
+      },
+      {
+        "case": "earliest-tie",
+        "status": "PASS",
+        "packCalls": 3
+      },
+      {
+        "case": "first-fails",
+        "status": "PASS",
+        "packCalls": 1
+      },
+      {
+        "case": "second-fails-discards-best",
+        "status": "PASS",
+        "packCalls": 2
+      },
+      {
+        "case": "third-fails-discards-best",
+        "status": "PASS",
+        "packCalls": 3
+      },
+      {
+        "case": "successful-zero-length",
+        "status": "PASS",
+        "packCalls": 1
+      },
+      {
+        "case": "successful-length-over-cap",
+        "status": "PASS",
+        "packCalls": 1
+      },
+      {
+        "case": "exact-hard-cap",
+        "status": "PASS",
+        "packCalls": 1
+      },
+      {
+        "case": "zero-soft-target",
+        "status": "PASS",
+        "packCalls": 0
+      }
+    ],
+    "summary": {
+      "scope": "host fake packer only; not an image codec",
+      "cases": 13,
+      "status": "PASS"
+    }
+  },
+  "bridge": {
+    "passNames": [
+      "native work uses a private input snapshot and preserves unknown facts",
+      "frame work is serialized and close drains accepted work exactly once",
+      "environment cleanup closes an idle frame without relying on its JS close",
+      "environment teardown waits for an actually running native call"
+    ],
+    "expectedNodeVersion": "v24.22.1",
+    "reporter": "spec",
+    "lifecycleCases": 4
+  },
+  "frozenTestInputs": [
+    {
+      "path": "runtime/tests/ohos/image-container-facts.c",
+      "bytes": 11298,
+      "sha256": "38156190542f22e80bac5aca570153a505c0e6ba2c8414355667e2a0b27355c4",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-encoding-ladder.c",
+      "bytes": 4845,
+      "sha256": "7a1bc67e3c091ac5a79be517f6b95a0f9e70ca2d9aa191721b3919b09db47129",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-codec-bridge.test.mjs",
+      "bytes": 6285,
+      "sha256": "6ef958aa01e6cd5fcae364c5189445a64b89a2876f6c723df18b46e16fb69e05",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-codec-fake.c",
+      "bytes": 5714,
+      "sha256": "995decab755d1ef51726d1210a31cf2ff6ce910c4d13bc666bb939f4bbe3e82a",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-codec-fake.h",
+      "bytes": 464,
+      "sha256": "a988847112355db7ca6558a2fe6a758d68d617cb4500b2996c5493f361777872",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-contract.c",
+      "bytes": 16226,
+      "sha256": "44566f2a43ac3a0942440c653281477c0440301f8f080de0065bab49c715b42d",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-host-compat.h",
+      "bytes": 500,
+      "sha256": "7f348c45f23aa7e6286c07edec7f783660def4e690eadf9a98aa06c24814db1e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-host.h",
+      "bytes": 2552,
+      "sha256": "80bbb9f64f0957082f5ba106574fc82a7fbdb4232fcb9715641c7421586344a0",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-inputs.c",
+      "bytes": 2309,
+      "sha256": "e2aad4931fcb563b28aaf143c4444b0831b2695251813977b20da949a3dfc0f9",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk-fake.c",
+      "bytes": 22863,
+      "sha256": "2e3597d420cacd626e016ef5748089ab6acb3322dfbd109670ab208a855132cf",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-shims/info/application_target_sdk_version.h",
+      "bytes": 239,
+      "sha256": "721d79664db32364d65624856546dfee3c4b3670c4918bc4bb0f68c7a2eff0f9",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-shims/napi/native_api.h",
+      "bytes": 274,
+      "sha256": "beaa4ea97ed4288b9633f09e54003deaeeb972848a144a5df089fa36bc64ff2e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-shims/rawfile/raw_file.h",
+      "bytes": 255,
+      "sha256": "d9adc2d289bd9b983848a1d252111cf86d5b1e7f5db639c773cfc4fc21f9b301",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-oracle.json",
+      "bytes": 4770,
+      "sha256": "435038e1a89ffc841866620ba2a1dcc0fa7ca33d0ed38314515e2eabf84bf50d",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/image_common.h",
+      "bytes": 79062,
+      "sha256": "17af7d879f65f4d02354b1f0a456f767f256aeafbc2f336908443fa405245698",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/image_packer_native.h",
+      "bytes": 23732,
+      "sha256": "e253e51a7887f5658a8e34a56ffb209aa7f687cd1f3fadf4a3eb55129aabaddd",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/image_source_native.h",
+      "bytes": 50650,
+      "sha256": "9a5ac06dcfc6e6b53cbc5b9e1a80b9551cec2b0dbbcdc865ac17fbf0b0c0289f",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/picture_native.h",
+      "bytes": 31561,
+      "sha256": "0820a90322351c8b826ba7956121480d343b2a5a0b416b74f8891b3a681cd8b6",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/pixelmap_native.h",
+      "bytes": 66242,
+      "sha256": "079e7ac4247d473a0a415b1c06bf14d4b9c0a09664c99ea28633bff20ff3318e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/native_color_space_manager/native_color_space_manager.h",
+      "bytes": 11311,
+      "sha256": "89c5b8bcc8d3d843a6ab0f422edb278382a0168fd7a8de4321231d79a120fea2",
+      "mode": "0644"
+    }
+  ],
+  "ndkOracle": "runtime/tests/ohos/image-ndk-oracle.json"
+}

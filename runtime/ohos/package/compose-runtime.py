@@ -269,6 +269,47 @@ class Composer:
             self.add(source, root, label, target, reason)
 
 
+def compose_python(composer, bundle, source_runtime, repo):
+    bundle = bundle.resolve(strict=True)
+    python_manifest = json.loads((bundle / 'manifest.json').read_text())
+    if python_manifest.get('schema') != 1 or python_manifest.get('pythonVersion') != '3.14.7':
+        raise ValueError('Unsupported Python bundle schema/version')
+    seen = set()
+    for row in python_manifest['files']:
+        name = row['path']
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+', name) or name in seen or re.search(r'\.(?:so|node|dll|dylib)(?:\.\d+)*$', name, re.I):
+            raise ValueError('Unsafe or duplicate Python asset')
+        seen.add(name)
+        src = bundle / name
+        if src.is_symlink() or src.stat().st_size != row['size'] or digest(src.read_bytes()) != row['sha256']:
+            raise ValueError('Python asset differs from manifest')
+        composer.add(src, bundle, 'python-bundle', 'runtime/ohos/python/assets/' + name)
+    if not {'stdlib.zip', 'ca.pem'} <= seen:
+        raise ValueError('Python stdlib or CA bundle missing')
+    composer.add(bundle / 'manifest.json', bundle, 'python-bundle', 'runtime/ohos/python/assets/manifest.json')
+    for name in ('host.mjs', 'host-worker.mjs', 'loader.mjs', 'platform.py'):
+        composer.add(source_runtime / 'python' / name, repo, 'repository', 'runtime/ohos/python/' + name)
+
+
+def compose_linux_assets(composer, directory):
+    spec = importlib.util.spec_from_file_location('ohos_linux_assets', Path(__file__).with_name('linux-assets.py'))
+    assets = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(assets)
+    directory = directory.absolute()
+    verified = assets.verify_assets(directory)
+    for row in verified['files']:
+        destination = assets.DIRECTORY + '/' + row['path']
+        composer.add(directory / row['path'], directory, 'linux-assets', destination)
+        copied = composer.payload[destination]
+        if copied['size'] != row['size'] or copied['sha256'] != row['sha256']:
+            raise ValueError('Linux asset changed between validation and composition')
+    # Verify the actual private payload, including decompressed identities.
+    # The trusted source directory is not a substitute for the bytes published.
+    if assets.verify_assets(composer.files / assets.DIRECTORY) != verified:
+        raise ValueError('Composed Linux assets differ from the verified input')
+    return verified
+
+
 def checked_lock(prefix: Path, expected: str):
     data = (prefix / 'package-lock.json').read_bytes()
     if digest(data) != expected:
@@ -314,14 +355,13 @@ def check_patches(repo: Path, prefix: Path, target_report: Path):
     spec.loader.exec_module(module)
     pins = json.loads((repo / 'runtime/patches/pins.json').read_text())
     names, _ = module.select_dsh_patches(pins, str(repo / 'runtime/patches'), 'ohos')
-    version = json.loads((repo / 'runtime/ohos/package/composition.json').read_text())['dshVersion']
-    _, identity = module.dsh_patch_inputs(pins, str(repo / 'runtime/patches'), names, 'ohos', version)
+    _, identity = module.dsh_patch_inputs(pins, str(repo / 'runtime/patches'), names, 'ohos', '0.2.2-rc.1')
     report = json.loads(target_report.read_text())
-    if report.get('target') != 'ohos' or report.get('dshVersion') != version or report.get('inputSha256') != identity:
+    if report.get('target') != 'ohos' or report.get('dshVersion') != '0.2.2-rc.1' or report.get('inputSha256') != identity:
         raise ValueError('Requires the current actual --target ohos patch report')
     final = {}
     for name in names:
-        final.update(pins['patches'][name][version])
+        final.update(pins['patches'][name]['0.2.2-rc.1'])
     for relative, pin in final.items():
         if digest((prefix / relative).read_bytes()) != pin['after']:
             raise ValueError(f'Patched input is not the final selected OHOS state: {relative}')
@@ -341,7 +381,7 @@ def deletion_variants(repo: Path, prefix: Path, output: Path):
         ('runtime/bridge/dsh-go-bridge/lib/session-deletion.js',
          'runtime/bridge/dsh-go-bridge/lib/session-deletion.js', 'session-deletion.js',
          '8483c8265cfad03d9f4f1b5a483f0f4a300bb97eb0027d8d60016c9f09706837',
-         'f94f045fd765b6dd99fc6f2a644c0eb144ace71123c7eea89d261ed32e910805'),
+         'c5b70e171c0da6876e0eae4e29ddacaec06ee306d7a56fed0f8533ccb2c77945'),
     ]
     patch = repo / 'runtime/ohos/package/session-deletion-ohos.diff'
     spec = importlib.util.spec_from_file_location('deletion_rtbuild', repo / 'runtime/lib/rtbuild.py')
@@ -417,13 +457,18 @@ def assemble(args):
         composer.dependencies(process, 'process-dependencies', 'runtime/ohos/process',
                               packages['process'], config['processRemovePackages'], config['processRemoveFiles'])
         source_runtime = repo / 'runtime/ohos'
-        for directory in ('net', 'publication', 'capabilities', 'lifecycle', 'process'):
+        for directory in ('net', 'publication', 'capabilities', 'lifecycle', 'phone', 'process', 'process/files', 'plugins', 'linux', 'image'):
             for source in sorted((source_runtime / directory).glob('*.mjs')):
                 if source.name.startswith(('build-', 'link-')):
                     continue
                 composer.add(source, repo, 'repository', source.relative_to(repo).as_posix())
+        if args.python_bundle:
+            compose_python(composer, args.python_bundle, source_runtime, repo)
+        linux_assets = compose_linux_assets(composer, args.linux_assets) if args.linux_assets else None
         for name in ('preload.mjs', 'node-version.json'):
             composer.add(source_runtime / name, repo, 'repository', 'runtime/ohos/' + name)
+        composer.add(source_runtime / 'linux/native/THIRD-PARTY-NOTICES.txt', repo, 'repository',
+                     'runtime/ohos/licenses/tinyemu-2019-12-21-NOTICES.txt')
         helper = source_runtime / 'native/hap-loader'
         for name in ('index.cjs', 'package.json'):
             composer.add(helper / name, repo, 'repository', 'node_modules/@dsh-go/ohos-native/' + name)
@@ -516,12 +561,15 @@ def assemble(args):
                   'archiveRoundTrip': True, 'runtimeArchive': container,
                   'rawfileFiles': 1, 'rawfileBytes': container['bytes'],
                   'expandedRetainedForValidation': args.keep_expanded,
-                  'nativeLibraries': config['nativeLibraries'],
+                  'nativeLibraries': {**config['nativeLibraries'], **({'python': 'libdsh_python.so', 'python-runtime': 'libpython3.14.so'} if args.python_bundle else {}),
+                                      **({'linux': 'libdsh_linux.so'} if linux_assets else {})},
                   'nativeLibrariesInRawfile': False, 'ohosTargetAbi': 'NOT_RUN', 'hapInstall': 'NOT_RUN',
                   'requiredRuntimeFiles': required,
                   'removed': composer.removed, 'buildCommand': command,
                   'importsCommand': imports_command, 'importsReportSha256': digest(args.imports_report.read_bytes()),
                   'compileCache': 'HostOptions.cacheDir/node-compile-cache; never part of immutable rawfile'}
+        if linux_assets:
+            report['linuxAssets'] = linux_assets
         (staging / 'composition-report.json').write_bytes(json_bytes(report))
         os.rename(staging, output)
         return report
@@ -535,6 +583,8 @@ def main():
     parser.add_argument('--target', choices=['ohos'], required=True)
     for name in ('dsh-prefix', 'process-prefix', 'target-report', 'prepared-inputs', 'regex-artifact', 'esbuild-prefix', 'imports-report', 'out'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--python-bundle', type=Path, help='Verified CPython bundle from prepare-bundle.py; optional')
+    parser.add_argument('--linux-assets', type=Path, help='Trusted six-file assets directory from build-linux-assets.py; optional')
     parser.add_argument('--node', type=Path, required=True)
     parser.add_argument('--runtime-core', type=Path, required=True,
                         help='Actual RuntimeCore.ets consumer; type syntax is erased for Linux validation')

@@ -35,7 +35,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${DSH_NODE_LIBRARY_DIR}/libnode.so")
 add_library(dsh_node SHARED IMPORTED)
 set_target_properties(dsh_node PROPERTIES IMPORTED_LOCATION "${DSH_NODE_LIBRARY_DIR}/libnode.so")
-add_library(dsh_host SHARED host_core.cpp napi_host.cpp)
+add_library(dsh_host SHARED host_core.cpp napi_host.cpp workspace_grants.cpp)
 target_compile_features(dsh_host PRIVATE cxx_std_17)
 target_compile_options(dsh_host PRIVATE -fvisibility=hidden -fexceptions -frtti)
 target_link_libraries(dsh_host PRIVATE libace_napi.z.so libhilog_ndk.z.so Threads::Threads dsh_node)

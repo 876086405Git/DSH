@@ -23,17 +23,20 @@ void main() {
     bool autoStart = true,
     int strikes = 0,
     bool autoSafe = true,
+    RuntimePhase phase = RuntimePhase.installed,
+    RuntimeFailure? failure,
   }) async {
     logs = _Logs();
     final runtime = RecordingRuntime(
       LocalRuntimeState(
         loaded: true,
         status: RuntimeStatus(
-          phase: RuntimePhase.installed,
+          phase: phase,
           bundledVersion: 'r1',
           installedVersion: 'r1',
           strikes: strikes,
           autoSafe: autoSafe,
+          failure: failure,
         ),
       ),
     );
@@ -72,6 +75,30 @@ void main() {
 
   testWidgets('two strikes with auto safe disabled waits', (tester) async {
     final runtime = await pump(tester, strikes: 2, autoSafe: false);
+    expect(runtime.starts, isEmpty);
+  });
+
+  group('a run that didn\'t end cleanly and can\'t say why (HarmonyOS)', () {
+    final unclean = RuntimeFailure(kind: FailureKind.killed, at: DateTime(2026), causeUnknown: true);
+
+    testWidgets('the system reclaiming the app isn\'t held against the next start', (tester) async {
+      final runtime = await pump(tester, phase: RuntimePhase.error, strikes: 1, autoSafe: false, failure: unclean);
+      expect(runtime.starts, ['start']);
+    });
+
+    testWidgets('two in a row wait for the person', (tester) async {
+      final runtime = await pump(tester, phase: RuntimePhase.error, strikes: 2, autoSafe: false, failure: unclean);
+      expect(runtime.starts, isEmpty);
+    });
+  });
+
+  testWidgets('a killed run with a known cause still waits (Android)', (tester) async {
+    final runtime = await pump(
+      tester,
+      phase: RuntimePhase.error,
+      strikes: 1,
+      failure: RuntimeFailure(kind: FailureKind.killed, at: DateTime(2026)),
+    );
     expect(runtime.starts, isEmpty);
   });
 

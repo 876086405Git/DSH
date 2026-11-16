@@ -18,6 +18,7 @@ import '../../state/phone_state.dart';
 import '../../state/plugins_state.dart';
 import '../../state/sessions_state.dart';
 import '../../state/settings_state.dart';
+import '../../state/system_actions_state.dart';
 import '../../state/ui_mode_state.dart';
 import '../../state/update_state.dart';
 import '../account/account_page.dart';
@@ -38,6 +39,7 @@ import '../features/permission_page.dart';
 import '../onboarding/api_key_page.dart' show maskApiKey;
 import '../pets/pet_settings_page.dart';
 import '../phone/phone_control_screen.dart';
+import '../phone/system_actions_page.dart';
 import '../plugins/plugins_screen.dart';
 import '../plugins/seats/plugin_settings_tiles.dart';
 import '../plugins/seats/seat_probe.dart';
@@ -55,6 +57,7 @@ import 'background_guide_page.dart';
 import 'diagnostics_page.dart';
 import 'interface_page.dart';
 import 'language_tile.dart';
+import 'linux_environment_page.dart';
 import 'notification_settings.dart';
 import 'performance_page.dart';
 import 'personalization_page.dart';
@@ -176,6 +179,16 @@ class SettingsScreen extends ConsumerWidget {
                 spot: SettingsIndex.entry(SettingsPageId.phone),
                 value: text(phoneValue, color: phoneValue == l10n.hubValueOneStep ? colors.warning : null),
                 onTap: () => _push(context, const PhoneControlScreen()),
+              )
+            else
+              SettingsTile(
+                icon: AppIcons.phoneControl,
+                tint: SettingsHues.abilities,
+                spot: SettingsIndex.entry(SettingsPageId.systemActions),
+                value: text(
+                  ref.watch(systemActionsProvider.select((s) => s.enabled)) ? l10n.pluginsTurnedOn : l10n.hubValueOff,
+                ),
+                onTap: () => _push(context, const SystemActionsPage()),
               ),
             SettingsTile(
               icon: AppIcons.webSearch,
@@ -190,6 +203,7 @@ class SettingsScreen extends ConsumerWidget {
               spot: SettingsIndex.entry(SettingsPageId.media),
               onTap: () => _push(context, const MediaSettingsPage()),
             ),
+            if (ref.watch(operatingSystemProvider) == 'ohos') const LinuxEnvironmentTile(tint: SettingsHues.abilities),
             SettingsTile(
               icon: AppIcons.plugin,
               tint: SettingsHues.abilities,

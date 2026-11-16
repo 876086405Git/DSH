@@ -72,7 +72,8 @@ final mediaMarketEntryProvider = Provider<MarketEntry?>(
 final mediaPluginProvider = Provider.autoDispose<MediaPluginState>((ref) {
   final listed = mediaPluginStateOf(
     ref.watch(installedPluginsProvider.select((s) => s.value)),
-    offered: ref.watch(mediaMarketEntryProvider) != null,
+    // A host that takes no market installs isn't offered one.
+    offered: ref.watch(mediaMarketEntryProvider) != null && !(ref.watch(pluginHostProvider)?.installRefused ?? false),
   );
   if (listed == MediaPluginState.ready) return listed;
   final serves = ref.watch(

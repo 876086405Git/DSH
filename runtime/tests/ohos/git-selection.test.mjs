@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -130,7 +131,7 @@ for (const row of crlfCases) {
 test('autocrlf does not normalize a symlink represented as a regular file', async t => {
   const f = await fixture(t); await seed(f);
   const path = join(f.dir, 'link'), target = 'first\r\nsecond';
-  await fs.symlink(target, path); await f.run(['add', 'link']); await f.run(['commit', '-m', 'symlink bytes']);
+  await symlinkFixture(target, path); await f.run(['add', 'link']); await f.run(['commit', '-m', 'symlink bytes']);
   await f.run(['config', 'core.symlinks', 'false']); await f.run(['config', 'core.autocrlf', 'true']);
   await fs.rm(path); await fs.writeFile(path, target);
   if (record) oracle.results['symlink-as-file'] = native(f.dir, ['diff', '--numstat']);

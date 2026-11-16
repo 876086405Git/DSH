@@ -30,6 +30,8 @@ export function runtimeCapabilities(ctx, bootId) {
   const bundled = Array.isArray(bundles) && bundles.length > 0 && loader !== undefined &&
     [...loader.entries()].some(entry => !entry.disabled && entry.fiber?.state === 2 &&
       typeof entry.options.name === 'string' && entry.options.name.startsWith('@deepseek-ai/'));
+  const marketInstall = process.platform === 'openharmony' &&
+    globalThis[Symbol.for('dsh.go.ohos.plugins')] !== undefined && ctx.get('pluginManager') !== undefined;
   const commands = subprocess?.commands;
   return {
     v: 1, bootId, platform: process.platform, arch: process.arch,
@@ -44,7 +46,7 @@ export function runtimeCapabilities(ctx, bootId) {
     python: support(subprocess?.python),
     // Presence alone does not prove that code generation is permitted.
     wasm: typeof globalThis.WebAssembly === 'undefined' ? 'unsupported' : 'unknown',
-    plugins: { bundled: bundled ? 'supported' : 'unknown', marketInstall: 'unsupported' },
+    plugins: { bundled: bundled ? 'supported' : 'unknown', marketInstall: support(marketInstall) },
     // The signed HAP's native inventory and per-module load observations are
     // not yet supplied by the host. Do not turn a package name into "loaded".
     nativeModules: null,

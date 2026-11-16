@@ -29,7 +29,7 @@ async function registered(modulePath) {
   const ctx = new Context();
   try {
     await ctx.plugin(SystemPrompt, {});
-    await ctx.plugin(ToolRuntime, { mode: 'native' });
+    await ctx.plugin(ToolRuntime, {});
     provider.applyGrepTool(ctx, { maxMatches: 250, maxLineBytes: 500,
       maxMetaBytes: 131072, rawOutputMaxBytes: 1048576, graceMs: 200,
       stderrMaxBytes: 65536, timeoutMs: 15000 });

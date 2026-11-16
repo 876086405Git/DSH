@@ -1,4 +1,4 @@
-import { createNodeScriptWorker } from './node-script.mjs';
+import { createNodeScriptWorker, formatNodeScriptError } from './node-script.mjs';
 
 /** Preserve just-bash routing: a node command is buffered inside its statement. */
 export function nodeCommand({ roots, workspaceRoots, readOnly }) {
@@ -22,14 +22,15 @@ export function nodeCommand({ roots, workspaceRoots, readOnly }) {
       for (const name of ['stdout', 'stderr']) worker[name].on('data', chunk => {
         bytes += chunk.length;
         if (bytes > 64 * 1024 * 1024) { overflow = true; void worker.terminate(); return; }
-        output[name].push(chunk);
+        output[name].push(Buffer.from(chunk));
       });
-      worker.on('error', error => output.stderr.push(Buffer.from((error.stack ?? error.message) + '\n')));
+      worker.on('error', error => output.stderr.push(Buffer.from(formatNodeScriptError(error) + '\n')));
       worker.once('exit', exitCode => {
         ctx.signal?.removeEventListener('abort', abort);
         resolve({ stdout: Buffer.concat(output.stdout).toString('latin1'), stdoutKind: 'bytes',
           stderr: Buffer.concat(output.stderr).toString('latin1') + (overflow ? 'ERR_OHOS_NODE_OUTPUT_LIMIT: Node command output exceeds 64 MiB\n' : ''), stderrKind: 'bytes',
-          exitCode: overflow ? 1 : exitCode });
+          // Match an external POSIX command before Bash tests the status.
+          exitCode: overflow ? 1 : (exitCode & 0xff) });
       });
     });
     ctx.signal?.throwIfAborted();

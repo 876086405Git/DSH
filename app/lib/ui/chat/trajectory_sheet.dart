@@ -230,7 +230,7 @@ class _Header extends StatelessWidget {
         ? (l10n.commonInProgress, theme.colorScheme.primary)
         : switch (reason?.kind) {
             'aborted' => (l10n.commonStopped, dsh.textTertiary),
-            'error' => (turnFailureText(reason?.error?.code), dsh.danger),
+            'error' => (turnFailureText(reason?.error?.code, message: reason?.error?.message), dsh.danger),
             'max-tokens' => (l10n.activityTraceOutputLimit, dsh.warning),
             'interrupted' => (l10n.activityTraceEngineRestarted, dsh.warning),
             'blocked' => (l10n.activityTraceBlocked, dsh.warning),

@@ -41,7 +41,7 @@ def main():
     actor, instrument = scripts / 'publication-fuse-actor.mjs', scripts / 'publication-fuse-instrument.mjs'
     dsh_package = args.prefix / 'node_modules/@deepseek-ai/dsh/package.json'
     dsh = json.loads(dsh_package.read_text())
-    assert dsh['name'] == '@deepseek-ai/dsh' and dsh['version'] == '0.2.1-rc.4'
+    assert dsh['name'] == '@deepseek-ai/dsh' and dsh['version'] == '0.2.2-rc.1'
     binary = (dsh_package.parent / dsh['bin']['dsh']).resolve()
     sources = {'driver': Path(__file__).resolve(), 'actor': actor, 'instrument': instrument,
                'node': args.node, 'simulation': args.simulation, 'marker': args.marker,

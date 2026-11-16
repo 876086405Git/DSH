@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../state/android_features.dart';
+import '../../state/artifacts.dart' show savedInChosenPlace, saveWindowDismissed;
 import '../../state/connection_state.dart';
 import '../../state/session_export.dart';
 import '../common/list_page_row.dart';
@@ -39,10 +41,12 @@ class _SessionExportPageState extends ConsumerState<SessionExportPage> {
           await exporter.share(widget.sessionId);
         case _Action.save:
           final where = await exporter.saveToDownloads(widget.sessionId);
-          if (mounted) showBriefNotice(context, l10n.featuresExportSavedTo(where));
+          if (mounted) {
+            showBriefNotice(context, savedInChosenPlace(where) ? l10n.harmonySaved : l10n.featuresExportSavedTo(where));
+          }
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted && !saveWindowDismissed(error)) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(sessionExportErrorText(error))));
       }
     } finally {
@@ -63,6 +67,7 @@ class _SessionExportPageState extends ConsumerState<SessionExportPage> {
     final connected = ref.watch(activeConnectionProvider).value != null;
     final supported = ref.watch(sessionLogExporterProvider).supported;
     final idle = _busy == null;
+    final harmony = ref.watch(operatingSystemProvider) == 'ohos';
     return AppPage.list(
       title: l10n.featuresExportTitle,
       subtitle: Text(l10n.featuresExportSubtitle),
@@ -88,8 +93,16 @@ class _SessionExportPageState extends ConsumerState<SessionExportPage> {
               ),
               ListPageRow(
                 icon: AppIcons.download,
-                title: wordsForIos ? l10n.iosSaveToFiles : l10n.featuresExportSaveDownloads,
-                subtitle: wordsForIos ? l10n.iosFilesFolderHint : l10n.featuresExportDownloadsHint,
+                title: harmony
+                    ? l10n.harmonySaveToFile
+                    : wordsForIos
+                    ? l10n.iosSaveToFiles
+                    : l10n.featuresExportSaveDownloads,
+                subtitle: harmony
+                    ? l10n.harmonySaveChooseLocation
+                    : wordsForIos
+                    ? l10n.iosFilesFolderHint
+                    : l10n.featuresExportDownloadsHint,
                 trailing: _spinner(_Action.save),
                 chevron: _busy != _Action.save,
                 onTap: idle ? () => _run(_Action.save) : null,

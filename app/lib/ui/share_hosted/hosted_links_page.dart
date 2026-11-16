@@ -40,12 +40,29 @@ String linkExpiryText(DateTime? expiresAt, DateTime now) {
   return appL10n.remoteHostedExpiresOn(date);
 }
 
-class HostedLinksPage extends ConsumerWidget {
+class HostedLinksPage extends ConsumerStatefulWidget {
   const HostedLinksPage({super.key, this.clock = DateTime.now});
 
   final DateTime Function() clock;
 
   static Route<void> route() => MaterialPageRoute(builder: (_) => const HostedLinksPage());
+
+  @override
+  ConsumerState<HostedLinksPage> createState() => _HostedLinksPageState();
+}
+
+class _HostedLinksPageState extends ConsumerState<HostedLinksPage> {
+  @override
+  void initState() {
+    super.initState();
+    // A previously failed read gets another attempt when the page opens.
+    Future.microtask(() {
+      if (mounted) {
+        final links = ref.read(hostedLinksProvider.notifier);
+        if (links.isHarmonyOS) unawaited(links.ensureLoaded());
+      }
+    });
+  }
 
   void _toast(BuildContext context, String text, {SnackBarAction? action, Duration? duration}) {
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -83,37 +100,63 @@ class HostedLinksPage extends ConsumerWidget {
     if (ok != true || !context.mounted) return;
     // Undo can come after the page closed: hold on to the notifier.
     final links = ref.read(hostedLinksProvider.notifier);
-    await links.remove(link.id);
+    final removed = await links.remove(link.id);
     if (!context.mounted) return;
+    if (links.isHarmonyOS && !removed) {
+      _toast(context, context.l10n.remoteHostedDeleteSaveFailed);
+      return;
+    }
     _toast(
       context,
       context.l10n.remoteHostedLinkDeleted,
       duration: HostedLinksController.undoWindow,
-      action: SnackBarAction(label: context.l10n.remoteUndo, onPressed: () => unawaited(links.undo(link.id))),
+      action: SnackBarAction(
+        label: context.l10n.remoteUndo,
+        onPressed: () async {
+          final result = await links.undo(link.id);
+          if (!context.mounted) return;
+          if (!links.isHarmonyOS) return;
+          if (result == HostedUndoResult.sessionOnly) _toast(context, context.l10n.remoteHostedUndoUnsaved);
+          if (result == HostedUndoResult.unavailable) _toast(context, context.l10n.remoteHostedUndoFailed);
+        },
+      ),
     );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
     ref.listen(hostedLinksProvider.select((s) => s.failure), (before, failure) {
       if (failure != null && !identical(before, failure)) _toast(context, _failureText(failure));
     });
     final state = ref.watch(hostedLinksProvider);
     final links = state.visible;
-    final now = clock();
+    final now = widget.clock();
     return AppPage.list(
       title: l10n.remoteHostedMyLinks,
       children: [
-        if (!state.loaded)
+        if (state.storageError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            child: Column(
+              children: [
+                Text(state.loaded ? l10n.remoteHostedSaveFailed : l10n.remoteHostedLoadFailed),
+                TextButton(
+                  onPressed: () => unawaited(ref.read(hostedLinksProvider.notifier).retry()),
+                  child: Text(l10n.commonRetry),
+                ),
+              ],
+            ),
+          ),
+        if (!state.loaded && state.storageError == null)
           const QuietSpinner()
-        else if (links.isEmpty)
+        else if (state.loaded && links.isEmpty)
           EmptyView(
             icon: AppIcons.link,
             title: l10n.remoteHostedNoLinks,
             padding: const EdgeInsets.fromLTRB(32, 40, 32, 24),
           )
-        else
+        else if (state.loaded)
           SmoothSize(
             duration: AppMotion.of(context, AppMotion.standard),
             curve: AppMotion.std,

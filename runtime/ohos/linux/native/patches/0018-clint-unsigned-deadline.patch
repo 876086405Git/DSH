@@ -1,0 +1,19 @@
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -1013 +1013 @@
+-    int64_t delay1;
++    uint64_t delay1, now;
+@@ -1015 +1015,2 @@
+-    /* wait for an event: the only asynchronous event is the RTC timer */
++    /* mtime/mtimecmp compare as unsigned values, including a distant future
++       deadline whose difference exceeds INT64_MAX. */
+@@ -1017,2 +1018,2 @@
+-        delay1 = m->timecmp - rtc_get_time(m);
+-        if (delay1 <= 0) {
++        now = rtc_get_time(m);
++        if (m->timecmp <= now) {
+@@ -1023,2 +1024,2 @@
+-            delay1 = delay1 / (RTC_FREQ / 1000);
+-            if (delay1 < delay)
++            delay1 = (m->timecmp - now) / (RTC_FREQ / 1000);
++            if (delay > 0 && delay1 < (uint64_t)delay)

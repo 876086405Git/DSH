@@ -60,6 +60,25 @@ void _systemIme(StringBuffer b, DiagnosticsSnapshot s) {
   final evidence = s.systemIme;
   if (evidence == null) return;
   final at = DateTime.fromMillisecondsSinceEpoch(evidence.capturedAt, isUtc: true);
+  if (evidence.source == 'ohosWindowGeometry') {
+    b
+      ..writeln('## 本应用键盘几何（手动导出，ohosWindowGeometry）')
+      ..writeln('- capturedAt: ${at.toIso8601String()} · code: ${evidence.code} · events: ${evidence.events.length}')
+      ..writeln('- 仅本应用主窗口回调；最近120秒、最多64条；坐标与尺寸单位px。时间戳是回调收到时间，不是系统动作发生时间。')
+      ..writeln('- 不含输入内容或系统日志；不能据此推断其他窗口、完整浮动键盘轨迹或系统输入法内部状态。');
+    if (evidence.events.isEmpty) {
+      b.writeln('- 没有可用记录；空记录或失败不能证明键盘行为正常。');
+    } else {
+      final recent = evidence.events.reversed.take(diagnosticsSystemImeEvents).toList().reversed;
+      b.writeln('- 最近${recent.length}条，ZIP保留完整有界记录；同毫秒条目按回调收到顺序排列：');
+      for (final event in recent) {
+        b.writeln('  - ${event.timestamp} ${event.event} geometry=${jsonEncode(event.geometry)}');
+      }
+    }
+    b.writeln();
+    return;
+  }
+
   b
     ..writeln('## System IME evidence (manual, privilegedIme)')
     ..writeln('- capturedAt: ${at.toIso8601String()} · code: ${evidence.code} · events: ${evidence.events.length}')
@@ -245,7 +264,13 @@ String _join(List<Object?> parts, {bool mono = false}) {
 String _android(Map<String, Object?> device) {
   final version = device['android'];
   final sdk = device['sdkInt'];
-  if (version == null && sdk == null) return '';
+  if (version == null && sdk == null) {
+    // HarmonyOS names them itself (OhosDeviceFacts.ets).
+    final os = device['osVersion'];
+    final api = device['apiVersion'];
+    if (os == null && api == null) return '';
+    return os == null ? 'API $api' : '$os${api == null ? '' : ' (API $api)'}';
+  }
   return version == null ? 'SDK $sdk' : 'Android $version${sdk == null ? '' : ' (SDK $sdk)'}';
 }
 

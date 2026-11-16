@@ -28,7 +28,7 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
-function fixture(boundary) {
+function fixture(boundary, gate = {}) {
   let loads = 0;
   const module = { exports: {} };
   vm.runInNewContext(compile(text), {
@@ -40,6 +40,8 @@ function fixture(boundary) {
       return boundary();
     },
   });
+  // RuntimeController owns this gate in the app, and these tests have no reset to wait for.
+  module.exports.configureNativeRecovery({ prepare: async () => {}, check() {}, begin: async () => 'load', finish: async () => {}, ...gate });
   return { api: module.exports, get loads() { return loads; } };
 }
 
@@ -78,8 +80,7 @@ test('concurrent demand shares one load and preserves live native state', async 
   const host = { getState: () => ({ ...current }) };
   const f = fixture(() => pending.promise);
   const first = f.api.loadNativeHost(), second = f.api.loadNativeHost();
-  assert.equal(first, second);
-  await Promise.resolve();
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(f.loads, 1);
   assert.equal(f.api.peekNativeHost(), null);
   assert.deepEqual(plain(f.api.nativeHostState()), idle);
@@ -93,17 +94,14 @@ test('concurrent demand shares one load and preserves live native state', async 
   assert.equal(f.loads, 1);
 });
 
-test('a rejected load stays unloaded and can be retried without consuming Node', async () => {
+test('a rejected load stays unloaded and is not retried in this process', async () => {
   const failure = new Error('fixture dlopen failure');
-  const host = { getState: () => ({ ...idle }) };
-  let fail = true;
-  const f = fixture(() => { if (fail) throw failure; return { default: host }; });
+  const f = fixture(() => { throw failure; });
   await assert.rejects(f.api.loadNativeHost(), error => error === failure);
   assert.equal(f.api.peekNativeHost(), null);
   assert.deepEqual(plain(f.api.nativeHostState()), idle);
-  fail = false;
-  assert.equal(await f.api.loadNativeHost(), host);
-  assert.equal(f.loads, 2);
+  await assert.rejects(f.api.loadNativeHost(), error => error === failure);
+  assert.equal(f.loads, 1);
 });
 
 test('resolved missing default is an explicit error and never a successful native load', async () => {
@@ -112,5 +110,45 @@ test('resolved missing default is an explicit error and never a successful nativ
   assert.equal(f.api.peekNativeHost(), null);
   assert.deepEqual(plain(f.api.nativeHostState()), idle);
   await assert.rejects(f.api.loadNativeHost(), { code: 'ohos_native_unavailable' });
-  assert.equal(f.loads, 2);
+  assert.equal(f.loads, 1);
 });
+
+for (const phase of ['prepare', 'begin', 'check-before-begin', 'check-before-import']) {
+  test(`failure at ${phase} before native import is retryable after recovery`, async () => {
+    const failure = new Error('controlled recovery I/O or admission failure');
+    let first = true, checks = 0, prepares = 0, finishes = 0;
+    const host = { getState: () => ({ ...idle }) };
+    const f = fixture(() => ({ default: host }), {
+      async prepare() { prepares++; if (first && phase === 'prepare') throw failure; },
+      check() { checks++; if (first && ((phase === 'check-before-begin' && checks === 3) || (phase === 'check-before-import' && checks === 4))) throw failure; },
+      async begin() { if (first && phase === 'begin') throw failure; return 'attempt'; },
+      async finish(id, success) { finishes++; assert.equal(id, 'attempt'); assert.equal(success, !first); },
+    });
+    const a = f.api.loadNativeHost(), b = f.api.loadNativeHost();
+    await Promise.all([assert.rejects(a, error => error === failure), assert.rejects(b, error => error === failure)]);
+    assert.equal(f.api.nativeHostTouched(), false);
+    assert.equal(f.loads, 0); assert.equal(prepares, 1);
+    assert.equal(finishes, phase === 'check-before-import' ? 1 : 0);
+    first = false;
+    const next = await Promise.all([f.api.loadNativeHost(), f.api.loadNativeHost()]);
+    assert.equal(next[0], host); assert.equal(next[1], host);
+    assert.equal(prepares, 2); assert.equal(f.loads, 1);
+    assert.equal(f.api.nativeHostTouched(), true);
+  });
+}
+
+for (const phase of ['finish', 'check-after-import']) {
+  test(`failure at ${phase} after native import remains process-sticky`, async () => {
+    const failure = new Error('controlled post-import failure');
+    let checks = 0, failed = false;
+    const host = { getState: () => ({ ...idle }) };
+    const f = fixture(() => ({ default: host }), {
+      check() { if (++checks === 4 && phase === 'check-after-import') { failed = true; throw failure; } },
+      async finish(id, success) { if (success && phase === 'finish') { failed = true; throw failure; } },
+    });
+    await assert.rejects(f.api.loadNativeHost(), error => error === failure);
+    assert.equal(failed, true); assert.equal(f.api.nativeHostTouched(), true);
+    await assert.rejects(f.api.loadNativeHost(), error => error === failure);
+    assert.equal(f.loads, 1); assert.equal(f.api.peekNativeHost(), host);
+  });
+}

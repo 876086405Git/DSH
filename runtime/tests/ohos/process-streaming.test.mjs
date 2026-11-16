@@ -202,3 +202,32 @@ test('dispose 在硬取消完成后精确删除自有临时根，已提交工作
   assert.equal(await readFile(join(f.work, 'keep'), 'utf8'), 'committed');
   assert.equal(await readFile(join(ownRoot, 'scratch')).then(() => true, error => { assert.equal(error.code, 'ENOENT'); return false; }), false);
 });
+
+for (const size of [8, 16]) test(`Node statement delivers ${size} MiB exact bytes within the unchanged Worker heap limit`, { timeout: 30000 }, async t => {
+  const f = await fixture(t);
+  const bytes = size * 1024 * 1024;
+  // Deliberately split multibyte UTF-8 and arbitrary binary bytes at pipe writes.
+  await writeFile(join(f.work, 'large-output.mjs'), `const pattern=Buffer.from([...Array(256).keys()]);const b=Buffer.alloc(${bytes},pattern);for(let i=0;i<b.length;i+=65537){if(!process.stdout.write(b.subarray(i,i+65537)))await new Promise(r=>process.stdout.once('drain',r));}`);
+  const result = await f.run('node large-output.mjs');
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr.length, 0);
+  assert.deepEqual(result.stdout, Buffer.alloc(bytes, Buffer.from([...Array(256).keys()])));
+});
+
+test('private output codec preserves all bytes, Unicode, surrogate replacement and exact pre-allocation limits', async () => {
+  const { e: encode, d: decode, a: byteLength, g: readBytes } = await import('../../ohos/process/build/just-bash/chunks/chunk-GN6CQ3J4.js');
+  for (const text of ['', '\0\r\n', '中文🙂', '\ud800', '\udc00', 'a\ud800Z\udc00🙂', '中'.repeat(8193)]) {
+    const expected = Buffer.from(text, 'utf8');
+    assert.equal(byteLength(text), expected.length);
+    assert.equal(encode(text), expected.toString('latin1'));
+    assert.equal(decode(encode(text)), expected.toString('utf8'));
+    if (expected.length) {
+      assert.equal(encode(text, expected.length), expected.toString('latin1'));
+      assert.throws(() => encode(text, expected.length - 1), /byte conversion limit/);
+    }
+  }
+  const bytes = Buffer.from([...Array(256).keys()]);
+  assert.equal(await readBytes({ readFileBuffer: async () => bytes }, 'fixture'), bytes.toString('latin1'));
+  const view = bytes.subarray(7, 251);
+  assert.equal(await readBytes({ readFileBuffer: async () => view }, 'fixture'), view.toString('latin1'));
+});

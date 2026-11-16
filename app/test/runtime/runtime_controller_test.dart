@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _Bridge extends RuntimeBridge {
   final stream = StreamController<RuntimeEvent>.broadcast(sync: true);
@@ -22,11 +24,34 @@ class _Bridge extends RuntimeBridge {
 
   @override
   Future<RuntimeLogSnapshot> logSnapshot({int lines = 300}) => initialLogs.future;
+
+  Object? startError;
+  Object? reopenError;
+  var reopens = 0;
+
+  @override
+  Future<void> start({
+    Map<String, String> env = const {},
+    bool phoneStorage = false,
+    EngineMode? mode,
+    bool visualReplies = true,
+  }) async {
+    if (startError case final error?) throw error;
+  }
+
+  @override
+  Future<void> reopenApp() async {
+    reopens++;
+    if (reopenError case final error?) throw error;
+  }
+
   @override
   Future<void> reset({ResetKeep keep = const ResetKeep()}) async {}
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
   late _Bridge bridge;
   late ProviderContainer container;
   setUp(() {
@@ -40,6 +65,20 @@ void main() {
   });
 
   Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+  test('no native runtime (no dsh/runtime handler): loaded, only remote hosts', () async {
+    bridge.initialStatus.completeError(MissingPluginException());
+    await flush();
+    final state = container.read(localRuntimeProvider);
+    expect(state.loaded, isTrue);
+    expect(state.available, isFalse);
+  });
+
+  test('any other status failure still counts as a runtime that is there', () async {
+    bridge.initialStatus.completeError(PlatformException(code: 'io'));
+    await flush();
+    expect(container.read(localRuntimeProvider).available, isTrue);
+  });
 
   test('late logs cannot overwrite a newer running event', () async {
     bridge.initialStatus.complete(const RuntimeStatus(phase: RuntimePhase.starting));
@@ -140,6 +179,36 @@ void main() {
     expect(container.read(localRuntimeProvider).notice?.seq, 1);
     bridge.stream.add(const RuntimeNoticeEvent('已启动'));
     expect(container.read(localRuntimeProvider).notice?.seq, 2);
+  });
+
+  group('a start HarmonyOS can only do in a new process', () {
+    final once = PlatformException(code: 'ohos_restart_required');
+
+    test('reopens the app', () async {
+      bridge.startError = once;
+      await container.read(localRuntimeProvider.notifier).start();
+      expect(bridge.reopens, 1);
+      expect(container.read(localRuntimeProvider).notice, isNull);
+    });
+
+    test('says so when the system refuses, and goes no further', () async {
+      bridge.startError = once;
+      bridge.reopenError = PlatformException(code: '16000053');
+      await container.read(localRuntimeProvider.notifier).startIn(EngineMode.normal);
+      expect(bridge.reopens, 1);
+      expect(container.read(localRuntimeProvider).notice, isNotNull);
+    });
+
+    test('any other refusal stays the caller\'s', () async {
+      bridge.startError = PlatformException(code: 'install_busy');
+      await expectLater(container.read(localRuntimeProvider.notifier).start(), throwsA(isA<PlatformException>()));
+      expect(bridge.reopens, 0);
+    });
+
+    test('a plain start asks nothing more', () async {
+      await container.read(localRuntimeProvider.notifier).start();
+      expect(bridge.reopens, 0);
+    });
   });
 
   test('a status failure still ends initial loading', () async {

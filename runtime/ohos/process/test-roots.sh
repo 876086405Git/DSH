@@ -16,5 +16,7 @@ env -u DSH_GO_OHOS_SIM M4_4_RUNTIME_DIR="$repo/runtime/ohos/process" \
   "$node_bin" --import "$repo/runtime/ohos/sim/marker.mjs" --import "$gate" \
   --test --test-isolation=none "${tests[@]}"
 env -u DSH_GO_OHOS_SIM M4_4_RUNTIME_DIR="$repo/runtime/ohos/process" \
+  python3 "$repo/runtime/tests/ohos/process-link-fixture.py" \
+  --evidence "${OHOS_TEST_ROOTS_LINK_EVIDENCE:-$repo/runtime/ohos/process/build/strict-roots-link-fixture.json}" -- \
   "$node_bin" --jitless --import "$OHOS_SIM_PRELOAD" --import "$gate" \
   --test --test-isolation=none "${tests[@]}"

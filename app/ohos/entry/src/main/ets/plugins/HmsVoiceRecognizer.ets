@@ -1,7 +1,8 @@
-// UNCOMPILED_HMS：仅此文件依赖用户 hms-contracts.md 的 CoreSpeechKit 合约。
+// UNCOMPILED_HMS：普通听写使用 CoreSpeechKit，与外部 PCM 字幕共用 ASR 引擎准入。
 // 使用 short / zh-CN / offline；境外行为与 isFinal/isLast 的真机时序仍未核实。
 import type { speechRecognizer } from '@kit.CoreSpeechKit';
-import { loadSpeechKit } from './HmsKits';
+import { loadSpeechKit, SpeechKit } from './HmsKits';
+import { HmsAsrLease, HmsAsrToken } from './HmsAsrLease';
 import { BusinessError } from '@ohos.base';
 import { VoiceFailure, VoiceNotice, VoiceResource, retiredVoice } from './VoiceTypes';
 
@@ -12,6 +13,7 @@ function voiceCode(code: number): number {
 }
 
 export class HmsVoiceRecognizer implements VoiceResource {
+  private static readonly asrToken: HmsAsrToken = new HmsAsrToken();
   private static engine?: speechRecognizer.SpeechRecognitionEngine;
   private static creating?: Promise<speechRecognizer.SpeechRecognitionEngine>;
   private static active?: HmsVoiceRecognizer;
@@ -52,8 +54,12 @@ export class HmsVoiceRecognizer implements VoiceResource {
     const params: speechRecognizer.CreateEngineParams = {
       language: 'zh-CN', online: 1, extraParams: { locate: 'CN', recognizerMode: 'short' }
     };
-    const kit = await loadSpeechKit();
-    const engine = await kit.createEngine(params);
+    if (!HmsAsrLease.claim(HmsVoiceRecognizer.asrToken)) throw new VoiceFailure('busy', '语音识别服务正在用于字幕。', 8);
+    let engine: speechRecognizer.SpeechRecognitionEngine;
+    try {
+      const kit: SpeechKit = await loadSpeechKit();
+      engine = await kit.createEngine(params);
+    } catch (error) { HmsAsrLease.release(HmsVoiceRecognizer.asrToken); throw error as Error; }
     const listener: speechRecognizer.RecognitionListener = {
       onStart: (): void => {},
       onEvent: (): void => {},
@@ -68,7 +74,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
     try { engine.setListener(listener); }
     catch (error) {
       // Do not forget an allocation whose shutdown failed and create another singleton.
-      try { engine.shutdown(); HmsVoiceRecognizer.engine = undefined; }
+      try { engine.shutdown(); HmsVoiceRecognizer.engine = undefined; HmsAsrLease.release(HmsVoiceRecognizer.asrToken); }
       catch (_) { HmsVoiceRecognizer.poisoned = true; }
       throw error as Error;
     }
@@ -88,7 +94,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
     try { await HmsVoiceRecognizer.creating; } catch (_) {}
     if (HmsVoiceRecognizer.active) return;
     const engine = HmsVoiceRecognizer.engine;
-    if (engine) { engine.shutdown(); HmsVoiceRecognizer.engine = undefined; HmsVoiceRecognizer.poisoned = false; }
+    if (engine) { engine.shutdown(); HmsVoiceRecognizer.engine = undefined; HmsAsrLease.release(HmsVoiceRecognizer.asrToken); HmsVoiceRecognizer.poisoned = false; }
   }
 
   start(): Promise<void> {
@@ -186,6 +192,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
       try { engine.shutdown(); }
       catch (_) { throw new VoiceFailure('recognizer', '语音服务尚未释放，请重试取消或重新打开应用。', 5); }
       HmsVoiceRecognizer.engine = undefined;
+      HmsAsrLease.release(HmsVoiceRecognizer.asrToken);
       HmsVoiceRecognizer.poisoned = false;
     }
     this.release();

@@ -234,7 +234,7 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
       await widget.gallery.saveVideoFile(file.path, name: widget.item.name);
       if (mounted) messenger.showBriefNotice(l10n.chatImageSavedToPhotos);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || saveWindowDismissed(error)) return;
       final permission = error is PlatformException && error.code == 'permission';
       messenger.showSnackBar(
         SnackBar(

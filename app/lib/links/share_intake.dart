@@ -16,7 +16,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../share_code/share_codec.dart' show shareFileExtension, shareFileMime;
 import '../share_code/share_link.dart';
 import '../share_hosted/hosted_link.dart' show findHostedUrl;
+import '../state/android_features.dart';
 import 'native_inbox.dart';
+import 'share_consumption.dart';
 
 /// One shared file, copied into the app cache (readable with dart:io).
 class SharedFile {
@@ -47,7 +49,7 @@ class SkippedShare {
 
 /// One arrival from the share sheet.
 class IncomingShare {
-  const IncomingShare({this.text, this.subject, this.files = const [], this.skipped = const []});
+  const IncomingShare({this.text, this.subject, this.files = const [], this.skipped = const [], this.consumption});
 
   /// EXTRA_TEXT (several joined by a blank line).
   final String? text;
@@ -56,6 +58,9 @@ class IncomingShare {
   final String? subject;
   final List<SharedFile> files;
   final List<SkippedShare> skipped;
+
+  /// Present only for an explicitly owned OH native incoming batch.
+  final ShareConsumption? consumption;
 
   bool get isEmpty => (text == null || text!.trim().isEmpty) && files.isEmpty && skipped.isEmpty;
 
@@ -137,14 +142,30 @@ class IncomingShare {
 
 /// The native bridge: a stream of shares.
 class ShareIntake extends NativeInbox<IncomingShare> {
-  ShareIntake({MethodChannel? channel})
-    : super(channel ?? const MethodChannel('dsh/share'), method: 'share', parse: IncomingShare.parse);
+  ShareIntake({MethodChannel? channel, bool ohos = false}) : this._(channel ?? const MethodChannel('dsh/share'), ohos);
+
+  ShareIntake._(super.channel, bool ohos)
+    : super(method: 'share', parse: ohos ? (raw) => _ownedShare(raw, channel) : IncomingShare.parse);
+
+  static IncomingShare? _ownedShare(Object? raw, MethodChannel channel) {
+    final share = IncomingShare.parse(raw);
+    if (share == null || raw is! Map || !raw.containsKey('shareId')) return share;
+    final lease = ShareConsumption.register(raw['shareId'], [for (final file in share.files) file.path], channel);
+    if (lease == null) return null;
+    return IncomingShare(
+      text: share.text,
+      subject: share.subject,
+      files: share.files,
+      skipped: share.skipped,
+      consumption: lease,
+    );
+  }
 
   Stream<IncomingShare> get shares => stream;
 }
 
 final shareIntakeProvider = Provider<ShareIntake>((ref) {
-  final intake = ShareIntake();
+  final intake = ShareIntake(ohos: ref.read(operatingSystemProvider) == 'ohos');
   ref.onDispose(intake.dispose);
   return intake;
 });

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
+import '../../state/android_features.dart';
 import '../../state/notify_state.dart';
 import '../common/app_sheet.dart';
 import '../common/progress_halo.dart';
@@ -199,8 +200,11 @@ class _RuntimeSetupPageState extends ConsumerState<RuntimeSetupPage> {
       _SetupView.failed => humanizeRuntimeError(state.status.error) ?? l10n.shellRuntimeExtractFailed,
     };
     final meta = view == _SetupView.installing ? installMetaLine(l10n, progress, ref.watch(installEtaProvider)) : null;
-    // Set up and waiting: when a notification can say it's done, say so.
+    // Set up and waiting: when a notification can say it's done, say so. HarmonyOS
+    // has none for it, and suspends the app if it leaves the screen.
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     final notifies =
+        !ohos &&
         widget.waiting &&
         ref.watch(notifySystemStatusProvider.select((s) => s.value?.native == true && s.value?.enabled == true));
 
@@ -297,7 +301,11 @@ class _RuntimeSetupPageState extends ConsumerState<RuntimeSetupPage> {
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  notifies ? l10n.setupNotifyWhenDone : l10n.shellRuntimeLocalOnly,
+                  notifies
+                      ? l10n.setupNotifyWhenDone
+                      : ohos && view == _SetupView.installing
+                      ? l10n.harmonySetupStay
+                      : l10n.shellRuntimeLocalOnly,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),
                 ),

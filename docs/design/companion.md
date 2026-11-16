@@ -54,7 +54,7 @@ Flutter CompanionPage
 
 ## 3. 素材包
 
-**随包带一份**（owner 2026-11-06 的决定）：把 zip 放在 `app/assets/companion/whale-girl.zip` 再打包，App 里就带着它。第一次进小屋时自动解压（走和导入一样的校验，她「游过来」的画面里完成）；用户在菜单里移除后不再自己回来，设置页的主按钮变成「接她回家」，「导入别的素材包」退到第二。模型授权 owner 已在 2026-11-08 拿到（署名见 §7），1.0.14 起正式版也带它。zip 仍被 `.gitignore` 挡在仓库外，CI 打的包没有：发版机打包前要把它放进 `app/assets/companion/`，并确认 zip 里的 `character/character.json` 和 `tooling/companion/whale-girl.character.json` 一致（署名在里面；旧 zip 是空的，直接替换这一个文件即可，运行库摘要不变），打完确认 APK 里有它。以后要不要提交进仓库另定。
+**随包带一份**（owner 2026-11-06 的决定）：把 zip 放在 `app/assets/companion/whale-girl.zip` 再打包，App 里就带着它。第一次进小屋时自动解压（走和导入一样的校验，她「游过来」的画面里完成）；用户在菜单里移除后不再自己回来，设置页的主按钮变成「接她回家」，「导入别的素材包」退到第二。模型授权 owner 已在 2026-11-08 拿到（署名见 §7），1.0.14 起正式版也带它。zip 仍被 `.gitignore` 挡在仓库外，CI 打的包没有：发版机打包前要把它放进 `app/assets/companion/`，并确认 zip 里的 `character/character.json` 和 `tooling/companion/whale-girl.character.json` 一致（署名在里面；旧 zip 是空的，直接替换这一个文件即可，运行库摘要不变），打完确认 APK 里有它。以后要不要提交进仓库另定。鸿蒙的 HAP 用的是 Actions 编出的 AOT 产物，里面没有这个 zip：打包前用 `tooling/ohos/bundle-companion-pack.py --aot <ohos-aot 产物> --pack <zip> --out <新目录>` 生成一份带它的 AOT 目录（同样换上仓库里的 character.json，并在 `AssetManifest.bin` 里登记），再把这个目录交给 `check-arkts.sh --aot`；打完确认 HAP 的 `flutter_assets/assets/companion/` 里有它。
 
 ```
 pack.zip

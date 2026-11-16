@@ -1,6 +1,6 @@
 {
   "gitVersion": "git version 2.51.1",
-  "testSHA256": "a141379ef5de459a748fb353630bdbd80337b6fc1d5a56702c590238e972e5fc",
+  "testSHA256": "d8cba0b2a91aed60595d62168fcb78e336c92123973f8cbb2c58f8edc75720f7",
   "scope": "Native Git control starts from an exact recursive copy of the product fixture",
   "results": {
     "update-only": {

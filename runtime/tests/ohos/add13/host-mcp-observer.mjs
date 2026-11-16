@@ -34,8 +34,8 @@ export async function apply(ctx, config) {
     saving = operation.catch(() => {});
     return operation;
   };
-  const definition = rawName => {
-    const name = `mcp__${config.serverName}__${rawName}`;
+  const definition = (rawName, serverName = config.serverName) => {
+    const name = `mcp__${serverName}__${rawName}`;
     const value = ctx.tools.get(name);
     if (!value) throw new Error(`Actual MCP tool has not registered: ${name}`);
     return value;
@@ -72,6 +72,11 @@ export async function apply(ctx, config) {
           await save();
           reply(response, 200, { result });
           return;
+        }
+        if (pathname === '/__add13_mcp/stdio-echo') {
+          const result = await definition('echo', 'add13_stdio').execute({ message: input.message }, { signal: new AbortController().signal });
+          note('stdio-echo', { input, result });
+          await save(); reply(response, 200, { result }); return;
         }
         if (pathname === '/__add13_mcp/hold') {
           const tool = definition('hold');

@@ -1,8 +1,11 @@
-// UNCOMPILED_HMS: public Kit names follow hms-contracts.md; device loading remains unverified.
+// UNCOMPILED_HMS: public Kit names follow hms-contracts.md (Scan Kit: Huawei's Scan Kit
+// reference); device loading remains unverified.
 // Type imports do not load a Kit. Each feature loads only at its first actual use.
 import type { pdfService } from '@kit.PDFKit';
 import type { systemShare } from '@kit.ShareKit';
 import type { speechRecognizer } from '@kit.CoreSpeechKit';
+import type { scanBarcode, scanCore } from '@kit.ScanKit';
+import type common from '@ohos.app.ability.common';
 import type Want from '@ohos.app.ability.Want';
 
 export class PdfKit {
@@ -44,9 +47,21 @@ export class SpeechKit {
   }
 }
 
+// The system's own scan page (Scan Kit default view): camera, torch and its album entry.
+export class ScanKit {
+  startScan: (context: common.Context, options: scanBarcode.ScanOptions) => Promise<scanBarcode.ScanResult>;
+  qrCode: scanCore.ScanType;
+  constructor(barcode: ESObject, core: ESObject) {
+    this.startScan = (context: common.Context, options: scanBarcode.ScanOptions): Promise<scanBarcode.ScanResult> =>
+      barcode.startScanForResult(context, options);
+    this.qrCode = core.ScanType.QR_CODE;
+  }
+}
+
 let pdfLoading: Promise<PdfKit> | null = null;
 let shareLoading: Promise<ShareKit> | null = null;
 let speechLoading: Promise<SpeechKit> | null = null;
+let scanLoading: Promise<ScanKit> | null = null;
 
 export function loadPdfKit(): Promise<PdfKit> {
   if (pdfLoading === null) {
@@ -88,4 +103,19 @@ export function loadSpeechKit(): Promise<SpeechKit> {
     });
   }
   return speechLoading;
+}
+
+export function loadScanKit(): Promise<ScanKit> {
+  if (scanLoading === null) {
+    scanLoading = import('./HmsScanKit').then((module: ESObject): ScanKit => {
+      const barcode: ESObject = module.scanBarcode;
+      const core: ESObject = module.scanCore;
+      if (barcode === undefined || core === undefined) throw new Error('Scan Kit is unavailable');
+      return new ScanKit(barcode, core);
+    }).catch((error: Error): ScanKit => {
+      scanLoading = null;
+      throw error as Error;
+    });
+  }
+  return scanLoading;
 }

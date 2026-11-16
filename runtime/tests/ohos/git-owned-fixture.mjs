@@ -50,7 +50,7 @@ export async function fixture(t, { inside = false, onStage, ownerFs, ownership }
   };
   const owner = makeOwner();
   // A separate forwarding object preserves the frozen owner's Proxy invariants.
-  const facade = Object.fromEntries(['createIndex', 'writeIndex', 'writeMetadata', 'commitIndex', 'releaseIndex']
+  const facade = Object.fromEntries(['createIndex', 'writeIndex', 'writeMetadata', 'commitIndex', 'releaseIndex', 'createClone', 'commitClone', 'releaseClone']
     .map(key => [key, (...args) => {
       calls.push({ operation: key, target: args[0]?.target, id: typeof args[0] === 'string' ? args[0] : undefined });
       return owner[key](...args);

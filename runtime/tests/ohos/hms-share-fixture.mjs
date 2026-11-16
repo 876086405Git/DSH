@@ -1,6 +1,7 @@
 // Test boundary only: actual ETS bodies and real Linux FS / production openUserFile.
 // HMS events, URI grants, Flutter and display are explicit doubles, never a device proof.
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +10,7 @@ import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import vm from 'node:vm';
+import { assertEntryAbilityImports, createEntryAbilityImports } from './entry-ability-fixture.mjs';
 
 const require = createRequire(import.meta.url);
 assert(process.env.OHOS_TYPESCRIPT_PREFIX && process.env.OHOS_USER_FILE_ADDON,
@@ -84,7 +86,8 @@ export async function shareFixture(t, options = {}) {
       if (currentOptions.zeroWrite) return 0;
       return (await promisify(fs.write)(fd, Buffer.from(buffer), 0, Math.min(buffer.byteLength, currentOptions.maxWrite ?? Infinity), opts.offset)).bytesWritten;
     },
-    fsync: fd => promisify(fs.fsync)(fd), unlink: fsp.unlink,
+    fsync: fd => promisify(fs.fsync)(fd),
+    async unlink(path) { await currentOptions.beforeUnlink?.(path); return fsp.unlink(path); },
     rmdir: path => fsp.rm(path, { recursive: true }),
   };
   for (const [name, operation] of Object.entries(api)) {
@@ -156,7 +159,7 @@ export async function shareFixture(t, options = {}) {
       FileUri: class { constructor(uri) { this.name = decodeURIComponent(uri.slice(uri.lastIndexOf('/') + 1)); } },
     } };
     if (name === '@ohos.data.uniformTypeDescriptor') return { default: utd };
-    if (name === '@ohos.util') return { default: { TextEncoder: class { encodeInto(value) { return new TextEncoder().encode(value); } } } };
+    if (name === '@ohos.util') return { default: { generateRandomUUID: randomUUID, TextEncoder: class { encodeInto(value) { return new TextEncoder().encode(value); } } } };
     if (name === '@ohos.display') return { default: { getDefaultDisplaySync: () => ({ densityPixels: currentOptions.density ?? 2.5 }) } };
     if (name === 'libdsh_host.so') return Promise.resolve(currentOptions.beforeNativeLoad?.()).then(() => ({ default: {
       openUserFile(root, relative) {
@@ -168,10 +171,17 @@ export async function shareFixture(t, options = {}) {
     };
     throw new Error('Unadapted platform import: ' + name);
   };
+  const entryImports = createEntryAbilityImports({
+    '../plugins/HmsSharePlugin': () => load(resolve(repo, 'app/ohos/entry/src/main/ets/plugins/HmsSharePlugin.ets')),
+    '../plugins/HmsShareInbox': () => load(resolve(repo, 'app/ohos/entry/src/main/ets/plugins/HmsShareInbox.ets')),
+    '../runtime/NativeHost': () => ({ loadNativeHost() { throw new Error('Share Entry fixture must not load NativeHost'); } }),
+  });
   function load(path) {
     if (moduleCache.has(path)) return moduleCache.get(path).exports;
     const module = { exports: {} }; moduleCache.set(path, module);
-    const compiled = ts.transpileModule(fs.readFileSync(path, 'utf8'), {
+    const source = fs.readFileSync(path, 'utf8');
+    if (path.endsWith('/entryability/EntryAbility.ets')) assertEntryAbilityImports(source);
+    const compiled = ts.transpileModule(source, {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
     });
     try { vm.runInNewContext(compiled.outputText, {
@@ -183,9 +193,7 @@ export async function shareFixture(t, options = {}) {
           return Promise.resolve(currentOptions.beforeKitLoad?.()).then(() => load(resolve(dirname(path), name + '.ets')));
         }
         if (name.startsWith('.')) {
-          if (path.endsWith('EntryAbility.ets') && !name.includes('HmsShare')) {
-            return { default: class {}, GeneratedPluginRegistrant: { registerWith() {} }, RuntimePlugin: class {} };
-          }
+          if (path.endsWith('/entryability/EntryAbility.ets')) return entryImports(name);
           return load(resolve(dirname(path), name + '.ets'));
         }
         return boundary(name);
@@ -195,13 +203,19 @@ export async function shareFixture(t, options = {}) {
   }
   const pluginPath = resolve(repo, 'app/ohos/entry/src/main/ets/plugins/HmsSharePlugin.ets');
   const Plugin = load(pluginPath).default;
+  // RuntimeController owns this gate in the app, and the fixture has no reset to wait for.
+  load(resolve(repo, 'app/ohos/entry/src/main/ets/runtime/NativeHost.ets')).configureNativeRecovery({
+    prepare: async () => {}, check() {}, begin: async () => 'load', finish: async () => {},
+  });
   const { HmsShareInbox: inbox } = load(resolve(dirname(pluginPath), 'HmsShareInbox.ets'));
   const policy = load(resolve(dirname(pluginPath), 'HmsSharePolicy.ets'));
   const entry = load(resolve(repo, 'app/ohos/entry/src/main/ets/entryability/EntryAbility.ets')).default;
+  const engines = [];
   function attach(plugin = new Plugin(), attachAbility = true) {
     const engine = { getApplicationContext: () => app, getBinaryMessenger: () => ({}) };
     const ability = { getAbility: () => ({ context: ui }) };
     plugin.onAttachedToEngine(engine); if (attachAbility) plugin.onAttachedToAbility(ability);
+    engines.push({ plugin, engine });
     return { plugin, engine, ability, outgoing: channels[channels.length - 2], incoming: channels[channels.length - 1] };
   }
   function call(channel, method, object = {}) {
@@ -220,7 +234,7 @@ export async function shareFixture(t, options = {}) {
   t.after(async () => {
     try {
       for (const panel of panels) panel.emit('dismiss');
-      first.plugin.onDetachedFromEngine(first.engine);
+      for (const value of engines) value.plugin.onDetachedFromEngine(value.engine);
       await until(() => fds.size === 0 && pendingIO === 0, 'all real IO closed and settled');
       assert.equal(panels.filter(panel => panel.visible).length, 0);
     } finally {

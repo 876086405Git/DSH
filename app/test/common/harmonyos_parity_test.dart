@@ -60,6 +60,73 @@ void main() {
       expect(seen.padding.bottom, 20);
     });
 
+    testWidgets('left alone it is exactly easeOutCubic', (tester) async {
+      await pump(tester, 0);
+      await pump(tester, 300);
+      for (final (ms, t) in [(50, 0.2), (50, 0.4), (100, 0.8)]) {
+        await tester.pump(Duration(milliseconds: ms));
+        expect(seen.viewInsets.bottom, moreOrLessEquals(300 * Curves.easeOutCubic.transform(t), epsilon: 0.01));
+      }
+    });
+
+    testWidgets('a change of mind keeps its speed', (tester) async {
+      await pump(tester, 0);
+      await pump(tester, 300);
+      await tester.pump(const Duration(milliseconds: 134));
+      final before = seen.viewInsets.bottom;
+      await tester.pump(const Duration(milliseconds: 16));
+      final at = seen.viewInsets.bottom;
+      await pump(tester, 600);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(seen.viewInsets.bottom - at, moreOrLessEquals(at - before, epsilon: (at - before) * 0.5));
+      await tester.pumpAndSettle();
+      expect(seen.viewInsets.bottom, 600);
+    });
+
+    testWidgets('a nearer target stops at it, never past it', (tester) async {
+      await pump(tester, 0);
+      await pump(tester, 300);
+      await tester.pump(const Duration(milliseconds: 40));
+      final at = seen.viewInsets.bottom;
+      await pump(tester, at + 20);
+      var last = at;
+      for (var i = 0; i < 16; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(seen.viewInsets.bottom, greaterThanOrEqualTo(last - 0.01));
+        expect(seen.viewInsets.bottom, lessThanOrEqualTo(at + 20 + 0.01));
+        last = seen.viewInsets.bottom;
+      }
+      expect(last, moreOrLessEquals(at + 20, epsilon: 0.01));
+    });
+
+    testWidgets('turning back carries on only a little the old way', (tester) async {
+      await pump(tester, 0);
+      await pump(tester, 300);
+      await tester.pump(const Duration(milliseconds: 25));
+      final at = seen.viewInsets.bottom;
+      await pump(tester, 0);
+      var furthest = at;
+      for (var i = 0; i < 16; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        furthest = furthest < seen.viewInsets.bottom ? seen.viewInsets.bottom : furthest;
+      }
+      expect(furthest, greaterThan(at), reason: 'it did not stop dead');
+      expect(furthest, lessThan(at * 1.3));
+      expect(seen.viewInsets.bottom, moreOrLessEquals(0, epsilon: 0.01));
+    });
+
+    testWidgets('rising again just as it lands never goes below the bottom', (tester) async {
+      await pump(tester, 300);
+      await pump(tester, 0);
+      await tester.pump(const Duration(milliseconds: 200));
+      await pump(tester, 300);
+      for (var i = 0; i < 16; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(seen.viewInsets.bottom, greaterThanOrEqualTo(0));
+      }
+      expect(seen.viewInsets.bottom, moreOrLessEquals(300, epsilon: 0.01));
+    });
+
     testWidgets('a change of mind continues from where it is', (tester) async {
       await pump(tester, 0);
       await pump(tester, 300);

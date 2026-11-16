@@ -108,6 +108,60 @@ class GuideSyncTest(unittest.TestCase):
         guide_sync.run(self.repo, write=True)
         self.assertFalse((assets / 'stale.md').exists())
 
+    def harmony_pages(self):
+        for locale, text in PAGE.items():
+            self.write(f'docs/guide/harmony/{locale}/01-engine.md', text)
+
+    def test_harmony_page_ships_beside_the_one_it_replaces(self):
+        self.harmony_pages()
+        self.write('docs/guide/harmony/SKILL.md', SKILL)
+        self.write('docs/guide/harmony/README.md', '# Guide\n\n> dsh-go 0.9.2\n\n[引擎](zh/01-engine.md)\n')
+        self.assertEqual(guide_sync.run(self.repo, write=True), [])
+        self.assertEqual(guide_sync.run(self.repo, write=False), [])
+        assets = self.repo / 'app/assets/skills/dsh-go-guide'
+        manifest = json.loads((assets / 'manifest.json').read_text())
+        self.assertEqual(manifest['harmony']['harmony-zh-01-engine.md'], 'zh/01-engine.md')
+        self.assertEqual(manifest['harmony']['harmony-SKILL.md'], 'SKILL.md')
+        # Android's own map doesn't move: the file set and what each file holds.
+        self.assertEqual(manifest['files']['zh-01-engine.md'], 'zh/01-engine.md')
+        self.assertNotIn('harmony-zh-01-engine.md', manifest['files'])
+        self.assertEqual(
+            set(manifest['files']) | set(manifest['harmony']), {p.name for p in assets.iterdir()} - {'manifest.json'})
+
+    def test_no_harmony_pages_no_harmony_in_the_manifest(self):
+        self.assertEqual(guide_sync.run(self.repo, write=True), [])
+        manifest = json.loads((self.repo / 'app/assets/skills/dsh-go-guide/manifest.json').read_text())
+        self.assertNotIn('harmony', manifest)
+
+    def test_harmony_page_must_replace_a_page_in_both_languages(self):
+        self.write('docs/guide/harmony/zh/09-new.md', '# 新\n')
+        self.assertFails('harmony/zh/09-new.md: takes the place of nothing')
+        self.assertFails('harmony: zh/en pages differ')
+
+    def test_harmony_page_follows_the_page_rules(self):
+        self.harmony_pages()
+        self.write('docs/guide/harmony/zh/01-engine.md', '# 引擎\n\n点**开始**。\n\n会话\n')
+        self.assertFails('harmony/zh/01-engine.md:3: **开始** is not a zh UI label')
+        self.assertFails('harmony/zh/01-engine.md:5: avoid 「会话」')
+
+    def test_harmony_links_read_from_where_the_page_installs(self):
+        self.harmony_pages()
+        # 02-settings has no HarmonyOS page, and is still next to this one once installed.
+        self.write('docs/guide/harmony/zh/01-engine.md', '# 引擎\n\n[设置](02-settings.md) [目录](../README.md)\n')
+        self.assertEqual(self.errors(), [])
+        self.write('docs/guide/harmony/zh/01-engine.md', '# 引擎\n\n[宠物](06-pets.md)\n')
+        self.assertFails('broken link 06-pets.md')
+
+    def test_harmony_skill_and_readme_are_checked_too(self):
+        self.write('docs/guide/harmony/README.md', '# Guide\n\n> dsh-go 0.1.0\n')
+        self.assertFails('harmony/README.md: want one line `> dsh-go 0.9.2`')
+        self.write('docs/guide/harmony/SKILL.md', SKILL.replace('# dsh-go:managed', '# managed'))
+        self.assertFails('harmony/SKILL.md: front matter needs the # dsh-go:managed line')
+
+    def test_stray_file_under_harmony_fails(self):
+        self.write('docs/guide/harmony/notes.txt', 'x')
+        self.assertFails('harmony/notes.txt: not part of the guide')
+
     def test_nav_label_must_match_the_arb(self):
         self.write('docs/guide/zh/01-engine.md', PAGE['zh'].replace('`设置 › 引擎`', '`设置 › 运行环境`'))
         self.assertFails('want `设置 › 引擎`')

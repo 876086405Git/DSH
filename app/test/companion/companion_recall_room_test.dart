@@ -116,6 +116,7 @@ class _Bridge extends DshConnection {
     Duration? timeout,
     bool followRedirects = true,
     int? maxResponseBytes,
+    DshHttpAbort? abort,
   }) async {
     final body = jsonDecode(utf8.decode(bytes)) as Map<String, Object?>;
     if (path == '/dsh-go/v1/companion/recall/bind') {

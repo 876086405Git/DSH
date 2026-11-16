@@ -220,6 +220,7 @@ Future<void> pumpTerminalPage(
   FakeTerminalBackend backend, {
   Brightness brightness = Brightness.light,
   double textScale = 1,
+  List<Override> overrides = const [],
 }) async {
   // Real fonts: the key row measures its labels (the test font draws every
   // glyph 1em wide).
@@ -228,7 +229,7 @@ Future<void> pumpTerminalPage(
   await tester.pumpWidget(
     goldenApp(
       brightness: brightness,
-      overrides: terminalOverrides(backend),
+      overrides: [...terminalOverrides(backend), ...overrides],
       home: MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
         maxScaleFactor: textScale,

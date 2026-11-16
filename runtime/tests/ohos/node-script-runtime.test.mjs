@@ -103,7 +103,7 @@ test('actual process.exit, uncaught exception and user parentPort messages canno
 
 test('unsupported Node CLI forms fail explicitly, missing script is exit 1, and no side effect runs', { timeout: 15000 }, async t => {
   const f = await fixture(t);
-  for (const args of [[], ['-e', 'process.exit(99)'], ['--help'], ['--eval=42'], ['-'], ['directory']]) {
+  for (const args of [['-e'], ['-p'], ['--help'], ['--eval=42'], ['--inspect'], ['directory']]) {
     if (args[0] === 'directory') await mkdir(join(f.work, 'directory'));
     const result = await f.run(['node', ...args]);
     assert.equal(result.exitCode, 2, JSON.stringify({ args, stderr: result.stderr.toString() }));
@@ -188,3 +188,106 @@ test('prepared read-only policy reaches Node file and FileHandle operations and 
   const result = await f.run(argv); assert.equal(result.exitCode, 0, result.stderr.toString());
   assert.equal(result.stdout.toString(), 'read-only\n'); assert.equal(await readFile(join(f.work, 'input'), 'utf8'), 'UNCHANGED');
 });
+
+// Worker exit events retain the integer supplied by the script. At the
+// subprocess seam, Node is an external POSIX command with an 8-bit status.
+for (const method of ['exit', 'exitCode']) for (const route of ['direct', 'nested']) {
+  for (const [code, expected] of [[0, 0], [7, 7], [255, 255], [256, 0], [-1, 255]]) {
+    test(`Node exit status ${method}/${route}/${code} matches an external command`, { timeout: 15000 }, async t => {
+      const f = await fixture(t);
+      const entry = await f.script(method === 'exit' ? `process.exit(${code});` : `process.exitCode=${code};`);
+      const result = await f.run(route === 'direct' ? ['node', entry] : ['bash', '-c', `node '${entry}'`]);
+      assert.deepEqual({ exitCode: result.exitCode, signal: result.signal }, { exitCode: expected, signal: null });
+      assert.equal(result.stdout.length, 0); assert.equal(result.stderr.length, 0);
+      assert.equal(f.runtime.live.size, 0);
+    });
+  }
+}
+
+for (const [code, expected] of [[0, 0], [7, 7], [255, 255], [256, 0], [-1, 255]]) {
+  test(`Node exit status ${code} drives Bash status and conditional branches`, { timeout: 15000 }, async t => {
+    const f = await fixture(t), entry = await f.script(`process.exit(${code});`);
+    const invoke = `node '${entry}'`;
+    const result = await f.run(['bash', '-c', `${invoke}; printf 'status=%s\n' "$?"; if ${invoke}; then printf 'if=yes\n'; else printf 'if=no\n'; fi; ${invoke} && printf 'and=yes\n'; printf 'after-and\n'; set -o pipefail; ${invoke} | cat; printf 'pipe=%s\n' "$?"`]);
+    const branch = expected === 0 ? 'if=yes\nand=yes\n' : 'if=no\n';
+    assert.equal(result.exitCode, 0); assert.equal(result.signal, null); assert.equal(result.stderr.length, 0);
+    assert.equal(result.stdout.toString(), `status=${expected}\n${branch}after-and\npipe=${expected}\n`);
+  });
+}
+
+for (const shell of [false, true]) test(`inline Node real ${shell ? 'bash' : 'direct'} path preserves output, status, stdin and guards`, { timeout: 20000 }, async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.work, 'relative.cjs'), 'module.exports="相对依赖";');
+  await writeFile(join(f.work, 'relative.mjs'), 'export default "ESM依赖";');
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  const args = values => shell ? ['bash', '-c', ['node', ...values].map(quote).join(' ')] : ['node', ...values];
+  const run = (values, options) => f.run(args(values), options);
+  const source = 'console.log(JSON.stringify({cwd:process.cwd(),env:process.env.EXPLICIT_VALUE,argv:process.argv.slice(1),value:require("./relative.cjs"),guard:globalThis[Symbol.for("dsh.go.ohos.nodeWorker.paths")],preload:globalThis[Symbol.for("dsh.go.ohos.nodeWorker.preload")]}));process.exitCode=7;';
+  const result = await run(['-e', source, '--', '中文 参数'], { env: { EXPLICIT_VALUE: '环境值' } });
+  assert.equal(result.exitCode, 7, result.stderr.toString());
+  const value = JSON.parse(result.stdout); assert.equal(value.cwd, f.work); assert.equal(value.env, '环境值');
+  assert.deepEqual(value.argv, ['中文 参数']); assert.equal(value.value, '相对依赖'); assert(value.guard); assert.equal(value.preload, 1);
+  for (const [code, expected] of [['1+2','3\n'],['undefined','undefined\n'],['({x:"中文",n:2})',"{ x: '中文', n: 2 }\n"]]) {
+    const printed = await run(['-p', code]); assert.equal(printed.exitCode, 0); assert.equal(printed.stdout.toString(), expected);
+  }
+  assert.equal((await run(['--version'])).stdout.toString(), process.version+'\n');
+  const moduleResult = await run(['-e','import value from "./relative.mjs";console.log(await Promise.resolve(value));']);
+  assert.equal(moduleResult.exitCode,0,moduleResult.stderr.toString());assert.equal(moduleResult.stdout.toString(),'ESM依赖\n');
+  const dynamic = await run(['-e','import("./relative.mjs").then(m=>console.log(m.default));']);
+  assert.equal(dynamic.exitCode,0,dynamic.stderr.toString());assert.equal(dynamic.stdout.toString(),'ESM依赖\n');
+  const stdin = { stdio: { stdin: { data: 'console.log("stdin-code");(async()=>{for await(const b of process.stdin)console.log("unexpected",b)})();' }, stdout: 'pipe', stderr: 'pipe' } };
+  assert.equal((await run([], stdin)).stdout.toString(), 'stdin-code\n');
+  const data = await run(['-e', '(async()=>{for await(const b of process.stdin)process.stdout.write(b)})()'], { stdio: { stdin: {data: shell ? '输入中文' : Buffer.from([0,255,195,169])}, stdout:'pipe',stderr:'pipe' } });
+  assert.deepEqual(data.stdout,shell ? Buffer.from('输入中文') : Buffer.from([0,255,195,169]));
+  const denied = await run(['-e','require("node:fs").writeFileSync("../outside", "bad")']);
+  assert.notEqual(denied.exitCode,0);assert.match(denied.stderr.toString(),/EACCES|OHOS_SANDBOX_DENIED/);
+  const deniedModule=await run(['-e','import fs from "node:fs";fs.writeFileSync("../outside-module","bad")']);
+  assert.notEqual(deniedModule.exitCode,0);assert.match(deniedModule.stderr.toString(),/EACCES|OHOS_SANDBOX_DENIED/);
+  for(const n of [-1,256]) assert.equal((await run(['-e',`process.exit(${n})`])).exitCode,n&255);
+  const bad = await run(['-e','throw new Error("inline failure")']);assert.equal(bad.exitCode,1);assert.match(bad.stderr.toString(),/inline failure/);
+  const active = f.spawn(args(['-e','require("node:fs").writeFileSync("inline-started","ready");console.log("ready");while(true){}']));
+  const started = new Promise(resolve=>active.stdout.once('data',resolve));
+  // Bash buffers the statement: observe an actual workspace write before cancellation.
+  if(shell) {
+    const deadline=Date.now()+6000;
+    while(await stat(join(f.work,'inline-started')).then(()=>false,()=>true)) {
+      assert(Date.now()<deadline,'inline Node really started before cancellation');await delay(10);
+    }
+  } else await started;
+  active.terminate();const stopped=await f.complete(active);assert.equal(stopped.signal,'SIGTERM');assert.equal(f.runtime.live.size,0);
+});
+
+test('a real shell pipeline feeds Node program source exactly once', async t => {
+  const f = await fixture(t);
+  const result = await f.run(['bash','-c',"printf 'console.log(6*7)' | node"]);
+  assert.equal(result.exitCode,0,result.stderr.toString());assert.equal(result.stdout.toString(),'42\n');
+});
+
+// Real Worker errors must remain command outcomes, never owner-listener errors.
+for (const route of ['direct', 'bash']) {
+  test(`${route} Worker thrown values preserve diagnostics and release the queued lane`, { timeout: 15000 }, async t => {
+    const f = await fixture(t);
+    const values = [
+      ['Object.assign(new Error("真实错误"), {stack:"Error: 真实错误\\n    at fixed-worker-frame"})', 'Error: 真实错误\n    at fixed-worker-frame\n'],
+      ['"中文抛值"', '中文抛值\n'],
+      ['null', 'null\n'],
+      ['({toString:1,valueOf:2,detail:"中文对象"})', "{ toString: 1, valueOf: 2, detail: '中文对象' }\n"],
+    ];
+    const next = await f.script("process.stdout.write('queue-continues');");
+    for (const [expression, expected] of values) {
+      const entry = await f.script(`process.stdout.write('before-error\\n',()=>setImmediate(()=>{throw ${expression};}));`);
+      const argv = route === 'direct' ? ['node', entry] : ['bash', '-c', `node '${entry}'`];
+      const failed = f.spawn(argv);
+      const queued = f.spawn(['node', next]);
+      const [result, following] = await Promise.all([f.complete(failed), f.complete(queued)]);
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.signal, null);
+      assert.equal(result.stdout.toString(), 'before-error\n');
+      assert.deepEqual(result.stderr, Buffer.from(expected));
+      assert.equal(following.exitCode, 0);
+      assert.equal(following.stderr.length, 0);
+      assert.equal(following.stdout.toString(), 'queue-continues');
+      assert.equal(f.runtime.live.size, 0);
+    }
+  });
+}

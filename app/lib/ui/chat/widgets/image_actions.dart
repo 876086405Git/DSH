@@ -47,6 +47,7 @@ Future<bool> saveImageToGallery(BuildContext context, ImageBytes load, {String? 
     messenger?.showBriefNotice(l10n.chatImageSavedToPhotos);
     return true;
   }
+  if (failure == 'cancelled') return false;
   messenger
     ?..hideCurrentSnackBar()
     ..showSnackBar(

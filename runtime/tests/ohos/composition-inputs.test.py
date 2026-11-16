@@ -116,6 +116,90 @@ class InputTests(unittest.TestCase):
             composition.checked_lock(prefix, expected)
 
 
+class DependencyPruningTests(unittest.TestCase):
+    def test_runtime_outputs_and_vendor_licenses_survive_development_pruning(self):
+        # Explicit real-file fixtures exercise the production Composer, not a
+        # second implementation of its glob rules. License contents are fixture
+        # markers; actual vendor texts are separately bound by composed manifests.
+        config = json.loads((ROOT / 'runtime/ohos/package/composition.json').read_text())
+        with tempfile.TemporaryDirectory(prefix='ohos-pruning-gate-') as directory:
+            root = Path(directory)
+            output = root / 'files'
+            composer = composition.Composer(output)
+            expected = {}
+            inputs_before = {}
+            for source, destination in [('dsh', ''), ('process', 'runtime/ohos/process')]:
+                prefix = root / source
+                keep = {
+                    '@mixmark-io/domino/package.json': b'{"main":"./lib"}\n',
+                    '@mixmark-io/domino/lib/index.js': b'module.exports = {};\n',
+                    '@mixmark-io/domino/LICENSE': b'domino fixture license\n',
+                    'yaml/package.json': b'{"main":"./dist/index.js"}\n',
+                    'yaml/dist/index.js': b'exports.parse = value => value;\n',
+                    'yaml/LICENSE': b'yaml fixture license\n',
+                    'undici/package.json': b'{"main":"index.js"}\n',
+                    'undici/index.js': b'module.exports = {};\n',
+                    'undici/LICENSE': b'undici fixture license\n',
+                }
+                development = {
+                    '@mixmark-io/domino/test/wpt/parser.html': b'<p>test only</p>\n',
+                    'yaml/browser/index.js': b'export const browserOnly = true;\n',
+                    'yaml/browser/package.json': b'{"type":"module"}\n',
+                    'undici/docs/docs/api/Client.md': b'API documentation fixture\n',
+                }
+                if source == 'dsh':
+                    keep.update({
+                        'openai/package.json': b'{"main":"./index.js"}\n',
+                        'openai/index.js': b'module.exports = {};\n',
+                        'openai/index.mjs': b'export default {};\n',
+                        'openai/src/internal/qs/LICENSE.md': b'qs fixture license\n',
+                        'openai/src/_vendor/zod-to-json-schema/LICENSE': b'zod converter fixture license\n',
+                        'openai/src/_vendor/partial-json-parser/LICENSE': b'partial parser fixture license\n',
+                        '@anthropic-ai/sdk/package.json': b'{"main":"./index.js"}\n',
+                        '@anthropic-ai/sdk/index.js': b'module.exports = {};\n',
+                        '@anthropic-ai/sdk/index.mjs': b'export default {};\n',
+                        '@anthropic-ai/sdk/src/internal/qs/LICENSE.md': b'qs fixture license\n',
+                        'zod/package.json': b'{"main":"./index.cjs"}\n',
+                        'zod/index.cjs': b'module.exports = {};\n',
+                        'zod/index.js': b'export const z = {};\n',
+                        'ajv/package.json': b'{"main":"dist/ajv.js"}\n',
+                        'ajv/dist/ajv.js': b'module.exports = {};\n',
+                        'ajv/dist/refs/json-schema-draft-07.json': b'{"type":"object"}\n',
+                    })
+                    development.update({
+                        'openai/src/client.ts': b'export const client = true;\n',
+                        'openai/src/internal/auth/state.cts': b'export const state = true;\n',
+                        '@anthropic-ai/sdk/src/client.ts': b'export const client = true;\n',
+                        'zod/src/index.ts': b'export const z = {};\n',
+                        'ajv/lib/ajv.ts': b'export const ajv = {};\n',
+                        'ajv/lib/refs/json-schema-draft-07.json': b'{"type":"object"}\n',
+                    })
+                for name, data in {**keep, **development}.items():
+                    path = prefix / 'node_modules' / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(data)
+                    inputs_before[path] = data
+                packages = [{'path': 'node_modules/' + name[:-len('/package.json')]}
+                            for name in keep if name.endswith('/package.json')]
+                composer.dependencies(prefix, source, destination, packages,
+                                      config[source + 'RemovePackages'], config[source + 'RemoveFiles'])
+                for name, data in keep.items():
+                    relative = '/'.join(part for part in (destination, 'node_modules', name) if part)
+                    expected[relative] = data
+            # First assert all retained bytes, including the four vendor texts.
+            # A broad src/* regression fails here before omission assertions.
+            for name, data in expected.items():
+                self.assertEqual((output / name).read_bytes(), data, name)
+                self.assertEqual(composer.payload[name]['sha256'], hashlib.sha256(data).hexdigest())
+            actual = sorted(path.relative_to(output).as_posix()
+                            for path in output.rglob('*') if path.is_file())
+            self.assertEqual(actual, sorted(expected), 'development files leaked into composed runtime')
+            self.assertEqual(sorted(composer.payload), sorted(expected))
+            self.assertTrue(any(row['decision'] == 'omit' for row in composer.inputs))
+            for path, data in inputs_before.items():
+                self.assertEqual(path.read_bytes(), data, str(path))
+
+
 class DeletionVariantTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix='ohos-deletion-variant-')
@@ -188,7 +272,8 @@ class RequiredTests(unittest.TestCase):
 
     def test_actual_host_requirements_include_bridge_and_match_manifest(self):
         entries = composition.required_entries(self.root)
-        self.assertEqual(len(entries), 8)
+        self.assertEqual(len(entries), 9)
+        self.assertIn('runtime/ohos/phone/index.mjs', entries)
         self.assertIn('runtime/bridge/dsh-go-bridge/lib/index.js', entries)
         self.assertIn('runtime/ohos/process/child-process.mjs', entries)
 

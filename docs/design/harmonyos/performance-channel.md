@@ -9,14 +9,22 @@
 | 输出 | 来源和限制 |
 |---|---|
 | `device.totalMemoryBytes` | 公开 `hidebug.getSystemMemInfo().totalMem`（KB）乘 1024；无能力、失败、零或非安全整数返回 null |
-| `device.tier` | 沿用现有 `PerformanceRules.LOW_MEMORY_BYTES` 的 5 GiB 产品阈值：已知低于阈值为 low；其余为 medium 默认，不是跑分 |
-| `device.cpuCores / availableProcessors / lowRam / mediaPerformanceClass` | null；不把 Android 专有事实映射成未知 OH 数值 |
+| `device.tier` | 按 Android `PerformanceRules.classify` 的门槛：已知低于 5 GiB 或不超过 2 核为 low；不低于 5 GiB、至少 4 核、屏幕支持 90Hz 及以上为 high；其余为 medium 默认，不是跑分 |
+| `device.cpuCores / availableProcessors` | 公开 `process.ProcessManager.getSystemConfig`，即系统 libc 的 `sysconf`（`_SC_NPROCESSORS_CONF` 83、`_SC_NPROCESSORS_ONLN` 84）；失败或超出 1 到 128 返回 null |
+| `device.supportedRefreshRates` | 公开 `display.getDefaultDisplaySync().supportedRefreshRates`（API 20），Android 没有这个键；失败或没有声明时为空数组 |
+| `device.lowRam / mediaPerformanceClass` | null；不把 Android 专有事实映射成未知 OH 数值 |
 | `device.apiVersion` | 公开 OH `deviceInfo.sdkApiVersion`，使用独立键，不填 Android `sdkInt` |
 | `thermal.status / level` | OH 的八级 COOL、NORMAL、WARM、HOT、OVERHEATED、WARNING、EMERGENCY、ESCAPE，明确 `platform:'ohos'` |
 | `thermal.lightweight` | WARM 或更热立即 true；COOL/NORMAL 持续 30 秒 active uptime 后才 false |
 | `thermal.supported / listening / listenerError` | 系统能力、注册 API 返回情况、固定错误分类；没有把 Linux 替身注册当作设备已收到回调 |
 
-5 GiB 和 30 秒都是既有产品策略值，不是本轮测量结果。OH API 26 不参与 Android MPC 的 high 判断；本通道不输出 high。未知内存的 medium 是原消费者的保守默认分类，不是硬件性能已确认的结论。新通道也不把 NODE_OPTIONS 填成 Android 的内存策略，因为嵌入 Node 的启动约束由宿主负责。
+5 GiB 和 30 秒都是既有产品策略值，不是本轮测量结果。Android 的 high 还要求厂商声明 media performance class，鸿蒙没有对应物，这里用屏幕声明的刷新率代替，90Hz 这个门槛是判断不是测量。OH API 号不参与 tier。Dart 和 Android 都只问 tier 是不是 low，所以 high 目前只影响诊断里的描述，真正改变行为的只有不超过 2 核这一条。未知内存或核数的 medium 是原消费者的保守默认分类，不是硬件性能已确认的结论。新通道也不把 NODE_OPTIONS 填成 Android 的内存策略，因为嵌入 Node 的启动约束由宿主负责。
+
+## 帧缓存
+
+`setFrameCache {enabled}` 把设置 → 性能里的「帧缓存」写给 `FlutterManager` 列出的每个 `FlutterView`。引擎默认开：多缓存一帧换帧率切换时的顺滑（`vsync_waiter_ohos.cpp` 的 `target_time` 加 4 ms）。开关留给真机对比，判断不了就不猜。
+
+默认开所以启动时只有存过「关」才发。Dart 启动早于窗口（`FlutterAbility.onCreate` 里就跑 Dart，`onWindowStageCreate` 才建 view），选择会留在模块里，由 EntryAbility 在建好 view 后再写一次。
 
 ## 热状态与生命周期
 
@@ -32,7 +40,7 @@
 
 ## 接线
 
-Entry 注册 `new PerformancePlugin()` 即可。它是 FlutterPlugin，不需要 Ability、前后台、WindowStage 或权限钩子。公开 OH imports 与 DSH NativeHost 无关。Diagnostics 后继可复用 `OhosDeviceFacts.ets` 的无标识信息 helper，但不能借此改动本检查点冻结字节。
+Entry 注册 `new PerformancePlugin()`，并在 `onWindowStageCreate` 里补上帧缓存；不需要 Ability、前后台或权限钩子。公开 OH imports 与 DSH NativeHost 无关。Diagnostics 后继可复用 `OhosDeviceFacts.ets` 的无标识信息 helper，但不能借此改动本检查点冻结字节。
 
 ## 已执行验证
 

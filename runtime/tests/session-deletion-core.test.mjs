@@ -11,7 +11,9 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, test } from 'node:test';
 
-const { createDeletionSeam } = await import(pathToFileURL(resolve('runtime/session-deletion/core.mjs')));
+const { createDeletionSeam } = await import(pathToFileURL(resolve(
+  process.env.DSH_SESSION_DELETION_CORE ?? 'runtime/session-deletion/core.mjs'
+)));
 
 const leases = new Set();
 const acquire = async (dir) => {

@@ -17,6 +17,7 @@ import '../../state/connection_state.dart';
 import '../../state/engine_settings_state.dart' show describeSettingsError;
 import '../../state/features_state.dart';
 import '../../state/settings_state.dart';
+import '../../state/system_actions_state.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../state/engine_control.dart';
 import '../../state/hosts_state.dart';
@@ -253,7 +254,11 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
               ),
             ),
         ],
-        if (android) ...[const SizedBox(height: 24), phone],
+        if (android) ...[
+          const SizedBox(height: 24),
+          phone,
+        ] else if (ref.watch(systemActionsProvider.select((s) => s.enabled)))
+          FeatureNote(l10n.systemActionsPermissionNote),
       ],
     );
   }

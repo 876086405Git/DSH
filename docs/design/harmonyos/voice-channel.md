@@ -83,3 +83,17 @@ python3 runtime/tests/ohos/voice-linux.py \
 
 v2 在该 await 后、进入两种权限 UI API 前，重新核对同一个 Flutter binding、AbilityPluginBinding、实际 UIAbility、当前插件 owner 及其前台状态；后续权限结果也重新核对。未引入一个宽泛的生命周期世代号：同一 Ability 回到前台后，仍允许当前请求继续。正常前台正例、后台反例、回前台正例、换 engine/Ability 的迟到结果均保留。原 v1 源码、补丁和 BLOCKED 报告不被覆盖。
 
+
+# 合入 main-dd130b31：语音输入的新方式与语音输出
+
+main 的语音输入多了 **DeepSeek** 和 **其他云端服务** 两种识别方式，自动模式在登录 DeepSeek 账号或填了 API Key 时先用 DeepSeek。两种方式都只用本通道已有的 `startRecorder`（带 `maxSeconds`）和 `stop` 取 WAV，再由 Dart 发给服务，所以鸿蒙版照常可用；账号付费的请求经本机引擎桥的 `/dsh-go/v1/speech`（`runtime/bridge/dsh-go-bridge/lib/speech.js`，随 HAP 运行时打包，未在设备上验证其出站 `fetch`）。鸿蒙本机的「自动」不再说成只用系统识别，文案见 `harmonyVoiceAutoHint`。
+
+以下 main 功能鸿蒙版还没有原生侧，按 `androidSystemFeaturesProvider` 隐藏入口：
+
+| 功能 | 需要的原生侧 | 鸿蒙版现状 |
+| --- | --- | --- |
+| 朗读（回复下方、长按菜单、酒馆菜单）、设置 › 语音 › 朗读的声音 | `dsh/speech` 的 `open`/`write`/`waiting`/`end`/`stop`/`duck` 与 `play`/`playLevel` 事件：24 kHz PCM16 流式播放 | 入口隐藏。不隐藏的话，DeepSeek 声音会先付费合成，再因 `open` 失败报「朗读失败」 |
+| 语音通话（加号）、设置 › 语音 › 通话 | 同上，加 `callStart`/`callStop`/`callMute`/`callBargeIn`/`callPlaying`/`callSpeaker` 与 `speechStart`/`utterance`/`micLevel`/`callError` 事件；Android 用 ONNX Runtime 跑 Silero VAD 与 smart-turn 判停 | 入口隐藏。不隐藏时 `callStart` 得不到处理，通话以「麦克风不可用」结束 |
+| 实时字幕（设置 › 语音） | `dsh/voice` 的 `streamingPcm` 与 PCM 事件；sherpa-onnx 只有 Android/桌面库，在 `ohos` 上抛 `UnsupportedError` | 下载卡隐藏；听写的 `liveWords` 取不到模型即照旧 |
+
+实现顺序建议：先做 `dsh/speech` 的流式播放（AudioRenderer），朗读即可用；通话还需要判停模型在鸿蒙上的推理方案。

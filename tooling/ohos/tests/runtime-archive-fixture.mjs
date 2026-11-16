@@ -15,10 +15,12 @@ export const observation = {
   opens: 0, closes: 0, inflates: 0, initialized: 0, ended: 0,
   fd: new Set(), maxInput: 0, maxOutput: 0, beforeRead: null, beforeWrite: null,
   maxReadChunk: Infinity, maxWriteChunk: Infinity, failEnd: 0,
+  checksumCreates: 0, crcCalls: 0, crcBytes: 0, maxCrcBuffer: 0, beforeCrc: null, failCrc: 0,
 };
 export function resetObservation() {
-  for (const key of ['reads','readBytes','maxRead','writes','writeBytes','opens','closes','inflates','initialized','ended','maxInput','maxOutput']) observation[key] = 0;
+  for (const key of ['reads','readBytes','maxRead','writes','writeBytes','opens','closes','inflates','initialized','ended','maxInput','maxOutput','checksumCreates','crcCalls','crcBytes','maxCrcBuffer']) observation[key] = 0;
   observation.beforeRead = null; observation.beforeWrite = null;
+  observation.beforeCrc = null; observation.failCrc = 0;
   observation.maxReadChunk = Infinity; observation.maxWriteChunk = Infinity;
 }
 
@@ -26,7 +28,14 @@ export const fileIo = {
   OpenMode: { CREATE: fs.constants.O_CREAT, READ_WRITE: fs.constants.O_RDWR, TRUNC: fs.constants.O_TRUNC,
     NOFOLLOW: fs.constants.O_NOFOLLOW, READ_ONLY: fs.constants.O_RDONLY, DIR: fs.constants.O_DIRECTORY },
   async access(name) { try { await fsp.access(name); return true; } catch (e) { if (['ENOENT','ENOTDIR'].includes(e.code)) return false; throw e; } },
-  lstat: fsp.lstat, rename: fsp.rename, unlink: fsp.unlink,
+  async lstat(name) {
+    try { return await fsp.lstat(name); } catch (error) {
+      if (error.code === 'ENOENT') error.code = 13900002;
+      if (error.code === 'ENOTDIR') error.code = 13900018;
+      throw error;
+    }
+  },
+  rename: fsp.rename, unlink: fsp.unlink,
   async mkdir(name) { try { await fsp.mkdir(name); } catch (e) { if (e.code === 'EEXIST') e.code = 13900015; throw e; } },
   readText: name => fsp.readFile(name, 'utf8'),
   async open(name, flags) { const handle = await fsp.open(name, flags, 0o600); observation.fd.add(handle.fd); return { fd: handle.fd, handle }; },
@@ -64,6 +73,16 @@ export const util = {
 
 export const nativeZlib = {
   ReturnStatus: { OK: 0, STREAM_END: 1, NEED_DICT: 2 }, CompressFlushMode: { NO_FLUSH: 0 },
+  async createChecksum() {
+    observation.checksumCreates++;
+    return {async crc32(previous, buffer) {
+      observation.crcCalls++; observation.crcBytes += buffer.byteLength;
+      observation.maxCrcBuffer = Math.max(observation.maxCrcBuffer, buffer.byteLength);
+      if (observation.beforeCrc) await observation.beforeCrc(previous, buffer);
+      if (observation.failCrc > 0) { observation.failCrc--; throw new Error('injected native CRC failure'); }
+      return backend.crc32(previous, buffer);
+    }};
+  },
   async createZip() {
     const handle = backend.create();
     return {

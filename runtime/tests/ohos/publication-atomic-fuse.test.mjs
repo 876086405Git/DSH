@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -275,7 +276,7 @@ for (const shape of ['symlink', 'directory', 'oversized']) {
   test(`invalid ${shape} state fails closed without replacing the entry`, async t => {
     const f = await fixture(t);
     if (shape === 'symlink') {
-      const outside = join(f.root, 'untouched'); await fs.writeFile(outside, 'untouched'); await fs.symlink(outside, f.statePath);
+      const outside = join(f.root, 'untouched'); await fs.writeFile(outside, 'untouched'); await symlinkFixture(outside, f.statePath);
     } else if (shape === 'directory') await fs.mkdir(f.statePath);
     else await fs.writeFile(f.statePath, 'x'.repeat(32769));
     await assert.rejects(f.open());

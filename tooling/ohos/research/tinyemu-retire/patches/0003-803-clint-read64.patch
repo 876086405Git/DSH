@@ -1,0 +1,84 @@
+diff --git a/iomem.h b/iomem.h
+--- a/iomem.h
++++ b/iomem.h
+@@ -27,12 +27,12 @@
+ typedef void DeviceWriteFunc(void *opaque, uint32_t offset,
+                              uint32_t val, int size_log2);
+ typedef uint32_t DeviceReadFunc(void *opaque, uint32_t offset, int size_log2);
++typedef uint64_t DeviceRead64Func(void *opaque, uint32_t offset);
+ 
+ #define DEVIO_SIZE8  (1 << 0)
+ #define DEVIO_SIZE16 (1 << 1)
+ #define DEVIO_SIZE32 (1 << 2)
+-/* not supported, could add specific 64 bit callbacks when needed */
+-//#define DEVIO_SIZE64 (1 << 3) 
++/* 64 bit reads use read64_func; writes retain the 32 bit fallback. */
+ #define DEVIO_DISABLED (1 << 4)
+ 
+ #define DEVRAM_FLAG_ROM        (1 << 0) /* not writable */
+@@ -59,6 +59,7 @@
+     /* the following is used for I/O access */
+     void *opaque;
+     DeviceReadFunc *read_func;
++    DeviceRead64Func *read64_func;
+     DeviceWriteFunc *write_func;
+     int devio_flags;
+ } PhysMemoryRange;
+diff --git a/iomem.c b/iomem.c
+--- a/iomem.c
++++ b/iomem.c
+@@ -200,6 +200,7 @@
+     pr->is_ram = FALSE;
+     pr->opaque = opaque;
+     pr->read_func = read_func;
++    pr->read64_func = NULL;
+     pr->write_func = write_func;
+     pr->devio_flags = devio_flags;
+     return pr;
+diff --git a/riscv_cpu.c b/riscv_cpu.c
+--- a/riscv_cpu.c
++++ b/riscv_cpu.c
+@@ -414,6 +414,9 @@
+                 ret = pr->read_func(pr->opaque, offset, size_log2);
+             }
+ #if MLEN >= 64
++            else if (size_log2 == 3 && pr->read64_func) {
++                ret = pr->read64_func(pr->opaque, offset);
++            }
+             else if ((pr->devio_flags & DEVIO_SIZE32) && size_log2 == 3) {
+                 /* emulate 64 bit access */
+                 ret = pr->read_func(pr->opaque, offset, 2);
+diff --git a/riscv_machine.c b/riscv_machine.c
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -218,6 +218,21 @@
+     return val;
+ }
+  
++/* A naturally aligned RV64 load must sample mtime only once. */
++static uint64_t clint_read64(void *opaque, uint32_t offset)
++{
++    RISCVMachine *m = opaque;
++
++    switch(offset) {
++    case 0xbff8:
++        return rtc_get_time(m);
++    case 0x4000:
++        return m->timecmp;
++    default:
++        return 0;
++    }
++}
++
+ static void clint_write(void *opaque, uint32_t offset, uint32_t val,
+                       int size_log2)
+ {
+@@ -870,7 +885,7 @@
+     }
+     
+     cpu_register_device(s->mem_map, CLINT_BASE_ADDR, CLINT_SIZE, s,
+-                        clint_read, clint_write, DEVIO_SIZE32);
++                        clint_read, clint_write, DEVIO_SIZE32)->read64_func = clint_read64;
+     cpu_register_device(s->mem_map, PLIC_BASE_ADDR, PLIC_SIZE, s,
+                         plic_read, plic_write, DEVIO_SIZE32);
+     for(i = 1; i < 32; i++) {

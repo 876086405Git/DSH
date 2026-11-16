@@ -1,0 +1,165 @@
+--- a/node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js
+@@ -1,5 +1,5 @@
+ import { access, lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
+-import { unwatchFile, watchFile } from "node:fs";
++import { unwatchFile, watch, watchFile } from "node:fs";
+ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+ import chokidar from "chokidar";
+ import z from "@deepseek-ai/schemastery";
+@@ -273,7 +273,8 @@
+ 				owners: /* @__PURE__ */ new Set(),
+ 				watcher: void 0,
+ 				opening: void 0,
+-				unhealthy: true
++				unhealthy: true,
++				nativeFallbackAnchor: void 0
+ 			};
+ 			this.roots.set(root.path, state);
+ 		}
+@@ -342,7 +343,13 @@
+ 	async openStableWatcher(state) {
+ 		while (!this.closing && state.owners.size > 0) {
+ 			const mode = await resolveRootWatchMode(state.root.path, this.config.followSymlinks);
+-			const watcher = mode.kind === "ancestor" ? this.openAncestorWatcher(state, mode) : await this.openRootWatcher(state, mode);
++			let watcher;
++			try {
++				watcher = mode.kind === "ancestor" ? this.openAncestorWatcher(state, mode) : await this.openRootWatcher(state, mode);
++			} catch (error) {
++				if (mode.kind === "ancestor" && !this.config.usePolling && isAbsentPathError(error)) continue;
++				throw error;
++			}
+ 			/* v8 ignore else -- A host path transition between the two probes is timing-dependent. */
+ 			try {
+ 				if (sameWatchMode(mode, await resolveRootWatchMode(state.root.path, this.config.followSymlinks))) return watcher;
+@@ -355,33 +362,75 @@
+ 		}
+ 	}
+ 	openAncestorWatcher(state, mode) {
++		let handle;
+ 		const listener = (_current, _previous) => {
+-			this.handleAncestorWatchEvent(state, mode);
+-		};
++			this.handleAncestorWatchEvent(state, handle);
++		};
++		if (!this.config.usePolling && state.nativeFallbackAnchor !== mode.anchor) {
++			let watcher;
++			let closed = false;
++			try {
++				watcher = watch(mode.anchor, { persistent: false }, (event) => {
++					if (!closed) this.handleAncestorWatchEvent(state, handle, event === "rename");
++				});
++			} catch (error) {
++				if (isAbsentPathError(error)) throw error;
++				state.nativeFallbackAnchor = mode.anchor;
++				this.ctx.logger.warn(`skill-filesystem: native events unavailable for ${mode.anchor}; using ${this.config.pollIntervalMs} ms stat polling: ${errorMessage(error)}`);
++			}
++			if (watcher !== void 0) {
++				state.nativeFallbackAnchor = void 0;
++				handle = {
++					mode,
++					close() {
++						if (closed) return;
++						closed = true;
++						watcher.close();
++					}
++				};
++				let errorQueued = false;
++				watcher.on("error", (error) => {
++					if (closed || errorQueued) return;
++					errorQueued = true;
++					(async () => {
++						await settleWatcherOpening(state.opening);
++						if (closed || this.closing || state.owners.size === 0 || state.watcher !== handle) return;
++						state.nativeFallbackAnchor = mode.anchor;
++						this.handleWatcherError(state, new Error(`native events unavailable; using ${this.config.pollIntervalMs} ms stat polling: ${errorMessage(error)}`, { cause: error }));
++					})();
++				});
++				return handle;
++			}
++		}
+ 		watchFile(mode.nextPath, {
+ 			persistent: false,
+ 			interval: this.config.pollIntervalMs
+ 		}, listener);
+-		return {
++		handle = {
+ 			mode,
+ 			close() {
+ 				unwatchFile(mode.nextPath, listener);
+ 			}
+ 		};
+-	}
+-	async handleAncestorWatchEvent(state, mode) {
++		return handle;
++	}
++	async handleAncestorWatchEvent(state, watcher, renamed = false) {
++		await settleWatcherOpening(state.opening);
++		if (watcher === void 0 || this.closing || state.owners.size === 0 || state.watcher !== watcher) return;
+ 		let current;
+ 		try {
+ 			current = await resolveRootWatchMode(state.root.path, this.config.followSymlinks);
+ 		} catch (error) {
+ 			/* v8 ignore start -- Non-absence stat failures need a platform permission or I/O fault. */
+-			if (!this.closing && state.owners.size > 0) this.handleWatcherError(state, error);
++			if (!this.closing && state.owners.size > 0 && state.watcher === watcher) this.handleWatcherError(state, error);
+ 			return;
+ 		}
+-		if (this.closing || state.owners.size === 0 || sameWatchMode(mode, current)) return;
+-		this.queueInvalidation();
++		if (this.closing || state.owners.size === 0 || state.watcher !== watcher) return;
++		const changed = !sameWatchMode(watcher.mode, current);
++		if (!changed && !renamed) return;
++		if (changed) this.queueInvalidation();
+ 		state.unhealthy = true;
+-		this.scheduleRewatch(state);
++		this.scheduleRewatch(state, changed ? void 0 : watcher.mode);
+ 	}
+ 	async openRootWatcher(state, mode) {
+ 		const watcher = chokidar.watch(mode.anchor, {
+@@ -466,7 +515,7 @@
+ 		this.queueInvalidation();
+ 		this.scheduleRewatch(state);
+ 	}
+-	scheduleRewatch(state) {
++	scheduleRewatch(state, quietMode) {
+ 		const currentOpening = state.opening ?? Promise.resolve();
+ 		(async () => {
+ 			await settleWatcherOpening(currentOpening);
+@@ -475,7 +524,7 @@
+ 			} catch {
+ 				return;
+ 			}
+-			this.queueInvalidation();
++			if (quietMode === void 0 || state.watcher === void 0 || !sameWatchMode(quietMode, state.watcher.mode)) this.queueInvalidation();
+ 		})();
+ 	}
+ 	queueInvalidation() {
+@@ -522,7 +571,8 @@
+ 	let candidate = root;
+ 	while (true) {
+ 		try {
+-			if ((await stat(candidate)).isDirectory()) {
++			const identity = await stat(candidate, { bigint: true });
++			if (identity.isDirectory()) {
+ 				const anchor = candidate === root && !followSymlinks && (await lstat(candidate)).isSymbolicLink() ? resolve(candidate) : await canonicalizeWatchPath(candidate);
+ 				if (candidate === root) return {
+ 					kind: "root",
+@@ -537,6 +587,8 @@
+ 				return {
+ 					kind: "ancestor",
+ 					anchor,
++					dev: identity.dev,
++					ino: identity.ino,
+ 					nextPath: join(anchor, firstSegment)
+ 				};
+ 			}
+@@ -555,7 +607,7 @@
+ 	}
+ }
+ function sameWatchMode(left, right) {
+-	return left.kind === right.kind && left.anchor === right.anchor && (left.kind === "root" || right.kind === "ancestor" && left.nextPath === right.nextPath);
++	return left.kind === right.kind && left.anchor === right.anchor && (left.kind === "root" || right.kind === "ancestor" && left.nextPath === right.nextPath && left.dev === right.dev && left.ino === right.ino);
+ }
+ function isRelevantWatchEvent(root, event, path) {
+ 	const segments = containedSegments(root.path, path);

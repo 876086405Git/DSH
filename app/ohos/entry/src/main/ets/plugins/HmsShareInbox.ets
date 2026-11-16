@@ -5,6 +5,7 @@ import common from '@ohos.app.ability.common';
 import Want from '@ohos.app.ability.Want';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import fs from '@ohos.file.fs';
+import util from '@ohos.util';
 import { Any, FlutterPluginBinding, MethodChannel } from '@ohos/flutter_ohos';
 import { HmsShareStorage, ShareBatch } from './HmsShareStorage';
 import {
@@ -16,6 +17,9 @@ class ShareArrival {
   event?: Map<string, Any>;
   batch?: ShareBatch;
   storage: HmsShareStorage;
+  shareId?: string;
+  owner?: FlutterPluginBinding;
+  cleanup?: Promise<void>;
   constructor(storage: HmsShareStorage) { this.storage = storage; }
 }
 
@@ -37,6 +41,7 @@ function problem(reason: string): Map<string, Any> {
 
 export class HmsShareInbox {
   private static pending: ShareArrival[] = [];
+  private static delivered: ShareArrival[] = [];
   private static reading: number = 0;
   private static overflow: boolean = false;
   private static owner?: FlutterPluginBinding;
@@ -48,8 +53,34 @@ export class HmsShareInbox {
   }
 
   static detach(owner: FlutterPluginBinding): void {
+    // A replaced engine still owns its delivered batches. Pending/read-in-flight
+    // arrivals have not reached Dart and retain the original cross-engine queue.
+    for (const arrival of HmsShareInbox.delivered) {
+      if (arrival.owner === owner) HmsShareInbox.finish(arrival).catch(() => {});
+    }
     if (HmsShareInbox.owner !== owner) return;
     HmsShareInbox.owner = undefined; HmsShareInbox.channel = undefined; HmsShareInbox.isReady = false;
+  }
+
+  static async consumed(owner: FlutterPluginBinding, token: Any): Promise<boolean> {
+    if (HmsShareInbox.owner !== owner || typeof token !== 'string') return false;
+    const arrival = HmsShareInbox.delivered.find((value: ShareArrival): boolean =>
+      value.owner === owner && value.shareId === token);
+    if (!arrival || arrival.cleanup) return false;
+    await HmsShareInbox.finish(arrival);
+    // discard uses the existing best-effort safe cleanup. This acknowledges
+    // consumption, not guaranteed physical deletion of every cache file.
+    return true;
+  }
+
+  private static finish(arrival: ShareArrival): Promise<void> {
+    if (arrival.cleanup) return arrival.cleanup;
+    const cleanup: Promise<void> = arrival.storage.discard(arrival.batch!).then((): void => {
+      const index = HmsShareInbox.delivered.indexOf(arrival);
+      if (index >= 0) HmsShareInbox.delivered.splice(index, 1);
+    }).catch((error: Error): void => { arrival.cleanup = undefined; throw error; });
+    arrival.cleanup = cleanup;
+    return cleanup;
   }
 
   static ready(owner: FlutterPluginBinding, reply: (ready: boolean) => void): void {
@@ -60,7 +91,9 @@ export class HmsShareInbox {
   static receive(context: common.UIAbilityContext, want: Want, launch: AbilityConstant.LaunchParam): boolean {
     if (launch.launchReasonMessage !== 'ReasonMessage_SystemShare') return false;
     const storage = new HmsShareStorage(context);
-    if (HmsShareInbox.pending.length >= 8) { HmsShareInbox.overflow = true; return true; }
+    if (HmsShareInbox.pending.length + HmsShareInbox.delivered.length >= 8) {
+      HmsShareInbox.overflow = true; HmsShareInbox.flush(); return true;
+    }
     const arrival = new ShareArrival(storage);
     HmsShareInbox.pending.push(arrival);
     if (HmsShareInbox.reading >= 4) {
@@ -142,13 +175,23 @@ export class HmsShareInbox {
   }
 
   private static flush(): void {
-    if (!HmsShareInbox.isReady || !HmsShareInbox.channel) return;
+    const owner = HmsShareInbox.owner;
+    if (!HmsShareInbox.isReady || !HmsShareInbox.channel || !owner) return;
     while (HmsShareInbox.pending.length > 0 && HmsShareInbox.pending[0].event) {
       const arrival = HmsShareInbox.pending[0];
-      try { HmsShareInbox.channel.invokeMethod('share', arrival.event!); }
+      try {
+        if (arrival.batch) {
+          if (!arrival.shareId) arrival.shareId = util.generateRandomUUID();
+          arrival.event!.set('shareId', arrival.shareId);
+        }
+        HmsShareInbox.channel.invokeMethod('share', arrival.event!);
+      }
       catch (_error) { HmsShareInbox.isReady = false; return; }
       HmsShareInbox.pending.shift();
-      if (arrival.batch) arrival.storage.release(arrival.batch);
+      if (arrival.batch) {
+        arrival.owner = owner;
+        HmsShareInbox.delivered.push(arrival);
+      }
     }
     if (HmsShareInbox.overflow && HmsShareInbox.pending.length === 0) {
       try { HmsShareInbox.channel.invokeMethod('share', problem('too_many')); HmsShareInbox.overflow = false; }

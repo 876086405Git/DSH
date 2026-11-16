@@ -214,14 +214,18 @@ class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
     final system = ref.watch(notifySystemStatusProvider).value;
     // Unknown (not answered, or it couldn't tell): no value rather than a wrong one.
     final notifications = system == null || !system.native ? null : system.allOpen;
+    final longTask = ref.watch(localRuntimeProvider.select((s) => s.status.longTaskEligible));
     return AppPage.list(
       title: l10n.pluginsBackgroundTitle,
-      subtitle: Text(l10n.harmonyBackgroundSubtitle),
+      subtitle: Text(longTask ? l10n.harmonyBackgroundSubtitleLong : l10n.harmonyBackgroundSubtitle),
       children: [
         SettingsSection(
           title: l10n.harmonyBackgroundAway,
           children: [
-            SettingsTile(title: l10n.phoneEngineLocal, subtitle: l10n.harmonyBackgroundLocal),
+            SettingsTile(
+              title: l10n.phoneEngineLocal,
+              subtitle: longTask ? l10n.harmonyBackgroundLocalLong : l10n.harmonyBackgroundLocal,
+            ),
             SettingsTile(title: l10n.harmonyBackgroundRemoteTitle, subtitle: l10n.harmonyBackgroundRemote),
           ],
         ),

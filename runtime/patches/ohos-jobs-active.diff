@@ -1,0 +1,14 @@
+--- a/node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js
+@@ -503,6 +503,11 @@
+ 		});
+ 		return id;
+ 	}
++	/** Whether any authoritative job record is still running or stopping. */
++	hasActiveJobs() {
++		for (const job of this.store.values()) if (job.status === "running" || job.status === "stopping") return true;
++		return false;
++	}
+ 	list(caller) {
+ 		return [...this.store.values()].filter((job) => job.owner === void 0 || job.owner.id === caller).map((job) => this.view(job));
+ 	}

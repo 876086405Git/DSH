@@ -7,28 +7,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final operatingSystemProvider = Provider<String>((ref) => Platform.operatingSystem);
 
 /// Whether this OS has what only Android has today: 手机操控 (an accessibility
-/// service to drive the phone), the pet's windows over other apps, refresh-rate
-/// caps, a picture as a launcher shortcut, the rescue tools that work on its Linux
-/// guest (安全模式, Direct 引擎), and the line about a maker cutting the network.
+/// service to drive the phone; HarmonyOS has 系统操作 instead), the pet's windows
+/// over other apps, refresh-rate caps, the rescue tools that work on its Linux
+/// guest (自动安全模式, Direct 引擎), the relay's direct link and the line about a
+/// maker cutting the network. iOS has some of them ([SettingSpot.iosToo]).
 ///
 /// This hides only what has no HarmonyOS or iOS form yet, in the hub, search and
-/// links alike (a link says the page isn't available here); each moves out of here
-/// once it is built there. What HarmonyOS does differently rather than lacks
-/// asks [operatingSystemProvider] instead (后台运行, 系统权限). It asks the OS, where
+/// links alike (a link says it isn't there, or on HarmonyOS leads to its form
+/// there: [SettingsIndex.ohosLink]); each moves out of here once it is built
+/// there. What HarmonyOS does differently rather than lacks asks
+/// [operatingSystemProvider] instead (后台运行, 系统权限). It asks the OS, where
 /// [LocalRuntimeState.available] and [AppUpdateState.installable] ask for a
 /// channel handler that may still come.
-final androidSystemFeaturesProvider = Provider<bool>((ref) => androidSystemFeaturesOn(ref.watch(operatingSystemProvider)));
-
-/// Whether a launch screen of one's own can be set: Flutter draws it, so it takes the system's
-/// picker and a clip player (`dsh/native-files`, `dsh/launch_clip`), not yet there on HarmonyOS.
-final ownLaunchScreenProvider = Provider<bool>((ref) => ownLaunchScreenOn(ref.watch(operatingSystemProvider)));
-
-bool ownLaunchScreenOn(String os) => os != 'ohos';
-
-/// Whether 重置和卸载运行环境 is on offer: not yet on HarmonyOS, whose channel refuses it.
-final engineResetProvider = Provider<bool>((ref) => engineResetOn(ref.watch(operatingSystemProvider)));
-
-bool engineResetOn(String os) => os != 'ohos';
+final androidSystemFeaturesProvider = Provider<bool>(
+  (ref) => androidSystemFeaturesOn(ref.watch(operatingSystemProvider)),
+);
 
 /// Whether flutter_webrtc has an implementation here, for DSH Remote's direct path.
 final webRtcAvailableProvider = Provider<bool>((ref) => webRtcOn(ref.watch(operatingSystemProvider)));

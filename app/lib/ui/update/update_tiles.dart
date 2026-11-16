@@ -22,8 +22,8 @@ class AppUpdateTiles extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final update = ref.watch(appUpdateProvider);
-    // Updated through the app store (HarmonyOS): nothing to check here.
-    if (!update.installable) return const SizedBox.shrink();
+    // No way to check at all; HarmonyOS checks, and its sheet only offers a page.
+    if (!update.checkable) return const SizedBox.shrink();
     final controller = ref.read(appUpdateProvider.notifier);
     final tint = this.tint;
     final l10n = context.l10n;

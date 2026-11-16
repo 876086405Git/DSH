@@ -6,7 +6,7 @@
       "icon": "$media:shortcut_new_chat",
       "wants": [
         {
-          "bundleName": "io.github.ccch1mneyyy.dsh_app",
+          "bundleName": "ccchimneyyy.dsh.go",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {
@@ -21,7 +21,7 @@
       "icon": "$media:shortcut_voice",
       "wants": [
         {
-          "bundleName": "io.github.ccch1mneyyy.dsh_app",
+          "bundleName": "ccchimneyyy.dsh.go",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {

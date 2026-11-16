@@ -19,12 +19,18 @@ import '../shell/golden_harness.dart';
 // when native.phase is still error (or setupError is present). No credentials.
 RuntimeStatus snapshot({String phase = 'error', String? installed, String? bundledVersion = bundled}) =>
     RuntimeStatus.fromMap({
-      'abi': 'arm64-v8a', 'bundledVersion': bundledVersion,
-      'installedVersion': installed, 'phase': phase,
+      'abi': 'arm64-v8a',
+      'bundledVersion': bundledVersion,
+      'installedVersion': installed,
+      'phase': phase,
       'error': 'synthetic retained native failure',
-      'mode': 'normal', 'safeState': 'off', 'autoSafe': false,
-      'failure': null, 'mainFailure': null,
-      'launchSelectedMode': 'ios-embedded', 'launchSpawned': true,
+      'mode': 'normal',
+      'safeState': 'off',
+      'autoSafe': false,
+      'failure': null,
+      'mainFailure': null,
+      'launchSelectedMode': 'ios-embedded',
+      'launchSpawned': true,
     });
 
 class UninstallRuntime extends RecordingLocalRuntime {
@@ -37,22 +43,27 @@ class UninstallRuntime extends RecordingLocalRuntime {
 }
 
 Future<void> frames(WidgetTester tester, [int n = 6]) async {
-  for (var i = 0; i < n; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+  for (var i = 0; i < n; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 Future<void> showScreen(WidgetTester tester, RecordingLocalRuntime runtime, String os) async {
   usePhoneSurface(tester);
-  await tester.pumpWidget(goldenApp(
-    home: const RootGate(home: EngineScreen()), brightness: Brightness.light,
-    prefs: const OnboardingPrefs(loaded: true, welcomeSeen: true, keySkipped: true, localDeclined: true),
-    overrides: [
-      operatingSystemProvider.overrideWithValue(os),
-      localRuntimeProvider.overrideWith(() => runtime),
-      localRuntimeLogsProvider.overrideWithBuild((ref, notifier) => const []),
-      settingsProvider.overrideWith(() => FakeSettings(const AppSettings(loaded: true, autoStartLocal: false))),
-      footprint(roomyPhone),
-    ],
-  ));
+  await tester.pumpWidget(
+    goldenApp(
+      home: const RootGate(home: EngineScreen()),
+      brightness: Brightness.light,
+      prefs: const OnboardingPrefs(loaded: true, welcomeSeen: true, keySkipped: true, localDeclined: true),
+      overrides: [
+        operatingSystemProvider.overrideWithValue(os),
+        localRuntimeProvider.overrideWith(() => runtime),
+        localRuntimeLogsProvider.overrideWithBuild((ref, notifier) => const []),
+        settingsProvider.overrideWith(() => FakeSettings(const AppSettings(loaded: true, autoStartLocal: false))),
+        footprint(roomyPhone),
+      ],
+    ),
+  );
   await frames(tester);
 }
 
@@ -110,9 +121,16 @@ void main() {
       final runtime = RecordingLocalRuntime(LocalRuntimeState(loaded: true, status: snapshot(phase: phase)));
       // RootGate owns installing navigation; exercise actual EngineActions directly for busy controls.
       usePhoneSurface(tester);
-      await tester.pumpWidget(goldenApp(home: Scaffold(body: EngineActions(phase: RuntimePhase.parse(phase))),
-        brightness: Brightness.light, overrides: [operatingSystemProvider.overrideWithValue('ios'),
-          localRuntimeProvider.overrideWith(() => runtime)]));
+      await tester.pumpWidget(
+        goldenApp(
+          home: Scaffold(body: EngineActions(phase: RuntimePhase.parse(phase))),
+          brightness: Brightness.light,
+          overrides: [
+            operatingSystemProvider.overrideWithValue('ios'),
+            localRuntimeProvider.overrideWith(() => runtime),
+          ],
+        ),
+      );
       await frames(tester);
       expect(find.text('安装运行环境'), findsNothing);
       expect(runtime.calls, isEmpty);

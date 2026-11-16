@@ -10,6 +10,7 @@
 #   --debug       debug embedding and buildMode (default release, as build-hap.sh)
 #   --with-forks  also compile the plugin forks of pubspec_overrides.ohos.yaml
 #   --hms-stubs   NONOFFICIAL minimal declarations; HMS remains uncompiled
+#   --distribution debug|device|store  permissions for that build (hap-distribution.py); store is what's in the repo
 #   --werror      warnings in the project's own files also fail the check
 #   --clean       delete --work first, downloads included
 #
@@ -18,7 +19,10 @@
 #   --full            keep externalNativeOptions and build the whole unsigned HAP
 #   --aot DIR         app.so and flutter_assets: the ohos-aot-<sha> Actions artifact
 #   --native DIR      libnode.so, libdsh_flock.so, libdsh_require_builtin.so
-#                     (runtime/ohos/native/build-hap-libs.py)
+#                     (runtime/ohos/native/build-hap-libs.py), optionally libdsh_linux.so,
+#                     libdsh_workspace_grants.so and libdsh_image_codec.so (runtime/ohos/image),
+#                     and an OH build of every native asset the AOT
+#                     carries (libsqlite3.so: runtime/ohos/native/build-sqlite.py)
 #   --runtime ZIP     dsh-runtime-rawfile.zip, one Stored dsh-runtime/runtime.zip
 #                     (runtime/ohos/package/compose-runtime.py)
 #   --node-headers D  Node 24.22.1 src/ or include/node, for CMakeLists.txt's N-API gate
@@ -48,7 +52,6 @@ PLUGIN_SHA512=54b84b5f857fd53376fbaabe358ba8bb0fafac786813306de25e391da048bddc94
 EMBEDDING_BASE=https://atomgit.com/oh-flutter/flutter_flutter/releases/download/3.47.9-ohos-1.0.0
 EMBEDDING_DEBUG_SHA256=90ebf7067ad3c91a53d564a38b1ee1130df8a34a01797bb4fcf8bd26bf9397ef
 EMBEDDING_RELEASE_SHA256=20903e3b9197004b0181e3a2acc9243d04e5b10fa63d19453969dfc97dc87e42
-PREPARED_HAR_SHA256=759a836691934a209ee39591fd8b0e25da38a77a330cb52d910d98f8b5f3899a
 SDK_API=26
 SDK_TESTED=26.0.0.38
 
@@ -63,6 +66,7 @@ FORKS=0
 HMS_STUBS=0
 WERROR=0
 CLEAN=0
+DISTRIBUTION=""
 FULL=0
 AOT=""
 NATIVE=""
@@ -78,6 +82,7 @@ while [ $# -gt 0 ]; do
     --hms-stubs) HMS_STUBS=1; shift ;;
     --werror) WERROR=1; shift ;;
     --clean) CLEAN=1; shift ;;
+    --distribution) DISTRIBUTION="${2:?--distribution needs debug, device or store}"; shift 2 ;;
     --full) FULL=1; shift ;;
     --aot) AOT="${2:?--aot needs a directory}"; shift 2 ;;
     --native) NATIVE="${2:?--native needs a directory}"; shift 2 ;;
@@ -117,6 +122,9 @@ if [ "$FULL" = 1 ]; then
       "$NATIVE/libdsh_flock.so" "$NATIVE/libdsh_require_builtin.so" "$NODE_HEADERS/node_api.h"; do
     [ -f "$file" ] || die "$file is missing"
   done
+  # Dart hooks built the AOT's native assets for another libc; each needs its OH build here.
+  python3 -I -B "$REPO/tooling/ohos/native_assets.py" --aot "$AOT" --native "$NATIVE" >/dev/null ||
+    die "--native lacks an OH build of the AOT's native assets (see above)"
 fi
 
 [ "$CLEAN" = 0 ] || rm -rf "$WORK"
@@ -163,8 +171,9 @@ if [ "$MODE" = release ]; then
   rm -rf "$PREPARED"
   python3 -I -B "$REPO/tooling/ohos/prepare-pasteboard.py" --input-har "$EMBEDDING_HAR" --output "$PREPARED" >/dev/null ||
     die "prepare-pasteboard.py refused $EMBEDDING_HAR"
-  echo "$PREPARED_HAR_SHA256  $PREPARED/flutter_embedding_release.har" | sha256sum -c --status ||
-    die "the prepared embedding HAR isn't $PREPARED_HAR_SHA256"
+  python3 -I -B "$REPO/tooling/ohos/prepare-pasteboard.py" --input-har "$EMBEDDING_HAR" \
+    --verify-har "$PREPARED/flutter_embedding_release.har" >/dev/null ||
+    die "the prepared embedding HAR members do not match the pinned sources"
   EMBEDDING_HAR="$PREPARED/flutter_embedding_release.har"
   EMBEDDING_PACKAGE="$PREPARED/package"
 else
@@ -344,6 +353,11 @@ print(version)
 PY
 )"
 
+if [ -n "$DISTRIBUTION" ]; then
+  python3 -I -B "$REPO/tooling/ohos/hap-distribution.py" permissions --distribution "$DISTRIBUTION" \
+    --input "$PROJECT/entry/src/main/module.json5" --output "$PROJECT/entry/src/main/module.json5"
+fi
+
 # --- the rest of the HAP, where flutter-hvigor-plugin's FlutterTask and flutter_tools put it.
 if [ "$FULL" = 1 ]; then
   ENTRY="$PROJECT/entry"
@@ -352,7 +366,8 @@ if [ "$FULL" = 1 ]; then
   mkdir -p "$RAWFILE" "$LIBS"
   cp -a "$AOT/flutter_assets" "$RAWFILE/flutter_assets"
   cp "$AOT/arm64-v8a/app.so" "$LIBS/libapp.so"
-  if [ -d "$AOT/native_assets/libs/arm64-v8a" ]; then cp "$AOT/native_assets/libs/arm64-v8a/"*.so "$LIBS/"; fi
+  # Never the AOT's own native assets: their OH builds, by the same name, from --native.
+  python3 -I -B "$REPO/tooling/ohos/native_assets.py" --aot "$AOT" --native "$NATIVE" --copy-to "$LIBS"
   # FlutterLoader reads these from rawfile; copyConfigsFile moves them there.
   for config in buildinfo.json5 framesconfig.json; do
     if [ -f "$ENTRY/src/main/resources/base/profile/$config" ]; then
@@ -361,6 +376,9 @@ if [ "$FULL" = 1 ]; then
   done
   # libdsh_host.so is hvigor's to build; libc++_shared.so is its to add.
   cp "$NATIVE/libnode.so" "$NATIVE/libdsh_flock.so" "$NATIVE/libdsh_require_builtin.so" "$LIBS/"
+  for optional in libdsh_linux.so libdsh_workspace_grants.so libdsh_image_codec.so; do
+    if [ -f "$NATIVE/$optional" ]; then cp "$NATIVE/$optional" "$LIBS/"; fi
+  done
   # The transport contains exactly one Stored asset; never expand its members.
   python3 -I - "$RUNTIME" "$RAWFILE" <<'PY_RUNTIME_ARCHIVE'
 import pathlib, sys, zipfile

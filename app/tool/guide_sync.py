@@ -20,6 +20,12 @@ manifest.json mapping each file back to its place. Rules for the pages:
   may open: app/lib/links/page_links.dart and the settings index
   (app/lib/ui/settings/index/spots.dart).
 - Chinese pages say 对话, never 会话, and never 实验.
+
+docs/guide/harmony/ holds what HarmonyOS says differently: a file there (SKILL.md,
+README.md, zh/*.md, en/*.md) takes the place of the file of that name on HarmonyOS,
+so Android's files stay as they are and the two install the same paths. The rules
+above apply to it too; its relative links read as they will from where it installs.
+A change to a page may need the same change to its HarmonyOS page.
 """
 from __future__ import annotations
 
@@ -32,6 +38,7 @@ from pathlib import Path
 
 SKILL = 'dsh-go-guide'
 LOCALES = ('zh', 'en')
+HARMONY = 'harmony'
 NAV = re.compile(r'^<!-- nav: ([A-Za-z][A-Za-z0-9_]*(?:,[A-Za-z][A-Za-z0-9_]*)*) -->$')
 SPAN = re.compile(r'`([^`\n]+)`')
 BOLD = re.compile(r'\*\*([^*\n]+)\*\*')
@@ -144,6 +151,8 @@ def check_page(path: Path, guide: Path, locale: str, arb: dict[str, str], labels
 def check_links(path: Path, guide: Path, ids: set[str]) -> list[str]:
     name = path.relative_to(guide).as_posix()
     errors: list[str] = []
+    parts = path.relative_to(guide).parts
+    base = guide.joinpath(*parts[1:]).parent if parts[0] == HARMONY else path.parent
     for i, line in enumerate(path.read_text(encoding='utf-8').splitlines()):
         for target in LINK.findall(line):
             if target.startswith('dshgo://'):
@@ -151,7 +160,7 @@ def check_links(path: Path, guide: Path, ids: set[str]) -> list[str]:
                 if not page or page[1] not in ids:
                     errors.append(f'{name}:{i + 1}: {target} is not a page link the app opens')
             elif not re.match(r'(https?|mailto):', target):
-                file = (path.parent / target.split('#')[0]).resolve()
+                file = (base / target.split('#')[0]).resolve()
                 if not file.is_file() or guide.resolve() not in file.parents:
                     errors.append(f'{name}:{i + 1}: broken link {target}')
     return errors
@@ -186,6 +195,15 @@ def guide_files(guide: Path) -> dict[str, Path]:
     return files
 
 
+def harmony_files(guide: Path) -> dict[str, Path]:
+    root = guide / HARMONY
+    files = {name: root / name for name in ('SKILL.md', 'README.md') if (root / name).is_file()}
+    for locale in LOCALES:
+        for page in sorted((root / locale).glob('*.md')):
+            files[f'{locale}/{page.name}'] = page
+    return files
+
+
 def check(repo: Path, guide: Path) -> list[str]:
     errors: list[str] = []
     for required in ('SKILL.md', 'README.md'):
@@ -197,17 +215,30 @@ def check(repo: Path, guide: Path) -> list[str]:
     if pages['zh'] != pages['en']:
         errors.append(f'zh/en pages differ: only zh {sorted(pages["zh"] - pages["en"])}, '
                       f'only en {sorted(pages["en"] - pages["zh"])}')
+    harmony = harmony_files(guide)
+    ours = {*guide_files(guide), *(f'{HARMONY}/{target}' for target in harmony)}
     for other in guide.rglob('*'):
         if other.name.startswith('._'):
             continue
         rel = other.relative_to(guide).as_posix()
-        if other.is_file() and rel not in guide_files(guide):
+        if other.is_file() and rel not in ours:
             errors.append(f'{rel}: not part of the guide (SKILL.md, README.md, zh/*.md, en/*.md)')
+    for target in sorted(harmony.keys() - guide_files(guide).keys()):
+        errors.append(f'{HARMONY}/{target}: takes the place of nothing in the guide')
+    only = {locale: {t.split('/')[1] for t in harmony if t.startswith(f'{locale}/')} for locale in LOCALES}
+    if only['zh'] != only['en']:
+        errors.append(f'{HARMONY}: zh/en pages differ: only zh {sorted(only["zh"] - only["en"])}, '
+                      f'only en {sorted(only["en"] - only["zh"])}')
     version = app_version(repo / 'app/pubspec.yaml')
-    stated = VERSION_LINE.findall((guide / 'README.md').read_text(encoding='utf-8'))
-    if stated != [version]:
-        errors.append(f'README.md: want one line `> dsh-go {version}` (app/pubspec.yaml), found {stated}')
+    for name, readme in (('README.md', guide / 'README.md'), (f'{HARMONY}/README.md', harmony.get('README.md'))):
+        if readme is None:
+            continue
+        stated = VERSION_LINE.findall(readme.read_text(encoding='utf-8'))
+        if stated != [version]:
+            errors.append(f'{name}: want one line `> dsh-go {version}` (app/pubspec.yaml), found {stated}')
     errors += check_skill((guide / 'SKILL.md').read_text(encoding='utf-8'))
+    if 'SKILL.md' in harmony:
+        errors += [f'{HARMONY}/{error}' for error in check_skill(harmony['SKILL.md'].read_text(encoding='utf-8'))]
     ids = read_page_ids(repo / 'app/lib/links/page_links.dart', repo / 'app/lib/ui/settings/index/spots.dart')
     res = repo / 'app/android/app/src/main/res'
     for locale in LOCALES:
@@ -215,8 +246,13 @@ def check(repo: Path, guide: Path) -> list[str]:
         labels = set(arb.values()) | read_android(res, locale)
         for page in sorted(source_files(guide / locale, '*.md')):
             errors += check_page(page, guide, locale, arb, labels, ids)
+        for target, page in harmony.items():
+            if target.startswith(f'{locale}/'):
+                errors += check_page(page, guide, locale, arb, labels, ids)
     for name in ('SKILL.md', 'README.md'):
         errors += check_links(guide / name, guide, ids)
+        if name in harmony:
+            errors += check_links(harmony[name], guide, ids)
     return errors
 
 
@@ -224,8 +260,12 @@ def assets(guide: Path) -> dict[str, bytes]:
     files = guide_files(guide)
     manifest = {target.replace('/', '-'): target for target in files}
     out = {flat: files[target].read_bytes() for flat, target in manifest.items()}
-    out['manifest.json'] = (json.dumps({'name': SKILL, 'files': manifest}, ensure_ascii=False, indent=2)
-                            + '\n').encode()
+    record: dict[str, object] = {'name': SKILL, 'files': manifest}
+    harmony = harmony_files(guide)
+    if harmony:
+        record[HARMONY] = {f'{HARMONY}-' + target.replace('/', '-'): target for target in harmony}
+        out.update({f'{HARMONY}-' + target.replace('/', '-'): page.read_bytes() for target, page in harmony.items()})
+    out['manifest.json'] = (json.dumps(record, ensure_ascii=False, indent=2) + '\n').encode()
     return out
 
 

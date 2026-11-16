@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 parser = argparse.ArgumentParser()
@@ -54,7 +55,12 @@ if args.suite == 'worker':
 if args.record_native:
     overrides['DSH_GIT_ORACLE'] = 'record'
 argv += ['--test', '--test-reporter=tap', str(test)]
+if args.mode == 'strict':
+    argv = [sys.executable, str(root / 'runtime/tests/ohos/process-link-fixture.py'),
+            '--evidence', str(output / 'host-link-fixture.json'), '--', *argv]
 env = {key: value for key, value in os.environ.items() if key not in removed}
+if args.mode == 'strict':
+    overrides['OHOS_TEST_LINK_LD_PRELOAD'] = overrides.pop('LD_PRELOAD')
 env.update(overrides)
 sources = [path for directory in ['runtime/ohos/process', 'runtime/ohos/publication']
            for path in sorted((root / directory).glob('*.mjs'))]

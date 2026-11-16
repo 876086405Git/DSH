@@ -17,6 +17,9 @@ export class OhosManagedSkillStorage implements ManagedSkillStorage {
       this.resolvedRoot = this.canonical(this.guestRoot).then((root: string) => {
         if (root.length === 0 || root === '/') throw new Error('Invalid managed skill root');
         return root;
+      }).catch((error: Error) => {
+        this.resolvedRoot = null;
+        throw error;
       });
     }
     return this.resolvedRoot;
@@ -136,6 +139,11 @@ export class OhosManagedSkillStorage implements ManagedSkillStorage {
     if (!await this.permitsPath(temporary)) throw new Error('Managed skill staging path is redirected');
     let opened = false;
     try {
+      requireManagedSkillCurrent(current);
+      // A leftover regular staging entry may be a hard link. Replace its name
+      // before opening, so TRUNC cannot modify a different name for that inode.
+      try { await fs.unlink(temporary); }
+      catch (error) { if ((error as BusinessError).code !== 13900002) throw error as Error; }
       requireManagedSkillCurrent(current);
       const file = await fs.open(temporary, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC |
         fs.OpenMode.NOFOLLOW | fs.OpenMode.NONBLOCK);

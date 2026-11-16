@@ -12,7 +12,7 @@
 | Worker rebased v2 | 补丁 SHA256 `46b1b09b2b96ac774ada4d3b78b6e4accd450642b88287ea6a1bfe1424b44909`，原基底2c，干净应用到本基底 |
 | 懒加载 native host 增量 | 补丁 SHA256 `c1f470fed52fa393175a666a53dd64425f47183102c9cfb617430b7c9a198215`，在本基底干净应用；不会用旧完整 P2 包覆盖已合入代码 |
 | 本组成 v2 | 在上述实际组合最后应用；产品补丁本身从530基底导出，精确 SHA256 由交付清单给出 |
-| DSH | `0.2.1-rc.4`；锁文件 SHA256 `9b61c5b60c82a3b64fb252af5c142d40d0c86aff30a17cdd5e1ca9d73df9a25c` |
+| DSH | `0.2.2-rc.1`；锁文件 SHA256 `9809a7a64fd5d40df441a30fb4407c037802162d75e8a8e39dc0ef2569bec2ab` |
 | process npm 闭包 | 锁文件 SHA256 `5a815fc00cafc62fca834fe3e2abf6792bd3263c1a386cb2948d6a4063ed8f30` |
 | 执行工具 | 官方 Linux Node `24.22.1`、npm `11.9.0`；构建解析器使用既有 esbuild `0.27.3`，不进入运行载荷 |
 | 私有 RE2 | 固定产物 SHA256 `80eaea2a9e50a2851e332fa4fccffeb01550584ad3c448a2eadd88b43373d5f1` |

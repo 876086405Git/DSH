@@ -8,13 +8,13 @@
 
 | 项目 | 实现与限制 |
 | --- | --- |
-| 命令 | `node <script.js\|script.cjs\|script.mjs> [args...]`，允许脚本前一个 `--`。不实现 `-e`、`--eval`、CLI 选项、stdin 脚本、目录入口、TS 或任意可执行程序。 |
+| 命令 | `node <script.js\|script.cjs\|script.mjs> [args...]`，以及 `-e/--eval <source>`、`-p/--print <expression>`、`-v/--version`、`node`/`node -` 批量 stdin 脚本。允许脚本前一个 `--`。其他 CLI 选项、目录入口、TS 和任意可执行程序仍不支持。 |
 | Worker 主入口 | Worker 的入口就是脚本文件，使用 Node 原生 CJS/ESM 入口装载；保留 require.main、import.meta.main、脚本相对 require/import、argv 和普通退出码。没有用 eval 包一层来伪造主模块。 |
 | cwd | 私有变量初值为本次调用的实际目录；process.cwd、process.chdir 和依赖它的 path.resolve 使用该值。chdir 只能在本次 workspaceRoots 中移动，不能因临时目录可读写而把它当作工作区。 |
 | 环境 | 沿用既有 scrubbedParentEnv，加显式 env 覆盖及 undefined 删除；TMPDIR 仍由服务设为私有临时根。未把父引擎 DSH 身份与凭据复制给脚本。 |
 | stdin | 一次性字符串或 Uint8Array，最多 64 MiB；在 Worker 内提供有限 Readable，读取时字节精确，不读取也不拖住正常退出。fs.readFileSync(0) 不等于这个输入流。 |
 | stdout/stderr | 直接 node 任务按实际字节持续交付；继续使用公开 pipe 与原 OutputCollector 的尾部/spill。bash 内的 node 命令先缓冲，等其外层语句完成路由后交付，以保留管道、替换和重定向。 |
-| 退出 | process.exit(n)、自然退出及未捕获异常属于脚本 Worker；异常写 stderr 并得到实际 exit 1。脚本向 parentPort 发任意 exitCode/failure 消息不会伪造后端结果。 |
+| 退出 | process.exit(n)、自然退出及未捕获异常属于脚本 Worker；异常写 stderr 并得到实际 exit 1。直接及 shell 内 Node 在 Worker 退出边界将合法整数映射为 POSIX 低 8 位状态，供 subprocess 结果、`$?`、条件和 pipefail 使用；例如 256→0、-1→255。脚本向 parentPort 发任意 exitCode/failure 消息不会伪造后端结果。 |
 | 取消 | 排队尚未启动可直接取消；已启动则调用真实 Worker.terminate，等实际退出及输出排空。同步死循环和真实后代 Worker 均有取消测试。已写入的内容不会回滚。 |
 | CLI 拒绝 | 不支持的 Node CLI 形式 exit 2；找不到脚本 exit 1；缺少可继承预加载器 exit 127，且 node 从能力命令表中移除。越界/read-only 等实际策略错误保留 EACCES。 |
 
@@ -88,3 +88,9 @@ v2 在 OH 私有 ESM 增加 `stderrKind: "bytes"`，用 Latin-1 字符串保存�
 - 既有 `publication-capabilities-http.mjs` 在真实已鉴权 DSH 上核对 worker-rebased 同源能力及实时熔断；Dart 模型/HTTP 另由固定 Dart SDK 实跑。
 
 源材料是官方 Node 24.22.1 源码与文档中的 fs、worker_threads、module、worker_thread 启动顺序和 FileHandle close 实现，以及锁定 DSH/just-bash 的现有契约。具体源码归档 SHA、实际命令、原失败、版本迁移与冻结交付哈希随报告保存。没有把 TypeScript 替身、普通 Linux ABI、工具存在或静态源码审读算作 OHOS 设备通过。
+
+## 内联与 stdin 入口
+
+内联代码和 stdin 程序走同一个专用 Worker、继承产品 preload 和 jitless，保留256MiB Worker堆、64MiB输入限制及路径/只读保护。固定Node24的CommonJS `Worker({eval:true})`不会先执行这条ESM preload路径，因此使用固定短data模块入口，源码经workerData传入，分类编译也全部在Worker中完成；CommonJS源在已初始化Worker中作为独立vm.Script运行，保留严格模式指令，require基于授权cwd。ESM静态/动态相对导入通过仅此专用Worker的resolver绑定cwd；内联ESM的import.meta.url为授权cwd下带随机私有query的合成file URL，支持new URL相邻资源与Node原生filename/dirname；它不是写入磁盘的脚本文件，不能把该URL当成源码文件存在的证明。仅完整私有query身份由loader提供内联源码，真实无query的[eval].mjs/[stdin].mjs仍正常加载；import.meta.main为false。脚本文件原生入口及其require.main/import.meta.main保持原样。
+
+`-p`在beforeExit/exit输出表达式结果；stdin模式将批量输入作为程序源码，仅消费一次，程序的process.stdin为空。`-e`/`-p`则将批量输入留给用户代码读取。直接Node仍实时输出；bash中的node仍先完成语句内部路由和缓冲，取消、背压、输出预算不变。错误仍经真实Worker异常/exit汇报，缺表达式或不支持的选项明确报ERR_OHOS_NODE_SCRIPT_ARGUMENTS。

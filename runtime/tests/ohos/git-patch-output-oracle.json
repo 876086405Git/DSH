@@ -1,0 +1,123 @@
+{
+  "gitVersion": "git version 2.43.0",
+  "names": [
+    "ascii.txt",
+    "中文.txt",
+    "emoji🙂.txt",
+    "with space.txt",
+    "with\ttab.txt",
+    "with\nnewline.txt"
+  ],
+  "old": "first\nold\nlast\n",
+  "new": "first\nchanged\nlast\n",
+  "cases": [
+    {
+      "quotePath": null,
+      "name": "ascii.txt",
+      "headers": [
+        "diff --git a/ascii.txt b/ascii.txt",
+        "--- a/ascii.txt",
+        "+++ b/ascii.txt"
+      ]
+    },
+    {
+      "quotePath": null,
+      "name": "中文.txt",
+      "headers": [
+        "diff --git \"a/\\344\\270\\255\\346\\226\\207.txt\" \"b/\\344\\270\\255\\346\\226\\207.txt\"",
+        "--- \"a/\\344\\270\\255\\346\\226\\207.txt\"",
+        "+++ \"b/\\344\\270\\255\\346\\226\\207.txt\""
+      ]
+    },
+    {
+      "quotePath": null,
+      "name": "emoji🙂.txt",
+      "headers": [
+        "diff --git \"a/emoji\\360\\237\\231\\202.txt\" \"b/emoji\\360\\237\\231\\202.txt\"",
+        "--- \"a/emoji\\360\\237\\231\\202.txt\"",
+        "+++ \"b/emoji\\360\\237\\231\\202.txt\""
+      ]
+    },
+    {
+      "quotePath": null,
+      "name": "with space.txt",
+      "headers": [
+        "diff --git a/with space.txt b/with space.txt",
+        "--- a/with space.txt\t",
+        "+++ b/with space.txt\t"
+      ]
+    },
+    {
+      "quotePath": null,
+      "name": "with\ttab.txt",
+      "headers": [
+        "diff --git \"a/with\\ttab.txt\" \"b/with\\ttab.txt\"",
+        "--- \"a/with\\ttab.txt\"",
+        "+++ \"b/with\\ttab.txt\""
+      ]
+    },
+    {
+      "quotePath": null,
+      "name": "with\nnewline.txt",
+      "headers": [
+        "diff --git \"a/with\\nnewline.txt\" \"b/with\\nnewline.txt\"",
+        "--- \"a/with\\nnewline.txt\"",
+        "+++ \"b/with\\nnewline.txt\""
+      ]
+    },
+    {
+      "quotePath": "false",
+      "name": "ascii.txt",
+      "headers": [
+        "diff --git a/ascii.txt b/ascii.txt",
+        "--- a/ascii.txt",
+        "+++ b/ascii.txt"
+      ]
+    },
+    {
+      "quotePath": "false",
+      "name": "中文.txt",
+      "headers": [
+        "diff --git a/中文.txt b/中文.txt",
+        "--- a/中文.txt",
+        "+++ b/中文.txt"
+      ]
+    },
+    {
+      "quotePath": "false",
+      "name": "emoji🙂.txt",
+      "headers": [
+        "diff --git a/emoji🙂.txt b/emoji🙂.txt",
+        "--- a/emoji🙂.txt",
+        "+++ b/emoji🙂.txt"
+      ]
+    },
+    {
+      "quotePath": "false",
+      "name": "with space.txt",
+      "headers": [
+        "diff --git a/with space.txt b/with space.txt",
+        "--- a/with space.txt\t",
+        "+++ b/with space.txt\t"
+      ]
+    },
+    {
+      "quotePath": "false",
+      "name": "with\ttab.txt",
+      "headers": [
+        "diff --git \"a/with\\ttab.txt\" \"b/with\\ttab.txt\"",
+        "--- \"a/with\\ttab.txt\"",
+        "+++ \"b/with\\ttab.txt\""
+      ]
+    },
+    {
+      "quotePath": "false",
+      "name": "with\nnewline.txt",
+      "headers": [
+        "diff --git \"a/with\\nnewline.txt\" \"b/with\\nnewline.txt\"",
+        "--- \"a/with\\nnewline.txt\"",
+        "+++ \"b/with\\nnewline.txt\""
+      ]
+    }
+  ]
+}

@@ -4,16 +4,24 @@ import { createFilesystem } from './filesystem.mjs';
 import { shellCommands, unavailableMessage } from './commands.mjs';
 import { executeRg } from './rg.mjs';
 import { createOwnedGitClient } from './owned-client.mjs';
+import { createLinuxForwardClient } from './linux-forward.mjs';
 import { executeGit } from './git.mjs';
 import { createFetch } from '../net/fetch.mjs';
 import { createHttpDispatcher } from '../net/dispatcher.mjs';
 import { nodeCommand } from './node-command.mjs';
 import { nodeScriptAvailable } from './node-script.mjs';
 
-const { argv, cwd, roots, stdin, env, policy } = workerData;
+const { argv, cwd, roots, stdin, env, policy, linuxCommands = [] } = workerData;
+const workspaceGrant = workerData.dshOhosWorkspaceGrants !== undefined;
 const ownedGitClient = createOwnedGitClient(parentPort);
+const linuxClient = createLinuxForwardClient(parentPort);
 const filesystem = createFilesystem(roots, policy);
-const nodeAvailable = nodeScriptAvailable();
+if (workspaceGrant && !(await filesystem.fs.stat(cwd)).isDirectory) throw Object.assign(new Error('ENOTDIR'), { code: 'ENOTDIR' });
+const nodeAvailable = !workspaceGrant && nodeScriptAvailable();
+const unsupportedGrantCommand = async () => ({ stdout: '', stderr:
+  'ERR_WORKSPACE_SCOPE_UNSUPPORTED: Node 脚本与 owned-git 尚未接入目录租约\n', exitCode: 126 });
+const unsupportedGrantLinux = async () => ({ stdout: '', stderr:
+  'ERR_WORKSPACE_SCOPE_UNSUPPORTED: Linux 命令尚未接入用户授权的目录\n', exitCode: 126 });
 const bash = new Bash({
   fs: filesystem.fs,
   cwd,
@@ -25,12 +33,16 @@ const bash = new Bash({
   customCommands: [
     defineCommand('rg', executeRg),
     defineCommand('git', async (args, context) => {
+      if (workspaceGrant) return unsupportedGrantCommand();
       const dispatcher = createHttpDispatcher({ proxyEnv: Object.fromEntries(context.env) });
       try { return await executeGit(args, { ...context, ownedGit: ownedGitClient.api, fetch: createFetch(dispatcher) }); }
       finally { await dispatcher.destroy(); }
     }),
     ...(nodeAvailable ? [defineCommand('node', nodeCommand({ roots,
-      workspaceRoots: [policy?.workspaceRoot ?? cwd], readOnly: policy?.mode === 'read-only' }))] : []),
+      workspaceRoots: [policy?.workspaceRoot ?? cwd], readOnly: policy?.mode === 'read-only' }))]
+      : workspaceGrant ? [defineCommand('node', unsupportedGrantCommand)] : []),
+    // Statement-buffered: each runs to completion as one job in the App's Linux.
+    ...linuxCommands.map(name => defineCommand(name, workspaceGrant ? unsupportedGrantLinux : linuxClient.command(name))),
   ],
   executionLimits: { maxExecutionTimeMs: Infinity, maxOutputSize: 64 * 1024 * 1024 },
 });
@@ -53,7 +65,7 @@ try {
     args: argv.slice(1), cwd, env, replaceEnv: true, stdin, rawScript: true,
     ohosStatementOutput: argv[0] === 'bash' || argv[0] === 'sh' ? deliver : undefined,
   });
-  if (result.exitCode === 127) result.stderr += result.stderrKind === 'bytes'
+  if (result.exitCode === 127 && !linuxClient.unavailable) result.stderr += result.stderrKind === 'bytes'
     ? Buffer.from(unavailableMessage + '\n').toString('latin1') : unavailableMessage + '\n';
   // 已交付语句已从私有累积器移除；此处只剩退出/错误等尚未交付的尾部。
   await deliver(result);
@@ -61,6 +73,6 @@ try {
 } catch (error) {
   parentPort.postMessage({ failure: { name: error.name, message: error.message, code: error.code, stack: error.stack } });
 } finally {
-  ownedGitClient.close();
-  parentPort.close();
+  try { filesystem.close(); }
+  finally { ownedGitClient.close(); linuxClient.close(); parentPort.close(); }
 }

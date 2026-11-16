@@ -7,9 +7,12 @@ import '../../companion/companion_voice_source.dart';
 import '../../l10n/l10n.dart';
 import '../../speech/speech_audio.dart';
 import '../../speech/speech_settings.dart';
+import '../../state/android_features.dart';
 import '../../state/streaming_asr_model_state.dart';
+import '../../state/streaming_asr_state.dart' show SystemAsrReadiness, ohosStreamingAsrReadyProvider;
 import '../../state/voice_model_state.dart';
 import '../../state/voice_settings.dart';
+import '../../state/voice_state.dart';
 import '../common/app_dialog.dart';
 import '../companion/companion_voice_page.dart';
 import '../providers/provider_widgets.dart';
@@ -122,7 +125,12 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final selected = ref.watch(voiceSettingsProvider);
+    final harmonyLocal = ref.watch(harmonyLocalVoiceProvider);
+    final stored = ref.watch(voiceSettingsProvider);
+    final selected = harmonyLocal ? voiceModeOnHarmonyLocal(stored) : stored;
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
+    final languages = ohos ? ref.watch(voiceCapabilitiesProvider).value?.languages : null;
+    final chineseOnly = languages != null && languages.isNotEmpty && languages.every((l) => l.startsWith('zh'));
     final call = ref.watch(callSettingsProvider);
     final calls = ref.read(callSettingsProvider.notifier);
     return AppPage.list(
@@ -146,35 +154,42 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
         ),
         SettingsSection(
           title: l10n.voiceModeSection,
+          footer: harmonyLocal ? Text(l10n.harmonyVoiceLocalLine, key: const ValueKey('voice-local-line')) : null,
           children: [
             if (wordsForIos)
               SettingsTile(title: voiceModeLabel(l10n, VoiceMode.system), subtitle: l10n.iosVoiceSystemHint),
             if (!wordsForIos)
               for (final mode in VoiceMode.values)
-                Semantics(
-                  checked: selected == mode,
-                  inMutuallyExclusiveGroup: true,
-                  child: SettingsTile(
-                    key: ValueKey('voice-mode-${mode.name}'),
-                    title: voiceModeLabel(l10n, mode),
-                    subtitle: switch (mode) {
-                      VoiceMode.auto => l10n.voiceModeAutoHint,
-                      VoiceMode.deepseek => l10n.voiceModeDeepseekHint,
-                      VoiceMode.system => l10n.voiceModeSystemHint,
-                      VoiceMode.engine => l10n.voiceModeEngineHint,
-                      VoiceMode.cloud => l10n.voiceModeCloudHint,
-                    },
-                    trailing: SizedBox.square(
-                      dimension: 32,
-                      child: Icon(selected == mode ? AppIcons.radioOn : AppIcons.radioOff, size: 24),
+                if (!harmonyLocal || mode != VoiceMode.engine)
+                  Semantics(
+                    checked: selected == mode,
+                    inMutuallyExclusiveGroup: true,
+                    child: SettingsTile(
+                      key: ValueKey('voice-mode-${mode.name}'),
+                      title: voiceModeLabel(l10n, mode),
+                      subtitle: switch (mode) {
+                        VoiceMode.auto => harmonyLocal ? l10n.harmonyVoiceAutoHint : l10n.voiceModeAutoHint,
+                        VoiceMode.deepseek => l10n.voiceModeDeepseekHint,
+                        VoiceMode.system =>
+                          !ohos
+                              ? l10n.voiceModeSystemHint
+                              : chineseOnly
+                              ? l10n.harmonyVoiceSystemHintChinese
+                              : l10n.harmonyVoiceSystemHint,
+                        VoiceMode.engine => l10n.voiceModeEngineHint,
+                        VoiceMode.cloud => l10n.voiceModeCloudHint,
+                      },
+                      trailing: SizedBox.square(
+                        dimension: 32,
+                        child: Icon(selected == mode ? AppIcons.radioOn : AppIcons.radioOff, size: 24),
+                      ),
+                      onTap: () => unawaited(ref.read(voiceSettingsProvider.notifier).setMode(mode)),
                     ),
-                    onTap: () => unawaited(ref.read(voiceSettingsProvider.notifier).setMode(mode)),
                   ),
-                ),
           ],
         ),
         if (!wordsForIos && selected == VoiceMode.cloud) const _CloudAsrForm(),
-        if (!wordsForIos)
+        if (!harmonyLocal && !wordsForIos)
           SettingsSection(
             title: l10n.voiceModelSection,
             footer: Text(l10n.voiceModelFooter),
@@ -183,8 +198,9 @@ class _VoiceSettingsPageState extends ConsumerState<VoiceSettingsPage> {
         if (!wordsForIos)
           SettingsSection(
             title: l10n.speechLiveSection,
-            footer: Text(l10n.speechLiveFooter),
-            children: const [StreamingAsrModelCard()],
+            footer: Text(ohos ? l10n.speechLiveSystemFooter : l10n.speechLiveFooter),
+            // HarmonyOS captions use its own recognizer: nothing to download.
+            children: [ohos ? const SystemAsrCard() : const StreamingAsrModelCard()],
           ),
         SettingsSection(
           title: l10n.speechCallSection,
@@ -531,6 +547,73 @@ class VoiceModelCard extends ConsumerWidget {
 }
 
 /// The streaming recognizer for live captions: download (about 198 MB), progress, delete.
+/// HarmonyOS's own recognizer for live captions: what its probe says now, and a
+/// retry when it was busy or failed. It never downloads or deletes anything.
+class SystemAsrCard extends ConsumerWidget {
+  const SystemAsrCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final colors = DshColors.of(context);
+    final probe = ref.watch(ohosStreamingAsrReadyProvider);
+    final (status, statusColor, note) = switch (probe) {
+      AsyncData(value: SystemAsrReadiness.ready) => (
+        l10n.voiceModelReady,
+        colors.success,
+        l10n.speechLiveSystemReadyNote,
+      ),
+      AsyncData(value: SystemAsrReadiness.busy) => (
+        l10n.speechLiveSystemBusy,
+        theme.colorScheme.onSurfaceVariant,
+        l10n.speechLiveSystemBusyNote,
+      ),
+      AsyncError(:final error) => (l10n.voiceModelFailed, colors.danger, l10n.speechLiveSystemFailedNote('$error')),
+      _ => ('', colors.textTertiary, null),
+    };
+    final retry = probe is AsyncError || probe.value == SystemAsrReadiness.busy;
+    return Padding(
+      key: const ValueKey('live-system-card'),
+      padding: VoiceModelCard.padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(child: Text(l10n.speechLiveSystemName, style: settingsTitleStyle(context))),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  status,
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: statusColor),
+                ),
+              ),
+            ],
+          ),
+          if (note != null) ...[
+            const SizedBox(height: 6),
+            Text(note, style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary)),
+          ],
+          if (retry) ...[
+            const SizedBox(height: 14),
+            OutlinedButton(
+              key: const ValueKey('live-system-retry'),
+              onPressed: () => ref.invalidate(ohosStreamingAsrReadyProvider),
+              child: Text(l10n.commonRetry),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class StreamingAsrModelCard extends ConsumerWidget {
   const StreamingAsrModelCard({super.key});
 

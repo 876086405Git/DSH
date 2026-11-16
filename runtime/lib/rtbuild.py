@@ -341,8 +341,27 @@ def apply_hunks(data, hunks, label):
     return data
 
 
+def patch_names(patches):
+    """Read the explicit application order; every .diff must occur exactly once."""
+    series = os.path.join(patches, "series")
+    with open(series, encoding="utf-8") as source:
+        names = [line.strip() for line in source if line.strip() and not line.lstrip().startswith("#")]
+    if not names or len(names) != len(set(names)):
+        sys.exit("%s: empty or duplicate patch order" % series)
+    available = {name for name in os.listdir(patches) if name.endswith(".diff")}
+    listed = set(names)
+    if listed != available:
+        sys.exit("%s: unlisted patches %s; unknown entries %s"
+                 % (series, sorted(available - listed), sorted(listed - available)))
+    return names
+
+
 def select_dsh_patches(pins, directory, target):
-    """Select an explicitly declared set; never infer a target from a patch filename."""
+    """Select an explicitly declared set; never infer a target from a patch filename.
+
+    `series` is the one application order for every diff; `targetSets` only says which
+    of them each target applies, so a target's set is applied in series order."""
+    order = patch_names(directory)
     if pins.get("schema") != 2 or not isinstance(pins.get("targetSets"), dict):
         sys.exit("pins.json schema 2 with explicit targetSets is required; register each diff for android/ohos before applying or recording")
     sets = pins["targetSets"]
@@ -356,7 +375,7 @@ def select_dsh_patches(pins, directory, target):
         if len(names) != len(set(names)):
             sys.exit("duplicate patch in targetSets." + platform)
         declared.update(names)
-    present = {name for name in os.listdir(directory) if name.endswith(".diff") and not name.startswith("._")}
+    present = set(order)
     if present != declared:
         sys.exit("patch target registration mismatch: unregistered=%s missing=%s" %
                  (sorted(present - declared), sorted(declared - present)))
@@ -364,9 +383,10 @@ def select_dsh_patches(pins, directory, target):
         sys.exit("pins.json patches must be an object")
     if set(pins["patches"]) - present:
         sys.exit("pins.json contains patch entries absent from the declared files")
-    # Preserve main's Android filename order. OH declares the complete common
-    # chain first, then its overlays, whose names may sort before newer main diffs.
-    names = patch_names(directory) if target == "android" else list(sets[target])
+    # Android is main's series exactly. OH lists the complete common chain first,
+    # then its overlays, so a later main diff never sees an OH intermediate state.
+    selected = set(sets[target])
+    names = [name for name in order if name in selected]
     if not names:
         sys.exit("no patches configured for target " + target)
     return names, sorted(present)
@@ -384,25 +404,6 @@ def dsh_patch_inputs(pins, directory, names, target, version):
     encoded = json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
     return inputs, hashlib.sha256(encoded).hexdigest()
 
-def patch_names(patches):
-    """Read the explicit application order; every .diff must occur exactly once."""
-    series = os.path.join(patches, "series")
-    with open(series, encoding="utf-8") as source:
-        names = [line.strip() for line in source if line.strip() and not line.lstrip().startswith("#")]
-    if not names or len(names) != len(set(names)):
-        sys.exit("%s: empty or duplicate patch order" % series)
-    available = {name for name in os.listdir(patches) if name.endswith(".diff") and not name.startswith("._")}
-    pins_path = os.path.join(patches, "pins.json")
-    if os.path.isfile(pins_path):
-        pins = json.load(open(pins_path))
-        if pins.get("schema") == 2:
-            available = set(pins["targetSets"]["android"])
-    listed = set(names)
-    if listed != available:
-        sys.exit("%s: unlisted patches %s; unknown entries %s"
-                 % (series, sorted(available - listed), sorted(listed - available)))
-    return names
-
 
 def cmd_patch_dsh(args):
     """Apply the explicitly selected target set, refusing unpinned inputs.
@@ -412,13 +413,8 @@ def cmd_patch_dsh(args):
     hard-linked tree is never modified in place. --record applies the hunks strictly and writes the
     observed hashes for this DSH version (use after reviewing the upstream file and the patch)."""
     pins_path = os.path.join(args.patches, "pins.json")
-    pins = json.load(open(pins_path)) if os.path.isfile(pins_path) else {"schema": 1, "patches": {}}
-    if pins.get("schema") == 1 and args.target == "android":
-        # Preserve main's standalone, explicitly ordered Android patch CLI.
-        names = patch_names(args.patches)
-        all_names = names
-    else:
-        names, all_names = select_dsh_patches(pins, args.patches, args.target)
+    pins = json.load(open(pins_path)) if os.path.isfile(pins_path) else {}
+    names, all_names = select_dsh_patches(pins, args.patches, args.target)
     print("DSH patch target: %s; selected %d of %d declared patches" % (args.target, len(names), len(all_names)))
     parsed = {name: parse_unified_diff(open(os.path.join(args.patches, name)).read()) for name in names}
     # Several independently reviewed patches may touch the same file. Their
@@ -458,8 +454,8 @@ def cmd_patch_dsh(args):
     selected_paths = {rel for diff in parsed.values() for rel, _ in diff}
     # The first excluded pin on a path is its original only in that target's
     # application order, which need not be lexicographic for OH overlays.
-    sets = pins.get("targetSets", {"android": names, "ohos": names})
-    excluded_names = sets["ohos"] if args.target == "android" else sorted(sets["android"])
+    other = set(pins["targetSets"]["ohos" if args.target == "android" else "android"])
+    excluded_names = [name for name in patch_names(args.patches) if name in other]
     for name in excluded_names:
         if name in names:
             continue
@@ -1856,11 +1852,12 @@ def main():
     p = sub.add_parser("patch-dsh")
     p.add_argument("--prefix", required=True, help="npm --prefix tree holding node_modules/@deepseek-ai/...")
     p.add_argument("--dsh-version", required=True)
+    p.add_argument("--target", choices=["android", "ohos"], required=True,
+                   help="required target patch set; no default (also required with --record)")
     p.add_argument("--patches", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "patches"))
-    p.add_argument("--target", choices=["android", "ohos"], required=True)
-    p.add_argument("--target-report")
     p.add_argument("--record", action="store_true", help="write the observed hashes as this version's pins")
     p.add_argument("--out", help="write the applied patch names (JSON list) here")
+    p.add_argument("--target-report", help="write target, selected, and excluded patch sets as JSON")
     p.set_defaults(fn=cmd_patch_dsh)
 
     p = sub.add_parser("resolve-debs")

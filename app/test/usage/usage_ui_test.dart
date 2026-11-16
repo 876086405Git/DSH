@@ -9,7 +9,10 @@
 //   flutter test --update-goldens test/usage/usage_ui_test.dart
 
 import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/ui/onboarding/usage_notice_row.dart';
 import 'package:dsh_app/ui/onboarding/welcome_page.dart';
+import 'package:dsh_app/ui/settings/usage_stats_section.dart';
 import 'package:dsh_app/ui/settings/privacy_page.dart';
 import 'package:dsh_app/usage/usage_stats.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -180,6 +183,52 @@ void main() {
       await tester.pump();
       final tile = find.widgetWithText(InkWell, appL10n.usageStatsTitle);
       expect(tester.widget<Switch>(find.descendant(of: tile, matching: find.byType(Switch))).value, isFalse);
+    });
+  });
+
+  group('on HarmonyOS, where nothing is sent yet', () {
+    final zh = lookupL10n(AppLocale.zhCN);
+    Future<void> pump(WidgetTester tester, Widget home, String os) async {
+      usePhoneSurface(tester);
+      await tester.pumpWidget(
+        goldenApp(
+          home: home,
+          brightness: Brightness.light,
+          overrides: [
+            ...engine.engineOverrides(DshClient.withCarrier(engine.FakeSettingsHost())),
+            operatingSystemProvider.overrideWithValue(os),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    Widget section() => const Scaffold(body: SingleChildScrollView(child: UsageStatsSection()));
+
+    testWidgets('settings says so, with the switch off and locked', (tester) async {
+      await pump(tester, section(), 'ohos');
+      expect(find.text(zh.harmonyUsageNotSent), findsOneWidget);
+      expect(find.text(zh.usageStatsFooter), findsNothing);
+      final toggle = tester.widget<Switch>(find.byType(Switch));
+      expect(toggle.value, isFalse);
+      expect(toggle.onChanged, isNull);
+    });
+
+    testWidgets('on Android: as ever', (tester) async {
+      await pump(tester, section(), 'android');
+      expect(find.text(zh.usageStatsFooter), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNotNull);
+    });
+
+    testWidgets('first run doesn\'t ask about it', (tester) async {
+      await pump(tester, const Scaffold(body: UsageNoticeRow()), 'ohos');
+      expect(find.byKey(_row), findsNothing);
+    });
+
+    testWidgets('on Android first run still does', (tester) async {
+      await pump(tester, const Scaffold(body: UsageNoticeRow()), 'android');
+      expect(find.byKey(_row), findsOneWidget);
     });
   });
 }

@@ -89,7 +89,7 @@ def main():
         raise ValueError('Node version differs from the fixed composition recipe')
     if run('npm-version', [str(args.npm), '--version'], output) != config['installation']['npmVersion']:
         raise ValueError('npm version differs from the fixed composition recipe')
-    for name, source in [('dsh', repo / ('runtime/locks/dsh-' + config['dshVersion'])),
+    for name, source in [('dsh', repo / 'runtime/locks/dsh-0.2.2-rc.1'),
                          ('process', repo / 'runtime/ohos/process')]:
         prefix = output / name
         prefix.mkdir()

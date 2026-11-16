@@ -6,6 +6,7 @@ export class RuntimePaths {
   readonly agentsHome: string;
   readonly workspace: string;
   readonly outputs: string;
+  readonly linuxDirectory: string;
 
   constructor(filesDir: string) {
     this.guestRoot = filesDir + '/runtime/rootfs';
@@ -14,5 +15,6 @@ export class RuntimePaths {
     this.agentsHome = this.home + '/.agents';
     this.workspace = this.home + '/workspace';
     this.outputs = this.workspace + '/DSH-Go';
+    this.linuxDirectory = filesDir + '/linux-tools';
   }
 }

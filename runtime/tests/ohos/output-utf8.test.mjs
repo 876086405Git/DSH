@@ -174,3 +174,40 @@ test('真实spill保持完整原字节及路径，lossy尾窗仍用原裁剪语�
   assert.deepEqual(failures, []);
   assert.equal(reader.finalize().spillPath, output.spillPath);
 });
+
+test('oversized output tail releases the discarded backing buffer without copying it on every later small chunk', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'output-backing-spill-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const input = Buffer.alloc(8 * 1024 * 1024, 0x61);
+  const suffix = Buffer.alloc(64, 0x62);
+  for (const cap of [64e3, 1024 * 1024]) for (const withSpill of [false, true]) {
+    const failures = [];
+    const reader = new OutputCollector(cap, 'stdout', withSpill ? {
+      dir, maxBytes: input.length + suffix.length, onFailure: error => failures.push(error),
+    } : undefined);
+    reader.push(input);
+    assert.equal(reader.bytes, cap);
+    assert.equal(reader.total, input.length);
+    assert.equal(reader.dropped, true);
+    assert.notEqual(reader.chunks[0].buffer, input.buffer, 'the tiny retained tail must release the oversized input allocation');
+    assert(reader.chunks[0].buffer.byteLength <= Math.max(cap, Buffer.poolSize));
+    const retained = reader.chunks[0].buffer;
+    for (const byte of suffix) reader.push(Buffer.from([byte]));
+    assert.equal(reader.chunks[0].buffer, retained, 'later small appends must not repeatedly copy the large retained head');
+    reader.seal();
+    const result = reader.readFrom(0);
+    assert.equal(reader.bytes, cap);
+    assert.equal(reader.total, input.length + suffix.length);
+    assert.equal(result.nextOffset, reader.total);
+    assert.equal(result.lossy, true);
+    assert.equal(result.text, 'a'.repeat(cap - suffix.length) + 'b'.repeat(suffix.length));
+    assert.equal(reader.readFrom(reader.total - suffix.length).text, 'b'.repeat(suffix.length));
+    assert.deepEqual(failures, []);
+    if (withSpill) {
+      const bytes = await readFile(result.spillPath);
+      assert.equal(bytes.length, input.length + suffix.length);
+      assert.deepEqual(bytes.subarray(0, input.length), input);
+      assert.deepEqual(bytes.subarray(input.length), suffix);
+    } else assert.equal(result.spillPath, undefined);
+  }
+});

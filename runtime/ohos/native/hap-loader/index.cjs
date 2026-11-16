@@ -4,6 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const libraries = Object.freeze({
   flock: 'libdsh_flock.so',
+  python: 'libdsh_python.so',
+  'workspace-grants': 'libdsh_workspace_grants.so',
+  'image-codec': 'libdsh_image_codec.so',
   'require-builtin': 'libdsh_require_builtin.so',
 });
 const loaded = new Map();
@@ -30,7 +33,7 @@ function load(product) {
     throw failure('ERR_OHOS_NATIVE_LIBRARY_PATH', 'A required library is missing or outside the application library directory');
   }
   // .so is the HAP library filename; require(.so) would parse it as JavaScript.
-  // This is an explicit call for two fixed libraries, not a built-in override.
+  // This is an explicit call for a fixed product library, not a built-in override.
   const module = { exports: {} };
   process.dlopen(module, filename);
   const result = Object.freeze({ binding: module.exports, path: filename });

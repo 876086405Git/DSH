@@ -170,7 +170,7 @@ void main() {
     final zh = lookupL10n(AppLocale.zhCN);
     const row = ValueKey('background-notifications');
 
-    Future<void> pump(WidgetTester tester, _Notify notify, {String os = 'ohos'}) async {
+    Future<void> pump(WidgetTester tester, _Notify notify, {String os = 'ohos', bool longTask = false}) async {
       usePhoneSurface(tester);
       await tester.pumpWidget(
         goldenApp(
@@ -181,11 +181,39 @@ void main() {
             // A phone that would say "not exempt", and a maker to name: none of it shows.
             runtimeBridgeProvider.overrideWithValue(_VendorBridge('huawei')),
             notifyChannelProvider.overrideWithValue(notify),
+            localRuntimeProvider.overrideWith(
+              () => FakeRuntime(
+                LocalRuntimeState(
+                  loaded: true,
+                  status: RuntimeStatus(phase: RuntimePhase.running, longTaskEligible: longTask),
+                ),
+              ),
+            ),
           ],
         ),
       );
       await tester.pumpAndSettle();
     }
+
+    testWidgets('a build that may ask for a long task says a turn tries to go on', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()), longTask: true);
+      expect(find.text(zh.harmonyBackgroundSubtitleLong), findsOneWidget);
+      expect(find.text(zh.harmonyBackgroundLocalLong), findsOneWidget);
+      expect(find.text(zh.harmonyBackgroundSubtitle), findsNothing);
+      expect(find.text(zh.harmonyBackgroundLocal), findsNothing);
+    });
+
+    testWidgets('a store build keeps today\'s words', (tester) async {
+      await pump(tester, _Notify(const NotifySystemStatus()));
+      expect(find.text(zh.harmonyBackgroundSubtitle), findsOneWidget);
+      expect(find.text(zh.harmonyBackgroundLocal), findsOneWidget);
+      expect(find.text(zh.harmonyBackgroundLocalLong), findsNothing);
+    });
+
+    test('the wire carries it; Android says nothing and stays false', () {
+      expect(RuntimeStatus.fromMap({'phase': 'running', 'longTaskEligible': true}).longTaskEligible, isTrue);
+      expect(RuntimeStatus.fromMap({'phase': 'running'}).longTaskEligible, isFalse);
+    });
 
     testWidgets('says what happens: nothing about batteries or makers', (tester) async {
       await pump(tester, _Notify(const NotifySystemStatus()));
@@ -198,6 +226,9 @@ void main() {
       ]) {
         expect(find.text(text), findsOneWidget, reason: text);
       }
+      // A running turn may carry on under the system's short grant first.
+      expect(zh.harmonyBackgroundLocal, contains('一小会儿'));
+      expect(zh.harmonyPausedInBackground, contains('可能'));
       for (final text in [
         zh.pluginsSystemBatteryOptimization,
         zh.pluginsStayOnline,

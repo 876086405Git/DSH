@@ -4,12 +4,14 @@
 
 import 'dart:async';
 
-import 'package:dsh_client/dsh_client.dart' show TerminalShell;
+import 'package:dsh_client/dsh_client.dart' show RuntimeSupport, TerminalShell;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../state/android_features.dart';
+import '../../state/runtime_capabilities_state.dart';
 import '../../state/terminal_state.dart';
 import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
@@ -151,20 +153,28 @@ class _TerminalPageState extends ConsumerState<TerminalPage> {
     final selected = state.selected;
     final padding = MediaQuery.paddingOf(context);
     final cwd = selected?.info?.cwd ?? state.environment?.cwd ?? '';
+    // HarmonyOS's own engine has no PTY and says so; asked before the first attach fails.
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
+    final capabilities = ohos ? ref.watch(runtimeCapabilitiesProvider) : null;
+    final noPty = capabilities?.value?.shell.pty == RuntimeSupport.unsupported;
 
     final Widget body;
     if (state.offline) {
       body = Center(
         child: EmptyView(icon: AppIcons.offline, title: TerminalCopy.offline),
       );
-    } else if (!state.supported) {
+    } else if (!state.supported || noPty) {
       body = Center(
         child: EmptyView(
           art: FeatureTile(FeatureKind.terminal, size: FeatureTile.empty),
           title: l10n.botsTerminalUnsupported,
-          message: l10n.botsTerminalSupportedHosts,
+          message: noPty
+              ? l10n.harmonyTerminalNoPty
+              : (ohos ? l10n.harmonyTerminalSupportedHosts : l10n.botsTerminalSupportedHosts),
         ),
       );
+    } else if (capabilities?.isLoading ?? false) {
+      body = TerminalCardPlaceholder(label: l10n.botsTerminalOpening);
     } else if (state.error case final error?) {
       body = Center(
         child: EmptyView(

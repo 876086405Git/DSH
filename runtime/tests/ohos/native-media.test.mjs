@@ -17,8 +17,11 @@ test('activation requires foreground and exact owner generation lease shapes',as
  const f=await mediaFixture(t);for(const input of [{owner:'bad'},{generation:1.5},{generation:-1},{lease:''},{lease:'x'.repeat(257)}])assert.equal((await call(f,'activate',input).done).error,'bad-request');
  f.background();assert.equal((await call(f,'activate').done).error,'not-foreground');assert.equal(f.operations.length,0);
 });
-test('voice and overlay are explicitly unsupported without microphone/permission work',async t=>{
- const f=await mediaFixture(t);await activate(f);for(const name of ['requestVoiceGrant','startVoice','stopVoice','showOverlay','updateOverlay','hideOverlay'])assert.equal((await call(f,name).done).error,'unsupported');
+test('voice needs the real indicator integration and overlay remains unsupported',async t=>{
+ const f=await mediaFixture(t);await activate(f);
+ assert.equal((await call(f,'startVoice').done).error,'indicator');
+ assert.equal((await call(f,'stopVoice').done).value,null);
+ for(const name of ['showOverlay','updateOverlay','hideOverlay'])assert.equal((await call(f,name).done).error,'unsupported');
  assert.equal(f.operations.length,0);await dispose(f);
 });
 test('play only accepts exact owner cache clip and allowlisted MIME before opener',async t=>{
@@ -155,4 +158,99 @@ test('cancel while awaiting a retired close cannot allocate a late replacement p
  const started=f.call(next.methods,'play',{...key,privatePath:path,contentType:'audio/wav'});await new Promise(r=>setImmediate(r));
  const stopped=f.call(next.methods,'stop',key);gate.resolve();assert.equal((await started.done).error,'stale-owner');assert.equal((await stopped.done).value,null);
  assert.equal(f.players.length,1);assert.equal(f.fds.size,0);assert.equal(f.operations.filter(x=>x.op==='opener').length,1);
+});
+
+// Public native handler, explicitly granted SDK permission; this never starts a
+// microphone and does not assert that the visible-stop UI has been integrated.
+test('without a visible stop control voice is not offered and asks for no permission',async t=>{
+ const f=await mediaFixture(t,{micGranted:true});await activate(f);
+ assert.deepEqual((await call(f,'capabilities').done).value,{features:['audio']});
+ assert.equal((await call(f,'requestVoiceGrant').done).error,'unsupported');
+ assert.equal(f.operations.filter(x=>x.op==='mic-check'||x.op==='mic-request').length,0);await dispose(f);
+});
+test('foreground owned native media obtains the actual microphone grant without capture',async t=>{
+ const f=await mediaFixture(t,{micGranted:true,indicator:true});await activate(f);let reply;
+ try{reply=await call(f,'requestVoiceGrant').done;}finally{await dispose(f);}
+ assert.equal(reply.value,true,JSON.stringify(reply));
+ assert.equal(f.operations.filter(x=>x.op==='mic-check').length,1);
+ assert.equal(f.operations.filter(x=>x.op==='mic-request').length,0);
+ assert.equal(f.players.length,0);assert.equal(f.fds.size,0);
+});
+
+const grantVoice=async f=>assert.equal((await call(f,'requestVoiceGrant').done).value,true);
+const startVoice=async f=>assert.equal((await call(f,'startVoice').done).value,null);
+const micStart=(f,v,id=1)=>f.call(v.methods,'startRecorder',{sessionId:id,maxSeconds:1});
+const micCancel=(f,v)=>f.call(v.methods,'cancel');
+function pcmFrames(count,value=0){const bytes=Buffer.alloc(count*320*2);for(let i=0;i<bytes.length;i+=2)bytes.writeInt16LE(value,i);return bytes;}
+
+test('supported integration still requires per-owner grant before capture',async t=>{
+ const f=await mediaFixture(t,{indicator:true});await activate(f);
+ assert.deepEqual((await call(f,'capabilities').done).value,{features:['audio','voice']});
+ assert.equal((await call(f,'startVoice').done).error,'permission');
+ assert.equal(f.capturers.length,0);assert.equal(f.indicators.length,0);await dispose(f);
+});
+test('ordinary dictation and plugin activity use the same physical lease',async t=>{
+ const f=await mediaFixture(t,{indicator:true}),v=f.attachVoice();await activate(f);await grantVoice(f);
+ assert.equal((await micStart(f,v).done).value,null);
+ assert.equal((await call(f,'startVoice').done).error,'busy');assert.equal(f.capturers.length,1);
+ assert.equal((await micCancel(f,v).done).value,null);await dispose(f);assert(f.capturers.every(c=>c.released));
+});
+test('dictation waits for actual plugin release before acquiring microphone',async t=>{
+ const release=deferred(),f=await mediaFixture(t,{indicator:true,captureRelease:()=>release.promise}),v=f.attachVoice();
+ await activate(f);await grantVoice(f);await startVoice(f);const dictation=micStart(f,v);
+ await until(()=>f.operations.some(x=>x.op==='capture-release'));
+ assert.equal(dictation.replies.length,0);assert.equal(f.capturers.length,1);
+ release.resolve();assert.equal((await dictation.done).value,null);
+ assert.equal(f.capturers.length,2);assert(f.capturers[0].released);
+ assert(f.events.some(x=>x.kind==='owner.revoked'&&x.reason==='dictation'));
+ assert.equal((await micCancel(f,v).done).value,null);assert(f.capturers.every(c=>c.released));
+});
+test('failed physical release blocks dictation until explicit original-owner close succeeds',async t=>{
+ const f=await mediaFixture(t,{indicator:true,captureRelease:()=>{throw Error('release failed');}}),v=f.attachVoice();
+ await activate(f);await grantVoice(f);await startVoice(f);
+ assert((await micStart(f,v).done).error);assert.equal(f.capturers.length,1);assert(!f.capturers[0].released);
+ f.change({captureRelease:undefined});await dispose(f);
+ assert.equal((await micStart(f,v,2).done).value,null);assert.equal(f.capturers.length,2);
+ assert.equal((await micCancel(f,v).done).value,null);assert(f.capturers.every(c=>c.released));
+});
+test('background while indicator mount is pending never opens microphone and hides late UI',async t=>{
+ const shown=deferred(),f=await mediaFixture(t,{indicator:true,indicatorShow:()=>shown.promise}),v=f.attachVoice();
+ await activate(f);await grantVoice(f);assert.equal((await play(f)).reply.value,null);const pending=call(f,'startVoice');
+ await until(()=>f.indicators.some(x=>x.op==='show'));f.background();assert.equal(f.capturers.length,0);
+ await until(()=>f.players[0].released&&f.fds.size===0);assert.equal(f.fds.size,0);
+ assert.equal(pending.replies.length,0,'UI mount has not settled, but playback is already closed');
+ shown.resolve();assert.equal((await pending.done).error,'stale-owner');
+ await until(()=>f.indicators.some(x=>x.op==='hide'));
+ assert.equal(f.capturers.length,0);assert.equal((await micStart(f,v).done).value,null);
+ assert.equal((await micCancel(f,v).done).value,null);assert(f.capturers.every(c=>c.released));
+});
+test('late capturer allocation after disposal releases before another owner starts',async t=>{
+ const creation=deferred(),f=await mediaFixture(t,{indicator:true,captureCreate:()=>creation.promise}),v=f.attachVoice();
+ await activate(f);await grantVoice(f);const pending=call(f,'startVoice');
+ await until(()=>f.operations.some(x=>x.op==='capture-create'));const closed=call(f,'disposeOwner');
+ assert.equal(closed.replies.length,0);assert.equal(f.capturers.length,0);creation.resolve();
+ assert((await pending.done).error);assert.equal((await closed.done).value,null);
+ assert.equal(f.capturers.length,1);assert(f.capturers[0].released);
+ assert(!f.operations.some(x=>x.op==='capture-start'));
+ f.change({captureCreate:undefined});assert.equal((await micStart(f,v).done).value,null);
+ assert.equal((await micCancel(f,v).done).value,null);assert(f.capturers.every(c=>c.released));
+});
+test('activity publishes localStopped only after actual player and FD release',async t=>{
+ const release=deferred(),f=await mediaFixture(t,{indicator:true,release:()=>release.promise});
+ await activate(f);await grantVoice(f);await startVoice(f);assert.equal((await play(f)).reply.value,null);
+ const capture=f.capturers[0];capture.data(pcmFrames(35,10000));
+ await until(()=>f.players[0].releases>0);
+ assert(!f.events.some(x=>x.kind==='voice.speechStart'));assert.equal(f.fds.size,1);
+ release.resolve();await until(()=>f.events.some(x=>x.kind==='voice.speechStart'));
+ const starts=f.events.filter(x=>x.kind==='voice.speechStart');assert.equal(starts.length,1);assert.equal(starts[0].localStopped,true);
+ assert(f.players[0].released);assert.equal(f.fds.size,0);
+ capture.data(pcmFrames(35));await until(()=>f.events.some(x=>x.kind==='voice.speechEnd'));
+ assert.equal(f.events.filter(x=>x.kind==='voice.speechEnd').length,1);await dispose(f);assert(capture.released);
+});
+test('visible stop callback retires only its actual current owner and does not restart',async t=>{
+ const f=await mediaFixture(t,{indicator:true});await activate(f);await grantVoice(f);await startVoice(f);
+ const visible=f.indicators.find(x=>x.op==='show');visible.stop();
+ await until(()=>f.capturers[0].released&&f.events.some(x=>x.kind==='owner.revoked'));
+ const count=f.events.length;f.capturers[0].data(pcmFrames(10,10000));await Promise.resolve();
+ assert.equal(f.events.length,count);assert.equal(f.capturers.length,1);assert.equal(f.indicators.filter(x=>x.op==='hide').length,1);
 });

@@ -144,11 +144,51 @@
         }
       }
     },
+    "ohos-api-gateway-idle.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
+          "after": "9d69b0cfd60d7f747251a7c3354a201ac8fef3080c6991cd4ebd4e35e2d27240",
+          "before": "91abae7edfaa2bf3154680829e77b1f341aa01ba9094795aa70b96ff3e15f52b"
+        }
+      }
+    },
+    "ohos-attachment-diagnostic.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a",
+          "before": "71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa"
+        }
+      }
+    },
     "ohos-attachment-publication.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
           "after": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b",
           "before": "3c17ef1ee80f8e1c9dc9229df4dd680e63387af750a4d26c3d9d056841e2911d"
+        }
+      }
+    },
+    "ohos-client-hmr-idle.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js": {
+          "after": "93a6da0f44cbd32926f3cdf8cbcd99bbafdf8e4f70e80bb8ed8da80800ccea18",
+          "before": "b5abcec230011f25b6ab8eab9c1da41eddc9e050ce4ca57d8bda5715982edd30"
+        }
+      }
+    },
+    "ohos-cordis-catalog-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
+          "after": "d03cb1f3c28eca98d500d51467ed2491510a0d18cf5c0caf8fe576a8ecb7a428",
+          "before": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8"
+        }
+      }
+    },
+    "ohos-forge-github-unavailable.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-experimental-forge-github/lib/index.js": {
+          "after": "f7a25e4e939900cb452f359396a7b76ff480a0eb540ed80c719c5852cc769140",
+          "before": "7043e0656aa2d23e62ee7aa9d1dae94bff775fafb3f4dd19363f0f10336b51d4"
         }
       }
     },
@@ -161,6 +201,66 @@
         "node_modules/node-addon-native-custom-loader/lib/index.js": {
           "after": "00bfe83989700049796ea03dc1cd9ab6e2789167bc038deed2f9d698eec9a55b",
           "before": "6d83f4e5426895d40820acf507146226a893c5aefba00a08bf0884446160049e"
+        }
+      }
+    },
+    "ohos-image-codec.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "fe0d80a1badf6b1faf26f6a2cf908b011c02ca5a3247ab081aabab3b8511a60a",
+          "before": "dd15efce9b5bbd0d896728f22bb3e9dd4643176555174f5bfcb39adfc75074df"
+        }
+      }
+    },
+    "ohos-jobs-active.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
+          "after": "5585ee7025496ad1ab9cdb46bcb58307a971bee7db39dab6eebc76ded9e53186",
+          "before": "223f6569c2be54c26cf537ed8014b3330ea2f69cc0a3e3d5bba46c2fc413cbf8"
+        }
+      }
+    },
+    "ohos-liveshare-owner-unavailable.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-experimental-liveshare/lib/index.js": {
+          "after": "39da13d5442ff559544954ea91b6bad005a18a91d8895ef2e79ff2e88f3a812c",
+          "before": "f023a7ef1f254c6e10fed1ac21b133e49951974e796f6a975938e7b67ef4f795"
+        }
+      }
+    },
+    "ohos-market-git-unavailable.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plugin-market/lib/index.js": {
+          "after": "b1db85d1fe34de0feb5e48401e798eaf668769afafdd605d5bff6fef5788bb5d",
+          "before": "28ea59098d0d46f2732f80c70dd361177b4dc79f9b5f7ff95b6d9aa80ddc9697"
+        }
+      }
+    },
+    "ohos-mcp-command-router.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-mcp-client/lib/index.js": {
+          "after": "04fb41ee85ceabc11948fade57eb70f66c6dd9182102cd188da0b92d78df1fff",
+          "before": "1b279593ef19f7ca2c7b46893bd897424b1fc8a5c0e0644140dbba0e488f9f99"
+        },
+        "node_modules/@modelcontextprotocol/client/dist/stdio.cjs": {
+          "after": "4addd12b80580f18a024a14ee55d9007da6df937c594a07a590f731d6bef8d1d",
+          "before": "a969d41733f483c4b520bd479d70efb0a12908d42d4287f601e16ece74234b19"
+        },
+        "node_modules/@modelcontextprotocol/client/dist/stdio.mjs": {
+          "after": "b04d2db0feb4a733b68bab98abc15ae85d8ba81bd474fd9e30bd5e04b5ba50ea",
+          "before": "26bba09797abb03929888ce234141ab89e5456a8ff3cdf5fadcb522d42f4ba3e"
+        }
+      }
+    },
+    "ohos-mcp-start-close.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@modelcontextprotocol/client/dist/stdio.cjs": {
+          "after": "d6e7cd153e9edc99a852eba3b480eba42bfef2569d03e61e6a16beaf4f7c9f55",
+          "before": "4addd12b80580f18a024a14ee55d9007da6df937c594a07a590f731d6bef8d1d"
+        },
+        "node_modules/@modelcontextprotocol/client/dist/stdio.mjs": {
+          "after": "8a3320ea65d4846346cf714f98ebad70450147c84bf18ea441ab87bfd06cbae6",
+          "before": "b04d2db0feb4a733b68bab98abc15ae85d8ba81bd474fd9e30bd5e04b5ba50ea"
         }
       }
     },
@@ -179,7 +279,7 @@
           "before": "5310861bc89788ea24be82a3b323e34cbd42b9e6214e2a179b2e6f92a8758cd5"
         },
         "node_modules/@deepseek-ai/dsh-web-fetch-http/lib/index.js": {
-          "after": "f9595a0f2c796839a6a5f68a3cd2585a6d68fafb4a16b9d5191f89f5e5e60a31",
+          "after": "ca1bdfd0bd924c5e5891d14f3d88de87c6153edb97e7c4bc0b9fe97cfe360166",
           "before": "4d6ebdc8be0404361aad52f75c4f4b3e264ba068dfaa0ba2a40f955d2337c064"
         }
       }
@@ -189,6 +289,70 @@
         "node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js": {
           "after": "feea1fd338ab0c3b2cab0509fbaf9e6d4a849fede0715350cf6591f98bcaf229",
           "before": "a32309bee49a3cb7f518cd748e2b2f2c0dd680de0bc19e1533e2182913567c04"
+        }
+      }
+    },
+    "ohos-piai-empty-models.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b",
+          "before": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a"
+        }
+      }
+    },
+    "ohos-piai-text-preabort.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "762e49300daac811c36184c9cb8ba44460de7fb5bacca06bc0c1b377cb192be1",
+          "before": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b"
+        }
+      }
+    },
+    "ohos-plugin-hmr-transaction.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "30e68c69b8a38d58f3e59fece0dbb63bc4f8e79212df91c25e76358502d2bd47",
+          "before": "eb73911bd27c3730bf5d70b9cf7193fff5cb301984f981b6e91edff33c2a8592"
+        },
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
+          "after": "7caff988b77c08a3da2b31f1d0c05dd2ad372af58c0bdd1a8d5a43a461da1c10",
+          "before": "373ed95b0a5ee0aabdd5a0fb5c15c2b4163bbee41edf67c436dafaa8fb7e79e0"
+        }
+      }
+    },
+    "ohos-plugin-linkless.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "4fe63479a0bfa026c578b3e3acc2b775aa3d027b6502a9d72a9135513b3e2cad",
+          "before": "55d3674947850069069733aafa2975982c77e0b743dc59527173f382c0ce77db"
+        },
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js": {
+          "after": "82e895216414eaa3a8f29d5d7aad31366272c8a6382e2ab4fe00fe30601e13c4",
+          "before": "4ccdf0cb1177a6fc9442f0392fbba88ea1b80b6738f3cae80d34be8d5b521b7d"
+        }
+      }
+    },
+    "ohos-plugin-locale-bom.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "55d3674947850069069733aafa2975982c77e0b743dc59527173f382c0ce77db",
+          "before": "8c8c617eec295d60e18189949705e04399cd7b7f4ad027e181c4666c99621a1c"
+        }
+      }
+    },
+    "ohos-plugin-manifest-bom.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "8c8c617eec295d60e18189949705e04399cd7b7f4ad027e181c4666c99621a1c",
+          "before": "30e68c69b8a38d58f3e59fece0dbb63bc4f8e79212df91c25e76358502d2bd47"
+        }
+      }
+    },
+    "ohos-plugin-remove-rollback.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
+          "after": "c48a0946ae9639be69b66fa079393def779e78cd6b4299b6c53fb5bf53a43164",
+          "before": "7caff988b77c08a3da2b31f1d0c05dd2ad372af58c0bdd1a8d5a43a461da1c10"
         }
       }
     },
@@ -212,6 +376,14 @@
         }
       }
     },
+    "ohos-skill-root-events.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
+          "after": "50e84da42c878ee5da57032b8766309c00d18d1e676deb43071c0da4aece2353",
+          "before": "5000e40f6eb3b6416c741c8a7300d8427fb10a9a995649d3ed3cbe2e7d8bff5d"
+        }
+      }
+    },
     "ohos-virtual-process.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js": {
@@ -224,11 +396,47 @@
         }
       }
     },
+    "ohos-web-converter-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-web/lib/index.js": {
+          "after": "2265c123e7f6bec161d7071709de939f1404df08e6816ec740cba976e48ccbe6",
+          "before": "08a37554c57a8a1a98b47489cd6a0c53c43b646060bdcc94b2b211bf04c2498c"
+        }
+      }
+    },
     "ohos-workspace-changes.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js": {
           "after": "0640af53762c8b2ebbdc5c38412fcd75badfe36edef12875d8d87969415f04ed",
           "before": "b73138187c8b251cf1da086fddf959fe3cca46df9c68d3aaca95bad01f3e9a62"
+        }
+      }
+    },
+    "ohos-workspace-edit.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "after": "fe8d6fa69462b0a76d73db9d857edbc9b82f8d7f8a793168e04e3e817d6ba2ba",
+          "before": "492128833d24c6a3762d5844e1101649bc3aec52e8e55cde2bc5d48cf66bcf5a"
+        },
+        "node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js": {
+          "after": "08cca0535fa5368693e0f5141d92d0704c823dd1f331ddd9299e376ab49f2ac0",
+          "before": "f4edd14bf48f8d5bfdea10a61c6651ccde99f2d08a79855746ad2a8d89c6fb73"
+        }
+      }
+    },
+    "ohos-workspace-grant-paths.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "after": "492128833d24c6a3762d5844e1101649bc3aec52e8e55cde2bc5d48cf66bcf5a",
+          "before": "4f36f666d2b2e707d795fa2b9c1b673926fd7609d3bea99dd0e2e105f9ce06f4"
+        },
+        "node_modules/@deepseek-ai/dsh-working-directory/lib/index.js": {
+          "after": "167c67034bde5de5862e99ddd27a42d6d690fc42d2cc8748ed58cedf06c01b50",
+          "before": "ee0876bbfa11c8d52dcdb663810d6a042c65274f1088bca3f6dd7b8446ed8e09"
+        },
+        "node_modules/@deepseek-ai/dsh-workspace/lib/index.js": {
+          "after": "6413e6c3a6d14a5518e3121ab936b599a2a46f40ab603eab39fd383c4067b72a",
+          "before": "97d891ee0bc2ee8a1867a3c2420cf3ea8787b8000293771244f923de3b362658"
         }
       }
     },
@@ -957,7 +1165,7 @@
     "zzzzzzz-ohos-session-publication.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "59ff6185416c5bcb6b58b642ea2f13968cbf8ea9c9bbaa00970539beb8123399",
+          "after": "a2fccd3b699d7d327246f684a2a3eb6b7e26f50d4ed57ec34c9eb750fa0cd199",
           "before": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3"
         }
       }
@@ -1201,8 +1409,8 @@
           "before": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b"
         },
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "b1b5477d800903b32fe042d7d7c92814f854d0acc29eb3ccb5c1b37fbe383861",
-          "before": "59ff6185416c5bcb6b58b642ea2f13968cbf8ea9c9bbaa00970539beb8123399"
+          "after": "ad21b818c567beb6f42e1091a37e622e3172d19e81952118e877b74195952fc1",
+          "before": "a2fccd3b699d7d327246f684a2a3eb6b7e26f50d4ed57ec34c9eb750fa0cd199"
         }
       }
     },
@@ -1577,8 +1785,8 @@
     "zzzzzzzzzzzz-ohos-runtime-capabilities.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "d8ef44093428788514c38d924fa60cd768114244ff8db7ef157ce1e352e8d622",
-          "before": "b1b5477d800903b32fe042d7d7c92814f854d0acc29eb3ccb5c1b37fbe383861"
+          "after": "31fb1a973e40c7886ebe6987344434bb5e33f6288850fcd861fb95f43cab27c9",
+          "before": "ad21b818c567beb6f42e1091a37e622e3172d19e81952118e877b74195952fc1"
         }
       }
     },
@@ -1601,7 +1809,7 @@
     "zzzzzzzzzzzzz-ohos-lifecycle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
-          "after": "bb12e297f91e801268b1e280bdde2df428c2f6cf45471d267be84ecfd98a4ceb",
+          "after": "cbb78b530e5baa6c7780c2b26fad7a28c91be329c18ce6b225bf9bcbe4588755",
           "before": "bd6312f32ed51becac225e349061817c4c27ca0cf587124f923ce0fa860e94b1"
         },
         "node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js": {
@@ -1621,7 +1829,7 @@
           "before": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee"
         },
         "node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js": {
-          "after": "a959fc8d55a2e2de80ed9c37908096e5804517202b56e67d85213ece75a6eb65",
+          "after": "541f5c565369f4a7cf9e6df8bfc380341e0727e4dde8ddf5333d6caf2719d830",
           "before": "ffc614ba600aaf9f3c2a4497dff441c8e8c228c22212741b9de43a0958b0b907"
         }
       }
@@ -1629,11 +1837,11 @@
     "zzzzzzzzzzzzz-ohos-plugin-install-refusal.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
-          "after": "470da55b6e18886fbcba3aec0b2461d09776cbf09fc127389b823080fadb2fec",
+          "after": "05d053691fec7658d22e2f59a1cc6ccc0cb71b9c4803e48f523e10cd119a5fcb",
           "before": "b3aae8aed987887d9c43c1f9c0ddd0c70e69d084fc35780589dd2d59fdfafe76"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js": {
-          "after": "5f14ea0b1663c40f3107b4ba8537f5c28c4750917c57f808ee3e951a4a89c47f",
+          "after": "7cad04583f2f3b68375acf06b6e9cfb5ff746fb5177a4f69c4e5269fdd355650",
           "before": "c7d72b35b81443a16f6a57f91087ba2f88812d0e5db7b9cdf131d852adcff9c8"
         }
       }
@@ -1667,6 +1875,22 @@
         "node_modules/proxy-agent-negotiate/dist/index.js": {
           "after": "d5317cfa41996c379958f5fbb9d90a282edc30bf9f8d67981f1b06d37e2131f6",
           "before": "56f33d231c16933054a0dddc665abdc8514d952c84fa96b245e841875d05f5e5"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzz-ohos-plugin-packages.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "eb73911bd27c3730bf5d70b9cf7193fff5cb301984f981b6e91edff33c2a8592",
+          "before": "0efe3b6c4be30e101982c0740b55d3e035fb754e32ad366a197a9b7ec5be6cdb"
+        },
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
+          "after": "373ed95b0a5ee0aabdd5a0fb5c15c2b4163bbee41edf67c436dafaa8fb7e79e0",
+          "before": "05d053691fec7658d22e2f59a1cc6ccc0cb71b9c4803e48f523e10cd119a5fcb"
+        },
+        "node_modules/@deepseek-ai/dsh/lib/profile-boot-e2mS45fC.js": {
+          "after": "5554f9d72f9095c627980344cdaddd064a0db9a429483110b1985043bffdf3f3",
+          "before": "25c966fcb5ab8e58e31c2610ccec3360b0cb2069bbef844640d5afdf27aebe5c"
         }
       }
     },
@@ -2409,6 +2633,7 @@
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "ohos-attachment-publication.diff",
+      "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
       "ohos-mcp-stdio-unavailable.diff",
       "ohos-network-transport.diff",
@@ -2426,7 +2651,29 @@
       "zzzzzzzzzzzz-ohos-runtime-capabilities.diff",
       "zzzzzzzzzzzzz-ohos-lifecycle.diff",
       "zzzzzzzzzzzzz-ohos-plugin-install-refusal.diff",
-      "zzzzzzzzzzzzzz-ohos-composition-imports.diff"
+      "zzzzzzzzzzzzzz-ohos-composition-imports.diff",
+      "ohos-forge-github-unavailable.diff",
+      "ohos-liveshare-owner-unavailable.diff",
+      "ohos-market-git-unavailable.diff",
+      "zzzzzzzzzzzzzz-ohos-plugin-packages.diff",
+      "ohos-plugin-hmr-transaction.diff",
+      "ohos-plugin-remove-rollback.diff",
+      "ohos-plugin-manifest-bom.diff",
+      "ohos-plugin-locale-bom.diff",
+      "ohos-plugin-linkless.diff",
+      "ohos-mcp-command-router.diff",
+      "ohos-workspace-grant-paths.diff",
+      "ohos-workspace-edit.diff",
+      "ohos-client-hmr-idle.diff",
+      "ohos-api-gateway-idle.diff",
+      "ohos-image-codec.diff",
+      "ohos-web-converter-lazy.diff",
+      "ohos-cordis-catalog-lazy.diff",
+      "ohos-skill-root-events.diff",
+      "ohos-piai-empty-models.diff",
+      "ohos-mcp-start-close.diff",
+      "ohos-jobs-active.diff",
+      "ohos-piai-text-preabort.diff"
     ]
   }
 }

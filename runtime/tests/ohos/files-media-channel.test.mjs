@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import vm from 'node:vm';
+import { shareFixture, until as shareUntil } from './hms-share-fixture.mjs';
 
 assert(process.env.OHOS_TYPESCRIPT_PREFIX, 'Set OHOS_TYPESCRIPT_PREFIX to the locked process npm-ci directory');
 assert(process.env.OHOS_USER_FILE_ADDON, 'Build user-file-access-addon.cc and set OHOS_USER_FILE_ADDON');
@@ -433,4 +434,65 @@ test('late old engine detach cannot remove the current file channel owner', asyn
   const result = await invokeSaved(handler, 'resolveGuest', { path });
   assert.equal(typeof result.value, 'string');
   assert.equal(await fsp.readFile(result.value, 'utf8'), 'hello');
+});
+
+// 125: real source file -> production resolveGuest snapshot, not a private helper mirror.
+test('valid long Chinese export retains the dshgo routing extension', async t => {
+  const f = await fixture(t);
+  const original = '文'.repeat(81) + '.dshgo';
+  const bytes = Buffer.from('{"dshgo":1,"code":"fixture"}\n');
+  const source = await f.file(original, bytes);
+  const reply = await f.call('dsh/files', 'resolveGuest', { path: source });
+  assert.equal(typeof reply.value, 'string', JSON.stringify(reply));
+  const name = reply.value.slice(reply.value.lastIndexOf('/') + 1);
+  assert.deepEqual(await fsp.readFile(reply.value), bytes);
+  console.log('ACTUAL_125_EXPORT', JSON.stringify({ original, originalBytes: Buffer.byteLength(original), name, bytes: Buffer.byteLength(name), copiedBytes: bytes.length }));
+  assert(name.endsWith('.dshgo'), 'A valid exported share-code file must retain its routing extension');
+  assert(Buffer.byteLength(name) <= 240);
+});
+
+test('actual outgoing share wire retains extension after local export', async t => {
+  const f = await fixture(t);
+  const source = await f.file('文'.repeat(81) + '.dshgo', 'actual-export-payload');
+  const reply = await f.call('dsh/files', 'resolveGuest', { path: source });
+  assert.equal(typeof reply.value, 'string');
+  const share = await shareFixture(t);
+  // Same application cache Context across the two actual platform consumers.
+  share.app.cacheDir = f.context.cacheDir;
+  const call = share.call(share.outgoing, 'share', { paths: [reply.value], mimeTypes: ['application/octet-stream'] });
+  await shareUntil(() => share.panels.some(p => p.visible), 'actual HMS adapter received exported path');
+  const panel = share.panels[0], record = panel.data.records[0];
+  const sharedPath = decodeURIComponent(new URL(record.uri).pathname);
+  assert.equal(await fsp.readFile(sharedPath, 'utf8'), 'actual-export-payload');
+  console.log('ACTUAL_125_SHARE_WIRE', JSON.stringify({ inputPath: reply.value, record }));
+  panel.emit('dismiss'); await call.done;
+  assert(record.title.endsWith('.dshgo'), 'The actual outgoing record must retain the suffix consumed by incoming share-code routing');
+  assert(sharedPath.endsWith('.dshgo'));
+});
+
+
+test('export preserves literal percent sequences, Chinese spaces and one file URI encoding', async t => {
+  const f = await fixture(t), name = '中文 50% %2F 文件.dshgo';
+  const source = await f.file(name, 'literal-percent-payload');
+  const reply = await f.call('dsh/files', 'resolveGuest', { path: source });
+  assert(reply.value.endsWith('/' + name));
+  assert.equal(await fsp.readFile(reply.value, 'utf8'), 'literal-percent-payload');
+  await f.call('dsh/files', 'open', { path: source, name, mime: 'application/octet-stream' });
+  const uri = f.starts[0].uri;
+  assert(uri.includes('%252F'), 'literal percent escape is encoded as data exactly once');
+  assert(decodeURIComponent(new URL(uri).pathname).endsWith('/' + name));
+});
+
+test('real export keeps bounded suffix and full Unicode code points at the 240-byte budget', async t => {
+  const f = await fixture(t);
+  for (const name of ['文'.repeat(78) + '.dshgo', '😀'.repeat(60) + '.dshgo']) {
+    const source = await f.file(name, name);
+    const reply = await f.call('dsh/files', 'resolveGuest', { path: source });
+    assert.equal(typeof reply.value, 'string');
+    const exported = reply.value.slice(reply.value.lastIndexOf('/') + 1);
+    assert(exported.endsWith('.dshgo')); assert(Buffer.byteLength(exported) <= 240);
+    assert(!exported.includes('\uFFFD'));
+    assert.equal(await fsp.readFile(reply.value, 'utf8'), name);
+    if (Buffer.byteLength(name) === 240) assert.equal(exported, name);
+  }
 });

@@ -241,7 +241,7 @@ Libraries.dev metal-fx, translated to Flutter GLSL.
 | 许可 | Apache License 2.0 |
 | 用途 | 桌面快捷方式与快速设置磁贴的图标；按自适应图标画布缩放、居中 |
 
-均在 `app/android/app/src/main/res/drawable/` 下：`ic_shortcut_chat_glyph.xml`（`chat_bubble_outline_rounded`）、`ic_shortcut_new_chat_glyph.xml`（`add_comment_outlined`）、`ic_shortcut_voice_glyph.xml`（`mic_none_rounded`）、`ic_tile_new_chat.xml`（`add_comment_outlined`）、`ic_pet_mic.xml`（`mic_none_rounded`）、`ic_pet_send.xml`（`arrow_upward_rounded`）。
+均在 `app/android/app/src/main/res/drawable/` 下：`ic_shortcut_chat_glyph.xml`（`chat_bubble_outline_rounded`）、`ic_shortcut_new_chat_glyph.xml`（`add_comment_outlined`）、`ic_shortcut_voice_glyph.xml`（`mic_none_rounded`）、`ic_tile_new_chat.xml`（`add_comment_outlined`）、`ic_pet_mic.xml`（`mic_none_rounded`）、`ic_pet_send.xml`（`arrow_upward_rounded`）。鸿蒙的 `app/ohos/entry/src/main/resources/{base,dark}/media/shortcut_{new_chat,voice}_foreground.png` 由其中的 `ic_shortcut_new_chat_glyph.xml`、`ic_shortcut_voice_glyph.xml` 渲染（`tooling/ohos/make-launcher-icons.py`）。
 
 ### discourse-emojis（MIT）
 
@@ -427,6 +427,25 @@ C710 新增的 `image` 4.12.0 是 MIT 许可 pub 依赖；其原许可由 Flutte
 - **Streamdown**（https://github.com/vercel/streamdown）：`app/lib/ui/chat/render/stream_repair.dart` 修补流式 Markdown 末尾的方式参照了它的 `remend`。
 - **DS Bot**：dsh-ui 组件的名称与 DS Bot 一致。
 - **Open-Meteo**（https://open-meteo.com，数据 CC BY 4.0）：示例插件 `examples/plugins/dsh-go-example-weather` 使用它的天气数据，卡片上注明来源。
+
+## 六、OpenHarmony 虚拟进程与构建工具
+
+OpenHarmony 的虚拟 shell / 搜索 / Git 适配使用独立固定依赖。逐包清单、111 份许可、归属与原始元数据摘录、来源文件和 SHA-256 见 [OpenHarmony 第三方通知](runtime/ohos/licenses/README.md) 与 [机器可读清单](runtime/ohos/licenses/manifest.json)。范围从三个固定根沿非可选依赖及非可选 peer 边计算，共 91 个 npm 包路径；可选平台组件不冒充每个发行物的实际内容。
+
+| 组件 | 版本 | 来源 | 许可与核验范围 |
+|---|---|---|---|
+| just-bash | 3.6.0 | npm / vercel-labs/just-bash | 包声明 Apache-2.0；非可选闭包和随包嵌入内容分别登记，不能把全部文件概括为 Apache-2.0 |
+| isomorphic-git | 1.44.9 | npm / isomorphic-git/isomorphic-git | 包声明 MIT；Node 实际入口还含 @zenfs/core/path 的 LGPL-3.0-or-later 片段，原通知与 GNU 条款已单列 |
+| re2js | 1.3.3 | npm / le0pard/re2js | MIT；已补直接依赖声明；OHOS 私有 Unicode 适配的修改说明与可重现构建见 `runtime/ohos/process/M4-1.md`，保留原 MIT 通知 |
+| Angular style_parser 编译副本 | 提交 `92e41e9cb417223d9888a4c23b4c0e73188f87d0` | `@mixmark-io/domino` 2.2.0 及 just-bash 3.6.0 实际捆绑文件 | MIT；Copyright (c) 2010-2022 Google LLC.；精确上游全文与两处原始许可头单独收录，同时保留 domino 的 BSD-2-Clause |
+| 其余非可选依赖 | 见 process/package-lock.json 与逐包索引 | 固定 npm 包 | 包括 TypeScript 5.9.3、sql.js 1.15.2、undici 7.29.0、run 2.1.3 等；完整 ThirdPartyNoticeText、AUTHORS、嵌入 QuickJS/devalue 通知、双许可和原始许可注释均按原文收录 |
+| esbuild / 实际主机 @esbuild/linux-x64 | 0.27.3 / 0.27.3 | npm / evanw/esbuild | MIT，Copyright (c) 2020 Evan Wallace；主机构建工具，不据此声称已打入 HAP |
+
+clean-git-ref 2.0.1 的 Apache-2.0 声明已经由精确 package.json 核实；本目录补入 Apache 官方标准全文，并原样保留其 author/license 字段。实际发行物未附 NOTICE，不能把 Apache §4(d) 的条件改写为必须另造 NOTICE，也没有从 author 字段补写版权人或年份。
+
+**尚未闭合：**minimisted 2.0.1 的 MIT 声明和作者元数据已知且原样保留，但尚未取得精确版本对应的完整版权/许可通知。just-bash 随包 CPython/Emscripten 的三个文件已经与精确发布标签的 Git/LFS 摘要绑定，但 `3.13.2-dirty` 的实际源码修订、工具链和嵌入组件通知尚缺。两项逐条标记 BLOCKED，并写明所缺证据；这不是宣称许可名称未知，当前也不能宣布 HAP 许可检查完成。
+
+isomorphic-git 的 LGPL 片段对应源码已定位到发布提交 `86df2db391962c8690a7550c6887ca0e87798542` 的 `src/utils/join.js`。登记原通知与完整条款，不代替实际发行时适用的对应源码等要求。最终 HAP 尚未构建核验；O2 需核对真实分发文件与通知路径。独立 shadow 裁剪实验支持把 TypeScript/sql.js/CPython 列为当前未启用功能配置下的候选，但未修改共享依赖或打包规则，也未证明最终 HAP 已排除。安卓现有许可资产和界面不在本项改动范围。
 
 ## 许可证全文
 

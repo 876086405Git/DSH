@@ -330,6 +330,23 @@ class ToolView {
   /// 结果文本(原样,含 ANSI)。
   String get resultText => item.resultText;
 
+  /// What a phone tool on HarmonyOS's engine reported, in place of a bare success
+  /// or failure: opening a page isn't the job done, and an unknown isn't a
+  /// failure. Null for everything else (Android's phone tools answer in prose).
+  late final DshPhoneResult? phoneResult = _phoneResult();
+
+  DshPhoneResult? _phoneResult() {
+    if (!name.startsWith('mcp__phone__') || isActive) return null;
+    final text = item.resultText;
+    final start = text.indexOf('{');
+    if (start < 0) return null;
+    try {
+      return DshPhoneResult.fromJson(jsonDecode(text.substring(start)));
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 失败原因(结果文本优先,其次 failure.reason)。
   String? get failureText {
     if (item.status != ToolStatus.failed) return null;
@@ -473,4 +490,50 @@ String displayPath(String path) {
   if (path.startsWith(prefix)) return path.substring(prefix.length);
   if (path == localWorkspaceDir) return '.';
   return path;
+}
+
+/// How a [DshPhoneResult] reads in the chat: a word for the row's end, a sentence
+/// for its details, and whether it deserves the row's failure red.
+extension PhoneResultText on DshPhoneResult {
+  bool get _unsupported => code == 'unsupported';
+
+  /// Unknown and unsupported aren't faults of the call, and a stop was asked for.
+  bool get isFault => switch (status) {
+    DshPhoneStatus.failed => !_unsupported,
+    DshPhoneStatus.timedOut => true,
+    _ => false,
+  };
+
+  String get word => switch (status) {
+    DshPhoneStatus.succeeded when evidence == DshPhoneEvidence.openedUi => appL10n.systemActionsOpenedUi,
+    DshPhoneStatus.succeeded when evidence == DshPhoneEvidence.userConfirmed => appL10n.phoneDecisionContinued,
+    DshPhoneStatus.succeeded when effect == DshPhoneEffect.reminderScheduled => appL10n.harmonyReminderSet,
+    DshPhoneStatus.succeeded => appL10n.phoneDecisionDone,
+    DshPhoneStatus.unknown => appL10n.systemActionsResultUnknown,
+    DshPhoneStatus.cancelled => appL10n.commonStopped,
+    DshPhoneStatus.timedOut => appL10n.phoneDecisionTimeout,
+    DshPhoneStatus.failed when _unsupported => appL10n.systemActionsNotSupported,
+    DshPhoneStatus.failed => appL10n.systemActionsNotRun,
+  };
+
+  String get sentence => switch (status) {
+    DshPhoneStatus.succeeded => switch (effect) {
+      DshPhoneEffect.openedUi => appL10n.systemActionsResultOpened,
+      DshPhoneEffect.notificationPublished => appL10n.systemActionsResultNotified,
+      DshPhoneEffect.clipboardWritten => appL10n.systemActionsResultClipboard,
+      DshPhoneEffect.reminderScheduled => appL10n.systemActionsResultReminder,
+      DshPhoneEffect.none => appL10n.systemActionsResultContinued,
+    },
+    DshPhoneStatus.unknown => appL10n.systemActionsResultUnknownDetail,
+    DshPhoneStatus.cancelled => appL10n.systemActionsResultStopped,
+    DshPhoneStatus.timedOut => appL10n.systemActionsResultTimeout,
+    DshPhoneStatus.failed => switch (code) {
+      'unsupported' => appL10n.systemActionsResultUnsupported,
+      'not_foreground' => appL10n.systemActionsResultOffScreen,
+      'native_unavailable' || 'owner_retired' || 'closed' => appL10n.systemActionsResultUnavailable,
+      'reminder_refused' when AppLocale.isEnglish => appL10n.harmonyReminderRefused,
+      // The native side's own reason says which part of it; it only has Chinese.
+      _ => AppLocale.isEnglish ? appL10n.systemActionsResultNotRun : message,
+    },
+  };
 }

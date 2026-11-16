@@ -6,8 +6,8 @@ import { Any } from '@ohos/flutter_ohos';
 
 export const SHARE_UNAVAILABLE: string = 'dev.fluttercommunity.plus/share/unavailable';
 export const SHARE_MAX_ITEMS: number = 9;
-export const SHARE_MAX_FILE: number = 30 * 1024 * 1024;
-export const SHARE_MAX_TOTAL: number = 60 * 1024 * 1024;
+export const SHARE_MAX_FILE: number = 200 * 1024 * 1024;
+export const SHARE_MAX_TOTAL: number = 400 * 1024 * 1024;
 export const SHARE_MAX_TEXT: number = 200000;
 export const SHARE_OUT_MAX_BYTES: number = 300 * 1024 * 1024;
 export const SHARE_MAX_RECORDS: number = 500;

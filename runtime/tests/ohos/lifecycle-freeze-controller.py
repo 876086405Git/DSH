@@ -72,12 +72,25 @@ def run_case(mode, logical, tool):
     def send(value): proc.stdin.write((value + '\n').encode()); proc.stdin.flush()
     try:
         ready = stage('ready')
+        # procfs can belong to an outer PID namespace. Signals still use our
+        # Popen PID; observe only the identity reported by this exact child.
+        assert ready['pid'] == proc.pid
+        assert isinstance(ready['procfsPid'], int) and ready['procfsPid'] > 0
+        procfs = Path('/proc') / str(ready['procfsPid'])
+        fields = dict(line.split(':', 1) for line in (procfs / 'status').read_text().splitlines() if ':' in line)
+        assert int(fields['Pid']) == ready['procfsPid']
+        assert int(fields['PPid']) == int(os.readlink('/proc/self'))
+        assert int(fields['NSpid'].split()[-1]) == proc.pid
+        assert os.readlink(procfs / 'ns/pid') == os.readlink('/proc/self/ns/pid')
+        def starttime(): return (procfs / 'stat').read_text().rsplit(')', 1)[1].split()[19]
+        started = starttime()
         acknowledged = None
         if logical: send('pause'); acknowledged = stage('paused'); assert acknowledged['status']['confirmedPause']
         os.kill(proc.pid, signal.SIGSTOP)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            state = next(line for line in Path(f'/proc/{proc.pid}/status').read_text().splitlines() if line.startswith('State:'))
+            assert starttime() == started, 'the observed process identity changed'
+            state = next(line for line in (procfs / 'status').read_text().splitlines() if line.startswith('State:'))
             if '\tT ' in state: break
             time.sleep(0.002)
         else: raise AssertionError('kernel did not acknowledge stopped state')
@@ -110,7 +123,8 @@ def run_case(mode, logical, tool):
             assert report['shellResult']['aborted'] == (not expected_timeout)
             assert report['liveAfterCancel'] == 0
         result = {'name': name, 'status': 'PASS_SCOPED', 'ready': ready, 'acknowledged': acknowledged,
-                  'resumed': resumed, 'frozenMsMeasuredExternally': frozen_ms, 'requests': requests, 'report': str(root / 'report.json')}
+                  'resumed': resumed, 'frozenMsMeasuredExternally': frozen_ms, 'requests': requests, 'report': str(root / 'report.json'),
+                  'observedProcess': {'signalPid': proc.pid, 'procfsPid': ready['procfsPid'], 'starttime': started, 'kernelState': state}}
         if mode == 'baseline': result['expectedOriginalFailure'] = 'old deadline expires during acknowledged logical pause'
         results.append(result)
     finally:

@@ -7,8 +7,13 @@ import '../../../l10n/l10n.dart';
 /// Sending unchanged can't help; choose a supported effort/model or upgrade.
 const modelRefusalCodes = {'CLIENT_UPGRADE_REQUIRED', 'MODEL_UNSUPPORTED', 'UNSUPPORTED_REASONING_EFFORT'};
 
+/// The engine reports 401 and 403 alike as AUTH; only the message tells them apart.
+/// A 403 is a key that may well be fine but isn't allowed this.
+final _forbidden = RegExp(r'\b403\b|permission[_ ](denied|error)', caseSensitive: false);
+
 /// 一轮出错时说明行上的短句,按错误码给;后端原文放在点开的详情里。
-String turnFailureText(String? code) => switch (code) {
+String turnFailureText(String? code, {String? message}) => switch (code) {
+  'AUTH' when message != null && _forbidden.hasMatch(message) => appL10n.chatErrForbidden,
   'AUTH' || 'INVALID_CREDENTIAL' => appL10n.chatErrApiKey,
   'QUOTA' => appL10n.chatErrBalance,
   'ACCOUNT_QUOTA' => appL10n.chatErrAccountQuota,

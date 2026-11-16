@@ -18,6 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../clipboard/paste_reader.dart';
 import '../../../l10n/l10n.dart';
 import '../../../plugins/native/native_capabilities.dart';
 import '../../../plugins/native/native_effects.dart';
@@ -258,7 +259,7 @@ Future<bool> runNativeTap(
 }) async {
   if (!context.mounted || !ref.context.mounted) return false;
   final clock = ref.read(nativeClockProvider);
-  final tappedAt = gestureAt ?? clock();
+  var tappedAt = gestureAt ?? clock();
   if (userGesture && nativeTapIsFresh(tappedAt, clock())) HapticFeedback.selectionClick();
   final l10n = context.l10n;
   final plugin = ref.read(nativeContributionsProvider).plugin(package);
@@ -296,12 +297,24 @@ Future<bool> runNativeTap(
   }
   String? clipboard;
   if (wants.contains('clipboard')) {
-    try {
-      clipboard = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    } catch (_) {
-      clipboard = null;
+    if (ref.read(operatingSystemProvider) == 'ohos') {
+      // 允许 above only said what may travel with a tap; the system's own button
+      // still grants this read, and pressing it is the gesture from here on.
+      final result = await ref.read(pasteReaderProvider).begin().finish();
+      if (!context.mounted || !guard.current) return false;
+      if (pasteFailureText(result) case final message?) _toast(context, message);
+      // An empty clipboard goes on without one, as on Android; the rest end the tap.
+      if (result.status != PasteStatus.text && result.status != PasteStatus.empty) return false;
+      clipboard = result.text;
+      tappedAt = clock();
+    } else {
+      try {
+        clipboard = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+      } catch (_) {
+        clipboard = null;
+      }
+      if (!context.mounted || !guard.current) return false;
     }
-    if (!context.mounted || !guard.current) return false;
   }
 
   work.start(control, NativeWork(owner: owner));
@@ -783,13 +796,16 @@ Future<void> runComposerCommand(BuildContext context, WidgetRef ref, String line
 }
 
 /// An app page by its ui.json / 全部功能 id, `new-chat` or `settings`.
-Future<void> openNativePage(BuildContext context, WidgetRef ref, String page, {String? sessionId}) async {
-  // On HarmonyOS, Android's own pages aren't there: say so.
-  if (!ref.read(androidSystemFeaturesProvider) &&
-      SettingsIndex.androidOnlyLink(page, ios: ref.read(operatingSystemProvider) == 'ios')) {
+Future<void> openNativePage(BuildContext context, WidgetRef ref, String id, {String? sessionId}) async {
+  final os = ref.read(operatingSystemProvider);
+  // On HarmonyOS, Android's own pages lead to its form of them; with none, say so.
+  final page = os == 'ohos' ? SettingsIndex.ohosLink(id) : id;
+  if (!ref.read(androidSystemFeaturesProvider) && SettingsIndex.androidOnlyLink(page, ios: os == 'ios')) {
     _toast(context, context.l10n.harmonyPageUnavailable);
     return;
   }
+  // A page only HarmonyOS has is no page at all elsewhere.
+  if (os != 'ohos' && SettingsIndex.ohosOnlyLink(page)) return;
   final navigator = Navigator.of(context);
   switch (page) {
     case 'new-chat':

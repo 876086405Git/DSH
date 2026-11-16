@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { execFileSync, execFile } from 'node:child_process';
@@ -5,7 +6,7 @@ import { promisify } from 'node:util';
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { readFile, writeFile, mkdtemp, mkdir, rm, copyFile, readdir, lstat, rename, chmod, symlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, rm, copyFile, readdir, lstat, rename, chmod } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -19,9 +20,9 @@ const git = require('isomorphic-git');
 const nodeRequire = createRequire(join(resolve(process.env.DSH_TEST_PREFIX ?? process.cwd()), 'package.json'));
 const providerPath = nodeRequire.resolve('@deepseek-ai/dsh-workspace-changes');
 const source = await readFile(providerPath, 'utf8');
-assert.equal(createHash('sha256').update(source).digest('hex'), '027c3246d8174ad2c519fd989e0ab157eedbe3535a5afa41121dc05e5e5615d3');
+assert.equal(createHash('sha256').update(source).digest('hex'), '0640af53762c8b2ebbdc5c38412fcd75badfe36edef12875d8d87969415f04ed');
 const providerFixture = await mkdtemp(join(tmpdir(), 'dsh-owned-git-provider-'));
-await symlink(resolve(dirname(providerPath), '../../..'), join(providerFixture, 'node_modules'), 'dir');
+await symlinkFixture(resolve(dirname(providerPath), '../../..'), join(providerFixture, 'node_modules'), 'dir');
 const sibling = join(providerFixture, 'index.mjs');
 after(() => rm(providerFixture, { recursive: true, force: true }));
 await writeFile(sibling, source + '\nexport { locateGitWorkspace, snapshotTree, diffTrees, treeBlob, blobText, gitlinkPaths, ignoredPaths, TurnRecorder, workspaceTemporaryRoot };\n', { flag: 'wx' });
@@ -139,7 +140,7 @@ test('real provider snapshots match native tree OIDs and numstat, preserve all u
   await writeFile(join(f.dir, 'new.bin'), Buffer.from([1, 0, 255, 2]));
   await writeFile(join(f.dir, 'kept.log'), 'tracked still\n');
   await chmod(join(f.dir, 'tracked.txt'), 0o755);
-  await symlink('tracked.txt', join(f.dir, 'link'));
+  await symlinkFixture('tracked.txt', join(f.dir, 'link'));
   const after = await provider.snapshotTree(f.runner, ws, signal);
   const expectedAfter = await nativeSnapshot(f, 'snapshot-after');
   assert.equal((await f.runner.run(['ls-tree', '-r', '-z', after], { cwd: f.dir, env: ws.env, signal })).stdout,
@@ -236,7 +237,7 @@ test('GIT env paths never grant extra roots; symlink escape and read-only policy
   let result = await executeGit(['add', '--all'], { ...f.ctx, env: { GIT_INDEX_FILE: join(neighbor, 'index') } });
   assert.equal(result.exitCode, 128); assert.match(result.stderr, /EACCES/);
   assert.equal(await readFile(join(neighbor, 'index'), 'utf8'), 'sentinel');
-  await symlink(neighbor, join(f.dir, 'escape'));
+  await symlinkFixture(neighbor, join(f.dir, 'escape'));
   result = await executeGit(['init', 'escape/repo'], f.ctx);
   assert.notEqual(result.exitCode, 0);
   const readOnly = createFilesystem([f.dir, f.scratch], { mode: 'read-only' }); readOnly.seal();
@@ -310,7 +311,7 @@ test('filemode and symlinks config preserve Git index mode semantics', async t =
   await f.run(['add', 'tracked.txt']);
   assert.equal((await f.run(['status', '--porcelain', '-z'])).stdout,
     native('mode-status-index', ['status', '--porcelain', '-z'], { cwd: f.dir }));
-  await symlink('tracked.txt', join(f.dir, 'link')); await f.run(['add', 'link']); await f.run(['commit', '-m', 'mode and link']);
+  await symlinkFixture('tracked.txt', join(f.dir, 'link')); await f.run(['add', 'link']); await f.run(['commit', '-m', 'mode and link']);
   await rm(join(f.dir, 'link')); await writeFile(join(f.dir, 'link'), 'tracked.txt');
   const ws = await workspace(f), tree = await provider.snapshotTree(f.runner, ws, new AbortController().signal);
   assert.equal(tree + '\n', await nativeSnapshot(f, 'symlinks-false-snapshot'));

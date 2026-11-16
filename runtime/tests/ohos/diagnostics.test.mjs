@@ -4,12 +4,14 @@ import fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { diagnosticsFixture, deferred, until, plain, manifestFixture } from './diagnostics-fixture.mjs';
 
-test('constructor, attach, facts and unknown method do not touch files or native host',async t => {
+test('constructor and attach stay lazy; startup checks only the bounded fault journal beside an engine-log read',async t => {
   const f=await diagnosticsFixture(t), i=f.attach();
   assert.deepEqual(f.operations,[]); assert.equal(plain(f.store.facts()).persistent,true);
   assert.deepEqual(await f.call(i,'unknown').done,{missing:true});assert.deepEqual(f.operations,[]);
   assert.deepEqual(await f.call(i,'engineLog').done,{value:[]});
-  assert.deepEqual(f.operations.map(v=>v.op),['lstat']);await assert.rejects(fs.stat(f.directory),{code:'ENOENT'});
+  assert.deepEqual(f.operations.map(v=>v.op),['lstat','lstat']);
+  assert.deepEqual(f.operations.map(v=>v.path).sort(),[f.directory,join(f.app.filesDir,'diagnostic-evidence')].sort());
+  assert.equal(f.native.loads,0);await assert.rejects(fs.stat(f.directory),{code:'ENOENT'});
 });
 
 test('actual info uses OH facts, validated manifest and existing Dart section names',async t => {
@@ -20,7 +22,7 @@ test('actual info uses OH facts, validated manifest and existing Dart section na
   assert.equal(reply.value.device.osVersion,'OpenHarmony fixture');assert.equal(reply.value.device.memoryMb,8192);
   assert.equal(reply.value.device.freeStorageMb,3072);assert.equal(reply.value.device.display.fontScale,1.25);
   assert.equal(reply.value.device.sdkInt,undefined);assert.equal(reply.value.device.android,undefined);
-  assert.deepEqual(reply.value.manifest,{runtimeVersion:'fixture-runtime',dshVersion:'0.0.fixture',nodeVersion:'24.22.1',files:8,uncompressedBytes:116});
+  assert.deepEqual(reply.value.manifest,{runtimeVersion:'fixture-runtime',dshVersion:'0.0.fixture',nodeVersion:'24.22.1',files:9,uncompressedBytes:135});
   assert.deepEqual(reply.value.voice,{});assert(!JSON.stringify(reply.value).includes('secrets'));
   assert(!f.operations.some(v=>['open','mkdir','write'].includes(v.op)));
   assert.deepEqual(f.operations.filter(v=>v.op==='resource').map(v=>v.name), ['dsh-runtime/runtime.zip']);

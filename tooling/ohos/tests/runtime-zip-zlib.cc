@@ -4,6 +4,7 @@
 #include <zlib.h>
 #include <cstring>
 #include <string>
+#include <limits>
 
 struct Stream {
   z_stream state{};
@@ -132,6 +133,16 @@ static napi_value End(napi_env env, napi_callback_info info) {
   return Number(env, status);
 }
 
+static napi_value Crc32(napi_env env, napi_callback_info info) {
+  size_t argc = 2; napi_value args[2];
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  uint32_t previous; void* bytes; size_t length;
+  if (argc != 2 || napi_get_value_uint32(env, args[0], &previous) != napi_ok ||
+      napi_get_arraybuffer_info(env, args[1], &bytes, &length) != napi_ok ||
+      length > std::numeric_limits<uInt>::max()) return Fail(env, "invalid CRC input", 401);
+  return Number(env, crc32(previous, static_cast<const Bytef*>(bytes), static_cast<uInt>(length)));
+}
+
 static napi_value Active(napi_env env, napi_callback_info) { return Number(env, active); }
 static napi_value Version(napi_env env, napi_callback_info) {
   napi_value value; napi_create_string_utf8(env, zlibVersion(), NAPI_AUTO_LENGTH, &value); return value;
@@ -139,7 +150,7 @@ static napi_value Version(napi_env env, napi_callback_info) {
 
 static napi_value Register(napi_env env, napi_value exports) {
   struct Method { const char* name; napi_callback function; } methods[] = {
-    {"create", Create}, {"init", Init}, {"inflate", Inflate}, {"state", State}, {"end", End}, {"active", Active}, {"version", Version}
+    {"create", Create}, {"init", Init}, {"inflate", Inflate}, {"state", State}, {"end", End}, {"active", Active}, {"version", Version}, {"crc32", Crc32}
   };
   for (const auto& method : methods) {
     napi_value value;

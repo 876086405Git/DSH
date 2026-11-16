@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { VirtualSubprocessRuntime } from '../../ohos/process/runtime.mjs';
 import { Bash, defineCommand } from '../../ohos/process/build/just-bash/index.js';
 import { createFilesystem } from '../../ohos/process/filesystem.mjs';
@@ -142,3 +144,44 @@ for (const [suffix, channel] of [['', 'stderr'], ['2>&1 | cat', 'stdout'], ['2> 
     if (channel !== 'stderr') assert.equal(stderr.length, 0);
   });
 }
+
+// Worker stdio clones the whole buffer behind a written view; the command must not keep those clones.
+test('a buffered Node command keeps the bytes it was given, not the buffers they were cut from', { timeout: 20000 }, async t => {
+  setFlagsFromString('--expose-gc');
+  const collect = runInNewContext('gc');
+  const root = await mkdtemp('/tmp/ohos-node-command-views-');
+  const controller = new AbortController();
+  let pending;
+  t.after(async () => {
+    controller.abort();
+    await writeFile(join(root, 'release'), '').catch(() => {});
+    if (pending) await pending.catch(() => {});
+    await rm(root, { recursive: true, force: true });
+  });
+  const views = 32, length = 65537;
+  await writeFile(join(root, 'views.mjs'), `import { existsSync, writeFileSync } from 'node:fs';
+const backing = Buffer.alloc(8 * 1024 * 1024, Buffer.from([...Array(256).keys()]));
+for (let i = 0; i < ${views}; i++) await new Promise(r => process.stdout.write(backing.subarray(i * ${length}, (i + 1) * ${length}), r));
+writeFileSync('written', '');
+while (!existsSync('release')) await new Promise(r => setTimeout(r, 10));`);
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+  collect();
+  const before = process.memoryUsage().arrayBuffers;
+  pending = nodeCommand({ roots: [root], workspaceRoots: [root], readOnly: false })(['views.mjs'],
+    { cwd: root, env: new Map(), stdin: '', signal: controller.signal });
+  while (await access(join(root, 'written')).then(() => false, () => true)) await settle();
+  let held = 0;
+  for (let round = 0; round < 10; round++) {
+    await settle();
+    collect();
+    held = Math.max(held, process.memoryUsage().arrayBuffers - before);
+  }
+  await writeFile(join(root, 'release'), '');
+  const result = await pending;
+  assert.equal(result.exitCode, 0, result.stderr);
+  const stdout = Buffer.from(result.stdout, 'latin1');
+  assert.equal(stdout.length, views * length);
+  assert.deepEqual(stdout, Buffer.alloc(views * length, Buffer.from([...Array(256).keys()])));
+  // 32 views of 8 MiB backings would hold 256 MiB; their own bytes are 2 MiB.
+  assert.ok(held < 64 * 1024 * 1024, `held ${held} bytes while the command ran`);
+});

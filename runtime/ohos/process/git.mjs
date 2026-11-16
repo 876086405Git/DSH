@@ -3,7 +3,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createGitFs, gitStorage, repository, normalizeGitFilesystem, requireGitOwnership, isGitOwnershipError } from './git-fs.mjs';
 import { readIndex, stageTree } from './git-index.mjs';
-import { changes, formatChanges, objectBytes, treeEntries } from './git-diff.mjs';
+import { changes, formatChanges, objectBytes, treeEntries, quoteGitPath } from './git-diff.mjs';
 import { normalizeAutoCrlf } from './git-eol.mjs';
 
 const unavailable = '这个命令在鸿蒙本机不可用，可以连接电脑执行';
@@ -15,6 +15,22 @@ const output = (stdout = '', stderr = '', exitCode = 0) => ({ stdout, stderr, ex
 const below = (root, path) => path === root || path.startsWith(root + sep);
 const sort = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b));
 const envObject = ctx => ctx.env instanceof Map ? Object.fromEntries(ctx.env) : (ctx.env ?? {});
+
+async function quoteHighBytes(options) {
+  const value = await git.getConfig({ ...options, path: 'core.quotePath' });
+  if (value === undefined) return true;
+  const text = String(value).trim().toLowerCase();
+  if (['true', 'yes', 'on'].includes(text)) return true;
+  if (['false', 'no', 'off', ''].includes(text)) return false;
+  // Git accepts signed/base-prefixed integers, with its ordinary unit suffixes.
+  const match = /^([+-]?)(0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)([kmg]?)$/.exec(text);
+  if (match) {
+    const digits = match[2], base = /^0[0-7]+$/.test(digits) ? '0o' + digits.slice(1) : digits;
+    const number = BigInt(base) * (match[1] === '-' ? -1n : 1n) * (1024n ** BigInt(match[3] ? 'kmg'.indexOf(match[3]) + 1 : 0));
+    if (number >= -2147483648n && number <= 2147483647n) return number !== 0n;
+  }
+  fault('bad boolean config value for core.quotePath');
+}
 
 function splitPaths(args) {
   const separator = args.indexOf('--');
@@ -239,7 +255,8 @@ async function gitDiff(args, ctx, options, treesOnly = false) {
     after = new Map([...after].filter(([path]) => selected.some(base => pathMatches(path, base))));
   }
   const rows = await changes(git, options, before, after, { renames });
-  return output(formatChanges(rows, { numstat, nul, nameOnly }));
+  return output(formatChanges(rows, { numstat, nul, nameOnly,
+    quoteHighBytes: await quoteHighBytes(options) }));
 }
 
 function authorFrom(ctx, kind) {
@@ -312,10 +329,24 @@ export async function executeGit(input, context) {
       const http = fetchTransport(ctx);
       const dir = resolve(ctx.cwd, positional[1] ?? basename(url.pathname).replace(/\.git$/, ''));
       if (await ctx.fs.exists(dir) && (await ctx.fs.readdir(dir)).length) fault('Clone destination is not empty');
-      await ctx.fs.mkdir(dir, { recursive: true });
-      try { await git.clone({ fs: createGitFs(ctx, { gitdir: join(dir, '.git') }), http, dir,
-        url: url.href, ref, depth, singleBranch: singleBranch || depth !== undefined }); }
-      catch (error) { abort(ctx); throw Object.assign(new Error('Git clone transport or repository operation failed'), { code: error.code }); }
+      const owner = requireGitOwnership(ctx);
+      if (['createClone', 'commitClone', 'releaseClone'].some(name => typeof owner[name] !== 'function')) {
+        throw Object.assign(new Error('Git clone requires main-engine directory ownership'), { code: 'ERR_OHOS_OWNERSHIP_UNAVAILABLE' });
+      }
+      await ctx.fs.mkdir(dirname(dir), { recursive: true });
+      const staging = await owner.createClone({ target: dir });
+      try {
+        await git.clone({ fs: createGitFs(ctx, { gitdir: join(staging.path, '.git') }), http, dir: staging.path,
+          url: url.href, ref, depth, singleBranch: singleBranch || depth !== undefined });
+        abort(ctx);
+        await owner.commitClone(staging.id);
+      } catch (error) {
+        // A terminated Worker cannot run this branch. The main job owner also
+        // releases uncommitted clones, after joining Worker and pending writes.
+        if (!ctx.signal?.aborted) await owner.releaseClone(staging.id);
+        abort(ctx);
+        throw Object.assign(new Error('Git clone transport or repository operation failed'), { code: error.code });
+      }
       return output('Repository cloned.\n');
     }
     const options = gitStorage(ctx, await repository(ctx));
@@ -343,7 +374,8 @@ export async function executeGit(input, context) {
       if (args.some(arg => !['-z', '--stage', '-s'].includes(arg))) unsupported('git ls-files 仅支持 --stage/-z');
       const entries = await readIndex(options), staged = args.includes('--stage') || args.includes('-s');
       const rows = staged ? entries : [...new Map(entries.map(entry => [entry.path, entry])).values()];
-      return output(rows.map(entry => `${staged ? `${entry.mode.toString(8).padStart(6, '0')} ${entry.oid} ${entry.stage}\t` : ''}${entry.path}${args.includes('-z') ? '\0' : '\n'}`).join(''));
+      const highBytes = await quoteHighBytes(options);
+      return output(rows.map(entry => `${staged ? `${entry.mode.toString(8).padStart(6, '0')} ${entry.oid} ${entry.stage}\t` : ''}${args.includes('-z') ? entry.path : quoteGitPath(entry.path, highBytes)}${args.includes('-z') ? '\0' : '\n'}`).join(''));
     }
     if (command === 'check-ignore') {
       if (args.some(arg => !['-z', '--stdin'].includes(arg)) || !args.includes('--stdin')) unsupported('git check-ignore 仅支持 --stdin 与 -z');
@@ -383,12 +415,14 @@ export async function executeGit(input, context) {
       const filemode = String(await git.getConfig({ ...options, path: 'core.filemode' })).toLowerCase() !== 'false';
       const symlinks = String(await git.getConfig({ ...options, path: 'core.symlinks' })).toLowerCase() !== 'false';
       let text = ''; const delimiter = args.includes('-z') ? '\0' : '\n';
+      const highBytes = await quoteHighBytes(options);
       for (const [path, head, work, stage] of matrix) {
+        const display = args.includes('-z') ? path : quoteGitPath(path, highBytes, true);
         if (unmerged.has(path)) {
-          text += `${({ 1: 'DD', 2: 'AU', 3: 'UD', 4: 'UA', 5: 'DU', 6: 'AA', 7: 'UU' })[unmerged.get(path)]} ${path}${delimiter}`;
+          text += `${({ 1: 'DD', 2: 'AU', 3: 'UD', 4: 'UA', 5: 'DU', 6: 'AA', 7: 'UU' })[unmerged.get(path)]} ${display}${delimiter}`;
           continue;
         }
-        if (!head && !stage) { text += `?? ${path}${delimiter}`; continue; }
+        if (!head && !stage) { text += `?? ${display}${delimiter}`; continue; }
         let x = head === stage ? ' ' : stage === 0 ? 'D' : head === 0 ? 'A' : 'M';
         let y = work === stage ? ' ' : work === 0 ? 'D' : 'M';
         const indexMode = indexed.get(path)?.mode, headMode = headFiles.get(path)?.mode;
@@ -400,8 +434,8 @@ export async function executeGit(input, context) {
             : (filemode ? info.mode & 0o111 : indexMode === 0o100755) ? 0o100755 : 0o100644;
           if (workMode !== indexMode) y = (workMode & 0o170000) === (indexMode & 0o170000) ? 'M' : 'T';
         }
-        if (stage === 0 && work !== 0) { text += `${x}  ${path}${delimiter}?? ${path}${delimiter}`; continue; }
-        if (x !== ' ' || y !== ' ') text += `${x}${y} ${path}${delimiter}`;
+        if (stage === 0 && work !== 0) { text += `${x}  ${display}${delimiter}?? ${display}${delimiter}`; continue; }
+        if (x !== ' ' || y !== ' ') text += `${x}${y} ${display}${delimiter}`;
       }
       return output(text);
     }

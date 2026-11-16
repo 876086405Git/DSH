@@ -1,7 +1,7 @@
-import { constants, lstatSync, readlinkSync, realpathSync } from 'node:fs';
+import { constants, lstatSync, readlinkSync, realpathSync, mkdirSync, openSync, fstatSync, closeSync, readdirSync, chmodSync, renameSync } from 'node:fs';
 import * as promises from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isMainThread } from 'node:worker_threads';
 import { cleanupOwnedTemporary } from '../publication/atomic.mjs';
 import { borrowInstalledOwnership } from '../publication/index.mjs';
@@ -39,7 +39,7 @@ const modeOf = (value = 0o644) => {
  * fs/onStage are explicit factory-test seams, never Worker message fields.
  */
 export function createOwnedGitResources({ roots, policy, getOwnership = borrowInstalledOwnership,
-  fs = promises, onStage = () => {} } = {}) {
+  fs = promises, onStage = () => {}, clearOwnedClone } = {}) {
   if (!isMainThread) throw fail('ERR_OHOS_OWNERSHIP_MAIN_THREAD', 'Git resources must be owned by the main engine');
   if (!Array.isArray(roots) || roots.length === 0) throw new TypeError('Explicit job roots are required');
   roots = Object.freeze([...new Set(roots.map(path => {
@@ -51,6 +51,7 @@ export function createOwnedGitResources({ roots, policy, getOwnership = borrowIn
   }))]);
   const readOnly = policy?.mode === 'read-only';
   const resources = new Map();
+  const clones = new Map();
   const providerFailures = new Set();
   const pending = new Set();
   let ownership, accepting = true, stopped = false, tail = Promise.resolve(), finalization;
@@ -265,7 +266,93 @@ export function createOwnedGitResources({ roots, policy, getOwnership = borrowIn
       throw failure;
     }
   };
+  // Clone work trees are private job directories, never the user's destination.
+  // Unlike Worker finally blocks, finish runs after hard termination and all
+  // accepted parent I/O has settled. File-ledger cleanup must precede this tree.
+  const cloneRemover = () => {
+    if (clearOwnedClone !== undefined) {
+      if (typeof clearOwnedClone !== 'function') throw new TypeError('Invalid native clone cleanup seam');
+      return clearOwnedClone;
+    }
+    const binding = process._linkedBinding('dsh_ohos_publication');
+    if (typeof binding.clearOwnedClone !== 'function') throw fail('ERR_OHOS_GIT_CLONE_CLEANUP_UNAVAILABLE', 'Native descriptor-anchored clone cleanup is required');
+    return binding.clearOwnedClone;
+  };
+  const cloneTarget = input => {
+    const target = physical(input);
+    if (target !== input || roots.includes(target)) throw denied();
+    const parent = physical(dirname(target), false);
+    let info;
+    try { info = lstatSync(target, { bigint: true }); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (info && (!info.isDirectory() || readdirSync(target).length)) {
+      throw fail('ENOTEMPTY', 'Clone destination is not empty or is not a directory');
+    }
+    return { target, parent, info };
+  };
+  const verifyClone = resource => {
+    if (physical(resource.parent, false) !== resource.parent
+        || !sameIdentity(lstatSync(resource.parent, { bigint: true }), resource.parentIdentity)
+        || physical(resource.path, false) !== resource.path) {
+      throw fail('ERR_OHOS_GIT_CLONE_REPLACED', 'Clone staging parent changed');
+    }
+    const named = lstatSync(resource.path, { bigint: true });
+    if (!named.isDirectory() || !sameIdentity(named, resource.receipt)
+        || !sameIdentity(fstatSync(resource.fd, { bigint: true }), resource.receipt)) {
+      throw fail('ERR_OHOS_GIT_CLONE_REPLACED', 'Clone staging directory changed');
+    }
+  };
+  const closeClone = resource => {
+    try { closeSync(resource.fd); }
+    finally { try { closeSync(resource.parentFd); } finally { clones.delete(resource.id); } }
+  };
+  const cleanClone = async resource => {
+    try {
+      if (!resource.committed) {
+        verifyClone(resource);
+        resource.remove(resource.fd, resource.parentFd, basename(resource.path), resource.receipt.dev, resource.receipt.ino);
+      }
+    } catch (error) { providerFailures.add(error); throw error; }
+    finally { closeClone(resource); }
+  };
+  const createClone = async payload => {
+    const remove = cloneRemover();
+    const { target, parent, info } = cloneTarget(payload.target);
+    const id = randomUUID(), path = join(parent, `.dsh-git-clone-${id}`);
+    // No await between exclusive creation and opening/recording its identity.
+    // The fd is retained until cleanup or successful publication.
+    const parentFd = openSync(parent, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    let fd;
+    try {
+      mkdirSync(path, { mode: 0o700 });
+      try { fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); }
+      catch (error) { throw error; } // Preserve an empty shell if opening its identity fails.
+    } catch (error) { closeSync(parentFd); throw error; }
+    const resource = { id, target, parent, path, fd, parentFd, remove, receipt: identityOf(fstatSync(fd, { bigint: true })),
+      parentIdentity: identityOf(fstatSync(parentFd, { bigint: true })), initial: info && identityOf(info),
+      mode: info ? Number(info.mode & 0o777n) : (0o777 & ~process.umask()) };
+    clones.set(id, resource);
+    await stage('clone-created', resource);
+    checkRunning(); verifyClone(resource);
+    return { id, path };
+  };
+  const commitClone = async resource => {
+    await stage('clone-before-commit', resource);
+    checkRunning(); verifyClone(resource);
+    const { info } = cloneTarget(resource.target);
+    if (resource.initial ? !info || !sameIdentity(info, resource.initial) : info) {
+      throw fail('ERR_OHOS_GIT_CLONE_REPLACED', 'Clone destination changed during clone');
+    }
+    chmodSync(resource.path, resource.mode);
+    // Same-parent rename has no EXDEV copy fallback. A user file added to an
+    // existing empty destination makes rename fail; it is never recursively removed.
+    renameSync(resource.path, resource.target);
+    resource.committed = true;
+    await cleanClone(resource);
+  };
   const normalize = (operation, payload) => {
+    if (operation === 'createClone') return { target: absolute(payload?.target) };
+    if (operation === 'commitClone' || operation === 'releaseClone') return { id: payload?.id };
     if (operation === 'createIndex' || operation === 'writeMetadata') {
       return { target: absolute(payload?.target), content: bytesOf(payload?.content), mode: modeOf(payload?.mode) };
     }
@@ -276,6 +363,17 @@ export function createOwnedGitResources({ roots, policy, getOwnership = borrowIn
   const execute = async (operation, payload) => {
     checkRunning();
     if (readOnly) throw denied();
+    if (operation === 'createClone') return createClone(payload);
+    if (operation === 'commitClone' || operation === 'releaseClone') {
+      const resource = clones.get(payload.id);
+      if (!resource) throw fail('ERR_OHOS_GIT_RESOURCE_ID', 'Clone id does not belong to this job');
+      if (operation === 'commitClone') return commitClone(resource);
+      for (const file of [...resources.values()]) {
+        if (inside(resource.path, file.path)) await clean(file);
+      }
+      checkRunning();
+      return cleanClone(resource);
+    }
     if (operation === 'createIndex') {
       const resource = await allocate(payload);
       return Object.freeze({ id: resource.id, path: resource.path });
@@ -307,6 +405,9 @@ export function createOwnedGitResources({ roots, policy, getOwnership = borrowIn
   const stop = () => { accepting = false; stopped = true; };
   return Object.freeze({
     accept,
+    createClone: payload => accept('createClone', payload),
+    commitClone: id => accept('commitClone', { id }),
+    releaseClone: id => accept('releaseClone', { id }),
     createIndex: payload => accept('createIndex', payload),
     writeIndex: (id, content) => accept('writeIndex', { id, content }),
     writeMetadata: payload => accept('writeMetadata', payload),
@@ -314,7 +415,7 @@ export function createOwnedGitResources({ roots, policy, getOwnership = borrowIn
     releaseIndex: id => accept('releaseIndex', { id }),
     stop,
     get pendingCount() { return pending.size; },
-    get resourceCount() { return resources.size; },
+    get resourceCount() { return resources.size + clones.size; },
     finish() {
       if (finalization) return finalization;
       stop();
@@ -322,6 +423,12 @@ export function createOwnedGitResources({ roots, policy, getOwnership = borrowIn
         await tail;
         for (const resource of [...resources.values()]) {
           try { await clean(resource); } catch {}
+        }
+        for (const resource of [...clones.values()]) {
+          try {
+            if (providerFailures.size) closeClone(resource);
+            else await cleanClone(resource);
+          } catch (error) { providerFailures.add(error); }
         }
         if (providerFailures.size === 1) throw [...providerFailures][0];
         if (providerFailures.size) throw new AggregateError([...providerFailures], 'Git resources did not cleanly finish');

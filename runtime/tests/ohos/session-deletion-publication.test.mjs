@@ -81,7 +81,8 @@ test('real atomic commit waits for file sync before log removal and preserves un
   const deletion = f.seam.delete('s1', f.hooks);
   try {
     await entered.promise;
-    assert.equal(f.seam.pending.has('s1'), true); assert.equal(f.leases.size, 3);
+    // The parent's deletion record, the mutation fence, the session identity and its directory.
+    assert.equal(f.seam.pending.has('s1'), true); assert.equal(f.leases.size, 4);
     assert.deepEqual(await fs.readFile(f.log), f.original); await absent(f.marker);
     assert.equal(f.state.commits, 0); assert.equal(f.state.cleanups, 0);
   } finally { release.resolve(); }

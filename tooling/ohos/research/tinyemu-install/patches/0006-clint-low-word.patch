@@ -1,0 +1,11 @@
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -241,7 +241,7 @@
+     assert(size_log2 == 2);
+     switch(offset) {
+     case 0x4000:
+-        m->timecmp = (m->timecmp & ~0xffffffff) | val;
++        m->timecmp = (m->timecmp & ~UINT64_C(0xffffffff)) | val;
+         riscv_cpu_reset_mip(m->cpu_state, MIP_MTIP);
+         break;
+     case 0x4004:

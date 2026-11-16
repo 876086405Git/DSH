@@ -1,6 +1,6 @@
-# 嵌入层的两项源码修复
+# 嵌入层的三项源码修复
 
-`prepare-pasteboard.py` 对固定上游 HAR 应用 `pasteboard-settlement.json` 列出的差分：输入法粘贴 helper 的 Promise 结算（下文大部分）和触感预置效果（见文末「触感预置效果」）。
+`prepare-pasteboard.py` 对固定上游 HAR 应用 `pasteboard-settlement.json` 列出的差分：输入法粘贴 helper 的 Promise 结算、触感预置效果和平台通道剪贴板查询结算。以下旧两项保留原验证范围；第三项见末节。
 
 ## 输入法粘贴 helper 的 Promise 结算修复
 
@@ -36,11 +36,19 @@ python3 tooling/ohos/prepare-pasteboard.py \
   --output /new/private/embedding-with-paste-settlement
 ```
 
-输入 HAR 必须为上述准确字节；准备器同时校验两个修复目标、两个真实消费者、补丁和许可文件，任一不符即退出。输出目录必须不存在，不会原地改原件或已有产物。`git apply` 只对 `/tmp` 内的目标文件私有副本执行，未运行网络操作。
+输入 HAR 必须为上述准确字节；准备器同时校验清单内全部修复目标、两个真实消费者、补丁和许可文件，任一不符即退出。输出目录必须不存在，不会原地改原件或已有产物。`git apply` 只对 `/tmp` 内的目标文件私有副本执行，未运行网络操作。
 
-输出目录包含新的 `flutter_embedding_release.har`、与 HAR 每个文件逐字对应的 `package/`、`licenses/`、小差分和 `report.json`。归档所有文件中只有 `package/src/main/ets/util/PasteboardUtils.ets` 和 `package/src/main/ets/plugin/PlatformPlugin.ets` 的内容变化，报告列出全部前后哈希。gzip 时间固定为 0、文件名为空，并记录 Python/zlib 版本；本次同环境重复生成的 HAR 完全一致，SHA 为 `759a836691934a209ee39591fd8b0e25da38a77a330cb52d910d98f8b5f3899a`。
+输出目录包含新的 `flutter_embedding_release.har`、与 HAR 每个文件逐字对应的 `package/`、`licenses/`、小差分和 `report.json`。归档所有文件中只有清单列出的 `PasteboardUtils.ets`、`PlatformPlugin.ets` 和 `PlatformChannel.ets` 的内容变化，报告列出全部前后哈希。gzip 时间固定为 0、文件名为空，并记录 Python/zlib 版本。压缩字节 SHA 仅供该产物追溯，不作为跨 Python/zlib 的接受条件。两个构建入口都调用下列只读校验：先硬核原始 HAR、补丁和许可 SHA，再从原始包的完整成员清单推导预期，仅将清单目标的内容 SHA 替换为已有 afterSha256；实际输出必须逐项匹配 path、文件/目录类型、mode 和文件内容 SHA。成员排序后按固定 JSON 编码另记 outputMembersSha256；重复（含规范化重复）路径、额外/缺失成员、链接或模式变化均拒绝。时间戳、所有者和 gzip/tar 封装差异不参与包内容身份。
 
-根代理/本机构建方应在自己的新私有构建目录同时使用这个 HAR 与匹配的提取 package，再跑真实 `check-arkts.sh`。这里没有自动覆盖构建下载缓存，也没有改动禁改的生产构建脚本。未完成这一步之前不能宣称应用已经使用补丁。
+```sh
+python3 -I -B tooling/ohos/prepare-pasteboard.py \
+  --input-har /path/to/original/flutter_embedding_release.har \
+  --verify-har /path/to/prepared/flutter_embedding_release.har
+```
+
+原始输入、全部补丁、目标前后文件及许可的钉值均未放宽；验证不会修改任一 HAR。
+
+根代理/本机构建方应在自己的新私有构建目录同时使用这个 HAR 与匹配的提取 package，再跑真实 `check-arkts.sh`。准备器不会自动覆盖构建下载缓存。本轮按追加要求更新了 build-hap.sh 与 check-arkts.sh 的成员身份校验接线；完整 HAP 构建仍待验证，不能仅凭准备器测试宣称应用已使用补丁。
 
 ### 实际验证
 
@@ -85,3 +93,27 @@ API 26 的 `@ohos.vibrator.d.ts` 公开的预置只有 `haptic.clock.timer`、`h
 | 差分 | `0915da9b4618de10276bf7e3828304f7f2bc5e056454e33bd1c3fbc7e6b24dc4` |
 
 验证：`tests/clipboard-settlement.py` 同时跑 `tests/haptic-presets.mjs`，执行 HAR 里实际的方法体，马达是替身：原版 **2/15 通过、13/15 失败**，修改版 **15/15 通过**。`check-arkts.sh` 在 release 下再查打包进 HAP 的字节码：每个触感都走 `vibratePreset`，表里不再自己启动马达，`startVibration` 确实收到 `type: preset`。真机上的手感和各设备实际支持哪些预置均未测量。
+
+
+## 平台通道剪贴板查询结算
+
+固定 release HAR 中，实际 `PlatformChannel` 的 `Clipboard.hasStrings` 分支调用系统 `hasData()`。成功时回 `{value: boolean}`；异步拒绝时只记日志，没有回复，因此实际 Flutter `ClipboardStatusNotifier.update()` 仍等待通道 Future。`PlatformPluginCallback.clipboardHasStrings()` 是未被此分发调用的旧方法，本项不改它。
+
+`clipboard-query-settlement.patch` 仅在异步拒绝出口增加 `result.success(response)`。`response` 是该分支原有的 `{value: false}`，表示当前无法提供可粘贴文本；不读取正文、不发起新的权限请求。成功、同步异常和实际 `Clipboard.getData` 授权/拒绝分支均保持原行为。此修复不会把无 ACL 或用户拒绝的读取变成成功。系统拒绝的实际设备条件、权限授权与界面效果**未在真机核实**。
+
+| 输入 | SHA256 |
+|---|---|
+| 原 `PlatformChannel.ets` | `60c4756d1a3eaffbda8431fa1bf0effd9d06d56b9356212dabfdb624df9d1fd6` |
+| 修改后 | `3eef8ffd2f497112e867be0241b7eb6e79cc1676dae9ed8ea2e75e3afdd15c69` |
+| 单行差分 | `6270e9f3d33410b1b26c02ae6ef929a8f3bc471451636df8504b3e95efbe174d` |
+
+`tests/clipboard-settlement.mjs` 执行实际 HAR 全部相关类的方法体：既有输入法粘贴及选区断言，加上通道可用/无文本/查询拒绝、普通与 HTML 正文、权限拒绝/INVALID、同步查询异常、权限和读取 Promise 拒绝，合计35例。权限、系统剪贴板、MethodChannel传输和HTML转换边界使用明确替身。基底已经应用旧两项修复时，34例通过、查询拒绝1例失败；新增修复后35/35，触感控制15/15。
+
+测试输出 `after-observations.json` 可交给实际 Flutter consumer：
+
+```bash
+OHOS_CLIPBOARD_WIRE=/absolute/test-output/after-observations.json \
+  flutter test --no-pub test/runtime/ohos_clipboard_consumer_test.dart
+```
+
+该消费者将真实原生方法观测到的回复经 Flutter JSONMethodCodec 送入实际 `Clipboard`、`ClipboardStatusNotifier`、App `ApiKeyPage` 的粘贴按钮以及 `EditableText` 选区粘贴。无环境变量时使用明确的协议夹具，不能当作原生联测。权限声明仅由非上架构建配置提供；调试签名可使用 release 构建，显式 Flutter debug 的上游 HAR 不包含本目录修复，不能套用这里的通过结论。

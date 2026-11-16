@@ -1,6 +1,3 @@
-# dsh-go: OpenHarmony exclusive publication; Android/Linux branches remain unchanged.
-# Base: DSH 0.2.2-rc.1 (ported from rc.4), following the existing pinned patch chain.
-# 未在真机核实。Exclusive copies preserve source/no-clobber, not atomic read visibility.
 --- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
 @@ -17,7 +17,7 @@
@@ -89,7 +86,7 @@
  				} catch (error) {
  					if (isLockContention(error)) throw new SessionAlreadyOwnedError(id);
  					throw error;
-@@ -2038,7 +2099,8 @@
+@@ -2038,10 +2099,12 @@
  		throw error;
  	}
  	try {
@@ -98,36 +95,19 @@
 +		else await internals.fs.link(staged, currentPath);
  	} catch (error) {
  		if (isEEXIST(error)) return false;
- 		if (error?.code !== "EPERM" && error?.code !== "EACCES") throw error;
-@@ -3283,17 +3345,20 @@
+-		if (error?.code !== "EPERM" && error?.code !== "EACCES") throw error;
++		// OpenHarmony's copy publication never renames over the current name.
++		if (internals.platform === "openharmony" || error?.code !== "EPERM" && error?.code !== "EACCES") throw error;
+ 		// The production migration caller holds the directory write lease.
+ 		try {
+ 			await internals.fs.lstat(currentPath);
+@@ -3283,7 +3346,8 @@
  		const tmp = await this.writeSyncedTempFile(finalPath, content);
  		let linked = false;
  		try {
 -			try {
--				await link(tmp, finalPath);
--			} catch (error) {
--				if (error?.code !== "EACCES" && error?.code !== "EPERM") throw error;
--				// Current first publishers hold the mutation lease. Keep link's
--				// no-replace semantics wherever hard links are available.
--				const existing = await lstat(finalPath).catch((statError) => {
--					if (statError?.code !== "ENOENT") throw statError;
--				});
--				if (existing !== void 0) throw error;
--				await rename(tmp, finalPath);
 +			if (process.platform === "openharmony") await publishOhosExclusive(tmp, finalPath);
-+			else {
-+				try {
-+					await link(tmp, finalPath);
-+				} catch (error) {
-+					if (error?.code !== "EACCES" && error?.code !== "EPERM") throw error;
-+					// Current first publishers hold the mutation lease. Keep link's
-+					// no-replace semantics wherever hard links are available.
-+					const existing = await lstat(finalPath).catch((statError) => {
-+						if (statError?.code !== "ENOENT") throw statError;
-+					});
-+					if (existing !== void 0) throw error;
-+					await rename(tmp, finalPath);
-+				}
- 			}
- 			linked = true;
- 		} finally {
++			else try {
+ 				await link(tmp, finalPath);
+ 			} catch (error) {
+ 				if (error?.code !== "EACCES" && error?.code !== "EPERM") throw error;

@@ -4,6 +4,8 @@
 import 'dart:convert';
 import 'dart:ui' show Tristate;
 
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/remote/secret_store.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
@@ -103,10 +105,7 @@ void main() {
     for (final provider in ['GitHub', '知乎', 'Google']) {
       expect(find.widgetWithText(FilledButton, '使用 $provider 登录'), findsOneWidget);
     }
-    expect(
-      tester.getTopLeft(find.text('使用 GitHub 登录')).dy,
-      lessThan(tester.getTopLeft(find.text('使用 知乎 登录')).dy),
-    );
+    expect(tester.getTopLeft(find.text('使用 GitHub 登录')).dy, lessThan(tester.getTopLeft(find.text('使用 知乎 登录')).dy));
     await tester.tap(find.text('使用 GitHub 登录'));
     await tester.pump();
     expect(relay.loginProviderIds, ['github']);
@@ -232,6 +231,34 @@ void main() {
     await frames(tester);
     expect(find.textContaining('服务器地址无效'), findsOneWidget);
     expect(relay.passwordLogins, isEmpty);
+  });
+
+  group('where the password is kept', () {
+    final zh = lookupL10n(AppLocale.zhCN);
+    Future<void> form(WidgetTester tester, String os) async {
+      usePhoneSurface(tester);
+      tester.view.physicalSize = const Size(390 * 2, 2400 * 2);
+      await tester.pumpWidget(
+        goldenApp(
+          home: const SshHostFormPage(),
+          brightness: Brightness.light,
+          overrides: [...overrides(), operatingSystemProvider.overrideWithValue(os)],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    testWidgets('on HarmonyOS names no Android', (tester) async {
+      await form(tester, 'ohos');
+      expect(find.text(zh.harmonyPasswordStorageHelp), findsOneWidget);
+      expect(find.textContaining('Android'), findsNothing);
+    });
+
+    testWidgets('on Android as ever', (tester) async {
+      await form(tester, 'android');
+      expect(find.text(zh.remotePasswordStorageHelp), findsOneWidget);
+    });
   });
 
   testWidgets('saving a new SSH host keeps the password out of preferences', (tester) async {

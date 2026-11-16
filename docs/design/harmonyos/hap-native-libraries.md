@@ -15,6 +15,15 @@
 
 JS、JSON、配置和静态资源进入 rawfile，再由 P2 按 SHA256 增量落地；ELF 和 `.node` 不进入运行时数据树。`NARB_DISABLE_NATIVE_CACHE=1` 保持启用，不把已安装库复制到可写临时缓存后再加载。
 
+## Dart 原生资产：`libsqlite3.so`
+
+酒馆（`packages/dsh_tavern`）经 Dart `sqlite3` 3.9.1 用 SQLite。该包的构建钩子在 Actions 上为 AOT 下载预编译的 **glibc** aarch64 `libsqlite3.so`（`native_assets/libs/arm64-v8a/`），鸿蒙是 musl，这份库装不上。AOT 的 `flutter_assets/NativeAssetsManifest.json` 把 `package:sqlite3/src/ffi/libsqlite3.g.dart` 映射为 `["absolute","libsqlite3.so"]`，即按文件名从应用库目录 dlopen，所以同名的 OH 构建可直接顶替。
+
+- **构建**：`runtime/ohos/native/build-sqlite.py --sdk-native <SDK>/native --amalgamation sqlite-amalgamation-3540100.zip --sqlite3-package ~/.pub-cache/hosted/pub.dev/sqlite3-3.9.1 --output <新目录>`。zip 不下载，按钉住的 SHA-256 `0a9c8e34…ad1f9`（SQLite 3.54.1）核对；包版本须等于 `app/pubspec.lock`。宏取包的 `_defaultDefines`，去掉仅 Windows 的 `SQLITE_HAVE_LOCALTIME_S`；版本脚本只导出 `usedSqliteSymbols`，链接参数照钩子的 Linux 源码构建（`-Bsymbolic`、`--gc-sections`、加固项），`-soname libsqlite3.so`，再 `llvm-strip`。脚本要求 3.54.1 的 `sqlite3.h` 声明全部 99 个用到的符号，产物恰好导出其中 98 个：`sqlite3_column_table_name` 需要 `SQLITE_ENABLE_COLUMN_METADATA`，包的默认值和它自己的预编译库都不开，Dart 侧先查 `sqlite3_compileoption_used` 再调用。输出可复现，并核对 hvigor 的二次 strip（`--keep-section=.permission`）不改字节；`build.json` 记版本、zip 摘要、宏、命令和产物 SHA-256。`build-hap-libs.py --sqlite-amalgamation … --sqlite3-package …` 把它并入原生集合。
+- **打包**：`tooling/ohos/native_assets.py` 是唯一规则。AOT 带的每个原生资产都必须在 `--native` 里有同名 OH 构建，`check-arkts.sh --full` 拷的是 `--native` 那份；没有登记 OH 构建的资产直接拒绝，不再整目录照抄。缺 `--native/libsqlite3.so` 时在输入检查阶段就退出 2。
+- **审计**：`audit-hap.py` 只在 AOT 需要时期望 `libsqlite3.so`，要求 HAP 里那份与 `--native` 逐字节相同（若是 AOT 的钩子产物会点名），并照常进原生集合 ELF 审计：无 RUNPATH、NEEDED 只在集合与 SDK sysroot 内、无 glibc 版本符号。
+- **尚未覆盖**：`build-hap.sh` 走 `flutter build hap`，oh-flutter 的 flutter_tools 在调 hvigor 前把 AOT 的原生资产拷进 `entry/libs/arm64-v8a/`，脚本在此之前放的同名文件会被覆盖，所以这条路仍会打进 glibc 那份；要改需让钩子本身为 OH 编译（例如 `hooks.user_defines.sqlite3` 走源码构建），那会改 AOT。设备上 dlopen、建库和 FTS5 等功能都是 `NOT_RUN`。
+
 ## 显式加载接缝
 
 `runtime/ohos/native/hap-loader/` 是本仓库的自有代码，安装为 `@dsh-go/ohos-native`，没有增加外部 npm 依赖。仓库 AGPL-3.0-only 许可证随包保留。

@@ -5,6 +5,8 @@
 
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/background_pause.dart';
+import 'package:dsh_app/runtime/runtime_bridge.dart';
+import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/notify_state.dart' show appForegroundProvider, launchNoticeShownProvider;
@@ -32,6 +34,18 @@ class _Current extends CurrentSessionController {
 
   @override
   String? build() => id;
+}
+
+class _Runtime extends LocalRuntimeController {
+  @override
+  LocalRuntimeState build() => const LocalRuntimeState(status: RuntimeStatus(phase: RuntimePhase.running));
+
+  void report(int phase, {required bool foreground}) => state = state.copyWith(
+    status: RuntimeStatus(
+      phase: RuntimePhase.running,
+      backgroundTask: RuntimeBackgroundTask(phase: phase, foreground: foreground),
+    ),
+  );
 }
 
 class _Fixed extends BackgroundPauseController {
@@ -65,6 +79,19 @@ void main() {
     test('nothing was running, or it ended before the app was suspended', () {
       expect(due(wasRunning: false), isFalse);
       expect(due(running: false), isFalse);
+    });
+
+    test('a long-running task kept the turn going', () {
+      expect(
+        BackgroundPausePolicy.onReturn(
+          away: const Duration(minutes: 5),
+          local: true,
+          wasRunning: true,
+          running: true,
+          keptRunning: true,
+        ),
+        isFalse,
+      );
     });
 
     test('the system is still letting it run: it never paused', () {
@@ -124,6 +151,71 @@ void main() {
       expect(c.read(backgroundPauseProvider), isTrue);
       // It counts as this launch's unbidden notice, as Android's line does.
       expect(c.read(launchNoticeShownProvider), isTrue);
+    });
+
+    group('the long-running task', () {
+      late _Runtime runtime;
+
+      ProviderContainer withRuntime() {
+        final c = ProviderContainer(
+          overrides: [
+            activeHostProvider.overrideWith(() => FixedActiveHost(HostRef.local)),
+            currentSessionProvider.overrideWith(() => _Current(_session)),
+            chatProvider.overrideWith2((id) => chat = FakeChatController(id, const ChatState(running: true))),
+            localRuntimeProvider.overrideWith(() => runtime = _Runtime()),
+          ],
+        );
+        addTearDown(c.dispose);
+        c.listen(backgroundPauseProvider, (_, _) {});
+        c.read(chatProvider(_session));
+        c.read(localRuntimeProvider);
+        return c;
+      }
+
+      test('held all the time away, ended by the return: no line', () {
+        final c = withRuntime();
+        leave(c);
+        runtime.report(RuntimeBackgroundTask.longRunningPhase, foreground: false);
+        runtime.report(4, foreground: true);
+        comeBack(c);
+        expect(c.read(backgroundPauseProvider), isFalse);
+      });
+
+      test('the return can be heard before the task ends', () {
+        final c = withRuntime();
+        leave(c);
+        runtime.report(RuntimeBackgroundTask.longRunningPhase, foreground: false);
+        comeBack(c);
+        runtime.report(4, foreground: true);
+        expect(c.read(backgroundPauseProvider), isFalse);
+      });
+
+      test('ended by the system while away: the line', () {
+        final c = withRuntime();
+        leave(c);
+        runtime.report(RuntimeBackgroundTask.longRunningPhase, foreground: false);
+        runtime.report(4, foreground: false);
+        comeBack(c);
+        expect(c.read(backgroundPauseProvider), isTrue);
+      });
+
+      test('only the short grant: the line', () {
+        final c = withRuntime();
+        leave(c);
+        runtime.report(2, foreground: false);
+        comeBack(c);
+        expect(c.read(backgroundPauseProvider), isTrue);
+      });
+
+      test('a held task from the last trip doesn\'t count for this one', () {
+        final c = withRuntime();
+        leave(c);
+        runtime.report(RuntimeBackgroundTask.longRunningPhase, foreground: false);
+        comeBack(c);
+        leave(c);
+        comeBack(c);
+        expect(c.read(backgroundPauseProvider), isTrue);
+      });
     });
 
     test('a short trip: nothing', () {

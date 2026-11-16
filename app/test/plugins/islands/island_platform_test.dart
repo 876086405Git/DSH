@@ -37,15 +37,35 @@ void main() {
   final expected = <List<Object?>>[
     ['device', null],
     ['appPss', null],
-    ['attach', {'id': 7, 'dark': true, 'textZoom': 130}],
-    ['setDark', {'id': 7, 'dark': false}],
-    ['setTextZoom', {'id': 7, 'zoom': 150}],
-    ['pause', {'id': 7}],
-    ['resume', {'id': 7}],
-    ['destroy', {'id': 7}],
+    [
+      'attach',
+      {'id': 7, 'dark': true, 'textZoom': 130},
+    ],
+    [
+      'setDark',
+      {'id': 7, 'dark': false},
+    ],
+    [
+      'setTextZoom',
+      {'id': 7, 'zoom': 150},
+    ],
+    [
+      'pause',
+      {'id': 7},
+    ],
+    [
+      'resume',
+      {'id': 7},
+    ],
+    [
+      'destroy',
+      {'id': 7},
+    ],
   ];
 
-  List<List<Object?>> seen() => [for (final call in calls) [call.method, call.arguments]];
+  List<List<Object?>> seen() => [
+    for (final call in calls) [call.method, call.arguments],
+  ];
 
   void fromNative(String method, Object? arguments) => messenger.handlePlatformMessage(
     _channel.name,
@@ -103,9 +123,7 @@ void main() {
       expect(events, hasLength(2));
       expect(
         events[0],
-        isA<IslandRendererGone>()
-            .having((e) => e.webViewId, 'webViewId', 7)
-            .having((e) => e.crashed, 'crashed', true),
+        isA<IslandRendererGone>().having((e) => e.webViewId, 'webViewId', 7).having((e) => e.crashed, 'crashed', true),
       );
       expect(events[1], isA<IslandTrimMemory>().having((e) => e.low, 'low', true));
     });

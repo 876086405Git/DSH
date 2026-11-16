@@ -211,7 +211,7 @@ class _ToolHeader extends StatelessWidget {
     final dsh = DshColors.of(context);
     final status = view.item.status;
     final blocked = view.sandboxBlocked;
-    final failed = status == ToolStatus.failed && !blocked;
+    final failed = status == ToolStatus.failed && !blocked && (view.phoneResult?.isFault ?? true);
 
     final title = titled ? view.pluginTitle : null;
     final summary = blocked ? l10n.chatToolNeedsApproval : title ?? view.summary;
@@ -351,6 +351,7 @@ class _FluidTrailState extends State<_FluidTrail> {
 /// 行尾画的是哪一种:只有换了种类才淡入淡出,streaming → running 还是
 /// 同一个小环,不闪。
 String _trailKind(ToolView view, bool autoAllowing) => switch (view.item.status) {
+  _ when view.phoneResult != null => 'phone',
   ToolStatus.streaming || ToolStatus.running => 'spinner',
   ToolStatus.awaitingApproval when autoAllowing => 'spinner',
   ToolStatus.failed when view.sandboxBlocked => 'empty',
@@ -385,6 +386,9 @@ class _StatusTrail extends StatelessWidget {
     final dsh = DshColors.of(context);
     final label = theme.textTheme.labelSmall?.copyWith(fontSize: 12);
 
+    if (view.phoneResult case final phone?) {
+      return Text(phone.word, style: label?.copyWith(color: phone.isFault ? dsh.danger : dsh.textTertiary));
+    }
     switch (view.item.status) {
       case ToolStatus.streaming || ToolStatus.running:
       case ToolStatus.awaitingApproval when autoAllowing:
@@ -499,6 +503,17 @@ class ToolDetail extends StatelessWidget {
     final resultTitle = view.isTerminal ? l10n.chatOutput : l10n.chatResult;
     if (view.sandboxBlocked) {
       // 被沙箱拦下的第一次尝试:行首的锁已经说明了,不另起一段。
+    } else if (view.phoneResult case final phone?) {
+      section(
+        resultTitle,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          child: Text(
+            phone.sentence,
+            style: theme.textTheme.bodySmall?.copyWith(color: phone.isFault ? dsh.danger : dsh.textTertiary),
+          ),
+        ),
+      );
     } else if (view.failureText case final failure?) {
       section(
         l10n.chatError,

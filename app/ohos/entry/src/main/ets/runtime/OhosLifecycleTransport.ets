@@ -1,6 +1,6 @@
 // Public SDK 26 APIs; actual redirect/cookie/cancellation behavior awaits a device.
 import http from '@ohos.net.http';
-import { LifecycleTransport, HostLifecycleObservation, LifecycleFailure } from './RuntimeLifecycle';
+import { LifecycleTransport, HostLifecycleObservation, HostLifecycleAck, LifecycleFailure } from './RuntimeLifecycle';
 
 class StopRedirect implements http.HttpInterceptor {
   interceptorType: http.InterceptorType = http.InterceptorType.REDIRECTION;
@@ -9,7 +9,8 @@ class StopRedirect implements http.HttpInterceptor {
   }
 }
 
-interface LifecycleAck {
+interface LifecycleAck extends HostLifecycleAck {
+  observationRevision: number;
   v: number;
   host: HostLifecycleObservation;
   closed: boolean;
@@ -51,7 +52,7 @@ export class OhosLifecycleTransport implements LifecycleTransport {
     if (generation !== this.generation) throw new LifecycleFailure('ohos_lifecycle_cancelled');
   }
 
-  async send(baseUrl: string, token: string, observation: HostLifecycleObservation): Promise<void> {
+  async send(baseUrl: string, token: string, observation: HostLifecycleObservation): Promise<HostLifecycleAck> {
     // HostCore starts a fixed IPv4 loopback listener. Never accept a Dart URL.
     const match = /^http:\/\/127\.0\.0\.1:([0-9]{1,5})\/?$/.exec(baseUrl);
     if (match === null || Number(match[1]) < 1 || Number(match[1]) > 65535 || token.length === 0) {
@@ -92,8 +93,20 @@ export class OhosLifecycleTransport implements LifecycleTransport {
     if (response.responseCode === 401) this.cookie = null;
     if (response.responseCode !== 200 || typeof response.result !== 'string') throw new LifecycleFailure('ohos_lifecycle_control');
     const ack: LifecycleAck = JSON.parse(response.result) as LifecycleAck;
-    if (ack.v !== 1 || ack.host?.revision !== observation.revision ||
-        ack.host.foreground !== observation.foreground || ack.host.computePermission !== observation.computePermission ||
-        ack.closed !== false || ack.blocked !== false) throw new LifecycleFailure('ohos_lifecycle_ack');
+    // The caller revision correlates this response only. Native facts are not
+    // required to equal untrusted HTTP foreground/permission input.
+    if (ack.v !== 1 || ack.observationRevision !== observation.revision ||
+        typeof ack.busy !== 'boolean' || typeof ack.manualPaused !== 'boolean' ||
+        typeof ack.confirmedPause !== 'boolean' || ack.closed !== false || ack.blocked !== false) {
+      throw new LifecycleFailure('ohos_lifecycle_ack');
+    }
+    const native = ack.nativeHost;
+    if (native === null || native === undefined || native.version !== 1 ||
+        ![native.engineGeneration, native.ownerGeneration, native.revision, native.grantGeneration,
+          native.deadlineMs, native.drainAtMs, native.phase].every((value: number): boolean => Number.isSafeInteger(value) && value >= 0) ||
+        !Number.isSafeInteger(native.nowMs) || native.nowMs < -1 || native.phase > 7 ||
+        ![0, 1].includes(native.available) || ![0, 1].includes(native.foreground) ||
+        ![0, 1].includes(native.clockFailed)) throw new LifecycleFailure('ohos_lifecycle_native');
+    return ack;
   }
 }

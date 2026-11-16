@@ -1,0 +1,62 @@
+--- a/machine.h
++++ b/machine.h
+@@ -116,6 +116,9 @@
+     CharacterDevice *console;
+     /* graphics */
+     FBDevice *fb_dev;
++#ifdef TEMU_EMBED
++    BOOL embed_poweroff; /* Machine-thread owned; not a resource-release flag. */
++#endif
+ } VirtMachine;
+ 
+ struct VirtMachineClass {
+--- a/riscv_machine.c
++++ b/riscv_machine.c
+@@ -135,7 +135,11 @@
+     if (s->htif_tohost == 1) {
+         /* shuthost */
+         printf("\nPower off.\n");
++#ifdef TEMU_EMBED
++        s->common.embed_poweroff = TRUE;
++#else
+         exit(0);
++#endif
+     } else if (device == 1 && cmd == 1) {
+         uint8_t buf[1];
+         buf[0] = s->htif_tohost & 0xff;
+--- a/temu.c
++++ b/temu.c
+@@ -974,9 +974,11 @@
+         s->net->device_set_carrier(s->net, TRUE);
+     if (initialized)
+         initialized(opaque);
+-    for(;;)
++    while (!s->embed_poweroff)
+         virt_machine_run(s);
+-    return 0;
++    /* CPU dispatch ended; device teardown is not implemented. Keep the owner
++       quarantined, never classify this as a reusable successful shutdown. */
++    return TEMU_EMBED_STOPPED_UNRELEASED;
+ 
+  drive_fail:
+     {
+--- a/temu_embed.h
++++ b/temu_embed.h
+@@ -8,12 +8,14 @@
+     /* Local config/drive failure: the fixed startup path released its devices. */
+     TEMU_EMBED_RETRYABLE_START_FAILURE = -1,
+     /* Control threads may end, but complete device cleanup is unproved. */
+-    TEMU_EMBED_UNRECOVERED_START_FAILURE = -2
++    TEMU_EMBED_UNRECOVERED_START_FAILURE = -2,
++    /* Guest requested shutdown; devices remain owned and must not be reused. */
++    TEMU_EMBED_STOPPED_UNRELEASED = -3
+ };
+ 
+ /* Callback runs synchronously on the machine thread after initialization and
+- * before the CPU loop. A successful invocation does not return in this source.
+- * Returned failure classes concern initialization only, not VM shutdown. */
++ * before the CPU loop. Guest poweroff returns STOPPED_UNRELEASED after CPU dispatch ends.
++ * This is not a device-release or safe-reinitialization guarantee. */
+ int temu_embed_run_initialized(const char *path, int in_fd, int out_fd,
+                                TemuInitialized initialized, void *opaque);
+ /* Existing ABI: every setup failure remains -1. */

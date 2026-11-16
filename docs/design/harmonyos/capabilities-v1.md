@@ -44,7 +44,7 @@
 | `python` | Support | 当前可调用的 Python 运行时；just-bash 可选 wasm Python 未加载时为 unsupported |
 | `wasm` | Support | 此实例是否有可用 WebAssembly；jitless 的本次实测为 unsupported |
 | `plugins.bundled` | Support | 随包插件是否可由当前 profile 正常发现和加载 |
-| `plugins.marketInstall` | Support | 当前策略和安装实现是否允许在线安装；OHOS 第一阶段为 unsupported |
+| `plugins.marketInstall` | Support | 当前 OH 平台已注册纯 JS 安装后端且真实 pluginManager 服务存在时为 supported；实际安装仍按包校验，不支持的包明确拒绝 |
 | `nativeModules` | 对象数组或 null | 仅列本运行时允许的原生模块，见下表；null 表示未获得清单 |
 | `storage.sessionLock` | `kernel | main-thread | none | unknown` | O3 实际锁范围；临时 JS 锁必须为 main-thread，不能写 kernel |
 | `background.policy` | `may-freeze | unrestricted | unknown` | 对当前宿主获准能力的保守描述；未验证授权时不能报 unrestricted |
@@ -84,7 +84,7 @@
   "nodeScripts": "worker-rebased",
   "python": "unsupported",
   "wasm": "unsupported",
-  "plugins": {"bundled": "supported", "marketInstall": "unsupported"},
+  "plugins": {"bundled": "supported", "marketInstall": "supported"},
   "nativeModules": [{"name": "node:sqlite", "version": null, "state": "loaded"}],
   "storage": {"sessionLock": "main-thread"},
   "background": {
@@ -136,7 +136,7 @@
 | processSpawn / nodeScripts / python | 后端声明来自当前已安装的虚拟进程服务。O4 Worker 后继在存在可继承的产品预加载器时为 unsupported/worker-rebased/unsupported；缺预加载器时 nodeScripts 为 none、命令表移除 node。仅有普通工作线程不代表 Node 脚本入口可用。 |
 | wasm | 当前实例没有 WebAssembly 时是 unsupported；仅存在对象不证明能编译，保留 unknown。读取不运行任何 wasm 探测。 |
 | plugins.bundled | 当前 profile 已组合 bundle，且 loader 存在至少一个未禁用、fiber active 的官方包条目，才报告 supported；证明本 profile 的发现/加载机制已经运行，不保证每个插件功能均兼容。证据不足为 unknown。 |
-| plugins.marketInstall | 当前 OHOS 第一阶段策略为 unsupported。O1/O2 的显式安装拒绝另交；能力读取自身不安装包、不修改市场策略。 |
+| plugins.marketInstall | 当前 OH 平台的纯 JS 安装后端和真实 pluginManager 服务均存在时为 supported，任一缺失为 unsupported。安装限注册表纯 JS 包，不运行安装脚本，原生 addon/WASM 明确拒绝；能力读取自身不调用后端方法、不恢复事务、不安装包或访问网络。 |
 | nativeModules | null。主机尚未提供已签名原生清单及逐模块加载观测，不能把包名、编译成功或 Linux 加载器结果写成设备 loaded。 |
 | storage.sessionLock | 新的仅 OHOS DSH diff 在真实 JSONL 实例的 openharmony 锁分支上暴露 main-thread 标记；未安装/缺标记时 unknown。不把 publication 的内核账本锁误作会话锁。 |
 | background | may-freeze / unknown / none。无设备后台授权观测，O8 恢复对账未装配；不自动触发工具重试。 |

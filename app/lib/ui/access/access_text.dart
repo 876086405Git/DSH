@@ -18,6 +18,7 @@ extension AccessFeatureText on AccessFeature {
     AccessFeature.background => AppIcons.keepAlive,
     AccessFeature.voice => AppIcons.voice,
     AccessFeature.alerts => AppIcons.notifications,
+    AccessFeature.systemActions => AppIcons.phoneControl,
   };
 
   String title(L10n l10n) => switch (this) {
@@ -27,6 +28,7 @@ extension AccessFeatureText on AccessFeature {
     AccessFeature.background => l10n.accessFeatureBackground,
     AccessFeature.voice => l10n.accessFeatureVoice,
     AccessFeature.alerts => l10n.accessFeatureAlerts,
+    AccessFeature.systemActions => l10n.systemActionsTitle,
   };
 
   /// What it needs, in one line.
@@ -37,6 +39,7 @@ extension AccessFeatureText on AccessFeature {
     AccessFeature.background => l10n.accessFeatureBackgroundNeeds,
     AccessFeature.voice => l10n.accessFeatureVoiceNeeds,
     AccessFeature.alerts => l10n.accessFeatureAlertsNeeds,
+    AccessFeature.systemActions => l10n.catalogSystemActionsSummary,
   };
 }
 

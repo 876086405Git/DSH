@@ -90,23 +90,38 @@ export async function changes(git, options, before, after, { renames = false } =
   return result;
 }
 
-export function formatChanges(rows, { numstat = false, nul = false, nameOnly = false } = {}) {
-  if (nameOnly) return rows.map(row => row.path + (nul ? '\0' : '\n')).join('');
+// Git's line-oriented path fields use C quoting; -z callers bypass this.
+export function quoteGitPath(path, highBytes = true, spaces = false) {
+  let text = '', quoted = spaces && path.includes(' ');
+  const escapes = { 7: '\\a', 8: '\\b', 9: '\\t', 10: '\\n', 11: '\\v', 12: '\\f', 13: '\\r', 34: '\\"', 92: '\\\\' };
+  for (const character of path) {
+    const code = character.codePointAt(0);
+    if (Object.hasOwn(escapes, code)) { text += escapes[code]; quoted = true; }
+    else if (code < 32 || code === 127 || (highBytes && code >= 128)) {
+      text += [...Buffer.from(character)].map(byte => '\\' + byte.toString(8).padStart(3, '0')).join('');
+      quoted = true;
+    } else text += character;
+  }
+  return quoted ? '"' + text + '"' : path;
+}
+
+export function formatChanges(rows, { numstat = false, nul = false, nameOnly = false, quoteHighBytes = true } = {}) {
+  if (nameOnly) return rows.map(row => (nul ? row.path : quoteGitPath(row.path, quoteHighBytes)) + (nul ? '\0' : '\n')).join('');
   if (numstat) return rows.map(row => {
-    const name = row.oldPath ? (nul ? `\0${row.oldPath}\0${row.path}` : `${row.oldPath} => ${row.path}`) : row.path;
+    const name = row.oldPath ? (nul ? `\0${row.oldPath}\0${row.path}` : `${row.oldPath} => ${row.path}`) : (nul ? row.path : quoteGitPath(row.path, quoteHighBytes));
     return `${row.added}\t${row.deleted}\t${name}${nul ? '\0' : '\n'}`;
   }).join('');
   return rows.map(row => {
     const oldName = row.before ? `a/${row.oldPath ?? row.path}` : '/dev/null';
     const newName = row.after ? `b/${row.path}` : '/dev/null';
-    let header = `diff --git a/${row.oldPath ?? row.path} b/${row.path}\n`;
+    let header = `diff --git ${quoteGitPath(`a/${row.oldPath ?? row.path}`, quoteHighBytes)} ${quoteGitPath(`b/${row.path}`, quoteHighBytes)}\n`;
     if (!row.before) header += `new file mode ${row.after.mode.toString(8)}\n`;
     else if (!row.after) header += `deleted file mode ${row.before.mode.toString(8)}\n`;
     else if (row.before.mode !== row.after.mode) header += `old mode ${row.before.mode.toString(8)}\nnew mode ${row.after.mode.toString(8)}\n`;
     if (row.oldPath) header += `rename from ${row.oldPath}\nrename to ${row.path}\n`;
     if (row.added === '-') return header + `Binary files ${oldName} and ${newName} differ\n`;
     if (row.oldBytes.equals(row.newBytes)) return header;
-    const patch = createTwoFilesPatch(oldName, newName, row.oldBytes.toString('utf8'), row.newBytes.toString('utf8'), '', '', { context: 3 });
+    const patch = createTwoFilesPatch(quoteGitPath(oldName, quoteHighBytes), quoteGitPath(newName, quoteHighBytes), row.oldBytes.toString('utf8'), row.newBytes.toString('utf8'), '', '', { context: 3 });
     return header + patch.replace(/^(?:Index:.*\n)?={3,}\n/, '');
   }).join('');
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -32,6 +32,31 @@ export async function runBridgeRouteContract({ base, cookie, rpc, WebSocket, out
       try { response.json = JSON.parse(response.raw.toString('utf8')); row.response.json = response.json; row.response.errorCode = jsonCode(response.json); } catch { row.response.text = response.raw.toString('utf8'); }
       row.endUTC = new Date().toISOString(); await persist(); return response;
     } catch (error) { row.error = { name: error.name, message: error.message }; row.endUTC = new Date().toISOString(); await persist(); throw error; }
+  }
+  // This is the production session API over authenticated HTTP, not a fixture handler.
+  // OH has no image codec: valid content must reach the explicit codec refusal.
+  const attachments = { status: 'RUNNING', cases: [], scope: 'owner full-reference HTTP; no reader authorization or OH codec-success claim' };
+  result.attachments = attachments;
+  async function attachmentCase(id, sessionId, reference, code, reason, { legacy = false, anonymous = false } = {}) {
+    const rpcId = randomUUID();
+    const body = { type: 'client-request', rpcId, method: 'session/attachment', payload: { args: {
+      request: legacy ? { sessionId, attachmentId: reference.attachmentId } : { sessionId, attachment: reference },
+    } } };
+    const response = await request('attachment-' + id, 'POST', '/api/session/attachment', { body, anonymous });
+    const row = { id, sessionId, expectedCode: code, expectedReason: reason ?? null, passed: false };
+    attachments.cases.push(row);
+    if (anonymous) {
+      check([401, 403].includes(response.status), 'anonymous attachment must be rejected by real authentication');
+    } else {
+      check(response.status === 200, 'attachment RPC uses the real HTTP result envelope: ' + id);
+      check(response.json?.type === 'server-response' && response.json.rpcId === rpcId, 'attachment RPC identity: ' + id);
+      const failure = response.json.result;
+      check(failure?.ok === false && failure.error?.code === code, 'attachment error code: ' + id);
+      if (reason !== undefined) check(failure.error.details?.reason === reason, 'attachment error reason: ' + id);
+      row.actualCode = failure.error.code;
+      row.actualReason = failure.error.details?.reason ?? null;
+    }
+    row.passed = true; await persist();
   }
   function nextFrame(predicate, description) {
     const index = frames.findIndex(predicate); if (index >= 0) return Promise.resolve(frames.splice(index, 1)[0]);
@@ -73,10 +98,24 @@ export async function runBridgeRouteContract({ base, cookie, rpc, WebSocket, out
     const sessionId = ownedSessionId; check(typeof sessionId === 'string' && sessionId.length > 0, 'completed private session supplied'); result.disposableSession = sessionId;
     const listedBefore = await rpc('session/list', { _request: {} });
     result.sessionListBefore = listedBefore; check(Array.isArray(listedBefore.items) && listedBefore.items.some(item => item.sessionId === sessionId), 'completed private session really listed before deletion');
+    const image = fixture.attachments.reference;
+    check(image.attachmentId === 'sha256:' + fixture.assetSHA256 && image.bytes === fixture.assetBytes && image.width === 1 && image.height === 1, 'fixed real PNG full reference');
+    await attachmentCase('full-reference', sessionId, image, 'session/attachment-invalid', 'OHOS_IMAGE_CODEC_UNAVAILABLE');
+    await attachmentCase('missing-object', sessionId, { ...image, attachmentId: fixture.attachments.missingId }, 'session/attachment-invalid', 'ATTACHMENT_NOT_FOUND');
+    await attachmentCase('corrupt-object', sessionId, { ...image, attachmentId: fixture.attachments.corruptId }, 'session/attachment-invalid', 'ATTACHMENT_CORRUPT');
+    await attachmentCase('invalid-reference', sessionId, { ...image, attachmentId: 'not-an-attachment-id' }, 'session/attachment-invalid', 'INVALID_ATTACHMENT_REF');
+    await attachmentCase('legacy-shape', sessionId, image, 'gateway/input-invalid', undefined, { legacy: true });
+    await attachmentCase('anonymous', sessionId, image, null, undefined, { anonymous: true });
     const deleted = await request('session-delete', 'POST', '/dsh-go/v1/sessions/delete', { body: { sessionId } });
     check(deleted.status === 200 && deleted.json?.deleted === true && deleted.json.sessionId === sessionId, 'delete only owned disposable session');
     const listedAfter = await rpc('session/list', { _request: {} });
     result.sessionListAfter = listedAfter; check(Array.isArray(listedAfter.items) && !listedAfter.items.some(item => item.sessionId === sessionId), 'actual subsequent session absence');
+    // sessionId is permission scope, not an image-history lookup. Owner bypasses
+    // remoteAccess.decide; this is deliberately not a restricted-reader test.
+    await attachmentCase('deleted-owner-session', sessionId, image, 'session/attachment-invalid', 'OHOS_IMAGE_CODEC_UNAVAILABLE');
+    check(attachments.cases.length === 7 && attachments.cases.every(row => row.passed), 'all seven real attachment HTTP cases');
+    attachments.status = 'PASS_OH_FULL_REFERENCE_CONTRACT';
+
 
     const caps = 'v=1&app=0.10.0&locale=zh-CN&features=audio,files&surfaces=panels&components=stack,text,metric';
     const contributions = await request('contributions', 'GET', `/dsh-go/v1/contributions?${caps}`);

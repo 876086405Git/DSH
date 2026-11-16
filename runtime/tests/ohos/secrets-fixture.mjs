@@ -120,7 +120,7 @@ export async function secretsFixture(t, initial = {}) {
   }
   const boundaries = {
     '@ohos.file.fs': { default: api }, '@kit.UniversalKeystoreKit': { huks },
-    '@kit.CryptoArchitectureKit': { cryptoFramework: { createRandom: () => ({ async generateRandom(length) {
+    '@kit.CryptoArchitectureKit': { cryptoFramework: { createRandom: () => ({ async generateRandom(length) { if (options.randomError) throw nativeError(options.randomError);
       assert.equal(length, 12); events.push({ op: 'random', bytes: length }); return { data: new Uint8Array(randomBytes(length)) };
     } }) } },
     '@ohos.util': { default: {

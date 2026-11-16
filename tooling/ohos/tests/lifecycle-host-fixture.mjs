@@ -17,13 +17,13 @@ export function tickRetry() {
   timers.delete(id); timer.callback(); return timer.delay;
 }
 export const permission = { grants: 0, modes: 0, status: 0, supported: true,
-  accessCapability: true, backgroundCapability: true, error: null, requestedModes: null };
+  accessCapability: true, backgroundCapability: true, reminderCapability: true, error: null, requestedModes: null, systemStatus: null };
 export const abilityAccessCtrl = {
   GrantStatus: { PERMISSION_GRANTED: 0, PERMISSION_DENIED: -1 },
   createAtManager() { return { checkAccessTokenSync(id, name) {
     permission.grants++; permission.last = { id, name };
     if (permission.error) throw permission.error;
-    return permission.status;
+    return name === 'ohos.permission.KEEP_BACKGROUND_RUNNING_SYSTEM' && permission.systemStatus !== null ? permission.systemStatus : permission.status;
   } }; },
 };
 export const backgroundTaskManager = {
@@ -35,15 +35,15 @@ export const backgroundTaskManager = {
     }
   },
 };
-export const canIUse = name => name === 'SystemCapability.Security.AccessToken'
-  ? permission.accessCapability : permission.backgroundCapability;
+export const canIUse = name => name === 'SystemCapability.Security.AccessToken' ? permission.accessCapability
+  : name === 'SystemCapability.Notification.ReminderAgent' ? permission.reminderCapability : permission.backgroundCapability;
 
 export async function loadHostModules(sourceOverride) {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
   const source = sourceOverride ?? path.join(repo, 'app/ohos/entry/src/main/ets/runtime');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-lifecycle-host-'));
   const fixture = import.meta.url;
-  const model = await fs.readFile(path.join(source, 'RuntimeLifecycle.ets'), 'utf8');
+  const model = (await fs.readFile(path.join(source, 'RuntimeLifecycle.ets'), 'utf8')).replace(/import type[^\n]+libdsh_host.so[^\n]+\n/, '');
   await fs.writeFile(path.join(directory, 'RuntimeLifecycle.mts'),
     `import { testSetTimeout as setTimeout, testClearTimeout as clearTimeout } from '${fixture}';\n` + model);
   const permissionSource = (await fs.readFile(path.join(source, 'BackgroundCompute.ets'), 'utf8'))

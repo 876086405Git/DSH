@@ -99,9 +99,9 @@ try:
     assert actual['engineLifecycle']['exit']['code'] == 0 and actual['engineLifecycle']['exit']['signal'] is None
     assert not any(row['signal'] == 'SIGKILL' for row in actual['engineLifecycle']['requested'])
     if EXPECTATION == 'complete':
-        log = (OUT / 'round/engine.log').read_text()
-        assert 'ERR_OHOS_NO_SPAWN' in log and 'add13_stdio' in log
-        assert not any('mcp-client(add13_stdio)' in line and any(word in line for word in ['retrying', 'reconnecting']) for line in log.splitlines())
+        assert actual['add13']['stdioInventory']['fiberPhase'] == 'active'
+        assert actual['add13']['stdioEcho']['result']['content'] == [{'type':'text','text':'真实 stdio MCP'}]
+        assert actual['add13']['stdioProcessMarkers'] and all(row['worker'] for row in actual['add13']['stdioProcessMarkers'])
     report.update(status=actual['add13']['status'], endedUtc=utc(), engineLifecycle=actual['engineLifecycle'])
     save(OUT / 'report.json', report)
     print(json.dumps({'status': report['status'], 'reportSha256': sha(OUT / 'report.json'), 'exitCode': code,

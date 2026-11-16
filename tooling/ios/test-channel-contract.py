@@ -25,9 +25,9 @@ class SpeechChannelContract(unittest.TestCase):
         # These are reviewed in CHANNEL_COVERAGE.md. Some are OHOS/Android-only;
         # unresolved iOS capabilities remain visible there until implemented.
         exceptions = {
-            'dsh/attachment-files', 'dsh/dynamic_color', 'dsh/media_video',
-            'dsh/phone/preview', 'dsh/picture_shortcut',
-            'dsh/secrets', 'dsh/update', 'dsh/web-files',
+            'dsh/attachment-files', 'dsh/authorized-workspaces', 'dsh/dynamic_color', 'dsh/media_video',
+            'dsh/paste', 'dsh/phone/preview', 'dsh/picture_shortcut',
+            'dsh/secrets', 'dsh/streaming_asr', 'dsh/update', 'dsh/web-files',
         }
         self.assertFalse(dart_channels - ios_channels - exceptions,
                          sorted(dart_channels - ios_channels - exceptions))

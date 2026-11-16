@@ -3,6 +3,7 @@
 // `flutter test --update-goldens test/share_hosted/hosted_links_page_test.dart`.
 
 import 'package:dsh_app/share_hosted/hosted_client.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/share_hosted/hosted_crypto.dart';
 import 'package:dsh_app/share_hosted/hosted_link.dart';
 import 'package:dsh_app/share_hosted/hosted_links_state.dart';
@@ -13,6 +14,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chat/support/harness.dart';
+import '../secrets/hosted_storage_recovery_test.dart' show FaultStorage;
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dsh_app/l10n/l10n.dart';
+
+import '../support/english_preview.dart' show useEnglish, inEnglish;
 import 'hosted_client_test.dart' show FakeHost;
 import 'hosted_links_state_test.dart' show MemoryStore;
 
@@ -66,6 +73,100 @@ Future<(FakeHost, MemoryStore)> _pump(
 }
 
 void main() {
+  for (final english in [false, true]) {
+    testWidgets('read retry and failed delete are visible (${english ? "en" : "zh"})', (tester) async {
+      if (english) useEnglish();
+      usePhoneView(tester);
+      final storage = FaultStorage([_links.first])..readError = PlatformException(code: 'locked');
+      await tester.pumpWidget(
+        testApp(
+          english ? inEnglish(const HostedLinksPage()) : const HostedLinksPage(),
+          overrides: [
+            operatingSystemProvider.overrideWithValue('ohos'),
+            hostedLinkStoreProvider.overrideWithValue(SecureHostedLinkStore(storage)),
+          ],
+        ),
+      );
+      await pumpFrames(tester, 6);
+      expect(find.text(appL10n.remoteHostedLoadFailed), findsOneWidget);
+      storage.readError = null;
+      await tester.tap(find.text(appL10n.commonRetry));
+      await pumpFrames(tester, 6);
+      expect(find.text(_links.first.title), findsOneWidget);
+      storage.writeError = PlatformException(code: 'locked');
+      await tester.tap(find.byKey(const ValueKey('hosted-delete-M000000001')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, appL10n.commonDelete));
+      await pumpFrames(tester, 6);
+      expect(find.text(_links.first.title), findsOneWidget);
+      expect(find.text(appL10n.remoteHostedDeleteSaveFailed), findsOneWidget);
+      expect(find.text(appL10n.remoteHostedLinkDeleted), findsNothing);
+    });
+  }
+  testWidgets('opening the page retries a prior read failure without losing unsaved links on re-open', (tester) async {
+    usePhoneView(tester);
+    final storage = FaultStorage([_links.first])..readError = PlatformException(code: 'locked');
+    final container = ProviderContainer(
+      overrides: [
+        operatingSystemProvider.overrideWithValue('ohos'),
+        hostedLinkStoreProvider.overrideWithValue(SecureHostedLinkStore(storage)),
+      ],
+    );
+    addTearDown(container.dispose);
+    final links = container.read(hostedLinksProvider.notifier);
+    await links.ready;
+    storage.readError = null;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: testApp(HostedLinksPage(clock: () => _now)),
+      ),
+    );
+    await pumpFrames(tester, 6);
+    expect(find.text(_links.first.title), findsOneWidget);
+    storage.writeError = PlatformException(code: 'locked');
+    await links.add(_links[1]);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: testApp(HostedLinksPage(clock: () => _now)),
+      ),
+    );
+    await pumpFrames(tester, 6);
+    expect(find.text(_links[1].title), findsOneWidget);
+    expect(find.textContaining('尚未保存'), findsOneWidget);
+  });
+  testWidgets('undo save failure restores the row and warns about restart instead of deleting', (tester) async {
+    usePhoneView(tester);
+    final storage = FaultStorage([_links.first]);
+    final host = FakeHost();
+    await tester.pumpWidget(
+      testApp(
+        const HostedLinksPage(),
+        overrides: [
+          operatingSystemProvider.overrideWithValue('ohos'),
+          hostedLinkStoreProvider.overrideWithValue(SecureHostedLinkStore(storage)),
+          hostedShareClientProvider.overrideWithValue(
+            HostedShareClient(client: host.client, origin: 'https://go.example'),
+          ),
+        ],
+      ),
+    );
+    await pumpFrames(tester, 6);
+    await tester.tap(find.byKey(const ValueKey('hosted-delete-M000000001')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, appL10n.commonDelete));
+    await pumpFrames(tester, 3);
+    storage.writeError = PlatformException(code: 'locked');
+    await tester.tap(find.text(appL10n.remoteUndo));
+    await tester.pumpAndSettle();
+    expect(find.text(_links.first.title), findsOneWidget);
+    expect(find.text(appL10n.remoteHostedUndoUnsaved), findsOneWidget);
+    await tester.pump(HostedLinksController.undoWindow + const Duration(seconds: 1));
+    expect(host.requests, isEmpty);
+  });
   test('expiry wording', () {
     expect(hostedExpiryText(_links[0], _now), '11 月 24 日到期');
     expect(hostedExpiryText(_links[1], _now), '明天到期');

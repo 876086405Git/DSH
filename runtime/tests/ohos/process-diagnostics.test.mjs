@@ -1,6 +1,7 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,7 +34,7 @@ async function fixture(t) {
   await writeFile(join(work, 'own'), 'inside');
   await writeFile(join(work, 'binary'), Buffer.from([0, 255, 195, 169]));
   await writeFile(join(work, 'unicode'), '你好');
-  await symlink(outside, join(work, 'escape'));
+  await symlinkFixture(outside, join(work, 'escape'));
   const runtime = new VirtualSubprocessRuntime({ workspaceRoots: [work], temporaryRoot });
   t.after(async () => { await runtime.dispose(); await rm(root, { recursive: true, force: true }); });
   const run = async (command, policy = 'workspace-write') => {

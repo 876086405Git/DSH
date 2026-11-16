@@ -1,0 +1,96 @@
+--- a/temu.c
++++ b/temu.c
+@@ -922,9 +922,11 @@
+ #endif /* !TEMU_EMBED */
+ 
+ #ifdef TEMU_EMBED
++#include "temu_embed.h"
+ /* Runs the machine described by the config file at path on the calling thread, with its
+    console on in_fd/out_fd. Disk images open read-write. Returns only if setup fails. */
+-int temu_embed_run(const char *path, int in_fd, int out_fd)
++int temu_embed_run_initialized(const char *path, int in_fd, int out_fd,
++                               TemuInitialized initialized, void *opaque)
+ {
+     VirtMachine *s;
+     VirtMachineParams p_s, *p = &p_s;
+@@ -932,7 +934,7 @@
+ 
+     virt_machine_set_defaults(p);
+     if (virt_machine_load_config_file_local(p, path) < 0)
+-        return -1;
++        return TEMU_EMBED_RETRYABLE_START_FAILURE;
+     for(i = 0; i < p->drive_count; i++) {
+         char *fname = get_file_path(p->cfg_filename, p->tab_drive[i].filename);
+         int error;
+@@ -952,7 +954,7 @@
+         p->tab_fs[i].fs_dev = fs_disk_init(fname);
+         free(fname);
+         if (!p->tab_fs[i].fs_dev)
+-            return -1;
++            return TEMU_EMBED_UNRECOVERED_START_FAILURE;
+     }
+     for(i = 0; i < p->eth_count; i++) {
+ #ifdef CONFIG_SLIRP
+@@ -960,16 +962,18 @@
+             p->tab_eth[i].net = slirp_open();
+ #endif
+         if (!p->tab_eth[i].net)
+-            return -1;
++            return TEMU_EMBED_UNRECOVERED_START_FAILURE;
+     }
+     p->console = console_init_fds(in_fd, out_fd);
+     p->rtc_real_time = TRUE;
+     s = virt_machine_init(p);
+     if (!s)
+-        return -1;
++        return TEMU_EMBED_UNRECOVERED_START_FAILURE;
+     virt_machine_free_config(p);
+     if (s->net)
+         s->net->device_set_carrier(s->net, TRUE);
++    if (initialized)
++        initialized(opaque);
+     for(;;)
+         virt_machine_run(s);
+     return 0;
+@@ -981,7 +985,14 @@
+             block_device_file_close(p->tab_drive[--i].block_dev);
+         virt_machine_free_config(p);
+         errno = error;
+-        return -1;
+-    }
++        return TEMU_EMBED_RETRYABLE_START_FAILURE;
++    }
++}
++
++/* Preserve the original public return convention for existing callers. */
++int temu_embed_run(const char *path, int in_fd, int out_fd)
++{
++    int result = temu_embed_run_initialized(path, in_fd, out_fd, NULL, NULL);
++    return result < 0 ? -1 : result;
+ }
+ #endif /* TEMU_EMBED */
+--- /dev/null
++++ b/temu_embed.h
+@@ -0,0 +1,22 @@
++/* Host-only embedding research API. TinyEMU's upstream MIT notice remains in
++ * COPYING and the source files. This adds no guest/tool READY guarantee. */
++#ifndef TEMU_EMBED_H
++#define TEMU_EMBED_H
++
++typedef void (*TemuInitialized)(void *opaque);
++enum {
++    /* Local config/drive failure: the fixed startup path released its devices. */
++    TEMU_EMBED_RETRYABLE_START_FAILURE = -1,
++    /* Control threads may end, but complete device cleanup is unproved. */
++    TEMU_EMBED_UNRECOVERED_START_FAILURE = -2
++};
++
++/* Callback runs synchronously on the machine thread after initialization and
++ * before the CPU loop. A successful invocation does not return in this source.
++ * Returned failure classes concern initialization only, not VM shutdown. */
++int temu_embed_run_initialized(const char *path, int in_fd, int out_fd,
++                               TemuInitialized initialized, void *opaque);
++/* Existing ABI: every setup failure remains -1. */
++int temu_embed_run(const char *path, int in_fd, int out_fd);
++
++#endif

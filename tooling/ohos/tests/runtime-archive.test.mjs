@@ -6,7 +6,7 @@ import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
 import {prepareArchiveModules, makeArchive, observation, resetObservation, activeInflaters,
-  fileIo, ArchiveResources} from './runtime-archive-fixture.mjs';
+  fileIo, nativeZlib, ArchiveResources} from './runtime-archive-fixture.mjs';
 
 const root = process.env.OHOS_ARCHIVE_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const temporary = await fs.mkdtemp(path.join(process.env.OHOS_ARCHIVE_TEST_DIR ?? os.tmpdir(), 'archive-tests-'));
@@ -18,6 +18,7 @@ const baseFiles = {
   'runtime/ohos/process/index.mjs': 'export const process = true;',
   'runtime/ohos/process/sandbox.mjs': 'export const sandbox = true;',
   'runtime/ohos/lifecycle/index.mjs': 'export const lifecycle = true;',
+  'runtime/ohos/phone/index.mjs': 'export const phone = true;',
   'runtime/ohos/capabilities/index.mjs': 'export const capabilities = true;',
   'runtime/bridge/dsh-go-bridge/lib/index.js': 'export function apply() {}',
   'runtime/ohos/process/child-process.mjs': 'export const childProcess = true;',
@@ -72,6 +73,16 @@ test('real random input crossing compressed and output chunk boundaries is byte-
   const data=randomBytes(1024*1024+19); const c=await scenario('chunked',{...baseFiles,'large.bin':data});
   await install(c); assert.deepEqual(await fs.readFile(c.installer.root+'/large.bin'),data);
   assert.ok(observation.inflates>Object.keys(baseFiles).length+4); assert.equal(observation.maxInput,256*1024);
+  assert.equal(observation.maxOutput,256*1024);
+});
+
+test('small members and the output-cap boundary finish with exact bytes and CRC',async()=>{
+  const sizes=[1,3,4,256*1024-2,256*1024-1,256*1024,256*1024+1];
+  const files={...baseFiles};
+  for(const size of sizes) files['boundary-'+size+'.txt']=Buffer.alloc(size,0x61);
+  const c=await scenario('output-boundary',files); await install(c);
+  for(const [name,bytes] of Object.entries(files)) assert.deepEqual(await fs.readFile(c.installer.root+'/'+name),Buffer.from(bytes));
+  assert.equal((await c.installer.installed()).runtimeVersion,'v1');
   assert.equal(observation.maxOutput,256*1024);
 });
 
@@ -201,9 +212,9 @@ test('corrupt actual Deflate bytes fail without installed marker; decompressor i
   await assert.rejects(install(c));assert.equal(await c.installer.installed(),null);
 });
 
-test('decompression beyond manifest size is stopped before oversized output is written',async()=>{
-  const c=await scenario('expanded-bomb',{...baseFiles,'000-bomb.txt':'x'.repeat(1024*1024)},'v1',m=>{m.files[0].size=1;});
-  await mutate(c,(b,r)=>{const row=r.find(x=>x.name==='files/000-bomb.txt');b.writeUInt32LE(1,row.centralOffset+24);b.writeUInt32LE(1,row.localOffset+22);});
+for(const declaredSize of [0,1]) test('decompression beyond declared size '+declaredSize+' is stopped before any output is written',async()=>{
+  const c=await scenario('expanded-bomb-'+declaredSize,{...baseFiles,'000-bomb.txt':'x'.repeat(1024*1024)},'v1',m=>{m.files[0].size=declaredSize;});
+  await mutate(c,(b,r)=>{const row=r.find(x=>x.name==='files/000-bomb.txt');b.writeUInt32LE(declaredSize,row.centralOffset+24);b.writeUInt32LE(declaredSize,row.localOffset+22);});
   await assert.rejects(install(c),{code:'ohos_size_mismatch'});assert.equal(await c.installer.installed(),null);
   const temps=await fs.readdir(c.directory+'/runtime/staging');assert.equal(temps.length,1);
   assert.equal((await fs.stat(c.directory+'/runtime/staging/'+temps[0])).size,0);
@@ -236,4 +247,211 @@ test('a staging close rejection retains explicit ownership and a new storage ins
     // The assertion above is evaluated before this test-only final cleanup.
     if(failed!==null&&observation.fd.has(failed.fd))await originalClose(failed);
   }
+});
+
+
+for (const kind of ['metadata', 'payload']) {
+  test(`actual installer ${kind} staging hardlink preserves the other inode name`, async () => {
+    const c = await scenario('hardlink-' + kind);
+    const member = c.manifest.files.find(file => file.path === 'runtime/ohos/preload.mjs');
+    const staging = kind === 'metadata' ? c.installer.base + '/installing.json.tmp'
+      : c.installer.base + '/staging/' + member.sha256 + '.tmp';
+    const victim = path.join(c.directory, 'outside-runtime-sentinel');
+    await fs.mkdir(path.dirname(staging), { recursive:true });
+    await fs.writeFile(victim, 'unchanged user bytes'); await fs.link(victim, staging);
+    assert.equal((await fs.stat(staging)).ino, (await fs.stat(victim)).ino);
+    await install(c);
+    assert.equal((await c.installer.installed()).runtimeVersion, 'v1');
+    for (const [name, bytes] of Object.entries(baseFiles))
+      assert.deepEqual(await fs.readFile(c.installer.root + '/' + name), Buffer.from(bytes));
+    assert.equal(await fs.readFile(victim, 'utf8'), 'unchanged user bytes');
+    assert.equal((await fs.stat(victim)).size, Buffer.byteLength('unchanged user bytes'));
+  });
+}
+
+
+async function hardlinkStage(name, kind) {
+  const c = await scenario(name);
+  const member = c.manifest.files.find(file => file.path === 'runtime/ohos/preload.mjs');
+  c.staging = kind === 'metadata' ? c.installer.base + '/installing.json.tmp'
+    : c.installer.base + '/staging/' + member.sha256 + '.tmp';
+  c.target = kind === 'metadata' ? c.installer.base + '/installing.json'
+    : c.installer.root + '/runtime/ohos/preload.mjs';
+  c.previous = kind === 'metadata' ? JSON.stringify({schema:1, ownedPaths:[], stagingHashes:[]}) : 'old target';
+  c.victim = path.join(c.directory, 'victim');
+  await fs.mkdir(path.dirname(c.staging), {recursive:true});
+  await fs.mkdir(path.dirname(c.target), {recursive:true});
+  await fs.writeFile(c.victim, 'outside data'); await fs.link(c.victim, c.staging);
+  await fs.writeFile(c.target, c.previous);
+  return c;
+}
+
+for (const kind of ['metadata', 'payload']) {
+  for (const errorCode of [13900005, 13900018]) {
+    test(`${kind} staging unlink error ${errorCode} preserves both files and permits explicit retry`, async () => {
+      const c = await hardlinkStage(`unlink-${kind}-${errorCode}`, kind), originalUnlink = fileIo.unlink;
+      fileIo.unlink = async name => {
+        if (name === c.staging) throw Object.assign(new Error('injected unlink failure'), {code:errorCode});
+        return originalUnlink(name);
+      };
+      try { await assert.rejects(install(c), {code:errorCode}); }
+      finally { fileIo.unlink = originalUnlink; }
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+      assert.equal(await fs.readFile(c.staging, 'utf8'), 'outside data');
+      assert.equal(await fs.readFile(c.target, 'utf8'), c.previous);
+      await install(c); assert.equal((await c.installer.installed()).runtimeVersion, 'v1');
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+    });
+  }
+  for (const entryKind of ['directory', 'symlink', 'danglingSymlink']) {
+    test(`${kind} staging ${entryKind} is rejected without touching its contents or target`, async () => {
+      const c = await hardlinkStage(`wrong-type-${kind}-${entryKind}`, kind);
+      await fs.unlink(c.staging);
+      if (entryKind === 'directory') {
+        await fs.mkdir(c.staging); await fs.writeFile(path.join(c.staging, 'keep'), 'child');
+      } else await fs.symlink(entryKind === 'danglingSymlink' ? c.victim + '.missing' : c.victim, c.staging);
+      if (entryKind === 'danglingSymlink') await assert.rejects(install(c));
+      else await assert.rejects(install(c), {code:'ohos_path_link'});
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+      assert.equal(await fs.readFile(c.target, 'utf8'), c.previous);
+      if (entryKind === 'directory') assert.equal(await fs.readFile(path.join(c.staging, 'keep'), 'utf8'), 'child');
+      else assert((await fs.lstat(c.staging)).isSymbolicLink());
+    });
+  }
+  if (kind === 'payload') {
+    test('payload staging directory batch commit failure blocks installed publication and retry succeeds', async () => {
+      const c = await hardlinkStage('batch-directory-fsync', kind);
+      const originalOpen = fileIo.open, originalClose = fileIo.close, originalSync = fileIo.fsync;
+      const directories = new Set();
+      let failed = false;
+      fileIo.open = async (name, flags) => {
+        const file = await originalOpen(name, flags);
+        if (name === path.dirname(c.staging) && (flags & fileIo.OpenMode.DIR) !== 0) directories.add(file.fd);
+        return file;
+      };
+      fileIo.close = async file => { await originalClose(file); directories.delete(file.fd); };
+      fileIo.fsync = async fd => {
+        if (directories.has(fd) && !failed) { failed = true; throw new Error('injected staging directory commit failure'); }
+        return originalSync(fd);
+      };
+      try { await assert.rejects(install(c), /staging directory commit failure/); }
+      finally { fileIo.open = originalOpen; fileIo.close = originalClose; fileIo.fsync = originalSync; }
+      assert.equal(failed, true);
+      await assert.rejects(fs.access(c.staging), {code:'ENOENT'});
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+      assert.deepEqual(await fs.readFile(c.target), Buffer.from(baseFiles['runtime/ohos/preload.mjs']));
+      assert.equal(await c.installer.installed(), null);
+      await fs.access(c.installer.base + '/installing.json');
+      await assert.rejects(fs.access(c.installer.base + '/installed.json'), {code:'ENOENT'});
+      await install(c);
+      assert.equal((await c.installer.installed()).runtimeVersion, 'v1');
+      for (const [name, bytes] of Object.entries(baseFiles))
+        assert.deepEqual(await fs.readFile(c.installer.root + '/' + name), Buffer.from(bytes));
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+    });
+    test('payload data fsync failure preserves the old target and outside hardlink bytes', async () => {
+      const c = await hardlinkStage('payload-data-fsync', kind);
+      const originalOpen = fileIo.open, originalClose = fileIo.close, originalSync = fileIo.fsync;
+      const payloads = new Set();
+      let failed = false;
+      fileIo.open = async (name, flags) => {
+        const file = await originalOpen(name, flags);
+        if (name === c.staging && (flags & fileIo.OpenMode.DIR) === 0) payloads.add(file.fd);
+        return file;
+      };
+      fileIo.close = async file => { await originalClose(file); payloads.delete(file.fd); };
+      fileIo.fsync = async fd => {
+        if (payloads.has(fd) && !failed) { failed = true; throw new Error('injected payload data fsync failure'); }
+        return originalSync(fd);
+      };
+      try { await assert.rejects(install(c), /payload data fsync failure/); }
+      finally { fileIo.open = originalOpen; fileIo.close = originalClose; fileIo.fsync = originalSync; }
+      assert.equal(failed, true);
+      assert.equal(await fs.readFile(c.target, 'utf8'), c.previous);
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+      assert.deepEqual(await fs.readFile(c.staging), Buffer.from(baseFiles['runtime/ohos/preload.mjs']));
+      assert.notEqual((await fs.stat(c.staging)).ino, (await fs.stat(c.victim)).ino);
+      assert.equal(await c.installer.installed(), null);
+      await fs.access(c.installer.base + '/installing.json');
+      await install(c);
+      assert.equal((await c.installer.installed()).runtimeVersion, 'v1');
+      assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+    });
+    continue;
+  }
+  test(`${kind} staging unlink fsync failure stops before replacement and retry succeeds`, async () => {
+    const c = await hardlinkStage('unlink-fsync-' + kind, kind);
+    const originalUnlink = fileIo.unlink, originalSync = fileIo.fsync;
+    let removed = false, failed = false;
+    fileIo.unlink = async name => { await originalUnlink(name); if (name === c.staging) removed = true; };
+    fileIo.fsync = async fd => {
+      if (removed && !failed) { failed = true; throw new Error('injected unlink parent fsync failure'); }
+      return originalSync(fd);
+    };
+    try { await assert.rejects(install(c), /unlink parent fsync failure/); }
+    finally { fileIo.unlink = originalUnlink; fileIo.fsync = originalSync; }
+    assert.equal(failed, true);
+    await assert.rejects(fs.access(c.staging), {code:'ENOENT'});
+    assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+    assert.equal(await fs.readFile(c.target, 'utf8'), c.previous);
+    await install(c); assert.equal((await c.installer.installed()).runtimeVersion, 'v1');
+    assert.equal(await fs.readFile(c.victim, 'utf8'), 'outside data');
+  });
+}
+
+// This is the failure contract of the new native CRC boundary, not evidence
+// that the former synchronous CRC accepted corrupt bytes.
+test('native CRC failure refuses completion and an explicit retry preserves all payload bytes', async () => {
+  const c = await scenario('native-crc-failure');
+  observation.failCrc = 1;
+  await assert.rejects(install(c), /injected native CRC failure/);
+  assert.equal(await c.installer.installed(), null);
+  await fs.access(c.directory + '/runtime/installing.json');
+  assert.equal(observation.fd.size, 0); assert.equal(activeInflaters(), 0);
+  await install(c);
+  assert.equal((await c.installer.installed()).runtimeVersion, 'v1');
+  for (const [name, bytes] of Object.entries(baseFiles))
+    assert.deepEqual(await fs.readFile(c.installer.root + '/' + name), Buffer.from(bytes));
+});
+
+test('native CRC uses unsigned incremental standard vectors and empty input', async () => {
+  const checksum = await nativeZlib.createChecksum();
+  const buffer = text => Uint8Array.from(Buffer.from(text)).buffer;
+  assert.equal(await checksum.crc32(0, buffer('123456789')), 0xcbf43926);
+  let crc = 0;
+  for (const text of ['123', '456', '789']) crc = await checksum.crc32(crc, buffer(text));
+  assert.equal(crc, 0xcbf43926);
+  assert.equal(await checksum.crc32(0, new ArrayBuffer(0)), 0);
+});
+
+test('asynchronous native CRC checks only valid output bytes and retains them until write', async () => {
+  const data = randomBytes(256 * 1024 + 29);
+  const files = {...baseFiles, 'chunked.bin': data, 'full-output.bin': Buffer.alloc(2 * 256 * 1024, 0x61),
+    'short.txt': '123456789'};
+  const c = await scenario('native-crc-valid-count', files);
+  observation.beforeCrc = async (_previous, buffer) => {
+    const before = Buffer.from(buffer).toString('base64');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(Buffer.from(buffer).toString('base64'), before);
+  };
+  await install(c);
+  assert.equal(observation.checksumCreates, 1);
+  assert.equal(observation.crcBytes, Object.values(files).reduce((n, bytes) => n + Buffer.byteLength(bytes), 0));
+  assert.ok(observation.crcCalls > Object.keys(files).length - 1);
+  assert.equal(observation.maxCrcBuffer, 256 * 1024);
+  for (const [name, bytes] of Object.entries(files))
+    assert.deepEqual(await fs.readFile(c.installer.root + '/' + name), Buffer.from(bytes));
+});
+
+test('incorrect payload CRC still refuses completion when manifest SHA and length match', async () => {
+  const c = await scenario('native-crc-corrupt');
+  await mutate(c, (bytes, rows) => {
+    const member = rows.find(row => row.name.endsWith('/bin.js'));
+    const wrong = (bytes.readUInt32LE(member.localOffset + 14) ^ 1) >>> 0;
+    bytes.writeUInt32LE(wrong, member.localOffset + 14);
+    bytes.writeUInt32LE(wrong, member.centralOffset + 16);
+  });
+  await assert.rejects(install(c), {code: 'ohos_checksum_failed'});
+  assert.equal(await c.installer.installed(), null);
+  await fs.access(c.directory + '/runtime/installing.json');
 });

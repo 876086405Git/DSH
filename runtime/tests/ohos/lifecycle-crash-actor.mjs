@@ -57,10 +57,9 @@ try {
       return [{ type: 'text', text: 'durable final ' + label + ' 中文' + (scenario === 'policy-spill' ? ' large complete output 中文'.repeat(2000) : '') }];
     }, { isConcurrencySafe: () => scenario === 'parallel' });
     if (scenario === 'search-spill') {
-      const [{ SessionProjectionRegistry }, { LocalFileSystem }, { WorkingDirectoryService }, search, { default: subprocess }] = await Promise.all([
-        load('dsh-session-projection'), load('dsh-fs-local'), load('dsh-working-directory'), load('dsh-tool-fs-search'), import('../../ohos/process/index.mjs'),
+      const [{ LocalFileSystem }, { WorkingDirectoryService }, search, { default: subprocess }] = await Promise.all([
+        load('dsh-fs-local'), load('dsh-working-directory'), load('dsh-tool-fs-search'), import('../../ohos/process/index.mjs'),
       ]);
-      await f.ctx.plugin(SessionProjectionRegistry);
       await f.ctx.plugin(LocalFileSystem, { cwd: join(root, 'workspace') });
       await f.ctx.plugin(WorkingDirectoryService, { defaultDirectory: join(root, 'workspace') });
       await fs.mkdir(join(root, 'temporary'), { mode: 0o700 });

@@ -1,0 +1,67 @@
+{
+  "linuxTitle": "Linux environment",
+  "linuxSubtitle": "Run gh, Python, git and other command-line tools on this phone",
+  "linuxSwitch": "Turn on Linux",
+  "linuxStatus": "Status",
+  "linuxFirstHint": "The first time downloads a 3.5 MB base system and installs it, which takes a minute or two. After that it starts in seconds.",
+  "linuxMemoryNote": "While Linux is on, the app uses roughly 100 MB more memory. Turning it off gives that back; turning it on again then needs the app reopened.",
+  "linuxStateOn": "On",
+  "linuxStateOff": "Off",
+  "linuxStateInstalling": "Getting ready",
+  "linuxStateStopping": "Turning off",
+  "linuxStateFailed": "Failed",
+  "linuxStateUnavailable": "Unavailable",
+  "linuxStageDownload": "Downloading the base system",
+  "linuxStageDisk": "Preparing disks",
+  "linuxStageBoot": "Starting",
+  "linuxStageTools": "Installing tools",
+  "linuxEngineOffline": "The on-device engine isn’t running. Start it, then turn Linux on.",
+  "linuxRequestFailed": "Couldn’t reach the engine. Try again in a moment.",
+  "linuxRestartRequired": "Linux has stopped. Reopen the app to turn it on again.",
+  "linuxReopenApp": "Reopen app",
+  "linuxReopenFailed": "Couldn't reopen the app. Quit it and open it again.",
+  "linuxErrorWithCode": "Couldn’t turn on: {code}",
+  "@linuxErrorWithCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "linuxReinstall": "Reinstall Linux",
+  "linuxReinstallHint": "Deletes everything inside Linux; turning it on again installs it fresh",
+  "linuxReinstallAfterRestart": "Linux already started in this run of the app. Quit and reopen the app to reinstall",
+  "linuxReinstallTitle": "Reinstall Linux?",
+  "linuxReinstallBody": "This deletes everything inside Linux: installed software and Python packages, files that exist only inside Linux, and accounts signed in there (such as gh). Files in your chat workspaces aren’t touched.\n\nThe switch stays off; turning it on afterwards downloads and installs Linux again.",
+  "linuxRetainedRefused": "The existing Linux data can’t be used any more (usually after an app update), and the app won’t overwrite it on its own. Tap Reinstall Linux to delete it, then turn Linux on for a fresh install. ({code})",
+  "@linuxRetainedRefused": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "linuxReinstallRestart": "Linux already started in this run of the app, so its data may still be in use. Quit and reopen the app, then tap Reinstall Linux.",
+  "linuxReinstallFailed": "Couldn’t reinstall: {code}",
+  "@linuxReinstallFailed": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "linuxProxyTitle": "Network proxy",
+  "linuxProxyFooter": "Applies only to commands inside Linux. Gitee, Huawei Cloud and other mirrors in China always connect directly.",
+  "linuxProxyMode": "Mode",
+  "linuxProxyInherit": "Same as app",
+  "linuxProxyDirect": "No proxy",
+  "linuxProxyManual": "Manual",
+  "linuxProxyHttp": "HTTP proxy",
+  "linuxProxyHttps": "HTTPS proxy",
+  "linuxProxyNoProxy": "Bypass for",
+  "linuxProxyUnset": "Not set",
+  "linuxProxySameAsHttp": "Same as HTTP",
+  "linuxProxyLoopbackNote": "127.0.0.1 means this phone, not your computer.",
+  "linuxProxyUrlInvalid": "Enter an address starting with http:// or https://, such as http://127.0.0.1:7890",
+  "searchKwLinux": "Linux,terminal,command line,virtual machine,gh,GitHub CLI,python,pip,proxy"
+}

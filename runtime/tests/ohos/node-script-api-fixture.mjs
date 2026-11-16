@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import { resolve } from 'node:path';
 
 const requests = JSON.parse(process.argv[2]);
+assert(['native', 'strict'].includes(process.argv[3]));
 const observations = [];
 for (const request of requests) {
   const { kind, name, operation, completion } = request;
@@ -19,7 +20,7 @@ for (const request of requests) {
   switch (operation) {
     case 'access': case 'exists': case 'stat': case 'lstat': case 'statfs': case 'readFile':
     case 'realpath': case 'openAsBlob': args = [source]; break;
-    case 'readlink': fs.symlinkSync(source, dest); args = [dest]; break;
+    case 'readlink': args = [dest]; break;
     case 'readdir': case 'opendir': fs.mkdirSync(dir); args = [dir]; break;
     case 'chmod': case 'lchmod': args = [source, 0o600]; break;
     case 'chown': case 'lchown': args = [source, process.getuid(), process.getgid()]; break;
@@ -58,6 +59,7 @@ for (const request of requests) {
     default: throw new Error('Executable fixture missing for path operation ' + operation);
   }
   let value;
+  const deniedLink = ['link', 'symlink'].includes(operation) && process.argv[3] === 'strict';
   try {
     if (special === 'promise-watch') {
       const signal = new AbortController();
@@ -68,6 +70,7 @@ for (const request of requests) {
     else if (completion === 'iterator') value = await Array.fromAsync(api[name](...args));
     else if (['ReadStream', 'WriteStream', 'FileReadStream', 'FileWriteStream', 'Utf8Stream'].includes(operation)) value = new api[name](...args);
     else value = await api[name](...args);
+    if (deniedLink) assert.fail(`${kind}.${name} unexpectedly created a link in strict simulation`);
     if (special === 'read-stream') {
       const chunks = []; for await (const chunk of value) chunks.push(chunk);
       assert.equal(Buffer.concat(chunks).toString(), '中文 source');
@@ -97,7 +100,10 @@ for (const request of requests) {
     inspect(); observations.push({ kind, name, called: true });
   } catch (error) {
     if (operation === 'lchmod' && ['ENOSYS', 'ERR_METHOD_NOT_IMPLEMENTED'].includes(error.code)) observations.push({ kind, name, nativeUnavailable: true, code: error.code });
-    else if (operation === 'link' && globalThis[Symbol.for('dsh.go.ohos.sim')] === true && error.code === 'EACCES') observations.push({ kind, name, originalOhosDenial: true, code: error.code });
+    else if (deniedLink && error.code === 'EACCES') {
+      assert.throws(() => fs.lstatSync(args[1]), { code: 'ENOENT' });
+      observations.push({ kind, name, originalOhosDenial: true, code: error.code });
+    }
     else { console.error('API_CASE_FAILED', kind, name, error); throw error; }
   }
 }

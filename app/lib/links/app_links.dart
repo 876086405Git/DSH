@@ -54,6 +54,7 @@ import 'page_links.dart' show pageLinkResolverProvider, registerPageLinks;
 import 'plugin_links.dart' show registerPluginLinks;
 
 import '../l10n/l10n.dart';
+import 'share_consumption.dart';
 
 /// Scheme of the app's own links.
 const appLinkScheme = 'dshgo';
@@ -129,8 +130,16 @@ class AppLinks {
   void dispose() {
     _disposed = true;
     _channel.setMethodCallHandler(null);
+    _held.removeWhere(_finishSharedFile);
     unawaited(_controller.close());
   }
+}
+
+bool _finishSharedFile(Uri uri) {
+  final consumption = ShareConsumption.forUri(uri);
+  if (consumption == null) return false;
+  unawaited(consumption.finishPath(uri.toFilePath()));
+  return true;
 }
 
 /// Takes a link; true when handled.
@@ -235,6 +244,7 @@ class LinkRouter {
   Future<bool> open(Uri uri) async {
     final handler = _handlerFor(uri);
     if (handler == null) {
+      _finishSharedFile(uri);
       _unhandled(uri);
       return false;
     }
@@ -255,6 +265,7 @@ class LinkRouter {
       if (handler != null) {
         unawaited(_run(uri, handler));
       } else if (_settled || !_canWait(uri)) {
+        _finishSharedFile(uri);
         _unhandled(uri);
       } else {
         _pending.add(uri);
@@ -295,11 +306,14 @@ class LinkRouter {
   };
 
   Future<bool> _run(Uri uri, LinkHandler handler) async {
+    final consumption = ShareConsumption.forUri(uri);
     var handled = false;
     try {
       handled = await handler(uri);
     } catch (error, stack) {
       debugPrint('link handler failed for ${uri.scheme}://${uri.host}: $error\n$stack');
+    } finally {
+      if (consumption != null) unawaited(consumption.finishPath(uri.toFilePath()));
     }
     if (!handled) _unhandled(uri);
     return handled;
@@ -315,6 +329,7 @@ class LinkRouter {
   }
 
   void dispose() {
+    _pending.removeWhere(_finishSharedFile);
     _graceTimer?.cancel();
     unawaited(_sub.cancel());
   }

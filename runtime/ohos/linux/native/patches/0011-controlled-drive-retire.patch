@@ -1,0 +1,46 @@
+--- a/temu.c
++++ b/temu.c
+@@ -350,6 +350,7 @@
+     BlockDeviceFile *bf = bs->opaque;
+     int ret;
+ 
++    if (!bf->f) return -1;
+     switch(bf->mode) {
+     case BF_MODE_RO:
+         ret = -1; /* error */
+@@ -450,6 +451,21 @@
+ }
+ 
+ #ifdef TEMU_EMBED
++/* CPU dispatch must have stopped. Retain device allocations because virtio
++   still references them; detach only the FILE owned by this block device.
++   fclose failure is terminal: the FILE must never be retried or reused. */
++static int block_device_file_retire(BlockDevice *bs)
++{
++    BlockDeviceFile *bf = bs->opaque;
++    FILE *f = bf->f;
++    int failed = 0;
++    if (!f) return 0;
++    bf->f = NULL;
++    if (bf->mode == BF_MODE_RW && fflush(f) != 0) failed = 1;
++    if (fclose(f) != 0) failed = 1;
++    return failed ? -1 : 0;
++}
++
+ static void block_device_file_close(BlockDevice *bs)
+ {
+     BlockDeviceFile *bf;
+@@ -1016,6 +1032,13 @@
+         virt_machine_run(s);
+     /* CPU dispatch ended; device teardown is not implemented. Keep the owner
+        quarantined, never classify this as a reusable successful shutdown. */
++    if (embed_controlled) {
++        int failed = 0;
++        for (i = 0; i < p->drive_count; i++)
++            if (block_device_file_retire(p->tab_drive[i].block_dev) < 0)
++                failed = 1;
++        if (failed) return -8; /* drive retirement failed; owner quarantined */
++    }
+     if (embed_output_failed) return TEMU_EMBED_OUTPUT_UNRELEASED;
+     if (embed_input_failed) return TEMU_EMBED_INPUT_UNRELEASED;
+     if (s->embed_poweroff) return TEMU_EMBED_STOPPED_UNRELEASED;

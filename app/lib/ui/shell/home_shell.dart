@@ -23,6 +23,7 @@ import '../bots/bot_alerts.dart';
 import '../chat/chat_screen.dart';
 import '../chat/composer_toast.dart' show composerToastGap;
 import '../engine/engine_screen.dart';
+import '../engine/reset_outcome.dart';
 import '../features/all_features_page.dart';
 import '../forum/forum_link_host.dart';
 import '../notify/background_net_host.dart';
@@ -32,6 +33,7 @@ import '../notify/voice_model_host.dart';
 import '../plugins/plugins_screen.dart';
 import '../pets/pet_settings_page.dart';
 import '../phone/phone_stop_watcher.dart';
+import '../phone/system_actions_host.dart';
 import '../remote/host_switcher.dart' show showHostSheet;
 import '../remote/remote_screen.dart';
 import '../safe_mode/safe_mode_notice_listener.dart';
@@ -345,8 +347,15 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                       // one line under the header (draws nothing here).
                       if (ref.watch(androidSystemFeaturesProvider))
                         const BackgroundNetHost()
-                      else
+                      else ...[
                         const BackgroundPauseHost(),
+                        if (ref.watch(operatingSystemProvider) == 'ohos') ...[
+                          // 系统操作: its session and a handoff's prompt (draws nothing here).
+                          const SystemActionsHost(),
+                          // How a reset asked for before the app reopened came out (draws nothing).
+                          const ResetReceiptHost(),
+                        ],
+                      ],
                       // Daily update check + install resume (draws nothing).
                       const UpdateLaunchCheck(),
                       // The voice model chosen during setup: download, resume, ready / failed notices (draws nothing).

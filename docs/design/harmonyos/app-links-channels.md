@@ -1,6 +1,6 @@
 # P3b：时区、回前台和深链通道
 
-基底 c818155。**未编译、未在真机核实。** 本包实现的行为以以下表格为边界；不把系统刷新率模式、文件导入或完整 P3 宣称为已完成。
+基底 c818155。**未编译、未在真机核实。** 本包实现的行为以以下表格为边界；不把文件导入或完整 P3 宣称为已完成。刷新率一节写于之后，同样没在真机核实。
 
 ## 协议
 
@@ -8,8 +8,9 @@
 | --- | --- |
 | `dsh/app.getTimeZoneId` | 公开 `i18n.getTimeZone().getID()`，返回系统时区字符串；查询失败返回 `ohos_timezone`。 |
 | `dsh/app.bringToFront` | 仅启动当前绑定 UIAbility 自身的 bundle/name；系统拒绝后台拉起或窗口已分离时明确报错，不承诺绕过系统限制。 |
-| `dsh/app.setRefreshRateMode` | `system` 表示保留系统与 Flutter 的刷新策略；`auto`、`max` 返回 `ohos_unsupported`，提示选择系统默认。 |
-| `dsh/app.setFrameActive` | 在唯一支持的 system 模式下无需应用强制帧率，返回空；没有新增 VSync 循环或帧率计时器。 |
+| `dsh/app.setRefreshRateMode` | `auto`、`max`、`system`，见下面的刷新率一节；其他值返回 `ohos_unsupported`。 |
+| `dsh/app.scanQrCode` | Scan Kit 默认界面扫码 `scanBarcode.startScanForResult(UIAbilityContext, {scanTypes: [QR_CODE], enableMultiMode: false, enableAlbum: true})`，返回 `originalValue`；用户关闭扫码页（1000500002）返回 null。非前台或无 ability 为 `no_ability`，已有扫码页为 `busy`，无 SysCap 或 Scan Kit 加载失败为 `unavailable`，其他错误或空结果为 `failed`。Scan Kit 只在首次扫码时动态加载。**UNCOMPILED_HMS**，未在真机核实。 |
+| `dsh/app.setFrameActive` | `auto` 下开关保活定时器，返回空；约每秒重发一次 true 作为续期。 |
 | `dsh/links.ready` | 返回 true，再按收到顺序回放等待中的链接。重复 ready 不重放。 |
 | `dsh/links` 原生调用 `link` | 参数必须是 Map `{uri: string}`；外来文件尚无可读副本时为 `{error: 'unreadable', name: null}`。不是裸字符串。 |
 
@@ -27,13 +28,21 @@ EntryAbility 增加 `singleton` 和 `dshgo` scheme 的 viewData/browsable skill�
 
 v2 增加公开 viewData 的外来 file URI 复制，详见下节。content URI 保留 unreadable；该方案不实现 dsh/share 的系统分享载荷。
 
-## 刷新率的真实边界
+## 刷新率
 
-公开 `@ohos.window` 声明没有可对任意窗口设置 Android preferredDisplayMode 的等价方法。`UIContext.requireDynamicSyncScene` 返回的是 ArkUI Swiper/Marquee 场景，不能仅凭方法名将它当作 Flutter XComponent 的刷新率控制。
+公开 `@ohos.window` 声明没有可对任意窗口设置 Android preferredDisplayMode 的等价方法。`UIContext.requireDynamicSyncScene` 返回的是 ArkUI Swiper/Marquee 场景，不能当作 Flutter XComponent 的刷新率控制。`updateRefreshRate` 是向引擎报告当前值，不改变面板刷新率。
 
-固定 oh-flutter 的 FlutterView 会把当前 display.refreshRate 传给引擎，并在输入活动时调用 `LTPODispatchHighFrameRate()`；`updateRefreshRate` 是向引擎报告当前值，不是改变面板刷新率。本包不拿这两个方法伪装强制最高模式。
+能用的杠杆在引擎里。固定 oh-flutter 在自己的 `OH_NativeVSync` 上投票（`ohos_vsync_voting_mgr.cpp`）：手指按下或抬起 100 ms 内 120；从没碰过或抬起超过 3 秒期望 60（`{30,120,60}`）；中间只有滚动、路由转场和 Hero 的动画票，否则 `{0,0,0}` 交给系统。App 自己的弹簧、Sheet 和流式输出不投票。`LTPODispatchHighFrameRate()` 是嵌入层给返回键用的公开方法，对引擎来说等于一次抬起，所以约每 80 ms 调一次就能留在 120 那一支。
 
-主线可先将鸿蒙刷新选项限制到系统默认，并保留明确的待办；当前 Dart refresh controller 会吞 PlatformException，因此若要向用户显示 unsupported，需主线在 UI 层加提示。本包不改该 UI。补齐 auto/max 需要可作用于 Flutter 所有权下 XComponent 的公开 NativeXComponent/VSync 接口及设备帧率、静止功耗和前后台行为证据；不能以持续请求高帧循环替代。
+| 模式 | 行为 |
+|---|---|
+| `auto`（默认） | Dart 连续看到动画节奏的帧（间隔不超过 50 ms，连续 3 个间隔）才 `setFrameActive(true)`，动画结束 0.7 秒后 false。闪烁的光标每秒约 2 帧，不会启动也不会撑住它。动作开头几帧仍是原来的帧率，手指引起的动作不受影响，因为此时引擎本来就在 120 |
+| `max` | 前台一直调用。官方最佳实践（`bpta-ltpo-description.md`）明确不建议长期锁 120，所以只是用户手选的选项，不是默认 |
+| `system` | 不调用，引擎和系统自己决定 |
+
+`OhosFrameRate.ets` 的定时器在这些情况下停：inactive、换模式、`onBackground`、Ability 分离、引擎分离、`thermal.lightweight` 为真（降温后恢复仍需要的）、引擎已分离或调用抛错（到引擎换掉为止不再启动）。`auto` 还有租约：连续 50 次调用（4 秒）没有等到 Dart 续期就自己停，这样 UI 线程卡死也不会一直留在 120。
+
+每次调用引擎都打一行 INFO（`nativeLTPODispatchHighFrameRate`）并投递两个任务，其中一个延迟 3 秒，也就是运行期间约每秒 12 行。这行只能靠改引擎去掉。手指按住时调用也会清掉引擎的 `is_touch_down_`：按住不动超过约 0.8 秒后再拖动，开头约 3 帧不在 120。设备上的检查方法见 [first-device.md](first-device.md)。
 
 ## 固定官方接口来源
 

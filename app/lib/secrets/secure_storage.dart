@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// True for the two failures trying again can't fix: the saved credentials
-/// don't decrypt, or the system key they need is gone. Only the OH channel
-/// reports them. Everything else (`secrets_unavailable`, `secrets_io`) may pass.
+/// True for the failures trying again can't fix: the saved credentials don't
+/// decrypt, the system key they need is gone, or no credentials are left and the
+/// key that remains doesn't work. Only the OH channel reports them. Everything
+/// else (`secrets_unavailable`, `secrets_io`) may pass.
 bool credentialsUnreadable(Object? error) =>
-    error is PlatformException && (error.code == 'secrets_unreadable' || error.code == 'secrets_key_missing');
+    error is PlatformException &&
+    const {'secrets_unreadable', 'secrets_key_missing', 'secrets_key_unusable'}.contains(error.code);
 
 /// Secret-storage operations and explicit OH credential recovery.
 ///

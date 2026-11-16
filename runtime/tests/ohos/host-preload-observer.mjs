@@ -9,10 +9,16 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 if (isMainThread) {
   const config = JSON.parse(process.env.OHOS_STARTUP_CASE);
+  // This is the first application/plugin-phase lookup. Mutate env before the
+  // lookup so a late capture cannot accidentally pass the ordering check.
+  process.env.DSH_GO_OHOS_LINUX_DIRECTORY = '/later-plugin-directory';
+  process.env.DSH_GO_OHOS_NATIVE_LIBRARY_DIR = '/later-plugin-native';
+  const { linuxHostPaths } = await import('../../ohos/linux/host-paths.mjs');
   const network = globalThis[Symbol.for('dsh.go.ohos.net')];
   const publication = globalThis[Symbol.for('dsh.go.ohos.publication')];
   const initial = globalThis.__ohosStartupSnapshot;
   if (config.name === 'android-env') {
+    assert.equal(linuxHostPaths(), undefined);
     assert.equal(network, undefined); assert.equal(publication, undefined);
     assert.equal(globalThis.fetch, initial.fetch);
     assert.equal(globalThis[Symbol.for('dsh.go.ohos.sim')], undefined);
@@ -23,6 +29,9 @@ if (isMainThread) {
   assert.equal(publication.protocolVersion, 1);
   for (const name of ['Request', 'Response', 'Headers', 'FormData']) assert.equal(globalThis[name], initial[name]);
   assert.equal(globalThis[Symbol.for('dsh.go.ohos.sim')], true);
+  assert.deepEqual(linuxHostPaths(), { directory: config.linuxDirectory, nativeLibraryDirectory: config.nativeLibraryDirectory });
+  assert.equal(Object.isFrozen(linuxHostPaths()), true);
+  assert.throws(() => { linuxHostPaths().directory = '/late-write'; }, TypeError);
   if (config.strict) assert.equal(typeof WebAssembly, 'undefined');
   const source = join(process.env.DSH_HOME, 'fixture-source');
   const target = join(process.env.DSH_HOME, 'fixture-final');
@@ -39,9 +48,9 @@ if (isMainThread) {
     worker = new Worker(new URL('./host-preload-worker.mjs', import.meta.url), { workerData: { url, strict: config.strict } });
     const message = once(worker, 'message'); const ended = once(worker, 'exit');
     const [value] = await message; const [exit] = await ended; assert.equal(exit, 0);
-    assert.deepEqual(value, { body: 'startup-ready', network: true, publication: false, simulated: true });
+    assert.deepEqual(value, { body: 'startup-ready', network: true, publication: false, simulated: true, linuxOwnerPaths: false });
     console.log(JSON.stringify({ beforeDshEntry: true, body, publishMethod: published.method,
-      publication: true, worker: value, constructorsSame: true, strict: config.strict }));
+      publication: true, worker: value, constructorsSame: true, linuxPathsCapturedBeforeEntry: true, strict: config.strict }));
   } finally {
     if (worker) await worker.terminate();
     await network.dispatcher.destroy();

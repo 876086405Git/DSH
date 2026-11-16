@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fsSync from 'node:fs';
@@ -92,7 +93,7 @@ test('a session-A ticket cannot be started with host-authorized session-B cwd', 
 
 test('canonical aliases do not grant a different session, and an unauthorized cwd is rejected', async t => {
   const f = await fixture(t), alias = join(f.root, 'alias-a'), unauthorized = join(f.root, 'outside');
-  await fs.symlink(f.a, alias);
+  await symlinkFixture(f.a, alias);
   await fs.mkdir(unauthorized);
   const own = await f.result(f.spawn(['bash', '-c', 'cat own.txt'], { cwd: alias }));
   assert.equal(own.stdout, 'SESSION_A\n');
@@ -124,7 +125,7 @@ test('missing, empty, relative, filesystem-root, nonexistent and file roots reje
 
 test('dispose removes owned temp and sealed spill output but preserves a linked external target', async t => {
   const f = await fixture(t, true);
-  await fs.symlink(f.b, join(f.temporary, 'external-link'));
+  await symlinkFixture(f.b, join(f.temporary, 'external-link'));
   const handle = f.spawn(['bash', '-c', 'printf 0123456789ABCDEFGHIJ'], {
     stdio: { stdin: 'ignore', stdout: { maxBytes: 8, spill: { maxBytes: 100 } }, stderr: { maxBytes: 8 } },
   });

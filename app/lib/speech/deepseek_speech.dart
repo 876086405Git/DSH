@@ -9,6 +9,8 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart';
@@ -18,6 +20,8 @@ import 'package:http/http.dart' as http;
 import '../state/account_state.dart';
 import '../state/connection_state.dart';
 import '../state/settings_state.dart';
+
+part 'ohos_deepseek_speech.dart';
 
 /// PCM from DeepSeek's TTS: 24 kHz, 16-bit little-endian, mono.
 const deepSeekTtsRate = 24000;
@@ -424,6 +428,9 @@ final deepSeekSpeechProvider = Provider<DeepSeekSpeechResolver>((ref) {
     final carrier = client?.carrier;
     final key = ref.read(settingsProvider).apiKey.trim();
     DeepSeekSpeech direct() => DirectDeepSeekSpeech(key, client: ref.read(deepSeekSpeechHttpProvider));
+    if (Platform.operatingSystem == 'ohos') {
+      return _resolveOhosSpeech(bridge, carrier, key, ref.read(deepSeekSpeechHttpProvider));
+    }
     if (bridge == DeepSeekSpeechRoute.account && carrier is DshHttpCarrier && !(_accountRefused && key.isNotEmpty)) {
       final account = BridgeDeepSeekSpeech(carrier.connection, bridge!);
       return key.isEmpty ? account : AccountThenKeySpeech(account, direct);

@@ -1,0 +1,1288 @@
+{
+  "gitVersion": "git version 2.43.0",
+  "names": [
+    "ascii.txt",
+    "中文.txt",
+    "emoji🙂.txt",
+    "with space.txt",
+    "with\ttab.txt",
+    "with\nnewline.txt"
+  ],
+  "cases": [
+    {
+      "quotePath": null,
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "false",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  emoji🙂.txt\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\nemoji🙂.txt\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\temoji🙂.txt\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "true",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "no",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  emoji🙂.txt\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\nemoji🙂.txt\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\temoji🙂.txt\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "off",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  emoji🙂.txt\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\nemoji🙂.txt\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\temoji🙂.txt\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "0",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  emoji🙂.txt\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\nemoji🙂.txt\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\temoji🙂.txt\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  emoji🙂.txt\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\nemoji🙂.txt\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\temoji🙂.txt\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "yes",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "on",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "1",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "FALSE",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  emoji🙂.txt\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\nemoji🙂.txt\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\temoji🙂.txt\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t中文.txt\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "2",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "-1",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "0x1",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "quotePath": "010",
+      "results": [
+        {
+          "args": [
+            "ls-files",
+            "--stage"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"emoji\\360\\237\\231\\202.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\ttab.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"with\\nnewline.txt\"\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\n100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "ls-files",
+            "--stage",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\tascii.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\temoji🙂.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\ttab.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith\nnewline.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\twith space.txt\u0000100644 d95f3ad14dee633a758d2e331151e950dd13e4ed 0\t中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\nA  \"emoji\\360\\237\\231\\202.txt\"\nA  \"with\\ttab.txt\"\nA  \"with\\nnewline.txt\"\nA  \"with space.txt\"\nA  \"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "status",
+            "--porcelain",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "A  ascii.txt\u0000A  emoji🙂.txt\u0000A  with\ttab.txt\u0000A  with\nnewline.txt\u0000A  with space.txt\u0000A  中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\n\"emoji\\360\\237\\231\\202.txt\"\n\"with\\ttab.txt\"\n\"with\\nnewline.txt\"\nwith space.txt\n\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "ascii.txt\u0000emoji🙂.txt\u0000with\ttab.txt\u0000with\nnewline.txt\u0000with space.txt\u0000中文.txt\u0000",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\n1\t0\t\"emoji\\360\\237\\231\\202.txt\"\n1\t0\t\"with\\ttab.txt\"\n1\t0\t\"with\\nnewline.txt\"\n1\t0\twith space.txt\n1\t0\t\"\\344\\270\\255\\346\\226\\207.txt\"\n",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "diff",
+            "--cached",
+            "--numstat",
+            "-z"
+          ],
+          "exitCode": 0,
+          "stdout": "1\t0\tascii.txt\u00001\t0\temoji🙂.txt\u00001\t0\twith\ttab.txt\u00001\t0\twith\nnewline.txt\u00001\t0\twith space.txt\u00001\t0\t中文.txt\u0000",
+          "stderr": ""
+        }
+      ]
+    }
+  ]
+}

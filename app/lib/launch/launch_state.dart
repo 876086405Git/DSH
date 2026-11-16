@@ -44,6 +44,7 @@ class LaunchSnapshot {
     this.icon,
     this.coldEngine = false,
     this.systemIcon = true,
+    this.motionAfterReady = false,
   });
 
   /// Android API level.
@@ -73,6 +74,11 @@ class LaunchSnapshot {
   /// The system's launch window shows [icon] (Android 13+ with the chosen icon's own splash theme).
   /// Otherwise it shows the page colour alone, and the launch screen brings the icon in.
   final bool systemIcon;
+
+  /// The still picture holds until the app is ready, then the motion plays (HarmonyOS). On
+  /// HBN-AL00 the app's first ~0.7 s of work stalled frames for 100–300 ms, right where the
+  /// motion would start; after it, frames take 2–3 ms.
+  final bool motionAfterReady;
 
   /// Android 12+ lays a flat colour; 8–11 the launch window's gradient.
   bool get flat => sdk >= 31;
@@ -110,6 +116,7 @@ class LaunchSnapshot {
       dark: raw['dark'] == true,
       coldEngine: raw['coldEngine'] == true,
       systemIcon: raw['systemIcon'] != false,
+      motionAfterReady: raw['motionAfterReady'] == true,
     );
   }
 
@@ -335,6 +342,10 @@ class LaunchController extends ChangeNotifier {
     if (_firstFrame) return;
     _firstFrame = true;
     if (native) unawaited(channel.mark('firstFrame'));
+    if (snapshot.motionAfterReady) {
+      _handOverTimer = Timer(readyCap, _play);
+      return;
+    }
     if (!snapshot.systemSplash) return _play();
     _handOverTimer = Timer(handOverWait, _play);
   }
@@ -374,6 +385,8 @@ class LaunchController extends ChangeNotifier {
     if (native) unawaited(channel.mark('ready'));
     if (_phase == LaunchPhase.playing) {
       _leaveIfDone();
+    } else if (_phase == LaunchPhase.cover && _firstFrame && snapshot.motionAfterReady) {
+      _play();
     } else if (_phase == LaunchPhase.cover && _firstFrame && !_handingOver && !_coldHold) {
       // Still waiting for Android 12+'s splash: the app doesn't wait the whole of
       // [handOverWait] for it. A splash that comes later dissolves straight onto the app.
@@ -384,6 +397,9 @@ class LaunchController extends ChangeNotifier {
 
   /// With the app ready, how much longer to wait for the system's splash to be handed over.
   static const readyWait = Duration(milliseconds: 200);
+
+  /// The longest [LaunchSnapshot.motionAfterReady] holds the still picture for an app not ready.
+  static const readyCap = Duration(milliseconds: 1200);
 
   /// What the launch screen still covers (before the hand-over too), with motion allowed: the
   /// user's own picture on every cold start of the app, whatever the engine is doing (opening, then

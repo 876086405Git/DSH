@@ -116,7 +116,7 @@ v3的反例为drain返回旧批次之后原生线程完成尾日志和exit；随
 
 ### 可信安装目录接线
 
-新增 `HostOptions.nativeLibraryDir`，只来自当前应用 Context：`bundleCodeDir` 是安装代码根，`applicationInfo.nativeLibraryPath` 是相对此根的安装库路径；不能把后一字段当成绝对路径。`resolveNativeLibraryDir` 要求根是非根绝对路径且无 NUL；相对路径可去一个末尾斜杠，随后不允许空分量、`.`、`..`、NUL 或前导斜杠。错误返回 `ohos_native_library_path`，不回退硬编码的 `/data/...`，不消耗唯一 Node 启动机会。
+新增 `HostOptions.nativeLibraryDir`，只来自当前应用 Context：`bundleCodeDir` 是安装代码根，`applicationInfo.nativeLibraryPath` 按文档是相对此根的安装库路径，但 HarmonyOS 7.0.0.111 真机给的是此根下的绝对路径（`/data/storage/el1/bundle/libs/arm64`），所以以「根 + /」开头时先去掉这个前缀，再按相对路径检查。`resolveNativeLibraryDir` 要求根是非根绝对路径且无 NUL；相对路径可去一个末尾斜杠，随后不允许空分量、`.`、`..`、NUL 或前导斜杠。错误返回 `ohos_native_library_path`，不回退硬编码的 `/data/...`，不消耗唯一 Node 启动机会。
 
 显式设置 `module.json5` 的 `extractNativeLibs:true`、`libIsolation:false`，让固定两库使用同一已解压的安装目录；具体 HAP 布局仍须主线核验。P1B v2 必须接收这个必填字段，canonicalize 并检查目录、固定 `libdsh_require_builtin.so` 和 `libdsh_flock.so` 为普通非链接文件，再写受保护的 `DSH_GO_OHOS_NATIVE_LIBRARY_DIR`。本 ArkTS 部分不自行 dlopen、不把 ELF 拷进可写 rawfile 运行时、不代替 C++ 的真实文件校验。已有 env 校验拒绝全部 `DSH_GO_OHOS_*`，包括此字段，不能由 Dart env 覆盖。
 

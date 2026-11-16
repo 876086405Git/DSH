@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Run a test command with an external, bounded real-hard-link fixture actor.
+"""Run a test command with an external, bounded real-link fixture actor.
 
-The strict Node process keeps its fs.link prohibition. Only this test parent
+The strict Node process keeps its fs.link and fs.symlink prohibitions. This parent
 creates links, within its fresh owned workspace, to model pre-existing files
 or an outside actor at an explicit test handshake. This is not product code.
 """
@@ -37,9 +37,12 @@ def main():
     for path in [workspace, requests, responses]:
         path.mkdir()
     env = os.environ.copy()
-    env.update(OHOS_TEST_LINK_WORKSPACE=str(workspace), OHOS_TEST_LINK_REQUESTS=str(requests),
+    linked = env.pop('OHOS_TEST_LINK_LD_PRELOAD', None)
+    if linked is not None:
+        env['LD_PRELOAD'] = linked
+    env.update(TMPDIR=str(workspace), OHOS_TEST_LINK_WORKSPACE=str(workspace), OHOS_TEST_LINK_REQUESTS=str(requests),
                OHOS_TEST_LINK_RESPONSES=str(responses))
-    report = {"scope": "real Python os.link outside strict Node; no Node capability restored",
+    report = {"scope": "real Python os.link/os.symlink outside strict Node; no Node capability restored",
               "argv": command, "requests": []}
     child = None
     start = time.monotonic()
@@ -50,21 +53,28 @@ def main():
                 record = {"id": request.stem}
                 try:
                     value = json.loads(request.read_text())
-                    if set(value) != {"source", "destination"}:
+                    operation = value.get("operation", "link")
+                    if operation not in {"link", "symlink"} or set(value) != ({"source", "destination"} if "operation" not in value else {"operation", "source", "destination"}):
                         raise ValueError("unexpected request shape")
                     source, destination = Path(value["source"]), Path(value["destination"])
-                    record.update(source=str(source), destination=str(destination))
-                    if not source.is_absolute() or not destination.is_absolute():
-                        raise ValueError("absolute fixture paths required")
-                    if workspace not in source.resolve(strict=True).parents:
-                        raise ValueError("source escaped owned fixture workspace")
+                    record.update(operation=operation, source=str(source), destination=str(destination))
+                    if not destination.is_absolute():
+                        raise ValueError("absolute fixture destination required")
                     if workspace not in destination.parent.resolve(strict=True).parents and destination.parent != workspace:
                         raise ValueError("destination escaped owned fixture workspace")
-                    if not stat.S_ISREG(source.lstat().st_mode):
-                        raise ValueError("only a regular fixture file can be linked")
-                    record["sourceBefore"] = identity(source)
-                    os.link(source, destination, follow_symlinks=False)
-                    record.update(sourceAfter=identity(source), destinationAfter=identity(destination))
+                    if operation == "symlink":
+                        # Target bytes are input, including dangling paths or a
+                        # dependency prefix. Never follow or modify that target.
+                        os.symlink(value["source"], destination)
+                        record["target"] = os.readlink(destination)
+                    else:
+                        if not source.is_absolute() or workspace not in source.resolve(strict=True).parents:
+                            raise ValueError("source escaped owned fixture workspace")
+                        if not stat.S_ISREG(source.lstat().st_mode):
+                            raise ValueError("only a regular fixture file can be linked")
+                        record["sourceBefore"] = identity(source)
+                        os.link(source, destination, follow_symlinks=False)
+                        record.update(sourceAfter=identity(source), destinationAfter=identity(destination))
                     answer = {"ok": True}
                 except Exception as error:
                     answer = {"ok": False, "message": str(error),

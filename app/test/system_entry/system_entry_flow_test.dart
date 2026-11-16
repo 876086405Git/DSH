@@ -8,8 +8,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_app/links/app_links.dart';
-import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/draft_store.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
@@ -90,7 +90,7 @@ late _Native _shares;
 late _Native _entries;
 late FakeVoiceBridge _voice;
 
-Future<ProviderContainer> _pump(WidgetTester tester, ChatHarness harness, {String? operatingSystem}) async {
+Future<ProviderContainer> _pump(WidgetTester tester, ChatHarness harness, {String os = 'android'}) async {
   usePhoneView(tester);
   mockClipboard(tester);
   await tester.pumpWidget(
@@ -98,8 +98,8 @@ Future<ProviderContainer> _pump(WidgetTester tester, ChatHarness harness, {Strin
       const _Shell(),
       overrides: [
         ...harness.overrides,
-        if (operatingSystem != null) operatingSystemProvider.overrideWithValue(operatingSystem),
         voiceBridgeProvider.overrideWithValue(_voice),
+        operatingSystemProvider.overrideWithValue(os),
       ],
     ),
   );
@@ -297,11 +297,25 @@ void main() {
     'skipped': [],
   };
 
-  group('behind an unanswered 放弃修改', () {
+  Future<ProviderContainer> pumpWeb(WidgetTester tester, {required String os}) async {
+    natives(tester);
+    await tester.pumpWidget(
+      testApp(
+        const Stack(fit: StackFit.expand, children: [LinkHost(), WebEntryHost(), Scaffold()]),
+        overrides: [...ChatHarness().overrides, operatingSystemProvider.overrideWithValue(os)],
+      ),
+    );
+    await pumpFrames(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(WebEntryHost)));
+    await openDirtyPage(tester, find.byType(WebEntryHost));
+    return container;
+  }
+
+  group('on HarmonyOS, behind an unanswered 放弃修改: its inbox holds the batch', () {
     testWidgets('a share stays in the cache until the person leaves the page', (tester) async {
       natives(tester);
       final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
-      await _pump(tester, ChatHarness());
+      await _pump(tester, ChatHarness(), os: 'ohos');
       await openDirtyPage(tester, find.byType(ChatScreen));
 
       await _shares.push(sharing(file));
@@ -318,7 +332,7 @@ void main() {
     testWidgets('a share still lands for later when the person keeps editing', (tester) async {
       natives(tester);
       final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
-      await _pump(tester, ChatHarness());
+      await _pump(tester, ChatHarness(), os: 'ohos');
       await openDirtyPage(tester, find.byType(ChatScreen));
 
       await _shares.push(sharing(file));
@@ -334,26 +348,12 @@ void main() {
       await _unmount(tester);
     });
 
-    Future<ProviderContainer> pumpWeb(WidgetTester tester, File file) async {
-      natives(tester);
-      await tester.pumpWidget(
-        testApp(
-          const Stack(fit: StackFit.expand, children: [LinkHost(), WebEntryHost(), Scaffold()]),
-          overrides: ChatHarness().overrides,
-        ),
-      );
-      await pumpFrames(tester);
-      final container = ProviderScope.containerOf(tester.element(find.byType(WebEntryHost)));
-      await openDirtyPage(tester, find.byType(WebEntryHost));
+    testWidgets('the web home reads a share once the person leaves the page', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'ohos');
       await _shares.push(sharing(file));
       await untilAsked(tester);
       expect(file.existsSync(), isTrue);
-      return container;
-    }
-
-    testWidgets('the web home reads a share once the person leaves the page', (tester) async {
-      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
-      final container = await pumpWeb(tester, file);
 
       await tester.tap(dialogButton<FilledButton>());
       await _settle(tester, () => container.read(webOpenProvider) != null);
@@ -364,11 +364,76 @@ void main() {
 
     testWidgets('the web home drops a share unread when the person keeps editing', (tester) async {
       final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
-      final container = await pumpWeb(tester, file);
+      final container = await pumpWeb(tester, os: 'ohos');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isTrue);
 
       await tester.tap(dialogButton<TextButton>());
       await _settle(tester, () => !file.existsSync());
       expect(container.read(webOpenProvider), isNull);
+      await _unmount(tester);
+    });
+  });
+
+  group('on Android, behind an unanswered 放弃修改: its native cache can drop what waits', () {
+    testWidgets('a share is read before the question, and lands when the person leaves', (tester) async {
+      natives(tester);
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      await _pump(tester, ChatHarness());
+      await openDirtyPage(tester, find.byType(ChatScreen));
+
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isFalse, reason: 'read, so the next share\'s prune can\'t take it');
+
+      await tester.tap(dialogButton<FilledButton>());
+      await _settle(tester, () => _tray(tester).isNotEmpty);
+      expect(_tray(tester), ['a.pdf']);
+      await _unmount(tester);
+    });
+
+    testWidgets('five shares with nobody answering: none is left waiting in the cache', (tester) async {
+      natives(tester);
+      await _pump(tester, ChatHarness());
+      await openDirtyPage(tester, find.byType(ChatScreen));
+
+      // SharePlugin.kt keeps three old slots: the fifth unread one would lose a file.
+      final files = [for (var i = 0; i < 5; i++) cached('$i.pdf', utf8.encode('%PDF-1.7'))];
+      for (final file in files) {
+        await _shares.push(sharing(file));
+        await _settle(tester, () => !file.existsSync());
+      }
+      expect(files.where((f) => f.existsSync()), isEmpty);
+      // One dialog answers for them all, and they land together.
+      await tester.tap(dialogButton<TextButton>());
+      await pumpFrames(tester);
+      await _unmount(tester);
+    });
+
+    testWidgets('the web home reads first too; keeping on editing drops what it read', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'android');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isFalse);
+
+      await tester.tap(dialogButton<TextButton>());
+      await pumpFrames(tester);
+      expect(container.read(webOpenProvider), isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('the web home opens with it once the person leaves', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'android');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isFalse);
+
+      await tester.tap(dialogButton<FilledButton>());
+      await _settle(tester, () => container.read(webOpenProvider) != null);
+      expect([for (final a in container.read(webOpenProvider)!.compose!.attachments) a.name], ['a.pdf']);
       await _unmount(tester);
     });
   });
@@ -476,7 +541,7 @@ void main() {
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       natives(tester);
-      await _pump(tester, ChatHarness(), operatingSystem: os);
+      await _pump(tester, ChatHarness(), os: os);
       await openDirtyPage(tester, find.byType(ChatScreen));
       await _entries.push(voice ? {'kind': 'voice'} : {'kind': 'new', 'text': '留到返回聊天时'});
       await untilAsked(tester);

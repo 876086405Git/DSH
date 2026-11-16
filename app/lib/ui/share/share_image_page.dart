@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../state/artifacts.dart' show saveWindowDismissed;
 import '../../usage/usage_stats.dart';
 import '../common/app_sheet.dart';
 import '../common/pressable.dart';
@@ -137,6 +138,7 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
       _error = null;
     });
     String? error;
+    var dismissed = false;
     try {
       await settleShareCard(context, _content);
       final png = await captureShareCard(_cardKey);
@@ -148,9 +150,12 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
       }
       if (mounted) ref.read(usageStatsProvider.notifier).count(UsageCount.share);
     } on PlatformException catch (e) {
-      error = busy == _Busy.saving
-          ? (e.code == 'permission' ? l10n.viewShareNoPermission : l10n.commonSaveFailedRetry)
-          : l10n.viewShareOpenFailed;
+      dismissed = busy == _Busy.saving && saveWindowDismissed(e);
+      if (!dismissed) {
+        error = busy == _Busy.saving
+            ? (e.code == 'permission' ? l10n.viewShareNoPermission : l10n.commonSaveFailedRetry)
+            : l10n.viewShareOpenFailed;
+      }
     } catch (_) {
       error = l10n.viewShareImageFailed;
     }
@@ -158,7 +163,7 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
     setState(() {
       _busy = null;
       _error = error;
-      _saved = busy == _Busy.saving && error == null;
+      _saved = busy == _Busy.saving && error == null && !dismissed;
     });
     if (_saved) {
       HapticFeedback.lightImpact();
@@ -211,12 +216,7 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
         onShare: () => _run(_Busy.sharing),
       ),
     );
-    return SharePageLayout(
-      title: l10n.viewShareAsImage,
-      top: choices,
-      preview: preview,
-      bottom: actions,
-    );
+    return SharePageLayout(title: l10n.viewShareAsImage, top: choices, preview: preview, bottom: actions);
   }
 }
 

@@ -50,6 +50,14 @@ fs.link = function (source, target, callback) {
 };
 fs.linkSync = function () { throw failure('link', 'fs.linkSync', 'EACCES'); };
 fsp.link = async function () { throw failure('link', 'fs.promises.link', 'EACCES'); };
+fs.symlink = function (source, target, type, callback) {
+  if (typeof type === 'function') callback = type;
+  if (typeof callback !== 'function') throw new TypeError('symlink callback must be a function');
+  const error = failure('link', 'fs.symlink', 'EACCES');
+  process.nextTick(callback, error);
+};
+fs.symlinkSync = function () { throw failure('link', 'fs.symlinkSync', 'EACCES'); };
+fsp.symlink = async function () { throw failure('link', 'fs.promises.symlink', 'EACCES'); };
 if (process.env.DSH_GO_OHOS_SIM_PLATFORM === 'openharmony') {
   Object.defineProperty(process, 'platform', { value: 'openharmony' });
 } else if (process.env.DSH_GO_OHOS_SIM_PLATFORM) {

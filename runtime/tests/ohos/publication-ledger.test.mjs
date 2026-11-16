@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -124,7 +125,7 @@ test('a replaced inode or missing creation marker preserves the named foreign fi
 
 test('ledger files, subpaths and parent aliases cannot be registered as resources or targets', async t => {
   const f = await fixture(t), ledger = await f.open(), external = join(f.root, 'external');
-  const alias = join(f.root, 'alias'); await fs.symlink(f.directory, alias);
+  const alias = join(f.root, 'alias'); await symlinkFixture(f.directory, alias);
   for (const path of [f.directory, join(f.directory, '.lock'), join(f.directory, 'ledger.json'),
     join(f.directory, 'ledger.pending'), join(f.directory, 'sub/file'), join(alias, '.lock')]) {
     await assert.rejects(ledger.reserve(path, f.finalPath), { code: 'ERR_OHOS_LEDGER_RESOURCE' });
@@ -158,7 +159,7 @@ test('a corrupt record naming the lock is rejected before any recovery mutation'
 test('a symbolic link in the fixed pending slot is refused without touching its victim', async t => {
   const f = await fixture(t), first = await f.open(); await first.close();
   const victim = join(f.root, 'victim'), pending = join(f.directory, 'ledger.pending');
-  await fs.writeFile(victim, 'keep'); await fs.symlink(victim, pending);
+  await fs.writeFile(victim, 'keep'); await symlinkFixture(victim, pending);
   await assert.rejects(f.open(), { code: 'ERR_OHOS_LEDGER_PENDING' });
   assert.equal(await fs.readFile(victim, 'utf8'), 'keep'); assert.equal((await fs.lstat(pending)).isSymbolicLink(), true);
 });

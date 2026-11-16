@@ -23,7 +23,7 @@ SDK 自带 clang 15.0.4 和它的 libc++ 实测在两处失败，均不是加参
 
 ## 执行
 
-内嵌 Undici 由 `tooling/ohos/prepare-node-fetch.mjs` 准备：它包含 `patch-undici.mjs` 的请求体重定向修复和响应体取消原因修复，只跑这一个入口。旧入口不认识新 bundle，第二次运行会拒绝。
+内嵌 Undici 由 `tooling/ohos/prepare-node-fetch.mjs` 准备：它包含 `patch-undici.mjs` 的请求体重定向修复和响应体取消原因修复，只跑这一个入口。旧入口不认识新 bundle，第二次运行会拒绝。构建完 `build-node.py` 核对 libnode 里恰好有一份这个 bundle，结果写进 `build.json` 的 `embeddedUndici`。js2c 按 Latin-1 或 UTF-16 存源码，所以比的是这种编码，不是文件的 UTF-8 字节。
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund --prefix runtime/ohos/node/build-tools

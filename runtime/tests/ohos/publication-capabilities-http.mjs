@@ -157,7 +157,7 @@ for (const name of ['before-route', 'available', 'unsupported', 'disabled-after-
     assert.equal(first.processSpawn, 'unsupported');
     assert.equal(first.nodeScripts, subprocessCapabilities.nodeScripts);
     assert.equal(first.python, 'unsupported'); assert.equal(first.wasm, 'unsupported');
-    assert.deepEqual(first.plugins, { bundled: 'supported', marketInstall: 'unsupported' });
+    assert.deepEqual(first.plugins, { bundled: 'supported', marketInstall: 'supported' });
     assert.equal(first.nativeModules, null);
     assert.deepEqual(first.storage, { sessionLock: 'main-thread' });
     assert.deepEqual(first.background, { policy: 'may-freeze', computePermission: 'unknown', resume: 'none' });

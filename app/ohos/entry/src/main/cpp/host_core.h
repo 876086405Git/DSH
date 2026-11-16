@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lifecycle_state.h"
+#include "phone_state.h"
 #include <deque>
 #include <functional>
 #include <map>
@@ -12,9 +14,10 @@
 
 namespace dsh {
 struct HostOptions {
-  std::string runtime_root, guest_root, dsh_home, cache_dir, native_library_dir;
+  std::string runtime_root, guest_root, dsh_home, cache_dir, native_library_dir, linux_directory;
   std::vector<std::string> workspace_roots;
   std::map<std::string, std::string> env;
+  bool safe_mode = false;
 };
 
 struct HostState {
@@ -42,11 +45,13 @@ using LogSink = std::function<void(const std::string&, const std::string&)>;
 // Own exactly one engine thread. Product lifetime is the whole application.
 class Host {
  public:
-  explicit Host(LogSink sink = {}) : sink_(std::move(sink)) {}
+  explicit Host(LogSink sink = {}) : phone_(lifecycle_), sink_(std::move(sink)) {}
   ~Host();
   void Start(HostOptions options, StartNode start_node, StopNode stop_node);
   void Stop();
   HostState State();
+  LifecycleState& Lifecycle() { return lifecycle_; }
+  PhoneState& Phone() { return phone_; }
   std::vector<HostEvent> Drain();
   void Wait();
 
@@ -54,6 +59,8 @@ class Host {
   void Run(HostOptions options, StartNode start_node);
   void Line(const std::string& stream, std::string line);
   void Push(HostEvent event);
+  LifecycleState lifecycle_;
+  PhoneState phone_;
   std::mutex mutex_;
   std::mutex join_mutex_;
   HostState state_;
@@ -63,6 +70,8 @@ class Host {
   std::thread engine_;
   StopNode stop_node_ = nullptr;
   bool stop_requested_ = false;
+  bool stop_delivered_ = false;
+  int capture_wake_ = -1;  // Registered/removed under mutex_ before descriptor close.
   LogSink sink_;
 };
 }  // namespace dsh

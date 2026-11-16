@@ -145,6 +145,10 @@ class VoiceCallController extends ChangeNotifier {
   CallEnd? _ended;
   bool _muted = false;
   bool _speaker = true;
+  bool? _speakerPreference;
+  int _speakerRequest = 0;
+  Object? _speakerError;
+  Completer<void>? _initialSpeaker;
   double _micLevel = 0;
   double _voiceLevel = 0;
   String _heard = '';
@@ -246,7 +250,7 @@ class VoiceCallController extends ChangeNotifier {
     if (_disposed || _phase == CallPhase.ended) return;
     _bargeIn = chosen.bargeIn;
     _pause = chosen.pause;
-    _speaker = chosen.speaker;
+    if (!audio.requiresSpeakerAck) _speaker = chosen.speaker;
     _spokenHint = chosen.spokenHint;
     notifyListeners();
     VoiceCloud? cloud;
@@ -274,15 +278,28 @@ class VoiceCallController extends ChangeNotifier {
       }
     }
     unawaited(const DiagnosticsChannel().recordVoiceStage('preparing'));
-    final started = await audio.startCall(bargeIn: _bargeIn, pause: _pause);
+    final started = audio.requiresSpeakerAck
+        ? await audio.startCallMuted(bargeIn: _bargeIn, pause: _pause, muted: _muted)
+        : await audio.startCall(bargeIn: _bargeIn, pause: _pause);
     if (_disposed || _phase == CallPhase.ended) {
-      if (started == CallStart.ok) unawaited(audio.stopCall());
+      // OH already retired this native generation in _end. Its old success
+      // acknowledgement must not issue a global stop after a newer call starts.
+      if (started == CallStart.ok && !audio.requiresSpeakerAck) unawaited(audio.stopCall());
       return;
     }
     switch (started) {
       case CallStart.ok:
         unawaited(const DiagnosticsChannel().recordVoiceStage('capture_started'));
-        _speaker = await audio.speaker(_speaker);
+        if (audio.requiresSpeakerAck) {
+          // A newer control can supersede this request while the call starts.
+          // start() still waits for the current acknowledgement or call end.
+          final ready = _initialSpeaker = Completer<void>();
+          unawaited(_setSpeakerChecked(_speakerPreference ?? chosen.speaker));
+          await ready.future;
+          return;
+        } else {
+          _speaker = await audio.speaker(_speaker);
+        }
         _set(CallPhase.listening);
       case CallStart.permission:
         _end(CallEnd.permission);
@@ -550,7 +567,40 @@ class VoiceCallController extends ChangeNotifier {
 
   Future<void> setSpeaker(bool on) async {
     if (_phase == CallPhase.ended) return;
+    if (audio.requiresSpeakerAck) {
+      _speakerPreference = on;
+      return _setSpeakerChecked(on);
+    }
     _speaker = await audio.speaker(on);
+    notifyListeners();
+  }
+
+  Future<void> _setSpeakerChecked(bool on) async {
+    final request = ++_speakerRequest;
+    try {
+      final accepted = await audio.speaker(on);
+      if (_disposed || _phase == CallPhase.ended || request != _speakerRequest) return;
+      _speaker = accepted;
+      if (identical(_error, _speakerError)) _error = null;
+      _speakerError = null;
+      final ready = _initialSpeaker;
+      if (ready != null) {
+        _initialSpeaker = null;
+        _set(CallPhase.listening);
+        ready.complete();
+        return;
+      }
+    } catch (error) {
+      if (_disposed || _phase == CallPhase.ended || request != _speakerRequest) return;
+      // The existing call error state is safe for the UI's unawaited control.
+      // Keep the previous preference; the requested value was not accepted.
+      _error = _speakerError = error;
+      if (_initialSpeaker != null) {
+        // There is no acknowledged preference for this new call yet.
+        _end(CallEnd.failed);
+        return;
+      }
+    }
     notifyListeners();
   }
 
@@ -579,6 +629,7 @@ class VoiceCallController extends ChangeNotifier {
 
   void _end(CallEnd why) {
     if (_phase == CallPhase.ended) return;
+    if (audio.requiresSpeakerAck) _speakerRequest++;
     unawaited(const DiagnosticsChannel().recordVoiceStage('call_ended', code: why.index));
     _ended = why;
     _overTimer?.cancel();
@@ -588,6 +639,9 @@ class VoiceCallController extends ChangeNotifier {
     unawaited(_replySub?.cancel());
     unawaited(_audioSub?.cancel());
     _set(CallPhase.ended);
+    final ready = _initialSpeaker;
+    _initialSpeaker = null;
+    ready?.complete();
   }
 
   void _set(CallPhase phase) {

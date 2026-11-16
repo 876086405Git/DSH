@@ -10,6 +10,11 @@ export class SecretStorageError extends Error {
   constructor(code: string, message: string) { super(message); this.code = code; }
 }
 
+// These failures describe the service call, not invalid ciphertext or key material.
+class RetryableSecretStorageError extends SecretStorageError {
+  constructor() { super('secrets_unavailable', '系统安全密钥暂不可用，请重试。'); }
+}
+
 class SecretRecord {
   key: string;
   value: string;
@@ -23,10 +28,12 @@ export class SecretVault {
   private static durabilityWarned: boolean = false;
   private static readonly alias: string = 'DSH.Go.Secrets.AES256.GCM.v1';
   private static readonly chunkSize: number = 64 * 1024;
+  private readonly filesDir: string;
   private readonly directory: string;
   private readonly path: string;
 
   constructor(filesDir: string) {
+    this.filesDir = filesDir;
     this.directory = filesDir + '/dsh-secrets';
     this.path = this.directory + '/vault-v1.bin';
   }
@@ -36,7 +43,11 @@ export class SecretVault {
   }
 
   private unavailable(): SecretStorageError {
-    return new SecretStorageError('secrets_unavailable', '系统安全密钥暂不可用，原加密数据已保留。');
+    return new SecretStorageError('secrets_unavailable', '系统安全密钥暂不可用，请重试。');
+  }
+
+  private keyUnusable(): SecretStorageError {
+    return new SecretStorageError('secrets_key_unusable', '本应用的系统密钥无法使用，需要清除后重新保存凭据。');
   }
 
   private queue<T>(operation: () => Promise<T>): Promise<T> {
@@ -95,6 +106,33 @@ export class SecretVault {
     }
   }
 
+  // A failed recovery can leave an unusable alias after the ciphertext is gone.
+  // Probe the existing key without generating one or publishing any ciphertext.
+  // Only a failure of the key itself says so: a key service or random source that
+  // can't answer may pass, and clearing here costs nothing, as no ciphertext is left.
+  private async probeKey(current: () => void): Promise<void> {
+    let nonce: Uint8Array;
+    try {
+      const exists = await this.hasKey();
+      current();
+      if (!exists) return;
+      nonce = (await cryptoFramework.createRandom().generateRandom(12)).data;
+      if (nonce.byteLength !== 12) throw this.unavailable();
+    } catch (error) {
+      if (error instanceof SecretStorageError) throw error;
+      throw this.unavailable();
+    }
+    const plaintext = new Uint8Array([91, 93]);
+    let encrypted: Uint8Array;
+    try { encrypted = await this.crypt(true, plaintext, nonce, current); }
+    catch (error) {
+      if (error instanceof RetryableSecretStorageError ||
+          (error instanceof SecretStorageError && error.code === 'cancelled')) throw error;
+      throw this.keyUnusable();
+    }
+    if (encrypted.byteLength !== plaintext.byteLength + 16) throw this.keyUnusable();
+  }
+
   private parameters(encrypt: boolean, nonce: Uint8Array, tag?: Uint8Array): huks.HuksParam[] {
     const parameters: huks.HuksParam[] = [
       { tag: huks.HuksTag.HUKS_TAG_ALGORITHM, value: huks.HuksKeyAlg.HUKS_ALG_AES },
@@ -150,6 +188,10 @@ export class SecretVault {
       return this.join(parts);
     } catch (error) {
       if (error instanceof SecretStorageError) throw error;
+      const code = (error as BusinessError).code;
+      // Public HUKS API: IPC communication failure / insufficient memory.
+      // A later attempt can succeed with exactly the same key and ciphertext.
+      if (code === 12000005 || code === 12000014) throw new RetryableSecretStorageError();
       if (encrypt) throw this.unavailable();
       throw this.unreadable();
     } finally {
@@ -202,7 +244,10 @@ export class SecretVault {
     current();
     const bytes = await this.readBytes();
     current();
-    if (bytes === null) return new Map<string, string>();
+    if (bytes === null) {
+      await this.probeKey(current);
+      return new Map<string, string>();
+    }
     const header = this.header();
     for (let i = 0; i < header.byteLength; i++) if (bytes[i] !== header[i]) throw this.unreadable();
     await this.key(true);
@@ -265,7 +310,7 @@ export class SecretVault {
       current();
       await fs.rename(temporary, this.path);
       published = true;
-      await this.syncDirectory();
+      await this.syncDirectory(this.directory);
     } finally {
       if (!published) { try { await fs.unlink(temporary); } catch (_) {} }
       try { await fs.rmdir(staging); } catch (_) {}
@@ -273,9 +318,9 @@ export class SecretVault {
   }
 
   // Only called after rename/unlink commits. Failure affects durability, not visibility.
-  private async syncDirectory(): Promise<void> {
+  private async syncDirectory(path: string): Promise<void> {
     try {
-      const directory = await fs.open(this.directory, fs.OpenMode.READ_ONLY | fs.OpenMode.DIR | fs.OpenMode.NOFOLLOW);
+      const directory = await fs.open(path, fs.OpenMode.READ_ONLY | fs.OpenMode.DIR | fs.OpenMode.NOFOLLOW);
       try { await fs.fsync(directory.fd); } finally { await fs.close(directory); }
     } catch (_) {
       if (!SecretVault.durabilityWarned) {
@@ -289,12 +334,15 @@ export class SecretVault {
   recover(current: () => void): Promise<void> {
     return this.queue(async (): Promise<void> => {
       current();
-      if (await this.directoryExists()) {
+      const stat = await this.stat(this.directory);
+      if (stat !== null) {
+        const insideDirectory = stat.isDirectory() && !stat.isSymbolicLink();
         current();
         let removed = false;
-        try { await fs.unlink(this.path); removed = true; }
+        // Remove only the fixed entry if it is a file/link, never follow its target.
+        try { await fs.unlink(insideDirectory ? this.path : this.directory); removed = true; }
         catch (error) { if ((error as BusinessError).code !== 13900002) throw error as Error; }
-        if (removed) await this.syncDirectory();
+        if (removed) await this.syncDirectory(insideDirectory ? this.directory : this.filesDir);
       }
       // Clear ciphertext first: a failed unlink must not destroy its usable key.
       // Do not query key existence: an existing but unusable alias also needs deletion.

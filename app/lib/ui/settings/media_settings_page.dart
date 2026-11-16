@@ -112,12 +112,22 @@ class MediaInstallPrompt extends ConsumerWidget {
     final l10n = context.l10n;
     final entry = ref.watch(mediaMarketEntryProvider);
     final job = entry == null ? null : ref.watch(pluginInstallsProvider.select((jobs) => jobs[entry.name]));
+    // Installed and off still has the plugin pages to go to; otherwise this engine has no way to get it.
+    final refused =
+        (ref.watch(pluginHostProvider)?.installRefused ?? false) &&
+        !(ref
+                .watch(installedPluginsProvider)
+                .value
+                ?.any((b) => isMediaPluginName(b.name) && (b.installed || b.availability == 'profile')) ??
+            false);
     return EmptyView(
       icon: AppIcons.generateMedia,
       compact: compact,
       title: l10n.mediaInstallTitle,
-      message: l10n.mediaInstallBody,
-      action: job != null && job.isActive
+      message: refused ? l10n.marketInstallRefused : l10n.mediaInstallBody,
+      action: refused
+          ? null
+          : job != null && job.isActive
           ? ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
               child: PluginInstallProgress(

@@ -6,6 +6,7 @@
 // ([readyComposeProvider]), switches to 新对话 and fills the composer with
 // [mergeIntoDraft]. Nothing is sent: the person reads it and adds a question.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -70,43 +71,52 @@ class ComposeRequest {
     int heldBytes = 0,
     int maxBytes = maxMessageBytes,
   }) async {
-    final load = read ?? (path) => File(path).readAsBytes();
-    final attachments = <DraftAttachment>[];
-    final problems = [for (final s in share.skipped) skippedText(s)];
-    var used = heldBytes;
-    for (final file in share.files) {
-      // Metadata can refuse a file before it is read; content providers may
-      // omit it, so the post-read check below still applies.
-      final length = read == null ? _fileLength(file.path) : null;
-      if (length != null && used + length > maxBytes) {
-        problems.add(appL10n.stateAttachmentTotalLimit);
-        if (read == null) _discard(file.path);
-        continue;
+    try {
+      final load = read ?? (path) => File(path).readAsBytes();
+      final attachments = <DraftAttachment>[];
+      final problems = [for (final s in share.skipped) skippedText(s)];
+      var used = heldBytes;
+      for (final file in share.files) {
+        // Metadata can refuse a file before it is read; content providers may
+        // omit it, so the post-read check below still applies.
+        final length = read == null ? _fileLength(file.path) : null;
+        if (length != null && used + length > maxBytes) {
+          problems.add(appL10n.stateAttachmentTotalLimit);
+          if (read == null && share.consumption == null) _discard(file.path);
+          continue;
+        }
+        final Uint8List bytes;
+        try {
+          bytes = await load(file.path);
+        } catch (_) {
+          problems.add(appL10n.stateShareReadFailed(file.name));
+          continue;
+        } finally {
+          if (read == null && share.consumption == null) _discard(file.path);
+        }
+        final attachment = DraftAttachment.sniff(file.name, bytes);
+        final problem = attachmentProblem(attachment) ?? attachmentBudgetProblem(used, attachment, limit: maxBytes);
+        if (problem != null) {
+          problems.add(problem);
+        } else {
+          attachments.add(attachment);
+          used += attachment.size;
+        }
       }
-      final Uint8List bytes;
-      try {
-        bytes = await load(file.path);
-      } catch (_) {
-        problems.add(appL10n.stateShareReadFailed(file.name));
-        continue;
-      } finally {
-        if (read == null) _discard(file.path);
-      }
-      final attachment = DraftAttachment.sniff(file.name, bytes);
-      final problem =
-          attachmentProblem(attachment) ?? attachmentBudgetProblem(used, attachment, limit: maxBytes);
-      if (problem != null) {
-        problems.add(problem);
-      } else {
-        attachments.add(attachment);
-        used += attachment.size;
-      }
+      return ComposeRequest(text: share.composedText, attachments: attachments, problems: problems);
+    } finally {
+      final consumption = share.consumption;
+      if (consumption != null) unawaited(consumption.finish());
     }
-    return ComposeRequest(text: share.composedText, attachments: attachments, problems: problems);
   }
 
   /// Deletes a share's cached copies unread, when nothing will take them.
   static void discardShare(IncomingShare share) {
+    final consumption = share.consumption;
+    if (consumption != null) {
+      unawaited(consumption.finish());
+      return;
+    }
     for (final file in share.files) {
       _discard(file.path);
     }
@@ -127,8 +137,7 @@ class ComposeRequest {
     try {
       final bytes = await (read ?? (p) => File(p).readAsBytes())(path);
       final attachment = DraftAttachment.sniff(name, bytes);
-      final problem =
-          attachmentProblem(attachment) ?? attachmentBudgetProblem(heldBytes, attachment, limit: maxBytes);
+      final problem = attachmentProblem(attachment) ?? attachmentBudgetProblem(heldBytes, attachment, limit: maxBytes);
       return problem == null ? ComposeRequest(attachments: [attachment]) : ComposeRequest(problems: [problem]);
     } catch (_) {
       return ComposeRequest(problems: [appL10n.stateShareReadFailed(name)]);

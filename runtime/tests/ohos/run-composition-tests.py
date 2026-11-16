@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
@@ -66,8 +67,11 @@ def main():
         assert updated.replace(module_root, '../../ohos/process/') == text
         rewrite.append({'file': source.name, 'sourceSha256': sha(source.read_bytes()),
                         'testSha256': sha(target.read_bytes()), 'importReplacements': count})
-    fixture = HERE / 'node-script-api-fixture.mjs'
-    (tests / fixture.name).write_bytes(fixture.read_bytes())
+    for name in ['node-script-api-fixture.mjs', 'host-link-fixture.mjs']:
+        fixture = HERE / name
+        (tests / fixture.name).write_bytes(fixture.read_bytes())
+        rewrite.append({'file': name, 'sourceSha256': sha(fixture.read_bytes()),
+                        'testSha256': sha((tests / name).read_bytes()), 'importReplacements': 0})
     save(out / 'test-inputs.json', rewrite)
     commands = []
     environment = os.environ.copy()
@@ -82,6 +86,11 @@ def main():
         argv = [str(node), *flags, '--import', str(payload / 'runtime/ohos/process/child-process.mjs'),
                 '--import', str(payload / 'runtime/ohos/process/node-worker-preload.mjs'),
                 '--test', '--test-isolation=none', *[str(tests / (name + '.test.mjs')) for name in TESTS]]
+        if mode == 'strict':
+            argv = [sys.executable, str(HERE / 'process-link-fixture.py'),
+                    '--evidence', str(out / 'strict-host-link-fixture.json'), '--', *argv]
+            if 'LD_PRELOAD' in env:
+                env['OHOS_TEST_LINK_LD_PRELOAD'] = env.pop('LD_PRELOAD')
         with (out / (mode + '.log')).open('x') as log:
             result = subprocess.run(argv, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
         commands.append({'argv': argv, 'cwd': str(ROOT), 'mode': mode, 'exitCode': result.returncode,

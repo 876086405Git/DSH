@@ -15,6 +15,7 @@ class VoiceCapabilities {
     required this.recorder,
     this.systemUnreliable = false,
     this.environmentId,
+    this.languages = const [],
   });
 
   static const none = VoiceCapabilities(recognizer: false, recorder: false);
@@ -29,6 +30,9 @@ class VoiceCapabilities {
   /// A service failure remembered for this OS build and recognition service version.
   final bool systemUnreliable;
   final String? environmentId;
+
+  /// What the system's recogniser takes, where the native side says (HarmonyOS).
+  final List<String> languages;
 }
 
 enum VoicePermission { granted, denied, blocked }
@@ -125,6 +129,10 @@ class MethodChannelVoiceBridge implements VoiceBridge {
         recorder: map?['recorder'] == true,
         systemUnreliable: map?['systemUnreliable'] == true,
         environmentId: map?['environmentId'] as String?,
+        languages: [
+          for (final language in map?['languages'] as List<Object?>? ?? const [])
+            if (language is String) language,
+        ],
       );
     } on MissingPluginException {
       return VoiceCapabilities.none;

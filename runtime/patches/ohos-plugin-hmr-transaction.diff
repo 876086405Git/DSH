@@ -1,0 +1,56 @@
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1457,7 +1457,8 @@
+ 			if (error.code !== "ENOENT") throw error;
+ 			continue;
+ 		}
+-		if (excludedTrees.some((prefix) => realPath + sep === prefix || realPath.startsWith(prefix)) || !statSync(realPath).isDirectory()) continue;
++		const ownedOhosGeneration = process.platform === "openharmony" && realPath.startsWith(join(realModuleDirectory(profile.dir), ".plugin-manager", "ohos", "generations") + sep);
++		if ((!ownedOhosGeneration && excludedTrees.some((prefix) => realPath + sep === prefix || realPath.startsWith(prefix))) || !statSync(realPath).isDirectory()) continue;
+ 		roots.push({
+ 			name: relative(modules, linkPath).split(sep).join("/"),
+ 			realPath
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
+@@ -10,7 +10,7 @@
+ import { Remote, RemoteError, TypertRemoteService, remoteErrorOf } from "@deepseek-ai/dsh-typert-protocol";
+ import { DetailFailure, NPM_FILE_SOURCES, detailImage, detailImageResponse, languageChain, localFiles, npmFileSourceOrder, npmFiles, readPackageDocument } from "@deepseek-ai/dsh-plugin-detail";
+ import { MAX_TIMER_DELAY_MS } from "@deepseek-ai/dsh-timeout";
+-import { PROFILE_COMPATIBILITY_FILENAME, ResolutionRestartRequired, UnsupportedBundlePlatformError, assertBundlePlatform, bundlePatchPaths, composeEntries, evaluatePluginCompatibility, getDshRuntimeVersion, loadOptionalPatches, loadOverlayPatches, pluginCompatibilityWarning, readBundlePatches, readPluginMeta, readProfileCompatibility, readProfileManifest, readProfilePatches, readProfileVersionExemptions, resolveBundleDir, resolveProfileDir, setProfileVersionExemption, validatePluginVersionExemption } from "@deepseek-ai/dsh-app-boot";
++import { PROFILE_COMPATIBILITY_FILENAME, ResolutionRestartRequired, UnsupportedBundlePlatformError, assertBundlePlatform, bundlePatchPaths, composeEntries, evaluatePluginCompatibility, getDshRuntimeVersion, loadOptionalPatches, loadOverlayPatches, pluginCompatibilityWarning, readBundlePatches, readPluginMeta, readProfileCompatibility, readProfileManifest, readProfilePatches, reconcileProfilePatches, readProfileVersionExemptions, resolveBundleDir, resolveProfileDir, setProfileVersionExemption, validatePluginVersionExemption } from "@deepseek-ai/dsh-app-boot";
+ import { pluginEntryId, readPluginInventory } from "@deepseek-ai/dsh-host-plugin-inventory";
+ import { OFFICIAL_ON_DEMAND_CATALOG, OPTIONAL_BUNDLES, PROTECTED_PLUGINS } from "@deepseek-ai/dsh-official-bundles";
+ import { once } from "node:events";
+@@ -3407,6 +3407,7 @@
+ 					ohosPluginPackages()?.recoverProfile(this.profile.dir);
+ 					const before = this.diskState();
+ 					let packageTransaction;
++					let previousPatches, previousActiveIds;
+ 					const result = {
+ 						...request,
+ 						changed: false,
+@@ -3423,6 +3424,10 @@
+ 						this.abort.signal.throwIfAborted();
+ 						if (active !== void 0) throw new Error(active);
+ 						if (reason === "install" || reason === "remove") packageTransaction = ohosPluginPackages()?.begin(this.profile);
++						if (packageTransaction !== void 0 && this.ownerContext.get("hmr") !== void 0) {
++							previousPatches = readProfilePatches("dsh", this.profile);
++							previousActiveIds = [...this.ctx.loader.entries()].filter((entry) => entry.fiber?.state === 2).map((entry) => entry.options.id);
++						}
+ 						const outcome = await operation(result);
+ 						if (outcome !== void 0) result.application = outcome;
+ 						else if (result.application === "applied" && result.restartReason !== void 0) result.application = "restart-required";
+@@ -3441,6 +3446,13 @@
+ 						} catch (error) {
+ 							result.application = "failed";
+ 							result.error = managementError(error);
++							if (previousPatches !== void 0) {
++								try {
++									result.warnings = await this.configure(() => reconcileProfilePatches(this.ownerContext.root, previousPatches, "dsh", previousActiveIds));
++								} catch (rollbackError) {
++									result.error = managementError(new Error(`${messageOf(error)}\nLive plugin rollback failed: ${messageOf(rollbackError)}`));
++								}
++							}
+ 						}
+ 					}
+ 					if (result.application !== "restart-required") delete result.restartReason;

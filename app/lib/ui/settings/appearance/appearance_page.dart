@@ -75,8 +75,8 @@ class AppearancePage extends ConsumerWidget {
     final l10n = context.l10n;
     final appearance = ref.watch(appearanceProvider);
     final wallpaper = ref.watch(wallpaperAccentProvider).value;
-    final androidFeatures = ref.watch(androidSystemFeaturesProvider);
-    final ownLaunchScreen = ref.watch(ownLaunchScreenProvider);
+    // A picture as a launcher shortcut: Android and HarmonyOS, not iOS.
+    final pictureShortcut = ref.watch(operatingSystemProvider) != 'ios';
     return AppPage.list(
       title: l10n.pluginsTheme,
       children: [
@@ -100,15 +100,14 @@ class AppearancePage extends ConsumerWidget {
           title: l10n.pluginsAppIcon,
           children: [
             SpotAnchor(spot: Spots.appIcon, child: const AppIconPicker()),
-            if (androidFeatures) const IconShortcutTile(),
+            if (pictureShortcut) const IconShortcutTile(),
           ],
         ),
-        if (ownLaunchScreen)
-          SettingsSection(
-            title: l10n.launchScreenTitle,
-            footer: Text(l10n.launchFooter),
-            children: [SpotAnchor(spot: Spots.launchScreen, child: const LaunchScreenSection())],
-          ),
+        SettingsSection(
+          title: l10n.launchScreenTitle,
+          footer: Text(l10n.launchFooter),
+          children: [SpotAnchor(spot: Spots.launchScreen, child: const LaunchScreenSection())],
+        ),
         SettingsSection(
           title: l10n.wallpaperTitle,
           footer: Text(l10n.wallpaperFooter),

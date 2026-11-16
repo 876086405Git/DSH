@@ -7,10 +7,13 @@ import 'dart:io';
 import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_voice.dart';
+import 'package:dsh_app/companion/companion_voice_source.dart';
 import 'package:dsh_app/ui/companion/companion_voice_page.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
+import 'package:dsh_app/speech/speech_settings.dart' show companionEffectiveVoiceProvider;
+import 'package:dsh_app/state/android_features.dart' show operatingSystemProvider;
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
@@ -396,6 +399,78 @@ void main() {
       }
       expect(find.textContaining('没成功：HTTP 401'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
+    });
+
+    for (final (os, sources) in [
+      ('ohos', ['deepseek', 'system']),
+      ('android', ['deepseek', 'system', 'preset', 'openai', 'custom']),
+    ]) {
+      testWidgets('朗读 on $os offers the voices it can play: $sources', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // The page saves on its way out, so the container outlives it.
+        final container = ProviderContainer(overrides: [operatingSystemProvider.overrideWithValue(os)]);
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: buildDarkTheme(),
+              localizationsDelegates: L10n.localizationsDelegates,
+              supportedLocales: L10n.supportedLocales,
+              locale: const Locale('zh'),
+              home: const CompanionVoicePage(shared: true),
+            ),
+          ),
+        );
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pumpAndSettle();
+        expect([
+          for (final source in CompanionVoiceSource.values)
+            if (find.byKey(ValueKey('voice-source-${source.name}')).evaluate().isNotEmpty) source.name,
+        ], sources);
+        await tester.pumpWidget(const SizedBox());
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      });
+    }
+
+    testWidgets('her room on ohos offers only the phone voice, whatever was saved', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(overrides: [operatingSystemProvider.overrideWithValue('ohos')]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildDarkTheme(),
+            localizationsDelegates: L10n.localizationsDelegates,
+            supportedLocales: L10n.supportedLocales,
+            locale: const Locale('zh'),
+            home: const CompanionVoicePage(),
+          ),
+        ),
+      );
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('voice-source-follow')), findsNothing);
+      expect(
+        [
+          for (final source in CompanionVoiceSource.values)
+            if (find.byKey(ValueKey('voice-source-${source.name}')).evaluate().isNotEmpty) source.name,
+        ],
+        ['system'],
+      );
+
+      // A DeepSeek or followed voice saved before still speaks with the phone's.
+      for (final saved in const [
+        CompanionVoiceSettings(on: true, source: CompanionVoiceSource.deepseek),
+        CompanionVoiceSettings(on: true, follow: true),
+      ]) {
+        await tester.runAsync(() => container.read(companionVoiceSettingsProvider.notifier).update(saved));
+        final used = container.read(companionEffectiveVoiceProvider)!;
+        expect((used.source, used.follow, used.on), (CompanionVoiceSource.system, false, true));
+      }
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     });
   });
 }

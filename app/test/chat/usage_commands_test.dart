@@ -4,6 +4,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/balance_state.dart';
 import 'package:dsh_app/state/commands_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
@@ -21,6 +23,26 @@ import 'support/harness.dart';
 void main() {
   group('slash commands', () {
     final all = mergeSlashCommands(testHostCommands);
+
+    test('/export: Android says 下载; HarmonyOS, where the system asks where, says 保存到文件', () {
+      String export(List<SlashCommand> commands) => commands.firstWhere((c) => c.name == 'export').description;
+      expect(export(all), '把这个对话的完整记录打包成 ZIP，分享或存到「下载」');
+      expect(export(mergeSlashCommands(testHostCommands, harmony: true)), '把这个对话的完整记录打包成 ZIP，分享或保存到文件');
+
+      String palette(String os) {
+        final container = ProviderContainer(
+          overrides: [
+            operatingSystemProvider.overrideWithValue(os),
+            activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+          ],
+        );
+        addTearDown(container.dispose);
+        return export(container.read(slashCommandsProvider(null)));
+      }
+
+      expect(palette('android'), '把这个对话的完整记录打包成 ZIP，分享或存到「下载」');
+      expect(palette('ohos'), '把这个对话的完整记录打包成 ZIP，分享或保存到文件');
+    });
 
     test('catalog: Chinese faces by definitionId, Web-only /export hidden', () {
       expect(testHostCommands.map((c) => c.name), ['goal', 'plan', 'feedback', 'compact', 'permission']);

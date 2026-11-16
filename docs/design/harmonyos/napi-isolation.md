@@ -1,6 +1,6 @@
 # Ark 与 Node 的原生符号边界
 
-本约定执行 dshgo-ohos2 追加 1。目标库的交叉编译和 ELF 审计已离线完成（`runtime/ohos/node/BUILD.md`），HAP 装载和设备运行尚未验证。Linux 的双 DSO 实验只验证 ELF 名称绑定，不代表 Ark 与 Node 已在设备共存。
+本约定是本机引擎的 N-API 隔离方案。目标库的交叉编译和 ELF 审计已离线完成（`runtime/ohos/node/BUILD.md`），HAP 装载和设备运行尚未验证。Linux 的双 DSO 实验只验证 ELF 名称绑定，不代表 Ark 与 Node 已在设备共存。
 
 ## 两侧各用自己的 N-API
 

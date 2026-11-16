@@ -24,6 +24,25 @@ async function fixture(t, options = {}) {
   return f;
 }
 
+test('cold history indexing preserves duplicate-result and first-sequence identity failures', async t => {
+  for (const scenario of ['duplicate-result', 'first-sequence-not-call']) await t.test(scenario, async t => {
+    const f = await fixture(t), owner = await f.create();
+    f.register('effect', async () => [{ type: 'text', text: 'durable result' }]);
+    await owner.run([{ id: 'indexed-call' }]);
+    const persisted = await f.readEvents(owner.session.id);
+    const call = persisted.find(event => event.type === 'tool/call');
+    const result = persisted.find(event => event.type === 'tool/result');
+    const damaged = scenario === 'duplicate-result'
+      ? [...persisted, { ...result, seq: persisted.length }]
+      : [{ ...call, type: 'step/start' }, ...persisted];
+    assert.deepEqual(await f.coordinator.reconcileCold(owner.session.id, damaged, []), []);
+    const status = await f.coordinator.recoveredCommitted(owner.session.id, damaged);
+    assert.equal(status.state, 'result-unknown');
+    assert.equal(status.calls[0].reconciliation.basis, 'session-identity-mismatch');
+    await assert.rejects(f.coordinator.gate(owner.session.id), { code: 'ERR_OHOS_LIFECYCLE_RESULT_UNKNOWN' });
+  });
+});
+
 test('actual pinned AgentLoop, ToolRuntime and JSONL persist all four boundaries before claiming completion', async t => {
   const f = await fixture(t), owner = await f.create();
   f.register('effect', async () => {

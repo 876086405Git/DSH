@@ -1,0 +1,27 @@
+--- a/riscv_cpu.c
++++ b/riscv_cpu.c
+@@ -914,7 +914,8 @@
+         s->stvec = val & ~3;
+         break;
+     case 0x106:
+-        s->scounteren = val & COUNTEREN_MASK;
++        /* M-mode firmware emulates time using this S-mode permission. */
++        s->scounteren = val & (COUNTEREN_MASK | (1 << 1));
+         break;
+     case 0x140:
+         s->sscratch = val;
+--- a/riscv_cpu_template.h
++++ b/riscv_cpu_template.h
+@@ -1352,8 +1352,10 @@
+             funct3 = (insn >> 12) & 7;
+             switch(funct3) {
+             case 0: /* fence */
+-                if (insn & 0xf00fff80)
+-                    goto illegal_insn;
++                if ((insn & 0xf00fff80) && insn != 0x8330000f)
++                    goto illegal_insn;
++                /* A full fence conservatively implements FENCE.TSO. */
++                __atomic_thread_fence(__ATOMIC_SEQ_CST);
+                 break;
+             case 1: /* fence.i */
+                 if (insn != 0x0000100f)

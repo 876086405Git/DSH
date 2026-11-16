@@ -1,0 +1,66 @@
+--- a/machine.h
++++ b/machine.h
+@@ -65,6 +65,7 @@
+     char *device;
+     char *filename;
+     BlockDevice *block_dev;
++    BOOL read_only;
+ } VMDriveEntry;
+ 
+ typedef struct {
+--- a/machine.c
++++ b/machine.c
+@@ -305,6 +305,14 @@
+         if (vm_get_str_opt(obj, "device", &str) < 0)
+             goto tag_fail;
+         p->tab_drive[p->drive_count].device = strdup_null(str);
++        el = json_object_get(obj, "readOnly");
++        if (!json_is_undefined(el)) {
++            if (el.type != JSON_BOOL) {
++                vm_error("drive readOnly: boolean expected\n");
++                goto tag_fail;
++            }
++            p->tab_drive[p->drive_count].read_only = el.u.b;
++        }
+         p->drive_count++;
+     }
+ 
+--- a/temu.c
++++ b/temu.c
+@@ -422,6 +422,7 @@
+     bf = mallocz(sizeof(*bf));
+ 
+     bf->mode = mode;
++    bs->read_only = mode == BF_MODE_RO;
+     bf->nb_sectors = file_size / 512;
+     bf->f = f;
+ 
+@@ -979,7 +980,7 @@
+             errno = ENOMEM;
+             goto drive_fail;
+         }
+-        p->tab_drive[i].block_dev = block_device_try_init(fname, BF_MODE_RW);
++        p->tab_drive[i].block_dev = block_device_try_init(fname, p->tab_drive[i].read_only ? BF_MODE_RO : BF_MODE_RW);
+         error = errno;
+         free(fname);
+         errno = error;
+--- a/virtio.h
++++ b/virtio.h
+@@ -66,6 +66,7 @@
+ typedef struct BlockDevice BlockDevice;
+ 
+ struct BlockDevice {
++    BOOL read_only;
+     int64_t (*get_sector_count)(BlockDevice *bs);
+     int (*read_async)(BlockDevice *bs,
+                       uint64_t sector_num, uint8_t *buf, int n,
+--- a/virtio.c
++++ b/virtio.c
+@@ -1123,6 +1123,7 @@
+     virtio_init(&s->common, bus,
+                 2, 8, virtio_block_recv_request);
+     s->bs = bs;
++    if (bs->read_only) s->common.device_features |= 1U << 5; /* VIRTIO_BLK_F_RO */
+     
+     nb_sectors = bs->get_sector_count(bs);
+     put_le32(s->common.config_space, nb_sectors);

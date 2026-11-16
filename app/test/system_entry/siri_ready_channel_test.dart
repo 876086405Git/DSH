@@ -17,15 +17,11 @@ void main() {
 
     Future<void> push(Map<String, Object?> args) async {
       final answer = Completer<void>();
-      await messenger.handlePlatformMessage(
-        channel.name,
-        codec.encodeMethodCall(MethodCall('entry', args)),
-        (reply) {
-          expect(reply, isNotNull);
-          expect(codec.decodeEnvelope(reply!), isNull);
-          answer.complete();
-        },
-      );
+      await messenger.handlePlatformMessage(channel.name, codec.encodeMethodCall(MethodCall('entry', args)), (reply) {
+        expect(reply, isNotNull);
+        expect(codec.decodeEnvelope(reply!), isNull);
+        answer.complete();
+      });
       await answer.future;
     }
 
@@ -52,7 +48,10 @@ void main() {
     final first = bridge.entries.listen(received.add);
     await Future<void>.delayed(Duration.zero);
     expect(received.cast<NewChatEntry>().map((entry) => (entry.text, entry.voice)), [
-      (text, false), (text, false), ('', true), ('', false),
+      (text, false),
+      (text, false),
+      ('', true),
+      ('', false),
     ]);
     await first.cancel();
 

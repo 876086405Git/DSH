@@ -162,3 +162,22 @@ test('mismatched cancellation owner leaves the current grant intact',async t=>{
  const f=await filesFixture(t),file=await f.file('data','x'),[entry]=await picked(f,[file]);await call(f,'cancel',{owner:'b'.repeat(32)}).done;
  assert.equal((await read(f,entry)).value.length,1);await cancel(f);
 });
+
+for (const [name,mime] of [['a'.repeat(128)+'.txt','text/plain'],['😀'.repeat(30)+'a'.repeat(98)+'.jpg','image/jpeg']]) {
+ test('MIME uses complete selected name before display truncation: '+mime,async t=>{
+  assert(Buffer.byteLength(name)<=255);
+  const f=await filesFixture(t),bytes=Buffer.from('selected bytes'),file=await f.file(name,bytes),[entry]=await picked(f,[file]);
+  assert.equal(entry.name,[...name].slice(0,128).join(''));assert.equal([...entry.name].length,128);
+  assert.equal(entry.mediaType,mime);assert.equal(f.operations.length,0);
+  assert.deepEqual(Buffer.from((await read(f,entry)).value),bytes);assert.equal((await read(f,entry)).value,null);await cancel(f);
+ });
+}
+test('MIME keeps short-name, hidden-name and UTD fallback contracts',async t=>{
+ for(const [name,options,mime,extension] of [
+  ['short.jpg',{},'image/jpeg','.jpg'],['plain',{},'application/octet-stream',null],['.jpg',{},'application/octet-stream',null],
+  ['unknown.zzz',{},'application/octet-stream','.zzz'],['short.jpg',{utdThrow:true},'application/octet-stream','.jpg'],
+  ['short.jpg',{utdMime:'bad\n/type'},'application/octet-stream','.jpg']]){
+  const f=await filesFixture(t,options),file=await f.file(name,'x'),[entry]=await picked(f,[file]);
+  assert.equal(entry.name,name);assert.equal(entry.mediaType,mime);assert.deepEqual(f.utd,extension===null?[]:[extension]);assert.equal(f.operations.length,0);await cancel(f);
+ }
+});

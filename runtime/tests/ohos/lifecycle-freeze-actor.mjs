@@ -54,7 +54,8 @@ try {
   active = owner.run([{ id: 'freeze-call' }]);
   active.catch(() => {});
   await ready.promise;
-  send('ready', { status: f.coordinator.status(owner.session.id), budget: config.tool === 'bash' ? 2000 : 800 });
+  send('ready', { pid: process.pid, procfsPid: Number(await fs.readlink('/proc/self')),
+    status: f.coordinator.status(owner.session.id), budget: config.tool === 'bash' ? 2000 : 800 });
   for await (const command of commands) {
     if (command === 'pause') {
       const status = await f.coordinator.pause();

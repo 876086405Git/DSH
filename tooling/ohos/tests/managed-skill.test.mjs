@@ -234,3 +234,134 @@ test('Service stop retires matching grant before delayed ready; invalid/stale re
   assert.deepEqual(result,{result:null,current:false,reason:'stale'});assert.equal(managedSkillIo.calls.length,0);
   service.install(owner,null,reply=>{result=plain(reply);});assert.deepEqual(result,{result:null,current:false,reason:'invalid'});
 });
+
+
+test('same live service retries root IO after one failed installation', async () => {
+  const c = await fixture();
+  const service = new ManagedSkillService(c.root, () => true);
+  const owner = service.attachOwner(); service.ready(1, TOKEN);
+  const install = id => new Promise(resolve => service.install(owner, wire(c.root, id), reply => resolve(plain(reply))));
+  let failed = false;
+  managedSkillIo.before = item => {
+    if (!failed && item.operation === 'open' && item.path === c.root) {
+      failed = true;
+      throw Object.assign(new Error('one transient root IO error'), { code:13900005 });
+    }
+  };
+  assert.deepEqual(await install('first'), { result:null, current:true, reason:'io' });
+  assert.equal(managedSkillIo.calls.filter(item => item.operation === 'open' && item.path === c.root).length, 1);
+  managedSkillIo.before = null;
+  assert.deepEqual(await install('retry'), { result:'installed', current:true, reason:null });
+  assert.equal(await fs.readFile(path.join(c.directory, 'SKILL.md'), 'utf8'), SKILL);
+  assert.deepEqual(await install('unchanged'), { result:'unchanged', current:true, reason:null });
+  await noTemps(c.directory);
+});
+
+test('root callers share a failed attempt and retry without losing the successful cache', async () => {
+  const c = await fixture(); const pending = deferred();
+  managedSkillIo.before = async item => {
+    if (item.operation === 'open' && item.path === c.root) {
+      await pending.promise;
+      throw Object.assign(new Error('temporary root unavailable'), { code:13900005 });
+    }
+  };
+  const first = c.storage.root(); const second = c.storage.root();
+  assert.equal(first, second);
+  const settled = Promise.allSettled([first, second]); pending.resolve();
+  assert((await settled).every(result => result.status === 'rejected'));
+  assert.equal(managedSkillIo.calls.filter(item => item.operation === 'open' && item.path === c.root).length, 1);
+  managedSkillIo.before = null;
+  assert.equal(await c.storage.root(), c.root);
+  assert.equal(await c.storage.root(), c.root);
+  assert.equal(managedSkillIo.calls.filter(item => item.operation === 'open' && item.path === c.root).length, 2);
+});
+
+
+test('real Service staging hardlink cannot truncate another file', async () => {
+  const c = await fixture();
+  const victim = path.join(temp, 'hardlink-victim-' + serial);
+  const staging = path.join(c.directory, 'nested/.dsh-go-tmp-data.txt');
+  await fs.writeFile(victim, 'outside original sentinel');
+  await fs.mkdir(path.dirname(staging), { recursive:true });
+  await fs.link(victim, staging);
+  assert.equal((await fs.stat(victim)).ino, (await fs.stat(staging)).ino);
+  const service = new ManagedSkillService(c.root, () => true);
+  const owner = service.attachOwner(); service.ready(1, TOKEN);
+  const outcome = await new Promise(resolve => service.install(owner,
+    wire(c.root, 'hardlink', payload('new managed content'), service.generationFor(TOKEN)),
+    reply => resolve(plain(reply))));
+  assert.equal(outcome.result, 'installed');
+  assert.equal(await fs.readFile(path.join(c.directory, 'nested/data.txt'), 'utf8'), 'new managed content');
+  assert.equal(await fs.readFile(victim, 'utf8'), 'outside original sentinel');
+  assert.equal((await fs.stat(victim)).size, Buffer.byteLength('outside original sentinel'));
+  await noTemps(c.directory);
+});
+
+
+test('real Service replacing a final hardlink preserves the other inode name', async () => {
+  const c = await fixture(), victim = path.join(temp, 'final-hardlink-victim-' + serial);
+  const target = path.join(c.directory, 'nested/data.txt');
+  await fs.writeFile(victim, 'original target sentinel');
+  await fs.mkdir(path.dirname(target), { recursive:true }); await fs.link(victim, target);
+  const originalInode = (await fs.stat(victim)).ino;
+  const service = new ManagedSkillService(c.root, () => true), owner = service.attachOwner();
+  service.ready(1, TOKEN);
+  const outcome = await new Promise(resolve => service.install(owner,
+    wire(c.root, 'final-hardlink', payload('replacement'), service.generationFor(TOKEN)),
+    reply => resolve(plain(reply))));
+  assert.equal(outcome.result, 'installed');
+  assert.equal(await fs.readFile(victim, 'utf8'), 'original target sentinel');
+  assert.equal(await fs.readFile(target, 'utf8'), 'replacement');
+  assert.notEqual((await fs.stat(target)).ino, originalInode); await noTemps(c.directory);
+});
+
+for (const errorCode of [13900005, 13900018]) {
+  test(`staging unlink error ${errorCode} preserves hardlink victim and existing target`, async () => {
+    const c = await fixture(), victim = path.join(temp, 'unlink-victim-' + serial);
+    const target = path.join(c.directory, 'nested/data.txt');
+    const staging = path.join(c.directory, 'nested/.dsh-go-tmp-data.txt');
+    await core.installManagedSkill(c.storage, parsed(c.root, 'initial', payload('old target')), () => true);
+    await fs.writeFile(victim, 'untouched victim'); await fs.link(victim, staging);
+    managedSkillIo.before = async item => {
+      if (item.operation === 'unlink' && item.path === staging)
+        throw Object.assign(new Error('staging unlink failure'), { code:errorCode });
+    };
+    const result = await core.installManagedSkill(c.storage, parsed(c.root, 'retry', payload('new target')), () => true);
+    assert.equal(result.reason, 'io');
+    assert.equal(await fs.readFile(victim, 'utf8'), 'untouched victim');
+    assert.equal(await fs.readFile(staging, 'utf8'), 'untouched victim');
+    assert.equal(await fs.readFile(target, 'utf8'), 'old target');
+  });
+}
+
+for (const hadStaging of [false, true]) {
+  test(`cancel after staging unlink ${hadStaging ? 'success' : 'ENOENT'} prevents opening or publishing`, async () => {
+    const c = await fixture(), staging = path.join(c.directory, 'nested/.dsh-go-tmp-data.txt');
+    await fs.mkdir(path.dirname(staging), { recursive:true });
+    if (hadStaging) await fs.writeFile(staging, 'leftover');
+    let current = true;
+    const cancel = async item => {
+      if (item.operation === 'unlink' && item.path === staging) current = false;
+    };
+    if (hadStaging) managedSkillIo.after = cancel;
+    else managedSkillIo.before = cancel; // Cancellation during the unlink that returns ENOENT.
+    const result = await core.installManagedSkill(c.storage, parsed(c.root), () => current);
+    assert.equal(result.reason, 'cancelled');
+    assert(!managedSkillIo.calls.some(item => item.operation === 'open' && item.path === staging));
+    await assert.rejects(fs.access(path.join(c.directory, 'nested/data.txt')), { code:'ENOENT' });
+    await assert.rejects(fs.access(path.join(c.directory, 'SKILL.md')), { code:'ENOENT' });
+    await noTemps(c.directory);
+  });
+}
+
+
+test('a directory at the reserved staging name fails without deleting its contents', async () => {
+  const c = await fixture(), staging = path.join(c.directory, 'nested/.dsh-go-tmp-data.txt');
+  await fs.mkdir(staging, { recursive:true });
+  await fs.writeFile(path.join(staging, 'sentinel'), 'keep');
+  const result = await core.installManagedSkill(c.storage, parsed(c.root), () => true);
+  assert.equal(result.reason, 'io');
+  assert.equal(await fs.readFile(path.join(staging, 'sentinel'), 'utf8'), 'keep');
+  assert(!managedSkillIo.calls.some(item => item.operation === 'open' && item.path === staging));
+  await assert.rejects(fs.access(path.join(c.directory, 'nested/data.txt')), { code:'ENOENT' });
+});

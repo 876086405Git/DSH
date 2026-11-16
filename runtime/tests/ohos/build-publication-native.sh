@@ -15,7 +15,8 @@ ohos_node_version=$(python3 "$root/runtime/ohos/host/generate-node-version.py" -
 }
 python3 "$root/runtime/ohos/host/generate-node-version.py" --output "$output/dsh_node_version.h"
 [[ $(uname -s) == Linux ]] || { printf 'Linux fixture only\n' >&2; exit 2; }
-common=(-std=c++20 -shared -fPIC -fvisibility=hidden -DNAPI_VERSION=8
+# libnode's target flags have no exceptions or RTTI; a build that does would hide a break.
+common=(-std=c++20 -shared -fPIC -fvisibility=hidden -fno-exceptions -fno-rtti -DNAPI_VERSION=8
   -I "$output" -I "$node_root/include/node"
   -I "$root/runtime/tests/ohos/publication-deviceinfo-fixture"
   "$root/runtime/tests/ohos/publication-deviceinfo-fixture/deviceinfo.cc"

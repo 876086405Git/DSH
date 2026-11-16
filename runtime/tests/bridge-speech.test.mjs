@@ -114,7 +114,9 @@ async function fixture(t, options = {}) {
     const target = new URL(url);
     state.calls.push({ url: target.href, init });
     if (state.transportError) throw state.transportError;
-    return nativeFetch(new URL(target.pathname + target.search, upstreamOrigin), init);
+    const response = await nativeFetch(new URL(target.pathname + target.search, upstreamOrigin), init);
+    options.observeSpeechResponse?.(response);
+    return response;
   };
   apply(ctx, { persist: false, guardRoutes: options.guardRoutes ?? false,
     speech: { fetch: speechFetch, ...(options.speech ?? {}) } });
@@ -127,6 +129,7 @@ async function fixture(t, options = {}) {
       const held = gate?.path === path ? gate : undefined;
       if (held) { gate = undefined; held.arrived.resolve({ req, res }); await held.resume.promise; }
       const route = webServer.exact.get(path) ?? [...webServer.prefixes.values()].find(r => path.startsWith(r.path));
+      options.observeBridgeResponse?.(res);
       if (route) await route.handler(req, res);
       else { res.writeHead(404); res.end(); }
       state.settled++;
@@ -551,17 +554,46 @@ test('a slow audio consumer applies backpressure instead of buffering the comple
   const total = 1024; // 64 MiB exceeds loopback socket and fetch stream buffers.
   let writes = 0, completed = false, stopped = false;
   const started = deferred(), upstreamClosed = deferred();
-  const f = await fixture(t, { upstream: async (_req, res) => {
-    res.once('close', () => { stopped = true; upstreamClosed.resolve(); });
-    res.writeHead(200, { 'content-type': 'application/octet-stream' });
-    started.resolve();
-    for (; writes < total && !stopped; writes++) {
-      if (!res.write(block)) {
-        await Promise.race([once(res, 'drain'), upstreamClosed.promise]);
+  const pressure = deferred();
+  let waitingForDrain = false, readsBeforeDrain = 0, backpressureCount = 0;
+  // Call the original transport methods; do not add another stream queue.
+  const f = await fixture(t, {
+    observeBridgeResponse(res) {
+      res.on('drain', () => { waitingForDrain = false; });
+      const write = res.write;
+      t.mock.method(res, 'write', function (...args) {
+        const accepted = write.apply(this, args);
+        if (!accepted) {
+          waitingForDrain = true;
+          backpressureCount++;
+          pressure.resolve();
+        }
+        return accepted;
+      });
+    },
+    observeSpeechResponse(response) {
+      const body = response.body, getReader = body.getReader;
+      t.mock.method(body, 'getReader', function (...args) {
+        const reader = getReader.apply(this, args), read = reader.read;
+        t.mock.method(reader, 'read', function (...readArgs) {
+          if (waitingForDrain) readsBeforeDrain++;
+          return read.apply(this, readArgs);
+        });
+        return reader;
+      });
+    },
+    upstream: async (_req, res) => {
+      res.once('close', () => { stopped = true; upstreamClosed.resolve(); });
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      started.resolve();
+      for (; writes < total && !stopped; writes++) {
+        if (!res.write(block)) {
+          await Promise.race([once(res, 'drain'), upstreamClosed.promise]);
+        }
       }
-    }
-    if (!stopped) { completed = true; res.end(); }
-  } });
+      if (!stopped) { completed = true; res.end(); }
+    },
+  });
   const gotResponse = deferred();
   const req = httpRequest(`${f.origin}${ROOT}/tts`, { method: 'POST', headers: { 'content-type': 'application/json' } }, response => {
     response.on('error', () => {});
@@ -572,13 +604,16 @@ test('a slow audio consumer applies backpressure instead of buffering the comple
   req.end(JSON.stringify({ text: 'slow client' }));
   const response = await bounded(gotResponse.promise, 'slow client received no response');
   t.after(() => { response.destroy(); req.destroy(); });
+  assert.equal(response.statusCode, 200);
   await started.promise;
-  await new Promise(resolve => setTimeout(resolve, 150));
-  const first = writes;
-  await new Promise(resolve => setTimeout(resolve, 150));
+  await bounded(pressure.promise, 'bridge never reached actual downstream backpressure');
+  // Observe the real relay boundary. Socket/fetch buffers need not finish
+  // filling within a wall-clock window, even while the client is paused.
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(completed, false, 'the entire audio was consumed while the client was paused');
   assert.ok(writes < total, `read ${writes} of ${total} upstream blocks despite a paused client`);
-  assert.ok(writes - first < 16, `upstream kept reading ahead (${writes - first} more blocks) without consumer progress`);
+  assert.ok(backpressureCount > 0, 'the real bridge write never returned false');
+  assert.equal(readsBeforeDrain, 0, 'relay read another upstream chunk after write(false) and before drain');
   response.destroy(); req.destroy();
   await bounded(upstreamClosed.promise, 'slow consumer disconnect did not abort upstream');
 });

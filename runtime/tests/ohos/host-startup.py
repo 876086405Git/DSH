@@ -25,6 +25,7 @@ def environment():
     env = os.environ.copy()
     for key in ['NODE_OPTIONS', 'NODE_USE_ENV_PROXY', 'LD_PRELOAD', 'DSH_HOME',
                 'DSH_GO_OHOS_SIM', 'DSH_GO_OHOS_SIM_PLATFORM', 'DSH_GO_OHOS_SIM_ADDONS',
+                'DSH_GO_OHOS_LINUX_DIRECTORY', 'DSH_GO_OHOS_NATIVE_LIBRARY_DIR',
                 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
                 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']:
         env.pop(key, None)
@@ -170,8 +171,13 @@ def main():
             label = ('strict-' if strict else 'jit-') + name
             directory = args.out / 'cases' / label; directory.mkdir(parents=True, exist_ok=True)
             home = directory / 'app-data'; home.mkdir(mode=0o700, exist_ok=True)
+            linux_directory = directory / 'linux-tools'; linux_directory.mkdir(mode=0o700, exist_ok=True)
+            native_directory = directory / 'native-libraries'; native_directory.mkdir(mode=0o700, exist_ok=True)
             env = environment()
-            env['OHOS_STARTUP_CASE'] = json.dumps({'name': name, 'entry': str(entry), 'strict': strict})
+            env['OHOS_STARTUP_CASE'] = json.dumps({'name': name, 'entry': str(entry), 'strict': strict,
+                'linuxDirectory': str(linux_directory), 'nativeLibraryDirectory': str(native_directory)})
+            env['DSH_GO_OHOS_LINUX_DIRECTORY'] = str(linux_directory)
+            env['DSH_GO_OHOS_NATIVE_LIBRARY_DIR'] = str(native_directory)
             if name != 'missing-home': env['DSH_HOME'] = str(home)
             if name != 'missing-binding': env['LD_PRELOAD'] = str(linked)
             arguments = ['--jitless'] if strict else []
@@ -192,8 +198,8 @@ def main():
                     return p.returncode == 0 and outcome == {
                         'beforeDshEntry': True, 'body': 'startup-ready',
                         'publishMethod': 'rename-noreplace' if strict else 'link', 'publication': True,
-                        'worker': {'body': 'startup-ready', 'network': True, 'publication': False, 'simulated': True},
-                        'constructorsSame': True, 'strict': strict}
+                        'worker': {'body': 'startup-ready', 'network': True, 'publication': False, 'simulated': True, 'linuxOwnerPaths': False},
+                        'constructorsSame': True, 'linuxPathsCapturedBeforeEntry': True, 'strict': strict}
                 if name == 'android-env':
                     return p.returncode == 0 and outcome == {
                         'androidGuardOnly': True, 'network': False, 'publication': False, 'fetchSame': True}
@@ -239,6 +245,7 @@ def main():
              OHOS / 'host/node_runner.cpp', OHOS / 'host/publication_binding.cc',
              OHOS / 'host/generate-node-version.py', OHOS / 'publication/index.mjs', Path(__file__).resolve()]
     paths += [HERE / 'publication-deviceinfo-fixture/deviceinfo.h', HERE / 'publication-deviceinfo-fixture/deviceinfo.cc']
+    paths += [OHOS / 'linux/host-paths.mjs', HERE / 'host-preload-observer.mjs', HERE / 'host-preload-worker.mjs']
     report = {'scope': 'Linux contract and explicit simulation evidence; OHOS SDK, ABI, HAP, device NOT_RUN',
               'nodePin': pin, 'inputs': {str(p): sha(p) for p in paths},
               'counts': {'total': len(rows), 'pass': sum(bool(row['passed']) for row in rows),

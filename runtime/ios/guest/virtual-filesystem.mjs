@@ -56,5 +56,6 @@ export function createFilesystem(roots, policy, aliases = []) {
       };
     },
   });
-  return { fs, seal: () => { ready = true; } };
+  // The shared Worker closes its filesystem when it ends; this one holds no grant mounts.
+  return { fs, seal: () => { ready = true; }, close: () => {} };
 }

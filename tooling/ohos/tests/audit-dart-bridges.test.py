@@ -82,17 +82,30 @@ class BridgeInventoryTest(unittest.TestCase):
         return lambda: self.report((channel,))
 
     def test_negative_reject_guard_requires_return_and_real_continuation(self):
-        for name,channel,method in [('AppLinksPlugin','dsh/links','ready'),
-                                    ('PerformancePlugin','dsh/performance','snapshot')]:
-            with self.subTest(plugin=name):
-                report=self.actual_plugin(name,channel,[method])
-                original=self.native.read_text()
-                self.assertEqual(report()['gateStatus'],'PASS_SCOPED')
-                # An unterminated rejection is not a proof of the allowed path.
-                self.native.write_text(original.replace('result.notImplemented(); return;', 'result.notImplemented();'))
-                if name=='AppLinksPlugin':self.assertEqual(report()['gateStatus'],'FAIL')
-                self.native.write_text(original.replace('result.success(true);', '').replace('result.success(this.snapshot());',''))
-                self.assertEqual(report()['gateStatus'],'FAIL')
+        report=self.actual_plugin('AppLinksPlugin','dsh/links',['ready'])
+        original=self.native.read_text()
+        self.assertEqual(report()['gateStatus'],'PASS_SCOPED')
+        # An unterminated rejection is not a proof of the allowed path.
+        self.native.write_text(original.replace('result.notImplemented(); return;', 'result.notImplemented();'))
+        self.assertEqual(report()['gateStatus'],'FAIL')
+        self.native.write_text(original.replace('result.success(true);', ''))
+        self.assertEqual(report()['gateStatus'],'FAIL')
+
+    def test_try_wrapped_reject_guard_requires_a_real_continuation(self):
+        report=self.actual_plugin('PerformancePlugin','dsh/performance',['snapshot'])
+        original="""class PerformancePlugin {
+  onAttachedToEngine(binding) {
+    this.methods = new MethodChannel(binding.getBinaryMessenger(), 'dsh/performance');
+    this.methods.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
+      if (call.method !== 'snapshot') { try { result.notImplemented(); } catch (_) {} return; }
+      try { result.success(this.snapshot()); } catch (_) {}
+    } });
+  }
+}"""
+        self.native.write_text(original)
+        self.assertEqual(report()['gateStatus'],'PASS_SCOPED')
+        self.native.write_text(original.replace('result.success(this.snapshot());',''))
+        self.assertEqual(report()['gateStatus'],'FAIL')
 
     def test_try_catch_rejection_and_non_guard_list_do_not_make_acceptance_unknown(self):
         for name,channel,methods in [

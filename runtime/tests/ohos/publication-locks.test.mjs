@@ -1,5 +1,6 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import assert from 'node:assert/strict';
-import { mkdtemp, open, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
@@ -60,7 +61,7 @@ for (const [name, module] of [['attachment', attachment], ['session', session]])
     const precious = join(directory, 'precious');
     await writeFile(source, 'ours');
     await writeFile(precious, 'keep');
-    await symlink(precious, target);
+    await symlinkFixture(precious, target);
     await assert.rejects(module.publishOhosExclusive(source, target, { link: denied, open }), { code: 'EEXIST' });
     assert.equal(await readFile(precious, 'utf8'), 'keep');
     assert.equal(await readFile(source, 'utf8'), 'ours');
@@ -101,7 +102,7 @@ for (const [name, module] of [['attachment', attachment], ['session', session]])
 test('lock identity follows the opened file through an alias, not path spelling', async () => {
   const path = join(directory, 'lock');
   const first = await handleAt(path);
-  await symlink(path, join(directory, 'alias'));
+  await symlinkFixture(path, join(directory, 'alias'));
   const second = await handleAt(join(directory, 'alias'));
   await session.tryLockOhos(first);
   await session.tryLockOhos(first);

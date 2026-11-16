@@ -41,6 +41,7 @@ class PerformancePage extends ConsumerWidget {
     final defaults = ref.watch(performanceDefaultsProvider);
     final thermal = ref.watch(performanceProvider.select((s) => s.thermalLightweight));
     final notifier = ref.read(performancePrefsProvider.notifier);
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     return AppPage.list(
       title: l10n.performanceTitle,
       children: [
@@ -68,9 +69,10 @@ class PerformancePage extends ConsumerWidget {
               ),
           ],
         ),
-        if (ref.watch(androidSystemFeaturesProvider))
+        // iOS paces frames itself (RefreshRateService leaves it alone).
+        if (ref.watch(operatingSystemProvider) != 'ios')
           SettingsSection(
-            footer: Text(l10n.performanceRefreshHint),
+            footer: Text(ohos ? l10n.performanceRefreshHintOhos : l10n.performanceRefreshHint),
             children: [
               SettingsSegmentTile<RefreshRateMode>(
                 key: const ValueKey('performance-refresh-rate'),
@@ -82,6 +84,18 @@ class PerformancePage extends ConsumerWidget {
                 ],
                 selected: prefs.refreshRate,
                 onChanged: (mode) => unawaited(notifier.setRefreshRate(mode)),
+              ),
+            ],
+          ),
+        if (ohos)
+          SettingsSection(
+            children: [
+              SettingsSwitchTile(
+                key: const ValueKey('performance-frame-cache'),
+                title: l10n.performanceFrameCache,
+                subtitle: l10n.performanceFrameCacheHint,
+                value: prefs.frameCache,
+                onChanged: (value) => unawaited(notifier.setFrameCache(value)),
               ),
             ],
           ),

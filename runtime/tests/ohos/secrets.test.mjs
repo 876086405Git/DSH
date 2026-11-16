@@ -349,3 +349,146 @@ test('retirement during dispatched HUKS deletion cannot delete a new engine key 
   assert.equal(f.events.filter(e => e.op === 'generate').length, 2);
   next.plugin.onDetachedFromEngine(next.engine);
 });
+
+test('failed recovery with an unusable residual alias stays visible to read probes across engines', async t => {
+  const f = await secretsFixture(t);
+  await f.request('write', { key: 'old', value: 'old' });
+  f.unusableKeys.add(ownAlias); f.change({ deleteKeyError: 12000006 });
+  assert.equal((await f.request('recover', { confirmed: true })).error, 'secrets_recovery_failed');
+  await assert.rejects(fs.access(f.vaultPath), { code: 'ENOENT' });
+  f.plugin.onDetachedFromEngine(f.engine); const next = f.attach();
+  for (const [method, args] of [['read', { key: 'probe' }], ['readAll', {}], ['write', { key: 'new', value: 'blocked' }]]) {
+    const reply = await f.request(method, args, next.channel);
+    assert.equal(reply.error, 'secrets_key_unusable');
+    assert(!reply.message.includes('已保留'), 'there is no ciphertext left to claim preserved');
+  }
+  assert.equal(f.events.filter(e => e.op === 'generate').length, 1);
+  f.change({ deleteKeyError: undefined });
+  assert.deepEqual(await f.request('recover', { confirmed: true }, next.channel), { value: null });
+  assert.deepEqual(await f.request('readAll', {}, next.channel), { value: {} });
+  assert.deepEqual(await f.request('write', { key: 'new', value: 'saved' }, next.channel), { value: null });
+  next.plugin.onDetachedFromEngine(next.engine);
+});
+
+for (const missing of ['directory', 'vault']) test(`missing ${missing} probes an existing key without generating or writing anything`, async t => {
+  const f = await secretsFixture(t);
+  await f.request('write', { key: 'old', value: 'old' });
+  const key = Buffer.from(f.keys.get(ownAlias));
+  if (missing === 'directory') await fs.rm(f.app.filesDir + '/dsh-secrets', { recursive: true });
+  else await fs.unlink(f.vaultPath);
+  const before = f.events.length;
+  assert.deepEqual(await f.request('readAll'), { value: {} });
+  assert(f.events.slice(before).some(e => e.op === 'finish'), 'exercise the existing key through finish, not just existence');
+  assert.deepEqual(f.keys.get(ownAlias), key);
+  assert.equal(f.events.filter(e => e.op === 'generate').length, 1);
+  await assert.rejects(fs.access(f.vaultPath), { code: 'ENOENT' });
+  f.unusableKeys.add(ownAlias);
+  assert.equal((await f.request('read', { key: 'probe' })).error, 'secrets_key_unusable');
+  f.unusableKeys.clear();
+  assert.deepEqual(await f.request('write', { key: 'new', value: 'saved' }), { value: null });
+});
+
+test('empty-vault probes report transient key-service failure and retry without creating keys', async t => {
+  const f = await secretsFixture(t, { keyQueryError: 12000005 });
+  const reply = await f.request('readAll');
+  assert.equal(reply.error, 'secrets_unavailable');
+  assert(!reply.message.includes('已保留'), 'first use has no old ciphertext');
+  assert.equal(f.keys.size, 0);
+  f.change({ keyQueryError: undefined });
+  assert.deepEqual(await f.request('readAll'), { value: {} });
+  assert.equal(f.events.filter(e => e.op === 'generate').length, 0);
+  await assert.rejects(fs.access(f.vaultPath), { code: 'ENOENT' });
+});
+
+test('empty-vault probes check key completion and close failed HUKS sessions', async t => {
+  const f = await secretsFixture(t);
+  await f.request('write', { key: 'old', value: 'old' });
+  await fs.unlink(f.vaultPath); f.change({ finishFailure: true });
+  assert.equal((await f.request('readAll')).error, 'secrets_key_unusable');
+  assert.equal(f.sessions.size, 0); assert(f.events.some(e => e.op === 'abort'));
+  f.change({ finishFailure: false });
+  assert.deepEqual(await f.request('readAll'), { value: {} });
+});
+
+for (const kind of ['file', 'symlink-file', 'symlink-directory', 'dangling-symlink']) test(`confirmed recovery removes only the invalid fixed directory entry: ${kind}`, async t => {
+  const f = await secretsFixture(t);
+  const directory = f.app.filesDir + '/dsh-secrets';
+  const target = f.app.filesDir + '/unrelated';
+  const otherKey = Buffer.alloc(32, 4); f.keys.set('unrelated-alias', otherKey);
+  f.keys.set(ownAlias, Buffer.alloc(32, 7)); f.unusableKeys.add(ownAlias);
+  if (kind === 'symlink-directory') {
+    await fs.mkdir(target); await fs.writeFile(target + '/vault-v1.bin', 'do not follow');
+    await fs.symlink(target, directory);
+  } else if (kind === 'symlink-file') {
+    await fs.writeFile(target, 'do not follow'); await fs.symlink(target, directory);
+  } else if (kind === 'dangling-symlink') await fs.symlink(target, directory);
+  else await fs.writeFile(directory, 'invalid directory entry');
+  assert.equal((await f.request('readAll')).error, 'secrets_unreadable');
+  assert.equal((await f.request('recover', { confirmed: false })).error, 'secrets_invalid');
+  await fs.lstat(directory);
+  assert.deepEqual(await f.request('recover', { confirmed: true }), { value: null });
+  await assert.rejects(fs.lstat(directory), { code: 'ENOENT' });
+  assert.deepEqual(f.keys.get('unrelated-alias'), otherKey);
+  assert.equal(f.keys.has(ownAlias), false);
+  if (kind === 'symlink-directory') assert.equal(await fs.readFile(target + '/vault-v1.bin', 'utf8'), 'do not follow');
+  if (kind === 'symlink-file') assert.equal(await fs.readFile(target, 'utf8'), 'do not follow');
+  assert(f.events.some(e => e.op === 'fsync' && e.path === f.app.filesDir));
+  assert.deepEqual(await f.request('write', { key: 'new', value: 'saved' }), { value: null });
+  assert.deepEqual(await f.request('readAll'), { value: { new: 'saved' } });
+});
+
+test('invalid-directory unlink failure preserves that entry and its key until explicit retry', async t => {
+  const f = await secretsFixture(t);
+  const directory = f.app.filesDir + '/dsh-secrets';
+  await fs.writeFile(directory, 'preserve'); f.keys.set(ownAlias, Buffer.alloc(32, 7));
+  f.change({ beforeUnlink: async () => { throw Object.assign(Error('controlled permission error'), { code: 13900012 }); } });
+  assert.equal((await f.request('recover', { confirmed: true })).error, 'secrets_io');
+  assert.equal(await fs.readFile(directory, 'utf8'), 'preserve');
+  assert.equal(f.events.filter(e => e.op === 'deleteKey').length, 0);
+  f.change({ beforeUnlink: undefined });
+  assert.deepEqual(await f.request('recover', { confirmed: true }), { value: null });
+});
+
+test('retiring an empty-vault key probe releases its session and never publishes data', async t => {
+  const f = await secretsFixture(t), entered = deferred(), release = deferred();
+  await f.request('write', { key: 'old', value: 'old' }); await fs.unlink(f.vaultPath);
+  f.change({ beforeFinish: async () => { entered.resolve(); await release.promise; } });
+  const reading = f.request('readAll'); await entered.promise;
+  f.plugin.onDetachedFromEngine(f.engine); const next = f.attach();
+  release.resolve(); assert.equal((await reading).error, 'cancelled');
+  f.change({ beforeFinish: undefined });
+  assert.deepEqual(await f.request('readAll', {}, next.channel), { value: {} });
+  await assert.rejects(fs.access(f.vaultPath), { code: 'ENOENT' });
+  assert.equal(f.sessions.size, 0); assert.equal(f.events.filter(e => e.op === 'generate').length, 1);
+  next.plugin.onDetachedFromEngine(next.engine);
+});
+
+test('an empty-vault probe blames the key only when the key itself fails', async t => {
+  const f = await secretsFixture(t);
+  await f.request('write', { key: 'old', value: 'old' }); await fs.unlink(f.vaultPath);
+  f.change({ randomError: 17620001 });
+  assert.equal((await f.request('readAll')).error, 'secrets_unavailable');
+  f.change({ randomError: undefined, keyQueryError: 12000005 });
+  assert.equal((await f.request('read', { key: 'probe' })).error, 'secrets_unavailable');
+  f.change({ keyQueryError: undefined });
+  assert.deepEqual(await f.request('readAll'), { value: {} });
+});
+
+for (const code of [12000005,12000014]) for (const empty of [false,true]) {
+  test(`transient HUKS session failure ${code}, empty=${empty}, preserves credential and retries`, async t => {
+    const f=await secretsFixture(t);
+    await f.request('write',{key:'deepseek_api_key',value:'fixture-only-not-a-real-key'});
+    const original=await fs.readFile(f.vaultPath);
+    if(empty) await fs.unlink(f.vaultPath);
+    f.change({beforeFinish:async()=>{throw Object.assign(new Error('controlled transient HUKS failure'),{code});}});
+    const reply=await f.request('readAll');
+    assert.equal(reply.error,'secrets_unavailable');
+    assert.equal(f.sessions.size,0);
+    assert.equal(f.events.filter(row=>row.op==='deleteKey').length,0);
+    assert.equal(f.events.filter(row=>row.op==='generate').length,1);
+    if(empty) await assert.rejects(fs.stat(f.vaultPath),{code:'ENOENT'});
+    else assert.deepEqual(await fs.readFile(f.vaultPath),original);
+    f.change({beforeFinish:undefined});
+    assert.deepEqual(await f.request('readAll'),{value:empty?{}:{deepseek_api_key:'fixture-only-not-a-real-key'}});
+  });
+}

@@ -49,3 +49,11 @@ Use a test installation; do not clear an existing user's data or test with real 
 4. Exit during scanner preparation/selection and return. There must be no late camera start, pairing callback or disposed-controller error.
 5. Check genuine permission denial remains distinguishable from SDK failure; an undecodable image may say no code, while a decoder exception must report reader unavailability.
 6. Include the reported Redmi K80/HyperOS Android 16 and another OEM/Android version. Automated ARM64 tests do not establish device compatibility.
+
+## HarmonyOS: system scan page
+
+mobile_scanner has no HarmonyOS implementation, so on HarmonyOS the box holds a **扫码** button that calls `dsh/app.scanQrCode`. `AppLinksPlugin.ets` opens Scan Kit's default view (`scanBarcode.startScanForResult`, QR only, single code, album on) with the foreground UIAbility context; Scan Kit loads on the first scan only. The system page owns the camera, so the app asks for no camera permission, and its album entry replaces 从相册识别, which is not shown. Closing the page (1000500002) answers null and nothing happens; `no_ability`, `unavailable` and `failed` show the reader-unavailable line that points to 粘贴配对链接.
+
+Automated: `app/test/remote/pairing_system_scanner_test.dart` (the box, cancel, errors, one scan at a time, Android keeps the camera) and `tooling/ohos/tests/scan-channel.test.mjs` (the ETS options, cancel code and error codes against doubles). Scan Kit itself is UNCOMPILED_HMS: the module names come from Huawei's Scan Kit reference, not an HMS SDK compile.
+
+On a device: scan a fresh pairing code from the camera; scan one from a screenshot through the page's album entry; close the page with back and check nothing happens and 扫码 works again; check the confirmation step follows each scan as on Android.

@@ -63,8 +63,8 @@ export const http = {
 export async function loadHttpTransport(source, directory) {
   let text = await fs.readFile(path.join(source, 'OhosLifecycleTransport.ets'), 'utf8');
   text = text.replace("import http from '@ohos.net.http';", `import { http } from '${import.meta.url}';`)
-    .replace("import { LifecycleTransport, HostLifecycleObservation, LifecycleFailure } from './RuntimeLifecycle';",
-      "import { type LifecycleTransport, type HostLifecycleObservation, LifecycleFailure } from './RuntimeLifecycle.mts';");
+    .replace("import { LifecycleTransport, HostLifecycleObservation, HostLifecycleAck, LifecycleFailure } from './RuntimeLifecycle';",
+      "import { type LifecycleTransport, type HostLifecycleObservation, type HostLifecycleAck, LifecycleFailure } from './RuntimeLifecycle.mts';");
   const target = path.join(directory, 'OhosLifecycleTransport.mts'); await fs.writeFile(target, text);
   return await import(pathToFileURL(target));
 }

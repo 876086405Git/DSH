@@ -30,6 +30,7 @@ import 'package:dsh_app/ui/onboarding/runtime_setup_page.dart';
 import 'package:dsh_app/ui/pets/overlay_settings_tile.dart';
 import 'package:dsh_app/ui/pets/pet_settings_page.dart';
 import 'package:dsh_app/ui/phone/phone_control_screen.dart';
+import 'package:dsh_app/ui/phone/system_actions_page.dart';
 import 'package:dsh_app/ui/plugins/native/native_taps.dart' show openNativePage;
 import 'package:dsh_app/ui/safe_mode/engine_failure_card.dart';
 import 'package:dsh_app/ui/settings/appearance/app_icon_picker.dart';
@@ -74,17 +75,11 @@ const _rows = {
   'phone-background-guide',
   'phone-files',
   'permission-phone-confirm',
-  'icon-shortcut',
-  'launch-screen',
   'pet-outside-app',
   'pet-display-when',
   'pet-overlay-shows',
   'pet-overlay-framing',
-  'refresh-rate',
   'auto-safe',
-  'safe-mode',
-  'engine-reset',
-  'engine-uninstall',
 };
 
 final _zh = lookupL10n(AppLocale.zhCN);
@@ -155,6 +150,18 @@ void main() {
         expect(SettingsIndex.androidOnlyLink(id), isFalse, reason: id);
       }
     });
+
+    test('HarmonyOS\'s own are 系统操作 and Linux 环境', () {
+      expect(
+        {
+          for (final spot in SettingsIndex.spots)
+            if (spot.ohosOnly) spot.id,
+        },
+        {'page:systemActions', 'page:linuxEnvironment'},
+      );
+      expect(SettingsIndex.ohosOnlyLink('system-actions'), isTrue);
+      expect(SettingsIndex.ohosOnlyLink('phone'), isFalse);
+    });
   });
 
   group('settings hub', () {
@@ -165,11 +172,15 @@ void main() {
       for (final id in ['page:phone', ...both]) {
         expect(find.byKey(SpotKey(id)), findsOneWidget, reason: id);
       }
+      expect(find.byKey(const SpotKey('page:systemActions')), findsNothing);
+      expect(find.text(_zh.systemActionsTitle), findsNothing);
     });
 
-    testWidgets('on HarmonyOS: no phone control, every group still there', (tester) async {
+    testWidgets('on HarmonyOS: 系统操作 instead of phone control, every group still there', (tester) async {
       await _pump(tester, const SettingsScreen(), android: false);
       expect(find.byKey(const SpotKey('page:phone')), findsNothing);
+      expect(find.byKey(const SpotKey('page:systemActions')), findsOneWidget);
+      expect(find.text(_zh.systemActionsTitle), findsOneWidget);
       for (final id in both) {
         expect(find.byKey(SpotKey(id)), findsOneWidget, reason: id);
       }
@@ -202,11 +213,13 @@ void main() {
     testWidgets('on Android: 手机操控 is a card', (tester) async {
       await _pump(tester, const AllFeaturesPage(), android: true);
       expect(find.text('手机操控'), findsOneWidget);
+      expect(find.text(_zh.catalogSystemActions), findsNothing);
     });
 
-    testWidgets('on HarmonyOS: no card, the rest of its group stays', (tester) async {
+    testWidgets('on HarmonyOS: 系统操作 in its place, the rest of its group stays', (tester) async {
       await _pump(tester, const AllFeaturesPage(), android: false);
       expect(find.text('手机操控'), findsNothing);
+      expect(find.text(_zh.catalogSystemActions), findsOneWidget);
       expect(find.text(_zh.catalogModels), findsOneWidget);
       expect(find.byKey(const ValueKey('all-settings')), findsOneWidget);
     });
@@ -232,6 +245,63 @@ void main() {
       expect(ids('电池优化', android: true), contains('page:background'));
       expect(ids('桌面图标', android: true), contains('app-icon'));
       expect(ids('悬浮窗', android: true), contains('pet-outside-app'));
+      expect(ids('系统操作', android: true), isNot(contains('page:systemActions')));
+      expect(ids('日历', android: true), isNot(contains('page:systemActions')));
+    });
+
+    test('on HarmonyOS: the words for what isn\'t there don\'t lead to pages without it', () {
+      for (final q in ['取色', 'wallpaper']) {
+        expect(ids(q, android: false), isNot(contains('accent')), reason: q);
+        expect(ids(q, android: true), contains('accent'), reason: q);
+      }
+      for (final q in ['悬浮', 'overlay']) {
+        expect(ids(q, android: false), isNot(contains('page:pets')), reason: q);
+        expect(ids(q, android: true), contains('page:pets'), reason: q);
+      }
+      expect(ids('主题色', android: false), contains('accent'));
+      expect(ids('桌宠', android: false), contains('page:pets'));
+    });
+
+    test('what isn\'t there isn\'t promised for later', () {
+      for (final l in [_zh, _en]) {
+        for (final text in [l.harmonyPageUnavailable, l.harmonySearchUnavailable]) {
+          expect(text, isNot(contains('暂时')), reason: text);
+          expect(text, isNot(contains('yet')), reason: text);
+        }
+      }
+    });
+
+    test('the progress notification goes by its own name on HarmonyOS, the live activity on Android', () {
+      for (final q in ['进度通知', '通知栏进度', '显示进度通知', 'progress notification']) {
+        expect(ids(q, android: false), contains('notify-live'), reason: q);
+        expect(ids(q, android: true), isNot(contains('notify-live')), reason: q);
+      }
+      for (final q in ['实时活动', '灵动岛', 'live activity']) {
+        expect(ids(q, android: true), contains('notify-live'), reason: q);
+        expect(ids(q, android: false), isNot(contains('notify-live')), reason: q);
+      }
+    });
+
+    test('on HarmonyOS: 系统操作 by its name and what it does, in both languages', () {
+      for (final q in [
+        '系统操作',
+        'system actions',
+        '拨号',
+        'dialer',
+        '发通知',
+        '写剪贴板',
+        'clipboard',
+        '手机操控',
+        '操作手机',
+        '代操作',
+        'phone control',
+      ]) {
+        expect(ids(q, android: false), contains('page:systemActions'), reason: q);
+      }
+      // Its words don't promise what it can't do.
+      for (final q in ['无障碍', '点按', 'tap', 'accessibility']) {
+        expect(ids(q, android: false), isNot(contains('page:systemActions')), reason: q);
+      }
     });
 
     test('on HarmonyOS: nothing of Android\'s by any of its names, the rest as before', () {
@@ -263,11 +333,15 @@ void main() {
       expect(find.text(_zh.searchNoResults), findsNothing);
     });
 
-    testWidgets('on HarmonyOS: 后台运行 is there, and 手机操控 says it isn\'t', (tester) async {
+    testWidgets('on HarmonyOS: 后台运行 is there, 手机操控 finds 系统操作, and 无障碍 says it isn\'t', (tester) async {
       await _pump(tester, const SettingsSearchPage(), android: false);
       expect(find.text(_zh.searchSuggestBackground), findsOneWidget);
       expect(find.text(_zh.searchSuggestDark), findsOneWidget);
       await tester.enterText(find.byType(TextField), '手机操控');
+      await tester.pumpAndSettle();
+      expect(find.textContaining(_zh.systemActionsTitle, findRichText: true), findsWidgets);
+      expect(find.text(_zh.harmonySearchUnavailable), findsNothing);
+      await tester.enterText(find.byType(TextField), '无障碍');
       await tester.pumpAndSettle();
       expect(find.text(_zh.harmonySearchUnavailable), findsOneWidget);
       expect(find.text(_zh.searchNoResults), findsNothing);
@@ -276,7 +350,8 @@ void main() {
 
   group('links', () {
     Widget? resolve(String id, {required bool android}) {
-      final container = ProviderContainer(overrides: [androidSystemFeaturesProvider.overrideWithValue(android)]);
+      final os = android ? 'android' : 'ohos';
+      final container = ProviderContainer(overrides: [operatingSystemProvider.overrideWithValue(os)]);
       addTearDown(container.dispose);
       return container.read(pageLinkResolverProvider)(id, null);
     }
@@ -285,26 +360,30 @@ void main() {
       expect(resolve('phone', android: true), isA<PhoneControlScreen>());
       expect(resolve('background', android: true), isNotNull);
       expect(resolve('system-permissions', android: true), isNotNull);
+      expect(resolve('system-actions', android: true), isNull, reason: 'HarmonyOS\'s own');
     });
 
-    test('on HarmonyOS they are unknown; other pages still open', () {
-      for (final id in ['phone', 'phone-unlocks', 'phone-confirm', 'phone-files']) {
-        expect(resolve(id, android: false), isNull, reason: id);
+    test('on HarmonyOS 系统操作 stands in for 手机操控, and the rest say they aren\'t there', () {
+      for (final id in ['phone', 'phone-unlocks']) {
+        expect(resolve(id, android: false), isA<SystemActionsPage>(), reason: id);
       }
+      expect(resolve('phone-confirm', android: false), isA<PermissionPage>());
+      expect(resolve('phone-files', android: false), isNull);
+      expect(resolve('system-actions', android: false), isA<SystemActionsPage>());
       expect(resolve('engine', android: false), isA<EngineScreen>());
       expect(resolve('background', android: false), isA<BackgroundGuidePage>());
       expect(resolve('system-permissions', android: false), isA<SystemAccessPage>());
     });
 
     for (final android in [true, false]) {
-      testWidgets('a plugin\'s `open phone` with android=$android', (tester) async {
+      Future<void> open(WidgetTester tester, String page) async {
         usePhoneSurface(tester);
         await tester.pumpWidget(
           goldenApp(
             home: Scaffold(
               body: Consumer(
                 builder: (context, ref, _) =>
-                    TextButton(onPressed: () => openNativePage(context, ref, 'phone'), child: const Text('open')),
+                    TextButton(onPressed: () => openNativePage(context, ref, page), child: const Text('open')),
               ),
             ),
             brightness: Brightness.light,
@@ -314,8 +393,23 @@ void main() {
         await tester.tap(find.text('open'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
+      }
+
+      testWidgets('a plugin\'s `open phone` with android=$android', (tester) async {
+        await open(tester, 'phone');
         expect(find.byType(PhoneControlScreen), android ? findsOneWidget : findsNothing);
+        expect(find.byType(SystemActionsPage), android ? findsNothing : findsOneWidget);
+        expect(find.text(_zh.harmonyPageUnavailable), findsNothing);
+      });
+
+      testWidgets('a plugin\'s `open phone-files` with android=$android', (tester) async {
+        await open(tester, 'phone-files');
         expect(find.text(_zh.harmonyPageUnavailable), android ? findsNothing : findsOneWidget);
+      });
+
+      testWidgets('a plugin\'s `open system-actions` with android=$android', (tester) async {
+        await open(tester, 'system-actions');
+        expect(find.byType(SystemActionsPage), android ? findsNothing : findsOneWidget);
       });
     }
   });
@@ -373,13 +467,15 @@ void main() {
       expect(find.byType(LaunchScreenSection), findsOneWidget);
     });
 
-    testWidgets('on HarmonyOS: the launcher icon only, the rest of the page stays', (tester) async {
+    testWidgets('on HarmonyOS: the launcher icon, picture shortcut and launch screen, the rest of the page stays', (
+      tester,
+    ) async {
       await _pump(tester, const AppearancePage(), android: false);
       expect(find.byType(AppIconPicker), findsOneWidget);
       expect(find.text(_zh.pluginsAppIcon), findsOneWidget);
-      expect(find.byType(IconShortcutTile), findsNothing);
-      expect(find.byType(LaunchScreenSection), findsNothing);
-      expect(find.text(_zh.launchScreenTitle), findsNothing);
+      expect(find.byType(IconShortcutTile), findsOneWidget);
+      expect(find.byType(LaunchScreenSection), findsOneWidget);
+      expect(find.text(_zh.launchScreenTitle), findsOneWidget);
       expect(find.byType(ThemeModePicker), findsOneWidget);
       expect(find.byType(WallpaperSection), findsOneWidget);
     });
@@ -413,31 +509,30 @@ void main() {
       expect(find.text(_zh.pluginsFollowWallpaper), findsNothing);
     });
 
-    test('the launch screen is searchable, the picture shortcut isn\'t, and HarmonyOS has neither', () {
-      List<String> ids(String q, {required bool ios}) => [
-        for (final h in searchSettings(
-          q,
-          spots: SettingsIndex.spots,
-          features: featureSections,
-          zh: _zh,
-          en: _en,
-          androidFeatures: false,
-          ios: ios,
-        ))
-          h.spot?.id ?? 'feature:${h.feature!.id}',
-      ];
-      expect(ids(_zh.launchScreenTitle, ios: true), contains('launch-screen'));
-      expect(ids(_zh.launchScreenTitle, ios: false), isNot(contains('launch-screen')));
-      expect(ids(_zh.iconShortcutRow, ios: true), isNot(contains('icon-shortcut')));
-      expect(ownLaunchScreenOn('ios'), isTrue);
-      expect(ownLaunchScreenOn('android'), isTrue);
-      expect(ownLaunchScreenOn('ohos'), isFalse);
-      expect(ids(_zh.phoneEngineReset, ios: true), contains('engine-reset'));
-      expect(ids(_zh.localEnvUninstall, ios: true), contains('engine-uninstall'));
-      expect(engineResetOn('ios'), isTrue);
-      expect(engineResetOn('android'), isTrue);
-      expect(engineResetOn('ohos'), isFalse);
-    });
+    test(
+      'iOS: the launch screen and engine reset are searchable, the picture shortcut isn\'t; HarmonyOS has all three',
+      () {
+        List<String> ids(String q, {required bool ios}) => [
+          for (final h in searchSettings(
+            q,
+            spots: SettingsIndex.spots,
+            features: featureSections,
+            zh: _zh,
+            en: _en,
+            androidFeatures: false,
+            ios: ios,
+          ))
+            h.spot?.id ?? 'feature:${h.feature!.id}',
+        ];
+        expect(ids(_zh.launchScreenTitle, ios: true), contains('launch-screen'));
+        expect(ids(_zh.iconShortcutRow, ios: true), isNot(contains('icon-shortcut')));
+        expect(ids(_zh.phoneEngineReset, ios: true), contains('engine-reset'));
+        expect(ids(_zh.localEnvUninstall, ios: true), contains('engine-uninstall'));
+        expect(ids(_zh.launchScreenTitle, ios: false), contains('launch-screen'));
+        expect(ids(_zh.iconShortcutRow, ios: false), contains('icon-shortcut'));
+        expect(ids(_zh.phoneEngineReset, ios: false), contains('engine-reset'));
+      },
+    );
   });
 
   group('性能', () {
@@ -446,12 +541,26 @@ void main() {
     testWidgets('on Android: the refresh rate choice', (tester) async {
       await _pump(tester, const PerformancePage(), android: true);
       expect(refreshRate(), findsOneWidget);
+      expect(find.byKey(const ValueKey('performance-frame-cache')), findsNothing);
     });
 
-    testWidgets('on HarmonyOS: no refresh rate, the effects stay', (tester) async {
+    testWidgets('on HarmonyOS: the refresh rate choice too, and what max costs', (tester) async {
       await _pump(tester, const PerformancePage(), android: false);
-      expect(refreshRate(), findsNothing);
+      expect(refreshRate(), findsOneWidget);
+      expect(find.text(_zh.performanceRefreshHintOhos), findsOneWidget);
       expect(find.byKey(const ValueKey('performance-blur')), findsOneWidget);
+    });
+
+    testWidgets('on HarmonyOS: the frame cache, on until it is turned off', (tester) async {
+      await _pump(tester, const PerformancePage(), android: false);
+      final row = find.byKey(const ValueKey('performance-frame-cache'));
+      expect(row, findsOneWidget);
+      expect(find.text(_zh.performanceFrameCache), findsOneWidget);
+      expect(find.text(_zh.performanceFrameCacheHint), findsOneWidget);
+      expect(tester.widget<Switch>(find.descendant(of: row, matching: find.byType(Switch))).value, isTrue);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(find.descendant(of: row, matching: find.byType(Switch))).value, isFalse);
     });
   });
 
@@ -485,16 +594,39 @@ void main() {
       expect(find.text(_zh.engineStartReopensApp), findsNothing);
     });
 
-    testWidgets('on HarmonyOS: none of them, and it says what starting again does', (tester) async {
+    testWidgets('on HarmonyOS: reset, uninstall and safe mode by hand, and it says what starting again does', (
+      tester,
+    ) async {
       await _pump(tester, const EngineScreen(), android: false, overrides: bridge());
-      expect(find.text(_zh.phoneEngineReset), findsNothing);
-      expect(find.text(_zh.phoneSafeAutoSettingsHint), findsNothing);
+      expect(find.text(_zh.phoneEngineReset), findsOneWidget);
+      expect(find.text(_zh.localEnvUninstall), findsOneWidget);
+      expect(find.text(_zh.phoneSafeStartSettings), findsOneWidget);
+      expect(find.text(_zh.phoneSafeAutoSettingsHint), findsNothing, reason: 'nothing there switches it on by itself');
       expect(find.text(_zh.engineStartReopensApp), findsOneWidget);
     });
 
     testWidgets('on Android: 后台保活 under 更多', (tester) async {
       await _pump(tester, const EngineScreen(), android: true, overrides: bridge());
       expect(find.byKey(const SpotKey('page:background')), findsOneWidget);
+    });
+
+    testWidgets('on HarmonyOS, a build that may ask for a long task: its hint says so', (tester) async {
+      tester.view.devicePixelRatio = 2;
+      tester.view.physicalSize = const Size(390 * 2, 3600 * 2);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        goldenApp(
+          home: const EngineScreen(),
+          brightness: Brightness.light,
+          overrides: [
+            ..._on(android: false, status: const RuntimeStatus(phase: RuntimePhase.running, longTaskEligible: true)),
+            ...bridge(),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(_zh.harmonyEngineBackgroundHintLong), findsOneWidget);
+      expect(find.text(_zh.harmonyEngineBackgroundHint), findsNothing);
     });
 
     testWidgets('on HarmonyOS: 后台运行 under 更多, and what it says is true there', (tester) async {

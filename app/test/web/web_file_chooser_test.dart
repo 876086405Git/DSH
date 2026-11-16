@@ -72,6 +72,35 @@ void main() {
     expect(await choose(), [_file]);
   });
 
+  group('HarmonyOS', () {
+    const docs = 'file://docs/storage/Users/currentUser/Download/a.pdf';
+    const media = 'file://media/Photo/12/IMG_1/a.jpg';
+
+    late WebFileChooser ohos;
+    setUp(() => ohos = WebFileChooser(channel: _channel, ohos: true));
+    tearDown(() => ohos.dispose());
+
+    Future<List<String>> pick(List<String> response) {
+      messenger.setMockMethodCallHandler(_channel, (call) async => response);
+      return ohos.choose(_params(mode: FileSelectorMode.openMultiple), webViewId: 7, currentUrl: () async => url);
+    }
+
+    test("the system picker's URIs reach the page", () async {
+      expect(await pick(const [docs, media]), const [docs, media]);
+    });
+
+    for (final bad in [
+      'file:///data/storage/el2/base/haps/entry/files/secret',
+      'file://com.example.app/data/storage/el2/base/files/secret',
+      '/data/storage/el2/base/files/secret',
+      _file,
+    ]) {
+      test('$bad is refused, along with the rest of the pick', () async {
+        expect(await pick([docs, bad]), isEmpty);
+      });
+    }
+  });
+
   test('save mode and non-web documents never invoke a file picker', () async {
     expect(await choose(_params(mode: FileSelectorMode.save)), isEmpty);
     url = 'file:///data/user/0/app/page.html';

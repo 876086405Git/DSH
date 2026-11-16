@@ -23,6 +23,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../remote/secret_store.dart' show SecretStore;
 import '../secrets/secure_storage.dart';
 import '../state/account_state.dart' show accountBrowserProvider;
+import '../state/android_features.dart';
 import '../l10n/l10n.dart';
 import 'discourse_client.dart';
 import 'forum_config.dart';
@@ -111,9 +112,9 @@ class ForumAuthController extends Notifier<ForumAuthState> {
   @override
   ForumAuthState build() {
     _base = ref.watch(forumBaseUrlProvider);
-    // A rebuild keeps this object: the pair is read again, not remembered past
-    // the saved credentials being cleared.
-    _keys = null;
+    // A rebuild keeps this object: on HarmonyOS, where saved credentials can be
+    // cleared, the pair is read again rather than remembered past that.
+    if (ref.read(operatingSystemProvider) == 'ohos') _keys = null;
     unawaited(_restore(_base));
     return const ForumAuthState();
   }
@@ -236,7 +237,9 @@ class ForumAuthController extends Notifier<ForumAuthState> {
       if (ref.mounted) {
         state = state.copyWith(
           phase: ForumAuthPhase.signedOut,
-          error: credentialsUnreadable(e) ? appL10n.harmonyCredentialsUnreadableHint : appL10n.stateSignInIncompleteRetry,
+          error: credentialsUnreadable(e)
+              ? appL10n.harmonyCredentialsUnreadableHint
+              : appL10n.stateSignInIncompleteRetry,
         );
       }
       return false;

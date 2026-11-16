@@ -42,7 +42,7 @@ enum IntegrityStatus { verified, unverifiable, mismatch }
 
 /// The engine an import goes to.
 class ImportTarget {
-  const ImportTarget(this.connection, {required this.isActive, this.safeMode = false});
+  const ImportTarget(this.connection, {required this.isActive, this.safeMode = false, this.installRefused = false});
 
   final HostConnection connection;
 
@@ -52,10 +52,13 @@ class ImportTarget {
   /// The on-device engine runs its repair profile: no installs.
   final bool safeMode;
 
+  /// The engine takes no market installs (HarmonyOS's own).
+  final bool installRefused;
+
   bool get isLocal => connection.isLocal;
   String get label => connection.label;
   DshClient get client => connection.client;
-  bool get canInstall => !safeMode && client.canInstallPlugins;
+  bool get canInstall => !safeMode && !installRefused && client.canInstallPlugins;
 }
 
 /// One row of the diff.
@@ -525,8 +528,11 @@ Future<ImportPlan> planImport(SharePayload payload, ImportTarget target, {requir
 bool _sameFiles(Map<String, String> a, Map<String, String> b) =>
     a.length == b.length && a.entries.every((e) => b[e.key]?.trim() == e.value.trim());
 
-String _cantInstall(ImportTarget target) =>
-    target.safeMode ? appL10n.pluginsSafeModeInstallBlocked : appL10n.pluginsHostInstallBlocked;
+String _cantInstall(ImportTarget target) => target.safeMode
+    ? appL10n.pluginsSafeModeInstallBlocked
+    : target.installRefused
+    ? appL10n.marketInstallRefused
+    : appL10n.pluginsHostInstallBlocked;
 
 // ── Applying ─────────────────────────────────────────────────────────────────
 

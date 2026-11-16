@@ -99,13 +99,18 @@ export async function runAdd13Contract({ base, cookie, exchange, out, server, ex
     report.httpInventory = http;
     assert.ok(stdio && http);
     assert.equal(http.fiberPhase, 'active');
-    if (expectation === 'complete') assert.equal(stdio.fiberPhase, 'failed');
-    else assert.equal(stdio.fiberPhase, 'active');
+    assert.equal(stdio.fiberPhase, 'active');
     let marker = '';
     try { marker = await readFile(stdioMarker, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     report.stdioProcessMarkers = marker.trim() ? marker.trim().split('\n').map(line => JSON.parse(line)) : [];
-    if (expectation === 'existing') assert.ok(report.stdioProcessMarkers.length > 0, 'Existing SDK must actually launch the owned configured command');
-    else assert.equal(report.stdioProcessMarkers.length, 0);
+    if (expectation === 'guard-only') assert.equal(report.stdioProcessMarkers.length, 0);
+    else assert.ok(report.stdioProcessMarkers.length > 0, 'SDK must actually start the owned peer');
+    if (expectation === 'complete') {
+      assert(report.stdioProcessMarkers.every(row => row.worker === true));
+      const stdioEcho = await request('stdio-echo', '/__add13_mcp/stdio-echo', { message: '真实 stdio MCP' });
+      assert.deepEqual(stdioEcho.result.content, [{ type: 'text', text: '真实 stdio MCP' }]);
+      report.stdioEcho = stdioEcho;
+    }
     assert.equal(server.events.some(row => row.type === 'fixture-error'), false);
     report.httpMethods = server.events.filter(row => row.type === 'rpc').map(row => row.method);
     assert.ok(report.httpMethods.includes('server/discover'));

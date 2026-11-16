@@ -88,10 +88,10 @@ export default class ConnectivityPlugin implements FlutterPlugin, MethodCallHand
   private unregister(observer: connection.NetConnection): void {
     try {
       observer.unregister((error: BusinessError) => {
-        if (error) hilog.warn(0xD003F00, 'DshConnectivity', '网络监听注销失败');
+        if (error) hilog.warn(0x3F00, 'DshConnectivity', '网络监听注销失败');
       });
     } catch (_error) {
-      hilog.warn(0xD003F00, 'DshConnectivity', '网络监听注销失败');
+      hilog.warn(0x3F00, 'DshConnectivity', '网络监听注销失败');
     }
   }
 

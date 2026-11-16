@@ -1,3 +1,4 @@
+import { symlinkFixture } from './host-link-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -74,7 +75,7 @@ for (const bytes of [Buffer.alloc(0), Buffer.from('existing complete target')]) 
 
 test('dangling final symlink is EEXIST; its entry and absent destination are preserved', async t => {
   const f = await fixture(t), missing = join(f.directory, 'not-created');
-  await fs.symlink(missing, f.target);
+  await symlinkFixture(missing, f.target);
   await assert.rejects(publisher(f)(f.source, f.target), { code: 'EEXIST' });
   assert.equal(await fs.readlink(f.target), missing); await absent(missing);
   await sourceUnchanged(f); await noTemporary(f.directory);

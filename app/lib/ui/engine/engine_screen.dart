@@ -29,6 +29,7 @@ import 'engine_status.dart';
 import 'engine_capabilities.dart';
 import 'linux_section.dart';
 import 'local_uninstall.dart';
+import 'reset_outcome.dart';
 import 'log_view.dart';
 import 'workspace_recovery_settings.dart';
 
@@ -141,6 +142,7 @@ class EngineScreen extends ConsumerWidget {
             for (final issue in state.relocation)
               Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: _RelocationNote(issue.text)),
             const SafeModeCard(padding: EdgeInsets.fromLTRB(16, 0, 16, 16)),
+            if (status.resetPending) ...[const ResetPendingNote(), const SizedBox(height: 10)],
             SettingsSection(
               title: l10n.hubEngineStartup,
               children: [
@@ -149,10 +151,10 @@ class EngineScreen extends ConsumerWidget {
                   value: settings.autoStartLocal,
                   onChanged: (v) => unawaited(ref.read(settingsProvider.notifier).setAutoStartLocal(v)),
                 ),
-                if (guest) ...[
-                  const SafeModeAutoSwitch(icon: null),
+                if (guest) const SafeModeAutoSwitch(icon: null),
+                // iOS has no rescue profile of its own (SafeModeSettingsTiles is Android's and HarmonyOS's).
+                if (guest || ref.watch(operatingSystemProvider) == 'ohos')
                   const SafeModeSettingsTiles(showAutoSwitch: false, icon: false),
-                ],
               ],
             ),
             if (!missing)
@@ -170,7 +172,11 @@ class EngineScreen extends ConsumerWidget {
               children: [
                 SettingsTile(
                   spot: SettingsIndex.entry(SettingsPageId.background),
-                  subtitle: guest ? l10n.phoneEngineKeepAliveHint : l10n.harmonyEngineBackgroundHint,
+                  subtitle: guest
+                      ? l10n.phoneEngineKeepAliveHint
+                      : status.longTaskEligible
+                      ? l10n.harmonyEngineBackgroundHintLong
+                      : l10n.harmonyEngineBackgroundHint,
                   onTap: () => _push(context, const BackgroundGuidePage()),
                 ),
                 SettingsTile(
@@ -196,7 +202,7 @@ class EngineScreen extends ConsumerWidget {
             ),
             // A way around a broken index, next to the other ways out of trouble.
             if (!missing) const WorkspaceRecoverySettings(),
-            if (!missing && ref.watch(engineResetProvider))
+            if (!missing)
               SettingsSection(
                 children: [
                   _ResetRow(enabled: !status.phase.isBusy),
@@ -384,8 +390,13 @@ class _ResetRow extends ConsumerWidget {
 
   Future<void> _reset(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final keep = await showAppDialog<ResetKeep>(context: context, builder: (_) => const _ResetDialog());
+    final harmony = ref.read(operatingSystemProvider) == 'ohos';
+    final keep = await showAppDialog<ResetKeep>(
+      context: context,
+      builder: (_) => _ResetDialog(harmony: harmony),
+    );
     if (keep == null || !context.mounted) return;
+    if (harmony) return resetOnHarmony(context, ref, keep);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
@@ -425,7 +436,10 @@ String resetDeletes(ResetKeep keep) {
 
 /// Pops the chosen [ResetKeep], or null on 取消.
 class _ResetDialog extends StatefulWidget {
-  const _ResetDialog();
+  const _ResetDialog({required this.harmony});
+
+  /// Says what a reset leaves alone, and that the app reopens to do it.
+  final bool harmony;
 
   @override
   State<_ResetDialog> createState() => _ResetDialogState();
@@ -452,6 +466,7 @@ class _ResetDialogState extends State<_ResetDialog> {
           }),
           const SizedBox(height: 8),
           Text(l10n.phoneResetAlsoDeletes),
+          if (widget.harmony) ...[const SizedBox(height: 8), Text(l10n.harmonyResetKept)],
           const SizedBox(height: 12),
           _KeepOption(
             label: l10n.phoneEngineKeepUiSkills,

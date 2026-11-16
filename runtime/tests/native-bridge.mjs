@@ -334,10 +334,24 @@ const ws2 = await wsConnect(C);
 ws2.send({ t: "hello", v: [1], locale: "en" });
 await ws2.next((m) => m.t === "welcome");
 ws2.send({ t: "sub", sub: "s1", pkg: USAGE, id: "usage", scope: { sessionId: "s1" }, rev: lastRev });
-const catchup = await ws2.next((m) => m.sub === "s1");
-check(catchup?.t === "data" && catchup.data?.count === 8 && catchup.rev !== lastRev, `reconnect with old rev -> full data count=${catchup?.data?.count}`);
+let catchup = await ws2.next((m) => m.sub === "s1");
+// The emit HTTP response is not a feed publication barrier. If the 4 Hz flush
+// is still pending, attach first confirms the old published rev, then patches it.
+if (catchup?.t === "sync") {
+  check(catchup.rev === lastRev, `pending flush -> sync at requested rev ${catchup.rev}`);
+  const update = await ws2.next((m) => m.sub === "s1");
+  check(update?.t === "patch" && update.base === lastRev && typeof update.rev === "string" && update.rev !== lastRev
+    && JSON.stringify(update.merge) === '{"count":8,"nested":{"b":8}}',
+    `pending flush -> exact patch from old rev: ${JSON.stringify(update)}`);
+  // Preserve the stale-rev/full-snapshot assertion after observing publication.
+  ws2.send({ t: "sub", sub: "s1", pkg: USAGE, id: "usage", scope: { sessionId: "s1" }, rev: lastRev });
+  catchup = await ws2.next((m) => m.sub === "s1");
+  check(catchup?.rev === update?.rev, "stale-rev snapshot uses the published patch rev");
+}
+check(catchup?.t === "data" && catchup.data?.count === 8 && typeof catchup.rev === "string" && catchup.rev !== lastRev, `reconnect with old rev -> full data count=${catchup?.data?.count}`);
 ws2.send({ t: "sub", sub: "s1", pkg: USAGE, id: "usage", scope: { sessionId: "s1" }, rev: catchup.rev });
-check((await ws2.next((m) => m.sub === "s1"))?.t === "sync", "re-sub with current rev -> sync");
+const currentSync = await ws2.next((m) => m.sub === "s1");
+check(currentSync?.t === "sync" && currentSync.rev === catchup.rev, "re-sub with current rev -> sync");
 
 // protocol errors, idle, limits
 const bad1 = await wsConnect(C);

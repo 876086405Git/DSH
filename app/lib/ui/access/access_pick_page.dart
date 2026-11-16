@@ -11,6 +11,7 @@ import '../../l10n/l10n.dart';
 import '../../state/access_state.dart';
 import '../../state/android_features.dart';
 import '../../state/phone_state.dart';
+import '../../state/system_actions_state.dart';
 import '../common/risk_notice.dart';
 import '../onboarding/onboarding_scaffold.dart';
 import '../phone/phone_disclosure_sheet.dart';
@@ -40,8 +41,9 @@ import 'phone_mode_sheet.dart';
 /// Picking 手机操控 shows its disclosure and then asks how it confirms
 /// (关键步骤先问我 / 全程自动), and 读写手机里的文件 what AI may then do, right
 /// there, the way their switches in settings do; declining either leaves the
-/// box empty. HarmonyOS lists fewer ([accessFeaturesFor]), and its voice input
-/// has nothing to download.
+/// box empty. HarmonyOS lists fewer ([accessFeaturesFor]); its 系统操作 shows the
+/// same disclosure, with no 确认方式 to choose (it follows the permission page),
+/// and its voice input has nothing to download.
 class AccessPickPage extends ConsumerStatefulWidget {
   const AccessPickPage({super.key, required this.onPicked, required this.onSkip});
 
@@ -71,6 +73,8 @@ class _AccessPickPageState extends ConsumerState<AccessPickPage> {
       final bool ok;
       if (feature == AccessFeature.phone) {
         ok = await _phoneDisclosure() && await _chooseMode();
+      } else if (feature == AccessFeature.systemActions) {
+        ok = await _systemActionsDisclosure();
       } else if (feature == AccessFeature.files) {
         ok = await confirmRisk(context, RiskNotices.phoneFilesFirstRun);
       } else {
@@ -86,6 +90,13 @@ class _AccessPickPageState extends ConsumerState<AccessPickPage> {
     if (ref.read(phoneProvider).disclosureAccepted) return true;
     if (!await showPhoneDisclosure(context)) return false;
     await ref.read(phoneProvider.notifier).acceptDisclosure();
+    return true;
+  }
+
+  Future<bool> _systemActionsDisclosure() async {
+    if (ref.read(systemActionsProvider).disclosureAccepted) return true;
+    if (!await showPhoneDisclosure(context, harmony: true)) return false;
+    await ref.read(systemActionsProvider.notifier).acceptDisclosure();
     return true;
   }
 

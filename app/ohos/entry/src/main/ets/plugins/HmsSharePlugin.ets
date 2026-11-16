@@ -77,9 +77,17 @@ export default class HmsSharePlugin implements FlutterPlugin, AbilityAware {
       this.share(call, result);
     } });
     this.incoming.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
-      if (call.method !== 'ready') { result.notImplemented(); return; }
+      if (call.method !== 'ready' && call.method !== 'consumed') { result.notImplemented(); return; }
       if (this.engine !== binding) { result.success(false); return; }
-      HmsShareInbox.ready(binding, (ready: boolean): void => result.success(ready));
+      if (call.method === 'ready') {
+        HmsShareInbox.ready(binding, (ready: boolean): void => result.success(ready));
+      } else {
+        HmsShareInbox.consumed(binding, call.argument('shareId')).then((consumed: boolean): void => {
+          try { result.success(consumed); } catch (_error) { /* Retired transport does not undo consumption. */ }
+        }).catch((_error: Error): void => {
+          try { result.error('share_failed', '分享缓存收尾未完成。', null); } catch (_replyError) { /* Engine retired. */ }
+        });
+      }
     } });
   }
 

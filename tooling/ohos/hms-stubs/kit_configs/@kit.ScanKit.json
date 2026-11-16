@@ -1,0 +1,12 @@
+{
+  "symbols": {
+    "scanBarcode": {
+      "source": "@hms.core.scan.scanBarcode.d.ts",
+      "bindings": "default"
+    },
+    "scanCore": {
+      "source": "@hms.core.scan.scanCore.d.ts",
+      "bindings": "default"
+    }
+  }
+}

@@ -4,7 +4,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { STATUS_CODES } from 'node:http';
 
 export const name = 'dsh-go-ohos-lifecycle';
-export const inject = ['sessions', 'sessionPersistence', 'agents', 'subprocess'];
+export const inject = ['sessions', 'sessionPersistence', 'agents', 'subprocess', 'jobs'];
 const lifecycleSymbol = Symbol.for('dsh.go.ohos.lifecycle');
 const simulationSymbol = Symbol.for('dsh.go.ohos.sim');
 const publicationSymbol = Symbol.for('dsh.go.ohos.publication');
@@ -80,10 +80,10 @@ export function registerLifecycleRoutes(ctx, coordinator, transport) {
           throw fail('ERR_OHOS_LIFECYCLE_REQUEST', 'Invalid host observation', 400);
         }
         const state = await coordinator.observeHost({ revision: body.revision, foreground: body.foreground,
-          computePermission: body.computePermission });
+          computePermission: body.computePermission }, true);
         // Host acknowledgements stay bounded even after thousands of calls.
-        const { v, host, closed, blocked, paused, confirmedPause, controlVersion } = state;
-        reply(200, { v, host, closed, blocked, paused, confirmedPause, controlVersion });
+        const { v, host, nativeHost, busy, manualPaused, closed, blocked, paused, confirmedPause, controlVersion } = state;
+        reply(200, { v, host, nativeHost, busy, manualPaused, observationRevision: body.revision, closed, blocked, paused, confirmedPause, controlVersion });
         return;
       }
       if (Object.keys(body).some(key => !['operation', 'sessionId'].includes(key))) throw fail('ERR_OHOS_LIFECYCLE_REQUEST', 'Unknown control field', 400);
@@ -111,10 +111,12 @@ export function registerLifecycleRoutes(ctx, coordinator, transport) {
 export async function apply(ctx, config = {}) {
   if (process.platform !== 'openharmony' && globalThis[simulationSymbol] !== true) return;
   if (Object.hasOwn(globalThis, lifecycleSymbol)) throw fail('ERR_OHOS_LIFECYCLE_DUPLICATE', 'One lifecycle owner is allowed for this engine process');
-  const [{ ohosLifecycleProtocol }, { ohosLifecycleBudgetProtocol }, { openBoundaryJournal }, { BoundaryCoordinator }, { createLifecycleTransport }] = await Promise.all([
+  const [{ ohosLifecycleProtocol, ohosLifecycleAdmissionProtocol }, { ohosLifecycleBudgetProtocol }, { openBoundaryJournal }, { BoundaryCoordinator }, { createLifecycleTransport }] = await Promise.all([
     import('@deepseek-ai/dsh-agent-loop'), import('@deepseek-ai/dsh-timeout'), import('./journal.mjs'), import('./coordinator.mjs'), import('./transport.mjs'),
   ]);
-  if (ohosLifecycleProtocol !== 1 || ohosLifecycleBudgetProtocol !== 1) throw fail('ERR_OHOS_LIFECYCLE_PROTOCOL', 'Pinned engine scheduler and timeout lifecycle seams are required');
+  if (ohosLifecycleProtocol !== 1 || ohosLifecycleAdmissionProtocol !== 1 || ohosLifecycleBudgetProtocol !== 1) throw fail('ERR_OHOS_LIFECYCLE_PROTOCOL', 'Pinned engine scheduler and timeout lifecycle seams are required');
+  const jobs = ctx.jobs;
+  if (typeof jobs.hasActiveJobs !== 'function') throw fail('ERR_OHOS_LIFECYCLE_PROTOCOL', 'Pinned job activity is required');
   const publication = globalThis[publicationSymbol];
   if (publication?.protocolVersion !== 1) throw fail('ERR_OHOS_LIFECYCLE_PUBLICATION', 'OH publication startup must precede lifecycle setup');
   if (Object.keys(config).some(key => key !== 'directory')) throw new TypeError('Unknown lifecycle configuration key');
@@ -135,7 +137,9 @@ export async function apply(ctx, config = {}) {
       try { return (await handle.read(from, to)).events; }
       finally { await handle.close(); }
     },
-    resolveAgent: id => ctx.agents.get(id), revalidateTransport: () => transport.revalidate() });
+    resolveAgent: id => ctx.agents.get(id), hasActiveRounds: () => ctx.agents.list().some(agent => agent.status === 'running'),
+    hasActiveWork: () => jobs.hasActiveJobs() || ctx.subprocess.backend.live.size > 0 || ctx.subprocess.linux.hasActiveWork(),
+    revalidateTransport: () => transport.revalidate() });
   // After teardown a patched scheduler sees a closed owner and fails closed;
   // it must not fall back to unjournaled dispatch because a plugin unloaded.
   Object.defineProperty(globalThis, lifecycleSymbol, { value: coordinator, configurable: false, writable: false });

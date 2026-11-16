@@ -40,7 +40,7 @@ def main():
         path.mkdir(parents=True)
     for name in ['runtime/ohos/preload.mjs', 'node_modules/@deepseek-ai/dsh/lib/bin.js',
                  'runtime/ohos/process/index.mjs', 'runtime/ohos/process/sandbox.mjs',
-                 'runtime/ohos/lifecycle/index.mjs', 'runtime/ohos/capabilities/index.mjs',
+                 'runtime/ohos/lifecycle/index.mjs','runtime/ohos/phone/index.mjs', 'runtime/ohos/capabilities/index.mjs',
                  'runtime/bridge/dsh-go-bridge/lib/index.js', 'runtime/ohos/process/child-process.mjs']:
         path = runtime / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,10 +50,11 @@ def main():
     environment = {key: os.environ[key] for key in ['PATH', 'LANG', 'LC_ALL'] if key in os.environ}
     rows = []
     services = [('lifecycle', 'ohos-lifecycle', 'runtime/ohos/lifecycle/index.mjs'),
+                ('phone', 'ohos-phone', 'runtime/ohos/phone/index.mjs'),
                 ('capabilities', 'ohos-capabilities', 'runtime/ohos/capabilities/index.mjs'),
                 ('bridge', 'dsh-go-bridge', 'runtime/bridge/dsh-go-bridge/lib/index.js')]
     guard = runtime / 'runtime/ohos/process/child-process.mjs'
-    for name in ['default-profile', 'missing-lifecycle', 'missing-capabilities', 'missing-bridge', 'missing-child-process']:
+    for name in ['default-profile', 'missing-lifecycle', 'missing-phone', 'missing-capabilities', 'missing-bridge', 'missing-child-process']:
         if name == 'missing-child-process':
             guard.unlink()
         else:

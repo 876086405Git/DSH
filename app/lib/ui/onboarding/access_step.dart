@@ -35,8 +35,11 @@ class _AccessStepPageState extends ConsumerState<AccessStepPage> {
   Future<void> _walked() async {
     if (_walkedOnce) return;
     _walkedOnce = true;
-    await ref.read(accessReadingsProvider.notifier).refresh();
-    if (mounted) setState(() => _summary = true);
+    final readings = await ref.read(accessReadingsProvider.notifier).refresh();
+    if (!mounted) return;
+    // Nothing to sum up: 系统操作 alone asks the phone for nothing.
+    if (accessWalk(ref.read(accessSetupProvider).features ?? const {}, readings.vendor).isEmpty) return _finish();
+    setState(() => _summary = true);
   }
 
   /// 继续: what was picked goes on as the summary is left, so an item turned

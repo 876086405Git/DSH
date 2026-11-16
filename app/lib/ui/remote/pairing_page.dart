@@ -18,6 +18,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../l10n/l10n.dart';
 import '../../remote/relay/relay_backend.dart';
 import '../../state/account_state.dart';
+import '../../state/android_features.dart' show operatingSystemProvider;
 import '../../state/hosts_state.dart';
 import '../../state/remote_pairing_state.dart';
 import '../account/account_widgets.dart' show AccountTile;
@@ -30,10 +31,13 @@ import 'host_key_dialog.dart' show activateHost;
 /// stand-in (there is no camera there).
 typedef PairingScannerBuilder = Widget Function(BuildContext context, ValueChanged<String> onCode);
 
-final pairingScannerProvider = Provider<PairingScannerBuilder>(
-  (ref) =>
-      (context, onCode) => _CameraScanner(onCode: onCode),
-);
+final pairingScannerProvider = Provider<PairingScannerBuilder>((ref) {
+  // HarmonyOS has no mobile_scanner: the system scan page reads the code there.
+  if (ref.watch(operatingSystemProvider) == 'ohos') {
+    return (context, onCode) => _SystemScanner(onCode: onCode);
+  }
+  return (context, onCode) => _CameraScanner(onCode: onCode);
+});
 
 /// Whether the current Remote Server pairs by scanning (the entry shows only
 /// then).
@@ -709,6 +713,83 @@ class _CameraScannerState extends State<_CameraScanner> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// HarmonyOS: a button that opens the system scan page (Scan Kit, through
+/// `dsh/app.scanQrCode`). That page owns the camera and has its own album entry,
+/// so there is no camera permission and no 从相册识别 here. Closing it does nothing.
+class _SystemScanner extends StatefulWidget {
+  const _SystemScanner({required this.onCode});
+
+  final ValueChanged<String> onCode;
+
+  @override
+  State<_SystemScanner> createState() => _SystemScannerState();
+}
+
+class _SystemScannerState extends State<_SystemScanner> {
+  static const _app = MethodChannel('dsh/app');
+  bool _scanning = false;
+  bool _failed = false;
+
+  Future<void> _scan() async {
+    if (_scanning) return;
+    setState(() {
+      _scanning = true;
+      _failed = false;
+    });
+    String? text;
+    var failed = false;
+    try {
+      text = await _app.invokeMethod<String>('scanQrCode');
+    } on PlatformException catch (e) {
+      // 'busy': a scan page is already open and will answer for itself.
+      failed = e.code != 'busy';
+    } on MissingPluginException {
+      failed = true;
+    }
+    if (!mounted) return;
+    setState(() {
+      _scanning = false;
+      _failed = failed;
+    });
+    if (text != null && text.isNotEmpty) widget.onCode(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final colors = DshColors.of(context);
+    return ColoredBox(
+      color: colors.codeWellBg,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.icon(
+                onPressed: _scanning ? null : () => unawaited(_scan()),
+                style: FilledButton.styleFrom(minimumSize: const Size(168, 56), textStyle: theme.textTheme.titleMedium),
+                icon: const Icon(AppIcons.qrCode, size: 24),
+                label: Text(l10n.remotePairSystemScan),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _failed ? l10n.remotePairScannerFailed : l10n.remotePairSystemScanHint,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: _failed ? colors.danger : theme.colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

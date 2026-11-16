@@ -54,7 +54,7 @@ void main() {
         await tester.tap(find.widgetWithText(FilledButton, '卸载'));
         await frames(tester);
         expect(container.read(localRuntimeProvider).status.phase, RuntimePhase.installed);
-        expect(container.read(onboardingPrefsProvider).localDeclined, os == 'ios' ? declined : false);
+        expect(container.read(onboardingPrefsProvider).localDeclined, declined);
         await tester.pumpWidget(const SizedBox());
         await frames(tester);
       });

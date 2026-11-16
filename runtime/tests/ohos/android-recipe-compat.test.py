@@ -2,7 +2,7 @@
 """Replay the actual old/new shell recipe blocks and mutate their real inputs.
 
 External archives are identical small fixtures, not Android image downloads.
-The baseline must be the verified origin/main f3875f2 runtime directory.
+The baseline must be the verified main-0441caf4 runtime directory.
 """
 import argparse
 from contextlib import contextmanager
@@ -46,8 +46,9 @@ def run_recipe(runtime, fixtures, abi, stream=False, revision='r14'):
     shell = '\n'.join([
         'set -euo pipefail', 'function recipe() {',
         'HERE="$1"; work="$2"; abi="$3"',
-        'RUNTIME_REVISION="$4"; DSH_VERSION=0.2.1-rc.4; NODE_VERSION=24.22.1; PNPM_VERSION=11.28.5',
-        'UBUNTU_VERSION=24.04.5; COMPRESS=xz; XZ_PRESET=6; PRUNE_DEV_METADATA=1; SOURCE_DATE_EPOCH=1767225600',
+        'RUNTIME_REVISION="$4"; DSH_VERSION=0.2.2-rc.1; NODE_VERSION=24.22.1; PNPM_VERSION=11.28.5',
+        'UBUNTU_VERSION=24.04.5; COMPRESS=xz; XZ_PRESET=6; XZ_THREADS=0; PRUNE_DEV_METADATA=1',
+        'SOURCE_DATE_EPOCH=1767225600; RUNTIME_LAYERS=1',
         'base="$work/base"; node="$work/node"; python="$work/python"',
         'proot_deb="$work/proot"; talloc_deb="$work/talloc"; shmem_deb="$work/shmem"',
         'extra_debs=("$work/extra1" "$work/extra2")',
@@ -68,11 +69,13 @@ def main():
     args = parser.parse_args()
     baseline = args.baseline.resolve()
     for name, expected in {
-        'build-runtime.sh': 'a3a4d9e73ec60b24b502ac094cb44dbb528ec492daea18331291d7bce95ae326',
-        'lib/rtbuild.py': '235370e7cfd7173a34cd71a348a909b083cc49d118e5ac8ed27a298d6aa821aa',
-        'patches/pins.json': '5a9c275e416a5187f186c4cb9682cd57be2c0215966d80e6c5cbdc5eb2bcfabe',
+        'build-runtime.sh': '71918e114d6f9a80392cc63410b4b65751c6f815d741d48066b2e401aff83bd4',
+        'lib/rtbuild.py': '904e61535a38a9a4464ab56f9ae444af538b91251f06bc73280fa35481bb972e',
+        'patches/pins.json': '119a3d949264f480b57ff6cea7e9a2b68fd3cbb281022abc788edb2869eb2d33',
+        'patches/series': '154565b33636471c26cd9d2af67285095404732f4e7241a63d8da310cf4a40ec',
+        'session-deletion/generate.py': '44aab75244ef5035d58ba2e03f4976fee514bf531bf7ca5abe5f854f889991a7',
     }.items():
-        assert sha((baseline / name).read_bytes()) == expected, 'not the f3875f2 baseline: ' + name
+        assert sha((baseline / name).read_bytes()) == expected, 'not the main-0441caf4 baseline: ' + name
     cases = []
     with tempfile.TemporaryDirectory(prefix='android-recipe-contract-') as temporary:
         root = Path(temporary)
@@ -128,7 +131,7 @@ def main():
         with changed_pins(pins):
             check('pins-order-and-format-irrelevant')
         changed = json.loads(pins_path.read_text())
-        original = next(iter(changed['patches']['ohos-network-transport.diff']['0.2.1-rc.4'].values()))
+        original = next(iter(changed['patches']['ohos-network-transport.diff']['0.2.2-rc.1'].values()))
         original['after'] = '0' * 64
         with changed_pins(changed):
             check('excluded-ohos-pins')
@@ -140,11 +143,23 @@ def main():
         changed = json.loads(pins_path.read_text())
         name = 'ohos-recipe-fixture.diff'
         changed['targetSets']['ohos'].append(name)
-        changed['patches'][name] = {'0.2.1-rc.4': {}}
-        with edited(runtime / 'patches' / name, b'# no-op OHOS fixture\n'), changed_pins(changed):
+        changed['patches'][name] = {'0.2.2-rc.1': {}}
+        series = runtime / 'patches/series'
+        with edited(runtime / 'patches' / name, b'# no-op OHOS fixture\n'), changed_pins(changed), \
+                edited(series, series.read_bytes() + name.encode() + b'\n'):
             check('new-registered-ohos-patch')
+        series = runtime / 'patches/series'
+        with edited(series, series.read_bytes() + b'# an OHOS-only comment\n'):
+            check('series-comment-irrelevant')
+        lines = series.read_text().splitlines(True)
+        android = [line for line in lines if line.strip() in set(json.loads(pins_path.read_text())['targetSets']['android'])]
+        swapped = list(lines)
+        first, second = swapped.index(android[0]), swapped.index(android[1])
+        swapped[first], swapped[second] = swapped[second], swapped[first]
+        with edited(series, ''.join(swapped).encode()):
+            check('android-series-order-changes', same=False)
         changed = json.loads(pins_path.read_text())
-        original = next(iter(changed['patches']['fs-create-exclusive.diff']['0.2.1-rc.4'].values()))
+        original = next(iter(changed['patches']['fs-create-exclusive.diff']['0.2.2-rc.1'].values()))
         original['after'] = '0' * 64
         with changed_pins(changed):
             check('active-android-pin-changes', same=False)
@@ -153,9 +168,9 @@ def main():
         with changed_pins(changed):
             check('android-selected-set-changes', same=False)
         for name in ('patches/fs-create-exclusive.diff', 'build-runtime.sh', 'lib/rtbuild.py',
-                     'lib/android_recipe.py', 'session-deletion/core.mjs',
+                     'lib/android_recipe.py', 'session-deletion/core.mjs', 'session-deletion/generate.py',
                      'bridge/dsh-go-bridge/package.json', 'boot/boot-cache.mjs', 'direct/paths.mjs',
-                     'locks/dsh-0.2.1-rc.4/package-lock.json', 'locks/pnpm-11.28.5/package-lock.json'):
+                     'locks/dsh-0.2.2-rc.1/package-lock.json', 'locks/pnpm-11.28.5/package-lock.json'):
             path = runtime / name
             suffix = b'\n# digest sensitivity fixture\n' if name.endswith(('.py', '.sh')) else b'\n'
             with edited(path, path.read_bytes() + suffix):
@@ -166,12 +181,14 @@ def main():
         check('changed-recipe-revision', same=False, revision='r15')
         compatibility_path = runtime / 'locks/android-recipe-compat.json'
         compatibility = json.loads(compatibility_path.read_text())
-        for key in ('sha256', 'legacySha256'):
-            changed = json.loads(json.dumps(compatibility))
-            changed['sources']['build-runtime.sh'][key] = '0' * 64
-            with edited(compatibility_path, json.dumps(changed).encode()):
-                check('changed-source-mapping-' + key, same=False)
-        for key in ('helperSha256', 'pinsCanonicalSha256', 'pinsLegacySha256', 'companionSha256'):
+        for source in compatibility['sources']:
+            for key in ('sha256', 'legacySha256'):
+                changed = json.loads(json.dumps(compatibility))
+                changed['sources'][source][key] = '0' * 64
+                with edited(compatibility_path, json.dumps(changed).encode()):
+                    check('changed-source-mapping-%s-%s' % (source, key), same=False)
+        for key in ('helperSha256', 'pinsCanonicalSha256', 'pinsLegacySha256',
+                    'seriesCanonicalSha256', 'seriesLegacySha256'):
             changed = dict(compatibility)
             changed[key] = '0' * 64
             with edited(compatibility_path, json.dumps(changed).encode()):

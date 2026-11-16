@@ -46,6 +46,8 @@ function fixture({ start = () => Promise.resolve(), zone = () => 'Asia/Shanghai'
       if (name === '@ohos.util') return { default: { TextEncoder: class {
         encodeInto(value) { return new TextEncoder().encode(value); }
       } } };
+      // Its own channel test: frame-rate-channel.test.mjs.
+      if (name === './OhosFrameRate') return { OhosFrameRateKeeper: class { close() {} setVisible() {} } };
       throw new Error(`Unexpected runtime import ${name}`);
     },
   });
@@ -174,15 +176,6 @@ test('synchronous platform foreground and timezone exceptions become stable chan
   f.plugin.onAttachedToAbility(f.binding);
   assert.equal((await f.call('dsh/app', 'bringToFront')).error, 'ohos_foreground');
   assert.equal((await f.call('dsh/app', 'getTimeZoneId')).error, 'ohos_timezone');
-});
-
-test('system refresh strategy is explicit; unsupported force modes are errors, not fabricated success', async () => {
-  const f = fixture();
-  assert.deepEqual(await f.call('dsh/app', 'setRefreshRateMode', { mode: 'system' }), { value: null });
-  for (const mode of ['auto', 'max', 'bad']) {
-    assert.equal((await f.call('dsh/app', 'setRefreshRateMode', { mode })).error, 'ohos_unsupported');
-  }
-  assert.deepEqual(await f.call('dsh/app', 'setFrameActive', { active: false }), { value: null });
 });
 
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };

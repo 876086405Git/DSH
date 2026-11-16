@@ -94,7 +94,7 @@ ToolSummary summarizeTools(Iterable<ToolChatItem> tools) {
     total++;
     final view = _cachedView(tool);
     if (view.sandboxBlocked) continue;
-    if (tool.status == ToolStatus.failed) failed++;
+    if (tool.status == ToolStatus.failed && (view.phoneResult?.isFault ?? true)) failed++;
     final fileKey = _normalisePath(view.path) ?? '#${tool.callId}';
     // "改了 / 读了" claim it happened: a failed, refused or abandoned file
     // call shows up in the failure count (or nowhere), not as a file.

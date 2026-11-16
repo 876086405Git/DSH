@@ -7,7 +7,7 @@ assert.equal(globalThis[Symbol.for('dsh.go.ohos.sim')], undefined);
 assert.equal(globalThis[Symbol.for('dsh.go.ohos.net')], undefined);
 assert.equal(globalThis[Symbol.for('dsh.go.ohos.publication')], undefined);
 const keys = Object.keys(process._linkedBinding('dsh_ohos_publication')).sort();
-assert.deepEqual(keys, ['getOwnershipMarker', 'getSystemBuildIdentity', 'lockExclusive', 'renameNoReplace', 'setOwnershipMarker']);
+assert.deepEqual(keys, ['bindPhoneEngine', 'claimPhonePermit', 'clearOwnedClone', 'completePhonePermit', 'getHostLifecycleSnapshot', 'getOwnershipMarker', 'getPhoneSnapshot', 'getSystemBuildIdentity', 'lockExclusive', 'renameNoReplace', 'revokePhonePermit', 'setOwnershipMarker']);
 if (process.env.OHOS_HOST_MAIN_SENTINEL) writeFileSync(process.env.OHOS_HOST_MAIN_SENTINEL, 'main');
 console.log(JSON.stringify({ linuxContractOnly: true, platform: process.platform,
   linked: keys, execArgv: process.execArgv, arguments: process.argv.slice(2) }));

@@ -1,0 +1,205 @@
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
+@@ -22,6 +22,9 @@
+ const OHOS_PLUGIN_INSTALL_MESSAGE = "[OHOS_PLUGIN_INSTALL_UNAVAILABLE] 鸿蒙本机不支持安装、更新或卸载插件包；可启停随包插件，或连接电脑管理插件。";
+ function requirePackageManager() {
+ 	if (process.platform === "openharmony") throw Object.assign(new Error(OHOS_PLUGIN_INSTALL_MESSAGE), { code: "ERR_OHOS_PLUGIN_INSTALL_UNAVAILABLE" });
++}
++function ohosPluginPackages() {
++	return process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.plugins")] : void 0;
+ }
+ //#region lib/types/bundle-detail.js
+ /**
+@@ -715,6 +718,8 @@
+ * The diagnostic file is closed on return or rejection, including preparation and spawn failures.
+ */
+ async function runProfilePnpm(context, args, options) {
++	const backend = ohosPluginPackages();
++	if (backend !== void 0) return backend.run(context, args, options);
+ 	requirePackageManager();
+ 	const env_1 = {
+ 		stack: [],
+@@ -1055,6 +1060,8 @@
+ * @returns The registry URL as pnpm printed it, or null when pnpm did not answer with one.
+ */
+ async function readProfileRegistry(dir, options) {
++	const backend = ohosPluginPackages();
++	if (backend !== void 0) return backend.registry(dir, options);
+ 	requirePackageManager();
+ 	const result = await execa(options.command ?? "pnpm", [
+ 		...options.args ?? [],
+@@ -1095,6 +1102,8 @@
+ * @returns pnpm's exit, output, and how the lookup ended.
+ */
+ async function viewProfilePackage(dir, spec, options) {
++	const backend = ohosPluginPackages();
++	if (backend !== void 0) return backend.view(dir, spec, options);
+ 	requirePackageManager();
+ 	const result = await execa(options.command ?? "pnpm", [
+ 		...options.args ?? [],
+@@ -2460,7 +2469,7 @@
+ 			return {
+ 				...this.configuredRegistries,
+ 				fallbackRegistries: [...this.configuredRegistries.fallbackRegistries],
+-				resolved: process.platform === "openharmony" ? null : await readProfileRegistry(this.profile.dir, {
++				resolved: process.platform === "openharmony" && ohosPluginPackages() === void 0 ? null : await readProfileRegistry(this.profile.dir, {
+ 					...this.profile.packageManager ?? { command: this.pnpmCommand },
+ 					timeoutMs: this.inspectTimeoutMs
+ 				})
+@@ -2473,7 +2482,7 @@
+ 		* @returns The package the spec names, or why it is refused.
+ 		*/
+ 		async inspect(spec, options, signal) {
+-			if (process.platform === "openharmony") return refused("unknown", OHOS_PLUGIN_INSTALL_MESSAGE);
++			if (process.platform === "openharmony" && ohosPluginPackages() === void 0) return refused("unknown", OHOS_PLUGIN_INSTALL_MESSAGE);
+ 			let parsed;
+ 			try {
+ 				parsed = parseInstallSpec(spec);
+@@ -2482,6 +2491,7 @@
+ 				if (!(error instanceof InvalidInstallSpecError)) throw error;
+ 				return refused("invalid-spec", error.reason);
+ 			}
++			if (process.platform === "openharmony" && parsed.kind !== "registry") return refused("invalid-spec", "鸿蒙本机仅支持注册表中的纯 JS 插件；Git、本地路径和直接归档请交给已连接的电脑安装。");
+ 			const manifest = readProfileManifest("dsh", this.profile.dir);
+ 			const installation = JSON.parse(readFileSync(this.profile.installAnchor, "utf8"));
+ 			const known = new Set([
+@@ -2713,14 +2723,15 @@
+ 				target,
+ 				error: managementError(error)
+ 			}));
++			const inPlace = this.ownerContext.get("hmr") === void 0 || ohosPluginPackages() !== void 0;
+ 			const installTarget = (preserveSelection = false) => settled("install", spec, this.installBundle(spec, {
+ 				saveExact: true,
+ 				registry: checked.registry,
+ 				enabled,
+ 				...preserveSelection ? { preserveSelection: true } : {},
+ 				...requestId === void 0 ? {} : { requestId }
+-			}, this.ownerContext.get("hmr") === void 0 ? { name, version: from } : void 0));
+-			if (this.ownerContext.get("hmr") === void 0) {
++			}, inPlace ? { name, version: from } : void 0));
++			if (inPlace) {
+ 				announce("installing");
+ 				return {
+ 					from,
+@@ -2783,7 +2794,7 @@
+ 		* @returns The parsed answer and the registry that gave it, or the last refusal, with every registry asked.
+ 		*/
+ 		async askRegistries(spec, fields, plan, parsed, signal) {
+-			if (process.platform === "openharmony") return {
++			if (process.platform === "openharmony" && ohosPluginPackages() === void 0) return {
+ 				status: "refused", problem: "unknown", reason: OHOS_PLUGIN_INSTALL_MESSAGE, attempts: []
+ 			};
+ 			const attempts = [];
+@@ -2899,10 +2910,11 @@
+ 		*/
+ 		// expectedInstalled is an internal update precondition, not a Remote option.
+ 		installBundle(spec, options, expectedInstalled) {
+-			if (process.platform === "openharmony") return Promise.resolve({
++			const backend = ohosPluginPackages();
++			if (process.platform === "openharmony" && (backend === void 0 || !backend.accepts(spec) || options?.approvedBuilds?.length > 0)) return Promise.resolve({
+ 				stage: "install", target: spec, enabled: options?.enabled !== false,
+ 				changed: false, application: "failed",
+-				error: { code: "operation-error", diagnostic: OHOS_PLUGIN_INSTALL_MESSAGE }
++				error: { code: "operation-error", diagnostic: backend === void 0 ? OHOS_PLUGIN_INSTALL_MESSAGE : "[OHOS_PLUGIN_UNSUPPORTED] 鸿蒙本机仅支持注册表纯 JS 包，不运行安装脚本；其他包请交给已连接的电脑安装。" }
+ 			});
+ 			const requestId = options?.requestId;
+ 			const control = {
+@@ -2928,7 +2940,7 @@
+ 					throw new Error(`Bundle ${expectedInstalled.name} changed while checking the update from ${expectedInstalled.version}. Check its current version before updating again.`);
+ 				}
+ 				const known = specPackageName(spec, before, this.profile.dir);
+-				if (this.ownerContext.get("hmr") !== void 0 && known !== void 0 && Object.hasOwn(before, known)) throw new ManagementFailure("already-installed");
++				if (this.ownerContext.get("hmr") !== void 0 && known !== void 0 && Object.hasOwn(before, known) && !(backend !== void 0 && expectedInstalled !== void 0)) throw new ManagementFailure("already-installed");
+ 				if (options?.approvedBuilds !== void 0) {
+ 					await approveBuilds(this.profile.dir, options.approvedBuilds);
+ 					result.approvedBuilds = options.approvedBuilds;
+@@ -3070,6 +3082,10 @@
+ 						? bundleSelection(readProfileManifest("dsh", this.profile.dir)).includes(name)
+ 						: options?.enabled !== false;
+ 					if (activate) await this.selectBundle(name, true);
++					if (backend !== void 0 && Object.hasOwn(before, name)) {
++						result.restartReason = "package-moved";
++						return;
++					}
+ 					if (Object.hasOwn(before, name) && this.ownerContext.get("hmr") === void 0) return;
+ 					const selected = bundleSelection(readProfileManifest("dsh", this.profile.dir)).includes(name);
+ 					Object.assign(result, await this.publishAndReload(selected ? this.bundleRows(name).map((row) => row.id) : []));
+@@ -3119,7 +3135,7 @@
+ 		*/
+ 		// selection is owned by this update only; capture it before HMR deselects.
+ 		removeBundle(name, selection) {
+-			if (process.platform === "openharmony") return Promise.resolve({
++			if (process.platform === "openharmony" && ohosPluginPackages() === void 0) return Promise.resolve({
+ 				stage: "remove", target: name, changed: false, application: "failed",
+ 				error: { code: "operation-error", diagnostic: OHOS_PLUGIN_INSTALL_MESSAGE }
+ 			});
+@@ -3269,6 +3285,7 @@
+ 		}
+ 		/** Put the profile files back; pnpm has exited by the time this runs. */
+ 		async restoreFiles(files) {
++			ohosPluginPackages()?.restore(this.profile.dir);
+ 			for (const [path, content] of files) if (content === void 0) await rm(path, { force: true });
+ 			else await writeFileAtomic(path, content, { mode: 384 });
+ 		}
+@@ -3387,7 +3404,9 @@
+ 			try {
+ 				settled = await withFileLock(join(this.profile.dir, "package.json"), async () => {
+ 					this.abort.signal.throwIfAborted();
++					ohosPluginPackages()?.recoverProfile(this.profile.dir);
+ 					const before = this.diskState();
++					let packageTransaction;
+ 					const result = {
+ 						...request,
+ 						changed: false,
+@@ -3403,12 +3422,23 @@
+ 						if (isCancelled?.()) throw new InstallCancelledError();
+ 						this.abort.signal.throwIfAborted();
+ 						if (active !== void 0) throw new Error(active);
++						if (reason === "install" || reason === "remove") packageTransaction = ohosPluginPackages()?.begin(this.profile);
+ 						const outcome = await operation(result);
+ 						if (outcome !== void 0) result.application = outcome;
+ 						else if (result.application === "applied" && result.restartReason !== void 0) result.application = "restart-required";
+ 					} catch (error) {
+ 						if (error instanceof InstallCancelledError) result.application = "cancelled";
+ 						else {
++							result.application = "failed";
++							result.error = managementError(error);
++						}
++					}
++					if (packageTransaction !== void 0) {
++						try {
++							const committed = result.application !== "failed" && result.application !== "cancelled";
++							packageTransaction.finish(committed);
++							if (!committed && reason === "remove" && this.ownerContext.get("hmr") !== void 0) await this.configure(() => this.reload());
++						} catch (error) {
+ 							result.application = "failed";
+ 							result.error = managementError(error);
+ 						}
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1793,6 +1793,7 @@
+ * @returns the successfully loaded bundle layers and optional user patch layer.
+ */
+ function loadProfileDirectory(binName, dir, installAnchor, options = {}) {
++	if (process.platform === "openharmony") globalThis[Symbol.for("dsh.go.ohos.plugins")]?.recoverProfile(dir);
+ 	const manifest = readProfileManifest(binName, dir);
+ 	const bundles = options.readOnly === true ? (manifest.dsh?.profile?.bundles ?? []).filter((bundle) => !RETIRED_BUNDLES.has(bundle)) : dropRetiredBundles(dir, manifest).dsh?.profile?.bundles ?? [];
+ 	const layers = [];
+@@ -1846,6 +1847,7 @@
+ */
+ function loadProfile(binName, name, installAnchor, home = resolveDshHome(), options = {}) {
+ 	const dir = resolveProfileDir(name, home);
++	if (process.platform === "openharmony") globalThis[Symbol.for("dsh.go.ohos.plugins")]?.recoverProfile(dir);
+ 	if (!existsSync(join(dir, "package.json"))) {
+ 		const template = PROFILE_TEMPLATES[name];
+ 		if (template === void 0) throw new Error(`${binName}: profile ${JSON.stringify(name)} does not exist; create it with 'dsh plugin --profile ${name} add <package>'`);
+--- a/node_modules/@deepseek-ai/dsh/lib/profile-boot-e2mS45fC.js
++++ b/node_modules/@deepseek-ai/dsh/lib/profile-boot-e2mS45fC.js
+@@ -146,6 +146,7 @@
+ */
+ function initializeProfileFromDefault(name, fromDefaultProfile, home = resolveDshHome()) {
+ 	const dir = resolveProfileDir(name, home);
++	if (process.platform === "openharmony") globalThis[Symbol.for("dsh.go.ohos.plugins")]?.recoverProfile(dir);
+ 	const template = Object.hasOwn(PROFILE_TEMPLATES, fromDefaultProfile) ? PROFILE_TEMPLATES[fromDefaultProfile] : void 0;
+ 	if (template === void 0) {
+ 		const expected = Object.keys(PROFILE_TEMPLATES).sort().map((value) => JSON.stringify(value)).join(", ");
