@@ -48,6 +48,8 @@ fun main(args: Array<String>) {
     }.start()
     val pid = child.pid().toInt()
     Os.permittedSignalPids += pid // only this test's own child may ever receive a signal
+    // Host-runner daemons are not part of this app fixture's UID view.
+    Os.beforeStat = { observed -> if (observed != null && observed != pid) Os.foreignUid += observed }
     if (denied) Os.denyStatPids += pid
     if (case in setOf("default-owned", "default-captured-unknown")) Os.ignoreSignals += pid
     if (case == "default-captured-unknown") Os.denyAfterSignal += pid
@@ -107,6 +109,7 @@ fun main(args: Array<String>) {
         ).joinToString(",") + "}")
         check(errors.isEmpty()) { errors.joinToString("; ") }
     } finally {
+        Os.beforeStat = null
         Os.denyStatPids -= pid
         Os.ignoreSignals -= pid
         Os.denyAfterSignal -= pid

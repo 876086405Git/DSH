@@ -63,6 +63,8 @@ fun main(args: Array<String>) {
     }.start()
     val pid = child.pid().toInt()
     Os.permittedSignalPids += pid
+    // The app fixture owns this child, not the CI runner's background services.
+    Os.beforeStat = { observed -> if (observed != null && observed != pid) Os.foreignUid += observed }
     if (captured) {
         Os.ignoreSignals += pid
         Os.denyAfterSignal += pid
@@ -90,6 +92,7 @@ fun main(args: Array<String>) {
         }
         println("{\"case\":\"$case\",\"passed\":true}")
     } finally {
+        Os.beforeStat = null
         Os.denyStatPids -= pid
         Os.ignoreSignals -= pid
         Os.denyAfterSignal -= pid

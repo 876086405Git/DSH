@@ -39,6 +39,10 @@ fun main(args: Array<String>) {
     val child = if (case != "visible-owned") null else ProcessBuilder("/bin/sleep", "45")
         .directory(root).apply { environment()["DSH_GO_RUNTIME_ROOT"] = root.canonicalPath }.start()
     child?.let { Os.permittedSignalPids += it.pid().toInt() }
+    // Keep the hidden-PID fault and our real child visible, not host-runner daemons.
+    Os.beforeStat = { observed ->
+        if (observed != null && observed != hidden && observed != child?.pid()?.toInt()) Os.foreignUid += observed
+    }
     Os.denyStatPids += hidden
     if (case == "captured-hidden") synchronized(state) { state.known[hidden] = "100" }
     try {
@@ -65,6 +69,7 @@ fun main(args: Array<String>) {
         }
         println("{\"case\":\"$case\",\"passed\":true}")
     } finally {
+        Os.beforeStat = null
         synchronized(state) { state.known.remove(hidden) }
         Os.denyStatPids -= hidden
         child?.let { if (it.isAlive) it.destroyForcibly(); it.waitFor() }
