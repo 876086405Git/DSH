@@ -230,7 +230,7 @@ export class BoundaryCoordinator {
     await this.gate(meta.session.id, meta.signal);
     try {
       if (await this.flushSession(meta.session) !== true) throw fail('ERR_OHOS_LIFECYCLE_NO_CHECKPOINT', 'A durable session flush listener is required');
-      const events = await this.readEvents(meta.session.id, meta.callSeq, meta.callSeq + 1);
+      const events = await this.readEvents(meta.session.id, meta.callSeq, 1);
       const event = events[0];
       if (events.length !== 1 || event.type !== 'tool/call' || event.seq !== meta.callSeq
           || event.data.callId !== meta.block.id || event.data.name !== meta.block.name

@@ -66,9 +66,9 @@ export async function engineFixture({ root, bootId = randomUUID(), journalOption
   const removeSchedulerConfig = ctx.provide('agentLoop', { config: { maxParallelToolCalls: { get: () => 2 } } });
   const { NativeToolExecutor } = await loadActualScheduler({ sourcePath, beforeResultAppend });
   ctx.tools.setExecutor(new NativeToolExecutor(ctx, () => 2));
-  const readEvents = async (id, from = 0, to) => {
+  const readEvents = async (id, offset = 0, length) => {
     const handle = await ctx.sessionPersistence.open(id, 'read');
-    try { return (await handle.read(from, to)).events; }
+    try { return (await handle.read(offset, length)).events; }
     finally { await handle.close(); }
   };
   const owners = new Map(), attachments = [], handles = [];
