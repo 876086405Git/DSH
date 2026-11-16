@@ -12,6 +12,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } 
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { startFakeModel } from './model.mjs';
 
 const { values } = parseArgs({ options: Object.fromEntries(
   ['simulator', 'app', 'mode', 'shot'].map((name) => [name, { type: 'string' }])) });
@@ -119,7 +120,8 @@ function screenshot(file) {
 /** Every reported observation is a gate: "done" alone says only that Dart got to the end. */
 function engineProblem(steps) {
   const expected = ['main', 'guest root', 'status', 'install', 'install again', 'start', 'login', 'capabilities',
-    'logs', 'stop', 'restart', 'performance', 'stop again', 'reset', 'install after reset', 'start after reset',
+    'first round', 'background ready', 'background paused', 'foreground round', 'logs', 'stop', 'restart',
+    'restart round', 'performance', 'stop again', 'reset', 'install after reset', 'start after reset',
     'stop after reset', 'events', 'done'];
   if (steps.length !== expected.length || steps.some((step, index) => step.step !== expected[index])) {
     return 'The app did not report the whole check, in order.';
@@ -132,6 +134,9 @@ function engineProblem(steps) {
     ['login', by.login.status === 303 && by.login.cookie === true],
     ['capabilities', by.capabilities.status === 200 && by.capabilities.v === 1 &&
       by.capabilities.platform === 'openharmony'],
+    ...['first round', 'foreground round', 'restart round'].map((name) => [
+      name, by[name].dequeued === true && by[name].streamed === true && by[name].toolRead === true,
+    ]),
     ['logs', Number.isSafeInteger(by.logs.entries) && by.logs.entries >= 0 &&
       Number.isSafeInteger(by.logs.through) && by.logs.through >= 0],
     ['stop', by.stop.phase === 'installed' && by['stop again'].phase === 'installed'],
@@ -192,7 +197,8 @@ if (values.mode === 'launch') {
 // The app writes one JSON line per step, into a container an earlier build may have used.
 const reports = join(simctl('get_app_container', values.simulator, bundleId, 'data').trim(), 'tmp', 'dsh-app-check.jsonl');
 rmSync(reports, { force: true });
-const pid = launch();
+const model = await startFakeModel('.');
+const pid = launch({ SIMCTL_CHILD_DSH_IOS_APP_CHECK_MODEL_URL: model.baseURL });
 console.log(`launched as ${pid}`);
 
 const steps = [];
@@ -209,6 +215,10 @@ while (!last) {
     lastStepAt = Date.now();
     console.log(line);
     if (step.step === 'done' || step.step === 'failed') last = step;
+    if (step.step === 'background ready') {
+      simctl('launch', '--terminate-running-process', values.simulator, 'com.apple.Preferences');
+    }
+    if (step.step === 'background paused') simctl('openurl', values.simulator, 'dshgo://open/workspaces');
   }
   // The app's own limits are shorter, so these only end a check that nothing else will.
   const quiet = Date.now() - lastStepAt;
@@ -229,4 +239,5 @@ if (passed) {
   explain(pid);
 }
 quietly(() => simctl('terminate', values.simulator, bundleId));
+await model.close();
 process.exit(passed ? 0 : 1);

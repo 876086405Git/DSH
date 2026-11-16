@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { once } from 'node:events';
-import { setImmediate as nextTurn } from 'node:timers/promises';
+import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
 
 // iOS smoke peer, derived from runtime/ohos/sim/fake-model.mjs.
@@ -41,13 +41,16 @@ export async function startFakeModel(workspace, { bashCommand = "printf 'shell-o
         JSON.stringify(message.content).includes('[DSH_IOS_SMOKE:'));
       if (tools.length && lastUser < 0) throw new Error('smoke turn marker missing');
       const results = body.messages.slice(lastUser + 1).filter((message) => message.role === 'tool');
-      const resumed = JSON.stringify(body.messages[lastUser]?.content).includes('[DSH_IOS_SMOKE:resume]');
-      const steps = resumed ? [['read', { file_path: file }]] : script;
+      const prompt = JSON.stringify(body.messages[lastUser]?.content ?? '');
+      const resumed = prompt.includes('[DSH_IOS_SMOKE:resume]');
+      const app = prompt.includes('[DSH_IOS_SMOKE:app]');
+      const steps = app ? [['read', { file_path: 'ios-app-check.txt' }]] :
+        resumed ? [['read', { file_path: file }]] : script;
       const step = tools.length === 0 ? undefined : steps[results.length];
       if (step && !tools.includes(step[0])) {
         res.writeHead(422); res.end(JSON.stringify({ error: { message: `required test tool unavailable: ${step[0]}` } })); return;
       }
-      requests.push({ toolResults: results.length, requestedTool: step?.[0] ?? null, offeredTools: tools, scenario: resumed ? 'resume' : 'round' });
+      requests.push({ toolResults: results.length, requestedTool: step?.[0] ?? null, offeredTools: tools, scenario: app ? 'app' : resumed ? 'resume' : 'round' });
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
       const id = `chatcmpl-ohos-${requests.length}`;
       const send = (delta, finish_reason = null) => res.write(`data: ${JSON.stringify({
@@ -64,6 +67,11 @@ export async function startFakeModel(workspace, { bashCommand = "printf 'shell-o
         await nextTurn();
         send({ tool_calls: [{ index: 0, function: { arguments: chars.slice(middle).join('') } }] });
         send({}, 'tool_calls');
+      } else if (app && tools.length) {
+        send({ content: 'iOS app ' });
+        await delay(50);
+        send({ content: 'round complete.' });
+        send({}, 'stop');
       } else {
         send({ content: tools.length ? 'O0 scripted round complete.' : '仿真测试' });
         send({}, 'stop');
