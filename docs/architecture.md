@@ -380,7 +380,7 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用目标平台的补
 | 原生插件协议/座位 | `docs/design/native-plugins.md`、`plugin-seams.md` | `plugins/native/`、`plugins/seams/`、`sdk/plugin-kit` | `cd sdk/plugin-kit && npm test` |
 | 桥路由 | `docs/design/bridge-contract.md` | `runtime/bridge/**`、`dsh_client dsh_go_api.dart` | `node --test runtime/tests/*.test.mjs` |
 | 引擎补丁/升级 | §5.4/§5.5、`docs/maintenance/*-contract.md` | `runtime/patches/**`、`runtime/build-runtime.sh` | `python3 -I runtime/tests/test_patch_dsh.py`（构建需 x86_64 主机） |
-| 本机引擎生命周期 | `docs/design/runtime-cold-start.md` | Kotlin `runtime/`、`state/engine_control.dart` | 真机 + `gradle :app:testArm64DebugUnitTest` |
+| 本机引擎生命周期 | `docs/design/runtime-cold-start.md` | Kotlin `runtime/`、`state/engine_control.dart` | 真机 + `(cd app/android && gradle :app:testArm64DebugUnitTest)` |
 | 手机操控 | `docs/design/phone-*.md` | Kotlin `phone/`、`state/phone_state.dart` | 真机 |
 | iOS 引擎 / guest | §3.6、`app/ios/README.md` | `EngineChannel.swift`、`runtime/ios/`、`tooling/ios/prepare-engine.sh` | iOS compile/guest CI + 真机启动 |
 | iOS 手机操控 | §3.6、`tooling/ios/phone-self-runner/README.md` | `IOSPhoneRunner.swift`、`IOSPhoneCoreDevice.swift`、`PhoneRunner/` | CoreDevice 服务探测、真机截图/输入/返回，逐项核对 |
@@ -419,7 +419,7 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用目标平台的补
 | 插件 SDK | `(cd sdk/plugin-kit && npm install && npm test)`（含生成物过期检查） |
 | 生成链（改 SDK/bridge/schema 后按序） | `gen-types → sync-bridge → sync-messages → gen-parity → sync-skill` |
 | 文案 / 指南 / 教学技能 | `l10n_merge.py --check`、`guide_sync.py --check`、`sync-skill.mjs --check` |
-| Android JVM | `gradle :app:testArm64DebugUnitTest`（需 JDK17） |
+| Android JVM | `(cd app/android && gradle :app:testArm64DebugUnitTest)`（需 JDK17） |
 | 真机 | `tooling/dev-run.sh`（热重载）/ `tooling/build-apk.sh`；真机结论不能由桌面替代 |
 | iOS | `python3 -B tooling/ios/test-channel-contract.py`；`iOS compile`/`iOS guest`/`iOS UI tour` CI；Xcode unsigned 编译和签名后的真机安装分别记录 |
 
