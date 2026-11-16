@@ -8,7 +8,7 @@
 // Failures become annotations, which can be read without signing in to GitHub. So does a
 // small copy of the screenshot, since the artifact can't be.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -195,10 +195,14 @@ if (values.mode === 'launch') {
 }
 
 // The app writes one JSON line per step, into a container an earlier build may have used.
-const reports = join(simctl('get_app_container', values.simulator, bundleId, 'data').trim(), 'tmp', 'dsh-app-check.jsonl');
+const appTemp = join(simctl('get_app_container', values.simulator, bundleId, 'data').trim(), 'tmp');
+mkdirSync(appTemp, { recursive: true });
+const reports = join(appTemp, 'dsh-app-check.jsonl');
+const modelConfig = join(appTemp, 'dsh-app-check-model-url');
 rmSync(reports, { force: true });
 const model = await startFakeModel('.');
-const pid = launch({ SIMCTL_CHILD_DSH_IOS_APP_CHECK_MODEL_URL: model.baseURL });
+writeFileSync(modelConfig, model.baseURL);
+const pid = launch();
 console.log(`launched as ${pid}`);
 
 const steps = [];
@@ -239,5 +243,6 @@ if (passed) {
   explain(pid);
 }
 quietly(() => simctl('terminate', values.simulator, bundleId));
+rmSync(modelConfig, { force: true });
 await model.close();
 process.exit(passed ? 0 : 1);

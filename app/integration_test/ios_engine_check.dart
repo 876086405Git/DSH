@@ -200,7 +200,7 @@ Future<void> _check() async {
   });
   final workspace = '$root/root/workspace';
   await File('$workspace/ios-app-check.txt').writeAsString(_toolMarker);
-  final modelUrl = Platform.environment['DSH_IOS_APP_CHECK_MODEL_URL']!;
+  final modelUrl = await File('${_reports.parent.path}/dsh-app-check-model-url').readAsString();
   final client = await DshClient.connect(baseUri: Uri.parse(firstUrl), token: firstToken);
   late final String sessionId;
   const provider = 'custom-ios-app-check';
