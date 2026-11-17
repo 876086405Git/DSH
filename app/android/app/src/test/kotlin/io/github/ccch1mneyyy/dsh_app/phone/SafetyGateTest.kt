@@ -207,7 +207,7 @@ class SafetyGateTest {
         assertNull(secure.image)
         assertFalse(secure.text.contains("ordinary"))
     }
-    @Test fun unknownCoordinatesAndLongSwipeIgnoreOrdinaryWaivers() {
+    @Test fun unknownCoordinatesAndLongSwipeHonorTaskAndGlobalWaivers() {
         for (mode in ConfirmMode.entries) {
             val tasks = PhoneTasks().apply { begin(); waive() }
             val gate = SafetyGate({ PhonePolicies(confirmMode = mode) }, tasks, { null })
@@ -215,22 +215,25 @@ class SafetyGateTest {
                 val action = PhoneAction.TapXY("s1", 10, 20, gesture, 30, 40, 400)
                 repeat(2) {
                     val verdict = gate.checkWrite(WriteKind.TAP_XY, null, "example.app", "Example",
-                        point = 10 to 20, coordinate = action) as SafetyGate.Verdict.Confirm
-                    assertFalse(verdict.request.firstInApp)
-                    assertTrue(verdict.request.allowRound)
+                        point = 10 to 20, coordinate = action)
+                    if (mode == ConfirmMode.ASK) {
+                        val question = verdict as SafetyGate.Verdict.Confirm
+                        assertFalse(question.request.firstInApp)
+                        assertTrue(question.request.allowRound)
+                    } else assertSame(SafetyGate.Verdict.Allow, verdict)
                 }
             }
-            // 本轮允许只覆盖普通动作：记录之后未知 / 长按 / 滑动坐标仍逐次确认。
+            // ASK 下的同 App / 动作授权仍不代替坐标确认；TASK / ALWAYS 免确认照常生效。
             val owner = tasks.activeOwner()!!
             assertTrue(tasks.confirmIfCurrent(owner, pkg = "example.app",
                 grant = PhoneTasks.grantKey("example.app", "tap_xy")))
-            assertTrue(gate.checkWrite(WriteKind.TAP_XY, null, "example.app", "Example",
+            assertEquals(mode == ConfirmMode.ASK, gate.checkWrite(WriteKind.TAP_XY, null, "example.app", "Example",
                 point = 10 to 20, coordinate = PhoneAction.TapXY("s1", 10, 20,
                     PhoneAction.CoordinateGesture.LONG, 30, 40, 400)) is SafetyGate.Verdict.Confirm)
         }
     }
 
-    @Test fun backgroundCoordinatesAlwaysAskEvenAfterAppAndTaskApprovalInEveryMode() {
+    @Test fun backgroundCoordinatesHonorWaiversButKeepHardRules() {
         for (mode in ConfirmMode.entries) {
             val tasks = PhoneTasks().apply { begin(); waive(); approve("example.app") }
             val gate = SafetyGate({ PhonePolicies(confirmMode = mode) }, tasks, { null })
@@ -238,10 +241,13 @@ class SafetyGateTest {
                 val action = PhoneAction.TapXY("b1", 10, 20, gesture, 30, 40, 400)
                 repeat(2) {
                     val verdict = gate.checkWrite(WriteKind.TAP_XY, null, "example.app", "Example",
-                        point = 10 to 20, coordinate = action, screen = PhoneScreen.BACKGROUND) as SafetyGate.Verdict.Confirm
-                    assertTrue(verdict.request.allowRound)
-                    assertFalse(verdict.request.firstInApp)
-                    assertTrue(verdict.request.sentence.contains("这是最近后台截图的位置"))
+                        point = 10 to 20, coordinate = action, screen = PhoneScreen.BACKGROUND)
+                    if (mode == ConfirmMode.ASK) {
+                        val question = verdict as SafetyGate.Verdict.Confirm
+                        assertTrue(question.request.allowRound)
+                        assertFalse(question.request.firstInApp)
+                        assertTrue(question.request.sentence.contains("这是最近后台截图的位置"))
+                    } else assertSame(SafetyGate.Verdict.Allow, verdict)
                 }
             }
             assertTrue(gate.checkWrite(WriteKind.TAP_XY, null, SafetyRules.DEFAULT_DENY.first(), "Blocked",

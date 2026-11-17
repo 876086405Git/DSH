@@ -99,7 +99,7 @@ enum class ConfirmMode(val wire: String) {
     /** 本轮允许 = 本轮不再询问: the same 本轮允许 button waives the rest of this turn. */
     TASK("task"),
 
-    /** Ordinary confirmation waiver; hard rules and independent visual gates still apply. */
+    /** Confirmation waiver; hard rules still apply. */
     ALWAYS("always");
 
     companion object {
@@ -286,8 +286,8 @@ class SafetyGate(
             firstInApp -> "first-in-app"
             else -> return Verdict.Allow
         }
-        // 判定顺序：一次 → 本轮 → 始终 → 弹窗. A coordinate tap keeps its own confirmation.
-        if (!forceOnce && (waived(p) || roundGranted(p, pkg, reason))) return Verdict.Allow
+        // A task/global waiver also answers coordinate questions; App grants stay scoped.
+        if (waived(p) || (!forceOnce && roundGranted(p, pkg, reason))) return Verdict.Allow
         val actionApp = appLabel ?: pkg ?: uiText.get("phone_current_app", "当前应用") // l10n:keep test default
         val action = describe(kind, target, actionApp, if (secret) SafetyRules.MASK else typed, submit, point, coordinate) +
             if (kind == WriteKind.TAP_XY && screen == PhoneScreen.BACKGROUND)
@@ -314,14 +314,14 @@ class SafetyGate(
             visual.scope.packageName !in policy.confirmEveryWritePackages
     }
 
-    /** Second, independent question; ordinary App/TASK choices never enter this grant slot. */
+    /** App grants do not fill this slot; a task/global waiver skips the question. */
     fun checkVisual(action: PhoneAction.TapXY, visual: VisualTarget, owner: PhoneTasks.Owner): Verdict {
         val t = visual.target
         val ordinary = checkWrite(WriteKind.TAP_XY, t, t.packageName, t.appLabel,
             coordinate = action, point = action.x to action.y, screen = visual.scope.screen, visual = visual)
         if (ordinary is Verdict.Refuse) return ordinary
         if (ordinary is Verdict.Confirm && ordinary.reason == "tap_xy") return ordinary
-        if (tasks.hasVisualGrant(owner, visual.scope)) return Verdict.Allow
+        if (waived() || tasks.hasVisualGrant(owner, visual.scope)) return Verdict.Allow
         val app = labelOf(visual.scope.packageName, t.appLabel)
         val sentence = if (visual.scope.screen == PhoneScreen.MAIN)
             uiText.get("phone_confirm_visual_main", "允许本任务在「%1\$s」当前窗口内，对明确识别的普通目标使用截图点击？未知或敏感目标仍逐次确认。", app) // l10n:keep test default
@@ -336,13 +336,11 @@ class SafetyGate(
 
     /**
      * A plain confirmation the core needs outside [checkWrite] (moving an app to the background
-     * screen, or an unknown intent handler). [inheritWaiver] false keeps asking even under 始终免确认:
-     * an unknown handler is nobody's standing grant, but 本轮允许 still answers it for this turn.
+     * screen, or an unknown intent handler). 本轮允许 answers the same app and kind for this turn.
      */
-    fun confirmation(sentence: String, pkg: String?, appLabel: String?, reason: String,
-                     inheritWaiver: Boolean = true): Verdict {
+    fun confirmation(sentence: String, pkg: String?, appLabel: String?, reason: String): Verdict {
         val p = policies()
-        if ((inheritWaiver && waived(p)) || roundGranted(p, pkg, reason)) return Verdict.Allow
+        if (waived(p) || roundGranted(p, pkg, reason)) return Verdict.Allow
         val request = ConfirmRequest(sentence = sentence, appLabel = appLabel ?: pkg, packageName = pkg, firstInApp = false)
         return Verdict.Confirm(request, pkg, reason, grant = PhoneTasks.grantKey(pkg, reason))
     }

@@ -93,16 +93,16 @@ class PhoneVisualPermissionTest {
             assertEquals(2, f.asks.size); assertEquals(2, f.actions)
         }
     }
-    @Test fun ordinaryAlwaysDoesNotGrantVisualAndAllowOnceNeverPersistsIt() {
+    @Test fun ordinaryAlwaysSkipsVisualConfirmationWithoutRecordingGrants() {
         Fixture().use { f ->
             f.policy = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
             f.decision = { Decision.ALLOW_ONCE }
             repeat(2) { f.read(); assertFalse(f.tap().isError) }
-            assertEquals(2, f.asks.size); assertTrue(f.asks.all { it.visualScope != null })
+            assertTrue(f.asks.isEmpty())
             assertFalse(f.tasks.isApproved("example.app")); assertFalse(f.tasks.isWaived)
         }
     }
-    @Test fun textOnlyVisualPointsStillRequireConfirmationForEveryUnknownTarget() {
+    @Test fun textOnlyVisualPointsHonorWaiverForUnknownTargets() {
         Fixture().use { f ->
             f.image = null; f.textCoordinates = true; f.knownTarget = false
             f.screenText = "V1 \"Details\" box=[20,30,50,60) point=(30,40)"
@@ -113,8 +113,7 @@ class PhoneVisualPermissionTest {
                 assertTrue(f.accepted)
                 assertFalse(f.tap().isError)
             }
-            assertEquals(2, f.actions); assertEquals(2, f.asks.size)
-            assertTrue(f.asks.all { it.visualScope == null })
+            assertEquals(2, f.actions); assertTrue(f.asks.isEmpty())
             assertFalse(f.tasks.isApproved("example.app")); assertFalse(f.tasks.isWaived)
             assertFalse(f.tasks.hasVisualGrant(f.tasks.activeOwner()!!, f.scope!!))
         }
@@ -154,7 +153,7 @@ class PhoneVisualPermissionTest {
             assertFalse(f.accepted); assertEquals(0, f.actions)
         }
     }
-    @Test fun returnedTextCandidateIsAcceptedOnlyAfterTheActionAndNeedsItsOwnConfirmation() {
+    @Test fun returnedTextCandidateIsAcceptedOnlyAfterTheActionAndHonorsWaiver() {
         Fixture().use { f ->
             f.image = null; f.textCoordinates = true; f.knownTarget = false
             f.afterText = "V1 \"Next\" box=[20,30,50,60) point=(30,40)"; f.afterCoordinates = true
@@ -165,8 +164,7 @@ class PhoneVisualPermissionTest {
             assertFalse(f.tap().isError)
             assertNotEquals(before, f.id); assertTrue(f.accepted)
             assertFalse(f.tap().isError)
-            assertEquals(2, f.actions); assertEquals(2, f.asks.size)
-            assertTrue(f.asks.all { it.visualScope == null })
+            assertEquals(2, f.actions); assertTrue(f.asks.isEmpty())
             assertFalse(f.tasks.hasVisualGrant(f.tasks.activeOwner()!!, f.scope!!))
         }
     }
@@ -181,14 +179,14 @@ class PhoneVisualPermissionTest {
             assertTrue(f.tap().isError); assertEquals(1, f.actions)
         }
     }
-    @Test fun unknownEveryWriteAndLongTapNeverOfferOrUseVisualGrant() {
+    @Test fun unknownAndLongTapAskInAskModeButEveryWriteHonorsWaiver() {
         Fixture().use { f ->
             f.read(); f.tap(); f.asks.clear(); f.decision = { Decision.ALLOW_ONCE }
             f.knownTarget = false; f.read(); f.tap()
             f.knownTarget = true; f.read(); f.tap("long")
             f.policy = PhonePolicies(confirmMode = ConfirmMode.ALWAYS, confirmEveryWritePackages = listOf("example.app"))
             f.read(); f.tap()
-            assertEquals(3, f.asks.size); assertTrue(f.asks.all { it.visualScope == null })
+            assertEquals(2, f.asks.size); assertTrue(f.asks.all { it.visualScope == null })
         }
     }
     @Test fun scopeTransitionsViaScreensWithoutCoordinatesRevokeBeforeReturningToA() {
@@ -201,7 +199,7 @@ class PhoneVisualPermissionTest {
             assertEquals(4, f.asks.size)
         }
     }
-    @Test fun filteredImageAndLateOwnerCannotAuthorizeAnAction() {
+    @Test fun filteredImageStillRefusesAndWaiverSkipsConfirmationCallback() {
         Fixture().use { f ->
             f.screenText = "«银行卡 ****1234»"; f.read()
             assertFalse(f.accepted); f.decision = { Decision.ALLOW_ONCE }
@@ -210,14 +208,16 @@ class PhoneVisualPermissionTest {
         Fixture().use { f ->
             f.policy = PhonePolicies(confirmMode = ConfirmMode.ALWAYS); f.read()
             f.onAsk = { f.tasks.stop("stop"); f.tasks.clearStop(); f.tasks.begin() }
-            assertTrue(f.tap().isError); assertEquals(0, f.actions)
+            assertFalse(f.tap().isError); assertEquals(1, f.actions)
+            assertTrue(f.asks.isEmpty())
         }
     }
-    @Test fun ordinaryAllowAppCannotAnswerVisualQuestion() {
+    @Test fun waivedVisualDoesNotAskForAnAppGrant() {
         Fixture().use { f ->
             f.policy = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
             f.decision = { Decision.ALLOW_APP_FOR_TASK }; f.read()
-            assertTrue(f.tap().isError); assertEquals(0, f.actions)
+            assertFalse(f.tap().isError); assertEquals(1, f.actions)
+            assertTrue(f.asks.isEmpty())
             assertFalse(f.tasks.isApproved("example.app"))
         }
     }
@@ -232,7 +232,7 @@ class PhoneVisualPermissionTest {
             assertTrue(f.tasks.hasVisualGrant(f.tasks.activeOwner()!!, f.scope!!))
         }
     }
-    @Test fun policyChangedDuringOrdinaryConfirmationCannotOfferVisualPermission() {
+    @Test fun policyChangedToAlwaysDuringOrdinaryConfirmationSkipsVisualQuestion() {
         Fixture().use { f ->
             f.decision = { Decision.ALLOW_ONCE }
             f.onAsk = {
@@ -240,7 +240,7 @@ class PhoneVisualPermissionTest {
                     confirmEveryWritePackages = listOf("example.app"))
             }
             f.read(); assertFalse(f.tap().isError)
-            assertEquals(2, f.asks.size)
+            assertEquals(1, f.asks.size)
             assertTrue(f.asks.all { it.visualScope == null })
             assertTrue(f.asks.last().allowRound)
             assertEquals(1, f.actions)

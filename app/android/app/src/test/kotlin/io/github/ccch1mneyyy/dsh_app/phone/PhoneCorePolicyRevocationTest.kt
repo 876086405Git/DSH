@@ -138,7 +138,7 @@ class PhoneCorePolicyRevocationTest {
         assertEquals(3, asked)
     }
 
-    @Test fun aVisualGrantCannotCoverANewOrdinaryConfirmationRequirement() {
+    @Test fun globalWaiverSkipsVisualConfirmationAndItsPolicyCallback() {
         policies = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
         main.scope = VisualScope.Main(Any(), Any(), 1, "example.app")
         observe()
@@ -149,8 +149,8 @@ class PhoneCorePolicyRevocationTest {
             Decision.ALLOW_VISUAL_FOR_TASK
         }
         val result = coordinate()
-        assertTrue(result.isError)
-        assertEquals(0, main.writes); assertEquals(1, asked)
+        assertFalse(result.isError)
+        assertEquals(1, main.writes); assertEquals(0, asked)
     }
 
     @Test fun aRealOrdinaryOnceStillCoversThisActionWhenEveryWriteBecomesRequired() {

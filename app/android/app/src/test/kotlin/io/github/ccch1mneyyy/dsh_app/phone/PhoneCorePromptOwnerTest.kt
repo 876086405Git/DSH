@@ -841,29 +841,28 @@ class PhoneCorePromptOwnerTest {
         assertSame(SystemTarget.UserChoice, startedPlan!!.target)
     }
 
-    @Test fun unknownSystemTargetsIgnoreStandingWaiversButAcceptOneRoundGrant() {
+    @Test fun unknownSystemTargetsHonorGlobalWaiverWithoutRecordingRoundGrants() {
         policies = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
         freshTarget = Either.Right(SystemTarget.Unknown)
         preparedTarget = SystemTarget.Unknown
-        // 始终免确认不继承给「未知处理应用」：允许一次后下一次仍然弹卡。
+        // 始终免确认也覆盖「未知处理应用」，无需调用确认卡。
         confirm = { Decision.ALLOW_ONCE }
-        repeat(2) { round ->
+        repeat(2) {
             assertFalse(openUrl().isError)
-            assertEquals(round + 1, asked)
+            assertEquals(0, asked)
             assertSame(SystemTarget.Unknown, startedPlan!!.target)
-            assertTrue(focusRequests.last().allowRound)
-            assertNull(focusRequests.last().packageName)
+            assertTrue(focusRequests.isEmpty())
         }
-        // 一次「本轮允许」让本轮同类未知处理应用确认不再问。
+        // 无论确认回调预设什么答案，免确认都不调用它或记录本轮授权。
         confirm = { Decision.ALLOW_APP_FOR_TASK }
         assertFalse(openUrl().isError)
-        assertEquals(3, asked)
+        assertEquals(0, asked)
         assertFalse(openUrl().isError)
-        assertEquals(3, asked)
-        // 下一轮从新任务开始，重新询问。
+        assertEquals(0, asked)
+        // 下一轮也继承始终免确认。
         replace()
         assertFalse(openUrl().isError)
-        assertEquals(4, asked)
+        assertEquals(0, asked)
         assertFalse(tasks.isWaived)
         assertFalse(tasks.isApproved("example.app"))
     }
@@ -1524,19 +1523,17 @@ class PhoneCorePromptOwnerTest {
     private fun focusCall(text: Any? = "hello", extra: Map<String, Any?> = emptyMap()) =
         core.call(PhoneCore.FOCUS_TEXT, mapOf("observation" to "s1", "text" to text) + extra)
 
-    @Test fun focusUsesOriginalEncodedNormalReplyAndAlwaysAsksOnce() {
+    @Test fun focusUsesOriginalEncodedNormalReplyWithoutAskingWhenWaived() {
         policies = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
         committedFocusScreen()
         tasks.approve("example.app")
         tasks.waive()
         val out = focusCall()
         assertFalse(out.text, out.isError)
-        assertEquals(1, asked)
+        assertEquals(0, asked)
         assertEquals(1, main.focusInputs)
         assertEquals(1, main.focusCloses)
-        assertFalse(focusRequests.single().allowRound)
-        assertFalse(focusRequests.single().firstInApp)
-        assertNull(focusRequests.single().visualScope)
+        assertTrue(focusRequests.isEmpty())
     }
 
     @Test fun focusCannotUseDirectOrExpiredObservationResponse() {
