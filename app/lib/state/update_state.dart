@@ -173,7 +173,9 @@ class AppUpdateState {
 
   bool get hasSelfUpdateResult => selfUpdate.state != SelfUpdatePendingState.none;
   bool get hasUpdate => latest != null;
-  bool get isSkipped => latest != null && skippedVersion == latest!.version.toString();
+  /// The same release from another source counts: the API's `1.2.0` is the manifest's
+  /// `1.2.0+N` ([AppVersion.compareTo] reads builds only when both have one).
+  bool get isSkipped => latest != null && AppVersion.tryParse(skippedVersion)?.compareTo(latest!.version) == 0;
   ReleaseAsset? get asset => noticeOnly ? null : latest?.apkFor(flavor);
 
   /// What a download fetches in place of [asset]: the patch from the installed

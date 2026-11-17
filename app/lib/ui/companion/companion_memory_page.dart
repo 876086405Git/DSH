@@ -183,26 +183,41 @@ class _CompanionMemoryPageState extends ConsumerState<CompanionMemoryPage> {
     if (!current()) return;
     final l10n = context.l10n;
     var input = memory?.text ?? '';
+    String? tooLong;
     final text = await showAppDialog<String>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(memory == null ? l10n.companionMemoryAdd : l10n.companionMemoryEdit),
-        content: TextFormField(
-          initialValue: input,
-          onChanged: (value) => input = value,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 5,
-          maxLength: _maxLength,
-          decoration: InputDecoration(hintText: l10n.companionMemoryHint),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialog, input.trim()),
-            child: Text(dialog.l10n.companionMemorySave),
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, setDialog) => AlertDialog(
+          title: Text(memory == null ? l10n.companionMemoryAdd : l10n.companionMemoryEdit),
+          content: TextFormField(
+            initialValue: input,
+            onChanged: (value) {
+              input = value;
+              if (tooLong != null) setDialog(() => tooLong = null);
+            },
+            autofocus: true,
+            minLines: 2,
+            maxLines: 5,
+            maxLength: _maxLength,
+            decoration: InputDecoration(hintText: l10n.companionMemoryHint, errorText: tooLong),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+            FilledButton(
+              onPressed: () {
+                final value = input.trim();
+                // The field counts what shows as one character, the Host code points (👍🏽 is
+                // two): over the Host's limit, the text stays here to be cut.
+                if (value.runes.length > _maxLength) {
+                  setDialog(() => tooLong = dialog.l10n.engineFieldMaxCharacters(_maxLength));
+                } else {
+                  Navigator.pop(dialog, value);
+                }
+              },
+              child: Text(dialog.l10n.companionMemorySave),
+            ),
+          ],
+        ),
       ),
     );
     if (!current() || text == null || text.isEmpty || text == memory?.text) return;
