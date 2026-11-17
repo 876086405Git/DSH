@@ -295,11 +295,11 @@ String? resolveWorkspaceLink(String url, {String? baseDir}) {
   return resolveSessionPath(path, cwd: baseDir);
 }
 
-/// A Windows drive path as a Markdown destination (`C:/A/b.png`): no fragment, and percent
-/// escapes decoded unless it was written in `<>`.
+/// A Windows drive path as a Markdown destination (`C:/A/b.png`): no query or fragment (a
+/// Windows name can't hold `?`), and percent escapes decoded unless it was written in `<>`.
 String? _drivePath(String target, {required bool decode, String? cwd}) {
-  final hash = target.indexOf('#');
-  if (hash >= 0) target = target.substring(0, hash);
+  final cut = target.indexOf(RegExp('[?#]'));
+  if (cut >= 0) target = target.substring(0, cut);
   if (decode) {
     try {
       target = Uri.decodeFull(target);
@@ -312,8 +312,9 @@ String? _drivePath(String target, {required bool decode, String? cwd}) {
   return resolveSessionPath(target, cwd: cwd);
 }
 
-/// Code in a reply: fenced blocks (to the end when unclosed) and inline spans.
-final _code = RegExp(r'(```|~~~)[\s\S]*?(?:\1|$)|`[^`\n]*`');
+/// Code in a reply: fenced blocks, closed by a fence at least as long (to the end when
+/// unclosed), and inline spans.
+final _code = RegExp(r'(`{3,}|~{3,})[\s\S]*?(?:\1|$)|`[^`\n]*`');
 
 /// Local file paths a reply links to (`[a](<out/a.pdf>)`, `![b](chart.png)`),
 /// in order, resolved against [cwd]; web links and anchors dropped, and links shown as
