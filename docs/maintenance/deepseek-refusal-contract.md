@@ -10,4 +10,4 @@ DeepSeek 的 Anthropic 兼容接口在 `message_delta.stop_reason` 里合法地�
 
 已流出的文字和块不撤回，也不把拒答当成功。合法拒答不再进入请求的 catch，因此不再调用 `auth.onRequestError`。默认重试码不含 `REFUSAL`。
 
-验证：在打过补丁的前缀上 `DSH_TEST_PREFIX=<prefix> node --test runtime/tests/deepseek-refusal.test.mjs`（普通 end_turn、空文本拒答、部分输出后拒答、未知 reason 仍 MALFORMED），以及 `python3 -I runtime/tests/test_patch_dsh.py`。Refs #1427。
+验证：在打过补丁的前缀上 `DSH_PREFIX=<prefix> node --test runtime/tests/deepseek-refusal.test.mjs`（普通 end_turn、空文本拒答、部分输出后拒答、未知 reason 仍 MALFORMED），以及 `python3 -I runtime/tests/test_patch_dsh.py`。Refs #1427。
