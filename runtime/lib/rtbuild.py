@@ -416,7 +416,7 @@ def cmd_patch_dsh(args):
     pins = json.load(open(pins_path)) if os.path.isfile(pins_path) else {}
     names, all_names = select_dsh_patches(pins, args.patches, args.target)
     print("DSH patch target: %s; selected %d of %d declared patches" % (args.target, len(names), len(all_names)))
-    parsed = {name: parse_unified_diff(open(os.path.join(args.patches, name)).read()) for name in names}
+    parsed = {name: parse_unified_diff(open(os.path.join(args.patches, name), encoding="utf-8").read()) for name in names}
     # Several independently reviewed patches may touch the same file. Their
     # pins must form one ordered chain, and a fully patched tree is a valid
     # idempotent input. Never accept an arbitrary intermediate/custom hash.
