@@ -8,6 +8,7 @@ class ProotLaunchFailureTest {
         "proot error: execve(\"/usr/bin/env\"): Permission denied",
         "proot error: execve(\"/usr/bin/env\"): Too many symbolic links encountered",
     )
+    private val envShellError = "/usr/bin/env: '/bin/sh': No such file or directory"
 
     private val prootAssertion =
         "./tracee/event.c:704: int handle_tracee_event(Tracee *, int): assertion \"IS_IN_SYSENTER(tracee)\" failed"
@@ -20,6 +21,30 @@ class ProotLaunchFailureTest {
         safe: Boolean = false,
         direct: Boolean = false,
     ) = CrashClassifier.classify(exitCode, readyAt, 180_000L, 123L, tail, safe, direct)
+
+    @Test fun preservesTheReportedEnvShellFailureWithoutCallingItAnAndroidKill() {
+        val failure = classify(listOf(envShellError), exitCode = 127)
+        assertEquals(FailureKind.LAUNCH_FAILED, failure.kind)
+        assertEquals(envShellError, failure.summary)
+        assertFalse(failure.kind.counts)
+    }
+
+    @Test fun onlyAcceptsTheEnvShellFailureBeforeReadyOnAnExit127ProotRun() {
+        assertEquals(FailureKind.KILLED, classify(listOf(envShellError), readyAt = 0L, exitCode = 127).kind)
+        assertEquals(FailureKind.KILLED, classify(listOf(envShellError), exitCode = 127, direct = true).kind)
+        for (code in listOf(0, 126)) {
+            assertEquals(FailureKind.KILLED, classify(listOf(envShellError), exitCode = code).kind)
+        }
+        assertEquals(FailureKind.KILLED, classify(emptyList(), exitCode = 127).kind)
+    }
+
+    @Test fun envShellFailureKeepsDiskFullAndDshFatalEvidenceAhead() {
+        assertEquals(FailureKind.NO_SPACE, classify(listOf(envShellError, "ENOSPC"), exitCode = 127).kind)
+        val fatal = "dsh: startup failed: required row missing"
+        val failure = classify(listOf(envShellError, fatal), exitCode = 127)
+        assertEquals(FailureKind.STARTUP_FAILED, failure.kind)
+        assertEquals("startup failed: required row missing", failure.summary)
+    }
 
     @Test fun preservesReportedProotFailuresInsteadOfCallingThemAndroidKills() {
         for (error in reported) {
