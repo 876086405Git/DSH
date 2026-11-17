@@ -62,6 +62,14 @@
         }
       }
     },
+    "deepseek-refusal.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "074ea3696725abfbf1ed9c770130c2d6a1b5cc34f1991c4127e24cbc39a4d6be",
+          "before": "33932219045bc1f31f96c94ce2a18883ad108ecdf0f7f74d7911e8a7d6257917"
+        }
+      }
+    },
     "fork-default-effort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
@@ -2479,7 +2487,8 @@
       "fork-default-effort.diff",
       "config-editor-lock-order.diff",
       "piai-overflow-output-limit.diff",
-      "schedule-authorization-availability.diff"
+      "schedule-authorization-availability.diff",
+      "deepseek-refusal.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2632,6 +2641,7 @@
       "config-editor-lock-order.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
+      "deepseek-refusal.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
