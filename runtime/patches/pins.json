@@ -702,6 +702,14 @@
         }
       }
     },
+    "web-empty-reply-notice.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-ui-chat/lib/client.js": {
+          "after": "0925ad851ec8ff4ab56d2153e6138018aa70889853a9b8eded4405c35f33d3e4",
+          "before": "b7e645f2461231e8ece31381f026db2df72d058e425eaef19265f215c823d84e"
+        }
+      }
+    },
     "web-preset-save-freshness.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-client-ui-agent-preset/lib/client.js": {
@@ -2497,7 +2505,8 @@
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
-      "deepseek-unnamed-stream-error.diff"
+      "deepseek-unnamed-stream-error.diff",
+      "web-empty-reply-notice.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2652,6 +2661,7 @@
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
+      "web-empty-reply-notice.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
