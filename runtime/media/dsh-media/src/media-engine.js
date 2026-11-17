@@ -65,7 +65,7 @@ export async function generateMedia(request, context) {
   const outputDate = context.admission?.outputDate ?? createdAt.slice(0, 10);
   const timeout = AbortSignal.timeout(request.model.kind === 'video' ? 30 * 60_000 : 180_000);
   const signal = AbortSignal.any([context.signal, timeout]);
-  const client = context.client ?? createMediaClient({ transport: context.transport ?? requestBytes });
+  const client = context.client ?? createMediaClient({ transport: context.transport ?? undefined });
   const transport = context.transport ?? requestBytes;
   let store, secret, providerTask, submitted = false, remoteSucceeded = false, cancelledRemote;
   const meta = mediaMeta(request, rid, 'done', context.job?.id);
@@ -89,9 +89,17 @@ export async function generateMedia(request, context) {
     await store.recheck();
     await validateReferencePins(context.referencePins);
     checkAbort(signal);
-    if (!context.resumeTaskId) await context.admission?.begin();
+    let performCreate;
+    if (!context.resumeTaskId) {
+      const options = { signal, maxResponseBytes: context.limits.maxResponseBytes };
+      performCreate = typeof client.prepareCreate === 'function'
+        ? await client.prepareCreate(request, refs, secret, options)
+        : () => client.create(request, refs, secret, options);
+      checkAbort(signal);
+      await context.admission?.begin();
+    }
     submitted = true; // Intent may have reached the provider, even if the response is lost.
-    const created = context.resumeTaskId ? { taskId: context.resumeTaskId } : await client.create(request, refs, secret, { signal, maxResponseBytes: context.limits.maxResponseBytes });
+    const created = context.resumeTaskId ? { taskId: context.resumeTaskId } : await performCreate();
     if (request.model.kind === 'image') {
       let total = 0;
       for (const source of created.images) {

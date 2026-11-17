@@ -7,6 +7,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CATALOG, HARD_LIMITS, Config, runtimeSnapshot, catalogModel } from '../src/config.js';
 import { createMediaClient, createDescriptor } from '../src/adapters.js';
 import { createHttpTransport } from '../src/http.js';
@@ -74,6 +75,14 @@ async function fixture(t, profile, behavior = {}) {
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await rm(directory, { recursive: true, force: true }); });
   return { directory, workspace, wires, controller, context, origin, setState(value) { state = value; } };
 }
+test('default DNS failure releases the unsent hold for another admission', t => {
+  const child = spawnSync(process.execPath, [fileURLToPath(new URL('./fixtures/presend-dns-child.mjs', import.meta.url))], {
+    encoding: 'utf8', timeout: 30_000,
+  });
+  if (child.stdout) t.diagnostic(child.stdout.trim());
+  assert.ifError(child.error);
+  assert.equal(child.status, 0, child.stderr);
+});
 test('image stage partial write failure preserves storage classification and submitted hold', async t => {
   const f = await fixture(t, 'openai-gpt-image'), req = request('openai-gpt-image');
   f.context.admission = await admitGeneration(req, f.context);

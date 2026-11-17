@@ -64,8 +64,8 @@ async function withAbort(promise, signal) {
   });
 }
 
-export function createHttpTransport({ allowLoopback = false, lookup = dnsLookup } = {}) {
-  return async function requestBytes(value, {
+function createHttpPreparer({ allowLoopback = false, lookup = dnsLookup } = {}) {
+  return async function prepareHttpRequest(value, {
     method = 'GET', headers = {}, body, signal, maxBytes,
   }) {
     checkAbort(signal);
@@ -97,7 +97,8 @@ export function createHttpTransport({ allowLoopback = false, lookup = dnsLookup 
     const selected = addresses[0];
     const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
 
-    return new Promise((resolve, reject) => {
+    return () => new Promise((resolve, reject) => {
+      checkAbort(signal);
       let settled = false;
       const finish = (error, result) => {
         if (settled) return;
@@ -188,4 +189,12 @@ export function createHttpTransport({ allowLoopback = false, lookup = dnsLookup 
   };
 }
 
+export function createHttpTransport(options) {
+  const prepare = createHttpPreparer(options);
+  return async function requestBytes(value, options) {
+    return (await prepare(value, options))();
+  };
+}
+
+export const prepareHttpRequest = createHttpPreparer();
 export const requestBytes = createHttpTransport();
