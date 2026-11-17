@@ -573,7 +573,7 @@ void main() {
 
   group('user-message and turn-outline corpus search', () {
     test('extracts full first prompt, turn outline and human inbox while ignoring nested strings', () {
-      const checkpointJson = '''
+      const checkpointJson = r'''
 {
   "version": 7,
   "record": {
