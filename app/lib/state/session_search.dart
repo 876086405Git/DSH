@@ -690,19 +690,7 @@ class HostContentSearch implements SessionContentSearch {
     final rpcDisabled = _rpcUnsupported[client] == true || !client.supportsEndpoint('session/search');
     if (!rpcDisabled) {
       try {
-        final rpcPage = await client.searchSessionsPage(query);
-        final supplement = await fallbackSearch?.call(query);
-        if (supplement == null || supplement.items.isEmpty) return rpcPage;
-        final seen = {for (final item in rpcPage.items) item.sessionId};
-        final merged = <ContentHit>[
-          ...rpcPage.items,
-          for (final item in supplement.items)
-            if (seen.add(item.sessionId)) item,
-        ];
-        return (
-          items: merged.take(20).toList(growable: false),
-          hasMore: rpcPage.hasMore || supplement.hasMore || merged.length > 20,
-        );
+        return await client.searchSessionsPage(query);
       } catch (error) {
         if (!isContentSearchUnsupported(error)) rethrow;
         _rpcUnsupported[client] = true;
@@ -736,7 +724,10 @@ final _remoteProjectionCache = Expando<Map<String, _CachedRemoteProjection>>('re
 /// Builds the user-message corpus for the active host's sessions from local
 /// `session_projcache` files (when on-device) and `SessionProjections`.
 Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref, DshClient client, String query) async {
-  final sessions = ref.read(sessionsProvider).value;
+  if (!ref.exists(sessionsProvider)) return null;
+  final sessionsAsync = ref.read(sessionsProvider);
+  if (!sessionsAsync.hasValue) return null;
+  final sessions = sessionsAsync.value;
   final archived = ref.read(sessionsProvider.notifier).archivedSessions;
   final all = <SessionSummary>[...?sessions, ...archived];
   if (all.isEmpty) return null;
