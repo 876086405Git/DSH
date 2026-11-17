@@ -8,7 +8,6 @@ import 'dart:math';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../companion/companion_keeper.dart';
@@ -26,25 +25,6 @@ import '../theme/semantic_colors.dart';
 
 /// The bridge's limit for one memory, in code points.
 const _maxLength = 512;
-
-/// At most [max] code points, as the Host checks a memory's text.
-class _CodePointLimit extends TextInputFormatter {
-  const _CodePointLimit(this.max);
-
-  final int max;
-
-  @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    // An input method's letters (pinyin) are not the text yet: cut once they turn into it.
-    if (newValue.text.runes.length <= max || !newValue.composing.isCollapsed) return newValue;
-    if (oldValue.text.runes.length >= max && oldValue.composing.isCollapsed) return oldValue;
-    final text = String.fromCharCodes(newValue.text.runes.take(max));
-    return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-  }
-}
 
 /// A v4 UUID: memories are named by the client so a retried save can't add two.
 String companionMemoryId() {
@@ -203,29 +183,41 @@ class _CompanionMemoryPageState extends ConsumerState<CompanionMemoryPage> {
     if (!current()) return;
     final l10n = context.l10n;
     var input = memory?.text ?? '';
+    String? tooLong;
     final text = await showAppDialog<String>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(memory == null ? l10n.companionMemoryAdd : l10n.companionMemoryEdit),
-        content: TextFormField(
-          initialValue: input,
-          onChanged: (value) => input = value,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 5,
-          maxLength: _maxLength,
-          // The Host counts code points (👍🏽 is two), the field what shows as one.
-          maxLengthEnforcement: MaxLengthEnforcement.none,
-          inputFormatters: const [_CodePointLimit(_maxLength)],
-          decoration: InputDecoration(hintText: l10n.companionMemoryHint),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialog, input.trim()),
-            child: Text(dialog.l10n.companionMemorySave),
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, setDialog) => AlertDialog(
+          title: Text(memory == null ? l10n.companionMemoryAdd : l10n.companionMemoryEdit),
+          content: TextFormField(
+            initialValue: input,
+            onChanged: (value) {
+              input = value;
+              if (tooLong != null) setDialog(() => tooLong = null);
+            },
+            autofocus: true,
+            minLines: 2,
+            maxLines: 5,
+            maxLength: _maxLength,
+            decoration: InputDecoration(hintText: l10n.companionMemoryHint, errorText: tooLong),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+            FilledButton(
+              onPressed: () {
+                final value = input.trim();
+                // The field counts what shows as one character, the Host code points (👍🏽 is
+                // two): over the Host's limit, the text stays here to be cut.
+                if (value.runes.length > _maxLength) {
+                  setDialog(() => tooLong = dialog.l10n.engineFieldMaxCharacters(_maxLength));
+                } else {
+                  Navigator.pop(dialog, value);
+                }
+              },
+              child: Text(dialog.l10n.companionMemorySave),
+            ),
+          ],
+        ),
       ),
     );
     if (!current() || text == null || text.isEmpty || text == memory?.text) return;
