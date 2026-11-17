@@ -71,7 +71,7 @@ export function normalizeImages(profile, value, n) {
   if (profile === 'silicon-image') rows = value?.images;
   if (!Array.isArray(rows) || rows.length !== n || rows.some(row => !row || row.error || row.is_image_safe === false
     || (typeof row.url === 'string') === (typeof row.b64_json === 'string'))) fail('response');
-  return rows.map(({ url, b64_json }) => url !== undefined ? { url } : { b64_json });
+  return rows.map(({ url, b64_json }) => typeof url === 'string' ? { url } : { b64_json });
 }
 export function normalizeTask(profile, value, expectedId) {
   let id, state, url;
