@@ -312,9 +312,9 @@ String? _drivePath(String target, {required bool decode, String? cwd}) {
   return resolveSessionPath(target, cwd: cwd);
 }
 
-/// Code in a reply: fenced blocks, closed by a fence at least as long (to the end when
-/// unclosed), and inline spans.
-final _code = RegExp(r'(`{3,}|~{3,})[\s\S]*?(?:\1|$)|`[^`\n]*`');
+/// Code in a reply: fenced blocks (fences start a line; closed by one at least as long, or
+/// running to the end), and inline spans.
+final _code = RegExp(r'^ {0,3}(`{3,}|~{3,})[\s\S]*?(?:^ {0,3}\1|(?![\s\S]))|`[^`\n]*`', multiLine: true);
 
 /// Local file paths a reply links to (`[a](<out/a.pdf>)`, `![b](chart.png)`),
 /// in order, resolved against [cwd]; web links and anchors dropped, and links shown as

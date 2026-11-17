@@ -72,6 +72,8 @@ void main() {
     const reply =
         '写好了 README：\n\n```markdown\n[截图](shot.png)\n```\n\n行内的 `[报告](out/report.pdf)` 也是示例，[真的](real.pdf) 才算。';
     expect(linkedPaths(reply, cwd: cwd), ['$cwd/real.pdf']);
+    // Tildes inside a line are no fence.
+    expect(linkedPaths('The marker ~~~ is literal. [real](real.pdf)', cwd: cwd), ['$cwd/real.pdf']);
     // A longer fence isn't closed by a shorter one inside it.
     expect(linkedPaths('~~~~md\n~~~\n[example](fake.pdf)\n~~~~\n[real](real.pdf)', cwd: cwd), ['$cwd/real.pdf']);
   });
