@@ -570,4 +570,129 @@ void main() {
     expect(searchDateLabel(DateTime(2026, 10, 3), searchNow), '10月3日');
     expect(searchDateLabel(DateTime(2025, 12, 30), searchNow), '2025/12/30');
   });
+
+  group('user-message and turn-outline corpus search', () {
+    test('extracts full first prompt, turn outline and human inbox while ignoring nested strings', () {
+      const checkpointJson = r'''
+{
+  "version": 7,
+  "record": {
+    "identity": {"formatVersion": 4, "createdAt": 1700000000000},
+    "rows": {
+      "contextTimeline": {
+        "ver": 1,
+        "seq": 20,
+        "val": {"note": "string containing \"turnOutline\": {\"val\": {\"turns\": []}}"}
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": 20,
+        "val": {
+          "first": {
+            "seq": 4,
+            "text": "帮我排查一下为什么正常模式启动会卡死在健康检查阶段，并且切换安全模式又能恢复"
+          },
+          "count": 2,
+          "lastSeq": 15
+        }
+      },
+      "turnOutline": {
+        "ver": 2,
+        "seq": 20,
+        "val": {
+          "turns": [
+            {
+              "turn": 1,
+              "seq": 4,
+              "prompt": "帮我排查一下为什么正常模式启动会卡死在…",
+              "response": "已定位到 PID 残留导致的门禁死锁。"
+            },
+            {
+              "turn": 2,
+              "seq": 14,
+              "prompt": "顺便加上回归测试",
+              "response": "已补充启动探针测试。"
+            }
+          ],
+          "draft": ""
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": 20,
+        "val": {
+          "next-turn": [
+            {
+              "id": "m1",
+              "role": "user",
+              "source": {"kind": "user"},
+              "content": [{"type": "text", "text": "排队中的追问消息"}]
+            },
+            {
+              "id": "m2",
+              "role": "user",
+              "source": {"kind": "runtime-context"},
+              "content": [{"type": "text", "text": "系统注入的上下文不应被当成用户提问"}]
+            }
+          ],
+          "next-step": []
+        }
+      }
+    }
+  }
+}
+''';
+      final corpus = extractCheckpointJsonSearchCorpus(checkpointJson);
+      expect(corpus.userMessages, ['排队中的追问消息', '顺便加上回归测试', '帮我排查一下为什么正常模式启动会卡死在健康检查阶段，并且切换安全模式又能恢复']);
+      expect(corpus.assistantPreviews, ['已补充启动探针测试。', '已定位到 PID 残留导致的门禁死锁。']);
+    });
+
+    test('matches CJK substrings, multi-turn user terms, and ranks user messages above reply previews', () {
+      final s1 = searchSession('s1', '日常杂谈 A', DateTime(2026, 10, 20));
+      final s2 = searchSession('s2', '日常杂谈 B', DateTime(2026, 10, 22));
+      final s3 = searchSession('s3', '日常杂谈 C', DateTime(2026, 10, 24));
+      final corpus = <String, SessionSearchCorpusEntry>{
+        // s1: single user message has both terms (tier 0)
+        's1': const SessionSearchCorpusEntry(userMessages: ['我想用 Shizuku 调用安卓 Shell 自动化命令']),
+        // s2: terms split across two user messages in the same session (tier 1)
+        's2': const SessionSearchCorpusEntry(userMessages: ['能不能接上 Shizuku', '再跑一条 Shell 命令']),
+        // s3: only the assistant preview has the terms (tier 2)
+        's3': const SessionSearchCorpusEntry(
+          userMessages: ['帮我看看怎么改'],
+          assistantPreviews: ['可以通过 Shizuku 执行 Shell 脚本。'],
+        ),
+      };
+      final page = searchSessionCorpus('shizuku shell', [s3, s2, s1], corpus);
+      expect(page.items.map((h) => h.sessionId), ['s1', 's2', 's3']);
+      expect(page.items.first.snippet, contains('Shizuku'));
+      expect(page.hasMore, isFalse);
+    });
+
+    testWidgets('HostContentSearch falls back to user corpus when Host SQLite index is disabled', (tester) async {
+      var rpcCalls = 0;
+      final carrier = FakePluginCarrier()
+        ..handlers['session/search'] = (_) {
+          rpcCalls++;
+          throw searchDisabled;
+        };
+      final client = DshClient.withCarrier(carrier);
+      addTearDown(client.close);
+
+      final hostSearch = HostContentSearch(
+        client,
+        fallbackSearch: (query) async =>
+            (items: <ContentHit>[(sessionId: 's4', snippet: '用户提问里包含 $query 的完整句子')], hasMore: false),
+      );
+
+      final first = await hostSearch.search('健康检查');
+      expect(rpcCalls, 1);
+      expect(first.items.single.sessionId, 's4');
+      expect(hostSearch.knownUnsupported, isFalse);
+
+      // Subsequent searches skip the disabled RPC and use the fallback directly.
+      final second = await hostSearch.search('启动卡死');
+      expect(rpcCalls, 1);
+      expect(second.items.single.snippet, contains('启动卡死'));
+    });
+  });
 }
