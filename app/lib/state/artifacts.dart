@@ -263,9 +263,10 @@ final _drive = RegExp(r'^[A-Za-z]:[\\/]');
 /// Decode the URI path once; query strings and fragments are not filenames.
 String? resolveWorkspaceLink(String url, {String? baseDir}) {
   var target = url.trim();
-  if (target.startsWith('<') && target.endsWith('>')) {
-    target = target.substring(1, target.length - 1).trim();
-  }
+  final bracketed = target.startsWith('<') && target.endsWith('>');
+  if (bracketed) target = target.substring(1, target.length - 1).trim();
+  // `C:/A/b.png` would parse as a URI with the scheme `c` (#1430).
+  if (_drive.hasMatch(target)) return _drivePath(target, decode: !bracketed, cwd: baseDir);
   if (target.isEmpty || target.startsWith('#') || target.startsWith('?') || target.startsWith('//')) return null;
   final uri = Uri.tryParse(target);
   if (uri == null) return null;
@@ -294,30 +295,37 @@ String? resolveWorkspaceLink(String url, {String? baseDir}) {
   return resolveSessionPath(path, cwd: baseDir);
 }
 
+/// A Windows drive path as a Markdown destination (`C:/A/b.png`): no query or fragment (a
+/// Windows name can't hold `?`), and percent escapes decoded unless it was written in `<>`.
+String? _drivePath(String target, {required bool decode, String? cwd}) {
+  final cut = target.indexOf(RegExp('[?#]'));
+  if (cut >= 0) target = target.substring(0, cut);
+  if (decode) {
+    try {
+      target = Uri.decodeFull(target);
+    } on ArgumentError {
+      // Keep it as written.
+    } on FormatException {
+      return null;
+    }
+  }
+  return resolveSessionPath(target, cwd: cwd);
+}
+
+/// Code in a reply: fenced blocks (fences start a line; closed by one at least as long, or
+/// running to the end), and inline spans.
+final _code = RegExp(r'^ {0,3}(`{3,}|~{3,})[\s\S]*?(?:^ {0,3}\1|(?![\s\S]))|`[^`\n]*`', multiLine: true);
+
 /// Local file paths a reply links to (`[a](<out/a.pdf>)`, `![b](chart.png)`),
-/// in order, resolved against [cwd]; web links and anchors dropped.
+/// in order, resolved against [cwd]; web links and anchors dropped, and links shown as
+/// examples in code ignored (#1432).
 List<String> linkedPaths(String text, {String? cwd}) {
   final out = <String>{};
-  for (final match in _linkTarget.allMatches(text)) {
-    var target = (match.group(1) ?? match.group(2) ?? '').trim();
-    final String? path;
-    if (_drive.hasMatch(target)) {
-      // Preserve existing artifact support for remote Windows paths.
-      final hash = target.indexOf('#');
-      if (hash >= 0) target = target.substring(0, hash);
-      if (match.group(1) == null) {
-        try {
-          target = Uri.decodeFull(target);
-        } on ArgumentError {
-          // Keep it as written.
-        } on FormatException {
-          continue;
-        }
-      }
-      path = resolveSessionPath(target, cwd: cwd);
-    } else {
-      path = resolveWorkspaceLink(target, baseDir: cwd);
-    }
+  for (final match in _linkTarget.allMatches(text.replaceAll(_code, ' '))) {
+    final target = (match.group(1) ?? match.group(2) ?? '').trim();
+    final path = _drive.hasMatch(target)
+        ? _drivePath(target, decode: match.group(1) == null, cwd: cwd)
+        : resolveWorkspaceLink(target, baseDir: cwd);
     if (path != null) out.add(path);
   }
   return out.toList();
