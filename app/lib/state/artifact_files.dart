@@ -2,6 +2,7 @@
 // share, save to Downloads).
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_client/dsh_client.dart';
@@ -250,7 +251,25 @@ String _safeName(String name) {
   final cleaned = name.replaceAll(RegExp(r'[\x00-\x1f/\\:*?"<>|]'), '_').trim();
   // Keep downloaded content separate from the cache's version marker.
   if (cleaned == '.version') return 'file.version';
-  return cleaned.isEmpty ? 'file' : cleaned;
+  return cleaned.isEmpty ? 'file' : _fitName(cleaned);
+}
+
+/// Android's file systems take 255 bytes for a name, a Windows Host 255 characters: a
+/// longer name (CJK is 3 bytes a character) is cut to fit, its extension kept. Each
+/// artifact has its own cache directory, so a cut name can't meet another.
+String _fitName(String name) {
+  const max = 200;
+  if (utf8.encode(name).length <= max) return name;
+  final dot = name.lastIndexOf('.');
+  final ext = dot > 0 && name.length - dot <= 16 ? name.substring(dot) : '';
+  var room = max - utf8.encode(ext).length;
+  final stem = StringBuffer();
+  for (final rune in (ext.isEmpty ? name : name.substring(0, dot)).runes) {
+    room -= utf8.encode(String.fromCharCode(rune)).length;
+    if (room < 0) break;
+    stem.writeCharCode(rune);
+  }
+  return '$stem$ext';
 }
 
 /// FNV-1a, hex: a stable cache directory name.
