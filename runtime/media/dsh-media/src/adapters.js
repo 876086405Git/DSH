@@ -1,7 +1,7 @@
 // Provider wire protocols. Every endpoint and model whitelist lives in the catalog.
 // No retry of creation: a lost response can already be a charged operation.
 import { CATALOG } from './config.js';
-import { requestBytes, parseMediaUrl } from './http.js';
+import { prepareHttpRequest, parseMediaUrl } from './http.js';
 import { checkAbort, fail } from './errors.js';
 
 const taskId = value => {
@@ -89,41 +89,61 @@ export function normalizeTask(profile, value, expectedId) {
   return { taskId: id, state, ...(state === 'succeeded' ? { url } : {}) };
 }
 
-export function createMediaClient({ transport = requestBytes, queryTimeoutMs = 30_000 } = {}) {
+export function createMediaClient({ transport, queryTimeoutMs = 30_000 } = {}) {
   if (!Number.isSafeInteger(queryTimeoutMs) || queryTimeoutMs < 1 || queryTimeoutMs > 30_000) fail('invalid_request');
-  async function send(service, descriptor, secret, { signal, maxResponseBytes = 32 * 1024 * 1024, timeoutMs = 180_000 } = {}, queryId) {
+  async function prepareSend(service, descriptor, secret, { signal, maxResponseBytes = 32 * 1024 * 1024, timeoutMs = 180_000 } = {}, queryId) {
     checkAbort(signal);
     const url = providerEndpoint(service, descriptor.path);
     parseMediaUrl(url); // Test transports rewrite a validated production URL internally.
     const timer = AbortSignal.timeout(timeoutMs);
     const active = signal ? AbortSignal.any([signal, timer]) : timer;
     const body = descriptor.body === undefined ? undefined : Buffer.from(JSON.stringify(descriptor.body));
-    let response;
-    try { response = await transport(url, { method: descriptor.method, headers: { authorization: 'Bearer ' + secret,
-      'content-type': 'application/json', accept: 'application/json', 'accept-encoding': 'identity', ...descriptor.headers }, body, signal: active, maxBytes: maxResponseBytes }); } catch (error) {
+    const options = { method: descriptor.method, headers: { authorization: 'Bearer ' + secret,
+      'content-type': 'application/json', accept: 'application/json', 'accept-encoding': 'identity', ...descriptor.headers }, body, signal: active, maxBytes: maxResponseBytes };
+    const rethrow = error => {
       if (timer.aborted && !signal?.aborted) fail('timeout');
       throw error;
-    }
-    checkAbort(active);
-    let value;
-    try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(response.body)); } catch { errorStatus(response.status); fail('response'); }
-    errorStatus(response.status, value, service.profile === 'ark-video' && queryId !== undefined
-      && value?.id === queryId && value?.status === 'failed');
-    return value;
-  }
-  return {
-    async create(request, refs, secret, options) {
+    };
+    const perform = transport === undefined
+      ? await prepareHttpRequest(url, options).catch(rethrow)
+      : () => transport(url, options);
+    return async () => {
+      let response;
+      try { response = await perform(); } catch (error) { rethrow(error); }
+      checkAbort(active);
       let value;
-      try { value = await send(request.service, createDescriptor(request, refs), secret, options); }
-      catch (error) {
-        if (['authentication', 'rate_limit', 'policy', 'invalid_request', 'unsafe_url'].includes(error?.code)) throw error;
-        fail('submission_unknown');
-      }
-      try {
+      try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(response.body)); } catch { errorStatus(response.status); fail('response'); }
+      errorStatus(response.status, value, service.profile === 'ark-video' && queryId !== undefined
+        && value?.id === queryId && value?.status === 'failed');
+      return value;
+    };
+  }
+  async function send(...args) {
+    return (await prepareSend(...args))();
+  }
+  async function createFrom(request, perform) {
+    let value;
+    try { value = await perform(); }
+    catch (error) {
+      if (['authentication', 'rate_limit', 'policy', 'invalid_request', 'unsafe_url'].includes(error?.code)) throw error;
+      fail('submission_unknown');
+    }
+    try {
       if (request.model.kind === 'image') return { images: normalizeImages(request.service.profile, value, request.n) };
       const profile = request.service.profile;
       return { taskId: taskId(profile === 'ark-video' ? value?.id : profile === 'ali-video' ? value?.output?.task_id : value?.requestId) };
-      } catch { fail('submission_unknown'); }
+    } catch { fail('submission_unknown'); }
+  }
+  return {
+    async create(request, refs, secret, options) {
+      return createFrom(request, () => send(request.service, createDescriptor(request, refs), secret, options));
+    },
+    async prepareCreate(request, refs, secret, options) {
+      // Custom transports remain behind the caller's submission gate.
+      const perform = transport === undefined
+        ? await prepareSend(request.service, createDescriptor(request, refs), secret, options)
+        : () => send(request.service, createDescriptor(request, refs), secret, options);
+      return () => createFrom(request, perform);
     },
     async query(request, id, secret, options) {
       taskId(id);
