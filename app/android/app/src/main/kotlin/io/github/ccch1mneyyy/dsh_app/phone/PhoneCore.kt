@@ -721,7 +721,7 @@ class PhoneCore(
         }
         val label = ui.get("phone_system_unknown_app", "未知应用") // l10n:keep test default
         val verdict = safety.confirmation(ui.get("phone_system_confirm_unknown",
-            "处理应用未知，要执行（%1\$s）吗？", summary), null, label, "unknown-app", inheritWaiver = false) // l10n:keep test default
+            "处理应用未知，要执行（%1\$s）吗？", summary), null, label, "unknown-app") // l10n:keep test default
         when (val result = safety.resolve(verdict, scope, owner)) {
             is SafetyGate.Result.No -> return Out(result.message, error = true, app = label,
                 summary = summary, decision = result.decision)
@@ -1019,7 +1019,7 @@ class PhoneCore(
             val sentence = if (plan.method == FocusInput.Method.CLIPBOARD)
                 "将覆盖系统剪贴板，并在「${app ?: "当前应用"}」的原焦点选择区粘贴一次。旧剪贴板不备份、不恢复；输入可能触发应用行为，不会请求提交。是否仅允许这一次？" // l10n:keep agent focus result
             else "将在「${app ?: "当前应用"}」的原焦点选择区插入一次文本，可能结束输入法组合状态；输入可能触发应用行为，不会请求提交。是否仅允许这一次？" // l10n:keep agent focus result
-            val decision = when (val consent = safety.resolve(safety.confirmationOnce(sentence, pkg,
+            val decision = if (safety.waived()) "allowed" else when (val consent = safety.resolve(safety.confirmationOnce(sentence, pkg,
                 target.appLabel, "focus_text"), scope, owner)) {
                 is SafetyGate.Result.No -> return Out(consent.message, error = true, app = app,
                     summary = summary, decision = consent.decision)
