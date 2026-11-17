@@ -1,0 +1,49 @@
+# Explain completed turns without a visible reply outside the process disclosure.
+# Target: @deepseek-ai/dsh-client-ui-chat 0.2.2-rc.1 (MIT), shipped client bundle.
+--- a/node_modules/@deepseek-ai/dsh-client-ui-chat/lib/client.js
++++ b/node_modules/@deepseek-ai/dsh-client-ui-chat/lib/client.js
+@@ -6593,1 +6593,3 @@
+-			"message.turnProcess.took": "已完成，用时 ",
++			"message.turnProcess.took": "已完成，用时 ",
++			"message.turnProcess.noReply": "未收到答复",
++			"message.turnNoReply": "本轮已结束，但没有可显示的答复。请先查看过程或工具结果，再决定是否发消息继续。",
+@@ -6791,1 +6793,3 @@
+-			"message.turnProcess.took": "Completed in ",
++			"message.turnProcess.took": "Completed in ",
++			"message.turnProcess.noReply": "No reply received",
++			"message.turnNoReply": "This turn ended without a visible reply. Check the process or tool results before sending a follow-up.",
+@@ -8694,5 +8698,6 @@
+-			const stopped = reason === "aborted" || reason === "interrupted";
+-			const elapsedMs = turn.start === void 0 || turn.end === void 0 ? void 0 : Math.max(1e3, turn.end.time - turn.start.time);
+-			const duration = elapsedMs === void 0 || stopped || reason === "error" ? void 0 : formatRunDuration(elapsedMs, t);
+-			const label = stopped ? t("message.stopped") : reason === "error" ? t("message.turnProcess.failed") : duration === void 0 ? t("message.turnProcess.worked") : t("message.turnProcess.took");
+-			const announcement = stopped ? t("message.stopped") : reason === "error" ? t("message.turnProcess.failed") : t("message.turnProcess.worked");
++			const stopped = reason === "aborted" || reason === "interrupted";
++			const noReply = reason === "completed" && node.data.answerAnchorSeq === null && node.data.messageCount === 0;
++			const elapsedMs = turn.start === void 0 || turn.end === void 0 ? void 0 : Math.max(1e3, turn.end.time - turn.start.time);
++			const duration = elapsedMs === void 0 || stopped || reason === "error" || noReply ? void 0 : formatRunDuration(elapsedMs, t);
++			const label = noReply ? t("message.turnProcess.noReply") : stopped ? t("message.stopped") : reason === "error" ? t("message.turnProcess.failed") : duration === void 0 ? t("message.turnProcess.worked") : t("message.turnProcess.took");
++			const announcement = noReply ? t("message.turnProcess.noReply") : stopped ? t("message.stopped") : reason === "error" ? t("message.turnProcess.failed") : t("message.turnProcess.worked");
+@@ -9016,2 +9021,3 @@
+-		const TurnTailNodeView = (0, react.memo)(function TurnTailNodeView({ node, openFile, forkAt, renderSlot, t, useAccess, useChat, usePerformanceUsage }) {
+-			const detailed = usePerformanceUsage((mode) => mode) === "detailed";
++		const TurnTailNodeView = (0, react.memo)(function TurnTailNodeView({ node, openFile, forkAt, renderSlot, t, useAccess, useChat, usePerformanceUsage, useTurnData }) {
++			const process = useTurnData("turn-process");
++			const detailed = usePerformanceUsage((mode) => mode) === "detailed";
+@@ -9035,5 +9041,11 @@
+-			if (closing === null) return tail === null ? null : (0, react_jsx_runtime.jsx)("div", {
+-				className: TurnTailNodeView_module_css_default.root,
+-				"data-turn-tail": data.turn,
+-				children: tail
+-			});
++			const noReply = turn.end?.data.reason.kind === "completed" && process !== void 0 && process.answerAnchorSeq === null && process.messageCount === 0;
++			const notice = noReply ? (0, react_jsx_runtime.jsx)("div", {
++				role: "status",
++				"data-turn-no-reply": true,
++				children: t("message.turnNoReply")
++			}) : null;
++			if (closing === null) return tail === null && notice === null ? null : (0, react_jsx_runtime.jsxs)("div", {
++				className: TurnTailNodeView_module_css_default.root,
++				"data-turn-tail": data.turn,
++				children: [notice, tail]
++			});
