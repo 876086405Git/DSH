@@ -37,7 +37,7 @@ class _CodePointLimit extends TextInputFormatter {
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
     // An input method's letters (pinyin) are not the text yet: cut once they turn into it.
     if (newValue.text.runes.length <= max || !newValue.composing.isCollapsed) return newValue;
-    if (oldValue.text.runes.length >= max) return oldValue;
+    if (oldValue.text.runes.length >= max && oldValue.composing.isCollapsed) return oldValue;
     final text = String.fromCharCodes(newValue.text.runes.take(max));
     return TextEditingValue(
       text: text,
