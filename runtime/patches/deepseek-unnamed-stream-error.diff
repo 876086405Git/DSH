@@ -1,0 +1,6 @@
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -1810 +1810,2 @@
+-		const event = object(raw);
++		const event = object(raw);
++		if (frame.event === void 0 && event.type === void 0 && typeof event.error?.message === "string") throw providerError(event, void 0);

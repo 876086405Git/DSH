@@ -70,6 +70,14 @@
         }
       }
     },
+    "deepseek-unnamed-stream-error.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "0ace65d8cf477ebaeaeaaf3af7080ea4695d46f5cc8a34c7f92d5107715e08a9",
+          "before": "074ea3696725abfbf1ed9c770130c2d6a1b5cc34f1991c4127e24cbc39a4d6be"
+        }
+      }
+    },
     "fork-default-effort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
@@ -2488,7 +2496,8 @@
       "config-editor-lock-order.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
-      "deepseek-refusal.diff"
+      "deepseek-refusal.diff",
+      "deepseek-unnamed-stream-error.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2642,6 +2651,7 @@
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
+      "deepseek-unnamed-stream-error.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
