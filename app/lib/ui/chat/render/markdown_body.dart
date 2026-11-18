@@ -677,31 +677,35 @@ class _MarkdownBodyState extends State<MarkdownBody> {
   }
 
   /// [data] as one GptMarkdown; [live] when it is still being written.
-  GptMarkdown _markdown(String data, TextStyle body, {required bool live, List<InlinePattern>? patterns}) =>
-      GptMarkdown(
-        data,
-        style: body,
-        followLinkColor: false,
-        htmlTags: _htmlTags,
-        // The tail is repaired here (and open formulas shown as source), so
-        // the package must not complete open `\(` / `\[` on its own.
-        isStreaming: widget.reveal && live,
-        animation: widget.reveal ? GptMarkdownAnimation.fade : GptMarkdownAnimation.none,
-        blockAnimation: widget.reveal ? GptMarkdownBlockAnimation.fadeIn : GptMarkdownBlockAnimation.none,
-        charactersPerSecond: MarkdownBody._revealPace,
-        revealFadeSeconds: MarkdownBody._revealFade,
-        inlinePatterns: patterns,
-        onLinkTap: (url, title) => MarkdownBody._onLinkTap(context, url, title),
-        codeBuilder: MarkdownBody._codeBuilder,
-        inlineCodeBuilder: MarkdownBody._inlineCodeBuilder,
-        checkboxBuilder: MarkdownBody._checkboxBuilder,
-        headingBuilder: MarkdownBody._headingBuilder,
-        inlineLatexBuilder: MarkdownMath.inline,
-        blockLatexBuilder: MarkdownMath.block,
-        imageBuilder: markdownImageBuilder,
-        orderedListBuilder: MarkdownLists.ordered,
-        unOrderedListBuilder: MarkdownLists.unordered,
-      );
+  GptMarkdown _markdown(String data, TextStyle body, {required bool live, List<InlinePattern>? patterns}) {
+    // The element itself, not [State.context]: a link tapped after this body
+    // is gone asks it whether it is still mounted.
+    final context = this.context;
+    return GptMarkdown(
+      data,
+      style: body,
+      followLinkColor: false,
+      htmlTags: _htmlTags,
+      // The tail is repaired here (and open formulas shown as source), so
+      // the package must not complete open `\(` / `\[` on its own.
+      isStreaming: widget.reveal && live,
+      animation: widget.reveal ? GptMarkdownAnimation.fade : GptMarkdownAnimation.none,
+      blockAnimation: widget.reveal ? GptMarkdownBlockAnimation.fadeIn : GptMarkdownBlockAnimation.none,
+      charactersPerSecond: MarkdownBody._revealPace,
+      revealFadeSeconds: MarkdownBody._revealFade,
+      inlinePatterns: patterns,
+      onLinkTap: (url, title) => MarkdownBody._onLinkTap(context, url, title),
+      codeBuilder: MarkdownBody._codeBuilder,
+      inlineCodeBuilder: MarkdownBody._inlineCodeBuilder,
+      checkboxBuilder: MarkdownBody._checkboxBuilder,
+      headingBuilder: MarkdownBody._headingBuilder,
+      inlineLatexBuilder: MarkdownMath.inline,
+      blockLatexBuilder: MarkdownMath.block,
+      imageBuilder: markdownImageBuilder,
+      orderedListBuilder: MarkdownLists.ordered,
+      unOrderedListBuilder: MarkdownLists.unordered,
+    );
+  }
 
   /// The blocks of [_source], built or handed back from [_built].
   ///
