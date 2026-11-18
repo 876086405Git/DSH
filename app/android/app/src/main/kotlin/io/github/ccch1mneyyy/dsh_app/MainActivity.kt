@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.Surface
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -154,19 +155,29 @@ class MainActivity : FlutterActivity() {
         if (window.attributes.preferredDisplayModeId != target) {
             window.attributes = window.attributes.apply { preferredDisplayModeId = target }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val surface = flutterSurface(findViewById<View>(FlutterActivity.FLUTTER_VIEW_ID))
-            if (surface != null && surface.isValid) {
-                surface.setFrameRate(want?.refreshRate ?: 0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
-            }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val view = flutterSurfaceView(findViewById<View>(FlutterActivity.FLUTTER_VIEW_ID)) ?: return
+        if (view !== votedView) {
+            votedView = view
+            // Coming back from the background, onResume runs before the surface is made again.
+            view.holder.addCallback(object : SurfaceHolder.Callback {
+                override fun surfaceCreated(holder: SurfaceHolder) = applyRefreshRate()
+                override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+                override fun surfaceDestroyed(holder: SurfaceHolder) {}
+            })
         }
+        val surface = view.holder.surface
+        if (surface.isValid) surface.setFrameRate(want?.refreshRate ?: 0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
     }
 
-    private fun flutterSurface(view: View?): Surface? {
-        if (view is SurfaceView) return view.holder.surface
+    /** Flutter's SurfaceView, which [applyRefreshRate] also votes on. */
+    private var votedView: SurfaceView? = null
+
+    private fun flutterSurfaceView(view: View?): SurfaceView? {
+        if (view is SurfaceView) return view
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {
-                flutterSurface(view.getChildAt(index))?.let { return it }
+                flutterSurfaceView(view.getChildAt(index))?.let { return it }
             }
         }
         return null
