@@ -386,10 +386,11 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     // The engine keeps the reply being written every half second; that one
     // is drawn from the stream, so the rest staying as they were is nothing
     // to draw again.
-    if (_running && _sameBesides(_messages, messages, _streamNode)) return;
+    final hasOlder = messages.length >= window;
+    if (_running && _sameBesides(_messages, messages, _streamNode) && hasOlder == _hasOlder) return;
     setState(() {
       _messages = messages;
-      _hasOlder = messages.length >= window;
+      _hasOlder = hasOlder;
     });
     unawaited(_readPinned());
   }
