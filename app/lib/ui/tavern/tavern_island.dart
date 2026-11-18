@@ -173,11 +173,12 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     _storyFrom = from;
     final read = at == null ? null : story?.value?.forMessage(at.nodeId, text: at.text, name: at.name, user: at.user);
     final own = read == null ? null : jsonEncode({...read}..remove('latest')..remove('chat')..remove('last'));
+    // Kept for whenever it loads again (a theme change), though not a reason to.
+    _story = read;
     if (waiting == _waiting && libs.length == _libraries.length && own == _storyKey) return;
     _storyKey = own;
     _waiting = waiting;
     _libraries = libs;
-    _story = read;
     // Built since: the page loads, and the view it is in is drawn.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(_open);

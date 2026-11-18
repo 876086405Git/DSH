@@ -47,9 +47,10 @@ class TavernPortrait extends StatelessWidget {
             builder: (context, box) {
               // Decoded near the size it is drawn at: a card's picture is
               // often 1–2k pixels, and a whole shelf of them at full size
-              // overflows the image cache.
+              // overflows the image cache. Twice the box's longer side, so a
+              // picture up to 2:1 the other way still covers it unblurred.
               final sides = [box.maxWidth, box.maxHeight].where((d) => d.isFinite);
-              final side = sides.isEmpty ? double.infinity : sides.reduce(max);
+              final side = sides.isEmpty ? double.infinity : sides.reduce(max) * 2;
               final ImageProvider picture = side.isFinite
                   ? ResizeImage(
                       FileImage(File(file)),

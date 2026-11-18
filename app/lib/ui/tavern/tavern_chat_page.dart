@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -2556,31 +2557,38 @@ Widget _beside(Widget? stage, Widget story) => stage == null
 /// never stored. The text as written until that comes, or if it cannot.
 final tavernShownTextProvider = FutureProvider.autoDispose.family<String, (String, String, String)>((ref, key) async {
   final (chatId, nodeId, text) = key;
-  // Kept a while after its row scrolls away: scrolling back is not the
-  // display regex over again.
-  final keep = ref.keepAlive();
-  Timer? let;
-  ref.onCancel(() => let = Timer(const Duration(minutes: 1), keep.close));
-  ref.onResume(() => let?.cancel());
-  ref.onDispose(() => let?.cancel());
   final tavern = ref.watch(tavernProvider);
-  // One at a time, a frame let through between: a page of messages asking
-  // at once runs their display passes back to back on this thread (the
-  // engine's), a freeze of their sum.
-  final turn = _displayQueue.then((_) => Future<void>.delayed(Duration.zero));
-  final done = Completer<void>();
-  _displayQueue = done.future;
-  try {
-    await turn;
+  return ref.watch(_displayQueueProvider).run(() async {
+    // Its row went before its turn came: nothing to show it in.
     if (!ref.mounted) return text;
     final shown = await tavern.displayText(chatId, nodeId: nodeId, text: text);
     return shown.superseded ? text : shown.text;
-  } finally {
-    done.complete();
-  }
+  });
 });
 
-Future<void> _displayQueue = Future<void>.value();
+/// Display passes one at a time, a frame between: a page of messages asking
+/// at once would run theirs back to back on this thread (the engine's), a
+/// freeze of their sum.
+final _displayQueueProvider = Provider<_DisplayQueue>((ref) => _DisplayQueue());
+
+class _DisplayQueue {
+  Future<void> _tail = Future<void>.value();
+  int _queued = 0;
+
+  Future<T> run<T>(Future<T> Function() job) async {
+    final behind = _queued > 0 ? _tail.then((_) => SchedulerBinding.instance.endOfFrame) : null;
+    _queued++;
+    final done = Completer<void>();
+    _tail = done.future;
+    try {
+      if (behind != null) await behind;
+      return await job();
+    } finally {
+      _queued--;
+      done.complete();
+    }
+  }
+}
 
 /// The message gone to: a soft wash of the accent for a moment.
 class _JumpMark extends StatelessWidget {
