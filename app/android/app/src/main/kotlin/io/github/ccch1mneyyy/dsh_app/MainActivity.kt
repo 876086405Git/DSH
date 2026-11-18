@@ -8,6 +8,10 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.Surface
+import android.view.SurfaceView
+import android.view.View
+import android.view.ViewGroup
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -147,8 +151,25 @@ class MainActivity : FlutterActivity() {
             else -> if (framesActive) fastest else null
         }
         val target = want?.modeId ?: 0
-        if (window.attributes.preferredDisplayModeId == target) return
-        window.attributes = window.attributes.apply { preferredDisplayModeId = target }
+        if (window.attributes.preferredDisplayModeId != target) {
+            window.attributes = window.attributes.apply { preferredDisplayModeId = target }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val surface = flutterSurface(findViewById<View>(FlutterActivity.FLUTTER_VIEW_ID))
+            if (surface != null && surface.isValid) {
+                surface.setFrameRate(want?.refreshRate ?: 0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+            }
+        }
+    }
+
+    private fun flutterSurface(view: View?): Surface? {
+        if (view is SurfaceView) return view.holder.surface
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                flutterSurface(view.getChildAt(index))?.let { return it }
+            }
+        }
+        return null
     }
 
     override fun onPause() {
