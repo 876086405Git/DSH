@@ -21,6 +21,8 @@ https://gh-proxy.com/https://github.com/876086405Git/DSH/releases/download/coexi
 ```
 
 > Release 标签用 `coexist-` 前缀（`coexist-v1.1.0`），和本仓库插件的 `v1.1.0` 区分开。
+>
+> 1.2.0 的共存包已经构建并在真机验证过（`versionName 1.2.0` / `versionCode 11182154`，见「六、版本基线」），但还没发 Release，所以上面的下载链接仍是 1.1.0。
 
 ---
 > **和本仓库 `main` 分支的关系**：`main` 是「DSH 插件集合」（`plugins/` 下三个独立 DSH 桌面插件），和这个分支**内容零重叠、互不影响**。这个分支是完整的 Android 应用源码，不含任何插件代码。
@@ -77,6 +79,28 @@ SenseVoice 跑在 App 进程里，**不依赖引擎、不依赖系统识别**，
 原因：官方 Release 里的 APK 包名没有 `.coexist` 后缀，下载安装只会**多出一个 App**，不会更新共存版。留着一个点了会装错包的按钮比没有更糟。
 
 开关是构建期 `--dart-define=DSH_COEXIST_BUILD=true`，官方构建不受影响。
+
+### 5. 独有功能一览（官方版没有，合并上游时必查）
+
+官方 changelog（`docs/changelog.md`）只写官方功能。下面这些**只存在于本分支**，每次合并新版本都要逐项确认还在：
+
+| 功能 | 官方版 | 共存版 | 主要代码入口 | 引入提交 |
+|---|---|---|---|---|
+| 包名共存（可与官方同时安装） | ❌ | ✅ `io.github.ccch1mneyyy.dsh_app.coexist` | `app/android/app/build.gradle.kts` | `79640e08` |
+| 内置模型语音（`VoiceMode.offline` 第 6 档） | ❌ | ✅ SenseVoice 跑在 App 里 | `app/lib/state/voice_settings.dart`、`app/android/app/src/main/kotlin/.../SenseVoiceEngine.kt`、本地 AAR | `79640e08`、`52178606` |
+| 提示词增强（✨） | ❌（`v1.1.0` / `v1.2.0` 的 tag 里都没有这些文件） | ✅ 本地直连，没 key 时退回宿主 | `app/lib/state/prompt_enhance_local.dart`、`app/lib/ui/chat/prompt_enhance_button.dart`、`packages/dsh_client/lib/src/prompt_enhance_api.dart`、`runtime/bridge/dsh-go-bridge/lib/prompt-enhance/` | `79640e08` |
+| 内置角色素材（鲸鱼娘） | ❌ 需自己导入素材包 | ✅ 开箱即有 | `app/assets/companion/whale-girl.zip` | `79640e08` |
+| 关闭 App 内更新入口 | — 有更新检查 | ✅ 全部隐藏 | `app/lib/update/update_config.dart`（`coexistBuild`） | `79640e08` |
+
+怎么自己确认（可复现）：
+
+```bash
+git cat-file -e v1.2.0:app/lib/state/prompt_enhance_local.dart
+# 报错 = 官方确实没有这个文件
+
+git diff --stat local/coexist-v2-pre120 HEAD -- app/lib/state/prompt_enhance_local.dart
+# 空 = 合并 v1.2.0 时完全没动过它
+```
 
 ---
 
@@ -159,6 +183,8 @@ flutter build apk --release \
 | **GitHub 直连不通** | `Could not connect to github.com port 443` | 用 `gh-proxy.com` 镜像下载 AAR |
 | **`TARGET_RATE` 访问不了** | `Cannot access 'companion object': it is private` | `private` → `internal` |
 | **模拟器验不了** | `CANNOT LINK EXECUTABLE ".../lib/arm64/libproot.so"` | x86_64 模拟器跑不了 arm64 的 PRoot，**官方包同样如此**；语音与引擎必须在 arm64 真机验 |
+| **官方删了 `VoiceMode.offline`** | 合并 `v1.2.0` 后 `voice_settings_page.dart` 的 switch 非穷尽，编译失败 | 官方 `v1.2.0` 把 `offline` 从枚举里删了；合并时用官方新结构（`wordsForIos` / `harmonyLocal`）再补回 `VoiceMode.offline => l10n.voiceModeOfflineHint` |
+| **l10n 冲突别手改** | 手写并集会把 `app_zh.arb` 写成坏 JSON | 文案不手改：只改 `app/lib/l10n/parts/*.arb`，再跑 `python app/tool/l10n_merge.py` 重新生成 arb 与 `gen/` |
 
 ---
 
@@ -166,10 +192,12 @@ flutter build apk --release \
 
 | 项 | 值 |
 |---|---|
-| 官方基线 | `v1.1.0`（`2e34b4c8`） |
+| 官方基线 | `v1.2.0`（`c1a84e3f`）；本分支合并提交 `3a5308d0` |
 | 本分支 HEAD | 见 `git log` |
-| versionName | `1.1.0` |
-| APK 体积 | 约 685MB |
+| versionName / versionCode | `1.2.0` / `11182154` |
+| APK 体积 / SHA-256 | 685.7 MB / `30f3d8ecff163319f0100d2d0c074295eba4d50c49dc66cdc79075e76a89325d` |
+| 合并前备份分支 | `local/coexist-v2-pre120`（回滚用） |
+| 真机验证 | Redmi 25053RT47C（Android 17 / arm64-v8a）：安装、启动、本机引擎、提示词增强、语音输入均正常 |
 
 ---
 
