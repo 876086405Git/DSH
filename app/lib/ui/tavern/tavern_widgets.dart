@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show max;
 import 'dart:typed_data';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
@@ -42,7 +43,29 @@ class TavernPortrait extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final file = path;
     final Widget body = file != null
-        ? Image.file(File(file), fit: BoxFit.cover, errorBuilder: (_, _, _) => _initial(context))
+        ? LayoutBuilder(
+            builder: (context, box) {
+              // Decoded near the size it is drawn at: a card's picture is
+              // often 1–2k pixels, and a whole shelf of them at full size
+              // overflows the image cache. Twice the box's longer side, so a
+              // picture up to 2:1 the other way still covers it unblurred.
+              final sides = [box.maxWidth, box.maxHeight].where((d) => d.isFinite);
+              final side = sides.isEmpty ? double.infinity : sides.reduce(max) * 2;
+              final ImageProvider picture = side.isFinite
+                  ? ResizeImage(
+                      FileImage(File(file)),
+                      width: (side * MediaQuery.devicePixelRatioOf(context)).ceil(),
+                      height: (side * MediaQuery.devicePixelRatioOf(context)).ceil(),
+                      policy: ResizeImagePolicy.fit,
+                    )
+                  : FileImage(File(file));
+              return Image(
+                image: picture,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _initial(context),
+              );
+            },
+          )
         : _initial(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),

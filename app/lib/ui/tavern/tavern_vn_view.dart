@@ -53,8 +53,20 @@ List<TavernPage> tavernPages(
 ];
 
 /// [m]'s pages from [text]: each paragraph's, markers taken out, each page
-/// carrying the marker in force.
+/// carrying the marker in force. Kept with the message: the view is built
+/// again with each piece of a reply, and only that one has changed.
 List<TavernPage> _messagePages(TavernMessage m, String text, {required bool streaming}) {
+  if (streaming) return _paginate(m, text, streaming: true);
+  final kept = _pagesOf[m];
+  if (kept != null && kept.$1 == text) return kept.$2;
+  final pages = _paginate(m, text, streaming: false);
+  _pagesOf[m] = (text, pages);
+  return pages;
+}
+
+final _pagesOf = Expando<(String, List<TavernPage>)>('tavern pages');
+
+List<TavernPage> _paginate(TavernMessage m, String text, {required bool streaming}) {
   final first = tavernMarkerIn(text);
   String? current;
   return [

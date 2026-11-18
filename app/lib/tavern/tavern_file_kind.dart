@@ -57,18 +57,24 @@ Object? _json(Uint8List bytes) {
   }
 }
 
-/// A PNG `tEXt` chunk keyed `chara` (V2) or `ccv3` (V3).
+/// A PNG `tEXt` chunk keyed `chara` (V2) or `ccv3` (V3). Goes chunk by
+/// chunk: a card is mostly its picture, not worth reading byte by byte.
 bool tavernPngIsCard(List<int> bytes) {
-  bool at(int i, String s) {
-    if (i + s.length > bytes.length) return false;
-    for (var k = 0; k < s.length; k++) {
-      if (bytes[i + k] != s.codeUnitAt(k)) return false;
+  bool keyed(int at, String key) {
+    if (at + key.length + 1 > bytes.length) return false;
+    for (var k = 0; k < key.length; k++) {
+      if (bytes[at + k] != key.codeUnitAt(k)) return false;
     }
-    return true;
+    return bytes[at + key.length] == 0;
   }
 
-  for (var i = 0; i + 8 < bytes.length; i++) {
-    if (at(i, 'tEXtchara\u0000') || at(i, 'tEXtccv3\u0000')) return true;
+  var i = 8; // the signature
+  while (i + 8 <= bytes.length) {
+    final length = bytes[i] << 24 | bytes[i + 1] << 16 | bytes[i + 2] << 8 | bytes[i + 3];
+    final type = String.fromCharCodes(bytes.sublist(i + 4, i + 8));
+    if (type == 'tEXt' && (keyed(i + 8, 'chara') || keyed(i + 8, 'ccv3'))) return true;
+    if (type == 'IEND') return false;
+    i += 12 + length;
   }
   return false;
 }

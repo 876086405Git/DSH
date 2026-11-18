@@ -156,7 +156,7 @@ void main() {
     expect(tavernFileKindOf('c.jsonl', Uint8List(0)), TavernFileKind.chat);
     expect(tavernFileKindOf('notes.txt', Uint8List.fromList(utf8.encode('just words'))), TavernFileKind.unknown);
     // A PNG is a card only with a chara / ccv3 text chunk.
-    final png = Uint8List.fromList([0x89, ...'PNG'.codeUnits, 0, 0, 0, 9, ...'tEXtchara\u0000eyJ9'.codeUnits]);
+    final png = Uint8List.fromList([0x89, ...'PNG'.codeUnits, 13, 10, 26, 10, 0, 0, 0, 9, ...'tEXtchara\u0000eyJ9'.codeUnits]);
     expect(tavernFileKindOf('card.png', png), TavernFileKind.card);
     expect(
       tavernFileKindOf('photo.png', Uint8List.fromList([0x89, ...'PNG'.codeUnits, ...List.filled(20, 0)])),

@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../links/app_links.dart';
+import '../../tavern/tavern_file_kind.dart';
 import '../../tavern/tavern_provider.dart';
 import 'tavern_character_page.dart';
 
@@ -25,7 +26,7 @@ Future<bool> isTavernCardFile(File file, String name) async {
   if (!lower.endsWith('.png') && !lower.endsWith('.json')) return false;
   try {
     final bytes = await file.readAsBytes();
-    if (lower.endsWith('.png')) return _hasCardChunk(bytes);
+    if (lower.endsWith('.png')) return tavernPngIsCard(bytes);
     final json = jsonDecode(utf8.decode(bytes));
     if (json is! Map) return false;
     final spec = json['spec'];
@@ -33,21 +34,6 @@ Future<bool> isTavernCardFile(File file, String name) async {
   } catch (_) {
     return false;
   }
-}
-
-/// A PNG `tEXt` chunk keyed `chara` (V2) or `ccv3` (V3).
-bool _hasCardChunk(List<int> bytes) {
-  bool at(int i, String s) {
-    for (var k = 0; k < s.length; k++) {
-      if (bytes[i + k] != s.codeUnitAt(k)) return false;
-    }
-    return true;
-  }
-
-  for (var i = 0; i + 9 <= bytes.length; i++) {
-    if (bytes[i] == 0x74 && at(i, 'tEXt') && (at(i + 4, 'chara\u0000') || at(i + 4, 'ccv3\u0000'))) return true;
-  }
-  return false;
 }
 
 /// Imports the card in [file] and opens its page; says when it couldn't.
