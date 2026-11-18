@@ -282,10 +282,16 @@ async function realRun(mode, provider) {
       check(past.status === 416, 'public: a range past the end is 416');
     }
 
+    // A rerun refreshes the notes of the published release from the changelog.
+    const releaseFile = join(served, 'gh', tag, '.release.json');
+    writeFileSync(releaseFile, JSON.stringify({ ...JSON.parse(readFileSync(releaseFile, 'utf8')), notes: 'stale' }));
     const again = publish(dist, ['--github'], env);
     const skipped = (again.out.match(/already there/g) ?? []).length;
-    // R2, dl and China: the APK, the patch, SHA256SUMS; GitHub: those and update.json.
-    check(again.code === 0 && skipped === 13, `${mode}: publishing again skips what's there (${skipped} files)`, again.out);
+    // R2, dl and China: the APK, the patch, SHA256SUMS; GitHub: those, while update.json is replaced on a published release.
+    check(again.code === 0 && skipped === 12, `${mode}: publishing again skips what's there (${skipped} files)`, again.out);
+    const reupload = readFileSync(log, 'utf8').split('\n').filter((l) => l.startsWith('gh release upload') && l.includes('--clobber') && l.includes('update.json'));
+    check(reupload.length > 0, `${mode}: publishing again replaces update.json on GitHub`, again.out);
+    check(JSON.parse(readFileSync(releaseFile, 'utf8')).notes === release.notes, `${mode}: publishing again restores the release notes`, again.out);
 
     const apkFile = join(dist, apk);
     appendFileSync(apkFile, 'changed');

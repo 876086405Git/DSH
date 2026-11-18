@@ -62,6 +62,8 @@
 # jq, curl, python3; rclone for resumable R2 uploads (else wrangler); ossutil /
 # coscli; gh.
 set -euo pipefail
+# Python's stdio defaults to the ANSI code page on Windows (GBK here); 1.1.0's Chinese notes came out garbled.
+export PYTHONUTF8=1
 
 usage() {
   echo "usage: CF_TOKEN_FILE=<file> $0 <dist dir> [--dry-run] [--github] [--no-dl] [--no-cn] [--no-latest] [--skip-verify]" >&2
@@ -310,7 +312,8 @@ step "1/5 R2 $BUCKET/beta/$VERSION/$([[ $DL_ON == 1 ]] && echo ", $DL_BUCKET/dow
 # Already up? Same size: skip it (step 4 still checks the bytes). Another size: refuse.
 up() { # URL NAME [curl args…]
   local code length
-  read -r code length < <(curl -sS --retry 5 --retry-all-errors -o /dev/null -I "${@:3}" -w '%{http_code} %header{content-length}\n' "$1" || echo "000 -")
+  # tr: Windows builds of curl end -w output with \r\n.
+  read -r code length < <({ curl -sS --retry 5 --retry-all-errors -o /dev/null -I "${@:3}" -w '%{http_code} %header{content-length}\n' "$1" || echo "000 -"; } | tr -d '\r')
   [[ "$code" == 200 ]] || return 1
   [[ "$length" == "${SIZE[$2]}" ]] || die "$1 is already up with another size; publish a new version"
   note "already there: $2"
@@ -338,8 +341,14 @@ r2_put() { # BUCKET KEY FILE CONTENT-TYPE [CACHE-CONTROL]
       return
     fi
     if [[ -z "$R2_ID" ]]; then
-      R2_ID=$(curl -sS --retry 3 -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$CF_TOKEN_FILE")") \
-        https://api.cloudflare.com/client/v4/user/tokens/verify | jq -r '.result.id // empty')
+      # Header via `-K -` (stdin), not `-H @<(…)`: Git Bash's native curl can't open /proc/…/fd.
+      # User tokens verify at /user/…, account-owned tokens only at /accounts/<id>/….
+      local verify
+      for verify in user "accounts/$ACCOUNT"; do
+        R2_ID=$(printf 'header = "Authorization: Bearer %s"\n' "$(tr -d '[:space:]' <"$CF_TOKEN_FILE")" |
+          curl -sS --retry 3 -K - "https://api.cloudflare.com/client/v4/$verify/tokens/verify" | jq -r '.result.id // empty')
+        [[ -n "$R2_ID" ]] && break
+      done
       [[ -n "$R2_ID" ]] || die "can't derive R2 S3 credentials from the token"
     fi
     RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
@@ -445,8 +454,15 @@ if [[ $GITHUB == 1 ]]; then
     for path in "${GH_PATHS[@]}"; do
       name=$(basename "$path")
       have=$(jq -r --arg n "$name" '[.assets[] | select(.name == $n) | .size][0] // empty' <<<"$info")
+      digest=$(jq -r --arg n "$name" '[.assets[] | select(.name == $n) | .digest][0] // empty' <<<"$info")
       if [[ -z "$have" ]]; then missing+=("$path")
-      elif [[ "$have" != "$(stat -c %s "$path")" ]]; then
+      elif [[ $GH_DRAFT == 0 && -n "${SHA[$name]:-}" && -z "$digest" ]]; then
+        die "$TAG: no digest for the published $name, so it can't be checked before update.json is replaced (older gh such as 2.65 leaves asset digests out of \`release view --json assets\`: upgrade gh)"
+      elif [[ $GH_DRAFT == 0 && $name == update.json ]]; then
+        # update.json only carries metadata (notes, routes): a published release always takes the current one.
+        replace+=("$path")
+      elif [[ "$have" != "$(stat -c %s "$path")" ]] ||
+           [[ $GH_DRAFT == 0 && -n "${SHA[$name]:-}" && -n "$digest" && "$digest" != "sha256:${SHA[$name]}" ]]; then
         [[ $GH_DRAFT == 1 ]] || die "$TAG is published with another $name; publish a new version"
         replace+=("$path")
       else note "already there: $name"
@@ -454,6 +470,8 @@ if [[ $GITHUB == 1 ]]; then
     done
     if ((${#missing[@]})); then run_gh release upload "$TAG" "${missing[@]}" --repo "$REPO" || die "gh release upload failed"; fi
     if ((${#replace[@]})); then run_gh release upload "$TAG" "${replace[@]}" --repo "$REPO" --clobber || die "gh release upload failed"; fi
+    # Rerunning on a published release refreshes its notes from the changelog.
+    if [[ $GH_DRAFT == 0 ]]; then run_gh release edit "$TAG" --repo "$REPO" --notes-file "$TMP/gh-notes.md" >/dev/null || die "updating the release notes failed"; fi
   fi
 fi
 
@@ -465,7 +483,7 @@ h, n = hashlib.sha256(), 0
 for block in iter(lambda: sys.stdin.buffer.read(1 << 20), b""):
     h.update(block)
     n += len(block)
-print(h.hexdigest(), n)'; }
+sys.stdout.buffer.write(f"{h.hexdigest()} {n}\n".encode())'; }  # bytes: print() ends lines with \r\n on Windows
 check() { # LABEL NAME (curl args…) → dies unless the bytes match dist
   local label=$1 name=$2 got got_size attempt
   shift 2
@@ -521,7 +539,7 @@ if [[ $GITHUB == 1 && $LATEST == 1 ]]; then
   if [[ $DRY == 1 ]]; then plan "GET bytes 0-0 of $GITHUB_DOWNLOAD_BASE/$TAG/$ARM64 (following redirects): of ${SIZE[$ARM64]}"
   else
     for attempt in 1 2 3 4 5 6; do
-      read -r code range < <(curl -sS -L -r 0-0 -o /dev/null --retry 3 -w '%{http_code} %header{content-range}\n' "$GITHUB_DOWNLOAD_BASE/$TAG/$ARM64" || echo "000 -")
+      read -r code range < <({ curl -sS -L -r 0-0 -o /dev/null --retry 3 -w '%{http_code} %header{content-range}\n' "$GITHUB_DOWNLOAD_BASE/$TAG/$ARM64" || echo "000 -"; } | tr -d '\r')
       [[ "$code" == 206 && "${range##*/}" == "${SIZE[$ARM64]}" ]] && break
       [[ $attempt == 6 ]] && die "$GITHUB_DOWNLOAD_BASE/$TAG/$ARM64 answers $code ($range)"
       sleep 5

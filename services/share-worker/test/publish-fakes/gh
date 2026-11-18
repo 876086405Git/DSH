@@ -3,6 +3,7 @@
 on ccch1mneyyy/dsh-go only. Drafts live in $FAKE_GH_ROOT/_drafts/<tag>/ (not
 public); `edit --draft=false` moves them to $FAKE_GH_ROOT/<tag>/, which the
 static server publishes like GitHub's releases/download/. Logged to $FAKE_LOG."""
+import hashlib
 import json
 import os
 import shutil
@@ -47,7 +48,11 @@ if cmd == "view":
     if not d:
         print("release not found", file=sys.stderr)
         sys.exit(1)
-    assets = [{"name": n, "size": os.path.getsize(os.path.join(d, n))} for n in sorted(os.listdir(d)) if n != ".release.json"]
+    def asset(n):
+        path = os.path.join(d, n)
+        digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        return {"name": n, "size": os.path.getsize(path), "digest": "sha256:" + digest}
+    assets = [asset(n) for n in sorted(os.listdir(d)) if n != ".release.json"]
     print(json.dumps({"isDraft": draft, "assets": assets}))
 elif cmd == "create":
     assert not d, "release exists"
@@ -69,6 +74,13 @@ elif cmd == "download":
     assert d, "no release"
     name = rest[rest.index("--pattern") + 1]
     shutil.copyfile(os.path.join(d, name), os.path.join(rest[rest.index("--dir") + 1], name))
+elif cmd == "edit" and "--notes-file" in rest:
+    # A rerun on a published release refreshes its notes.
+    assert d and not draft, "notes edit on a draft"
+    meta = os.path.join(d, ".release.json")
+    release = json.load(open(meta, encoding="utf-8"))
+    release["notes"] = open(rest[rest.index("--notes-file") + 1], encoding="utf-8").read()
+    json.dump(release, open(meta, "w", encoding="utf-8"), ensure_ascii=False)
 elif cmd == "edit":
     assert d and draft and "--draft=false" in rest
     shutil.move(d, os.path.join(ROOT, tag))
