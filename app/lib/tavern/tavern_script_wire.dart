@@ -559,7 +559,20 @@ TavernScriptOwner _owner(Map<String, Object?> json, String method) {
     kind: _enum(TavernScriptOwnerKind.values, p.string('kind'), 'script.kind', method),
     scriptId: p.string('scriptId'),
     assetId: p.stringOrNull('assetId'),
+    presetCarrier: p.has('presetCarrier') ? _carrier(p.object('presetCarrier'), method) : null,
   );
+}
+
+TavernScriptPresetCarrier _carrier(Map<String, Object?> json, String method) {
+  final p = _Params(method, json);
+  final chatId = p.stringOrNull('chatId');
+  return switch (_enum(TavernScriptPresetCarrierKind.values, p.string('kind'), 'presetCarrier.kind', method)) {
+    TavernScriptPresetCarrierKind.inline => TavernScriptPresetCarrier.inline(chatId: chatId),
+    TavernScriptPresetCarrierKind.working => TavernScriptPresetCarrier.working(
+      chatId: chatId,
+      workingId: p.string('workingId'),
+    ),
+  };
 }
 
 TavernScriptMessageRef _ref(Map<String, Object?> json, String method) {
@@ -699,8 +712,15 @@ Map<String, Object?> _mutation(TavernScriptMutation m) => {
   'refresh': m.refresh.name,
 };
 
-Map<String, Object?>? _ownerJson(TavernScriptOwner? o) =>
-    o == null ? null : {'kind': o.kind.name, 'scriptId': o.scriptId, 'assetId': o.assetId};
+Map<String, Object?>? _ownerJson(TavernScriptOwner? o) => o == null ? null : tavernScriptOwnerJson(o);
+
+/// [o] as the wire gives it; a preset's carrier only when it has one.
+Map<String, Object?> tavernScriptOwnerJson(TavernScriptOwner o) => {
+  'kind': o.kind.name,
+  'scriptId': o.scriptId,
+  'assetId': o.assetId,
+  'presetCarrier': ?o.presetCarrier?.toJson(),
+};
 
 Map<String, Object?> tavernScriptRefJson(TavernScriptMessageRef r) => {'chatId': r.chatId, 'nodeId': r.nodeId};
 
@@ -819,3 +839,14 @@ Map<String, Object?> tavernScriptMessageJson(TavernScriptMessage m) => {
       },
   ],
 };
+
+/// The app's key for the script [o] names, whole: the same script id in the
+/// global library, a preset and a card are three scripts.
+String tavernScriptKey(TavernScriptOwner o) => jsonEncode([
+  o.kind.name,
+  o.assetId,
+  o.scriptId,
+  o.presetCarrier?.kind.name,
+  o.presetCarrier?.chatId,
+  o.presetCarrier?.workingId,
+]);

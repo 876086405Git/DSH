@@ -24111,6 +24111,74 @@ class L10nZh extends L10n {
   String get tavernPackExportChanged => '导出的来源或选项变了，请重新预览';
 
   @override
+  String get tavernScripts => '脚本库';
+
+  @override
+  String get tavernScriptsEmpty => '还没有全局脚本。导入酒馆助手导出的脚本 JSON，打开的脚本会在每个对话的整页画布里运行。';
+
+  @override
+  String get tavernScriptsImport => '导入脚本';
+
+  @override
+  String tavernScriptsImported(int count) {
+    return '$count 个脚本加入了脚本库';
+  }
+
+  @override
+  String get tavernScriptsExportAll => '导出全部';
+
+  @override
+  String get tavernScriptsOrder => '调整顺序';
+
+  @override
+  String get tavernScriptsOrderNote => '从上到下依次运行，拖动右边的把手调整。';
+
+  @override
+  String tavernScriptCount(int count) {
+    return '$count 个';
+  }
+
+  @override
+  String get tavernScriptUnnamed => '未命名脚本';
+
+  @override
+  String get tavernScriptOpenFolder => '打开文件夹';
+
+  @override
+  String get tavernScriptExport => '导出';
+
+  @override
+  String get tavernScriptDelete => '删除';
+
+  @override
+  String tavernScriptDeleteTitle(String name) {
+    return '删除「$name」？';
+  }
+
+  @override
+  String get tavernScriptDeleteMessage => '它的变量和按钮会一起删除，找不回来。';
+
+  @override
+  String get tavernChatScripts => '脚本';
+
+  @override
+  String get tavernChatScriptsNote => '这段对话在整页画布里运行的脚本，按运行顺序。';
+
+  @override
+  String get tavernScriptSourceGlobal => '全局';
+
+  @override
+  String get tavernScriptSourcePreset => '预设';
+
+  @override
+  String get tavernScriptSourceCard => '卡';
+
+  @override
+  String tavernChatScriptsSkipped(int count) {
+    return '$count 个脚本没有运行';
+  }
+
+  @override
   String get updateCheck => '检查更新';
 
   @override

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dsh_app/tavern/tavern_canvas_calls.dart';
 import 'package:dsh_app/tavern/tavern_card_scripts.dart';
 import 'package:dsh_app/tavern/tavern_provider.dart';
+import 'package:dsh_app/tavern/tavern_script_wire.dart';
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,73 +33,6 @@ Map<String, Object?> _script(
 };
 
 void main() {
-  test("a card's scripts that run: enabled, with code, in the tree's order, not under a folder that is off", () {
-    final card = _card({
-      'tavern_helper': {
-        'scripts': [
-          _script(
-            'a',
-            name: '状态栏',
-            button: {
-              'enabled': true,
-              'buttons': [
-                {'name': '前往', 'visible': true},
-                {'name': '藏起来的', 'visible': false},
-                {'name': '', 'visible': true},
-              ],
-            },
-          ),
-          _script('off', enabled: false),
-          _script('blank', content: '   '),
-          {
-            'type': 'folder',
-            'enabled': true,
-            'name': '工具',
-            'id': 'f1',
-            'scripts': [
-              _script('b'),
-              {
-                'type': 'folder',
-                'enabled': false,
-                'name': '关着',
-                'id': 'f2',
-                'scripts': [_script('hidden')],
-              },
-            ],
-          },
-          _script(
-            'c',
-            button: {
-              'enabled': false,
-              'buttons': [
-                {'name': '不显示', 'visible': true},
-              ],
-            },
-          ),
-          'not a script',
-          {'type': 'script', 'id': 'no-content', 'enabled': true},
-        ],
-      },
-    });
-    final scripts = tavernCardScripts(card);
-    expect([for (final s in scripts) s.id], ['a', 'b', 'c']);
-    expect(scripts.first.name, '状态栏');
-    expect(scripts.first.buttons, ['前往']);
-    expect(scripts.last.buttons, isEmpty);
-    expect(scripts.first.toJson(), {
-      'id': 'a',
-      'name': '状态栏',
-      'content': 'console.log(1);',
-      'buttons': ['前往'],
-      'buttonList': [
-        {'name': '前往', 'visible': true},
-        {'name': '藏起来的', 'visible': false},
-      ],
-    });
-    // Off as a whole, its buttons are still the script's (getScriptButtons).
-    expect([for (final b in scripts.last.buttonList) b.name], ['不显示']);
-  });
-
   test('a card uses MVU when it says so, or anything in it loads MagVarUpdate', () {
     expect(tavernUsesMvu(null), isFalse);
     expect(tavernUsesMvu({'name': '林晚'}), isFalse);
@@ -126,48 +60,7 @@ void main() {
     );
   });
 
-  test('the older place for them is read too; a card without any has none', () {
-    expect(
-      [
-        for (final s in tavernCardScripts(
-          _card({
-            'TavernHelper_scripts': [_script('old')],
-          }),
-        ))
-          s.id,
-      ],
-      ['old'],
-    );
-    // The newer place wins when both are there.
-    expect(
-      [
-        for (final s in tavernCardScripts(
-          _card({
-            'tavern_helper': {
-              'scripts': [_script('new')],
-            },
-            'TavernHelper_scripts': [_script('old')],
-          }),
-        ))
-          s.id,
-      ],
-      ['new'],
-    );
-    expect(tavernCardScripts(_card({})), isEmpty);
-    expect(tavernCardScripts({'name': 'v1 card'}), isEmpty);
-    expect(tavernCardScripts(null), isEmpty);
-    // Fields at the top (no data wrapper) are read as well.
-    expect(
-      tavernCardScripts({
-        'extensions': {
-          'TavernHelper_scripts': [_script('top')],
-        },
-      }).single.id,
-      'top',
-    );
-  });
-
-  test("the scripts come back from the engine's own copy of the card", () async {
+  test("a chat's scripts come from the engine: global, then the card's; the same id in both is two scripts", () async {
     final dir = await Directory.systemTemp.createTemp('card-scripts');
     final tavern = await openTavern(dir.path);
     addTearDown(() async {
@@ -181,12 +74,48 @@ void main() {
       },
     });
     final id = (await tavern.importCard(utf8.encode(jsonEncode(card)), fileName: 'card.json')).id;
+    await tavern.importGlobalScripts(jsonEncode(_script('s1', name: '全局')));
+    final chat = await tavern.createChat(id);
     final container = ProviderContainer(overrides: [tavernProvider.overrideWithValue(tavern)]);
     addTearDown(container.dispose);
-    final sub = container.listen(tavernCardScriptsProvider(id), (_, _) {});
+    final sub = container.listen(tavernChatScriptsProvider((chat, id)), (_, _) {});
     addTearDown(sub.close);
-    final scripts = await container.read(tavernCardScriptsProvider(id).future);
-    expect(scripts, [const TavernCardScript(id: 's1', name: '变量初始化', content: 'await initVars();')]);
+    final chosen = await container.read(tavernChatScriptsProvider((chat, id)).future);
+    expect(
+      [for (final s in chosen.scripts) (s.owner.kind, s.name)],
+      [(TavernScriptOwnerKind.global, '全局'), (TavernScriptOwnerKind.character, '变量初始化')],
+    );
+    final [global, own] = chosen.scripts;
+    expect(tavernScriptKey(global.owner), isNot(tavernScriptKey(own.owner)));
+    expect(tavernScriptJson(own), containsPair('owner', {'kind': 'character', 'scriptId': 's1', 'assetId': id}));
+
+    // Each one's buttons are kept on its own owner, through its own context.
+    final calls = TavernCanvasCalls(tavern.scripts, chatId: chat, characterId: () => id)..setScripts(chosen);
+    addTearDown(calls.close);
+    Future<Map<String, Object?>> buttons(TavernRunnableScript s, String name) => calls.handle({
+      'id': name,
+      'method': 'replaceScriptButtons',
+      'params': {
+        'asScript': tavernScriptKey(s.owner),
+        'buttons': [
+          {'name': name, 'visible': true},
+        ],
+      },
+    });
+    expect((await buttons(global, '全局按钮'))['ok'], isTrue);
+    expect((await buttons(own, '卡按钮'))['ok'], isTrue);
+    final after = await tavern.chatScripts(chat, characterId: id);
+    expect(
+      [for (final s in after.scripts) tavernScriptButtons(s)],
+      [
+        ['全局按钮'],
+        ['卡按钮'],
+      ],
+    );
+    // A script the page no longer runs: its context is gone, not reopened.
+    calls.setScripts(TavernChatScripts(chatId: chat, characterId: id, scripts: [own]));
+    expect(((await buttons(global, 'x'))['error']! as Map)['code'], 'closedContext');
+
     // The card's fields themselves, for the page's character questions.
     final dataSub = container.listen(tavernCardDataProvider(id), (_, _) {});
     addTearDown(dataSub.close);
@@ -203,7 +132,7 @@ void main() {
   });
 
   test(
-    "a script's own variables, asked for by the page by script alone: on this character's card, kept there",
+    "a script's own variables, asked for by the page by its whole owner: on this character's card, kept there",
     () async {
       final dir = await Directory.systemTemp.createTemp('card-script-vars');
       final tavern = await openTavern(dir.path);
@@ -225,9 +154,9 @@ void main() {
       final chat = await tavern.createChat(id);
       final calls = TavernCanvasCalls(tavern.scripts, chatId: chat, characterId: () => id);
       addTearDown(calls.close);
-      const target = {
+      final target = {
         'scope': 'script',
-        'scriptOwner': {'kind': 'character', 'scriptId': 's1'},
+        'scriptOwner': {'kind': 'character', 'scriptId': 's1', 'assetId': id},
       };
       final read = await calls.handle({
         'id': 1,

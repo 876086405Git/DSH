@@ -336,6 +336,27 @@ void main() {
     final book = await deferred.importLorebook('{"entries": {"0": {"content": "x"}}}', fileName: 'w.json');
     expect((await deferred.listLorebooks()).single.id, book.book.id);
   });
+
+  test('the script library waits for the tavern to open; its watches start then', () async {
+    final opening = Completer<Tavern>();
+    final deferred = DeferredTavern(opening.future);
+    final library = deferred.watchGlobalScripts().firstWhere((l) => l.isNotEmpty);
+    final running = deferred.watchChatScripts('c1', characterId: 'x').firstWhere((c) => c.scripts.isNotEmpty);
+    final imported = deferred.importGlobalScripts(
+      '{"type":"script","id":"s1","name":"状态栏","enabled":true,"content":"x"}',
+    );
+
+    opening.complete(PreviewTavern(tick: Duration.zero));
+    expect((await imported).single.id, 's1');
+    expect((await library).single.name, '状态栏');
+    final chosen = await running;
+    expect((chosen.characterId, chosen.scripts.single.owner.scriptId), ('x', 's1'));
+    await deferred.setGlobalScriptEnabled('s1', false);
+    expect((await deferred.chatScripts('c1')).scripts, isEmpty);
+    expect(await deferred.exportGlobalScripts(id: 's1'), contains('"enabled":false'));
+    await deferred.deleteGlobalScript('s1');
+    expect(await deferred.listGlobalScripts(), isEmpty);
+  });
 }
 
 /// A host that never answers: only its presence is looked at.

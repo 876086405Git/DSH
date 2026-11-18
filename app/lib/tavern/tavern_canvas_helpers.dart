@@ -307,29 +307,29 @@ const _js = r'''
   });}
   share('replaceTavernRegexes',watched(replaceTavernRegexes));share('updateTavernRegexesWith',watched(updateTavernRegexesWith));
 
-  // A card script's buttons (the app shows them over the composer): kept on
-  // the script in the card; a press is the event getButtonEvent names.
+  // A script's buttons (the app shows them over the composer): kept on its
+  // owner, by its key; a press is the event getButtonEvent names.
   var buttons={};
   function buttonScript(id){
     var s=id==null?callerScript():scriptById(String(id));
-    if(!s)throw new Error('Buttons are a card script\'s own: called from one, or by its script_id');
-    if(!buttons[s.id])buttons[s.id]=clone(s.buttonList||[]);
+    if(!s)throw new Error('Buttons are a script\'s own: called from one, or by its script_id');
+    if(!buttons[s.key])buttons[s.key]=clone(s.buttonList||[]);
     return s;
   }
-  function tellButtons(id){
-    post({type:'buttons',scriptId:id,names:buttons[id].filter(function(b){return b.visible;}).map(function(b){return b.name;})});
+  function tellButtons(key){
+    post({type:'buttons',key:key,names:buttons[key].filter(function(b){return b.visible;}).map(function(b){return b.name;})});
   }
   function asButtons(list){
     return [].concat(list||[]).map(function(b){return typeof b==='string'?{name:b,visible:true}:{name:String(b.name),visible:b.visible!==false};});
   }
-  function getScriptButtons(id){return clone(buttons[buttonScript(id).id]);}
+  function getScriptButtons(id){return clone(buttons[buttonScript(id).key]);}
   function setButtons(s,list){
-    var before=buttons[s.id],mine=buttons[s.id]=list;tellButtons(s.id);
-    return call('replaceScriptButtons',{asScript:s.id,buttons:list}).then(function(r){
-      if(buttons[s.id]===mine){buttons[s.id]=r.buttons;tellButtons(s.id);}
+    var before=buttons[s.key],mine=buttons[s.key]=list;tellButtons(s.key);
+    return call('replaceScriptButtons',{asScript:s.key,buttons:list}).then(function(r){
+      if(buttons[s.key]===mine){buttons[s.key]=r.buttons;tellButtons(s.key);}
     },function(e){
       // Not kept: the ones that were, back.
-      if(buttons[s.id]===mine){buttons[s.id]=before;tellButtons(s.id);}
+      if(buttons[s.key]===mine){buttons[s.key]=before;tellButtons(s.key);}
       throw e;
     });
   }
@@ -337,15 +337,15 @@ const _js = r'''
     var s=b===undefined?buttonScript():buttonScript(a);return setButtons(s,asButtons(b===undefined?a:b));
   });}
   function appendInexistentScriptButtons(a,b){return attempt(function(){
-    var s=b===undefined?buttonScript():buttonScript(a),now=buttons[s.id].slice(),have={};
+    var s=b===undefined?buttonScript():buttonScript(a),now=buttons[s.key].slice(),have={};
     now.forEach(function(x){have[x.name]=true;});
     asButtons(b===undefined?a:b).forEach(function(x){if(!have[x.name]){have[x.name]=true;now.push(x);}});
     return setButtons(s,now);
   });}
   function updateScriptButtonsWith(updater,id){return attempt(function(){
-    var s=buttonScript(id),now=clone(buttons[s.id]);
+    var s=buttonScript(id),now=clone(buttons[s.key]);
     return Promise.resolve(updater(now)).then(function(n){
-      var list=asButtons(n===undefined?now:n);return setButtons(s,list).then(function(){return clone(buttons[s.id]);});
+      var list=asButtons(n===undefined?now:n);return setButtons(s,list).then(function(){return clone(buttons[s.key]);});
     });
   });}
   share('getScriptButtons',getScriptButtons);share('replaceScriptButtons',watched(replaceScriptButtons));
