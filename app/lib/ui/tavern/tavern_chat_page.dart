@@ -2558,9 +2558,9 @@ Widget _beside(Widget? stage, Widget story) => stage == null
 final tavernShownTextProvider = FutureProvider.autoDispose.family<String, (String, String, String)>((ref, key) async {
   final (chatId, nodeId, text) = key;
   final tavern = ref.watch(tavernProvider);
-  return ref.watch(_displayQueueProvider).run(() async {
-    // Its row went before its turn came: nothing to show it in.
-    if (!ref.mounted) return text;
+  // Its row gone before its turn came: nothing to show it in, so no pass and
+  // no frame waited for.
+  return ref.watch(_displayQueueProvider).run(alive: () => ref.mounted, orElse: text, () async {
     final shown = await tavern.displayText(chatId, nodeId: nodeId, text: text);
     return shown.superseded ? text : shown.text;
   });
@@ -2575,13 +2575,18 @@ class _DisplayQueue {
   Future<void> _tail = Future<void>.value();
   int _queued = 0;
 
-  Future<T> run<T>(Future<T> Function() job) async {
-    final behind = _queued > 0 ? _tail.then((_) => SchedulerBinding.instance.endOfFrame) : null;
+  Future<T> run<T>(Future<T> Function() job, {required bool Function() alive, required T orElse}) async {
+    final behind = _queued > 0 ? _tail : null;
     _queued++;
     final done = Completer<void>();
     _tail = done.future;
     try {
-      if (behind != null) await behind;
+      if (behind != null) {
+        await behind;
+        if (!alive()) return orElse;
+        await SchedulerBinding.instance.endOfFrame;
+      }
+      if (!alive()) return orElse;
       return await job();
     } finally {
       _queued--;
@@ -2820,11 +2825,12 @@ class _StreamingReply extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: stream,
-    // Its words go by [live] (a display pass at most every 120 ms), not by
-    // each piece: a long reply is not laid out again a hundred times.
-    child: ListenableBuilder(
+    // Its words are laid out again at most every 50 ms, not with each piece
+    // ([live] passes the text on as it comes while the display regex changes
+    // nothing): a long reply is not parsed again a hundred times.
+    child: _EveryBeat(
       listenable: live,
-      builder: (context, _) {
+      builder: (context) {
         final shown = live.shown;
         if (shown.isEmpty) return const SizedBox.shrink();
         // Component tags turn into cards once the reply is in; while it is
@@ -2870,6 +2876,65 @@ class _StreamingReply extends StatelessWidget {
       );
     },
   );
+}
+
+/// Builds again when [listenable] changes, at most once every [beat]; the
+/// last change always gets its build.
+class _EveryBeat extends StatefulWidget {
+  const _EveryBeat({required this.listenable, required this.builder});
+
+  static const beat = Duration(milliseconds: 50);
+
+  final Listenable listenable;
+  final WidgetBuilder builder;
+
+  @override
+  State<_EveryBeat> createState() => _EveryBeatState();
+}
+
+class _EveryBeatState extends State<_EveryBeat> {
+  Timer? _resting;
+  bool _missed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.listenable.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(_EveryBeat old) {
+    super.didUpdateWidget(old);
+    if (old.listenable != widget.listenable) {
+      old.listenable.removeListener(_changed);
+      widget.listenable.addListener(_changed);
+    }
+  }
+
+  void _changed() {
+    if (_resting != null) {
+      _missed = true;
+      return;
+    }
+    setState(() {});
+    _resting = Timer(_EveryBeat.beat, () {
+      _resting = null;
+      if (_missed && mounted) {
+        _missed = false;
+        _changed();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.listenable.removeListener(_changed);
+    _resting?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
 }
 
 /// How long the model has thought: from the first second, after the label;
