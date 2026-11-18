@@ -93,7 +93,7 @@ internal class ManagedSkillRequest private constructor(
         const val MAX_FILES = 64
         const val MAX_FILE_BYTES = 512 * 1024
         const val MAX_BYTES = 1024 * 1024
-        private val names = setOf("dsh-go-ui", "dsh-go-plugin", "dsh-go-guide", "dsh-go-support", "companion-adapt")
+        private val names = setOf("dsh-go-ui", "dsh-go-plugin", "dsh-go-guide", "dsh-go-support", "companion-adapt", "pet-theme")
         private val path = Regex("^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$")
 
         /** Cheap bounded checks on the main thread; UTF-8 encoding happens on the runtime worker. */
