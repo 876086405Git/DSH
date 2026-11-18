@@ -7,6 +7,40 @@ import 'package:dsh_tavern/src/regex_library.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('worker inspection preserves findings counts and fingerprint', () async {
+    final document = <String, Object?>{
+      'data': {
+        'name': 'Sample',
+        'first_mes': '<div>{{user}}</div>',
+        'extensions': {
+          'regex_scripts': [_rule()],
+        },
+        'character_book': {
+          'entries': [
+            {
+              'keys': ['sample'],
+              'content': 'A short entry.',
+            },
+          ],
+        },
+      },
+    };
+    final checkedAt = DateTime.utc(2026, 11, 18);
+    final expected = assessImport(
+      kind: TavernImportKind.character,
+      document: document,
+      embeddedAssetPaths: ['portrait.png'],
+      checkedAt: checkedAt,
+    );
+    final actual = await assessImportAsync(
+      kind: TavernImportKind.character,
+      document: document,
+      embeddedAssetPaths: ['portrait.png'].map((value) => value),
+      checkedAt: checkedAt,
+    );
+    expect(actual.toJson(), expected.toJson());
+  });
+
   test('empty valid assets keep usable verdicts without invented features', () {
     for (final entry in <TavernImportKind, Map<String, Object?>>{
       TavernImportKind.character: {'data': <String, Object?>{}},

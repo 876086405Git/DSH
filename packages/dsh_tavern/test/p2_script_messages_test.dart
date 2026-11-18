@@ -8,6 +8,187 @@ import 'package:test/test.dart';
 import 'p2_script_test_support.dart';
 
 void main() {
+  test('message-only cache updates retain detached snapshots and send only changed rows', () async {
+    final h = await ScriptFixture.open();
+    final character = await h.card('Cached rows', description: 'Unchanged authority');
+    final chat = await h.emptyChat(character);
+    final host = ScriptHost();
+    h.bridge.attachHost(host);
+    final context = await h.context(chat, characterId: character);
+    await h.bridge.createChatMessages(context.id, [
+      for (var index = 0; index < 3; index++)
+        TavernScriptMessageDraft(
+          role: TavernScriptRole.assistant,
+          message: 'row-$index',
+          data: {'n': index},
+          extra: {
+            'foreign': [index],
+          },
+        ),
+    ], options: const TavernScriptWriteOptions(refresh: TavernScriptRefresh.none));
+    final before = await h.bridge.snapshot(context.id);
+    final resources = before.resourceRefs;
+    scriptMap(scriptMap(before.resourceRefs['characterData'])['data'])['description'] = 'caller mutation';
+    before.messages.first.data!['n'] = -1;
+    (before.messages.first.extra['foreign']! as List<Object?>).add('caller mutation');
+    scriptMap(before.messages.first.swipes.single.info['extra'])['foreign'] = 'caller mutation';
+    host.deliveries.clear();
+    await h.bridge.setChatMessages(context.id, [
+      TavernScriptMessagePatch(
+        messageId: 1,
+        fields: {
+          'message': 'edited middle',
+          'data': {'n': 10},
+          'hidden': true,
+        },
+      ),
+    ], options: const TavernScriptWriteOptions(refresh: TavernScriptRefresh.none));
+    final after = await h.bridge.snapshot(context.id);
+    expect(after.messages.map((value) => value.message), ['row-0', 'edited middle', 'row-2']);
+    expect(after.messages.map((value) => value.data), [
+      {'n': 0},
+      {'n': 10},
+      {'n': 2},
+    ]);
+    expect(after.messages[1].hidden, isTrue);
+    expect(after.messages.first.extra, {
+      'foreign': [0],
+    });
+    expect(scriptMap(after.messages.first.swipes.single.info['extra']), {
+      'foreign': [0],
+    });
+    expect(before.messages[1].message, 'row-1');
+    expect(before.messages[1].data, {'n': 1});
+    expect(before.messages[1].hidden, isFalse);
+    expect(after.resourceRefs, resources);
+    final deltas = host.deliveries
+        .where((value) => value.kind == TavernScriptDispatchKind.cache)
+        .map((value) => value.delta!);
+    expect(deltas.expand((value) => value.upsertMessages).map((value) => value.ref), [before.messages[1].ref]);
+    expect(deltas.every((value) => value.resourceRefs.isEmpty), isTrue);
+    await h.bridge.replaceVariables(
+      context.id,
+      TavernVariableTarget(scope: TavernVariableScope.message, messageRef: before.messages.first.ref),
+      {'n': 7},
+    );
+    final stateOnly = await h.bridge.snapshot(context.id);
+    expect(stateOnly.messages.first.message, 'row-0');
+    expect(stateOnly.messages.first.data, {'n': 7});
+    expect(stateOnly.messages.first.swipes.single.data, {'n': 7});
+    expect(before.messages.first.data, {'n': 0});
+    h.expectNoGeneration();
+  });
+
+  test('script read projections preserve imported shapes and full write evidence', () async {
+    final h = await ScriptFixture.open();
+    final character = await h.card('Imported projections');
+    final document = StChatDocument(
+      fileName: 'projection.jsonl',
+      header: {'user_name': 'User', 'character_name': 'Imported projections', 'chat_metadata': {}},
+      messages: [
+        {'name': 'User', 'is_user': true, 'mes': 'absent variables', 'extra': {}},
+        {
+          'name': 'User',
+          'is_user': true,
+          'mes': 'explicit null',
+          'variables': [null],
+          'extra': {},
+        },
+        {
+          'name': '\ufeffSpeaker',
+          'is_user': false,
+          'mes': '\ufeffselected',
+          'swipes': ['alternate', '\ufeffselected'],
+          'swipe_id': 1,
+          'variables': [
+            ['opaque'],
+            {'n': 2},
+          ],
+          'swipe_info': [
+            {
+              'send_date': null,
+              'gen_started': false,
+              'unknown': ['alternate'],
+              'extra': {'foreign': 'alternate'},
+            },
+            {
+              'unknown': ['selected'],
+              'send_date': 'overridden',
+              'gen_started': 'not present at top',
+            },
+          ],
+          'send_date': null,
+          'gen_finished': [1, 'opaque'],
+          'vendor': {'must': 'survive the write'},
+          'extra': {
+            'foreign': ['selected'],
+            'dshgo': {
+              'inspection': {'foreignEvidence': 'retain'},
+            },
+          },
+        },
+      ],
+    );
+    final chat = (await h.engine.importChats(character, [
+      TavernChatFile(fileName: document.fileName, bytes: document.encode()),
+    ])).chatIds.single;
+    final context = await h.context(chat, characterId: character);
+    final snapshot = await h.bridge.snapshot(context.id);
+    expect(snapshot.messages.first.hasData, isFalse);
+    expect(snapshot.messages[1].hasData, isTrue);
+    expect(snapshot.messages[1].rawData, isNull);
+    expect(snapshot.messages[1].dataIssue?.actualKind, 'null');
+    final selected = snapshot.messages.last;
+    expect([selected.name, selected.message], ['\ufeffSpeaker', '\ufeffselected']);
+    expect(selected.data, {'n': 2});
+    expect(selected.swipes.first.rawData, ['opaque']);
+    expect(selected.swipes.first.dataIssue?.actualKind, 'list');
+    expect(selected.swipes.first.info, {
+      'unknown': ['alternate'],
+      'send_date': null,
+      'gen_started': false,
+      'extra': {'foreign': 'alternate'},
+    });
+    expect(selected.swipes.last.info, {
+      'unknown': ['selected'],
+      'send_date': null,
+      'gen_finished': [1, 'opaque'],
+      'extra': {
+        'foreign': ['selected'],
+      },
+    });
+    (selected.swipes.last.info['unknown']! as List<Object?>).add('caller mutation');
+    final before = h.inspect(
+      (db) => db.select('SELECT extra, original FROM nodes WHERE id = ?', [selected.ref.nodeId]).single.values.toList(),
+    );
+    await h.bridge.setChatMessages(context.id, [
+      TavernScriptMessagePatch(ref: selected.ref, fields: {'message': 'edited selected'}),
+    ]);
+    final after = h.inspect(
+      (db) => db.select('SELECT extra, original FROM nodes WHERE id = ?', [selected.ref.nodeId]).single.values.toList(),
+    );
+    expect(after, before);
+    final fresh = await h.bridge.snapshot(context.id);
+    expect(fresh.messages.last.message, 'edited selected');
+    expect(fresh.messages.last.swipes.last.info['unknown'], ['selected']);
+    final exported = StChatDocument.decode('export.jsonl', (await h.engine.exportChat(chat)).first.bytes);
+    expect(exported.messages.last['mes'], 'edited selected');
+    expect(exported.messages.last['vendor'], {'must': 'survive the write'});
+    final otherChat = await h.emptyChat(character);
+    await h.engine.narrate(otherChat, 'another chat');
+    await h.bridge.getVariables(
+      context.id,
+      TavernVariableTarget(scope: TavernVariableScope.message, chatId: otherChat, messageId: -1),
+    );
+    expect((await h.bridge.snapshot(context.id)).messages.last.ref, selected.ref);
+    await h.engine.selectSibling(chat, selected.ref.nodeId, 0);
+    final alternate = (await h.bridge.snapshot(context.id)).messages.last;
+    expect(alternate.message, 'alternate');
+    expect(alternate.rawData, ['opaque']);
+    expect(alternate.swipes.last.data, {'n': 2});
+    h.expectNoGeneration();
+  });
+
   test('bridge numbers the complete path before range and role filters', () async {
     final h = await ScriptFixture.open();
     final character = await h.card('Long path');

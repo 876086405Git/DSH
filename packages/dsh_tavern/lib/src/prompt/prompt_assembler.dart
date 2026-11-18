@@ -33,6 +33,8 @@ final class PromptInput {
     this.worldExamples = const [],
     this.pinExamples = false,
     this.stripExamples = false,
+    this.cacheFriendlyTrimming,
+    this.historyWindow,
     this.quietPrompt = '',
     this.bias = '',
     this.stops = const [],
@@ -76,6 +78,11 @@ final class PromptInput {
   final List<PromptExample> worldExamples;
   final bool pinExamples;
   final bool stripExamples;
+
+  /// Explicit turn setting takes priority over the preset. A missing preset
+  /// setting enables cache-friendly trimming; false keeps ST's original path.
+  final bool? cacheFriendlyTrimming;
+  final PromptHistoryWindow? historyWindow;
   final String quietPrompt;
   final String bias;
   final List<String> stops;
@@ -260,7 +267,27 @@ final class _AssemblyRun {
     this.preparedStops,
     this.preparedBiasHasContent,
     this.historyPrefix = const [],
-  }) : settings = input.preset.settings {
+  }) : settings = input.preset.executionSettings {
+    cacheFriendlyTrimming = input.cacheFriendlyTrimming ?? (settings['cacheFriendlyTrimming'] != false);
+    final window = cacheFriendlyTrimming ? input.historyWindow : null;
+    if (window != null) {
+      // Bodies are deliberately unnecessary here: unread prefix nodes still
+      // carry their physical identities and original depth positions.
+      var found = false;
+      for (final item in historyPrefix.followedBy(input.history)) {
+        if (item.id == window.firstNodeId && !item.hidden && !item.isSystem) {
+          found = true;
+          break;
+        }
+        olderHistory.add(item.id);
+      }
+      if (found) {
+        historyWindow = window;
+      } else {
+        olderHistory.clear();
+      }
+    }
+    if (cacheFriendlyTrimming) unreadHistory.addAll(historyPrefix.map((item) => item.id));
     type = input.generationType.trim().toLowerCase();
     if (type.isEmpty) type = 'normal';
     final extensions = settings['extensions'];
@@ -291,6 +318,13 @@ final class _AssemblyRun {
   final List<PromptHistoryMessage> historyPrefix;
   final PromptTokenCounter counter;
   final Map<String, Object?> settings;
+  late final bool cacheFriendlyTrimming;
+  PromptHistoryWindow? historyWindow;
+  final olderHistory = <String>{};
+  final unreadHistory = <String>{};
+  bool historyOverflow = false;
+  final admittedExamples = <({String kind, String id, int block}), _TrimGroup?>{};
+  final excludedInjections = <String>{};
   late final bool enhancedPrefillEnabled;
   late final String prefillTarget;
   late final List<Map<String, Object?>> tools;
@@ -379,7 +413,16 @@ final class _AssemblyRun {
       injectionPieces(injection).any((fragment) => fragment.content.isNotEmpty);
   _TrimGroup? groupFor(PromptFragment fragment) => !fragment.trimOnOverflow
       ? null
-      : trimGroups.putIfAbsent((fragment.source.kind, fragment.source.id), () => _TrimGroup(fragment.source));
+      : trimGroups.putIfAbsent((fragment.source.kind, fragment.source.id), () {
+          final group = _TrimGroup(fragment.source);
+          if (historyWindow?.excludedOptionalSources.contains((kind: fragment.source.kind, id: fragment.source.id)) ==
+              true) {
+            // Keep the ordinary exclusion reason: WI persistence must not
+            // count a source that the retained window continues to exclude.
+            drop(group);
+          }
+          return group;
+        });
   Iterable<_Prompt> promptPieces(_Prompt prompt) sync* {
     final pieces = prompt.pieces;
     if (pieces == null) {
@@ -843,6 +886,9 @@ final class _AssemblyRun {
     // The decorator says "reaches" maximum context, including an exact fit.
     // This has no effect without optional fragments and never re-expands text.
     makeRoom(1);
+    // Unpinned examples have already made their ordinary admission choices.
+    // Releasing extra history space any earlier would let them refill it.
+    final nextHistoryWindow = finishHistoryWindow();
     var flattened = <PromptSegment>[
       for (final id in prompts.map((prompt) => prompt.id).toSet()) ...?collections[id],
       ...tail,
@@ -900,6 +946,7 @@ final class _AssemblyRun {
       remainingBudget: remaining,
       counterName: counter.name,
       exactTokenCounts: counter.exact,
+      historyWindow: nextHistoryWindow,
     );
   }
 
@@ -1125,7 +1172,25 @@ final class _AssemblyRun {
     }
     final pool = history.reversed.toList();
     for (var i = 0; i < pool.length; i++) {
-      final segment = message(pool[i], expandText: true, includeName: settings['names_behavior'] == 1);
+      final prompt = pool[i];
+      if (prompt.injected && historyWindow?.excludedInjections.contains(injectionKey(prompt)) == true) {
+        excluded.add(PromptExclusion(prompt.id, 'cache-friendly-window', prompt.sources));
+        continue;
+      }
+      if (cacheFriendlyTrimming && !prompt.injected) {
+        if (olderHistory.contains(prompt.id)) {
+          excluded.add(PromptExclusion(prompt.id, 'cache-friendly-window', prompt.sources));
+          continue;
+        }
+        if (unreadHistory.contains(prompt.id)) {
+          // Preflight supplies identities, not zero-token history. If an
+          // existing window lets us reach them, they still cannot be admitted.
+          historyOverflow = true;
+          excluded.add(PromptExclusion(prompt.id, 'history-budget', prompt.sources));
+          continue;
+        }
+      }
+      final segment = message(prompt, expandText: true, includeName: settings['names_behavior'] == 1);
       makeRoom(segment.tokens);
       if (removed(segment)) continue;
       if (segment.tokens > remaining) {
@@ -1135,6 +1200,12 @@ final class _AssemblyRun {
           continue;
         }
         for (final dropped in pool.skip(i)) {
+          // An injected depth piece can be the first miss while its older
+          // tail still contains eligible history. That is also a history
+          // overflow; already excluded old-window nodes alone are not.
+          if (cacheFriendlyTrimming && !dropped.injected && !olderHistory.contains(dropped.id)) {
+            historyOverflow = true;
+          }
           final tailGroup = dropped.trimGroup;
           // These older entries have not been visited/charged. Still report
           // optional exclusions so WI persistence cannot count an unsent
@@ -1143,6 +1214,7 @@ final class _AssemblyRun {
             drop(tailGroup);
             continue;
           }
+          if (cacheFriendlyTrimming && dropped.injected) excludedInjections.add(injectionKey(dropped));
           excluded.add(PromptExclusion(dropped.id, 'history-budget', dropped.sources));
         }
         break;
@@ -1236,12 +1308,22 @@ final class _AssemblyRun {
         PromptSource('control', 'new_example_chat_prompt'),
       ]),
     );
+    final sourceBlocks = <({String kind, String id}), int>{};
     for (var i = 0; i < exampleBlocks.length; i++) {
       final entry = exampleBlocks[i];
       final block = entry.messages;
       final source = entry.source;
       final group = entry.trimGroup;
+      final sourceKey = (kind: source.kind, id: source.id);
+      final blockIndex = sourceBlocks[sourceKey] ?? 0;
+      sourceBlocks[sourceKey] = blockIndex + 1;
+      final key = (kind: source.kind, id: source.id, block: blockIndex);
       if (group?.removed == true) continue;
+      if (historyWindow != null && !historyWindow!.admittedExamples.contains(key)) {
+        excluded.add(PromptExclusion('dialogueExamples-$i', 'cache-friendly-window', [source]));
+        if (group != null) drop(group);
+        continue;
+      }
       // Native blocks share their immutable prefix. An optional entry needs
       // its own charged instance so dropping it cannot remove another block.
       final blockPrefix = group == null
@@ -1277,6 +1359,7 @@ final class _AssemblyRun {
         }
         break;
       }
+      if (cacheFriendlyTrimming) admittedExamples[key] = group;
       for (final segment in candidates) {
         // ST canAffordAll counts empty named examples; insert then skips them.
         if (!meaningful(segment)) continue;
@@ -1284,6 +1367,85 @@ final class _AssemblyRun {
         output.add(segment);
       }
     }
+  }
+
+  bool actualHistory(PromptSegment segment) =>
+      segment.sources.length == 1 &&
+      segment.sources.single.kind == 'history' &&
+      segment.sources.single.id == segment.id;
+
+  bool trimmableHistory(PromptSegment segment) =>
+      actualHistory(segment) &&
+      segment.message['role'] != 'tool' &&
+      !segment.message.containsKey('tool_calls') &&
+      !segment.message.containsKey('tool_call_id');
+
+  String injectionKey(_Prompt prompt) => jsonEncode([
+    prompt.id,
+    [
+      for (final source in prompt.sources) [source.kind, source.id],
+    ],
+  ]);
+
+  PromptHistoryWindow? finishHistoryWindow() {
+    if (!cacheFriendlyTrimming || (!historyOverflow && historyWindow == null)) return null;
+    final history = collections['chatHistory'];
+    if (historyOverflow && history != null) {
+      var tokens = 0;
+      var count = 0;
+      String? latestUser;
+      for (final segment in history) {
+        if (!trimmableHistory(segment)) continue;
+        tokens += segment.tokens * (charges[segment] ?? 0);
+        count++;
+        if (segment.message['role'] == 'user') latestUser = segment.id;
+      }
+      // Everything else has already been charged: fixed prompts, examples,
+      // tools, controls, continuation and retained depth injections. Only the
+      // remaining pure-history allowance receives the 75% target.
+      final target = (remaining + tokens) * 3 ~/ 4;
+      final trimmed = <PromptSegment>{};
+      for (final segment in history) {
+        if (tokens <= target || count <= 1) break;
+        if (!actualHistory(segment)) continue;
+        // Advancing a single prefix cannot leave a protected tool exchange
+        // behind and then remove later history. The target is best effort.
+        if (!trimmableHistory(segment) || segment.id == latestUser) break;
+        final refund = segment.tokens * (charges.remove(segment) ?? 0);
+        remaining += refund;
+        tokens -= refund;
+        count--;
+        trimmed.add(segment);
+        excluded.add(PromptExclusion(segment.id, 'cache-friendly-trim', segment.sources));
+      }
+      history.removeWhere(trimmed.contains);
+    }
+    String? firstNodeId = historyWindow?.firstNodeId;
+    if (historyOverflow) {
+      // Read physical sources before squash or DeepSeek can combine them with
+      // controls/injections. Continue-prefill carries its original source id.
+      firstNodeId = (history ?? const <PromptSegment>[])
+          .followedBy(tail)
+          .where((segment) => !removed(segment))
+          .expand((segment) => segment.sources)
+          .where((source) => source.kind == 'history')
+          .firstOrNull
+          ?.id;
+    }
+    if (firstNodeId == null) return null;
+    return PromptHistoryWindow(
+      firstNodeId: firstNodeId,
+      admittedExamples: [
+        for (final entry in admittedExamples.entries)
+          if (entry.value?.removed != true) entry.key,
+      ],
+      excludedOptionalSources: {
+        ...?historyWindow?.excludedOptionalSources,
+        for (final group in trimGroups.values)
+          if (group.removed) (kind: group.source.kind, id: group.source.id),
+      },
+      excludedInjections: {...?historyWindow?.excludedInjections, ...excludedInjections},
+    );
   }
 
   List<PromptSegment> squash(List<PromptSegment> input) {

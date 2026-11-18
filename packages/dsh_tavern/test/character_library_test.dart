@@ -56,6 +56,36 @@ void main() {
     expect((await library.list()).single.id, second.id);
   });
 
+  test('runtime projections reuse unchanged files and refresh managed and external edits', () async {
+    final imported = await library.importCard(await File('test/fixtures/card-v3.json').readAsBytes());
+    final first = await library.readRuntimeAuthority(imported.id, (data) => data);
+    final avatar = await library.readRuntimeAvatarMetadata(imported.id);
+    expect(identical(await library.readRuntimeAuthority(imported.id, (data) => data), first), isTrue);
+    expect(identical(await library.readRuntimeAvatarMetadata(imported.id), avatar), isTrue);
+    await library.updateFields(imported.id, {'description': 'Managed change'});
+    expect(await library.readRuntimeAuthority(imported.id, (data) => data['description']), 'Managed change');
+    expect((await library.readRuntimeAvatarMetadata(imported.id)).snapshot.rawText, contains('Managed change'));
+
+    final file = File('${root.path}/characters/${imported.id}/card.json');
+    final raw = jsonDecode(await file.readAsString()) as Map<String, Object?>;
+    (raw['data']! as Map<String, Object?>)['description'] = 'External change with different length';
+    await file.writeAsString(jsonEncode(raw));
+    expect(
+      await library.readRuntimeAuthority(imported.id, (data) => data['description']),
+      'External change with different length',
+    );
+    expect((await library.readRuntimeAvatarMetadata(imported.id)).snapshot.rawText, contains('External change'));
+    final detached = await library.readAuthority(imported.id, (data) => data);
+    detached!['description'] = 'Detached edit';
+    expect(
+      await library.readRuntimeAuthority(imported.id, (data) => data['description']),
+      'External change with different length',
+    );
+    await library.delete(imported.id);
+    expect(await library.readRuntimeAuthority(imported.id, (data) => data), isNull);
+    expect((await library.readRuntimeAvatarMetadata(imported.id)).snapshot.present, isFalse);
+  });
+
   test('concurrent imports are serialized and no partial directory is listed', () async {
     final bytes = await File('test/fixtures/card-v3.json').readAsBytes();
     final first = library.importCard(bytes);

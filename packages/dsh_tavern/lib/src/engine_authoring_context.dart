@@ -745,10 +745,10 @@ extension _AuthoringPromptContexts on TavernEngine {
         // The raw row, including absence, is independent seal evidence.
         // A parse/read failure stays deferred at this definition's own slot.
         final rows = _store.readGameplayConfigurationRows([id]);
-        final historical = _gameplayHistoricalConfig(this, {'dshgoPackDefinitionConfigId': id});
         for (final entry in rows.entries) {
           gameplayConfigRows.putIfAbsent(entry.key, () => entry.value);
         }
+        final historical = _gameplayHistoricalConfig(this, {'dshgoPackDefinitionConfigId': id});
         secretDefinitions[id] = (definition: historical.config?.secrets, error: null, stack: null);
       } catch (error, stack) {
         secretDefinitions[id] = (definition: null, error: error, stack: stack);

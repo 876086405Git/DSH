@@ -996,7 +996,8 @@ extension GameplaySimulationStore on ChatStore {
           char(1) || after_json AS after_json,
           char(1) || artifacts_json AS artifacts_json,
           char(1) || state AS state, adopted_revision,
-          char(1) || issue_json AS issue_json, created_at, updated_at
+          char(1) || issue_json AS issue_json, created_at, updated_at,
+          before_raw_text_id, after_raw_text_id, request_uses_after
         FROM authoring_operations
         WHERE domain_id = ? AND operation_id = ? AND state IN ('adopted', 'published')''',
         [key.$1, key.$2],
@@ -1010,14 +1011,24 @@ extension GameplaySimulationStore on ChatStore {
       if (request['method'] != 'importDshgoCastMember') {
         continue;
       }
+      // These rows may be copied into an isolated simulation database. Carry
+      // portable snapshot JSON, never references to this database's payloads.
+      final materialized =
+          row['before_raw_text_id'] != null || row['after_raw_text_id'] != null || row['request_uses_after'] == 1
+          ? readAuthoringOperationData(key.$1, key.$2)!
+          : null;
       result[key] = {
         'domain_id': ChatStore._unguardText(row['domain_id'])!,
         'operation_id': ChatStore._unguardText(row['operation_id'])!,
         'physical_resource_id': ChatStore._unguardText(row['physical_resource_id'])!,
-        'request_json': requestJson,
+        'request_json': row['request_uses_after'] == 1 ? jsonEncode(materialized!.request) : requestJson,
         'base_revision': row['base_revision'] as int,
-        'before_json': ChatStore._unguardText(row['before_json'])!,
-        'after_json': ChatStore._unguardText(row['after_json'])!,
+        'before_json': materialized == null
+            ? ChatStore._unguardText(row['before_json'])!
+            : jsonEncode(materialized.before),
+        'after_json': materialized == null
+            ? ChatStore._unguardText(row['after_json'])!
+            : jsonEncode(materialized.after),
         'artifacts_json': ChatStore._unguardText(row['artifacts_json'])!,
         'state': ChatStore._unguardText(row['state'])!,
         'adopted_revision': row['adopted_revision'] as int?,

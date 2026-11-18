@@ -189,7 +189,7 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     for (final id in ids) {
       if (!state.embedded.containsKey(id)) {
         try {
-          final found = await engine._library.readAuthority(id, (data) {
+          final found = await engine._library.readRuntimeAuthority(id, (data) {
             scriptBookDirectoryCardCommitted(id, data);
             return true;
           });

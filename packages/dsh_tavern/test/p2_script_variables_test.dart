@@ -8,6 +8,36 @@ import 'package:test/test.dart';
 import 'p2_script_test_support.dart';
 
 void main() {
+  test('runtime character snapshots observe external authority edits and retain old captures', () async {
+    final h = await ScriptFixture.open();
+    final character = await h.card('Runtime authority', extensions: {'tavern_helper': scriptContainer('before')});
+    final chat = await h.emptyChat(character);
+    final owner = TavernScriptOwner(kind: TavernScriptOwnerKind.character, assetId: character, scriptId: 'same-script');
+    final context = await h.context(chat, characterId: character, owner: owner);
+    final before = await h.bridge.snapshot(context.id);
+    final oldData = scriptMap(before.resourceRefs['characterData']);
+    final file = File('${h.root.path}/characters/$character/card.json');
+    final envelope = scriptMap(jsonDecode(await file.readAsString()));
+    scriptMap(envelope['data'])['extensions'] = {'tavern_helper': scriptContainer('external replacement')};
+    await file.writeAsString(jsonEncode(envelope), flush: true);
+    expect((await h.bridge.getVariables(context.id, scriptCharacter)).value, {'card-variable': 'external replacement'});
+    expect((await h.bridge.getVariables(context.id, scriptOwner)).value, {'start': 'external replacement'});
+    final after = await h.bridge.snapshot(context.id);
+    final newData = scriptMap(after.resourceRefs['characterData']);
+    expect(newData['version'], isNot(oldData['version']));
+    expect(scriptMap(scriptMap(scriptMap(newData['data'])['extensions'])['tavern_helper'])['variables'], {
+      'card-variable': 'external replacement',
+    });
+    expect(
+      before.variableSnapshots
+          .singleWhere((value) => value.resolvedTarget.scope == TavernVariableScope.character)
+          .value,
+      {'card-variable': 'before'},
+    );
+    expect(scriptMap(before.resourceRefs['characterData']), oldData);
+    h.expectNoGeneration();
+  });
+
   test('five persistent scopes keep script owners and iframe instances distinct', () async {
     final h = await ScriptFixture.open();
     final first = await h.card('Twin', extensions: {'tavern_helper': scriptContainer('A')});

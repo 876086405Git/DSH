@@ -73,6 +73,12 @@ void main() {
       remainingBudget: 94,
       counterName: 'test estimate',
       exactTokenCounts: false,
+      historyWindow: PromptHistoryWindow(
+        firstNodeId: 'history:id',
+        admittedExamples: [(kind: 'card', id: 'card:mes_example', block: 0)],
+        excludedOptionalSources: [(kind: 'worldInfo', id: 'book:3')],
+        excludedInjections: ['["depth-10",[["extension","fixture"]]]'],
+      ),
     );
     final snapshot = TavernTurnInspection(
       chatId: 'chat',

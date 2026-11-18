@@ -45,8 +45,10 @@ extension _ScriptCharacterAvatars on _ScriptCoordinator {
   Future<_ScriptCharacterAvatarView> _scriptCharacterAvatarView(String characterId) =>
       engine._libraryOperation(() async {
         final revision = engine._directors._cardRevisions[characterId] ?? 0;
-        final metadata = await engine._library.readAvatarMetadata(characterId);
-        return _ScriptCharacterAvatarView(
+        final metadata = await engine._library.readRuntimeAvatarMetadata(characterId);
+        final cached = scriptResources.avatarViews[metadata];
+        if (cached != null && _scriptCharacterAvatarViewCurrent(cached)) return cached;
+        return scriptResources.avatarViews[metadata] = _ScriptCharacterAvatarView(
           characterId: characterId,
           version: _scriptAvatarMetadataVersion(characterId, metadata),
           hasAvatar: metadata.hasAvatar,

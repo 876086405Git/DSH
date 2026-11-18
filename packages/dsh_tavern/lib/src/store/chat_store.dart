@@ -113,9 +113,14 @@ class StoredHistoryLink {
     required this.hidden,
     required this.isSystem,
     this.selectedChildId,
+    this.speakerCharacterId,
+    this.seq = 0,
+    this.sourceEpoch = 0,
+    this.contentVersion = 0,
   });
   final String nodeId;
-  final String? selectedChildId;
+  final int seq, sourceEpoch, contentVersion;
+  final String? selectedChildId, speakerCharacterId;
   final TavernRole role;
   final String speaker;
   final bool hidden;
@@ -241,7 +246,7 @@ class ChatStore {
     return ChatStore._(database, clock: clock, createId: createId);
   }
 
-  static const schemaVersion = 16;
+  static const schemaVersion = 17;
 
   // Keys are destination versions. Future upgrades register every successor
   // here and increase schemaVersion; no existing schema is dropped or replayed.
@@ -263,15 +268,21 @@ class ChatStore {
     14: _gameplayBindingSchema,
     15: _gameplayWorldInfoPolicySchema,
     16: _gameplayCastImportsSchema,
+    17: _authoringPayloadSchema,
   };
   static const _schemaV12 = '$_authoringRunSchema\n$_authoringSeedSchema';
   final Database _db;
   final DateTime Function() _clock;
   final String Function() _createId;
   final _changes = StreamController<String>.broadcast();
+  final _chatCommits = StreamController<({String chatId, bool bodyOnly})>.broadcast();
   final _presetChanges = StreamController<void>.broadcast();
   final _changedChats = <String>{};
   final _displayVersions = <String, Object>{};
+  Object _presetVersion = Object();
+
+  /// Committed preset-library identity; unchanged by ordinary chat writes.
+  Object get presetVersion => _transactionDepth == 0 ? _presetVersion : Object();
   var _presetsChanged = false;
   var _transactionDepth = 0;
   ({Object error, StackTrace stackTrace})? _transactionFailure;
@@ -287,6 +298,10 @@ class ChatStore {
   void Function(Set<String> chatIds, bool presetsChanged)? committedObserver;
 
   Stream<String> get changes => _changes.stream;
+
+  /// The same committed chat changes with their original transaction kind.
+  /// Body checkpoints are separate outer transactions and only update text.
+  Stream<({String chatId, bool bodyOnly})> get chatCommits => _chatCommits.stream;
 
   /// Preset records and selections changed in a committed outer transaction.
   /// Several edits in one transaction emit once; rolled-back edits never emit.
@@ -467,6 +482,7 @@ class ChatStore {
       // the successful COMMIT. Streaming bodies change the same read view.
       if (depth == 0) {
         if (_presetsChanged) {
+          _presetVersion = Object();
           _displayVersions.clear();
         } else {
           for (final chatId in _changedChats) {
@@ -521,6 +537,7 @@ class ChatStore {
       }
       for (final chatId in changed) {
         _changes.add(chatId);
+        _chatCommits.add((chatId: chatId, bodyOnly: bodyOnly));
       }
       if (presetsChanged) {
         _presetChanges.add(null);
@@ -944,7 +961,15 @@ class ChatStore {
 
   /// Revision of the committed tree/content/state view. Bridge tokens add an
   /// engine epoch; this integer is never exposed to JavaScript as a Number.
-  int treeRevision(String chatId) => _chatRow(chatId)['tree_revision'] as int;
+  int treeRevision(String chatId) => _chatRow(chatId, columns: 'c.tree_revision')['tree_revision'] as int;
+
+  /// Current host identity without materializing the chat's JSON documents.
+  /// This is a fresh SQL read, including inside a managed transaction.
+  String chatCharacterId(String chatId) => _chatRow(chatId, columns: 'c.character_id')['character_id'] as String;
+
+  /// Current selection without materializing the chat's JSON documents.
+  String? chatCurrentLeafId(String chatId) =>
+      _chatRow(chatId, columns: 'c.current_leaf_id')['current_leaf_id'] as String?;
 
   /// Allocates an identity without adding a row. A batch can prepare all state
   /// reports against their actual node ids before its first INSERT.
@@ -1157,7 +1182,7 @@ class ChatStore {
   }) {
     return transaction(() {
       final chat = _chatRow(chatId);
-      final parent = parentId == null ? null : _nodeRow(chatId, parentId);
+      final parent = parentId == null ? null : _nodeRow(chatId, parentId, columns: 'n.depth');
       final depth = parent == null ? 1 : (parent['depth'] as int) + 1;
       final nodeId = id ?? _createId();
       final encodedExtra = _encodeNodeExtra(extra, chatId, nodeId);
@@ -1377,7 +1402,9 @@ ORDER BY n.seq
   /// checkpoints which do not advance tree_revision. Cache only store data.
   Object displayVersion(String chatId) {
     _ensureOpen();
-    return _displayVersions.putIfAbsent(chatId, Object.new);
+    // A committed token must not hide writes made earlier in this transaction.
+    // Temporary identities also prevent rollback views entering later caches.
+    return _transactionDepth == 0 ? _displayVersions.putIfAbsent(chatId, Object.new) : Object();
   }
 
   /// Only fields used by display and its macro/state context. In particular,
@@ -1469,25 +1496,62 @@ ORDER BY n.seq
   /// branches and stored extra/original fields. There is no 60-message default.
   /// A non-null leaf uses two SELECTs: the chat check and the recursive query.
   List<StoredNode> historyTo(String chatId, String? leafId) {
-    _chatRow(chatId);
+    chatCharacterId(chatId);
     return [for (final row in _ancestorRows(chatId, leafId)) _storedNode(row)];
   }
 
+  /// Read-only bridge message projection. It preserves every script-visible
+  /// extra/state/swipe field, without inspection or duplicate imported bodies.
+  /// Write plans and exporters must still read full [node]/[children] rows.
+  List<StoredNode> scriptHistoryTo(String chatId, String? leafId) {
+    chatCharacterId(chatId);
+    return [
+      for (final row in _ancestorRows(chatId, leafId, columns: '$_scriptNodeColumns, $_siblingColumns'))
+        _scriptNode(row),
+    ];
+  }
+
+  /// Visible swipe family with the same read projection as [scriptHistoryTo].
+  List<StoredNode> scriptChildren(String chatId, String? parentId) {
+    chatCharacterId(chatId);
+    if (parentId != null &&
+        _db.select('SELECT 1 FROM nodes WHERE chat_id = ? AND id = ? AND deleted_by IS NULL', [
+          chatId,
+          parentId,
+        ]).isEmpty) {
+      throw StateError('Node does not belong to chat: $parentId');
+    }
+    return [
+      for (final row in _db.select(
+        'SELECT $_scriptNodeColumns, $_siblingColumns FROM nodes n '
+        'WHERE n.chat_id = ? AND n.parent_id IS ? AND n.deleted_by IS NULL ORDER BY n.seq',
+        [chatId, parentId],
+      ))
+        _scriptNode(row),
+    ];
+  }
+
   List<StoredHistoryLink> historyLinksTo(String chatId, String? leafId) {
-    _chatRow(chatId);
+    chatCharacterId(chatId);
     return [
       for (final row in _ancestorRows(
         chatId,
         leafId,
         columns: '''
       n.id, n.parent_id, n.selected_child_id, n.role, n.hidden,
+      n.seq, n.source_epoch, n.content_version,
+      char(1) || n.speaker_character_id AS speaker_character_id,
       char(1) || n.speaker AS speaker, json_type(n.original, '\$.is_system') = 'true' AS is_system''',
       ))
         StoredHistoryLink(
           nodeId: row['id'] as String,
           selectedChildId: row['selected_child_id'] as String?,
+          seq: row['seq'] as int,
+          sourceEpoch: row['source_epoch'] as int,
+          contentVersion: row['content_version'] as int,
           role: TavernRole.values.byName(row['role'] as String),
           speaker: _unguardText(row['speaker'])!,
+          speakerCharacterId: _unguardText(row['speaker_character_id']),
           hidden: row['hidden'] == 1,
           isSystem: row['role'] == 'system' || row['is_system'] == 1,
         ),
@@ -1496,9 +1560,18 @@ ORDER BY n.seq
 
   /// A bounded prompt-only page. Old inspection/usage and unknown import
   /// fields are not materialized merely to assemble another request.
-  List<StoredNode> promptHistoryTo(String chatId, String? leafId, {required int limit, bool includeSource = false}) {
+  List<StoredNode> promptHistoryTo(
+    String chatId,
+    String? leafId, {
+    required int limit,
+    bool includeSource = false,
+    bool includeRuntime = false,
+  }) {
     _ensureOpen();
-    final extra = includeSource
+    final extra = includeRuntime
+        ? "json_object('dshgo', json_object('chatJsonl', json_extract(n.extra, '\$.dshgo.chatJsonl'), "
+              "'group', json_extract(n.extra, '\$.dshgo.group')))"
+        : includeSource
         ? "json_object('dshgo', json_object('chatJsonl', json_extract(n.extra, '\$.dshgo.chatJsonl')))"
         : "'{}'";
     return [
@@ -1506,7 +1579,8 @@ ORDER BY n.seq
         chatId,
         leafId,
         limit: limit,
-        columns: '$_promptNodeColumns, $extra AS extra, $_siblingColumns',
+        columns:
+            '${includeRuntime ? _runtimePromptNodeColumns : _promptNodeColumns}, $extra AS extra, $_siblingColumns',
       ))
         _storedNode(row),
     ];
@@ -1516,7 +1590,7 @@ ORDER BY n.seq
   /// structure as [historyTo]. It does not decode message/state documents: bad
   /// unrelated extra/original JSON cannot invalidate a membership-only read.
   List<String> ancestorIds(String chatId, String? leafId) {
-    _chatRow(chatId);
+    chatCharacterId(chatId);
     return [for (final row in _ancestorRows(chatId, leafId, identitiesOnly: true)) row['id'] as String];
   }
 
@@ -2387,6 +2461,7 @@ ORDER BY n.seq
     _closed = true;
     _db.close();
     await _changes.close();
+    await _chatCommits.close();
     await _presetChanges.close();
   }
 
@@ -2446,17 +2521,22 @@ ORDER BY n.seq
       )
       .isNotEmpty;
 
-  Row _chatRow(String chatId) {
+  Row _chatRow(String chatId, {String columns = _chatColumns}) {
     _ensureOpen();
-    final rows = _db.select('SELECT $_chatColumns FROM chats c WHERE c.id = ?', [chatId]);
+    final rows = _db.select('SELECT $columns FROM chats c WHERE c.id = ?', [chatId]);
     if (rows.isEmpty) throw StateError('Chat not found: $chatId');
     return rows.first;
   }
 
-  Row _nodeRow(String chatId, String nodeId, {bool includeDeleted = false}) {
+  Row _nodeRow(
+    String chatId,
+    String nodeId, {
+    bool includeDeleted = false,
+    String columns = '$_nodeColumns, $_siblingColumns',
+  }) {
     _ensureOpen();
     final rows = _db.select(
-      'SELECT $_nodeColumns, $_siblingColumns FROM nodes n WHERE n.chat_id = ? AND n.id = ? AND (n.deleted_by IS NULL OR ? = 1)',
+      'SELECT $columns FROM nodes n WHERE n.chat_id = ? AND n.id = ? AND (n.deleted_by IS NULL OR ? = 1)',
       [chatId, nodeId, includeDeleted ? 1 : 0],
     );
     if (rows.isEmpty) throw StateError('Node does not belong to chat: $nodeId');
@@ -2495,6 +2575,17 @@ ORDER BY n.seq
       },
     },
     original: {'is_system': row['display_system'] == 1},
+  );
+
+  static StoredNode _scriptNode(Row row) => StoredNode(
+    message: _message(row),
+    depth: row['depth'] as int,
+    selectedChildId: row['selected_child_id'] as String?,
+    extra: {
+      ..._map(row['script_extra']),
+      if (row['script_state'] != null) 'dshgo': {'tavernState': _map(row['script_state'])},
+    },
+    original: _map(row['original']),
   );
 
   static Map<String, Object?> _nodeExtra(Row row) {
@@ -2647,6 +2738,17 @@ ORDER BY n.seq
     CASE WHEN json_type(n.display_context, '\$.dshgo.chatJsonl') = 'object'
       THEN json_extract(n.display_context, '\$.dshgo.chatJsonl') END AS display_source''';
 
+  static const _scriptNodeColumns = '''
+    n.id, n.parent_id, n.selected_child_id, n.depth, n.role,
+    char(1) || n.speaker AS speaker, char(1) || n.text AS text,
+    NULL AS reasoning, n.at, n.hidden,
+    char(1) || n.stream_text AS stream_text, NULL AS stream_reasoning,
+    char(1) || n.speaker_character_id AS speaker_character_id, NULL AS usage, NULL AS reported_usage,
+    json_remove(n.extra, '\$.dshgo') AS script_extra,
+    CASE WHEN json_type(n.display_context, '\$.dshgo.tavernState') = 'object'
+      THEN json_extract(n.display_context, '\$.dshgo.tavernState') END AS script_state,
+    json_remove(n.original, '\$.mes', '\$.swipes', '\$.extra') AS original''';
+
   static const _promptNodeColumns = '''
     n.seq, n.id, n.chat_id, n.parent_id, n.selected_child_id, n.depth, n.role,
     char(1) || n.speaker AS speaker, char(1) || n.text AS text,
@@ -2657,6 +2759,10 @@ ORDER BY n.seq
       'tool_call_id', json_extract(n.original, '\$.tool_call_id')) AS original,
     char(1) || n.stream_text AS stream_text, NULL AS stream_reasoning,
     n.deleted_by, NULL AS reported_usage, char(1) || n.speaker_character_id AS speaker_character_id''';
+
+  static final _runtimePromptNodeColumns = _promptNodeColumns
+      .replaceFirst('NULL AS reasoning', 'char(1) || n.reasoning AS reasoning')
+      .replaceFirst('NULL AS stream_reasoning', 'char(1) || n.stream_reasoning AS stream_reasoning');
 
   static const _chatColumns = '''
     c.id, c.character_id, char(1) || c.title AS title, c.created_at, c.updated_at,

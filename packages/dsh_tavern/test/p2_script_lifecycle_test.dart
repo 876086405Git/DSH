@@ -417,11 +417,17 @@ void main() {
     // A real carrier commit occurs while the earlier cache Ack is held. A pull
     // must see it without moving the baseline used by the still-pending delta.
     await h.engine.setGlobalVariables({'afterPull': 'committed'});
+    final cardFile = File('${h.root.path}/characters/$character/card.json');
+    final cardRaw = scriptMap(jsonDecode(await cardFile.readAsString()));
+    scriptMap(cardRaw['data'])['description'] = 'Resource changed while the cache Ack is held.';
+    await cardFile.writeAsString(jsonEncode(cardRaw), flush: true);
     final pulled = await h.bridge.snapshot(context.id);
     expect(
       pulled.variableSnapshots.singleWhere((value) => value.resolvedTarget.scope == TavernVariableScope.global).value,
       {'afterPull': 'committed'},
     );
+    final pulledCard = scriptMap(pulled.resourceRefs['characterData']);
+    expect(scriptMap(pulledCard['data'])['description'], 'Resource changed while the cache Ack is held.');
     releaseFirstCache.complete();
     final created = await create;
     final deliveredGlobal = await globalCache.future;
@@ -431,6 +437,7 @@ void main() {
           .value,
       {'afterPull': 'committed'},
     );
+    expect(deliveredGlobal.delta!.resourceRefs['characterData'], pulledCard);
     expect(created.upsertMessages.single.message, 'recover me');
     expect(
       recovered.any((snapshot) => snapshot.messages.length == 1 && snapshot.messages.single.message == 'recover me'),

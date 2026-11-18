@@ -4,9 +4,9 @@ const _cardEventRuntimeKey = 'dshgoDirectorEventRuntime';
 typedef _CardEventPrepared = ({_DirectorPrepared run, Map<String, state_core.StateEventTarget>? targets});
 
 state_core.CardEventDefinition _cardEventDefinition(Map<String, Object?> data) {
-  final own = _map(_map(data['extensions'])['dshgo']);
+  final own = _readMap(_readMap(data['extensions'])['dshgo']);
   return state_core.CardEventDefinition.parse(
-    _map(own['director'])['eventRules'],
+    _readMap(own['director'])['eventRules'],
     version: own.containsKey('v') ? own['v'] : 1,
   );
 }

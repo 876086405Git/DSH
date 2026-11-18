@@ -97,6 +97,29 @@ void main() {
     store.endStreamingWrites();
   });
 
+  test('chat commits retain body-only identity without publishing rolled-back edits', () async {
+    final commits = <({String chatId, bool bodyOnly})>[];
+    final legacy = <String>[];
+    final subscription = store.chatCommits.listen(commits.add);
+    final legacySubscription = store.changes.listen(legacy.add);
+    store.beginStreamingWrites();
+    store.writeStreamingBody(chat, node.nodeId, text: 'draft');
+    store.endStreamingWrites();
+    expect(
+      () => store.transaction<void>(() {
+        store.updateChat(chat, title: 'rolled back');
+        throw StateError('fixture');
+      }),
+      throwsStateError,
+    );
+    store.updateMessage(chat, node.nodeId, text: 'complete');
+    await Future<void>.delayed(Duration.zero);
+    expect(commits, [(chatId: chat, bodyOnly: true), (chatId: chat, bodyOnly: false)]);
+    expect(legacy, [chat, chat]);
+    await subscription.cancel();
+    await legacySubscription.cancel();
+  });
+
   test('metadata usage and original-only edits neither index nor promote a draft', () {
     store.updateMessage(chat, node.nodeId, extra: {'keep': 'metadata'});
     store.updateMessage(chat, node.nodeId, usage: const TavernUsage(completionTokens: 3));

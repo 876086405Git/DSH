@@ -2,7 +2,8 @@ part of 'engine.dart';
 
 const _mvuFields = ['stat_data', 'schema', 'initialized_lorebooks', 'display_data', 'delta_data'];
 
-bool _mvuDeclared(Map<String, Object?> data) => _map(_map(_map(data['extensions'])['dshgo'])['mvu'])['enabled'] == true;
+bool _mvuDeclared(Map<String, Object?> data) =>
+    _readMap(_readMap(_readMap(data['extensions'])['dshgo'])['mvu'])['enabled'] == true;
 
 List<TavernScriptIssue> _mvuIssues(
   List<mvu_core.MvuIssue> issues, {
@@ -108,13 +109,16 @@ extension _NativeMvu on _ScriptCoordinator {
 
 /// A physical variable carrier. Null node is reserved for a real group root.
 class _MvuFrame {
-  _MvuFrame(this.chat, this.node, this.state, this.data, this.version, this.pathRevision);
+  _MvuFrame(this.chat, this.node, this.state, this.data, this.version, this.pathRevision, this.checkedVersion);
   final StoredChat chat;
   final StoredNode? node;
   final Map<String, Object?> state;
   final TavernJsonObject data;
   final String version;
   final String pathRevision;
+  Object checkedVersion;
+  bool checkedPath = true;
+  bool checkedBody = true;
   String? get nodeId => node?.message.nodeId;
   TavernScriptMessageRef? get ref => nodeId == null ? null : TavernScriptMessageRef(chatId: chat.id, nodeId: nodeId!);
 }
@@ -229,10 +233,16 @@ extension _NativeMvuStorage on _ScriptCoordinator {
             ),
             raw,
           );
-    return _MvuFrame(chat, node, state, data, version, _pathRevision(chatId));
+    return _MvuFrame(chat, node, state, data, version, _pathRevision(chatId), engine._store.displayVersion(chatId));
   }
 
   void _checkMvuFrame(_MvuFrame frame, {bool samePath = true, bool sameBody = true}) {
+    final readVersion = engine._store.displayVersion(frame.chat.id);
+    if (identical(frame.checkedVersion, readVersion) &&
+        (!samePath || frame.checkedPath) &&
+        (!sameBody || frame.checkedBody)) {
+      return;
+    }
     final current = _mvuFrame(frame.chat.id, frame.nodeId);
     final beforeMessage = frame.node?.message;
     final afterMessage = current.node?.message;
@@ -251,6 +261,9 @@ extension _NativeMvuStorage on _ScriptCoordinator {
         nodeId: frame.nodeId,
       );
     }
+    frame.checkedPath = samePath || (identical(frame.checkedVersion, readVersion) && frame.checkedPath);
+    frame.checkedBody = sameBody || (identical(frame.checkedVersion, readVersion) && frame.checkedBody);
+    frame.checkedVersion = readVersion;
   }
 
   bool _mvuNeedsInitialization(_MvuFrame frame, _MvuResources resources) {

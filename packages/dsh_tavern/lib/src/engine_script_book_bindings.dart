@@ -119,8 +119,8 @@ extension _ScriptBookBindings on _ScriptCoordinator {
     Map<String, Object?>? document,
     Map<String, Object?>? character,
   }) {
-    final settings = _optionalObject(document ?? engine._document, 'settings');
-    final legacy = _optionalObject(settings, 'lorebooks');
+    final settings = _readOptionalObject(document ?? engine._document, 'settings');
+    final legacy = _readOptionalObject(settings, 'lorebooks');
     TavernScriptBookRef? primary;
     final additional = <TavernScriptBookRef>[];
     final inherited = <TavernScriptBookRef>[];
@@ -141,9 +141,9 @@ extension _ScriptBookBindings on _ScriptCoordinator {
       case TavernScriptBookBindingScope.character:
         final id = target.targetId!;
         final capturedCharacter = character!;
-        final data = _optionalObject(capturedCharacter, 'data');
-        final own = _optionalObject(settings, 'characterLorebooks');
-        final primaries = _optionalObject(settings, 'characterPrimaryLorebooks');
+        final data = _readOptionalObject(capturedCharacter, 'data');
+        final own = _readOptionalObject(settings, 'characterLorebooks');
+        final primaries = _readOptionalObject(settings, 'characterPrimaryLorebooks');
         final explicit = primaries[id];
         if (data.containsKey('character_book')) {
           primary = TavernScriptBookRef.embedded(characterId: id);
@@ -160,7 +160,7 @@ extension _ScriptBookBindings on _ScriptCoordinator {
         });
       case TavernScriptBookBindingScope.persona:
         final id = target.targetId!;
-        final own = _optionalObject(settings, 'personaLorebooks');
+        final own = _readOptionalObject(settings, 'personaLorebooks');
         append(additional, own[id]);
         append(inherited, legacy['persona']);
         evidence.addAll({'own': _bookBindingSlot(own, id), 'inherited': _bookBindingSlot(legacy, 'persona')});
@@ -175,8 +175,8 @@ extension _ScriptBookBindings on _ScriptCoordinator {
             'The selected chat metadata source is absent.',
           );
         }
-        final names = _optionalObject(chat.settings, 'stLorebookIds');
-        final own = _optionalObject(chat.settings, 'lorebooks');
+        final names = _readOptionalObject(chat.settings, 'stLorebookIds');
+        final own = _readOptionalObject(chat.settings, 'lorebooks');
         final name = raw['world_info'];
         final mapped = name is String ? names[name] : null;
         final ownIds = _strings(own['chat']);
@@ -322,7 +322,7 @@ extension _ScriptBookBindings on _ScriptCoordinator {
     final chatCapture = target.scope == TavernScriptBookBindingScope.chat ? _captureChat(contextId) : null;
     final character = await _bookBindingCharacter(contextId, target);
     _checkBookBindingContext(contextId, context, target, character);
-    final embedded = character != null && _optionalObject(character, 'data').containsKey('character_book');
+    final embedded = character != null && _readOptionalObject(character, 'data').containsKey('character_book');
     if (target.scope == TavernScriptBookBindingScope.character) {
       if (embedded) {
         if (requestedPrimary != TavernScriptBookRef.embedded(characterId: target.targetId!)) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,12 +7,91 @@ import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
+import 'p2_script_test_support.dart' show ScriptHost;
 import 'support/stage1_engine_harness.dart';
 import 'support/t24_engine_harness.dart';
 
 // Real imports, store, macros and assembler. The callback counter deliberately
 // retains the complete-history path with exactly the same token convention.
 void main() {
+  test('cache trimming keeps an admitted boundary across sends and resets on a branch', () async {
+    final h = await _Harness.open();
+    await h.importHistory(_history(160));
+    await h.send('first question');
+    final first = h.engine.inspect(h.chat)!.prompt.historyWindow!;
+    await h.send('next');
+    expect(h.engine.inspect(h.chat)!.prompt.historyWindow!.firstNodeId, first.firstNodeId);
+    await h.send('next again');
+    expect(h.engine.inspect(h.chat)!.prompt.historyWindow!.firstNodeId, first.firstNodeId);
+
+    final path = await h.engine.path(h.chat, limit: 1000);
+    await h.engine.selectNode(h.chat, path[2].nodeId);
+    await h.send('a separate branch');
+    expect(h.engine.inspect(h.chat)!.prompt.historyWindow, isNull);
+    expect(_text(h.model.allCalls.last.body!), contains('TRUE ROOT'));
+  });
+
+  test('explicitly disabling cache trimming restores the ordinary larger history window', () async {
+    final h = await _Harness.open();
+    await h.importHistory(_history(160));
+    await h.send('first question');
+    final first = h.engine.inspect(h.chat)!.prompt.historyWindow!;
+    final original = await h.engine.path(h.chat, limit: 1000);
+    final boundary = original.indexWhere((node) => node.nodeId == first.firstNodeId);
+    await h.engine.setSettings({'cacheFriendlyTrimming': false}, chatId: h.chat);
+    await h.send('next');
+    final assembly = h.engine.inspect(h.chat)!.prompt;
+    expect(assembly.historyWindow, isNull);
+    final sentIds = {
+      for (final segment in assembly.beforePostProcessing)
+        for (final source in segment.sources)
+          if (source.kind == 'history') source.id,
+    };
+    expect(original.take(boundary).any((node) => sentIds.contains(node.nodeId)), isTrue);
+  });
+
+  test('a preset updated during a held hook invalidates the old captured budget window', () async {
+    final h = await _Harness.open();
+    await h.importHistory(_history(160));
+    final selected = await h.engine.importPreset(jsonEncode(h.engine.settings()['preset']));
+    await h.engine.bindPreset(h.chat, selected.preset.id);
+    await h.engine.scripts.openContext(
+      TavernScriptContextSpec(instanceId: 'window-preset-change', chatId: h.chat, characterId: h.characterId),
+    );
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    addTearDown(() {
+      if (!release.isCompleted) release.complete();
+    });
+    final host = ScriptHost();
+    host.onDispatch = (request, cancellation) async {
+      if (request.name == 'GENERATION_AFTER_COMMANDS' && !entered.isCompleted) {
+        entered.complete();
+        await release.future;
+      }
+      return TavernScriptDispatchAck(eventId: request.eventId);
+    };
+    h.engine.scripts.attachHost(host);
+    final call = h.model.prepare();
+    final events = T24Events(h.engine.send(h.chat, 'captured small budget'));
+    await Future.any<void>([
+      entered.future,
+      events.done.future.then<void>((_) => throw StateError('Turn ended before its held preparation hook.')),
+    ]);
+    await h.engine.updatePreset(selected.preset.id, {'openai_max_context': 20000});
+    release.complete();
+    await call.listening.future;
+    call.add(const ModelText('The reply.'));
+    await call.finish();
+    await events.done.future;
+    expect(events.values.whereType<TavernTurnFailed>(), isEmpty);
+    expect(h.engine.inspect(h.chat)!.prompt.budget, 576);
+    expect(h.engine.inspect(h.chat)!.prompt.historyWindow, isNotNull);
+    await h.send('use the newly expanded budget');
+    expect(h.engine.inspect(h.chat)!.prompt.historyWindow, isNull);
+    expect(_text(h.model.allCalls.last.body!), contains('TRUE ROOT'));
+  });
+
   test('plain prompt and WI windows preserve the request, exclusions and full-history effects', () async {
     final embedded = {
       'entries': [

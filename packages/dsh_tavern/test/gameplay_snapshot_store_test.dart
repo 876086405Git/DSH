@@ -23,6 +23,13 @@ void main() {
     final own = store.readGameplaySnapshot(chatId: chat, packRefs: []);
     expect(own.domainId, store.authoringDomainId);
     expect(own.chat!.title, 'before');
+    final ownBindings = store.readGameplayBindingFacts(chatId: chat);
+    expect(ownBindings.domainId, own.domainId);
+    expect(ownBindings.hostCharacterId, own.chat!.characterId);
+    expect(ownBindings.groupCharacterIds, isNull);
+    expect(ownBindings.scopeSnapshots, hasLength(3));
+    expect(ownBindings.resolvedScopes.every((scope) => scope.bindings.isEmpty), isTrue);
+    expect(ownBindings.versions, isEmpty);
     expect(db.autocommit, isTrue);
     expect(_totalChanges(db), initialChanges);
     await Future<void>.delayed(Duration.zero);
@@ -38,6 +45,7 @@ void main() {
       final beforeRead = _totalChanges(db);
       final borrowed = store.readGameplaySnapshot(chatId: chat, packRefs: []);
       expect(borrowed.chat!.title, 'uncommitted');
+      expect(store.readGameplayBindingFacts(chatId: chat).hostCharacterId, borrowed.chat!.characterId);
       expect(db.autocommit, isFalse);
       expect(_totalChanges(db), beforeRead);
       expect(publications, 0);
@@ -61,6 +69,7 @@ void main() {
         final beforeRead = _totalChanges(db);
         committed = store.readGameplaySnapshot(chatId: chat, packRefs: []);
         expect(committed!.chat!.title, 'committed');
+        expect(store.readGameplayBindingFacts(chatId: chat).hostCharacterId, committed!.chat!.characterId);
         expect(db.autocommit, isTrue);
         expect(_totalChanges(db), beforeRead);
         expect(publications, 0);
@@ -95,6 +104,13 @@ void main() {
         expect(
           () => store.readGameplaySnapshot(chatId: chat, packRefs: []),
           throwsA(isA<FormatException>().having((error) => error.source, 'source', '{')),
+        );
+        // Resource currentness reads the live host and bindings, not unused
+        // chat metadata. The full reader keeps its existing decode failure.
+        expect(store.readGameplayBindingFacts(chatId: chat).hostCharacterId, 'snapshot-character');
+        expect(
+          () => store.readGameplayBindingFacts(chatId: 'absent'),
+          throwsA(isA<StateError>().having((error) => error.message, 'message', 'Chat not found: absent')),
         );
         expect(db.autocommit, isFalse);
         expect(_totalChanges(db), beforeRead);

@@ -65,6 +65,144 @@ void main() {
     expect(store.chat(id).metadata, chat.metadata);
   });
 
+  test('script reads keep variable shapes and swipe evidence without private payloads', () {
+    final chat = store.createChat(characterId: 'card');
+    final extra = <String, Object?>{
+      'foreign': {
+        'items': [null, '\ufeffkept'],
+      },
+      'dshgo': {
+        'inspection': {'private': 'prompt evidence'},
+        'branchName': 'private label',
+        'tavernState': {
+          'messageVariables': null,
+          'other': [1, false],
+        },
+      },
+    };
+    final original = <String, Object?>{
+      'mes': 'imported body',
+      'swipes': ['imported body', 'other body'],
+      'extra': {'duplicate': true},
+      'swipe_id': 1,
+      'swipe_info': [
+        null,
+        {
+          'unknown': [false, 'kept'],
+          'send_date': null,
+          'gen_started': false,
+        },
+      ],
+      'send_date': null,
+      'gen_finished': [1, 'opaque'],
+      'vendor': {'keep': true},
+    };
+    final saved = store.append(
+      chat,
+      parentId: null,
+      role: TavernRole.character,
+      speaker: '\ufeffSpeaker',
+      text: '\ufeffcurrent body',
+      extra: extra,
+      original: original,
+      state: {
+        'messageVariables': {'physical': true},
+      },
+    );
+    final expectedOriginal = Map<String, Object?>.of(original)
+      ..remove('mes')
+      ..remove('swipes')
+      ..remove('extra');
+    for (final node in [store.scriptHistoryTo(chat, saved.nodeId).single, store.scriptChildren(chat, null).single]) {
+      expect([node.message.speaker, node.message.text], ['\ufeffSpeaker', '\ufeffcurrent body']);
+      expect(node.extra, {
+        'foreign': extra['foreign'],
+        'dshgo': {
+          'tavernState': {
+            'messageVariables': null,
+            'other': [1, false],
+          },
+        },
+      });
+      expect(node.original, expectedOriginal);
+      (node.extra['foreign']! as Map<String, Object?>)['items'] = 'caller mutation';
+      (node.original['vendor']! as Map<String, Object?>)['keep'] = false;
+    }
+    expect(store.node(chat, saved.nodeId).extra, extra);
+    expect(store.node(chat, saved.nodeId).original, original);
+    expect(store.nodeState(chat, saved.nodeId), {
+      'messageVariables': {'physical': true},
+    });
+    store.beginStreamingWrites();
+    try {
+      store.writeStreamingBody(chat, saved.nodeId, text: '\ufeffdraft', reasoning: null);
+      expect(store.scriptHistoryTo(chat, saved.nodeId).single.message.text, '\ufeffdraft');
+      expect(store.scriptChildren(chat, null).single.message.text, '\ufeffdraft');
+      expect(store.rawNodeExtra(chat, saved.nodeId), extra);
+    } finally {
+      store.endStreamingWrites();
+    }
+  });
+
+  test('read tokens and scalar identities observe state commits and isolate rollbacks', () {
+    final chat = store.createChat(characterId: 'host');
+    final other = store.createChat(characterId: 'other');
+    final root = append(
+      chat,
+      'root',
+      state: {
+        'messageVariables': {'n': 1},
+      },
+    );
+    final before = store.displayVersion(chat);
+    final otherBefore = store.displayVersion(other);
+    final revision = store.treeRevision(chat);
+    Object? temporary;
+    expect(
+      () => store.transaction<void>(() {
+        store.writeNodeState(chat, root.nodeId, {
+          'messageVariables': {'n': 2},
+        });
+        final child = append(chat, 'temporary', parent: root.nodeId);
+        temporary = store.displayVersion(chat);
+        expect(identical(temporary, before), isFalse);
+        expect(store.chatCharacterId(chat), 'host');
+        expect(store.chatCurrentLeafId(chat), child.nodeId);
+        expect(store.contextAnchor(chat).selectedLeaf?.nodeId, child.nodeId);
+        expect(store.treeRevision(chat), greaterThan(revision));
+        expect(store.nodeState(chat, root.nodeId), {
+          'messageVariables': {'n': 2},
+        });
+        throw StateError('rollback');
+      }),
+      throwsStateError,
+    );
+    expect(identical(store.displayVersion(chat), before), isTrue);
+    expect(identical(store.displayVersion(chat), temporary), isFalse);
+    expect(store.chatCurrentLeafId(chat), root.nodeId);
+    expect(store.treeRevision(chat), revision);
+    expect(store.nodeState(chat, root.nodeId), {
+      'messageVariables': {'n': 1},
+    });
+    store.writeNodeState(chat, root.nodeId, {
+      'messageVariables': {'n': 3},
+    });
+    expect(identical(store.displayVersion(chat), before), isFalse);
+    expect(identical(store.displayVersion(other), otherBefore), isTrue);
+    expect(store.nodeState(chat, root.nodeId), {
+      'messageVariables': {'n': 3},
+    });
+    for (final read in <void Function()>[
+      () => store.chatCharacterId('missing'),
+      () => store.chatCurrentLeafId('missing'),
+      () => store.treeRevision('missing'),
+      () => store.contextAnchor('missing'),
+      () => store.scriptHistoryTo('missing', null),
+    ]) {
+      expect(read, throwsA(isA<StateError>().having((error) => error.message, 'message', 'Chat not found: missing')));
+    }
+  });
+
   test('summaries count the selected path and sort by last change', () {
     final first = store.createChat(characterId: 'card', title: 'one');
     final root = append(first, 'opening');

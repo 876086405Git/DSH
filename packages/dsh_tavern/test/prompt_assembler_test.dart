@@ -242,7 +242,7 @@ void main() {
   });
 
   test('examples are atomic; pinning gives their whole block priority', () {
-    final preset = _preset({'openai_max_context': 8, 'openai_max_tokens': 0});
+    final preset = _preset({'openai_max_context': 8, 'openai_max_tokens': 0, 'cacheFriendlyTrimming': false});
     const card = {'name': 'Whale', 'mes_example': '<START>\nUser: example U\nWhale: example A'};
     const history = [
       PromptHistoryMessage(id: '1', role: 'user', content: 'one'),
