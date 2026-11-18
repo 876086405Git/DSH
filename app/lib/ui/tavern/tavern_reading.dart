@@ -68,7 +68,8 @@ class TavernReading extends ConsumerWidget {
     final ink = st == null ? TavernInk.of(palette, theme.brightness) : TavernInk.st(st, theme.colorScheme.surface);
     final read = Theme(
       data: tavernReadingTheme(theme, size: size, height: height, font: bodyFont),
-      child: names.isEmpty && nameFont == null ? child : TavernNameColors(names: names, font: nameFont, child: child),
+      // Always there: a story that changed shape would be built afresh.
+      child: TavernNameColors(names: names, font: nameFont, child: child),
     );
     return TavernInkScope(
       ink: ink,

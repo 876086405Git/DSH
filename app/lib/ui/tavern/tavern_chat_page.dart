@@ -382,11 +382,32 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     final window = _window;
     final messages = await _tavern.path(widget.chatId, limit: window);
     if (!mounted) return;
+    // The engine keeps the reply being written every half second; that one
+    // is drawn from the stream, so the rest staying as they were is nothing
+    // to draw again.
+    if (_running && _sameBesides(_messages, messages, _streamNode)) return;
     setState(() {
       _messages = messages;
       _hasOlder = messages.length >= window;
     });
     unawaited(_readPinned());
+  }
+
+  static bool _sameBesides(List<TavernMessage>? old, List<TavernMessage> next, String? streaming) {
+    if (old == null || old.length != next.length) return false;
+    for (var i = 0; i < old.length; i++) {
+      final (a, b) = (old[i], next[i]);
+      if (a.nodeId != b.nodeId) return false;
+      if (a.nodeId == streaming) continue;
+      if (a.text != b.text ||
+          a.reasoning != b.reasoning ||
+          a.hidden != b.hidden ||
+          a.siblingIndex != b.siblingIndex ||
+          a.siblingCount != b.siblingCount) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// The state the card pins, for the header's line (engine T17); none when
@@ -1462,7 +1483,13 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     final showUsage = ref.watch(tavernSettingsProvider.select((s) => s.showUsage));
     // What each reply's turn did with tools, by reply (the engine's record).
     final toolTurns = ref.watch(tavernChatToolTurnsProvider(widget.chatId)).value ?? const {};
-    final messages = _messages;
+    // The story waits for the card's look: drawn before it, it would all be
+    // drawn again (its islands loaded twice) when the accent came.
+    final themePending =
+        characterId != null &&
+        ref.watch(tavernSettingsProvider.select((s) => s.cardTheme)) &&
+        !ref.watch(tavernCharacterDetailProvider(characterId).select((d) => d.hasValue || d.hasError));
+    final messages = themePending ? null : _messages;
     final (String status, StatusTone tone) = switch (()) {
       // A group: who speaks now, and who follows.
       _ when _running && _groupProgress?.speakerCharacterId != null => (
@@ -2079,10 +2106,12 @@ class _MessageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final drawn = novel ? _novel(context) : _bubble(context);
     // A reply with alternatives swipes sideways through them, like ‹ ›.
-    final swipes = message.role == TavernRole.character && !busy && (last || message.siblingCount > 1);
-    final body = swipes
+    // Always in it, turned off when it can't: a row that changed shape would
+    // build its islands (web pages) afresh.
+    final body = message.role == TavernRole.character
         ? _SwipeToSwitch(
             key: ValueKey('tavern-swipe-${message.nodeId}'),
+            enabled: !busy && (last || message.siblingCount > 1),
             canPrevious: message.siblingIndex > 0,
             canNext: message.siblingIndex + 1 < message.siblingCount || last,
             onSwitch: onSibling,
@@ -2405,12 +2434,14 @@ class _QuickReplyRow extends StatelessWidget {
 class _SwipeToSwitch extends StatefulWidget {
   const _SwipeToSwitch({
     super.key,
+    required this.enabled,
     required this.canPrevious,
     required this.canNext,
     required this.onSwitch,
     required this.child,
   });
 
+  final bool enabled;
   final bool canPrevious;
   final bool canNext;
   final ValueChanged<int> onSwitch;
@@ -2451,12 +2482,14 @@ class _SwipeToSwitchState extends State<_SwipeToSwitch> {
   @override
   Widget build(BuildContext context) => GestureDetector(
     behavior: HitTestBehavior.translucent,
-    onHorizontalDragUpdate: _update,
-    onHorizontalDragEnd: _end,
-    onHorizontalDragCancel: () => setState(() {
-      _dragging = false;
-      _dx = 0;
-    }),
+    onHorizontalDragUpdate: widget.enabled ? _update : null,
+    onHorizontalDragEnd: widget.enabled ? _end : null,
+    onHorizontalDragCancel: widget.enabled
+        ? () => setState(() {
+            _dragging = false;
+            _dx = 0;
+          })
+        : null,
     child: AnimatedContainer(
       duration: _dragging ? Duration.zero : AppMotion.of(context, AppMotion.standard),
       curve: AppMotion.std,
@@ -2523,6 +2556,13 @@ Widget _beside(Widget? stage, Widget story) => stage == null
 /// never stored. The text as written until that comes, or if it cannot.
 final tavernShownTextProvider = FutureProvider.autoDispose.family<String, (String, String, String)>((ref, key) async {
   final (chatId, nodeId, text) = key;
+  // Kept a while after its row scrolls away: scrolling back is not the
+  // display regex over again.
+  final keep = ref.keepAlive();
+  Timer? let;
+  ref.onCancel(() => let = Timer(const Duration(minutes: 1), keep.close));
+  ref.onResume(() => let?.cancel());
+  ref.onDispose(() => let?.cancel());
   final shown = await ref.watch(tavernProvider).displayText(chatId, nodeId: nodeId, text: text);
   return shown.superseded ? text : shown.text;
 });
@@ -2580,9 +2620,11 @@ class _Shown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Expression markers ([表情:x]) pick her picture; they are not words.
-    final shown = tavernStripMarkers(
-      ref.watch(tavernShownTextProvider((chatId, message.nodeId, message.text))).value ?? message.text,
-    );
+    final display = ref.watch(tavernShownTextProvider((chatId, message.nodeId, message.text)));
+    final shown = tavernStripMarkers(display.value ?? message.text);
+    // Islands wait for the display pass: one built from the raw text would
+    // be thrown away (a web page loaded twice) when it comes.
+    final settled = display.hasValue || display.hasError;
     Widget text(String markdown) =>
         MarkdownBody(text: indent ? tavernIndentParagraphs(markdown) : markdown, selectable: false);
     // HTML in it: those parts in islands of their own (酒馆设置 › 显示);
@@ -2599,6 +2641,7 @@ class _Shown extends ConsumerWidget {
         for (final part in parts)
           switch (part) {
             TavernTextPart(:final markdown) => text(markdown),
+            TavernIslandPart() when !settled => const SizedBox.shrink(),
             TavernIslandPart(:final html) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: TavernIslandMessage(
@@ -2753,10 +2796,27 @@ class _StreamingReply extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([stream, live]),
-    builder: (context, _) {
+    listenable: stream,
+    // Its words go by [live] (a display pass at most every 120 ms), not by
+    // each piece: a long reply is not laid out again a hundred times.
+    child: ListenableBuilder(
+      listenable: live,
+      builder: (context, _) {
+        final shown = live.shown;
+        if (shown.isEmpty) return const SizedBox.shrink();
+        // Component tags turn into cards once the reply is in; while it is
+        // written, only their words.
+        return MarkdownBody(
+          text: indent
+              ? tavernIndentParagraphs(tavernComponentTagsOut(tavernStripMarkers(shown)))
+              : tavernComponentTagsOut(tavernStripMarkers(shown)),
+          streaming: true,
+          selectable: false,
+        );
+      },
+    ),
+    builder: (context, words) {
       final (:text, :reasoning) = stream.value;
-      final shown = live.shown;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2781,16 +2841,8 @@ class _StreamingReply extends StatelessWidget {
             ),
           if (text.isEmpty && reasoning.isEmpty)
             const Align(alignment: Alignment.centerLeft, child: TypingIndicator())
-          else if (shown.isNotEmpty)
-            // Component tags turn into cards once the reply is in; while it
-            // is written, only their words.
-            MarkdownBody(
-              text: indent
-                  ? tavernIndentParagraphs(tavernComponentTagsOut(tavernStripMarkers(shown)))
-                  : tavernComponentTagsOut(tavernStripMarkers(shown)),
-              streaming: true,
-              selectable: false,
-            ),
+          else
+            words!,
         ],
       );
     },

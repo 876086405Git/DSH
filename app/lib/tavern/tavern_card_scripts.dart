@@ -4,6 +4,7 @@
 // enabled ones run in the whole-story canvas, each in its own hidden frame.
 
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,8 +130,11 @@ List<TavernCardScript> tavernCardScripts(Object? card) {
 bool tavernUsesMvu(Map<String, Object?>? card) {
   if (card == null) return false;
   if (card['extensions'] case {'dshgo': {'mvu': {'enabled': true}}}) return true;
-  return jsonEncode(card).contains('MagVarUpdate');
+  // Its world book left out: often most of the card, and never what loads it.
+  return jsonEncode({...card}..remove('character_book')).contains('MagVarUpdate');
 }
+
+const _bigCard = 256 * 1024;
 
 /// A character's card as the engine exports it, its fields (V2/V3 data, or a
 /// V1 card's top level); null when it cannot be read.
@@ -140,7 +144,10 @@ final tavernCardDataProvider = FutureProvider.autoDispose.family<Map<String, Obj
 ) async {
   try {
     final bytes = await ref.watch(tavernProvider).exportCard(characterId, format: TavernCardFormat.json);
-    return tavernCardData(jsonDecode(utf8.decode(bytes)));
+    // A big card (a world book of hundreds of entries) is megabytes of JSON:
+    // read off the screen's thread.
+    Map<String, Object?>? read() => tavernCardData(jsonDecode(utf8.decode(bytes)));
+    return bytes.length > _bigCard ? await Isolate.run(read) : read();
   } on Object {
     return null;
   }

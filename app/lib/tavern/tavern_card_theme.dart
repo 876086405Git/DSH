@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dsh_tavern/dsh_tavern.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +45,20 @@ class TavernCardTheme {
   /// `fonts` names assets, as a string (the text's) or {body, names}.
   final String? bodyFont;
   final String? nameFont;
+
+  // Read again on each change to the library: the same look is no change.
+  @override
+  bool operator ==(Object other) =>
+      other is TavernCardTheme &&
+      other.accent == accent &&
+      other.layout == layout &&
+      mapEquals(other.names, names) &&
+      other.background == background &&
+      other.bodyFont == bodyFont &&
+      other.nameFont == nameFont;
+
+  @override
+  int get hashCode => Object.hash(accent, layout, Object.hashAllUnordered(names.entries.map((e) => (e.key, e.value))), background, bodyFont, nameFont);
 
   bool get isEmpty =>
       accent == null && layout == null && names.isEmpty && background == null && bodyFont == null && nameFont == null;
