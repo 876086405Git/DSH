@@ -314,12 +314,25 @@ class _GlassPainter extends CustomPainter {
     final disc = Rect.fromCircle(center: center, radius: r);
 
     // Outside: a soft halo of the theme's colour.
+    final halo = tones[2].withValues(alpha: ((light ? 0.28 : 0.18) + scene.glow * 0.45) * fade);
+    // A disc of r·1.02 blurred by σ = r·0.45, drawn as that blur's own falloff
+    // (full well inside, half at the edge, gone 2.5σ out): a mask blur that
+    // wide, every frame, is what made the call page stutter.
+    final outer = r * 2.145;
     canvas.drawCircle(
       center,
-      r * 1.02,
+      outer,
       Paint()
-        ..color = tones[2].withValues(alpha: ((light ? 0.28 : 0.18) + scene.glow * 0.45) * fade)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.45),
+        ..shader = RadialGradient(
+          colors: [
+            halo,
+            halo.withValues(alpha: halo.a * 0.85),
+            halo.withValues(alpha: halo.a * 0.5),
+            halo.withValues(alpha: halo.a * 0.12),
+            halo.withValues(alpha: 0),
+          ],
+          stops: const [0, 0.266, 0.476, 0.727, 1],
+        ).createShader(Rect.fromCircle(center: center, radius: outer)),
     );
 
     canvas.save();
@@ -444,15 +457,24 @@ class _EdgePainter extends CustomPainter {
       colors: [...palette.tones, palette.tones.first],
       transform: GradientRotation(scene.flow * 0.5),
     ).createShader(Offset.zero & size);
-    canvas.drawRRect(
-      frame,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 10 + scene.energy * 6 + scene.accent * 5
-        ..shader = shader
-        ..color = Colors.white.withValues(alpha: strength.clamp(0.0, 1.0))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
-    );
+    final width = 10 + scene.energy * 6 + scene.accent * 5;
+    final alpha = strength.clamp(0.0, 1.0);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..shader = shader;
+    // A 16 blur round the whole screen every frame cost too much: eight nested
+    // strokes instead, each 6 wider on either side and carrying the Gaussian's
+    // share between its edge and the next one's.
+    double falloff(double d) => math.exp(-d * d / (2 * 16 * 16));
+    final peak = alpha * math.min(1.0, width / 40);
+    for (var k = 0; k < 8; k++) {
+      canvas.drawRRect(
+        frame,
+        paint
+          ..strokeWidth = width + 12.0 * k
+          ..color = Colors.white.withValues(alpha: peak * (falloff(6.0 * k) - falloff(6.0 * k + 6))),
+      );
+    }
   }
 
   @override
@@ -471,7 +493,17 @@ class CallClock extends StatefulWidget {
 }
 
 class _CallClockState extends State<CallClock> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker((elapsed) => widget.onTick(elapsed.inMicroseconds / 1e6));
+  late final Ticker _ticker = createTicker(_tick);
+  double? _last;
+
+  void _tick(Duration elapsed) {
+    final now = elapsed.inMicroseconds / 1e6;
+    // At most 60 a second, as the voice ring keeps: a 120 Hz screen would
+    // otherwise repaint the whole page twice as often for no visible gain.
+    if (_last != null && now - _last! < 1 / 62) return;
+    _last = now;
+    widget.onTick(now);
+  }
 
   @override
   void initState() {

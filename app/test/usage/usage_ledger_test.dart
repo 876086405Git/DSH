@@ -38,7 +38,8 @@ void main() {
     for (var d = 10; d <= 27; d++) {
       ledger.touch(_at(d));
     }
-    final due = ledger.due(_at(28));
+    // Keep this seven-day case on the same date as the UTC+8 share host.
+    final due = ledger.due(DateTime.utc(2026, 10, 28));
     expect(due, [for (var d = 21; d <= 27; d++) '2026-10-$d']);
     expect(ledger.days.keys.toSet(), due.toSet());
   });

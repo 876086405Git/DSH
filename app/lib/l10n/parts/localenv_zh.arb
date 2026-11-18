@@ -29,6 +29,8 @@
     }
   },
   "localEnvRemoteDetail": "连接电脑或服务器上的 DSH",
+  "localEnvUnavailable": "这台设备暂时不能在本机运行 DSH",
+  "localEnvUnsupported": "暂不支持",
   "localEnvRecommended": "推荐",
   "localEnvInstallTitle": "安装本机运行环境",
   "localEnvInstallMessage": "在这台手机上运行 DSH",
@@ -58,5 +60,22 @@
   "localEnvUninstallFailed": "没能卸载，再试一次",
   "localEnvPhoneNeedsRuntime": "安装本机运行环境后可用",
   "localEnvSignInNeedsRuntime": "需要本机运行环境",
-  "localEnvSignInInstallFirst": "安装后即可登录"
+  "localEnvSignInInstallFirst": "安装后即可登录",
+  "engineStartReopensApp": "引擎每次打开 App 只能启动一次，再启动会重新打开 App。",
+  "engineReopenFailed": "引擎要重新打开 App 才能再启动，请手动重开一次。",
+  "engineCapShell": "命令行",
+  "engineCapShellBuiltin": "内置 {count} 个命令",
+  "@engineCapShellBuiltin": {"placeholders": {"count": {"type": "int"}}},
+  "engineCapShellSystem": "系统",
+  "engineCapNodeScripts": "Node 脚本",
+  "engineCapMarket": "安装市场插件",
+  "engineCapBackground": "切到后台时",
+  "engineCapMayFreeze": "可能被系统暂停",
+  "engineCapKeepsRunning": "继续运行",
+  "engineCapYes": "可以",
+  "engineCapNone": "不可用",
+  "marketInstallRefused": "这个引擎不能安装市场插件",
+  "localEnvChooseUseTitle": "想怎么用 dsh-Go？",
+  "localEnvTavernTitle": "和角色聊天",
+  "localEnvTavernDetail": "接回 DeepSeek 的对话也在这里 · 不用安装"
 }

@@ -53,6 +53,19 @@
   "speechCallCueHint": "回答一时没出声时，轻响一声表示还在想",
   "speechLiveSection": "实时字幕",
   "speechLiveName": "流式识别模型",
+  "speechLiveSystemName": "系统识别（普通话）",
+  "speechLiveSystemReadyNote": "由鸿蒙系统提供，不用下载模型，通话时自动使用",
+  "speechLiveSystemBusy": "使用中",
+  "speechLiveSystemBusyNote": "语音输入或另一项识别正在用它，用完后点重试",
+  "speechLiveSystemFailedNote": "这台手机现在用不了系统识别：{reason}",
+  "@speechLiveSystemFailedNote": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "speechLiveSystemFooter": "字幕和插话判断由鸿蒙系统识别在手机上完成；发给 AI 的文字仍由上面选的识别方式给出，选了云端识别录音就会上传。",
   "speechLiveAbsentNote": "下载后，通话时一边说一边出字，插话也停得更快。约 {mb}，在手机上运行",
   "@speechLiveAbsentNote": {
     "placeholders": {

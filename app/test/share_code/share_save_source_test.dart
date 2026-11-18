@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dsh_app/share_code/share_codec.dart';
 import 'package:dsh_app/share_code/share_models.dart';
 import 'package:dsh_app/state/artifacts.dart';
+import 'package:dsh_app/ui/common/pressable.dart';
 import 'package:dsh_app/ui/share_code/share_code_panel.dart';
 import 'package:dsh_app/ui/share_code/share_out.dart';
 import 'package:flutter/material.dart';
@@ -83,6 +84,55 @@ void main() {
     expect((decodeShareFile(firstContent!) as ProfileShare).skills.single.name, 'first');
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('backing out of the save window reads as neither saved nor failed', (tester) async {
+    final cache = Directory.systemTemp.createTempSync('share-save-cancel-');
+    addTearDown(() => cache.deleteSync(recursive: true));
+    const channel = MethodChannel('test/share-save-cancel');
+    Object failure = PlatformException(code: 'cancelled');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => throw failure);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    final out = ShareOut(files: const FilesChannel(channel), cacheRoot: () async => cache);
+    usePhoneSurface(tester);
+    await tester.pumpWidget(
+      goldenApp(
+        brightness: Brightness.light,
+        home: Scaffold(
+          body: ShareCodePanel(
+            payload: ProfileShare(
+              skills: [
+                SharedSkill(name: 'a', files: {'SKILL.md': 'x'}),
+              ],
+            ),
+            title: 'a',
+          ),
+        ),
+        overrides: [shareOutProvider.overrideWithValue(out)],
+      ),
+    );
+    // The save does real file I/O: wait until its key is back, not a fixed time (a busy CI
+    // runner can take longer than any guess).
+    final key = find.byKey(const ValueKey('share-code-save'));
+    Future<void> save() async {
+      await tester.runAsync(() => tester.tap(key));
+      await tester.pump();
+      for (var i = 0; i < 250 && !tester.widget<Pressable>(key).enabled; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+      expect(tester.widget<Pressable>(key).enabled, isTrue, reason: 'the save never finished');
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    await save();
+    expect(find.text('没能保存，请重试'), findsNothing);
+    expect(find.text('已保存'), findsNothing);
+
+    failure = PlatformException(code: 'failed');
+    await save();
+    expect(find.text('没能保存，请重试'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('native failure removes only its owned save directory', () async {
     final cache = Directory.systemTemp.createTempSync('share-save-failure-');
     addTearDown(() => cache.deleteSync(recursive: true));

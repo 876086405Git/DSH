@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "status": "FROZEN_EXPECTATION_NOT_RUN",
+  "before": "FIRST\n",
+  "existingMode": 420,
+  "bodyRule": {
+    "encoding": "utf8",
+    "prefix": "A",
+    "repeat": 1048576,
+    "suffixByte": 10
+  },
+  "body": {
+    "bytes": 1048577,
+    "sha256": "dfb17388a59fcc17cc5b8f0e07239ff95c234caa78ef56710a331cf6e0d49800"
+  },
+  "abortReason": {
+    "name": "Error",
+    "code": null,
+    "message": "ordinary whole-write staging cancellation",
+    "cause": null
+  },
+  "providerError": {
+    "name": "FsError",
+    "code": "FS_ABORTED",
+    "message": "write aborted",
+    "cause": {
+      "name": "AbortError",
+      "code": "ABORT_ERR",
+      "message": "The operation was aborted",
+      "cause": {
+        "name": "Error",
+        "code": null,
+        "message": "ordinary whole-write staging cancellation",
+        "cause": null
+      }
+    }
+  },
+  "toolResult": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: write aborted"
+      }
+    ],
+    "isError": true,
+    "error": {
+      "message": "write aborted",
+      "info": {
+        "name": "FsError",
+        "code": "FS_ABORTED"
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "logical-existing",
+      "logical": true,
+      "existing": true,
+      "filename": "existing.txt"
+    },
+    {
+      "name": "logical-new",
+      "logical": true,
+      "existing": false,
+      "filename": "new.txt"
+    }
+  ],
+  "schedule": {
+    "after": "first actual positive writeWholeOutput return",
+    "callback": "node:timers.setImmediate",
+    "before": "second staging write, closeWholeOutput and stepWholeOutput",
+    "nativeSequence": [
+      "beginWholeOutput",
+      "writeWholeOutput",
+      "abortWholeOutput"
+    ],
+    "firstRequestedBytes": 1048576,
+    "actualReturnedBytes": "integer 1..1048576, independently read from owned staging content; never assumed equal to requested"
+  },
+  "unchangedTarget": {
+    "existing": "FIRST LF 6B 0644 and exact five-field identity/version unchanged",
+    "new": "absent before, at cancellation, after batch, at context exit and final teardown"
+  },
+  "resourcePoints": [
+    "live lease=1 at cancellation observation",
+    "batch await returned, before Context.dispose: active=true, leases=0",
+    "after Context.dispose: active=true, leases=0",
+    "separate ordinary background retirement: active=false,leases=0,drained=true"
+  ],
+  "notCovered": [
+    "physical Node write cancellation",
+    "guarded-create or wx fallback copy",
+    "effect1/partial publication",
+    "post-publication cancellation",
+    "failure injection/cleanup failure",
+    "ACL preservation/device or phone",
+    "full Host/model/RPC/UI",
+    "VM/permissions/namespace experiments"
+  ],
+  "bodyLog": "Complete text input is fixed by construction rule+byte length+SHA256; no repeated MiB hex in evidence. Errors/batch/provider objects remain complete."
+}

@@ -1,3 +1,4 @@
+import 'package:dsh_app/tavern/tavern_island_story.dart';
 import 'package:dsh_app/tavern/tavern_islands.dart';
 import 'package:dsh_app/tavern/tavern_preview.dart';
 import 'package:dsh_app/tavern/tavern_provider.dart';
@@ -95,6 +96,59 @@ void main() {
     expect(offline, contains('img-src data: blob:'));
     expect(offline, contains("script-src 'unsafe-inline' 'unsafe-eval'\">"));
     expect(offline, isNot(contains("'unsafe-eval' 'nonce-")));
+  });
+
+  test("a status bar's island reads its floor (read only), with jQuery and lodash first", () {
+    expect(tavernIslandReadsStory("<script>await waitGlobalInitialized('Mvu');</script>"), isTrue);
+    expect(tavernIslandReadsStory("<script>getVariables({type:'message'})</script>"), isTrue);
+    expect(tavernIslandReadsStory('<div>Mvu</div>'), isFalse);
+    expect(tavernIslandHasScript('<p>x</p>'), isFalse);
+    // An inline handler runs as a script does.
+    expect(tavernIslandReadsStory('<button onclick="getVariables()">看</button>'), isTrue);
+    expect(tavernIslandHasScript('<p onclick="go()">x</p>'), isTrue);
+    String page({bool noScripts = false}) => tavernIslandDocument(
+      _status,
+      text: const Color(0xff112233),
+      accent: const Color(0xff445566),
+      fontSize: 15,
+      nonce: 'n0nce',
+      noScripts: noScripts,
+      libraries: const ['window.lib=1;</script>'],
+      story: const {
+        'messageId': 1,
+        'data': {'note': '</script>'},
+      },
+    );
+    final open = page();
+    expect(open, contains(r'<script nonce="n0nce">window.lib=1;<\/script></script>'));
+    expect(open, contains(r'var dshStory={"messageId":1,"data":{"note":"\u003c/script>"}};'));
+    expect(open, contains("e.code='unsupportedCapability'"));
+    expect(open.indexOf('var dshStory'), lessThan(open.indexOf(_status)));
+    final quiet = page(noScripts: true);
+    expect(quiet, isNot(contains('dshStory')));
+    expect(quiet, isNot(contains('window.lib')));
+  });
+
+  test("an island's story: each message's floor and variables, the latest's, the chat's", () {
+    final story = TavernIslandStory(
+      floors: {
+        'n0': (floor: 0, data: const {'a': 1}),
+        'n1': (floor: 1, data: const {'a': 2}),
+      },
+      chat: const {'c': true},
+      last: (floor: 1, data: const {'a': 2}),
+    );
+    expect(story.forMessage('n0', text: '你好', name: '林晚', user: false), {
+      'messageId': 0,
+      'last': 1,
+      'data': {'a': 1},
+      'latest': {'a': 2},
+      'chat': {'c': true},
+      'message': '你好',
+      'name': '林晚',
+      'role': 'assistant',
+    });
+    expect(story.forMessage('gone', text: '', name: '', user: false), isNull);
   });
 
   testWidgets("a message's HTML is an island; the words around it stay native", (tester) async {

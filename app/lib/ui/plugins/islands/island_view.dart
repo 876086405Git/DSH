@@ -20,6 +20,11 @@ import 'island_messages.dart';
 import 'island_skeleton.dart';
 import 'island_theme.dart';
 
+/// How an island's WebView is drawn before it is ready. Fully see-through would
+/// mean not drawn at all, and on iOS a platform view that isn't drawn leaves the
+/// window and has no size: DSH Web would have nothing to lay itself out for.
+double get _hiddenOpacity => defaultTargetPlatform == TargetPlatform.iOS ? 0.01 : 0;
+
 /// Probe islands: the size DSH Web lays itself out for, off screen.
 abstract final class IslandProbeMetrics {
   static const width = 360.0;
@@ -304,7 +309,7 @@ class _IslandViewState extends ConsumerState<IslandView> {
       IslandForm.overlay => IgnorePointer(
         ignoring: !ready,
         child: Opacity(
-          opacity: ready ? 1 : 0,
+          opacity: ready ? 1 : _hiddenOpacity,
           child: IslandHitRegion(rects: handle.hitRects, child: web),
         ),
       ),
@@ -319,7 +324,10 @@ class _IslandViewState extends ConsumerState<IslandView> {
             maxWidth: IslandProbeMetrics.width,
             minHeight: IslandProbeMetrics.height,
             maxHeight: IslandProbeMetrics.height,
-            child: Opacity(opacity: 0, child: IgnorePointer(child: web)),
+            child: Opacity(
+              opacity: _hiddenOpacity,
+              child: IgnorePointer(child: web),
+            ),
           ),
         ),
       ),
@@ -339,7 +347,7 @@ class _IslandViewState extends ConsumerState<IslandView> {
     children: [
       IgnorePointer(
         ignoring: !ready,
-        child: Opacity(opacity: ready ? 1 : 0, child: web),
+        child: Opacity(opacity: ready ? 1 : _hiddenOpacity, child: web),
       ),
       IgnorePointer(
         child: AnimatedOpacity(

@@ -29,7 +29,7 @@ class AccessSummaryPage extends ConsumerWidget {
   /// What the picked features need, in walk order.
   final List<AccessItem> items;
 
-  /// 语音输入 was picked: its model downloads once the engine is up.
+  /// 语音输入 was picked and has a model: it downloads once the engine is up.
   final bool voice;
   final VoidCallback onDone;
 

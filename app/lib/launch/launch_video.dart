@@ -1,5 +1,6 @@
-// A custom launch screen's clip: the platform's MediaPlayer on a Flutter texture
-// (android/.../launch/LaunchClipPlugin.kt, `dsh/launch_clip`), silent, played once. Its first
+// A custom launch screen's clip: the platform's player on a Flutter texture
+// (android/.../launch/LaunchClipPlugin.kt, Runner/LaunchChannel.swift, `dsh/launch_clip`), silent,
+// played once. Its first
 // frame, saved as a poster on import, shows at once and stays under the texture, so the switch
 // to the playing clip can't be seen; the last frame stays when it ends.
 

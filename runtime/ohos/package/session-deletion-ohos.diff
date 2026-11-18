@@ -1,0 +1,62 @@
+# OH-only composition variants; shared Android inputs remain byte-identical.
+--- a/runtime/session-deletion/core.mjs
++++ b/runtime/session-deletion/core.mjs
+@@ -77,7 +77,19 @@
+         await handle.writeFile(JSON.stringify({ version: 1, directory: relative(root, dir) }));
+         await handle.sync();
+       } finally { await handle.close(); }
+-      await link(temporary, marker(id));
++      if (process.platform === 'openharmony') {
++        const publication = globalThis[Symbol.for('dsh.go.ohos.publication')];
++        if (publication?.protocolVersion !== 1 || typeof publication.publishAtomic !== 'function') {
++          throw failure('unavailable', 'Atomic session deletion publication is unavailable.');
++        }
++        try { await publication.publishAtomic(temporary, marker(id)); }
++        catch (error) {
++          if (error?.code === 'ERR_OHOS_PUBLICATION_ATOMIC_REQUIRED') {
++            throw Object.assign(failure('unavailable', 'Atomic session deletion publication is unavailable.'), { cause: error });
++          }
++          throw error;
++        }
++      } else await link(temporary, marker(id));
+     } finally { await rm(temporary, { force: true }); }
+     await syncMarkerDirectories(id);
+   };
+@@ -195,6 +207,12 @@
+   };
+   return {
+     version: 2, pending, deleted, assertAdmit, assertParent, withMutation: mutation,
++    get supported() {
++      if (process.platform !== 'openharmony') return true;
++      const publication = globalThis[Symbol.for('dsh.go.ohos.publication')];
++      return publication?.protocolVersion === 1 && typeof publication.publishAtomic === 'function'
++        && !['unsupported', 'disabled-after-crash'].includes(publication.atomic);
++    },
+     // Global identity lease closes the alternate-cwd create race; the original directory
+     // lease also excludes older runtime writers. Neither inode is ever unlinked.
+     async acquireWriter(id, dir, header) {
+--- a/runtime/bridge/dsh-go-bridge/lib/session-deletion.js
++++ b/runtime/bridge/dsh-go-bridge/lib/session-deletion.js
+@@ -43,6 +43,8 @@
+       await services.cache.dshGoForget(sessionId);
+       await services.query.dshGoForget(sessionId);
+       await services.workspace.dshGoForget(sessionId);
++      const { cleanupSessionResources } = await import("@earendil-works/pi-ai");
++      cleanupSessionResources(sessionId);
+     },
+   });
+   return {
+@@ -50,7 +52,12 @@
+       if (path !== `${ROOT}/deletion` && path !== `${ROOT}/delete`) return false;
+       if (path === `${ROOT}/deletion`) {
+         if (req.method !== "GET") send(res, 405, errorBody("unavailable", "Use GET."));
+-        else send(res, 200, { supported: await seam() !== undefined, version: 1 });
++        else {
++          const services = await seam();
++          const supported = services !== undefined && (process.platform !== "openharmony"
++            || services.persistence.dshGoDeletion.supported === true);
++          send(res, 200, { supported, version: 1 });
++        }
+         return true;
+       }
+       if (req.method !== "POST") {

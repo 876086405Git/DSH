@@ -1,0 +1,138 @@
+--- a/temu.c
++++ b/temu.c
+@@ -23,6 +23,9 @@
+  */
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <poll.h>
++#include <stdatomic.h>
++#include <sys/socket.h>
+ #include <stdarg.h>
+ #include <string.h>
+ #include <inttypes.h>
+@@ -99,17 +102,41 @@
+ #ifdef TEMU_EMBED
+ /* Embedded in an app: the console is a pair of pipes, never the process's stdio. */
+ static int embed_out_fd = -1;
++/* These callbacks execute only on the machine thread; caller must not block. */
++static _Thread_local int (*embed_should_stop)(void *);
++static _Thread_local void *embed_control_opaque;
++static _Thread_local int embed_output_failed;
++static _Thread_local int embed_controlled;
++static atomic_flag embed_control_claimed = ATOMIC_FLAG_INIT;
++static int embed_stopping(void)
++{
++    return embed_should_stop && embed_should_stop(embed_control_opaque);
++}
+ #endif
+ 
+ static void console_write(void *opaque, const uint8_t *buf, int len)
+ {
+ #ifdef TEMU_EMBED
+     while (len > 0) {
+-        int k = write(embed_out_fd, buf, len);
+-        if (k < 0 && errno == EINTR)
+-            continue;
+-        if (k <= 0)
++        int k;
++        if (embed_controlled) {
++            struct pollfd pfd = { embed_out_fd, POLLOUT, 0 };
++            if (embed_stopping()) return;
++            /* Per-call nonblocking/no-SIGPIPE: never modify the caller's OFD
++               flags or install a process-global signal handler. */
++            k = send(embed_out_fd, buf, len, MSG_DONTWAIT | MSG_NOSIGNAL);
++            if (k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
++                int ready = poll(&pfd, 1, 10);
++                if (ready >= 0 || errno == EINTR) continue;
++            }
++        } else {
++            k = write(embed_out_fd, buf, len);
++        }
++        if (k < 0 && errno == EINTR) continue;
++        if (k <= 0) {
++            if (embed_controlled) embed_output_failed = 1;
+             return;
++        }
+         buf += k;
+         len -= k;
+     }
+@@ -974,11 +1001,13 @@
+         s->net->device_set_carrier(s->net, TRUE);
+     if (initialized)
+         initialized(opaque);
+-    while (!s->embed_poweroff)
++    while (!s->embed_poweroff && !embed_stopping() && !embed_output_failed)
+         virt_machine_run(s);
+     /* CPU dispatch ended; device teardown is not implemented. Keep the owner
+        quarantined, never classify this as a reusable successful shutdown. */
+-    return TEMU_EMBED_STOPPED_UNRELEASED;
++    if (embed_output_failed) return TEMU_EMBED_OUTPUT_UNRELEASED;
++    if (s->embed_poweroff) return TEMU_EMBED_STOPPED_UNRELEASED;
++    return TEMU_EMBED_CANCELLED_UNRELEASED;
+ 
+  drive_fail:
+     {
+@@ -991,6 +1020,31 @@
+     }
+ }
+ 
++/* New controlled ABI: caller owns a stream socket writer, and serializes the
++   one global VM. Return does not release VM devices or authorize another run. */
++int temu_embed_run_controlled(const char *path, int in_fd, int out_fd,
++                             TemuInitialized initialized, TemuShouldStop stop,
++                             void *opaque)
++{
++    int type;
++    socklen_t size = sizeof(type);
++    int result;
++    if (!stop || getsockopt(out_fd, SOL_SOCKET, SO_TYPE, &type, &size) < 0 ||
++        type != SOCK_STREAM)
++        return TEMU_EMBED_RETRYABLE_START_FAILURE;
++    if (atomic_flag_test_and_set(&embed_control_claimed))
++        return TEMU_EMBED_OWNER_UNRELEASED;
++    embed_controlled = 1;
++    embed_should_stop = stop;
++    embed_control_opaque = opaque;
++    embed_output_failed = 0;
++    result = temu_embed_run_initialized(path, in_fd, out_fd, initialized, opaque);
++    embed_controlled = 0;
++    embed_should_stop = NULL;
++    embed_control_opaque = NULL;
++    return result;
++}
++
+ /* Preserve the original public return convention for existing callers. */
+ int temu_embed_run(const char *path, int in_fd, int out_fd)
+ {
+--- a/temu_embed.h
++++ b/temu_embed.h
+@@ -4,13 +4,17 @@
+ #define TEMU_EMBED_H
+ 
+ typedef void (*TemuInitialized)(void *opaque);
++typedef int (*TemuShouldStop)(void *opaque);
+ enum {
+     /* Local config/drive failure: the fixed startup path released its devices. */
+     TEMU_EMBED_RETRYABLE_START_FAILURE = -1,
+     /* Control threads may end, but complete device cleanup is unproved. */
+     TEMU_EMBED_UNRECOVERED_START_FAILURE = -2,
+     /* Guest requested shutdown; devices remain owned and must not be reused. */
+-    TEMU_EMBED_STOPPED_UNRELEASED = -3
++    TEMU_EMBED_STOPPED_UNRELEASED = -3,
++    TEMU_EMBED_CANCELLED_UNRELEASED = -4,
++    TEMU_EMBED_OUTPUT_UNRELEASED = -5,
++    TEMU_EMBED_OWNER_UNRELEASED = -6
+ };
+ 
+ /* Callback runs synchronously on the machine thread after initialization and
+@@ -21,4 +25,10 @@
+ /* Existing ABI: every setup failure remains -1. */
+ int temu_embed_run(const char *path, int in_fd, int out_fd);
+ 
++/* Both callbacks execute synchronously on the VM thread and must not block.
++ * stdout is a caller-owned stream socket. The caller joins its machine thread
++ * after return, but MUST retain the unreleased VM owner/library thereafter. */
++int temu_embed_run_controlled(const char *path, int in_fd, int out_fd,
++                             TemuInitialized initialized, TemuShouldStop stop,
++                             void *opaque);
+ #endif

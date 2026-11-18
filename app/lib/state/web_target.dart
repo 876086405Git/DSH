@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:dsh_client/dsh_client.dart' show PluginBundle;
 
 import '../l10n/l10n.dart';
@@ -74,7 +76,11 @@ class DshWebTarget {
   };
 
   /// The call the WebView runs once the page and the bridge are loaded.
-  String get openScript => 'window.__dshAppOpen && window.__dshAppOpen(${jsonEncode(toJson())});';
+  String get openScript {
+    final target = toJson();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && newSession) target['confirmNewSession'] = true;
+    return 'window.__dshAppOpen && window.__dshAppOpen(${jsonEncode(target)});';
+  }
 
   /// A copy aimed at [sessionId] (keeps the destination).
   DshWebTarget inSession(String? sessionId) => _copy(sessionId: sessionId, pluginItem: pluginItem);

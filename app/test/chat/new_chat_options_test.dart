@@ -304,7 +304,14 @@ void main() {
     expect(defaultPreset([a, b])?.id, 'b');
     expect(defaultPreset([a])?.id, 'a');
     expect(defaultPreset(const []), isNull);
-    expect(newChatPresets([a, const AgentPresetInfo(id: 'dsh-go-companion-full')]).map((p) => p.id), ['a']);
+    expect(
+      newChatPresets([
+        a,
+        const AgentPresetInfo(id: 'dsh-go-companion-full'),
+        const AgentPresetInfo(id: 'dsh-go-diagnostics'),
+      ]).map((p) => p.id),
+      ['a'],
+    );
 
     const state = PermissionState(options: [], hostDefault: 'workspace-write');
     String effective({bool local = true, bool autoApprove = true, bool safeMode = false}) =>

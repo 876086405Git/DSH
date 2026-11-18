@@ -6,6 +6,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../common/field_paste.dart';
 import 'numeric_edit_math.dart';
 
 import 'package:flutter/material.dart';
@@ -909,7 +910,7 @@ class SecretFieldSheet extends StatefulWidget {
   State<SecretFieldSheet> createState() => _SecretFieldSheetState();
 }
 
-class _SecretFieldSheetState extends State<SecretFieldSheet> {
+class _SecretFieldSheetState extends State<SecretFieldSheet> with FieldPaste<SecretFieldSheet> {
   final _controller = TextEditingController();
   bool _obscure = true;
   bool _busy = false;
@@ -924,8 +925,8 @@ class _SecretFieldSheetState extends State<SecretFieldSheet> {
   String get _value => _controller.text.replaceAll(RegExp(r'\s'), '');
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = (data?.text ?? '').replaceAll(RegExp(r'\s'), '');
+    final raw = await readClipboard(say: (message) => setState(() => _error = message));
+    final text = (raw ?? '').replaceAll(RegExp(r'\s'), '');
     if (text.isEmpty || !mounted) return;
     _controller.value = TextEditingValue(
       text: text,
@@ -1542,7 +1543,7 @@ class _ObjectItemPageState extends State<_ObjectItemPage> {
           padding: EdgeInsets.zero,
           child: EngineFieldRow(
             title: label,
-            trailing: Switch(
+            trailing: Switch.adaptive(
               value: _draft[key] == true || (_draft[key] == null && node.effective.meta.defaultValue == true),
               onChanged: (v) => setState(() => _draft = {..._draft, key: v}),
             ),

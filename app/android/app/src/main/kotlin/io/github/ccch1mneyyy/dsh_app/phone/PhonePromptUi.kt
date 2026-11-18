@@ -49,7 +49,6 @@ internal object PhonePromptUi {
     fun label(ctx: Context, choice: PromptChoice): String = AppStrings.get(ctx, when (choice) {
         PromptChoice.ALLOW_ONCE -> R.string.phone_prompt_allow_once
         PromptChoice.ALLOW_APP -> R.string.phone_prompt_allow_app
-        PromptChoice.ALLOW_TASK -> R.string.phone_prompt_allow_task
         PromptChoice.ALLOW_VISUAL -> R.string.phone_prompt_allow_visual
         PromptChoice.REJECT -> R.string.phone_prompt_reject
         PromptChoice.OPEN -> R.string.phone_prompt_open
@@ -96,7 +95,7 @@ internal object PhonePromptUi {
         p.ticket.onFinished { main.removeCallbacks(tick) }
         val armedAt = SystemClock.elapsedRealtime() + 600
         for (choice in p.ticket.content.choices) {
-            val primary = choice in setOf(PromptChoice.ALLOW_ONCE, PromptChoice.ALLOW_APP, PromptChoice.ALLOW_TASK, PromptChoice.ALLOW_VISUAL,
+            val primary = choice in setOf(PromptChoice.ALLOW_ONCE, PromptChoice.ALLOW_APP, PromptChoice.ALLOW_VISUAL,
                 PromptChoice.OPEN, PromptChoice.CONTINUE)
             val b = PromptButton(ctx, armedAt) { p.live }.apply {
                 text = label(ctx, choice)

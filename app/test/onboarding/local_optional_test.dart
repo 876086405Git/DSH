@@ -2,6 +2,7 @@
 // without the runtime opens home, every 本机 entry offers to install, the
 // runtime can be uninstalled, and the auto start setting holds.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/remote/secret_store.dart';
@@ -9,6 +10,7 @@ import 'package:dsh_app/runtime/local_footprint.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/account_state.dart';
+import 'package:dsh_app/state/app_mode_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/onboarding_state.dart';
@@ -120,9 +122,10 @@ void main() {
       RuntimeStatus status = missingStatus,
       VoidCallback? onRemote,
       bool choose = true,
+      bool available = true,
       OnboardingPrefs prefs = const OnboardingPrefs(loaded: true, welcomeSeen: true),
     }) async {
-      final runtime = RecordingLocalRuntime(LocalRuntimeState(loaded: true, status: status));
+      final runtime = RecordingLocalRuntime(LocalRuntimeState(loaded: true, status: status, available: available));
       usePhoneSurface(tester);
       await tester.pumpWidget(
         goldenApp(
@@ -215,6 +218,26 @@ void main() {
       await pump(tester, phone: fullPhone, onRemote: () {});
       expect(find.text('存储空间不足，需要约 900 MB'), findsOneWidget);
       expect(tester.getSemantics(find.byKey(_remote)), isSemantics(isSelected: true));
+    });
+
+    testWidgets('a build without the runtime only goes on with the remote host', (tester) async {
+      var remote = 0;
+      final (runtime, _) = await pump(tester, available: false, onRemote: () => remote++);
+      expect(find.text('这台设备暂时不能在本机运行 DSH'), findsOneWidget);
+      expect(find.text('推荐'), findsNothing);
+      expect(
+        tester.getSemantics(find.byKey(_local)),
+        isSemantics(isSelected: false, isEnabled: false, hasEnabledState: true),
+      );
+      expect(tester.getSemantics(find.byKey(_remote)), isSemantics(isSelected: true));
+
+      await tester.tap(find.byKey(_local));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getSemantics(find.byKey(_remote)), isSemantics(isSelected: true));
+      await tester.tap(find.widgetWithText(FilledButton, '继续'));
+      await tester.pump();
+      expect(remote, 1);
+      expect(runtime.calls, isEmpty);
     });
 
     testWidgets('installing clears a past 「远程主机」', (tester) async {
@@ -310,7 +333,7 @@ void main() {
 
     testWidgets('远程主机 → pick a host → home, nothing installed', (tester) async {
       final (runtime, container) = await pumpGate(tester);
-      expect(find.text('DSH 在哪里运行？'), findsOneWidget);
+      expect(find.text('想怎么用 dsh-Go？'), findsOneWidget);
       await chooseRemote(tester);
       expect(find.byType(RemoteScreen), findsOneWidget);
 
@@ -329,8 +352,20 @@ void main() {
       await tester.binding.handlePopRoute();
       await _frames(tester);
       expect(find.byType(RemoteScreen), findsNothing);
-      expect(find.text('DSH 在哪里运行？'), findsOneWidget);
+      expect(find.text('想怎么用 dsh-Go？'), findsOneWidget);
       expect(container.read(onboardingPrefsProvider).localDeclined, isFalse);
+      expect(runtime.calls, isEmpty);
+    });
+
+    testWidgets('和角色聊天 → home in 酒馆, nothing installed and no key asked for', (tester) async {
+      final (runtime, container) = await pumpGate(tester);
+      await tester.tap(find.byKey(const ValueKey('runtime-option-tavern')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(FilledButton, '继续'));
+      await _frames(tester);
+      expect(find.text('home'), findsOneWidget);
+      expect(container.read(onboardingPrefsProvider).localDeclined, isTrue);
+      expect(container.read(appModeProvider).startup, AppMode.tavern);
       expect(runtime.calls, isEmpty);
     });
 
@@ -605,6 +640,47 @@ void main() {
       await tester.tap(find.text('安装运行环境'));
       await _frames(tester, 8);
       expect(find.byType(LocalInstallPage), findsOneWidget);
+    });
+
+    testWidgets('a build without the runtime: no 本机 row, the drawer offers a remote host', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        HostsController.prefsKey: jsonEncode([sampleSsh.toJson()]),
+      });
+      usePhoneSurface(tester);
+      final runtime = RecordingLocalRuntime(
+        const LocalRuntimeState(loaded: true, status: missingStatus, available: false),
+      );
+      await tester.pumpWidget(
+        goldenApp(
+          home: HomeShell(chatBuilder: (_) => const SizedBox.expand(), initiallyOpen: true),
+          brightness: Brightness.light,
+          overrides: [
+            localRuntimeProvider.overrideWith(() => runtime),
+            settingsProvider.overrideWith(() => FakeSettings(const AppSettings(loaded: true))),
+            sessionsProvider.overrideWith(() => FakeSessions(const [])),
+            secretStoreProvider.overrideWithValue(MemorySecretStore()),
+            relayBackendProvider.overrideWithValue(FakeRelayBackend()),
+            networkKicksProvider.overrideWithValue(const Stream.empty()),
+            hostLinkStatusProvider.overrideWith((ref, host) => Stream.value(HostLinkStatus.idle)),
+            footprint(roomyPhone),
+          ],
+        ),
+      );
+      await _frames(tester, 6);
+      expect(find.text('这台设备暂时不能在本机运行 DSH'), findsOneWidget);
+      expect(find.text('安装运行环境'), findsNothing);
+      await tester.tap(find.text('改用远程主机'));
+      await _frames(tester, 8);
+      expect(find.byType(RemoteScreen), findsOneWidget);
+      expect(find.byType(LocalInstallPage), findsNothing);
+      expect(runtime.calls, isEmpty);
+
+      final context = tester.element(find.byType(RemoteScreen));
+      unawaited(showHostSheet(context, onManage: () {}));
+      await _frames(tester, 6);
+      expect(find.byType(HostSheet), findsOneWidget);
+      expect(find.text('这台手机上的 DSH'), findsNothing);
+      expect(find.text(sampleSsh.name), findsWidgets);
     });
 
     testWidgets('web page: install instead of 启动', (tester) async {

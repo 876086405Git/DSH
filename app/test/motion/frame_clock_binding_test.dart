@@ -1,6 +1,7 @@
 // The real binding, driven by hand: widget tests have their own binding with fake
 // time, which never goes through SteadyFrameBinding. So no testWidgets in this file.
 
+import 'package:dsh_app/clipboard/paste_button_messenger.dart';
 import 'package:dsh_app/ui/theme/frame_clock.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('tickers run on the steadied clock: a stall moves them one step, not through the stall', () {
     final binding = SteadyFrameBinding();
+    expect(binding.defaultBinaryMessenger, isNot(isA<PasteButtonMessenger>()), reason: 'not on this OS');
     const frame = Duration(milliseconds: 16);
     const stall = Duration(milliseconds: 250);
 

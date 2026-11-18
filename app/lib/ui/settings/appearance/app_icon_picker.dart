@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../../state/android_features.dart';
 import '../../../state/app_icon_state.dart';
 import '../../common/pressable.dart';
 import '../../shell/brand_glyph.g.dart';
@@ -87,13 +88,17 @@ class AppIconPicker extends ConsumerWidget {
   Future<void> _select(BuildContext context, WidgetRef ref, AppIcon icon) async {
     final l10n = context.l10n;
     final messenger = ScaffoldMessenger.maybeOf(context);
+    // HarmonyOS refuses for good under a custom theme or in an app twin.
+    final failed = ref.read(operatingSystemProvider) == 'ohos'
+        ? l10n.harmonyIconChangeFailed
+        : l10n.pluginsIconChangeFailed;
     final ok = await ref.read(appIconProvider.notifier).select(icon);
     if (ok) {
-      messenger?.showBriefNotice(l10n.pluginsIconChanged);
+      messenger?.showBriefNotice(wordsForIos ? l10n.iosIconChanged : l10n.pluginsIconChanged);
     } else {
       messenger
         ?..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.pluginsIconChangeFailed)));
+        ..showSnackBar(SnackBar(content: Text(failed)));
     }
   }
 }

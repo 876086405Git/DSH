@@ -1,0 +1,6 @@
+{
+  "name": "libdsh_host.so",
+  "version": "1.0.0",
+  "description": "DSH single-instance native host",
+  "types": "./index.d.ts"
+}

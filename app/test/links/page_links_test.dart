@@ -1,16 +1,24 @@
 // `dshgo://open/<page>`: only pages from the fixed list open, pushed over the
-// home route; anything else gets the router's toast and nothing else happens.
+// home route; anything else gets the router's toast and nothing else happens,
+// and a page HarmonyOS doesn't have yet says that.
 
 import 'package:dsh_app/links/app_links.dart';
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/links/page_links.dart';
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/ui/features/feature_catalog.dart';
 import 'package:dsh_app/ui/phone/phone_control_screen.dart';
+import 'package:dsh_app/ui/phone/system_actions_page.dart';
 import 'package:dsh_app/ui/settings/index/settings_pages.dart';
 import 'package:dsh_app/ui/settings/index/spot_anchor.dart';
+import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../phone/support.dart' show FixedActiveHost;
 
 void main() {
   group('pageLinkId', () {
@@ -154,6 +162,63 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('无法打开这个链接'), findsOneWidget);
       expect(opened, isEmpty);
+    });
+
+    group('on HarmonyOS', () {
+      final zh = lookupL10n(AppLocale.zhCN);
+
+      Future<void> pumpHarmony(WidgetTester tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              linkRouterProvider.overrideWithValue(router),
+              currentSessionProvider.overrideWithBuild((ref, _) => null),
+              operatingSystemProvider.overrideWithValue('ohos'),
+              activeHostProvider.overrideWith(() => FixedActiveHost(HostRef.local)),
+            ],
+            child: MaterialApp(
+              theme: buildLightTheme(),
+              home: const Scaffold(body: LinkHost()),
+            ),
+          ),
+        );
+        await tester.pump();
+      }
+
+      testWidgets('a page only Android has says it isn\'t available here', (tester) async {
+        await pumpHarmony(tester);
+        expect(await router.open(Uri.parse('dshgo://open/phone-files')), isTrue);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text(zh.harmonyPageUnavailable), findsOneWidget);
+      });
+
+      testWidgets('手机操控\'s link opens 系统操作 there, not a page that isn\'t', (tester) async {
+        await pumpHarmony(tester);
+        expect(await router.open(Uri.parse('dshgo://open/phone')), isTrue);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byType(SystemActionsPage), findsOneWidget);
+        expect(find.byType(PhoneControlScreen), findsNothing);
+        expect(find.text(zh.harmonyPageUnavailable), findsNothing);
+      });
+
+      test('only the links of what HarmonyOS hasn\'t built yet are left with nowhere to go', () {
+        final left = {
+          for (final id in SettingsIndex.linkIds)
+            if (SettingsIndex.androidOnlyLink(SettingsIndex.ohosLink(id))) id,
+        };
+        expect(left, {'phone-files'});
+      });
+
+      testWidgets('a page nobody has is still the router\'s to say', (tester) async {
+        await pumpHarmony(tester);
+        expect(await router.open(Uri.parse('dshgo://open/nope')), isFalse);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('无法打开这个链接'), findsOneWidget);
+        expect(find.text(zh.harmonyPageUnavailable), findsNothing);
+      });
     });
 
     testWidgets('a link that arrives from outside opens the page too', (tester) async {

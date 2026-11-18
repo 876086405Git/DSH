@@ -51,6 +51,14 @@ npm run watch                 # 查 dist-tags.latest 并检查新版，输出 re
 
 `integrity` 证明扫描的是 npm 当时给出的这份 tarball；不证明作者身份或后续宿主实际安装字节。当前 DSH `pluginManager.installBundle` 不接收 expected integrity，也不返回实际安装 tarball hash，App 只能做安装前的注册表比对，不能声称端到端完整性强制成立。
 
+## 鸿蒙兼容性（静态）
+
+可信检查器现在从实际包字节生成 `platforms.ohos`：`dsh-go.json` 中位于每个插件条目，格式 1 索引中位于 `metadata.platforms.ohos`。作者的 `plugins/*.json` 仍不接受该字段。报告区分原生模块、子进程、Wasm、命令入口和安装脚本，保留文件哈希与源码位置；没有执行插件或脚本。
+
+`usable / partial / unavailable` 对应「可用 / 部分可用 / 不可用」，仅表示已扫描范围的静态判断。未扫描的必需依赖会使结果为 `partial`；该标签不保证存在可运行的功能子集。所有结果均标记 `deviceValidated: false`。鸿蒙应用内安装插件包的能力仍不可用，不因此字段变更；现有 App 读者会忽略新元数据，本补丁不改变界面或安装授权。
+
+单包、锁定安装树、固定市场快照与版本/完整性绑定的数据补丁命令，见 [鸿蒙扫描说明](docs/ohos-compatibility.md)。`platforms/ohos-2026-11-02.json` 是一次精确版本快照的数据补充，不作为以后版本的兼容性承诺，也不替代每次发布的在线安全检查。
+
 ## 原生适配声明
 
 复用 DSH Go 已有 `package.json.dshGo` 协议 v1，不引入另一套清单：

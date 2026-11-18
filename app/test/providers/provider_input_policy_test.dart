@@ -3,6 +3,7 @@
 // embedding contract probe in the G53 evidence bundle.
 import 'dart:convert';
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/providers_state.dart';
 import 'package:dsh_app/ui/providers/provider_form_page.dart';
 import 'package:dsh_app/ui/providers/provider_widgets.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../clipboard/fake_paste.dart';
 import '../shell/golden_harness.dart' show goldenApp, loadGoldenFonts;
 import 'support.dart';
 
@@ -36,7 +38,7 @@ class _EditLauncher extends StatelessWidget {
   );
 }
 
-Future<void> _open(WidgetTester tester, FakeProviderBackend backend, {bool edit = false}) async {
+Future<void> _open(WidgetTester tester, FakeProviderBackend backend, {bool edit = false, String? os}) async {
   await tester.runAsync(loadGoldenFonts);
   tester.view.devicePixelRatio = 2;
   tester.view.physicalSize = const Size(780, 2800);
@@ -45,7 +47,7 @@ Future<void> _open(WidgetTester tester, FakeProviderBackend backend, {bool edit 
     goldenApp(
       home: edit ? const _EditLauncher() : const ProvidersPage(),
       brightness: Brightness.light,
-      overrides: providerOverrides(backend),
+      overrides: [if (os != null) operatingSystemProvider.overrideWithValue(os), ...providerOverrides(backend)],
     ),
   );
   await settle(tester);
@@ -153,6 +155,32 @@ void main() {
     expect(reads, greaterThan(0));
     expect(backend.callNames.where((name) => name != 'read'), isEmpty);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('HarmonyOS: the system paste button fills the key, normalized, marked edited', (tester) async {
+    final paste = FakePaste(tester, reply: FakePaste.text('  sk-g53-pasted\n'), flutterText: 'wrong');
+    final backend = sampleBackend(isLocal: false);
+    await _open(tester, backend, edit: true, os: 'ohos');
+    await tester.tap(find.text('粘贴'));
+    await settle(tester);
+    expect(paste.reads, hasLength(1));
+    expect(paste.flutterReads, 0);
+    expect(tester.widget<TextField>(_field('API Key')).controller!.text, 'sk-g53-pasted');
+    await tester.tap(find.text('保存'));
+    await settle(tester);
+    expect(backend.stored[gateway.apiKeyEnv], 'sk-g53-pasted');
+  });
+
+  testWidgets('HarmonyOS: backed out of leaves the key alone, and saving stores nothing new', (tester) async {
+    FakePaste(tester, reply: {'status': 'cancelled'});
+    final backend = sampleBackend(isLocal: false);
+    await _open(tester, backend, edit: true, os: 'ohos');
+    final before = tester.widget<TextField>(_field('API Key')).controller!.text;
+    await tester.tap(find.text('粘贴'));
+    await settle(tester);
+    expect(tester.widget<TextField>(_field('API Key')).controller!.text, before);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(backend.callNames.where((name) => name == 'storeKey'), isEmpty);
   });
 
   testWidgets('explicit key paste keeps password policy and saves the key separately from the URL', (tester) async {

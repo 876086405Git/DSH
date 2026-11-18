@@ -1,0 +1,20 @@
+{
+  "sourceArchive": "真机930-HBN-AL00-Linux测量-20261108.zip",
+  "archiveBytes": 105107,
+  "archiveSha256": "b3919f1b938b19406d6c60728bf4e29286866d9bd49797e0ce0fff2d75b0a884",
+  "scope": "Unchanged public repository command stderr supplied by the device owner; no account, proxy credential, token or cookie. Replay classifies these bytes; it does not repeat remote network access.",
+  "fixtures": [
+    {
+      "fixture": "phone930-github.stderr",
+      "zipEntry": "run3/jobs/8/stderr-1318.bin",
+      "bytes": 225,
+      "sha256": "972e8f182b0dfaef685ad478937dec8b7839bf48b3400178526b1b5b28c47930"
+    },
+    {
+      "fixture": "phone930-gitee.stderr",
+      "zipEntry": "run4/jobs/8/stderr-678.bin",
+      "bytes": 77,
+      "sha256": "e601b48e46baecf6dc76ef1f28720fd60c42f542fe9c684db7e105911ebf892e"
+    }
+  ]
+}

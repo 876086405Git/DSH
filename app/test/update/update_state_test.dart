@@ -8,6 +8,7 @@ import 'package:dsh_app/update/installer.dart';
 import 'package:dsh_app/update/release.dart';
 import 'package:dsh_app/update/update_config.dart';
 import 'package:dsh_app/update/update_http.dart';
+import 'package:dsh_app/update/version.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -150,6 +151,27 @@ void main() {
       expect(http.urls, [m1], reason: 'starts where it worked last time');
     });
 
+    test('a build without the APK installer (HarmonyOS) never checks or offers', () async {
+      // A real channel with no handler behind it, as on HarmonyOS.
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final c = ProviderContainer(
+        overrides: [
+          updateHttpProvider.overrideWithValue(http),
+          updateInstallerProvider.overrideWithValue(const ChannelUpdateInstaller()),
+          updateSourcesProvider.overrideWithValue(_sources),
+          updateClockProvider.overrideWithValue(() => now),
+          updateDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      addTearDown(c.dispose);
+      final controller = await ready(c);
+      expect(c.read(appUpdateProvider).loaded, isTrue);
+      expect(c.read(appUpdateProvider).installable, isFalse);
+      expect(await controller.autoCheckIfDue(), isFalse);
+      expect(await controller.check(), UpdateCheckPhase.idle);
+      expect(http.requests, isEmpty);
+    });
+
     test('switched off: no automatic check', () async {
       final c = container();
       final controller = await ready(c);
@@ -192,6 +214,18 @@ void main() {
       expect(await controller.autoCheckIfDue(), isTrue);
       expect(c.read(appUpdateProvider).latest!.version.name, '1.2.1');
       expect(c.read(appUpdateProvider).isSkipped, isFalse);
+    });
+
+    test('a release skipped from one source stays skipped from the other', () {
+      AppUpdateState offer(String latest, String skipped) => AppUpdateState(
+        current: AppVersion.tryParse('1.0.0')!,
+        latest: ReleaseInfo(version: AppVersion.tryParse(latest)!, tag: 'v1.2.0', apks: const {}),
+        skippedVersion: skipped,
+      );
+      // The manifest's 1.2.0+N and the API's tag v1.2.0 are one release.
+      expect(offer('1.2.0', '1.2.0+11170000').isSkipped, isTrue);
+      expect(offer('1.2.0+11170000', '1.2.0').isSkipped, isTrue);
+      expect(offer('1.2.0+11170001', '1.2.0+11170000').isSkipped, isFalse);
     });
 
     test('same version as installed → up to date', () async {

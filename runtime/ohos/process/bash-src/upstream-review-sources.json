@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "sourceCommit": "7537a260e38648e8998db7a95504102ad80b0194",
+  "basis": "npm provenance metadata; signature not independently verified",
+  "buildInput": "Only the exact npm bundle pins in just-bash-3.6.0.json; these upstream TS files were read for review, not used to claim an upstream TS rebuild",
+  "files": [
+    {
+      "path": "packages/just-bash/src/interpreter/builtins/cd.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/interpreter/builtins/cd.ts",
+      "sha256": "f9be4f191cc910a3b097b52917bd3e9f5c9d04ad09d9bf2cb2f57885378f9e1d",
+      "bytes": 3565
+    },
+    {
+      "path": "packages/just-bash/src/interpreter/redirections.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/interpreter/redirections.ts",
+      "sha256": "53b2670b32aa21e225ffb5ea11642e0c5afc5606fb1924ed4d8a3fc1e1abe243",
+      "bytes": 45899
+    },
+    {
+      "path": "packages/just-bash/src/commands/cat/cat.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/commands/cat/cat.ts",
+      "sha256": "2307fe1e8493639f491b774b29d78ff7a5339c28427e72efb2d9b9781c07a01e",
+      "bytes": 9012
+    },
+    {
+      "path": "packages/just-bash/src/interpreter/helpers/result.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/interpreter/helpers/result.ts",
+      "sha256": "326ed63a2440e40e0183679da903b2459749f5bcee979a5ee112422651e82ecc",
+      "bytes": 3028
+    },
+    {
+      "path": "packages/just-bash/package.json",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/package.json",
+      "sha256": "8300d5eb3a2dd1b41fec9b815cf8d5955874c8c6b6716d87db12fe874f729cfa",
+      "bytes": 7277
+    },
+    {
+      "path": "packages/just-bash/src/execution-output.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/execution-output.ts",
+      "sha256": "b42ec7df07b6fe9f8502449f65170f5a18c432ffd6c1977fff131b4eec4a5ecc",
+      "bytes": 2903
+    },
+    {
+      "path": "packages/just-bash/src/Bash.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/Bash.ts",
+      "sha256": "7e04c8b7e7884613aa71f22323904e59bc7b8c50892b2ecdc4131b1b09214ca8",
+      "bytes": 43553
+    },
+    {
+      "path": "packages/just-bash/src/interpreter/interpreter.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/interpreter/interpreter.ts",
+      "sha256": "e2d84901e473f811469cbe635ceabac5711469b0a18e776f47eb1f484ee4d83c",
+      "bytes": 43307
+    },
+    {
+      "path": "packages/just-bash/src/commands/bash/bash.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/commands/bash/bash.ts",
+      "sha256": "00181d316be94adbf858c90a3380b89b49d7ab8c6ed23af07a7bd2e37125197a",
+      "bytes": 6154
+    },
+    {
+      "path": "packages/just-bash/src/interpreter/pipeline-execution.ts",
+      "url": "https://raw.githubusercontent.com/vercel-labs/just-bash/7537a260e38648e8998db7a95504102ad80b0194/packages/just-bash/src/interpreter/pipeline-execution.ts",
+      "sha256": "5e3866dd42e0006c12ba5792da4ff6e4b725141ac82f28a7fd1a8048c1188e87",
+      "bytes": 12307
+    }
+  ]
+}

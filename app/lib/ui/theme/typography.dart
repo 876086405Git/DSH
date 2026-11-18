@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // See THIRD_PARTY_NOTICES.md.
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 /// 字体规范:**系统无衬线负责一切文字,等宽只给代码**。
@@ -70,6 +71,34 @@ abstract final class AppType {
         labelLarge: s,
         labelMedium: s,
         labelSmall: s,
+      ),
+    );
+  }
+
+  /// ThemeData merges Material's tracking in under [textTheme]. It's made for Roboto and reads loose
+  /// in San Francisco and PingFang, so iOS sets its own: none, and a little less on big titles, as
+  /// the system's own type does.
+  static TextTheme tracked(TextTheme t) {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return t;
+    const none = TextStyle(letterSpacing: 0);
+    const tight = TextStyle(letterSpacing: -0.2);
+    return t.merge(
+      const TextTheme(
+        displayLarge: tight,
+        displayMedium: tight,
+        displaySmall: tight,
+        headlineLarge: tight,
+        headlineMedium: tight,
+        headlineSmall: tight,
+        titleLarge: tight,
+        titleMedium: none,
+        titleSmall: none,
+        bodyLarge: none,
+        bodyMedium: none,
+        bodySmall: none,
+        labelLarge: none,
+        labelMedium: none,
+        labelSmall: none,
       ),
     );
   }

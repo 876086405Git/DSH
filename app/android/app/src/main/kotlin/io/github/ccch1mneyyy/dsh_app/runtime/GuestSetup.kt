@@ -45,6 +45,24 @@ object GuestSetup {
         |- 用户报障、排查问题、写 bug 反馈时加载 `dsh-go-support` 技能：它教你怎么读本机诊断、按症状定位、生成脱敏的 issue 草稿。
         |""").trimMargin()
 
+    private val AGENTS_MD_EN = """
+        |<!-- dsh-app:managed — Remove this line to prevent DSH App from overwriting this file -->
+        |# Runtime environment (DSH mobile app)
+        |
+        |- You are running in an Ubuntu 24.04 environment (proot, no root required) on an Android phone. There is no usable sandbox backend here (neither bubblewrap nor Landlock is available), and the `workspace-write` sandbox mode will always be rejected.
+        |- When you need to run a bash command, request execution directly with `sandbox_permissions: "danger-full-access"` and give a one-sentence reason; do not try sandbox mode first.
+        |- The default working directory is `/root/workspace`. {STORAGE_LINE}
+        |- node / npm / pnpm, python3 / pip, and git are preinstalled; npm and pnpm use the Chinese mirror registry.npmmirror.com by default. If other tools are missing, you can use `apt-get update && apt-get install -y <package-name>` (requires network access).
+        |- Phone screens are small: keep replies as concise as possible and avoid overly wide code blocks; reply in the language the user uses.
+        |
+        |## Interface and skills
+        |
+        |- This App's chat interface is a native Flutter interface, not Harness Web Client. Use dsh-go-ui (ui.json) to change the App's appearance; use dsh-go-plugin to add features such as capsules, menu items, status bars, native panels, and tool cards. Use official skills such as cordis-plugin-development only when the user explicitly asks to create a Cordis plugin or change the Harness web or desktop interface.
+        |- If the user does not specify an interface, the default target on the phone is the dsh-go native interface. Identify the interface first, then choose a skill; do not choose based on loading order.
+        |- dsh-go native plugins are not Cordis bundles: their directory is `${'$'}DSH_HOME/dsh-go/plugins/`, and they are installed with `dsh plugin --profile web add`. The official skills' "create a package in the workspace + plugin_manager install_bundle" workflow is only for Cordis plugins; do not mix the two.
+        |- When the user reports an issue, when troubleshooting, or when writing a bug report, load the `dsh-go-support` skill: it explains how to read local diagnostics, investigate by symptom, and generate a redacted issue draft.
+        |""".trimMargin()
+
     /**
      * Appended while 「可视化回复」 is on (default): how to answer with a ```dsh-ui view. The
      * component list and the rules are written for a fenced block in a phone chat.
@@ -72,6 +90,24 @@ object GuestSetup {
         |- 不要用视图收集密码、密钥或验证码。
         |""").trimMargin()
 
+    private val DSH_UI_SECTION_EN = """
+        |
+        |## Visual replies (dsh-ui)
+        |
+        |- This App can render code blocks marked with ```dsh-ui as native charts and cards. Use them only when they are clearer than text: chart for comparing values or viewing trends, metric for a few key numbers, compare for comparing alternatives, steps for steps and progress, and options or confirm when the user needs to make a selection. Do not use them for casual conversation, a single number, or an ordinary list.
+        |- Start with the conclusion in one or two sentences, then include the view. Do not repeat the same data in prose, a table, and a chart. Use at most two views in one reply.
+        |- Use a fenced code block: put ```dsh-ui alone on the first line, start the JSON on the next line, and put ``` alone on the final line. JSON written directly in the reply is plain text and will not render.
+        |- Put only one JSON object inside the fence, with no comments or trailing commas, and keep it within 4 KB. The data must be real; identify example or estimated numbers in caption.
+        |- Components: stack / row {children}; text {text}; metric {label, value, tone?: good|warn|bad, caption?}; chart {kind: bar|hbar|line|donut, categories, series: [{name?, values}], unit?, caption?} (values correspond one-to-one with categories; at most 6 series with 60 points each; donut has only one series); compare {items: [{title, badge?, rows: [[name, value]]}]} (2–4 items); steps {items: [{label, status: done|current|todo|failed, detail?}]}; callout {text, tone?: info|good|warn|bad}; options {id, options: [{label, description?}], multi?, freetext?} (at most 8 options); confirm {id, confirmLabel?, cancelLabel?}. The root node can have title.
+        |- To let users answer outside the listed options, add `freetext: true` to options (or use a prompt string, such as `freetext: "Write your own"`): an input field appears below the options, and the user's text is returned together with the selection as "Other: …".
+        |- Example:
+        |```dsh-ui
+        |{"type":"stack","title":"Spending over the last 6 months","children":[{"type":"metric","label":"Monthly average","value":"¥4,180"},{"type":"chart","kind":"bar","categories":["May","June"],"series":[{"values":[3800,4100]}],"unit":"yuan"}]}
+        |```
+        |- Place a view containing options or confirm at the end of the reply, then end this turn. The user's selection will come back as a message starting with "[dsh-ui reply]" (for example, "Select: Option A" or "Confirm: Start"; free text appears on a new line as "Other: …"). Use ask_user_question when asking a single simple question.
+        |- Do not use views to collect passwords, secret keys, or verification codes.
+        |""".trimMargin()
+
     // l10n:keep agent prompt
     private val DIAGNOSTICS_SECTION = """
         |
@@ -84,6 +120,25 @@ object GuestSetup {
         |- 报告会尝试脱敏，但不能保证没有遗漏。外发前人工检查凭据、路径和设备信息，不把完整报告或秘密原样贴到聊天或 issue 里。
         |- 完整的排查流程（症状清单、issue 模板、隐私红线）在 `dsh-go-support` 技能里；用户报障时加载它再动手。
         |""".trimMargin()
+
+    private val DIAGNOSTICS_SECTION_EN = """
+        |
+        |## Local diagnostics
+        |
+        |- When the user reports a problem (slowdowns, overheating, connection failures, failed updates, crashes, plugins not working, or phone-control failures), read the available diagnostics: if the user has just chosen to publish a report, prefer `diagnostics-manual.md` in the same directory; otherwise, read the automatic snapshot at `{PATH}` first. Check the report time, version, and device, then analyze engine status, connection mode, performance, and the limited logs. If one report is available, do not repeatedly request a refresh just because the other is missing; there is no need to ask separately before reading.
+        |- After the user taps "Let the AI read diagnostics", `diagnostics-manual.md` in the same directory keeps the most recent manual report (which may include input-method evidence the user consented to collect this time). If it exists, also read it and check its collection time. Later automatic snapshots do not overwrite it; only the next manual publication replaces it. Clearing the App's in-memory evidence does not retract files that have already been published.
+        |- When a newer version provides `mcp__phone__diagnostics`, refresh the diagnostics yourself after a problem is reported, then read the summary/evidence/appErrors/voice/engine/failure sections, without first reading the screen, enabling phone control, or obtaining elevated permissions. Check the collection time, refreshed, and error codes; if the tool is not supported, read the existing snapshots. The tool does not collect system input-method evidence or send reports externally on the user's behalf.
+        |- If more detail is needed, ask the user to export a diagnostic bundle (zip) from Settings → Diagnostics; it is still subject to limits on log count and size. Say explicitly when the data is insufficient; do not draw conclusions from guesses.
+        |- Reports attempt to redact sensitive data, but omissions are still possible. Before sharing externally, have a person check credentials, paths, and device information; do not paste complete reports or secrets verbatim into chat or issues.
+        |- The complete troubleshooting workflow (symptom checklist, issue template, and privacy boundaries) is in the `dsh-go-support` skill; load it before starting when the user reports a problem.
+        |""".trimMargin()
+
+    // l10n:keep guest path
+    private const val STORAGE_GRANTED_EN = "The user has authorized access to phone storage: internal phone storage is mounted at `/sdcard` (`/root/手机存储` is a shortcut to it; photos are in `/sdcard/DCIM`, and downloads are in `/sdcard/Download`). Before modifying or deleting user files, explain the change and obtain confirmation; put files produced for the user in `/sdcard/Download/DSH-Go/`."
+    private const val STORAGE_UNAVAILABLE_EN = "User files such as phone photos and downloads are not in this environment and cannot be seen here; if access is needed, ask the user to turn on \"Access phone files\" in the App's settings."
+    private const val DIRECT_ENVIRONMENT_FROM_EN = "Ubuntu 24.04 environment (proot, no root required)"
+    private const val DIRECT_ENVIRONMENT_TO_EN = "Ubuntu 24.04 runtime environment (the engine starts directly; bash/git/python/apt tools still run through proot)"
+    private const val DIRECT_PATH_NOTE_EN = "\n- File tools, session directories, @ references, AGENTS, and skills use the same full absolute path; that path is also visible under the same name in the shell. Legacy `/root` paths remain available to file tools. Shell output is not rewritten; do not remove path prefixes.\n"
 
     /** Where the engine's agent finds that snapshot, inside the guest. */
     private const val DIAGNOSTICS_FILE = "root/.dsh/dsh-app/diagnostics.md"
@@ -112,6 +167,7 @@ object GuestSetup {
         phoneControl: Boolean = false,
         visualReplies: Boolean = true,
         directEngine: Boolean = false,
+        nativeLocale: String = "zh-CN",
     ) {
         try {
             val file = File(rootfs, "root/.dsh/AGENTS.md")
@@ -121,28 +177,43 @@ object GuestSetup {
             val existing = source?.readText()
             if (Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
                 existing?.startsWith(AGENTS_MARKER) != true) return
+            val english = nativeLocale == "en"
+            val instructions = if (english) AGENTS_MD_EN else AGENTS_MD
             val environment = if (directEngine) {
-                // l10n:keep agent prompt
-                AGENTS_MD.replace("Ubuntu 24.04 环境里（proot，免 Root）", "Ubuntu 24.04 运行环境里（引擎直接启动，bash/git/python/apt 工具仍经 proot）")
-                    .replace("`/root/workspace`", "`${rootfs.canonicalPath}/root/workspace`") +
+                val directInstructions = if (english) {
+                    instructions.replace(DIRECT_ENVIRONMENT_FROM_EN, DIRECT_ENVIRONMENT_TO_EN)
+                } else {
+                    // l10n:keep agent prompt
+                    instructions.replace("Ubuntu 24.04 环境里（proot，免 Root）", "Ubuntu 24.04 运行环境里（引擎直接启动，bash/git/python/apt 工具仍经 proot）")
+                }
+                val pathNote = if (english) DIRECT_PATH_NOTE_EN else {
+                    // l10n:keep agent prompt
                     "\n- 文件工具、会话目录、@ 引用、AGENTS 和 skills 使用同一个完整绝对路径；该路径在 shell 内也同名可见。旧的 `/root` 路径仍可用于文件工具。shell 的输出不改写，不要删除路径的前缀。\n"
-            } else AGENTS_MD
+                }
+                directInstructions.replace("`/root/workspace`", "`${rootfs.canonicalPath}/root/workspace`") + pathNote
+            } else instructions
             val text = environment.replace(
                 "{STORAGE_LINE}",
                 if (phoneStorage) {
-                    // l10n:keep agent prompt
-                    "用户已授权访问手机存储：手机内部存储挂载在 `/sdcard`（`/root/手机存储` 是它的快捷方式；相册在 `/sdcard/DCIM`，下载在 `/sdcard/Download`）。改动或删除用户文件前先说明并确认；给用户的产出文件放到 `/sdcard/Download/DSH-Go/`。"
+                    if (english) STORAGE_GRANTED_EN else {
+                        // l10n:keep agent prompt
+                        "用户已授权访问手机存储：手机内部存储挂载在 `/sdcard`（`/root/手机存储` 是它的快捷方式；相册在 `/sdcard/DCIM`，下载在 `/sdcard/Download`）。改动或删除用户文件前先说明并确认；给用户的产出文件放到 `/sdcard/Download/DSH-Go/`。"
+                    }
                 } else {
-                    // l10n:keep agent prompt
-                    "手机相册、下载等用户文件不在这个环境里，看不到；如需访问，请用户在 App 设置里打开「访问手机文件」。"
+                    if (english) STORAGE_UNAVAILABLE_EN else {
+                        // l10n:keep agent prompt
+                        "手机相册、下载等用户文件不在这个环境里，看不到；如需访问，请用户在 App 设置里打开「访问手机文件」。"
+                    }
                 },
-            ) + (if (visualReplies) DSH_UI_SECTION else "") +
-                (if (phoneControl) PhoneGuest.AGENTS_SECTION else "") +
-                DIAGNOSTICS_SECTION.replace(
-                    "{PATH}",
-                    if (directEngine) "${rootfs.canonicalPath}/root/.dsh/dsh-app/diagnostics.md"
-                    else "\$DSH_HOME/dsh-app/diagnostics.md",
-                )
+            ) + (if (visualReplies) {
+                if (english) DSH_UI_SECTION_EN else DSH_UI_SECTION
+            } else "") + (if (phoneControl) {
+                if (english) PhoneGuest.AGENTS_SECTION_EN else PhoneGuest.AGENTS_SECTION
+            } else "") + (if (english) DIAGNOSTICS_SECTION_EN else DIAGNOSTICS_SECTION).replace(
+                "{PATH}",
+                if (directEngine) "${rootfs.canonicalPath}/root/.dsh/dsh-app/diagnostics.md"
+                else "\$DSH_HOME/dsh-app/diagnostics.md",
+            )
             file.parentFile?.mkdirs()
             // Resolve tawc tokens for reading only; atomic replacement keeps backups unchanged.
             if (existing != text) SafeMode.writeAtomic(file.canonicalFile, text)

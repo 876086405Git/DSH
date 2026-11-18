@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:dsh_app/diagnostics/diagnostics_export.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/ui/common/list_page_row.dart';
 import 'package:dsh_app/ui/engine/diagnostics_export_card.dart';
@@ -22,9 +23,11 @@ import '../shell/golden_harness.dart';
 
 /// Walks through the steps on cue instead of touching files.
 class _ScriptedExporter extends DiagnosticsExporter {
-  _ScriptedExporter({this.failWith}) : super(collect: (_) => throw UnimplementedError(), files: const FilesChannel());
+  _ScriptedExporter({this.failWith, this.savedAt})
+    : super(collect: (_) => throw UnimplementedError(), files: const FilesChannel());
 
   final Object? failWith;
+  final String? savedAt;
   final packed = Completer<void>();
   final done = Completer<void>();
   int shares = 0;
@@ -41,7 +44,7 @@ class _ScriptedExporter extends DiagnosticsExporter {
   @override
   Future<String> saveToDownloads({void Function(DiagnosticsStep step)? onStep}) async {
     await _walk(onStep, DiagnosticsStep.saving);
-    return 'Download/DSH-Go/dsh-go-diagnostics-20261024-153012.zip';
+    return savedAt ?? 'Download/DSH-Go/dsh-go-diagnostics-20261024-153012.zip';
   }
 
   @override
@@ -79,14 +82,17 @@ class _Host extends StatelessWidget {
   );
 }
 
-Future<_ScriptedExporter> _pump(WidgetTester tester, {Object? failWith}) async {
-  final exporter = _ScriptedExporter(failWith: failWith);
+Future<_ScriptedExporter> _pump(WidgetTester tester, {Object? failWith, String? savedAt, String? os}) async {
+  final exporter = _ScriptedExporter(failWith: failWith, savedAt: savedAt);
   usePhoneSurface(tester);
   await tester.pumpWidget(
     goldenApp(
       home: const _Host(),
       brightness: Brightness.light,
-      overrides: [diagnosticsExporterProvider.overrideWithValue(exporter)],
+      overrides: [
+        if (os != null) operatingSystemProvider.overrideWithValue(os),
+        diagnosticsExporterProvider.overrideWithValue(exporter),
+      ],
     ),
   );
   await tester.pump();
@@ -130,6 +136,85 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('没有存储权限，存不进「下载」'), findsOneWidget);
     expect(find.text('存进 下载/DSH-Go'), findsOneWidget);
+  });
+
+  group('HarmonyOS, where the system asks where', () {
+    const picked = 'file://docs/storage/Users/currentUser/Download/d.zip';
+
+    test('the words, by OS and by what came back', () {
+      expect(diagnosticsStepText(DiagnosticsStep.saving, harmony: true), '正在保存…');
+      expect(diagnosticsStepText(DiagnosticsStep.saving, harmony: false), '正在存到「下载」…');
+      expect(diagnosticsStepText(DiagnosticsStep.packing, harmony: true), '正在打包…');
+      expect(diagnosticsSavedText(picked), '已保存');
+      expect(diagnosticsSavedText('Download/DSH-Go/d.zip'), '已存到 下载/DSH-Go/d.zip');
+    });
+
+    testWidgets('asks where, and says 已保存 instead of the URI', (tester) async {
+      final exporter = await _pump(tester, savedAt: picked, os: 'ohos');
+      expect(find.text('选择保存位置'), findsOneWidget);
+      expect(find.text('存到「下载」'), findsNothing);
+      expect(find.text('存进 下载/DSH-Go'), findsNothing);
+      await tester.tap(find.text('保存到文件'));
+      await tester.pump();
+      exporter.packed.complete();
+      exporter.done.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('已保存'), findsOneWidget);
+      expect(find.textContaining('file://'), findsNothing);
+    });
+
+    testWidgets('backing out of the window: no toast, the row back as it was', (tester) async {
+      final exporter = await _pump(
+        tester,
+        failWith: PlatformException(code: 'cancelled'),
+        os: 'ohos',
+      );
+      await tester.tap(find.text('保存到文件'));
+      await tester.pump();
+      exporter.packed.complete();
+      exporter.done.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text('已保存'), findsNothing);
+      expect(find.text('选择保存位置'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('backing out from the sheet leaves it open', (tester) async {
+      final exporter = await _pump(
+        tester,
+        failWith: PlatformException(code: 'cancelled'),
+        os: 'ohos',
+      );
+      await tester.tap(find.text('打开导出'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.tap(find.text('保存到文件').last);
+      await tester.pump();
+      exporter.packed.complete();
+      exporter.done.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('导出诊断包'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a save that really failed still says so', (tester) async {
+      final exporter = await _pump(
+        tester,
+        failWith: PlatformException(code: 'failed'),
+        os: 'ohos',
+      );
+      await tester.tap(find.text('保存到文件'));
+      await tester.pump();
+      exporter.packed.complete();
+      exporter.done.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('没能导出诊断包'), findsOneWidget);
+    });
   });
 
   testWidgets('the sheet closes before it confirms a save', (tester) async {

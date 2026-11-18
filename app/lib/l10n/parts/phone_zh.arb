@@ -108,6 +108,23 @@
   "phoneAppRulesAcceptRisk": "我知道风险，仍然修改",
   "phoneAppRulesPackage": "包名",
   "phoneAppRulesPackageHint": "在「设置 → 应用 → 应用信息」里能找到",
+  "phoneAlwaysAllowTitle": "始终允许",
+  "phoneAlwaysAllowOff": "未开启",
+  "phoneAlwaysAllowCount": "已允许 {count} 个应用",
+  "@phoneAlwaysAllowCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneAlwaysAllowSwitchHint": "不再询问就把内容发到你选的应用",
+  "phoneAlwaysAllowWarning": "开启后 DSH 可不再询问就把内容发到这些应用，发出后无法撤回。",
+  "phoneAlwaysAllowConfirm": "确认开启",
+  "phoneAlwaysAllowAdd": "添加应用",
+  "phoneAlwaysAllowEmpty": "还没有允许的应用",
+  "phoneAlwaysAllowRemove": "移除",
+  "phoneAlwaysAllowSaveFailed": "保存失败",
   "phoneDndRequiresAndroid": "需要 Android 14 及以上",
   "phoneDndHiddenScreen": "在看不见的屏幕上操作",
   "phoneNotReadyYet": "还没准备好",
@@ -184,7 +201,7 @@
   "phoneConfirmTask": "本任务免确认",
   "phoneConfirmAlways": "始终免确认",
   "phoneConfirmAskHint": "进新 App、发送、删除、付款前先问你",
-  "phoneConfirmTaskHint": "每个任务只问一次",
+  "phoneConfirmTaskHint": "本轮只问一次",
   "phoneConfirmAlwaysHint": "从不询问，直接操作",
   "phoneConfirmTitle": "确认方式",
   "phoneConfirmAlwaysTitle": "始终免确认？",
@@ -681,7 +698,13 @@
   "phonePreviewDescription": "仅在预览可见时取帧。画面只留在本机；预览不可点击。",
   "phonePreviewOpen": "查看后台屏",
   "phonePreviewTask": "预览任务 {taskId}",
-  "@phonePreviewTask": {"placeholders": {"taskId": {"type": "String"}}},
+  "@phonePreviewTask": {
+    "placeholders": {
+      "taskId": {
+        "type": "String"
+      }
+    }
+  },
   "phonePreviewInUse": "正在预览另一任务",
   "phonePreviewOff": "任务已结束或预览已关闭",
   "phonePreviewUnavailable": "画面暂不可预览，或受到保护",
@@ -869,15 +892,32 @@
   "phoneSkillBundlePublishedUnverified": "文件已发布，但尚未通过完整核验。不要重复保存。",
   "phoneSkillBundleUnknown": "保存结果尚未确认，文件可能已经写入。不要重复保存。",
   "phoneSkillBundleRevision": "路线版本：{revision}",
-  "@phoneSkillBundleRevision": {"placeholders": {"revision": {"type": "String"}}},
+  "@phoneSkillBundleRevision": {
+    "placeholders": {
+      "revision": {
+        "type": "String"
+      }
+    }
+  },
   "phoneSkillReplayReview": "核对手机路线",
   "phoneSkillReplaySourceChanged": "本机会话或连接已改变，请返回当前本机会话重新选择。",
   "phoneSkillReplayUnavailable": "此路线尚不能在当前本机安全执行。仍可按普通技能模板使用。",
   "phoneSkillReplayConfirm": "我已核对这条路线与本次选择的 App。",
   "phoneSkillReplayToComposer": "放入当前对话",
   "phoneSkillReplayStartText": "本机已选择并核对手机路线。请仅调用 mcp__phone__replay，参数 {request}。若不可用或被拒绝，交回用户/模型，不要改为普通动作重放。",
-  "@phoneSkillReplayStartText": {"placeholders": {"request": {"type": "String"}}},
+  "@phoneSkillReplayStartText": {
+    "placeholders": {
+      "request": {
+        "type": "String"
+      }
+    }
+  },
   "phoneSkillReplayQueue": "发送路线（排队）",
   "phoneSkillReplayQueued": "路线消息已被接收或排队，尚不代表路线执行成功。",
-  "phoneSkillReplaySendUncertain": "路线消息未确认发送成功；没有自动重新准备或重放。请核对原对话结果。"
+  "phoneSkillReplaySendUncertain": "路线消息未确认发送成功；没有自动重新准备或重放。请核对原对话结果。",
+  "phoneIosServiceTitle": "iOS 自动化服务",
+  "phoneIosServiceHint": "授权后按需启动。任务结束会停止服务，系统的“Automation Running”提示也会结束。",
+  "phoneIosSetupHint": "保持 LocalDevVPN 已连接，首次使用时允许 30 分钟操控。",
+  "phoneIosReturnHint": "任务完成后回到当前对话，并停止手机操控服务。",
+  "phoneIosNeedsSetup": "运行器尚未就绪，请确认本机引擎和开发者环境已配置。"
 }

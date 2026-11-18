@@ -5,9 +5,12 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:yaml_edit/yaml_edit.dart';
+
 import '../js_string.dart';
 
 part 'legacy_macro_engine.dart';
+part 'message_variable_macros.dart';
 part 'script_macro_adapter.dart';
 
 /// A message on the active chat path. Message ids are indices in this path.
@@ -68,6 +71,8 @@ class MacroContext {
   MacroContext({
     Map<String, Object?>? localVariables,
     Map<String, Object?>? globalVariables,
+    this.messageVariables,
+    this.messageVariablesExists = false,
     this.userName = '',
     String? charName,
     String? group,
@@ -122,6 +127,13 @@ class MacroContext {
 
   final Map<String, Object?> localVariables;
   final Map<String, Object?> globalVariables;
+
+  /// The message-variable carrier captured by the caller for this expansion.
+  /// Presence is separate from null. A missing or non-object carrier leaves
+  /// message-variable macros unresolved; an existing nested null is a value.
+  /// The reader never queries storage or mutates this caller-owned snapshot.
+  final Object? messageVariables;
+  final bool messageVariablesExists;
   final String userName;
   final String charName;
   final String group;
@@ -322,6 +334,8 @@ _Spec? _spec(String name) {
     case 'hasextension':
     case 'getvar':
     case 'getglobalvar':
+    case 'get_message_variable':
+    case 'format_message_variable':
     case 'incvar':
     case 'incglobalvar':
     case 'decvar':
@@ -1016,6 +1030,10 @@ class _Evaluation {
         return _elseMarker;
       case 'input':
         return context.input;
+      case 'get_message_variable':
+        return _messageVariableMacro(context, args[0]);
+      case 'format_message_variable':
+        return _messageVariableMacro(context, args[0], format: true);
       case 'maxprompt':
         return '${context.maxPrompt}';
       case 'maxcontext':

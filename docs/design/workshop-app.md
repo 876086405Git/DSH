@@ -38,7 +38,7 @@
 
 下载复用 `ApkDownloader`，沿用 Range 续传、取消、重试与 SHA-256。包装传输只接受本次固定的内容寻址 URL，禁止跳转，严格校验 Content-Range 和总长；没有 Content-Length 时也在超过目录 `size` 前中止流。有界正文使用保留上游取消传播的 `Stream.map`，避免额外的异步生成器在等待下一块时阻碍取消；这不承诺网络或文件系统立即完成清理。
 
-空间预检的预算为 ZIP、128 MiB staging、伙伴 runtime 的复制量和 4 MiB 余量。Android 既有的 update info 提供 `cacheDir` 可用空间；调用方可注入与目标目录同文件系统的更精确探针。预检不预留磁盘空间，未知剩余空间也不表示「足够」。本层直接取得的存储错误数字码 28、122 映射成 `workshop_no_space`，其他或未知码为 `workshop_storage`。既有下载器把写入失败归并为 storage，丢失原 errno，因此本层在该失败后再查空间：预算不足返回 `workshop_no_space`，探针不可用或预算足够仍返回 `workshop_storage`。该探针只说明查询时预算是否够用，不能证明刚才的写入失败原因，也不能排除已经丢失的配额错误。
+空间预检的预算为 ZIP、256 MiB staging、伙伴 runtime 的复制量和 4 MiB 余量。Android 既有的 update info 提供 `cacheDir` 可用空间；调用方可注入与目标目录同文件系统的更精确探针。预检不预留磁盘空间，未知剩余空间也不表示「足够」。本层直接取得的存储错误数字码 28、122 映射成 `workshop_no_space`，其他或未知码为 `workshop_storage`。既有下载器把写入失败归并为 storage，丢失原 errno，因此本层在该失败后再查空间：预算不足返回 `workshop_no_space`，探针不可用或预算足够仍返回 `workshop_storage`。该探针只说明查询时预算是否够用，不能证明刚才的写入失败原因，也不能排除已经丢失的配额错误。
 
 伙伴解压写入失败时保留原始的存储错误类型、errno 和栈，再由既有映射给出 `no_space` 或 `storage`。写入失败后关闭输出流，以及失败事务最后关闭输入流，都不能遮蔽主错误；正常写入后的输出 close 失败仍为 `storage`，非存储的提取错误仍为 `notAPack`。生产路径在 `compute` isolate 里提取；仅测试构造器可替换一个输出文件流边界，并在当前 isolate 执行同一安装事务。依赖的控制流按官方 archive v4.6.0 标签 commit `3852d7e402a2a796d3f2af00ac3c28f129c0bb78` 的源码核对。
 
@@ -97,7 +97,7 @@ Companion 槽位的列表读取将预期的收据、存储和恢复错误经既�
 
 不同目标也会等待前一项完成，资源库可能因此更久持有自己的队列；尚未完成的写入会延迟所有后续导出。写入回调只应生成本次 staging，不得递归等待另一次导出。该并发承诺限于同一 App isolate 的这些导出 API，不是跨 isolate、跨进程或外部文件系统写入者之间的 no-replace 原语；最后一次检查与普通 rename 之间仍不具备这种原子保证。
 
-伙伴导出对每张 PNG 复用 `pngIntact` 的完整校验：8 MiB 文件、每边 4096、16 MiB 解码后 RGBA、CRC / IDAT 和像素解码。超界或损坏在 prepare 返回前以稳定错误拒绝，不缩小一般本地导入范围，也不放宽 Worker。导出的 JSON 成员仍限 1 MiB；空的许可 / notice 文件省略。缺少 `character.model` 时沿用舞台的 index 首模型顺序，不能因为另一个模型路径更浅而换角色。
+伙伴导出只读每张 PNG 的签名和 IHDR：单边最多 8192（2026-11-15 放宽：Live2D 贴图常见 4096×4096，按宠物精灵图的 4096 / 16 MiB 解码门会被拦），像素交给 WebView 解码。单个成员最多 32 MiB，JSON 成员最多 8 MiB，开头的 UTF-8 BOM 照常读；空的许可 / notice 文件省略。缺少 `character.model` 时沿用舞台的 index 首模型顺序，不能因为另一个模型路径更浅而换角色。
 
 ### 为本次投稿选择公开图
 

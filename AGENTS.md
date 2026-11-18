@@ -1,20 +1,22 @@
 # AGENTS.md
 
-dsh-Go 是 DeepSeek Harness 的 Android 手机应用：Flutter 原生界面 + 纯 Dart 客户端 + 打过补丁的 DSH 引擎运行时（在 PRoot 里运行 `dsh web`）。改动前先读 [CONTRIBUTING.md](CONTRIBUTING.md)（贡献与验证契约）与 [docs/architecture.md](docs/architecture.md)。
+dsh-Go 是 DeepSeek Harness 的手机应用：Flutter 原生界面 + 纯 Dart 客户端 + 打过补丁的 DSH 引擎运行时。Android 版在 PRoot 里运行 `dsh web`；鸿蒙版共用同一套 Dart，宿主是 ArkTS（`app/ohos/`），引擎跑在 App 进程内的 Node 里（`runtime/ohos/`，见 [docs/architecture.md §3B](docs/architecture.md)）。改动前先读 [CONTRIBUTING.md](CONTRIBUTING.md)（贡献与验证契约）与 [docs/architecture.md](docs/architecture.md)。
 
 ## 仓库布局
 
 ```
 app/                         Flutter App：原生界面、Riverpod 状态、l10n、手机操控
 app/lib/l10n/parts/          界面文案的中英文 ARB 输入
+app/ohos/                    鸿蒙 ArkTS 宿主工程（Android 不读）
 packages/dsh_client/         纯 Dart 客户端：HTTP/SSE、mux、会话与删除 API
 packages/dsh_remote/         远程传输：WebRTC / LAN / TURN / 中继
 runtime/                     打补丁的 DSH 引擎运行时
 runtime/bridge/dsh-go-bridge/  App ↔ 引擎的 HTTP 桥（/dsh-go/v1/*，含会话删除路由）
-runtime/patches/             引擎补丁及其 pins.json（补丁与版本钉死）
+runtime/patches/             引擎补丁及其 pins.json（补丁与版本钉死，targetSets 分 android / ohos）
+runtime/ohos/                鸿蒙本机引擎：Node 宿主、虚拟进程、生命周期、运行时组成
 sdk/plugin-kit/              插件 SDK
-tooling/                     APK 构建与构建号脚本
-docs/                        架构、发布、路线图、用户指南
+tooling/                     APK 构建与构建号脚本；tooling/ohos/ 是鸿蒙构建、ArkTS 检查与门禁
+docs/                        架构、发布、路线图、用户指南（鸿蒙版在 docs/guide/harmony/，设计在 docs/design/harmonyos/）
 ```
 
 ## 命令
@@ -30,6 +32,8 @@ node --test runtime/tests/*.test.mjs                               # 引擎桥/�
 python3 app/tool/l10n_merge.py --check                             # 文案生成检查
 python3 app/tool/guide_sync.py --check                             # 用户指南同步检查
 tooling/build-apk.sh --build-name <x.y.z>                          # 构建 APK
+tooling/ohos/check-arkts.sh --sdk <OpenHarmony SDK> --hms-stubs    # 鸿蒙严格 ArkTS 编译
+bash tooling/ohos/run-gates.sh --config <inputs.json> --out <dir>  # 鸿蒙全量门禁（tooling/ohos/GATES.zh.md）
 ```
 
 CI（`.github/workflows/ci.yml`）在 PR 上跑通用检查和改动涉及的部分，在 `main` 上跑全量，结果看 `CI OK`。它不碰真机和真实账号，绿了不等于手机上没问题。
@@ -48,8 +52,8 @@ CI（`.github/workflows/ci.yml`）在 PR 上跑通用检查和改动涉及的部
 
 - 不手改生成物：`app/build/`、`.dart_tool/`、生成的 l10n 产物等；改输入后运行对应生成器。
 - 界面文案改 `app/lib/l10n/parts/*.arb`，中英文同步，再跑 `python3 app/tool/l10n_merge.py`；不要手改生成结果。
-- 用户指南改 `docs/guide/`，再跑 `python3 app/tool/guide_sync.py`。
-- 引擎补丁在 `runtime/patches/`：补丁文件与 `pins.json` 保持同步，不手改正被补丁覆盖的产物。
+- 用户指南改 `docs/guide/`，再跑 `python3 app/tool/guide_sync.py`。鸿蒙版指南在 `docs/guide/harmony/`，功能在鸿蒙上有差异时两套都要改。
+- 引擎补丁在 `runtime/patches/`：补丁文件与 `pins.json` 保持同步，不手改正被补丁覆盖的产物。新补丁要登记进 `pins.json` 的 `targetSets`（`android`、`ohos` 或两者），没登记的补丁 rtbuild 拒绝构建。
 - 插件教学技能改 `sdk/plugin-kit/skill/` 或 SDK 对应输入，再跑 `node sdk/plugin-kit/scripts/sync-skill.mjs`。
 
 ### 行为与契约
@@ -58,6 +62,14 @@ CI（`.github/workflows/ci.yml`）在 PR 上跑通用检查和改动涉及的部
 - 危险操作（删除会话、权限、凭据）以主机/引擎的实际回答为准，不用本地推断代替；失败要有稳定错误码，不静默吞掉。
 - 界面文案中英两版同步（`app/lib/l10n/parts/*.arb` 与对应 `.en.arb`）。
 - 双语文档同步：README、CONTRIBUTING、SECURITY、docs/guide 中英两版同步。
+
+### 鸿蒙
+
+- 鸿蒙和 Android 功能一致是目标，前端优先。能实现的功能走同一套 UI；做不到的才用 `androidSystemFeaturesProvider` / `operatingSystemProvider`（`app/lib/state/android_features.dart`）按功能隐藏，不全局放开或关闭，并在鸿蒙指南里写明替代。
+- `androidSystemFeaturesProvider` 在鸿蒙和 iOS 上都是 false。只属于鸿蒙的分支判断 `operatingSystemProvider == 'ohos'`，不要用它的 false 代指鸿蒙。
+- 鸿蒙改动不能改变 Android 的运行时字节和行为；门禁的 Android 对照（`android-targets`、`android-version-tree`）以 main 为基线。
+- ArkTS 按严格模式写：for-of 变量显式类型、子类传给 `Error` 参数要 `as Error`、静态方法不用 `this`。改了 `app/ohos/` 就跑 `check-arkts.sh`。
+- 签名材料（`.p12`、证书、profile）只放仓库外（`DSH_OHOS_SIGN`），不入库、不回显。
 
 ### 凭据与隐私
 
@@ -78,6 +90,7 @@ CI（`.github/workflows/ci.yml`）在 PR 上跑通用检查和改动涉及的部
 
 - Flutter widget 测试需要对应架构的 Flutter 引擎；只有桌面端（x86_64）而设备是 arm64 时，明确写"未运行"及原因。
 - 手机操控、PRoot、直接启动、更新安装相关改动必须在真机上验证；桌面结果不能替代。
+- 鸿蒙的系统能力（HMS、后台、通知、语音、卡片）只有真机能证明；`--hms-stubs` 只是让调用方编得过的非官方声明，编过不等于能用。
 
 ## 代码审查原则
 

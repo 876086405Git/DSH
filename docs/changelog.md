@@ -2,6 +2,34 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.2.0 · 2026-11-18
+
+### 中文
+
+- **iOS 版（测试）。** 这一版起提供未签名的 iOS 安装包 `dsh-go-1.2.0-ios-unsigned.ipa`，需要用爱思助手、AltStore 等工具自己签名后安装。用免费 Apple ID 签名时 Bundle ID 会被改掉，部分能力（如 Siri、分享扩展、后台）可能用不了。iOS 版只在少数真机上试过，问题请开 issue。
+- **鸿蒙版合入主线。** 鸿蒙版的代码已经和安卓、iOS 共用一套，这一版暂时不提供 HAP 安装包，签名就绪后再补到这个版本下。
+- **酒馆。** 酒馆助手的接口补齐，支持原生 MVU 变量；能把 DeepSeek 网页里聊不下去的对话导入酒馆接着聊；导入大卡和长聊天时明显不卡了。
+- **让 AI 做一只宠物。** 宠物页新增「让 AI 做一只宠物」：带上自己的素材（GIF、逐帧图、Aseprite 导出或单张图），AI 会把它转成宠物包；转换时保留中文动画名，网页模式也能用。
+- **按你问过的话搜索会话。** 会话搜索能搜到你自己问过的话和回复摘要，句子中间的中文词也能搜到。
+- **手机操控确认改成三档**：允许一次、本轮允许、取消；设置里可以列一份「始终允许」的 App。停止只作用于当前这一轮，下一轮自动恢复。免确认模式下截图和点击不再弹卡。
+- **长回复更流畅。** 长回复分块显示，流式输出时只重排最后一块。
+- 其他改进：选 English 时 App 写给引擎的 AGENTS.md 也用英文；伙伴包的大小上限放宽，投稿失败会说清原因；桌面小组件的默认文字跟随 App 语言；跳过的版本换了更新源后也算跳过。
+- **修复。** 安卓引擎在某些情况下重启被锁死；DeepSeek 的拒绝回复和无名错误被当成网络错误；生成图片时网关返回空链接导致图片丢失；首次 DNS 失败占用当天的生成额度；回合结束但没有答复时没有任何提示；Windows 主机的盘符路径和链接打不开、长文件名存不到手机；换启动画面或壁纸时旧文件被提前删掉；快速切换主机后最近会话停在上一个；未发出的草稿丢失；读屏无法点击详情页签和主题选项。
+- **验证情况。** iOS 版和鸿蒙版都只在 CI 里编译并跑过模拟器测试，真机只做过零星试用；安卓版的新改动大部分只经过自动测试。遇到问题请导出诊断并开 issue。
+
+### English
+
+- **iOS (testing).** Starting with this version there is an unsigned iOS package, `dsh-go-1.2.0-ios-unsigned.ipa`, which you sign yourself with a tool such as AltStore before installing. Signing with a free Apple ID changes the bundle ID, and some features (such as Siri, the share extension and background work) may not be available. The iOS version has only been tried on a few real devices; please open an issue if something goes wrong.
+- **HarmonyOS joins the main line.** The HarmonyOS code now shares one code base with Android and iOS. This version doesn't ship a HAP yet; it will be added to this release once signing is ready.
+- **Tavern.** The Tavern Helper interfaces are complete, with native MVU variables; conversations that ran out of room on the DeepSeek website can be imported into Tavern and continued; importing large cards and long chats no longer stutters.
+- **Have the AI make a pet.** The pets page has a new Have the AI make a pet entry: bring your own art (GIFs, frame sequences, Aseprite exports or a single image) and the AI turns it into a pet pack; Chinese animation names are kept, and it works in web mode too.
+- **Search chats by what you asked.** Chat search finds your own questions and reply summaries, including Chinese words in the middle of a sentence.
+- **Phone control confirmation has three choices**: allow once, allow for this turn, or cancel, and Settings can keep a list of always-allowed apps. Stop only applies to the current turn; the next turn starts fresh. Screenshots and taps no longer show a card when confirmation is off.
+- **Smoother long replies.** Long replies are rendered in blocks, and while streaming only the last block is laid out again.
+- Other improvements: with English selected, the AGENTS.md the app writes for the engine is in English too; companion pack size limits are looser and failed submissions say why; the home screen widget's default text follows the app language; a skipped version stays skipped after switching update source.
+- **Fixes.** The Android engine getting stuck on restart in some cases; DeepSeek refusals and unnamed errors being reported as network errors; images lost when the gateway returned an empty link; a first DNS failure using up the day's generation budget; no notice when a turn ended without an answer; drive-letter paths and links from Windows hosts not opening, and long file names not saving to the phone; the old file being deleted too early when changing the launch screen or wallpaper; recent chats sticking to the previous host after switching quickly; unsent drafts being lost; screen readers not being able to tap detail tabs and theme options.
+- **Testing.** The iOS and HarmonyOS versions have only been compiled and run on simulators in CI, with only occasional tries on real devices; most of the new Android changes have only been checked by automated tests. If you run into a problem, please export diagnostics and open an issue.
+
 ## 1.1.0 · 2026-11-15
 
 ### 中文

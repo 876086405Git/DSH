@@ -28,7 +28,7 @@ object Os {
             throw AccessDeniedException(path, null, "Independent simulated EACCES")
         }
         val uid = Files.getAttribute(Path.of(path), "unix:uid") as Int
-        return Stat(if (pid in foreignUid) uid + 1 else uid)
+        return Stat(if (pid in foreignUid) android.os.Process.myUid() + 1 else uid)
     }
 
     fun readlink(path: String): String = Files.readSymbolicLink(Path.of(path)).toString()

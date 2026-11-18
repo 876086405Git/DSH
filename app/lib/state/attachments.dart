@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_client/dsh_client.dart' show ImageAttachment;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../l10n/l10n.dart';
+import 'attachment_files_ohos.dart';
 import 'connection_state.dart';
 
 /// Something picked in the composer and not sent yet.
@@ -169,103 +173,206 @@ class DeviceAttachmentPicker implements AttachmentPicker {
   }
 
   @override
-  Future<PickedAttachments> pickFiles({int limit = maxAttachments, int heldBytes = 0}) async {
-    final picked = await FilePicker.pickFiles();
-    final accepted = <DraftAttachment>[];
-    // Bytes already in the tray plus what this pick has retained so far: the
-    // budget covers the whole message, not one picker invocation.
-    var usedBytes = heldBytes;
-    String? problem;
-    for (final file in picked) {
-      if (accepted.length >= limit) {
-        problem ??= appL10n.chatAttachmentLimit(maxAttachments);
-        break;
-      }
-      // Metadata can reject an oversized file without opening it, but cannot
-      // authorize a read: content providers may omit it or report a stale size.
-      final length = file.lengthSync();
-      if (length != null && length > maxFileBytes) {
-        problem ??= appL10n.stateAttachmentFileLimit(file.name);
-        continue;
-      }
-      if (length != null && usedBytes + length > maxMessageBytes) {
-        problem ??= appL10n.stateAttachmentTotalLimit;
-        continue;
-      }
-      final bytes = BytesBuilder(copy: false);
-      final prefix = Uint8List(12);
-      var prefixLength = 0;
-      String? mediaType;
-      var tooLarge = false;
-      var overMessageBudget = false;
-      try {
-        await for (final chunk in file.readAsByteStream()) {
-          // Signatures may span chunks. Inspect only the small prefix before
-          // retaining a chunk, and use image limits even with a misleading name.
-          final take = (prefix.length - prefixLength).clamp(0, chunk.length);
-          prefix.setRange(prefixLength, prefixLength + take, chunk);
-          prefixLength += take;
-          mediaType = inlineImageType(Uint8List.sublistView(prefix, 0, prefixLength));
-          final budget = mediaType == null ? maxFileBytes : maxImageBytes;
-          if ((length != null && length > budget) || chunk.length > budget - bytes.length) {
-            tooLarge = true;
-            break; // Cancels the stream without retaining the excess chunk.
-          }
-          if (chunk.length > maxMessageBytes - usedBytes - bytes.length) {
-            tooLarge = true;
-            overMessageBudget = true;
-            break;
-          }
-          bytes.add(chunk);
-        }
-      } on Exception {
-        // Partial bytes are not an attachment and have not consumed usedBytes.
-        problem ??= appL10n.stateShareReadFailed(file.name);
-        continue;
-      }
-      if (tooLarge) {
-        problem ??= overMessageBudget
-            ? appL10n.stateAttachmentTotalLimit
-            : (mediaType == null
-                  ? appL10n.stateAttachmentFileLimit(file.name)
-                  : appL10n.stateAttachmentImageLimit(file.name));
-        continue;
-      }
-      final attachment = DraftAttachment(name: file.name, bytes: bytes.takeBytes(), mediaType: mediaType);
-      final issue = attachmentProblem(attachment) ?? attachmentBudgetProblem(usedBytes, attachment);
-      if (issue != null) {
-        problem ??= issue;
-      } else {
-        accepted.add(attachment);
-        usedBytes += attachment.size;
-      }
-    }
-    return PickedAttachments(accepted, problem: problem);
-  }
+  Future<PickedAttachments> pickFiles({int limit = maxAttachments, int heldBytes = 0}) async => _readAttachmentFiles(
+    (await FilePicker.pickFiles()).map(_AttachmentFileInput.platform),
+    limit: limit,
+    heldBytes: heldBytes,
+  );
 
   @override
   Future<String?> pickTextFile({int maxBytes = 64 * 1024}) async {
-    final f = await FilePicker.pickFile();
-    if (f == null) return null;
-    // Picker metadata can be absent or stale. It is only an early rejection;
-    // enforce the byte budget on the stream before retaining each chunk.
-    final length = f.lengthSync();
-    if (length != null && length > maxBytes) {
-      throw FormatException(appL10n.statePrivateKeyTooLarge);
-    }
-    final bytes = BytesBuilder();
-    await for (final chunk in f.readAsByteStream()) {
-      if (chunk.length > maxBytes - bytes.length) {
-        // Leaving await-for cancels the source instead of reading the tail.
-        throw FormatException(appL10n.statePrivateKeyTooLarge);
-      }
-      bytes.add(chunk);
-    }
-    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
+    final file = await FilePicker.pickFile();
+    return file == null ? null : _readAttachmentText(_AttachmentFileInput.platform(file), maxBytes: maxBytes);
   }
 }
 
-final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => const DeviceAttachmentPicker());
+// Both backends use the same bounded Dart reader. Android's FilePicker source
+// and its metadata/stream behavior remain unchanged.
+class _AttachmentFileInput {
+  _AttachmentFileInput(this.name, this.lengthSync, this.readAsByteStream);
+  _AttachmentFileInput.platform(PlatformFile file) : this(file.name, file.lengthSync, file.readAsByteStream);
+  final String name;
+  final int? Function() lengthSync;
+  final Stream<Uint8List> Function() readAsByteStream;
+}
+
+Future<PickedAttachments> _readAttachmentFiles(
+  Iterable<_AttachmentFileInput> picked, {
+  required int limit,
+  required int heldBytes,
+}) async {
+  final accepted = <DraftAttachment>[];
+  // Bytes already in the tray plus what this pick has retained so far: the
+  // budget covers the whole message, not one picker invocation.
+  var usedBytes = heldBytes;
+  String? problem;
+  for (final file in picked) {
+    if (accepted.length >= limit) {
+      problem ??= appL10n.chatAttachmentLimit(maxAttachments);
+      break;
+    }
+    // Metadata can reject an oversized file without opening it, but cannot
+    // authorize a read: content providers may omit it or report a stale size.
+    final length = file.lengthSync();
+    if (length != null && length > maxFileBytes) {
+      problem ??= appL10n.stateAttachmentFileLimit(file.name);
+      continue;
+    }
+    if (length != null && usedBytes + length > maxMessageBytes) {
+      problem ??= appL10n.stateAttachmentTotalLimit;
+      continue;
+    }
+    final bytes = BytesBuilder(copy: false);
+    final prefix = Uint8List(12);
+    var prefixLength = 0;
+    String? mediaType;
+    var tooLarge = false;
+    var overMessageBudget = false;
+    try {
+      await for (final chunk in file.readAsByteStream()) {
+        // Signatures may span chunks. Inspect only the small prefix before
+        // retaining a chunk, and use image limits even with a misleading name.
+        final take = (prefix.length - prefixLength).clamp(0, chunk.length);
+        prefix.setRange(prefixLength, prefixLength + take, chunk);
+        prefixLength += take;
+        mediaType = inlineImageType(Uint8List.sublistView(prefix, 0, prefixLength));
+        final budget = mediaType == null ? maxFileBytes : maxImageBytes;
+        if ((length != null && length > budget) || chunk.length > budget - bytes.length) {
+          tooLarge = true;
+          break; // Cancels the stream without retaining the excess chunk.
+        }
+        if (chunk.length > maxMessageBytes - usedBytes - bytes.length) {
+          tooLarge = true;
+          overMessageBudget = true;
+          break;
+        }
+        bytes.add(chunk);
+      }
+    } on Exception {
+      // Partial bytes are not an attachment and have not consumed usedBytes.
+      problem ??= appL10n.stateShareReadFailed(file.name);
+      continue;
+    }
+    if (tooLarge) {
+      problem ??= overMessageBudget
+          ? appL10n.stateAttachmentTotalLimit
+          : (mediaType == null
+                ? appL10n.stateAttachmentFileLimit(file.name)
+                : appL10n.stateAttachmentImageLimit(file.name));
+      continue;
+    }
+    final attachment = DraftAttachment(name: file.name, bytes: bytes.takeBytes(), mediaType: mediaType);
+    final issue = attachmentProblem(attachment) ?? attachmentBudgetProblem(usedBytes, attachment);
+    if (issue != null) {
+      problem ??= issue;
+    } else {
+      accepted.add(attachment);
+      usedBytes += attachment.size;
+    }
+  }
+  return PickedAttachments(accepted, problem: problem);
+}
+
+Future<String> _readAttachmentText(_AttachmentFileInput f, {required int maxBytes}) async {
+  // Picker metadata can be absent or stale. It is only an early rejection;
+  // enforce the byte budget on the stream before retaining each chunk.
+  final length = f.lengthSync();
+  if (length != null && length > maxBytes) {
+    throw FormatException(appL10n.statePrivateKeyTooLarge);
+  }
+  final bytes = BytesBuilder();
+  await for (final chunk in f.readAsByteStream()) {
+    if (chunk.length > maxBytes - bytes.length) {
+      // Leaving await-for cancels the source instead of reading the tail.
+      throw FormatException(appL10n.statePrivateKeyTooLarge);
+    }
+    bytes.add(chunk);
+  }
+  return utf8.decode(bytes.takeBytes(), allowMalformed: true);
+}
+
+/// OH uses public ArkTS document grants and owned local cache files. Photos
+/// keep the existing image-picker path; no URI is converted into a Dart path.
+class OhosAttachmentPicker extends DeviceAttachmentPicker {
+  const OhosAttachmentPicker();
+  static const _files = OhosAttachmentFiles();
+
+  @override
+  Future<PickedAttachments> pickFiles({int limit = maxAttachments, int heldBytes = 0}) async {
+    if (limit <= 0) return PickedAttachments(const [], problem: appL10n.chatAttachmentLimit(maxAttachments));
+    if (heldBytes >= maxMessageBytes) return PickedAttachments(const [], problem: appL10n.stateAttachmentTotalLimit);
+    return _files.consume(
+      limit: limit.clamp(1, maxAttachments),
+      maxFileBytes: maxFileBytes,
+      maxTotalBytes: (maxMessageBytes - heldBytes).clamp(0, maxMessageBytes),
+      maxImageBytes: maxImageBytes,
+      allowEmpty: false,
+      use: (entries) async {
+        final accepted = <DraftAttachment>[];
+        String? problem;
+        var used = heldBytes;
+        for (final entry in entries) {
+          if (accepted.length >= limit) {
+            problem ??= appL10n.chatAttachmentLimit(maxAttachments);
+            break;
+          }
+          if (entry.problem != null) {
+            problem ??= _nativeAttachmentProblem(entry);
+            continue;
+          }
+          final selected = await _readAttachmentFiles(
+            [_AttachmentFileInput(entry.name, () => entry.size, entry.readAsByteStream)],
+            limit: 1,
+            heldBytes: used,
+          );
+          problem ??= selected.problem;
+          accepted.addAll(selected.attachments);
+          used += totalAttachmentBytes(selected.attachments);
+        }
+        return PickedAttachments(accepted, problem: problem);
+      },
+    );
+  }
+
+  @override
+  Future<String?> pickTextFile({int maxBytes = 64 * 1024}) async => _files.consume(
+    limit: 1,
+    maxFileBytes: maxBytes.clamp(0, maxFileBytes),
+    maxTotalBytes: maxBytes.clamp(0, maxFileBytes),
+    maxImageBytes: 0,
+    allowEmpty: true,
+    use: (entries) async {
+      if (entries.isEmpty) return null;
+      final entry = entries.first;
+      if (entry.problem == 'file_too_large' || entry.problem == 'total_too_large') {
+        throw FormatException(appL10n.statePrivateKeyTooLarge);
+      }
+      if (entry.problem != null) {
+        throw PlatformException(code: 'ohos_attachment_io', message: appL10n.chatOpenAttachmentFailed);
+      }
+      return _readAttachmentText(
+        _AttachmentFileInput(entry.name, () => entry.size, entry.readAsByteStream),
+        maxBytes: maxBytes,
+      );
+    },
+  );
+}
+
+String _nativeAttachmentProblem(OhosAttachmentFile file) => switch (file.problem) {
+  'file_too_large' => appL10n.stateAttachmentFileLimit(file.name),
+  'image_too_large' => appL10n.stateAttachmentImageLimit(file.name),
+  'total_too_large' => appL10n.stateAttachmentTotalLimit,
+  'too_many' => appL10n.chatAttachmentLimit(maxAttachments),
+  'empty' => appL10n.stateAttachmentEmpty(file.name),
+  _ => appL10n.chatOpenAttachmentFailed,
+};
+
+AttachmentPicker createAttachmentPicker({String? operatingSystem}) =>
+    (operatingSystem ?? (kIsWeb ? 'web' : Platform.operatingSystem)) == 'ohos'
+    ? const OhosAttachmentPicker()
+    : const DeviceAttachmentPicker();
+
+final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => createAttachmentPicker());
 
 /// Bytes of an image a session's log refers to (`session/attachment`), for
 /// thumbnails of sent messages. Dropped once no bubble shows it.

@@ -1,0 +1,322 @@
+diff --git a/machine.c b/machine.c
+--- a/machine.c
++++ b/machine.c
+@@ -31,6 +31,7 @@
+ #include <errno.h>
+ #include <unistd.h>
+ #include <time.h>
++#include <limits.h>
+ 
+ #include "cutils.h"
+ #include "iomem.h"
+@@ -240,10 +241,10 @@
+     if (version != VM_CONFIG_VERSION) {
+         if (version > VM_CONFIG_VERSION) {
+             vm_error("The emulator is too old to run this VM: please upgrade\n");
+-            return -1;
++            goto tag_fail;
+         } else {
+             vm_error("The VM configuration file is too old for this emulator version: please upgrade the VM configuration file\n");
+-            return -1;
++            goto tag_fail;
+         }
+     }
+     
+@@ -296,7 +297,7 @@
+             break;
+         if (p->drive_count >= MAX_DRIVE_DEVICE) {
+             vm_error("Too many drives\n");
+-            return -1;
++            goto tag_fail;
+         }
+         if (vm_get_str(obj, "file", &str) < 0)
+             goto tag_fail;
+@@ -314,7 +315,7 @@
+             break;
+         if (p->fs_count >= MAX_DRIVE_DEVICE) {
+             vm_error("Too many filesystems\n");
+-            return -1;
++            goto tag_fail;
+         }
+         if (vm_get_str(obj, "file", &str) < 0)
+             goto tag_fail;
+@@ -339,7 +340,7 @@
+             break;
+         if (p->eth_count >= MAX_ETH_DEVICE) {
+             vm_error("Too many ethernet interfaces\n");
+-            return -1;
++            goto tag_fail;
+         }
+         if (vm_get_str(obj, "driver", &str) < 0)
+             goto tag_fail;
+@@ -382,7 +383,7 @@
+             p->accel_enable = TRUE;
+         } else {
+             vm_error("unsupported 'accel' config: %s\n", str);
+-            return -1;
++            goto tag_fail;
+         }
+     }
+ 
+@@ -578,6 +579,105 @@
+     config_additional_file_load(s);
+ }
+ 
++#ifdef TEMU_EMBED
++/* The embedded startup path cannot use the CLI loader's fatal exits or its
++   asynchronous URL callbacks. This reader owns and closes only its local FILE. */
++static int load_file_local(uint8_t **pbuf, const char *filename)
++{
++    FILE *f = NULL;
++    uint8_t *buf = NULL;
++    long size;
++    int error;
++
++    *pbuf = NULL;
++    f = fopen(filename, "rb");
++    if (!f)
++        goto fail;
++    if (fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 ||
++        fseek(f, 0, SEEK_SET) != 0)
++        goto fail;
++    if (size > INT_MAX) {
++        errno = EFBIG;
++        goto fail;
++    }
++    buf = malloc((size_t)size + 1);
++    if (!buf) {
++        errno = ENOMEM;
++        goto fail;
++    }
++    if (fread(buf, 1, (size_t)size, f) != (size_t)size) {
++        if (!ferror(f) || !errno)
++            errno = EIO;
++        goto fail;
++    }
++    if (fclose(f) != 0) {
++        f = NULL;
++        goto fail;
++    }
++    buf[size] = 0;
++    *pbuf = buf;
++    return (int)size;
++
++ fail:
++    error = errno ? errno : EIO;
++    if (f)
++        fclose(f);
++    free(buf);
++    errno = error;
++    perror(filename);
++    errno = error;
++    return -1;
++}
++
++int virt_machine_load_config_file_local(VirtMachineParams *p,
++                                        const char *filename)
++{
++    uint8_t *config = NULL;
++    int len, i, error;
++
++    p->cfg_filename = strdup(filename);
++    if (!p->cfg_filename) {
++        errno = ENOMEM;
++        goto fail;
++    }
++    len = load_file_local(&config, filename);
++    if (len < 0)
++        goto fail;
++    if (virt_machine_parse_config(p, (char *)config, len) < 0) {
++        errno = EINVAL;
++        goto fail;
++    }
++    free(config);
++    config = NULL;
++    for(i = 0; i < VM_FILE_COUNT; i++) {
++        char *fname;
++        if (!p->files[i].filename)
++            continue;
++        fname = get_file_path(p->cfg_filename, p->files[i].filename);
++        if (!fname) {
++            errno = ENOMEM;
++            goto fail;
++        }
++        len = load_file_local(&p->files[i].buf, fname);
++        error = errno;
++        free(fname);
++        errno = error;
++        if (len < 0)
++            goto fail;
++        p->files[i].len = len;
++    }
++    return 0;
++
++ fail:
++    error = errno;
++    free(config);
++    virt_machine_free_config(p);
++    virt_machine_set_defaults(p);
++    errno = error;
++    return -1;
++}
++#endif
++
+ void vm_add_cmdline(VirtMachineParams *p, const char *cmdline)
+ {
+     char *new_cmdline, *old_cmdline;
+@@ -606,15 +706,17 @@
+         free(p->files[i].filename);
+         free(p->files[i].buf);
+     }
+-    for(i = 0; i < p->drive_count; i++) {
++    /* set_defaults zeroes every slot. A parse error can leave an allocated
++       field in the current slot before its count has been incremented. */
++    for(i = 0; i < MAX_DRIVE_DEVICE; i++) {
+         free(p->tab_drive[i].filename);
+         free(p->tab_drive[i].device);
+     }
+-    for(i = 0; i < p->fs_count; i++) {
++    for(i = 0; i < MAX_FS_DEVICE; i++) {
+         free(p->tab_fs[i].filename);
+         free(p->tab_fs[i].tag);
+     }
+-    for(i = 0; i < p->eth_count; i++) {
++    for(i = 0; i < MAX_ETH_DEVICE; i++) {
+         free(p->tab_eth[i].driver);
+         free(p->tab_eth[i].ifname);
+     }
+diff --git a/machine.h b/machine.h
+--- a/machine.h
++++ b/machine.h
+@@ -143,6 +143,12 @@
+                                    const char *filename,
+                                    void (*start_cb)(void *opaque),
+                                    void *opaque);
++#ifdef TEMU_EMBED
++/* Local, synchronous startup only. p must start with defaults. On error it is
++   freed/reset and -1 is returned; the CLI/asynchronous loader above is unchanged. */
++int virt_machine_load_config_file_local(VirtMachineParams *p,
++                                        const char *filename);
++#endif
+ void vm_add_cmdline(VirtMachineParams *p, const char *cmdline);
+ char *get_file_path(const char *base_filename, const char *filename);
+ void virt_machine_free_config(VirtMachineParams *p);
+diff --git a/temu.c b/temu.c
+--- a/temu.c
++++ b/temu.c
+@@ -345,8 +345,8 @@
+     return ret;
+ }
+ 
+-static BlockDevice *block_device_init(const char *filename,
+-                                      BlockDeviceModeEnum mode)
++static BlockDevice *block_device_try_init(const char *filename,
++                                          BlockDeviceModeEnum mode)
+ {
+     BlockDevice *bs;
+     BlockDeviceFile *bf;
+@@ -363,10 +363,23 @@
+     f = fopen(filename, mode_str);
+     if (!f) {
+         perror(filename);
+-        exit(1);
+-    }
+-    fseek(f, 0, SEEK_END);
++        return NULL;
++    }
++    if (fseek(f, 0, SEEK_END) != 0) {
++        int error = errno;
++        fclose(f);
++        errno = error;
++        perror(filename);
++        return NULL;
++    }
+     file_size = ftello(f);
++    if (file_size < 0) {
++        int error = errno;
++        fclose(f);
++        errno = error;
++        perror(filename);
++        return NULL;
++    }
+ 
+     bs = mallocz(sizeof(*bs));
+     bf = mallocz(sizeof(*bf));
+@@ -386,6 +399,37 @@
+     bs->write_async = bf_write_async;
+     return bs;
+ }
++
++/* Keep the command-line entry's fatal behavior. Embedded startup uses the
++   nonfatal opener and owns all devices until virt_machine_init succeeds. */
++static BlockDevice *block_device_init(const char *filename,
++                                      BlockDeviceModeEnum mode)
++{
++    BlockDevice *bs = block_device_try_init(filename, mode);
++    if (!bs)
++        exit(1);
++    return bs;
++}
++
++#ifdef TEMU_EMBED
++static void block_device_file_close(BlockDevice *bs)
++{
++    BlockDeviceFile *bf;
++    int64_t i;
++
++    if (!bs)
++        return;
++    bf = bs->opaque;
++    fclose(bf->f);
++    if (bf->sector_table) {
++        for(i = 0; i < bf->nb_sectors; i++)
++            free(bf->sector_table[i]);
++        free(bf->sector_table);
++    }
++    free(bf);
++    free(bs);
++}
++#endif
+ 
+ #ifndef _WIN32
+ 
+@@ -887,11 +931,21 @@
+     int i;
+ 
+     virt_machine_set_defaults(p);
+-    virt_machine_load_config_file(p, path, NULL, NULL); /* exits on a bad config */
++    if (virt_machine_load_config_file_local(p, path) < 0)
++        return -1;
+     for(i = 0; i < p->drive_count; i++) {
+         char *fname = get_file_path(p->cfg_filename, p->tab_drive[i].filename);
+-        p->tab_drive[i].block_dev = block_device_init(fname, BF_MODE_RW);
++        int error;
++        if (!fname) {
++            errno = ENOMEM;
++            goto drive_fail;
++        }
++        p->tab_drive[i].block_dev = block_device_try_init(fname, BF_MODE_RW);
++        error = errno;
+         free(fname);
++        errno = error;
++        if (!p->tab_drive[i].block_dev)
++            goto drive_fail;
+     }
+     for(i = 0; i < p->fs_count; i++) {
+         char *fname = get_file_path(p->cfg_filename, p->tab_fs[i].filename);
+@@ -919,5 +973,15 @@
+     for(;;)
+         virt_machine_run(s);
+     return 0;
++
++ drive_fail:
++    {
++        int error = errno;
++        while (i > 0)
++            block_device_file_close(p->tab_drive[--i].block_dev);
++        virt_machine_free_config(p);
++        errno = error;
++        return -1;
++    }
+ }
+ #endif /* TEMU_EMBED */

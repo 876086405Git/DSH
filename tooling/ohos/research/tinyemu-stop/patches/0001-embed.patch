@@ -1,0 +1,150 @@
+Lets an app run TinyEMU in-process: with TEMU_EMBED the console is a pair of pipes
+(no termios, no exit on EOF or C-a x) and temu_embed_run() replaces main().
+
+diff --git a/temu.c b/temu.c
+index 7c07f3b..d400feb 100644
+--- a/temu.c
++++ b/temu.c
+@@ -96,10 +96,27 @@ static void term_init(BOOL allow_ctrlc)
+     atexit(term_exit);
+ }
+ 
++#ifdef TEMU_EMBED
++/* Embedded in an app: the console is a pair of pipes, never the process's stdio. */
++static int embed_out_fd = -1;
++#endif
++
+ static void console_write(void *opaque, const uint8_t *buf, int len)
+ {
++#ifdef TEMU_EMBED
++    while (len > 0) {
++        int k = write(embed_out_fd, buf, len);
++        if (k < 0 && errno == EINTR)
++            continue;
++        if (k <= 0)
++            return;
++        buf += k;
++        len -= k;
++    }
++#else
+     fwrite(buf, 1, len, stdout);
+     fflush(stdout);
++#endif
+ }
+ 
+ static int console_read(void *opaque, uint8_t *buf, int len)
+@@ -116,7 +133,11 @@ static int console_read(void *opaque, uint8_t *buf, int len)
+         return 0;
+     if (ret == 0) {
+         /* EOF */
++#ifdef TEMU_EMBED
++        return 0;
++#else
+         exit(1);
++#endif
+     }
+ 
+     j = 0;
+@@ -126,8 +147,11 @@ static int console_read(void *opaque, uint8_t *buf, int len)
+             s->console_esc_state = 0;
+             switch(ch) {
+             case 'x':
++#ifndef TEMU_EMBED
+                 printf("Terminated\n");
+                 exit(0);
++#endif
++                break;
+             case 'h':
+                 printf("\n"
+                        "C-a h   print this help\n"
+@@ -165,7 +189,9 @@ static void console_get_size(STDIODevice *s, int *pw, int *ph)
+     /* default values */
+     width = 80;
+     height = 25;
+-    if (ioctl(s->stdin_fd, TIOCGWINSZ, &ws) == 0 &&
++    if (!isatty(s->stdin_fd)) {
++        /* a pipe: keep the defaults */
++    } else if (ioctl(s->stdin_fd, TIOCGWINSZ, &ws) == 0 &&
+         ws.ws_col >= 4 && ws.ws_row >= 4) {
+         width = ws.ws_col;
+         height = ws.ws_row;
+@@ -204,6 +230,21 @@ CharacterDevice *console_init(BOOL allow_ctrlc)
+     return dev;
+ }
+ 
++#ifdef TEMU_EMBED
++static CharacterDevice *console_init_fds(int in_fd, int out_fd)
++{
++    CharacterDevice *dev = mallocz(sizeof(*dev));
++    STDIODevice *s = mallocz(sizeof(*s));
++    s->stdin_fd = in_fd;
++    embed_out_fd = out_fd;
++    fcntl(in_fd, F_SETFL, O_NONBLOCK);
++    dev->opaque = s;
++    dev->write_data = console_write;
++    dev->read_data = console_read;
++    return dev;
++}
++#endif
++
+ #endif /* !_WIN32 */
+ 
+ typedef enum {
+@@ -644,6 +685,7 @@ static BOOL net_poll_cb(void *arg)
+ 
+ #endif
+ 
++#ifndef TEMU_EMBED
+ int main(int argc, char **argv)
+ {
+     VirtMachine *s;
+@@ -833,3 +875,49 @@ int main(int argc, char **argv)
+     virt_machine_end(s);
+     return 0;
+ }
++#endif /* !TEMU_EMBED */
++
++#ifdef TEMU_EMBED
++/* Runs the machine described by the config file at path on the calling thread, with its
++   console on in_fd/out_fd. Disk images open read-write. Returns only if setup fails. */
++int temu_embed_run(const char *path, int in_fd, int out_fd)
++{
++    VirtMachine *s;
++    VirtMachineParams p_s, *p = &p_s;
++    int i;
++
++    virt_machine_set_defaults(p);
++    virt_machine_load_config_file(p, path, NULL, NULL); /* exits on a bad config */
++    for(i = 0; i < p->drive_count; i++) {
++        char *fname = get_file_path(p->cfg_filename, p->tab_drive[i].filename);
++        p->tab_drive[i].block_dev = block_device_init(fname, BF_MODE_RW);
++        free(fname);
++    }
++    for(i = 0; i < p->fs_count; i++) {
++        char *fname = get_file_path(p->cfg_filename, p->tab_fs[i].filename);
++        p->tab_fs[i].fs_dev = fs_disk_init(fname);
++        free(fname);
++        if (!p->tab_fs[i].fs_dev)
++            return -1;
++    }
++    for(i = 0; i < p->eth_count; i++) {
++#ifdef CONFIG_SLIRP
++        if (!strcmp(p->tab_eth[i].driver, "user"))
++            p->tab_eth[i].net = slirp_open();
++#endif
++        if (!p->tab_eth[i].net)
++            return -1;
++    }
++    p->console = console_init_fds(in_fd, out_fd);
++    p->rtc_real_time = TRUE;
++    s = virt_machine_init(p);
++    if (!s)
++        return -1;
++    virt_machine_free_config(p);
++    if (s->net)
++        s->net->device_set_carrier(s->net, TRUE);
++    for(;;)
++        virt_machine_run(s);
++    return 0;
++}
++#endif /* TEMU_EMBED */

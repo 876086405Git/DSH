@@ -1,0 +1,12 @@
+{
+  "url": "https://codeload.github.com/OpenMinis/ish-arm64/tar.gz/c5c264da19148512167aa493d7bd4e50aae1b74e",
+  "commit": "c5c264da19148512167aa493d7bd4e50aae1b74e",
+  "bytes": 3025227,
+  "sha256": "046e17769c9978e21060d465c0610a27a033dba2af92f58f42e7d8bcb6bb36ad",
+  "buildInputs": {
+    "meson.build": "7e83e2f7bc06838b3545c73c32b5b32bb1daca2976ae0660166b0fc0ea08394f",
+    "meson_options.txt": "7e21824fd2b5957bd5372455a64672098f540ca8ed6cab0a89d39512adfea499",
+    "vdso/arm64/meson.build": "965aac2122366c2bc3d380c1b61d66088c50b466f54aa6f537fa7f980e75400d",
+    "deps/meson.build": "e002b737cdd908204f2d7fd6b9147e517f1bf2beddd03e784be3b1ee5aa8ad88"
+  }
+}

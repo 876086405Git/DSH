@@ -12,10 +12,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../runtime/runtime_state.dart';
+import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
 import '../../state/engine_settings_state.dart' show describeSettingsError;
 import '../../state/features_state.dart';
 import '../../state/settings_state.dart';
+import '../../state/system_actions_state.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../state/engine_control.dart';
 import '../../state/hosts_state.dart';
@@ -183,7 +185,8 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
     ];
 
     final phoneFiles = ref.watch(settingsProvider.select((s) => s.phoneStorage));
-    final confirm = ref.watch(phoneProvider.select((s) => s.policies?.confirmMode));
+    final android = ref.watch(androidSystemFeaturesProvider);
+    final confirm = android ? ref.watch(phoneProvider.select((s) => s.policies?.confirmMode)) : null;
     final phone = ListPageCard(
       title: l10n.hubPermissionPhone,
       children: [
@@ -194,7 +197,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
               spot: Spots.phoneFiles,
               subtitle: l10n.hubSettingsPhoneFilesHint,
               onTap: () => unawaited(_onPhoneFiles(!phoneFiles)),
-              trailing: Switch(value: phoneFiles, onChanged: (v) => unawaited(_onPhoneFiles(v))),
+              trailing: Switch.adaptive(value: phoneFiles, onChanged: (v) => unawaited(_onPhoneFiles(v))),
             ),
           ),
         // The control itself stays on 手机操控: this opens it at that row.
@@ -251,8 +254,11 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
               ),
             ),
         ],
-        const SizedBox(height: 24),
-        phone,
+        if (android) ...[
+          const SizedBox(height: 24),
+          phone,
+        ] else if (ref.watch(systemActionsProvider.select((s) => s.enabled)))
+          FeatureNote(l10n.systemActionsPermissionNote),
       ],
     );
   }

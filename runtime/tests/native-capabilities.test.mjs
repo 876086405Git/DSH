@@ -15,6 +15,7 @@ import { apply } from '../bridge/dsh-go-bridge/lib/index.js';
 import { encodeFrame } from '../bridge/dsh-go-bridge/lib/native/ws.js';
 import { parseManifest } from '../bridge/dsh-go-bridge/lib/native/manifest.js';
 import { normalize } from '../bridge/dsh-go-bridge/lib/native/effects.js';
+import { CapabilityRuntime } from '../bridge/dsh-go-bridge/lib/native/capability-runtime.js';
 import { microModel } from '../bridge/dsh-go-bridge/lib/native/capabilities.js';
 import { LIMITS } from '../bridge/dsh-go-bridge/lib/native/limits.js';
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -129,11 +130,16 @@ test('actual production HTTP guard precedes media handler; finite same-host medi
 
 test('lease rejects cross-connection/stale/duplicate events and ignores handler effects', async t => {
   const f = await fixture(t), events = [];
+  let marker = 0;
+  const settled = async client => {
+    const at = ++marker; client.send({ t: 'ping', at });
+    await client.next(message => message.t === 'pong' && message.at === at);
+  };
   f.service.media('clip', () => ({ body: Buffer.from('a'), contentType: 'audio/mpeg' })); f.service.onCapability((s, e) => { events.push([s, e.event]); return { command: 'danger' }; });
   f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'a', src: 'media:clip' }));
   const a = await f.ws(['audio']), b = await f.ws(['audio']); const old = (await f.invoke(a)).effects[0], current = (await f.invoke(a)).effects[0]; assert.notEqual(old.lease, current.lease);
-  b.send({ t: 'cap.event', lease: current.lease, seq: 1, event: 'audio.ended' }); a.send({ t: 'cap.event', lease: old.lease, seq: 2, event: 'audio.ended' }); await delay(30); assert.equal(events.length, 0);
-  a.send({ t: 'cap.event', lease: current.lease, seq: 2, event: 'audio.ended' }); a.send({ t: 'cap.event', lease: current.lease, seq: 3, event: 'audio.ended' }); await delay(30); assert.equal(events.length, 1); assert.equal(events[0][0].sessionId, 's1'); assert.equal((await f.request(f.mediaPath(current))).status, 404);
+  b.send({ t: 'cap.event', lease: current.lease, seq: 1, event: 'audio.ended' }); a.send({ t: 'cap.event', lease: old.lease, seq: 2, event: 'audio.ended' }); await Promise.all([settled(a), settled(b)]); assert.equal(events.length, 0);
+  a.send({ t: 'cap.event', lease: current.lease, seq: 2, event: 'audio.ended' }); a.send({ t: 'cap.event', lease: current.lease, seq: 3, event: 'audio.ended' }); await settled(a); assert.equal(events.length, 1); assert.equal(events[0][0].sessionId, 's1'); assert.equal((await f.request(f.mediaPath(current))).status, 404);
 });
 
 test('media stop aborts pending handler; disconnect revokes lease', async t => {
@@ -519,3 +525,31 @@ for (const mode of ['dispose', 'replace', 'callback-only']) {
     assert.deepEqual(events, expected);
   });
 }
+
+// §11.5 is a source send budget; network receive timestamps cannot measure it.
+test('micro source clock enforces 100ms latest-only budget and cancels pending work', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  // The feed paces on the monotonic clock; let it follow the mocked one.
+  t.mock.method(performance, 'now', () => Date.now());
+  let emit, starts = 0, cancels = 0;
+  const sent = [];
+  const rec = { pkg: 'voice-test', uid: 1, stamp: 1, parsed: { capabilities: ['micro'], items: { micro: [{ id: 'caption' }] } } };
+  const reg = { token: {}, def: { data(scope, fn) { starts++; emit = fn; fn({ text: 'first' }); return () => cancels++; } } };
+  const core = { onChanged: () => () => {}, plugin: () => rec, stateOf: () => 'ok', registration: () => reg, violation: () => assert.fail('valid micro rejected') };
+  const runtime = new CapabilityRuntime(core, () => assert.fail('unexpected failure'));
+  t.after(() => runtime.dispose());
+  const conn = { features: ['micro'], locale: 'en', send: frame => sent.push({ at: Date.now(), ...frame }) };
+  const message = { t: 'micro.sub', sub: 'm', pkg: 'voice-test', id: 'caption' };
+  assert.equal(starts, 0); runtime.message(conn, message); await Promise.resolve();
+  assert.equal(starts, 1); assert.equal(sent.length, 1); assert.equal(sent[0].at, 1000);
+  emit({ text: 'superseded' }); t.mock.timers.tick(99); emit({ text: 'latest' });
+  assert.equal(sent.length, 1, 'no source send before the 100ms boundary');
+  t.mock.timers.tick(1); assert.equal(sent.length, 2); assert.equal(sent[1].at, 1100); assert.equal(sent[1].data.text, 'latest');
+  emit({ text: 'latest' }); t.mock.timers.tick(100); assert.equal(sent.length, 2, 'equal data is suppressed');
+  emit({ text: 'next' }); assert.equal(sent.length, 3); assert.equal(sent[2].at, 1200);
+  const revisions = sent.map(x => x.rev.split('.'));
+  assert.equal(new Set(revisions.map(x => x[0])).size, 1); assert.deepEqual(revisions.map(x => Number(x[1])), [1, 2, 3]);
+  emit({ text: 'cancel-pending' }); runtime.message(conn, { t: 'micro.unsub', sub: 'm' });
+  assert.equal(cancels, 1); assert.equal(runtime.feeds.size, 0); assert.equal(conn.microSubs.size, 0);
+  t.mock.timers.tick(1000); emit({ text: 'late' }); assert.equal(sent.length, 3, 'unsub removes pending and future emissions');
+});

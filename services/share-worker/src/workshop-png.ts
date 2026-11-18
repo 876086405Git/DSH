@@ -9,6 +9,17 @@ const passes = [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2
 export interface PngInfo { width: number; height: number; pixels: number; rgbaSum: number }
 export interface PngRegion { x: number; y: number; width: number; height: number }
 export function validatePng(bytes: Uint8Array): PngInfo { return readPng(bytes); }
+// A companion texture: a PNG of at most 8192 per side. The WebView decodes
+// it, so only the signature and IHDR are read; Live2D textures are commonly
+// 4096×4096 and larger than a pet sheet may be.
+export function validateTexture(bytes: Uint8Array): void {
+  need(bytes.length >= 33, 'png_size');
+  need([137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => bytes[i] === b), 'png_header');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+  need(view.getUint32(8) === 13 && String.fromCharCode(...bytes.subarray(12, 16)) === 'IHDR', 'png_header');
+  const width = view.getUint32(16), height = view.getUint32(20);
+  need(width > 0 && height > 0 && width <= 8192 && height <= 8192, 'png_decoded_size');
+}
 // Reconstruct every source pixel through the same validator; retain only the
 // explicitly requested, bounded cell. No full-source RGBA buffer is created.
 export function cropPng(bytes: Uint8Array, region: PngRegion): Uint8Array { return readPng(bytes, region).rgba!; }

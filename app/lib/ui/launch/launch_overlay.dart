@@ -42,6 +42,54 @@ class LaunchLayer extends StatelessWidget {
   );
 }
 
+/// The app under the launch screen: built and laid out all along (it keeps its place and its
+/// state), but not painted while the launch screen covers it whole. Painted, its blurs ran every
+/// frame of the motion: 7–11 ms of raster on a phone, more than a 120 Hz frame has.
+class LaunchUnder extends StatefulWidget {
+  const LaunchUnder({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<LaunchUnder> createState() => _LaunchUnderState();
+}
+
+class _LaunchUnderState extends State<LaunchUnder> {
+  LaunchController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = LaunchController.active.value?..addListener(_changed);
+    LaunchController.active.addListener(_follow);
+  }
+
+  void _follow() {
+    final next = LaunchController.active.value;
+    if (next == _controller) return;
+    _controller?.removeListener(_changed);
+    _controller = next?..addListener(_changed);
+    _changed();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    LaunchController.active.removeListener(_follow);
+    _controller?.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final phase = _controller?.phase;
+    return Offstage(offstage: phase == LaunchPhase.cover || phase == LaunchPhase.playing, child: widget.child);
+  }
+}
+
 /// Passes "this phone's engine is running" to a cold start's [controller].
 class _EngineWatch extends ConsumerWidget {
   const _EngineWatch({required this.controller, required this.child});
@@ -91,7 +139,11 @@ class _LaunchOverlayState extends State<LaunchOverlay> with TickerProviderStateM
     super.initState();
     _c.addListener(_sync);
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _c.firstFrame();
+      if (!mounted) return;
+      _c.firstFrame();
+      // A layer remounted under a controller already past the cover won't hear of the phase it
+      // missed, and the motion's first frame is a blank page.
+      if (_c.phase != LaunchPhase.cover) _sync();
     });
   }
 

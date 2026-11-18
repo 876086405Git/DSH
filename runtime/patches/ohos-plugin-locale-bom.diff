@@ -1,0 +1,26 @@
+diff --git a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -2943,11 +2943,11 @@
+ 	if (typeof value !== "string" || value.trim() === "") throw new Error(`${path} must be a non-empty string`);
+ 	return value;
+ }
+-function readObject(file, packageManifest = false) {
++function readObject(file) {
+ 	let contents;
+ 	try {
+ 		const text = readFileSync(file, "utf8");
+-		contents = JSON.parse(packageManifest ? text.replace(/^\uFEFF/, "") : text);
++		contents = JSON.parse(text.replace(/^\uFEFF/, ""));
+ 	} catch (error) {
+ 		throw new Error(`${file}: ${String(error)}`);
+ 	}
+@@ -3011,7 +3011,7 @@
+ 		const englishPath = optionalResourcePath(`${specifier}/locale/en.json`, parentURL);
+ 		const dictionaries = englishPath === void 0 ? /* @__PURE__ */ new Map() : dictionariesOf(englishPath, specifier, parentURL);
+ 		const manifestPath = packageName === specifier ? optionalResourcePath(`${specifier}/package.json`, parentURL) : void 0;
+-		const manifest = manifestPath === void 0 ? void 0 : readObject(manifestPath, true);
++		const manifest = manifestPath === void 0 ? void 0 : readObject(manifestPath);
+ 		const title = localizedText("title", dictionaries, fallbackText(manifest?.name), specifier);
+ 		const description = localizedText("description", dictionaries, fallbackText(manifest?.description), "");
+ 		const text = {

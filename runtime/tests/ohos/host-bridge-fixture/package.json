@@ -1,0 +1,17 @@
+{
+  "name": "dsh-go-fixture-host-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "dshGo": {
+    "v": 1,
+    "title": "Private Host bridge contract",
+    "assets": "assets",
+    "capabilities": ["audio", "files"],
+    "contributes": {
+      "panels": [{ "id": "proof", "title": "Proof" }],
+      "media": [{ "id": "tone" }]
+    }
+  }
+}

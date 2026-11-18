@@ -8,12 +8,17 @@
 // last (the app has no archive view).
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show FileSystemEntityType;
+import 'dart:math' as math;
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/services.dart' show TextEditingValue;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../share_code/guest_fs.dart';
 import 'connection_state.dart';
+import 'hosts_state.dart';
 import 'sessions_state.dart';
 
 /// One Host content hit: the session and a plain-text excerpt around the match.
@@ -246,24 +251,563 @@ abstract interface class SessionContentSearch {
   void markUnsupported();
 }
 
-/// `session/search` on a [DshClient]. "No index" is remembered per client, so
-/// typing on a host without content search costs one failed call, not one per
-/// keystroke; a reconnect (new client) asks again.
+// ── User-message & turn-outline corpus ──────────────────────────────────────
+
+/// Searchable human prompts and reply previews extracted for one session,
+/// newest turn first.
+class SessionSearchCorpusEntry {
+  const SessionSearchCorpusEntry({this.userMessages = const [], this.assistantPreviews = const []});
+
+  static const empty = SessionSearchCorpusEntry();
+
+  final List<String> userMessages;
+  final List<String> assistantPreviews;
+
+  bool get isEmpty => userMessages.isEmpty && assistantPreviews.isEmpty;
+
+  SessionSearchCorpusEntry merge(SessionSearchCorpusEntry other) {
+    if (other.isEmpty) return this;
+    if (isEmpty) return other;
+    return SessionSearchCorpusEntry(
+      userMessages: _dedupStrings([...userMessages, ...other.userMessages]),
+      assistantPreviews: _dedupStrings([...assistantPreviews, ...other.assistantPreviews]),
+    );
+  }
+}
+
+List<String> _dedupStrings(Iterable<String> items) {
+  final out = <String>[];
+  final seen = <String>{};
+  for (final item in items) {
+    final trimmed = item.trim();
+    if (trimmed.isNotEmpty && seen.add(trimmed)) out.add(trimmed);
+  }
+  return out;
+}
+
+/// Extracts searchable human prompts and reply previews from [projections]
+/// (`turnOutline` and `inbox`), newest turn first.
+SessionSearchCorpusEntry extractProjectionSearchCorpus(SessionProjections projections) {
+  return _extractCorpusFromValues(turnOutline: projections.values['turnOutline'], inbox: projections.values['inbox']);
+}
+
+/// Extracts `titleInput`, `turnOutline` and `inbox` from a `session_projcache`
+/// JSON document without decoding unrelated large rows such as `contextTimeline`.
+SessionSearchCorpusEntry extractCheckpointJsonSearchCorpus(String rawJson) {
+  final rows = _scanCheckpointRows(rawJson);
+  if (rows.isEmpty) return SessionSearchCorpusEntry.empty;
+  final titleInput = rows['titleInput'];
+  final firstPrompt = switch (titleInput) {
+    {'val': {'first': {'text': final String text}}} => text,
+    {'first': {'text': final String text}} => text,
+    _ => null,
+  };
+  final turnOutlineRow = rows['turnOutline'];
+  final turnOutline = switch (turnOutlineRow) {
+    {'val': {'turns': final Object? turns}} => turns,
+    {'turns': final Object? turns} => turns,
+    _ => turnOutlineRow,
+  };
+  final inboxRow = rows['inbox'];
+  final inbox = switch (inboxRow) {
+    {'val': final Object? val} => val,
+    _ => inboxRow,
+  };
+  return _extractCorpusFromValues(firstPrompt: firstPrompt, turnOutline: turnOutline, inbox: inbox);
+}
+
+SessionSearchCorpusEntry _extractCorpusFromValues({String? firstPrompt, Object? turnOutline, Object? inbox}) {
+  final userMessages = <String>[];
+  final assistantPreviews = <String>[];
+
+  if (inbox is Map) {
+    for (final slot in const ['next-step', 'next-turn']) {
+      final list = inbox[slot];
+      if (list is! List) continue;
+      for (final item in list.reversed) {
+        if (item is! Map) continue;
+        final source = item['source'];
+        final kind = source is Map ? source['kind'] : null;
+        if (kind != 'user' && kind != 'user-rpc') continue;
+        final content = item['content'];
+        final text = _textFromBlocks(content);
+        if (text.isNotEmpty) userMessages.add(text);
+      }
+    }
+  }
+
+  final cleanFirst = firstPrompt?.trim() ?? '';
+  if (turnOutline is List && turnOutline.isNotEmpty) {
+    for (var i = turnOutline.length - 1; i >= 0; i--) {
+      final entry = turnOutline[i];
+      if (entry is! Map) continue;
+      final prompt = (entry['prompt'] is String ? entry['prompt'] as String : '').trim();
+      final response = (entry['response'] is String ? entry['response'] as String : '').trim();
+      if (i == 0 && cleanFirst.isNotEmpty) {
+        final prefix = prompt.endsWith('…') ? prompt.substring(0, prompt.length - 1).trimRight() : prompt;
+        if (prefix.isEmpty || cleanFirst.startsWith(prefix)) {
+          userMessages.add(cleanFirst);
+        } else {
+          userMessages.add(prompt);
+          userMessages.add(cleanFirst);
+        }
+      } else if (prompt.isNotEmpty) {
+        userMessages.add(prompt);
+      }
+      if (response.isNotEmpty) assistantPreviews.add(response);
+    }
+  } else if (cleanFirst.isNotEmpty) {
+    userMessages.add(cleanFirst);
+  }
+
+  if (userMessages.isEmpty && assistantPreviews.isEmpty) return SessionSearchCorpusEntry.empty;
+  return SessionSearchCorpusEntry(
+    userMessages: _dedupStrings(userMessages),
+    assistantPreviews: _dedupStrings(assistantPreviews),
+  );
+}
+
+String _textFromBlocks(Object? content) {
+  if (content is! List) return '';
+  final parts = <String>[];
+  for (final block in content) {
+    if (block is Map && block['type'] == 'text' && block['text'] is String) {
+      final text = (block['text'] as String).trim();
+      if (text.isNotEmpty) parts.add(text);
+    }
+  }
+  return parts.join('\n');
+}
+
+/// Scans `record.rows` at depth 3 of a `session_projcache` JSON document and
+/// decodes only `titleInput`, `turnOutline` and `inbox`.
+Map<String, Object?> _scanCheckpointRows(String raw) {
+  const wanted = {'titleInput', 'turnOutline', 'inbox'};
+  final found = <String, Object?>{};
+  final units = raw.codeUnits;
+  final len = units.length;
+  var depth = 0;
+  var inStr = false;
+  var esc = false;
+  var strStart = -1;
+
+  for (var i = 0; i < len; i++) {
+    final c = units[i];
+    if (inStr) {
+      if (esc) {
+        esc = false;
+      } else if (c == 0x5C /* \ */ ) {
+        esc = true;
+      } else if (c == 0x22 /* " */ ) {
+        inStr = false;
+        if (depth == 3 && strStart >= 0) {
+          var j = i + 1;
+          while (j < len && units[j] <= 0x20) {
+            j++;
+          }
+          if (j < len && units[j] == 0x3A /* : */ ) {
+            final key = raw.substring(strStart, i);
+            if (wanted.contains(key)) {
+              var k = j + 1;
+              while (k < len && units[k] <= 0x20) {
+                k++;
+              }
+              if (k < len && units[k] == 0x7B /* { */ ) {
+                final objStart = k;
+                var objDepth = 1;
+                var objInStr = false;
+                var objEsc = false;
+                k++;
+                for (; k < len && objDepth > 0; k++) {
+                  final cc = units[k];
+                  if (objInStr) {
+                    if (objEsc) {
+                      objEsc = false;
+                    } else if (cc == 0x5C) {
+                      objEsc = true;
+                    } else if (cc == 0x22) {
+                      objInStr = false;
+                    }
+                  } else if (cc == 0x22) {
+                    objInStr = true;
+                  } else if (cc == 0x7B) {
+                    objDepth++;
+                  } else if (cc == 0x7D /* } */ ) {
+                    objDepth--;
+                  }
+                }
+                if (objDepth == 0) {
+                  try {
+                    found[key] = jsonDecode(raw.substring(objStart, k));
+                  } catch (_) {}
+                  i = k - 1;
+                  if (found.length == wanted.length) break;
+                  continue;
+                }
+              }
+            }
+          }
+        }
+      }
+      continue;
+    }
+    if (c == 0x22 /* " */ ) {
+      inStr = true;
+      strStart = i + 1;
+    } else if (c == 0x7B /* { */ || c == 0x5B /* [ */ ) {
+      depth++;
+    } else if (c == 0x7D /* } */ || c == 0x5D /* ] */ ) {
+      depth--;
+    }
+  }
+  return found;
+}
+
+/// Builds a whitespace-normalized snippet of at most [maxChars] UTF-16 units
+/// around the first match of [terms] in [text], never splitting a surrogate pair.
+String buildSearchSnippet(String text, List<String> terms, {int maxChars = 240}) {
+  final normalized = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  final ranges = matchRanges(normalized, terms);
+  final matchedIndex = ranges.isEmpty ? 0 : ranges.first.start.clamp(0, normalized.length - 1);
+  var start = math.max(0, matchedIndex - maxChars ~/ 3);
+  if (start > 0 && _isLowSurrogate(normalized.codeUnitAt(start))) start--;
+  var prefix = start > 0 ? '…' : '';
+  var suffix = '…';
+  var contentLength = maxChars - prefix.length - suffix.length;
+  if (matchedIndex >= start + contentLength) {
+    start = math.max(0, matchedIndex - contentLength + 1);
+    if (start > 0 && _isLowSurrogate(normalized.codeUnitAt(start))) start--;
+    prefix = start > 0 ? '…' : '';
+    contentLength = maxChars - prefix.length - suffix.length;
+  }
+  var end = math.min(normalized.length, start + contentLength);
+  if (end == normalized.length) {
+    suffix = '';
+    contentLength = maxChars - prefix.length;
+    start = math.max(0, end - contentLength);
+    if (start > 0 && _isLowSurrogate(normalized.codeUnitAt(start))) start++;
+  }
+  if (end < normalized.length && _isHighSurrogate(normalized.codeUnitAt(end - 1))) {
+    end--;
+  }
+  return '$prefix${normalized.substring(start, end)}$suffix';
+}
+
+bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
+bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
+
+/// Ranks and slices content hits across [sessions] from [corpus].
+///
+/// Human user messages rank above assistant reply previews; within a tier,
+/// higher term occurrence count, shorter message length and newer session
+/// activity win.
+({List<ContentHit> items, bool hasMore}) searchSessionCorpus(
+  String query,
+  Iterable<SessionSummary> sessions,
+  Map<String, SessionSearchCorpusEntry> corpus, {
+  int limit = 20,
+}) {
+  final rawTerms = [
+    for (final term in foldForSearch(query).split(RegExp(r'\s+')))
+      if (term.isNotEmpty) term,
+  ];
+  if (rawTerms.isEmpty) return (items: const <ContentHit>[], hasMore: false);
+  final requiredCounts = <String, int>{};
+  for (final term in rawTerms) {
+    requiredCounts[term] = (requiredCounts[term] ?? 0) + 1;
+  }
+  final distinctTerms = requiredCounts.keys.toList(growable: false);
+
+  int countOccurrences(String folded, String term) {
+    var count = 0;
+    var from = 0;
+    while (true) {
+      final at = folded.indexOf(term, from);
+      if (at < 0) break;
+      count++;
+      from = at + term.length;
+    }
+    return count;
+  }
+
+  ({String text, int occurrences})? bestSingleMatch(List<String> messages) {
+    String? bestText;
+    var bestOccurrences = -1;
+    var bestLength = 0x7fffffff;
+    for (final msg in messages) {
+      final folded = foldForSearch(msg);
+      var total = 0;
+      var allMatched = true;
+      for (final MapEntry(key: term, value: needed) in requiredCounts.entries) {
+        final count = countOccurrences(folded, term);
+        if (count < needed) {
+          allMatched = false;
+          break;
+        }
+        total += count;
+      }
+      if (!allMatched) continue;
+      if (total > bestOccurrences || (total == bestOccurrences && msg.length < bestLength)) {
+        bestText = msg;
+        bestOccurrences = total;
+        bestLength = msg.length;
+      }
+    }
+    return bestText == null ? null : (text: bestText, occurrences: bestOccurrences);
+  }
+
+  ({String text, int occurrences})? bestCombinedMatch(List<String> messages) {
+    if (messages.length < 2) return null;
+    final remaining = Map<String, int>.of(requiredCounts);
+    String? bestText;
+    var bestTerms = -1;
+    var bestOccurrences = -1;
+    var bestLength = 0x7fffffff;
+    for (final msg in messages) {
+      final folded = foldForSearch(msg);
+      var matchedTerms = 0;
+      var msgOccurrences = 0;
+      for (final term in distinctTerms) {
+        final count = countOccurrences(folded, term);
+        if (count > 0) {
+          matchedTerms++;
+          msgOccurrences += count;
+          final left = remaining[term] ?? 0;
+          if (left > 0) remaining[term] = math.max(0, left - count);
+        }
+      }
+      if (matchedTerms == 0) continue;
+      if (matchedTerms > bestTerms ||
+          (matchedTerms == bestTerms && msgOccurrences > bestOccurrences) ||
+          (matchedTerms == bestTerms && msgOccurrences == bestOccurrences && msg.length < bestLength)) {
+        bestText = msg;
+        bestTerms = matchedTerms;
+        bestOccurrences = msgOccurrences;
+        bestLength = msg.length;
+      }
+    }
+    if (bestText == null || remaining.values.any((left) => left > 0)) return null;
+    return (text: bestText, occurrences: bestOccurrences);
+  }
+
+  final hits = <({SessionSummary session, int tier, int occurrences, int length, String snippet})>[];
+  for (final session in sessions) {
+    if (session.blank || session.isSubagent) continue;
+    final entry = corpus[session.sessionId];
+    if (entry == null || entry.isEmpty) continue;
+
+    final singleUser = bestSingleMatch(entry.userMessages);
+    if (singleUser != null) {
+      hits.add((
+        session: session,
+        tier: 0,
+        occurrences: singleUser.occurrences,
+        length: singleUser.text.length,
+        snippet: buildSearchSnippet(singleUser.text, distinctTerms),
+      ));
+      continue;
+    }
+
+    final multiUser = bestCombinedMatch(entry.userMessages);
+    if (multiUser != null) {
+      hits.add((
+        session: session,
+        tier: 1,
+        occurrences: multiUser.occurrences,
+        length: multiUser.text.length,
+        snippet: buildSearchSnippet(multiUser.text, distinctTerms),
+      ));
+      continue;
+    }
+
+    final singleAssistant = bestSingleMatch(entry.assistantPreviews);
+    if (singleAssistant != null) {
+      hits.add((
+        session: session,
+        tier: 2,
+        occurrences: singleAssistant.occurrences,
+        length: singleAssistant.text.length,
+        snippet: buildSearchSnippet(singleAssistant.text, distinctTerms),
+      ));
+      continue;
+    }
+
+    final combinedAll = bestCombinedMatch([...entry.userMessages, ...entry.assistantPreviews]);
+    if (combinedAll != null) {
+      hits.add((
+        session: session,
+        tier: 2,
+        occurrences: combinedAll.occurrences,
+        length: combinedAll.text.length,
+        snippet: buildSearchSnippet(combinedAll.text, distinctTerms),
+      ));
+    }
+  }
+
+  hits.sort((a, b) {
+    final byTier = a.tier.compareTo(b.tier);
+    if (byTier != 0) return byTier;
+    final byCount = b.occurrences.compareTo(a.occurrences);
+    if (byCount != 0) return byCount;
+    final byLen = a.length.compareTo(b.length);
+    if (byLen != 0) return byLen;
+    final byTime = b.session.updatedAt.compareTo(a.session.updatedAt);
+    if (byTime != 0) return byTime;
+    return a.session.sessionId.compareTo(b.session.sessionId);
+  });
+
+  final hasMore = hits.length > limit;
+  return (
+    items: [for (final hit in hits.take(limit)) (sessionId: hit.session.sessionId, snippet: hit.snippet)],
+    hasMore: hasMore,
+  );
+}
+
+typedef FallbackContentSearch = Future<({List<ContentHit> items, bool hasMore})?> Function(String query);
+
+/// `session/search` on a [DshClient], backed by the lightweight user-message
+/// and turn-outline search when the Host's SQLite index is off (`openAt: never`)
+/// or when FTS5 `unicode61` misses a CJK substring.
 class HostContentSearch implements SessionContentSearch {
-  HostContentSearch(this.client);
+  HostContentSearch(this.client, {this.fallbackSearch});
 
   final DshClient client;
+  final FallbackContentSearch? fallbackSearch;
 
   static final _unsupported = Expando<bool>('sessionContentSearchUnsupported');
+  static final _rpcUnsupported = Expando<bool>('sessionSearchRpcUnsupported');
 
   @override
-  bool get knownUnsupported => _unsupported[client] ?? !client.supportsEndpoint('session/search');
+  bool get knownUnsupported =>
+      _unsupported[client] ?? (!client.supportsEndpoint('session/search') && fallbackSearch == null);
 
   @override
   void markUnsupported() => _unsupported[client] = true;
 
   @override
-  Future<({List<ContentHit> items, bool hasMore})> search(String query) => client.searchSessionsPage(query);
+  Future<({List<ContentHit> items, bool hasMore})> search(String query) async {
+    final rpcDisabled = _rpcUnsupported[client] == true || !client.supportsEndpoint('session/search');
+    if (!rpcDisabled) {
+      try {
+        return await client.searchSessionsPage(query);
+      } catch (error) {
+        if (!isContentSearchUnsupported(error)) rethrow;
+        _rpcUnsupported[client] = true;
+        final fallback = await fallbackSearch?.call(query);
+        if (fallback != null) return fallback;
+        rethrow;
+      }
+    }
+    final fallback = await fallbackSearch?.call(query);
+    if (fallback != null) return fallback;
+    throw const DshRemoteException('gateway/internal', 'session search is disabled');
+  }
+}
+
+class _CachedCheckpointFile {
+  const _CachedCheckpointFile(this.modified, this.length, this.entry);
+  final DateTime modified;
+  final int length;
+  final SessionSearchCorpusEntry entry;
+}
+
+class _CachedRemoteProjection {
+  const _CachedRemoteProjection(this.updatedAt, this.entry);
+  final DateTime updatedAt;
+  final SessionSearchCorpusEntry entry;
+}
+
+final _localCheckpointCache = <String, _CachedCheckpointFile>{};
+final _remoteProjectionCache = Expando<Map<String, _CachedRemoteProjection>>('remoteProjectionSearchCache');
+
+/// Builds the user-message corpus for the active host's sessions from local
+/// `session_projcache` files (when on-device) and `SessionProjections`.
+Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref, DshClient client, String query) async {
+  if (!ref.exists(sessionsProvider)) return null;
+  final sessionsAsync = ref.read(sessionsProvider);
+  if (!sessionsAsync.hasValue) return null;
+  final sessions = sessionsAsync.value;
+  final archived = ref.read(sessionsProvider.notifier).archivedSessions;
+  final all = <SessionSummary>[...?sessions, ...archived];
+  if (all.isEmpty) return null;
+
+  GuestFs? guestFs;
+  if (ref.read(activeHostProvider).isLocal) {
+    try {
+      guestFs = await ref.read(guestFsProvider.future);
+    } catch (_) {
+      guestFs = null;
+    }
+  }
+
+  final corpus = <String, SessionSearchCorpusEntry>{};
+  final missingProjections = <SessionSummary>[];
+
+  for (final s in all) {
+    if (s.blank || s.isSubagent) continue;
+    var entry = extractProjectionSearchCorpus(s.projections);
+    if (guestFs != null) {
+      final file = guestFs.file('${GuestFs.dshHome}/storages/session_projcache/sessions/${s.sessionId}.json');
+      try {
+        final stat = file.statSync();
+        if (stat.type == FileSystemEntityType.file) {
+          final key = file.path;
+          final cached = _localCheckpointCache[key];
+          SessionSearchCorpusEntry diskEntry;
+          if (cached != null && cached.length == stat.size && cached.modified == stat.modified) {
+            diskEntry = cached.entry;
+          } else {
+            diskEntry = extractCheckpointJsonSearchCorpus(file.readAsStringSync());
+            if (_localCheckpointCache.length >= 512) {
+              _localCheckpointCache.remove(_localCheckpointCache.keys.first);
+            }
+            _localCheckpointCache[key] = _CachedCheckpointFile(stat.modified, stat.size, diskEntry);
+          }
+          entry = entry.merge(diskEntry);
+        }
+      } catch (_) {}
+    }
+    if (!entry.isEmpty) {
+      corpus[s.sessionId] = entry;
+    } else {
+      missingProjections.add(s);
+    }
+  }
+
+  // On remote hosts (or for a brand-new session not yet checkpointed to disk),
+  // read projections for the newest sessions without activating an Agent.
+  if (missingProjections.isNotEmpty && client.supportsEndpoint('session/projections')) {
+    final cache = _remoteProjectionCache[client] ??= <String, _CachedRemoteProjection>{};
+    final toFetch = <SessionSummary>[];
+    for (final s in missingProjections) {
+      final cached = cache[s.sessionId];
+      if (cached != null && cached.updatedAt == s.updatedAt) {
+        if (!cached.entry.isEmpty) corpus[s.sessionId] = cached.entry;
+      } else if (toFetch.length < 30) {
+        toFetch.add(s);
+      }
+    }
+    var cursor = 0;
+    Future<void> worker() async {
+      while (cursor < toFetch.length) {
+        final row = toFetch[cursor++];
+        try {
+          final proj = await client.projections(row.sessionId);
+          final entry = proj == null ? SessionSearchCorpusEntry.empty : extractProjectionSearchCorpus(proj);
+          cache[row.sessionId] = _CachedRemoteProjection(row.updatedAt, entry);
+          if (!entry.isEmpty) corpus[row.sessionId] = entry;
+        } catch (_) {}
+      }
+    }
+
+    if (toFetch.isNotEmpty) {
+      await Future.wait(List.generate(math.min(4, toFetch.length), (_) => worker()));
+    }
+  }
+
+  if (guestFs == null && corpus.isEmpty) return null;
+  return searchSessionCorpus(query, all, corpus);
 }
 
 /// Whether [error] means the Host has no content search at all (index off,
@@ -284,7 +828,8 @@ final sessionContentSearchProvider = Provider<SessionContentSearch?>((ref) {
       (connection) => connection.isLoading || connection.hasError ? null : connection.value?.client,
     ),
   );
-  return client == null ? null : HostContentSearch(client);
+  if (client == null) return null;
+  return HostContentSearch(client, fallbackSearch: (query) => _searchHostUserCorpus(ref, client, query));
 });
 
 // ── Controller ───────────────────────────────────────────────────────────────

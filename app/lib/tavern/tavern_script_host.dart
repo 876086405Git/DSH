@@ -108,27 +108,50 @@ class TavernScriptPages implements TavernScriptHost {
   void acknowledge(String eventId, Map<Object?, Object?> answer) {
     final waiting = _waiting.remove(eventId);
     if (waiting == null || waiting.answer.isCompleted) return;
-    final status = switch (answer['status']) {
-      'failed' => TavernScriptAckStatus.failed,
-      'cancelled' => TavernScriptAckStatus.cancelled,
-      _ => TavernScriptAckStatus.completed,
-    };
+    // A candidate a listener left in another shape (a command that is not
+    // an object…) is not taken: the event failed, said why.
+    final raw = answer['mvu'];
+    final Object? mvu;
+    if (raw == null) {
+      mvu = null;
+    } else if (raw case {'data': final Map<String, Object?> data}
+        when (raw['commands'] == null ||
+                raw['commands'] is List<Object?> &&
+                    (raw['commands']! as List<Object?>).every((c) => c is Map<String, Object?>)) &&
+            (raw['beforeData'] == null || raw['beforeData'] is Map<String, Object?>)) {
+      mvu = TavernScriptMvuFeedback(
+        data: data,
+        commands: (raw['commands'] as List<Object?>?)?.cast<Map<String, Object?>>(),
+        beforeData: raw['beforeData'] as Map<String, Object?>?,
+      );
+    } else {
+      mvu = false;
+    }
+    final status = mvu == false
+        ? TavernScriptAckStatus.failed
+        : switch (answer['status']) {
+            'failed' => TavernScriptAckStatus.failed,
+            'cancelled' => TavernScriptAckStatus.cancelled,
+            _ => TavernScriptAckStatus.completed,
+          };
+    TavernScriptIssue issue(String code, String message) => TavernScriptIssue(
+      code: code,
+      message: message,
+      committed: false,
+      contextId: waiting.contextId,
+      eventId: eventId,
+      stage: 'handler',
+    );
     waiting.answer.complete(
       TavernScriptDispatchAck(
         eventId: eventId,
         status: status,
         issues: [
-          for (final issue in (answer['issues'] as List?) ?? const [])
-            if (issue is Map)
-              TavernScriptIssue(
-                code: '${issue['code'] ?? 'hookFailure'}',
-                message: '${issue['message'] ?? ''}',
-                committed: false,
-                contextId: waiting.contextId,
-                eventId: eventId,
-                stage: 'handler',
-              ),
+          for (final x in (answer['issues'] as List?) ?? const [])
+            if (x is Map) issue('${x['code'] ?? 'hookFailure'}', '${x['message'] ?? ''}'),
+          if (mvu == false) issue('invalidArgument', 'MVU listeners left the candidate in a shape it cannot take.'),
         ],
+        mvu: mvu is TavernScriptMvuFeedback ? mvu : null,
       ),
     );
   }

@@ -76,6 +76,8 @@ class DsBotInstallCard extends ConsumerWidget {
               onPressed: busy ? null : () => _install(context, ref),
               child: Text(busy ? l10n.botsInstalling : l10n.commonInstall),
             )
+          else if (host?.installRefused ?? false)
+            Text(l10n.marketInstallRefused, textAlign: TextAlign.center)
           else
             const _CommandWell(command: dsBotInstallCommand),
         ],

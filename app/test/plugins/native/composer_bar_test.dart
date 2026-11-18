@@ -6,6 +6,7 @@
 
 import 'dart:async';
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/plugins/native/native_model.dart';
 import 'package:dsh_app/plugins/native/native_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -21,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../clipboard/fake_paste.dart';
 import '../../chat/support/harness.dart';
 import 'support.dart';
 
@@ -38,6 +40,7 @@ Widget bar(
   bool visible = true,
   DateTime Function()? clock,
   Widget? leading,
+  String? os,
 }) {
   final host = composer ?? FakeComposer(sessionId: sessionId);
   return testApp(
@@ -61,7 +64,10 @@ Widget bar(
         ),
       ),
     ),
-    overrides: nativeOverrides(bridge, quick: quick, clock: clock),
+    overrides: [
+      if (os != null) operatingSystemProvider.overrideWithValue(os),
+      ...nativeOverrides(bridge, quick: quick, clock: clock),
+    ],
   );
 }
 
@@ -206,6 +212,85 @@ void main() {
     await pumpFrames(tester);
     expect(find.text('「快捷指令」要读取剪贴板'), findsNothing, reason: 'asked once');
     expect(bridge.invocations, hasLength(2));
+  });
+
+  group('reading the clipboard on HarmonyOS', () {
+    Future<FakeBridge> allowed(WidgetTester tester, {DateTime Function()? clock}) async {
+      usePhoneView(tester);
+      SharedPreferences.setMockInitialValues({});
+      final bridge = FakeBridge(
+        contributions([
+          quickPlugin(wants: ['clipboard']),
+        ]),
+      );
+      await tester.pumpWidget(bar(bridge, os: 'ohos', clock: clock));
+      await pumpFrames(tester);
+      return bridge;
+    }
+
+    Future<void> tapAndAllow(WidgetTester tester) async {
+      await tester.tap(find.text('译成英文'));
+      await pumpFrames(tester);
+      if (find.text('允许').evaluate().isNotEmpty) {
+        await tester.tap(find.text('允许'));
+        await pumpFrames(tester);
+      }
+    }
+
+    testWidgets('允许 is not the system\'s grant: the paste button still opens, then the text travels', (tester) async {
+      final paste = FakePaste(tester, reply: FakePaste.text('你好世界'), flutterText: 'wrong');
+      final bridge = await allowed(tester);
+      await tester.tap(find.text('译成英文'));
+      await pumpFrames(tester);
+      expect(find.text('「快捷指令」要读取剪贴板'), findsOneWidget);
+      expect(paste.reads, isEmpty, reason: 'nothing read before 允许');
+      await tester.tap(find.text('允许'));
+      await pumpFrames(tester);
+      expect(paste.reads, hasLength(1));
+      expect(paste.flutterReads, 0);
+      expect(bridge.invocations.single.clipboard, '你好世界');
+
+      await tester.tap(find.text('译成英文'));
+      await pumpFrames(tester);
+      expect(paste.reads, hasLength(2), reason: 'each tap asks the system again, though 允许 is remembered');
+      expect(bridge.invocations, hasLength(2));
+    });
+
+    testWidgets('backed out of: the tap ends, nothing is sent or said', (tester) async {
+      FakePaste(tester, reply: {'status': 'cancelled'});
+      final bridge = await allowed(tester);
+      await tapAndAllow(tester);
+      expect(bridge.invocations, isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a read that failed: the tap ends and it says so', (tester) async {
+      FakePaste(tester, reply: {'status': 'unavailable'});
+      final bridge = await allowed(tester);
+      await tapAndAllow(tester);
+      expect(bridge.invocations, isEmpty);
+      expect(find.text('无法读取剪贴板，请重试或手动输入。'), findsOneWidget);
+    });
+
+    testWidgets('an empty clipboard goes on without one, as on Android; the toast has said it', (tester) async {
+      FakePaste(tester, reply: {'status': 'empty', 'shown': true});
+      final bridge = await allowed(tester);
+      await tapAndAllow(tester);
+      expect(bridge.invocations.single.clipboard, isNull);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('time spent in the window doesn\'t age the tap: the paste button is the gesture', (tester) async {
+      var now = DateTime(2026, 10, 25, 12);
+      final paste = FakePaste(tester, reply: FakePaste.text('你好'))..gate = Completer<void>();
+      final bridge = await allowed(tester, clock: () => now);
+      await tapAndAllow(tester);
+      expect(bridge.invocations, isEmpty);
+      now = now.add(const Duration(seconds: 10));
+      paste.gate!.complete();
+      await pumpFrames(tester);
+      expect(bridge.invocations.single.userGesture, isTrue);
+    });
   });
 
   testWidgets('deferred: the capsule works in place until the result; a tap cancels; void says so', (tester) async {

@@ -222,4 +222,27 @@ void main() {
       expect(boxes[i].top - boxes[i - 1].bottom, 2);
     }
   });
+
+  testWidgets('HarmonyOS\'s launch reads in words, not its code names', (tester) async {
+    final l10n = lookupL10n(AppLocale.zhCN);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: AppLocale.zhCN,
+        supportedLocales: AppLocale.supported,
+        localizationsDelegates: const [L10n.delegate, ...GlobalMaterialLocalizations.delegates],
+        home: const Scaffold(
+          body: RuntimeLaunchFacts(
+            status: RuntimeStatus(
+              phase: RuntimePhase.error,
+              launchSelectedMode: 'ohos-embedded',
+              launchFailureReason: 'ohos_node_exited',
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text(l10n.harmonyLaunchEmbedded), findsOneWidget);
+    expect(find.text(l10n.harmonyLaunchNodeExited), findsOneWidget);
+    expect(find.textContaining('ohos'), findsNothing);
+  });
 }

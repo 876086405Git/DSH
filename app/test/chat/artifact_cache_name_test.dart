@@ -16,7 +16,8 @@ class _LoopbackBinding extends AutomatedTestWidgetsFlutterBinding {
 
 void main() {
   _LoopbackBinding();
-  for (final name in ['.version', '.version ', 'report.txt']) {
+  // The last: a legal Windows name too long for an Android file name (262 UTF-8 bytes).
+  for (final name in ['.version', '.version ', 'report.txt', '${'文' * 86}.txt']) {
     test('remote cache preserves $name body, version refresh and outgoing name', () async {
       final cache = await Directory.systemTemp.createTemp('artifact-cache-name-');
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

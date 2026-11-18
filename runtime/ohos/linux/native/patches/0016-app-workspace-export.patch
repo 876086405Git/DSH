@@ -1,0 +1,25 @@
+--- a/temu.c
++++ b/temu.c
+@@ -991,6 +991,9 @@ int main(int argc, char **argv)
+ 
+ #ifdef TEMU_EMBED
+ #include "temu_embed.h"
++#ifdef DSH_FS_EXPORT
++#include "fs_export.h"
++#endif
+ #ifdef CONFIG_FS_GRANT
+ #include "fs_grant.h"
+ static FSDevice *dsh_fixed_grant;
+@@ -1037,7 +1040,12 @@ int temu_embed_run_initialized(const char *path, int in_fd, int out_fd,
+ #else
+     for(i = 0; i < p->fs_count; i++) {
+         char *fname = get_file_path(p->cfg_filename, p->tab_fs[i].filename);
++#ifdef DSH_FS_EXPORT
++        /* App-owned export: resolves without following host symlinks. */
++        p->tab_fs[i].fs_dev = fs_export_init(fname);
++#else
+         p->tab_fs[i].fs_dev = fs_disk_init(fname);
++#endif
+         free(fname);
+         if (!p->tab_fs[i].fs_dev)
+             return TEMU_EMBED_UNRECOVERED_START_FAILURE;

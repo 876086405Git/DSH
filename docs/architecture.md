@@ -1,6 +1,6 @@
 # dsh-Go 架构与代码地图
 
-> 给要改这个仓库的人（或 AI）：§0 看全局，§1 找目录，§2–§5 看各层，
+> 给要改这个仓库的人（或 AI）：§0 看全局，§1 找目录，§2–§5 看各层（鸿蒙宿主在 §3B），
 > §7 按「要改什么」找入口和检查，§8 查专题文档。
 > 代码是事实来源；本文与源码冲突时以源码为准，发现过时请直接改这里。
 
@@ -24,14 +24,27 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-技术栈（2026-10 定稿）：
+上图是 Android。鸿蒙版共用同一套 Dart，宿主换成 ArkTS、本机引擎换成 App 进程内的 Node，见 §3B。
+
+iOS 复用同一套 Flutter 页面、Riverpod 状态、`dsh_client` 和引擎桥协议，宿主实现不同：
+
+```text
+Flutter Dart ── MethodChannel ──> Swift（DshPlugin / EngineChannel）
+      │                                  ├─ 同进程 NodeMobile + 专门生成的 runtime.zip
+      │                                  ├─ 可选 iSH Linux guest（DshGuest.framework）
+      │                                  ├─ CoreDevice / XCTest PhoneRunner 手机操控
+      │                                  └─ WidgetKit 伙伴小组件、语音、可选宠物 PiP
+      └──────── DshClient ── 127.0.0.1 本机引擎或远程 Host
+```
+
+技术栈：
 
 | 层 | 选型 | 说明 |
 |---|---|---|
 | UI | Flutter 3.47（Dart 3.13）+ Riverpod 3 | 玻璃质感用 `BackdropFilter`；手写 Notifier，无 codegen |
-| 原生层 | Kotlin，Flutter 插件形式写在 `app/android/` | 解压运行时、管理 proot 进程、前台服务、手机操控 |
+| 原生层 | Android Kotlin（`app/android/`）；iOS Swift（`app/ios/Runner/`） | 各自管理运行时、系统接口和手机操控；Dart 通道需逐平台实现 |
 | DSH 客户端 | 纯 Dart `packages/dsh_client` | 无 Flutter 依赖，可单测；本机与远程共用 |
-| 本地运行时 | Ubuntu 24.04 + Node + `@deepseek-ai/dsh`，经 proot 运行 | 免 Root、免 Termux |
+| 本地运行时 | Android：Ubuntu 24.04 + Node，经 PRoot；iOS：NodeMobile + iOS 专用运行时包，可选 iSH Linux guest | 两端共用上游 DSH/桥协议，但不能把 iOS just-bash 当成 Linux |
 
 五条贯穿主线：
 
@@ -39,20 +52,20 @@
 |---|---|---|
 | 对话 | UI 订阅 session/follow 事件流，ChatTranscript 折叠成 ChatState | `state/chat_state.dart` → `dsh_client` `watch()` |
 | 插件 | 引擎桥 /dsh-go/v1/* 提供 contributions/invoke/stream，App 只读渲染 | `state/plugins_state.dart`、`plugins/` |
-| 手机操控 | 引擎发工具调用 → 原生 phone/ 驱动无障碍/Shizuku/ADB | `phone/`（Kotlin）、`state/phone_state.dart` |
+| 手机操控 | 引擎发工具调用 → 各平台原生执行并按任务所有者结算结果 | Android `phone/`；iOS `IOSPhoneBridge`/`IOSPhoneRunner`；`state/phone_state.dart` |
 | 远程 | 另开一条加密隧道（SSH 或 WebRTC/中继），复用同一个 DshClient | `packages/dsh_remote`、`remote/` |
-| 自更新 | 检查→下载→校验→安装（可走 Shizuku/ADB 特权） | `state/update_state.dart`、`update/`（Kotlin） |
+| 自更新 | Android 检查→下载→校验→安装（可走 Shizuku/ADB 特权） | `state/update_state.dart`、`update/`（Kotlin）；iOS 不复用 APK 安装器 |
 
 ## 1. 仓库地图
 
 | 路径 | 是什么 | 关键入口 | 备注 |
 |---|---|---|---|
-| `app/` | Flutter App + Android 原生实现 | `lib/main.dart`、`android/.../MainActivity.kt` | 4789 文件，本仓库主体 |
+| `app/` | Flutter App + Android/iOS 原生实现 | `lib/main.dart`、`android/.../MainActivity.kt`、`ios/Runner/AppDelegate.swift` | 本仓库主体 |
 | `packages/dsh_client/` | DSH Web API 纯 Dart 客户端（连接/RPC/mux/事件/各域 API） | `lib/dsh_client.dart`（barrel） | 不依赖 Flutter，可单测 |
 | `packages/dsh_remote/` | 远程传输：账号、SSH 宿主、Noise IK 加密通道、WebRTC/中继、隧道 carrier | `lib/dsh_remote.dart` | 依赖 dsh_client 的 carrier 抽象 |
 | `packages/dsh_tavern/` | SillyTavern 兼容酒馆引擎（纯 Dart，191 个测试文件） | `lib/dsh_tavern.dart` | 与 AGPL 上游同许可，来源见 NOTICES |
 | `packages/dartssh2/` | vendored dartssh2 4.1.0 + 补丁 | `VENDORED.md` | app 的 SSH 链路用它 |
-| `runtime/` | 引擎运行时：构建脚本、补丁（139 个）、桥、boot/direct 启动、测试 | `build-runtime.sh`、`patches/series`、`bridge/` | 产物在 `runtime/out/<abi>/` |
+| `runtime/` | 引擎运行时：构建脚本、锁定补丁、桥、boot/direct 启动、iOS 特化与测试 | `build-runtime.sh`、`patches/series`、`bridge/`、`ios/` | Android 产物在 `runtime/out/<abi>/`；iOS 构建输出不入库 |
 | `sdk/plugin-kit/` | 原生插件作者 SDK（schema、checker、视图解析 JS 孪生、技能） | `bin/check.mjs`、`schema/` | private 包，不发 npm |
 | `examples/plugins/` | 10 个插件示例 + e2e（只覆盖 weather/usage/quick） | 各 `package.json` `scripts.check` | |
 | `services/share-worker/` | Cloudflare Worker：分享链接、下载、市场/工坊、统计 | `src/index.ts` | sparse-checkout 外 |
@@ -60,8 +73,11 @@
 | `infra/forum/` | Discourse 部署配置 | `containers/app.yml` | sparse-checkout 外 |
 | `site/` | 官网与分享页静态站 | `home/`、`share/` | sparse-checkout 外 |
 | `tooling/` | 构建/发版/真机脚本与 Python 工具 | `build-apk.sh`、`dev-run.sh`、`release_assets.py` | |
+| `app/ohos/` | 鸿蒙 ArkTS 宿主工程（Ability、通道插件、运行时、桌面卡片） | `entry/src/main/ets/entryability/EntryAbility.ets` | Android 不读；§3B |
+| `runtime/ohos/` | 鸿蒙本机引擎：Node 宿主、虚拟进程、生命周期、组成器、Linux 客体 | `package/compose-runtime.py`、`preload.mjs` | 只进 OH 组成物 |
+| `tooling/ohos/` | 鸿蒙构建、ArkTS 检查、门禁、真机脚本 | `check-arkts.sh`、`run-gates.sh`、`device.sh` | `research/` 是一次性实验记录 |
 | `docs/` | 设计（50）、维护合同（61）、测试（14）、用户指南、插件教程 | `architecture.md`（本文） | §8 有索引 |
-| `.github/workflows/` | CI（ci/goldens/pr-gate） | `ci.yml` | §9 |
+| `.github/workflows/` | CI（ci/goldens/pr-gate/runtime/ohos-compile） | `ci.yml` | §9 |
 | `.agents/skills/` | 内部流程技能：pr/review/audit/bug/vuln-check | `SKILL.md` | |
 
 > **sparse-checkout**：默认工作区只检出 `.agents .github app docs examples packages runtime sdk/plugin-kit tooling`；
@@ -167,9 +183,9 @@ HomeShell = [ChatScreen] + [SessionsDrawer 左] + [QuickPanel 右] + [SystemEntr
 - l10n 链路：改 `parts/*_{zh,en}.arb`（中英同步、key 全局唯一 lowerCamel、占位符一致）
   → `python3 app/tool/l10n_merge.py` → 产物入库；CI 用 `git diff --exit-code -- lib/l10n` 防手改。
 
-## 3. Android 原生层（Kotlin）
+## 3. 原生层
 
-> 主源码 315 个 `.kt`（另有 278 个测试 `.kt`），集中四大块：引擎运行时、手机操控、外设/通知、自更新。
+以下 §3.1–§3.5 是 Android Kotlin 实现，集中四大块：引擎运行时、手机操控、外设/通知、自更新。
 
 ### 3.1 注册与入口
 
@@ -221,6 +237,64 @@ HomeShell = [ChatScreen] + [SessionsDrawer 左] + [QuickPanel 右] + [SystemEntr
 
 > `dsh/runtime` 的方法/状态模型以 `app/lib/runtime/runtime_bridge.dart` 为准
 > （`RuntimeStatus`/`RuntimePhase`/事件类型都在那里；本文不再复制方法表）。
+
+### 3.6 iOS 原生层（Swift）
+
+`app/ios/Runner/AppDelegate.swift` 注册 `DshPlugin`，后者把文件、通知、相册、语音等通道接到同一 Flutter 引擎。`EngineChannel.swift` 实现 `dsh/runtime`：在 App 沙盒安装运行时，启动同进程 NodeMobile 的 `dsh web`，把本机地址与状态交给 Dart；Dart 的 `LocalPaths.load()` 在首帧前向它读取 `guestRoot`，新会话才会使用真实的 iOS 工作目录。iOS 工程用 Swift Package Manager，包含单独签名的 NodeHost、原生 addon 和可选 `DshGuest.framework`，见 [`app/ios/README.md`](../app/ios/README.md)。
+
+| 入口 | 职责与边界 |
+|---|---|
+| `runtime/ios/`、`tooling/ios/prepare-engine.sh`、`specialize-runtime.py` | 在验证过的共享运行时组合上做 iOS 特化，生成 `Engine/runtime.zip`；NodeMobile 24.22.1 与 framework 随 App 签名，不把 Android PRoot/APK 产物直接放进 IPA |
+| `tooling/ios/ish/`、`GuestChannel.swift` | 可选 Linux guest。未安装时用 just-bash；安装 guest 后才有真实 Linux 环境，Python 等包还取决于 guest 内实际安装情况 |
+| `runtime/ios/phone/`、`IOSPhoneBridge.swift`、`IOSPhoneRunner.swift` | 引擎的手机工具请求以运行代/会话所有者绑定，经原生任务授权后选择 CoreDevice 或已启用的 XCTest；失败结果不自动跨路线重放 |
+| `IOSPhoneCoreDevice.swift`、`IOSPhoneSelfRunner.swift`、`PhoneRunner/` | CoreDevice 负责可用的应用控制和观察；本机缺少输入服务时，已签名的独立 PhoneRunner 承担 XCTest 元素观察与点按。能力以设备实际服务和用户设置为准 |
+| `IOSPhoneTaskConsent.swift`、`ContinuedRun.swift` | 每个手机任务首次在前台授权，最长 30 分钟；后续普通动作可在目标 App 前台继续。离开 DSH Go 时才请求 iOS 26 持续任务，系统可拒绝、过期或中止；画中画不是手机操控准入条件 |
+| `CompanionWidget/`、`IOSCompanionWidget.swift` | WidgetKit 小/中尺寸伙伴卡；主 App 写有限展示快照到专用 Keychain，扩展只读快照，不分享 Host 凭据 |
+| `PetOverlay/IOSPetOverlay.swift`、`VoiceChannel.swift`、`IOSAudioSessionCoordinator.swift` | 像素宠物 PiP 默认关闭且可选；`dsh/voice` 负责系统听写/录音，`dsh/speech` 负责通话与朗读 PCM，音频会话由原生协调器管理 |
+
+iOS 仍有明确缺口：内置视频预览、通话实时 PCM 字幕、网页伙伴画中画渲染和 APK 式自更新没有等价原生实现；相关入口须降级或隐藏。每次共享 Flutter 新增平台通道，都要核对 iOS 注册及方法返回类型；当前清单和轻量 CI 检查在 [`tooling/ios/CHANNEL_COVERAGE.md`](../tooling/ios/CHANNEL_COVERAGE.md)。真机上的后台持续执行、XCTest 输入与可选 guest 软件包不能由模拟器编译推断。
+
+## 3B. 鸿蒙宿主层（ArkTS）
+
+> 同一套 Dart（`app/lib`），宿主换成 `app/ohos/`（ArkTS，105 个 `.ets`），本机引擎换成 App 进程内的 Node。
+> 现状、能力差异和每个通道的协议在 [`docs/design/harmonyos/README.md`](design/harmonyos/README.md)；本节只给地图。
+
+```text
+┌──────────────── 鸿蒙 App 进程（oh-flutter 3.47.9-ohos + ArkTS）─────────────────┐
+│ Dart: 与 Android 同一份 app/lib；operatingSystemProvider == 'ohos' 时按功能分支   │
+│   └─ MethodChannel（与 Android 同名：dsh/runtime、dsh/files、dsh/speech …）       │
+│ ArkTS: entryability/ → plugins/（各通道）  runtime/（安装、生命周期、后台任务）   │
+│        phone/（系统操作）  companion/ formability/ widget/（伙伴桌面卡片）         │
+│   └─ NativeHost 首次按需加载 libdsh_host.so（Ark N-API）                          │
+│        └─ C ABI → libnode.so：Node 24.22.1 --jitless，独立线程，一进程只启动一次  │
+│             dsh web + dsh-go-bridge，补丁 = 公共链 + OH 覆盖补丁                  │
+│             虚拟进程 runtime/ohos/process：just-bash、JS rg、isomorphic-git、     │
+│             node 脚本走 Worker；可选 Linux 客体（TinyEMU，libdsh_linux.so）       │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+和 Android 的根本差别：没有 PRoot、不能 exec 外部程序、不能加载任意 native addon、不能在别的 App 上面画东西或读屏。
+因此手机操控换成「系统操作」（打开应用/系统页、通知、剪贴板，`ets/phone/`），App 外宠物、悬浮条、无障碍不存在；
+命令行工具要么由虚拟进程实现，要么交给可选的 Linux 环境，要么连电脑。
+
+| 部分 | 位置 | 说明 |
+|---|---|---|
+| ArkTS 工程 | `app/ohos/entry/src/main/ets/` | 构建与现状见 [`app/ohos/README.md`](../app/ohos/README.md)；凭据见 `app/ohos/secrets.md` |
+| 原生宿主 | `app/ohos/entry/src/main/cpp/`、`runtime/ohos/native/`、`runtime/ohos/node/` | `libdsh_host.so`（hvigor 现编）、`libnode.so` 等由 `build-hap-libs.py` 构建 |
+| 运行时组成 | `runtime/ohos/package/compose-runtime.py` | 一个 Stored `runtime.zip` 放在 HAP rawfile，安装时逐文件核 size/SHA |
+| 引擎补丁 | `runtime/patches/series` + `pins.json` 的 `targetSets` | `series` 是唯一顺序；`android` 集合等于 main 的整条链，`ohos` 集合是公共链加 `ohos-*` 覆盖补丁。**新补丁必须登记进两个集合之一或两者**，否则 rtbuild 拒绝构建 |
+| OH 专属 JS | `runtime/ohos/{process,lifecycle,capabilities,publication,linux,net,plugins,preload.mjs}` | 只进 OH 组成物，Android 运行时字节不受影响 |
+| Dart 分支 | `state/android_features.dart` | `operatingSystemProvider`、`androidSystemFeaturesProvider`；另有少量 `*_ohos.dart`（语音、Linux、附件、空闲诊断） |
+| 无 OH 版的插件 | `app/ohos/pubspec_overrides.ohos.yaml`、`tooling/ohos/vendor_platform_switches.py`、`patch_framework.py` | 只在构建 HAP 时生效，不影响 Android |
+| 用户指南 | `docs/guide/harmony/` | 鸿蒙版单独一套，`guide_sync.py` 生成 `app/assets/skills/dsh-go-guide/harmony-*` |
+
+规则：
+
+- **按功能放开，不全局放开。** 能在鸿蒙实现的功能直接走同一套 UI；做不到的才用 `androidSystemFeaturesProvider` 或 `operatingSystemProvider` 隐藏，并在鸿蒙指南里写明替代。隐藏是最后手段。
+- **鸿蒙和 iOS 都不是「安卓」。** `androidSystemFeaturesProvider` 在两者上都是 false，所以它只能表示「没有安卓专属功能」；只属于鸿蒙的东西（系统操作、Linux 环境、`SettingsIndex.ohosLink`、`ohosOnly` 页面）一律判断 `operatingSystemProvider == 'ohos'`，iOS 也有的安卓功能用 `SettingSpot.iosToo`。
+- **Android 不变。** 鸿蒙改动不能改变 Android 的运行时字节和行为：门禁里 `android-targets`、`android-version-tree` 对照 main 的运行时，`runtime/locks/android-recipe-compat.json` 记录允许的差异。
+- **严格 ArkTS。** for-of 变量要显式类型、子类传给 `Error` 参数要 `as Error`、静态方法里不能用 `this`；`check-arkts.sh` 能在 Linux 上真编译查出来。
+- **Dart 产物只在 macOS 上编。** oh-flutter 的 AOT 工具只发 macOS 版，`.github/workflows/ohos-compile.yml` 在推到 `claude/harmonyos-ohos` 或 `ohos/**` 时编出 `ohos-aot-<sha>`；HAP 的打包、签名、安装都在 Linux 上做。
 
 ## 4. 包
 
@@ -294,12 +368,14 @@ UI 输入 ─> ChatController.send() ─> DshClient.prompt(sessionId, text)
 ### 5.4 运行时构建与分层升级
 
 ```text
-DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（pins 双哈希校验）
+DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用目标平台的补丁（pins 双哈希校验）
   → 加 bridge/boot/direct/patch.yml → assemble → runtime/out/<abi>/assets/runtime/
        ├─ manifest.json（版本/baseId/分层或单包）
        └─ rootfs-<abi>.tar.xz（schema 1）或 base+engine 两层（RUNTIME_LAYERS=1，schema 2）
 → Gradle flavor 打为 APK 资产
 ```
+
+上图是 Android 构建链。iOS 则从同一 DSH 版本和桥出发：`runtime/ohos/package/prepare-inputs.py` 先准备隔离的 npm 前缀，`compose-runtime.py` 组合共享运行时，再由 `tooling/ios/specialize-runtime.py` 换入 iOS 的图像、存储与原生 addon 路径；`tooling/ios/prepare-engine.sh` 把 `runtime.zip`、NodeMobile 和 addon/framework 输入放到 `app/ios/Engine/`。Xcode 编译 iOS framework 并嵌入 App，产物与缓存不进 git。可选 iSH guest 单独构建，不是共享运行时 ZIP 的替代。
 
 升级：`manifest.upgrade` → `RuntimeInstaller` 解 staging → `EngineUpgrade` 事务
 （`engine.prepare` → `engine.upgrade` → 换入 → `rootfs.version`）→ 只替换固定引擎路径，
@@ -308,21 +384,25 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 ### 5.5 补丁（runtime/patches）
 
 - `series` 定序；`pins.json` 记录每个 DSH 版本的 before/after 哈希链；无 fuzz，
-  每个 hunk 必须唯一匹配。
+  每个 hunk 必须唯一匹配。`targetSets` 显式列出 Android 与 OHOS 公共/平台补丁；
+  iOS 消费验证过的共享组合后另做特化，改 `series` 时要复核 iOS 组合链。
 - 改一个补丁 = 改 `.diff` + `pins.json --record` + 同名 `runtime/tests/<name>.test.mjs`
   + `docs/maintenance/<name>-contract.md`。改 `DSH_VERSION` 要全量重 pin。
 - `zzzzzz-session-deletion.diff` 文件名是 rtbuild 的硬编码开关，别改。
 
 ### 5.6 打包与本地连接
 
-- Gradle 产品风味 `abi`：`arm64`（真机）/ `x64`（模拟器）；各风味只带自己的
+- Android Gradle 产品风味 `abi`：`arm64`（真机）/ `x64`（模拟器）；各风味只带自己的
   `runtime/out/<abi>` 资产与 jniLibs，并设 `abiFilters`；`targetSdk = 28`（与 Termux 同，避开
   Android 10+ 对私有目录 exec 的限制），`minSdk = 26`。
 - 构建：`tooling/build-apk.sh`（默认 release arm64，`-f x64` / `-f all`），versionCode 按构建时间生成。
 - proot 等可执行文件以 `lib*.so` 放 jniLibs，`useLegacyPackaging = true` 使其解压到 `nativeLibraryDir`。
-- 本地连接：原生层启动 `dsh web --host 127.0.0.1 --port 3080 --no-open`，从 stdout 解析 token；
+- Android 本地连接：原生层启动 `dsh web --host 127.0.0.1 --port 3080 --no-open`，从 stdout 解析 token；
   Dart 侧 `dsh_client` 用 token 换 cookie（`dsh-auth-<base64url(sha256(authority))>`，30 天，绑定 host:port），
   之后 HTTP/WS 带 cookie、不带 Origin；WebView 兜底直接打开 `http://127.0.0.1:3080/?token=…`。
+- iOS Xcode 用 `Runner.xcworkspace`、Swift Package Manager；带本机引擎的构建必须先运行
+  `tooling/ios/prepare-engine.sh`。`EngineChannel` 在 App 内启动 NodeMobile 和本机 `dsh web`，
+  通过实际端口与 token 建立本机连接；不能把 Android 的固定端口或 APK 安装器带过来。
 
 ## 6. 关键约束速查
 
@@ -333,6 +413,9 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 5. **协议改动**：客户端/桥/插件协议改一处要查另一端的调用方与旧版本兼容。
 6. **验证边界**：手机操控、PRoot、直接启动、更新安装必须真机验证；桌面/CI 不能替代。
 7. **本机限制**：这台开发机是手机，默认不跑全量测试/编译，见 `AGENTS.local.md`。
+8. **鸿蒙**：按功能分支、不全局放开；不改变 Android 的运行时字节；新引擎补丁登记进 `pins.json` 的 `targetSets`（§3B）。
+9. **iOS 准入**：共享 Dart 通道编译通过不代表 Swift 已注册；查看
+   `tooling/ios/CHANNEL_COVERAGE.md`，并在实际 iPhone 上验收手机操控、可选 guest 与覆盖安装。
 
 ## 7. 改哪儿：任务导航
 
@@ -346,13 +429,19 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 | 原生插件协议/座位 | `docs/design/native-plugins.md`、`plugin-seams.md` | `plugins/native/`、`plugins/seams/`、`sdk/plugin-kit` | `cd sdk/plugin-kit && npm test` |
 | 桥路由 | `docs/design/bridge-contract.md` | `runtime/bridge/**`、`dsh_client dsh_go_api.dart` | `node --test runtime/tests/*.test.mjs` |
 | 引擎补丁/升级 | §5.4/§5.5、`docs/maintenance/*-contract.md` | `runtime/patches/**`、`runtime/build-runtime.sh` | `python3 -I runtime/tests/test_patch_dsh.py`（构建需 x86_64 主机） |
-| 本机引擎生命周期 | `docs/design/runtime-cold-start.md` | Kotlin `runtime/`、`state/engine_control.dart` | 真机 + `gradle :app:testArm64DebugUnitTest` |
+| 本机引擎生命周期 | `docs/design/runtime-cold-start.md` | Kotlin `runtime/`、`state/engine_control.dart` | 真机 + `(cd app/android && gradle :app:testArm64DebugUnitTest)` |
 | 手机操控 | `docs/design/phone-*.md` | Kotlin `phone/`、`state/phone_state.dart` | 真机 |
+| iOS 引擎 / guest | §3.6、`app/ios/README.md` | `EngineChannel.swift`、`runtime/ios/`、`tooling/ios/prepare-engine.sh` | iOS compile/guest CI + 真机启动 |
+| iOS 手机操控 | §3.6、`tooling/ios/phone-self-runner/README.md` | `IOSPhoneRunner.swift`、`IOSPhoneCoreDevice.swift`、`PhoneRunner/` | CoreDevice 服务探测、真机截图/输入/返回，逐项核对 |
+| iOS 小组件 / 语音 / PiP | §3.6、`tooling/ios/CHANNEL_COVERAGE.md` | `CompanionWidget/`、`VoiceChannel.swift`、`PetOverlay/` | 对应原生/Flutter 测试 + 真机行为 |
 | 远程连接 | `docs/testing/remote-*.md` | `packages/dsh_remote`、`app/lib/remote/` | `cd packages/dsh_remote && dart test` |
 | 自更新 | `docs/design/self-update-installation.md` | `state/update_state.dart`、Kotlin `update/` | `dart test` + 真机 |
 | 插件 SDK | `docs/plugins/README.md`、`sdk/plugin-kit/README.md` | `sdk/plugin-kit/**` | 按序生成链（§9） |
 | 插件市场 | `docs/design/plugin-market.md` | `market/**`、`state/plugins/plugin_market.dart` | `cd market && npm test` |
 | CI/构建 | `docs/release.md`、`CONTRIBUTING.md` | `.github/workflows/**`、`tooling/**` | 看 `CI OK` |
+| 鸿蒙功能/通道 | §3B、`docs/design/harmonyos/README.md` 与对应专题 | `app/ohos/entry/src/main/ets/plugins/`、Dart 侧同名通道、`state/android_features.dart` | `tooling/ohos/check-arkts.sh`、对应 `runtime/tests/ohos/` 或 `tooling/ohos/tests/` |
+| 鸿蒙本机引擎 | `docs/design/harmonyos/README.md` §1–§2 | `runtime/ohos/**`、`app/ohos/.../ets/runtime/` | `bash tooling/ohos/run-gates.sh`（`tooling/ohos/GATES.zh.md`） |
+| 鸿蒙用户指南 | §8 | `docs/guide/harmony/**` | `python3 app/tool/guide_sync.py --check` |
 
 ## 8. 文档索引（docs/）
 
@@ -362,7 +451,8 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 | `docs/design/` | 50 | 实现规格/方案：改对应子系统前读（`bridge-contract`、`native-plugins-*`、`runtime-*`、`plugin-*`、`settings-ia`、`rendering`、`roleplay-*`、`pets`、`companion`、`phone-*`、`share-*`、`self-update-installation` 等） |
 | `docs/maintenance/` | 61 | 45 份 `*-contract` 是某行为/补丁的合同（复现+边界+测试），改对应代码前读；其余是故障/迁移记录 |
 | `docs/testing/` | 14 | 真机/专项验证记录（remote、self-update、android-shell 等） |
-| `docs/guide/` | 12+12 | 用户指南（中文/英文），App 内置技能输入 |
+| `docs/guide/` | 12+12 | 用户指南（中文/英文），App 内置技能输入；`docs/guide/harmony/` 是鸿蒙版单独一套 |
+| `docs/design/harmonyos/` | — | 鸿蒙宿主与本机引擎：`README.md` 是总览和现状，其余是逐个通道/组件的协议与证据 |
 | `docs/plugins/` | 23+23 | 插件作者教程（含能力边界、发布与上架） |
 | `docs/pets/` | 2 | 宠物包作者指南（格式/导入/校验/发布） |
 | `docs/live2d/` | 2 | Live2D 伙伴作者指南（素材包/适配/限制/许可） |
@@ -378,13 +468,19 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用 139 个补丁（p
 |---|---|
 | Flutter 应用 | `(cd app && flutter pub get && flutter analyze && flutter test)` |
 | Dart 包 | `(cd packages/dsh_client && dart pub get && dart analyze && dart test)`；dsh_remote / dsh_tavern 同理 |
-| 桥/补丁 | `node --test runtime/tests/*.test.mjs`；`python3 -I runtime/tests/test_patch_dsh.py`；`bash runtime/tests/run-guard-tests.sh "$DSH_PREFIX"`、`run-native-tests.sh "$DSH_PREFIX"` |
+| 桥/补丁 | `node --test runtime/tests/*.test.mjs`；`python3 -I runtime/tests/test_patch_dsh.py`；`bash runtime/tests/run-guard-tests.sh "$DSH_PREFIX"`、`bash runtime/tests/run-native-tests.sh "$DSH_PREFIX"` |
 | 插件 SDK | `(cd sdk/plugin-kit && npm install && npm test)`（含生成物过期检查） |
 | 生成链（改 SDK/bridge/schema 后按序） | `gen-types → sync-bridge → sync-messages → gen-parity → sync-skill` |
 | 文案 / 指南 / 教学技能 | `l10n_merge.py --check`、`guide_sync.py --check`、`sync-skill.mjs --check` |
-| Android JVM | `gradle :app:testArm64DebugUnitTest`（需 JDK17） |
+| Android JVM | `(cd app/android && gradle :app:testArm64DebugUnitTest)`（需 JDK17） |
 | 真机 | `tooling/dev-run.sh`（热重载）/ `tooling/build-apk.sh`；真机结论不能由桌面替代 |
+| 鸿蒙 ArkTS | `tooling/ohos/check-arkts.sh --sdk <OpenHarmony SDK> --hms-stubs`（严格 ArkTS 真编译，Linux 可跑） |
+| 鸿蒙全量门禁 | `bash tooling/ohos/run-gates.sh --config <inputs.json> --out <dir>`：运行时、虚拟进程、通道、Flutter、与 main 的 Android 对照；输入见 `gate-inputs.example.json` |
+| 鸿蒙真机 | Actions `ohos-aot-<sha>` → `check-arkts.sh --full …` → `tooling/ohos/device.sh install <hap>`（见 `app/ohos/README.md`） |
+| iOS | `python3 -B tooling/ios/test-channel-contract.py`；`iOS compile`/`iOS guest`/`iOS UI tour` CI；Xcode unsigned 编译和签名后的真机安装分别记录 |
 
-CI：`.github/workflows/ci.yml` 按 paths-filter 在 PR 上跑改动涉及部分，push `main` 全量，唯一看 `CI OK`；
+CI：`.github/workflows/ci.yml` 按 paths-filter 在 PR 上跑改动涉及部分，push `main` 全量，看 `CI OK`；
+`ios-compile.yml`、`ios-guest.yml`、`ios-ui-tour.yml` 在相关路径改动时检查 iOS 编译、运行时与界面（含 `main`），
+不能代替签名和 iPhone 真机结果；`ohos-compile.yml` 在推到 `claude/harmonyos-ohos`、`ohos/**` 时于 macOS 编鸿蒙 Dart 产物（`ohos-aot-<sha>`）；
 `pr-gate.yml` 关闭外部 PR；`goldens.yml` 手动渲染 golden。
 本机（手机）默认只做静态阅读/轻量检查，不跑全量测试/编译（`AGENTS.local.md`）。

@@ -15,6 +15,7 @@ import '../../links/app_links.dart';
 import '../../pets/overlay_channel.dart' show petOverlayChannelProvider;
 import '../../pets/pet_overlay_bridge.dart';
 import '../../state/adaptive_layout_state.dart';
+import '../../state/android_features.dart';
 import '../../state/drawer_view_state.dart' show drawerSelectionProvider;
 import '../../state/quick_panel_state.dart';
 import '../../state/sessions_state.dart' show currentSessionProvider;
@@ -22,14 +23,17 @@ import '../bots/bot_alerts.dart';
 import '../chat/chat_screen.dart';
 import '../chat/composer_toast.dart' show composerToastGap;
 import '../engine/engine_screen.dart';
+import '../engine/reset_outcome.dart';
 import '../features/all_features_page.dart';
 import '../forum/forum_link_host.dart';
 import '../notify/background_net_host.dart';
+import '../notify/background_pause_host.dart';
 import '../notify/chat_alert_host.dart';
 import '../notify/voice_model_host.dart';
 import '../plugins/plugins_screen.dart';
 import '../pets/pet_settings_page.dart';
 import '../phone/phone_stop_watcher.dart';
+import '../phone/system_actions_host.dart';
 import '../remote/host_switcher.dart' show showHostSheet;
 import '../remote/remote_screen.dart';
 import '../safe_mode/safe_mode_notice_listener.dart';
@@ -339,8 +343,19 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                     children: [
                       // Notifications: routes taps, raises the in-app banner (draws nothing here).
                       ChatAlertHost(onReveal: _revealChat),
-                      // Background running cut off by the phone: one line under the header (draws nothing here).
-                      const BackgroundNetHost(),
+                      // Background running cut off by the phone, or on HarmonyOS suspended with the app:
+                      // one line under the header (draws nothing here).
+                      if (ref.watch(androidSystemFeaturesProvider))
+                        const BackgroundNetHost()
+                      else ...[
+                        const BackgroundPauseHost(),
+                        if (ref.watch(operatingSystemProvider) == 'ohos') ...[
+                          // 系统操作: its session and a handoff's prompt (draws nothing here).
+                          const SystemActionsHost(),
+                          // How a reset asked for before the app reopened came out (draws nothing).
+                          const ResetReceiptHost(),
+                        ],
+                      ],
                       // Daily update check + install resume (draws nothing).
                       const UpdateLaunchCheck(),
                       // The voice model chosen during setup: download, resume, ready / failed notices (draws nothing).

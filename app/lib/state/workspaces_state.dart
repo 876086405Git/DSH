@@ -9,6 +9,8 @@
 //   picked recently. The Host has no pin or group for a workspace, so these
 //   stay on this phone.
 
+import '../runtime/container_paths.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -294,7 +296,7 @@ class WorkspacePrefsController extends Notifier<WorkspacePrefs> {
   WorkspacePrefs build() {
     final key = keyFor(ref.watch(activeHostProvider));
     _key = key;
-    _loading = _load(key);
+    _loading = _load(key, ref.read(activeHostProvider).isLocal);
     return const WorkspacePrefs();
   }
 
@@ -304,16 +306,57 @@ class WorkspacePrefsController extends Notifier<WorkspacePrefs> {
     return state.selected;
   }
 
-  Future<void> _load(String key) async {
+  Future<void> _load(String key, bool local) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(key);
+      var restored = raw == null ? const WorkspacePrefs(loaded: true) : WorkspacePrefs.fromJson(jsonDecode(raw));
+      if (local && ContainerPaths.enabled) {
+        final paths = await ContainerPaths.load();
+        restored = _relocated(restored, paths);
+      }
       // The provider may have been disposed while prefs loaded.
       if (!ref.mounted || _key != key || state.loaded) return;
-      state = raw == null ? const WorkspacePrefs(loaded: true) : WorkspacePrefs.fromJson(jsonDecode(raw));
+      state = restored;
+      if (local && ContainerPaths.enabled && raw != null) {
+        final migrated = jsonEncode(restored.toJson());
+        if (migrated != raw) await prefs.setString(key, migrated);
+      }
     } catch (_) {
       // No preferences backend (tests) or a damaged entry: start empty.
       if (ref.mounted && _key == key && !state.loaded) state = const WorkspacePrefs(loaded: true);
+    }
+  }
+
+  static WorkspacePrefs _relocated(WorkspacePrefs restored, ContainerPaths paths) {
+    // Retained workspace settings win; aliases only fill missing groups.
+    final groups = {
+      for (final entry in restored.groups.entries)
+        if (paths.workspaceId(entry.key) == entry.key) entry.key: entry.value,
+    };
+    for (final entry in restored.groups.entries) {
+      groups.putIfAbsent(paths.workspaceId(entry.key), () => entry.value);
+    }
+    return restored.copyWith(
+      selected: () => restored.selected == null ? null : paths.workspaceId(restored.selected!),
+      pinned: {for (final id in restored.pinned) paths.workspaceId(id)}.toList(),
+      groups: groups,
+      recent: [for (final path in restored.recent) paths.guestPath(path)],
+    );
+  }
+
+  /// Apply the newly committed marker before the local connection is published.
+  Future<void> relocate(ContainerPaths paths) async {
+    final key = _key;
+    await _loading;
+    if (!ref.mounted || _key != key || !ref.read(activeHostProvider).isLocal) return;
+    final next = _relocated(state, paths);
+    state = next;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, jsonEncode(next.toJson()));
+    } catch (_) {
+      // The migrated in-memory selection still precedes connection publication.
     }
   }
 

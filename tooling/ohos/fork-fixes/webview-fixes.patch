@@ -1,0 +1,110 @@
+--- a/ohos/src/main/ets/io.flutter.plugins/webview_flutter/OhosWebView.ets
++++ b/ohos/src/main/ets/io.flutter.plugins/webview_flutter/OhosWebView.ets
+@@ -21,6 +21,7 @@
+   lastExecTime = 0;
+ 
+   @State textZoomRatio: number = this.webView.getWebSettings().getTextZoom();
++  @State darkMode: boolean = this.webView.getDarkMode();
+   @State disposed: boolean = false;
+   private subscriber: commonEventManager.CommonEventSubscriber | null = null;
+ 
+@@ -28,6 +29,9 @@
+     this.webView.getWebSettings().onTextZoomChanged((ratio: number) => {
+       this.textZoomRatio = ratio;
+     });
++    this.webView.onDarkModeChanged((dark: boolean) => {
++      this.darkMode = dark;
++    });
+     this.webView.setOnDisposeCallback(() => {
+       this.disposed = true;
+     });
+@@ -69,7 +73,7 @@
+       case 2:
+         return MixedMode.None;
+       default:
+-        return MixedMode.All;
++        return MixedMode.None;
+     }
+   }
+ 
+@@ -118,6 +122,7 @@
+           .wideViewModeAccess(this.webView.getWebSettings().getUseWideViewPort())
+           .fileAccess(this.webView.getWebSettings().getAllowFileAccess())
+           .textZoomRatio(this.textZoomRatio)
++          .darkMode(this.darkMode ? WebDarkMode.On : WebDarkMode.Off)
+           .onScroll(this.webView.onScroll)
+           .onControllerAttached(this.webView.onControllerAttached)
+           .onWindowNew((event: Any) => {
+@@ -129,7 +134,7 @@
+             event.handler.setWebController(newWebViewController);
+           })
+           .onSslErrorEventReceive((event) => {
+-            event.handler.handleConfirm();
++            event.handler.handleCancel();
+           })
+           .onHttpAuthRequest(this.webView.onHttpAuthRequest)
+           .onAlert(this.webView.onJsAlert)
+@@ -140,6 +145,10 @@
+           .onOverrideUrlLoading(this.webView.onOverrideUrlLoading)
+           .onFullScreenEnter(this.webView.onFullScreenEnter)
+           .onFullScreenExit(this.webView.onFullScreenExit)
++          .onRenderExited((event: OnRenderExitedEvent) => {
++            // Closing several Web components together can end their renderer: that's no loss.
++            if (!this.disposed) this.webView.onRenderExited(event);
++          })
+       }
+     }
+   }
+--- a/ohos/src/main/ets/io.flutter.plugins/webview_flutter/WebViewHostApiImpl.ets
++++ b/ohos/src/main/ets/io.flutter.plugins/webview_flutter/WebViewHostApiImpl.ets
+@@ -321,6 +321,12 @@
+ 
+   private onDisposeCallback?: () => void;
+ 
++  private darkMode: boolean = false;
++
++  private darkModeCallback?: (dark: boolean) => void;
++
++  private onRenderExitedCallback?: (crashed: boolean) => void;
++
+   private rotation: number = 0;
+   
+   userAgentString: string = '';
+@@ -492,6 +498,28 @@
+     this.onDisposeCallback = callback;
+   }
+ 
++  // The Web component reads this at build and follows it; there is no controller API for it.
++  setDarkMode(dark: boolean) {
++    this.darkMode = dark;
++    this.darkModeCallback && this.darkModeCallback(dark);
++  }
++
++  getDarkMode(): boolean {
++    return this.darkMode;
++  }
++
++  onDarkModeChanged(callback: (dark: boolean) => void) {
++    this.darkModeCallback = callback;
++  }
++
++  setOnRenderExitedCallback(callback?: (crashed: boolean) => void) {
++    this.onRenderExitedCallback = callback;
++  }
++
++  onRenderExited = (event: OnRenderExitedEvent) => {
++    this.onRenderExitedCallback && this.onRenderExitedCallback(event.renderExitReason === RenderExitReason.ProcessCrashed);
++  }
++
+   onJsAlert = (event: ESObject): boolean => {
+     if (this.webChromeClient && event) {
+       return this.webChromeClient.onJsAlert(this, event.url, event.message, event.result);
+@@ -710,7 +738,7 @@
+   textZoomRatioCallback?: (ratio: number) => void;
+   isAllowFullScreenRotate: boolean = false;
+   paymentRequestEnabled: boolean = false;
+-  mixedMode: number = 0; // Default: MixedMode.All (allow all mixed content)
++  mixedMode: number = 2; // Default: MixedMode.None (deny mixed content)
+   overScrollMode: number = 0; // Default: OverScrollMode.NEVER
+ 
+   constructor(webView: WebViewPlatformView) {

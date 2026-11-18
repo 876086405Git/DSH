@@ -102,6 +102,39 @@ class DshTraceEntry {
 
 typedef DshTracer = void Function(DshTraceEntry entry);
 
+/// Explicit cancellation for one or more owned HTTP exchanges. Completed
+/// exchanges unsubscribe, so a long-lived owner does not retain old requests.
+final class DshHttpAbort {
+  bool _aborted = false;
+  final _listeners = <void Function()>{};
+  bool get isAborted => _aborted;
+
+  void abort() {
+    if (_aborted) return;
+    _aborted = true;
+    final listeners = _listeners.toList();
+    _listeners.clear();
+    for (final listener in listeners) {
+      try {
+        listener();
+      } catch (_) {
+        /* Continue cancelling the remaining requests. */
+      }
+    }
+  }
+
+  void Function() _listen(void Function() listener) {
+    if (_aborted) {
+      listener();
+      return () {};
+    }
+    _listeners.add(listener);
+    return () {
+      _listeners.remove(listener);
+    };
+  }
+}
+
 /// Raw HTTP response with the body fully read.
 class DshHttpResponse {
   const DshHttpResponse(
@@ -125,6 +158,19 @@ class DshHttpResponse {
   final Uint8List body;
 
   String get text => utf8.decode(body, allowMalformed: true);
+}
+
+/// A single-use response body owned by one streaming exchange. Cancelling it
+/// retires that response and its abort listener; the connection remains usable.
+class DshHttpStreamResponse {
+  DshHttpStreamResponse(this.statusCode, this.contentType, this.body, this._cancel);
+
+  final int statusCode;
+  final String contentType;
+  final Stream<Uint8List> body;
+  final Future<void> Function() _cancel;
+
+  Future<void> cancel() => _cancel();
 }
 
 /// Reachability of the Host as seen by [DshConnection.checkHealth].
@@ -322,6 +368,27 @@ class DshConnection {
     );
   }
 
+  /// An explicitly selected streaming POST, used by OH speech. It preserves
+  /// this connection's client, Host and cookie policy. Redirects are refused.
+  /// [headerTimeout] bounds connection/headers; [idleTimeout] bounds an active
+  /// body read and does not run while the consumer pauses for playback capacity.
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path,
+    Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
+    Duration idleTimeout = const Duration(seconds: 20),
+  }) {
+    return _DshHttpStream(
+      this,
+      resolve(path),
+      utf8.encode(jsonEncode(body)),
+      abort,
+      headerTimeout ?? requestTimeout,
+      idleTimeout,
+    ).start();
+  }
+
   /// POSTs raw bytes (used for `session/uploadFileBinary`).
   Future<DshHttpResponse> postBytes(
     String path,
@@ -331,6 +398,7 @@ class DshConnection {
     Duration? timeout,
     bool followRedirects = true,
     int? maxResponseBytes,
+    DshHttpAbort? abort,
   }) {
     return _exchange(
       'POST',
@@ -340,19 +408,30 @@ class DshConnection {
       timeout: timeout,
       followRedirects: followRedirects,
       maxResponseBytes: maxResponseBytes,
+      abort: abort,
     );
   }
 
   /// Authenticated GET returning the raw response (any status), e.g. the
   /// Host's `/api/file?path=…` file route. [headers] adds request headers
-  /// (`if-none-match`).
+  /// (`if-none-match`). Optional limits keep this connection's custom client
+  /// and proxy/TLS policy; existing callers retain the same defaults.
   Future<DshHttpResponse> get(
     String path, {
     Map<String, String>? query,
     Map<String, String>? headers,
     Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
   }) {
-    return _exchange('GET', resolve(path, query), headers: headers, timeout: timeout);
+    return _exchange(
+      'GET',
+      resolve(path, query),
+      headers: headers,
+      timeout: timeout,
+      followRedirects: followRedirects,
+      maxResponseBytes: maxResponseBytes,
+    );
   }
 
   /// A bounded authenticated GET for media: no redirects (not even same
@@ -508,10 +587,24 @@ class DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
     Duration? timeout,
+    DshHttpAbort? abort,
   }) async {
+    if (abort?.isAborted == true) throw const DshClosedException('HTTP request cancelled');
     HttpClientRequest? request;
     StreamIterator<List<int>>? responseBody;
     TimeoutException? expired;
+    final cancelled = Completer<DshHttpResponse>();
+    var settled = false;
+    final unsubscribe = abort?._listen(() {
+      if (settled) return;
+      unawaited(responseBody?.cancel().catchError((Object _) {}));
+      try {
+        request?.abort(const DshClosedException('HTTP request cancelled'));
+      } catch (_) {
+        /* Already closed. */
+      }
+      if (!cancelled.isCompleted) cancelled.completeError(const DshClosedException('HTTP request cancelled'));
+    });
     Future<DshHttpResponse> run() async {
       request = await _http.openUrl(method, uri);
       final req = request!;
@@ -522,6 +615,13 @@ class DshConnection {
         unawaited(req.done.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
         req.abort(deadlineError);
         throw deadlineError;
+      }
+      // A cancellation can win the same way. Never attach the cookie or body to
+      // the late request.
+      if (abort != null && (abort.isAborted || settled)) {
+        unawaited(req.done.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
+        req.abort(const DshClosedException('HTTP request cancelled'));
+        throw const DshClosedException('HTTP request cancelled');
       }
       req.followRedirects = followRedirects;
       _applyHost(req.headers);
@@ -556,7 +656,10 @@ class DshConnection {
     }
 
     try {
-      return await run().timeout(timeout ?? requestTimeout);
+      final exchange = run();
+      return await (abort == null ? exchange : Future.any([exchange, cancelled.future])).timeout(
+        timeout ?? requestTimeout,
+      );
     } on TimeoutException catch (error) {
       expired = error;
       // Once headers arrived, request.abort no longer owns the response body.
@@ -570,6 +673,9 @@ class DshConnection {
       throw DshTransportException('$method ${uri.path} failed: ${error.message}', error);
     } on HandshakeException catch (error) {
       throw DshTransportException('TLS handshake failed: ${error.message}', error);
+    } finally {
+      settled = true;
+      unsubscribe?.call();
     }
   }
 
@@ -627,5 +733,126 @@ class DshConnection {
       }
     }
     return DshCookie(name: name, value: value, authority: authority, expiresAt: expiresAt);
+  }
+}
+
+/// One response owns its reader and cancellation for the complete body
+/// lifetime, including the interval after headers and before the first listen.
+final class _DshHttpStream {
+  _DshHttpStream(this.connection, this.uri, this.payload, this.abort, this.headerTimeout, this.idleTimeout);
+
+  final DshConnection connection;
+  final Uri uri;
+  final List<int> payload;
+  final DshHttpAbort abort;
+  final Duration headerTimeout, idleTimeout;
+  final _cancelled = Completer<DshHttpStreamResponse>();
+  HttpClientRequest? _request;
+  StreamIterator<List<int>>? _reader;
+  Future<bool>? _first;
+  Timer? _deadline;
+  void Function()? _unsubscribe;
+  bool _closed = false;
+  Object? _reason;
+  Future<void>? _retirement;
+
+  Future<DshHttpStreamResponse> start() async {
+    if (connection._closed || abort.isAborted) throw const DshClosedException('HTTP request cancelled');
+    if (headerTimeout <= Duration.zero || idleTimeout <= Duration.zero) {
+      throw ArgumentError('stream timeouts must be positive');
+    }
+    final opened = _open();
+    final result = Future.any([opened, _cancelled.future]);
+    _deadline = Timer(headerTimeout, () {
+      unawaited(_cancel(DshTransportException('POST ${uri.path} headers timed out')).catchError((Object _) {}));
+    });
+    _unsubscribe = abort._listen(() {
+      unawaited(_cancel(const DshClosedException('HTTP request cancelled')).catchError((Object _) {}));
+    });
+    try {
+      return await result;
+    } catch (error) {
+      await _cancel(error);
+      throw _transportError(error);
+    }
+  }
+
+  Object _transportError(Object error) {
+    if (error is DshException) return error;
+    if (error is TimeoutException) return DshTransportException('POST ${uri.path} body stalled', error);
+    if (error is SocketException) return DshTransportException('POST ${uri.path} failed: ${error.message}', error);
+    if (error is HttpException) return DshTransportException('POST ${uri.path} failed: ${error.message}', error);
+    if (error is HandshakeException) return DshTransportException('TLS handshake failed: ${error.message}', error);
+    return error;
+  }
+
+  Future<DshHttpStreamResponse> _open() async {
+    final request = _request = await connection._http.openUrl('POST', uri);
+    if (_closed || abort.isAborted || connection._closed) {
+      unawaited(request.done.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
+      request.abort(_reason ?? const DshClosedException('HTTP request cancelled'));
+      throw _reason ?? const DshClosedException('HTTP request cancelled');
+    }
+    request.followRedirects = false;
+    connection._applyHost(request.headers);
+    final cookie = connection.cookie;
+    if (cookie != null) request.headers.set(HttpHeaders.cookieHeader, cookie.header);
+    request.headers.contentType = ContentType.json;
+    request.contentLength = payload.length;
+    request.add(payload);
+    final response = await request.close();
+    final reader = _reader = StreamIterator<List<int>>(response);
+    // StreamIterator does not listen until moveNext. Subscribe now so an
+    // abort after headers owns the socket even before the caller reads body.
+    // The iterator pauses after this single chunk until the caller advances.
+    _first = reader.moveNext();
+    unawaited(_first!.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
+    if (_closed || abort.isAborted || connection._closed) {
+      // Headers may arrive after cancellation won. Own that late response too.
+      await reader.cancel();
+      throw _reason ?? const DshClosedException('HTTP request cancelled');
+    }
+    _deadline?.cancel();
+    final type = response.headers.contentType;
+    return DshHttpStreamResponse(
+      response.statusCode,
+      type == null ? '' : '${type.primaryType}/${type.subType}'.toLowerCase(),
+      _body(),
+      () => _cancel(const DshClosedException('HTTP response cancelled')),
+    );
+  }
+
+  Stream<Uint8List> _body() async* {
+    try {
+      final reader = _reader!;
+      while (!_closed) {
+        final next = _first ?? reader.moveNext();
+        _first = null;
+        final more = await next.timeout(idleTimeout);
+        if (_closed || !more) break;
+        final chunk = reader.current;
+        yield chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+      }
+    } catch (error) {
+      if (!_closed) throw _transportError(error);
+    } finally {
+      await _cancel(const DshClosedException('HTTP response finished'));
+    }
+  }
+
+  Future<void> _cancel(Object reason) {
+    if (_closed) return _retirement ?? Future.value();
+    _closed = true;
+    _reason = reason;
+    _deadline?.cancel();
+    _unsubscribe?.call();
+    _unsubscribe = null;
+    if (!_cancelled.isCompleted) _cancelled.completeError(reason);
+    try {
+      _request?.abort(reason);
+    } catch (_) {
+      // The response may have completed between the caller and this cleanup.
+    }
+    return _retirement = _reader?.cancel() ?? Future.value();
   }
 }

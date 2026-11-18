@@ -188,13 +188,32 @@ List<state_core.SecretRelease> _secretReleases(
   }
   final result = <state_core.SecretRelease>[];
   for (final binding in protection.ledger.bindings) {
-    final release = _secretReleaseForBinding(characterId, input, protection, binding);
+    StoredAgentRun? proof;
+    final release = _secretReleaseForBinding(
+      characterId,
+      input,
+      protection,
+      binding,
+      resolveBoundDefinition: () {
+        proof ??= engine._store.agentRunById(chatId, binding['bindReceiptId']! as String);
+        if (!_secretProofMatches(proof, binding) || proof?.result['proposalRunId'] != binding['proposalRunId']) {
+          return null;
+        }
+        final proposal = engine._store.agentRunById(chatId, binding['proposalRunId']! as String);
+        final configId = _secretBindingConfigId(binding, proposal);
+        if (configId == null) {
+          return null;
+        }
+        return _gameplayHistoricalConfig(engine, {'dshgoPackDefinitionConfigId': configId}).config?.secrets;
+      },
+    );
     if (release == null) {
       continue;
     }
-    // Keep the live lookup behind the exact definition/path/value gates.
+    // The unchanged-definition path still reads its proof after the value gate.
+    // Historical resolution has already authenticated the same real bind row.
     // The native verifier never accepts a preview proof reader.
-    final proof = engine._store.agentRunById(chatId, binding['bindReceiptId']! as String);
+    proof ??= engine._store.agentRunById(chatId, binding['bindReceiptId']! as String);
     if (_secretProofMatches(proof, binding)) {
       result.add(release);
     }
@@ -222,12 +241,21 @@ state_core.SecretRelease? _secretReleaseForBinding(
   String characterId,
   _StateInput input,
   _SecretProtection protection,
-  Map<String, Object?> binding,
-) {
-  if (binding['characterId'] != characterId || binding['definitionFingerprint'] != protection.definition.fingerprint) {
+  Map<String, Object?> binding, {
+  state_core.SecretDefinition? Function()? resolveBoundDefinition,
+}) {
+  if (binding['characterId'] != characterId) {
     return null;
   }
-  final release = protection.definition.releaseFor(
+  var definition = protection.definition;
+  if (binding['definitionFingerprint'] != definition.fingerprint) {
+    final bound = resolveBoundDefinition?.call();
+    if (bound == null || binding['definitionFingerprint'] != bound.fingerprint) {
+      return null;
+    }
+    definition = bound;
+  }
+  final release = definition.releaseFor(
     slotId: binding['slotId']! as String,
     entityId: binding['entityId']! as String,
     characterId: characterId,
@@ -237,6 +265,20 @@ state_core.SecretRelease? _secretReleaseForBinding(
   return release == null || release.path != binding['path'] || release.valueHash != binding['valueHash']
       ? null
       : release;
+}
+
+/// Callers first authenticate the same-chat bind receipt. Only its original
+/// proposal can name the immutable configuration that authorized this binding.
+String? _secretBindingConfigId(Map<String, Object?> binding, StoredAgentRun? proposal) {
+  if (proposal == null ||
+      proposal.id != binding['proposalRunId'] ||
+      _secretProposalShapeReason(proposal, binding['characterId']! as String) != null ||
+      proposal.result['sourceFingerprint'] != binding['inputSourceFingerprint'] ||
+      _map(proposal.result['capability'])['definitionFingerprint'] != binding['definitionFingerprint']) {
+    return null;
+  }
+  final id = proposal.result['effectiveConfigId'];
+  return id is String && id.isNotEmpty ? id : null;
 }
 
 bool _secretProofMatches(StoredAgentRun? proof, Map<String, Object?> binding) =>

@@ -232,6 +232,8 @@ class ChatWebPluginsPane extends ConsumerWidget {
         _WebPlugins(web: web, sessionId: sessionId),
         if (others.isNotEmpty)
           ListPageCard(
+            key: const ValueKey('chat-plugins-other-pages'),
+            margin: const EdgeInsets.only(top: ChatPluginsMetrics.gap),
             children: [
               ListPageRow(icon: AppIcons.plugin, title: context.l10n.hubPlugins, chevron: true, onTap: onOtherPages),
             ],

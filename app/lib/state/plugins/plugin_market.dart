@@ -210,7 +210,8 @@ typedef _OfficialCopy = ({String index, String? indexTag, String sidecar, String
 
 Future<_OfficialCopy?> _readOfficialCopy() async {
   try {
-    final json = jsonDecode((await SharedPreferences.getInstance()).getString(_officialCopyKey)!) as Map<String, Object?>;
+    final json =
+        jsonDecode((await SharedPreferences.getInstance()).getString(_officialCopyKey)!) as Map<String, Object?>;
     return (
       index: json['index']! as String,
       indexTag: json['indexTag'] as String?,

@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/jkcoxson/idevice",
+  "commit": "3854a5df4a5a6dee71ffce4d8befc2ea356a8065",
+  "archive": "https://codeload.github.com/jkcoxson/idevice/tar.gz/3854a5df4a5a6dee71ffce4d8befc2ea356a8065",
+  "archiveSha256": "bb3c171161476dac94c190a4867bf4a670663643d5dfa5b8b38086948fbc3042",
+  "license": "MIT",
+  "patch": "idevice-rsd-xctest.patch",
+  "rustToolchain": "1.99.1"
+}

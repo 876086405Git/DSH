@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../state/artifacts.dart' show FilesChannel, filesChannelProvider;
+import '../state/artifacts.dart' show FilesChannel, filesChannelProvider, savedInChosenPlace;
 import '../l10n/l10n.dart';
 import 'diagnostics_bundle.dart';
 
@@ -103,8 +103,9 @@ String diagnosticsErrorText(Object error) => switch (error) {
 };
 
 /// `已存到 下载/DSH-Go/…` for a saved bundle.
-String diagnosticsSavedText(String where) =>
-    appL10n.stateDiagnosticsSaved(where.replaceFirst(RegExp(r'^Download/'), appL10n.stateDownloadsPrefix));
+String diagnosticsSavedText(String where) => savedInChosenPlace(where)
+    ? appL10n.harmonySaved
+    : appL10n.stateDiagnosticsSaved(where.replaceFirst(RegExp(r'^Download/'), appL10n.stateDownloadsPrefix));
 
 final diagnosticsExporterProvider = Provider<DiagnosticsExporter>(
   (ref) => DiagnosticsExporter(

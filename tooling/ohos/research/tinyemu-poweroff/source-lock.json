@@ -1,0 +1,15 @@
+{
+  "archiveUrl": "https://bellard.org/tinyemu/tinyemu-2019-12-21.tar.gz",
+  "archiveSha256": "be8351f2121819b3172fcedce5cb1826fa12c87da1b7ed98f269d3e802a05555",
+  "files": {
+    "clock-cpu.c": "fea3652eff3a7fa66169f88100b66ff1e406d98ccb40d994109046f6a12f596e",
+    "patches/0001-embed.patch": "c5b8fd3f6e0a9af8fb0f5821875bfa4966a562bf98e563a1622a1dcc94d7f74d",
+    "patches/0002-707-core.patch": "15aecee0c9cc6960d20dd5fbaf48c93cacff9b2e3150b620a5fc24ed1d901c09",
+    "patches/0003-803-clint-read64.patch": "ed11dd0d911a60d8b6eb3b29a8b1e73f243af540b0cec9c731fc684d8f8aa0b1",
+    "patches/0004-nonfatal-local-startup.patch": "87d303bc9769df2a0df155ef3746f7505b2f89a7e737dc29ed55202131ffa6f5",
+    "patches/0005-initialized-owner.patch": "931809dbbd1f485182dd054e9ec535d92665ac21656822dc8e1dfd61558f9169",
+    "patches/0006-clint-low-word.patch": "2e2cc49171df11d8cec6b58dacf49cbfbc58133c0cd6207591ba2d40c019fbb6",
+    "patches/0007-embed-poweroff-return.patch": "e4e2ef619ce3a85c619727f79d325d0e19a28c7411b260c49becf1748719363d",
+    "semantic-core.c": "4285582eb0bc247888f5afca6e49a4466f3613e755fcf688d788a52a4ab00ccd"
+  }
+}

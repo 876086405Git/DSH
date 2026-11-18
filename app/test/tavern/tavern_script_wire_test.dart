@@ -445,7 +445,7 @@ void main() {
     final id =
         (_result(await _ask(wire, 'openContext', {'instanceId': 'frame'}))! as Map<String, Object?>)['id']! as String;
     final regexes = _result(await _ask(wire, 'getTavernRegexes', {'contextId': id}))! as Map<String, Object?>;
-    expect(regexes.keys, unorderedEquals(['global', 'preset', 'character']));
+    expect(regexes.keys, unorderedEquals(['global', 'preset', 'character', 'chat']));
     expect(regexes['global'], [
       {
         'id': 'r1',
@@ -525,6 +525,94 @@ void main() {
     expect(byId['both']!['destination'], {'display': true, 'prompt': true});
     expect(regexes['character'], isEmpty);
   });
+
+  test(
+    'stage 4 over the channel: a book made, read, written with its version, gone; the preset; the picture; MVU',
+    () async {
+      final card = await File('assets/tavern/sample_innkeeper.json').readAsBytes();
+      final character = await tavern.importCard(card, fileName: 'sample_innkeeper.json');
+      final chat = await tavern.createChat(character.id);
+      final id =
+          (_result(await _ask(wire, 'openContext', {'instanceId': 'frame', 'chatId': chat}))!
+                  as Map<String, Object?>)['id']!
+              as String;
+      Future<Object?> ok(String method, [Map<String, Object?> params = const {}]) async =>
+          _result(await _ask(wire, method, {'contextId': id, ...params}));
+
+      final made = await ok('createBook', {
+        'name': '旅店传闻',
+        'raw': {
+          'entries': {
+            '0': {
+              'uid': 0,
+              'key': ['酒'],
+              'comment': '酒',
+              'content': '老板娘爱喝酒',
+            },
+          },
+        },
+      }) as Map<String, Object?>;
+      final ref = made['ref']! as Map<String, Object?>;
+      expect(ref['kind'], 'standalone');
+      final directory = await ok('getBookDirectory') as Map<String, Object?>;
+      expect([
+        for (final b in (directory['books']! as List).cast<Map<String, Object?>>()) b['displayName'],
+      ], contains('旅店传闻'));
+      expect(await ok('resolveBook', {'nameOrHandle': '旅店传闻'}), ref);
+      final read = await ok('readBook', {'ref': ref}) as Map<String, Object?>;
+      final book = read['book']! as Map<String, Object?>;
+      ((book['entries']! as Map<String, Object?>)['0']! as Map<String, Object?>)['content'] = '改过了';
+      final written = await ok('replaceBook', {
+        'ref': ref,
+        'book': book,
+        'expectedVersion': read['version'],
+      }) as Map<String, Object?>;
+      final entries = (written['book']! as Map<String, Object?>)['entries']! as Map<String, Object?>;
+      expect((entries['0']! as Map<String, Object?>)['content'], '改过了');
+      // The version it was read at is gone: refused, said so.
+      final stale = _error(
+        await _ask(wire, 'replaceBook', {
+          'contextId': id,
+          'ref': ref,
+          'book': book,
+          'expectedVersion': read['version'],
+        }),
+      );
+      expect(stale['code'], 'revisionConflict');
+      expect(stale['issues'], isA<List<Object?>>());
+      await ok('deleteBook', {'ref': ref, 'expectedVersion': written['version']});
+
+      final preset = await ok('readPreset', {
+        'ref': {'kind': 'current'},
+      }) as Map<String, Object?>;
+      expect(preset['ref'], {'kind': 'current'});
+      expect(preset['raw'], isA<Map<String, Object?>>());
+
+      // The picture goes as base64; what is not base64 is refused by name.
+      final picture = await ok('readCharacterAvatar', {'characterId': character.id}) as Map<String, Object?>;
+      expect(picture['bytes'], anyOf(isNull, isA<String>()));
+      final bad = _error(
+        await _ask(wire, 'replaceCharacterAvatar', {
+          'contextId': id,
+          'characterId': character.id,
+          'bytes': 'not base64!',
+          'expectedVersion': picture['version'],
+        }),
+      );
+      expect((bad['code'], bad['fieldPath']), ('invalidArgument', 'bytes'));
+
+      final mvu = await ok('setMvuEnabled', {'enabled': true}) as Map<String, Object?>;
+      expect((mvu['chatId'], mvu['enabled']), (chat, true));
+      expect(mvu['issues'], isA<List<Object?>>());
+      final parsed = await ok('parseMvuMessage', {
+        'message': "<UpdateVariable>_.set('好感度', 0, 10);//喝了一杯</UpdateVariable>",
+        'previousData': {
+          'stat_data': {'好感度': 0},
+        },
+      }) as Map<String, Object?>;
+      expect((parsed['data']! as Map<String, Object?>)['stat_data'], containsPair('好感度', 10));
+    },
+  );
 
   test('a wrong request is told why, as an error, not a broken channel', () async {
     final id =

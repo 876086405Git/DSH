@@ -1,0 +1,13 @@
+# rc.1: main subprocess-utf8-cursor owns live UTF-8 semantics; retain OH tail backing-buffer bound only.
+--- a/node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js
++++ b/node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js
+@@ -144,7 +144,8 @@
+ 				this.chunks.shift();
+ 				this.bytes -= head.length;
+ 			} else {
+-				this.chunks[0] = head.subarray(excess);
++				const tail = head.subarray(excess);
++				this.chunks[0] = head.buffer.byteLength > Math.max(this.maxBytes, Buffer.poolSize) ? Buffer.from(tail) : tail;
+ 				this.bytes -= excess;
+ 			}
+ 			this.dropped = true;

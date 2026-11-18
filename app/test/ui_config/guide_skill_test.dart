@@ -7,9 +7,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/links/page_links.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/ui/settings/index/spots.dart';
 import 'package:dsh_app/ui_config/ui_config.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,7 +39,11 @@ void main() {
     final manifest = jsonDecode(File('${assets.path}/manifest.json').readAsStringSync()) as Map;
     expect(manifest['name'], guideSkillName);
     final files = (manifest['files'] as Map).cast<String, String>();
-    expect(files.keys.toSet(), {for (final f in assets.listSync()) f.uri.pathSegments.last}..remove('manifest.json'));
+    final harmony = (manifest['harmony'] as Map).cast<String, String>();
+    expect({
+      ...files.keys,
+      ...harmony.keys,
+    }, {for (final f in assets.listSync()) f.uri.pathSegments.last}..remove('manifest.json'));
 
     expect(guide.name, guideSkillName);
     expect(guide.files.keys.toSet(), files.values.toSet());
@@ -120,5 +129,102 @@ void main() {
     for (final MapEntry(key: path, value: text) in guide.files.entries) {
       expect(File('${installed().path}/$path').readAsStringSync(), text, reason: path);
     }
+  });
+
+  group('on HarmonyOS', () {
+    late UiSkillBundle harmony;
+    final pageLink = RegExp(r'dshgo://open/([a-z0-9-]+)');
+
+    setUpAll(() async => harmony = await loadUiSkillBundle(readAssetFromDisk, guideSkillName, 'ohos'));
+
+    test('the same paths with its own pages in them, and Android keeps every word', () async {
+      expect(harmony.files.keys.toSet(), guide.files.keys.toSet());
+      expect(harmony.writeOrder.last.key, 'SKILL.md');
+      expect(isManagedUiSkill(harmony.skillMd), isTrue);
+      expect(harmony.files['zh/04-phone-control.md'], startsWith('# 系统操作'));
+      expect(harmony.files['en/04-phone-control.md'], startsWith('# System actions'));
+      expect(harmony.files['zh/09-appearance.md'], isNot(contains('跟随壁纸')));
+      expect(harmony.files['en/09-appearance.md'], isNot(contains('Use wallpaper colors')));
+      expect(harmony.skillMd, contains('dshgo://open/system-actions'));
+      expect(harmony.skillMd, isNot(contains('dshgo://open/phone')));
+      // A page HarmonyOS says nothing different about is the one page both read.
+      expect(harmony.files['zh/02-models.md'], guide.files['zh/02-models.md']);
+
+      expect(guide.files['zh/04-phone-control.md'], startsWith('# 手机操控'));
+      for (final MapEntry(key: path, value: text) in guide.files.entries) {
+        expect(text, File('$appDir/../docs/guide/$path').readAsStringSync(), reason: path);
+      }
+      final android = await loadUiSkillBundle(readAssetFromDisk, guideSkillName, 'android');
+      expect(android.files, guide.files);
+    });
+
+    test('a skill with nothing of its own for HarmonyOS is the same bundle', () async {
+      final android = await loadUiSkillBundle(readAssetFromDisk, supportSkillName);
+      final ohos = await loadUiSkillBundle(readAssetFromDisk, supportSkillName, 'ohos');
+      expect(ohos.files, android.files);
+    });
+
+    test('every page link opens a page there, so none hits 「鸿蒙不支持」', () {
+      var checked = 0;
+      for (final MapEntry(key: path, value: text) in harmony.files.entries) {
+        for (final match in pageLink.allMatches(text)) {
+          final target = SettingsIndex.ohosLink(match[1]!);
+          expect(pageLinkIds, contains(target), reason: '$path → ${match[0]}');
+          expect(SettingsIndex.androidOnlyLink(target), isFalse, reason: '$path → ${match[0]}');
+          checked++;
+        }
+      }
+      expect(checked, greaterThan(10));
+    });
+
+    for (final lang in ['zh', 'en']) {
+      test('no $lang page names a row only Android has as if it were on screen', () {
+        final l10n = lookupL10n(Locale(lang));
+        // 系统操作 has a row called this too.
+        final shared = {l10n.systemActionsConfirmTitle};
+        final absent = {
+          for (final spot in SettingsIndex.spots)
+            if (SettingsIndex.androidOnly(spot)) spot.title(l10n),
+        }.difference(shared);
+        expect(absent, isNotEmpty);
+        for (final MapEntry(key: path, value: text) in harmony.files.entries) {
+          if (!path.startsWith('$lang/')) continue;
+          for (final title in absent) {
+            expect(text, isNot(contains('**$title**')), reason: '$path: $title');
+          }
+        }
+      });
+    }
+
+    test('over a copy that held Android\'s pages: every one replaced, nothing left beside them', () async {
+      expect(await installUiSkill(root, guide), UiSkillInstallResult.installed);
+      final before = {for (final f in installed().listSync(recursive: true).whereType<File>()) f.path};
+      expect(await installUiSkill(root, harmony), UiSkillInstallResult.updated);
+      expect({for (final f in installed().listSync(recursive: true).whereType<File>()) f.path}, before);
+      for (final MapEntry(key: path, value: text) in harmony.files.entries) {
+        expect(File('${installed().path}/$path').readAsStringSync(), text, reason: path);
+      }
+    });
+
+    test('the default loaders pick by the OS on engine start', () async {
+      late SkillRuntime runtime;
+      final c = ProviderContainer(
+        overrides: [
+          operatingSystemProvider.overrideWithValue('ohos'),
+          localRuntimeProvider.overrideWith(() => runtime = SkillRuntime(RuntimePhase.installed)),
+          runtimeBridgeProvider.overrideWithValue(SkillFileBridge()),
+          uiRootfsResolverProvider.overrideWithValue(() async => root),
+        ],
+      );
+      addTearDown(c.dispose);
+      c.listen(uiSkillAutoInstallProvider, (_, _) {});
+
+      runtime.setPhase(RuntimePhase.running);
+      await until(() => c.read(uiSkillAutoInstallProvider) != null);
+      await c.read(uiSkillAutoInstallProvider.notifier).running;
+      for (final MapEntry(key: path, value: text) in harmony.files.entries) {
+        expect(File('${installed().path}/$path').readAsStringSync(), text, reason: path);
+      }
+    });
   });
 }

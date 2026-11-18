@@ -16,11 +16,12 @@ enum PhoneDisclosureAnswer { agree, notNow, ask }
 /// The 显著披露 before 「手机操控」 is first turned on: what is read, when, who
 /// gets it, and what DSH never does. Resolves true on 「同意并开启」;
 /// 「不确定？问 AI」 resolves false and opens the question in a new chat.
-Future<bool> showPhoneDisclosure(BuildContext context) async {
+/// [harmony]: the same sheet for 系统操作, which reads nothing off the screen.
+Future<bool> showPhoneDisclosure(BuildContext context, {bool harmony = false}) async {
   final answer = await showAppSheet<PhoneDisclosureAnswer>(
     context,
     isScrollControlled: true,
-    builder: (sheet) => const PhoneDisclosureSheet(),
+    builder: (sheet) => PhoneDisclosureSheet(harmony: harmony),
   );
   if (answer == PhoneDisclosureAnswer.ask && context.mounted) {
     unawaited(askAi(context, AskAiTopic.phoneControl));
@@ -29,7 +30,9 @@ Future<bool> showPhoneDisclosure(BuildContext context) async {
 }
 
 class PhoneDisclosureSheet extends ConsumerWidget {
-  const PhoneDisclosureSheet({super.key});
+  const PhoneDisclosureSheet({super.key, this.harmony = false});
+
+  final bool harmony;
 
   static List<(IconData, int, String, String)> get items => [
     (AppIcons.readText, 0, appL10n.phoneDisclosureWhatTitle, appL10n.phoneDisclosureWhatBody),
@@ -39,19 +42,28 @@ class PhoneDisclosureSheet extends ConsumerWidget {
     (AppIcons.operate, 5, appL10n.phoneDisclosureStopTitle, appL10n.phoneDisclosureStopBody),
   ];
 
+  static List<(IconData, int, String, String)> get harmonyItems => [
+    (AppIcons.operate, 0, appL10n.systemActionsDisclosureWhatTitle, appL10n.systemActionsDisclosureWhatBody),
+    (AppIcons.time, 2, appL10n.systemActionsDisclosureWhenTitle, appL10n.systemActionsDisclosureWhenBody),
+    (AppIcons.cloud, 6, appL10n.systemActionsDisclosureWhoTitle, appL10n.systemActionsDisclosureWhoBody),
+    (AppIcons.blocked, 3, appL10n.systemActionsDisclosureNeverTitle, appL10n.systemActionsDisclosureNeverBody),
+    (AppIcons.lock, 5, appL10n.systemActionsDisclosureStopTitle, appL10n.systemActionsDisclosureStopBody),
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final colors = DshColors.of(context);
-    final canAsk = ref.watch(askAiAvailableProvider);
+    // The question it would ask is about reading the screen.
+    final canAsk = !harmony && ref.watch(askAiAvailableProvider);
     return SafeArea(
       top: false,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SheetHeader(l10n.phoneDisclosureTitle),
+          SheetHeader(harmony ? l10n.systemActionsDisclosureTitle : l10n.phoneDisclosureTitle),
           Flexible(
             child: SingleChildScrollView(
               child: Column(
@@ -60,23 +72,24 @@ class PhoneDisclosureSheet extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(kSheetGutter, 0, kSheetGutter, 12),
                     child: Text(
-                      l10n.phoneDisclosureIntro,
+                      harmony ? l10n.systemActionsDisclosureIntro : l10n.phoneDisclosureIntro,
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ),
                   SheetGroup(
                     children: [
-                      for (final (icon, tint, title, text) in items)
+                      for (final (icon, tint, title, text) in harmony ? harmonyItems : items)
                         _Item(icon: icon, tint: tint, title: title, text: text),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(kSheetGutter, 10, kSheetGutter, 0),
-                    child: Text(
-                      l10n.phoneDisclosureRestartNote,
-                      style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),
+                  if (!harmony)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(kSheetGutter, 10, kSheetGutter, 0),
+                      child: Text(
+                        l10n.phoneDisclosureRestartNote,
+                        style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

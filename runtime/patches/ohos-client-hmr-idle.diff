@@ -1,0 +1,68 @@
+# OH-only: pause bundle stats without SSE clients; reconcile on reconnect and fence retired routes.
+--- a/node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js
+@@ -45,6 +45,13 @@
+ function apply(ctx, config) {
+ 	const pollIntervalMs = config.pollIntervalMs;
+ 	const watched = /* @__PURE__ */ new Map();
++	const connections = /* @__PURE__ */ new Set();
++	let timer;
++	let disposed = false;
++	const stopPolling = () => {
++		clearInterval(timer);
++		timer = void 0;
++	};
+ 	const publish = (id, watch, current) => {
+ 		try {
+ 			ctx.clientModules.rebuilt(id);
+@@ -105,15 +112,13 @@
+ 	ctx.effect(() => {
+ 		syncWatches();
+ 		const unsubscribe = ctx.clientModules.onGraphChanged(syncWatches);
+-		const timer = setInterval(pollWatches, pollIntervalMs);
+-		timer.unref();
+ 		return () => {
++			disposed = true;
+ 			unsubscribe();
+-			clearInterval(timer);
++			stopPolling();
+ 			watched.clear();
+ 		};
+ 	}, "client-hmr: bundle watches");
+-	const connections = /* @__PURE__ */ new Set();
+ 	const publishGraph = () => {
+ 		const line = sseData({
+ 			type: "graph",
+@@ -123,6 +128,14 @@
+ 	};
+ 	const connect = (res) => {
+ 		if (res.destroyed) return;
++		// The web route may already be waiting for Connection when HMR retires.
++		if (disposed) {
++			res.writeHead(503);
++			res.end();
++			return;
++		}
++		// Reconcile offline writes before this browser receives its initial graph.
++		if (connections.size === 0) pollWatches();
+ 		res.writeHead(200, {
+ 			"content-type": "text/event-stream",
+ 			"cache-control": "no-cache",
+@@ -130,12 +143,17 @@
+ 		});
+ 		res.write(": connected\n\n");
+ 		connections.add(res);
++		if (timer === void 0) {
++			timer = setInterval(pollWatches, pollIntervalMs);
++			timer.unref();
++		}
+ 		res.write(sseData({
+ 			type: "graph",
+ 			graph: ctx.clientModules.graph()
+ 		}));
+ 		res.on("close", () => {
+ 			connections.delete(res);
++			if (connections.size === 0) stopPolling();
+ 		});
+ 	};
+ 	ctx.effect(() => {

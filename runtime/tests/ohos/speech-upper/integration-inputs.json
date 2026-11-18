@@ -1,0 +1,24 @@
+{
+  "native": {
+    "app/ohos/entry/src/main/ets/plugins/SpeechPlugin.ets": "a0e2a023a0bb06509ab6d438d4e487f750051065750353c327455c6ef3987368",
+    "app/ohos/entry/src/main/ets/plugins/OhosPcmStream.ets": "a9bc81475ea61fb6a1f096030caddb28eb00e486fbe7e5a344088272fcab92ab",
+    "app/ohos/entry/src/main/ets/plugins/PcmStreamTypes.ets": "416a8fed9352143a6f92b8011d1748859bc3b828706411f465abdf7766d655aa",
+    "app/ohos/entry/src/main/ets/plugins/PcmByteQueue.ets": "db707f061e5da2efde6cd1ae3afe42450a53d05ed5f3118e1827de968e8dd4c6",
+    "runtime/tests/ohos/pcm-stream-fixture.mjs": "67c8f794a53b9faee0122972550ee8a8a574c698199501202fc9a2c1ddc6361f",
+    "app/ohos/entry/src/main/ets/plugins/OhosSpeechPlayback.ets": "2b806c1cf73d1f02d053e581d6b7fb30d3ea281a2567a82b1e8a9c8f7acca4e0",
+    "app/ohos/entry/src/main/ets/plugins/OhosSpeechCall.ets": "f60cd931a8fc0cba5d9543cbcef4f9c2e944ae08f0106cb6c1d046b371a964b3",
+    "app/ohos/entry/src/main/ets/plugins/OhosCallCapture.ets": "31f1ac9903f802e2198e8e778bb488629196489969a548b25658cdfd59588e2a",
+    "app/ohos/entry/src/main/ets/plugins/CallEnergyGate.ets": "800cbdedb4d2cf3e11de66941b57a4ba70c62dcced895a7f68c63a6f5d41730a",
+    "app/ohos/entry/src/main/ets/plugins/VoicePcmTap.ets": "1dd67ddfdb367e298f6efb097f6817f5854eaa94aa9417cf6617cf08da2feacc",
+    "app/ohos/entry/src/main/ets/plugins/VoicePcm.ets": "e40d09807ba8851bdee637853a49c5beaa3f558d7f6d41d05e713746e9a71ded",
+    "app/ohos/entry/src/main/ets/plugins/VoiceTypes.ets": "a14268626600ed9b4d5ffc5690364ba11b373edffc8c847db6e650df24895478",
+    "app/ohos/entry/src/main/ets/plugins/VoiceMicLease.ets": "9f2ebdee088b1d054ba2002f276ac70610e96b51d525f6d833b822e1fcba05a4",
+    "app/ohos/entry/src/main/ets/plugins/OhosCallRoute.ets": "d52c6419f7ccd4b9b35a2c29edfe804b5e9d6f5d4da7a240a266db27957874d3"
+  },
+  "bridge": {
+    "commit": "b4527967afb4a7e245c59b5954493cb4a2c919e9",
+    "path": "runtime/bridge/dsh-go-bridge/lib/speech.js",
+    "sha256": "2593ca0537b054eaaeee6c3ccac308bd5e2cf1c08692007c38d04c5988873e1e"
+  },
+  "scope": "1321 pending call pause and prior 1320/1317/1301-1303 speech dependency closure; unchanged main bridge; explicit OS boundaries, no SDK/device/paid API claim"
+}

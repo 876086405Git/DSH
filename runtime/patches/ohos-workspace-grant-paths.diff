@@ -1,0 +1,269 @@
+--- a/node_modules/@deepseek-ai/dsh-workspace/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-workspace/lib/index.js
+@@ -1,10 +1,14 @@
+ import { randomUUID } from "node:crypto";
+-import { mkdir, realpath, stat } from "node:fs/promises";
++import { mkdir, realpath, stat as hostStat } from "node:fs/promises";
+ import { Service } from "@deepseek-ai/cordis";
+ import { posix, win32 } from "node:path";
+ import { z } from "zod";
+ import { brandString } from "@deepseek-ai/dsh-brand";
+ import { defineDomain, domainTable } from "@deepseek-ai/dsh-storage-domain";
++const ohosWorkspacePaths = process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.workspace-paths")] : void 0;
++async function stat(path) {
++	return ohosWorkspacePaths?.handles(path) ? ohosWorkspacePaths.stat(path) : hostStat(path);
++}
+ //#region lib/types/paths.js
+ /**
+ * Path canonicalization for workspace identity.
+@@ -47,6 +51,7 @@
+ */
+ async function realpathNormalize(path) {
+ 	if (!fullyQualifiedWorkspacePath(path)) throw new TypeError(`Workspace path is not fully qualified: '${path}'`);
++	if (ohosWorkspacePaths?.handles(path)) return await ohosWorkspacePaths.realpath(path);
+ 	return await realpath(path);
+ }
+ //#endregion
+@@ -451,7 +456,7 @@
+ 			if (state.workspaceIds.length > 0 || state.archivedSessionIds.length > 0 || sessions.list().length > 0 || (await this.listStoredHeaders()).length > 0) return void 0;
+ 			const path = await resolveDirectory();
+ 			if (!fullyQualifiedWorkspacePath(path)) throw new TypeError(`Workspace path is not fully qualified: '${path}'`);
+-			await mkdir(path, { recursive: true });
++			if (!ohosWorkspacePaths?.handles(path)) await mkdir(path, { recursive: true });
+ 			const canonical = await realpathNormalize(path);
+ 			if ((await this.listStoredHeaders()).length > 0 || sessions.list().length > 0) return void 0;
+ 			return this.createCanonical(canonical, defaultWorkspaceTitle(path), true);
+@@ -910,7 +915,9 @@
+ 			this.sessionPaths.set(header.id, path);
+ 			this.invalidSessionPaths.delete(header.id);
+ 		} catch (error) {
+-			if (fullyQualifiedWorkspacePath(header.cwd) && error instanceof Error && "code" in error && error.code === "ENOENT") this.missingSessionPaths.add(header.id);
++			// Preserve saved logical identity; access still requires the current grant.
++			if (ohosWorkspacePaths?.isRoot(header.cwd)) this.sessionPaths.set(header.id, header.cwd);
++			else if (fullyQualifiedWorkspacePath(header.cwd) && error instanceof Error && "code" in error && error.code === "ENOENT") this.missingSessionPaths.add(header.id);
+ 			this.invalidSessionPaths.set(header.id, `cwd '${header.cwd}' does not resolve`);
+ 		}
+ 	}
+--- a/node_modules/@deepseek-ai/dsh-working-directory/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-working-directory/lib/index.js
+@@ -3,6 +3,7 @@
+ import z from "@deepseek-ai/schemastery";
+ import { z as z$1 } from "zod";
+ import { createUserMessage } from "@deepseek-ai/dsh-llm";
++const ohosWorkspacePaths = process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.workspace-paths")] : void 0;
+ //#region lib/types/index.js
+ /**
+ * Session working directories, durable changes, and model context.
+@@ -79,6 +80,7 @@
+ 	*/
+ 	get(session) {
+ 		const directory = this.workingDirectoryProjectionHandle.stateOf(session) ?? this.defaultDirectory;
++		if (ohosWorkspacePaths?.handles(directory)) return directory;
+ 		return globalThis[Symbol.for("dsh.go.direct")]?.toHost(directory) ?? directory;
+ 	}
+ 	/**
+@@ -92,6 +94,21 @@
+ 	ensure(agent, signal) {
+ 		return this.serialize(agent, signal, async (control) => {
+ 			const current = this.get(agent.session);
++			if (ohosWorkspacePaths?.handles(current)) {
++				let directory;
++				try { directory = await ohosWorkspacePaths.directory(current, current, control); }
++				catch (error) {
++					if (!["ENOENT", "ENOTDIR"].includes(error.code) || error.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") throw error;
++					const original = agent.session.header.cwd ?? this.defaultDirectory;
++					const restored = await ohosWorkspacePaths.directory(original, current, control);
++					this.commit(agent, restored, true, control);
++					return restored;
++				}
++				control.throwIfAborted();
++				agent.ctx.fiber.assertActive();
++				if (this.workingDirectoryProjectionHandle.stateOf(agent.session) === null) agent.session.append("working-directory/change", { cwd: directory });
++				return directory;
++			}
+ 			const target = await this.ctx.fs.resolve(current, { signal: control });
+ 			const info = await this.ctx.fs.stat(target, control);
+ 			control.throwIfAborted();
+@@ -127,6 +144,7 @@
+ 		return `Current working directory: ${JSON.stringify(this.get(session))}.`;
+ 	}
+ 	async directory(path, cwd, signal) {
++		if (ohosWorkspacePaths?.handles(path) || ohosWorkspacePaths?.handles(cwd)) return await ohosWorkspacePaths.directory(path, cwd, signal);
+ 		const target = await this.ctx.fs.resolve(path, {
+ 			cwd,
+ 			signal
+--- a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+@@ -11,6 +11,7 @@
+ import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+ import { TextDecoder, promisify } from "node:util";
+ import { homedir } from "node:os";
++const ohosWorkspacePaths = process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.workspace-paths")] : void 0;
+ //#region lib/types/win32.js
+ /**
+ * Windows security-descriptor helpers for atomic local-file replacement. Koffi loads lazily so
+@@ -493,6 +494,69 @@
+ 		if (isAbortError(error)) throw new FsError("read aborted", "FS_ABORTED");
+ 		throw error;
+ 	}
++}
++// Metadata and directory listing keep their own error vocabulary; the existing
++// whole/stream text helper below retains its 64 MiB text-only contract.
++function ohosDirectoryError(error, verb, displayPath, signal) {
++	if (error instanceof FsError) return error;
++	const code = error?.code;
++	let kind = "FS_IO_ERROR", detail = "authorized workspace directory operation unavailable";
++	if (code === "ERR_WORKSPACE_DRAIN") detail = "workspace lease retirement was not confirmed";
++	else if (signal?.aborted || error?.name === "AbortError") {
++		return new FsError(`${verb} aborted`, "FS_ABORTED", { cause: error });
++	} else if (error?.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") {
++		detail = "文件夹授权当前不可用，请在系统选择器中重新选择该文件夹。";
++	} else if (code === "ERR_WORKSPACE_NOT_DIRECTORY") {
++		kind = "FS_NOT_DIRECTORY"; detail = "not a directory";
++	} else if (code === "ENOENT" || code === "ENOTDIR") {
++		kind = "FS_NOT_FOUND"; detail = "not found";
++	} else if (code === "ERR_WORKSPACE_LIMIT") {
++		kind = "FS_TOO_LARGE"; detail = "workspace directory exceeds the 10000 entry listing limit";
++	} else if (code === "EACCES" || code === "EPERM") {
++		kind = "FS_PERMISSION_DENIED"; detail = "directory access denied";
++	}
++	return new FsError(`cannot ${verb} "${displayPath}": ${detail}`, kind, { cause: error });
++}
++// OH logical reads use the process-owned directory lease, never a host path.
++// The bridge confirms close/retire before completion; this provider retains
++// its existing text contract and public FsError vocabulary.
++function ohosFileError(error, verb, displayPath, signal) {
++	if (error instanceof FsError) return error;
++	const code = error?.code;
++	let kind = "FS_IO_ERROR", detail = "authorized workspace read unavailable";
++	if (code === "ERR_WORKSPACE_DRAIN") detail = "workspace lease retirement was not confirmed";
++	else if (signal?.aborted || error?.name === "AbortError") {
++		return new FsError(`${verb} aborted`, "FS_ABORTED", { cause: error });
++	} else if (error?.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") {
++		detail = "文件夹授权当前不可用，请在系统选择器中重新选择该文件夹。";
++	} else if ((code === "ENOENT" || code === "ENOTDIR") && error?.reason !== "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") {
++		kind = "FS_NOT_FOUND"; detail = "not found";
++	} else if (code === "EISDIR" || code === "ERR_WORKSPACE_NOT_REGULAR_FILE") {
++		kind = "FS_NOT_REGULAR_FILE"; detail = "not a regular file";
++	} else if (code === "ERR_WORKSPACE_LIMIT") {
++		kind = "FS_TOO_LARGE"; detail = "workspace text exceeds the 64 MiB read limit";
++	} else if (code === "EACCES" || code === "EPERM") {
++		kind = "FS_PERMISSION_DENIED"; detail = "file access denied";
++	}
++	return new FsError(`cannot ${verb} "${displayPath}": ${detail}`, kind, { cause: error });
++}
++async function* streamOhosText(target, signal) {
++	const decoder = new TextDecoder("utf-8", { fatal: true });
++	let sampledBytes = 0;
++	try {
++		throwIfAborted(signal, "read");
++		for await (const chunk of ohosWorkspacePaths.readChunks(String(target.targetKey), signal)) {
++			throwIfAborted(signal, "read");
++			if (sampledBytes < BINARY_SAMPLE_BYTES) {
++				const sample = chunk.subarray(0, Math.min(chunk.length, BINARY_SAMPLE_BYTES - sampledBytes));
++				if (sample.includes(0)) throw new FsError(`cannot read "${target.displayPath}": binary file`, "FS_NOT_TEXT");
++				sampledBytes += sample.length;
++			}
++			yield decodeUtf8Stream(decoder, chunk, "read", target.displayPath);
++		}
++		throwIfAborted(signal, "read");
++		yield decodeUtf8Stream(decoder, void 0, "read", target.displayPath);
++	} catch (error) { throw ohosFileError(error, "read", target.displayPath, signal); }
+ }
+ async function removeStagingDirOrThrow(stagingDir, originalError, removeStagingDir) {
+ 	try {
+@@ -864,6 +928,14 @@
+ 	}
+ 	async resolve(path, opts) {
+ 		if (opts?.signal?.aborted) throw new FsError("resolve aborted", "FS_ABORTED");
++		const cwd = opts?.cwd ?? this.config.cwd;
++		if (ohosWorkspacePaths?.handles(path) || ohosWorkspacePaths?.handles(cwd)) {
++			try {
++				const logical = await ohosWorkspacePaths.resolveFile(path, cwd, opts?.signal);
++				throwIfAborted(opts?.signal, "resolve");
++				return { targetKey: FsTargetKey(logical), displayPath: logical };
++			} catch (error) { throw ohosFileError(error, "resolve", path, opts?.signal); }
++		}
+ 		const local = await resolveLocalTarget(opts?.cwd ?? this.config.cwd, expandHomePrefix(path));
+ 		if (opts?.signal?.aborted) throw new FsError("resolve aborted", "FS_ABORTED");
+ 		return {
+@@ -886,6 +958,12 @@
+ 	}
+ 	async stat(target, signal) {
+ 		if (signal?.aborted) throw new FsError("stat aborted", "FS_ABORTED");
++		if (ohosWorkspacePaths?.handles(String(target.targetKey))) {
++			try {
++				const info = await ohosWorkspacePaths.statFile(String(target.targetKey), signal);
++				return info === undefined ? undefined : { ...info, version: FsVersion(info.version) };
++			} catch (error) { throw ohosFileError(error, "stat", target.displayPath, signal); }
++		}
+ 		const info = await probe(target.targetKey);
+ 		if (signal?.aborted) throw new FsError("stat aborted", "FS_ABORTED");
+ 		if (!info) return void 0;
+@@ -898,6 +976,15 @@
+ 	async lstat(path, opts, signal) {
+ 		if (signal?.aborted) throw new FsError("lstat aborted", "FS_ABORTED");
+ 		if (path.trim().length === 0) throw new FsError("file_path must be a non-empty string", "FS_NOT_FOUND");
++		const cwd = opts?.cwd ?? this.config.cwd;
++		if (ohosWorkspacePaths?.handles(path) || ohosWorkspacePaths?.handles(cwd)) {
++			try {
++				const logical = await ohosWorkspacePaths.resolveFile(path, cwd, signal);
++				const info = await ohosWorkspacePaths.lstatFile(logical, signal);
++				throwIfAborted(signal, "lstat");
++				return info === undefined ? undefined : { ...info, version: FsVersion(info.version) };
++			} catch (error) { throw ohosDirectoryError(error, "lstat", path, signal); }
++		}
+ 		const info = await probeNoFollow(localDisplayPath(opts?.cwd ?? this.config.cwd, expandHomePrefix(path)));
+ 		if (signal?.aborted) throw new FsError("lstat aborted", "FS_ABORTED");
+ 		if (!info) return void 0;
+@@ -908,12 +995,22 @@
+ 		};
+ 	}
+ 	async readText(target, signal) {
++		if (ohosWorkspacePaths?.handles(String(target.targetKey))) {
++			try {
++				throwIfAborted(signal, "read");
++				const raw = await ohosWorkspacePaths.readBuffer(String(target.targetKey), signal);
++				throwIfAborted(signal, "read");
++				if (raw.subarray(0, BINARY_SAMPLE_BYTES).includes(0)) throw new FsError(`cannot read "${target.displayPath}": binary file`, "FS_NOT_TEXT");
++				return decodeUtf8(raw, "read", target.displayPath);
++			} catch (error) { throw ohosFileError(error, "read", target.displayPath, signal); }
++		}
+ 		return readWholeText({
+ 			displayPath: target.displayPath,
+ 			targetKey: target.targetKey
+ 		}, signal);
+ 	}
+ 	streamText(target, signal) {
++		if (ohosWorkspacePaths?.handles(String(target.targetKey))) return Promise.resolve(streamOhosText(target, signal));
+ 		return Promise.resolve(streamWholeText({
+ 			displayPath: target.displayPath,
+ 			targetKey: target.targetKey
+@@ -926,12 +1023,27 @@
+ 		}, signal, maxBytes, this.internals);
+ 	}
+ 	async readByteRange(target, range, signal) {
++		if (ohosWorkspacePaths?.handles(String(target.targetKey))) {
++			try { return await ohosWorkspacePaths.readWindow(String(target.targetKey), range, signal); }
++			catch (error) { throw ohosFileError(error, "read", target.displayPath, signal); }
++		}
+ 		return readByteWindow({
+ 			displayPath: target.displayPath,
+ 			targetKey: target.targetKey
+ 		}, range, signal);
+ 	}
+ 	async listDir(target, signal) {
++		if (ohosWorkspacePaths?.handles(String(target.targetKey))) {
++			try {
++				throwIfAborted(signal, "list");
++				const entries = await ohosWorkspacePaths.listDirectory(String(target.targetKey), signal);
++				throwIfAborted(signal, "list");
++				return entries.map(entry => ({ name: entry.name, type: entry.type,
++					target: { targetKey: FsTargetKey(entry.logicalPath), displayPath: entry.logicalPath },
++					...entry.version !== undefined ? { version: FsVersion(entry.version) } : {},
++					...entry.size !== undefined ? { size: entry.size } : {} }));
++			} catch (error) { throw ohosDirectoryError(error, "list", target.displayPath, signal); }
++		}
+ 		return (await listDirectory({
+ 			displayPath: target.displayPath,
+ 			targetKey: target.targetKey

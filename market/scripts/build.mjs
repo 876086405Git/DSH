@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { checkDirectory } from './check.mjs';
 import { digest, makeIndex } from './core.mjs';
 import semver from 'semver';
+import { ohosSummary } from './ohos-scan.mjs';
 export function build(rows, policy, now = new Date().toISOString()) {
   if (!Array.isArray(policy.officialPackages) || !policy.blockedVersions || typeof policy.blockedVersions !== 'object')
     throw new Error('invalid-maintainer-policy');
@@ -33,6 +34,7 @@ export function build(rows, policy, now = new Date().toISOString()) {
       integrity: report.integrity,
       checkedAt: report.checkedAt,
       blockedVersions,
+      platforms: { ohos: ohosSummary(report.platforms.ohos) },
     };
   }
   return { index: makeIndex(rows), sidecar: { schema: 1, generatedAt: now, plugins } };

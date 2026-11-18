@@ -12,6 +12,7 @@ import 'package:dsh_app/ui/bots/new_bot_page.dart';
 import 'package:dsh_app/ui/bots/new_room_sheet.dart';
 import 'package:dsh_app/ui/bots/room_chat_page.dart';
 import 'package:dsh_app/ui/bots/room_details_page.dart';
+import 'package:dsh_app/ui/chat/dsh_ui/dsh_ui.dart';
 import 'package:dsh_app/ui/shell/page_frame.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -91,6 +92,46 @@ void main() {
     await frames(tester, 3);
     expect(find.text('发送中'), findsNothing);
     expect(find.text('海报文案今晚给我'), findsOneWidget);
+  });
+
+  // #1395: a card in a Bot's reply answers like one in a chat, and the answer reads as a tag.
+  const card = '''选一个：
+
+```dsh-ui
+{"type":"stack","title":"选一个方案","children":[
+ {"type":"options","id":"plan","options":[{"label":"方案 A"},{"label":"方案 B"}]}]}
+```''';
+
+  testWidgets('a card in a Bot reply answers through the Bot', (tester) async {
+    final fake = FakeDsBotTransport()
+      ..chatItems = [
+        {'id': 'v1', 'kind': 'bot', 'botId': 'b2', 'text': card, 'time': DateTime.now().millisecondsSinceEpoch},
+      ];
+    await open(tester, const BotChatPage(botId: 'b2'), transport: fake);
+    expect(find.byType(DshUiBlock), findsOneWidget);
+    await tester.tap(find.text('方案 B'));
+    await frames(tester);
+    expect(fake.calls.last.$1, 'send');
+    final sent = (fake.calls.last.$2 as Map)['text'] as String;
+    expect(parseDshUiReply(sent)?.chipLabel, contains('方案 B'));
+    expect(find.byType(DshUiReplyChip), findsOneWidget);
+    expect(find.textContaining('[dsh-ui reply]'), findsNothing);
+  });
+
+  testWidgets('an answer from elsewhere reads as a tag, and the card is done', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final fake = FakeDsBotTransport()
+      ..chatItems = [
+        {'id': 'v1', 'kind': 'bot', 'botId': 'b2', 'text': card, 'time': now - 2000},
+        {'kind': 'user', 'text': '[dsh-ui reply] 选一个方案\n选择：方案 B', 'time': now - 1000},
+      ];
+    await open(tester, const BotChatPage(botId: 'b2'), transport: fake);
+    expect(find.byType(DshUiReplyChip), findsOneWidget);
+    expect(find.textContaining('[dsh-ui reply]'), findsNothing);
+    final sends = fake.calls.where((c) => c.$1 == 'send').length;
+    await tester.tap(find.text('方案 A').first);
+    await frames(tester);
+    expect(fake.calls.where((c) => c.$1 == 'send').length, sends);
   });
 
   testWidgets('choosing a model without thinking levels clears the old Bot effort', (tester) async {

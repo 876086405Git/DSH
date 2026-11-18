@@ -21,6 +21,15 @@ def at(text: str) -> datetime.datetime:
 
 
 class BuildNumberTest(unittest.TestCase):
+    def test_app_version_fallback_matches_pubspec(self):
+        pubspec = (ROOT / "app" / "pubspec.yaml").read_text(encoding="utf-8")
+        app_info = (ROOT / "app" / "lib" / "state" / "app_info.dart").read_text(encoding="utf-8")
+        version = re.search(r"^version:\s*(\S+)", pubspec, re.MULTILINE)
+        fallback = re.search(r"String\.fromEnvironment\('DSH_APP_VERSION', defaultValue: '([^']+)'\)", app_info)
+        self.assertIsNotNone(version)
+        self.assertIsNotNone(fallback)
+        self.assertEqual(fallback.group(1), version.group(1))
+
     def test_reads_as_the_build_minute(self):
         self.assertEqual(build_number(at("2026-10-25T12:34+08:00")), 10251234)
         self.assertEqual(build_number(at("2026-01-01T00:00+08:00")), 1010000)

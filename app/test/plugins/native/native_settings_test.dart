@@ -2,18 +2,26 @@
 // 「原生界面」 line that opens the problems with their paths. Plugins without
 // a native part get nothing.
 
+import 'package:dsh_app/plugins/native/native_platform.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/plugins/native/native_model.dart';
 import 'package:dsh_app/plugins/native/native_state.dart';
 import 'package:dsh_app/ui/plugins/native/native_plugin_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../chat/support/harness.dart';
 import 'support.dart';
 
-Future<ProviderContainer> pumpSection(WidgetTester tester, FakeBridge bridge, String package) async {
+Future<ProviderContainer> pumpSection(
+  WidgetTester tester,
+  FakeBridge bridge,
+  String package, {
+  List<Override> overrides = const [],
+}) async {
   usePhoneView(tester);
   await tester.pumpWidget(
     testApp(
@@ -26,16 +34,94 @@ Future<ProviderContainer> pumpSection(WidgetTester tester, FakeBridge bridge, St
           ),
         ),
       ),
-      overrides: nativeOverrides(bridge),
+      overrides: [...overrides, ...nativeOverrides(bridge)],
     ),
   );
   await pumpFrames(tester);
   return ProviderScope.containerOf(tester.element(find.byType(NativePluginSection)));
 }
 
+class _Features implements NativeMediaPlatform {
+  _Features(this.features);
+
+  final Set<String> features;
+  int asked = 0;
+
+  @override
+  Future<Set<String>> capabilities() async {
+    asked++;
+    return features;
+  }
+
+  @override
+  Future<Object?> call(String method, Map<String, Object?> arguments) async => null;
+
+  @override
+  Stream<Object?> get events => const Stream.empty();
+}
+
 void main() {
   setUpAll(loadTestFonts);
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  group('听你开口', () {
+    final voice = {
+      ...quickPlugin(),
+      'capabilities': ['voice'],
+    };
+    Switch tile(WidgetTester tester) => tester.widget<Switch>(
+      find.descendant(of: find.byKey(const ValueKey('native-switch-voice')), matching: find.byType(Switch)),
+    );
+
+    testWidgets('Android: a switch, and nothing asked of the platform for it', (tester) async {
+      final platform = _Features(const {});
+      await pumpSection(
+        tester,
+        FakeBridge(contributions([voice])),
+        'dsh-go-example-quick',
+        overrides: [
+          operatingSystemProvider.overrideWithValue('android'),
+          nativeMediaPlatformProvider.overrideWithValue(platform),
+        ],
+      );
+      expect(tile(tester).onChanged, isNotNull);
+      expect(find.text('这台设备不能听你开口'), findsNothing);
+      expect(platform.asked, 0);
+    });
+
+    testWidgets('HarmonyOS, a device that can listen: the same switch, and it answers', (tester) async {
+      await pumpSection(
+        tester,
+        FakeBridge(contributions([voice])),
+        'dsh-go-example-quick',
+        overrides: [
+          operatingSystemProvider.overrideWithValue('ohos'),
+          nativeMediaPlatformProvider.overrideWithValue(_Features(const {'audio', 'voice'})),
+        ],
+      );
+      expect(find.text('这台设备不能听你开口'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('native-switch-voice')));
+      await pumpFrames(tester);
+      expect(tile(tester).value, isTrue);
+    });
+
+    testWidgets('HarmonyOS, a device that can\'t: it says so, and no dead switch', (tester) async {
+      await pumpSection(
+        tester,
+        FakeBridge(contributions([voice])),
+        'dsh-go-example-quick',
+        overrides: [
+          operatingSystemProvider.overrideWithValue('ohos'),
+          nativeMediaPlatformProvider.overrideWithValue(_Features(const {'audio'})),
+        ],
+      );
+      expect(find.text('这台设备不能听你开口'), findsOneWidget);
+      expect(tile(tester).onChanged, isNull);
+      await tester.tap(find.byKey(const ValueKey('native-switch-voice')));
+      await pumpFrames(tester);
+      expect(tile(tester).value, isFalse);
+    });
+  });
 
   testWidgets('a switch per declared place, then the status line', (tester) async {
     final container = await pumpSection(tester, FakeBridge(contributions([quickPlugin()])), 'dsh-go-example-quick');

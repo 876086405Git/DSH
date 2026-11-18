@@ -42,11 +42,20 @@ void main() {
     bool systemSplash = true,
     bool dark = false,
     bool reduceMotion = false,
+    bool motionAfterReady = false,
+    bool coldEngine = false,
   }) async {
     usePhone(tester);
     icon = (await tester.runAsync(() => flatImage(320, 320, const Color(0xFF4F68B7))))!;
     final controller = LaunchController(
-      snapshot: snapshotFor(icon: icon, sdk: sdk, systemSplash: systemSplash, dark: dark),
+      snapshot: snapshotFor(
+        icon: icon,
+        sdk: sdk,
+        systemSplash: systemSplash,
+        dark: dark,
+        motionAfterReady: motionAfterReady,
+        coldEngine: coldEngine,
+      ),
       channel: channel,
     );
     await tester.pumpWidget(launchApp(controller, reduceMotion: reduceMotion));
@@ -87,6 +96,43 @@ void main() {
       expect(c.phase, LaunchPhase.playing);
       await tester.pump(const Duration(milliseconds: 640));
       expect(tester.getRect(_icon).width, closeTo(128, 0.01));
+    });
+
+    testWidgets('HarmonyOS: the still picture holds until the app is ready, then the motion plays', (tester) async {
+      // A cold start of the in-process engine, as every HarmonyOS cold start is.
+      final c = await start(tester, sdk: 26, systemSplash: false, motionAfterReady: true, coldEngine: true);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(c.phase, LaunchPhase.cover);
+      expect(rectOf(tester, _icon), _systemRect);
+      c.ready();
+      await tester.pump();
+      expect(c.phase, LaunchPhase.playing);
+      await tester.pump(const Duration(milliseconds: 640));
+      expect(tester.getRect(_icon).width, closeTo(128, 0.01));
+      c.engineReady();
+      await _finish(tester, c);
+    });
+
+    testWidgets('HarmonyOS: an app not ready in 1.2 s gets the motion anyway', (tester) async {
+      final c = await start(tester, sdk: 26, systemSplash: false, motionAfterReady: true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1100));
+      expect(c.phase, LaunchPhase.cover);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(c.phase, LaunchPhase.playing);
+      await _finish(tester, c);
+    });
+
+    testWidgets('built anew after the motion started (HarmonyOS): it still plays', (tester) async {
+      final c = await start(tester, sdk: 26, systemSplash: false);
+      await tester.pump();
+      expect(c.phase, LaunchPhase.playing);
+      // A parent of another type remounts the layer, as MaterialApp's Theme / AnimatedTheme swap did.
+      await tester.pumpWidget(KeyedSubtree(key: UniqueKey(), child: launchApp(c)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 640));
+      expect(tester.getRect(_icon).width, closeTo(128, 0.01));
+      await _finish(tester, c);
     });
 
     testWidgets('dark: the night page colour and a light wordmark', (tester) async {
@@ -274,6 +320,21 @@ void main() {
     c.ready();
     await tester.pump();
     expect(c.phase, LaunchPhase.gone);
+  });
+
+  testWidgets('the app under it is laid out but not painted until the layer leaves', (tester) async {
+    final c = await start(tester, sdk: 30, systemSplash: false);
+    await tester.pump();
+    expect(c.phase, LaunchPhase.playing);
+    LaunchController.active.value = c;
+    addTearDown(() => LaunchController.active.value = null);
+    await tester.pumpWidget(const Directionality(textDirection: TextDirection.ltr, child: LaunchUnder(child: Text('app'))));
+    expect(find.text('app'), findsNothing);
+    expect(find.text('app', skipOffstage: false), findsOneWidget);
+    c.skip();
+    await tester.pump();
+    expect(c.phase, LaunchPhase.leaving);
+    expect(find.text('app'), findsOneWidget);
   });
 
   testWidgets('the home under it is built all along and keeps its state', (tester) async {

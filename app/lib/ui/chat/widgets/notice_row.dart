@@ -69,7 +69,7 @@ class _NoticeRowState extends State<NoticeRow> {
           }
           return (AppIcons.noApiKey, appL10n.chatDeepSeekKeyMissing);
         }
-        return (AppIcons.error, turnFailureText(failure?.code));
+        return (AppIcons.error, turnFailureText(failure?.code, message: failure?.message));
       case 'aborted':
         return (AppIcons.stopped, appL10n.commonStopped);
       case 'max-tokens':

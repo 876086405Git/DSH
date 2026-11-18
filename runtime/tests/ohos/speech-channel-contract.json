@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "role": "READ_ONLY_FIXED_UPSTREAM_PROTOCOL_REFERENCE",
+  "referenceCommit": "dd130b31061e305cd9c06e103c3e5210fee1922f",
+  "referenceTree": "8a99dee4508e414255aa6364eb9d165815abcdd7",
+  "repositoryId": 1432967563,
+  "productBaseline": "a836880",
+  "channel": "dsh/speech",
+  "eventMethod": "event",
+  "eventType": "play",
+  "playPhases": [
+    "start",
+    "done",
+    "stopped",
+    "error"
+  ],
+  "pcm": {
+    "sampleRate": 24000,
+    "channels": 1,
+    "bitsPerSample": 16,
+    "byteOrder": "little-endian",
+    "container": "raw"
+  },
+  "methods": {
+    "open": {
+      "arguments": [
+        "id",
+        "rate",
+        "call",
+        "levels"
+      ],
+      "result": "bool"
+    },
+    "write": {
+      "arguments": [
+        "id",
+        "bytes"
+      ],
+      "result": "queued bytes integer, -1 when gone"
+    },
+    "waiting": {
+      "arguments": [
+        "id"
+      ],
+      "result": "queued bytes integer, -1 when gone"
+    },
+    "end": {
+      "arguments": [
+        "id"
+      ],
+      "result": "null"
+    },
+    "stop": {
+      "arguments": [],
+      "result": "null"
+    },
+    "duck": {
+      "arguments": [
+        "id",
+        "on"
+      ],
+      "result": "null"
+    }
+  },
+  "notImplementedInOhosPlayback": [
+    "call capture",
+    "call=true playback",
+    "levels=true heard-time events",
+    "native preflight before actual pinned Dart synthesize"
+  ],
+  "sources": [
+    {
+      "path": "app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/speech/PcmStream.kt",
+      "url": "https://raw.githubusercontent.com/ccch1mneyyy/dsh-Go/dd130b31061e305cd9c06e103c3e5210fee1922f/app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/speech/PcmStream.kt",
+      "status": 200,
+      "bytes": 9762,
+      "git_blob_sha1": "4cdda089c0be04a2524f8f38e0747c8c46fe3670",
+      "sha256": "6e17e03e84f1ea1b5f5202ff0791cde1ddc4c3ec878fd3cd5fb90602002b3423"
+    },
+    {
+      "path": "app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/speech/SpeechPlugin.kt",
+      "url": "https://raw.githubusercontent.com/ccch1mneyyy/dsh-Go/dd130b31061e305cd9c06e103c3e5210fee1922f/app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/speech/SpeechPlugin.kt",
+      "status": 200,
+      "bytes": 13102,
+      "git_blob_sha1": "c78dcf99f246858d56e5481d10abb877ddcdb75d",
+      "sha256": "9e80ebd28d28fdebe0e889593940aeefdde91ff16cb1b52b1d538e392f481b76"
+    },
+    {
+      "path": "app/lib/speech/deepseek_speech.dart",
+      "url": "https://raw.githubusercontent.com/ccch1mneyyy/dsh-Go/dd130b31061e305cd9c06e103c3e5210fee1922f/app/lib/speech/deepseek_speech.dart",
+      "status": 200,
+      "bytes": 16861,
+      "git_blob_sha1": "1a92a5c000dc5ac5fdbf406e71eac0e5aa276661",
+      "sha256": "8c5639e63a11ecf95c1f3850d557d2840e8122b327f2273cbbd7459dcd7b56da"
+    },
+    {
+      "path": "app/lib/speech/speech_audio.dart",
+      "url": "https://raw.githubusercontent.com/ccch1mneyyy/dsh-Go/dd130b31061e305cd9c06e103c3e5210fee1922f/app/lib/speech/speech_audio.dart",
+      "status": 200,
+      "bytes": 5423,
+      "git_blob_sha1": "c264d8c9fda858c88f0329e626dd76179f173d47",
+      "sha256": "ba2d31864cac52fdfd8bbc3bf736930f408220063ee6887a81be639a4154fcb8"
+    },
+    {
+      "path": "app/lib/speech/speech_out.dart",
+      "url": "https://raw.githubusercontent.com/ccch1mneyyy/dsh-Go/dd130b31061e305cd9c06e103c3e5210fee1922f/app/lib/speech/speech_out.dart",
+      "status": 200,
+      "bytes": 20762,
+      "git_blob_sha1": "0897aa59c15b62f7a7282d2e4b9e79a678f44de1",
+      "sha256": "eba5aecd5fcdfab1c0e7c92fbb0bbd31390f57f2c3fc182a627b67cc370ec954"
+    },
+    {
+      "path": "runtime/bridge/dsh-go-bridge/lib/speech.js",
+      "url": "https://raw.githubusercontent.com/ccch1mneyyy/dsh-Go/dd130b31061e305cd9c06e103c3e5210fee1922f/runtime/bridge/dsh-go-bridge/lib/speech.js",
+      "status": 200,
+      "bytes": 14683,
+      "git_blob_sha1": "c9d8d19fc419137fa492be6b184b7bec1b88465b",
+      "sha256": "2593ca0537b054eaaeee6c3ccac308bd5e2cf1c08692007c38d04c5988873e1e"
+    }
+  ]
+}

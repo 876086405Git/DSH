@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../runtime/local_paths.dart';
 import 'share_models.dart';
 
 /// The app-managed global AGENTS.md starts with this (GuestSetup.kt); such a
@@ -50,7 +51,7 @@ class GuestFs {
   /// The on-device rootfs; null when the runtime isn't installed.
   static Future<GuestFs?> local() async {
     try {
-      final dir = Directory('${(await getApplicationSupportDirectory()).path}/runtime/rootfs');
+      final dir = Directory(LocalPaths.root ?? '${(await getApplicationSupportDirectory()).path}/runtime/rootfs');
       return dir.existsSync() ? GuestFs(dir) : null;
     } catch (_) {
       return null;

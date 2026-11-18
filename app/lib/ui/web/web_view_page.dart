@@ -981,13 +981,29 @@ class _WebViewPageState extends State<WebViewPage> {
 
   void _onHide() => _hiddenAt = DateTime.now();
 
-  void _onShow() {
+  Future<void> _onShow() async {
     final after = widget.reloadAfterBackground;
     final hidden = _hiddenAt;
     _hiddenAt = null;
-    if (after != null && hidden != null && !_gone && DateTime.now().difference(hidden) > after) {
-      unawaited(_controller.reload());
+    if (after == null || hidden == null || _gone || DateTime.now().difference(hidden) <= after) return;
+    final controller = _controller;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && widget.dshWeb) {
+      try {
+        final count = await controller
+            .runJavaScriptReturningResult(
+              "typeof window.__dshAppPendingAttachmentCount === 'function' ? window.__dshAppPendingAttachmentCount() : null",
+            )
+            .timeout(const Duration(seconds: 1));
+        // Only a definite count protects this draft. An unavailable or stuck
+        // page still gets the original socket-recovery reload.
+        if (count is num && count.isFinite && count > 0 && count == count.truncateToDouble()) return;
+      } on Object {
+        // Missing bridge, timeout or WebView error: keep the recovery reload.
+      }
     }
+    // Asking JavaScript yields: the person may leave or background us again.
+    if (!mounted || _gone || _hiddenAt != null || !identical(controller, _controller)) return;
+    await controller.reload();
   }
 
   @override
@@ -1423,6 +1439,9 @@ class _LoadErrorState extends State<_LoadError> {
 class DshWebLink {
   _WebViewPageState? _page;
   Completer<WebComposeResult>? _composing;
+  final _correlateComposeReplies = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  final _composeReplies = <String, Completer<WebComposeResult>>{};
+  int _composeNumber = 0;
 
   /// Calls made while no page is attached (the engine still starting, a
   /// host switch rebuilding the page): the next page runs them.
@@ -1463,19 +1482,50 @@ class DshWebLink {
     List<({String name, String? type, String base64})> files = const [],
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    final done = _composing = Completer<WebComposeResult>();
+    final done = Completer<WebComposeResult>();
+    final requestId = _correlateComposeReplies ? '${++_composeNumber}' : null;
+    if (requestId == null) {
+      _composing = done;
+    } else {
+      _composeReplies[requestId] = done;
+    }
     final draft = {
+      'requestId': ?requestId,
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) 'composerAttachmentCount': true,
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) 'requireOpenedTarget': true,
       'text': text,
       'files': [
         for (final f in files) {'name': f.name, 'type': ?f.type, 'data': f.base64},
       ],
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) 'guardTextFallback': true,
     };
-    await _send('window.__dshAppCompose && window.__dshAppCompose(${jsonEncode(draft)});');
-    return done.future.timeout(timeout, onTimeout: () => const WebComposeResult());
+    final script = 'window.__dshAppCompose && window.__dshAppCompose(${jsonEncode(draft)});';
+    try {
+      await _send(script);
+      return await done.future.timeout(timeout, onTimeout: () => const WebComposeResult());
+    } finally {
+      if (requestId != null) {
+        _composeReplies.remove(requestId);
+        // A failed paste must not be sent later, after its caller has fallen back.
+        _queued.remove(script);
+        _page?._pendingScripts.remove(script);
+      }
+    }
   }
 
   void _composed(String message) {
-    final done = _composing;
+    Completer<WebComposeResult>? done;
+    if (_correlateComposeReplies) {
+      try {
+        final reply = jsonDecode(message);
+        if (reply is! Map || reply['requestId'] is! String) return;
+        done = _composeReplies.remove(reply['requestId']);
+      } on FormatException {
+        return;
+      }
+    } else {
+      done = _composing;
+    }
     if (done == null || done.isCompleted) return;
     done.complete(WebComposeResult.parse(message));
   }

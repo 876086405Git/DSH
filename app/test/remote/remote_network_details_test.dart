@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/remote/link_status.dart';
 import 'package:dsh_app/remote/secret_store.dart';
@@ -70,7 +71,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  Future<void> pump(WidgetTester tester, _InspectableLink link, {bool page = false}) async {
+  Future<void> pump(WidgetTester tester, _InspectableLink link, {bool page = false, String? os}) async {
     usePhoneSurface(tester);
     addTearDown(link.changes.close);
     await tester.pumpWidget(
@@ -83,6 +84,7 @@ void main() {
           relayBackendProvider.overrideWithValue(FakeRelayBackend(user: sampleRelayUser)),
           hostLinkProvider.overrideWith((ref, host) => link),
           hostNameProvider.overrideWith((ref, host) => 'Workstation'),
+          if (os != null) operatingSystemProvider.overrideWithValue(os),
           localRuntimeProvider.overrideWith(
             () => FakeRuntime(const LocalRuntimeState(loaded: true, status: runningStatus)),
           ),
@@ -225,6 +227,31 @@ void main() {
     expect(find.textContaining('192.168'), findsNothing);
     expect(find.textContaining('SDP'), findsNothing);
     expect(link.status.isConnected, isTrue);
+  });
+
+  group('without a direct path to try (HarmonyOS)', () {
+    final zh = lookupL10n(AppLocale.zhCN);
+    _InspectableLink relayOnly() => _InspectableLink(
+      const HostLinkStatus(
+        HostLinkPhase.connected,
+        path: RelayPath.relay,
+        network: RemoteNetworkStatus(path: RelayPath.relay, fallbackReason: 'webrtcUnavailable'),
+      ),
+    );
+
+    testWidgets('on HarmonyOS: the relay is simply how this version connects', (tester) async {
+      await pump(tester, relayOnly(), os: 'ohos');
+      expect(find.textContaining(zh.harmonyNetworkRelayOnly), findsOneWidget);
+      expect(find.text(zh.harmonyNetworkFallbackRelayOnly), findsOneWidget);
+      expect(find.textContaining('LAN → P2P'), findsNothing);
+      expect(find.text(zh.remoteNetworkFallbackWebrtcUnavailable), findsNothing);
+    });
+
+    testWidgets('on Android: the order it tries, and the device at fault', (tester) async {
+      await pump(tester, relayOnly(), os: 'android');
+      expect(find.textContaining(zh.remoteNetworkAutomatic), findsOneWidget);
+      expect(find.text(zh.remoteNetworkFallbackWebrtcUnavailable), findsOneWidget);
+    });
   });
 
   testWidgets('fallback codes are explained in the current language', (tester) async {

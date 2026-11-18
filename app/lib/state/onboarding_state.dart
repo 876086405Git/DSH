@@ -9,8 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///   every launch after that (they may have configured the key inside DSH's own
 ///   Web UI); settings shows the key as missing instead.
 /// - [localDeclined]: the app runs without the on-device runtime: first run
-///   went to a remote host instead (「远程主机」), or it was uninstalled in
-///   settings. A launch without the runtime then goes straight home; any
+///   went to a remote host instead (「远程主机」) or straight to 酒馆
+///   (「和角色聊天」), or it was uninstalled in settings. A launch without the runtime then goes straight home; any
 ///   install clears it.
 /// - [setupStep]: first run picked 「本机」 and is setting up while the runtime
 ///   unpacks; the page to come back to after the app was killed. Cleared once

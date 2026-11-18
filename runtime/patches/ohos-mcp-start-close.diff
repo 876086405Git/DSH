@@ -1,0 +1,22 @@
+--- a/node_modules/@modelcontextprotocol/client/dist/stdio.mjs
++++ b/node_modules/@modelcontextprotocol/client/dist/stdio.mjs
+@@ -94,6 +94,8 @@
+ 				resolve();
+ 			});
+ 			this._process.on("close", (_code) => {
++				// A cancelled admission may close without spawn or error.
++				reject(new SdkError(SdkErrorCode.ConnectionClosed, "Stdio process closed before startup completed"));
+ 				this._process = void 0;
+ 				this._rejectPendingSends();
+ 				this.onclose?.();
+--- a/node_modules/@modelcontextprotocol/client/dist/stdio.cjs
++++ b/node_modules/@modelcontextprotocol/client/dist/stdio.cjs
+@@ -97,6 +97,8 @@
+ 				resolve();
+ 			});
+ 			this._process.on("close", (_code) => {
++				// A cancelled admission may close without spawn or error.
++				reject(new require_src.SdkError(require_src.SdkErrorCode.ConnectionClosed, "Stdio process closed before startup completed"));
+ 				this._process = void 0;
+ 				this._rejectPendingSends();
+ 				this.onclose?.();

@@ -43,9 +43,9 @@ class _Menu extends StatelessWidget {
   }
 }
 
-Widget _app(Widget child, {bool reduced = false}) => MaterialApp(
+Widget _app(Widget child, {bool reduced = false, double devicePixelRatio = 1}) => MaterialApp(
   home: MediaQuery(
-    data: MediaQueryData(disableAnimations: reduced),
+    data: MediaQueryData(disableAnimations: reduced, devicePixelRatio: devicePixelRatio),
     child: Center(
       child: RepaintBoundary(
         key: const ValueKey('shot'),
@@ -141,7 +141,7 @@ void main() {
     expect(SchedulerBinding.instance.transientCallbackCount, 0);
   });
 
-  Widget slider(double left, {bool reduced = false}) => _app(
+  Widget slider(double left, {bool reduced = false, double devicePixelRatio = 1}) => _app(
     Liquid(
       fill: _fill,
       blur: LiquidTabs.blur,
@@ -165,6 +165,7 @@ void main() {
       ),
     ),
     reduced: reduced,
+    devicePixelRatio: devicePixelRatio,
   );
 
   testWidgets('move: the liquid trails a jump, then the group falls asleep', (tester) async {
@@ -295,6 +296,31 @@ void main() {
     // 20% white over the near-black page: the thumb is painted, not cut away.
     expect(got.r, closeTo(0.25, 0.02), reason: '20% white composited on the page');
     image.dispose();
+  });
+
+  testWidgets('the liquid edge is cut about one device pixel wide, not blurred', (tester) async {
+    // A 3× screen, and captured at 3×.
+    await tester.pumpWidget(slider(20, devicePixelRatio: 3));
+    expect(MediaQuery.devicePixelRatioOf(tester.element(find.byType(Liquid))), 3);
+    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('shot')));
+    final image = (await tester.runAsync(() => boundary.toImage(pixelRatio: 3)))!;
+    final data = (await tester.runAsync(() => image.toByteData()))!;
+    int red(int x) => data.getUint8((60 * image.width + x) * 4); // the thumb's middle row, y 20
+    // Across the thumb's left end (x 20 → 60 device px): page, then fill.
+    expect(red(30), greaterThan(250));
+    expect(red(90), lessThan(64));
+    // Pixels part page, part fill. The 0.6 px softening blur this replaced left
+    // about five; a one-pixel ramp leaves at most two.
+    final lo = _fill.r * 255 + (255 - _fill.r * 255) * 0.1;
+    final hi = 255 - (255 - _fill.r * 255) * 0.1;
+    final partial = [for (var x = 30; x <= 90; x++) red(x)].where((r) => r > lo && r < hi).length;
+    expect(partial, lessThanOrEqualTo(2));
+    image.dispose();
+  });
+
+  test('the threshold steepens with the screen, never below the given contrast', () {
+    expect(Liquid.slopeFor(18, LiquidTabs.blur, 1), 18);
+    expect(Liquid.slopeFor(18, LiquidTabs.blur, 3), closeTo(26.9, 0.1));
   });
 
   testWidgets('an item outside a group is an error', (tester) async {

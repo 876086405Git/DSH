@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { Socket } from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
+const [library, config] = process.argv.slice(2);
+const module = { exports: {} }; process.dlopen(module, library);
+const native = module.exports, owner = native.create(config);
+const socket = new Socket({ fd: owner.fd, readable: true, writable: true });
+let output = ''; socket.on('data', bytes => { output += bytes; }); socket.on('error', () => {});
+const deadline = performance.now() + 3000;
+while (!output.includes('900-BEFORE-POWEROFF') && performance.now() < deadline) await delay(2);
+assert.match(output, /900-BEFORE-POWEROFF/);
+await delay(100);
+const before = native.__idleStats(), begin = performance.now();
+await delay(350);
+const end = performance.now(), after = native.__idleStats();
+const delta = Object.fromEntries(['calls', 'returned', 'timeouts', 'ready', 'errors', 'zeroDelayCalls', 'threadCpuNs'].map(key => [key, after[key] - before[key]]));
+const stopBegin = performance.now(); owner.requestStop(); const promise = owner.join(); assert.equal(owner.join(), promise);
+const watchdog = setTimeout(() => { throw new Error('test watchdog: native join did not settle'); }, 3000);
+const result = await promise; clearTimeout(watchdog); socket.destroy();
+assert.equal(result.joined, true); assert.equal(result.apiResult, -4); assert.equal(result.joinError, 0);
+const quiet = delta.returned === 0 && delta.calls === 0;
+console.log(JSON.stringify({ scope: 'Actual masked-WFI RISC-V tiny-BIOS without guest timer or network; not Linux kernel/phone CPU',
+  windowMs: end - begin, before, after, delta, stopJoinMs: performance.now() - stopBegin, quiet, result }));
+if (!quiet) process.exitCode = 1;

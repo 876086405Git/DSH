@@ -83,6 +83,9 @@ extension _GameplayCharacterExports on TavernEngine {
     final png = request.copyCardMedia && card.character!.card.png != null
         ? Uint8List.fromList(card.character!.card.png!)
         : null;
+    final avatar = request.copyCardMedia && card.character!.card.avatar != null
+        ? Uint8List.fromList(card.character!.card.avatar!)
+        : null;
     final usedPaths = <String>{...card.character!.card.assets.keys, 'card.json'};
     void reserveUris(Object? value) {
       if (value is List<Object?>) {
@@ -335,6 +338,16 @@ extension _GameplayCharacterExports on TavernEngine {
       'card': {'characterId': context.characterId, 'raw': _authoringCopy(card.document)},
     };
     data['modification_date'] = request.at.toUtc().millisecondsSinceEpoch ~/ 1000;
+    final avatarAssets = data['assets'];
+    if (avatar != null && avatarAssets != null && avatarAssets is! List<Object?>) {
+      issues.add(
+        _gameplayExportIssue(
+          'export_avatar_assets_shape',
+          'The selected avatar requires an array of character assets.',
+          path: '/data/assets',
+        ),
+      );
+    }
     try {
       const CardCodec().validateAuthority(raw);
     } on FormatException catch (error) {
@@ -372,6 +385,7 @@ extension _GameplayCharacterExports on TavernEngine {
       issues: issues,
       files: files,
       png: png,
+      avatar: avatar,
       facts: {
         'effectiveConfigId': resolution.effectiveConfigId,
         'bindings': _gameplayBindingIdentity(captured.snapshot),
@@ -388,7 +402,14 @@ extension _GameplayCharacterExports on TavernEngine {
         ],
       },
     );
-    return _GameplayExportPlan(request: request, preview: preview, files: files, png: png, recheck: recheck);
+    return _GameplayExportPlan(
+      request: request,
+      preview: preview,
+      files: files,
+      png: png,
+      avatar: avatar,
+      recheck: recheck,
+    );
   }
 }
 

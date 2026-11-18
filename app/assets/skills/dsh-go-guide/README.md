@@ -1,13 +1,13 @@
 # dsh-go 使用说明 · User guide
 
-> dsh-go 1.1.0
+> dsh-go 1.2.0
 
 ## 中文
 
 - [对话](zh/01-chat.md)：新对话、模型、图片与语音、插话与排队、提问与授权、消息菜单、对话列表、外接键盘
 - [模型与渠道](zh/02-models.md)：切换模型、思考深度、自定义渠道、模型设置、DeepSeek 账号与 API Key
 - [本机引擎与远程主机](zh/03-engine-hosts.md)：本机或远程、启动与自动启动、重置、卸载、切换主机、SSH、DSH Remote
-- [手机操控](zh/04-phone-control.md)：开启、悬浮条、停止、确认方式、后台确认与返回、应用名单、解除限制、不打扰模式
+- [手机操控](zh/04-phone-control.md)：开启、悬浮条、停止、确认方式、始终允许、后台确认与返回、应用名单、解除限制、不打扰模式
 - [网页模式](zh/05-web.md)：切换界面、网页里的 App 功能、网页版手机布局
 - [宠物](zh/06-pets.md)：选择宠物、气泡、App 外显示、伙伴小屋、创意工坊
 - [分享与回放](zh/07-sharing.md)：一个面板分享链接、图片、文件或文字，回放与接着聊
@@ -28,7 +28,7 @@
 - [Chat](en/01-chat.md): new chats, models, images and voice, steering and queueing, questions and approvals, message menu, chat list, hardware keyboard
 - [Models and providers](en/02-models.md): switching models, thinking effort, custom providers, model settings, DeepSeek account and API key
 - [Engine and remote hosts](en/03-engine-hosts.md): this phone or remote, starting and auto-start, reset, uninstall, switching hosts, SSH, DSH Remote
-- [Phone control](en/04-phone-control.md): turning it on, floating bar, stopping, confirmation, confirmations and return, app rules, lifting limits, non-disruptive mode
+- [Phone control](en/04-phone-control.md): turning it on, floating bar, stopping, confirmation, always allow, confirmations and return, app rules, lifting limits, non-disruptive mode
 - [Web mode](en/05-web.md): switching interfaces, app features in Web, Web phone layout
 - [Pets](en/06-pets.md): choosing a pet, bubbles, showing outside the app, the companion room, the workshop
 - [Sharing and replay](en/07-sharing.md): one panel for a link, an image, a file or text; replay and continue

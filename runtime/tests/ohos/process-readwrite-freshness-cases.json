@@ -1,0 +1,23 @@
+[
+  {
+    "name": "read -u sees current bytes from an independent open without sharing its cursor",
+    "initialHex": "414243440a",
+    "command": "exec 3<> sample.bin\nopen3_rc=$?\nprintf 'open3_rc=%s\\n' \"$open3_rc\"\nif test \"$open3_rc\" -ne 0; then exit \"$open3_rc\"; fi\nexec 4<> sample.bin\nopen4_rc=$?\nprintf 'open4_rc=%s\\n' \"$open4_rc\"\nif test \"$open4_rc\" -ne 0; then exit \"$open4_rc\"; fi\nprintf X >&3\nwrite_x_rc=$?\nprintf 'write_x_rc=%s\\n' \"$write_x_rc\"\nif test \"$write_x_rc\" -ne 0; then exit \"$write_x_rc\"; fi\nIFS= read -r -u4 value\nread_rc=$?\nprintf 'read_rc=%s\\nvalue=%s\\n' \"$read_rc\" \"$value\"\nif test \"$read_rc\" -ne 0; then exit \"$read_rc\"; fi\nprintf Y >&3\nwrite_y_rc=$?\nprintf 'write_y_rc=%s\\n' \"$write_y_rc\"\nif test \"$write_y_rc\" -ne 0; then exit \"$write_y_rc\"; fi\nprintf Z >&4\nwrite_z_rc=$?\nprintf 'write_z_rc=%s\\n' \"$write_z_rc\"\nif test \"$write_z_rc\" -ne 0; then exit \"$write_z_rc\"; fi\ntest \"$value\" = XBCD\nvalue_equal_rc=$?\nprintf 'value_equal_rc=%s\\n' \"$value_equal_rc\"\nreport_rc=$?\nif test \"$value_equal_rc\" -ne 0; then exit \"$value_equal_rc\"; fi\nexit \"$report_rc\"\n",
+    "stdout": "open3_rc=0\nopen4_rc=0\nwrite_x_rc=0\nread_rc=0\nvalue=XBCD\nwrite_y_rc=0\nwrite_z_rc=0\nvalue_equal_rc=0\n",
+    "fileHex": "585943440a5a"
+  },
+  {
+    "name": "read -u dup retains shared byte progress across multibyte text and a noninitial BOM",
+    "initialHex": "41e4b8ad0aefbbbfe696870a",
+    "command": "exec 3<> sample.bin\nopen3_rc=$?\nprintf 'open3_rc=%s\\n' \"$open3_rc\"\nif test \"$open3_rc\" -ne 0; then exit 1; fi\nexec 4<&3\ndup_rc=$?\nprintf 'dup_rc=%s\\n' \"$dup_rc\"\nif test \"$dup_rc\" -ne 0; then exit 1; fi\nread -r -u3 first\nread_first_rc=$?\nprintf 'read_first_rc=%s\\n' \"$read_first_rc\"\nprintf 'first=%s\\n' \"$first\"\nif test \"$read_first_rc\" -ne 0; then exit 1; fi\ntest \"$first\" = 'A中'\nfirst_equal_rc=$?\nprintf 'first_equal_rc=%s\\n' \"$first_equal_rc\"\nif test \"$first_equal_rc\" -ne 0; then exit 1; fi\nread -r -u4 second\nread_second_rc=$?\nprintf 'read_second_rc=%s\\n' \"$read_second_rc\"\nprintf 'second=%s\\n' \"$second\"\nif test \"$read_second_rc\" -ne 0; then exit 1; fi\ntest \"$second\" = '﻿文'\nsecond_equal_rc=$?\nprintf 'second_equal_rc=%s\\n' \"$second_equal_rc\"\nif test \"$second_equal_rc\" -ne 0; then exit 1; fi\nprintf Z >&3\nwrite_z_rc=$?\nprintf 'write_z_rc=%s\\n' \"$write_z_rc\"\nif test \"$write_z_rc\" -ne 0; then exit 1; fi\nexit 0\n",
+    "stdout": "open3_rc=0\ndup_rc=0\nread_first_rc=0\nfirst=A中\nfirst_equal_rc=0\nread_second_rc=0\nsecond=﻿文\nsecond_equal_rc=0\nwrite_z_rc=0\n",
+    "fileHex": "41e4b8ad0aefbbbfe696870a5a"
+  },
+  {
+    "name": "read -u EOF after shortening preserves the byte cursor beyond the new length",
+    "initialHex": "41424344450a",
+    "command": "exec 3<> sample.bin\nopen3_rc=$?\nprintf 'open3_rc=%s\\n' \"$open3_rc\"\nif test \"$open3_rc\" -ne 0; then exit 1; fi\nread -r -n4 -u3 prefix\nread_prefix_rc=$?\nprintf 'read_prefix_rc=%s\\n' \"$read_prefix_rc\"\nprintf 'prefix=%s\\n' \"$prefix\"\nif test \"$read_prefix_rc\" -ne 0; then exit 1; fi\ntest \"$prefix\" = ABCD\nprefix_equal_rc=$?\nprintf 'prefix_equal_rc=%s\\n' \"$prefix_equal_rc\"\nif test \"$prefix_equal_rc\" -ne 0; then exit 1; fi\nprintf Q > sample.bin\ntruncate_rc=$?\nprintf 'truncate_rc=%s\\n' \"$truncate_rc\"\nif test \"$truncate_rc\" -ne 0; then exit 1; fi\nread -r -u3 tail\neof_rc=$?\nprintf 'eof_rc=%s\\n' \"$eof_rc\"\nprintf 'tail=%s\\n' \"$tail\"\nif test \"$eof_rc\" -ne 1; then exit 1; fi\ntest -z \"$tail\"\ntail_empty_rc=$?\nprintf 'tail_empty_rc=%s\\n' \"$tail_empty_rc\"\nif test \"$tail_empty_rc\" -ne 0; then exit 1; fi\nprintf Z >&3\nwrite_z_rc=$?\nprintf 'write_z_rc=%s\\n' \"$write_z_rc\"\nif test \"$write_z_rc\" -ne 0; then exit 1; fi\nexit 0\n",
+    "stdout": "open3_rc=0\nread_prefix_rc=0\nprefix=ABCD\nprefix_equal_rc=0\ntruncate_rc=0\neof_rc=1\ntail=\ntail_empty_rc=0\nwrite_z_rc=0\n",
+    "fileHex": "510000005a"
+  }
+]

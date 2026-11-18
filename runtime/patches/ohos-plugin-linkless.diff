@@ -1,0 +1,127 @@
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1436,10 +1436,14 @@
+ * Active profile `node_modules` entries linked outside the shared profiles tree and the active profile.
+ * Missing targets and files are not linked roots; invalid link chains retain Node's diagnostic.
+ */
++function ohosPluginResolution() {
++	return process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.plugin-resolution")] : void 0;
++}
+ function linkedProfileRoots(profile, profilesDir) {
+ 	const modules = join(profile.dir, "node_modules");
+ 	const links = symlinksUnder(modules);
+-	if (links.length === 0) return [];
++	const managed = ohosPluginResolution()?.roots(profile.dir) ?? [];
++	if (links.length === 0) return managed;
+ 	let tree;
+ 	try {
+ 		tree = realModuleDirectory(profilesDir) + sep;
+@@ -1448,7 +1452,7 @@
+ 		tree = resolve(profilesDir) + sep;
+ 	}
+ 	const excludedTrees = [tree, realModuleDirectory(profile.dir) + sep];
+-	const roots = [];
++	const roots = [...managed];
+ 	for (const linkPath of links) {
+ 		let realPath;
+ 		try {
+@@ -1629,7 +1633,7 @@
+ /** Return installed direct dependencies that Node resolves before profile fallback. */
+ function installedProfilePackageNames(profile, manifest) {
+ 	if (manifest === void 0) return [];
+-	return profileDependencyNames(manifest).filter((name) => existsSync(join(profile.dir, "node_modules", name, "package.json")));
++	return profileDependencyNames(manifest).filter((name) => (ohosPluginResolution()?.packageDirectory(join(profile.dir, "package.json"), name) !== void 0 || existsSync(join(profile.dir, "node_modules", name, "package.json"))));
+ }
+ /** Collect the first resolvable package directory for each dependency name. */
+ function dependencyClosure(anchors, reserved, declarers, versions) {
+@@ -1754,6 +1758,8 @@
+ * `existsSync` follows the symlinks pnpm's isolated layout uses.
+ */
+ function packageDirFromAnchor(anchor, packageName) {
++	const managed = ohosPluginResolution()?.packageDirectory(anchor, packageName);
++	if (managed !== void 0) return managed;
+ 	/* v8 ignore next */
+ 	for (const searchPath of createRequire(anchor).resolve.paths(packageName) ?? []) {
+ 		const candidate = join(searchPath, packageName);
+@@ -1953,7 +1959,7 @@
+ 	return {
+ 		manifest,
+ 		dependencies: Object.entries(manifest.dependencies ?? {}).map(([name, spec]) => {
+-			const installed = optionalManifest(location.binName, join(location.profileDir, "node_modules", name));
++			const installed = optionalManifest(location.binName, ohosPluginResolution()?.packageDirectory(join(location.profileDir, "package.json"), name) ?? join(location.profileDir, "node_modules", name));
+ 			return {
+ 				name,
+ 				version: typeof installed?.version === "string" ? installed.version : spec,
+@@ -2550,6 +2556,8 @@
+ 		return this.routeScoped(request, parentRoutes, resolution, "cjs", cjs);
+ 	}
+ 	packageDir(specifier, parentURL) {
++		const managed = ohosPluginResolution()?.packageDirectory(parentURL, specifier);
++		if (managed !== void 0) return managed;
+ 		const name = barePackageName(specifier);
+ 		if (name === void 0) return void 0;
+ 		const state = this.routeUrl(name, parentURL);
+@@ -2701,6 +2709,7 @@
+ 			};
+ 		};
+ 		return (request, parent, attributes) => {
++			if (ohosPluginResolution()?.request(request, parent) !== void 0) return native(request, parent, attributes);
+ 			const result = adapted(request, parent, attributes);
+ 			/* v8 ignore next -- the current loader resolves synchronously; the private interface also permits Promise results */
+ 			return result instanceof Promise ? result.then((resolved) => relocate(resolved, parent)) : relocate(result, parent);
+@@ -2829,6 +2838,8 @@
+ 		}
+ 	};
+ 	const relocatedFilename = (request, parent, main, options) => {
++		const managed = ohosPluginResolution()?.resolveCjs(request, parent, main, options, cjsConditions, originalFilename);
++		if (managed !== void 0) return managed;
+ 		const filename = wrappedFilename(request, parent, main, options);
+ 		return isAbsolute(filename) ? router.relocate(filename, parent?.filename ?? void 0) : filename;
+ 	};
+@@ -4319,6 +4330,8 @@
+ 	}
+ };
+ function packageDirFromParent(name, parentURL) {
++	const managed = ohosPluginResolution()?.packageDirectory(parentURL, name);
++	if (managed !== void 0) return managed;
+ 	for (const searchPath of createRequire(parentURL).resolve.paths(name)) {
+ 		const candidate = join(searchPath, name);
+ 		if (existsSync(join(candidate, "package.json"))) return candidate;
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js
+@@ -44,6 +44,9 @@
+ //#region lib/types/profile-resolution/resolver.js
+ /** In-memory profile package routing for Node's default ESM and CommonJS loaders. */
+ const EMPTY_ATTRIBUTES = Object.freeze({});
++function ohosPluginResolution() {
++	return process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.plugin-resolution")] : void 0;
++}
+ /** A successor resolution the running process cannot adopt, such as a retained mapping in another directory; it waits for a restart. */
+ var ResolutionRestartRequired = class extends Error {
+ 	/** @param message Diagnostic naming the rejected changes. */
+@@ -544,6 +547,8 @@
+ 		return this.routeScoped(request, parentRoutes, resolution, "cjs", cjs);
+ 	}
+ 	packageDir(specifier, parentURL) {
++		const managed = ohosPluginResolution()?.packageDirectory(parentURL, specifier);
++		if (managed !== void 0) return managed;
+ 		const name = barePackageName(specifier);
+ 		if (name === void 0) return void 0;
+ 		const state = this.routeUrl(name, parentURL);
+@@ -695,6 +700,7 @@
+ 			};
+ 		};
+ 		return (request, parent, attributes) => {
++			if (ohosPluginResolution()?.request(request, parent) !== void 0) return native(request, parent, attributes);
+ 			const result = adapted(request, parent, attributes);
+ 			/* v8 ignore next -- the current loader resolves synchronously; the private interface also permits Promise results */
+ 			return result instanceof Promise ? result.then((resolved) => relocate(resolved, parent)) : relocate(result, parent);
+@@ -823,6 +829,8 @@
+ 		}
+ 	};
+ 	const relocatedFilename = (request, parent, main, options) => {
++		const managed = ohosPluginResolution()?.resolveCjs(request, parent, main, options, cjsConditions, originalFilename);
++		if (managed !== void 0) return managed;
+ 		const filename = wrappedFilename(request, parent, main, options);
+ 		return isAbsolute(filename) ? router.relocate(filename, parent?.filename ?? void 0) : filename;
+ 	};

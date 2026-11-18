@@ -371,7 +371,12 @@ class PluginTrustNote extends StatelessWidget {
             Expanded(
               child: Text(
                 local
-                    ? (thirdParty ? l10n.pluginsPermissionLocalThirdParty : l10n.pluginsPermissionLocalTrusted)
+                    ? switch ((thirdParty, wordsForIos)) {
+                        (true, true) => l10n.iosPluginsPermissionLocalThirdParty,
+                        (false, true) => l10n.iosPluginsPermissionLocalTrusted,
+                        (true, false) => l10n.pluginsPermissionLocalThirdParty,
+                        (false, false) => l10n.pluginsPermissionLocalTrusted,
+                      }
                     : (thirdParty ? l10n.pluginsPermissionRemoteThirdParty : l10n.pluginsPermissionRemoteTrusted),
                 style: theme.textTheme.bodySmall?.copyWith(color: colors.onWarningContainer, height: 1.6),
               ),

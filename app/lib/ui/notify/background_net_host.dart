@@ -87,52 +87,94 @@ class BackgroundNetLayer extends ConsumerWidget {
       valueListenable: onScreen,
       builder: (context, current, _) {
         final shown = current ? reason : null;
-        return Positioned(
-          top: ChatHeader.heightOf(context),
-          left: AppSpace.md,
-          right: AppSpace.md,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: AnimatedSwitcher(
-              duration: AppMotion.of(context, AppMotion.standard),
-              switchInCurve: AppMotion.enter,
-              switchOutCurve: AppMotion.exit,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween(begin: const Offset(0, -0.25), end: Offset.zero).animate(animation),
-                  child: child,
+        return BackgroundLineSlot(
+          child: shown == null
+              ? null
+              : BackgroundNetPill(
+                  key: ValueKey(shown),
+                  reason: shown,
+                  onDismiss: controller.dismiss,
+                  onOpen: () {
+                    controller.dismiss();
+                    Navigator.of(
+                      context,
+                      rootNavigator: true,
+                    ).push(MaterialPageRoute<void>(builder: (_) => const BackgroundGuidePage()));
+                  },
                 ),
-              ),
-              child: shown == null
-                  ? const SizedBox(key: ValueKey('none'))
-                  : BackgroundNetPill(
-                      key: ValueKey(shown),
-                      reason: shown,
-                      onDismiss: controller.dismiss,
-                      onOpen: () {
-                        controller.dismiss();
-                        Navigator.of(
-                          context,
-                          rootNavigator: true,
-                        ).push(MaterialPageRoute<void>(builder: (_) => const BackgroundGuidePage()));
-                      },
-                    ),
-            ),
-          ),
         );
       },
     );
   }
 }
 
-/// One line in a glass capsule: glyph, what happened, 「去放行」. A tap anywhere else dismisses.
+/// Where such a line sits in the root overlay, and how it comes and goes.
+class BackgroundLineSlot extends StatelessWidget {
+  const BackgroundLineSlot({super.key, required this.child});
+
+  /// The line; null: none.
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    top: ChatHeader.heightOf(context),
+    left: AppSpace.md,
+    right: AppSpace.md,
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: AppMotion.of(context, AppMotion.standard),
+        switchInCurve: AppMotion.enter,
+        switchOutCurve: AppMotion.exit,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween(begin: const Offset(0, -0.25), end: Offset.zero).animate(animation),
+            child: child,
+          ),
+        ),
+        child: child ?? const SizedBox(key: ValueKey('none')),
+      ),
+    ),
+  );
+}
+
+/// Android's line: why the network was cut, and 「去放行」.
 class BackgroundNetPill extends StatelessWidget {
   const BackgroundNetPill({super.key, required this.reason, required this.onDismiss, required this.onOpen});
 
   final BackgroundNetReason reason;
   final VoidCallback onDismiss;
   final VoidCallback onOpen;
+
+  static const minHeight = BackgroundLinePill.minHeight;
+
+  @override
+  Widget build(BuildContext context) => BackgroundLinePill(
+    icon: reason == BackgroundNetReason.intro ? AppIcons.keepAlive : AppIcons.offline,
+    text: reason.text,
+    onDismiss: onDismiss,
+    action: context.l10n.phoneBackgroundAllow,
+    onAction: onOpen,
+  );
+}
+
+/// One line in a glass capsule: glyph, what happened, maybe an action. A tap anywhere else dismisses.
+class BackgroundLinePill extends StatelessWidget {
+  const BackgroundLinePill({
+    super.key,
+    required this.icon,
+    required this.text,
+    required this.onDismiss,
+    this.action,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String text;
+  final VoidCallback onDismiss;
+  final String? action;
+  final VoidCallback? onAction;
 
   /// Glyph and label sit this far from their ends of the capsule.
   static const inset = 12.0;
@@ -159,13 +201,13 @@ class BackgroundNetPill extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: minHeight),
           child: Padding(
-            padding: const EdgeInsets.only(left: inset, right: inset - actionPad),
+            padding: EdgeInsets.only(left: inset, right: action == null ? inset : inset - actionPad),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   key: const ValueKey('background-net-glyph'),
-                  reason == BackgroundNetReason.intro ? AppIcons.keepAlive : AppIcons.offline,
+                  icon,
                   size: 16,
                   color: colors.textTertiary,
                 ),
@@ -173,25 +215,27 @@ class BackgroundNetPill extends StatelessWidget {
                 Flexible(
                   child: Semantics(
                     onTapHint: l10n.commonClose,
-                    child: Text(reason.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+                    child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
                   ),
                 ),
-                const SizedBox(width: AppSpace.xs),
-                Semantics(
-                  button: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onOpen,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: actionPad, vertical: 10),
-                      child: Text(
-                        l10n.phoneBackgroundAllow,
-                        key: const ValueKey('background-net-action'),
-                        style: style?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+                if (action case final action?) ...[
+                  const SizedBox(width: AppSpace.xs),
+                  Semantics(
+                    button: true,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onAction,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: actionPad, vertical: 10),
+                        child: Text(
+                          action,
+                          key: const ValueKey('background-net-action'),
+                          style: style?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

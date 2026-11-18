@@ -1,0 +1,636 @@
+{
+  "schema": 1,
+  "scanner": "dsh-go-ohos-static/1",
+  "inputManifestSha256": "050b00ffcb15e3f17dea8fa076f1157051b453fc522e5ffde28aa1ef4f9fc30c",
+  "packages": [
+    {
+      "name": "@ccch1mneyyy/dsh-media",
+      "version": "0.2.1",
+      "category": "plugins",
+      "integrity": "sha512-OCm2F4PwrCaNptn2TLTiZvlcK2RY7vmSNW8Qa3uu8YlUzt49pMSS9VdHQ3sKUUB9VEvST3+bjxs0TlfR4wdbmg==",
+      "tarballSha256": "9829f5106dec8cb354c203c74cc0510656f0f94538c36abf0fb80226388d13c9",
+      "source": "https://registry.npmjs.org/@ccch1mneyyy/dsh-media/-/dsh-media-0.2.1.tgz",
+      "platforms": {
+        "ohos": {
+          "schema": 1,
+          "scanner": "dsh-go-ohos-static/1",
+          "name": "@ccch1mneyyy/dsh-media",
+          "version": "0.2.1",
+          "status": "partial",
+          "label": "部分可用",
+          "ownStatus": "usable",
+          "scope": "static-package-only",
+          "deviceValidated": false,
+          "target": {
+            "platform": "openharmony",
+            "arch": "arm64",
+            "node": "24.22.1",
+            "jit": false,
+            "wasm": false,
+            "externalProcesses": false
+          },
+          "provisioning": "prebundled-only; in-app package installation is unavailable",
+          "meaning": "可用表示所扫描范围未发现本扫描器覆盖的阻断；不是运行证明。部分可用表示功能限制或证据不足，不保证存在可运行子集。",
+          "reasons": [
+            {
+              "code": "unresolved-dependencies",
+              "message": "未扫描全部必需依赖；单包结果不能证明依赖闭包在鸿蒙可运行。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "460f099947b9b0a8184abe27667bd0531acfd164a21c32c02a22a1ff85347a9f",
+                  "detail": "@deepseek-ai/cordis, @deepseek-ai/dsh-atomic-write, @deepseek-ai/dsh-credentials, @deepseek-ai/dsh-fs, @deepseek-ai/dsh-home-paths, @deepseek-ai/dsh-jobs, @deepseek-ai/dsh-sandbox-policy, @deepseek-ai/dsh-system-prompt, @deepseek-ai/dsh-tools, @deepseek-ai/dsh-user-approval, @deepseek-ai/dsh-working-directory, @deepseek-ai/schemastery, image-size"
+                }
+              ]
+            }
+          ],
+          "dependencies": {
+            "coverage": "not-traversed",
+            "required": [
+              {
+                "name": "@deepseek-ai/cordis",
+                "range": "4.0.5",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-atomic-write",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-credentials",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-fs",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-home-paths",
+                "range": "0.2.1-rc.4",
+                "kind": "dependency"
+              },
+              {
+                "name": "@deepseek-ai/dsh-jobs",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-sandbox-policy",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-system-prompt",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-tools",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-user-approval",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-working-directory",
+                "range": "0.2.1-rc.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/schemastery",
+                "range": "3.18.5",
+                "kind": "dependency"
+              },
+              {
+                "name": "image-size",
+                "range": "2.0.2",
+                "kind": "dependency"
+              }
+            ],
+            "optional": []
+          },
+          "source": {
+            "files": 19,
+            "bytes": 163812,
+            "sha256": "d66039c5c0ce3c81f8bde4b086bf23255ff57a277139065fd309c54d0352af6c"
+          }
+        }
+      }
+    },
+    {
+      "name": "@liustack/modlens",
+      "version": "3.27.2",
+      "category": "plugins",
+      "integrity": "sha512-Xz8BkrLgBFyTlDiRcxv+sf4V0W0xsHFPaCcXV3GpJOWBgqCb2CrgJwrA8Tfd1JoLqS0LInrILEMky/AM+0j9gA==",
+      "tarballSha256": "fb340900b97e2222e74ddc5999f1d82f3982aec18391af147efd0e325dff3842",
+      "source": "https://registry.npmjs.org/@liustack/modlens/-/modlens-3.27.2.tgz",
+      "platforms": {
+        "ohos": {
+          "schema": 1,
+          "scanner": "dsh-go-ohos-static/1",
+          "name": "@liustack/modlens",
+          "version": "3.27.2",
+          "status": "partial",
+          "label": "部分可用",
+          "ownStatus": "partial",
+          "scope": "static-package-only",
+          "deviceValidated": false,
+          "target": {
+            "platform": "openharmony",
+            "arch": "arm64",
+            "node": "24.22.1",
+            "jit": false,
+            "wasm": false,
+            "externalProcesses": false
+          },
+          "provisioning": "prebundled-only; in-app package installation is unavailable",
+          "meaning": "可用表示所扫描范围未发现本扫描器覆盖的阻断；不是运行证明。部分可用表示功能限制或证据不足，不保证存在可运行子集。",
+          "reasons": [
+            {
+              "code": "bin",
+              "message": "声明 npm 命令入口；CLI 功能不能通过外部进程启动，不能据此推断包内 API 也失效。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "173b4fa3371505693d227cf0ca181cff5c5990850287309e552dda0e4fdb54c1",
+                  "detail": "modlens: dist/main.js"
+                }
+              ]
+            },
+            {
+              "code": "child-process",
+              "message": "源码引用 child_process 或进程执行依赖；鸿蒙本机不能执行外部程序。",
+              "evidence": [
+                {
+                  "path": "dist/main.js",
+                  "line": 10,
+                  "sha256": "e94809c783000412d6023c25acc84ebaad225c0eeb26ffa0b2a9e86d83953e27",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "dsh/spawnHidden.js",
+                  "line": 16,
+                  "sha256": "44a95bfc4cf5c67463bcf749da195f66cf1b11ba19048c43ffd6009803f343f2",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "skills/modlens/scripts/run.sh",
+                  "sha256": "4234b057c754780458bdfc496a05ffbe587234b1384447d1cba71c05445231ce",
+                  "detail": "shell script file"
+                }
+              ]
+            },
+            {
+              "code": "unresolved-dependencies",
+              "message": "未扫描全部必需依赖；单包结果不能证明依赖闭包在鸿蒙可运行。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "173b4fa3371505693d227cf0ca181cff5c5990850287309e552dda0e4fdb54c1",
+                  "detail": "commander, undici"
+                }
+              ]
+            }
+          ],
+          "dependencies": {
+            "coverage": "not-traversed",
+            "required": [
+              {
+                "name": "commander",
+                "range": "^13.1.0",
+                "kind": "dependency"
+              },
+              {
+                "name": "undici",
+                "range": "^8.10.0",
+                "kind": "dependency"
+              }
+            ],
+            "optional": []
+          },
+          "source": {
+            "files": 34,
+            "bytes": 732368,
+            "sha256": "8cca145816ffb93dffdcda5b8a8323eb84efd6440e3b0d58d21a80ffe80dc8aa"
+          }
+        }
+      }
+    },
+    {
+      "name": "@liustack/modsearch",
+      "version": "5.10.11",
+      "category": "plugins",
+      "integrity": "sha512-mIe0R3S9ouLu4Vemz7rZtmQ9HXFlmjQePFmMjxVQFD9SwbNp6lAJtXouFjXJ6XD27xfJECgNQC3p+baMI3rs6A==",
+      "tarballSha256": "f3aa3ceb92dbab01ee58069851b0cf07e7077a78d444eafee4439333218e6ce8",
+      "source": "https://registry.npmjs.org/@liustack/modsearch/-/modsearch-5.10.11.tgz",
+      "platforms": {
+        "ohos": {
+          "schema": 1,
+          "scanner": "dsh-go-ohos-static/1",
+          "name": "@liustack/modsearch",
+          "version": "5.10.11",
+          "status": "partial",
+          "label": "部分可用",
+          "ownStatus": "partial",
+          "scope": "static-package-only",
+          "deviceValidated": false,
+          "target": {
+            "platform": "openharmony",
+            "arch": "arm64",
+            "node": "24.22.1",
+            "jit": false,
+            "wasm": false,
+            "externalProcesses": false
+          },
+          "provisioning": "prebundled-only; in-app package installation is unavailable",
+          "meaning": "可用表示所扫描范围未发现本扫描器覆盖的阻断；不是运行证明。部分可用表示功能限制或证据不足，不保证存在可运行子集。",
+          "reasons": [
+            {
+              "code": "bin",
+              "message": "声明 npm 命令入口；CLI 功能不能通过外部进程启动，不能据此推断包内 API 也失效。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "a4b6b7f3151e98c9598744c12660c085b15fa5716732fe654cf9d2071e3d7f9f",
+                  "detail": "modsearch: ./dist/main.js"
+                }
+              ]
+            },
+            {
+              "code": "child-process",
+              "message": "源码引用 child_process 或进程执行依赖；鸿蒙本机不能执行外部程序。",
+              "evidence": [
+                {
+                  "path": "dist/main.js",
+                  "line": 10,
+                  "sha256": "207b1accb32ec5b0f1294b6c14fd4ce9fd41b80cbab8ef27cedd6841456a0fa5",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "dsh/spawnHidden.js",
+                  "line": 4,
+                  "sha256": "554116e9268befcfce85668633a55e43fdb3daf303c3ee2406fbdd2da0ac6922",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "skills/modsearch/scripts/run.sh",
+                  "sha256": "959bdc7feac5e5fa7e9f60353666bcf8bd2983fff430fa9669451670669c580d",
+                  "detail": "shell script file"
+                }
+              ]
+            },
+            {
+              "code": "unresolved-dependencies",
+              "message": "未扫描全部必需依赖；单包结果不能证明依赖闭包在鸿蒙可运行。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "a4b6b7f3151e98c9598744c12660c085b15fa5716732fe654cf9d2071e3d7f9f",
+                  "detail": "commander, undici"
+                }
+              ]
+            }
+          ],
+          "dependencies": {
+            "coverage": "not-traversed",
+            "required": [
+              {
+                "name": "commander",
+                "range": "^13.1.0",
+                "kind": "dependency"
+              },
+              {
+                "name": "undici",
+                "range": "^7.29.0",
+                "kind": "dependency"
+              }
+            ],
+            "optional": []
+          },
+          "source": {
+            "files": 36,
+            "bytes": 518726,
+            "sha256": "9fa3b2acc9a1e74655a53c7b8025986a8632f21913468ca343d265142a2bf590"
+          }
+        }
+      }
+    },
+    {
+      "name": "@xmanrui/dsh-im",
+      "version": "5.8.0",
+      "category": "plugins",
+      "integrity": "sha512-zr/YL+aAqEe024snz7iNmPSCuuHB4cX9WY+GJJenHgQbotcT8Nan1roMPwYUrLCvCki6Go8lfcUiZWM+A60TuA==",
+      "tarballSha256": "93e3640a5049ee7d2046e11461eaf7adb0c1c5f8f8c71d6d04f596daf7c1c0c9",
+      "source": "https://registry.npmjs.org/@xmanrui/dsh-im/-/dsh-im-5.8.0.tgz",
+      "platforms": {
+        "ohos": {
+          "schema": 1,
+          "scanner": "dsh-go-ohos-static/1",
+          "name": "@xmanrui/dsh-im",
+          "version": "5.8.0",
+          "status": "partial",
+          "label": "部分可用",
+          "ownStatus": "partial",
+          "scope": "static-package-only",
+          "deviceValidated": false,
+          "target": {
+            "platform": "openharmony",
+            "arch": "arm64",
+            "node": "24.22.1",
+            "jit": false,
+            "wasm": false,
+            "externalProcesses": false
+          },
+          "provisioning": "prebundled-only; in-app package installation is unavailable",
+          "meaning": "可用表示所扫描范围未发现本扫描器覆盖的阻断；不是运行证明。部分可用表示功能限制或证据不足，不保证存在可运行子集。",
+          "reasons": [
+            {
+              "code": "bin",
+              "message": "声明 npm 命令入口；CLI 功能不能通过外部进程启动，不能据此推断包内 API 也失效。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "caa8be957dc959f237c4b40dfe6a4da8052026de10f4de6ad6bec25de55283d4",
+                  "detail": "dsh-im: bin/dsh-im.mjs"
+                }
+              ]
+            },
+            {
+              "code": "child-process",
+              "message": "源码引用 child_process 或进程执行依赖；鸿蒙本机不能执行外部程序。",
+              "evidence": [
+                {
+                  "path": "lib/index.js",
+                  "line": 303,
+                  "sha256": "bcc1cb44acd2d43e1ffba93c43f474c53ff2acc725cd8c9ffb0060dc2978b3c4",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "src/channels/email/transports/agently-cli.mjs",
+                  "line": 19,
+                  "sha256": "c9382cd47166f668c3c2e19271f8bc0d8e7b67d3a1afa41a430dc42a7f138ab8",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "src/channels/feishu/config.mjs",
+                  "line": 1,
+                  "sha256": "f6e776c92e58d67b8143104d06f7c24493a6bbb317f455628428276389a7a69c",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "bin/dsh-im.mjs",
+                  "line": 6,
+                  "sha256": "b4dea28739e40eab058b82ce4a00b65f060369e38417718ff7f198b7fcd40a50",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "src/channels/shared/harness-client.mjs",
+                  "line": 2,
+                  "sha256": "de93d1ac8c56acbbefe603b0db007109ec9df0e43b98595fa13537b144f8a0a8",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "src/channels/imessage/imessage-api.mjs",
+                  "line": 1,
+                  "sha256": "d6704c74bb92f3f484ae53a174c048ba115cf57937ce1ea5c50fa5ea5d84706e",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "scripts/verify-interface-language.mjs",
+                  "line": 15,
+                  "sha256": "df5cd0990aa352756c05d3a3e944bf52ddd608a5e32f0703df3443f0a479069e",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "scripts/verify-lan-management.mjs",
+                  "line": 3,
+                  "sha256": "9b901430f2f94a0414ea1dcc3cc793e5c598ae33b9f547cd6283612058cf6d6c",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "scripts/verify-model-setting.mjs",
+                  "line": 3,
+                  "sha256": "24174e1df113e135fd851e67109ba6222e33273f6fbd43b23feee659c7a019c4",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "scripts/verify-session-channel-logos.mjs",
+                  "line": 3,
+                  "sha256": "f55151936926fcddbd18c190fec93dcf5859537ddeb9b401882c78c438c2e729",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "src/channels/feishu/voice.mjs",
+                  "line": 8,
+                  "sha256": "774f5552d3dfe010a82a861472624a6e7fc65e4ec2f543354ef196b2166f6f5c",
+                  "detail": "source reference (not execution proof)"
+                },
+                {
+                  "path": "src/channels/telegram/voice.mjs",
+                  "line": 11,
+                  "sha256": "0cc7188397d3b7ccc937739d2ab4932537384dd608253a6c3905ed2294f55784",
+                  "detail": "source reference (not execution proof)"
+                }
+              ]
+            },
+            {
+              "code": "optional-dependencies",
+              "message": "存在未纳入必需闭包的可选依赖；相关功能仍需单独核实。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "caa8be957dc959f237c4b40dfe6a4da8052026de10f4de6ad6bec25de55283d4",
+                  "detail": "@tencent-qqmail/agently-cli, sharp"
+                }
+              ]
+            },
+            {
+              "code": "unresolved-dependencies",
+              "message": "未扫描全部必需依赖；单包结果不能证明依赖闭包在鸿蒙可运行。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "caa8be957dc959f237c4b40dfe6a4da8052026de10f4de6ad6bec25de55283d4",
+                  "detail": "@matrix-org/olm, @tencent-connect/qqbot-connector, @tencent-connect/qqbot-nodejs, @wecom/aibot-node-sdk, dingtalk-stream, imapflow, mailparser, nodemailer, qrcode, undici"
+                }
+              ]
+            },
+            {
+              "code": "wasm",
+              "message": "包含 Wasm 字节或 WebAssembly 引用；当前鸿蒙运行时没有可用的 Wasm 执行通道。",
+              "evidence": [
+                {
+                  "path": "lib/index.js",
+                  "line": 28,
+                  "sha256": "bcc1cb44acd2d43e1ffba93c43f474c53ff2acc725cd8c9ffb0060dc2978b3c4",
+                  "detail": "source reference (not execution proof)"
+                }
+              ]
+            }
+          ],
+          "dependencies": {
+            "coverage": "not-traversed",
+            "required": [
+              {
+                "name": "@matrix-org/olm",
+                "range": "3.2.15",
+                "kind": "dependency"
+              },
+              {
+                "name": "@tencent-connect/qqbot-connector",
+                "range": "1.2.0",
+                "kind": "dependency"
+              },
+              {
+                "name": "@tencent-connect/qqbot-nodejs",
+                "range": "1.0.4",
+                "kind": "dependency"
+              },
+              {
+                "name": "@wecom/aibot-node-sdk",
+                "range": "1.0.7",
+                "kind": "dependency"
+              },
+              {
+                "name": "dingtalk-stream",
+                "range": "2.1.4",
+                "kind": "dependency"
+              },
+              {
+                "name": "imapflow",
+                "range": "^2.0.5",
+                "kind": "dependency"
+              },
+              {
+                "name": "mailparser",
+                "range": "^3.9.43",
+                "kind": "dependency"
+              },
+              {
+                "name": "nodemailer",
+                "range": "^10.1.4",
+                "kind": "dependency"
+              },
+              {
+                "name": "qrcode",
+                "range": "1.5.4",
+                "kind": "dependency"
+              },
+              {
+                "name": "undici",
+                "range": "7.30.1",
+                "kind": "dependency"
+              }
+            ],
+            "optional": [
+              "@tencent-qqmail/agently-cli",
+              "sharp"
+            ]
+          },
+          "source": {
+            "files": 492,
+            "bytes": 28403878,
+            "sha256": "a4e6baabfab158a7221b0bdb04ba8144f5c1fd446377681c27ac5cd5da6af9ad"
+          }
+        }
+      }
+    },
+    {
+      "name": "dsh-context",
+      "version": "0.78.2",
+      "category": "plugins",
+      "integrity": "sha512-aqvtRTvvUWe41jdlZlfiPE0VSnr8I5KVLFXNLusHfnk3tXGOYuN5qoexiOMzaO+RbczKFsThUH7zeXXC+3q6WA==",
+      "tarballSha256": "b6dbb38230e55ee846c2f4a2b16c0140862c45b0cc9c6ad5f6bc108d5b3d9b4c",
+      "source": "https://registry.npmjs.org/dsh-context/-/dsh-context-0.78.2.tgz",
+      "platforms": {
+        "ohos": {
+          "schema": 1,
+          "scanner": "dsh-go-ohos-static/1",
+          "name": "dsh-context",
+          "version": "0.78.2",
+          "status": "partial",
+          "label": "部分可用",
+          "ownStatus": "usable",
+          "scope": "static-package-only",
+          "deviceValidated": false,
+          "target": {
+            "platform": "openharmony",
+            "arch": "arm64",
+            "node": "24.22.1",
+            "jit": false,
+            "wasm": false,
+            "externalProcesses": false
+          },
+          "provisioning": "prebundled-only; in-app package installation is unavailable",
+          "meaning": "可用表示所扫描范围未发现本扫描器覆盖的阻断；不是运行证明。部分可用表示功能限制或证据不足，不保证存在可运行子集。",
+          "reasons": [
+            {
+              "code": "unresolved-dependencies",
+              "message": "未扫描全部必需依赖；单包结果不能证明依赖闭包在鸿蒙可运行。",
+              "evidence": [
+                {
+                  "path": "package.json",
+                  "sha256": "214e331393e15c6bf8ff879d4c7a26da5823b28aa90223ef25e15145200ad4dd",
+                  "detail": "@deepseek-ai/cordis, @deepseek-ai/dsh-session, @deepseek-ai/schemastery, zod"
+                }
+              ]
+            }
+          ],
+          "dependencies": {
+            "coverage": "not-traversed",
+            "required": [
+              {
+                "name": "@deepseek-ai/cordis",
+                "range": "^4.0.4",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/dsh-session",
+                "range": ">=0.2.0-rc.2 || >=0.2.1-rc.2",
+                "kind": "peer"
+              },
+              {
+                "name": "@deepseek-ai/schemastery",
+                "range": "^3.18.2",
+                "kind": "peer"
+              },
+              {
+                "name": "zod",
+                "range": "^4.6.7",
+                "kind": "dependency"
+              }
+            ],
+            "optional": []
+          },
+          "source": {
+            "files": 10,
+            "bytes": 764434,
+            "sha256": "49ba54a783e001f743e3f2a22b203f27e189c7bcf693264da566e14c902e552c"
+          }
+        }
+      }
+    }
+  ],
+  "blocked": [
+    {
+      "name": "dsh-univer-office",
+      "version": "0.3.9",
+      "category": "candidates",
+      "error": "package-too-large",
+      "status": "partial",
+      "label": "部分可用（证据不足）",
+      "runtimeVerdict": "unknown",
+      "scanCompleted": false,
+      "source": "https://registry.npmjs.org/dsh-univer-office/-/dsh-univer-office-0.3.9.tgz",
+      "integrity": "sha512-C0+EqSMC9XiSvmt6jQpUZnkIYeixE1DeOfQgzjsecJ2q4yNylGoS6y+lCpqNvIy2pHXYlqe/lsjDgSRPsgd1bA==",
+      "tarballSha256": "ea196132b2115f0123f0423b695740f54db4d9ce2a190bd69e2250af0fd41596",
+      "note": "候选包触发既有归档检查上限或身份校验；没有降低上限，也没有推断代码可运行。"
+    }
+  ]
+}

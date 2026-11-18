@@ -1,0 +1,381 @@
+{
+  "schema": 1,
+  "scope": "Host attachment fixtures and SDK declarations; product identities come from current source and target report",
+  "dshVersion": "0.2.2-rc.1",
+  "nodeVersion": "24.22.1",
+  "frozenTests": [
+    {
+      "path": "runtime/tests/ohos/image-attachment-entry.mjs",
+      "bytes": 11584,
+      "sha256": "9e81cb3311fa65ed64800b176168d04a90af30cf1f302e949a83cb8e6b33a4e2",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-fixtures/alpha.png",
+      "bytes": 168,
+      "sha256": "58677b1c38afb848b50d6280e6ed8e3d80f437186b72385b9a1bf226525fb956",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-fixtures/opaque.jpg",
+      "bytes": 165,
+      "sha256": "a2973c3de4188016f8a9d3a2ae0ffca92fff8f81aab9718adaac6d258bf66ec5",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-host-compat.h",
+      "bytes": 500,
+      "sha256": "7f348c45f23aa7e6286c07edec7f783660def4e690eadf9a98aa06c24814db1e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-host.h",
+      "bytes": 2271,
+      "sha256": "b182cdfbb6aa95b30789e4904f3b2d546e1b75eecaebe4772eacc1eac08de1c6",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-inputs.c",
+      "bytes": 2083,
+      "sha256": "c79fe2e7c3b3b6aec1458df4306de01e4d4b4408f9931dd7e09647bbbbd08bd2",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-inputs.h",
+      "bytes": 309,
+      "sha256": "32ca9ce6ad34bea29a9a43b653cd792bae339107bfb58d80016dda2a4be0944b",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-oracle.json",
+      "bytes": 6408,
+      "sha256": "954ab35f9c4d9e6e54f249916a09349b0d2de043a56532f0032d39f884eebb49",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-attachment-sdk.c",
+      "bytes": 26271,
+      "sha256": "fd17c7c679734de0553b3d6e1e96e095a0ac1b0d0636f34446f8e6a1e91caa24",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/image_common.h",
+      "bytes": 79062,
+      "sha256": "17af7d879f65f4d02354b1f0a456f767f256aeafbc2f336908443fa405245698",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/image_packer_native.h",
+      "bytes": 23732,
+      "sha256": "e253e51a7887f5658a8e34a56ffb209aa7f687cd1f3fadf4a3eb55129aabaddd",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/image_source_native.h",
+      "bytes": 50650,
+      "sha256": "9a5ac06dcfc6e6b53cbc5b9e1a80b9551cec2b0dbbcdc865ac17fbf0b0c0289f",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/picture_native.h",
+      "bytes": 31561,
+      "sha256": "0820a90322351c8b826ba7956121480d343b2a5a0b416b74f8891b3a681cd8b6",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/multimedia/image_framework/image/pixelmap_native.h",
+      "bytes": 66242,
+      "sha256": "079e7ac4247d473a0a415b1c06bf14d4b9c0a09664c99ea28633bff20ff3318e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-sdk26/include/native_color_space_manager/native_color_space_manager.h",
+      "bytes": 11311,
+      "sha256": "89c5b8bcc8d3d843a6ab0f422edb278382a0168fd7a8de4321231d79a120fea2",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-shims/info/application_target_sdk_version.h",
+      "bytes": 239,
+      "sha256": "721d79664db32364d65624856546dfee3c4b3670c4918bc4bb0f68c7a2eff0f9",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-shims/napi/native_api.h",
+      "bytes": 274,
+      "sha256": "beaa4ea97ed4288b9633f09e54003deaeeb972848a144a5df089fa36bc64ff2e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/tests/ohos/image-ndk-shims/rawfile/raw_file.h",
+      "bytes": 255,
+      "sha256": "d9adc2d289bd9b983848a1d252111cf86d5b1e7f5db639c773cfc4fc21f9b301",
+      "mode": "0644"
+    }
+  ],
+  "frozenSource": [
+    {
+      "path": "runtime/ohos/image/addon.cc",
+      "bytes": 34102,
+      "sha256": "4ab41a1d490c906b960b9b1b01cb2e67c2587e2a271e07067f0e5ad2f801d3a3",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/codec_bridge.h",
+      "bytes": 5804,
+      "sha256": "abc276d2ed036954511b68819a0eb0395e5de8c307cf4a1b9e7f7e1d2f0fa68e",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/codec_ndk.c",
+      "bytes": 27395,
+      "sha256": "ee043bdbf9a0c62d0df93a639d4b9a814ac75bd19645a5963e7ea6bef888522b",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/container_facts.c",
+      "bytes": 29731,
+      "sha256": "f8c49b28fdf7b1b0fdcd8646d5bea589c5a198b2ac20fd24227fbb9afdf069f2",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/container_facts.h",
+      "bytes": 2657,
+      "sha256": "d1ed8578a90b30e3dff0d577b5538c83778675a7acad6a6ac2ec8af5afede96d",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/encoding_ladder.c",
+      "bytes": 2760,
+      "sha256": "e5f11d5ffa2506e8bf3c41e7173c7d64aaf963f063736133cd4fe5122ed1fccf",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/encoding_ladder.h",
+      "bytes": 1797,
+      "sha256": "c9ad5d41af96720447d0d09ce6b79e51db68afc8f76b13ee67ae377c7c3c376d",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/image/preload.mjs",
+      "bytes": 10512,
+      "sha256": "7417380e7e01d212f66b200121d5f51fbbf08f6fb3a533c4bd6deabbd4ee7e81",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/native/hap-loader/index.cjs",
+      "bytes": 1894,
+      "sha256": "ba321e24574e0b001a170ee108a05c4eca7ceac7ab1b4b51ce772f79fdf47674",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/native/hap-loader/package.json",
+      "bytes": 152,
+      "sha256": "69de3a127be4753f3a0805351915aa3f43c39a07211d68e4c1003d62a41977ab",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/node-version.json",
+      "bytes": 10,
+      "sha256": "abbea973e37761623fc80fe12da17d79df3db932b66169da3fa1e45f552192c4",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/package/session-deletion-ohos.diff",
+      "bytes": 2710,
+      "sha256": "054a78a32a1a5a83d422632696d12e6ca054d4ab13d2a7367a807d898a3ebb62",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/preload.mjs",
+      "bytes": 769,
+      "sha256": "ed0e65dbbf5dc56a6b59d74f11bf6587a0a30057197bdf867eeedfb453ce2d04",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/publication/atomic-fuse.mjs",
+      "bytes": 7360,
+      "sha256": "0366926205d795cbea47328b912c424c1e983891c46e5a7271fdb4ca1a927e67",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/publication/atomic.mjs",
+      "bytes": 10283,
+      "sha256": "68c8b2dc916435e3c4b0ff44a326cebda41d1d8819c39629cd19c17bf43d222b",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/publication/capabilities.mjs",
+      "bytes": 1048,
+      "sha256": "68c5d6bcb9d42c5793256a9f60f17d3efed6d5b5a84933976947bd4c27709940",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/publication/index.mjs",
+      "bytes": 6628,
+      "sha256": "955e3333a2bddce130eecdb51c362b5e22f6efd7b199d4c5b6c513ed4fcff8f0",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/publication/ledger.mjs",
+      "bytes": 17798,
+      "sha256": "7c270df09f93234e968db56314777ed6d0cb07a9691268dc27072e313a2b2bb2",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/publication/preload.mjs",
+      "bytes": 167,
+      "sha256": "f96709d715008befa3dc15b6a9e1d1bdb089b00e42ee09022662422952c5cbf1",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/ohos/sim/marker.mjs",
+      "bytes": 215,
+      "sha256": "eeb23ab089e0ff7d4eeb512e8a136eee8a3f2d417e9aeeaa577f9f1a1093ac58",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/patches/ohos-image-codec.diff",
+      "bytes": 6370,
+      "sha256": "e1792145ebd63f200086b325c6c8e2e62a90011279b37a87520389d1c02e663c",
+      "mode": "0644"
+    },
+    {
+      "path": "runtime/session-deletion/core.mjs",
+      "bytes": 9564,
+      "sha256": "85d4678533627422d4c00cd7a92b6e5c1a97172a40b3b432338e0ffa579bcfe8",
+      "mode": "0644"
+    }
+  ],
+  "extraPayload": [
+    {
+      "bytes": 1241,
+      "sha256": "70be1056619663339433309474b1e6a2307088097af3cb082afe4b5ca2021b26",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/cordis/package.json"
+    },
+    {
+      "bytes": 17160,
+      "sha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/cosmokit/lib/index.js"
+    },
+    {
+      "bytes": 739,
+      "sha256": "7825705f990d7b54c6d1216da86eaf8c6a795274834be83dc0d976bbd929f9da",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/cosmokit/package.json"
+    },
+    {
+      "bytes": 1239,
+      "sha256": "2306d3519630f12be811e77a29a7867666ecb69bac014055a81489baca394269",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/dsh-attachment-local/package.json"
+    },
+    {
+      "bytes": 15516,
+      "sha256": "5940e4809c334f2bd7feedf3962126a6f04c4e36512c165d121fc5322afd3a15",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/dsh-attachment/lib/index.js"
+    },
+    {
+      "bytes": 1058,
+      "sha256": "d13da433b1985777dfa32565e76b05fcf895288b10f299e969449eae6d0a3f0f",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/dsh-attachment/package.json"
+    },
+    {
+      "bytes": 823,
+      "sha256": "b65f6d0d1ba6645e0aae801250936f0c93bdc8fde8d6b5a28d22803a614dd887",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/dsh-home-paths/package.json"
+    },
+    {
+      "bytes": 828,
+      "sha256": "eab2f914e4b5f54b2a1af5998eecd52f1b737146db44881ef51fb5e501e1faeb",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/dsh-lazy-require/lib/index.js"
+    },
+    {
+      "bytes": 858,
+      "sha256": "a3f05749fbee48fa9a9fda2bcbdbbef63b53abe566d49de9891e03fe5bb65dcb",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/dsh-lazy-require/package.json"
+    },
+    {
+      "bytes": 932,
+      "sha256": "b56f354704ff6e65c8a0c2639f0d46dffa74aaeef9c12e83d47d60f19021112b",
+      "mode": "0644",
+      "path": "node_modules/@deepseek-ai/schemastery/package.json"
+    }
+  ],
+  "runtimeMappings": [
+    {
+      "source": "runtime/ohos/publication/atomic-fuse.mjs",
+      "payload": "runtime/ohos/publication/atomic-fuse.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/publication/atomic.mjs",
+      "payload": "runtime/ohos/publication/atomic.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/publication/capabilities.mjs",
+      "payload": "runtime/ohos/publication/capabilities.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/publication/index.mjs",
+      "payload": "runtime/ohos/publication/index.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/publication/ledger.mjs",
+      "payload": "runtime/ohos/publication/ledger.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/publication/preload.mjs",
+      "payload": "runtime/ohos/publication/preload.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/node-version.json",
+      "payload": "runtime/ohos/node-version.json",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/sim/marker.mjs",
+      "payload": "runtime/ohos/sim/marker.mjs",
+      "hostFixtureOnly": true
+    },
+    {
+      "source": "runtime/ohos/image/preload.mjs",
+      "payload": "runtime/ohos/image/preload.mjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/native/hap-loader/index.cjs",
+      "payload": "node_modules/@dsh-go/ohos-native/index.cjs",
+      "hostFixtureOnly": false
+    },
+    {
+      "source": "runtime/ohos/native/hap-loader/package.json",
+      "payload": "node_modules/@dsh-go/ohos-native/package.json",
+      "hostFixtureOnly": false
+    }
+  ],
+  "formalAdditionalMappings": [
+    {
+      "source": "runtime/ohos/preload.mjs",
+      "payload": "runtime/ohos/preload.mjs",
+      "hostFixtureOnly": false
+    }
+  ],
+  "bridgeFixtureMacro": false,
+  "colorGetterPolicy": "destroy",
+  "sdkPixels": "fake",
+  "formalManifestPolicy": "Actual adjacent composer manifest required; selected original payload copied to a test-owned view, host marker added explicitly from source",
+  "componentPolicy": "Current official patcher target report and actual final OH pin bytes; no private historical receipt"
+}

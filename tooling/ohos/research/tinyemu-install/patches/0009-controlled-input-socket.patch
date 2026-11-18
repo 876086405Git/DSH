@@ -1,0 +1,89 @@
+--- a/temu.c
++++ b/temu.c
+@@ -106,6 +106,7 @@
+ static _Thread_local int (*embed_should_stop)(void *);
+ static _Thread_local void *embed_control_opaque;
+ static _Thread_local int embed_output_failed;
++static _Thread_local int embed_input_failed;
+ static _Thread_local int embed_controlled;
+ static atomic_flag embed_control_claimed = ATOMIC_FLAG_INIT;
+ static int embed_stopping(void)
+@@ -155,6 +156,15 @@
+     if (len <= 0)
+         return 0;
+ 
++#ifdef TEMU_EMBED
++    if (embed_controlled) {
++        ret = recv(s->stdin_fd, buf, len, MSG_DONTWAIT);
++        if (ret > 0) return ret; /* Controlled transport is raw bytes. */
++        if (ret == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK))
++            embed_input_failed = 1;
++        return 0;
++    }
++#endif
+     ret = read(s->stdin_fd, buf, len);
+     if (ret < 0)
+         return 0;
+@@ -264,7 +274,7 @@
+     STDIODevice *s = mallocz(sizeof(*s));
+     s->stdin_fd = in_fd;
+     embed_out_fd = out_fd;
+-    fcntl(in_fd, F_SETFL, O_NONBLOCK);
++    if (!embed_controlled) fcntl(in_fd, F_SETFL, O_NONBLOCK);
+     dev->opaque = s;
+     dev->write_data = console_write;
+     dev->read_data = console_read;
+@@ -1001,11 +1011,12 @@
+         s->net->device_set_carrier(s->net, TRUE);
+     if (initialized)
+         initialized(opaque);
+-    while (!s->embed_poweroff && !embed_stopping() && !embed_output_failed)
++    while (!s->embed_poweroff && !embed_stopping() && !embed_output_failed && !embed_input_failed)
+         virt_machine_run(s);
+     /* CPU dispatch ended; device teardown is not implemented. Keep the owner
+        quarantined, never classify this as a reusable successful shutdown. */
+     if (embed_output_failed) return TEMU_EMBED_OUTPUT_UNRELEASED;
++    if (embed_input_failed) return TEMU_EMBED_INPUT_UNRELEASED;
+     if (s->embed_poweroff) return TEMU_EMBED_STOPPED_UNRELEASED;
+     return TEMU_EMBED_CANCELLED_UNRELEASED;
+ 
+@@ -1029,7 +1040,9 @@
+     int type;
+     socklen_t size = sizeof(type);
+     int result;
+-    if (!stop || getsockopt(out_fd, SOL_SOCKET, SO_TYPE, &type, &size) < 0 ||
++    if (!stop || in_fd < 0 || in_fd >= FD_SETSIZE ||
++        getsockopt(in_fd, SOL_SOCKET, SO_TYPE, &type, &size) < 0 ||
++        type != SOCK_STREAM || getsockopt(out_fd, SOL_SOCKET, SO_TYPE, &type, &size) < 0 ||
+         type != SOCK_STREAM)
+         return TEMU_EMBED_RETRYABLE_START_FAILURE;
+     if (atomic_flag_test_and_set(&embed_control_claimed))
+@@ -1038,6 +1051,7 @@
+     embed_should_stop = stop;
+     embed_control_opaque = opaque;
+     embed_output_failed = 0;
++    embed_input_failed = 0;
+     result = temu_embed_run_initialized(path, in_fd, out_fd, initialized, opaque);
+     embed_controlled = 0;
+     embed_should_stop = NULL;
+--- a/temu_embed.h
++++ b/temu_embed.h
+@@ -14,7 +14,8 @@
+     TEMU_EMBED_STOPPED_UNRELEASED = -3,
+     TEMU_EMBED_CANCELLED_UNRELEASED = -4,
+     TEMU_EMBED_OUTPUT_UNRELEASED = -5,
+-    TEMU_EMBED_OWNER_UNRELEASED = -6
++    TEMU_EMBED_OWNER_UNRELEASED = -6,
++    TEMU_EMBED_INPUT_UNRELEASED = -7
+ };
+ 
+ /* Callback runs synchronously on the machine thread after initialization and
+@@ -26,7 +27,7 @@
+ int temu_embed_run(const char *path, int in_fd, int out_fd);
+ 
+ /* Both callbacks execute synchronously on the VM thread and must not block.
+- * stdout is a caller-owned stream socket. The caller joins its machine thread
++ * stdin and stdout are caller-owned stream sockets; neither OFD is mutated. The caller joins its machine thread
+  * after return, but MUST retain the unreleased VM owner/library thereafter. */
+ int temu_embed_run_controlled(const char *path, int in_fd, int out_fd,
+                              TemuInitialized initialized, TemuShouldStop stop,

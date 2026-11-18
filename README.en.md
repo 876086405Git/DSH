@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  An Android client for DeepSeek Harness. Run DSH right on your phone, or drive the one on your computer.
+  A mobile client for DeepSeek Harness. Android is released; iOS is in development and device testing, and currently needs a Mac build signed with your own team (<a href="app/ios/README.md">iOS project</a> · <a href="docs/architecture.md">architecture</a>).
 </p>
 
 <p align="center">
@@ -51,7 +51,7 @@
 </p>
 
 <p align="center">
-  <b>Thank you all for supporting and loving DSH Go! iOS and HarmonyOS versions are coming as soon as I can make them. The more stars, the faster they come, hehe</b>
+  <b>Thank you for supporting DSH Go! The download page currently provides Android APKs. iOS is still in development and device testing, with no public install package yet; HarmonyOS work continues too.</b>
 </p>
 
 <p align="center">
@@ -294,15 +294,15 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 
 | Path | Contents |
 | --- | --- |
-| `app/` | Flutter interface and Android Kotlin platform code |
+| `app/` | Flutter interface, Android Kotlin code, and iOS Swift/WidgetKit code under development |
 | `packages/dsh_client/` | Dart client for the DSH Web API |
 | `packages/dsh_remote/` | Dart client for DSH Remote |
-| `runtime/` | Linux runtime assembly, engine patches and the app bridge |
+| `runtime/` | Android Linux runtime assembly, iOS runtime specialization, engine patches and the app bridge |
 | `sdk/plugin-kit/` | Native plugin authoring kit, used from the repository and not published to npm |
 | `examples/plugins/` | Example plugins |
 | `docs/guide/`, `docs/plugins/`, `docs/pets/`, `docs/live2d/` | User guides, plugin development, pet packs and Live2D companion authoring |
 | `docs/assets/` | Showcase images, pet animations and community QR codes used on this page |
-| `tooling/` | Toolchain, APK build and diagnostic scripts |
+| `tooling/` | Toolchain, Android APK/iOS development build, and diagnostic scripts |
 | `services/`, `site/`, `infra/` | Companion sharing service, website and deployment materials |
 
 ## Contribute

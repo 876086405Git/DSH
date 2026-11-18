@@ -26,7 +26,10 @@ void main() {
 
     test('only the makers\' switches go to the native side, by its names', () {
       expect([for (final i in _i) ?i.vendorWire], ['background', 'autostart', 'popup']);
-      expect([for (final i in _i) if (i.dialog) i], [AccessItem.mic, AccessItem.storage, AccessItem.battery]);
+      expect(
+        [for (final i in _i) if (i.dialogOn('android')) i],
+        [AccessItem.mic, AccessItem.storage, AccessItem.battery],
+      );
     });
   });
 

@@ -1,0 +1,14 @@
+diff --git a/deps/undici/src/lib/web/fetch/body.js b/deps/undici/src/lib/web/fetch/body.js
+--- a/deps/undici/src/lib/web/fetch/body.js
++++ b/deps/undici/src/lib/web/fetch/body.js
+@@ -158,8 +158,8 @@
+       length = null
+     }
+ 
+-    // Set source to object.
+-    source = object
++    // Keep the boundary and entry snapshot when a redirect replays the body.
++    source = new Blob(blobParts)
+ 
+     action = async function * () {
+       for (const part of blobParts) {

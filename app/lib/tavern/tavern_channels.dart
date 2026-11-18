@@ -13,6 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import '../secrets/secure_storage.dart';
+
 /// DeepSeek's own API, the built-in channel.
 const tavernDeepSeekBaseUrl = 'https://api.deepseek.com';
 
@@ -149,11 +151,12 @@ abstract class TavernChannelKeys {
 }
 
 class SecureTavernChannelKeys implements TavernChannelKeys {
-  const SecureTavernChannelKeys([this._storage = const FlutterSecureStorage()]);
+  const SecureTavernChannelKeys([this._injected]);
 
   static const prefix = 'tavern_channel_key_';
   static const headersPrefix = 'tavern_channel_headers_';
-  final FlutterSecureStorage _storage;
+  final FlutterSecureStorage? _injected;
+  AppSecureStorage get _storage => AppSecureStorage(_injected);
 
   @override
   Future<String?> read(String id) => _storage.read(key: '$prefix$id');

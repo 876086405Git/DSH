@@ -85,6 +85,76 @@ void main() {
     await other.close();
   });
 
+  test('an MVU event is answered with its candidate as the listeners left it', () async {
+    final pages = TavernScriptPages();
+    pages.add('ctx', (d) async => true);
+    final answer = pages.dispatch(
+      TavernScriptDispatch(
+        kind: TavernScriptDispatchKind.lifecycle,
+        eventId: 'm1',
+        contextId: 'ctx',
+        seq: 1,
+        namespace: 'tavern',
+        name: 'mag_command_parsed',
+        args: [
+          <String, Object?>{'stat_data': <String, Object?>{}},
+          <Object?>[],
+          'raw',
+        ],
+      ),
+      _Never(),
+    );
+    await Future<void>.delayed(Duration.zero);
+    pages.acknowledge('m1', {
+      'status': 'completed',
+      'mvu': {
+        'data': {
+          'stat_data': {'好感度': 5},
+        },
+        'commands': [
+          {
+            'type': 'set',
+            'full_match': "_.set('好感度', 0, 5);",
+            'args': ['好感度', '0', '5'],
+            'reason': '',
+          },
+        ],
+      },
+    });
+    final ack = await answer;
+    expect(ack.mvu!.data, {
+      'stat_data': {'好感度': 5},
+    });
+    expect(ack.mvu!.commands!.single['type'], 'set');
+    expect(ack.mvu!.beforeData, isNull);
+    // An answer without one leaves the candidate as it was.
+    final plain = pages.dispatch(
+      TavernScriptDispatch(kind: TavernScriptDispatchKind.lifecycle, eventId: 'm2', contextId: 'ctx', seq: 2),
+      _Never(),
+    );
+    await Future<void>.delayed(Duration.zero);
+    pages.acknowledge('m2', {'status': 'completed'});
+    expect((await plain).mvu, isNull);
+    // A listener left a command that is not one: not taken, the event failed.
+    final bad = pages.dispatch(
+      TavernScriptDispatch(kind: TavernScriptDispatchKind.lifecycle, eventId: 'm3', contextId: 'ctx', seq: 3),
+      _Never(),
+    );
+    await Future<void>.delayed(Duration.zero);
+    pages.acknowledge('m3', {
+      'status': 'completed',
+      'mvu': {
+        'data': <String, Object?>{},
+        'commands': [null],
+      },
+    });
+    final refused = await bad;
+    expect(
+      (refused.status, refused.mvu, refused.issues.single.code),
+      (TavernScriptAckStatus.failed, null, 'invalidArgument'),
+    );
+  });
+
   test("a lifecycle event waits for the page's handlers, and says how they went", () async {
     final pages = TavernScriptPages();
     final put = <Map<String, Object?>>[];

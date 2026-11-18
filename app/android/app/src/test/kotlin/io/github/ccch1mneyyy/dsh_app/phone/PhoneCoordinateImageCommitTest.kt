@@ -44,7 +44,9 @@ class PhoneCoordinateImageCommitTest {
             override fun gate() = object : UserGate {
                 override fun confirm(request: ConfirmRequest): Decision {
                     confirmations++
-                    assertFalse(request.offerTaskWaiver)
+                    // In ASK mode an unknown coordinate has no visual scope to inherit.
+                    assertNull(request.visualScope)
+                    assertTrue(request.allowRound)
                     return Decision.ALLOW_ONCE
                 }
                 override fun handoff(reason: String, timeoutMs: Long): HandoffResult = error("unused")
@@ -64,14 +66,14 @@ class PhoneCoordinateImageCommitTest {
         override fun close() { core.worker.shutdown() }
     }
 
-    @Test fun retainedImageCommitsThroughRealOwnerLedgerAndBackgroundTapStillConfirms() {
+    @Test fun retainedImageCommitsThroughRealOwnerLedgerAndWaivedTapSkipsConfirmation() {
         Fixture().use { f ->
             assertFalse(f.read().isError)
             assertEquals(1, f.acceptCalls)
             assertFalse(f.tap().isError)
-            assertEquals(1, f.confirmations)
+            assertEquals(0, f.confirmations)
             assertTrue(f.tap().isError) // Same image cannot authorize a second action.
-            assertEquals(2, f.confirmations)
+            assertEquals(0, f.confirmations)
         }
     }
 

@@ -7,6 +7,7 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../runtime/local_paths.dart';
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
 import 'account_state.dart';
@@ -43,8 +44,8 @@ final localReadListRootProvider = FutureProvider<String?>((ref) async {
     ),
   );
   try {
-    final support = await getApplicationSupportDirectory();
-    return await Directory('${support.path}/runtime/rootfs').resolveSymbolicLinks();
+    final root = LocalPaths.root ?? '${(await getApplicationSupportDirectory()).path}/runtime/rootfs';
+    return await Directory(root).resolveSymbolicLinks();
   } on Object {
     return null;
   }

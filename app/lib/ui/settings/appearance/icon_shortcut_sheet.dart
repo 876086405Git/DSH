@@ -27,6 +27,7 @@ import '../../../launch/launch_import.dart' show edgeColour;
 import '../../../plugins/native/native_effects.dart';
 import '../../../plugins/native/native_file_platform.dart';
 import '../../../state/app_icon_state.dart';
+import '../../../state/android_features.dart' show operatingSystemProvider;
 import '../../../state/app_info.dart';
 import '../../../state/icon_shortcut_state.dart';
 import '../../common/app_sheet.dart';
@@ -296,18 +297,21 @@ class _IconShortcutSheetState extends ConsumerState<IconShortcutSheet> {
                       l10n.iconShortcutConfirm,
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(child: Text(l10n.iconShortcutNoDialog, style: note)),
-                        TextButton(
-                          key: const ValueKey('shortcut-settings'),
-                          onPressed: () => unawaited(ref.read(iconShortcutChannelProvider).openAppSettings()),
-                          child: Text(l10n.iconShortcutSettings),
-                        ),
-                      ],
-                    ),
+                    // HarmonyOS asks before the request returns: nothing to allow afterwards.
+                    if (ref.watch(operatingSystemProvider) != 'ohos') ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: Text(l10n.iconShortcutNoDialog, style: note)),
+                          TextButton(
+                            key: const ValueKey('shortcut-settings'),
+                            onPressed: () => unawaited(ref.read(iconShortcutChannelProvider).openAppSettings()),
+                            child: Text(l10n.iconShortcutSettings),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ],
               ),

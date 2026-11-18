@@ -1,4 +1,9 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/services.dart' show BinaryMessenger;
 import 'package:flutter/widgets.dart';
+
+import '../../clipboard/paste_button_messenger.dart';
 
 /// 动画时钟防跳帧。
 ///
@@ -49,4 +54,8 @@ class SteadyFrameBinding extends WidgetsFlutterBinding {
   void handleBeginFrame(Duration? rawTimeStamp) {
     super.handleBeginFrame(rawTimeStamp == null ? null : FrameClock.instance.adjust(rawTimeStamp));
   }
+
+  @override
+  BinaryMessenger createBinaryMessenger() =>
+      clipboardMessengerFor(Platform.operatingSystem, super.createBinaryMessenger());
 }

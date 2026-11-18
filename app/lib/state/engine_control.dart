@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
+import 'android_features.dart' show operatingSystemProvider;
 
 /// Multi-step engine actions built on [localRuntimeProvider].
 ///
@@ -56,6 +57,18 @@ abstract final class EngineControl {
   static bool shouldAutoStart(RuntimeStatus status) =>
       !(status.safeState == SafeModeState.off && !status.autoSafe && status.strikes >= 2);
 
+  /// What the launch-time start goes by. A run that merely didn't end cleanly
+  /// (HarmonyOS, [RuntimeFailure.causeUnknown]: the system reclaiming the app
+  /// reads the same) doesn't stop the next one until [shouldAutoStart] says so.
+  static bool startsAtLaunch(RuntimeStatus status) {
+    final unclean =
+        status.phase == RuntimePhase.error &&
+        status.error == null &&
+        status.failure?.kind == FailureKind.killed &&
+        status.failure!.causeUnknown;
+    return (status.phase == RuntimePhase.installed || unclean) && shouldAutoStart(status);
+  }
+
   /// Stops before renaming home-level files, then starts the safe profile.
   static Future<void> enterSafeMode(ProviderContainer container, {List<String> moveAside = const []}) async {
     if (moveAside.isEmpty) {
@@ -81,7 +94,11 @@ abstract final class EngineControl {
         status.phase == RuntimePhase.starting ||
         status.phase == RuntimePhase.stopping;
     // Only a currently running safe profile may keep running during this write.
-    final safeRunning = status.inSafeMode && status.phase == RuntimePhase.running;
+    // OH must observe the embedded Node's exit even when its safe profile runs.
+    final safeRunning =
+        status.inSafeMode &&
+        status.phase == RuntimePhase.running &&
+        container.read(operatingSystemProvider) != 'ohos';
     if (busy && !safeRunning && !await _stopAndWait(container)) {
       throw PlatformException(code: 'runtime_not_stopped');
     }

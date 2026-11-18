@@ -11,6 +11,7 @@ import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
 import '../common/overview_card.dart';
 import '../onboarding/api_key_page.dart';
+import '../settings/credential_recovery_dialog.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
@@ -512,6 +513,11 @@ Future<void> manageApiKey(BuildContext context, WidgetRef ref) async {
           ],
         ),
       );
-      if (ok == true) await ref.read(settingsProvider.notifier).setApiKey('');
+      if (ok != true) return;
+      try {
+        await ref.read(settingsProvider.notifier).setApiKey('');
+      } catch (e) {
+        if (!context.mounted || !await offerCredentialRecovery(context, ref, e)) rethrow;
+      }
   }
 }

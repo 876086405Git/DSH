@@ -62,6 +62,8 @@ class PhoneTasks(
     private var stopSource: StopSource? = null
     private var interrupted = false
     private val approved = LinkedHashSet<String>()
+    // 本轮允许: app + 动作类别 granted for this turn only; endLocked clears it.
+    private val grants = LinkedHashSet<String>()
     private var waived = false
     private var visualLifecycle = -1L
     private val visualScopes = mutableMapOf<PhoneScreen, VisualScope>()
@@ -92,7 +94,7 @@ class PhoneTasks(
             val now = clock()
             if (now < stoppedUntil) {
                 stoppedUntil = now + stopHoldMs
-                return Begin.Refused(STOPPED_MESSAGE + (stopReason?.let { "（$it）" } ?: ""))
+                return Begin.Refused(if (stopSource == StopSource.USER) STOPPED_MESSAGE else ENV_STOPPED_MESSAGE)
             }
             interrupted = false
             // This call is in flight already, so only the pause and the clock count here.
@@ -303,23 +305,35 @@ class PhoneTasks(
         fire()
     }
 
-    /** Exact host run end wakes queued work without treating it as a new user stop/resume. */
+    /** Exact host run end wakes queued work and drops the stop hold: 停止只作用于本轮. */
     fun cancelPending() {
-        synchronized(lock) { lifecycle++; admissionEpoch++; paused = false; lock.notifyAll() }
+        synchronized(lock) {
+            lifecycle++
+            admissionEpoch++
+            paused = false
+            stoppedUntil = 0L
+            stopReason = null
+            interrupted = false
+            lock.notifyAll()
+        }
         fire()
     }
 
     /** Applying a late waiver and checking its owner are one operation. */
-    fun confirmIfCurrent(owner: Owner, pkg: String? = null, waiveTask: Boolean = false): Boolean {
+    fun confirmIfCurrent(owner: Owner, pkg: String? = null, waiveTask: Boolean = false, grant: String? = null): Boolean {
         var changed = false
         synchronized(lock) {
             if (!owner.active || !currentLocked(owner)) return false
             if (pkg != null) approved += pkg
+            if (grant != null) grants += grant
             if (waiveTask && !waived) { waived = true; changed = true }
         }
         if (changed) fire()
         return true
     }
+
+    /** 本轮允许 already granted for this app and kind of action. */
+    fun hasGrant(pkg: String?, kind: String): Boolean = synchronized(lock) { grantKey(pkg, kind) in grants }
 
     /** All consumers hold the original owner; scope changes revoke rather than restore history. */
     fun syncVisualScope(owner: Owner, screen: PhoneScreen, scope: VisualScope?): Boolean = synchronized(lock) {
@@ -514,6 +528,7 @@ class PhoneTasks(
         lifecycle++
         active = false
         approved.clear()
+        grants.clear()
         visualScopes.clear(); visualGrants.clear(); visualLifecycle = lifecycle
         waived = false
         notified.clear()
@@ -532,8 +547,28 @@ class PhoneTasks(
     }
 
     companion object {
+        /** 本轮不再执行: the person stopped this turn. The next turn starts fresh and asks again. */
         // l10n:keep agent stop protocol
-        const val STOPPED_MESSAGE = "本轮手机操作已停止。不要重试本轮手机动作；与手机无关的工作可继续"
+        const val STOPPED_MESSAGE = "你停止了本轮手机操作，本轮不再执行手机动作；下一轮会恢复，届时会重新向你确认"
+
+        /** This one action was cancelled; the rest of the turn is unaffected. */
+        // l10n:keep agent cancel protocol
+        const val CANCELLED_MESSAGE = "这一条手机动作已取消，没有执行；本轮其他手机操作不受影响"
+
+        /** 熄屏 / 无障碍断开 stopped this turn (not the person). */
+        // l10n:keep agent environment-stop protocol
+        const val ENV_STOPPED_MESSAGE = "手机操控被系统中断（熄屏或无障碍断开），本轮不再执行手机动作；恢复后下一轮会重新向你确认"
+
+        /** The host ended this turn; the next turn asks again. */
+        // l10n:keep agent run-end protocol
+        const val RUN_ENDED_MESSAGE = "本轮已结束，这条手机动作没有执行；下一轮会恢复，届时会重新向你确认"
+
+        /** No confirmation surface is reachable, so this one action did not run. */
+        // l10n:keep agent no-gate protocol
+        const val NO_CONFIRM_MESSAGE = "这一条需要你确认，但现在无法弹出确认界面，没有执行；本轮其他手机操作不受影响。请允许 DSH 发通知，或开启无障碍"
+
+        /** 本轮授权 key: the app plus the kind of action the person allowed for this turn. */
+        fun grantKey(pkg: String?, kind: String): String = (pkg ?: "") + "\u0000" + kind
     }
 }
 

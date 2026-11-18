@@ -9,6 +9,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/app_icon_state.dart';
 import 'package:dsh_app/ui/settings/appearance/app_icon_picker.dart';
 import 'package:dsh_app/ui/settings/settings_widgets.dart';
@@ -54,13 +55,18 @@ Widget _page() => Scaffold(
   ),
 );
 
-Future<void> _pump(WidgetTester tester, _FakeLauncher launcher, {Brightness brightness = Brightness.light}) async {
+Future<void> _pump(
+  WidgetTester tester,
+  _FakeLauncher launcher, {
+  Brightness brightness = Brightness.light,
+  String os = 'android',
+}) async {
   usePhoneSurface(tester);
   await tester.pumpWidget(
     goldenApp(
       home: _page(),
       brightness: brightness,
-      overrides: [launcherIconChannelProvider.overrideWithValue(launcher)],
+      overrides: [launcherIconChannelProvider.overrideWithValue(launcher), operatingSystemProvider.overrideWithValue(os)],
     ),
   );
   await tester.pumpAndSettle();
@@ -109,6 +115,18 @@ void main() {
       expect(launcher.sets, [AppIcon.ink]);
       expect(_chosen(tester), AppIcon.mist);
       expect(find.text('没能更换，稍后再试'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('on HarmonyOS a refusal says why trying again won\'t help', (tester) async {
+      final handle = tester.ensureSemantics();
+      final launcher = _FakeLauncher()..fail = true;
+      await _pump(tester, launcher, os: 'ohos');
+      await tester.tap(find.text('墨'));
+      await tester.pumpAndSettle();
+      expect(_chosen(tester), AppIcon.mist);
+      expect(find.text('没能更换。使用自定义主题或应用分身时不能换桌面图标'), findsOneWidget);
+      expect(find.text('没能更换，稍后再试'), findsNothing);
       handle.dispose();
     });
 

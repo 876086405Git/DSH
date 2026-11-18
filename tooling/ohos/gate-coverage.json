@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "wrappers": {
+    "process-test": [
+      "runtime/tests/ohos/node-script-runtime.test.mjs",
+      "runtime/tests/ohos/node-script-stderr.test.mjs",
+      "runtime/tests/ohos/node-script-unavailable.test.mjs",
+      "runtime/tests/ohos/node-script.test.mjs",
+      "runtime/tests/ohos/process-android-path.test.mjs",
+      "runtime/tests/ohos/process-cancel-before-start.test.mjs",
+      "runtime/tests/ohos/process-combined.test.mjs",
+      "runtime/tests/ohos/process-control-flow.test.mjs",
+      "runtime/tests/ohos/process-date-timezone.test.mjs",
+      "runtime/tests/ohos/process-diagnostics.test.mjs",
+      "runtime/tests/ohos/process-independent-open.test.mjs",
+      "runtime/tests/ohos/process-integration.test.mjs",
+      "runtime/tests/ohos/process-live-output.test.mjs",
+      "runtime/tests/ohos/process-policy.test.mjs",
+      "runtime/tests/ohos/process-readwrite-bytes.test.mjs",
+      "runtime/tests/ohos/process-readwrite-freshness.test.mjs",
+      "runtime/tests/ohos/process-readwrite-read-errors.test.mjs",
+      "runtime/tests/ohos/process-scoped-fd.test.mjs",
+      "runtime/tests/ohos/process-startup-import.test.mjs",
+      "runtime/tests/ohos/process-stderr-limit.test.mjs",
+      "runtime/tests/ohos/process-streaming.test.mjs",
+      "runtime/tests/ohos/process-symlink-mount.test.mjs",
+      "runtime/tests/ohos/process-wc-counts.test.mjs",
+      "runtime/tests/ohos/process.test.mjs"
+    ],
+    "process-test-roots": [
+      "runtime/tests/ohos/process-concurrency.test.mjs",
+      "runtime/tests/ohos/process-roots-lifecycle.test.mjs",
+      "runtime/tests/ohos/process-search-roots.test.mjs"
+    ],
+    "net-test": [
+      "runtime/tests/ohos/net.test.mjs"
+    ],
+    "net-test-integration": [
+      "runtime/tests/ohos/net-android-path.test.mjs",
+      "runtime/tests/ohos/net-integration.test.mjs"
+    ],
+    "net-test-proxy-env": [
+      "runtime/tests/ohos/net-proxy-env.test.mjs"
+    ],
+    "net-test-dispatcher-errors": [
+      "runtime/tests/ohos/net-headers.test.mjs",
+      "runtime/tests/ohos/net-policy-closed.test.mjs"
+    ],
+    "git-client-*": [
+      "runtime/tests/ohos/git-owned-client.test.mjs",
+      "runtime/tests/ohos/git-path-output.test.mjs",
+      "runtime/tests/ohos/process-git-link-first-hop.test.mjs"
+    ],
+    "git-oracle-*": [
+      "runtime/tests/ohos/git.test.mjs"
+    ],
+    "git-semantics-*": [
+      "runtime/tests/ohos/git-selection.test.mjs"
+    ],
+    "git-worker-*": [
+      "runtime/tests/ohos/process-git-integration.test.mjs"
+    ],
+    "owned-core-*": [
+      "runtime/tests/ohos/owned-resources.test.mjs"
+    ],
+    "owned-rpc-*": [
+      "runtime/tests/ohos/owned-rpc.test.mjs"
+    ],
+    "owned-share-*": [
+      "runtime/tests/ohos/owned-share.test.mjs"
+    ],
+    "native-files": [
+      "runtime/tests/ohos/native-files.test.mjs"
+    ],
+    "voice": [
+      "runtime/tests/ohos/voice-channel.test.mjs"
+    ],
+    "pdf": [
+      "runtime/tests/ohos/pdf-pages.test.mjs",
+      "runtime/tests/ohos/files-pdf-channel.test.mjs"
+    ],
+    "hms-share": [
+      "runtime/tests/ohos/hms-share-channel.test.mjs"
+    ],
+    "native-media": [
+      "runtime/tests/ohos/native-media.test.mjs"
+    ],
+    "performance-dart": [
+      "runtime/tests/ohos/performance.test.mjs"
+    ],
+    "diagnostics-dart": [
+      "runtime/tests/ohos/diagnostics.test.mjs"
+    ]
+  },
+  "historicalOrResearchOnly": {
+    "runtime/tests/ohos/android-recipe-compat.test.py": "Historical f387 input assertions. The current gate calls current-android-targets.py against the supplied exact Android baseline and fresh target prefixes; no claim that this historic file passed.",
+    "runtime/tests/ohos/publication-fallback-evaluation/fallback-io.test.mjs": "Research comparison of baseline/naive/guarded experimental implementations, not the current product. Current publication atomic/fuse/errno/installed gates remain mandatory."
+  }
+}

@@ -14,6 +14,8 @@
   "accessFeatureBackgroundNeeds": "任务跑完通知你，需要通知和后台权限",
   "accessFeatureVoice": "语音输入",
   "accessFeatureVoiceNeeds": "需要麦克风权限",
+  "accessFeatureAlerts": "回复提醒",
+  "accessFeatureAlertsNeeds": "需要通知权限",
   "accessVoiceModel": "离线识别，需下载约 {size} MB 语音模型",
   "@accessVoiceModel": {
     "placeholders": {

@@ -24,12 +24,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/l10n.dart';
 import '../../../plugins/native/native_model.dart';
 import '../../../plugins/native/native_state.dart';
+import '../../../state/android_features.dart';
 import '../../../state/chat_state.dart';
 import '../../../state/connection_state.dart';
 import '../../../state/features_state.dart';
 import '../../../state/hosts_state.dart';
 import '../../../state/phone_state.dart';
 import '../../../state/session_modes.dart';
+import '../../../state/system_actions_state.dart';
 import '../../common/app_sheet.dart';
 import '../../common/list_page_row.dart';
 import '../../common/risk_notice.dart';
@@ -38,6 +40,7 @@ import '../../common/sheet_title_bar.dart';
 import '../../features/feature_format.dart';
 import '../../features/permission_page.dart' show confirmPermission, writePermissionDefault;
 import '../../phone/phone_control_screen.dart' show PhoneConfirmModeText;
+import '../../phone/system_actions_page.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 
@@ -160,6 +163,11 @@ class _PlusRoot extends ConsumerWidget {
         const _PluginTools(),
         if (sessionId != null) ...[const SizedBox(height: 16), _ThisChatCard(sessionId: sessionId)],
         if (phoneOn) ...[const SizedBox(height: 24), const _PhoneCard()],
+        if (ref.watch(operatingSystemProvider) == 'ohos' &&
+            ref.watch(systemActionsProvider.select((s) => s.enabled))) ...[
+          const SizedBox(height: 24),
+          const _SystemActionsCard(),
+        ],
         const SizedBox(height: 20),
       ],
     );
@@ -304,7 +312,7 @@ class _ThisChatCardState extends ConsumerState<_ThisChatCard> {
           child: ListPageRow(
             title: l10n.hubSessionPlanMode,
             onTap: _busy ? null : () => unawaited(_togglePlan(!plan)),
-            trailing: Switch(value: plan, onChanged: _busy ? null : (v) => unawaited(_togglePlan(v))),
+            trailing: Switch.adaptive(value: plan, onChanged: _busy ? null : (v) => unawaited(_togglePlan(v))),
           ),
         ),
       ],
@@ -328,6 +336,31 @@ class _PhoneCard extends ConsumerWidget {
           title: l10n.phoneConfirmTitle,
           value: mode?.label,
           onTap: mode == null ? null : () => SheetNavigator.of(context).push((_) => const _ConfirmModePage()),
+        ),
+      ],
+    );
+  }
+}
+
+/// 系统操作: confirmed the way the chat's permissions say, so there is no mode to
+/// pick here; the row opens its page.
+class _SystemActionsCard extends StatelessWidget {
+  const _SystemActionsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return ListPageCard(
+      title: l10n.systemActionsTitle,
+      margin: const EdgeInsets.symmetric(horizontal: PlusPanelMetrics.side),
+      children: [
+        ListPageRow(
+          title: l10n.systemActionsConfirmTitle,
+          value: l10n.systemActionsConfirmValue,
+          onTap: () => Navigator.of(
+            context,
+            rootNavigator: true,
+          ).push(MaterialPageRoute<void>(builder: (_) => const SystemActionsPage())),
         ),
       ],
     );

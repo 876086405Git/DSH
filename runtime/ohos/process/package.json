@@ -1,0 +1,12 @@
+{
+  "name": "@dsh-go/ohos-subprocess",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": ".\/index.mjs",
+  "dependencies": {
+    "just-bash": "3.6.0",
+    "isomorphic-git": "1.44.9",
+    "re2js": "1.3.3"
+  }
+}

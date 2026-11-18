@@ -1,0 +1,63 @@
+diff --git a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+index 99463d6..66ee323 100644
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1482,7 +1482,7 @@ function pointsInto(link, root) {
+ }
+ /** Read one package manifest while traversing a dependency graph. */
+ function readPackageManifest(anchor) {
+-	return JSON.parse(readFileSync(anchor, "utf8"));
++	return JSON.parse(readFileSync(anchor, "utf8").replace(/^\uFEFF/, ""));
+ }
+ /** Return dependency names that may be imported by a loader-visible plugin. */
+ function profileDependencyNames(manifest) {
+@@ -1690,7 +1690,7 @@ function readProfileManifest(binName, dir) {
+ 	} catch (error) {
+ 		throw new Error(`${binName}: failed to read profile manifest ${path}: ${String(error)}`);
+ 	}
+-	const parsed = JSON.parse(raw);
++	const parsed = JSON.parse(raw.replace(/^\uFEFF/, ""));
+ 	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${binName}: profile manifest ${path} must hold a JSON object`);
+ 	return parsed;
+ }
+@@ -2943,10 +2943,11 @@ function textOf(value, path) {
+ 	if (typeof value !== "string" || value.trim() === "") throw new Error(`${path} must be a non-empty string`);
+ 	return value;
+ }
+-function readObject(file) {
++function readObject(file, packageManifest = false) {
+ 	let contents;
+ 	try {
+-		contents = JSON.parse(readFileSync(file, "utf8"));
++		const text = readFileSync(file, "utf8");
++		contents = JSON.parse(packageManifest ? text.replace(/^\uFEFF/, "") : text);
+ 	} catch (error) {
+ 		throw new Error(`${file}: ${String(error)}`);
+ 	}
+@@ -3010,7 +3011,7 @@ function readPluginMeta(specifier, parentURL) {
+ 		const englishPath = optionalResourcePath(`${specifier}/locale/en.json`, parentURL);
+ 		const dictionaries = englishPath === void 0 ? /* @__PURE__ */ new Map() : dictionariesOf(englishPath, specifier, parentURL);
+ 		const manifestPath = packageName === specifier ? optionalResourcePath(`${specifier}/package.json`, parentURL) : void 0;
+-		const manifest = manifestPath === void 0 ? void 0 : readObject(manifestPath);
++		const manifest = manifestPath === void 0 ? void 0 : readObject(manifestPath, true);
+ 		const title = localizedText("title", dictionaries, fallbackText(manifest?.name), specifier);
+ 		const description = localizedText("description", dictionaries, fallbackText(manifest?.description), "");
+ 		const text = {
+@@ -3039,7 +3040,7 @@ function readPluginMeta(specifier, parentURL) {
+ //#region lib/types/compatibility-preflight.js
+ /** Compatibility checks at the composition entry points DSH owns; no Loader instrumentation. */
+ function readManifest(filename) {
+-	return JSON.parse(readFileSync(filename, "utf8"));
++	return JSON.parse(readFileSync(filename, "utf8").replace(/^\uFEFF/, ""));
+ }
+ /** Render the patch wording an Include would report, through the profile's logger. */
+ function patchWarning(ctx) {
+@@ -4231,7 +4232,7 @@ async function generateConfigSchema(profile, layers, installAnchor) {
+ function readPackage(dir, fallbackName) {
+ 	const manifestPath = join(dir, "package.json");
+ 	if (!existsSync(manifestPath)) return void 0;
+-	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
++	const manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
+ 	const name = manifest.name;
+ 	const version = manifest.version;
+ 	return {

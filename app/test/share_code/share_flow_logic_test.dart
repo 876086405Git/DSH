@@ -257,6 +257,16 @@ void main() {
       expect(plan.defaultSelection, isNot(contains('preset:writer')), reason: 'presets follow their plugin');
     });
 
+    test('an engine that refuses market installs blocks the plugin rows and says so', () async {
+      final plan = await planImport(
+        profile(),
+        ImportTarget(_host(client), isActive: true, installRefused: true),
+        net: net,
+        fs: fs,
+      );
+      expect(plan.changes.firstWhere((c) => c.id == 'plugin:dsh-writer').blocked, '这个引擎不能安装市场插件');
+    });
+
     test('a changed package or a host that cannot install blocks the plugin rows', () async {
       final mismatch = await planImport(
         profile(integrity: 'sha512-AAAA'),

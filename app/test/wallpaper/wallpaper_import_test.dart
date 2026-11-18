@@ -133,13 +133,13 @@ void main() {
       expect(problem, LaunchImportProblem.unavailable);
     });
 
-    test('a new picture replaces the old file, keeps the look, starts the framing over', () async {
+    test('a new picture keeps the look, starts the framing over, and leaves the old file to the save', () async {
       final (first, _) = await importer(_Platform([])).keep(Stream.value(_bytes(brightFixture)));
       final tuned = first!.copyWith(zoom: 2, alignX: 0.5, blur: 0.7, lighten: 0.1, dim: 0.6);
       await Future<void>.delayed(const Duration(milliseconds: 2));
       final (second, problem) = await importer(_Platform([])).keep(Stream.value(_bytes(darkFixture)), previous: tuned);
       expect(problem, isNull);
-      expect(File(first.path).existsSync(), isFalse);
+      expect(File(first.path).existsSync(), isTrue, reason: 'the controller removes it once the new one is saved');
       expect(File(second!.path).existsSync(), isTrue);
       expect((second.blur, second.lighten, second.dim), (0.7, 0.1, 0.6));
       expect((second.zoom, second.alignX), (1.0, 0.0));

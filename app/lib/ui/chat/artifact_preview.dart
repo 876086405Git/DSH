@@ -176,12 +176,15 @@ Future<void> runArtifactAction(
       case ArtifactAction.save:
         final where = await files.saveToDownloads(sessionId, target);
         messenger?.showBriefNotice(
-          l10n.viewArtifactSaved(where.replaceFirst(RegExp(r'^Download/'), l10n.viewDownloadFolder)),
+          savedInChosenPlace(where)
+              ? l10n.harmonySaved
+              : l10n.viewArtifactSaved(where.replaceFirst(RegExp(r'^Download/'), l10n.viewDownloadFolder)),
         );
       case ArtifactAction.preview || ArtifactAction.copyPath:
         break;
     }
   } catch (e) {
+    if (action == ArtifactAction.save && saveWindowDismissed(e)) return;
     messenger?.showSnackBar(SnackBar(content: Text(artifactErrorText(e))));
   }
 }

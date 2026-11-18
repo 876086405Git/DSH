@@ -9,7 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../clipboard/paste_reader.dart';
 import '../links/app_links.dart' show linkRouterProvider;
+import '../state/android_features.dart';
 import '../l10n/l10n.dart';
 import '../share_code/share_codec.dart';
 import '../share_code/share_link.dart';
@@ -87,6 +89,14 @@ typedef ForumShareCodePick = ({ShareLink? link, String? reason});
 /// another way.
 final forumShareCodePickerProvider = Provider<Future<ForumShareCodePick> Function(BuildContext context)>((ref) {
   return (context) async {
+    if (ref.read(operatingSystemProvider) == 'ohos') {
+      final result = await ref.read(pasteReaderProvider).begin().finish();
+      if (!context.mounted) return (link: null, reason: null);
+      final text = result.text;
+      if (text == null) return (link: null, reason: pasteFailureText(result));
+      final link = ShareLink.find(text);
+      return (link: link, reason: link == null ? appL10n.stateCopyShareCodeFirst : null);
+    }
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text ?? '';
     final link = text.isEmpty ? null : ShareLink.find(text);

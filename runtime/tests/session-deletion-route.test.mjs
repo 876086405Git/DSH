@@ -7,20 +7,20 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 const { createSessionDeletion } = await import(
-  pathToFileURL(resolve('runtime/bridge/dsh-go-bridge/lib/session-deletion.js'))
+  pathToFileURL(resolve(process.env.DSH_SESSION_DELETION_ROUTE ?? 'runtime/bridge/dsh-go-bridge/lib/session-deletion.js'))
 );
 
 const CAP = '/dsh-go/v1/sessions/deletion';
 const DEL = '/dsh-go/v1/sessions/delete';
 
-function harness({ active = [], tasks = [], fail, scheduleOk = true, tree = false, seamVersion = 2 } = {}) {
+function harness({ active = [], tasks = [], fail, scheduleOk = true, tree = false, seamVersion = 2, deletionSupported = true } = {}) {
   const calls = [];
   const logs = [];
   const related = () => Object.assign(new Error('tasks'), { code: 'session-related' });
   const services = {
     sessionPersistence: {
       dshGoDeletion: {
-        version: seamVersion,
+        version: seamVersion, supported: deletionSupported,
         async delete(id, hooks) {
           calls.push(['delete', id]);
           if (fail) throw fail;
@@ -83,7 +83,7 @@ function harness({ active = [], tasks = [], fail, scheduleOk = true, tree = fals
     };
     return routes.handle(req, {}, path).then((handled) => ({ handled, last: logs.at(-1) }));
   };
-  return { request, calls, logs };
+  return { request, calls, logs, services };
 }
 
 test('unknown paths are not handled', async () => {
@@ -207,6 +207,7 @@ test('engine refusals map to stable codes without leaking host details', async (
     [Object.assign(new Error('x'), { code: 'session-related' }), 409, 'session-related'],
     [Object.assign(new Error('x'), { code: 'writer-held' }), 409, 'writer-held'],
     [Object.assign(new Error('x'), { code: 'not-found' }), 404, 'not-found'],
+    [Object.assign(new Error('/private/path leaked'), { code: 'unavailable' }), 503, 'unavailable'],
     [Object.assign(new Error('/private/path leaked'), { name: 'SessionAlreadyOwnedError' }), 409, 'writer-held'],
     [new Error('/private/path leaked'), 500, 'failed'],
   ]) {
@@ -225,4 +226,25 @@ test('the capability probe awaits the seam instead of reporting a pending promis
   // throw for a present one; both show up as a non-object body or a rejection.
   const { last } = await h.request('GET', CAP);
   assert.deepEqual(last, [200, { supported: true, version: 1 }]);
+});
+
+// An unavailable new commit must not block cleanup of an already valid marker.
+test('known OH publication capability is read-only and does not preempt the seam retry path', async () => {
+  const h = harness({ deletionSupported: false });
+  assert.deepEqual((await h.request('GET', CAP)).last,
+    [200, { supported: process.platform !== 'openharmony', version: 1 }]);
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual((await h.request('POST', DEL, { body: '{"sessionId":"s1"}' })).last,
+    [200, { deleted: true, sessionId: 's1' }]);
+});
+
+test('an OH seam without a support getter is not advertised as usable', async () => {
+  const h = harness();
+  delete h.services.sessionPersistence.dshGoDeletion.supported;
+  assert.deepEqual((await h.request('GET', CAP)).last,
+    [200, { supported: process.platform !== 'openharmony', version: 1 }]);
+  assert.deepEqual(h.calls, []);
+  // POST still delegates to the seam, so valid-marker cleanup is not preempted.
+  assert.deepEqual((await h.request('POST', DEL, { body: '{"sessionId":"s1"}' })).last,
+    [200, { deleted: true, sessionId: 's1' }]);
 });

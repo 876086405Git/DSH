@@ -2,6 +2,7 @@
 // share, save to Downloads).
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_client/dsh_client.dart';
@@ -12,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../l10n/l10n.dart';
+import 'android_features.dart' show operatingSystemProvider;
 import 'artifacts.dart';
 import 'connection_state.dart';
 
@@ -58,20 +60,24 @@ String artifactErrorText(Object error) {
 /// environment, or in shared storage): Android gets them in place. A remote
 /// Host's file is downloaded once into the app cache (`artifacts/`), keyed by
 /// Host, session and path, and fetched again when the Host reports a new
-/// version.
+/// version. HarmonyOS logical workspace files use the same Session-aware
+/// byte service because their logical paths are not platform file paths.
 class ArtifactFiles {
   ArtifactFiles({
     required this.connection,
     required this.channel,
     Future<void> Function(ShareParams params)? share,
     Future<Directory> Function()? cacheRoot,
+    String? operatingSystem,
   }) : _share = share ?? _systemShare,
-       _cacheRoot = cacheRoot ?? getTemporaryDirectory;
+       _cacheRoot = cacheRoot ?? getTemporaryDirectory,
+       _operatingSystem = operatingSystem ?? Platform.operatingSystem;
 
   final HostConnection? connection;
   final FilesChannel channel;
   final Future<void> Function(ShareParams params) _share;
   final Future<Directory> Function() _cacheRoot;
+  final String _operatingSystem;
 
   static Future<void> _systemShare(ShareParams params) async {
     await SharePlus.instance.share(params);
@@ -134,7 +140,10 @@ class ArtifactFiles {
   }) async {
     final conn = connection;
     if (conn == null) throw const ArtifactError('offline');
-    if (conn.isLocal) {
+    // This prefix selects a transport, not authority. The existing Session
+    // file service still resolves the path and checks its workspace grant.
+    final sessionCopy = conn.isLocal && _operatingSystem == 'ohos' && artifact.path.startsWith('/workspaces/');
+    if (conn.isLocal && !sessionCopy) {
       final host = await channel.resolveGuest(artifact.path);
       if (host == null) throw const ArtifactError('missing');
       return File(host);
@@ -174,6 +183,7 @@ class ArtifactFiles {
               ? null
               : (received, total) => onProgress(total == null || total == 0 ? null : received / total),
         );
+        if (sessionCopy) await sink.flush();
       } finally {
         await sink.close();
       }
@@ -241,7 +251,25 @@ String _safeName(String name) {
   final cleaned = name.replaceAll(RegExp(r'[\x00-\x1f/\\:*?"<>|]'), '_').trim();
   // Keep downloaded content separate from the cache's version marker.
   if (cleaned == '.version') return 'file.version';
-  return cleaned.isEmpty ? 'file' : cleaned;
+  return cleaned.isEmpty ? 'file' : _fitName(cleaned);
+}
+
+/// Android's file systems take 255 bytes for a name, a Windows Host 255 characters: a
+/// longer name (CJK is 3 bytes a character) is cut to fit, its extension kept. Each
+/// artifact has its own cache directory, so a cut name can't meet another.
+String _fitName(String name) {
+  const max = 200;
+  if (utf8.encode(name).length <= max) return name;
+  final dot = name.lastIndexOf('.');
+  final ext = dot > 0 && name.length - dot <= 16 ? name.substring(dot) : '';
+  var room = max - utf8.encode(ext).length;
+  final stem = StringBuffer();
+  for (final rune in (ext.isEmpty ? name : name.substring(0, dot)).runes) {
+    room -= utf8.encode(String.fromCharCode(rune)).length;
+    if (room < 0) break;
+    stem.writeCharCode(rune);
+  }
+  return '$stem$ext';
 }
 
 /// FNV-1a, hex: a stable cache directory name.
@@ -255,8 +283,11 @@ String _fnv(String text) {
 }
 
 final artifactFilesProvider = Provider<ArtifactFiles>(
-  (ref) =>
-      ArtifactFiles(connection: ref.watch(activeConnectionProvider).value, channel: ref.watch(filesChannelProvider)),
+  (ref) => ArtifactFiles(
+    connection: ref.watch(activeConnectionProvider).value,
+    channel: ref.watch(filesChannelProvider),
+    operatingSystem: ref.watch(operatingSystemProvider),
+  ),
 );
 
 /// [ArtifactFiles.thumbnail], cached per (session, path) while shown.

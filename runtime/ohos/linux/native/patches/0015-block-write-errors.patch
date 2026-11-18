@@ -1,0 +1,52 @@
+--- a/temu.c
++++ b/temu.c
+@@ -302,6 +302,7 @@
+     int64_t nb_sectors;
+     BlockDeviceModeEnum mode;
+     uint8_t **sector_table;
++    int io_failed; /* A failed write/retirement cannot become clean later. */
+ } BlockDeviceFile;
+ 
+ static int64_t bf_get_sector_count(BlockDevice *bs)
+@@ -355,15 +356,21 @@
+     BlockDeviceFile *bf = bs->opaque;
+     int ret;
+ 
+-    if (!bf->f) return -1;
++    if (!bf->f || bf->io_failed) return -1;
+     switch(bf->mode) {
+     case BF_MODE_RO:
+         ret = -1; /* error */
+         break;
+     case BF_MODE_RW:
+-        fseek(bf->f, sector_num * SECTOR_SIZE, SEEK_SET);
+-        fwrite(buf, 1, n * SECTOR_SIZE, bf->f);
+-        ret = 0;
++        if (ferror(bf->f) ||
++            fseek(bf->f, sector_num * SECTOR_SIZE, SEEK_SET) != 0 ||
++            fwrite(buf, 1, (size_t)n * SECTOR_SIZE, bf->f) != (size_t)n * SECTOR_SIZE ||
++            ferror(bf->f)) {
++            bf->io_failed = 1;
++            ret = -1;
++        } else {
++            ret = 0;
++        }
+         break;
+     case BF_MODE_SNAPSHOT:
+         {
+@@ -463,11 +470,13 @@
+ {
+     BlockDeviceFile *bf = bs->opaque;
+     FILE *f = bf->f;
+-    int failed = 0;
+-    if (!f) return 0;
++    int failed = bf->io_failed;
++    if (!f) return failed ? -1 : 0;
+     bf->f = NULL;
++    if (ferror(f)) failed = 1;
+     if (bf->mode == BF_MODE_RW && fflush(f) != 0) failed = 1;
+     if (fclose(f) != 0) failed = 1;
++    bf->io_failed = failed;
+     return failed ? -1 : 0;
+ }
+ 

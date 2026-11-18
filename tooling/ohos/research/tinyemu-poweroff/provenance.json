@@ -1,0 +1,50 @@
+[
+  {
+    "title": "830-真实NodeAPI单块接管研究入口-reviewed-20261108-042249.zip",
+    "sha256": "292bd377b7f37257bb8237492cc2412c11f72e78bfed4734de00db598792b7e2",
+    "bytes": 721548,
+    "directory": "prior-830"
+  },
+  {
+    "title": "829-App内Linux接线契约与勘误-reviewed-20261108-041135.zip",
+    "sha256": "a5fe2f1ca5c2d9ec27d8d121171851599ad2c18e857afb691046f763e420ef87",
+    "bytes": 696680,
+    "directory": "prior-829"
+  },
+  {
+    "title": "828-原生环境与输出接管责任-reviewed-20261108-040842.zip",
+    "sha256": "287631f9c84f4772496b82de6651a244cd347139b0504c1f57b4fde377190f0c",
+    "bytes": 841680,
+    "directory": "prior-828"
+  },
+  {
+    "title": "827-TinyEMU运行生命周期现状-reviewed-20261108-040840.zip",
+    "sha256": "11025a90b69accca569a1d908be3c003820de6a879ba00e3324df4e01fc27a19",
+    "bytes": 379878,
+    "directory": "prior-827"
+  },
+  {
+    "title": "815-嵌入控制台失败重试与隔离-reviewed-20261108-023717.zip",
+    "sha256": "2babf38767c01edac58353f57499ad2c28cc7bdc7c754beb17b41b86435fcf19",
+    "bytes": 10388716,
+    "directory": "prior-815"
+  },
+  {
+    "title": "814-CLINT低字写修复-含812研究入口-reviewed-20261108-021634.zip",
+    "sha256": "5b176d201136611f9125edf22bb70517b3a3623d335558820107f8a2b2b83331",
+    "bytes": 5374714,
+    "directory": "prior-814"
+  },
+  {
+    "title": "812-TinyEMU嵌入启动失败返回-reviewed-20261108-020513.zip",
+    "sha256": "934e1dd4dba1f0207f4121d78e15f9e9b546123d92c6f15f13dbd7d8947e24cb",
+    "bytes": 4322934,
+    "directory": "prior-812"
+  },
+  {
+    "title": "810-Linux工具量级与嵌入栈研究-reviewed-20261108-015319.zip",
+    "sha256": "dc5c1a9d40179464ef099572cb8416b60186bdfc7bc36dd66bcfe9abcc30114f",
+    "bytes": 3166129,
+    "directory": "prior-810"
+  }
+]

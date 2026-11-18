@@ -285,6 +285,13 @@ class GenericInputTest(unittest.TestCase):
         self.assertEqual(len(pack['animations']['thinking']['frames']), 1)
         self.assertEqual([f['ms'] for f in pack['animations']['idle']['frames']], [90, 90])
 
+    def test_chinese_names_keep_their_own_states(self):
+        self._solid(48, 48, (240, 60, 80)).save(os.path.join(self.dir, '待机.png'))
+        self._solid(48, 48, (50, 150, 230)).save(os.path.join(self.dir, '思考.png'))
+        pack = C.build(self.dir, self.out, 'zh')
+        self.assertEqual(pack['states']['idle'], ['待机'])
+        self.assertEqual(pack['states']['thinking'], ['思考'])
+
     def test_single_still_becomes_idle(self):
         self._solid(48, 48, (160, 120, 200)).save(os.path.join(self.dir, 'solo.png'))
         pack = C.build(self.dir, self.out, 'solo')

@@ -356,36 +356,125 @@ def patch_names(patches):
     return names
 
 
+def select_dsh_patches(pins, directory, target):
+    """Select an explicitly declared set; never infer a target from a patch filename.
+
+    `series` is the one application order for every diff; `targetSets` only says which
+    of them each target applies, so a target's set is applied in series order."""
+    order = patch_names(directory)
+    if pins.get("schema") != 2 or not isinstance(pins.get("targetSets"), dict):
+        sys.exit("pins.json schema 2 with explicit targetSets is required; register each diff for android/ohos before applying or recording")
+    sets = pins["targetSets"]
+    if set(sets) != {"android", "ohos"}:
+        sys.exit("targetSets must declare exactly android and ohos")
+    declared = set()
+    for platform, names in sets.items():
+        if not isinstance(names, list) or any(not isinstance(name, str) or not name.endswith(".diff")
+                                             or os.path.basename(name) != name or "\\" in name for name in names):
+            sys.exit("invalid patch names in targetSets." + platform)
+        if len(names) != len(set(names)):
+            sys.exit("duplicate patch in targetSets." + platform)
+        declared.update(names)
+    present = set(order)
+    if present != declared:
+        sys.exit("patch target registration mismatch: unregistered=%s missing=%s" %
+                 (sorted(present - declared), sorted(declared - present)))
+    if not isinstance(pins.get("patches"), dict):
+        sys.exit("pins.json patches must be an object")
+    if set(pins["patches"]) - present:
+        sys.exit("pins.json contains patch entries absent from the declared files")
+    # Android is main's series exactly. OH lists the complete common chain first,
+    # then its overlays, so a later main diff never sees an OH intermediate state.
+    selected = set(sets[target])
+    names = [name for name in order if name in selected]
+    if not names:
+        sys.exit("no patches configured for target " + target)
+    return names, sorted(present)
+
+
+def dsh_patch_inputs(pins, directory, names, target, version):
+    inputs = {"schema": 1, "target": target, "dshVersion": version, "patches": []}
+    for name in names:
+        inputs["patches"].append({"name": name,
+            "sha256": hashlib.sha256(open(os.path.join(directory, name), "rb").read()).hexdigest(),
+            "pins": pins["patches"][name][version]})
+    if "zzzzzz-session-deletion.diff" in names:
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "session-deletion", "core.mjs")
+        inputs["companionSha256"] = hashlib.sha256(open(source, "rb").read()).hexdigest()
+    encoded = json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
+    return inputs, hashlib.sha256(encoded).hexdigest()
+
+
 def cmd_patch_dsh(args):
-    """Apply runtime/patches/*.diff to a DSH npm prefix, refusing anything not pinned for this DSH version.
+    """Apply the explicitly selected target set, refusing unpinned inputs.
 
     pins.json maps patch -> DSH version -> file -> {before, after} sha256. Without --record the
     original must match `before` and the result `after`; files are replaced (write + rename), so a
     hard-linked tree is never modified in place. --record applies the hunks strictly and writes the
     observed hashes for this DSH version (use after reviewing the upstream file and the patch)."""
     pins_path = os.path.join(args.patches, "pins.json")
-    pins = json.load(open(pins_path)) if os.path.isfile(pins_path) else {"schema": 1, "patches": {}}
-    names = patch_names(args.patches)
+    pins = json.load(open(pins_path)) if os.path.isfile(pins_path) else {}
+    names, all_names = select_dsh_patches(pins, args.patches, args.target)
+    print("DSH patch target: %s; selected %d of %d declared patches" % (args.target, len(names), len(all_names)))
+    parsed = {name: parse_unified_diff(open(os.path.join(args.patches, name), encoding="utf-8").read()) for name in names}
     # Several independently reviewed patches may touch the same file. Their
     # pins must form one ordered chain, and a fully patched tree is a valid
     # idempotent input. Never accept an arbitrary intermediate/custom hash.
-    terminal = {}
-    after_positions = {}
+    chain = {}
+    later = {}
     if not args.record:
-        for position, name in enumerate(names):
-            for rel, pin in pins["patches"].get(name, {}).get(args.dsh_version, {}).items():
-                if rel in terminal and terminal[rel] != pin["before"]:
+        for name in names:
+            want = pins["patches"].get(name, {}).get(args.dsh_version)
+            if want is None:
+                sys.exit("patch %s has no pin for DSH %s and target %s: review the upstream files, then record the declared target set" %
+                         (name, args.dsh_version, args.target))
+            if sorted(want) != sorted(rel for rel, _ in parsed[name]):
+                sys.exit("%s: diff file paths do not match its version pins" % name)
+            for rel, pin in want.items():
+                if rel in chain and chain[rel][-1] != pin["before"]:
                     sys.exit("%s: broken patch hash chain for %s" % (name, rel))
-                terminal[rel] = pin["after"]
-                after_positions.setdefault(rel, {})[pin["after"]] = position
+                chain.setdefault(rel, [pin["before"]]).append(pin["after"])
+        seen = {}
+        for name in reversed(names):
+            later[name] = {}
+            for rel, pin in pins["patches"][name][args.dsh_version].items():
+                seen.setdefault(rel, set()).add(pin["after"])
+                later[name][rel] = set(seen[rel])
+        # Inspect all selected inputs before writing any. An OHOS-final hash is
+        # not an Android state merely because the runtime branch would be inert.
+        for rel, states in chain.items():
+            actual = hashlib.sha256(open(os.path.join(args.prefix, rel), "rb").read()).hexdigest()
+            if actual not in states:
+                sys.exit("target %s: %s sha256 %s differs from the vetted DSH %s patch chain" %
+                         (args.target, rel, actual, args.dsh_version))
+    # A reused prefix may already contain an excluded OHOS-only patch on a file
+    # untouched by the Android set. Refuse that contamination instead of leaving
+    # it silently installed. Common-chain files were checked above.
+    excluded_original = {}
+    selected_paths = {rel for diff in parsed.values() for rel, _ in diff}
+    # The first excluded pin on a path is its original only in that target's
+    # application order, which need not be lexicographic for OH overlays.
+    other = set(pins["targetSets"]["ohos" if args.target == "android" else "android"])
+    excluded_names = [name for name in patch_names(args.patches) if name in other]
+    for name in excluded_names:
+        if name in names:
+            continue
+        for rel, pin in pins["patches"].get(name, {}).get(args.dsh_version, {}).items():
+            if rel not in selected_paths:
+                excluded_original.setdefault(rel, pin["before"])
+    for rel, expected in excluded_original.items():
+        actual = hashlib.sha256(open(os.path.join(args.prefix, rel), "rb").read()).hexdigest()
+        if actual != expected:
+            sys.exit("target %s excludes changes to %s, but its sha256 %s is not the vetted original %s; use a fresh prefix" %
+                     (args.target, rel, actual, expected))
     applied = []
-    for position, name in enumerate(names):
-        diff = parse_unified_diff(open(os.path.join(args.patches, name)).read())
+    for name in names:
+        diff = parsed[name]
         want = pins["patches"].get(name, {}).get(args.dsh_version)
         if want is None and not args.record:
             sys.exit("patch %s has no pin for DSH %s: review the upstream files it touches, then run\n"
-                     "  python3 -I runtime/lib/rtbuild.py patch-dsh --prefix <dsh-prefix> --dsh-version %s --record"
-                     % (name, args.dsh_version, args.dsh_version))
+                     "  python3 -I runtime/lib/rtbuild.py patch-dsh --prefix <dsh-prefix> --dsh-version %s --target %s --record"
+                     % (name, args.dsh_version, args.dsh_version, args.target))
         observed = {}
         for rel, hunks in diff:
             path = os.path.join(args.prefix, rel)
@@ -395,7 +484,7 @@ def cmd_patch_dsh(args):
             if not args.record:
                 if pin is None:
                     sys.exit("%s: no pin for %s" % (name, rel))
-                if after_positions[rel].get(before, -1) >= position:
+                if before in later[name][rel]:
                     print("%s: %s already patched" % (name, rel))
                     observed[rel] = pin
                     continue
@@ -435,6 +524,13 @@ def cmd_patch_dsh(args):
     if args.out:
         with open(args.out, "w") as f:
             json.dump(applied, f)
+    if args.target_report:
+        inputs, input_hash = dsh_patch_inputs(pins, args.patches, names, args.target, args.dsh_version)
+        with open(args.target_report, "w") as f:
+            json.dump({"schema": 1, "target": args.target, "dshVersion": args.dsh_version,
+                       "selected": names, "excluded": sorted(set(all_names) - set(names)),
+                       "inputSha256": input_hash, "inputs": inputs}, f, indent=2)
+            f.write("\n")
 
 
 # ---------------------------------------------------------------------------
@@ -1756,9 +1852,12 @@ def main():
     p = sub.add_parser("patch-dsh")
     p.add_argument("--prefix", required=True, help="npm --prefix tree holding node_modules/@deepseek-ai/...")
     p.add_argument("--dsh-version", required=True)
+    p.add_argument("--target", choices=["android", "ohos"], required=True,
+                   help="required target patch set; no default (also required with --record)")
     p.add_argument("--patches", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "patches"))
     p.add_argument("--record", action="store_true", help="write the observed hashes as this version's pins")
     p.add_argument("--out", help="write the applied patch names (JSON list) here")
+    p.add_argument("--target-report", help="write target, selected, and excluded patch sets as JSON")
     p.set_defaults(fn=cmd_patch_dsh)
 
     p = sub.add_parser("resolve-debs")

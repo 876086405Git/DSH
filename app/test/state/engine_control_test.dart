@@ -1,5 +1,6 @@
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/android_features.dart' show operatingSystemProvider;
 import 'package:dsh_app/state/engine_control.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,6 +61,36 @@ void main() {
     final runtime = _Runtime(LocalRuntimeState(loaded: true, status: safeStatus()), calls);
     final container = ProviderContainer(
       overrides: [
+        localRuntimeProvider.overrideWith(() => runtime),
+        runtimeBridgeProvider.overrideWithValue(_Bridge(calls)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await EngineControl.restoreLastKnownGood(container);
+    expect(calls, ['restore', 'stop', 'normal']);
+  });
+
+  test('OH safe mode waits for stop before restore and normal start', () async {
+    final calls = <String>[];
+    final runtime = _Runtime(LocalRuntimeState(loaded: true, status: safeStatus()), calls);
+    final container = ProviderContainer(
+      overrides: [
+        operatingSystemProvider.overrideWithValue('ohos'),
+        localRuntimeProvider.overrideWith(() => runtime),
+        runtimeBridgeProvider.overrideWithValue(_Bridge(calls)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await EngineControl.restoreLastKnownGood(container);
+    expect(calls, ['stop', 'restore', 'normal']);
+  });
+
+  test('Android safe mode preserves restore before stop and normal start', () async {
+    final calls = <String>[];
+    final runtime = _Runtime(LocalRuntimeState(loaded: true, status: safeStatus()), calls);
+    final container = ProviderContainer(
+      overrides: [
+        operatingSystemProvider.overrideWithValue('android'),
         localRuntimeProvider.overrideWith(() => runtime),
         runtimeBridgeProvider.overrideWithValue(_Bridge(calls)),
       ],

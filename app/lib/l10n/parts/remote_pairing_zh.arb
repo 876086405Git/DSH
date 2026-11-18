@@ -14,6 +14,8 @@
   "remotePairImageNoCode": "这张图里没找到二维码",
   "remotePairCameraDenied": "没有相机权限。可以在系统设置里打开，或者用「从相册识别」「粘贴配对链接」",
   "remotePairCameraFailed": "相机打不开。可以用「从相册识别」或「粘贴配对链接」",
+  "remotePairSystemScan": "扫码",
+  "remotePairSystemScanHint": "打开系统扫码，里面也能从相册选截图",
   "remotePairReading": "正在读取配对信息…",
   "remotePairConfirmTitle": "要连接这台电脑吗？",
   "remotePairComputer": "电脑",

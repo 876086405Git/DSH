@@ -136,7 +136,8 @@ void main() {
         const PhoneControlScreen(),
         native: FakePhoneNative(status: phoneStatus(enabled: false)),
       );
-      expect(find.text('未开启'), findsOneWidget);
+      // The status card's line; 始终允许's row says 未开启 too when off.
+      expect(find.descendant(of: find.byType(OverviewCard), matching: find.text('未开启')), findsOneWidget);
       expect(find.text('开启后能做什么'), findsOneWidget);
       expect(find.text('准备'), findsNothing);
       // Setup and Shell remain reachable while off; background controls do not.

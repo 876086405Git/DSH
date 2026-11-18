@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../state/android_features.dart';
 import '../../state/notify_state.dart' show launchNoticeShownProvider;
 import '../../usage/usage_net.dart' show UsageBuild;
 import '../../usage/usage_stats.dart';
@@ -95,8 +96,8 @@ class _UsageUpgradeNoticeState extends ConsumerState<UsageUpgradeNotice> {
   @override
   void initState() {
     super.initState();
-    // Builds that count nothing have nothing to tell.
-    if (!UsageBuild.active) return;
+    // Builds that count nothing have nothing to tell, nor has one that sends nothing.
+    if (!UsageBuild.active || ref.read(operatingSystemProvider) == 'ohos') return;
     ref.listenManual(usageStatsProvider, (_, s) => _schedule(s), fireImmediately: true);
   }
 

@@ -20,6 +20,7 @@ import '../../l10n/l10n.dart';
 import '../../speech/deepseek_speech.dart';
 import '../../speech/speech_settings.dart';
 import '../../state/account_state.dart';
+import '../../state/android_features.dart' show operatingSystemProvider;
 import '../providers/provider_widgets.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
@@ -63,7 +64,11 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
 
   /// What actually speaks: hers may be 朗读's.
   CompanionVoiceSettings _speaking(CompanionVoiceSettings s) {
-    if (widget.shared || !s.follow) return s;
+    if (widget.shared) return s;
+    if (ref.read(operatingSystemProvider) == 'ohos') {
+      return s.copyWith(source: CompanionVoiceSource.system, follow: false, cloneOn: false);
+    }
+    if (!s.follow) return s;
     final shared = ref.read(speechVoiceSettingsProvider);
     return (shared ?? const CompanionVoiceSettings(source: CompanionVoiceSource.deepseek)).copyWith(on: s.on);
   }
@@ -332,7 +337,13 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
     final title = widget.shared ? l10n.speechVoiceTitle : l10n.companionMenuVoice;
     final s = _seen = _watch();
     if (s == null) return AppPage.list(title: title, children: const []);
-    final following = !widget.shared && s.follow;
+    // HarmonyOS plays DeepSeek's stream for 朗读 and its own voice everywhere; the
+    // others have no player there yet, and her room has only the phone's voice
+    // (companionEffectiveVoiceProvider).
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
+    final room = ohos && !widget.shared;
+    final following = !room && !widget.shared && s.follow;
+    final chosen = room ? CompanionVoiceSource.system : s.source;
     _fill(s);
     if (s.cloneSample.isNotEmpty && _recordingFor != s.cloneSample) unawaited(_describe(s.cloneSample));
     final busy = _preview == '';
@@ -365,7 +376,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
         SettingsSection(
           title: l10n.companionVoiceSource,
           children: [
-            if (!widget.shared)
+            if (!widget.shared && !room)
               SettingsTile(
                 key: const ValueKey('voice-source-follow'),
                 title: l10n.speechVoiceFollow,
@@ -378,18 +389,20 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
                 },
               ),
             for (final (source, title, hint) in [
-              (CompanionVoiceSource.deepseek, l10n.speechVoiceDeepseek, l10n.speechVoiceDeepseekHint),
+              if (!room) (CompanionVoiceSource.deepseek, l10n.speechVoiceDeepseek, l10n.speechVoiceDeepseekHint),
               (CompanionVoiceSource.system, l10n.companionVoiceSystem, l10n.companionVoiceSystemHint),
-              (CompanionVoiceSource.preset, l10n.companionVoicePreset, l10n.companionVoicePresetHint),
-              (CompanionVoiceSource.openai, l10n.companionVoiceOpenai, l10n.companionVoiceOpenaiHint),
-              (CompanionVoiceSource.custom, l10n.companionVoiceCustom, l10n.companionVoiceCustomHint),
+              if (!ohos) ...[
+                (CompanionVoiceSource.preset, l10n.companionVoicePreset, l10n.companionVoicePresetHint),
+                (CompanionVoiceSource.openai, l10n.companionVoiceOpenai, l10n.companionVoiceOpenaiHint),
+                (CompanionVoiceSource.custom, l10n.companionVoiceCustom, l10n.companionVoiceCustomHint),
+              ],
             ])
               SettingsTile(
                 title: title,
                 subtitle: hint,
                 chevron: false,
                 key: ValueKey('voice-source-${source.name}'),
-                trailing: !following && s.source == source ? const Icon(AppIcons.selected, size: 20) : null,
+                trailing: !following && chosen == source ? const Icon(AppIcons.selected, size: 20) : null,
                 onTap: () {
                   setState(() => _preview = null);
                   unawaited(_set(s.copyWith(source: source, follow: false)));
@@ -397,7 +410,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
               ),
           ],
         ),
-        if (!following && s.source == CompanionVoiceSource.deepseek)
+        if (!following && chosen == CompanionVoiceSource.deepseek)
           SettingsSection(
             title: l10n.companionVoiceVoice,
             footer: Text(l10n.speechVoiceDeepseekFooter),
@@ -418,7 +431,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
                 ),
             ],
           ),
-        if (!following && s.source == CompanionVoiceSource.preset) ...[
+        if (!following && chosen == CompanionVoiceSource.preset) ...[
           SettingsSection(
             title: l10n.companionVoiceService,
             children: [
@@ -516,7 +529,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
             ],
           ),
         ],
-        if (!following && s.source == CompanionVoiceSource.openai)
+        if (!following && chosen == CompanionVoiceSource.openai)
           SettingsSection(
             title: l10n.companionVoiceApi,
             footer: Text(l10n.companionVoicePrivacy),
@@ -546,7 +559,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
               ),
             ],
           ),
-        if (!following && s.source == CompanionVoiceSource.custom)
+        if (!following && chosen == CompanionVoiceSource.custom)
           SettingsSection(
             title: l10n.companionVoiceRequest,
             footer: Text(l10n.companionVoicePrivacy),

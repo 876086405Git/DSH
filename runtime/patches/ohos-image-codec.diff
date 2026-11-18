@@ -1,0 +1,245 @@
+--- a/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js
+@@ -14,6 +14,52 @@
+ 		throw Object.assign(new Error("OpenHarmony publication preload is required"), { code: "ERR_OHOS_PUBLICATION_PRELOAD_MISSING" });
+ 	}
+ 	return service.publish(source, target, { fs });
++}
++
++// OpenHarmony image operations use the fixed HAP binding captured by preload.
++// The non-OH Sharp implementation and its descriptor remain unchanged.
++const ohosEncodedImages = new WeakSet();
++const ohosRequestImage = Symbol("ohosRequestImage");
++// One completed publication proof per module, containing no image storage.
++let ohosCacheProof;
++function requireOhosImageCodec() {
++	const codec = globalThis[Symbol.for("dsh.go.ohos.image-codec")];
++	if (codec?.protocolVersion !== 1 || typeof codec.identity !== "function" || typeof codec.probe !== "function" || typeof codec.detect !== "function" || typeof codec.encode !== "function") throw new AttachmentError("鸿蒙图像组件尚未就绪；普通文件仍可上传或保存。", "OHOS_IMAGE_CODEC_UNAVAILABLE");
++	return codec;
++}
++function ohosImageError(error, fallback, message) {
++	if (error instanceof AttachmentError) return error;
++	const known = ["OHOS_IMAGE_CODEC_UNAVAILABLE", "INVALID_IMAGE", "IMAGE_TOO_MANY_PIXELS", "IMAGE_DIMENSION_TOO_LARGE", "ATTACHMENT_WRITE_FAILED"];
++	const code = known.includes(error?.code) ? error.code : error?.code === "OHOS_IMAGE_CLEANUP_UNCONFIRMED" ? "ATTACHMENT_WRITE_FAILED" : fallback;
++	const mapped = new AttachmentError(code === "OHOS_IMAGE_CODEC_UNAVAILABLE" ? "鸿蒙图像组件或必要能力尚未就绪。" : message, code, { cause: error });
++	if (typeof error?.code === "string") mapped.nativeCode = error.code;
++	if (typeof error?.stage === "string") mapped.nativeStage = error.stage;
++	if (typeof error?.nativeStatus === "number") mapped.nativeStatus = error.nativeStatus;
++	if (typeof error?.encodingCapBytes === "number") mapped.encodingCapBytes = error.encodingCapBytes;
++	if (typeof error?.resourcesRetired === "boolean") mapped.resourcesRetired = error.resourcesRetired;
++	if (error?.retirement !== void 0) mapped.retirement = error.retirement;
++	return mapped;
++}
++async function callOhosImage(method, args, fallback, message) {
++	try {
++		return await requireOhosImageCodec()[method](...args);
++	} catch (error) {
++		throw ohosImageError(error, fallback, message);
++	}
++}
++function ohosImageIdentity() {
++	try {
++		return requireOhosImageCodec().identity();
++	} catch (error) {
++		throw ohosImageError(error, "OHOS_IMAGE_CODEC_UNAVAILABLE", "The packaged image codec is unavailable.");
++	}
++}
++async function encodeOhosImage(data, target) {
++	const image = await callOhosImage("encode", [data, target], "ATTACHMENT_WRITE_FAILED", "Unable to convert image to the verified normalized form.");
++	// Only a successful native encode plus output verification and awaited close
++	// reaches this point. Do not replace that proof with converted source facts.
++	ohosEncodedImages.add(image);
++	return image;
+ }
+ 
+ //#region lib/types/compression-limiter.js
+@@ -179,6 +225,7 @@
+ * @returns verified format and dimensions.
+ */
+ async function probeImage(data) {
++	if (process.platform === "openharmony") return callOhosImage("probe", [data], "INVALID_IMAGE", "Unsupported or malformed image data.");
+ 	const sharp = requireSharp();
+ 	try {
+ 		return await imageMetadata(sharp(data, {
+@@ -197,6 +244,7 @@
+ * @returns verified format and dimensions.
+ */
+ async function detectImage(data, limits) {
++	if (process.platform === "openharmony") return callOhosImage("detect", [data, limits], "INVALID_IMAGE", "Unsupported or malformed image data.");
+ 	const sharp = requireSharp();
+ 	try {
+ 		const image = sharp(data, {
+@@ -267,6 +315,11 @@
+ * @returns verified provider-independent normalized bytes and metadata.
+ */
+ async function normalizeImage(data, detected, policy) {
++	if (process.platform === "openharmony") {
++		const { width, height } = initialDimensions(detected, policy);
++		const image = await encodeOhosImage(data, { width, height, maxBytes: policy.maxBytes });
++		return { data: image.data, mediaType: image.mediaType, width: image.width, height: image.height };
++	}
+ 	if (canPassThroughNormalization(detected, data.byteLength, policy)) return {
+ 		data,
+ 		mediaType: detected.mediaType,
+@@ -626,6 +679,13 @@
+ async function saveImageFile(root, input, limits, policy) {
+ 	return commitPreparedImageFile(root, await prepareImageFile(input, limits, policy));
+ }
++// fs.readFile owns its completed, closed-file result. Keep the public plain
++// Uint8Array shape without duplicating a complete private backing allocation.
++// Short/unknown-size reads can be pooled subviews; retain their exact-sized copy.
++function imageFileBytes(buffer) {
++	if (process.platform === "openharmony" && buffer.byteLength === buffer.buffer.byteLength) return new Uint8Array(buffer.buffer);
++	return new Uint8Array(buffer);
++}
+ /**
+ * Read and verify one content-addressed image.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+@@ -639,7 +699,7 @@
+ 	const sha256 = ensureReference(ref);
+ 	let data;
+ 	try {
+-		data = new Uint8Array(await readFile(normalizedImagePath(root, ref), { signal }));
++		data = imageFileBytes(await readFile(normalizedImagePath(root, ref), { signal }));
+ 	} catch (error) {
+ 		signal?.throwIfAborted();
+ 		if (error instanceof Error && "code" in error && error.code === "ENOENT") throw new AttachmentError("Attachment object is missing.", "ATTACHMENT_NOT_FOUND");
+@@ -804,6 +864,14 @@
+ 	checkedInteger(target.maxBytes, "Image request maxBytes");
+ }
+ function descriptor(attachment, target) {
++	if (process.platform === "openharmony") return JSON.stringify({
++		transformVersion: `${REQUEST_IMAGE_TRANSFORM_VERSION}-ohos-ndk26-v1`,
++		attachmentId: attachment.attachmentId,
++		targetWidth: target.width,
++		targetHeight: target.height,
++		encodedByteBudget: target.maxBytes,
++		encoding: ohosImageIdentity()
++	});
+ 	return JSON.stringify({
+ 		transformVersion: REQUEST_IMAGE_TRANSFORM_VERSION,
+ 		attachmentId: attachment.attachmentId,
+@@ -843,6 +911,7 @@
+ 	}).toColourspace("srgb");
+ }
+ async function createRequestImage(attachment, target, hasAlpha) {
++	if (process.platform === "openharmony") return encodeOhosImage(attachment.data, target);
+ 	if (target.width >= attachment.ref.width && target.height >= attachment.ref.height && attachment.data.byteLength <= target.maxBytes) return {
+ 		data: attachment.data,
+ 		mediaType: attachment.ref.mediaType,
+@@ -855,11 +924,15 @@
+ function cachePath(root, hash) {
+ 	return join(root, "request-images", hash.slice(0, 2), hash);
+ }
+-async function readCached(path, target, expectedAlpha, signal) {
+-	try {
+-		const data = new Uint8Array(await readFile(path, { signal }));
++async function readCached(path, target, expectedAlpha, signal, variantId, owner) {
++	try {
++		const data = imageFileBytes(await readFile(path, { signal }));
+ 		const detected = await probeImage(data);
+-		if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width > target.width || detected.height > target.height || !encodedAlphaIsCompatible(expectedAlpha, detected)) return void 0;
++		const proof = owner?.active && ohosCacheProof?.owner === owner ? ohosCacheProof : void 0;
++		const verified = proof?.variantId === variantId && proof.sha256 === digest(data) &&
++			proof.width === detected.width && proof.height === detected.height &&
++			proof.mediaType === detected.mediaType && proof.hasAlpha === detected.hasAlpha;
++		if (detected.depth !== "uchar" || detected.space !== "srgb" && !(detected.space === void 0 && verified) || detected.width > target.width || detected.height > target.height || !encodedAlphaIsCompatible(expectedAlpha, detected)) return void 0;
+ 		return {
+ 			data,
+ 			mediaType: detected.mediaType,
+@@ -869,11 +942,17 @@
+ 		};
+ 	} catch (error) {
+ 		if (error?.code === "ENOENT") return void 0;
++		// Cancellation/cache fallback must not hide an unretired native owner.
++		if (process.platform === "openharmony" && (error?.nativeCode === "OHOS_IMAGE_CLEANUP_UNCONFIRMED" || error?.retirement?.confirmed === false)) throw error;
+ 		signal?.throwIfAborted();
+ 		return;
+ 	}
+ }
+ async function verifyRequestImage(image, expectedAlpha) {
++	if (process.platform === "openharmony") {
++		if (!ohosEncodedImages.has(image)) throw new AttachmentError("Image output has no completed native verification.", "ATTACHMENT_WRITE_FAILED");
++		return image;
++	}
+ 	const detected = await detectImage(image.data);
+ 	if (detected.depth !== "uchar" || detected.space !== "srgb" || detected.width !== image.width || detected.height !== image.height || detected.mediaType !== image.mediaType || !encodedAlphaIsCompatible(expectedAlpha, detected)) throw new AttachmentError("Encoded model-request image does not match its verified 8-bit sRGB metadata.", "ATTACHMENT_WRITE_FAILED");
+ 	return {
+@@ -906,19 +985,33 @@
+ * @returns verified request bytes and deterministic variant identity.
+ */
+ async function readRequestImageFile(root, attachment, target, signal) {
++	return readRequestImage(root, attachment, target, signal);
++}
++async function readRequestImage(root, attachment, target, signal, owner) {
+ 	signal?.throwIfAborted();
+ 	validateTarget(target);
+ 	const source = await probeImage(attachment.data);
+ 	const variantId = requestImageVariantId(attachment.ref, target);
+ 	const path = cachePath(root, String(variantId).slice(7));
+-	const cached = await readCached(path, target, source.hasAlpha, signal);
++	const cached = await readCached(path, target, source.hasAlpha, signal, variantId, owner);
++	if (process.platform === "openharmony") signal?.throwIfAborted();
+ 	const created = cached ?? await createRequestImage(attachment, target, source.hasAlpha);
+ 	const version = cached ?? (created.data === attachment.data ? {
+ 		...created,
+ 		hasAlpha: source.hasAlpha
+ 	} : await verifyRequestImage(created, source.hasAlpha));
+ 	signal?.throwIfAborted();
+-	if (cached === void 0 && version.data !== attachment.data) await writeCached(path, version.data);
++	if (cached === void 0 && version.data !== attachment.data) {
++		// Native verification and close finished before this private output was
++		// returned. Keep only scalars before exposing its mutable bytes to callers.
++		const proof = owner?.active ? Object.freeze({ owner, variantId, sha256: digest(version.data),
++			mediaType: version.mediaType, width: version.width, height: version.height, hasAlpha: version.hasAlpha }) : void 0;
++		await writeCached(path, version.data);
++		if (owner) {
++			signal?.throwIfAborted();
++			if (owner.active) ohosCacheProof = proof;
++		}
++	}
+ 	return {
+ 		variantId,
+ 		attachment: attachment.ref,
+@@ -1064,6 +1157,14 @@
+ 		if (!Number.isSafeInteger(compressionConcurrency) || compressionConcurrency < 1 || compressionConcurrency > 8) throw new Error(`attachment-local: imageCompressionConcurrency must be an integer from 1 through 8`);
+ 		this.imageCompressionConcurrency = compressionConcurrency;
+ 		this.compression = new CompressionLimiter(compressionConcurrency);
++		if (process.platform === "openharmony") {
++			const owner = { active: true };
++			this[ohosRequestImage] = (attachment, target, signal) => readRequestImage(this.cacheRoot, attachment, target, signal, owner);
++			ctx.effect(() => () => {
++				owner.active = false;
++				if (ohosCacheProof?.owner === owner) ohosCacheProof = void 0;
++			});
++		}
+ 	}
+ 	async validateImage(input) {
+ 		await this.compression.run(() => validateImageFile(input, this.imageLimits, this.normalizationPolicy));
+@@ -1102,8 +1203,14 @@
+ 	}
+ 	requestVersion(ref, target, stored, signal) {
+ 		signal?.throwIfAborted();
+-		const variantId = requestImageVariantId(ref, target);
+-		const key = String(variantId);
++		// This key only joins in-flight callers. The persistent variant still uses
++		// the complete codec identity after source existence and integrity checks.
++		const key = process.platform === "openharmony" ? JSON.stringify({
++			attachmentId: ref.attachmentId,
++			targetWidth: target.width,
++			targetHeight: target.height,
++			encodedByteBudget: target.maxBytes
++		}) : String(requestImageVariantId(ref, target));
+ 		let operation = this.requestInflight.get(key);
+ 		if (operation?.controller.signal.aborted) {
+ 			this.requestInflight.delete(key);
+@@ -1111,7 +1218,8 @@
+ 		}
+ 		if (operation === void 0) {
+ 			const shared = new SharedRequest((sharedSignal) => this.compression.run(async () => {
+-				return await readRequestImageFile(this.cacheRoot, stored ?? await this.readImage(ref, sharedSignal), target, sharedSignal);
++				const attachment = stored ?? await this.readImage(ref, sharedSignal);
++				return process.platform === "openharmony" ? this[ohosRequestImage](attachment, target, sharedSignal) : readRequestImageFile(this.cacheRoot, attachment, target, sharedSignal);
+ 			}));
+ 			operation = shared;
+ 			this.requestInflight.set(key, shared);

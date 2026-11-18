@@ -6,12 +6,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../runtime/background_net.dart';
 import '../../runtime/runtime_state.dart';
+import '../../state/android_features.dart';
 import '../../state/app_info.dart';
+import '../../state/notify_state.dart';
+import '../common/brief_notice.dart';
 import '../shell/page_frame.dart';
 import '../theme/theme.dart';
 import 'settings_widgets.dart';
 import '../common/row_marks.dart';
 import '../common/smooth_size.dart';
+
+/// 后台运行: how to keep conversations running on Android; on HarmonyOS and iOS,
+/// where nothing does, what happens instead.
+class BackgroundGuidePage extends ConsumerWidget {
+  const BackgroundGuidePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      ref.watch(androidSystemFeaturesProvider) ? const _KeepRunningGuide() : const _SuspendedPage();
+}
 
 /// Keeping conversations running in the background: this phone maker's own
 /// switch first (one tap opens it where the ROM allows, else the app's system
@@ -21,17 +34,17 @@ import '../common/smooth_size.dart';
 /// the native side tries them only when they
 /// resolve and falls back to the app's details page, and every row also says
 /// where the switch lives.
-class BackgroundGuidePage extends ConsumerStatefulWidget {
-  const BackgroundGuidePage({super.key});
+class _KeepRunningGuide extends ConsumerStatefulWidget {
+  const _KeepRunningGuide();
 
   @override
-  ConsumerState<BackgroundGuidePage> createState() => _BackgroundGuidePageState();
+  ConsumerState<_KeepRunningGuide> createState() => _KeepRunningGuideState();
 }
 
 /// One maker's switch: the name it has in their settings, and the way there.
 typedef _VendorSwitch = ({String name, String key, String path});
 
-class _BackgroundGuidePageState extends ConsumerState<BackgroundGuidePage> {
+class _KeepRunningGuideState extends ConsumerState<_KeepRunningGuide> {
   late final AppLifecycleListener _lifecycle;
 
   @override
@@ -155,6 +168,88 @@ class _BackgroundGuidePageState extends ConsumerState<BackgroundGuidePage> {
           children: [
             for (final (keys, label, steps) in _vendors)
               if (!keys.contains(vendor)) _VendorRow(vendor: label, steps: [for (final s in steps) named(s)]),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// HarmonyOS suspends an app within seconds of it leaving the screen, and no
+/// switch a chat app may use changes that: this says so, what still runs, and
+/// what to do about long tasks. The one thing to set is its notifications.
+class _SuspendedPage extends ConsumerStatefulWidget {
+  const _SuspendedPage();
+
+  @override
+  ConsumerState<_SuspendedPage> createState() => _SuspendedPageState();
+}
+
+class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: () => ref.invalidate(notifySystemStatusProvider));
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openNotifications() async {
+    final opened = await ref.read(notifyChannelProvider).openSettings();
+    if (!mounted) return;
+    // A half-sheet over the app: there may be no resume to read again on.
+    ref.invalidate(notifySystemStatusProvider);
+    if (!opened) showBriefNotice(context, context.l10n.accessOpenFailed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final system = ref.watch(notifySystemStatusProvider).value;
+    // Unknown (not answered, or it couldn't tell): no value rather than a wrong one.
+    final notifications = system == null || !system.native ? null : system.allOpen;
+    final longTask = ref.watch(localRuntimeProvider.select((s) => s.status.longTaskEligible));
+    return AppPage.list(
+      title: l10n.pluginsBackgroundTitle,
+      subtitle: Text(longTask ? l10n.harmonyBackgroundSubtitleLong : l10n.harmonyBackgroundSubtitle),
+      children: [
+        SettingsSection(
+          title: l10n.harmonyBackgroundAway,
+          children: [
+            SettingsTile(
+              title: l10n.phoneEngineLocal,
+              subtitle: longTask ? l10n.harmonyBackgroundLocalLong : l10n.harmonyBackgroundLocal,
+            ),
+            SettingsTile(title: l10n.harmonyBackgroundRemoteTitle, subtitle: l10n.harmonyBackgroundRemote),
+          ],
+        ),
+        SettingsSection(
+          title: l10n.harmonyBackgroundLong,
+          children: [
+            SettingsTile(title: l10n.harmonyBackgroundStay),
+            SettingsTile(title: l10n.harmonyBackgroundUseRemote),
+          ],
+        ),
+        SettingsSection(
+          footer: Text(l10n.harmonyNotifyWhy),
+          children: [
+            SettingsTile(
+              key: const ValueKey('background-notifications'),
+              title: l10n.pluginsNotifications,
+              value: notifications == null
+                  ? null
+                  : Text(
+                      notifications ? l10n.accessStateOn : l10n.accessStateOff,
+                      style: notifications ? null : TextStyle(color: DshColors.of(context).warning),
+                    ),
+              onTap: () => unawaited(_openNotifications()),
+            ),
           ],
         ),
       ],

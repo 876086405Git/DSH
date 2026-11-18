@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../state/android_features.dart';
 import 'system_ime_evidence.dart';
 
 /// A second content boundary for the native voice observation. Unexpected
@@ -124,8 +125,17 @@ Map<String, Object?> diagnosticEvidenceFacts(Object? raw) {
         fields['backend'] = row['backend'];
         if (row['code'] is int) fields['code'] = row['code'];
       } else {
-        for (final key in const ['reason', 'status', 'importance', 'pssKb', 'rssKb']) {
-          if (row[key] is int) fields[key] = row[key];
+        if (row['source'] == 'hiAppEvent') {
+          if (!const {'APP_CRASH', 'APP_FREEZE'}.contains(row['event'])) continue;
+          fields['source'] = 'hiAppEvent';
+          fields['event'] = row['event'];
+          if (row['event'] == 'APP_CRASH' && const {'NativeCrash', 'JsError'}.contains(row['crashType'])) {
+            fields['crashType'] = row['crashType'];
+          }
+        } else {
+          for (final key in const ['reason', 'status', 'importance', 'pssKb', 'rssKb']) {
+            if (row[key] is int) fields[key] = row[key];
+          }
         }
       }
       final size = utf8.encode(jsonEncode(fields)).length + 1;
@@ -186,9 +196,11 @@ class NativeDiagnostics {
 /// MethodChannel `dsh/diagnostics`. Without the native side (tests, other
 /// platforms) it answers empty.
 class DiagnosticsChannel {
-  const DiagnosticsChannel([this.channel = const MethodChannel('dsh/diagnostics')]);
+  const DiagnosticsChannel([this.channel = const MethodChannel('dsh/diagnostics')]) : _imeSource = 'privilegedIme';
+  const DiagnosticsChannel.ohos([this.channel = const MethodChannel('dsh/diagnostics')]) : _imeSource = 'ohosWindowGeometry';
 
   final MethodChannel channel;
+  final String _imeSource;
 
   Future<void> recordVoiceStage(String stage, {String backend = 'unknown', int? code}) async {
     if (!diagnosticVoiceStages.contains(stage) || !diagnosticVoiceBackends.contains(backend)) return;
@@ -208,15 +220,20 @@ class DiagnosticsChannel {
     }
   }
 
-  /// Every call requires fresh consent in the native guarded dialog.
+  /// Explicit user export. Android prompts for privileged capture; OH reads
+  /// only its own bounded window geometry, with no system log permission.
   Future<SystemImeEvidence> collectSystemIme() async {
     try {
       final raw = await channel.invokeMethod<Object?>('collectSystemIme');
-      return SystemImeEvidence.fromNative(raw, now: DateTime.now());
+      final at = DateTime.now();
+      final evidence = SystemImeEvidence.fromNative(raw, now: at);
+      return evidence.source == _imeSource
+          ? evidence
+          : SystemImeEvidence.failure('failed', at, source: _imeSource);
     } on MissingPluginException {
-      return SystemImeEvidence.failure('unsupported', DateTime.now());
+      return SystemImeEvidence.failure('unsupported', DateTime.now(), source: _imeSource);
     } on PlatformException {
-      return SystemImeEvidence.failure('failed', DateTime.now());
+      return SystemImeEvidence.failure('failed', DateTime.now(), source: _imeSource);
     }
   }
 
@@ -250,4 +267,5 @@ class DiagnosticsChannel {
   }
 }
 
-final diagnosticsChannelProvider = Provider<DiagnosticsChannel>((ref) => const DiagnosticsChannel());
+final diagnosticsChannelProvider = Provider<DiagnosticsChannel>((ref) =>
+    ref.watch(operatingSystemProvider) == 'ohos' ? const DiagnosticsChannel.ohos() : const DiagnosticsChannel());

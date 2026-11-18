@@ -1,0 +1,264 @@
+{
+  "bashSha256": "bc5945feb8bd26203ebfafea5ce1878bb2e32cb8fb50ab7ae395cfb1e1aaaef1",
+  "caseSourceSha256": "c3bc747273b16eaef84ccae07ef560ea2493df71a7e4bcbc800f33fda09af8fb",
+  "inputFiles": {
+    "result.bin": "73656564",
+    "b": "00ffc3a9800a",
+    "e": "fef09f98800a"
+  },
+  "rows": [
+    {
+      "name": "scoped-live-stderr-alias",
+      "command": "{ printf C; printf E >&2; } 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "scoped-capture-live-stderr-alias",
+      "command": "{ printf \"<%s>\" \"$(printf C; printf E >&2)\"; } 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "3c433e"
+      }
+    },
+    {
+      "name": "scoped-pipeline-live-stderr-alias",
+      "command": "{ { printf C; printf E >&2; } | cat; } 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "persistent-capture-live-stderr-alias",
+      "command": "exec 2>&1; printf \"<%s>\" \"$(printf C; printf E >&2)\" > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "3c433e"
+      }
+    },
+    {
+      "name": "same-file-capture-positive",
+      "command": "{ printf \"<%s>\" \"$(printf C; printf E >&2)\"; } > result.bin 2>&1",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "453c433e"
+      }
+    },
+    {
+      "name": "numeric-live-capture",
+      "command": "exec 3>&1; { printf \"<%s>\" \"$(printf C; printf E >&3)\"; } > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "3c433e"
+      }
+    },
+    {
+      "name": "if-live-alias",
+      "command": "if true; then printf C; printf E >&2; fi 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "for-live-alias",
+      "command": "for x in 1; do printf C; printf E >&2; done 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "c-for-live-alias",
+      "command": "for ((i=0;i<1;i++)); do printf C; printf E >&2; done 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "while-live-alias",
+      "command": "while true; do printf C; printf E >&2; break; done 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "until-live-alias",
+      "command": "until false; do printf C; printf E >&2; break; done 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "case-live-alias",
+      "command": "case x in x) printf C; printf E >&2;; esac 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "subshell-live-alias",
+      "command": "(printf C; printf E >&2) 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "function-return-live-alias",
+      "command": "f(){ printf C; printf E >&2; return 7; }; f 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 7,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "function-capture-live-alias",
+      "command": "f(){ printf C; printf E >&2; return 7; }; printf \"<%s>\" \"$(f 2>&1 > result.bin)\"",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "3c453e",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "nested-shell-live-alias",
+      "command": "bash -c 'printf C; printf E >&2' 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "input-process-substitution-live-alias",
+      "command": "{ cat <(printf C; printf E >&2); } 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "raw-bytes-live-alias",
+      "command": "{ cat b; cat e >&2; } 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "fef09f98800a",
+        "stderrHex": "",
+        "fileHex": "00ffc3a9800a"
+      }
+    },
+    {
+      "name": "utf8-live-alias",
+      "command": "{ printf 中文; printf 错误 >&2; } 2>&1 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "e99499e8afaf",
+        "stderrHex": "",
+        "fileHex": "e4b8ade69687"
+      }
+    },
+    {
+      "name": "numeric-swap-live-alias",
+      "command": "exec 3>&1; { printf C; printf E >&2; } 1>&2 2>&3 > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    },
+    {
+      "name": "pipe-captures-both-live-streams",
+      "command": "{ printf C; printf E >&2; } 2>&1 | cat > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "4345"
+      }
+    },
+    {
+      "name": "nested-capture-keeps-numeric-live-alias",
+      "command": "exec 3>&1; printf \"<%s>\" \"$(printf \"%s\" \"$(printf C; printf E >&3)\")\" > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "45",
+        "stderrHex": "",
+        "fileHex": "3c433e"
+      }
+    },
+    {
+      "name": "root-prefix-and-tail-order",
+      "command": "printf B; { printf C; printf E >&2; } 2>&1 > result.bin; printf A",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "424541",
+        "stderrHex": "",
+        "fileHex": "43"
+      }
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../secrets/secure_storage.dart';
+
 /// Where remote-access secrets live: SSH passwords and private keys, relay
 /// device credentials. Never SharedPreferences.
 ///
@@ -11,11 +13,11 @@ abstract class SecretStore {
   Future<void> delete(String key);
 }
 
-/// Android Keystore-backed storage (flutter_secure_storage).
+/// Android Keystore storage, or the OH app's HUKS-backed secret channel.
 class SecureSecretStore implements SecretStore {
-  SecureSecretStore([FlutterSecureStorage? storage]) : _storage = storage ?? const FlutterSecureStorage();
+  SecureSecretStore([FlutterSecureStorage? storage]) : _storage = AppSecureStorage(storage);
 
-  final FlutterSecureStorage _storage;
+  final AppSecureStorage _storage;
 
   /// Every key is namespaced so remote secrets never collide with app settings.
   static String _k(String key) => 'remote.$key';

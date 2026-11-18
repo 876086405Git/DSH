@@ -2,7 +2,7 @@
   "tavernTitle": "Tavern",
   "tavernImport": "Import",
   "tavernEmptyTitle": "No characters yet",
-  "tavernEmptyMessage": "Import a character card: PNG, JSON or CHARX",
+  "tavernEmptyMessage": "Bring a chat over from DeepSeek, or import a character card",
   "tavernContinue": "Continue",
   "tavernCharacters": "Characters",
   "tavernImported": "Imported “{name}”",
@@ -1050,6 +1050,8 @@
   "tavernGameHere": "A mini-game goes here; it can't be played here yet",
   "tavernCanvasReplied": "{name} replied",
   "@tavernCanvasReplied": {"placeholders": {"name": {"type": "String"}}},
+  "tavernMvuIssues": "This card's variables hit a problem",
+  "tavernMvuUnfinished": "This message's variables were not fully updated; its text is kept",
   "tavernRegexEdit": "Edit rule",
   "tavernRegexFieldName": "Name",
   "tavernRegexFieldFindHelp": "SillyTavern's form: /pattern/flags, e.g. /(hi|bye)/gi",
@@ -1390,5 +1392,54 @@
   "tavernDraftTrialPlay": "Start",
   "tavernDraftTrialRunning": "Playing…",
   "tavernDraftTrialDone": "Done",
-  "tavernDraftTrialUnsupported": "This draft can't be tried yet"
+  "tavernDraftTrialUnsupported": "This draft can't be tried yet",
+  "tavernImportFromDeepSeek": "Bring over from DeepSeek",
+  "tavernImportFromDeepSeekSubtitle": "Export all chats in DeepSeek's settings, then pick that ZIP",
+  "tavernDeepSeekTitle": "Bring chats over from DeepSeek",
+  "tavernDeepSeekFound": "{count} chats found, the longest first. Tick the ones to continue.",
+  "@tavernDeepSeekFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekMessages": "{count} messages",
+  "@tavernDeepSeekMessages": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekUntitled": "Untitled chat",
+  "tavernDeepSeekAlready": "Already here; tap to open",
+  "tavernDeepSeekMore": "Show more ({count} left)",
+  "@tavernDeepSeekMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekTake": "Bring over ({count})",
+  "@tavernDeepSeekTake": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekTaking": "Bringing over…",
+  "tavernDeepSeekNotExport": "This isn't a DeepSeek chat export",
+  "tavernDeepSeekNotExportMessage": "Pick the ZIP DeepSeek gives you when you export all chats",
+  "tavernDeepSeekFailed": "Couldn't bring it over; try again",
+  "tavernDeepSeekTaken": "{count} chats brought over; the rest are in the chat list",
+  "@tavernDeepSeekTaken": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

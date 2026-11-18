@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../../state/android_features.dart';
 import '../../../state/artifact_files.dart';
 import '../../../state/artifacts.dart';
 import '../../common/app_sheet.dart';
@@ -188,10 +189,16 @@ class _ArtifactTileState extends ConsumerState<ArtifactTile> {
   });
 
   Future<void> _save() => _run(_Busy.saving, (files) async {
-    final where = await files.saveToDownloads(widget.sessionId, _artifact, onProgress: _onProgress);
-    return where.startsWith('Download/')
-        ? appL10n.chatSavedToDownloadsPath(where.substring('Download/'.length))
-        : appL10n.chatSavedToPath(where);
+    try {
+      final where = await files.saveToDownloads(widget.sessionId, _artifact, onProgress: _onProgress);
+      if (savedInChosenPlace(where)) return appL10n.harmonySaved;
+      return where.startsWith('Download/')
+          ? appL10n.chatSavedToDownloadsPath(where.substring('Download/'.length))
+          : appL10n.chatSavedToPath(where);
+    } catch (e) {
+      if (saveWindowDismissed(e)) return null;
+      rethrow;
+    }
   });
 
   void _tap() {
@@ -234,7 +241,12 @@ class _ArtifactTileState extends ConsumerState<ArtifactTile> {
       _Busy.fetching =>
         _progress == null ? appL10n.chatDownloading : appL10n.chatDownloadingPercent((_progress! * 100).round()),
       _Busy.opening => appL10n.chatOpening,
-      _Busy.saving => appL10n.chatSavingToDownloads,
+      _Busy.saving =>
+        ref.watch(operatingSystemProvider) == 'ohos'
+            ? appL10n.harmonySaving
+            : wordsForIos
+            ? appL10n.iosSavingToFiles
+            : appL10n.chatSavingToDownloads,
       null =>
         _note ??
             artifact.description ??
@@ -420,18 +432,28 @@ enum ArtifactAction {
   const ArtifactAction(this.icon);
   final IconData icon;
 
-  String get label => switch (this) {
+  String labelOn({required bool harmony}) => switch (this) {
     ArtifactAction.preview => appL10n.chatPreview,
     ArtifactAction.open => appL10n.commonOpen,
     ArtifactAction.openWith => appL10n.commonOpenWith,
     ArtifactAction.share => appL10n.commonShare,
-    ArtifactAction.save => appL10n.chatSaveToDownloads,
+    ArtifactAction.save =>
+      harmony
+          ? appL10n.harmonySaveToFile
+          : wordsForIos
+          ? appL10n.iosSaveToFiles
+          : appL10n.chatSaveToDownloads,
     ArtifactAction.copyPath => appL10n.chatCopyPath,
   };
 
-  String? get hint => switch (this) {
+  String? hintOn({required bool harmony}) => switch (this) {
     ArtifactAction.open => appL10n.chatOpenInDefaultApp,
-    ArtifactAction.save => appL10n.chatDownloadsFolderHint,
+    ArtifactAction.save =>
+      harmony
+          ? appL10n.harmonySaveChooseLocation
+          : wordsForIos
+          ? appL10n.iosFilesFolderHint
+          : appL10n.chatDownloadsFolderHint,
     _ => null,
   };
 }
@@ -500,6 +522,9 @@ Future<ArtifactAction?> showArtifactMenu(
   bool officeToPdf = false,
 }) {
   final l10n = context.l10n;
+  final harmony = ProviderScope.containerOf(context, listen: false).read(operatingSystemProvider) == 'ohos';
+  // HarmonyOS has no /sdcard: a path that reads like one isn't in this phone's Downloads.
+  final inDownloads = !harmony && artifact.inPhoneDownloads;
   HapticFeedback.selectionClick();
   return showAppSheet<ArtifactAction>(
     context,
@@ -509,12 +534,8 @@ Future<ArtifactAction?> showArtifactMenu(
       final dsh = DshColors.of(sheet);
       final actions = [
         if (canFetch && artifactPreviewable(artifact, officeToPdf: officeToPdf)) ArtifactAction.preview,
-        if (canFetch) ...[
-          ArtifactAction.open,
-          ArtifactAction.openWith,
-          ArtifactAction.share,
-        ],
-        if (canFetch && !artifact.inPhoneDownloads) ArtifactAction.save,
+        if (canFetch) ...[ArtifactAction.open, ArtifactAction.openWith, ArtifactAction.share],
+        if (canFetch && !inDownloads) ArtifactAction.save,
         ArtifactAction.copyPath,
       ];
       return SafeArea(
@@ -542,7 +563,7 @@ Future<ArtifactAction?> showArtifactMenu(
                     overflow: TextOverflow.ellipsis,
                     style: AppType.mono(size: 12, height: 1.4, color: dsh.textTertiary),
                   ),
-                  if (artifact.inPhoneDownloads)
+                  if (inDownloads)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
@@ -567,8 +588,8 @@ Future<ArtifactAction?> showArtifactMenu(
                     SettingsTile(
                       icon: action.icon,
                       tinted: false,
-                      title: action.label,
-                      subtitle: action.hint,
+                      title: action.labelOn(harmony: harmony),
+                      subtitle: action.hintOn(harmony: harmony),
                       chevron: false,
                       onTap: () => Navigator.pop(sheet, action),
                     ),

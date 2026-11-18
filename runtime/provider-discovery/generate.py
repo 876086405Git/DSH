@@ -25,6 +25,14 @@ FILES = {
     'piai-index.js': 'dsh-llm-pi-ai/lib/index.js',
     'remotes-client.js': 'dsh-api-remotes/lib/client.js',
 }
+
+
+def publish_patch(path, text):
+    pending = path.with_name(path.name + '.tmp')
+    pending.write_text(text)
+    pending.replace(path)
+
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, required=True)
 parser.add_argument('--prefix', type=Path, required=True, help='rc1 prefix with preceding patches, without this patch')
@@ -71,10 +79,10 @@ with tempfile.TemporaryDirectory(prefix='dsh-provider-headers-') as directory:
     record.mkdir()
     (record / NAME).write_text(''.join(diff))
     (record / 'series').write_text(NAME + '\n')
-    subprocess.run([sys.executable, '-I', str(RUNTIME / 'lib/rtbuild.py'), 'patch-dsh',
+    subprocess.run([sys.executable, '-I', str(RUNTIME / 'lib/rtbuild.py'), 'patch-dsh', '--target', 'android',
                     '--prefix', str(temp / 'prefix'), '--patches', str(record),
                     '--dsh-version', '0.2.2-rc.1', '--record'], check=True)
-    (patches / NAME).write_text(''.join(diff))
+    publish_patch(patches / NAME, ''.join(diff))
     pins['patches'][NAME] = json.loads((record / 'pins.json').read_text())['patches'][NAME]
     (patches / 'pins.json').write_text(json.dumps(pins, indent=2, sort_keys=True) + '\n')
     series = patches / 'series'

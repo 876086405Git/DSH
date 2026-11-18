@@ -14,9 +14,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../remote/secret_store.dart' show SecretStore;
+import '../secrets/secure_storage.dart';
 import '../workshop/github_device_flow.dart';
 import '../workshop/workshop_models.dart';
 import 'workshop_dependencies.dart';
@@ -55,7 +55,7 @@ const workshopAccountKey = 'workshop.github.account.v1';
 
 class _SecureAccountStore implements SecretStore {
   const _SecureAccountStore();
-  static const _storage = FlutterSecureStorage();
+  static const _storage = AppSecureStorage();
   @override
   Future<String?> read(String key) => _storage.read(key: key);
   @override

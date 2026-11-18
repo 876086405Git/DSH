@@ -349,6 +349,8 @@ class _ScriptPromptRun {
       preset: macroPreset,
       regexPresetSettings: capture.contextRegexPresetSettings,
       gameplayCapture: capture.gameplayCapture,
+      messageVariables: capture.state['messageVariables'],
+      messageVariablesExists: capture.state.containsKey('messageVariables'),
       macroHistory: capture.chat == null ? unavailableHistory : null,
       onCharacterDependency: capture.actorId == null ? _observeCharacterDependency : null,
       prepareCharacterFieldsOnDemand: raw,

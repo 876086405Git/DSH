@@ -247,7 +247,8 @@ def image_frames(path):
 
 def sanitize(name):
     """A folder or file name as a pack animation name."""
-    cleaned = re.sub(r'[^a-z0-9_-]+', '-', name.lower()).strip('-')
+    # Letters of any script: 待机 and 思考 stay two names, each its own state.
+    cleaned = re.sub(r'[^\w-]+', '-', name.lower()).strip('-')
     return cleaned or 'anim'
 
 

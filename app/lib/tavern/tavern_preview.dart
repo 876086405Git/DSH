@@ -940,6 +940,13 @@ class PreviewTavern implements Tavern, TavernPreview {
   Future<List<TavernChatFile>> exportChat(String chatId, {String? fileName}) async => throw UnsupportedError('preview');
 
   @override
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath) async => throw UnsupportedError('preview');
+
+  @override
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds) async =>
+      throw UnsupportedError('preview');
+
+  @override
   Future<void> deleteChat(String chatId) async {
     _chats.remove(chatId);
     _listChanged.add(null);
@@ -2272,6 +2279,88 @@ class _PreviewScripts implements TavernScriptBridge {
     TavernJsonObject data, {
     String? expectedVersion,
   }) => _no('replaceCharacterData');
+
+  @override
+  Future<TavernMvuInitialization> setMvuEnabled(String contextId, bool enabled) => _no('setMvuEnabled');
+
+  @override
+  Future<TavernMvuParseResult> parseMvuMessage(String contextId, String message, TavernJsonObject previousData) =>
+      _no('parseMvuMessage');
+
+  @override
+  Future<TavernScriptCharacterAvatarSnapshot> readCharacterAvatar(String contextId, String characterId) =>
+      _no('readCharacterAvatar');
+
+  @override
+  Future<TavernScriptCharacterAvatarSnapshot> replaceCharacterAvatar(
+    String contextId,
+    String characterId,
+    Uint8List bytes, {
+    required String expectedVersion,
+  }) => _no('replaceCharacterAvatar');
+
+  @override
+  Future<TavernScriptWorldInfoSettingsSnapshot> updateWorldInfoSettings(
+    String contextId,
+    TavernJsonObject patch, {
+    String? expectedVersion,
+  }) => _no('updateWorldInfoSettings');
+
+  @override
+  Future<TavernScriptButtonsSnapshot> replaceScriptButtons(
+    String contextId,
+    List<TavernScriptButton> buttons, {
+    String? expectedVersion,
+  }) => _no('replaceScriptButtons');
+
+  @override
+  Future<TavernScriptBookDirectorySnapshot> getBookDirectory(String contextId) => _no('getBookDirectory');
+
+  @override
+  Future<TavernScriptBookRef> resolveBook(String contextId, String nameOrHandle) => _no('resolveBook');
+
+  @override
+  Future<TavernScriptBookSnapshot> createBook(String contextId, String name, TavernJsonObject raw) => _no('createBook');
+
+  @override
+  Future<void> deleteBook(String contextId, TavernScriptBookRef ref, {required String expectedVersion}) =>
+      _no('deleteBook');
+
+  @override
+  Future<TavernScriptBookBindingsSnapshot> readBookBindings(String contextId, TavernScriptBookBindingsTarget target) =>
+      _no('readBookBindings');
+
+  @override
+  Future<TavernScriptBookBindingsSnapshot> updateBookBindings(
+    String contextId,
+    TavernScriptBookBindingsEdit edit, {
+    required String expectedVersion,
+  }) => _no('updateBookBindings');
+
+  @override
+  Future<TavernScriptPresetSnapshot> readPreset(String contextId, TavernScriptPresetRef ref) => _no('readPreset');
+
+  @override
+  Future<TavernScriptPresetSnapshot> replacePreset(
+    String contextId,
+    TavernScriptPresetRef ref,
+    TavernJsonObject raw, {
+    required String expectedVersion,
+  }) => _no('replacePreset');
+
+  @override
+  Future<TavernScriptRegexWriteSnapshot> readTavernRegexesForWrite(
+    String contextId,
+    TavernScriptRegexWriteTarget target,
+  ) => _no('readTavernRegexesForWrite');
+
+  @override
+  Future<TavernScriptRegexWriteSnapshot> replaceTavernRegexes(
+    String contextId,
+    TavernScriptRegexWriteTarget target,
+    List<TavernScriptRegexWriteItem> items, {
+    required String expectedVersion,
+  }) => _no('replaceTavernRegexes');
 
   @override
   Future<List<TavernScriptBookBinding>> getContextBooks(String contextId) => _no('getContextBooks');

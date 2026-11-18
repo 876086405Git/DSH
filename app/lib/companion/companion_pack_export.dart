@@ -214,13 +214,12 @@ Future<void> _exportCompanion((String, String, Map<String, String>) args) async 
       _complete(isSafePackPath(name) && !name.contains(':'), 'companion_bad_reference');
       _complete(writtenNames.add(petNameAlias(name)), 'companion_bad_reference');
       expanded += bytes.length;
-      _complete(expanded <= workshopExpandedBytes && bytes.length <= 16 * 1024 * 1024 && archive.files.length < 1000, 'companion_too_large');
+      _complete(expanded <= workshopExpandedBytes && bytes.length <= companionMemberCap && archive.files.length < 1000, 'companion_too_large');
       _complete(bytes.isNotEmpty, 'companion_empty_file');
-      if (_extension(name) == '.json') _complete(bytes.length <= 1024 * 1024, 'companion_too_large');
+      if (_extension(name) == '.json') _complete(bytes.length <= companionJsonCap, 'companion_too_large');
       if (_extension(name) == '.png') {
-        // Reuse the exact import gate, including 8 MiB, 4096 per side,
-        // 16 MiB decoded RGBA, CRC/IDAT checks and actual pixel decoding.
-        _complete(pngIntact(bytes is Uint8List ? bytes : Uint8List.fromList(bytes)), 'companion_bad_png');
+        final size = pngSize(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
+        _complete(size != null && size.$1 <= companionTextureSide && size.$2 <= companionTextureSide, 'companion_bad_png');
       }
       archive.add(ArchiveFile.bytes('character/$name', bytes));
     }
@@ -230,7 +229,7 @@ Future<void> _exportCompanion((String, String, Map<String, String>) args) async 
       final file = inventory.files[entry.key];
       _complete(file != null, 'companion_missing_reference');
       if (entry.value == 'moc' || entry.value == 'texture') {
-        add(entry.key, await _companionBytes(file!, 16 * 1024 * 1024));
+        add(entry.key, await _companionBytes(file!, companionMemberCap));
       } else {
         final raw = await _companionJson(file!);
         _complete(raw is Map<String, Object?>, 'companion_bad_json');

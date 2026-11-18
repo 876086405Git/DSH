@@ -11,6 +11,7 @@ import 'package:dsh_app/ui/web/web_target.dart';
 import 'package:dsh_app/ui/web/web_view_page.dart';
 import 'package:dsh_client/dsh_client.dart' show PluginBundle;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
 import '../chat/support/harness.dart';
@@ -28,6 +29,22 @@ PluginBundle _bundle(String name, Map<String, String> title, List<String> rows) 
 });
 
 void main() {
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    test('new conversation binding option $platform', () {
+      debugDefaultTargetPlatformOverride = platform;
+      try {
+        const target = DshWebTarget(newSession: true);
+        final script = target.openScript;
+        final wire = jsonDecode(script.substring(script.indexOf('({') + 1, script.length - 2)) as Map;
+        expect(wire.containsKey('confirmNewSession'), platform == TargetPlatform.iOS);
+        if (platform == TargetPlatform.iOS) expect(wire['confirmNewSession'], isTrue);
+        expect(target.toJson(), {'newSession': true});
+        expect(const DshWebTarget(settings: DshWebSettings.general).openScript, isNot(contains('confirmNewSession')));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
   group('a plugin card target', () {
     test('names are trimmed, none empty, each once; only empty names open nothing', () {
       const target = DshWebTarget(pluginItem: [' 天气 ', '', '天气', 'Weather  app', '  ']);

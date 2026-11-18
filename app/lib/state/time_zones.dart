@@ -171,15 +171,15 @@ const _byOffset = {
   600: 'Australia/Sydney',
 };
 
-/// The phone's IANA zone: `TZ`, then Android's default time zone, then
-/// the Linux zone files, then a zone with the current offset, then `UTC`.
+/// The phone's IANA zone: `TZ`, then the system's default time zone (Android,
+/// HarmonyOS), then the Linux zone files, then a zone with the current offset, then `UTC`.
 Future<String> detectDeviceTimeZone() async {
   ensureTimeZones();
   bool usable(String? name) => name != null && name.isNotEmpty && isKnownZone(name);
   final env = Platform.environment['TZ']?.replaceFirst(RegExp(r'^:'), '');
   if (usable(env)) return env!;
   try {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS || Platform.operatingSystem == 'ohos') {
       return await detectAndroidTimeZone();
     } else if (Platform.isLinux || Platform.isMacOS) {
       final file = File('/etc/timezone');

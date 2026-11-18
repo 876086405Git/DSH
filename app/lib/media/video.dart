@@ -5,12 +5,18 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../state/android_features.dart';
 import '../state/artifact_files.dart';
 import '../state/artifacts.dart';
 
 /// No URL entry point: the caller must materialize through its captured Host.
 class MediaVideoChannel {
-  const MediaVideoChannel([this.channel = const MethodChannel('dsh/media_video')]);
+  const MediaVideoChannel([this.channel = const MethodChannel('dsh/media_video')]) : _refreshMaterializedPoster = false;
+  const MediaVideoChannel.ohos([this.channel = const MethodChannel('dsh/media_video')])
+    : _refreshMaterializedPoster = true;
+  // The viewer has explicitly materialized this file again. OH refreshes its
+  // poster then; ordinary scrolling and the default channel retain the cache.
+  final bool _refreshMaterializedPoster;
   final MethodChannel channel;
 
   // One decoder request at a time across channel instances. Queued requests
@@ -19,7 +25,12 @@ class MediaVideoChannel {
 
   Future<MediaVideoHandle> open(String path) async {
     _localPath(path);
-    final value = await channel.invokeMapMethod<String, dynamic>('open', {'path': path});
+    final Map<String, dynamic>? value;
+    try {
+      value = await channel.invokeMapMethod<String, dynamic>('open', {'path': path});
+    } on MissingPluginException {
+      throw PlatformException(code: 'unsupported');
+    }
     if (value == null) throw PlatformException(code: 'unsupported');
     return MediaVideoHandle(
       texture: (value['texture'] as num).toInt(),
@@ -31,7 +42,13 @@ class MediaVideoChannel {
 
   Future<Uint8List?> poster(String path) {
     _localPath(path);
-    final request = _posterTail.then((_) => channel.invokeMethod<Uint8List>('poster', {'path': path}));
+    final request = _posterTail.then((_) async {
+      try {
+        return await channel.invokeMethod<Uint8List>('poster', {'path': path});
+      } on MissingPluginException {
+        return null;
+      }
+    });
     _posterTail = request.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return request;
   }
@@ -74,7 +91,9 @@ class MediaVideoState {
   final bool playing;
 }
 
-final mediaVideoChannelProvider = Provider<MediaVideoChannel>((ref) => const MediaVideoChannel());
+final mediaVideoChannelProvider = Provider<MediaVideoChannel>(
+  (ref) => ref.watch(operatingSystemProvider) == 'ohos' ? const MediaVideoChannel.ohos() : const MediaVideoChannel(),
+);
 
 // Keyed by captured ArtifactFiles, not a mutable active-host provider. Bounded
 // per Host snapshot, with weak ownership when that connection is discarded.
@@ -105,9 +124,11 @@ Future<ImageProvider?> cacheMediaVideoThumbnail(
 }) {
   final cache = _posters[files] ??= {};
   final key = (sessionId, item.path);
-  if (cache[key] case final existing?) return existing;
+  if (!video._refreshMaterializedPoster || materialized == null) {
+    if (cache[key] case final existing?) return existing;
+  }
   if (materialized == null && !files.isLocal) return Future.value(null);
-  if (cache.length >= 24) cache.remove(cache.keys.first);
+  if (cache.length >= 24 && !cache.containsKey(key)) cache.remove(cache.keys.first);
   final future = () async {
     try {
       final file =

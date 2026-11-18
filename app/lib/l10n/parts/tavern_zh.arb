@@ -2,7 +2,7 @@
   "tavernTitle": "酒馆",
   "tavernImport": "导入",
   "tavernEmptyTitle": "还没有角色",
-  "tavernEmptyMessage": "导入一张角色卡：PNG、JSON 或 CHARX",
+  "tavernEmptyMessage": "接回 DeepSeek 里的对话，或导入一张角色卡",
   "tavernContinue": "继续",
   "tavernCharacters": "角色",
   "tavernImported": "已导入「{name}」",
@@ -1050,6 +1050,8 @@
   "tavernGameHere": "这里有一个小游戏，现在还不能在这里玩",
   "tavernCanvasReplied": "{name}回复了",
   "@tavernCanvasReplied": {"placeholders": {"name": {"type": "String"}}},
+  "tavernMvuIssues": "这张卡的变量更新有问题",
+  "tavernMvuUnfinished": "这一层的变量没有更新完，正文已经保留",
   "tavernRegexEdit": "编辑规则",
   "tavernRegexFieldName": "名字",
   "tavernRegexFieldFindHelp": "SillyTavern 的写法：/规则/标志，比如 /(早安|晚安)/gi",
@@ -1390,5 +1392,54 @@
   "tavernDraftTrialPlay": "开始试玩",
   "tavernDraftTrialRunning": "正在试…",
   "tavernDraftTrialDone": "试完了",
-  "tavernDraftTrialUnsupported": "这份草稿暂时没法试玩"
+  "tavernDraftTrialUnsupported": "这份草稿暂时没法试玩",
+  "tavernImportFromDeepSeek": "从 DeepSeek 接回来",
+  "tavernImportFromDeepSeekSubtitle": "在 DeepSeek 的设置里导出全部历史对话，再选那个 ZIP",
+  "tavernDeepSeekTitle": "接回 DeepSeek 的对话",
+  "tavernDeepSeekFound": "找到 {count} 段对话，聊得最多的排在前面。勾上想接着聊的。",
+  "@tavernDeepSeekFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekMessages": "{count} 条",
+  "@tavernDeepSeekMessages": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekUntitled": "没有标题的对话",
+  "tavernDeepSeekAlready": "已经接回来了，点开继续",
+  "tavernDeepSeekMore": "显示更多（还有 {count} 段）",
+  "@tavernDeepSeekMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekTake": "接回来（{count}）",
+  "@tavernDeepSeekTake": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tavernDeepSeekTaking": "正在接回…",
+  "tavernDeepSeekNotExport": "这不是 DeepSeek 导出的对话",
+  "tavernDeepSeekNotExportMessage": "要选在 DeepSeek 里导出全部历史对话后得到的那个 ZIP",
+  "tavernDeepSeekFailed": "没接回来，再试一次",
+  "tavernDeepSeekTaken": "接回了 {count} 段，其余的在对话列表里",
+  "@tavernDeepSeekTaken": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

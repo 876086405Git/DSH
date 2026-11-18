@@ -20,5 +20,8 @@
   "performanceRefreshMax": "Max",
   "performanceRefreshSystem": "System",
   "performanceRefreshHint": "Auto: fastest while drawing, handed back when still; System: the system decides.",
+  "performanceRefreshHintOhos": "Auto: fastest while things move, handed back when still; Max: always fastest, more battery and heat; System: asks for nothing extra.",
+  "performanceFrameCache": "Frame cache",
+  "performanceFrameCacheHint": "Smoother, with slightly more touch delay",
   "searchKwRefreshRate": "refresh rate high refresh 120Hz 90Hz smooth"
 }

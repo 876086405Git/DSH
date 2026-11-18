@@ -1,0 +1,17 @@
+plist-macro 0.1.6 — published license declaration and source-text gap
+
+The exact published Cargo.toml.orig and README.md are included below.
+They declare MIT; the package authors field names Jackson Coxson.
+The published crate and repository at d1d48559ddc8e9bd263f36180bbe1d4f2a3d55e5
+contain no separate LICENSE, COPYING, NOTICE or copyright statement.
+
+The following SPDX-MIT.txt is the complete standard MIT text copied unchanged
+from SPDX license-list-data v3.27.0, commit d46e94e2c78ceede1cfc63cfa0396472d2798d4c:
+https://raw.githubusercontent.com/spdx/license-list-data/d46e94e2c78ceede1cfc63cfa0396472d2798d4c/text/MIT.txt
+Its <year> and <copyright holders> placeholders are part of that standard text.
+They are not an upstream copyright notice, and this package does not invent a
+year or attribute another repository's copyright statement to plist-macro.
+The unavailable upstream copyright notice remains an identified source gap.
+
+Published source revision:
+https://github.com/jkcoxson/plist_macro/tree/d1d48559ddc8e9bd263f36180bbe1d4f2a3d55e5

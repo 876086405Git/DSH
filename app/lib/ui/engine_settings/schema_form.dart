@@ -264,7 +264,7 @@ class SchemaFieldView extends ConsumerWidget {
             badge: badge,
             enabled: enabled,
             onTap: enabled ? () => unawaited(set(!on)) : null,
-            trailing: Switch(value: on, onChanged: enabled ? (v) => unawaited(set(v)) : null),
+            trailing: Switch.adaptive(value: on, onChanged: enabled ? (v) => unawaited(set(v)) : null),
           ),
         );
 

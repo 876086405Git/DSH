@@ -47,6 +47,9 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
+# HarmonyOS builds only (tooling/ohos/build-hap.sh); never left behind for Android.
+/pubspec_overrides.yaml
+
 # 伙伴小屋: the pack carried inside release builds (companion_pack.dart). It stays
 # out of the repository; the release machine copies it in (docs/design/companion.md §3).
 /assets/companion/*.zip

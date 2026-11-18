@@ -35,12 +35,18 @@ class PhoneStopSourceTest {
         assertEquals(PhoneTasks.StopSource.ENVIRONMENT, tasks.snapshot().stopSource)
     }
 
-    @Test fun ambientRefusalDoesNotPretendTheUserCancelledUnrelatedWork() {
-        val tasks = PhoneTasks(clock = { 1_000L })
-        tasks.begin()
-        tasks.publish(tasks.stopActiveDeferred("screen off", PhoneTasks.StopSource.SCREEN_OFF))
-        val refused = tasks.begin() as PhoneTasks.Begin.Refused
-        assertFalse(refused.message.contains("用户已停止"))
-        assertTrue(refused.message.contains("与手机无关的工作可继续"))
+    @Test fun ambientAndUserStopsKeepTheirOwnRefusalCopy() {
+        val ambient = PhoneTasks(clock = { 1_000L })
+        ambient.begin()
+        ambient.publish(ambient.stopActiveDeferred("screen off", PhoneTasks.StopSource.SCREEN_OFF))
+        val environment = ambient.begin() as PhoneTasks.Begin.Refused
+        assertEquals(PhoneTasks.ENV_STOPPED_MESSAGE, environment.message)
+
+        val user = PhoneTasks(clock = { 1_000L })
+        user.begin()
+        user.stop("user stop")
+        val refused = user.begin() as PhoneTasks.Begin.Refused
+        assertEquals(PhoneTasks.STOPPED_MESSAGE, refused.message)
+        assertNotEquals(environment.message, refused.message)
     }
 }

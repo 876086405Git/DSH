@@ -13,6 +13,7 @@ import '../../state/account_state.dart' show accountBrowserProvider;
 import '../../state/app_foreground.dart';
 import '../../state/subscriptions_state.dart';
 import '../common/app_sheet.dart';
+import '../common/field_paste.dart';
 import '../common/sheet_title_bar.dart';
 import '../common/smooth_size.dart';
 import '../theme/app_icons.dart';
@@ -443,11 +444,20 @@ class _PromptBody extends StatefulWidget {
   State<_PromptBody> createState() => _PromptBodyState();
 }
 
-class _PromptBodyState extends State<_PromptBody> {
+class _PromptBodyState extends State<_PromptBody> with FieldPaste<_PromptBody> {
+  String? _pasteError;
+
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(_PromptBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Another question on the same field: a paste still waiting was for the last one.
+    if (oldWidget.helper != widget.helper || oldWidget.hint != widget.hint) cancelPaste();
   }
 
   @override
@@ -456,10 +466,10 @@ class _PromptBodyState extends State<_PromptBody> {
     super.dispose();
   }
 
-  void _changed() => setState(() {});
+  void _changed() => setState(() => _pasteError = null);
 
   Future<void> _paste() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+    final text = (await readClipboard(say: (message) => setState(() => _pasteError = message)))?.trim();
     if (text == null || text.isEmpty || !mounted) return;
     widget.controller.value = TextEditingValue(
       text: text,
@@ -500,6 +510,8 @@ class _PromptBodyState extends State<_PromptBody> {
             hintText: widget.hint?.trim().isNotEmpty == true ? widget.hint : l10n.engineSubscriptionPasteHere,
             helperText: _cjk.hasMatch(widget.helper ?? '') ? widget.helper!.trim() : null,
             helperMaxLines: 3,
+            errorText: _pasteError,
+            errorMaxLines: 3,
             suffixIcon: IconButton(
               tooltip: l10n.commonPaste,
               icon: const Icon(AppIcons.paste, size: 20),

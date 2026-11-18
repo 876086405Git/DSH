@@ -67,7 +67,8 @@ class _SystemLocales with WidgetsBindingObserver {
 /// What the app tells the bridge it can do (protocol §3.1).
 final nativeCapsProvider = Provider<DshGoCaps>(
   (ref) => DshGoCaps(
-    app: AppInfo.version.split('+').first,
+    // The bridge reads x.y.z; a beta (1.3.0-beta.1) counts as its release.
+    app: AppInfo.version.split('+').first.split('-').first,
     locale: ref.watch(nativeLocaleProvider),
     surfaces: DshGoSurfaces.all,
     components: ref.watch(nativeViewComponentsProvider),

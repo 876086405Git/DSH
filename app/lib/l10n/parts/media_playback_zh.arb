@@ -1,6 +1,7 @@
 {
   "mediaVideoLoading": "正在加载视频…",
   "mediaVideoCannotPlay": "无法在 App 内播放此视频，请重试或使用其他应用打开。",
+  "mediaVideoUnsupported": "此版本暂不支持在 App 内播放视频，可保存到相册或在其他应用中打开。",
   "mediaVideoPlay": "播放",
   "mediaVideoPause": "暂停",
   "mediaVideoSaveFailed": "视频保存失败，请重试。"

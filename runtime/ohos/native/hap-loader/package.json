@@ -1,0 +1,8 @@
+{
+  "name": "@dsh-go/ohos-native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "license": "AGPL-3.0-only"
+}

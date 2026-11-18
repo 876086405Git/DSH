@@ -5,6 +5,7 @@ import 'package:dsh_app/diagnostics/system_ime_diagnostics.dart';
 import 'package:dsh_app/diagnostics/system_ime_evidence.dart';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/ui/settings/diagnostics_page.dart';
+import 'package:dsh_app/state/android_features.dart' show operatingSystemProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,11 +27,14 @@ class _Channel extends DiagnosticsChannel {
   Future<void> cancelSystemIme() async { cancellations++; }
 }
 
-Future<void> _pump(WidgetTester tester, SystemImeDiagnostics diagnostics) async {
+Future<void> _pump(WidgetTester tester, SystemImeDiagnostics diagnostics, {String os = 'android'}) async {
   await tester.pumpWidget(goldenApp(
     home: const Scaffold(body: SingleChildScrollView(child: SystemImeDiagnosticsSection())),
     brightness: Brightness.light,
-    overrides: [systemImeDiagnosticsProvider.overrideWithValue(diagnostics)],
+    overrides: [
+      systemImeDiagnosticsProvider.overrideWithValue(diagnostics),
+      operatingSystemProvider.overrideWithValue(os),
+    ],
   ));
   await tester.pumpAndSettle();
 }
@@ -148,6 +152,22 @@ void main() {
     expect(find.text(appL10n.systemImePermissionsHint), findsOneWidget);
     expect(find.text(appL10n.systemImeEvidenceLimits), findsOneWidget);
     expect(channel.requests, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('on HarmonyOS it is this app\'s keyboard geometry, and unavailable sends nowhere', (tester) async {
+    final channel = _Channel();
+    final diagnostics = SystemImeDiagnostics(channel);
+    addTearDown(diagnostics.dispose);
+    await _pump(tester, diagnostics, os: 'ohos');
+    expect(find.text(appL10n.systemImeOhosTitle), findsOneWidget);
+    expect(find.text(appL10n.systemImeTitle), findsNothing);
+    expect(find.text(appL10n.systemImeOhosPrivacy), findsOneWidget);
+    await tester.tap(find.text(appL10n.systemImeOhosCollect));
+    channel.requests.single.complete(systemImeEvidence(code: 'unavailable', count: 0));
+    await tester.pump();
+    expect(find.text(appL10n.systemImeOhosUnavailable), findsOneWidget);
+    expect(find.text(appL10n.systemImePermissions), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

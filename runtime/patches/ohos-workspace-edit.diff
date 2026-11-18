@@ -1,0 +1,506 @@
+diff --git a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+@@ -590,7 +590,8 @@
+ }
+ /**
+ * Atomically replace a file through a private, synced staging file in the same directory.
+-* POSIX protects the staging directory and file with `0o700` and `0o600`. A new Windows file
++* POSIX normally protects staging with `0o700` / `0o600`; OH whole-write new files
++* retain directory creation defaults inside the private directory. A new Windows file
+ * inherits the destination directory's DACL; a replacement copies the existing target's DACL
+ * onto the empty temp before writing and preserves the target descriptor at publication.
+ * Node write errors become FsError; permission refusals use FS_PERMISSION_DENIED and other I/O uses FS_IO_ERROR.
+@@ -619,6 +620,7 @@
+ 	const stagingDir = join(directory, internals.tempDirName?.(absolutePath) ?? `.${process.pid}.${randomUUID()}.tmpdir`);
+ 	const tempPath = join(stagingDir, internals.tempName?.(absolutePath) ?? "file.tmp");
+ 	const platform = internals.platform ?? process.platform;
++	const directoryDefault = options.ohosWholeWriteDefault === true && platform === "openharmony" && mode === void 0;
+ 	const copyFileDacl = internals.copyFileDacl ?? copyFileDaclWin32;
+ 	const replaceFile = internals.replaceFile ?? replaceFileWin32;
+ 	const linkFile = internals.linkFile ?? link;
+@@ -630,11 +632,23 @@
+ 	let handle;
+ 	let stagingCreated = false;
+ 	try {
++		const parentDefaults = directoryDefault ? await lstat(directory, { bigint: true }) : void 0;
+ 		await mkdir(stagingDir, { mode: 448 });
+ 		stagingCreated = true;
+-		await chmod(stagingDir, 448);
+-		handle = await open(tempPath, "wx", 384);
+-		await handle.chmod(384);
++		if (directoryDefault) {
++			const inherited = await lstat(stagingDir, { bigint: true });
++			const sgid = Number(inherited.mode) & 0o2000;
++			if ((Number(parentDefaults.mode) & 0o2000) && (!sgid || inherited.gid !== parentDefaults.gid)) {
++				throw Object.assign(new Error("directory default group inheritance was not confirmed"), { code: "EIO" });
++			}
++			await chmod(stagingDir, 0o700 | sgid);
++			const secured = await lstat(stagingDir, { bigint: true });
++			if ((Number(secured.mode) & 0o7777) !== (0o700 | sgid) || secured.gid !== inherited.gid) {
++				throw Object.assign(new Error("private directory defaults were not preserved"), { code: "EIO" });
++			}
++		} else await chmod(stagingDir, 448);
++		handle = await open(tempPath, "wx", directoryDefault ? 0o666 : 384);
++		if (!directoryDefault) await handle.chmod(384);
+ 		if (platform === "win32" && existingDestination) await copyFileDacl(absolutePath, tempPath);
+ 		await handle.writeFile(content, {
+ 			encoding: "utf8",
+@@ -656,10 +670,10 @@
+ 				await throwGuardedCreateFailure(error, absolutePath, displayPath, inspectPublicationTarget);
+ 			}
+ 			throwIfAborted(signal, "write");
+-			handle = await (internals.openPublicationFile ?? open)(absolutePath, "wx", 384)
++			handle = await (internals.openPublicationFile ?? open)(absolutePath, "wx", directoryDefault ? 0o666 : 384)
+ 				.catch((openError) => throwGuardedCreateFailure(openError, absolutePath, displayPath, inspectPublicationTarget));
+ 			try {
+-				await handle.chmod(384);
++				if (!directoryDefault) await handle.chmod(384);
+ 				await handle.writeFile(content, { encoding: "utf8", ...signal ? { signal } : {} });
+ 				await handle.sync();
+ 				if (mode !== void 0) await handle.chmod(mode);
+@@ -755,9 +769,9 @@
+ * @param signal - aborts the read (`FS_ABORTED`).
+ * @returns LF-normalized content and the original format metadata to restore on write-back.
+ */
+-async function readForEdit(absolutePath, displayPath, signal) {
++async function readForEdit(absolutePath, displayPath, signal, readBuffer) {
+ 	throwIfAborted(signal, "edit");
+-	const buffer = await readFileAbortable(absolutePath, "edit", signal);
++	const buffer = readBuffer ? await readBuffer() : await readFileAbortable(absolutePath, "edit", signal);
+ 	throwIfAborted(signal, "edit");
+ 	if (buffer.includes(0)) throw new FsError(`cannot edit "${displayPath}": binary file`, "FS_NOT_TEXT");
+ 	const raw = decodeUtf8(buffer, "edit", displayPath);
+@@ -779,10 +793,10 @@
+ * @returns the LF-normalized text, or null for a non-regular, at/above-limit, binary, non-UTF-8,
+ * descriptor-size-changed, or unreadable file.
+ */
+-async function readTextForDiff(absolutePath, maxBytes, signal) {
++async function readTextForDiff(absolutePath, maxBytes, signal, openFile) {
+ 	throwIfAborted(signal, "read");
+ 	try {
+-		const handle = await open(absolutePath, "r");
++		const handle = openFile ? await openFile() : await open(absolutePath, "r");
+ 		let buffer;
+ 		let total = 0;
+ 		let openedSize = 0;
+@@ -792,7 +806,8 @@
+ 			throwIfAborted(signal, "read");
+ 			if (!info.isFile()) return null;
+ 			if (info.size >= maxBytes) return null;
+-			openedSize = info.size;
++			// Native supplies exact bigint size; conversion follows the safe configured bound.
++			openedSize = Number(info.size);
+ 			buffer = Buffer.allocUnsafe(openedSize + 1);
+ 			while (total < buffer.length) {
+ 				throwIfAborted(signal, "read");
+@@ -817,7 +832,10 @@
+ 			return null;
+ 		}
+ 	} catch (error) {
++		// Resource uncertainty must not become a best-effort null and permit unlink.
++		if (openFile && error?.workspaceEditCleanupFailed) throw error;
+ 		if (error instanceof FsError) throw error;
++		if (openFile && isAbortError(error)) throw new FsError("read aborted", "FS_ABORTED", { cause: error });
+ 		if (error instanceof Error && "code" in error) return null;
+ 		throw error;
+ 	}
+@@ -1017,6 +1035,22 @@
+ 		}, signal));
+ 	}
+ 	async readBytes(target, signal, maxBytes) {
++		if (ohosWorkspacePaths?.handles(String(target.targetKey))) {
++			try {
++				throwIfAborted(signal, "read");
++				const logicalPath = String(target.targetKey);
++				const info = await ohosWorkspacePaths.statFile(logicalPath, signal);
++				if (info === void 0) throw new FsError(`cannot read "${target.displayPath}": not found`, "FS_NOT_FOUND");
++				if (info.type !== "file") throw new FsError(`cannot read "${target.displayPath}": not a regular file`, "FS_NOT_REGULAR_FILE");
++				if (info.size > maxBytes) throw new FsError(`cannot read "${target.displayPath}": ${info.size} bytes exceeds the ${maxBytes}-byte limit`, "FS_TOO_LARGE");
++				await this.internals.inspectReadBytesAfterStat?.({ displayPath: target.displayPath, targetKey: target.targetKey });
++				// Include one overflow byte; the existing window validates its safe-integer domain.
++				const raw = await ohosWorkspacePaths.readWindow(logicalPath, { offset: 0, length: maxBytes + 1 }, signal);
++				throwIfAborted(signal, "read");
++				if (raw.length > maxBytes) throw new FsError(`cannot read "${target.displayPath}": content exceeds the ${maxBytes}-byte limit`, "FS_TOO_LARGE");
++				return raw;
++			} catch (error) { throw ohosFileError(error, "read", target.displayPath, signal); }
++		}
+ 		return readWholeBytes({
+ 			displayPath: target.displayPath,
+ 			targetKey: target.targetKey
+@@ -1058,111 +1092,220 @@
+ 			...entry.size !== void 0 ? { size: entry.size } : {}
+ 		}));
+ 	}
+-	async writeText(target, content, expected, signal) {
++	async writeText(target, content, expected, signal, withWorkspace) {
+ 		return this.withLock(target.targetKey, async () => {
+-			const existing = await this.writeTarget(target, expected);
+-			const before = existing !== null && Buffer.byteLength(content, "utf8") < this.config.diffBasisMaxBytes ? await readTextForDiff(target.targetKey, this.config.diffBasisMaxBytes, signal) : null;
+-			await writeFileAtomic(target.targetKey, content, existing?.mode, signal, this.internals, {
+-				displayPath: target.displayPath,
+-				createIfAbsent: expected?.kind === "createIfAbsent"
+-			});
+-			const after = await probe(target.targetKey);
+-			return {
+-				operation: existing ? "update" : "create",
+-				version: this.versionAfterWrite(after, target),
+-				before,
+-				after: normalizeLineEndings(content)
++			const apply = async (io) => {
++				const existing = await this.writeTarget(target, expected, io?.probe);
++				const before = existing !== null && Buffer.byteLength(content, "utf8") < this.config.diffBasisMaxBytes ? await readTextForDiff(target.targetKey, this.config.diffBasisMaxBytes, signal, io?.openDiffInput) : null;
++				if (io) {
++					try { await io.writeWhole(content, existing?.mode, { createIfAbsent: expected?.kind === "createIfAbsent" }); }
++					catch (error) {
++						if (error.workspaceWholeEffect === 1) throw new FsError(`cannot finish creating "${target.displayPath}": ${errorMessage(error)}; file may be incomplete`, isAbortError(error) ? "FS_ABORTED" : "FS_IO_ERROR", { cause: error });
++						if (error.workspaceWholeEffect === 0 && expected?.kind === "createIfAbsent") {
++							await throwGuardedCreateFailure(error, target.targetKey, target.displayPath, async () => {
++								const found = await io.probe();
++								if (!found) throw Object.assign(new Error("not found"), { code: "ENOENT" });
++								return { isFile: () => found.type === "file" };
++							});
++						}
++						throw error;
++					}
++				} else await writeFileAtomic(target.targetKey, content, existing?.mode, signal, this.internals, {
++					displayPath: target.displayPath,
++					createIfAbsent: expected?.kind === "createIfAbsent"
++				});
++				const after = io ? await io.probe() : await probe(target.targetKey);
++				return {
++					operation: existing ? "update" : "create",
++					version: this.versionAfterWrite(after, target),
++					before,
++					after: normalizeLineEndings(content)
++				};
+ 			};
++			if (!withWorkspace) return apply();
++			try { return await withWorkspace(apply); }
++			catch (error) {
++				if (error.workspaceEditState === "committed") throw new FsError(`saved "${target.displayPath}", but post-save validation or resource cleanup failed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditState === "partial") {
++					const aborted = !error.workspaceEditCleanupFailed && (error.code === "ABORT_ERR" || error.code === "FS_ABORTED");
++					throw new FsError(`cannot finish creating "${target.displayPath}": file may be incomplete; ${aborted ? "write aborted" : "operation or resource completion was not confirmed"}: ${error.message}`, aborted ? "FS_ABORTED" : "FS_IO_ERROR", { cause: error });
++				}
++				if (error.workspaceEditState === "unknown") throw new FsError(`save status for "${target.displayPath}" could not be confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditCleanupFailed) throw new FsError(`write of "${target.displayPath}" did not reach publication; resource cleanup was not confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error instanceof FsError) throw error;
++				if (isAbortError(error)) throw new FsError("write aborted", "FS_ABORTED", { cause: error });
++				if (error.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") throw ohosFileError(error, "write", target.displayPath);
++				throw writeIoError(target.displayPath, error);
++			}
+ 		});
+ 	}
+-	async editText(target, edit, expected, signal) {
++	async editText(target, edit, expected, signal, withWorkspace) {
+ 		return this.withLock(target.targetKey, async () => {
+-			const existing = await probe(target.targetKey);
+-			if (!existing) throw new FsError(`cannot edit "${target.displayPath}": file changed since it was read`, "FS_STALE_VERSION");
+-			if (existing.type !== "file") throw new FsError(`cannot edit "${target.displayPath}": not a regular file`, "FS_NOT_REGULAR_FILE");
+-			if (expected && existing.version !== expected.version) throw new FsError(`cannot edit "${target.displayPath}": file changed since it was read`, "FS_STALE_VERSION");
+-			const original = await readForEdit(target.targetKey, target.displayPath, signal);
+-			const edited = applyLiteralEdit(original.content, edit.oldString, edit.newString, edit.replaceAll, target.displayPath);
+-			const content = restoreFileText(edited.content, original);
+-			await writeFileAtomic(target.targetKey, content, existing.mode, signal, this.internals, { displayPath: target.displayPath });
+-			const after = await probe(target.targetKey);
+-			return {
+-				version: this.versionAfterWrite(after, target),
+-				before: original.content,
+-				after: edited.content
++			const apply = async (io) => {
++				const existing = io ? await io.probe() : await probe(target.targetKey);
++				if (!existing) throw new FsError(`cannot edit "${target.displayPath}": file changed since it was read`, "FS_STALE_VERSION");
++				if (existing.type !== "file") throw new FsError(`cannot edit "${target.displayPath}": not a regular file`, "FS_NOT_REGULAR_FILE");
++				if (expected && existing.version !== expected.version) throw new FsError(`cannot edit "${target.displayPath}": file changed since it was read`, "FS_STALE_VERSION");
++				const original = await readForEdit(target.targetKey, target.displayPath, signal, io?.read);
++				const edited = applyLiteralEdit(original.content, edit.oldString, edit.newString, edit.replaceAll, target.displayPath);
++				const content = restoreFileText(edited.content, original);
++				if (io) await io.write(content, existing.mode);
++				else await writeFileAtomic(target.targetKey, content, existing.mode, signal, this.internals, { displayPath: target.displayPath });
++				const after = io ? await io.probe() : await probe(target.targetKey);
++				return { version: this.versionAfterWrite(after, target), before: original.content, after: edited.content };
+ 			};
++			if (!withWorkspace) return apply();
++			try { return await withWorkspace(apply); }
++			catch (error) {
++				if (error.workspaceEditState === "committed") throw new FsError(`saved "${target.displayPath}", but post-save validation or resource cleanup failed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditState === "unknown") throw new FsError(`save status for "${target.displayPath}" could not be confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditCleanupFailed) throw new FsError(`edit of "${target.displayPath}" did not reach publication; resource cleanup was not confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error instanceof FsError || error.code === "ERR_FS_FILE_TOO_LARGE") throw error;
++				if (isAbortError(error)) throw new FsError("edit aborted", "FS_ABORTED");
++				if (error.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") throw ohosFileError(error, "edit", target.displayPath);
++				throw writeIoError(target.displayPath, error);
++			}
+ 		});
+ 	}
+-	async patchText(target, hunks, expected, signal) {
++	async patchText(target, hunks, expected, signal, withWorkspace) {
+ 		return this.withLock(target.targetKey, async () => {
+-			const existing = await this.requireFile(target, expected, "patch");
+-			const original = await readForEdit(target.targetKey, target.displayPath, signal);
+-			const after = this.patchContent(target, original.content, hunks);
+-			await writeFileAtomic(target.targetKey, restoreFileText(after, original), existing.mode, signal, this.internals, { displayPath: target.displayPath });
+-			return {
+-				version: this.versionAfterWrite(await probe(target.targetKey), target),
+-				before: original.content,
+-				after
++			const apply = async (io) => {
++				const existing = await this.requireFile(target, expected, "patch", io?.probe);
++				const original = await readForEdit(target.targetKey, target.displayPath, signal, io?.read);
++				const after = this.patchContent(target, original.content, hunks);
++				const content = restoreFileText(after, original);
++				if (io) await io.write(content, existing.mode);
++				else await writeFileAtomic(target.targetKey, content, existing.mode, signal, this.internals, { displayPath: target.displayPath });
++				return {
++					version: this.versionAfterWrite(io ? await io.probe() : await probe(target.targetKey), target),
++					before: original.content,
++					after
++				};
+ 			};
++			if (!withWorkspace) return apply();
++			try { return await withWorkspace(apply); }
++			catch (error) {
++				if (error.workspaceEditState === "committed") throw new FsError(`saved "${target.displayPath}", but post-save validation or resource cleanup failed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditState === "unknown") throw new FsError(`save status for "${target.displayPath}" could not be confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditCleanupFailed) throw new FsError(`patch of "${target.displayPath}" did not reach publication; resource cleanup was not confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error instanceof FsError || error.code === "ERR_FS_FILE_TOO_LARGE") throw error;
++				if (isAbortError(error)) throw new FsError("patch aborted", "FS_ABORTED");
++				if (error.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") throw ohosFileError(error, "patch", target.displayPath);
++				throw writeIoError(target.displayPath, error);
++			}
+ 		});
+ 	}
+-	async deleteFile(target, expected, signal) {
++	async deleteFile(target, expected, signal, withWorkspace) {
+ 		return this.withLock(target.targetKey, async () => {
+-			await this.requireFile(target, expected, "delete");
+-			const before = await readTextForDiff(target.targetKey, this.config.diffBasisMaxBytes, signal);
+-			await this.internals.inspectBeforeMutation?.(target);
+-			if (signal?.aborted) throw new FsError("delete aborted", "FS_ABORTED");
+-			await removeFile(target.targetKey, target.displayPath, this.internals);
+-			return { before };
++			const apply = async (io) => {
++				await this.requireFile(target, expected, "delete", io?.probe);
++				const before = await readTextForDiff(target.targetKey, this.config.diffBasisMaxBytes, signal, io?.openDiffInput);
++				await this.internals.inspectBeforeMutation?.(target);
++				if (signal?.aborted) throw new FsError("delete aborted", "FS_ABORTED");
++				if (io) await io.remove();
++				else await removeFile(target.targetKey, target.displayPath, this.internals);
++				return { before };
++			};
++			if (!withWorkspace) return apply();
++			try { return await withWorkspace(apply); }
++			catch (error) {
++				if (error.workspaceEditState === "committed") throw new FsError(`deleted "${target.displayPath}", but resource cleanup failed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditState === "unknown") throw new FsError(`delete status for "${target.displayPath}" could not be confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error.workspaceEditCleanupFailed) throw new FsError(`delete of "${target.displayPath}" did not reach removal; resource cleanup was not confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (error instanceof FsError) throw error;
++				if (isAbortError(error)) throw new FsError("delete aborted", "FS_ABORTED");
++				if (error.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") throw ohosFileError(error, "delete", target.displayPath);
++				throw new FsError(`cannot delete "${target.displayPath}": ${errorMessage(error)}`, isPermissionError(error) ? "FS_PERMISSION_DENIED" : "FS_IO_ERROR", { cause: error });
++			}
+ 		});
+ 	}
+-	async moveFile(source, destination, options, signal) {
++	async moveFile(source, destination, options, signal, withWorkspace) {
+ 		if (source.targetKey === destination.targetKey) throw new FsError(`cannot move "${source.displayPath}" to itself`, "FS_SAME_TARGET");
+ 		return this.withLocks([source.targetKey, destination.targetKey], async () => {
+-			const sourceInfo = await this.requireFile(source, options.expectedSource, "move");
+-			const existing = await this.writeTarget(destination, options.expectedDestination);
+-			const original = await readForEdit(source.targetKey, source.displayPath, signal);
+-			const after = options.hunks === void 0 ? original.content : this.patchContent(source, original.content, options.hunks);
+-			const content = restoreFileText(after, original);
+-			// The diff basis keeps its existing text budget, excluding the stored BOM.
+-			const before = existing && Buffer.byteLength(content, "utf8") - (original.bom ? 3 : 0) < this.config.diffBasisMaxBytes ? await readTextForDiff(destination.targetKey, this.config.diffBasisMaxBytes, signal) : null;
+-			await this.internals.inspectBeforeMutation?.(source);
+-			if (signal?.aborted) throw new FsError("move aborted", "FS_ABORTED");
+-			await writeFileAtomic(destination.targetKey, content, sourceInfo.mode, void 0, this.internals, {
+-				displayPath: destination.displayPath,
+-				createIfAbsent: options.expectedDestination?.kind === "createIfAbsent",
+-				existingDestination: existing !== null
+-			});
+-			const outcome = {
+-				operation: existing ? "update" : "create",
+-				version: this.versionAfterWrite(await probe(destination.targetKey), destination),
+-				before,
+-				after
+-			};
+-			const sourceBefore = Buffer.byteLength(original.content, "utf8") < this.config.diffBasisMaxBytes ? original.content : null;
+-			try {
+-				await removeFile(source.targetKey, source.displayPath, this.internals);
+-			} catch (error) {
+-				if (!(error instanceof FsError)) throw error;
++			const apply = async (io) => {
++				const sourceInfo = await this.requireFile(source, options.expectedSource, "move", io?.source.probe);
++				const existing = await this.writeTarget(destination, options.expectedDestination, io?.destination.probe);
++				const original = await readForEdit(source.targetKey, source.displayPath, signal, io?.source.read);
++				const after = options.hunks === void 0 ? original.content : this.patchContent(source, original.content, options.hunks);
++				const content = restoreFileText(after, original);
++				// The diff basis keeps its existing text budget, excluding the stored BOM.
++				const before = existing && Buffer.byteLength(content, "utf8") - (original.bom ? 3 : 0) < this.config.diffBasisMaxBytes ? await readTextForDiff(destination.targetKey, this.config.diffBasisMaxBytes, signal, io?.destination.openDiffInput) : null;
++				await this.internals.inspectBeforeMutation?.(source);
++				if (signal?.aborted) throw new FsError("move aborted", "FS_ABORTED");
++				if (io) {
++					io.beginCommit();
++					try { await io.destination.write(content, sourceInfo.mode, { createIfAbsent: options.expectedDestination?.kind === "createIfAbsent" }); }
++					catch (error) {
++						if (error.workspaceMoveEffect === 1) throw new FsError(`cannot finish creating "${destination.displayPath}": ${errorMessage(error)}; file may be incomplete`, "FS_IO_ERROR", { cause: error });
++						if (error.workspaceMoveEffect === 0 && options.expectedDestination?.kind === "createIfAbsent") {
++							await throwGuardedCreateFailure(error, destination.targetKey, destination.displayPath, async () => {
++								const found = await io.destination.probe();
++								if (!found) throw Object.assign(new Error("not found"), { code: "ENOENT" });
++								return { isFile: () => found.type === "file" };
++							});
++						}
++						throw writeIoError(destination.displayPath, error);
++					}
++				} else await writeFileAtomic(destination.targetKey, content, sourceInfo.mode, void 0, this.internals, {
++					displayPath: destination.displayPath,
++					createIfAbsent: options.expectedDestination?.kind === "createIfAbsent",
++					existingDestination: existing !== null
++				});
++				const outcome = {
++					operation: existing ? "update" : "create",
++					version: this.versionAfterWrite(io ? await io.destination.probe() : await probe(destination.targetKey), destination),
++					before,
++					after
++				};
++				const sourceBefore = Buffer.byteLength(original.content, "utf8") < this.config.diffBasisMaxBytes ? original.content : null;
++				try {
++					if (io) {
++						try { await io.source.remove(); }
++						catch (error) {
++							if (!error.workspaceMoveSourceUnchanged) throw error;
++							throw new FsError(`cannot delete "${source.displayPath}": ${errorMessage(error)}`, isPermissionError(error) ? "FS_PERMISSION_DENIED" : "FS_IO_ERROR", { cause: error });
++						}
++					} else await removeFile(source.targetKey, source.displayPath, this.internals);
++				} catch (error) {
++					if (!(error instanceof FsError)) throw error;
++					return {
++						sourceBefore,
++						destination: outcome,
++						sourceDeleted: false,
++						sourceFailure: {
++							code: error.code,
++							message: error.message
++						}
++					};
++				}
+ 				return {
+ 					sourceBefore,
+ 					destination: outcome,
+-					sourceDeleted: false,
+-					sourceFailure: {
+-						code: error.code,
+-						message: error.message
+-					}
++					sourceDeleted: true
+ 				};
++			};
++			if (!withWorkspace) return apply();
++			try { return await withWorkspace(apply); }
++			catch (error) {
++				const facts = error.workspaceMoveFacts;
++				const partial = error.workspaceMoveResult;
++				if (partial?.sourceDeleted === false && facts?.destination === "published" && facts.source === "not-deleted") {
++					return { ...partial, sourceFailure: { ...partial.sourceFailure, message: `${partial.sourceFailure.message}; resource cleanup could not be confirmed: ${error.message}` } };
++				}
++				if (facts?.destination === "published") throw new FsError(`destination "${destination.displayPath}" was written; source removal is ${facts.source}; resource/operation completion could not be confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (facts?.destination === "partial") throw new FsError(`cannot finish creating "${destination.displayPath}": file may be incomplete; source removal was not attempted: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (facts?.destination === "unknown" || facts?.source === "unknown") throw new FsError(`move status could not be confirmed for "${source.displayPath}" to "${destination.displayPath}": ${error.message}`, "FS_IO_ERROR", { cause: error });
++				if (facts?.cleanupFailed) throw new FsError(`move was not committed; resource cleanup could not be confirmed: ${error.message}`, "FS_IO_ERROR", { cause: error });
++				const cause = facts ? error.cause : error;
++				if (cause instanceof FsError) throw cause;
++				if (isAbortError(cause)) throw new FsError("move aborted", "FS_ABORTED", { cause });
++				if (cause?.reason === "ERR_WORKSPACE_REAUTHORIZATION_REQUIRED") throw ohosFileError(cause, "move", source.displayPath);
++				throw new FsError(`cannot move "${source.displayPath}": ${errorMessage(cause)}`, isPermissionError(cause) ? "FS_PERMISSION_DENIED" : "FS_IO_ERROR", { cause });
+ 			}
+-			return {
+-				sourceBefore,
+-				destination: outcome,
+-				sourceDeleted: true
+-			};
+ 		});
+ 	}
+-	async writeTarget(target, expected) {
+-		const existing = await probe(target.targetKey);
++	async writeTarget(target, expected, probeFile) {
++		const existing = probeFile ? await probeFile() : await probe(target.targetKey);
+ 		if (existing && existing.type !== "file") throw new FsError(`cannot write "${target.displayPath}": not a regular file`, "FS_NOT_REGULAR_FILE");
+ 		if (expected?.kind === "replaceIfVersion") {
+ 			if (!existing) throw new FsError(`cannot write "${target.displayPath}": file no longer exists`, "FS_STALE_VERSION");
+@@ -1170,8 +1314,8 @@
+ 		} else if (expected?.kind === "createIfAbsent" && existing) throw new FsError(`cannot overwrite existing "${target.displayPath}" without reading it first`, "FS_NOT_OBSERVED");
+ 		return existing;
+ 	}
+-	async requireFile(target, expected, verb) {
+-		const existing = await probe(target.targetKey);
++	async requireFile(target, expected, verb, probeFile) {
++		const existing = probeFile ? await probeFile() : await probe(target.targetKey);
+ 		if (!existing) throw new FsError(`cannot ${verb} "${target.displayPath}": file changed since it was read`, "FS_STALE_VERSION");
+ 		if (existing.type !== "file") throw new FsError(`cannot ${verb} "${target.displayPath}": not a regular file`, "FS_NOT_REGULAR_FILE");
+ 		if (expected && existing.version !== expected.version) throw new FsError(`cannot ${verb} "${target.displayPath}": file changed since it was read`, "FS_STALE_VERSION");
+diff --git a/node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js b/node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js
+@@ -1,3 +1,4 @@
++const ohosWorkspaceEdit = process.platform === "openharmony" ? globalThis[Symbol.for("dsh.go.ohos.workspace-edit")] : void 0;
+ import { LocalFileSystem } from "@deepseek-ai/dsh-fs-local";
+ import { FsError } from "@deepseek-ai/dsh-fs";
+ import { writableRoots } from "@deepseek-ai/dsh-sandbox";
+@@ -123,7 +124,9 @@
+ 	* @returns the write outcome from the inherited backend.
+ 	*/
+ 	async writeText(target, content, expected, signal, sandboxPolicy) {
+-		return super.writeText(await this.checkedTarget(target, sandboxPolicy), content, expected, signal);
++		const policy = sandboxPolicy ?? this.ctx.sandboxPolicy.resolve();
++		const fresh = await this.checkedTarget(target, policy);
++		return super.writeText(fresh, content, expected, signal, ohosWorkspaceEdit?.workspaceEditScope(fresh, policy, signal));
+ 	}
+ 	/**
+ 	* Fence the edit by the per-call policy, then delegate to the inherited
+@@ -137,30 +140,37 @@
+ 	* @returns the edit outcome from the inherited backend.
+ 	*/
+ 	async editText(target, edit, expected, signal, sandboxPolicy) {
+-		return super.editText(await this.checkedTarget(target, sandboxPolicy), edit, expected, signal);
++		const policy = sandboxPolicy ?? this.ctx.sandboxPolicy.resolve();
++		const fresh = await this.checkedTarget(target, policy);
++		return super.editText(fresh, edit, expected, signal, ohosWorkspaceEdit?.workspaceEditScope(fresh, policy, signal));
+ 	}
+ 	/**
+ 	* Fence the mutation before delegating to the local provider.
+ 	* @param sandboxPolicy - per-call mode and workspace root; omit for the deployment fallback.
+ 	*/
+ 	async patchText(target, hunks, expected, signal, sandboxPolicy) {
+-		return super.patchText(await this.checkedTarget(target, sandboxPolicy), hunks, expected, signal);
++		const policy = sandboxPolicy ?? this.ctx.sandboxPolicy.resolve();
++		const fresh = await this.checkedTarget(target, policy);
++		return super.patchText(fresh, hunks, expected, signal, ohosWorkspaceEdit?.workspaceEditScope(fresh, policy, signal));
+ 	}
+ 	/**
+ 	* Fence the mutation before delegating to the local provider.
+ 	* @param sandboxPolicy - per-call mode and workspace root; omit for the deployment fallback.
+ 	*/
+ 	async deleteFile(target, expected, signal, sandboxPolicy) {
+-		return super.deleteFile(await this.checkedTarget(target, sandboxPolicy), expected, signal);
++		const policy = sandboxPolicy ?? this.ctx.sandboxPolicy.resolve();
++		const fresh = await this.checkedTarget(target, policy);
++		return super.deleteFile(fresh, expected, signal, ohosWorkspaceEdit?.workspaceEditScope(fresh, policy, signal));
+ 	}
+ 	/**
+ 	* Fence the mutation before delegating to the local provider.
+ 	* @param sandboxPolicy - per-call mode and workspace root; omit for the deployment fallback.
+ 	*/
+ 	async moveFile(source, destination, options, signal, sandboxPolicy) {
+-		const checkedSource = await this.checkedTarget(source, sandboxPolicy);
+-		const checkedDestination = await this.checkedTarget(destination, sandboxPolicy);
+-		return super.moveFile(checkedSource, checkedDestination, options, signal);
++		const policy = sandboxPolicy ?? this.ctx.sandboxPolicy.resolve();
++		const checkedSource = await this.checkedTarget(source, policy);
++		const checkedDestination = await this.checkedTarget(destination, policy);
++		return super.moveFile(checkedSource, checkedDestination, options, signal, ohosWorkspaceEdit?.workspaceMoveScope(checkedSource, checkedDestination, policy, signal));
+ 	}
+ 	/**
+ 	* Enforce the per-call policy against `target` and return the EXACT target the

@@ -14,6 +14,9 @@ import 'dart:ui' show Color;
 
 import 'package:dsh_tavern/dsh_tavern.dart' show PersonaSelection, TavernPersona;
 
+import 'tavern_canvas_helpers.dart';
+import 'tavern_card_scripts.dart' show tavernUsesMvu;
+
 /// One message on the canvas.
 final class TavernCanvasEntry {
   const TavernCanvasEntry({
@@ -259,6 +262,8 @@ String tavernCanvasDocument({
   final cardJson = noScripts || card == null ? 'null' : _inScript(card);
   final cardIdJson = noScripts ? 'null' : _inScript(characterId);
   final cardScriptsJson = noScripts ? '[]' : _inScript(cardScripts);
+  // MVU's variables, kept by the engine, for a card that uses them.
+  final mvu = !noScripts && tavernUsesMvu(card);
   // The libraries card scripts expect on the page (jQuery, lodash), ours and
   // so under the page's nonce; not there when card scripts do not run.
   final preload = noScripts
@@ -336,6 +341,8 @@ $preload
       [].slice.call(m.querySelectorAll('script')).forEach(function(old){
         running=running.then(function(){return new Promise(function(done){
           if(!m.isConnected||!old.parentNode||inert(old)){done();return;}
+          // MagVarUpdate is built in (Mvu): not fetched.
+          if(isMvuSrc(old.getAttribute('src'))){old.remove();done();return;}
           var s=document.createElement('script');
           for(var a=0;a<old.attributes.length;a++){var at=old.attributes[a];if(at.name!=='nonce')s.setAttribute(at.name,at.value);}
           // Once run, it leaves the message (a started script runs on): the
@@ -343,7 +350,7 @@ $preload
           var gone=function(){s.remove();};
           if(old.hasAttribute('src')){s.async=false;s.onload=s.onerror=function(){gone();done();};old.parentNode.replaceChild(s,old);}
           else if((s.getAttribute('type')||'').trim().toLowerCase()==='module'){
-            s.text=old.text+'\\n//# sourceURL=dsh-mes-'+mark(m)+'.js';s.onload=s.onerror=gone;old.parentNode.replaceChild(s,old);done();
+            s.text=withoutMvuImport(old.text)+'\\n//# sourceURL=dsh-mes-'+mark(m)+'.js';s.onload=s.onerror=gone;old.parentNode.replaceChild(s,old);done();
           }
           else{s.text=old.text+'\\n//# sourceURL=dsh-mes-'+mark(m)+'.js';old.parentNode.replaceChild(s,old);gone();done();}
         });});
@@ -384,11 +391,16 @@ $preload
   // dsh.call(method, params): a Promise of what the engine answers (the
   // result, or an Error carrying code/committed/fieldPath).
   var calls={},callSeq=0;
-  function call(method,params){
-    var p=new Promise(function(ok,no){
+  // Asked, not kept for any event's answer: what starts the engine's own
+  // events (setMvuEnabled) must not have their answers wait on it.
+  function ask(method,params){
+    return new Promise(function(ok,no){
       var id=++callSeq;calls[id]={ok:ok,no:no};
       post({type:'call',id:id,method:method,params:params===undefined?{}:params});
     });
+  }
+  function call(method,params){
+    var p=ask(method,params);
     // Kept until answered: an event's answer waits for the writes its
     // handlers started.
     inflight.push(p);
@@ -440,7 +452,7 @@ $preload
       var last=chat.lastElementChild;
       if(replied&&last&&fresh.indexOf(last)>=0&&last.getAttribute('is_user')!=='true')say(fill(L.replied,'name',last.getAttribute('aria-label')||''));
       // The card's own scripts start once the story is drawn, its snapshot in.
-      if(runScripts&&!scriptsStarted&&cardScripts.length){
+      if(runScripts&&!scriptsStarted&&(cardScripts.length||mvuWanted)){
         scriptsStarted=true;
         var start=function(){runCardScripts();};dsh.scripts.ready().then(start,start);
       }
@@ -519,6 +531,9 @@ $preload
     lastSeq=d.seq;
     var x=d.delta;if(!x)return;
     (x.variables||[]).forEach(setVar);
+    // The engine's resources (books, presets, regexes…) changed, the path
+    // or not.
+    adoptResources(x.resourceRefs);
     if(x.baseRevision===x.newRevision)return;
     var moved=(x.removedRefs||[]).length||Object.keys(x.indexChanges||{}).length||x.baseRevision!==pathRev;
     var up=x.upsertMessages||[];
@@ -538,10 +553,13 @@ $preload
           var k=varKey(v.target),e=vars[k]||(vars[k]={seq:0});
           e.target=v.target;e.version=v.version;e.value=v.value;
         });
+        adoptResources(s.resourceRefs,s.context);
         lastSeq=s.lastSeq||0;pathRev=s.pathRevision||null;loaded=true;
         renumber();
         var waiting=held;held=[];waiting.forEach(apply);
-        return regexReady().then(function(){return true;});
+        // The library's presets, for getPreset by name, on the way.
+        preloadPresets();
+        return true;
       },function(x){loading=null;throw x;});
       return loading;
     },
@@ -767,26 +785,15 @@ $preload
       fav:x.fav!=null?x.fav:false,data:card}));
   }
   // The chat's regexes (酒馆助手's 获取正则 page), which getTavernRegexes
-  // hands out at once: fetched before any script runs; another character's
-  // or preset's are not on this page, and come back empty. Not read (the
-  // engine refused, or not yet): the call says so and asks again, so a
-  // later one can have them; scripts still start.
-  var regexes=null,regexLoading=null,regexError=null;
-  function regexReady(){
-    if(!regexLoading)regexLoading=call('getTavernRegexes',{}).then(function(r){
-      regexes=r||{global:[],character:[],preset:[]};regexError=null;
-    },function(x){regexLoading=null;regexError=x;});
-    return regexLoading;
-  }
+  // hands out at once: the engine's, as of the snapshot and kept current by
+  // its deliveries (adoptResources); another character's or preset's are not
+  // on this page, and come back empty.
+  var regexes=null;
   function getTavernRegexes(option){
     var o=option||{},name=o.name;
     if(o.type!=='global'&&o.type!=='character'&&o.type!=='preset')
       throw new Error('getTavernRegexes: type is global, character or preset');
-    if(!regexes){
-      var why=regexError?'could not be read: '+(regexError.message||regexError):'are not read yet';
-      regexReady();
-      throw new Error('getTavernRegexes: the regexes '+why+'; asked again, try once more');
-    }
+    if(!regexes)throw new Error('getTavernRegexes: the regexes are not read yet');
     if(o.type==='global')return clone(regexes.global||[]);
     if(o.type==='character')return name==null||name==='current'||isCurrent(name)?clone(regexes.character||[]):[];
     return name==null||name==='in_use'?clone(regexes.preset||[]):[];
@@ -1153,7 +1160,11 @@ $preload
           if(e.failed&&!e.seen)issues.push({code:e.failed.code||'hookFailure',
             message:'A write nobody waited for failed: '+String(e.failed.message||e.failed)});
         });
-        post({type:'ack',eventId:d.eventId,status:issues.length?'failed':'completed',issues:issues});
+        var ack={type:'ack',eventId:d.eventId,status:issues.length?'failed':'completed',issues:issues};
+        // An MVU event: its candidate as the listeners left it.
+        var mvu=issues.length?null:mvuFeedback(d);
+        if(mvu)ack.mvu=mvu;
+        post(ack);
       });
     });
   }
@@ -1460,7 +1471,11 @@ $preload
   [['getScriptId',getScriptId],['getScriptName',getScriptName],['getButtonEvent',getButtonEvent]].forEach(function(f){
     dsh.scripts[f[0]]=f[1];if(!window[f[0]])window[f[0]]=f[1];
   });
-  function runCardScripts(){
+${tavernCanvasHelpersJs(mvu: mvu)}
+  // MVU (when the card uses it) is on for this chat and Mvu shared before
+  // any of them runs.
+  function runCardScripts(){mvuStart().then(startCardScripts);}
+  function startCardScripts(){
     cardScripts.forEach(function(s,n){
       var frame=document.createElement('iframe');
       frame.style.display='none';frame.setAttribute('aria-hidden','true');frame.dataset.script=s.id;
@@ -1471,9 +1486,9 @@ $preload
       frame.onload=function(){
         var w=frame.contentWindow;if(!w)return;
         shared.forEach(function(k){if(window[k]!==undefined)w[k]=window[k];});
-        Promise.all([own,regexReady()]).then(function(){
+        own.then(function(){
           var el=w.document.createElement('script');el.type='module';
-          el.textContent=s.content+'\\n//# sourceURL=dsh-script-'+n+'.js';
+          el.textContent=withoutMvuImport(s.content)+'\\n//# sourceURL=dsh-script-'+n+'.js';
           w.document.head.appendChild(el);
         });
       };

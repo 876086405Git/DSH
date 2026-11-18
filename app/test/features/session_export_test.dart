@@ -5,6 +5,7 @@
 
 import 'dart:io';
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -12,6 +13,7 @@ import 'package:dsh_app/state/session_export.dart';
 import 'package:dsh_app/ui/features/session_export_page.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -52,8 +54,11 @@ class _NoHttp extends DshCarrier {
 }
 
 class _Recording extends SessionLogExporter {
-  _Recording(HostConnection connection) : super(connection: connection, channel: _Channel());
+  _Recording(HostConnection connection, {this.savedAt, this.failure})
+    : super(connection: connection, channel: _Channel());
 
+  final String? savedAt;
+  final Object? failure;
   final calls = <String>[];
 
   @override
@@ -62,7 +67,8 @@ class _Recording extends SessionLogExporter {
   @override
   Future<String> saveToDownloads(String sessionId) async {
     calls.add('save $sessionId');
-    return 'Download/DSH-Go/${sessionLogZipName(sessionId)}';
+    if (failure case final error?) throw error;
+    return savedAt ?? 'Download/DSH-Go/${sessionLogZipName(sessionId)}';
   }
 }
 
@@ -164,6 +170,45 @@ void main() {
       await pumpFrames(tester);
       expect(exporter.calls, ['share s1', 'save s1']);
       expect(find.text('已存到 Download/DSH-Go/dsh-session-s1.zip'), findsOneWidget);
+      expect(find.text('存进 下载/DSH-Go'), findsOneWidget);
+    });
+
+    List<Override> onHarmony(_Recording exporter) => [
+      operatingSystemProvider.overrideWithValue('ohos'),
+      activeConnectionProvider.overrideWithValue(AsyncData(fakeConnection)),
+      sessionLogExporterProvider.overrideWithValue(exporter),
+    ];
+
+    testWidgets('HarmonyOS: asks where, and says 已保存 instead of the URI', (tester) async {
+      final exporter = _Recording(fakeConnection, savedAt: 'file://docs/storage/Users/currentUser/Download/s1.zip');
+      await _pump(tester, overrides: onHarmony(exporter));
+      expect(find.text('选择保存位置'), findsOneWidget);
+      expect(find.text('存到「下载」'), findsNothing);
+      expect(find.text('存进 下载/DSH-Go'), findsNothing);
+      await tester.tap(find.text('保存到文件'));
+      await pumpFrames(tester);
+      expect(exporter.calls, ['save s1']);
+      expect(find.text('已保存'), findsOneWidget);
+      expect(find.textContaining('file://'), findsNothing);
+    });
+
+    testWidgets('HarmonyOS: backing out of the window says nothing; a real failure still does', (tester) async {
+      await _pump(
+        tester,
+        overrides: onHarmony(_Recording(fakeConnection, failure: PlatformException(code: 'cancelled'))),
+      );
+      await tester.tap(find.text('保存到文件'));
+      await pumpFrames(tester);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text('已保存'), findsNothing);
+
+      await _pump(
+        tester,
+        overrides: onHarmony(_Recording(fakeConnection, failure: PlatformException(code: 'failed'))),
+      );
+      await tester.tap(find.text('保存到文件'));
+      await pumpFrames(tester);
+      expect(find.text('没能导出'), findsOneWidget);
     });
 
     testWidgets('the relay tunnel explains instead of offering buttons', (tester) async {

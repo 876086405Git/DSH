@@ -6,6 +6,7 @@
 // (<dsh-letter>…, tavern_components.dart) outside an HTML block are parts of
 // their own, drawn natively.
 
+import 'dart:convert';
 import 'dart:ui' show Color;
 
 import 'tavern_components.dart';
@@ -103,11 +104,29 @@ String _htmlOf(String segment) => [
       '<p>${block.trim().replaceAllMapped(RegExp(r'\*([^*\n]+)\*'), (m) => '<em>${m[1]}</em>').replaceAll('\n', '<br>')}</p>',
 ].join('\n');
 
+/// Whether [html]'s scripts read the story (a status bar drawing its
+/// floor's variables): then its island is told them (tavern_island_story.dart).
+bool tavernIslandReadsStory(String html) => _readsStory.hasMatch(html);
+
+final _readsStory = RegExp(
+  r'(<script\b|\son[a-z]+\s*=)[\s\S]*\b(getVariables|Mvu|getChatMessages|getCurrentMessageId|getLastMessageId|waitGlobalInitialized)\b',
+  caseSensitive: false,
+);
+
+/// Whether [html] carries a script of its own, or an inline handler.
+bool tavernIslandHasScript(String html) => _script.hasMatch(html);
+
+final _script = RegExp(r'<script\b|\son[a-z]+\s*=', caseSensitive: false);
+
 /// The page an island loads: [html] in the story's colours and size on a
 /// see-through ground, and a small script of ours (allowed by [nonce]) that
 /// reports the content's height to the `TavernIsland` channel. [noScripts]
 /// keeps the card's own scripts from running; [offline] keeps the page from
 /// loading anything off the network (only what is inline or data:).
+/// [libraries] (jQuery, lodash) come first, for its scripts; [story] is
+/// what they may read of the story (TavernIslandStory.forMessage): read
+/// only, as 酒馆助手's and MVU's getters give it. Neither when scripts do not
+/// run.
 String tavernIslandDocument(
   String html, {
   required Color text,
@@ -116,7 +135,16 @@ String tavernIslandDocument(
   required String nonce,
   bool noScripts = false,
   bool offline = false,
+  List<String> libraries = const [],
+  Map<String, Object?>? story,
 }) {
+  final preload = noScripts
+      ? ''
+      : [
+          for (final code in libraries) '<script nonce="$nonce">${code.replaceAll('</script', r'<\/script')}</script>',
+          if (story != null)
+            '<script nonce="$nonce">var dshStory=${jsonEncode(story).replaceAll('<', r'\u003c')};$_storyJs</script>',
+        ].join('\n');
   String css(Color c) =>
       'rgba(${(c.r * 255).round()},${(c.g * 255).round()},${(c.b * 255).round()},${c.a.toStringAsFixed(3)})';
   final policy = noScripts || offline
@@ -144,7 +172,7 @@ a{color:${css(accent)};}
 img,video,svg{max-width:100%;height:auto;}
 p{margin:0 0 .6em;}
 </style></head>
-<body><div id="dsh-island">
+<body>$preload<div id="dsh-island">
 $html
 </div>
 <script nonce="$nonce">
@@ -161,3 +189,54 @@ $html
 })();
 </script></body></html>''';
 }
+
+/// An island's read-only helpers: 酒馆助手's getters and MVU's over
+/// dshStory; a write is refused, said where it can be done.
+const _storyJs = r'''
+(function(){
+  var d=dshStory;
+  function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+  function readOnly(){
+    var e=new Error('Read only in an island: writing to the story is 整页画布\'s');
+    e.code='unsupportedCapability';e.committed=false;return Promise.reject(e);
+  }
+  function floor(id){
+    if(id===undefined||id==='latest')return d.last;
+    return typeof id==='number'&&id<0?d.last+1+id:id;
+  }
+  function getVariables(o){
+    var t=(o&&o.type)||'chat';
+    if(t==='chat')return clone(d.chat)||{};
+    if(t!=='message')return {};
+    var f=floor(o&&o.message_id);
+    return clone(f===d.messageId?d.data:f===d.last?d.latest:{})||{};
+  }
+  function steps(p){var out=[];String(p).replace(/[^.[\]]+|\[(\d+)\]/g,function(m,i){out.push(i===undefined?m:+i);return m;});return out;}
+  function vwd(v){return Array.isArray(v)&&v.length===2&&typeof v[1]==='string'?v[0]:v;}
+  var Mvu={
+    events:{VARIABLE_INITIALIZED:'mag_variable_initialized',VARIABLE_UPDATE_STARTED:'mag_variable_update_started',
+      COMMAND_PARSED:'mag_command_parsed',VARIABLE_UPDATE_ENDED:'mag_variable_update_ended'},
+    getMvuData:function(o){return getVariables(o||{type:'chat'});},
+    getCurrentMvuData:function(){return clone(d.data)||{};},
+    getMvuVariable:function(data,p,o){
+      o=o||{};var v=(data||{})[(o.category||'stat')+'_data'];
+      steps(p).forEach(function(k){v=v==null?undefined:v[k];});
+      return vwd(v===undefined?o.default_value:v);
+    },
+    getRecordFromMvuData:function(data,c){return (data||{})[(c||'stat')+'_data']||{};},
+    replaceMvuData:readOnly,replaceCurrentMvuData:readOnly,parseMessage:readOnly,setMvuVariable:readOnly,
+    reloadInitVar:function(){return Promise.resolve(false);}
+  };
+  function message(){return {message_id:d.messageId,name:d.name,role:d.role,is_hidden:false,message:d.message,data:clone(d.data)||{},extra:{}};}
+  function quiet(){return {stop:function(){}};}
+  var api={Mvu:Mvu,getVariables:getVariables,
+    getCurrentMessageId:function(){return d.messageId;},getLastMessageId:function(){return d.last;},
+    getChatMessages:function(r){var f=floor(typeof r==='number'?r:parseInt(String(r),10));return f===d.messageId?[message()]:[];},
+    waitGlobalInitialized:function(n){return n==='Mvu'?Promise.resolve(Mvu):new Promise(function(){});},
+    initializeGlobal:function(n,v){window[n]=v;},
+    eventOn:quiet,eventOnce:quiet,eventMakeFirst:quiet,eventMakeLast:quiet,eventRemoveListener:function(){},
+    tavern_events:{},replaceVariables:readOnly,insertOrAssignVariables:readOnly,insertVariables:readOnly,
+    updateVariablesWith:readOnly,deleteVariable:readOnly};
+  for(var k in api)if(window[k]===undefined)window[k]=api[k];
+})();
+''';

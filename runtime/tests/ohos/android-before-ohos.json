@@ -1,0 +1,21 @@
+{
+  "baseCommit": "afb5cdd",
+  "archiveSHA256": "2796a501eb18ee9ff3c553aca75a5be3cfba114db05fa4b1f0248a026b8773c1",
+  "dshVersion": "0.2.1-rc.4",
+  "files": {
+    "runtime/lib/rtbuild.py": "235370e7cfd7173a34cd71a348a909b083cc49d118e5ac8ed27a298d6aa821aa",
+    "runtime/patches/pins.json": "34db3fa0ce38e9eeb865c2de2a9e82e3db7b47390c50bd82fc3857cc182fa508",
+    "runtime/session-deletion/core.mjs": "61212f5cbd95481d3c66bf6f64458ffef964017fdef5b3ec83bcd4eb74341478",
+    "runtime/patches/fs-create-exclusive.diff": "7518223c254ee972f2b1f1eb5b200c4bddbf0e165e3499d3edb395c5f304fc4c",
+    "runtime/patches/install-log-redaction.diff": "464ec6a6f18e2a3cdfb9d88a3ef2b046e5ff473488de9849cf63cf05612e166d",
+    "runtime/patches/plugin-manager-active-run-guard.diff": "8416b6ae56cc42193c288c89bcc1d4b307aba4b79ce394284a8b5aaa4391fcff",
+    "runtime/patches/plugin-manager-cancel-tree-confirmation.diff": "4f203ebc420a3ffb2e216b4ca6f53b13d12a7119b44f7d1f3fd126d687789959",
+    "runtime/patches/route-guard.diff": "2be911f8e137dd5e36cc29507b4a2c979d936242c5f3b93ca7667d468a3af8ac",
+    "runtime/patches/zz-direct-runtime.diff": "cb13bfc9e8f2cecf630760cfe1953b5c0508bc7d080da568f23b9f335bb501f7",
+    "runtime/patches/zzz-config-editor-path.diff": "05366bdeaac8f76b0b952206dd6a11dd5b7283321458bb0c4edf4516e2309197",
+    "runtime/patches/zzz-title-cache-refresh.diff": "cdbec3d4311bdbf3fe314e676fcd1f3b7e5d1085a4004d3d66b1f70b36e4dedd",
+    "runtime/patches/zzzz-plugin-config-readability.diff": "4066eadfb6bb3c4c4ca04a02871128f3e765c44c2d52ed686e42b0122f50f26d",
+    "runtime/patches/zzzzz-plugin-config-bundles.diff": "bcdfe453bb77ae86a4447aaf494d6afcaadfc44e5997bb5624509776bd0a1c34",
+    "runtime/patches/zzzzzz-session-deletion.diff": "39188e1747f3069a17d52bf5e961df062ee7ddf8eea3e0a1ba169894695cb355"
+  }
+}

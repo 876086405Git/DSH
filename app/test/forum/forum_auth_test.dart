@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/forum/discourse_client.dart';
 import 'package:dsh_app/forum/forum_auth.dart';
 import 'package:dsh_app/forum/forum_config.dart';
@@ -187,6 +188,34 @@ void main() {
       expect(d.read(forumAuthProvider).signedIn, isFalse);
       expect(d.read(forumAuthProvider).error, '登录已失效，请重新登录');
     });
+
+    for (final (os, made) in [('android', 1), ('ohos', 2)]) {
+      test('on $os a rebuild ${made == 1 ? 'keeps the pair it holds' : 'reads the pair again'}', () async {
+        var pairs = 0;
+        final c = ProviderContainer(
+          overrides: [
+            operatingSystemProvider.overrideWithValue(os),
+            forumSecretStoreProvider.overrideWithValue(store),
+            forumKeyPairFactoryProvider.overrideWithValue(() async {
+              pairs++;
+              return _keys;
+            }),
+            accountBrowserProvider.overrideWithValue(browser),
+            forumApiFactoryProvider.overrideWithValue((base, credentials) => api),
+          ],
+        );
+        addTearDown(c.dispose);
+        await settled(c);
+        await c.read(forumAuthProvider.notifier).authorizeUrl();
+        expect(pairs, 1);
+        // What a failed read of the store looks like from here: the saved pair is gone.
+        await store.delete('rsa');
+        c.invalidate(forumAuthProvider);
+        await settled(c);
+        await c.read(forumAuthProvider.notifier).authorizeUrl();
+        expect(pairs, made);
+      });
+    }
 
     test('a custom forum address keeps its own session', () async {
       SharedPreferences.setMockInitialValues({'forum.baseUrl': 'https://bbs.example.com'});

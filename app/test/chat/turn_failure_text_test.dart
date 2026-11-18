@@ -24,4 +24,21 @@ void main() {
   for (final entry in cases.entries) {
     test('${entry.key}', () => expect(turnFailureText(entry.key), entry.value));
   }
+
+  group('AUTH says which kind', () {
+    for (final message in const [
+      '403 {"error":{"type":"permission_denied"}}',
+      'OpenAI API error: 403 forbidden',
+      'permission_error: this key cannot use this model',
+    ]) {
+      test(message, () => expect(turnFailureText('AUTH', message: message), '凭据不可用或权限不足'));
+    }
+    for (final message in const [null, '', '401 invalid api key', 'authentication_error: expired']) {
+      test('$message', () => expect(turnFailureText('AUTH', message: message), 'API Key 无效或已过期'));
+    }
+    test('the message only matters for AUTH', () {
+      expect(turnFailureText('INVALID_CREDENTIAL', message: '403'), 'API Key 无效或已过期');
+      expect(turnFailureText('SERVER', message: '403'), turnFailureText('SERVER'));
+    });
+  });
 }

@@ -1,5 +1,7 @@
 // Behaviour of the startup gate, onboarding helpers and small formatters.
 
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/notify_state.dart';
@@ -286,6 +288,42 @@ void main() {
     await tester.pump();
     expect(channel.calls, 1);
     expect(find.text('全程在本机完成'), findsOneWidget);
+  });
+
+  group('while it installs', () {
+    Future<void> setup(WidgetTester tester, String os, {bool waiting = false}) async {
+      usePhoneSurface(tester);
+      final runtime = _ProgressRuntime();
+      await tester.pumpWidget(
+        goldenApp(
+          home: RuntimeSetupPage(onDone: () {}, waiting: waiting),
+          brightness: Brightness.light,
+          overrides: [
+            operatingSystemProvider.overrideWithValue(os),
+            localRuntimeProvider.overrideWith(() => runtime),
+            notifyChannelProvider.overrideWithValue(_CountingNotify()),
+          ],
+        ),
+      );
+      await tester.pump();
+      runtime.progress(1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    final zh = lookupL10n(AppLocale.zhCN);
+
+    testWidgets('on HarmonyOS: stay here, no notification promised', (tester) async {
+      await setup(tester, 'ohos', waiting: true);
+      expect(find.text(zh.harmonySetupStay), findsOneWidget);
+      expect(find.text(zh.setupNotifyWhenDone), findsNothing);
+    });
+
+    testWidgets('on Android: as ever', (tester) async {
+      await setup(tester, 'android');
+      expect(find.text(zh.shellRuntimeLocalOnly), findsOneWidget);
+      expect(find.text(zh.harmonySetupStay), findsNothing);
+    });
   });
 
   testWidgets('update notes begin 16 inside the card', (tester) async {

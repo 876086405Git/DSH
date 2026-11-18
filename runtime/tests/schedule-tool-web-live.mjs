@@ -124,7 +124,8 @@ try {
       if (tasks.length) assert.equal(tasks[0].target.kind, 'new_once');
       if (decision !== 'cancelled') {
         assert.equal(mock.requests.length, 2);
-        assert.ok(JSON.stringify(mock.requests[1].body).includes(decision === 'allowed-once' ? 'Synthetic scheduled task' : 'authorization_required'));
+        const deniedCode = decision === 'rejected' ? 'authorization_rejected' : 'authorization_required';
+        assert.ok(JSON.stringify(mock.requests[1].body).includes(decision === 'allowed-once' ? 'Synthetic scheduled task' : deniedCode));
       }
       if (decision === 'timeout') {
         const state = await clockAction('state');

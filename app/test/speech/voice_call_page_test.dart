@@ -12,8 +12,9 @@ import 'package:dsh_app/state/app_notes.dart';
 import 'package:dsh_app/state/voice_state.dart';
 import 'package:dsh_app/ui/speech/call/call_backdrop.dart';
 import 'package:dsh_app/ui/speech/call/call_parts.dart';
-import 'package:dsh_app/ui/speech/call/call_visuals.dart';
 import 'package:dsh_app/ui/speech/voice_call_page.dart';
+import 'package:dsh_app/state/android_features.dart' show operatingSystemProvider;
+import 'package:dsh_app/ui/speech/call/call_visuals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -235,6 +236,15 @@ void main() {
     }
     expect(find.text('还没开口。你们说的话会一句句记在这里。'), findsOneWidget);
   });
+
+  for (final (os, frosted) in [('android', true), ('ohos', false)]) {
+    testWidgets('on $os the keys over the moving field ${frosted ? 'are' : 'are not'} frosted', (tester) async {
+      await pumpCall(tester, extra: [operatingSystemProvider.overrideWithValue(os)]);
+      expect(find.byType(BackdropFilter), frosted ? findsWidgets : findsNothing);
+      await tester.tap(find.byKey(const ValueKey('call-hang-up')));
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
 
   testWidgets('mute and loudspeaker keys switch and say so', (tester) async {
     final (audio, _) = await pumpCall(tester);

@@ -38,6 +38,7 @@ import 'io/authoring_image.dart';
 import 'io/card_codec.dart'
     show CardCodec, DecodedCardSeed, TavernCard, embeddedCardAssetPath, isSafeCardAssetPath, cardAssetDataUri;
 import 'io/chat_jsonl.dart';
+import 'io/deepseek_export.dart';
 import 'io/gameplay_pack_codec.dart';
 import 'io/import_intake.dart';
 import 'io/preset_codec.dart';
@@ -50,6 +51,7 @@ import 'llm/tool_calls.dart';
 import 'llm/tool_usage.dart';
 import 'lorebook_library.dart';
 import 'macros/macro_engine.dart';
+import 'mvu/mvu.dart' as mvu_core;
 import 'persona.dart';
 import 'preset_library.dart';
 import 'prompt/character_fields.dart';
@@ -114,6 +116,8 @@ part 'engine_card_events.dart';
 part 'engine_secrets.dart';
 part 'engine_group.dart';
 part 'engine_scripts.dart';
+part 'engine_mvu.dart';
+part 'engine_mvu_resources.dart';
 part 'engine_script_variables.dart';
 part 'engine_scripts_messages.dart';
 part 'engine_script_generation_types.dart';
@@ -122,6 +126,7 @@ part 'engine_script_generation_commit.dart';
 part 'engine_script_prompt.dart';
 part 'engine_script_injections.dart';
 part 'engine_script_regex.dart';
+part 'engine_script_regex_write.dart';
 part 'engine_slash_types.dart';
 part 'engine_slash_execution.dart';
 part 'engine_slash_effects.dart';
@@ -137,6 +142,12 @@ part 'engine_slash_output.dart';
 part 'engine_slash_host.dart';
 part 'engine_slash_generation_lock.dart';
 part 'engine_script_resources.dart';
+part 'engine_script_helper_settings.dart';
+part 'engine_script_presets.dart';
+part 'engine_script_avatars.dart';
+part 'engine_script_book_directory.dart';
+part 'engine_script_book_bindings.dart';
+part 'engine_deepseek_import.dart';
 part 'slash/st_name_matching.dart';
 part 'slash/st_message_bias.dart';
 
@@ -236,6 +247,7 @@ class TavernEngine implements Tavern {
   ) {
     _globalVariables = _NativeGlobals(_map(_document['globalVariables']));
     _store.committedObserver = _scripts.storeCommitted;
+    _regexLibrary.committedObserver = _scripts.resourcesChanged;
     _library.cardCommitted = (id, data) {
       _characterCache = null;
       unawaited(_characterDetails.remove(id));
@@ -456,8 +468,14 @@ class TavernEngine implements Tavern {
   final _characterDetails = <String, Future<StoredCharacter?>>{};
   static const _detailCacheCapacity = 8;
   Future<void> _libraryQueue = Future.value();
+
+  /// DeepSeek imports, one after another (engine_deepseek_import.dart).
+  Future<void> _deepSeekImports = Future.value();
   Future<void> _personaQueue = Future.value();
   Future<void> _presetQueue = Future.value();
+  Map<String?, _PresetWorkingSlot> _presetWorkingSlots = {};
+  var _presetWorkingRevision = 0;
+  var _presetWorkingNotifiedRevision = 0;
   Future<void> _fileQueue = Future.value();
   Future<void> _bookQueue = Future.value();
   Future<void>? _closeFuture;
@@ -958,6 +976,8 @@ class TavernEngine implements Tavern {
           pickRerollSeed: metadata['pick_reroll_seed'],
           characterId: characterId,
           preset: preset,
+          messageVariables: state['messageVariables'],
+          messageVariablesExists: state.containsKey('messageVariables'),
           packRegex: _resolveGameplayResources(
             gameplayCapture,
             settings,
@@ -1063,29 +1083,32 @@ class TavernEngine implements Tavern {
       });
 
   @override
-  Future<TavernCharacter> importCard(Uint8List bytes, {String? fileName}) => _operation(
-    () => _libraryOperation(() async {
-      var diagnostics = <TavernRegexDiagnostic>[];
-      final stored = await _library.importCard(
-        bytes,
-        fileName: fileName,
-        inspect: (card) async {
-          diagnostics = await _checkCardRegex(card.data);
-          return assessImport(
-            kind: TavernImportKind.character,
-            document: card.json,
-            embeddedAssetPaths: card.assets.keys,
-            regexDiagnostics: diagnostics,
-            checkedAt: _clock().toUtc(),
-          );
-        },
-      );
-      _characterCache = null;
-      _cacheCharacterDetail(stored.id, Future.value(stored));
-      _notifyLists();
-      return stored.toCharacter(regexDiagnostics: diagnostics);
-    }),
-  );
+  Future<TavernCharacter> importCard(Uint8List bytes, {String? fileName}) =>
+      _operation(() => _importCard(bytes, fileName: fileName));
+
+  /// [importCard] for an operation already admitted: one that began before a
+  /// backup closed admission still takes its cards in.
+  Future<TavernCharacter> _importCard(Uint8List bytes, {String? fileName}) => _libraryOperation(() async {
+    var diagnostics = <TavernRegexDiagnostic>[];
+    final stored = await _library.importCard(
+      bytes,
+      fileName: fileName,
+      inspect: (card) async {
+        diagnostics = await _checkCardRegex(card.data);
+        return assessImport(
+          kind: TavernImportKind.character,
+          document: card.json,
+          embeddedAssetPaths: card.assets.keys,
+          regexDiagnostics: diagnostics,
+          checkedAt: _clock().toUtc(),
+        );
+      },
+    );
+    _characterCache = null;
+    _cacheCharacterDetail(stored.id, Future.value(stored));
+    _notifyLists();
+    return stored.toCharacter(regexDiagnostics: diagnostics);
+  });
 
   @override
   Future<Uint8List> exportCard(String characterId, {TavernCardFormat format = TavernCardFormat.png}) =>
@@ -1325,6 +1348,7 @@ class TavernEngine implements Tavern {
           _store.updateChat(
             id,
             variables: _copy(variables),
+            settings: {if (_mvuDeclared(data)) 'mvuEnabled': true},
             metadata: _runtimeMetadata(_store.chat(id).metadata, state),
           );
           return id;
@@ -1491,6 +1515,12 @@ class TavernEngine implements Tavern {
       );
     });
   });
+
+  @override
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath) => _inspectDeepSeekExport(zipPath);
+  @override
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds) =>
+      _importDeepSeekSessions(zipPath, sessionIds);
 
   @override
   Future<List<TavernChatFile>> exportChat(String chatId, {String? fileName}) => _operation(() {
@@ -1936,23 +1966,46 @@ class TavernEngine implements Tavern {
       _operation(() => _resolvePreset(chatId == null ? null : _store.chat(chatId)).selection);
 
   @override
-  Future<void> setDefaultPreset(String? presetId) =>
-      _operation(() => _presetOperation(() => _store.setDefaultPreset(presetId)));
+  Future<void> setDefaultPreset(String? presetId) => _operation(
+    () => _presetOperation(() {
+      late _PresetWorkingMutation working;
+      _store.transaction(
+        () {
+          _store.setDefaultPreset(presetId);
+          working = _preparePresetWorkingReset();
+        },
+        onCommitted: () {
+          _adoptPresetWorking(working);
+        },
+      );
+    }),
+  );
 
   @override
   Future<void> bindPreset(String chatId, String? presetId) => _operation(
     () => _presetOperation(() async {
       if (presetId != null) _requirePreset(presetId);
       final chat = _store.chat(chatId);
-      if (chat.presetId == presetId && !chat.settings.containsKey('preset')) return;
+      if (chat.presetId == presetId && !chat.settings.containsKey('preset')) {
+        _adoptPresetWorking(_preparePresetWorkingReset(chatId: chatId));
+        _notifyPresetWorking();
+        return;
+      }
+      late _PresetWorkingMutation working;
       await _withMutation(
         chatId,
-        () => _store.transaction(() {
-          final settings = _store.chat(chatId).settings;
-          settings.remove('preset');
-          _store.updateChat(chatId, settings: settings);
-          _store.bindPreset(chatId, presetId);
-        }),
+        () => _store.transaction(
+          () {
+            final settings = _store.chat(chatId).settings;
+            settings.remove('preset');
+            _store.updateChat(chatId, settings: settings);
+            _store.bindPreset(chatId, presetId);
+            working = _preparePresetWorkingReset(chatId: chatId);
+          },
+          onCommitted: () {
+            _adoptPresetWorking(working);
+          },
+        ),
       );
     }),
   );
@@ -2079,43 +2132,57 @@ class TavernEngine implements Tavern {
           // This legacy mixed API has no transaction spanning a file and SQL.
           // Keep its established in-memory/file behavior, then commit selection.
           _document['settings'] = settings;
+          _adoptPresetWorking(_preparePresetSettingsAdoption(patch));
+          _notifyPresetWorking();
           await _saveDocument(writeGlobals: false);
           if (hasPreset) {
+            late _PresetWorkingMutation working;
             _store.transaction(
-              () => _selectLegacyPreset(
-                settings['preset'],
-                envelope: inherited?.envelope,
-                inheritedName: inherited?.name,
-              ),
+              () {
+                _selectLegacyPreset(settings['preset'], envelope: inherited?.envelope, inheritedName: inherited?.name);
+                working = _preparePresetWorkingReset();
+              },
+              onCommitted: () {
+                _adoptPresetWorking(working);
+              },
             );
           }
         } finally {
           _globalPresetUpdate = false;
         }
       } else {
+        late _PresetWorkingMutation working;
         await _withMutation(
           chatId,
-          () => _store.transaction(() {
-            final chat = _store.chat(chatId);
-            final inherited = !replacePreset && patch['preset'] is Map<String, Object?> && chat.presetId != null
-                ? _store.preset(chat.presetId!)
-                : null;
-            final settings = _mergeSettingsPatch(
-              chat.settings,
-              patch,
-              scopePresetId: chat.presetId,
-              replacePreset: replacePreset,
-            );
-            _store.updateChat(chatId, settings: settings);
-            if (patch.containsKey('preset')) {
-              _selectLegacyPreset(
-                settings['preset'],
-                chatId: chatId,
-                envelope: inherited?.envelope,
-                inheritedName: inherited?.name,
+          () => _store.transaction(
+            () {
+              final chat = _store.chat(chatId);
+              final inherited = !replacePreset && patch['preset'] is Map<String, Object?> && chat.presetId != null
+                  ? _store.preset(chat.presetId!)
+                  : null;
+              final settings = _mergeSettingsPatch(
+                chat.settings,
+                patch,
+                scopePresetId: chat.presetId,
+                replacePreset: replacePreset,
               );
-            }
-          }),
+              _store.updateChat(chatId, settings: settings);
+              if (patch.containsKey('preset')) {
+                _selectLegacyPreset(
+                  settings['preset'],
+                  chatId: chatId,
+                  envelope: inherited?.envelope,
+                  inheritedName: inherited?.name,
+                );
+                working = _preparePresetWorkingReset(chatId: chatId);
+              } else {
+                working = _preparePresetSettingsAdoption(patch, chatId: chatId);
+              }
+            },
+            onCommitted: () {
+              _adoptPresetWorking(working);
+            },
+          ),
         );
       }
     } catch (error, stack) {
@@ -2307,6 +2374,7 @@ class TavernEngine implements Tavern {
     final leaf = onCurrentPath ? chat.currentLeafId : job.nodeId;
     final context = _displayContext(view, leaf);
     final state = context.state;
+    final messageState = job.nodeId == null ? state : _displayContext(view, job.nodeId).state;
     final metadata = context.metadata;
     final live = _liveVariables[job.chatId];
     final active = _turns[job.chatId];
@@ -2363,6 +2431,8 @@ class TavernEngine implements Tavern {
       characterId: actorId ?? '',
       groupNames: groupNames?.names,
       groupNotMuted: groupNames?.enabledNames,
+      messageVariables: messageState['messageVariables'],
+      messageVariablesExists: messageState.containsKey('messageVariables'),
       macroHistorySnapshot: context.historySnapshot(
         overlayNodeId: job.reasoning ? null : contextTarget,
         text: job.text,
@@ -2950,64 +3020,75 @@ class TavernEngine implements Tavern {
   @override
   Future<void> deleteLorebook(String id) => _operation(() {
     _requireBookId(id);
-    return _bookOperation(() async {
-      _authoringAuthority.checkWritable('lorebook:$id');
-      final file = File('${directory.path}/lorebooks/$id.json');
-      var remove = false;
-      if (await file.exists()) {
-        remove = true;
-      } else {
-        // exists can hide lookup errors. Preserve its link-following and
-        // known non-file behavior, but do not acknowledge uncertain absence.
-        final type = await FileSystemEntity.type(file.path, followLinks: true);
-        if (type == FileSystemEntityType.file ||
-            type == FileSystemEntityType.pipe ||
-            type == FileSystemEntityType.unixDomainSock) {
-          remove = true;
-        } else if (type == FileSystemEntityType.notFound) {
-          // Linux delete can fold a lookup error into ENOENT. A read-only
-          // open preserves that error without reading or creating the book.
-          RandomAccessFile? probe;
-          try {
-            probe = await file.open(mode: FileMode.read);
-          } on PathNotFoundException catch (error) {
-            final code = error.osError?.errorCode;
-            if (code != 2 && (!Platform.isWindows || code != 3)) rethrow;
-          }
-          if (probe != null) {
-            // Neither close nor delete errors authorize the cache cleanup.
-            await probe.close();
-            remove = true;
-          }
-        }
-      }
-      final before = remove
-          ? AuthoringResourceSnapshot(present: true, rawText: (await readAuthoringText(file)).rawText)
-          : const AuthoringResourceSnapshot(present: false);
-      final owner = _authoringAuthority;
-      final ticket = AuthoringWriteTicket(
-        request: owner.newRequest('lorebook:$id', {'method': 'deleteLorebook'}),
-        before: before,
-        after: const AuthoringResourceSnapshot(present: false),
-      );
-      try {
-        if (!remove) {
-          owner.notAdopted(ticket, noChange: true);
-          _forgetBook(id);
-          return;
-        }
-        if (owner.prepare(ticket) != null) return;
-        ticket.enteredEffect = true;
-        await file.delete();
-        ticket.knownAdopted = true;
-        _forgetBook(id);
-        owner.adopted(ticket);
-        owner.publish(ticket);
-      } catch (error, stack) {
-        owner.fail(ticket, error, stack);
-      }
-    });
+    return _bookOperation(() => _deleteBookNow(id));
   });
+
+  Future<void> _deleteBookNow(String id, {void Function()? check, void Function()? onDeleted}) async {
+    check?.call();
+    _authoringAuthority.checkWritable('lorebook:$id');
+    final file = File('${directory.path}/lorebooks/$id.json');
+    var remove = false;
+    if (await file.exists()) {
+      remove = true;
+    } else {
+      // exists can hide lookup errors. Preserve its link-following and
+      // known non-file behavior, but do not acknowledge uncertain absence.
+      final type = await FileSystemEntity.type(file.path, followLinks: true);
+      if (type == FileSystemEntityType.file ||
+          type == FileSystemEntityType.pipe ||
+          type == FileSystemEntityType.unixDomainSock) {
+        remove = true;
+      } else if (type == FileSystemEntityType.notFound) {
+        // Linux delete can fold a lookup error into ENOENT. A read-only
+        // open preserves that error without reading or creating the book.
+        RandomAccessFile? probe;
+        try {
+          probe = await file.open(mode: FileMode.read);
+        } on PathNotFoundException catch (error) {
+          final code = error.osError?.errorCode;
+          if (code != 2 && (!Platform.isWindows || code != 3)) {
+            rethrow;
+          }
+        }
+        if (probe != null) {
+          // Neither close nor delete errors authorize the cache cleanup.
+          await probe.close();
+          remove = true;
+        }
+      }
+    }
+    final before = remove
+        ? AuthoringResourceSnapshot(present: true, rawText: (await readAuthoringText(file)).rawText)
+        : const AuthoringResourceSnapshot(present: false);
+    final owner = _authoringAuthority;
+    final ticket = AuthoringWriteTicket(
+      request: owner.newRequest('lorebook:$id', {'method': 'deleteLorebook'}),
+      before: before,
+      after: const AuthoringResourceSnapshot(present: false),
+    );
+    try {
+      if (!remove) {
+        owner.notAdopted(ticket, noChange: true, check: check);
+        _forgetBook(id);
+        return;
+      }
+      if (owner.prepare(ticket, check: check) != null) {
+        return;
+      }
+      ticket.enteredEffect = true;
+      await file.delete();
+      ticket.knownAdopted = true;
+      try {
+        _forgetBook(id);
+      } finally {
+        onDeleted?.call();
+      }
+      owner.adopted(ticket);
+      owner.publish(ticket);
+    } catch (error, stack) {
+      owner.fail(ticket, error, stack);
+    }
+  }
 
   /// A global binding applies to all chats; a chat binding overrides that
   /// source's global list. Character-specific bindings may be set globally via
@@ -3073,7 +3154,8 @@ class TavernEngine implements Tavern {
       });
 
   Map<String, Object?> _effectiveSettings([StoredChat? chat, Map<String, Object?>? metadata]) {
-    var result = _map(_document['settings']);
+    final global = _map(_document['settings']);
+    var result = Map<String, Object?>.of(global);
     if (chat != null) {
       final source = metadata ?? _chatCodec.metadataForNode(_store, chat.id);
       result = _merge(
@@ -3090,19 +3172,14 @@ class TavernEngine implements Tavern {
     } else if (chat != null && chat.settings.containsKey('preset')) {
       result['preset'] = _map(chat.settings['preset']);
     }
-    final overrides = _map(result['presetOverrides']);
-    final sampling = <String, Object?>{
-      for (final key in const [
-        'temperature',
-        'top_p',
-        'presence_penalty',
-        'frequency_penalty',
-        'openai_max_tokens',
-        'openai_max_context',
-      ])
-        if (overrides.containsKey(key)) key: overrides[key],
-    };
-    if (sampling.isNotEmpty) result['preset'] = {..._map(result['preset']), ...sampling};
+    result = _applyPresetWorkingSettings(
+      result,
+      global: global,
+      chat: chat,
+      selectedSource: selection.selection.source,
+      selectedPresetId: selection.selection.effectivePresetId,
+      working: _presetWorkingSlots.isEmpty ? null : _currentPresetData(chat?.id, capturedChat: chat).working,
+    );
     // Project only after every global/source/chat merge. A read->set roundtrip
     // cannot duplicate the collection or replace it with a supplied snapshot.
     result.remove('managedRegexScripts');
@@ -3157,7 +3234,7 @@ class TavernEngine implements Tavern {
     return value;
   }
 
-  Future<void> _saveDocument({bool writeGlobals = true}) {
+  Future<void> _saveDocument({bool writeGlobals = true, void Function()? onGlobalsAdopted}) {
     final through = _globalVariables.revision;
     return _settingsDocument((document) async {
       if (!writeGlobals) {
@@ -3167,16 +3244,22 @@ class TavernEngine implements Tavern {
       // Claim only still-uncommitted native intent at this real queue position.
       // An earlier flush may already have saved the same prefix.
       if (!_globalVariables.hasThrough(through)) {
+        onGlobalsAdopted?.call();
         return;
       }
       final runtime = _globalVariables.project(through);
       final persisted = _copy(runtime);
       if (_jsonString({'value': document['globalVariables']}) == _jsonString({'value': persisted})) {
         _adoptGlobals(runtime, through);
+        onGlobalsAdopted?.call();
         return;
       }
       document['globalVariables'] = persisted;
-      await _commitSettingsDocument(document, globals: (runtime: runtime, through: through));
+      await _commitSettingsDocument(
+        document,
+        globals: (runtime: runtime, through: through),
+        onCommitted: onGlobalsAdopted,
+      );
     });
   }
 
@@ -3197,12 +3280,14 @@ class TavernEngine implements Tavern {
   Future<void> _commitSettingsDocument(
     Map<String, Object?> document, {
     ({Map<String, Object?> runtime, int through})? globals,
+    void Function()? check,
     void Function()? onCommitted,
   }) async {
     final file = File('${directory.path}/settings.json');
     await file.parent.create(recursive: true);
     final temporary = File('${file.path}.writing');
     await temporary.writeAsString(jsonEncode(document), flush: true);
+    check?.call();
     await temporary.rename(file.path);
     if (globals != null) {
       _adoptGlobals(globals.runtime, globals.through);
@@ -3331,6 +3416,7 @@ class TavernEngine implements Tavern {
     () => _withMutation(chatId, () async {
       final chat = _store.chat(chatId);
       final target = _store.node(chatId, nodeId);
+      final messageState = _stateFromNode(chatId, target, chat: chat);
       final group = _store.groupChat(chatId);
       final actorId = group != null && target.message.role == TavernRole.character
           ? target.message.speakerCharacterId
@@ -3386,6 +3472,8 @@ class TavernEngine implements Tavern {
         characterId: actorId ?? '',
         groupNames: groupNames?.names,
         groupNotMuted: groupNames?.enabledNames,
+        messageVariables: messageState['messageVariables'],
+        messageVariablesExists: messageState.containsKey('messageVariables'),
         packRegex: _resolveGameplayResources(gameplayCapture, settings, actorId: actorId, kinds: const {'regex'}).regex,
       );
       final globals = _globalVariables.checkpoint();
@@ -3724,6 +3812,8 @@ class TavernEngine implements Tavern {
       preset: preset,
       groupNames: groupView?.names ?? names?.names,
       groupNotMuted: groupView?.enabledNames ?? names?.enabledNames,
+      messageVariables: state['messageVariables'],
+      messageVariablesExists: state.containsKey('messageVariables'),
       // Narrator preparation never runs the user-input regex pipeline.
       packRegex: narrator
           ? const []
@@ -4231,6 +4321,8 @@ class TavernEngine implements Tavern {
         groupNames: turn.groupView?.names,
         groupNotMuted: turn.groupView?.enabledNames,
         preset: preset,
+        messageVariables: turn.state['messageVariables'],
+        messageVariablesExists: turn.state.containsKey('messageVariables'),
         packRegex: turn.gameplayResources.regex,
       );
       turn.environment = environment;
@@ -4466,6 +4558,7 @@ class TavernEngine implements Tavern {
       } else {
         _bindOrdinaryToolReply(this, turn, parentId: parent, speaker: record.card.promptName, target: target);
       }
+      await _scripts._captureMvuTurnBase(turn);
       final requestBody = _copy(assembly.body);
       turn.cancellation.check();
       try {
@@ -4680,7 +4773,13 @@ class TavernEngine implements Tavern {
         if (source == WorldInfoSource.character)
           for (final id
               in group == null ? [characterId] : [for (final member in group.group.members) member.characterId])
-            ..._strings(_map(settings['characterLorebooks'])[id]),
+            ..._characterLinkedBookIds(
+              settings,
+              id,
+              embedded: group == null
+                  ? data.containsKey('character_book')
+                  : (group.cards[id]?.card.data.containsKey('character_book') ?? false),
+            ),
         if (source == WorldInfoSource.persona && personaId != null)
           ..._strings(_map(settings['personaLorebooks'])[personaId]),
       ];
@@ -5684,6 +5783,8 @@ class _Turn {
   Map<String, Object?> originalVariables = {};
   final previousSelections = <(String, String?)>[];
   _MacroEnvironment? environment;
+  _MvuResources? mvuResources;
+  _MvuTurnBase? mvuBase;
   bool writeBackAttempted = false;
   state_core.StateDefinition? stateDefinition;
   bool stateAutomatic = false;
@@ -5798,6 +5899,8 @@ class _MacroEnvironment {
     Map<String, Object?>? regexPresetSettings,
     this.macroHistory,
     this.macroHistorySnapshot,
+    this.messageVariables,
+    this.messageVariablesExists = false,
     this.onCharacterDependency,
     this.prepareCharacterFieldsOnDemand = false,
     this.collapseNewlinesOverride,
@@ -5815,6 +5918,8 @@ class _MacroEnvironment {
   final List<StoredNode> history;
   final List<MacroMessage>? macroHistory;
   final MacroHistorySnapshot? macroHistorySnapshot;
+  final Object? messageVariables;
+  final bool messageVariablesExists;
   final void Function(String)? onCharacterDependency;
   final bool prepareCharacterFieldsOnDemand;
   final bool? collapseNewlinesOverride;
@@ -5890,6 +5995,8 @@ class _MacroEnvironment {
     persona: persona,
     history: macroHistory ?? _MacroHistory(history),
     historySnapshot: macroHistorySnapshot,
+    messageVariables: messageVariables,
+    messageVariablesExists: messageVariablesExists,
     model: config.model,
     input: input,
     maxContext: maxContext,

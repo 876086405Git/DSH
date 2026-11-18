@@ -1,0 +1,76 @@
+--- a/src/Utils.js
++++ b/src/Utils.js
+@@ -1,5 +1,6 @@
+ import { Codepoint } from './Codepoint'
+ import { Unicode } from './Unicode'
++import { isUnicodeWord } from './UnicodeGroups'
+ /**
+  * Various constants and helper utilities.
+  */
+@@ -104,17 +105,8 @@
+     return String.fromCodePoint(r)
+   }
+ 
+-  // isWordRune reports whether r is consider a ``word character''
+-  // during the evaluation of the \b and \B zero-width assertions.
+-  // These assertions are ASCII-only: the word characters are [A-Za-z0-9_].
+-  static isWordRune(r) {
+-    return (
+-      (Codepoint.CODES.get('a') <= r && r <= Codepoint.CODES.get('z')) ||
+-      (Codepoint.CODES.get('A') <= r && r <= Codepoint.CODES.get('Z')) ||
+-      (Codepoint.CODES.get('0') <= r && r <= Codepoint.CODES.get('9')) ||
+-      r === Codepoint.CODES.get('_')
+-    )
+-  }
++  // OHOS rg: Unicode 16 boundary classification agrees with PERL_GROUPS.
++  static isWordRune(r) { return isUnicodeWord(r) }
+ 
+   // emptyOpContext returns the zero-width assertions satisfied at the position
+   // between the runes r1 and r2, a bitmask of EMPTY_* flags.
+--- a/src/MachineInput.js
++++ b/src/MachineInput.js
+@@ -41,6 +41,8 @@
+       return MachineInputBase.EOF()
+     }
+     let x = this.bytes[i++] & 255
++    // A continuation byte is not a Unicode scalar start, but empty byte matches remain legal.
++    if ((x & 192) === 128) return (0x110000 << 3) | 1
+     if ((x & 128) === 0) {
+       return (x << 3) | 1
+     } else if ((x & 224) === 192) {
+@@ -81,6 +83,8 @@
+   // Returns a bitmask of EMPTY_* flags.
+   context(pos) {
+     pos += this.start
++    // Neither Unicode boundary assertion is true inside a UTF-8 scalar.
++    if (pos < this.end && (this.bytes[pos] & 192) === 128) return 0
+     let r1 = -1
+     if (pos > this.start && pos <= this.end) {
+       let start = pos - 1
+--- a/src/Machine.js
++++ b/src/Machine.js
+@@ -290,10 +290,10 @@
+           add = c === i.runes[0]
+           break
+         case Inst.RUNE_ANY:
+-          add = true
++          add = c >= 0 && c <= 0x10ffff
+           break
+         case Inst.RUNE_ANY_NOT_NL:
+-          add = c !== Codepoint.CODES.get('\n')
++          add = c >= 0 && c <= 0x10ffff && c !== Codepoint.CODES.get('\n')
+           break
+         default:
+           throw new Error('bad inst')
+--- a/src/Parser.js
++++ b/src/Parser.js
+@@ -3,7 +3,8 @@
+ import { Unicode } from './Unicode'
+ import { UnicodeTables } from './UnicodeTables'
+ import { UnicodeRangeTable } from './UnicodeRangeTable'
+-import { PERL_GROUPS, POSIX_GROUPS } from './CharGroup'
++import { POSIX_GROUPS } from './CharGroup'
++import { PERL_GROUPS } from './UnicodeGroups'
+ import { Utils } from './Utils'
+ import { CharClass } from './CharClass'
+ import { RE2JSSyntaxException } from './exceptions'

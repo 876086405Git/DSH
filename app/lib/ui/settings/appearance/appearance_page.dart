@@ -1,6 +1,6 @@
 // 设置 › 主题: light / dark, the palette (six presets,
 // a custom hue, the wallpaper), the feature tile style, the launcher icon (and a
-// picture shortcut) and the launch screen.
+// picture shortcut) and the launch screen (those two on Android only).
 //
 // Every picker on the page shares one grid: previews start 16 from the card's
 // edges and sit 12 apart, labels 8 under them (TileStylePicker, AppIconPicker).
@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../../state/android_features.dart';
 import '../../../state/appearance_state.dart';
 import '../../../state/settings_state.dart';
 import '../../../ui_config/ui_config.dart';
@@ -74,6 +75,8 @@ class AppearancePage extends ConsumerWidget {
     final l10n = context.l10n;
     final appearance = ref.watch(appearanceProvider);
     final wallpaper = ref.watch(wallpaperAccentProvider).value;
+    // A picture as a launcher shortcut: Android and HarmonyOS, not iOS.
+    final pictureShortcut = ref.watch(operatingSystemProvider) != 'ios';
     return AppPage.list(
       title: l10n.pluginsTheme,
       children: [
@@ -97,7 +100,7 @@ class AppearancePage extends ConsumerWidget {
           title: l10n.pluginsAppIcon,
           children: [
             SpotAnchor(spot: Spots.appIcon, child: const AppIconPicker()),
-            const IconShortcutTile(),
+            if (pictureShortcut) const IconShortcutTile(),
           ],
         ),
         SettingsSection(
@@ -927,7 +930,7 @@ class _WallpaperRow extends ConsumerWidget {
         title: l10n.pluginsFollowWallpaper,
         value: AccentDot(color: seed),
         onTap: () => set(!on),
-        trailing: Switch(value: on, onChanged: set),
+        trailing: Switch.adaptive(value: on, onChanged: set),
       ),
     );
   }

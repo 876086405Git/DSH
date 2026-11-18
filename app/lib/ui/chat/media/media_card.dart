@@ -865,18 +865,23 @@ Future<void> saveMediaItems(BuildContext context, WidgetRef ref, String sessionI
   final media = ref.read(mediaChannelProvider);
   final files = ref.read(artifactFilesProvider);
   var saved = 0;
+  var backedOut = false;
   String? failure;
   for (final item in pictures) {
     try {
       await saveToGallery(media, await mediaItemBytes(ref, sessionId, item), name: item.name);
       saved++;
     } on GallerySaveException catch (e) {
+      // Backed out of the system's window: stop asking, and nothing to report for it.
+      backedOut = e.code == 'cancelled';
+      if (backedOut) break;
       failure ??= e.code;
     } catch (_) {
       failure ??= 'failed';
     }
   }
   for (final item in videos) {
+    if (backedOut) break;
     try {
       final file = await files.materialize(
         sessionId,
@@ -885,6 +890,8 @@ Future<void> saveMediaItems(BuildContext context, WidgetRef ref, String sessionI
       await media.saveVideoFile(file.path, name: item.name);
       saved++;
     } on PlatformException catch (error) {
+      // Backed out of HarmonyOS's album window: stop asking, nothing to report.
+      if (saveWindowDismissed(error)) break;
       failure ??= error.code;
     } catch (_) {
       failure ??= 'failed';

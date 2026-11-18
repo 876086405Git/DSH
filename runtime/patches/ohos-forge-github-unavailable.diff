@@ -1,0 +1,12 @@
+--- a/node_modules/@deepseek-ai/dsh-experimental-forge-github/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-experimental-forge-github/lib/index.js
+@@ -28,6 +28,9 @@
+ */
+ function ghRunner(config) {
+ 	return async (args, signal, input) => {
++		if (process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true) {
++			throw new GhUnavailableError("OpenHarmony local hosts cannot run gh; connect to a computer host to use GitHub forge.");
++		}
+ 		const result = await execa(config.ghCommand, args, {
+ 			env: {
+ 				...scrubbedParentEnv(),

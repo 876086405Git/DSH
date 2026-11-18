@@ -1,0 +1,21 @@
+--- a/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
+@@ -3,7 +3,7 @@
+ import { deepEqualJson } from "@deepseek-ai/dsh-util-values";
+ import { MAX_TIMER_DELAY_MS, idleWatchdog, timeoutOf } from "@deepseek-ai/dsh-timeout";
+ import { brandString } from "@deepseek-ai/dsh-brand";
+-import { requestImageDimensions } from "@deepseek-ai/dsh-attachment";
++import { AttachmentError, requestImageDimensions } from "@deepseek-ai/dsh-attachment";
+ import z from "@deepseek-ai/schemastery";
+ import { credentialKey, credentialKeyId, credentialKeyScope, credentialRef, isCredentialKeySegment, isCredentialRefName } from "@deepseek-ai/dsh-credentials";
+ import { builtinModels, builtinProviders, getAllBuiltinModels, getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
+@@ -2061,6 +2061,9 @@
+ 			} catch (error) {
+ 				if (timeoutOf(watchdog.signal, "LLM_STREAM_IDLE_TIMEOUT") !== void 0) throw new LlmError(`pi-ai stream idle timeout after ${streamIdleTimeoutMs}ms`, "TIMEOUT", { cause: error });
+ 				if (options.signal?.aborted) throw new LlmError("pi-ai request aborted by caller", "ABORTED", { cause: error });
++				// AttachmentError cannot inherit HarnessError without a dependency cycle.
++				// Keep its known first-party code through the OH adapter boundary.
++				if (process.platform === "openharmony" && error instanceof AttachmentError) throw new LlmError(error.message, error.code, { cause: error });
+ 				throw error;
+ 			} finally {
+ 				consumer.abort("pi-ai stream consumer stopped");

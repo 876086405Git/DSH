@@ -1,0 +1,132 @@
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js
+@@ -19,6 +19,10 @@
+ import { homedir } from "node:os";
+ import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument, visit } from "yaml";
+ import hostedGitInfo from "hosted-git-info";
++const OHOS_PLUGIN_INSTALL_MESSAGE = "[OHOS_PLUGIN_INSTALL_UNAVAILABLE] 鸿蒙本机不支持安装、更新或卸载插件包；可启停随包插件，或连接电脑管理插件。";
++function requirePackageManager() {
++	if (process.platform === "openharmony") throw Object.assign(new Error(OHOS_PLUGIN_INSTALL_MESSAGE), { code: "ERR_OHOS_PLUGIN_INSTALL_UNAVAILABLE" });
++}
+ //#region lib/types/bundle-detail.js
+ /**
+ * Detail documents of profile bundles: an installed bundle's `meta.detail` file or README from its directory, and an
+@@ -711,6 +715,7 @@
+ * The diagnostic file is closed on return or rejection, including preparation and spawn failures.
+ */
+ async function runProfilePnpm(context, args, options) {
++	requirePackageManager();
+ 	const env_1 = {
+ 		stack: [],
+ 		error: void 0,
+@@ -1050,6 +1055,7 @@
+ * @returns The registry URL as pnpm printed it, or null when pnpm did not answer with one.
+ */
+ async function readProfileRegistry(dir, options) {
++	requirePackageManager();
+ 	const result = await execa(options.command ?? "pnpm", [
+ 		...options.args ?? [],
+ 		"config",
+@@ -1089,6 +1095,7 @@
+ * @returns pnpm's exit, output, and how the lookup ended.
+ */
+ async function viewProfilePackage(dir, spec, options) {
++	requirePackageManager();
+ 	const result = await execa(options.command ?? "pnpm", [
+ 		...options.args ?? [],
+ 		"view",
+@@ -2453,7 +2460,7 @@
+ 			return {
+ 				...this.configuredRegistries,
+ 				fallbackRegistries: [...this.configuredRegistries.fallbackRegistries],
+-				resolved: await readProfileRegistry(this.profile.dir, {
++				resolved: process.platform === "openharmony" ? null : await readProfileRegistry(this.profile.dir, {
+ 					...this.profile.packageManager ?? { command: this.pnpmCommand },
+ 					timeoutMs: this.inspectTimeoutMs
+ 				})
+@@ -2466,6 +2473,7 @@
+ 		* @returns The package the spec names, or why it is refused.
+ 		*/
+ 		async inspect(spec, options, signal) {
++			if (process.platform === "openharmony") return refused("unknown", OHOS_PLUGIN_INSTALL_MESSAGE);
+ 			let parsed;
+ 			try {
+ 				parsed = parseInstallSpec(spec);
+@@ -2775,6 +2783,9 @@
+ 		* @returns The parsed answer and the registry that gave it, or the last refusal, with every registry asked.
+ 		*/
+ 		async askRegistries(spec, fields, plan, parsed, signal) {
++			if (process.platform === "openharmony") return {
++				status: "refused", problem: "unknown", reason: OHOS_PLUGIN_INSTALL_MESSAGE, attempts: []
++			};
+ 			const attempts = [];
+ 			for (const [index, registry] of plan.entries()) {
+ 				const view = await viewProfilePackage(this.profile.dir, spec, {
+@@ -2888,6 +2899,11 @@
+ 		*/
+ 		// expectedInstalled is an internal update precondition, not a Remote option.
+ 		installBundle(spec, options, expectedInstalled) {
++			if (process.platform === "openharmony") return Promise.resolve({
++				stage: "install", target: spec, enabled: options?.enabled !== false,
++				changed: false, application: "failed",
++				error: { code: "operation-error", diagnostic: OHOS_PLUGIN_INSTALL_MESSAGE }
++			});
+ 			const requestId = options?.requestId;
+ 			const control = {
+ 				abort: new AbortController(),
+@@ -3103,6 +3119,10 @@
+ 		*/
+ 		// selection is owned by this update only; capture it before HMR deselects.
+ 		removeBundle(name, selection) {
++			if (process.platform === "openharmony") return Promise.resolve({
++				stage: "remove", target: name, changed: false, application: "failed",
++				error: { code: "operation-error", diagnostic: OHOS_PLUGIN_INSTALL_MESSAGE }
++			});
+ 			return this.change(async (result) => {
+ 				if (!await this.configure(async () => {
+ 					const bundle = (await this.listBundles()).find((item) => item.name === name);
+--- a/node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js
++++ b/node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js
+@@ -51,6 +51,10 @@
+     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+ });
+ /** Shared profile package operations used by dsh plugin and the running manager. */
++const OHOS_PLUGIN_INSTALL_MESSAGE = "[OHOS_PLUGIN_INSTALL_UNAVAILABLE] 鸿蒙本机不支持安装、更新或卸载插件包；可启停随包插件，或连接电脑管理插件。";
++function requirePackageManager() {
++	if (process.platform === "openharmony") throw Object.assign(new Error(OHOS_PLUGIN_INSTALL_MESSAGE), { code: "ERR_OHOS_PLUGIN_INSTALL_UNAVAILABLE" });
++}
+ import { once } from 'node:events';
+ import { StringDecoder } from 'node:string_decoder';
+ import { existsSync, readFileSync } from 'node:fs';
+@@ -314,6 +318,7 @@
+  * The diagnostic file is closed on return or rejection, including preparation and spawn failures.
+  */
+ export async function runProfilePnpm(context, args, options) {
++    requirePackageManager();
+     const env_1 = { stack: [], error: void 0, hasError: false };
+     try {
+         const dir = context.dir ?? resolveProfileDir(context.profile, context.home);
+@@ -629,6 +634,7 @@
+  * @returns Completed package-manager result.
+  */
+ export async function runPluginCommand(context, args, options) {
++    requirePackageManager();
+     const dir = context.dir ?? resolveProfileDir(context.profile, context.home);
+     await mkdir(dir, { recursive: true });
+     return withFileLock(join(dir, 'package.json'), async () => {
+@@ -648,6 +654,7 @@
+  * @returns The registry URL as pnpm printed it, or null when pnpm did not answer with one.
+  */
+ export async function readProfileRegistry(dir, options) {
++    requirePackageManager();
+     const result = await execa(options.command ?? 'pnpm', [...options.args ?? [], 'config', 'get', 'registry'], {
+         cwd: dir, env: { ...scrubbedParentEnv(), ...options.env }, extendEnv: false, reject: false, stdin: 'ignore', timeout: options.timeoutMs,
+     });
+@@ -675,6 +682,7 @@
+  * @returns pnpm's exit, output, and how the lookup ended.
+  */
+ export async function viewProfilePackage(dir, spec, options) {
++    requirePackageManager();
+     const result = await execa(options.command ?? 'pnpm', [
+         ...options.args ?? [], 'view', spec, ...options.fields, '--json',
+         ...registryArguments(options.registry ?? null), '--config.fetch-retries=0',

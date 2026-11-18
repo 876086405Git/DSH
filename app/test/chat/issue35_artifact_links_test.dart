@@ -36,6 +36,11 @@ void main() {
     'out/%E6%96%87%E6%A1%A3.docx': '$cwd/out/文档.docx',
     '../report.docx': '/root/report.docx',
     '<out/word report.docx>': '$cwd/out/word report.docx',
+    // A Windows Host (#1430): a click opens these as the artifact card does.
+    'C:/A/probe.png': 'C:/A/probe.png',
+    'C:/A/my%20shot.png': 'C:/A/my shot.png',
+    'C:/A/report.pdf?download=1#page2': 'C:/A/report.pdf',
+    '<C:/A/my%20shot.png>': 'C:/A/my%20shot.png',
   };
 
   for (final MapEntry(key: target, value: expected) in cases.entries) {
@@ -62,6 +67,16 @@ void main() {
       expect(linkedPaths('[document]($target)', cwd: cwd), isEmpty);
     });
   }
+
+  test('links shown as examples in code are not artifacts (#1432)', () {
+    const reply =
+        '写好了 README：\n\n```markdown\n[截图](shot.png)\n```\n\n行内的 `[报告](out/report.pdf)` 也是示例，[真的](real.pdf) 才算。';
+    expect(linkedPaths(reply, cwd: cwd), ['$cwd/real.pdf']);
+    // Tildes inside a line are no fence.
+    expect(linkedPaths('The marker ~~~ is literal. [real](real.pdf)', cwd: cwd), ['$cwd/real.pdf']);
+    // A longer fence isn't closed by a shorter one inside it.
+    expect(linkedPaths('~~~~md\n~~~\n[example](fake.pdf)\n~~~~\n[real](real.pdf)', cwd: cwd), ['$cwd/real.pdf']);
+  });
 
   test('decoded paths deduplicate without decoding literal percent escapes twice', () {
     expect(linkedPaths('[one](out/a%20b.docx) [two](<out/a%20b.docx>)', cwd: cwd), ['$cwd/out/a b.docx']);

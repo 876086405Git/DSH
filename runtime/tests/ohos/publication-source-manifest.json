@@ -1,0 +1,174 @@
+{
+  "reference": "OpenHarmony-v6.1-Release",
+  "scope": "Pinned public reference-source audit only; no device image or filesystem support claim. Third-party source bodies are fetched on demand and are not in this patch.",
+  "files": [
+    {
+      "name": "musl-rename.c",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/src/stdio/rename.c",
+      "status": 200,
+      "bytes": 339,
+      "sha256": "48087ba007f7736aef77a0382a30a7e059a29384be100d2fd8906cd95721d067",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "musl-aarch64-syscall.h.in",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/arch/aarch64/bits/syscall.h.in",
+      "status": 200,
+      "bytes": 8106,
+      "sha256": "0cf2ce52a191ae36b768b932197e31d5c9b0c6980e0d4f132a5b194d2f013e14",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "manifest.xml",
+      "url": "https://raw.githubusercontent.com/openharmony/manifest/OpenHarmony-v6.1-Release/default.xml",
+      "status": 200,
+      "bytes": 1069,
+      "sha256": "d317d430b7fc3a861642eb0386642b46cf0888bf2ce67b45a2122902e38c2879",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "gitcode-sharefs.c",
+      "url": "https://raw.gitcode.com/openharmony/kernel_linux_6.6/raw/OpenHarmony-v6.1-Release/fs/sharefs/inode.c",
+      "status": 200,
+      "bytes": 12351,
+      "sha256": "7478c2b95cae359130dde7c283bba3d033c3855963300d463b9b01af3104b111",
+      "contentType": "text/plain;charset=UTF-8"
+    },
+    {
+      "name": "musl-renameat.c",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/src/unistd/renameat.c",
+      "status": 200,
+      "bytes": 418,
+      "sha256": "b2f59611306699e7f0d9c3058e9c6a3476cbb2601adc96545c75ccbc87aca20c",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "musl-renameat2-test.c",
+      "url": "https://raw.githubusercontent.com/openharmony/third_party_musl/OpenHarmony-v6.1-Release/libc-test/src/functional/renameat2_test.c",
+      "status": 200,
+      "bytes": 7398,
+      "sha256": "69375b48b90b7710f852f5c824f89da01c5272ea7685184876b2377c63ce05f4",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "kernel-f2fs-namei.c",
+      "url": "https://raw.gitcode.com/openharmony/kernel_linux_6.6/raw/OpenHarmony-v6.1-Release/fs/f2fs/namei.c",
+      "status": 200,
+      "bytes": 32822,
+      "sha256": "c5c93009242e855bdfd19176fb45bb93ccd884f776027984e8bf133d39a95685",
+      "contentType": "text/plain;charset=UTF-8"
+    },
+    {
+      "name": "kernel-hmdfs-inode_local.c",
+      "url": "https://raw.gitcode.com/openharmony/kernel_linux_6.6/raw/OpenHarmony-v6.1-Release/fs/hmdfs/inode_local.c",
+      "status": 200,
+      "bytes": 28392,
+      "sha256": "e86152035e905d58391e26cfd52f51f6020499896d9c9b7b82b679afa5d65fab",
+      "contentType": "text/plain;charset=UTF-8"
+    },
+    {
+      "name": "kernel-hmdfs-inode_remote.c",
+      "url": "https://raw.gitcode.com/openharmony/kernel_linux_6.6/raw/OpenHarmony-v6.1-Release/fs/hmdfs/inode_remote.c",
+      "status": 200,
+      "bytes": 26763,
+      "sha256": "1a6155fc8d2ae49c5bf3a0c878cf0c5420cf58afc634704a5ed70950151f4300",
+      "contentType": "text/plain;charset=UTF-8"
+    },
+    {
+      "name": "kernel-hmdfs-inode_merge.c",
+      "url": "https://raw.gitcode.com/openharmony/kernel_linux_6.6/raw/OpenHarmony-v6.1-Release/fs/hmdfs/inode_merge.c",
+      "status": 200,
+      "bytes": 36293,
+      "sha256": "571090cddcfed0d53677d3493ea2ddb95d3b9527e37a1b535b7dc2b779f080fd",
+      "contentType": "text/plain;charset=UTF-8"
+    },
+    {
+      "name": "appspawn-common.c",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_appspawn/OpenHarmony-v6.1-Release/modules/common/appspawn_common.c",
+      "status": 200,
+      "bytes": 26350,
+      "sha256": "964c7ebad52d7134b66a2e2ba0c80e27ac79caf954a771a5b36039cb3cc15b62",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "appspawn-adapter.cpp",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_appspawn/OpenHarmony-v6.1-Release/modules/common/appspawn_adapter.cpp",
+      "status": 200,
+      "bytes": 12167,
+      "sha256": "cbaa6b64cb22929db87d47db5d105bdc1842ab569e0ccd1482219c75c1ff588d",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "manifest-ohos.xml",
+      "url": "https://raw.githubusercontent.com/openharmony/manifest/OpenHarmony-v6.1-Release/ohos/ohos.xml",
+      "status": 200,
+      "bytes": 97176,
+      "sha256": "1b66c9bc70f178b9bf7361b47c4f800c1841482936de713a63034d5502184164",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app.seccomp.policy",
+      "status": 200,
+      "bytes": 5387,
+      "sha256": "83a5a0d0a835b1dc3593bdb5507d2e76f18e22027c5b05bfb400807979bbdfd5",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app-blocklist.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app.blocklist.seccomp.policy",
+      "status": 200,
+      "bytes": 1207,
+      "sha256": "a2ea437bb15b53d6a096d637d5b3a7621c2e77f880a5699089b91e2c6378b788",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app-atomic.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app_atomic.seccomp.policy",
+      "status": 200,
+      "bytes": 5792,
+      "sha256": "04e8412bbe402348fd80fa33bd5c5c6f22550620f7de9a90e716d042cabfdc65",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-app-custom.policy",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy/app_custom.seccomp.policy",
+      "status": 200,
+      "bytes": 5609,
+      "sha256": "d860aff88a029e66255e153b7b35d72508be3c6839b33fc9f75c6b210b92c743",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-policy.c",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy.c",
+      "status": 200,
+      "bytes": 7640,
+      "sha256": "d8db67713e6892cb05c883614a7fab08c1b074fea7308ba6f5265973412bc178",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-policy-static.c",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy_static.c",
+      "status": 200,
+      "bytes": 1691,
+      "sha256": "6873a7df71b00705194ae2862e21b1a8812c8378c3fb150375eaeecd4da734a6",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-policy-constants.h",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/seccomp_policy_constants.h",
+      "status": 200,
+      "bytes": 986,
+      "sha256": "727ae8d5711fda166726c71e2e6f1be27e3971bb87a2ee0b39761baa97768f27",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "name": "seccomp-BUILD.gn",
+      "url": "https://raw.githubusercontent.com/openharmony/startup_init/OpenHarmony-v6.1-Release/services/modules/seccomp/BUILD.gn",
+      "status": 200,
+      "bytes": 4899,
+      "sha256": "2b8f8c6cf366379ffd14493de3c2580e62b6043abe342e36d32846cf52d04545",
+      "contentType": "text/plain; charset=utf-8"
+    }
+  ]
+}

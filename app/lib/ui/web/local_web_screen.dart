@@ -78,8 +78,10 @@ class _NotRunning extends ConsumerWidget {
     final busy = phase == RuntimePhase.starting || phase == RuntimePhase.installing;
     final canStart = phase == RuntimePhase.installed || phase == RuntimePhase.error;
     final failed = phase == RuntimePhase.error;
-    // Nothing on this phone: the one way forward is installing it.
+    // Nothing on this phone: the one way forward is installing it (or, on a
+    // build without the runtime, a remote host).
     final missing = state.status.runtimeMissing;
+    final missingCopy = localMissingCopy(context.l10n, available: state.available);
     return AppPage(
       title: context.l10n.commonWeb,
       showLargeTitle: false,
@@ -121,7 +123,7 @@ class _NotRunning extends ConsumerWidget {
                       : failed
                       ? context.l10n.webEngineStartFailed
                       : missing
-                      ? context.l10n.localEnvNotInstalled
+                      ? missingCopy.title
                       : context.l10n.webEngineNotRunning,
                   message: failed
                       ? (humanizeRuntimeError(state.status.error) ?? context.l10n.webEngineProblem)
@@ -134,7 +136,7 @@ class _NotRunning extends ConsumerWidget {
                       ? FilledButton(
                           style: FilledButton.styleFrom(minimumSize: const Size(160, 44)),
                           onPressed: () => unawaited(openLocalInstall(context)),
-                          child: Text(context.l10n.phoneEngineInstallRuntime),
+                          child: Text(missingCopy.action),
                         )
                       : canStart
                       ? FilledButton(

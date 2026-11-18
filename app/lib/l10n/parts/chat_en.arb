@@ -297,6 +297,7 @@
   "chatOutputToEnd": "Jump to end",
   "chatOutputToStart": "Back to top",
   "chatErrApiKey": "API key is invalid or expired",
+  "chatErrForbidden": "Credentials unavailable or permission denied",
   "chatErrBalance": "Insufficient balance",
   "chatErrAccountQuota": "Account quota used up",
   "chatErrRateLimit": "Too many requests. Try again later.",

@@ -100,9 +100,13 @@ class ChatList extends ConsumerStatefulWidget {
     this.onQuote,
     this.onToast,
     this.onSwitchModel,
+    this.toTop,
   });
 
   final String sessionId;
+
+  /// Where the status bar's tap arrives (iOS).
+  final StatusBarTop? toTop;
 
   /// 顶栏占的高度(含状态栏)。
   final double topInset;
@@ -259,6 +263,35 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     _glide.start();
   }
 
+  void _goToTop() => unawaited(_runToTop());
+
+  /// The rows above are measured as they come into view, so the top can turn out nearer or further
+  /// than it first looked: stop on arriving, and go on if it's further. A finger takes over.
+  Future<void> _runToTop() async {
+    if (!_scroll.hasClients) return;
+    _stopGlide();
+    _pinned = false;
+    final position = _scroll.position;
+    final duration = AppMotion.of(context, const Duration(milliseconds: 600));
+    void stopAtTop() {
+      if (position.pixels < position.minScrollExtent) position.jumpTo(position.minScrollExtent);
+    }
+
+    _scroll.addListener(stopAtTop);
+    for (
+      var tries = 0;
+      tries < 3 && mounted && _fingers == 0 && position.pixels > position.minScrollExtent + 1;
+      tries++
+    ) {
+      if (duration == Duration.zero) {
+        position.jumpTo(position.minScrollExtent);
+      } else {
+        await position.animateTo(position.minScrollExtent, duration: duration, curve: AppMotion.glide);
+      }
+    }
+    if (mounted) _scroll.removeListener(stopAtTop);
+  }
+
   void _stopGlide() {
     _gliding = false;
     if (_glide.isActive) _glide.stop();
@@ -362,7 +395,14 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       ref.read(chatProvider(widget.sessionId).notifier).rejectQuestion(request);
 
   @override
+  void initState() {
+    super.initState();
+    widget.toTop?.onTap = _goToTop;
+  }
+
+  @override
   void dispose() {
+    if (widget.toTop?.onTap == _goToTop) widget.toTop?.onTap = null;
     // This conversation's calls leave the tool summary caches with it.
     forgetToolSummaries({
       for (final item in _builtState?.items ?? const <ChatItem>[])
@@ -378,6 +418,10 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   @override
   void didUpdateWidget(ChatList oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.toTop != widget.toTop) {
+      if (oldWidget.toTop?.onTap == _goToTop) oldWidget.toTop?.onTap = null;
+      widget.toTop?.onTap = _goToTop;
+    }
     if (oldWidget.bottomInset != widget.bottomInset && _pinned) _follow();
     // Rows call the callbacks through `widget` when tapped; only whether
     // each is there shapes what they show.
@@ -1362,7 +1406,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       return null;
     }
     if (refused) {
-      if (code == 'CLIENT_UPGRADE_REQUIRED' && ref.read(activeHostProvider).kind == HostKind.local) {
+      if (code == 'CLIENT_UPGRADE_REQUIRED' && !wordsForIos && ref.read(activeHostProvider).kind == HostKind.local) {
         return (label: appL10n.updateCheck, onPressed: () => checkForUpdates(context, ref));
       }
       return widget.onSwitchModel == null ? null : (label: appL10n.chatSwitchModel, onPressed: _switchModel);
@@ -1741,4 +1785,16 @@ class _TopBoundedScrollPosition extends ScrollPositionWithSingleContext {
     }
     return super.applyContentDimensions(minScrollExtent, maxScrollExtent);
   }
+}
+
+/// A tap on iOS's status bar: the framework's Scaffold asks the nearest primary scroll controller to
+/// go to 0, and this one hands that to the conversation, whose list has its own top.
+class StatusBarTop extends ScrollController {
+  VoidCallback? onTap;
+
+  @override
+  bool get hasClients => true;
+
+  @override
+  Future<void> animateTo(double offset, {required Duration duration, required Curve curve}) async => onTap?.call();
 }

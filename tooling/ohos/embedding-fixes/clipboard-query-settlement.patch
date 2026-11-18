@@ -1,0 +1,10 @@
+--- a/package/src/main/ets/embedding/engine/systemchannels/PlatformChannel.ets
++++ b/package/src/main/ets/embedding/engine/systemchannels/PlatformChannel.ets
+@@ -546,6 +546,7 @@
+             result.success(response);
+           }).catch((err: Any) => {
+             Log.e(PlatformMethodCallback.TAG, "systemPasteboard.hasData err: " + JSON.stringify(err));
++            result.success(response);
+           })
+           break;
+         case "Scroll.Activity":

@@ -125,7 +125,7 @@ class IslandHandle extends ChangeNotifier {
   List<Rect> get hitRects => _hitRects;
   List<Rect> _hitRects = const [];
 
-  /// The underlying Android WebView (null off Android and in tests).
+  /// The underlying WebView (null where its controller has no identifier, as in tests).
   int? get webViewId => _webViewId;
   int? _webViewId;
 
@@ -187,7 +187,7 @@ class IslandHandle extends ChangeNotifier {
 
   static const rightPaneTabSlot = 'sidebar.right.pane.tab';
 
-  /// Creates the WebView, takes it over on the Android side, loads.
+  /// Creates the WebView, takes it over on the platform side, loads.
   Future<void> start() async {
     clock.start();
     controller = WebViewController(onPermissionRequest: (request) => unawaited(request.deny()));
@@ -225,9 +225,9 @@ class IslandHandle extends ChangeNotifier {
     await controller.loadRequest(_loadUrl).catchError((Object _) => _fail(IslandFailure.load));
   }
 
-  /// webview_flutter_android's `AndroidWebViewController.webViewIdentifier`,
-  /// without depending on the platform package (the app only depends on
-  /// webview_flutter). Null when it isn't an Android controller.
+  /// The platform controller's `webViewIdentifier` (webview_flutter_android's
+  /// and webview_flutter_ohos's alike), without depending on either package (the
+  /// app only depends on webview_flutter). Null where a controller has none.
   static int? _identifierOf(WebViewController c) {
     try {
       final Object? id = (c.platform as dynamic).webViewIdentifier;

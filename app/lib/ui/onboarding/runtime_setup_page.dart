@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
+import '../../state/android_features.dart';
 import '../../state/notify_state.dart';
 import '../common/app_sheet.dart';
 import '../common/progress_halo.dart';
@@ -43,6 +44,7 @@ class RuntimeSetupPage extends ConsumerStatefulWidget {
     this.choose = false,
     this.onRemote,
     this.onLocal,
+    this.onTavern,
     this.waiting = false,
     this.leading,
   });
@@ -60,6 +62,9 @@ class RuntimeSetupPage extends ConsumerStatefulWidget {
   /// Picked 「本机」 in the choice: the caller starts the unpack and moves on
   /// while it runs. Null: this page installs and shows the progress.
   final VoidCallback? onLocal;
+
+  /// 和角色聊天 in the choice (first run): 酒馆 without the runtime.
+  final VoidCallback? onTavern;
 
   /// Set up while unpacking and done with it: the progress says it will go
   /// on by itself (and, when it can, that a notification will say so).
@@ -164,6 +169,7 @@ class _RuntimeSetupPageState extends ConsumerState<RuntimeSetupPage> {
               leading: widget.leading,
               onLocal: widget.onLocal ?? () => _install(),
               onRemote: widget.onRemote!,
+              onTavern: widget.onTavern,
             )
           : KeyedSubtree(key: const ValueKey('progress'), child: _progress(context, state, view)),
     );
@@ -199,8 +205,11 @@ class _RuntimeSetupPageState extends ConsumerState<RuntimeSetupPage> {
       _SetupView.failed => humanizeRuntimeError(state.status.error) ?? l10n.shellRuntimeExtractFailed,
     };
     final meta = view == _SetupView.installing ? installMetaLine(l10n, progress, ref.watch(installEtaProvider)) : null;
-    // Set up and waiting: when a notification can say it's done, say so.
+    // Set up and waiting: when a notification can say it's done, say so. HarmonyOS
+    // has none for it, and suspends the app if it leaves the screen.
+    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
     final notifies =
+        !ohos &&
         widget.waiting &&
         ref.watch(notifySystemStatusProvider.select((s) => s.value?.native == true && s.value?.enabled == true));
 
@@ -297,7 +306,11 @@ class _RuntimeSetupPageState extends ConsumerState<RuntimeSetupPage> {
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  notifies ? l10n.setupNotifyWhenDone : l10n.shellRuntimeLocalOnly,
+                  notifies
+                      ? l10n.setupNotifyWhenDone
+                      : ohos && view == _SetupView.installing
+                      ? l10n.harmonySetupStay
+                      : l10n.shellRuntimeLocalOnly,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),
                 ),

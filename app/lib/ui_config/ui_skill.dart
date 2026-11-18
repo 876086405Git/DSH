@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/l10n.dart';
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
+import '../state/android_features.dart' show operatingSystemProvider;
 import '../state/hosts_state.dart';
 import 'ui_config_state.dart';
 
@@ -86,13 +87,21 @@ typedef UiAssetReader = Future<String> Function(String key);
 
 /// Reads a bundled skill (manifest first): [uiSkillName] unless [name] says
 /// otherwise.
-Future<UiSkillBundle> loadUiSkillBundle([UiAssetReader? read, String name = uiSkillName]) async {
+Future<UiSkillBundle> loadUiSkillBundle([UiAssetReader? read, String name = uiSkillName, String? os]) async {
   final reader = read ?? rootBundle.loadString;
   final assetDir = 'assets/skills/$name/';
   final manifest = jsonDecode(await reader('${assetDir}manifest.json'));
   final files = (manifest as Map)['files'] as Map;
+  // What HarmonyOS says differently takes the same path, so nothing of Android's
+  // is left behind when it installs over an earlier copy.
+  final harmony = os == 'ohos' ? manifest['harmony'] as Map? : null;
+  final assets = {
+    for (final MapEntry(key: asset, value: target) in files.entries) '$target': '$asset',
+    if (harmony != null)
+      for (final MapEntry(key: asset, value: target) in harmony.entries) '$target': '$asset',
+  };
   return UiSkillBundle({
-    for (final MapEntry(key: asset, value: target) in files.entries) '$target': await reader('$assetDir$asset'),
+    for (final MapEntry(key: target, value: asset) in assets.entries) target: await reader('$assetDir$asset'),
   }, name: name);
 }
 
@@ -163,15 +172,16 @@ typedef UiSkillBundleLoader = Future<UiSkillBundle> Function();
 final uiSkillBundleLoaderProvider = Provider<UiSkillBundleLoader>((ref) => loadUiSkillBundle);
 
 /// The other skills installed next to [uiSkillName] on each engine start.
-final extraSkillLoadersProvider = Provider<List<UiSkillBundleLoader>>(
-  (ref) => [
+final extraSkillLoadersProvider = Provider<List<UiSkillBundleLoader>>((ref) {
+  final os = ref.watch(operatingSystemProvider);
+  return [
     () => loadUiSkillBundle(null, pluginSkillName),
-    () => loadUiSkillBundle(null, guideSkillName),
+    () => loadUiSkillBundle(null, guideSkillName, os),
     () => loadUiSkillBundle(null, supportSkillName),
     () => loadUiSkillBundle(null, companionAdaptSkillName),
     () => loadUiSkillBundle(null, petThemeSkillName),
-  ],
-);
+  ];
+});
 
 /// Installs the skill each time the on-device engine comes up (and at launch
 /// when it is already running); the state is the last result (null before

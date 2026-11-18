@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "status": "FROZEN_TEST_SOURCE_NOT_RUN_PENDING_REVIEW",
+  "purpose": "Four ordinary after-only defaults using the actual new group; no old logical baseline",
+  "before": "FIRST\n",
+  "after": "SECOND\n",
+  "beforeBytes": 6,
+  "afterBytes": 7,
+  "existingMode": 420,
+  "newFileMode": {
+    "policy": "directory-default",
+    "requestedMode": 438,
+    "oracle": "independent same-parent Node wx creation; mode and gid, not ACL contents"
+  },
+  "cases": [
+    {
+      "name": "physical-existing",
+      "logical": false,
+      "existing": true,
+      "filename": "existing.txt"
+    },
+    {
+      "name": "physical-new",
+      "logical": false,
+      "existing": false,
+      "filename": "new.txt"
+    },
+    {
+      "name": "logical-existing",
+      "logical": true,
+      "existing": true,
+      "filename": "existing.txt"
+    },
+    {
+      "name": "logical-new",
+      "logical": true,
+      "existing": false,
+      "filename": "new.txt"
+    }
+  ],
+  "intent": {
+    "present": false
+  },
+  "batch": {
+    "additionalContexts": [],
+    "concluded": false
+  },
+  "policyMode": "workspace-write",
+  "newFileBefore": {
+    "exists": false
+  },
+  "updateValue": {
+    "operation": "update",
+    "before": "FIRST\n",
+    "after": "SECOND\n"
+  },
+  "createValue": {
+    "operation": "create",
+    "before": null,
+    "after": "SECOND\n"
+  },
+  "updateDiff": {
+    "oldText": "FIRST",
+    "newText": "SECOND"
+  },
+  "createDiffs": [],
+  "observations": "Exactly one present fs/observed for each successful read/write; independent bigint+actual grant version",
+  "leases": "logical after-write-batch-await before Context.dispose, and after Context.dispose: active, matching nativeGeneration, leases0; final ordinary background inactive/leases0/drained",
+  "stop": "Any setup/unexpected/timeout/input-drift/cleanup or non-PASS case stops; never edit oracle to fit a run",
+  "notCovered": [
+    "guarded link/wx",
+    "bounded copy continuation1/2/3",
+    "effect1 or unknown",
+    "cancellation",
+    "cleanup failure",
+    "mode0/no-read-bit",
+    "default ACL contents/SGID",
+    "empty/binary/BOM/CRLF",
+    "diff budget boundary",
+    "new parent directories",
+    "permissions/UID/namespace/umask changes",
+    "VM/device",
+    "old logical baseline"
+  ],
+  "nativeWhole": {
+    "group": "WHOLE_WRITE_ABI_V1",
+    "physicalCalls": [],
+    "logicalBegin": {
+      "existingPolicy": 0,
+      "newPolicy": 1,
+      "existingPriorMode": 420,
+      "newPriorPlaceholder": 0,
+      "createIfAbsent": false
+    },
+    "logicalWrite": "actual positive counts concatenate exactly SECOND LF 7B",
+    "closeReturn": 1,
+    "step": {
+      "schemaVersion": 1,
+      "effectKnown": true,
+      "effect": 2,
+      "continuation": 0,
+      "stagingRemoved": true
+    },
+    "abortReturn": 1,
+    "resourceMeaning": "closeWhole only write FD; abort closes remaining owned resources; lease0 and final retire separately sampled"
+  }
+}

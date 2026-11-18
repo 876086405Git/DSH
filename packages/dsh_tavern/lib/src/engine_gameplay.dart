@@ -60,6 +60,7 @@ extension _GameplayResolutionOperations on TavernEngine {
     final settingsIdentity = _document['settings'];
     final globalSettings = _map(settingsIdentity);
     final settingsText = jsonEncode(globalSettings);
+    final presetWorking = _capturePresetWorking(chatId: chat?.id);
     final personaVersion = _personas.authoringVersion;
     final persona = _personas.resolve(personaId: chat?.personaId);
     final chatVersion = chat == null ? null : _store.displayVersion(chat.id);
@@ -104,6 +105,8 @@ extension _GameplayResolutionOperations on TavernEngine {
         chat,
         metadata,
         selectedPreset: snapshot.selectedPreset?.raw,
+        selectedPresetId: snapshot.selectedPreset?.id,
+        presetWorking: presetWorking,
         managedRegex: managed,
       ),
       persona,
@@ -119,6 +122,7 @@ extension _GameplayResolutionOperations on TavernEngine {
       metadata: metadata,
       personaId: persona.persona?.id,
       selectedPreset: snapshot.selectedPreset,
+      currentPreset: {'source': presetWorking.source, 'token': presetWorking.token},
       regex: regex,
       capture: capture,
     );
@@ -133,6 +137,9 @@ extension _GameplayResolutionOperations on TavernEngine {
       );
     }
     void check() {
+      if (!_presetWorkingCurrent(presetWorking)) {
+        _gameplayCaptureConflict();
+      }
       if (_authoringAuthority.domainId != snapshot.domainId ||
           !identical(_document['settings'], settingsIdentity) ||
           jsonEncode(_map(_document['settings'])) != settingsText ||
@@ -269,6 +276,7 @@ Future<List<_GameplayLegacyResource>> _captureGameplayLegacyResources({
   required Map<String, Object?> metadata,
   required String? personaId,
   required StoredPreset? selectedPreset,
+  required Map<String, Object?> currentPreset,
   required _AuthoringCapturedResource regex,
   required Future<_AuthoringCapturedResource> Function(TavernAuthoringTarget target) capture,
 }) async {
@@ -281,7 +289,13 @@ Future<List<_GameplayLegacyResource>> _captureGameplayLegacyResources({
       for (final id in _strings(bindings[bucket.name])) (id: id, characterId: null, personaId: null),
       if (bucket == WorldInfoSource.character)
         for (final characterId in group == null ? [actorId] : [for (final member in group.members) member.characterId])
-          for (final id in _strings(_map(settings['characterLorebooks'])[characterId]))
+          for (final id in _characterLinkedBookIds(
+            settings,
+            characterId,
+            embedded: group == null
+                ? actorData.containsKey('character_book')
+                : (cards[characterId]?.character?.card.data.containsKey('character_book') ?? false),
+          ))
             (id: id, characterId: characterId, personaId: null),
       if (bucket == WorldInfoSource.persona && personaId != null)
         for (final id in _strings(_map(settings['personaLorebooks'])[personaId]))
@@ -412,7 +426,7 @@ Future<List<_GameplayLegacyResource>> _captureGameplayLegacyResources({
       _gameplayLegacyRegexArray(
         presetExtensions['regex_scripts'],
         bucket: 'preset',
-        source: {'kind': 'preset', 'presetId': selectedPreset?.id},
+        source: {'kind': 'preset', 'presetId': selectedPreset?.id, 'current': currentPreset},
         pointer: '/extensions/regex_scripts',
         enabled: enabled && settings['presetRegexEnabled'] != false,
       ),

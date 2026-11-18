@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/l10n.dart';
 import '../remote/link_status.dart';
 import '../remote/relay/dsh_remote_backend.dart';
+import 'android_features.dart';
 import 'app_info.dart';
 import '../remote/relay/relay_backend.dart';
 import '../remote/relay/webrtc_peer.dart';
@@ -177,7 +179,6 @@ class HostsController extends Notifier<HostsState> {
       }
     }
 
-    await put(SshSecrets.attachTokenKey(id), config.dshMode == SshDshMode.attachOnly ? secrets.attachToken?.trim() : null);
     if (config.auth == SshAuthMethod.password) {
       await put(SshSecrets.passwordKey(id), secrets.password);
       await _secrets.delete(SshSecrets.privateKeyKey(id));
@@ -187,6 +188,12 @@ class HostsController extends Notifier<HostsState> {
       await put(SshSecrets.passphraseKey(id), secrets.passphrase);
       await _secrets.delete(SshSecrets.passwordKey(id));
     }
+    // A failure writing the credential the person just entered must be
+    // reported as that failure, not hidden behind unrelated token cleanup.
+    await put(
+      SshSecrets.attachTokenKey(id),
+      config.dshMode == SshDshMode.attachOnly ? secrets.attachToken?.trim() : null,
+    );
   }
 
   Future<SshSecrets> loadSecrets(String id) async {
@@ -210,7 +217,12 @@ class HostsController extends Notifier<HostsState> {
   Future<void> removeSsh(String id) async {
     await _loaded;
     await _persist([...state.ssh.where((h) => h.id != id)]);
-    for (final key in [SshSecrets.passwordKey(id), SshSecrets.privateKeyKey(id), SshSecrets.passphraseKey(id), SshSecrets.attachTokenKey(id)]) {
+    for (final key in [
+      SshSecrets.passwordKey(id),
+      SshSecrets.privateKeyKey(id),
+      SshSecrets.passphraseKey(id),
+      SshSecrets.attachTokenKey(id),
+    ]) {
       try {
         await _secrets.delete(key);
       } catch (_) {}
@@ -473,7 +485,9 @@ final relayBackendProvider = Provider<RelayBackend>((ref) {
     secrets: ref.watch(secretStoreProvider),
     serverUrl: ref.watch(relayServerProvider),
     clientVersion: AppInfo.version.split('+').first,
-    peerConnector: flutterPeerConnector,
+    // flutter_webrtc has no HarmonyOS implementation: straight to the relay,
+    // not two handshakes that fail on the way there.
+    peerConnector: ref.watch(webRtcAvailableProvider) ? flutterPeerConnector : null,
     loadCompactHistory: () async {
       await history.ready;
       return ref.read(remoteCompactHistoryProvider);
@@ -498,6 +512,8 @@ typedef UrlOpener = Future<bool> Function(Uri url);
 
 final urlOpenerProvider = Provider<UrlOpener>(
   (ref) => (url) async {
+    // HarmonyOS's url_launcher answers the in-app mode with a developer's toast.
+    if (Platform.operatingSystem == 'ohos') return launchUrl(url, mode: LaunchMode.externalApplication);
     try {
       return await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } catch (_) {

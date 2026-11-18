@@ -2,6 +2,7 @@
 // step of the sign-in sheet against a fake bridge, polling that stops with
 // the sheet, and the signed-in page's sign-out.
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/account_state.dart' show accountBrowserProvider;
 import 'package:dsh_app/state/models_state.dart';
@@ -16,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../clipboard/fake_paste.dart';
 import '../account/support.dart' show FakeBrowser;
 import '../shell/golden_harness.dart' show goldenApp, loadGoldenFonts;
 import 'support.dart';
@@ -82,9 +84,10 @@ Future<void> _pump(WidgetTester tester, Widget home, List<Override> overrides, {
 }
 
 /// Opens the sheet against [bridge]; returns the browser fake.
-Future<FakeBrowser> _openSheet(WidgetTester tester, FakeSubscriptionBackend bridge) async {
+Future<FakeBrowser> _openSheet(WidgetTester tester, FakeSubscriptionBackend bridge, {String? os}) async {
   final browser = FakeBrowser();
   await _pump(tester, const _Opener(), [
+    if (os != null) operatingSystemProvider.overrideWithValue(os),
     ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
     accountBrowserProvider.overrideWithValue(browser),
   ]);
@@ -285,6 +288,58 @@ void main() {
       expect(find.byType(SubscriptionLoginSheet), findsNothing);
       expect(find.text('result: true'), findsOneWidget);
       expect(bridge.calls, isNot(contains('cancel:att-1')), reason: 'a finished attempt is not cancelled');
+    });
+
+    group('prompt 粘贴', () {
+      const prompt = [LoginStep(phase: LoginPhase.prompt, message: 'Paste the authorization code')];
+
+      String field(WidgetTester tester) => tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+      testWidgets('Android: Flutter\'s clipboard, trimmed, only filled in', (tester) async {
+        final paste = FakePaste(tester, flutterText: '  abc#xyz ');
+        final bridge = FakeSubscriptionBackend(steps: prompt);
+        await _openSheet(tester, bridge);
+        await tester.tap(find.byTooltip('粘贴'));
+        await settle(tester);
+        expect(field(tester), 'abc#xyz');
+        expect(paste.flutterReads, 1);
+        expect(paste.reads, isEmpty);
+        expect(bridge.calls.where((call) => call.startsWith('answer')), isEmpty);
+      });
+
+      testWidgets('HarmonyOS: the system paste button, trimmed, only filled in', (tester) async {
+        final paste = FakePaste(tester, reply: FakePaste.text('  abc#xyz '), flutterText: 'wrong');
+        final bridge = FakeSubscriptionBackend(steps: prompt);
+        await _openSheet(tester, bridge, os: 'ohos');
+        await tester.tap(find.byTooltip('粘贴'));
+        await settle(tester);
+        expect(field(tester), 'abc#xyz');
+        expect(paste.flutterReads, 0);
+        expect(bridge.calls.where((call) => call.startsWith('answer')), isEmpty);
+      });
+
+      testWidgets('HarmonyOS: a failure shows on the field the sheet covers no notice of, until it changes', (
+        tester,
+      ) async {
+        FakePaste(tester, reply: {'status': 'busy'});
+        await _openSheet(tester, FakeSubscriptionBackend(steps: prompt), os: 'ohos');
+        await tester.tap(find.byTooltip('粘贴'));
+        await settle(tester);
+        const text = '粘贴窗口尚未结束或仍在关闭，请完成或取消后重试。';
+        expect(find.text(text), findsOneWidget);
+        await tester.enterText(find.byType(TextField), 'a');
+        await settle(tester);
+        expect(find.text(text), findsNothing);
+      });
+
+      testWidgets('HarmonyOS: backed out of, nothing is said', (tester) async {
+        FakePaste(tester, reply: {'status': 'cancelled'});
+        await _openSheet(tester, FakeSubscriptionBackend(steps: prompt), os: 'ohos');
+        await tester.tap(find.byTooltip('粘贴'));
+        await settle(tester);
+        expect(field(tester), isEmpty);
+        expect(tester.widget<TextField>(find.byType(TextField)).decoration!.errorText, isNull);
+      });
     });
 
     testWidgets('failed: the reason and 再试一次 starts a new attempt', (tester) async {

@@ -1,0 +1,115 @@
+--- a/slirp/socket.h
++++ b/slirp/socket.h
+@@ -44,0 +45,4 @@
++#ifdef TEMU_EMBED
++  uint64_t so_expire_started_ms;
++  uint32_t so_expire_duration_ms; /* Zero disables UDP expiry, not a timestamp. */
++#endif
+@@ -55,0 +60,43 @@
++
++/* Fixed UDP lifetimes are positive and below the 32-bit half range. */
++#if SO_EXPIRE <= 0 || SO_EXPIRE >= 0x80000000U || SO_EXPIREFAST <= 0 || SO_EXPIREFAST >= 0x80000000U
++#error Invalid UDP expiry duration
++#endif
++#ifdef TEMU_EMBED
++/* Same monotonic sample whose low word remains the legacy curtime. */
++extern uint64_t udp_curtime_ms;
++#endif
++static inline int so_has_expiry(const struct socket *so)
++{
++#ifdef TEMU_EMBED
++    return so->so_expire_duration_ms != 0;
++#else
++    return so->so_expire != 0;
++#endif
++}
++static inline void so_set_expiry(struct socket *so, uint32_t now, uint32_t duration)
++{
++    so->so_expire = now + duration; /* Preserve the legacy diagnostic field. */
++#ifdef TEMU_EMBED
++    so->so_expire_started_ms = udp_curtime_ms;
++    so->so_expire_duration_ms = duration;
++#endif
++}
++static inline void so_clear_expiry(struct socket *so)
++{
++    so->so_expire = 0;
++#ifdef TEMU_EMBED
++    so->so_expire_started_ms = 0;
++    so->so_expire_duration_ms = 0;
++#endif
++}
++static inline int so_expiry_due(const struct socket *so, uint32_t now)
++{
++#ifdef TEMU_EMBED
++    (void)now;
++    /* No 32-bit signed-half-range assumption about a stopped host thread. */
++    return so_has_expiry(so) && udp_curtime_ms - so->so_expire_started_ms >= so->so_expire_duration_ms;
++#else
++    return so_has_expiry(so) && so->so_expire <= now;
++#endif
++}
+--- a/slirp/socket.c
++++ b/slirp/socket.c
+@@ -512 +512 @@
+-	    if (so->so_expire) {
++	    if (so_has_expiry(so)) {
+@@ -514 +514 @@
+-		so->so_expire = curtime + SO_EXPIREFAST;
++		so_set_expiry(so, curtime, SO_EXPIREFAST);
+@@ -516 +516 @@
+-		so->so_expire = curtime + SO_EXPIRE;
++		so_set_expiry(so, curtime, SO_EXPIRE);
+@@ -568,2 +568,2 @@
+-	if (so->so_expire)
+-		so->so_expire = curtime + SO_EXPIRE;
++	if (so_has_expiry(so))
++		so_set_expiry(so, curtime, SO_EXPIRE);
+--- a/slirp/udp.c
++++ b/slirp/udp.c
+@@ -308 +308 @@
+-    so->so_expire = curtime + SO_EXPIRE;
++    so_set_expiry(so, curtime, SO_EXPIRE);
+@@ -356 +356 @@
+-	so->so_expire = curtime + SO_EXPIRE;
++	so_set_expiry(so, curtime, SO_EXPIRE);
+@@ -380 +380 @@
+-	   so->so_expire = 0;
++	   so_clear_expiry(so);
+--- a/slirp/slirp.c
++++ b/slirp/slirp.c
+@@ -39,0 +40,3 @@
++#ifdef TEMU_EMBED
++uint64_t udp_curtime_ms;
++#endif
+@@ -329,2 +332,2 @@
+-			if (so->so_expire) {
+-				if (so->so_expire <= curtime) {
++			if (so_has_expiry(so)) {
++				if (so_expiry_due(so, curtime)) {
+@@ -367,0 +371,4 @@
++#ifdef TEMU_EMBED
++    udp_curtime_ms = os_get_time_ms64();
++    curtime = (uint32_t)udp_curtime_ms;
++#else
+@@ -368,0 +376 @@
++#endif
+--- a/slirp/misc.h
++++ b/slirp/misc.h
+@@ -71,0 +72,3 @@
++#ifdef TEMU_EMBED
++uint64_t os_get_time_ms64(void);
++#endif
+--- a/slirp/misc.c
++++ b/slirp/misc.c
+@@ -86,0 +87,10 @@
++
++#ifdef TEMU_EMBED
++uint64_t os_get_time_ms64(void)
++{
++    struct timespec ts;
++
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return (uint64_t)ts.tv_sec * 1000 + (ts.tv_nsec / 1000000);
++}
++#endif

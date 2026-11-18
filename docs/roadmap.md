@@ -161,7 +161,7 @@
 ## P4：平台
 
 - targetSdk 升级（为国内商店上架做准备；需要改用 W^X 兼容的执行方式）。
-- 纯血鸿蒙：Flutter OHOS 版本评估。
+- 纯血鸿蒙：☑️ 旁加载测试包在 HBN-AL00 上运行（oh-flutter 3.47.9、进程内 Node 本机引擎、系统操作代替手机操控、可选 Linux 环境），功能按 Android 对齐；待办是逐项真机验证和应用市场上架（`docs/design/harmonyos/README.md`）。
 - iOS：只做远程客户端（iOS 不允许本地运行 Linux 环境）。
 
 ## 可参考的项目

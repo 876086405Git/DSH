@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/remote/secret_store.dart';
 import 'package:dsh_app/state/attachments.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../clipboard/fake_paste.dart';
 import '../shell/golden_harness.dart';
 
 const _host = SshHostConfig(
@@ -39,6 +41,9 @@ class _PendingPicker implements AttachmentPicker {
 }
 
 class _Rig {
+  _Rig({this.os});
+
+  final String? os;
   final formVisible = ValueNotifier(true);
   final picker = _PendingPicker();
   final clipboard = Completer<Map<String, dynamic>?>();
@@ -60,6 +65,7 @@ class _Rig {
       goldenApp(
         brightness: Brightness.light,
         overrides: [
+          if (os != null) operatingSystemProvider.overrideWithValue(os!),
           secretStoreProvider.overrideWithValue(MemorySecretStore()),
           attachmentPickerProvider.overrideWithValue(picker),
         ],
@@ -116,6 +122,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(rig.keyText(tester), 'synthetic-pasted-key');
     expect(tester.takeException(), isNull);
+  });
+
+  group('HarmonyOS, through the system paste button', () {
+    Future<_Rig> open(WidgetTester tester) async {
+      final rig = _Rig(os: 'ohos');
+      await rig.pump(tester);
+      return rig;
+    }
+
+    testWidgets('the key arrives trimmed with its lines, and Flutter\'s clipboard stays unread', (tester) async {
+      final rig = await open(tester);
+      FakePaste(tester, reply: FakePaste.text('  -----BEGIN KEY-----\nabc\n-----END KEY-----\n'));
+      await rig.tap(tester, '粘贴');
+      await tester.pumpAndSettle();
+      expect(rig.keyText(tester), '-----BEGIN KEY-----\nabc\n-----END KEY-----');
+      expect(rig.clipboardCalls, 0);
+    });
+
+    testWidgets('backed out of leaves the key as it was, silently', (tester) async {
+      final rig = await open(tester);
+      final before = rig.keyText(tester);
+      FakePaste(tester, reply: {'status': 'cancelled'});
+      await rig.tap(tester, '粘贴');
+      await tester.pumpAndSettle();
+      expect(rig.keyText(tester), before);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a busy window says so', (tester) async {
+      final rig = await open(tester);
+      FakePaste(tester, reply: {'status': 'busy'});
+      await rig.tap(tester, '粘贴');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('粘贴窗口尚未结束或仍在关闭，请完成或取消后重试。'), findsOneWidget);
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+    });
+
+    testWidgets('leaving the form closes the window; the late key goes nowhere', (tester) async {
+      final rig = await open(tester);
+      final paste = FakePaste(tester, reply: FakePaste.text('late'))..gate = Completer<void>();
+      await rig.tap(tester, '粘贴');
+      await tester.pump();
+      await rig.leave(tester);
+      expect(paste.cancels, contains(paste.reads.single));
+      paste.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('next page'), findsOneWidget);
+    });
   });
 
   testWidgets('late file failure does not show a snackbar on the successor page', (tester) async {

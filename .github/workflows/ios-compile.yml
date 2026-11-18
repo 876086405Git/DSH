@@ -1,0 +1,505 @@
+# Compiles the app for the iOS simulator and for a device, unsigned, on a macOS
+# runner: the only place Xcode runs. Needs no secrets. Signing, TestFlight and
+# running anything on a device are later jobs. The engine job does run the engine: on
+# the iOS Simulator, one real round against a fake model, then a restart in place.
+name: iOS compile
+
+on:
+  push:
+    branches: [main, 'feat/ios-**', 'ios/**']
+    paths:
+      - 'app/**'
+      - 'packages/**'
+      - 'tooling/ios/**'
+      - 'runtime/**'
+      - '.github/workflows/ios-compile.yml'
+  workflow_dispatch:
+    inputs:
+      regression_only:
+        description: Run the embedded-engine regression in the simulator app
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      regression_only:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phone-protocol:
+    if: ${{ !inputs.regression_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the shared phone native owner without Apple services
+        run: |
+          bash tooling/ios/build-phone-self-runner.sh --check
+          python3 tooling/ios/tests/phone-self-runner.test.py -v
+          python3 -B tooling/ios/test-channel-contract.py -v
+
+  compile:
+    if: ${{ !inputs.regression_only }}
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      FLUTTER_VERSION: 3.47.7
+      FLUTTER_SHA256: dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show the toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphone
+
+      - name: Check pet overlay recovery and production state contracts
+        run: bash tooling/ios/pet-overlay-tests/contract.sh
+
+      - name: Check real readiness crypto and the enabled Swift native interface
+        run: |
+          python3 tooling/ios/tests/phone-self-runner.test.py -v
+          xcrun swiftc -swift-version 5 -typecheck -D DSH_PHONE_SELF_RUNNER \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -target arm64-apple-ios17.0-simulator \
+            -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
+            app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/Runner/IOSPhoneSelfRunner.swift \
+            app/ios/Runner/IOSPhonePairingStore.swift app/ios/Runner/IOSPhoneDDI.swift \
+            app/ios/Runner/IOSPhoneCoreDevice.swift app/ios/Runner/IOSPhoneScreen.swift \
+            app/ios/Runner/IOSPhoneRPCDispatch.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift
+
+      - name: Install Flutter
+        run: |
+          archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
+          echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve dependencies
+        run: |
+          flutter --version
+          python3 app/tool/l10n_merge.py --no-gen
+          cd app
+          flutter pub get --enforce-lockfile
+          flutter gen-l10n
+
+      - name: Check where the engine looks for its addons
+        run: |
+          python3 -B tooling/ios/test-native-loader.py -v
+          python3 -B tooling/ios/test-guest-embedding.py -v
+          python3 -B runtime/tests/ohos/host-core.py --ios --out "$RUNNER_TEMP/host-core-ios"
+          python3 -B runtime/tests/ohos/host-core.py --out "$RUNNER_TEMP/host-core-hap"
+
+      - name: Compile for the simulator
+        working-directory: app
+        run: bash ../tooling/ios/build.sh --simulator --debug
+
+      - name: Compile for a device, unsigned
+        working-directory: app
+        run: bash ../tooling/ios/build.sh --release --no-codesign
+
+  engine:
+    runs-on: macos-26
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DSH_IOS_ENGINE_WORK: ${{ github.workspace }}/../engine-work
+      FLUTTER_VERSION: 3.47.7
+      FLUTTER_SHA256: dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the shared host profiles
+        if: inputs.regression_only
+        run: |
+          python3 -B runtime/tests/ohos/host-core.py --ios --out "$RUNNER_TEMP/host-core-ios"
+          python3 -B runtime/tests/ohos/host-core.py --out "$RUNNER_TEMP/host-core-hap"
+
+      - name: Prepare the engine
+        id: prepare
+        run: |
+          python3 --version
+          log="$(mktemp)"
+          if ! bash tooling/ios/prepare-engine.sh 2>&1 | tee "$log"; then
+            tail -n 8 "$log" | cut -c1-600 | sed -e 's/%/%25/g' -e 's/^/::error title=prepare-engine::/'
+            exit 1
+          fi
+          ls -la app/ios/Engine
+
+      - name: Install the iSH build tools
+        run: |
+          # Homebrew ships ld.lld in its own formula now, not with llvm.
+          brew install llvm lld
+          python3 -m venv "$RUNNER_TEMP/ish-tools"
+          "$RUNNER_TEMP/ish-tools/bin/pip" install meson==1.7.2 ninja==1.11.1.4
+          echo "$RUNNER_TEMP/ish-tools/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
+          PATH="$(brew --prefix lld)/bin:$PATH" ld.lld --version
+
+      - name: Identify the pinned iSH build inputs
+        id: ish-inputs
+        run: |
+          device="$(bash tooling/ios/build-ish.sh --cache-key iphoneos)"
+          simulator="$(bash tooling/ios/build-ish.sh --cache-key iphonesimulator)"
+          key="$(printf '%s\n%s\n' "$device" "$simulator" | shasum -a 256 | cut -d' ' -f1)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the iSH frameworks and fixed source archive
+        id: ish-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            app/ios/Engine/ish-cache
+            app/ios/Engine/build/iphoneos/guest
+            app/ios/Engine/build/iphonesimulator/guest
+          key: ${{ runner.os }}-ish-${{ steps.ish-inputs.outputs.key }}
+
+      - name: Compile iSH and its N-API owner for the simulator and device
+        id: ish-build
+        run: |
+          for sdk in iphonesimulator iphoneos; do
+            out="app/ios/Engine/build/$sdk/guest"
+            log="$RUNNER_TEMP/ish-$sdk.log"
+            if ! bash tooling/ios/build-guest-addon.sh "$sdk" "$out" 2>&1 | tee "$log"; then
+              tail -n 12 "$log" | cut -c1-600 | sed -e 's/%/%25/g' -e 's/^/::error title=iSH build::/'
+              exit 1
+            fi
+            for name in DshGuest DshGuestBridge; do
+              binary="$out/$name.framework/$name"
+              file "$binary"
+              xcrun lipo "$binary" -verify_arch arm64
+              install_name="$(xcrun otool -D "$binary" | tail -n 1)"
+              test "$install_name" = "@rpath/$name.framework/$name"
+              xcrun vtool -show-build "$binary"
+            done
+            xcrun nm -gU "$out/DshGuestBridge.framework/DshGuestBridge" | grep 'napi_register_module_v1$'
+          done
+
+      - name: Save the compiled iSH cache
+        if: steps.ish-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            app/ios/Engine/ish-cache
+            app/ios/Engine/build/iphoneos/guest
+            app/ios/Engine/build/iphonesimulator/guest
+          key: ${{ steps.ish-cache.outputs.cache-primary-key }}
+
+      - name: Keep the iSH build logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-ish-build
+          path: ${{ runner.temp }}/ish-*.log
+          if-no-files-found: ignore
+
+      - name: Compile the native pieces for the simulator
+        if: ${{ !inputs.regression_only }}
+        run: |
+          log="$(mktemp)"
+          if ! bash tooling/ios/build-engine-native.sh iphonesimulator "$RUNNER_TEMP/sim" -DDSH_IOS_ENGINE_SMOKE 2>&1 | tee "$log"; then
+            grep -E 'error:|Undefined|ld:' "$log" | awk '!seen[$0]++' | head -10 | cut -c1-600               | sed -e 's/%/%25/g' -e 's/^/::error title=native::/'
+            exit 1
+          fi
+          for name in DshFlock DshRequireBuiltin; do
+            test -f "$RUNNER_TEMP/sim/$name.framework/$name"
+            test -f "$RUNNER_TEMP/sim/$name.framework/Info.plist"
+          done
+          cp -R app/ios/Engine/NodeMobile.xcframework/ios-arm64-simulator/NodeMobile.framework "$RUNNER_TEMP/sim/"
+          xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator             tooling/ios/engine-smoke/smoke.c -o "$RUNNER_TEMP/smoke"
+
+      - name: Compile the native pieces for a device
+        if: ${{ !inputs.regression_only }}
+        run: |
+          log="$(mktemp)"
+          if ! bash tooling/ios/build-engine-native.sh iphoneos "$RUNNER_TEMP/device" 2>&1 | tee "$log"; then
+            grep -E 'error:|Undefined|ld:' "$log" | awk '!seen[$0]++' | head -10 | cut -c1-600               | sed -e 's/%/%25/g' -e 's/^/::error title=native-device::/'
+            exit 1
+          fi
+
+          for name in DshFlock DshRequireBuiltin; do
+            test -f "$RUNNER_TEMP/device/$name.framework/$name"
+            test -f "$RUNNER_TEMP/device/$name.framework/Info.plist"
+          done
+
+      - name: Boot the simulator
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          udid="$(python3 tooling/ios/engine-smoke/pick-simulator.py)"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid"
+          echo "DSH_SIMULATOR=$udid" >> "$GITHUB_ENV"
+
+      - name: Run a round on the simulator
+        if: ${{ !inputs.regression_only }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/tree"
+          unzip -q app/ios/Engine/runtime.zip 'files/*' -d "$RUNNER_TEMP/tree"
+          udid="$DSH_SIMULATOR"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          status=0
+          "$node" tooling/ios/engine-smoke/drive.mjs --simulator "$udid" --smoke "$RUNNER_TEMP/smoke"             --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/smoke-work"             --ws "$RUNNER_TEMP/tree/files" || status=$?
+          "$node" tooling/ios/engine-smoke/annotate.mjs "$RUNNER_TEMP/smoke-work"
+          exit "$status"
+
+      - name: Cache the fixed Alpine guest fixture
+        if: ${{ !inputs.regression_only }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/guest-archive/alpine-minirootfs-3.24.4-aarch64.tar.gz
+          key: ios-guest-alpine-3.24.4-aarch64-4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de
+
+      - name: Run real guest tools through the simulator approval chain
+        if: ${{ !inputs.regression_only }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/guest-archive"
+          archive="$RUNNER_TEMP/guest-archive/alpine-minirootfs-3.24.4-aarch64.tar.gz"
+          if [ ! -f "$archive" ]; then
+            curl --fail --location --retry 3 --output "$archive" https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.4-aarch64.tar.gz
+          fi
+          printf '%s  %s\n' 4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de "$archive" | shasum -a 256 -c -
+          # Foundation/CryptoKit + the actual I3 installer, no alternate unpacker/database builder.
+          xcrun swiftc -swift-version 5 -parse-as-library app/ios/Runner/GuestRootfsArchive.swift app/ios/Runner/GuestRootfsInstaller.swift tooling/ios/engine-smoke/guest-install.swift -o "$RUNNER_TEMP/guest-install"
+          "$RUNNER_TEMP/guest-install" "$archive" "$RUNNER_TEMP/guest-installation"
+          for name in DshGuest DshGuestBridge; do
+            test -f "app/ios/Engine/build/iphonesimulator/guest/$name.framework/$name"
+            cp -R "app/ios/Engine/build/iphonesimulator/guest/$name.framework" "$RUNNER_TEMP/sim/"
+            test -f "$RUNNER_TEMP/sim/$name.framework/$name"
+          done
+          xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator tooling/ios/engine-smoke/guest-smoke.c -o "$RUNNER_TEMP/guest-smoke"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/guest-drive.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/guest-smoke" --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/guest-smoke-work" --ws "$RUNNER_TEMP/tree/files" --rootfs "$RUNNER_TEMP/guest-installation/rootfs"
+
+      - name: Keep real guest approval evidence
+        if: ${{ !inputs.regression_only && always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-guest-smoke
+          path: |
+            ${{ runner.temp }}/guest-smoke-work/guest-report.json
+            ${{ runner.temp }}/guest-smoke-work/engine.log
+          if-no-files-found: warn
+
+      - name: Check whose file descriptors a stop closes
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          bash tooling/ios/engine-smoke/build-fd.sh "$RUNNER_TEMP/fd-smoke"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          status=0
+          "$node" tooling/ios/engine-smoke/fd-drive.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/fd-smoke" --frameworks "$RUNNER_TEMP/sim" --work "$RUNNER_TEMP/fd-smoke-work" || status=$?
+          report="$RUNNER_TEMP/fd-smoke-work/report.json"
+          if [ -f "$report" ]; then
+            echo "::notice title=fd smoke::$(tr -d '\n' < "$report" | cut -c1-3000 | sed -e 's/%/%25/g')"
+          else
+            echo "::error title=fd smoke::no report, status $status"
+          fi
+          exit "$status"
+
+      - name: Check the engine comes back from the heap limit
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          bash tooling/ios/engine-smoke/build-heap.sh "$RUNNER_TEMP/heap-smoke"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          status=0
+          "$node" tooling/ios/engine-smoke/heap-drive.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/heap-smoke" --frameworks "$RUNNER_TEMP/sim" --work "$RUNNER_TEMP/heap-smoke-work" || status=$?
+          report="$RUNNER_TEMP/heap-smoke-work/report.json"
+          if [ -f "$report" ]; then
+            echo "::notice title=heap smoke::$(tr -d '\n' < "$report" | cut -c1-3000 | sed -e 's/%/%25/g')"
+          else
+            echo "::error title=heap smoke::no report, status $status"
+          fi
+          exit "$status"
+
+      - name: Check images on Apple's decoder, through the real store
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          xcrun --sdk iphonesimulator clang -std=c11 -target arm64-apple-ios15.0-simulator -O2 -pthread tooling/ios/engine-smoke/image-smoke.c -o "$RUNNER_TEMP/image-smoke"
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          status=0
+          "$node" tooling/ios/engine-smoke/image-drive.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/image-smoke" --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/image-smoke-work" || status=$?
+          report="$RUNNER_TEMP/image-smoke-work/report.json"
+          if [ -f "$report" ]; then
+            echo "::notice title=image smoke::$(tr -d '\n' < "$report" | tr -s ' ' | cut -c1-6000 | sed -e 's/%/%25/g')"
+          else
+            echo "::error title=image smoke::no report, status $status"
+          fi
+          exit "$status"
+
+      - name: Record what this Node build has
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/env-probe.mjs --simulator "$DSH_SIMULATOR" --smoke "$RUNNER_TEMP/image-smoke" --frameworks "$RUNNER_TEMP/sim" --runtime "$RUNNER_TEMP/tree/files" --work "$RUNNER_TEMP/env-probe-work" || echo "::warning title=node env::the probe itself failed"
+
+      - name: Install Flutter
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+          curl -fsSL -o "$RUNNER_TEMP/$archive"             "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
+          echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve dependencies
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          python3 app/tool/l10n_merge.py --no-gen
+          cd app
+          flutter pub get --enforce-lockfile
+          flutter gen-l10n
+
+      - name: Run the engine inside the app
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          (cd app && bash ../tooling/ios/build.sh --simulator --debug -t integration_test/ios_engine_check.dart)
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode engine
+
+      - name: Launch the real app
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          (cd app && bash ../tooling/ios/build.sh --simulator --debug)
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode launch --shot "$RUNNER_TEMP/launch.png"
+
+      - name: Drive other apps with the phone runner
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/phone-runner-check.mjs --simulator "$DSH_SIMULATOR" --work "$RUNNER_TEMP/phone-runner"
+
+      - name: Call the browser and system tools inside the app
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
+          "$node" tooling/ios/engine-smoke/tools-check.mjs --simulator "$DSH_SIMULATOR" --app app/build/ios/iphonesimulator/Runner.app --work "$RUNNER_TEMP/tools-check"
+
+      - name: Exercise Swift phone and companion voice contracts
+        id: swift
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: app
+        run: |
+          suites="IOSPhoneSelfRunnerTests IOSPhonePairingStoreTests IOSPhoneCoreDeviceTests IOSPhoneScreenTests
+            IOSPhoneDDIBackgroundTests IOSPhoneOperationTests IOSPhoneApprovalTests IOSPhoneClipboardTests
+            IOSPhoneXCTestObservationTests IOSPhoneRPCDispatchTests IOSPhoneTaskConsentTests
+            IOSPhoneResultEnvelopeTests IOSCompanionVoiceTests IOSAudioSessionCoordinatorTests"
+          only=(); for suite in $suites; do only+=("-only-testing:RunnerTests/$suite"); done
+          bundle="$RUNNER_TEMP/swift-contracts.xcresult"
+          status=0
+          xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner -destination "id=$DSH_SIMULATOR" \
+            "${only[@]}" -resultBundlePath "$bundle" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/swift-contracts.log" || status=$?
+          # The console stops printing test cases partway through a long run, so the result bundle
+          # decides: every listed suite has to be there, with cases, all passed.
+          xcrun xcresulttool get test-results tests --path "$bundle" > "$RUNNER_TEMP/swift-tests.json" || status=1
+          python3 - "$RUNNER_TEMP/swift-tests.json" $suites <<'PY' || status=1
+          import json, sys
+          expected = sys.argv[2:]
+          try:
+              nodes = json.load(open(sys.argv[1])).get('testNodes', [])
+          except Exception as error:
+              print('::error title=Swift contracts::result bundle unreadable: %s' % error)
+              sys.exit(1)
+          suites, problems = {}, []
+          def walk(node):
+              if node.get('nodeType') == 'Test Suite':
+                  cases = [c for c in node.get('children', []) if c.get('nodeType') == 'Test Case']
+                  suites[node.get('name', '')] = (node.get('result', ''), len(cases))
+                  for case in cases:
+                      if case.get('result') not in ('Passed', 'Expected Failure'):
+                          detail = '; '.join(c.get('name', '')[:200] for c in case.get('children', []))
+                          problems.append('%s.%s %s %s' % (node.get('name'), case.get('name'), case.get('result'), detail))
+                  return
+              for child in node.get('children', []):
+                  walk(child)
+          for node in nodes:
+              walk(node)
+          for name in expected:
+              result, count = suites.get(name, ('missing', 0))
+              if result != 'Passed' or count == 0:
+                  problems.append('%s: %s, %d cases' % (name, result, count))
+          summary = ', '.join('%s %d' % (name, suites.get(name, ('', 0))[1]) for name in expected)
+          print('::notice title=Swift contracts::' + summary)
+          if problems:
+              text = '%0A'.join(p.replace('%', '%25') for p in problems)
+              print('::error title=Swift contracts::' + text[:3500])
+              sys.exit(1)
+          PY
+          exit $status
+
+      - name: Keep the Swift contract results
+        if: ${{ failure() && steps.swift.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-swift-contracts
+          path: |
+            ${{ runner.temp }}/swift-contracts.xcresult
+            ${{ runner.temp }}/swift-contracts.log
+          retention-days: 7
+
+      - name: Capture the native pet renderer in the simulator
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash tooling/ios/pet-overlay-tests/capture-simulator.sh "$DSH_SIMULATOR" "$RUNNER_TEMP/pet-overlay"
+
+      - name: Keep the native pet frames and capture receipt
+        if: ${{ !inputs.regression_only && always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-pet-overlay
+          path: ${{ runner.temp }}/pet-overlay/
+          if-no-files-found: ignore
+
+      - name: Keep what the tools answered
+        if: ${{ !inputs.regression_only && always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-native-tools
+          path: ${{ runner.temp }}/tools-check/rows.jsonl
+          if-no-files-found: ignore
+
+      - name: Archive as for TestFlight, and look inside
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash tooling/ios/check-archive.sh
+
+      - name: Keep the unsigned app
+        if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-unsigned-ipa
+          path: ${{ runner.temp }}/DSH-Go-unsigned.ipa
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
+
+      - name: Keep the launch screenshot
+        if: ${{ !inputs.regression_only && always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-launch-screenshot
+          path: ${{ runner.temp }}/launch.png
+          if-no-files-found: ignore
+
+      - name: Say how a crashed process died
+        if: ${{ failure() }}
+        run: python3 tooling/ios/engine-smoke/crash-notes.py 120

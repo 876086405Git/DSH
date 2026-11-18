@@ -28,19 +28,31 @@ class HostedConversationLinkMaker implements ConversationLinkMaker {
   @override
   Future<ConversationLink> upload(Uint8List fileBytes, LinkExpiry expiry, {required String title}) async {
     final link = await _links.publish(fileBytes, title: title, ttl: ttlOf(expiry));
-    return ConversationLink(url: Uri.parse(link.url), expiresAt: link.expiresAt, id: link.id);
+    return ConversationLink(
+      url: Uri.parse(link.url),
+      expiresAt: link.expiresAt,
+      id: link.id,
+      locallySaved: _links.isPersisted(link.id),
+    );
   }
 
   /// Hidden from 「我的分享链接」 at once, deleted on the host after the
   /// undo window (as a delete there).
   @override
   Future<void> revoke(ConversationLink link) async {
-    if (link.id case final id?) await _links.remove(id);
+    if (link.id == null) {
+      if (_links.isHarmonyOS) throw const HostedStorageException();
+      return;
+    }
+    final saved = await _links.remove(link.id!);
+    if (_links.isHarmonyOS && !saved) throw const HostedStorageException();
   }
 
   @override
   Future<void> restore(ConversationLink link) async {
-    if (link.id case final id?) await _links.undo(id);
+    final result = link.id == null ? HostedUndoResult.unavailable : await _links.undo(link.id!);
+    if (_links.isHarmonyOS && result == HostedUndoResult.sessionOnly) throw const ConversationLinkRestoreUnsaved();
+    if (_links.isHarmonyOS && result == HostedUndoResult.unavailable) throw const HostedStorageException();
   }
 
   @override

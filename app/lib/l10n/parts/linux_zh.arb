@@ -1,0 +1,67 @@
+{
+  "linuxTitle": "Linux 环境",
+  "linuxSubtitle": "在手机里运行 gh、Python、git 等命令行工具",
+  "linuxSwitch": "开启 Linux",
+  "linuxStatus": "状态",
+  "linuxFirstHint": "第一次开启会下载约 3.5 MB 的基础系统并安装，大约一两分钟；之后再开几秒就好。",
+  "linuxMemoryNote": "开着 Linux 时 App 大约多占 100 MB 以上内存；关掉开关会把这部分还给系统，之后要重新打开 App 才能再开启。",
+  "linuxStateOn": "已开启",
+  "linuxStateOff": "未开启",
+  "linuxStateInstalling": "正在准备",
+  "linuxStateStopping": "正在关闭",
+  "linuxStateFailed": "出错了",
+  "linuxStateUnavailable": "暂不可用",
+  "linuxStageDownload": "下载基础系统",
+  "linuxStageDisk": "准备磁盘",
+  "linuxStageBoot": "启动",
+  "linuxStageTools": "安装工具",
+  "linuxEngineOffline": "本机引擎没在运行，启动引擎后再来开启。",
+  "linuxRequestFailed": "没能和引擎通信，请稍后重试。",
+  "linuxRestartRequired": "Linux 已经停止，重新打开 App 后才能再开启。",
+  "linuxReopenApp": "重新打开 App",
+  "linuxReopenFailed": "没能自动重新打开，请手动退出 App 再打开。",
+  "linuxErrorWithCode": "没能开启：{code}",
+  "@linuxErrorWithCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "linuxReinstall": "重新安装 Linux",
+  "linuxReinstallHint": "删除 Linux 里的全部内容，再开启时全新安装",
+  "linuxReinstallAfterRestart": "这次运行已经启动过 Linux：完全退出并重新打开 App 后才能重新安装",
+  "linuxReinstallTitle": "重新安装 Linux？",
+  "linuxReinstallBody": "会删除 Linux 里的全部内容：装过的软件和 Python 包、只存在 Linux 里的文件，以及在 Linux 里登录过的账号（比如 gh）。对话工作区里的文件不受影响。\n\n开关保持关闭；之后打开会重新下载并安装。",
+  "linuxRetainedRefused": "原来的 Linux 数据没法继续用了（常见于 App 更新之后），App 不会自动覆盖它。点「重新安装 Linux」删除后再开启，即可全新安装。（{code}）",
+  "@linuxRetainedRefused": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "linuxReinstallRestart": "这次运行已经启动过 Linux，数据可能仍被占用。完全退出并重新打开 App 后，再点「重新安装 Linux」。",
+  "linuxReinstallFailed": "没能重新安装：{code}",
+  "@linuxReinstallFailed": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "linuxProxyTitle": "网络代理",
+  "linuxProxyFooter": "只作用于 Linux 里的命令。gitee、华为云等国内源始终直连。",
+  "linuxProxyMode": "方式",
+  "linuxProxyInherit": "跟随 App",
+  "linuxProxyDirect": "不用代理",
+  "linuxProxyManual": "手动",
+  "linuxProxyHttp": "HTTP 代理",
+  "linuxProxyHttps": "HTTPS 代理",
+  "linuxProxyNoProxy": "不走代理的地址",
+  "linuxProxyUnset": "未设置",
+  "linuxProxySameAsHttp": "同 HTTP",
+  "linuxProxyLoopbackNote": "127.0.0.1 指的是这台手机，不是电脑。",
+  "linuxProxyUrlInvalid": "请填 http:// 或 https:// 开头的地址，例如 http://127.0.0.1:7890",
+  "searchKwLinux": "Linux,终端,命令行,虚拟机,gh,GitHub CLI,python,pip,代理"
+}

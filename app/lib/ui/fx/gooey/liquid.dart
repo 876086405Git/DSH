@@ -19,16 +19,17 @@ import 'liquid_transition.dart';
 /// below contributes a rounded rect (or a moving body with a tail, or a bowed
 /// body), the lot is blurred by [blur] and its alpha thresholded at slope
 /// [contrast] — the SVG goo filter — and [shadows] are drawn from the merged
-/// shape. Content stays crisp because it paints on top, untouched.
+/// shape. Content stays crisp because it paints on top, untouched; so does the
+/// liquid's own edge, cut about one device pixel wide.
 ///
 /// Size the group to hold the full travel of its items: the liquid is cut at
 /// the group's box plus about `3 × blur + filterPadding`. Items find their
 /// group by context; keep a [RepaintBoundary] from sitting between the group
 /// and an item that moves, or the liquid will not see it move.
 ///
-/// Cost: one blur + threshold layer, plus one per shadow layer (two per inset
-/// layer), over the group's padded box — every frame something in the group
-/// repaints. Keep groups small.
+/// Cost: a blur layer and a threshold layer, plus that pair again per shadow
+/// layer (twice per inset layer), over the group's padded box — every frame
+/// something in the group repaints. Keep groups small.
 class Liquid extends StatefulWidget {
   const Liquid({
     super.key,
@@ -44,7 +45,10 @@ class Liquid extends StatefulWidget {
   /// once it is about as large as the gap between them.
   final double blur;
 
-  /// Alpha slope: how sharp the liquid edge is. Higher is crisper and beadier.
+  /// Least alpha slope: how sharp the liquid edge is. The group steepens it as
+  /// far as the screen needs for an edge about one device pixel wide (see
+  /// [slopeFor]); the shape itself does not change with it, the threshold
+  /// crossing stays put.
   final double contrast;
 
   /// Liquid colour; null follows the theme ([LiquidPalette.surface]).
@@ -61,6 +65,16 @@ class Liquid extends StatefulWidget {
   /// The alpha intercept that keeps the threshold near the classic 18 / −7
   /// crossing whatever the slope.
   static double interceptFor(double contrast) => ((0.5 - contrast * (5 / 12)) * 100).round() / 100;
+
+  /// The threshold slope that cuts the edge one device pixel wide, and never
+  /// below [contrast].
+  ///
+  /// The threshold crosses ½ where the blurred alpha is 5/12; across a straight
+  /// edge that alpha climbs φ(Φ⁻¹(5/12)) ≈ 0.39 per σ, so the cut edge spans
+  /// `blur / (0.39 · slope)` logical px. At the author's 18 that is one device
+  /// pixel on a 2× screen but 1.5 on a 3× one, which reads as a soft edge.
+  static double slopeFor(double contrast, double blur, double devicePixelRatio) =>
+      math.max(contrast, blur * devicePixelRatio / 0.39);
 
   @override
   State<Liquid> createState() => _LiquidState();
@@ -103,6 +117,7 @@ class _LiquidState extends State<Liquid> with SingleTickerProviderStateMixin {
           shadows: widget.shadows,
           filterPadding: widget.filterPadding,
           reduced: AppMotion.reduced(context),
+          devicePixelRatio: MediaQuery.maybeDevicePixelRatioOf(context) ?? View.of(context).devicePixelRatio,
           child: widget.child,
         ),
       ),
@@ -335,6 +350,7 @@ class _LiquidLayer extends SingleChildRenderObjectWidget {
     required this.shadows,
     required this.filterPadding,
     required this.reduced,
+    required this.devicePixelRatio,
     required super.child,
   });
 
@@ -345,6 +361,7 @@ class _LiquidLayer extends SingleChildRenderObjectWidget {
   final List<LiquidShadow> shadows;
   final double filterPadding;
   final bool reduced;
+  final double devicePixelRatio;
 
   @override
   _RenderLiquid createRenderObject(BuildContext context) => _RenderLiquid(
@@ -355,6 +372,7 @@ class _LiquidLayer extends SingleChildRenderObjectWidget {
     shadows: shadows,
     filterPadding: filterPadding,
     reduced: reduced,
+    devicePixelRatio: devicePixelRatio,
   );
 
   @override
@@ -365,7 +383,8 @@ class _LiquidLayer extends SingleChildRenderObjectWidget {
       ..fill = fill
       ..shadows = shadows
       ..filterPadding = filterPadding
-      ..reduced = reduced;
+      ..reduced = reduced
+      ..devicePixelRatio = devicePixelRatio;
   }
 }
 
@@ -381,6 +400,7 @@ class _RenderLiquid extends RenderProxyBox {
     required this._shadows,
     required this._filterPadding,
     required bool reduced,
+    required this._devicePixelRatio,
   }) {
     _fill = fill;
     _shape.color = fill.withValues(alpha: 1);
@@ -402,6 +422,14 @@ class _RenderLiquid extends RenderProxyBox {
   set contrast(double value) {
     if (value == _contrast) return;
     _contrast = value;
+    _invalidate();
+  }
+
+  double get devicePixelRatio => _devicePixelRatio;
+  double _devicePixelRatio;
+  set devicePixelRatio(double value) {
+    if (value == _devicePixelRatio) return;
+    _devicePixelRatio = value;
     _invalidate();
   }
 
@@ -428,6 +456,9 @@ class _RenderLiquid extends RenderProxyBox {
   final _shape = Paint();
   final _layer = Paint();
   final _isolate = Paint();
+
+  /// The goo blur, in a layer of its own under every pass (see [_shapes]).
+  final _blurLayer = Paint();
   Color _fill = const Color(0xFFFFFFFF);
   set fill(Color value) {
     if (value == _fill) return;
@@ -468,16 +499,15 @@ class _RenderLiquid extends RenderProxyBox {
       ui.ImageFilter.compose(outer: outer, inner: inner);
 
   List<_Pass> _build() {
-    final goo = _then(_blurOf(_blur), _alpha(_contrast, Liquid.interceptFor(_contrast)));
+    _blurLayer.imageFilter = _blurOf(_blur);
+    // Every filter below runs on shapes already blurred by [_blurLayer]: the
+    // threshold is the first step, not the blur.
+    final slope = Liquid.slopeFor(_contrast, _blur, _devicePixelRatio);
+    final ui.ImageFilter goo = _alpha(slope, Liquid.interceptFor(slope));
     final bin = _then(goo, _binarize);
     // The threshold runs on the opaque shape; the fill (colour and alpha) is
-    // applied on top of the thresholded silhouette. The threshold cuts the
-    // edge with no antialiasing, so a hair of blur after the tint turns that
-    // hard edge back into a smooth one (the goo itself stays crisp).
-    _layer.imageFilter = _then(
-      _then(goo, ColorFilter.mode(_fill, BlendMode.srcIn)),
-      _blurOf(0.6),
-    );
+    // applied on top of the thresholded silhouette.
+    _layer.imageFilter = _then(goo, ColorFilter.mode(_fill, BlendMode.srcIn));
     ui.ImageFilter morph(ui.ImageFilter src, double spread, {required bool grow}) => _then(
       src,
       grow
@@ -556,11 +586,23 @@ class _RenderLiquid extends RenderProxyBox {
     canvas.restore();
   }
 
+  /// The silhouette through [layer]'s filter, blurred first in a layer of its
+  /// own.
+  ///
+  /// Not one composed filter: Impeller blurs a σ past about 4 device px at half
+  /// size or less and hands that small texture straight to the next filter, so
+  /// the threshold ran at half resolution and cut the edge in 2 px steps. Here
+  /// the blur lands in the full-size layer first and the threshold cuts the
+  /// edge at device resolution.
   void _shapes(Canvas canvas, Rect bounds, Paint layer, Offset shift) {
-    canvas.saveLayer(bounds, layer);
+    canvas
+      ..saveLayer(bounds, layer)
+      ..saveLayer(bounds, _blurLayer);
     if (shift != Offset.zero) canvas.translate(shift.dx, shift.dy);
     _engine.paint(canvas, _shape);
-    canvas.restore();
+    canvas
+      ..restore()
+      ..restore();
   }
 }
 

@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "status": "AUTHOR_SOURCE_NOT_RUN",
+  "identity": {
+    "buildId": "oh-image-ndk26-v1;decode=rgba8-sdr-srgb;resize=high-fit-inside;orient=explicit;quality=85,75,60;cap=52428800;verify=container+decode;getcolor=destroy",
+    "resizeAlgorithm": "NDK_HIGH_FIT_INSIDE_WITHOUT_ENLARGEMENT",
+    "orientation": "explicit",
+    "colourspace": "srgb",
+    "qualityLadder": [
+      85,
+      75,
+      60
+    ],
+    "encodingCapBytes": 52428800,
+    "alphaSelection": "known-opaque:jpeg;alpha-or-unknown:webp",
+    "outputVerification": "container+decode",
+    "colorGetterPolicy": "destroy"
+  },
+  "cases": [
+    {
+      "name": "opaque-jpeg",
+      "file": "opaque.jpg",
+      "input": {
+        "bytes": 165,
+        "sha256": "a2973c3de4188016f8a9d3a2ae0ffca92fff8f81aab9718adaac6d258bf66ec5",
+        "hex": "ffd8ffe000104a46494600010100000100010000ffdb00430001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101ffc00011080004000603011100021100031100ffc40026000100000000000000000000000000000000100100000000000000000000000000000000ffda000c03010002000300003f0003ffd9"
+      },
+      "inputMediaType": "image/jpeg",
+      "alpha": false,
+      "ref": {
+        "attachmentId": "sha256:ac44481c5bdb22b9985e4baf66da9d709048593f417b15367f204b9cc093639c",
+        "mediaType": "image/jpeg",
+        "width": 6,
+        "height": 4,
+        "bytes": 240,
+        "name": "opaque.jpg"
+      },
+      "normalized": {
+        "bytes": 240,
+        "sha256": "ac44481c5bdb22b9985e4baf66da9d709048593f417b15367f204b9cc093639c",
+        "hex": "ffd8ffe000104a46494600010100000100010000ffdb00430001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101ffc00011080004000603011100021100031100ffc40026000100000000000000000000000000000000100100000000000000000000000000000000ffda000c03010002000300003f0055111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111ffd9"
+      },
+      "target": {
+        "width": 3,
+        "height": 2,
+        "maxBytes": 1024
+      },
+      "request": {
+        "bytes": 240,
+        "sha256": "f3b66a540781d611848810b4081f669f0ea8778a055c4df5ecfbeeb9da9dff11",
+        "hex": "ffd8ffe000104a46494600010100000100010000ffdb00430001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101ffc00011080002000303011100021100031100ffc40026000100000000000000000000000000000000100100000000000000000000000000000000ffda000c03010002000300003f0055111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111ffd9"
+      },
+      "variantId": "sha256:4059ea711dca06a30627e568a80cd2bda2e75a23e9d9f44b4c1b90038a491394",
+      "sourceFacts": {
+        "mediaType": "image/jpeg",
+        "width": 6,
+        "height": 4,
+        "animated": false,
+        "carriesMetadata": false,
+        "depth": "uchar",
+        "space": "UNKNOWN",
+        "hasAlpha": false
+      }
+    },
+    {
+      "name": "transparent-png",
+      "file": "alpha.png",
+      "input": {
+        "bytes": 168,
+        "sha256": "58677b1c38afb848b50d6280e6ed8e3d80f437186b72385b9a1bf226525fb956",
+        "hex": "89504e470d0a1a0a0000000d4948445200000006000000040806000000ad044e430000006f4944415478010164009bff00284682003c468280504682ff64468200784682808c4682ff00285a82803c5a82ff505a8200645a8280785a82ff8c5a820000286e82ff3c6e8200506e8280646e82ff786e82008c6e828000288282003c828280508282ff64828200788282808c8282ffd41929f9223e14a20000000049454e44ae426082"
+      },
+      "inputMediaType": "image/png",
+      "alpha": true,
+      "ref": {
+        "attachmentId": "sha256:f8ecdaf1ec96b031580a9dea49d187d77adb14b8ffb7db5df069073c98280784",
+        "mediaType": "image/webp",
+        "width": 6,
+        "height": 4,
+        "bytes": 240,
+        "name": "alpha.png"
+      },
+      "normalized": {
+        "bytes": 240,
+        "sha256": "f8ecdaf1ec96b031580a9dea49d187d77adb14b8ffb7db5df069073c98280784",
+        "hex": "52494646e800000057454250565038580a00000010000000050000030000414c50481900000000007ffe007ffe007ffe007ffe007ffe007ffe007ffe007ffe0056503820a80000003000009d012a060004003535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353555"
+      },
+      "target": {
+        "width": 3,
+        "height": 2,
+        "maxBytes": 1024
+      },
+      "request": {
+        "bytes": 240,
+        "sha256": "a51287c8f7e89a689d0460c0d0c891f91bfa07afd62dca90d7a7177efcb1f01d",
+        "hex": "52494646e800000057454250565038580a00000010000000020000010000414c50480700000000007ffe007ffe0056503820ba0000003000009d012a030002003535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353555"
+      },
+      "variantId": "sha256:cf8c0a73d736853293a1dfb7446355be89a60c790df612d72e05361ab3a0ef88",
+      "sourceFacts": {
+        "mediaType": "image/png",
+        "width": 6,
+        "height": 4,
+        "animated": false,
+        "carriesMetadata": false,
+        "depth": "uchar",
+        "space": "UNKNOWN",
+        "hasAlpha": true
+      }
+    }
+  ],
+  "sequentialRepeat": {
+    "case": "opaque-jpeg",
+    "variantUnchanged": true,
+    "packDelta": 1,
+    "sourceDecodeDelta": 1,
+    "verifyDecodeDelta": 1,
+    "scaleDelta": 1,
+    "cacheSourceSpace": "UNKNOWN"
+  },
+  "total": {
+    "packs": 5,
+    "sourceDecodes": 7,
+    "verificationDecodes": 5,
+    "scales": 3,
+    "quality": 85,
+    "liveSdkObjectsAtEveryAwait": 0
+  },
+  "scope": "Real production attachment/facade/bridge/NDK/scanner/ladder, real publication fixture and disk I/O; SDK implements deterministic typed calls and independent fixture facts, not actual pixels. Two image paths + one sequential request, not device success."
+}

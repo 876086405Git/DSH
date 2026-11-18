@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fixture, name, executeTool, selectedPackage } from './plugin-package-harness.mjs';
+const yaml = JSON.stringify([{ insert: [{ id: 'owned-tool', name }] }]);
+for (const mode of ['bad-archive', 'cancelled', 'success']) test(`real HMR update ${mode} preserves loaded code and transaction contract`, { timeout: 30000 }, async t => {
+  const f = await fixture(t, { '1.0.0': { yaml }, '2.0.0': { yaml } }, { hmr: true, profileName: 'hmr-owned' });
+  assert(f.ctx.get('hmr')); assert(f.ctx.get('pluginPackages'));
+  const installed = await f.invoke('installBundle', name + '@1.0.0', { registry: f.registry, enabled: true });
+  assert.equal(installed.changed, true, JSON.stringify(installed));
+  await executeTool(f.ctx, '1.0.0');
+  const before = await f.snapshot();
+  const oldRow = [...f.ctx.loader.entries()].find(row => row.options.id === 'owned-tool');
+  const oldFiber = oldRow.fiber;
+  f.facts.hmrBefore = { name: oldRow.options.name, uid: oldFiber.uid, entries: f.ctx.pluginPackages.resolution.entries.filter(entry => entry.name === name) };
+  const oldTarCount = f.facts.requests.filter(x => x === '/tar/1.0.0').length;
+  f.corruptTar('1.0.0');
+  if (mode === 'bad-archive') f.corruptTar('2.0.0');
+  if (mode === 'cancelled') f.holdTar('2.0.0');
+  const pending = f.invoke('updateBundle', name, '2.0.0', { registry: f.registry, requestId: 'hmr-update-' + mode });
+  if (mode === 'cancelled') {
+    await Promise.race([f.tarEntered.promise, pending.then(r => { throw Error('Update ended before held tar: ' + JSON.stringify(r)); })]);
+    assert.equal((await f.invoke('cancelInstall', 'hmr-update-' + mode)).status, 'cancelled');
+  }
+  const updated = await pending;
+  await executeTool(f.ctx, '1.0.0');
+  const liveRow = [...f.ctx.loader.entries()].find(row => row.options.id === 'owned-tool');
+  f.facts.hmrAfter = { name: liveRow.options.name, uid: liveRow.fiber.uid, sameFiber: liveRow.fiber === oldFiber, oldFiberState: oldFiber.state, entries: f.ctx.pluginPackages.resolution.entries.filter(entry => entry.name === name) };
+  assert.equal(updated.result.application, mode === 'success' ? 'restart-required' : mode === 'cancelled' ? 'cancelled' : 'failed', JSON.stringify(updated));
+  assert.equal(updated.result.changed, mode === 'success');
+  assert.equal(f.facts.requests.filter(x => x === '/tar/1.0.0').length, oldTarCount, 'never re-download old tar as rollback');
+  assert.equal(f.manager.installs.size, 0);
+  if (mode !== 'success') assert.deepEqual(await f.snapshot(), before);
+  const manifest = JSON.parse(await readFile(join(selectedPackage(f.dir), 'package.json'), 'utf8'));
+  assert.equal(manifest.version, mode === 'success' ? '2.0.0' : '1.0.0');
+  const row = (await f.manager.listBundles()).find(row => row.name === name);
+  assert.equal(row.enabled, true);
+  await executeTool(f.ctx, '1.0.0');
+});
+
+test('real HMR refused unmanaged removal restores the selected live contribution', { timeout: 30000 }, async t => {
+  const { cp, writeFile } = await import('node:fs/promises');
+  const { pathToFileURL } = await import('node:url');
+  const f = await fixture(t, {}, { hmr: true, profileName: 'hmr-removal' });
+  await f.invoke('installBundle', name + '@1.0.0', { registry: f.registry, enabled: false });
+  const legacy = join(f.dir, 'node_modules', name);
+  await cp(selectedPackage(f.dir), legacy, { recursive: true });
+  await writeFile(join(f.dir, '.plugin-manager/ohos/active.json'), '{"schema":1,"packages":{}}\n');
+  const marker = '__ohosContractLive';
+  t.after(() => { delete globalThis[marker]; });
+  await writeFile(join(legacy, 'index.mjs'), `export function apply(ctx) { globalThis.${marker} = true; ctx.effect(() => () => { globalThis.${marker} = false; }); }\n`);
+  await writeFile(join(legacy, 'cordis.patch.yml'), JSON.stringify([{ insert: [{ id: 'legacy-live', name: pathToFileURL(join(legacy, 'index.mjs')).href }] }]));
+  const enabled = await f.invoke('setBundleEnabled', name, true);
+  assert.equal(enabled.application, 'applied'); assert.equal(globalThis[marker], true);
+  const before = await f.snapshot();
+  const removed = await f.invoke('removeBundle', name);
+  assert.equal(removed.application, 'failed'); assert.equal(removed.changed, false);
+  assert.deepEqual(await f.snapshot(), before);
+  assert.equal((await f.manager.listBundles()).find(row => row.name === name).enabled, true);
+  assert.equal(globalThis[marker], true, 'failed removal must reload the contribution that real HMR stopped');
+});

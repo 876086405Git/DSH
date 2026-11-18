@@ -89,6 +89,7 @@ function wsConnect(headers) {
       resolve({
         status: res.statusCode,
         queue,
+        pause() { socket.pause(); }, resume() { socket.resume(); },
         send(obj) { if (!socket.destroyed) socket.write(WS.encodeFrame(0x1, JSON.stringify(obj), { mask: true })); },
         close() { socket.destroy(); },
         next(pred = () => true, ms = 3000) {
@@ -171,14 +172,30 @@ while (Date.now() < until) {
   const m = await ws.next((x) => x.t === "micro.data" && x.sub === "m1", until - Date.now());
   if (m) frames.push(m);
 }
-const gaps = frames.slice(1).map((f, i) => f.at - frames[i].at);
+const revisions = frames.map(f => f.rev.split("."));
 check(frames.length >= 8 && frames.length <= 17, `${frames.length} updates in 1.5 s from a 50 Hz producer`);
-check(gaps.every((g) => g >= 80), `gaps ≥ 80 ms (min ${Math.min(...gaps)} ms)`);
+check(new Set(revisions.map(r => r[0])).size === 1 && revisions.every((r, i) => i === 0 || Number(r[1]) === Number(revisions[i - 1][1]) + 1), "one epoch, unique contiguous revisions in receive order");
 check(frames.every((f) => /^[0-9a-f]{16}\.[1-9][0-9]*$/.test(f.rev) && typeof f.data.text === "string" && Object.keys(f.data).every((k) => k === "text" || k === "progress")), "rev <epoch>.<seq>, the small model only");
 ws.send({ t: "micro.unsub", sub: "m1" });
 await sleep(300);
 const lateFrames = ws.queue.filter((m) => m.t === "micro.data" && m.sub === "m1" && m.at > Date.now() - 150);
 check(lateFrames.length === 0, "nothing after micro.unsub");
+
+// A paused reader may decode several correctly throttled sends together.
+const delayed = await wsConnect(C);
+delayed.send({ t: "hello", v: [1], locale: "zh-CN", features: ALL });
+await delayed.next(m => m.t === "welcome");
+delayed.send({ t: "micro.sub", sub: "paused", pkg: PKG, id: "caption", scope: { sessionId: "paused-reader" } });
+const buffered = [await delayed.next(m => m.t === "micro.data" && m.sub === "paused")];
+delayed.pause(); await sleep(350); delayed.resume();
+while (buffered.length < 5) {
+  const frame = await delayed.next(m => m.t === "micro.data" && m.sub === "paused");
+  if (!frame) break;
+  buffered.push(frame);
+}
+const bufferedRevisions = buffered.filter(Boolean).map(f => f.rev.split("."));
+check(bufferedRevisions.length === 5 && new Set(bufferedRevisions.map(r => r[0])).size === 1 && bufferedRevisions.every((r, i) => i === 0 || Number(r[1]) === Number(bufferedRevisions[i - 1][1]) + 1), "paused reader retains unique contiguous revisions without loss");
+delayed.send({ t: "micro.unsub", sub: "paused" }); delayed.close();
 
 section("capability events reach the plugin; terminals end the lease");
 ws.send({ t: "cap.event", lease: play?.lease, seq: 1, event: "voice.speechStart" });

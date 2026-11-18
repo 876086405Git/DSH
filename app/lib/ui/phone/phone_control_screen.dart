@@ -9,7 +9,9 @@ import '../../runtime/local_footprint.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
 import '../../state/connection_state.dart';
+import '../../state/android_features.dart';
 import '../../state/hosts_state.dart';
+import '../../state/ios_phone_link_state.dart';
 import '../../state/phone_overlay_prefs.dart';
 import '../../state/phone_state.dart';
 import '../../state/phone_turn_end.dart';
@@ -31,8 +33,11 @@ import '../theme/theme.dart';
 import 'action_log_page.dart';
 import 'android_shell_page.dart';
 import 'a11y_restore_sheet.dart';
+import 'always_allow_page.dart';
 import 'app_rules_page.dart';
 import 'dnd_mode_page.dart';
+import 'ios_pet_pip_section.dart';
+import 'ios_phone_link_section.dart';
 import 'phone_disclosure_sheet.dart';
 import 'phone_background_guide.dart';
 import 'phone_unlock_page.dart';
@@ -120,6 +125,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
   }
 
   Future<void> _onResume() async {
+    unawaited(ref.read(phoneLinkProvider.notifier).refresh());
     final read = ++_resumeRead;
     setState(() => _skillPromptsReady = false);
     final ready = await _phone.refreshStatus();
@@ -319,6 +325,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(operatingSystemProvider) == 'ios') return _buildIOS();
     final l10n = context.l10n;
     final state = ref.watch(phoneProvider);
     final blocker = ref.watch(phoneBlockerProvider);
@@ -583,6 +590,95 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
     );
   }
 
+  Widget _buildIOS() {
+    final l10n = context.l10n;
+    final state = ref.watch(phoneProvider);
+    final status = state.status;
+    final link = ref.watch(phoneLinkProvider).status;
+    final returnAfterDone = ref.watch(phoneReturnPrefProvider);
+    Future<void> setEnabled(bool value) async {
+      if (await ref.read(phoneChannelProvider).setEnabled(value)) {
+        await ref.read(phoneProvider.notifier).refreshStatus();
+      }
+    }
+
+    // The runner's `bridgeListening` is the XCTest route only; the on-device connection says
+    // ready by its own switch and record.
+    final linkSet = link != null && link.enabled && link.pairingPresent;
+    final taskRow = status.task.active
+        ? ListPageRow(
+            icon: AppIcons.phoneControl,
+            title: l10n.phoneControlWorking,
+            trailing: FixButton(label: l10n.commonStop, onPressed: () => unawaited(_stopTask(status.task.id))),
+          )
+        : null;
+    final returnRow = MergeSemantics(
+      child: ListPageRow(
+        icon: AppIcons.returnToApp,
+        spot: Spots.phoneReturn,
+        subtitle: l10n.phoneIosReturnHint,
+        subtitleMaxLines: 3,
+        onTap: () => unawaited(_setReturn(!returnAfterDone)),
+        trailing: Switch.adaptive(value: returnAfterDone, onChanged: (value) => unawaited(_setReturn(value))),
+      ),
+    );
+
+    return AppPage.list(
+      title: l10n.phoneControlTitle,
+      children: [
+        const PhoneLinkClipboardCard(),
+        OverviewCard(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          leading: const FeatureTile(FeatureKind.phone, size: OverviewCard.avatarSize),
+          title: Text(l10n.phoneControlTitle),
+          subtitle: Text(
+            !status.enabled
+                ? l10n.phoneControlNotEnabled
+                : linkSet || status.bridgeListening
+                ? l10n.phoneControlReady
+                : l10n.phoneIosNeedsSetup,
+          ),
+          trailing: Switch.adaptive(
+            value: status.enabled,
+            onChanged: state.loaded ? (value) => unawaited(setEnabled(value)) : null,
+          ),
+        ),
+        const SizedBox(height: 24),
+        if (link == null) ...[
+          // A build without the on-device connection: the runner alone.
+          ListPageCard(
+            title: l10n.phoneIosServiceTitle,
+            children: [
+              ListPageRow(
+                icon: AppIcons.phoneControl,
+                title: l10n.phoneIosServiceTitle,
+                subtitle: l10n.phoneIosServiceHint,
+                subtitleMaxLines: 4,
+              ),
+              returnRow,
+              ?taskRow,
+            ],
+          ),
+          PageFootnote(l10n.phoneIosSetupHint),
+        ] else ...[
+          if (taskRow != null) ...[
+            ListPageCard(children: [taskRow]),
+            const SizedBox(height: 24),
+          ],
+          const PhoneLinkSection(),
+          PageFootnote(l10n.iosPhoneLinkIntro),
+          const SizedBox(height: 24),
+          const IosPetPipSection(),
+          PageFootnote(l10n.iosPetPipHint),
+          const SizedBox(height: 24),
+          ListPageCard(children: [returnRow]),
+          const SizedBox(height: 24),
+          const PhoneLinkExtrasSection(),
+        ],
+      ],
+    );
+  }
+
   ValueChanged<bool>? _switchHandler(PhoneState state, PhoneBlocker? blocker) {
     if (state.toggling || !state.loaded) return null;
     if (blocker == PhoneBlocker.notReady) return null;
@@ -704,7 +800,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             spot: Spots.phoneAutoCollapse,
             subtitle: context.l10n.phoneAutoCollapseHint,
             onTap: () => unawaited(_setAutoCollapse(!overlay.autoCollapse)),
-            trailing: Switch(value: overlay.autoCollapse, onChanged: (v) => unawaited(_setAutoCollapse(v))),
+            trailing: Switch.adaptive(value: overlay.autoCollapse, onChanged: (v) => unawaited(_setAutoCollapse(v))),
           ),
         ),
         MergeSemantics(
@@ -713,7 +809,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             spot: Spots.phoneReturn,
             subtitle: context.l10n.phoneReturnAfterDoneHint,
             onTap: () => unawaited(_setReturn(!returnAfterDone)),
-            trailing: Switch(value: returnAfterDone, onChanged: (v) => unawaited(_setReturn(v))),
+            trailing: Switch.adaptive(value: returnAfterDone, onChanged: (v) => unawaited(_setReturn(v))),
           ),
         ),
       ],
@@ -796,6 +892,12 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             spot: SettingsIndex.entry(SettingsPageId.phoneUnlocks),
             subtitle: phoneUnlockSummary(context.l10n, policies) ?? context.l10n.phoneControlLoading,
             onTap: () => _push(const PhoneUnlockPage()),
+          ),
+          ListPageRow(
+            icon: AppIcons.allowed,
+            spot: SettingsIndex.entry(SettingsPageId.phoneAlwaysAllow),
+            subtitle: phoneAlwaysAllowSummary(context.l10n, policies) ?? context.l10n.phoneControlLoading,
+            onTap: policies == null ? null : () => _push(const PhoneAlwaysAllowPage()),
           ),
         ],
       ),

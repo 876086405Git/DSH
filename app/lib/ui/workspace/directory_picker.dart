@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../runtime/local_paths.dart';
 import '../../state/connection_state.dart';
 import '../../state/sessions_state.dart' show localWorkspaceDir;
 import '../../state/settings_state.dart';
@@ -68,7 +69,8 @@ List<DirectoryShortcut> directoryShortcuts({required bool local, required bool p
         localWorkspaceDir,
         subtitle: displayPath(localWorkspaceDir, local: true),
       ),
-      DirectoryShortcut(AppIcons.home, appL10n.remoteDirectoryHome, localHome, subtitle: '~'),
+      // HarmonyOS: the sandbox lets the engine at its default folder and no further.
+      if (!LocalPaths.noGuest) DirectoryShortcut(AppIcons.home, appL10n.remoteDirectoryHome, localHome, subtitle: '~'),
       if (phoneStorage) ...[
         DirectoryShortcut(AppIcons.phoneStorage, appL10n.remoteDirectoryPhoneStorage, phoneStorageRoot),
         DirectoryShortcut(
@@ -195,19 +197,23 @@ class DirectoryLocationsSheet extends ConsumerWidget {
   }
 }
 
-/// Asks for an absolute folder path.
+/// A Windows host's absolute path (C:/Users/me, C:\Users\me) and its drive root.
+final _drivePath = RegExp(r'^[A-Za-z]:[\\/]');
+final _driveRoot = RegExp(r'^[A-Za-z]:[\\/]$');
+
+/// Asks for an absolute folder path, as the host writes it.
 Future<String?> askFolderPath(BuildContext context) async {
   final l10n = context.l10n;
   final path = await showTextPrompt(
     context,
     title: l10n.remoteDirectoryEnterPath,
-    hint: '/root/workspace',
+    hint: localWorkspaceDir,
     confirm: l10n.remoteDirectoryGo,
     mono: true,
     keyboardType: TextInputType.url,
-    validate: (v) => v.startsWith('/') ? null : l10n.remoteDirectoryAbsolutePath,
+    validate: (v) => v.startsWith('/') || _drivePath.hasMatch(v) ? null : l10n.remoteDirectoryAbsolutePath,
   );
-  if (path == null) return null;
+  if (path == null || _driveRoot.hasMatch(path)) return path;
   return path.length > 1 && path.endsWith('/') ? path.substring(0, path.length - 1) : path;
 }
 

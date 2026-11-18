@@ -21,7 +21,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../remote/secret_store.dart' show SecretStore;
+import '../secrets/secure_storage.dart';
 import '../state/account_state.dart' show accountBrowserProvider;
+import '../state/android_features.dart';
 import '../l10n/l10n.dart';
 import 'discourse_client.dart';
 import 'forum_config.dart';
@@ -29,11 +31,11 @@ import 'forum_crypto.dart';
 import 'forum_models.dart';
 import 'forum_state.dart';
 
-/// Android Keystore-backed storage for the forum's key pair and API key.
+/// Platform secure storage for the forum's key pair and API key.
 class SecureForumStore implements SecretStore {
-  SecureForumStore([FlutterSecureStorage? storage]) : _storage = storage ?? const FlutterSecureStorage();
+  SecureForumStore([FlutterSecureStorage? storage]) : _storage = AppSecureStorage(storage);
 
-  final FlutterSecureStorage _storage;
+  final AppSecureStorage _storage;
 
   static String _k(String key) => 'forum.$key';
 
@@ -110,6 +112,9 @@ class ForumAuthController extends Notifier<ForumAuthState> {
   @override
   ForumAuthState build() {
     _base = ref.watch(forumBaseUrlProvider);
+    // A rebuild keeps this object: on HarmonyOS, where saved credentials can be
+    // cleared, the pair is read again rather than remembered past that.
+    if (ref.read(operatingSystemProvider) == 'ohos') _keys = null;
     unawaited(_restore(_base));
     return const ForumAuthState();
   }
@@ -187,8 +192,13 @@ class ForumAuthController extends Notifier<ForumAuthState> {
       final url = await authorizeUrl();
       if (await ref.read(accountBrowserProvider).open(url)) return true;
       if (ref.mounted) state = state.copyWith(phase: ForumAuthPhase.signedOut, error: appL10n.stateBrowserOpenFailed);
-    } catch (_) {
-      if (ref.mounted) state = state.copyWith(phase: ForumAuthPhase.signedOut, error: appL10n.stateSignInStartFailed);
+    } catch (e) {
+      if (ref.mounted) {
+        state = state.copyWith(
+          phase: ForumAuthPhase.signedOut,
+          error: credentialsUnreadable(e) ? appL10n.harmonyCredentialsUnreadableHint : appL10n.stateSignInStartFailed,
+        );
+      }
     }
     return false;
   }
@@ -223,9 +233,14 @@ class ForumAuthController extends Notifier<ForumAuthState> {
       state = ForumAuthState(phase: ForumAuthPhase.signedIn, credentials: credentials);
       unawaited(refreshUser());
       return true;
-    } catch (_) {
+    } catch (e) {
       if (ref.mounted) {
-        state = state.copyWith(phase: ForumAuthPhase.signedOut, error: appL10n.stateSignInIncompleteRetry);
+        state = state.copyWith(
+          phase: ForumAuthPhase.signedOut,
+          error: credentialsUnreadable(e)
+              ? appL10n.harmonyCredentialsUnreadableHint
+              : appL10n.stateSignInIncompleteRetry,
+        );
       }
       return false;
     }

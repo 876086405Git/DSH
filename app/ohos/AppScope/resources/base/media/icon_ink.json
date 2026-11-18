@@ -1,0 +1,6 @@
+{
+  "layered-image": {
+    "background": "$media:ink_background",
+    "foreground": "$media:ink_foreground"
+  }
+}

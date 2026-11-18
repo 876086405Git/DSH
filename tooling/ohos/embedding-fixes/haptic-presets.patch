@@ -1,0 +1,74 @@
+--- a/package/src/main/ets/plugin/PlatformPlugin.ets
++++ b/package/src/main/ets/plugin/PlatformPlugin.ets
+@@ -171,6 +171,8 @@
+  */
+ export class PlatformPluginCallback implements PlatformMessageHandler {
+   private static TAG = "PlatformPluginCallback";
++  /** What the device said about each haptic preset. */
++  private static hapticPresets: Map<string, boolean> = new Map<string, boolean>();
+   /** The PlatformPlugin instance this callback is associated with. */
+   platform: PlatformPlugin | null = null;
+   /** The main window for system UI operations. */
+@@ -208,30 +210,42 @@
+    * @param feedbackType - The type of haptic feedback
+    */
+   async vibrateHapticFeedback(feedbackType: HapticFeedbackType) {
++    // Preset, its intensity, and the milliseconds a device without that preset vibrates for instead. A timed
++    // motor alone made every tap a long buzz. How each of these feels needs a device to judge: tune them here.
+     switch (feedbackType) {
+-      case HapticFeedbackType.STANDARD:
+-        await vibrator.startVibration({ type: 'time', duration: 75 },
+-          { id: 0, usage: 'touch' });
+-        break;
+-      case HapticFeedbackType.LIGHT_IMPACT:
+-        await vibrator.startVibration({ type: 'time', duration: 25 },
+-          { id: 0, usage: 'touch' });
+-        break;
+-      case HapticFeedbackType.MEDIUM_IMPACT:
+-        await vibrator.startVibration({ type: 'time', duration: 150 },
+-          { id: 0, usage: 'touch' });
+-        break;
+-      case HapticFeedbackType.HEAVY_IMPACT:
+-        await vibrator.startVibration({ type: 'time', duration: 300 },
+-          { id: 0, usage: 'touch' });
+-        break;
+-      case HapticFeedbackType.SELECTION_CLICK:
+-        await vibrator.startVibration({ type: 'time', duration: 100 },
+-          { id: 0, usage: 'touch' });
+-        break;
++      case HapticFeedbackType.SELECTION_CLICK: await this.vibratePreset('haptic.clock.timer', 100, 10); break;
++      case HapticFeedbackType.LIGHT_IMPACT: await this.vibratePreset('haptic.effect.soft', 100, 15); break;
++      case HapticFeedbackType.MEDIUM_IMPACT: await this.vibratePreset('haptic.effect.hard', 60, 25); break;
++      case HapticFeedbackType.HEAVY_IMPACT: await this.vibratePreset('haptic.effect.hard', 100, 40); break;
++      case HapticFeedbackType.STANDARD: await this.vibratePreset('haptic.effect.hard', 100, 40); break;
+     }
+   }
+ 
++  private async vibratePreset(effectId: string, intensity: number, fallbackMs: number): Promise<void> {
++    if (await PlatformPluginCallback.hasHapticPreset(effectId)) {
++      await vibrator.startVibration({ type: 'preset', effectId: effectId, intensity: intensity },
++        { id: 0, usage: 'touch' });
++    } else {
++      await vibrator.startVibration({ type: 'time', duration: fallbackMs },
++        { id: 0, usage: 'touch' });
++    }
++  }
++
++  // Asked once per preset, and not with isSupportEffectSync, which blocks the UI thread a tap is on.
++  private static async hasHapticPreset(effectId: string): Promise<boolean> {
++    let known = PlatformPluginCallback.hapticPresets.get(effectId);
++    if (known === undefined) {
++      try {
++        known = await vibrator.isSupportEffect(effectId);
++      } catch (err) {
++        Log.w(PlatformPluginCallback.TAG, "isSupportEffect " + effectId + ": " + JSON.stringify(err));
++        known = false;
++      }
++      PlatformPluginCallback.hapticPresets.set(effectId, known);
++    }
++    return known;
++  }
++
+   /**
+    * Sets the preferred screen orientation.
+    * @param ohosOrientation - The orientation value.

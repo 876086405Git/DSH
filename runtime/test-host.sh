@@ -157,16 +157,20 @@ ok=0; for _ in $(seq 1 240); do grep -q '^dsh web: http' "$LOG2" && { ok=1; brea
 kill -TERM "$BG" 2>/dev/null || true; wait "$BG" 2>/dev/null || true
 
 echo "== route guard patch and dsh-go-bridge (port $((PORT + 1)))"
-python3 -I - "$ROOT" "$HERE/patches/pins.json" "$MANIFEST" <<'PY' && pass "patched webserver matches pins.json; bridge at /opt/dsh-go; overlay loads it" || fail "patch / bridge layout"
-import hashlib, json, os, sys
-root, pins, manifest = sys.argv[1:4]
+python3 -I - "$ROOT" "$HERE/patches/pins.json" "$MANIFEST" "$HERE" <<'PY' && pass "patched webserver matches pins.json; bridge at /opt/dsh-go; overlay loads it" || fail "patch / bridge layout"
+import hashlib, importlib.util, json, os, sys
+root, pins, manifest, runtime = sys.argv[1:5]
+spec = importlib.util.spec_from_file_location('rtbuild', os.path.join(runtime, 'lib/rtbuild.py'))
+rtbuild = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rtbuild)
+catalog = json.load(open(pins))
+names, _ = rtbuild.select_dsh_patches(catalog, os.path.dirname(pins), 'android')
 m = json.load(open(manifest))
 terminal = {}
-patches = json.load(open(pins))["patches"]
-assert set(patches) <= set(m["dshPatches"]), m["dshPatches"]
+assert set(names) <= set(m["dshPatches"]), m["dshPatches"]
 # The build records the series application order in the manifest.
 for name in m["dshPatches"]:
-    for rel, pin in patches[name][m["dshVersion"]].items():
+    for rel, pin in catalog["patches"][name][m["dshVersion"]].items():
         if rel in terminal:
             assert terminal[rel] == pin["before"], (name, rel, 'broken ordered hash chain')
         terminal[rel] = pin["after"]

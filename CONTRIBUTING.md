@@ -29,6 +29,7 @@
 - Flutter/Dart：使用仓库对应的 Flutter 版本和 App 的 Dart SDK 要求。
 - Android：JDK 17，运行时 ABI 与 APK flavor 匹配。
 - 插件 SDK：Node.js 22.19 或更新版本。SDK 在 `sdk/plugin-kit/` 内使用，尚未发布到 npm。
+- 鸿蒙：OpenHarmony 公开 SDK（API 26）和 JDK 17 就能在 Linux 上编 ArkTS；Dart 产物由 Actions 在 macOS 上编。详见 [app/ohos/README.md](app/ohos/README.md)。
 
 ## 修改范围
 
@@ -76,7 +77,7 @@ python3 app/tool/l10n_merge.py
 python3 app/tool/l10n_merge.py --check
 ```
 
-**用户指南：** 修改 `docs/guide/`，同步 App 内置的教学技能：
+**用户指南：** 修改 `docs/guide/`（鸿蒙版在 `docs/guide/harmony/`，功能在鸿蒙上不同时两套都改），同步 App 内置的教学技能：
 
 ```bash
 python3 app/tool/guide_sync.py
@@ -88,6 +89,13 @@ python3 app/tool/guide_sync.py --check
 ```bash
 node sdk/plugin-kit/scripts/sync-skill.mjs
 node sdk/plugin-kit/scripts/sync-skill.mjs --check
+```
+
+**鸿蒙：** 改了 `app/ohos/` 先跑严格 ArkTS 编译；改了 `runtime/ohos/`、引擎补丁或鸿蒙通道，跑全量门禁（输入和结果说明见 [GATES.zh.md](tooling/ohos/GATES.zh.md)）。鸿蒙改动不能改变 Android 的行为和运行时字节。
+
+```bash
+JAVA_HOME=/path/to/jdk tooling/ohos/check-arkts.sh --sdk /path/to/ohos-sdk/linux --hms-stubs
+bash tooling/ohos/run-gates.sh --config ../gate-inputs.json --out ../gate-run-001
 ```
 
 需要 APK 验证时，使用 README 中的构建入口。涉及 Android 进程、PRoot、直接启动、手机操控或更新安装的改动，应说明测试的 ABI、Android 版本、启动方式和设备；桌面测试结果不能替代真机结果。

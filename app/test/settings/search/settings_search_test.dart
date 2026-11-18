@@ -1,11 +1,12 @@
 // Settings search: what a query finds and in what order, in Chinese and
 // English alike; the page around it (common words, recent searches, a result
 // opening its page at the row, a row that isn't there right now, 问 AI when
-// nothing matched and not in 网页模式); and the two ways in (the hub's
-// capsule, ⚙ held down in the drawer).
+// nothing matched and not in 网页模式, what only Android has on HarmonyOS); and
+// the two ways in (the hub's capsule, ⚙ held down in the drawer).
 
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/ask_ai.dart';
 import 'package:dsh_app/state/compose_inbox.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -62,12 +63,37 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('matching', () {
+    test('iOS search keeps the available PiP setting and filters unsupported renderer controls', () {
+      List<String?> ids(String query) => [
+        for (final hit in searchSettings(
+          query,
+          spots: SettingsIndex.spots,
+          features: const [],
+          zh: _zh,
+          en: _en,
+          androidFeatures: false,
+          ios: true,
+        ))
+          hit.spot?.id,
+      ];
+      expect(ids('桌面宠物'), contains(Spots.petOutsideApp.id));
+      expect(ids('悬浮窗里显示'), isNot(contains(Spots.petOverlayShows.id)));
+    });
+
     test('Android system commands find the phone page, not the engine shell', () {
       final androidShell = SettingsIndex.entry(SettingsPageId.phoneAndroidShell);
       for (final query in ['Android Shell', '系统命令', 'system-command']) {
         expect(_search(query).first.spot, androidShell, reason: query);
       }
       expect(_search('bash').first.spot, SettingsIndex.entry(SettingsPageId.shell));
+    });
+
+    test('「始终允许」 finds the always-allow page', () {
+      final alwaysAllow = SettingsIndex.entry(SettingsPageId.phoneAlwaysAllow);
+      for (final query in ['始终允许', 'always allow']) {
+        expect(_ids(query).first, alwaysAllow.id, reason: query);
+      }
+      expect(_ids('不再询问'), contains(alwaysAllow.id));
     });
 
     test('lower case, full width folded, spaces dropped', () {
@@ -226,6 +252,55 @@ void main() {
       expect(find.text('没有找到相关设置'), findsOneWidget);
       expect(find.textContaining('问 AI'), findsNothing);
     });
+
+    testWidgets('on HarmonyOS: the launcher icon, launch screen and picture shortcut are all there', (tester) async {
+      await _pumpSearch(tester, overrides: [..._overrides(), operatingSystemProvider.overrideWithValue('ohos')]);
+      for (final q in [_zh.pluginsAppIcon, _zh.launchScreenTitle, _zh.iconShortcutRow]) {
+        await _type(tester, q);
+        expect(find.text(q), findsWidgets, reason: q);
+        expect(find.text(_zh.harmonySearchUnavailable), findsNothing, reason: q);
+      }
+    });
+
+    testWidgets('on HarmonyOS: what only Android has says so, a typo stays a typo', (tester) async {
+      await _pumpSearch(tester, overrides: [..._overrides(), operatingSystemProvider.overrideWithValue('ohos')]);
+      for (final q in ['悬浮窗', '无障碍', '电池优化']) {
+        await _type(tester, q);
+        expect(find.text(_zh.harmonySearchUnavailable), findsOneWidget, reason: q);
+        expect(find.text('没有找到相关设置'), findsNothing, reason: q);
+      }
+      // 手机操控 by its old name finds what stands in for it there.
+      for (final q in ['手机操控', 'phone control']) {
+        await _type(tester, q);
+        expect(find.text(_zh.harmonySearchUnavailable), findsNothing, reason: q);
+        expect(find.textContaining(_zh.systemActionsTitle, findRichText: true), findsWidgets, reason: q);
+      }
+      await _type(tester, '怎么把对话导出成 PDF');
+      expect(find.text('没有找到相关设置'), findsOneWidget);
+      expect(find.text(_zh.harmonySearchUnavailable), findsNothing);
+      await _type(tester, '后台运行');
+      expect(find.text('没有找到相关设置'), findsNothing);
+      expect(find.text(_zh.harmonySearchUnavailable), findsNothing);
+    });
+
+    testWidgets('on HarmonyOS: the progress notification is listed by its own name', (tester) async {
+      await _pumpSearch(tester, overrides: [..._overrides(), operatingSystemProvider.overrideWithValue('ohos')]);
+      await _type(tester, '进度通知');
+      expect(find.text(_zh.harmonyLiveSwitch), findsOneWidget);
+      expect(find.text(_zh.liveSettingsSwitch), findsNothing);
+    });
+
+    testWidgets('on Android: those words find their pages, and it never says so', (tester) async {
+      await _pumpSearch(tester, overrides: [..._overrides(), operatingSystemProvider.overrideWithValue('android')]);
+      for (final q in ['悬浮窗', '手机操控', '无障碍', 'phone control', '电池优化']) {
+        await _type(tester, q);
+        expect(find.text('没有找到相关设置'), findsNothing, reason: q);
+        expect(find.text(_zh.harmonySearchUnavailable), findsNothing, reason: q);
+      }
+      await _type(tester, '怎么把对话导出成 PDF');
+      expect(find.text('没有找到相关设置'), findsOneWidget);
+      expect(find.text(_zh.harmonySearchUnavailable), findsNothing);
+    });
   });
 
   group('ways in', () {
@@ -248,7 +323,12 @@ void main() {
           home: Scaffold(
             body: Align(
               alignment: Alignment.bottomCenter,
-              child: IdentityBar(onHost: () {}, onFeatures: () {}, onSettings: () => tapped++, onSettingsHold: () => held++),
+              child: IdentityBar(
+                onHost: () {},
+                onFeatures: () {},
+                onSettings: () => tapped++,
+                onSettingsHold: () => held++,
+              ),
             ),
           ),
           brightness: Brightness.light,

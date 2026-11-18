@@ -1,6 +1,7 @@
 {
   "mediaVideoLoading": "Loading video…",
   "mediaVideoCannotPlay": "This video could not be played here. Retry or open it in another app.",
+  "mediaVideoUnsupported": "In-app video playback is not available in this build. Save the video or open it in another app.",
   "mediaVideoPlay": "Play",
   "mediaVideoPause": "Pause",
   "mediaVideoSaveFailed": "Couldn’t save the video. Try again."

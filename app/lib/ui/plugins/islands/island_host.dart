@@ -46,7 +46,7 @@ class IslandHost extends ChangeNotifier {
   IslandDevice get device => _device;
   IslandDevice _device = IslandDevice.unknown;
 
-  /// The Kotlin side answered (Android with the islands plugin).
+  /// The platform side answered (Android or HarmonyOS, with the islands plugin).
   bool get supported => _device.totalMem > 0;
 
   /// Overrides the tier (the PoC opens three on a 2 GB emulator).

@@ -2,6 +2,7 @@
 // (no detour through a phone service that fails on Chinese ROMs); without it
 // the phone service runs, and its failures fall back to the model.
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/voice_settings.dart';
 import 'package:dsh_app/ui/chat/voice/voice_bridge.dart';
 import 'package:dsh_app/ui/chat/voice/voice_controller.dart';
@@ -23,6 +24,7 @@ void main() {
     VoiceMode mode = VoiceMode.auto,
     bool modelReady = false,
     String? requiredProviderId,
+    bool harmony = false,
   }) {
     final voice = VoiceInputController(
       input: input,
@@ -30,12 +32,44 @@ void main() {
       client: () => client,
       mode: () async => mode,
       modelReady: () => modelReady,
+      harmony: () => harmony,
       requiredProviderId: requiredProviderId,
       observeLifecycle: false,
     );
     addTearDown(voice.dispose);
     return voice;
   }
+
+  group('no recognizer', () {
+    const none = VoiceCapabilities(recognizer: false, recorder: true);
+    final zh = lookupL10n(AppLocale.zhCN);
+
+    Future<String?> said(WidgetTester tester, VoiceMode mode, {required bool harmony}) async {
+      final client = DshClient.withCarrier(FakeRpcCarrier({'speech/catalog': (_) => throw StateError('no catalog')}));
+      final voice = controller(
+        FakeVoiceBridge(caps: none),
+        client,
+        mode: mode,
+        harmony: harmony,
+      );
+      String? message;
+      voice.onMessage = (m) => message = m.text;
+      await voice.start();
+      await settleVoice(tester);
+      return message;
+    }
+
+    for (final mode in [VoiceMode.system, VoiceMode.auto]) {
+      testWidgets('on HarmonyOS, $mode: it says so, with nothing to choose or download', (tester) async {
+        expect(await said(tester, mode, harmony: true), zh.harmonyVoiceSystemUnavailable);
+      });
+    }
+
+    testWidgets('on Android: choose a service, or download the model', (tester) async {
+      expect(await said(tester, VoiceMode.system, harmony: false), zh.voiceChooseSystem);
+      expect(await said(tester, VoiceMode.auto, harmony: false), zh.voiceConfigureEither);
+    });
+  });
 
   testWidgets('automatic mode records for a ready voice model even with a phone service', (tester) async {
     final client = DshClient.withCarrier(FakeRpcCarrier({'speech/catalog': (_) => readySpeechCatalog()}));

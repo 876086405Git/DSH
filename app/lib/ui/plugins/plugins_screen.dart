@@ -130,6 +130,7 @@ class _PluginsScreenState extends ConsumerState<PluginsScreen> {
   static String _subtitle(PluginHost? host) {
     if (host == null) return appL10n.pluginsConnectToManage;
     if (host.safeMode) return appL10n.pluginsSafeModeOperationsBlocked;
+    if (host.installRefused) return appL10n.marketInstallRefused;
     if (!host.canInstall) return appL10n.pluginsRelayToggleOnly(host.label);
     return host.kind == HostKind.local ? appL10n.pluginsInstallThisPhone : appL10n.pluginsInstallHost(host.label);
   }

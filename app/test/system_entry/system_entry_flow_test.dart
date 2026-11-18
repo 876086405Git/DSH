@@ -3,20 +3,26 @@
 // The native sides are faked the way SharePlugin.kt / ShortcutsPlugin.kt
 // behave: arrivals held until Dart says `ready`, then pushed as calls.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_app/links/app_links.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/draft_store.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
+import 'package:dsh_app/state/ui_mode_state.dart';
 import 'package:dsh_app/state/voice_state.dart';
 import 'package:dsh_app/ui/chat/chat_screen.dart';
 import 'package:dsh_app/ui/chat/composer.dart';
 import 'package:dsh_app/ui/chat/widgets/attachments.dart';
+import 'package:dsh_app/ui/common/discard_guard.dart';
 import 'package:dsh_app/ui/shell/system_entry_host.dart';
+import 'package:dsh_app/ui/web/web_home.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,11 +90,18 @@ late _Native _shares;
 late _Native _entries;
 late FakeVoiceBridge _voice;
 
-Future<ProviderContainer> _pump(WidgetTester tester, ChatHarness harness) async {
+Future<ProviderContainer> _pump(WidgetTester tester, ChatHarness harness, {String os = 'android'}) async {
   usePhoneView(tester);
   mockClipboard(tester);
   await tester.pumpWidget(
-    testApp(const _Shell(), overrides: [...harness.overrides, voiceBridgeProvider.overrideWithValue(_voice)]),
+    testApp(
+      const _Shell(),
+      overrides: [
+        ...harness.overrides,
+        voiceBridgeProvider.overrideWithValue(_voice),
+        operatingSystemProvider.overrideWithValue(os),
+      ],
+    ),
   );
   await pumpFrames(tester);
   return ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
@@ -147,6 +160,85 @@ void main() {
     return File('${slot.path}/$name')..writeAsBytesSync(bytes);
   }
 
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    for (final mode in ['created-paused', 'existing-paused', 'created-resumed']) {
+      testWidgets('voice initial state $platform $mode', (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          natives(tester);
+          for (final phase
+              in tester.binding.lifecycleState == AppLifecycleState.paused
+                  ? [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]
+                  : [AppLifecycleState.resumed]) {
+            tester.binding.handleAppLifecycleStateChanged(phase);
+          }
+          if (mode == 'created-paused') {
+            for (final phase in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+              tester.binding.handleAppLifecycleStateChanged(phase);
+            }
+          }
+          await _pump(tester, ChatHarness(session: 's1', states: {'s1': const ChatState(loading: false)}));
+          if (mode == 'existing-paused') {
+            for (final phase in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+              tester.binding.handleAppLifecycleStateChanged(phase);
+            }
+          }
+          final expectedState = mode == 'created-resumed' ? AppLifecycleState.resumed : AppLifecycleState.paused;
+          expect(tester.binding.lifecycleState, expectedState);
+          await _entries.push({'kind': 'voice'});
+          await tester.pump();
+          if (mode != 'created-resumed') {
+            expect(_voice.calls, isEmpty);
+            await tester.pump(const Duration(milliseconds: 2999));
+            expect(_voice.calls, isEmpty);
+            await tester.pump(const Duration(milliseconds: 2));
+          }
+          await pumpFrames(tester, 6);
+          expect(tester.binding.lifecycleState, expectedState);
+          final observed = List<String>.of(_voice.calls);
+          await _unmount(tester);
+          for (final phase
+              in tester.binding.lifecycleState == AppLifecycleState.paused
+                  ? [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]
+                  : [AppLifecycleState.resumed]) {
+            tester.binding.handleAppLifecycleStateChanged(phase);
+          }
+          if (mode == 'existing-paused' || (platform == TargetPlatform.iOS && mode == 'created-paused')) {
+            expect(observed, isEmpty);
+          } else {
+            expect(observed, containsAllInOrder(['permission', 'recognizer']));
+          }
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+  }
+
+  testWidgets('iOS voice resumes during the launch wait', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      natives(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      for (final phase in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+        tester.binding.handleAppLifecycleStateChanged(phase);
+      }
+      await _pump(tester, ChatHarness(session: 's1', states: {'s1': const ChatState(loading: false)}));
+      await _entries.push({'kind': 'voice'});
+      await tester.pump(const Duration(seconds: 1));
+      expect(_voice.calls, isEmpty);
+      for (final phase in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+        tester.binding.handleAppLifecycleStateChanged(phase);
+      }
+      await pumpFrames(tester, 6);
+      final observed = List<String>.of(_voice.calls);
+      await _unmount(tester);
+      expect(observed, containsAllInOrder(['permission', 'recognizer']));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('a share opens 新对话 with its text and files in the composer, not sent', (tester) async {
     natives(tester);
     final image = cached('IMG_1.png', tinyPng);
@@ -174,6 +266,176 @@ void main() {
     expect(image.existsSync(), isFalse);
     expect(pdf.existsSync(), isFalse);
     await _unmount(tester);
+  });
+
+  // A page with unsaved edits above [anchor], which asks before anyone leaves.
+  Future<void> openDirtyPage(WidgetTester tester, Finder anchor) async {
+    unawaited(
+      Navigator.of(tester.element(anchor)).push(
+        MaterialPageRoute<void>(
+          builder: (_) => DiscardGuard(listenable: ValueNotifier(0), isDirty: () => true, child: const Scaffold()),
+        ),
+      ),
+    );
+    await pumpFrames(tester);
+  }
+
+  // The share has reached the dialog, and any read it started has had real
+  // time to finish.
+  Future<void> untilAsked(WidgetTester tester) async {
+    await _settle(tester, () => find.byType(AlertDialog).evaluate().isNotEmpty);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+  }
+
+  Finder dialogButton<T extends Widget>() => find.descendant(of: find.byType(AlertDialog), matching: find.byType(T));
+
+  Map<String, Object?> sharing(File file) => {
+    'files': [
+      {'path': file.path, 'name': file.uri.pathSegments.last, 'mime': 'application/pdf'},
+    ],
+    'skipped': [],
+  };
+
+  Future<ProviderContainer> pumpWeb(WidgetTester tester, {required String os}) async {
+    natives(tester);
+    await tester.pumpWidget(
+      testApp(
+        const Stack(fit: StackFit.expand, children: [LinkHost(), WebEntryHost(), Scaffold()]),
+        overrides: [...ChatHarness().overrides, operatingSystemProvider.overrideWithValue(os)],
+      ),
+    );
+    await pumpFrames(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(WebEntryHost)));
+    await openDirtyPage(tester, find.byType(WebEntryHost));
+    return container;
+  }
+
+  group('on HarmonyOS, behind an unanswered 放弃修改: its inbox holds the batch', () {
+    testWidgets('a share stays in the cache until the person leaves the page', (tester) async {
+      natives(tester);
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      await _pump(tester, ChatHarness(), os: 'ohos');
+      await openDirtyPage(tester, find.byType(ChatScreen));
+
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isTrue);
+
+      await tester.tap(dialogButton<FilledButton>());
+      await _settle(tester, () => _tray(tester).isNotEmpty);
+      expect(_tray(tester), ['a.pdf']);
+      expect(file.existsSync(), isFalse);
+      await _unmount(tester);
+    });
+
+    testWidgets('a share still lands for later when the person keeps editing', (tester) async {
+      natives(tester);
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      await _pump(tester, ChatHarness(), os: 'ohos');
+      await openDirtyPage(tester, find.byType(ChatScreen));
+
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isTrue);
+
+      await tester.tap(dialogButton<TextButton>());
+      await _settle(tester, () => !file.existsSync());
+      expect(find.byType(DiscardGuard), findsOneWidget);
+      // The composer under the page has taken it, ready for when they're back.
+      final tray = tester.widget<ComposerTray>(find.byType(ComposerTray, skipOffstage: false));
+      expect([for (final a in tray.items) a.name], ['a.pdf']);
+      await _unmount(tester);
+    });
+
+    testWidgets('the web home reads a share once the person leaves the page', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'ohos');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isTrue);
+
+      await tester.tap(dialogButton<FilledButton>());
+      await _settle(tester, () => container.read(webOpenProvider) != null);
+      expect([for (final a in container.read(webOpenProvider)!.compose!.attachments) a.name], ['a.pdf']);
+      expect(file.existsSync(), isFalse);
+      await _unmount(tester);
+    });
+
+    testWidgets('the web home drops a share unread when the person keeps editing', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'ohos');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isTrue);
+
+      await tester.tap(dialogButton<TextButton>());
+      await _settle(tester, () => !file.existsSync());
+      expect(container.read(webOpenProvider), isNull);
+      await _unmount(tester);
+    });
+  });
+
+  group('on Android, behind an unanswered 放弃修改: its native cache can drop what waits', () {
+    testWidgets('a share is read before the question, and lands when the person leaves', (tester) async {
+      natives(tester);
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      await _pump(tester, ChatHarness());
+      await openDirtyPage(tester, find.byType(ChatScreen));
+
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isFalse, reason: 'read, so the next share\'s prune can\'t take it');
+
+      await tester.tap(dialogButton<FilledButton>());
+      await _settle(tester, () => _tray(tester).isNotEmpty);
+      expect(_tray(tester), ['a.pdf']);
+      await _unmount(tester);
+    });
+
+    testWidgets('five shares with nobody answering: none is left waiting in the cache', (tester) async {
+      natives(tester);
+      await _pump(tester, ChatHarness());
+      await openDirtyPage(tester, find.byType(ChatScreen));
+
+      // SharePlugin.kt keeps three old slots: the fifth unread one would lose a file.
+      final files = [for (var i = 0; i < 5; i++) cached('$i.pdf', utf8.encode('%PDF-1.7'))];
+      for (final file in files) {
+        await _shares.push(sharing(file));
+        await _settle(tester, () => !file.existsSync());
+      }
+      expect(files.where((f) => f.existsSync()), isEmpty);
+      // One dialog answers for them all, and they land together.
+      await tester.tap(dialogButton<TextButton>());
+      await pumpFrames(tester);
+      await _unmount(tester);
+    });
+
+    testWidgets('the web home reads first too; keeping on editing drops what it read', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'android');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isFalse);
+
+      await tester.tap(dialogButton<TextButton>());
+      await pumpFrames(tester);
+      expect(container.read(webOpenProvider), isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('the web home opens with it once the person leaves', (tester) async {
+      final file = cached('a.pdf', utf8.encode('%PDF-1.7'));
+      final container = await pumpWeb(tester, os: 'android');
+      await _shares.push(sharing(file));
+      await untilAsked(tester);
+      expect(file.existsSync(), isFalse);
+
+      await tester.tap(dialogButton<FilledButton>());
+      await _settle(tester, () => container.read(webOpenProvider) != null);
+      expect([for (final a in container.read(webOpenProvider)!.compose!.attachments) a.name], ['a.pdf']);
+      await _unmount(tester);
+    });
   });
 
   testWidgets('a share joins what the new chat already holds and says what did not fit', (tester) async {
@@ -266,6 +528,79 @@ void main() {
     expect(_composerFocused(tester), isTrue);
     expect(_voice.calls, isEmpty);
     await _unmount(tester);
+  });
+
+  group('Siri navigation permission', () {
+    Future<Map<String, Object?>> afterAnswer(
+      WidgetTester tester, {
+      required bool discard,
+      String os = 'ios',
+      bool voice = true,
+    }) async {
+      debugDefaultTargetPlatformOverride = os == 'ios' ? TargetPlatform.iOS : TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      natives(tester);
+      await _pump(tester, ChatHarness(), os: os);
+      await openDirtyPage(tester, find.byType(ChatScreen));
+      await _entries.push(voice ? {'kind': 'voice'} : {'kind': 'new', 'text': '留到返回聊天时'});
+      await untilAsked(tester);
+      expect(_voice.calls, isEmpty);
+      await tester.tap(discard ? dialogButton<FilledButton>() : dialogButton<TextButton>());
+      await pumpFrames(tester);
+      final composer = tester.widget<Composer>(find.byType(Composer, skipOffstage: false));
+      final field = tester.widget<TextField>(
+        find.descendant(
+          of: find.byType(Composer, skipOffstage: false),
+          matching: find.byType(TextField, skipOffstage: false),
+        ),
+      );
+      final observed = <String, Object?>{
+        'calls': List.of(_voice.calls),
+        'voiceActive': composer.voice!.active,
+        'editing': find.byType(DiscardGuard).evaluate().isNotEmpty,
+        'text': field.controller!.text,
+      };
+      await _unmount(tester);
+      debugDefaultTargetPlatformOverride = null;
+      return observed;
+    }
+
+    testWidgets('iOS keeps editing without starting hidden dictation', (tester) async {
+      expect(await afterAnswer(tester, discard: false), {
+        'calls': <String>[],
+        'voiceActive': false,
+        'editing': true,
+        'text': '',
+      });
+    });
+
+    testWidgets('iOS discard opens the chat and starts dictation', (tester) async {
+      expect(await afterAnswer(tester, discard: true), {
+        'calls': ['permission', 'recognizer'],
+        'voiceActive': true,
+        'editing': false,
+        'text': '',
+      });
+    });
+
+    testWidgets('iOS text still fills the draft behind a kept page', (tester) async {
+      expect(await afterAnswer(tester, discard: false, voice: false), {
+        'calls': <String>[],
+        'voiceActive': false,
+        'editing': true,
+        'text': '留到返回聊天时',
+      });
+    });
+
+    testWidgets('Android shortcut retains its existing behavior', (tester) async {
+      expect(await afterAnswer(tester, discard: false, os: 'android'), {
+        'calls': ['permission', 'recognizer'],
+        'voiceActive': true,
+        'editing': true,
+        'text': '',
+      });
+    });
   });
 
   testWidgets('语音输入 opens 新对话 listening', (tester) async {

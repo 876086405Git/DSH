@@ -26,6 +26,7 @@ import 'code_block.dart';
 import 'markdown_blocks.dart';
 import 'markdown_image.dart';
 import 'markdown_math.dart';
+import 'markdown_split.dart';
 import 'math_syntax.dart';
 import 'stream_repair.dart';
 import 'table_syntax.dart';
@@ -41,6 +42,9 @@ final Map<String, HtmlTag?> _htmlTags = {
   'details': const HtmlTag.block(MarkdownDisclosure.build),
   'summary': const HtmlTag.block(),
 };
+
+/// The HTML gpt_markdown parses with [_htmlTags]: where its blocks end.
+final _markdownHtml = GptMarkdownConfig(htmlTags: _htmlTags).markdownHtml;
 
 /// Inline patterns a part of the app lays over every [MarkdownBody] below it
 /// (the tavern colours its story's dialogue). Keep [patterns] one list per
@@ -98,6 +102,13 @@ class MarkdownBody extends StatefulWidget {
 
   /// 表格单列最宽多少;更长的单元格在列内换行,而不是把整表拉得很长。
   static const _maxColumnWidth = 260.0;
+
+  /// A reply this long, or one that streams, is drawn in blocks of about this
+  /// many characters, one GptMarkdown each behind its own repaint boundary
+  /// ([MarkdownBlockSplit]): new text re-renders and repaints only the last
+  /// block, however long the reply. A shorter static text is one GptMarkdown.
+  @visibleForTesting
+  static int blockLength = 2000;
 
   static final _themes = <String, Expando<GptMarkdownThemeData>>{};
   static final _secondaryThemes = <String, Expando<GptMarkdownThemeData>>{};
@@ -628,6 +639,24 @@ class _MarkdownBodyState extends State<MarkdownBody> {
   /// Finished code blocks of a revealed reply: see [_RevealStreaming.blocks].
   final _blocks = <String, Widget>{};
 
+  /// Drawn in blocks ([MarkdownBody.blockLength]). Decided once and kept: a
+  /// streamed reply keeps its tree when it finishes.
+  late bool _blocked = _wantsBlocks();
+
+  final _split = MarkdownBlockSplit(html: _markdownHtml, minLength: MarkdownBody.blockLength);
+
+  /// Each block's widget, handed back while its text, its place at the end
+  /// and [_builtStyle] stay the same: Flutter then skips the block entirely.
+  final _built = <({String text, bool live, Widget widget})>[];
+  TextStyle? _builtStyle;
+
+  /// How many blocks the last build had (none before the first): what is
+  /// already on screen has been seen, and only blocks past it are revealed
+  /// from empty.
+  int _shown = 0;
+
+  bool _wantsBlocks() => widget.streaming || widget.reveal || widget.text.length >= MarkdownBody.blockLength;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -643,37 +672,28 @@ class _MarkdownBodyState extends State<MarkdownBody> {
         oldWidget.repairBareViews != widget.repairBareViews) {
       _source = _prepare();
     }
+    _blocked = _blocked || _wantsBlocks();
+    if (oldWidget.reveal != widget.reveal) _built.clear();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final body = widget.secondary
-        ? AppType.chatBody(context, scale: 0.9, color: theme.colorScheme.onSurfaceVariant)
-        : AppType.chatBody(context, color: theme.colorScheme.onSurface);
-    final source = _source;
-
-    // 表格底色是用户设置，只有主题跟着它变；正文 widget 本身保持同一个实例，
-    // 切设置时不让 gpt_markdown 重新解析一遍。
-    final text = GptMarkdown(
-      source,
+  /// [data] as one GptMarkdown; [live] when it is still being written.
+  GptMarkdown _markdown(String data, TextStyle body, {required bool live, List<InlinePattern>? patterns}) {
+    // The element itself, not [State.context]: a link tapped after this body
+    // is gone asks it whether it is still mounted.
+    final context = this.context;
+    return GptMarkdown(
+      data,
       style: body,
       followLinkColor: false,
       htmlTags: _htmlTags,
       // The tail is repaired here (and open formulas shown as source), so
       // the package must not complete open `\(` / `\[` on its own.
-      isStreaming: widget.reveal && widget.streaming,
+      isStreaming: widget.reveal && live,
       animation: widget.reveal ? GptMarkdownAnimation.fade : GptMarkdownAnimation.none,
       blockAnimation: widget.reveal ? GptMarkdownBlockAnimation.fadeIn : GptMarkdownBlockAnimation.none,
       charactersPerSecond: MarkdownBody._revealPace,
       revealFadeSeconds: MarkdownBody._revealFade,
-      inlinePatterns: switch ((widget.streaming && !widget.reveal, MarkdownPatterns.maybeOf(context))) {
-        (true, null) => MarkdownBody._streamingPatterns,
-        (false, null) => null,
-        (true, final extra?) => MarkdownBody._streamingWith[extra] ??= [...MarkdownBody._streamingPatterns, ...extra],
-        (false, final extra?) => extra,
-      },
+      inlinePatterns: patterns,
       onLinkTap: (url, title) => MarkdownBody._onLinkTap(context, url, title),
       codeBuilder: MarkdownBody._codeBuilder,
       inlineCodeBuilder: MarkdownBody._inlineCodeBuilder,
@@ -685,6 +705,76 @@ class _MarkdownBodyState extends State<MarkdownBody> {
       orderedListBuilder: MarkdownLists.ordered,
       unOrderedListBuilder: MarkdownLists.unordered,
     );
+  }
+
+  /// The blocks of [_source], built or handed back from [_built].
+  ///
+  /// Only the last block is live: it alone gets the cursor, the reveal's
+  /// streaming hold, and new text. A block that appears as a revealed reply
+  /// streams starts empty ([_RevealBlock]), so its words fade in.
+  _MarkdownBlocks _blocksFor(TextStyle body) {
+    if (_builtStyle != body) {
+      _built.clear();
+      _builtStyle = body;
+    }
+    final blocks = _split.update(_source);
+    final children = <Widget>[];
+    for (var i = 0; i < blocks.length; i++) {
+      final text = blocks[i];
+      final live = widget.streaming && i == blocks.length - 1;
+      var built = i < _built.length ? _built[i] : null;
+      if (built == null || built.live != live || !(identical(built.text, text) || built.text == text)) {
+        final Widget block = widget.reveal
+            ? _RevealBlock(
+                text: text,
+                fromEmpty: _shown > 0 && i >= _shown,
+                build: (text) => _markdown(text, body, live: live),
+              )
+            : _markdown(text, body, live: live, patterns: live ? MarkdownBody._streamingPatterns : null);
+        built = (text: text, live: live, widget: RepaintBoundary(child: block));
+        if (i < _built.length) {
+          _built[i] = built;
+        } else {
+          _built.add(built);
+        }
+      }
+      children.add(built.widget);
+    }
+    if (_built.length > blocks.length) _built.removeRange(blocks.length, _built.length);
+    _shown = blocks.length;
+    return _MarkdownBlocks(style: body, children: children);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final body = widget.secondary
+        ? AppType.chatBody(context, scale: 0.9, color: theme.colorScheme.onSurfaceVariant)
+        : AppType.chatBody(context, color: theme.colorScheme.onSurface);
+    final source = _source;
+    final extra = MarkdownPatterns.maybeOf(context);
+
+    // 表格底色是用户设置，只有主题跟着它变；正文 widget 本身保持同一个实例，
+    // 切设置时不让 gpt_markdown 重新解析一遍。
+    // A part of the app's own patterns (the tavern's) are matched over the
+    // whole text, so such a text stays one GptMarkdown.
+    final Widget text = _blocked && extra == null
+        ? _blocksFor(body)
+        : _markdown(
+            source,
+            body,
+            live: widget.streaming,
+            patterns: switch ((widget.streaming && !widget.reveal, extra)) {
+              (true, null) => MarkdownBody._streamingPatterns,
+              (false, null) => null,
+              (true, final extra?) => MarkdownBody._streamingWith[extra] ??= [
+                ...MarkdownBody._streamingPatterns,
+                ...extra,
+              ],
+              (false, final extra?) => extra,
+            },
+          );
 
     Widget withTint(TableTint tint) =>
         GptMarkdownTheme(gptThemeData: MarkdownBody._themeFor(theme, widget.secondary, l10n, tint), child: text);
@@ -702,6 +792,58 @@ class _MarkdownBodyState extends State<MarkdownBody> {
       child: MarkdownGalleryScope(child: markdown),
     );
   }
+}
+
+/// The blocks of a reply stacked as gpt_markdown stacks its own segments: the
+/// same gap between them, sized to their content, left-aligned.
+class _MarkdownBlocks extends StatelessWidget {
+  const _MarkdownBlocks({required this.style, required this.children});
+
+  /// The text style the blocks are drawn in; the gap is scaled from it.
+  final TextStyle style;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    textDirection: TextDirection.ltr,
+    spacing: blockGap(context, GptMarkdownConfig(style: style)),
+    children: children,
+  );
+}
+
+/// One block of a revealed reply. A GptMarkdown shows the text it mounts with
+/// at once (it has been seen), so a block that comes into being as the reply
+/// streams first mounts empty, for a frame, and its words then fade in.
+class _RevealBlock extends StatefulWidget {
+  const _RevealBlock({required this.text, required this.fromEmpty, required this.build});
+
+  final String text;
+
+  /// Read when the block mounts: whether it starts empty.
+  final bool fromEmpty;
+  final Widget Function(String text) build;
+
+  @override
+  State<_RevealBlock> createState() => _RevealBlockState();
+}
+
+class _RevealBlockState extends State<_RevealBlock> {
+  late bool _empty = widget.fromEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_empty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _empty = false);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.build(_empty ? '' : widget.text);
 }
 
 /// 当前子树里有没有 ProviderScope;没有就按默认表格底色画。

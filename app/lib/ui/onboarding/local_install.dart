@@ -1,6 +1,7 @@
 // 「安装运行环境」 after first run — for a phone that started on a remote host, or
 // after an uninstall. Every install entry (the engine page, the host switcher,
-// the empty chat and drawer, the web page) opens this one page.
+// the empty chat and drawer, the web page) opens this one page; a build without
+// the runtime (LocalRuntimeState.available) opens the host list instead.
 
 import 'dart:async';
 
@@ -15,6 +16,7 @@ import '../../state/engine_control.dart';
 import '../../state/hosts_state.dart';
 import '../../state/onboarding_state.dart';
 import '../../state/settings_state.dart';
+import '../remote/remote_screen.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
@@ -22,9 +24,22 @@ import 'connect_page.dart';
 import 'onboarding_scaffold.dart';
 import 'runtime_setup_page.dart';
 
-/// Opens the install page over whatever is showing.
-Future<void> openLocalInstall(BuildContext context, {bool useWhenDone = false}) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => LocalInstallPage(useWhenDone: useWhenDone)));
+/// Opens the install page over whatever is showing; the host list on a build
+/// without the runtime.
+Future<void> openLocalInstall(BuildContext context, {bool useWhenDone = false}) {
+  final available = ProviderScope.containerOf(context, listen: false).read(localRuntimeProvider).available;
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => available ? LocalInstallPage(useWhenDone: useWhenDone) : const RemoteScreen(),
+    ),
+  );
+}
+
+/// What a 本机 entry says with no runtime: install it, or on a build without
+/// one, use a remote host. Both actions go through [openLocalInstall].
+({String title, String action}) localMissingCopy(L10n l10n, {required bool available}) => available
+    ? (title: l10n.localEnvNotInstalled, action: l10n.phoneEngineInstallRuntime)
+    : (title: l10n.localEnvUnavailable, action: l10n.localEnvUseRemote);
 
 /// What installing costs and one 「安装」; then the same progress as first
 /// run. Once installed the engine starts, and a phone with no model yet goes

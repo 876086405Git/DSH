@@ -134,6 +134,9 @@ class _OverlayRendererTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The iOS PiP source renders pixel frames. It has no native WebView
+    // configureCompanion endpoint, so offering this choice would only fail.
+    if (ref.watch(petOverlayProvider.select((s) => s.ios))) return const SizedBox.shrink();
     final l10n = context.l10n;
     final availability = ref.watch(companionFloatAvailabilityProvider);
     final running = ref.watch(companionFloatProvider);

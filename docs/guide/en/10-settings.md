@@ -22,7 +22,7 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 - **Personalization**:
   - **Personal preferences**: instructions for the AI; new chats follow them. Clear and save to remove them.
   - **Visual replies**: on by default; the AI on this phone's engine can answer with charts, comparisons and tappable options. Takes effect after the engine restarts; tap **Restart now** when asked.
-  - **Agent presets**: how new chats work by default; you can also create, copy and edit presets.
+  - **Agent presets**: how new chats work by default; you can also create, copy and edit presets. A preset decides which tools a chat can use. Coding presets such as **Standard mode** and **PTC mode** bring `bash`, `run_code` and other Linux tools; a custom persona preset can have no tools at all, so pick the right preset when you start a chat.
   - The first two show only with this phone's engine.
 
 ## Capabilities
@@ -41,7 +41,7 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 - **Interface**: the **Mode** group at the top sets **Open on launch** (Work, Companion or Tavern). Below it, choose whether the app opens to **Native** or **Web**, and DSH Web's options; see [Web mode](05-web.md).
 - **Language**: **System**, **简体中文** or **English**.
 - **Notifications**: turn on **Allow notifications**, then choose **Turn complete**, **Error or stopped**, **Needs approval** and **Questions for you**. Alerts from remote hosts need the app running and the connection online. Sound, banners and the lock screen are set in system settings.
-- **Voice**: the **Reading voice** (for reading replies aloud, the companion room and voice calls), how voice input recognizes speech (**Automatic**, **DeepSeek**, **System**, **Voice model** or **Another cloud service**), the voice model download, and for voice calls **Call background**, **Interrupt by speaking**, **Spoken answers** and **Speakerphone by default**.
+- **Voice**: the **Reading voice** (for reading replies aloud, the companion room and voice calls), how voice input recognizes speech (**Automatic**, **DeepSeek**, **System**, **Voice model** or **Another cloud service**), the voice model download, and for voice calls **Call background**, **Interrupt by speaking**, **Spoken answers** and **Speakerphone by default**. On iPhone, voice input currently uses the system recognizer; local model downloads and live PCM captions are not available yet. Voice calls need a working DeepSeek account, API key or another cloud recognizer to recognize recordings and end when the app goes to the background.
 - **Performance**: **Auto**, **Full** or **Light**, plus glass blur, interface motion, fluid motion and **Refresh rate** (Auto / Max / System).
 - **Background running**: see [FAQ](11-faq.md). Until it's set up, the row says so on the right.
 - **System permissions**: the system permissions each feature uses. [Open](dshgo://open/system-permissions)

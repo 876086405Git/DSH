@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/l10n.dart';
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
+import '../state/android_features.dart';
 import '../state/app_info.dart';
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
@@ -32,12 +33,18 @@ typedef DiagnosticSender = Future<void> Function(
 /// A single owner; dependencies are injected so asynchronous revocation and
 /// persistence-before-send can be checked without Android or a model request.
 class AutomaticDiagnostics extends ChangeNotifier {
-  AutomaticDiagnostics({required this.collect, required this.load, required this.store, DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now;
+  AutomaticDiagnostics({
+    required this.collect,
+    required this.load,
+    required this.store,
+    this.guardStaleCancellation = false,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   final Future<DiagnosticsSnapshot> Function() collect;
   final Future<Map<String, Object?>> Function() load;
   final Future<void> Function(Map<String, Object?> checkpoint) store;
+  final bool guardStaleCancellation;
   AutomaticDiagnosticsPhase phase = AutomaticDiagnosticsPhase.waiting;
   String? reportSessionId;
   String? failureCode;
@@ -73,10 +80,13 @@ class AutomaticDiagnostics extends ChangeNotifier {
   }
 
   Future<void> _cancelOnce(Future<void> Function() cancel) async {
+    final epoch = _epoch;
     try {
       await cancel().timeout(const Duration(seconds: 10));
     } catch (_) {
-      if (!_disposed) {
+      // OH cancellation may finish after an owner change or explicit recovery.
+      // A failure in the still-current generation remains visible.
+      if (!_disposed && (!guardStaleCancellation || epoch == _epoch)) {
         failureCode = 'cancel_failed';
         phase = AutomaticDiagnosticsPhase.failed;
         notifyListeners();
@@ -136,6 +146,8 @@ class AutomaticDiagnostics extends ChangeNotifier {
   Future<void> recoverStorage({required bool Function() isCurrent}) async {
     if (_disposed || _busy || !_storageFailed || !isCurrent()) return;
     _busy = true;
+    // Recovery owns new state even when the connection owner remains null.
+    if (guardStaleCancellation) _epoch++;
     final epoch = _epoch;
     bool current() => !_disposed && epoch == _epoch && isCurrent();
     notifyListeners();
@@ -311,7 +323,10 @@ bool _isFailure(String key, Map row) => switch (key) {
   // A model/session error could be our own failed analysis.
   'appErrors' => row['source'] == 'flutter' || row['source'] == 'platform',
   'voiceStages' => row['stage'] == 'error' || row['stage'] == 'failed',
-  'processExits' => const [3, 4, 5, 6].contains(row['reason']),
+  'processExits' =>
+    row['source'] == 'hiAppEvent'
+        ? const ['APP_CRASH', 'APP_FREEZE'].contains(row['event'])
+        : const [3, 4, 5, 6].contains(row['reason']),
   _ => false,
 };
 
@@ -332,7 +347,10 @@ Set<String> diagnosticFailureFingerprints(DiagnosticsSnapshot snapshot, Map<Stri
       final fields = switch (key) {
         'appErrors' => [row['source'], row['errorType'], row['stack']],
         'voiceStages' => [row['stage'], row['backend'], row['code']],
-        _ => [row['reason'], row['status'], lastVoice['stage'], lastVoice['backend']],
+        _ =>
+          row['source'] == 'hiAppEvent'
+              ? [row['source'], row['event'], row['crashType'], lastVoice['stage'], lastVoice['backend']]
+              : [row['reason'], row['status'], lastVoice['stage'], lastVoice['backend']],
       };
       result.add(sha256.convert(utf8.encode(jsonEncode([version, key, fields]))).toString());
     }
@@ -450,6 +468,7 @@ Future<void> sendDiagnosticAnalysis(
 final automaticDiagnosticsProvider = Provider<AutomaticDiagnostics>((ref) {
   const key = 'automatic_diagnostics_checkpoint';
   final coordinator = AutomaticDiagnostics(
+    guardStaleCancellation: ref.watch(operatingSystemProvider) == 'ohos',
     collect: () async {
       // Capture ref-bound state before the platform await. No ref access after
       // await: this provider can be disposed or the host can change meanwhile.

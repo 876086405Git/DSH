@@ -2,7 +2,7 @@ import { PET_LIMITS, WORKSHOP_VALIDATOR_PROFILE } from './generated/workshop-dat
 import { record } from './pet-catalog';
 import { WorkshopArchive, nameAlias, strictJson } from './workshop-archive';
 import { encoder, finite, MEMBER_CAP, requireWorkshop as need, type SubmissionMeta, whole } from './workshop-common';
-import { validatePng } from './workshop-png';
+import { validatePng, validateTexture } from './workshop-png';
 
 export const VALIDATOR_VERSION = `workshop-1:${WORKSHOP_VALIDATOR_PROFILE}`;
 export interface PackSummary { validator: string; files: number; expandedBytes: number; sheets?: number; mocVersions?: number[] }
@@ -64,6 +64,8 @@ export function validatePet(bytes: Uint8Array, meta: SubmissionMeta): PackSummar
   return { validator: VALIDATOR_VERSION, files: zip.files.size, expandedBytes: raw.length + total, sheets: sheets.size };
 }
 
+// Large motions run past 1 MiB; the app re-encodes every JSON it uploads.
+export const COMPANION_JSON_CAP = 8 * 1024 * 1024;
 const extensions = new Set(['json', 'moc3', 'png', 'jpg', 'jpeg', 'webp', 'wav', 'mp3', 'txt', 'md']);
 const extension = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
 function companionReference(zip: WorkshopArchive, home: string, value: unknown, allowed: string[]): string {
@@ -72,7 +74,7 @@ function companionReference(zip: WorkshopArchive, home: string, value: unknown, 
   need(zip.files.has(path) && allowed.includes(extension(path)), 'companion_reference'); return path;
 }
 function validateCompanionJson(data: Uint8Array, name: string, zip: WorkshopArchive, meta: SubmissionMeta): void {
-  const value = strictJson(data, 1024 * 1024, 60);
+  const value = strictJson(data, COMPANION_JSON_CAP, 60);
   // The local installer regenerates index.json; reject it on upload so
   // stale local indexes cannot be published as trusted model metadata.
   need(name !== 'character/index.json' && record(value), 'companion_json');
@@ -113,7 +115,7 @@ export function validateCompanion(bytes: Uint8Array, meta: SubmissionMeta, maxMo
       validateCompanionJson(data, name, zip, meta);
       if (name === 'character/character.json') characterChecked = true;
       if (/\.model3\.json$/i.test(name)) models++;
-    } else if (extension(name) === 'png') validatePng(data);
+    } else if (extension(name) === 'png') validateTexture(data);
     else if (extension(name) === 'moc3') {
       need(data.length >= 5 && String.fromCharCode(...data.subarray(0, 4)) === 'MOC3', 'companion_moc');
       need(data[4]! >= 1 && data[4]! <= maxMocVersion, 'companion_moc_version'); mocVersions.add(data[4]!);

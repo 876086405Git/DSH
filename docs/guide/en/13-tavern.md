@@ -7,7 +7,7 @@ The Tavern is the app's role-play area: import SillyTavern character cards and c
 <!-- nav: chatChats,modeKeyTooltip,tavernTitle -->
 `Chats › Switch mode › Tavern`
 
-Tap the **Switch mode** key at the top of the chat list and pick **Tavern** under **Mode**; Back returns to Work. Set **Open on launch** to Tavern and the app opens straight into it.
+Tap the **Switch mode** key at the top of the chat list and pick **Tavern** under **Mode**; Back returns to Work. Set **Open on launch** to Tavern and the app opens straight into it. Picking **Chat with characters** the first time you open the app skips installing, goes straight to the tavern and sets this for you.
 
 ## Importing
 
@@ -17,6 +17,17 @@ Tap the **Switch mode** key at the top of the chat list and pick **Tavern** unde
 **From a file** works out what each file is: character cards (PNG, JSON, CHARX), lorebooks, presets, regex, quick replies and SillyTavern chat records. **From a link** takes a character page on a card site or a direct card-file link. With several files picked, each result is reported; a non-card file opens its import report listing what was noticed while importing.
 
 **Import chats** takes SillyTavern .jsonl files, one or several at a time. Importing an ST theme lives under **Display** in **Tavern settings**.
+
+### Bringing a chat over from DeepSeek
+
+<!-- nav: tavernTitle,tavernImport,tavernImportFromDeepSeek -->
+`Tavern › Import › Bring over from DeepSeek`
+
+A long chat that DeepSeek's own app won't continue can be carried over and continued here. Export all chats in DeepSeek's settings to get a ZIP, then either share that file to dsh-Go from a file manager, or tap **Bring over from DeepSeek** under **Import** in the tavern and pick it.
+
+The list is sorted by length with the longest chat already ticked; the button at the bottom opens it, ready for your next line. Each chat becomes a character on the shelf, with the branches left by regenerating and editing kept; replies that were withdrawn or never finished stay, but are no longer sent to the model. A chat brought over before isn't copied again: tapping it opens it.
+
+Continuing uses the model and key you set up in the tavern, billed by the API. A chat brought over asks for a larger context (at least 64K) and a longer reply limit. The model can't see what falls outside the context, so a very long chat keeps its first two messages (skipping withdrawn or unfinished replies) in the character's description, up to 4,000 characters of each.
 
 ## Shelf, chats and the character page
 

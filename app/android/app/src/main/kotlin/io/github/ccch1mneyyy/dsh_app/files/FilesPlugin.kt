@@ -37,8 +37,9 @@ import kotlin.concurrent.thread
  * MethodChannel `dsh/files`.
  *
  * - `resolveGuest {path}` → host path of a local-engine file, or null.
- * - `listOutputs {depth}` → `[{path, bytes, modified}]` under `/sdcard/Download/DSH-Go`, then
- *   the old `/sdcard/Download/DSH` (guest paths; empty without phone storage).
+ * - `listOutputs {depth}` → up to 500 most recently modified `[{path, bytes, modified}]` from
+ *   `/sdcard/Download/DSH-Go` and the old `/sdcard/Download/DSH`
+ *   (guest paths; empty without phone storage).
  * - `open {path, mime, name, chooser}` → ACTION_VIEW through this app's FileProvider.
  * - `saveToDownloads {path, name, mime}` → shown location (`Download/DSH-Go/x.pdf`):
  *   MediaStore Downloads on API 29+, the public Downloads directory before
@@ -286,7 +287,6 @@ class FilesPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         fun walk(dir: File, level: Int) {
             val children = dir.listFiles() ?: return
             for (child in children.sortedBy { it.name }) {
-                if (out.size >= MAX_OUTPUTS) return
                 if (child.name.startsWith(".")) continue
                 if (child.isDirectory) {
                     if (level < depth) walk(child, level + 1)
@@ -301,7 +301,7 @@ class FilesPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         }
         // The old folder too: earlier chats' files, and a user's own AGENTS.md that still names it.
         for (folder in listOf(SUBDIR, LEGACY_SUBDIR)) walk(File(hostRoot, "${Environment.DIRECTORY_DOWNLOADS}/$folder"), 1)
-        return out
+        return out.sortedByDescending { it["modified"] as Long }.take(MAX_OUTPUTS)
     }
 
     // ---------------------------------------------------------------------------------------------

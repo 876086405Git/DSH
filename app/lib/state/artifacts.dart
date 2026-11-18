@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
+import '../runtime/local_paths.dart';
 import 'chat_state.dart';
 import 'connection_state.dart';
 import 'settings_state.dart';
@@ -262,9 +263,10 @@ final _drive = RegExp(r'^[A-Za-z]:[\\/]');
 /// Decode the URI path once; query strings and fragments are not filenames.
 String? resolveWorkspaceLink(String url, {String? baseDir}) {
   var target = url.trim();
-  if (target.startsWith('<') && target.endsWith('>')) {
-    target = target.substring(1, target.length - 1).trim();
-  }
+  final bracketed = target.startsWith('<') && target.endsWith('>');
+  if (bracketed) target = target.substring(1, target.length - 1).trim();
+  // `C:/A/b.png` would parse as a URI with the scheme `c` (#1430).
+  if (_drive.hasMatch(target)) return _drivePath(target, decode: !bracketed, cwd: baseDir);
   if (target.isEmpty || target.startsWith('#') || target.startsWith('?') || target.startsWith('//')) return null;
   final uri = Uri.tryParse(target);
   if (uri == null) return null;
@@ -293,30 +295,37 @@ String? resolveWorkspaceLink(String url, {String? baseDir}) {
   return resolveSessionPath(path, cwd: baseDir);
 }
 
+/// A Windows drive path as a Markdown destination (`C:/A/b.png`): no query or fragment (a
+/// Windows name can't hold `?`), and percent escapes decoded unless it was written in `<>`.
+String? _drivePath(String target, {required bool decode, String? cwd}) {
+  final cut = target.indexOf(RegExp('[?#]'));
+  if (cut >= 0) target = target.substring(0, cut);
+  if (decode) {
+    try {
+      target = Uri.decodeFull(target);
+    } on ArgumentError {
+      // Keep it as written.
+    } on FormatException {
+      return null;
+    }
+  }
+  return resolveSessionPath(target, cwd: cwd);
+}
+
+/// Code in a reply: fenced blocks (fences start a line; closed by one at least as long, or
+/// running to the end), and inline spans.
+final _code = RegExp(r'^ {0,3}(`{3,}|~{3,})[\s\S]*?(?:^ {0,3}\1|(?![\s\S]))|`[^`\n]*`', multiLine: true);
+
 /// Local file paths a reply links to (`[a](<out/a.pdf>)`, `![b](chart.png)`),
-/// in order, resolved against [cwd]; web links and anchors dropped.
+/// in order, resolved against [cwd]; web links and anchors dropped, and links shown as
+/// examples in code ignored (#1432).
 List<String> linkedPaths(String text, {String? cwd}) {
   final out = <String>{};
-  for (final match in _linkTarget.allMatches(text)) {
-    var target = (match.group(1) ?? match.group(2) ?? '').trim();
-    final String? path;
-    if (_drive.hasMatch(target)) {
-      // Preserve existing artifact support for remote Windows paths.
-      final hash = target.indexOf('#');
-      if (hash >= 0) target = target.substring(0, hash);
-      if (match.group(1) == null) {
-        try {
-          target = Uri.decodeFull(target);
-        } on ArgumentError {
-          // Keep it as written.
-        } on FormatException {
-          continue;
-        }
-      }
-      path = resolveSessionPath(target, cwd: cwd);
-    } else {
-      path = resolveWorkspaceLink(target, baseDir: cwd);
-    }
+  for (final match in _linkTarget.allMatches(text.replaceAll(_code, ' '))) {
+    final target = (match.group(1) ?? match.group(2) ?? '').trim();
+    final path = _drive.hasMatch(target)
+        ? _drivePath(target, decode: match.group(1) == null, cwd: cwd)
+        : resolveWorkspaceLink(target, baseDir: cwd);
     if (path != null) out.add(path);
   }
   return out.toList();
@@ -490,7 +499,9 @@ class FilesChannel {
       channel.invokeMethod<void>('open', {'path': hostPath, 'name': name, 'mime': mime, 'chooser': chooser});
 
   /// Copies an Android file into the public Downloads (`Download/DSH-Go`);
-  /// returns where it landed (`Download/DSH-Go/report.pdf`).
+  /// returns where it landed (`Download/DSH-Go/report.pdf`). On HarmonyOS the
+  /// system's save window asks where: see [savedInChosenPlace] and
+  /// [saveWindowDismissed].
   Future<String> saveToDownloads(String hostPath, {required String name, required String mime}) async =>
       await channel.invokeMethod<String>('saveToDownloads', {'path': hostPath, 'name': name, 'mime': mime}) ??
       'Download/DSH-Go/$name';
@@ -515,9 +526,20 @@ class FilesChannel {
 
 final filesChannelProvider = Provider<FilesChannel>((ref) => const FilesChannel());
 
+/// Whether [where], from [FilesChannel.saveToDownloads], is the URI the system's
+/// save window answered with (HarmonyOS): the person chose the place, and a
+/// `file://…` means nothing to read, so a note only says it's saved.
+bool savedInChosenPlace(String where) => where.contains('://');
+
+/// Whether [error], from [FilesChannel.saveToDownloads], is the person backing
+/// out of the system's save window (HarmonyOS): nothing saved and nothing wrong,
+/// so nothing to say. Android has no such window and never answers this.
+bool saveWindowDismissed(Object error) => error is PlatformException && error.code == 'cancelled';
+
 /// The local engine's output folder ([phoneOutputDir]); empty unless the
-/// engine is on this phone with "访问手机文件" on. Scanned when first needed
-/// and again whenever a turn ends ([refresh]).
+/// engine is on this phone with "访问手机文件" on (on HarmonyOS the folder is in
+/// the app's own files and needs no such access). Scanned when first needed and
+/// again whenever a turn ends ([refresh]).
 class PhoneOutputsController extends Notifier<List<PhoneOutput>> {
   bool _enabled = false;
 
@@ -525,7 +547,7 @@ class PhoneOutputsController extends Notifier<List<PhoneOutput>> {
   List<PhoneOutput> build() {
     final local = ref.watch(activeConnectionProvider.select((c) => c.value?.isLocal ?? false));
     final storage = ref.watch(settingsProvider.select((s) => s.phoneStorage));
-    _enabled = local && storage;
+    _enabled = local && (storage || LocalPaths.noGuest);
     if (_enabled) unawaited(refresh());
     return const [];
   }

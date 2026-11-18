@@ -1,0 +1,48 @@
+[
+  {
+    "name": "readwrite ASCII overwrite preserves the following UTF-8 bytes",
+    "initialHex": "41e4b8ad0a",
+    "command": "bug68_open_rc=\nbug68_write_rc=\nexec 3<> sample.bin\nbug68_open_rc=$?\nif [ \"$bug68_open_rc\" -eq 0 ]; then\n  printf X >&3\n  bug68_write_rc=$?\nfi\nprintf 'open=%s\\nwrite=%s\\n' \"$bug68_open_rc\" \"$bug68_write_rc\"\nbug68_report_rc=$?\nif [ \"$bug68_open_rc\" -ne 0 ]; then exit \"$bug68_open_rc\"; fi\nif [ -n \"$bug68_write_rc\" ] && [ \"$bug68_write_rc\" -ne 0 ]; then exit \"$bug68_write_rc\"; fi\nexit \"$bug68_report_rc\"\n",
+    "stdout": "open=0\nwrite=0\n",
+    "fileHex": "58e4b8ad0a"
+  },
+  {
+    "name": "readwrite dup shares byte position after a text read",
+    "initialHex": "41e4b8ad0a",
+    "command": "# Planned command text only. NOT_RUN; no executable driver is included.\n# The parent must create ./sample.bin as exactly 41e4b8ad0a in a private cwd.\n\nexec 3<> './sample.bin'\nopen_rc=$?\nprintf 'BUG68_STEP open_rc %s\\n' \"$open_rc\"\nreport_rc=$?\nif [ \"$open_rc\" -ne 0 ]; then exit \"$open_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nexec 4>&3\ndup_rc=$?\nprintf 'BUG68_STEP dup_rc %s\\n' \"$dup_rc\"\nreport_rc=$?\nif [ \"$dup_rc\" -ne 0 ]; then exit \"$dup_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nprintf X >&3\nfirst_write_rc=$?\nprintf 'BUG68_STEP first_write_rc %s\\n' \"$first_write_rc\"\nreport_rc=$?\nif [ \"$first_write_rc\" -ne 0 ]; then exit \"$first_write_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nread -r -u4 value\nread_rc=$?\nprintf 'BUG68_STEP read_rc %s\\n' \"$read_rc\"\nreport_rc=$?\nif [ \"$read_rc\" -ne 0 ]; then exit \"$read_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\ntest \"$value\" = '中'\nvalue_equal_rc=$?\nprintf 'BUG68_STEP value_equal_rc %s\\n' \"$value_equal_rc\"\nreport_rc=$?\nif [ \"$value_equal_rc\" -ne 0 ]; then exit \"$value_equal_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nprintf Y >&3\nsecond_write_rc=$?\nprintf 'BUG68_STEP second_write_rc %s\\n' \"$second_write_rc\"\nreport_rc=$?\nif [ \"$second_write_rc\" -ne 0 ]; then exit \"$second_write_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nexit 0\n",
+    "stdout": "BUG68_STEP open_rc 0\nBUG68_STEP dup_rc 0\nBUG68_STEP first_write_rc 0\nBUG68_STEP read_rc 0\nBUG68_STEP value_equal_rc 0\nBUG68_STEP second_write_rc 0\n",
+    "fileHex": "58e4b8ad0a59"
+  },
+  {
+    "name": "readwrite mapfile text consumption advances the byte position",
+    "initialHex": "41e4b8ad0a",
+    "command": "# Planned command text only. NOT_RUN; no executable driver is included.\n# The parent must create ./sample.bin as exactly 41e4b8ad0a in a private cwd.\n\nexec 3<> './sample.bin'\nopen_rc=$?\nprintf 'BUG68_STEP open_rc %s\\n' \"$open_rc\"\nreport_rc=$?\nif [ \"$open_rc\" -ne 0 ]; then exit \"$open_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nmapfile -t rows <&3\nmapfile_rc=$?\nprintf 'BUG68_STEP mapfile_rc %s\\n' \"$mapfile_rc\"\nreport_rc=$?\nif [ \"$mapfile_rc\" -ne 0 ]; then exit \"$mapfile_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\ntest \"${rows[0]}\" = 'A中'\nvalue_equal_rc=$?\nprintf 'BUG68_STEP value_equal_rc %s\\n' \"$value_equal_rc\"\nreport_rc=$?\nif [ \"$value_equal_rc\" -ne 0 ]; then exit \"$value_equal_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nprintf X >&3\nwrite_rc=$?\nprintf 'BUG68_STEP write_rc %s\\n' \"$write_rc\"\nreport_rc=$?\nif [ \"$write_rc\" -ne 0 ]; then exit \"$write_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nexit 0\n",
+    "stdout": "BUG68_STEP open_rc 0\nBUG68_STEP mapfile_rc 0\nBUG68_STEP value_equal_rc 0\nBUG68_STEP write_rc 0\n",
+    "fileHex": "41e4b8ad0a58"
+  },
+  {
+    "name": "readwrite read -n and -N retain complete four-byte scalars",
+    "initialHex": "f09f9880f09f98800a",
+    "command": "# One finite four-byte-scalar boundary case; native oracle is a separate gate.\n\nexec 3<> './sample.bin'\nopen_rc=$?\nprintf 'BUG68_STEP open_rc %s\\n' \"$open_rc\"\nreport_rc=$?\nif [ \"$open_rc\" -ne 0 ]; then exit \"$open_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nread -r -n1 -u3 first\nread_n_rc=$?\nprintf 'BUG68_STEP read_n_rc %s\\n' \"$read_n_rc\"\nreport_rc=$?\nif [ \"$read_n_rc\" -ne 0 ]; then exit \"$read_n_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\ntest \"$first\" = '😀'\nfirst_equal_rc=$?\nprintf 'BUG68_STEP first_equal_rc %s\\n' \"$first_equal_rc\"\nreport_rc=$?\nif [ \"$first_equal_rc\" -ne 0 ]; then exit \"$first_equal_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nread -r -N1 -u3 second\nread_N_rc=$?\nprintf 'BUG68_STEP read_N_rc %s\\n' \"$read_N_rc\"\nreport_rc=$?\nif [ \"$read_N_rc\" -ne 0 ]; then exit \"$read_N_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\ntest \"$second\" = '😀'\nsecond_equal_rc=$?\nprintf 'BUG68_STEP second_equal_rc %s\\n' \"$second_equal_rc\"\nreport_rc=$?\nif [ \"$second_equal_rc\" -ne 0 ]; then exit \"$second_equal_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nprintf X >&3\nwrite_rc=$?\nprintf 'BUG68_STEP write_rc %s\\n' \"$write_rc\"\nreport_rc=$?\nif [ \"$write_rc\" -ne 0 ]; then exit \"$write_rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nexit 0\n",
+    "stdout": "BUG68_STEP open_rc 0\nBUG68_STEP read_n_rc 0\nBUG68_STEP first_equal_rc 0\nBUG68_STEP read_N_rc 0\nBUG68_STEP second_equal_rc 0\nBUG68_STEP write_rc 0\n",
+    "fileHex": "f09f9880f09f988058"
+  },
+  {
+    "name": "readwrite restored standard target preserves its open identity after descriptor rebinding",
+    "command": "# Frozen scope observation text; NOT_RUN at creation.\n# All files are private fixture files. Markers use stderr 2; stdout 1 is intentional file output.\nexec 3<> sample-a.bin\nrc=$?\nprintf 'BUG68_SCOPE_STEP open_a_rc %s\\n' \"$rc\" >&2\nreport_rc=$?\nif [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nexec 1>&3\nrc=$?\nprintf 'BUG68_SCOPE_STEP bind_stdout_rc %s\\n' \"$rc\" >&2\nreport_rc=$?\nif [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\n{\n  printf X >&3\n  rc=$?\n  printf 'BUG68_SCOPE_STEP scope1_write_x_rc %s\\n' \"$rc\" >&2\n  report_rc=$?\n  if [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\n  if [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\n  printf Y\n  rc=$?\n  printf 'BUG68_SCOPE_STEP scope1_write_y_rc %s\\n' \"$rc\" >&2\n  report_rc=$?\n  if [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\n  if [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n} >&3\nrc=$?\nprintf 'BUG68_SCOPE_STEP scope1_rc %s\\n' \"$rc\" >&2\nreport_rc=$?\nif [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\n{\n  exec 3<> sample-b.bin\n  rc=$?\n  printf 'BUG68_SCOPE_STEP scope2_rebind_b_rc %s\\n' \"$rc\" >&2\n  report_rc=$?\n  if [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\n  if [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\n  printf P >&3\n  rc=$?\n  printf 'BUG68_SCOPE_STEP scope2_write_p_rc %s\\n' \"$rc\" >&2\n  report_rc=$?\n  if [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\n  if [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n} >&3\nrc=$?\nprintf 'BUG68_SCOPE_STEP scope2_rc %s\\n' \"$rc\" >&2\nreport_rc=$?\nif [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nprintf Z\nrc=$?\nprintf 'BUG68_SCOPE_STEP restored_a_write_z_rc %s\\n' \"$rc\" >&2\nreport_rc=$?\nif [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nprintf Q >&3\nrc=$?\nprintf 'BUG68_SCOPE_STEP rebound_b_write_q_rc %s\\n' \"$rc\" >&2\nreport_rc=$?\nif [ \"$rc\" -ne 0 ]; then exit \"$rc\"; fi\nif [ \"$report_rc\" -ne 0 ]; then exit \"$report_rc\"; fi\n\nexit 0\n",
+    "stdout": "",
+    "stderr": "BUG68_SCOPE_STEP open_a_rc 0\nBUG68_SCOPE_STEP bind_stdout_rc 0\nBUG68_SCOPE_STEP scope1_write_x_rc 0\nBUG68_SCOPE_STEP scope1_write_y_rc 0\nBUG68_SCOPE_STEP scope1_rc 0\nBUG68_SCOPE_STEP scope2_rebind_b_rc 0\nBUG68_SCOPE_STEP scope2_write_p_rc 0\nBUG68_SCOPE_STEP scope2_rc 0\nBUG68_SCOPE_STEP restored_a_write_z_rc 0\nBUG68_SCOPE_STEP rebound_b_write_q_rc 0\n",
+    "files": [
+      {
+        "path": "sample-a.bin",
+        "initialHex": "414243440a",
+        "fileHex": "58595a440a"
+      },
+      {
+        "path": "sample-b.bin",
+        "initialHex": "616263640a",
+        "fileHex": "505163640a"
+      }
+    ]
+  }
+]

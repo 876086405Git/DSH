@@ -131,9 +131,8 @@ class _PhoneUnlockPageState extends ConsumerState<PhoneUnlockPage> {
         showBriefNotice(context, l10n.phoneUnlockBusy);
         return;
       }
-      final done = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => PhoneUnlockConfirmPage(unlock: unlock)),
-      );
+      final done = await Navigator.of(context)
+          .push<bool>(MaterialPageRoute(builder: (_) => PhoneUnlockConfirmPage(unlock: unlock)));
       if (done == true && mounted) showBriefNotice(context, l10n.phoneUnlockOnNotice(unlock.label(l10n)));
       return;
     }
@@ -185,9 +184,8 @@ class _PhoneUnlockPageState extends ConsumerState<PhoneUnlockPage> {
                 icon: AppIcons.appRules,
                 title: l10n.phoneUnlockBanks,
                 subtitle: l10n.phoneUnlockBanksHint,
-                onTap: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute<void>(builder: (_) => const PhoneAppRulesPage())),
+                onTap: () =>
+                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PhoneAppRulesPage())),
               ),
             ],
           ),
@@ -226,7 +224,7 @@ class _UnlockRow extends StatelessWidget {
                 dimension: 22,
                 child: CircularProgressIndicator(strokeWidth: 2, strokeCap: StrokeCap.round),
               )
-            : Switch(value: on, onChanged: change),
+            : Switch.adaptive(value: on, onChanged: change),
       ),
     );
   }
@@ -312,9 +310,7 @@ class _PhoneUnlockConfirmPageState extends ConsumerState<PhoneUnlockConfirmPage>
                     busyTask ? l10n.phoneUnlockBusy : l10n.phoneUnlockHoldHint,
                     key: const ValueKey('unlock-hold-hint'),
                     textAlign: TextAlign.center,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
                   ),
                 ),
               ],
@@ -360,7 +356,10 @@ class _Disclaimer extends StatelessWidget {
                     Expanded(
                       child: Semantics(
                         header: true,
-                        child: Text(context.l10n.phoneUnlockDisclaimerTitle, style: theme.textTheme.titleSmall?.copyWith(color: ink)),
+                        child: Text(
+                          context.l10n.phoneUnlockDisclaimerTitle,
+                          style: theme.textTheme.titleSmall?.copyWith(color: ink),
+                        ),
                       ),
                     ),
                   ],

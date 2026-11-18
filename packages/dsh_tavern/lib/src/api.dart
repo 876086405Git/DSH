@@ -439,6 +439,37 @@ final class TavernChatImportResult {
   final List<String> notices;
 }
 
+/// One conversation in a DeepSeek export, as a list of them shows it.
+final class TavernDeepSeekSession {
+  const TavernDeepSeekSession({
+    required this.id,
+    required this.title,
+    required this.messageCount,
+    this.updatedAt,
+    this.imported,
+  });
+
+  /// Its id in the export.
+  final String id;
+
+  /// As DeepSeek titled it; empty when it had none.
+  final String title;
+  final int messageCount;
+  final DateTime? updatedAt;
+
+  /// Where it lives when it was taken in before.
+  final TavernDeepSeekImported? imported;
+}
+
+/// A DeepSeek conversation taken in: the character made for it and its chat.
+final class TavernDeepSeekImported {
+  const TavernDeepSeekImported({required this.sessionId, required this.characterId, required this.chatId});
+
+  final String sessionId;
+  final String characterId;
+  final String chatId;
+}
+
 /// Where the model calls go. The key is read through [apiKey] each call, so
 /// the app keeps it in secure storage and the engine never stores it.
 class TavernModelConfig {
@@ -874,6 +905,16 @@ abstract interface class Tavern {
   /// document has a fresh integrity UUID. Reading during a turn does not stop
   /// generation; only the state already committed to storage is included.
   Future<List<TavernChatFile>> exportChat(String chatId, {String? fileName});
+
+  /// The conversations in DeepSeek's「导出所有历史对话」ZIP at [zipPath], the
+  /// longest first. Throws [TavernImportError] when the file is not one.
+  Future<List<TavernDeepSeekSession>> inspectDeepSeekExport(String zipPath);
+
+  /// Takes the named conversations in: each becomes a character of its own
+  /// with one chat holding every branch, the one last on screen selected, so
+  /// the next message continues it. No greeting is added and no model is
+  /// called. One taken in before is returned as it is, not copied again.
+  Future<List<TavernDeepSeekImported>> importDeepSeekSessions(String zipPath, List<String> sessionIds);
 
   Future<void> deleteChat(String chatId);
 

@@ -25,6 +25,7 @@ export 'src/inspection.dart';
 export 'src/lorebook_library.dart';
 export 'src/io/card_codec.dart' hide DecodedCardSeed, cardAssetDataUri;
 export 'src/io/chat_jsonl.dart';
+export 'src/io/deepseek_export.dart' show isDeepSeekExport;
 export 'src/io/st_chat_document.dart';
 export 'src/llm/model_client.dart';
 export 'src/macros/macro_engine.dart'
@@ -51,7 +52,13 @@ export 'src/prompt/prompt_types.dart';
 export 'src/regex/regex_engine.dart';
 export 'src/regex/regex_worker.dart';
 export 'src/store/character_library.dart'
-    hide AuthoringCardMedia, AuthoringCharacterCapture, replayAuthoringSaveAs, authoringSaveAsReceipt;
+    hide
+        AuthoringCardMedia,
+        AuthoringCharacterCapture,
+        CharacterAvatarMetadata,
+        CharacterAvatarCapture,
+        replayAuthoringSaveAs,
+        authoringSaveAsReceipt;
 export 'src/store/chat_store.dart'
     hide
         GameplayBindingStore,

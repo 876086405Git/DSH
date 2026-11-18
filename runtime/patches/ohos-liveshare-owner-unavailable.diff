@@ -1,0 +1,39 @@
+--- a/node_modules/@deepseek-ai/dsh-experimental-liveshare/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-experimental-liveshare/lib/index.js
+@@ -2489,6 +2489,9 @@
+ * @returns Worker lifecycle, registration replay, credential state, and timers.
+ */
+ function createTunnelSupervision(deps) {
++	const ownerGatewayUnavailable = process.platform === "openharmony" || globalThis[Symbol.for("dsh.go.ohos.sim")] === true
++		? "OpenHarmony local owner gateway IPC is unavailable; connect to a computer host to publish a LiveShare."
++		: void 0;
+ 	const pending = /* @__PURE__ */ new Map();
+ 	const forwardedRequests = /* @__PURE__ */ new Map();
+ 	const forwardedTasks = /* @__PURE__ */ new Set();
+@@ -2579,6 +2582,14 @@
+ 	};
+ 	const send = (command) => {
+ 		if (command.type === "remove-share") deps.relay.invalidateRelayAccess(command.shareId);
++		if (ownerGatewayUnavailable !== void 0) {
++			if (command.type === "add-share") settle({
++				type: "share-error",
++				shareId: command.share.shareId,
++				message: ownerGatewayUnavailable
++			});
++			return;
++		}
+ 		ensureWorker().send(command);
+ 	};
+ 	const waitForShare = (shareId, timeoutMs) => {
+@@ -3026,6 +3037,11 @@
+ 	* The dialog picks its visual state from this flag and prints `error` unchanged.
+ 	*/
+ 	const probeRelayPublish = async (relay, share) => {
++		if (ownerGatewayUnavailable !== void 0) return {
++			ok: false,
++			blocking: true,
++			error: ownerGatewayUnavailable
++		};
+ 		const settled = await probeRegistration(share);
+ 		if (settled.ok) return {
+ 			ok: true,

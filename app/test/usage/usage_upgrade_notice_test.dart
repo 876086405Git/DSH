@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/settings/index/spot_anchor.dart';
 import 'package:dsh_app/ui/settings/privacy_page.dart';
@@ -129,6 +130,20 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('on HarmonyOS, where nothing is sent: no toast about it', (tester) async {
+    usePhoneSurface(tester);
+    await tester.pumpWidget(
+      goldenApp(
+        home: _home(),
+        brightness: Brightness.light,
+        overrides: [..._overrides(), operatingSystemProvider.overrideWithValue('ohos')],
+      ),
+    );
+    await tester.pump();
+    await _wait(tester);
+    expect(find.byKey(_notice), findsNothing);
+  });
 
   testWidgets('an install from before: shown once, and told from then on', (tester) async {
     await _pumpHome(tester);

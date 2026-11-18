@@ -4,6 +4,16 @@ part of 'companion_pack.dart';
 /// snapshot's companion tests; version compatibility is not Moc consistency.
 const companionMaxMocVersion = 6;
 
+/// One JSON file of a character; large motions run past 1 MiB.
+const companionJsonCap = 8 * 1024 * 1024;
+
+/// One file of a character on export; an 8192-wide PNG can pass 16 MiB.
+const companionMemberCap = 32 * 1024 * 1024;
+
+/// A texture's longest side. The WebView decodes it, so a texture is only
+/// checked for being a PNG of at most this size (Live2D uses 4096 and up).
+const companionTextureSide = 8192;
+
 class _CompanionIntegrity implements Exception {
   const _CompanionIntegrity(this.code);
   final String code;
@@ -35,7 +45,10 @@ Future<Uint8List> _companionBytes(File file, int cap) async {
 
 Future<Object?> _companionJson(File file) async {
   try {
-    return decodePetJson(await _companionBytes(file, 1024 * 1024), maxBytes: 1024 * 1024);
+    var bytes = await _companionBytes(file, companionJsonCap);
+    // Some editors save a UTF-8 BOM; the JSON under it is still fine.
+    if (bytes.length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf) bytes = Uint8List.sublistView(bytes, 3);
+    return decodePetJson(bytes, maxBytes: companionJsonCap);
   } on PetValidationException {
     throw const _CompanionIntegrity('companion_bad_json');
   }

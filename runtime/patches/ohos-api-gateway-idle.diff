@@ -1,0 +1,25 @@
+# OH-only: retire the heartbeat after the last WebSocket closes.
+--- a/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js
+@@ -337,6 +337,12 @@
+ 	*/
+ 	handleUpgrade(req, socket, head, peer) {
+ 		this.server.handleUpgrade(req, socket, head, (websocket) => {
++			websocket.once("close", () => {
++				if (this.server.clients.size === 0) {
++					clearInterval(this.heartbeatTimer);
++					this.heartbeatTimer = void 0;
++				}
++			});
+ 			const release = bindPeer(websocket, peer);
+ 			if (release === void 0) return;
+ 			const alive = () => {
+@@ -371,7 +377,7 @@
+ 		await closed.promise;
+ 		await Promise.all(this.connections);
+ 	}
+-	/** Start one `unref()` timer after the first upgrade; it spans empty-client periods until close(). */
++	/** Share one `unref()` heartbeat while sockets remain; restart on the next admitted upgrade. */
+ 	startHeartbeat() {
+ 		if (this.heartbeatTimer !== void 0) return;
+ 		this.heartbeatTimer = setInterval(() => {

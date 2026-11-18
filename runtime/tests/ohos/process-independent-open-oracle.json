@@ -1,0 +1,350 @@
+{
+  "bashSha256": "bc5945feb8bd26203ebfafea5ce1878bb2e32cb8fb50ab7ae395cfb1e1aaaef1",
+  "caseSourceSha256": "07c7cee06774c04a1fa3ae4a387f03c363b19f2815e26548ea518b5e17ee08f7",
+  "inputFiles": {
+    "stdout.bin": "414200c3a980434445",
+    "stderr.bin": "31ff32",
+    "all-bytes.bin": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+  },
+  "rows": [
+    {
+      "name": "two-truncating-opens",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    },
+    {
+      "name": "append-then-truncate",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } >> result.bin 2> result.bin",
+      "initial": "old-prefix",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    },
+    {
+      "name": "reverse-open-order",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } 2> result.bin > result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    },
+    {
+      "name": "truncate-then-append",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } > result.bin 2>> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "414243444546474849313233"
+      }
+    },
+    {
+      "name": "two-appending-opens",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } >> result.bin 2>> result.bin",
+      "initial": "old-prefix",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "6f6c642d707265666978414243444546474849313233"
+      }
+    },
+    {
+      "name": "explicit-clobber",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } >| result.bin 2>| result.bin",
+      "initial": "old-prefix-longer-than-output",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    },
+    {
+      "name": "old-tail-truncated-on-open",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } > result.bin 2> result.bin",
+      "initial": "old-prefix-longer-than-output",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    },
+    {
+      "name": "empty-stderr",
+      "command": "{ printf ABCDEFGHI; :; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "414243444546474849"
+      }
+    },
+    {
+      "name": "empty-stdout",
+      "command": "{ printf 123 >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233"
+      }
+    },
+    {
+      "name": "both-empty",
+      "command": ": > result.bin 2> result.bin",
+      "initial": "old-prefix",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": ""
+      }
+    },
+    {
+      "name": "stderr-longer",
+      "command": "{ printf 123; printf ABCDEFGHI >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "414243444546474849"
+      }
+    },
+    {
+      "name": "raw-tail",
+      "command": "{ cat stdout.bin; cat stderr.bin >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "raw-append-truncate",
+      "command": "{ cat stdout.bin; cat stderr.bin >&2; } >> result.bin 2> result.bin",
+      "initial": "old-prefix",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "all-byte-tail",
+      "command": "{ cat all-bytes.bin; cat stderr.bin >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+      }
+    },
+    {
+      "name": "utf8-tail",
+      "command": "{ printf '甲乙丙'; printf '丁' >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "e4b881e4b999e4b899"
+      }
+    },
+    {
+      "name": "unicode-path",
+      "command": "{ cat stdout.bin; cat stderr.bin >&2; } > '结果.bin' 2> '结果.bin'",
+      "output": "结果.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "lexical-alias",
+      "command": "{ cat stdout.bin; cat stderr.bin >&2; } > result.bin 2> ./result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "symlink-alias",
+      "command": "{ cat stdout.bin; cat stderr.bin >&2; } > result.bin 2> alias.bin",
+      "symlink": true,
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "function-return",
+      "command": "f(){ cat stdout.bin; cat stderr.bin >&2; return 7; }; f > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 7,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "brace-exit",
+      "command": "{ cat stdout.bin; cat stderr.bin >&2; exit 7; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 7,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "nested-shell",
+      "command": "bash -c 'cat stdout.bin; cat stderr.bin >&2' > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff32c3a980434445"
+      }
+    },
+    {
+      "name": "loop-two-writes",
+      "command": "for x in 1 2; do cat stdout.bin; cat stderr.bin >&2; done > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "31ff3231ff32434445414200c3a980434445"
+      }
+    },
+    {
+      "name": "stdout-pieces",
+      "command": "{ printf ABC; printf DEF; printf 123 >&2; } > result.bin 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546"
+      }
+    },
+    {
+      "name": "dup-stderr-control",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } 2> result.bin 1>&2",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "414243444546474849313233"
+      }
+    },
+    {
+      "name": "dup-stdout-control",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } > result.bin 2>&1",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "414243444546474849313233"
+      }
+    },
+    {
+      "name": "dup-append-control",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } 2>> result.bin 1>&2",
+      "initial": "old-prefix",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "6f6c642d707265666978414243444546474849313233"
+      }
+    },
+    {
+      "name": "discard-control",
+      "command": "{ printf ABCDEFGHI; printf 123 >&2; } > /dev/null 2> result.bin",
+      "scope": "scoped-standard-file-output",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233"
+      }
+    },
+    {
+      "name": "stderr-first-buffered-group",
+      "command": "{ printf 123 >&2; printf ABCDEFGHI; } > result.bin 2> result.bin",
+      "scope": "adjacent-existing-boundary",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "414243444546474849"
+      }
+    },
+    {
+      "name": "persistent-standard-fds",
+      "command": "exec > result.bin 2> result.bin; printf ABCDEFGHI; printf 123 >&2",
+      "scope": "adjacent-existing-boundary",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    },
+    {
+      "name": "persistent-numeric-fds",
+      "command": "exec 3> result.bin 4> result.bin; printf ABCDEFGHI >&3; printf 123 >&4",
+      "scope": "adjacent-existing-boundary",
+      "result": {
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": "",
+        "fileHex": "313233444546474849"
+      }
+    }
+  ]
+}
