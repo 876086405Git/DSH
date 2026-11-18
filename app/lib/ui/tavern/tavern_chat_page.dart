@@ -2563,9 +2563,24 @@ final tavernShownTextProvider = FutureProvider.autoDispose.family<String, (Strin
   ref.onCancel(() => let = Timer(const Duration(minutes: 1), keep.close));
   ref.onResume(() => let?.cancel());
   ref.onDispose(() => let?.cancel());
-  final shown = await ref.watch(tavernProvider).displayText(chatId, nodeId: nodeId, text: text);
-  return shown.superseded ? text : shown.text;
+  final tavern = ref.watch(tavernProvider);
+  // One at a time, a frame let through between: a page of messages asking
+  // at once runs their display passes back to back on this thread (the
+  // engine's), a freeze of their sum.
+  final turn = _displayQueue.then((_) => Future<void>.delayed(Duration.zero));
+  final done = Completer<void>();
+  _displayQueue = done.future;
+  try {
+    await turn;
+    if (!ref.mounted) return text;
+    final shown = await tavern.displayText(chatId, nodeId: nodeId, text: text);
+    return shown.superseded ? text : shown.text;
+  } finally {
+    done.complete();
+  }
 });
+
+Future<void> _displayQueue = Future<void>.value();
 
 /// The message gone to: a soft wash of the accent for a moment.
 class _JumpMark extends StatelessWidget {
