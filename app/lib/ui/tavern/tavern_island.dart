@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -70,7 +71,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   late final WebViewGuard _guard = WebViewGuard(onGone: _onGone);
   double _height = 48;
   bool _gone = false;
-  (String, bool, bool, Color, Color, int, String?)? _loaded;
+  (String, bool, bool, int, String?)? _loaded;
 
   /// What its scripts get (build works it out): jQuery and lodash, what
   /// they may read of the story; not loaded while either is on its way.
@@ -96,16 +97,34 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     if (old.html != widget.html) _open();
   }
 
+  /// The theme's colours for the page, and the last set the loaded page was given.
+  Map<String, Color> _colors = const {};
+  Map<String, Color>? _shown;
+  bool _pageLoaded = false;
+
+  void _pushColors() {
+    final controller = _controller;
+    if (!mounted || !_pageLoaded || controller == null || mapEquals(_shown, _colors)) return;
+    _shown = _colors;
+    unawaited(controller.runJavaScript(tavernPageColorsJs(_colors)).catchError((_) {}));
+  }
+
   /// Loads the page, again when what it shows or how it is guarded changes.
   void _open() {
     final theme = Theme.of(context);
     if (_waiting) return;
     final (noScripts, offline) = ref.read(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)));
-    // By its colours, not the brightness: a light / dark switch cross-fades
-    // the theme, and the brightness flips halfway, with the text still grey.
+    // The colours are set in place on the loaded page (_pushColors), never by
+    // loading it again: a theme's cross-fade would run the card's scripts, and
+    // what they write, once per step.
     final (text, accent) = (theme.colorScheme.onSurface, theme.colorScheme.primary);
-    final key = (widget.html, noScripts, offline, text, accent, _libraries.length, _storyKey);
-    if (key == _loaded) return;
+    _colors = {'text': text, 'accent': accent};
+    final key = (widget.html, noScripts, offline, _libraries.length, _storyKey);
+    if (key == _loaded) {
+      _pushColors();
+      return;
+    }
+    _pageLoaded = false;
     _loaded = key;
     final document = tavernIslandDocument(
       widget.html,
@@ -127,7 +146,16 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
           controller.setJavaScriptMode(JavaScriptMode.unrestricted),
           controller.setBackgroundColor(Colors.transparent),
           controller.addJavaScriptChannel('TavernIsland', onMessageReceived: (m) => _onHeight(m.message)),
-          controller.setNavigationDelegate(NavigationDelegate(onNavigationRequest: _onNavigation)),
+          controller.setNavigationDelegate(
+            NavigationDelegate(
+              onNavigationRequest: _onNavigation,
+              onPageFinished: (_) {
+                _pageLoaded = true;
+                _shown = null;
+                _pushColors();
+              },
+            ),
+          ),
         ].map((f) => f.catchError((_) {})),
       );
       if (!mounted || controller != _controller) return;
@@ -175,7 +203,14 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     if (waiting == _waiting && libs.length == _libraries.length && from == _storyFrom) return;
     _storyFrom = from;
     final read = at == null ? null : story?.value?.forMessage(at.nodeId, text: at.text, name: at.name, user: at.user);
-    final own = read == null ? null : jsonEncode({...read}..remove('latest')..remove('chat')..remove('last'));
+    final own = read == null
+        ? null
+        : jsonEncode(
+            {...read}
+              ..remove('latest')
+              ..remove('chat')
+              ..remove('last'),
+          );
     // Kept for whenever it loads again (a theme change), though not a reason to.
     _story = read;
     if (waiting == _waiting && libs.length == _libraries.length && own == _storyKey) return;

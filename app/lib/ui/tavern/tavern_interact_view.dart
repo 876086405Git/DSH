@@ -11,6 +11,7 @@ import '../../tavern/tavern_interact.dart';
 import '../chat/render/markdown_body.dart';
 import '../common/app_dialog.dart';
 import '../theme/app_icons.dart';
+import '../theme/theme.dart' show DshColors;
 
 /// Shows [kind]'s request with [fields] and answers it once.
 ///
@@ -243,15 +244,28 @@ class _PopupDialog extends StatelessWidget {
 }
 
 /// [theme] for Markdown on the notice's ground (the inverse surface): it
-/// draws in onSurface, which there is the ground's own tone.
+/// draws in onSurface, which there is the ground's own tone; its code wells
+/// and table headers take the other brightness's, made for that text.
 ThemeData _onNotice(ThemeData theme) {
   final scheme = theme.colorScheme;
+  final dsh = theme.extension<DshColors>()!;
+  final other = theme.brightness == Brightness.dark ? DshColors.light : DshColors.dark;
   return theme.copyWith(
     colorScheme: scheme.copyWith(
       onSurface: scheme.onInverseSurface,
       onSurfaceVariant: scheme.onInverseSurface,
       primary: scheme.inversePrimary,
     ),
+    extensions: [
+      for (final e in theme.extensions.values)
+        if (e is! DshColors) e,
+      dsh.copyWith(
+        codeWellBg: other.codeWellBg,
+        codeWellHeader: other.codeWellHeader,
+        codeWellFg: other.codeWellFg,
+        codeWellBorder: other.codeWellBorder,
+      ),
+    ],
   );
 }
 

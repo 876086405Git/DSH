@@ -22,6 +22,7 @@ import '../../tavern/tavern_canvas.dart';
 import '../../tavern/tavern_canvas_audio.dart';
 import '../../tavern/tavern_canvas_calls.dart';
 import '../../tavern/tavern_canvas_helpers.dart' show tavernMvuIssueText;
+import '../../tavern/tavern_islands.dart' show tavernPageColorsJs;
 import '../../tavern/tavern_card_scripts.dart';
 import '../../tavern/tavern_provider.dart';
 import '../../tavern/tavern_settings.dart';
@@ -153,6 +154,17 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   /// The character the page was last built for.
   String? _character;
 
+  /// The theme's colours for the page, and the last set it was given.
+  Map<String, Color> _colors = const {};
+  Map<String, Color>? _pushed;
+
+  void _pushColors() {
+    final controller = _controller;
+    if (!_ready || controller == null || mapEquals(_pushed, _colors)) return;
+    _pushed = _colors;
+    unawaited(controller.runJavaScript(tavernPageColorsJs(_colors)).catchError((_) {}));
+  }
+
   /// Loads the page, again when its look or its guards change.
   void _open() {
     final theme = Theme.of(context);
@@ -185,23 +197,23 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       libraries = loaded.value ?? const [];
       card = data?.value;
     }
-    final key = (
-      noScripts,
-      offline,
-      // The colours, not only the brightness: it flips halfway through the
-      // theme's cross-fade, with the text still grey.
-      text,
-      dsh.textTertiary,
-      ink?.dialogue,
-      ink?.action,
-      theme.colorScheme.primary,
-      reading,
-      themeCss,
-      card,
-      character,
-    );
+    // The colours are set in place on the loaded page (_pushColors), never by
+    // loading it again: that would start the card's scripts, and what they
+    // write, once more on every step of a theme's cross-fade.
+    _colors = {
+      'text': text,
+      'accent': theme.colorScheme.primary,
+      'muted': dsh.textTertiary,
+      'user': theme.colorScheme.primary.withValues(alpha: 0.12),
+      'quote': ink?.dialogue ?? text,
+      'emphasis': ink?.action ?? text,
+    };
+    final key = (noScripts, offline, reading, themeCss, card, character);
     _character = character;
-    if (key == _loaded) return;
+    if (key == _loaded) {
+      _pushColors();
+      return;
+    }
     _loaded = key;
     _ready = false;
     _rendered = null;
@@ -274,6 +286,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     switch (data['type']) {
       case 'ready':
         _ready = true;
+        _pushed = null;
+        _pushColors();
         _rendered = null;
         _streamSent = null;
         _avatars.reset();

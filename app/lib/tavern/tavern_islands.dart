@@ -34,9 +34,29 @@ final class TavernComponentPart extends TavernPart {
   final TavernComponent component;
 }
 
+/// A page's colours as CSS variables (`--dsh-<name>`), and the scheme its form
+/// controls take: light text, a dark page; so a control a card styled without
+/// a text colour (ST gives it the body's) is not black. Set again in place on a
+/// theme change ([tavernPageColorsJs]): reloading the page would run a card's
+/// scripts, and what they write, once more.
+Map<String, String> tavernPageColors(Map<String, Color> colors) => {
+  for (final MapEntry(:key, :value) in colors.entries)
+    '--dsh-$key':
+        'rgba(${(value.r * 255).round()},${(value.g * 255).round()},${(value.b * 255).round()},${value.a.toStringAsFixed(3)})',
+  '--dsh-scheme': (colors['text']?.computeLuminance() ?? 0) > 0.5 ? 'dark' : 'light',
+};
+
+/// JavaScript that sets [colors] ([tavernPageColors]) on a loaded page.
+String tavernPageColorsJs(Map<String, Color> colors) =>
+    '(function(s){${tavernPageColors(colors).entries.map((e) => 's.setProperty(${jsonEncode(e.key)},${jsonEncode(e.value)});').join()}})(document.documentElement.style)';
+
 /// A fenced code block (up to three spaces in, as Markdown allows): its
-/// fence, its info string, its body.
-final tavernFence = RegExp(r'^[ ]{0,3}(`{3,}|~{3,})([^\n`]*)\n([\s\S]*?)\n?^[ ]{0,3}\1[ \t]*$', multiLine: true);
+/// fence, its info string, its body. As CommonMark has it, the whole opening
+/// run is the fence, and it closes on a run of the same mark at least as long.
+final tavernFence = RegExp(
+  r'^[ ]{0,3}(`{3,}(?!`)|~{3,}(?!~))([^\n`]*)\n([\s\S]*?)\n?^[ ]{0,3}\1(?:(?<=`)`*|(?<=~)~*)[ \t]*$',
+  multiLine: true,
+);
 
 /// Whether a code block with [info] (its info string) and [body] is a page
 /// to show rather than code: an ```html block, or — whatever its language,
@@ -212,11 +232,6 @@ String tavernIslandDocument(
           if (story != null)
             '<script nonce="$nonce">var dshStory=${jsonEncode(story).replaceAll('<', r'\u003c')};$_storyJs</script>',
         ].join('\n');
-  String css(Color c) =>
-      'rgba(${(c.r * 255).round()},${(c.g * 255).round()},${(c.b * 255).round()},${c.a.toStringAsFixed(3)})';
-  // Light text: a dark page. Form controls take the page's scheme, so one a
-  // card styled without a text colour (ST gives it the body's) is not black.
-  final scheme = text.computeLuminance() > 0.5 ? 'dark' : 'light';
   final policy = noScripts || offline
       ? [
           if (offline) "default-src 'none'",
@@ -235,11 +250,12 @@ String tavernIslandDocument(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${policy == null ? '' : '<meta http-equiv="Content-Security-Policy" content="$policy">'}
 <style>
+:root{${tavernPageColors({'text': text, 'accent': accent}).entries.map((e) => '${e.key}:${e.value};').join()}}
 html,body{margin:0;padding:0;background:transparent;}
 #dsh-island{display:flow-root;}
-body{color:${css(text)};font:${fontSize}px/1.5 system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;overflow-wrap:anywhere;}
-a{color:${css(accent)};}
-button,input,select,textarea{color-scheme:$scheme;}
+body{color:var(--dsh-text);font:${fontSize}px/1.5 system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;overflow-wrap:anywhere;}
+a{color:var(--dsh-accent);}
+button,input,select,textarea{color-scheme:var(--dsh-scheme);}
 img,video,svg{max-width:100%;height:auto;}
 p{margin:0 0 .6em;}
 </style></head>
@@ -283,8 +299,10 @@ const _storyJs = r'''
     return clone(f===d.messageId?d.data:f===d.last?d.latest:{})||{};
   }
   // 酒馆助手's getAllVariables: the chat's, then this floor's over them.
+  // Arrays are replaced, not merged by index, as 酒馆助手 does since 3.5.1.
+  function plain(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
   function merge(a,b){
-    if(!b||typeof b!=='object'||!a||typeof a!=='object')return b===undefined?a:b;
+    if(!plain(a)||!plain(b))return b===undefined?a:b;
     for(var k in b)a[k]=merge(a[k],b[k]);
     return a;
   }

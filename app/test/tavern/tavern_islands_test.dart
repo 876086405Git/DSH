@@ -121,6 +121,14 @@ void main() {
     expect(tavernIsFrontend('<div>x</div>'), isFalse);
   });
 
+  test('a fence closes on a run of its own mark at least as long, as CommonMark has it', () {
+    expect((tavernParts('```text\n<body>x</body>\n````').single as TavernIslandPart).html, '<body>x</body>');
+    expect((tavernParts('~~~~\n<body>y</body>\n~~~~~').single as TavernIslandPart).html, '<body>y</body>');
+    // A shorter run, or the other mark, is still inside the block.
+    expect(tavernParts('````\n<body>z</body>\n```').single, isA<TavernTextPart>());
+    expect(tavernParts('~~~\n<body>z</body>\n```').single, isA<TavernTextPart>());
+  });
+
   test('the page reports its height with our script; the protections are choices', () {
     String page({bool noScripts = false, bool offline = false}) => tavernIslandDocument(
       _status,

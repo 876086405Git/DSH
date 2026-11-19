@@ -248,8 +248,11 @@ void main() {
     ]) {
       expect(open, contains("['$name',$name]"));
     }
-    expect(open, contains('--SmartThemeQuoteColor:rgba(170,85,0,1.000)'));
-    expect(open, contains('--SmartThemeEmColor:rgba(85,102,119,1.000)'));
+    // Colours are variables, so a theme change sets them in place (tavernPageColorsJs).
+    expect(open, contains('--dsh-quote:rgba(170,85,0,1.000)'));
+    expect(open, contains('--SmartThemeQuoteColor:var(--dsh-quote)'));
+    expect(open, contains('--dsh-emphasis:rgba(85,102,119,1.000)'));
+    expect(open, contains('--SmartThemeEmColor:var(--dsh-emphasis)'));
     expect(open, contains('font:var(--mainFontSize)/1.65'));
     expect(open, contains('<script nonce="n0nce">'));
     expect(open, contains("m.className='mes'"));
