@@ -135,13 +135,14 @@ jobs:
       # (Tried and dropped: starting this build, Flutter's download or the simulator's boot in
       # the background. The runner's three cores and its network are already full; the steps
       # they ran under took three to ten times as long, and the job no less.)
-      # LICENSE is in the key because license_inventory.py copies it into the library's notices.
+      # In the key besides the sources: LICENSE, which license_inventory.py copies into the
+      # library's notices, and the Xcode this job builds with.
       - name: Restore the phone runner library
         id: phone-runner
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app/ios/PhoneSelfRunnerNative
-          key: ${{ runner.os }}-${{ runner.arch }}-phone-runner-${{ hashFiles('tooling/ios/phone-self-runner/**', 'tooling/ios/build-phone-self-runner.sh', 'LICENSE') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-phone-runner-${{ env.DEVELOPER_DIR }}-${{ hashFiles('tooling/ios/phone-self-runner/**', 'tooling/ios/build-phone-self-runner.sh', 'LICENSE') }}
       - name: Use the restored phone runner library
         if: steps.phone-runner.outputs.cache-hit == 'true'
         run: echo "DSH_PHONE_SELF_RUNNER_RESTORED=1" >> "$GITHUB_ENV"

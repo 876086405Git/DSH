@@ -147,7 +147,8 @@ def shard(index, total):
 def failed(report):
     """The test files behind the failures in a `--file-reporter json:` report."""
     suites, tests, again, finished = {}, {}, set(), False
-    owed = {}  # (bundle, member) -> tests the member declared that have not ended
+    owed = {}  # (bundle, member) -> tests of the member that have not ended; set when its first test starts
+    broken = set()  # bundles with a failure in them
     for line in Path(report).read_text(encoding='utf-8').splitlines():
         if not line.startswith('{'):
             continue
@@ -162,7 +163,8 @@ def failed(report):
         elif kind == 'testStart':
             tests[event['test']['id']] = event['test']
         elif kind == 'done':
-            finished = True
+            # null when the runner was stopped before every test had run.
+            finished = event['success'] is not None
         elif kind in ('testDone', 'error'):
             test = tests[event['testID']]
             suite = suites[test['suiteID']]
@@ -176,10 +178,15 @@ def failed(report):
             if kind == 'error' or event['result'] != 'success':
                 # A bundle that did not load (one member does not compile) fails as a whole.
                 again.update(named or members or [suite.as_posix()])
+                if members:
+                    broken.add(suite)
     if not finished:
         sys.exit('The run stopped before its report was complete: see its output above.')
-    # A process that died took the rest of its bundle with it: those files have not run.
-    again.update(member for (_, member), count in owed.items() if count > 0)
+    # A process that died took the rest of its bundle with it. Those files have not run:
+    # the ones it was in the middle of, and the ones it never reached, which the report
+    # does not mention at all.
+    for suite in broken:
+        again.update(member for member in MEMBER.findall(text(suite)) if owed.get((suite, member), 1) > 0)
     if not again:
         sys.exit('The run failed, and not in a test: see its output above.')
     print('\n'.join(sorted(again)))

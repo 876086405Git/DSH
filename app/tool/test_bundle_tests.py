@@ -85,35 +85,51 @@ class BundleTests(unittest.TestCase):
         self.report(events + [{'type': 'error', 'testID': 3, 'error': 'late'}])
         self.assertIn('test/secrets/c_test.dart', self.run_tool(bundle_tests.failed, 'report.json'))
 
-    def test_a_file_whose_tests_never_ended_runs_again_with_the_one_that_failed(self):
-        Path('test/chat/z_test.dart').write_text(WIDGET, encoding='utf-8')
+    def test_when_the_process_dies_the_rest_of_its_bundle_runs_again_too(self):
+        for name in ['m', 'y', 'z']:
+            Path(f'test/chat/{name}_test.dart').write_text(WIDGET, encoding='utf-8')
+        Path('test/state/c_test.dart').write_text(PLAIN, encoding='utf-8')
         self.run_tool(bundle_tests.shard, 0, 1)
         root = Path.cwd().as_posix()
+        # The reporter names a group when its first test starts, so a file the process never
+        # reached is not in the report at all.
         self.report([
             {'type': 'suite', 'suite': {'id': 0, 'path': f'{root}/test/_bundles/chat_widget_0_test.dart'}},
-            {'type': 'group', 'group': {'suiteID': 0, 'name': '', 'testCount': 3}},
+            {'type': 'suite', 'suite': {'id': 1, 'path': f'{root}/test/_bundles/state_plain_0_test.dart'}},
             {'type': 'group', 'group': {'suiteID': 0, 'name': 'test/chat/a_test.dart', 'testCount': 1}},
-            {'type': 'group', 'group': {'suiteID': 0, 'name': 'test/chat/z_test.dart', 'testCount': 2}},
             {'type': 'testStart', 'test': {'id': 1, 'name': 'test/chat/a_test.dart x', 'suiteID': 0}},
-            # The process died here: a.x fails with the crash, and z never starts.
-            {'type': 'testDone', 'testID': 1, 'result': 'error', 'hidden': False},
+            {'type': 'testDone', 'testID': 1, 'result': 'success', 'hidden': False},
+            {'type': 'group', 'group': {'suiteID': 0, 'name': 'test/chat/m_test.dart', 'testCount': 1}},
+            {'type': 'testStart', 'test': {'id': 2, 'name': 'test/chat/m_test.dart x', 'suiteID': 0}},
+            {'type': 'testDone', 'testID': 2, 'result': 'error', 'hidden': False},
+            {'type': 'group', 'group': {'suiteID': 0, 'name': 'test/chat/y_test.dart', 'testCount': 2}},
+            {'type': 'testStart', 'test': {'id': 3, 'name': 'test/chat/y_test.dart x', 'suiteID': 0}},
+            {'type': 'testDone', 'testID': 3, 'result': 'success', 'hidden': False},
+            # The other bundle passed, and only b of its two files is in the report.
+            {'type': 'group', 'group': {'suiteID': 1, 'name': 'test/state/b_test.dart', 'testCount': 1}},
+            {'type': 'testStart', 'test': {'id': 4, 'name': 'test/state/b_test.dart x', 'suiteID': 1}},
+            {'type': 'testDone', 'testID': 4, 'result': 'success', 'hidden': False},
             {'type': 'done', 'success': False},
         ])
-        self.assertEqual(self.run_tool(bundle_tests.failed, 'report.json'), ['test/chat/a_test.dart', 'test/chat/z_test.dart'])
+        # m failed, y stopped after one of its two tests, z never started; a had finished.
+        self.assertEqual(
+            self.run_tool(bundle_tests.failed, 'report.json'),
+            ['test/chat/m_test.dart', 'test/chat/y_test.dart', 'test/chat/z_test.dart'],
+        )
 
-    def test_a_failed_run_with_no_failed_test_or_no_end_is_not_a_pass(self):
+    def test_a_failed_run_with_no_failed_test_or_no_proper_end_is_not_a_pass(self):
         self.run_tool(bundle_tests.shard, 0, 1)
         root = Path.cwd().as_posix()
-        self.report([{'type': 'done', 'success': False}])
-        with self.assertRaises(SystemExit):
-            self.run_tool(bundle_tests.failed, 'report.json')
-        self.report([
+        failure = [
             {'type': 'suite', 'suite': {'id': 0, 'path': f'{root}/test/_bundles/chat_widget_0_test.dart'}},
             {'type': 'testStart', 'test': {'id': 1, 'name': 'test/chat/a_test.dart x', 'suiteID': 0}},
             {'type': 'testDone', 'testID': 1, 'result': 'failure', 'hidden': False},
-        ])
-        with self.assertRaises(SystemExit):
-            self.run_tool(bundle_tests.failed, 'report.json')
+        ]
+        # No failed test; no `done`; a `done` from a runner stopped early.
+        for events in ([{'type': 'done', 'success': False}], failure, failure + [{'type': 'done', 'success': None}]):
+            self.report(events)
+            with self.assertRaises(SystemExit):
+                self.run_tool(bundle_tests.failed, 'report.json')
 
     def report(self, events):
         Path('report.json').write_text('\n'.join(json.dumps(event) for event in events), encoding='utf-8')
