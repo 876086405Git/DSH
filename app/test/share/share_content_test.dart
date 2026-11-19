@@ -1,5 +1,5 @@
 // What goes on a share card: masking, images, code segments, the question
-// and stats from the conversation, and cutting long replies at a boundary.
+// and stats from the conversation, keeping long replies whole.
 
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/ui/share/share_content.dart';
@@ -81,88 +81,27 @@ void main() {
     });
   });
 
-  group('layoutShareBlocks', () {
-    test('a short reply fits whole', () {
-      final layout = layoutShareBlocks(sampleReplyContent().blocks);
-      expect(layout.truncated, isFalse);
-      expect(layout.blocks, hasLength(2));
+  group('long share content', () {
+    test('all list items survive preparation', () {
+      final text = longAnswer();
+      expect(shareMarkdown(text), text);
+      final segments = shareSegments(shareMarkdown(text));
+      expect(segments.single.text, text);
+      expect(segments.single.text, contains('第 24 步'));
     });
 
-    test('a long reply is cut at an item boundary', () {
-      final layout = layoutShareBlocks([ShareAnswer(shareMarkdown(longAnswer()))]);
-      expect(layout.truncated, isTrue);
-      final kept = (layout.blocks.single as ShareAnswer).markdown;
-      expect(kept, startsWith('1. 第 1 步'));
-      expect(kept, isNot(contains('第 24 步')));
-      expect(kept.trimRight(), endsWith('单元测试。'), reason: 'whole items only');
-    });
-
-    test('one huge paragraph is cut at a sentence end with …', () {
+    test('a huge paragraph retains its last sentence without an ellipsis', () {
       final text = List.filled(120, '这是一句很长的说明，用来把卡片撑满。').join();
-      final kept = (layoutShareBlocks([ShareAnswer(text)]).blocks.single as ShareAnswer).markdown;
-      expect(kept, endsWith('。…'));
-      expect(kept.length, lessThan(text.length));
+      expect(shareSegments(shareMarkdown(text)).single.text, text);
     });
 
-    test('a long code block keeps its head and is closed again', () {
-      final code = ['```python', for (var i = 0; i < 200; i++) 'print($i)', '```'].join('\n');
-      final layout = layoutShareBlocks([ShareAnswer(code)]);
-      expect(layout.truncated, isTrue);
-      final kept = (layout.blocks.single as ShareAnswer).markdown;
-      expect(kept, startsWith('```python\nprint(0)'));
-      expect(kept, endsWith('\n```'));
-      expect(shareSegments(kept).single.code, isTrue);
-    });
-
-    test('galleries count at their drawn size; pictures in a row as one', () {
-      // Three 4:3 galleries in a 342 column (256 tall each) and some text.
-      final three = [for (var i = 0; i < 3; i++) '一段说明文字。\n\n![](p$i.png)'].join('\n\n');
-      expect(layoutShareBlocks([ShareAnswer(three)]).truncated, isFalse);
-      // Twelve pictures on their own lines are one gallery, not twelve.
-      final grid = [for (var i = 0; i < 12; i++) '![](p$i.png)'].join('\n\n');
-      expect(layoutShareBlocks([ShareAnswer(grid)], budget: 400).truncated, isFalse);
-    });
-
-    test('a gallery that does not fit is left out whole', () {
-      final layout = layoutShareBlocks([
-        ShareAnswer('${List.filled(30, '很长的一段话。').join()}\n\n![](a.png)'),
-      ], budget: 200);
-      expect(layout.truncated, isTrue);
-      expect((layout.blocks.single as ShareAnswer).markdown, isNot(contains('![')));
-    });
-
-    test('a prompt\'s pictures count above its bubble', () {
-      const bare = ShareQuestion('看看这张');
-      const withImages = ShareQuestion(
-        '看看这张',
-        images: [
-          ShareAttachmentImage(ImageAttachment(attachmentId: 'a', mediaType: 'image/png', width: 1000, height: 1000)),
-        ],
-      );
-      final plain =
-          (layoutShareBlocks([bare, ShareAnswer(shareMarkdown(longAnswer()))]).blocks.last as ShareAnswer).markdown;
-      final shorter =
-          (layoutShareBlocks([withImages, ShareAnswer(shareMarkdown(longAnswer()))]).blocks.last as ShareAnswer)
-              .markdown;
-      expect(shorter.length, lessThan(plain.length), reason: 'the 240 square takes room from the reply');
-    });
-
-    test('several replies get the long image\'s budget', () {
-      final one = ShareContent(blocks: [ShareAnswer(longAnswer())]);
-      final two = ShareContent(blocks: [ShareAnswer(longAnswer()), const ShareAnswer('好。')]);
-      expect(one.isLong, isFalse);
-      expect(two.isLong, isTrue);
-      expect(layoutShareBlocks(two.blocks, budget: shareLongBudget).truncated, isFalse);
-    });
-
-    test('later blocks are dropped once the budget is spent', () {
-      final layout = layoutShareBlocks([
-        ShareAnswer(shareMarkdown(longAnswer())),
-        const ShareQuestion('还有吗？'),
-        const ShareAnswer('有。'),
-      ]);
-      expect(layout.truncated, isTrue);
-      expect(layout.blocks, hasLength(1));
+    test('a long code block retains every line', () {
+      final body = [for (var i = 0; i < 200; i++) 'print($i)'].join('\n');
+      final code = '```python\n$body\n```';
+      final segment = shareSegments(shareMarkdown(code)).single;
+      expect(segment.code, isTrue);
+      expect(segment.text, body);
+      expect(segment.language, 'python');
     });
   });
 

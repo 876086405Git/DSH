@@ -99,6 +99,8 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
   final _cardKey = GlobalKey(debugLabel: 'share card');
   late final ShareCardStyle _style = widget.style ?? ShareCardStyle();
   late ShareContent _content = widget.content;
+  // Keep all strips on the same content while an async refinement arrives.
+  ShareContent? _exportContent;
   _Busy? _busy;
   bool _saved = false;
   String? _error;
@@ -135,12 +137,13 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
     final exporter = ref.read(shareExporterProvider);
     setState(() {
       _busy = busy;
+      _exportContent = _content;
       _error = null;
     });
     String? error;
     var dismissed = false;
     try {
-      await settleShareCard(context, _content);
+      await settleShareCard(context, _exportContent!);
       final png = await captureShareCard(_cardKey);
       final file = await exporter.write(png);
       if (busy == _Busy.sharing) {
@@ -162,6 +165,7 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
     if (!mounted) return;
     setState(() {
       _busy = null;
+      _exportContent = null;
       _error = error;
       _saved = busy == _Busy.saving && error == null && !dismissed;
     });
@@ -177,7 +181,7 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final content = _content;
+    final content = _exportContent ?? _content;
     final style = _style;
     final template = style.templateFor(Theme.of(context).brightness);
     final options = [
@@ -185,20 +189,24 @@ class _ShareImagePageState extends ConsumerState<ShareImagePage> {
         ShareToggle(
           label: l10n.viewShareQuestion,
           selected: style.showQuestion,
-          onSelected: () => style.showQuestion = !style.showQuestion,
+          onSelected: () {
+            if (_busy == null) style.showQuestion = !style.showQuestion;
+          },
         ),
       if (content.hasMeta)
         ShareToggle(
           label: l10n.viewShareModelSteps,
           selected: style.showMeta,
-          onSelected: () => style.showMeta = !style.showMeta,
+          onSelected: () {
+            if (_busy == null) style.showMeta = !style.showMeta;
+          },
         ),
     ];
     final choices = [
       SegmentedPill<ShareTemplate>(
         segments: [for (final t in ShareTemplate.values) PillSegment(t, t.label)],
         selected: template,
-        onChanged: (t) => style.template = t,
+        onChanged: _busy == null ? (t) => style.template = t : null,
       ),
       if (options.isNotEmpty) ...[const SizedBox(height: 12), Wrap(spacing: 8, runSpacing: 8, children: options)],
     ];

@@ -63,7 +63,7 @@ ShareContent sampleReplyContent() => ShareContent(
   process: sampleProcess,
 );
 
-/// About twice what fits on one card.
+/// A reply longer than the old one-card truncation budget.
 String longAnswer() =>
     [for (var i = 1; i <= 24; i++) '$i. 第 $i 步：检查 `step_$i.dart` 里的状态机，确认每个分支在出错时都会把按钮恢复成可点状态，并补一条对应的单元测试。']
         .join('\n\n');
@@ -144,9 +144,11 @@ Future<void> pumpShareCard(
           data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
           child: child!,
         ),
-        home: Align(
-          alignment: Alignment.topLeft,
-          child: RepaintBoundary(key: boundary, child: card),
+        home: SingleChildScrollView(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: RepaintBoundary(key: boundary, child: card),
+          ),
         ),
       ),
     ),
