@@ -78,12 +78,13 @@ internal class EngineUpgrade(
         recover()
     }
 
-    fun recover() {
+    /** The version completed by this call, or null when no published journal needed recovery. */
+    fun recover(): String? {
         // Committed transactions are retired atomically before their cleanup.
         cleanupCommitted()
         if (!present(pending)) {
             remove(preparing)
-            return
+            return null
         }
         if (!Files.isDirectory(pending.toPath(), NOFOLLOW_LINKS)) throw RuntimeUpgradeBlocked("transaction")
         val version = try { File(pending, "version").readText() }
@@ -128,6 +129,7 @@ internal class EngineUpgrade(
         move(pending, done)
         afterStep("committed")
         cleanupCommitted()
+        return version
     }
 
     private fun ensureParent(file: File) {
