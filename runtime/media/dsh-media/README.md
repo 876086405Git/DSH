@@ -78,6 +78,8 @@ Host 重启后，原会话可调用 `resume_media(rid)` 继续查询已保存的
 
 预留是本地记账护栏，**不是供应商实际金额的硬上限**。实际账单可能高于预留。调低未知价预留会放行更多请求，不会降低供应商价格。账本在提交前持久化不确定状态，接受后的失败、超时、取消或断网均保留预留；本插件不声称退款。明确尚未提交的请求才释放预留。账本的内部 `basis: estimate` 记录本地预留结算，不是经过核实的供应商报价。
 
+媒体插件启动时，在注册工具前释放账本中全部尚未进入 `begin` 的 `reserved`，让进程中断后的用户能在同一上海日重新审批生成；`submission_unknown`、`submitted`、`settled` 保持原样。此恢复采用 Android 同一个 `DSH_HOME` 只有一个 Host 的部署合同。非常规地让两个 Host 共用同一个 `DSH_HOME` 时，后启动的一方也会释放另一方尚未 `begin` 的预留；一次清理最多重新放行一份当日日额的本地预留容量，实际供应商费用仍不受该金额封顶。普通配置或凭据刷新不会执行此清理。详见[启动恢复合同](../../../docs/maintenance/media-reserved-startup-contract.md)。
+
 方舟和百炼仅排队时可能取消。取消请求与状态变化可能竞争，只有后续查询明确 cancelled / CANCELED 才显示已取消；运行中、查询失败、供应商不支持时都提示服务端可能继续生成并收费。付费 POST 不自动重试。
 
 ## English
@@ -87,5 +89,7 @@ Host 重启后，原会话可调用 `resume_media(rid)` 继续查询已保存的
 It supports OpenAI / Gemini-compatible images, Ark Seedream / Seedance, Alibaba Wan and SiliconFlow Qwen / Wan. Editing uses one workspace image. Video generation runs as a real background job; `get_media_result` retrieves its media result after the completion notice. `resume_media(rid)` explicitly resumes a saved provider task in its original session without submitting again. Provider cancellation is confirmed only when the API reports it; SiliconFlow cancellation is unavailable.
 
 All currently bundled prices are unknown. Every generation requires explicit one-time approval. The default CNY 20 daily ledger and CNY 20 per-request hold limit local reservations, **not actual provider bills**. Accepted or uncertain submissions retain their hold. Validation uses each supported runtime version’s existing pinned dependency graph; see `VERIFICATION.md` for current evidence. No paid-provider or Android App installation/media-viewer validation is claimed. The package is prepared for publication but this change does not publish or preinstall it.
+
+Before registering tools at startup, the plugin releases every `reserved` entry that has not entered `begin`, allowing a new approved request on the same Shanghai budget day after process loss. It preserves `submission_unknown`, `submitted` and `settled`. This uses the Android deployment contract of one Host per `DSH_HOME`. If two Hosts share a home, the later startup also releases the other Host's pre-begin holds; one cleanup can reopen at most one daily limit of local reservation capacity, without capping actual provider charges. Configuration and credential refreshes do not perform this cleanup. See the [startup recovery contract](../../../docs/maintenance/media-reserved-startup-contract.md).
 
 Version 0.3.0 also publishes provider presets in the plugin catalogue. The App builds a service from a preset, writes any env-style credential name such as `DSH_MEDIA_ARK_API_KEY`, reuses one key for the image and video services of the same provider, and keeps separate image/video defaults. The four fixed slots remain for compatibility only, and a legacy `serviceId`/`modelId` default keeps its exact previous behavior.

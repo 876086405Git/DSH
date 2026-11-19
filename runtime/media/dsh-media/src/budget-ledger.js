@@ -251,6 +251,17 @@ export function createBudgetLedger(trustedDirectory, { clock = Date.now, checkpo
     async snapshot(options) {
       return transaction(state => result(false, 'read', state), options);
     },
+    async releaseReserved(options) {
+      return transaction(state => {
+        let released = 0;
+        for (const record of state.requests) {
+          if (record.state !== 'reserved') continue;
+          record.state = 'released';
+          released++;
+        }
+        return result(released > 0, 'release-reserved', released);
+      }, options);
+    },
     async setDailyLimit(limitMicros, expectedRevision, options) {
       amount(limitMicros); amount(expectedRevision);
       return transaction(state => {
