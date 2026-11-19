@@ -1,7 +1,7 @@
 // 导入 › 从文件 (docs/design/roleplay-roadmap.md §4): one door. Each picked
 // file goes where it belongs — cards to the shelf, presets, lorebooks and
-// regex to the library, an ST quick reply set to 快速回复, a chat to the
-// character it names — and one non-card file opens its 体检.
+// regex to the library, 酒馆助手 scripts to 脚本库, an ST quick reply set to
+// 快速回复, a chat to the character it names — and one non-card file opens its 体检.
 
 import 'dart:async';
 import 'dart:convert';
@@ -22,6 +22,7 @@ import 'tavern_lorebooks_page.dart';
 import 'tavern_presets_page.dart';
 import 'tavern_regex_page.dart';
 import 'tavern_report_page.dart';
+import 'tavern_scripts_page.dart' show tavernScriptCount;
 
 /// Picks files and takes each in where it belongs, saying how each went. The
 /// first card taken in is returned (its page opens); a single other file
@@ -84,6 +85,9 @@ Future<TavernCharacter?> importTavernFiles(BuildContext context, WidgetRef ref) 
             await ref.read(tavernSettingsProvider.notifier).setPalette(TavernPalette.st);
             notice = l10n.tavernStThemeImported(theme.name);
           }
+        case TavernFileKind.helperScripts:
+          final added = await tavern.importGlobalScripts(tavernTextOf(file.bytes));
+          notice = l10n.tavernScriptsImported(tavernScriptCount(added));
         case TavernFileKind.unknown:
           notice = l10n.tavernImportUnknown(file.fileName);
       }

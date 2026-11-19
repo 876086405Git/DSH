@@ -2076,10 +2076,12 @@ extension ToolStore on ChatStore {
       _toolMaybeSource(chatId, nodeId) ?? (throw StateError('Node does not belong to chat: $nodeId'));
 
   TavernToolContextAnchor contextAnchor(String chatId) {
-    _chatRow(chatId);
-    final saved = _db.select('SELECT char(1) || current_leaf_id AS leaf, tree_revision FROM chats WHERE id = ?', [
+    _ensureOpen();
+    final rows = _db.select('SELECT char(1) || current_leaf_id AS leaf, tree_revision FROM chats WHERE id = ?', [
       chatId,
-    ]).single;
+    ]);
+    if (rows.isEmpty) throw StateError('Chat not found: $chatId');
+    final saved = rows.single;
     final id = ChatStore._unguardText(saved['leaf']);
     final source = id == null ? null : _toolMaybeSource(chatId, id);
     if (id != null && source == null) throw const FormatException('Selected leaf is not visible in this chat.');

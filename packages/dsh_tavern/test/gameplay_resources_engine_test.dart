@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:dsh_tavern/dsh_tavern.dart';
+import 'package:dsh_tavern/src/store/chat_store.dart';
 import 'package:test/test.dart';
 
 import 'p2_script_test_support.dart';
@@ -10,6 +12,65 @@ import 'p2_script_test_support.dart';
 typedef Json = Map<String, Object?>;
 
 void main() {
+  test('unchanged remapped pack books preserve the prompt window across ordinary appends', () async {
+    final h = await ScriptFixture.open(allowModel: true);
+    await h.engine.setPreset(ChatPreset({...scriptPreset().raw, 'openai_max_context': 640, 'openai_max_tokens': 64}));
+    final actor = await h.card('Guide', greeting: 'hello');
+    final document = StChatDocument(
+      fileName: 'window.jsonl',
+      header: {'user_name': 'User', 'character_name': 'Guide', 'chat_metadata': <String, Object?>{}},
+      messages: [
+        for (var i = 0; i < 160; i++)
+          {
+            'name': i.isEven ? 'User' : 'Guide',
+            'is_user': i.isEven,
+            'is_system': false,
+            'send_date': '2026-11-01T12:00:00Z',
+            'mes': 'History $i: The rain continued outside. '.padRight(100, 'x'),
+            'extra': <String, Object?>{},
+          },
+      ],
+    );
+    final chat = (await h.engine.importChats(actor, [
+      TavernChatFile(fileName: document.fileName, bytes: document.encode()),
+    ])).chatIds.single;
+    final pack = await _install(
+      h,
+      'stable-window-book',
+      'one',
+      resources: [
+        {
+          'kind': 'lorebook',
+          'localId': 'lore',
+          'path': 'lore.json',
+          'entries': [
+            {'localId': 'detail', 'pointer': '/entries/entry'},
+          ],
+        },
+      ],
+      files: {
+        'lore.json': {
+          'entries': {
+            'entry': {'uid': 0, 'key': <String>[], 'constant': true, 'content': 'STATIC PACK DETAIL', 'position': 0},
+          },
+        },
+      },
+    );
+    await _bind(h, TavernPackScopeTarget(kind: TavernGameplayScope.chat, targetId: chat), pack, 'stable');
+    await _send(h, chat, 'first', 'reply');
+    final inspected = h.engine.inspect(chat)!;
+    final boundary = inspected.prompt.historyWindow!.firstNodeId;
+    for (final hit in inspected.worldInfo.activated) {
+      hit.entry.raw['content'] = 'edited inspection copy';
+      hit.entry.book.raw['name'] = 'edited inspection name';
+    }
+    for (var i = 0; i < 2; i++) {
+      final sent = await _send(h, chat, 'next', 'reply');
+      expect(h.engine.inspect(chat)!.prompt.historyWindow!.firstNodeId, boundary);
+      expect(_requestText(sent.request.body), contains('STATIC PACK DETAIL'));
+    }
+  });
+
   test('pack regex order and switches agree across query format display and a real prompt', () async {
     final h = await ScriptFixture.open(allowModel: true);
     final actor = await h.card('Actor', greeting: 'hello');
@@ -233,6 +294,109 @@ void main() {
     expect((await _saved(h.engine, chat))['dshgoPackRuntime'], savedA['dshgoPackRuntime']);
     expect(_map((await h.engine.readState(chat)).values)['n'], 11);
     expect(h.requests, hasLength(4));
+  });
+
+  test('pending display observes first binding, roster order and pack availability from another connection', () async {
+    final h = await ScriptFixture.open();
+    final actor = await h.card('Display actor');
+    final other = await h.card('Display member');
+    final chat = await h.engine.createGroupChat([actor, other], addGreetings: false);
+    final ref = await _regexPack(h, 'late-display-regex', 'TOKEN', 'LATE');
+    final store = ChatStore.open('${h.root.path}/tavern.sqlite3');
+    addTearDown(store.close);
+    final scope = TavernPackScopeTarget(kind: TavernGameplayScope.chat, targetId: chat);
+
+    // displayText captures bindings synchronously, then yields at its real
+    // card/name read. A committed external write must be observed on resume
+    // even when the admitted scope was empty and no engine event was emitted.
+    final first = h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    store.updateGameplayBindingsData(
+      scope,
+      expected: store.readGameplayScopeData(scope).token,
+      operationId: 'first-display-binding',
+      edits: [TavernPackBindingEdit.create(clientKey: 'late', packRef: ref)],
+    );
+    expect((await first).superseded, isTrue);
+    final fresh = await h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    expect(fresh.text, 'LATE');
+    expect(fresh.superseded, isFalse);
+
+    final beforeRoster = h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    final group = store.groupChat(chat)!;
+    store.saveGroup(
+      TavernGroupChat(
+        chatId: chat,
+        title: group.title,
+        hostCharacterId: group.hostCharacterId,
+        members: group.members.reversed.toList(),
+        activation: group.activation,
+        maxSpeakersPerTurn: group.maxSpeakersPerTurn,
+        allowSelfResponses: group.allowSelfResponses,
+      ),
+    );
+    expect((await beforeRoster).superseded, isTrue);
+    final reordered = await h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    expect(reordered.text, 'LATE');
+    expect(reordered.superseded, isFalse);
+
+    final beforeRemoval = h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    store.removeGameplayPackVersionData(
+      ref,
+      expected: store.readGameplayPackVersion(ref)!.availability,
+      operationId: 'remove-display-version',
+    );
+    expect((await beforeRemoval).superseded, isTrue);
+    h.expectNoGeneration();
+  });
+
+  test('a display with warm binding checks observes an external change during its worker request', () async {
+    final h = await ScriptFixture.open();
+    final actor = await h.card('Display actor');
+    final chat = await h.engine.createChat(actor);
+    final ref = await _regexPack(h, 'warm-display-regex', 'TOKEN', 'CHANGED');
+    final scope = TavernPackScopeTarget(kind: TavernGameplayScope.chat, targetId: chat);
+    final bound = await _bind(h, scope, ref, 'display');
+    final store = ChatStore.open('${h.root.path}/tavern.sqlite3');
+    addTearDown(store.close);
+
+    final warm = await h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    expect(warm.text, 'CHANGED');
+    expect(warm.superseded, isFalse);
+    var changes = 0;
+    const limits = RegexLimits();
+    final pending = await runZoned(
+      () => h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user),
+      zoneSpecification: ZoneSpecification(
+        createTimer: (self, parent, zone, duration, callback) {
+          final timer = parent.createTimer(zone, duration, callback);
+          // The real worker creates its deadline after this job's initial
+          // guards and before dispatch. Keep the deadline and timer intact.
+          if (changes == 0 && duration == limits.timeout) {
+            changes++;
+            try {
+              store.updateGameplayBindingsData(
+                scope,
+                expected: store.readGameplayScopeData(scope).token,
+                operationId: 'disable-after-display-stamp',
+                edits: [TavernPackBindingEdit.setEnabled(bindingId: bound.createdBindings['display']!, enabled: false)],
+              );
+            } catch (_) {
+              timer.cancel();
+              rethrow;
+            }
+          }
+          return timer;
+        },
+      ),
+    );
+    expect(changes, 1);
+    expect(pending.superseded, isTrue);
+    expect(pending.replacements, 0);
+    expect(pending.text, 'TOKEN');
+    final fresh = await h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    expect(fresh.text, 'TOKEN');
+    expect(fresh.superseded, isFalse);
+    h.expectNoGeneration();
   });
 
   test('raw scripts ignore unused broken WI and revoke an empty resource vector on first enable', () async {

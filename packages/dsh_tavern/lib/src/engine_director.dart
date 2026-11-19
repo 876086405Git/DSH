@@ -27,7 +27,7 @@ String _directorHash(Object? value) =>
     crypto.sha256.convert(utf8.encode(jsonEncode(_directorCanonical(value)))).toString();
 
 Map<String, Object?> _directorCard(Map<String, Object?> data) {
-  final own = _map(_map(data['extensions'])['dshgo']);
+  final own = _readMap(_readMap(data['extensions'])['dshgo']);
   return _copy({
     for (final key in const [
       'name',

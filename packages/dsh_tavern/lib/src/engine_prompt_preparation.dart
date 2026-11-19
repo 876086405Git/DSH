@@ -161,6 +161,7 @@ PromptAssembly _assemblePreparedPrompt({
   required List<PromptInjection> injections,
   required PromptTokenCounter counter,
   List<PromptHistoryMessage> prefix = const [],
+  PromptHistoryWindow? cacheWindow,
 }) {
   final examples = [for (var index = 0; index < world.activated.length; index++) (index, world.activated[index])];
   examples.sort((a, b) {
@@ -173,6 +174,11 @@ PromptAssembly _assemblePreparedPrompt({
     PromptAssembler(counter: counter),
     PromptInput(
       preset: preset,
+      cacheFriendlyTrimming: switch (turn.settings['cacheFriendlyTrimming']) {
+        final bool value => value,
+        _ => null,
+      },
+      historyWindow: cacheWindow,
       card: data,
       history: [for (final node in promptHistory) _promptHistory(node)],
       model: turn.config.model,

@@ -111,7 +111,8 @@ final class AuthoringAuthority {
 
   /// Check before a writer reads a target that an unresolved delete may have
   /// moved away. This preserves the blocking operation's identity on all exits.
-  void checkWritable(String resourceId) => _checkPending(resourceId, _store.readAuthoringResource(resourceId));
+  void checkWritable(String resourceId) =>
+      _checkPending(resourceId, _store.readAuthoringResourceHead(resourceId)?.pendingOperationId);
 
   /// Reads only. In particular this does not observe current files, reconcile
   /// a live ticket, or create a version for an unobserved resource.
@@ -169,11 +170,16 @@ final class AuthoringAuthority {
 
   TavernAuthorityRevision observe(String resourceId, AuthoringResourceSnapshot fresh) => _store.transaction(() {
     final current = _store.readAuthoringResource(resourceId);
-    _checkPending(resourceId, current);
+    _checkPending(resourceId, current?.pendingOperationId);
     var revision = current?.revision ?? 1;
     if (current == null || !AuthoringResourceSnapshot.fromJson(current.snapshot).sameAs(fresh)) {
       if (current != null) revision++;
-      _store.putAuthoringResource(resourceId, revision, fresh.toJson());
+      _store.putAuthoringResource(
+        resourceId,
+        revision,
+        fresh.toJson(),
+        rawTextId: current?.snapshot['rawText'] == fresh.rawText ? current?.rawTextId : null,
+      );
     }
     return TavernAuthorityRevision(domainId: domainId, revision: revision);
   });
@@ -208,8 +214,8 @@ final class AuthoringAuthority {
           return existing;
         }
         check?.call();
-        final current = _store.readAuthoringResource(request.physicalResourceId)!;
-        _checkPending(request.physicalResourceId, current);
+        final current = _store.readAuthoringResourceHead(request.physicalResourceId)!;
+        _checkPending(request.physicalResourceId, current.pendingOperationId);
         if (expected != null &&
             (expected.revision.domainId != domainId ||
                 expected.revision.revision != current.revision ||
@@ -228,12 +234,7 @@ final class AuthoringAuthority {
           state: state,
         );
         if (state == TavernAuthoringOperationState.prepared) {
-          _store.putAuthoringResource(
-            request.physicalResourceId,
-            current.revision,
-            ticket.before.toJson(),
-            pendingOperationId: request.operationId,
-          );
+          _store.setAuthoringResourcePending(request.physicalResourceId, request.operationId);
         }
         inserted = true;
         return null;
@@ -252,15 +253,15 @@ final class AuthoringAuthority {
     int? adoptedRevision;
     _store.transaction(
       () {
-        final operation = _store.readAuthoringOperationData(request.domainId, request.operationId)!;
+        final operation = _store.readAuthoringReceiptData(request.domainId, request.operationId)!;
         if (operation.committed == true) {
           adoptedRevision = operation.adoptedRevision;
           return;
         }
-        final current = _store.readAuthoringResource(request.physicalResourceId)!;
+        final current = _store.readAuthoringResourceHead(request.physicalResourceId)!;
         final revision = current.revision + 1;
         adoptedRevision = revision;
-        _store.putAuthoringResource(request.physicalResourceId, revision, ticket.after.toJson());
+        _store.adoptAuthoringResourceData(request.physicalResourceId, revision, request.domainId, request.operationId);
         _store.finishAuthoringOperationData(
           request.domainId,
           request.operationId,
@@ -294,7 +295,7 @@ final class AuthoringAuthority {
     final request = ticket.request;
     _store.transaction(
       () {
-        final operation = _store.readAuthoringOperationData(request.domainId, request.operationId)!;
+        final operation = _store.readAuthoringReceiptData(request.domainId, request.operationId)!;
         final state = operation.state == TavernAuthoringOperationState.noChange
             ? TavernAuthoringOperationState.noChange
             : TavernAuthoringOperationState.notAdopted;
@@ -303,8 +304,7 @@ final class AuthoringAuthority {
             operation.issue?.message == ticket._issue?.message) {
           return;
         }
-        final current = _store.readAuthoringResource(request.physicalResourceId)!;
-        _store.putAuthoringResource(request.physicalResourceId, current.revision, current.snapshot);
+        _store.setAuthoringResourcePending(request.physicalResourceId, null);
         _store.finishAuthoringOperationData(request.domainId, request.operationId, state, issue: ticket._issue);
       },
       onCommitted: () {
@@ -335,7 +335,7 @@ final class AuthoringAuthority {
     final request = ticket.request;
     _store.transaction(
       () {
-        final current = _store.readAuthoringOperationData(request.domainId, request.operationId)!;
+        final current = _store.readAuthoringReceiptData(request.domainId, request.operationId)!;
         final nextIssue = ticket._issue ?? current.issue;
         if (current.state == TavernAuthoringOperationState.published &&
             current.issue?.type == nextIssue?.type &&
@@ -402,9 +402,9 @@ final class AuthoringAuthority {
 
   TavernAuthoringReceipt _receipt(AuthoringWriteTicket ticket) {
     final request = ticket.request;
-    final TavernAuthoringOperation current;
+    final TavernAuthoringReceipt current;
     try {
-      current = _store.readAuthoringOperationData(request.domainId, request.operationId)!;
+      current = _store.readAuthoringReceiptData(request.domainId, request.operationId)!;
     } catch (_) {
       // A failed journal read must not replace the original file/marker error
       // or erase a successful return that this live call already witnessed.
@@ -456,7 +456,7 @@ final class AuthoringAuthority {
       // this journal result never repeats a file effect or repairs an index.
       try {
         _store.transaction(() {
-          final saved = _store.readAuthoringOperationData(domainId, operationId)!;
+          final saved = _store.readAuthoringReceiptData(domainId, operationId)!;
           if (saved.state == TavernAuthoringOperationState.adopted) {
             _store.finishAuthoringOperationData(
               domainId,
@@ -542,14 +542,14 @@ final class AuthoringAuthority {
     }
   }
 
-  void _checkPending(String resourceId, StoredAuthoringResource? current) {
-    if (current?.pendingOperationId != null) {
+  void _checkPending(String resourceId, String? pendingOperationId) {
+    if (pendingOperationId != null) {
       throw TavernAuthoringException(
         'pending_operation',
         'This resource has an unresolved file operation.',
         physicalResourceId: resourceId,
         blockedDomainId: domainId,
-        blockedOperationId: current!.pendingOperationId,
+        blockedOperationId: pendingOperationId,
       );
     }
   }

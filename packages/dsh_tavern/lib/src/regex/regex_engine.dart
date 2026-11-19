@@ -76,7 +76,7 @@ final class RegexScript {
     );
   }
 
-  const RegexScript._({
+  RegexScript._({
     required this.id,
     required this.scriptName,
     required this.findRegex,
@@ -107,6 +107,36 @@ final class RegexScript {
   final num? minDepth;
   final num? maxDepth;
   final bool _valid;
+  late final _RegexReplacement _replacement = _RegexReplacement(replaceString);
+}
+
+final class _RegexReplacement {
+  _RegexReplacement(String source) : template = source.replaceAll(_matchMacro, r'$0');
+
+  final String template;
+  late final int templateBytes = regexUtf8Length(template);
+  ({List<String> keys, int bytes})? _captureReferences;
+
+  List<String> referenceKeys(int maximum) {
+    final cached = _captureReferences;
+    var bytes = cached?.bytes ?? 0;
+    if (bytes > maximum) {
+      throw const _DisplayLimit('capture-limit', '捕获引用描述超过内部传输上限。');
+    }
+    if (cached != null) return cached.keys;
+    final keys = <String>{};
+    for (final reference in _captureReference.allMatches(template)) {
+      final key = _referenceKey(reference);
+      if (!keys.add(key)) continue;
+      bytes += regexUtf8Length(key, stopAfter: maximum - bytes - 16) + 16;
+      if (bytes > maximum) {
+        throw const _DisplayLimit('capture-limit', '捕获引用描述超过内部传输上限。');
+      }
+    }
+    final result = keys.toList();
+    _captureReferences = (keys: result, bytes: bytes);
+    return result;
+  }
 }
 
 /// Text transforms with legacy synchronous and protected display paths.
@@ -310,23 +340,12 @@ final class RegexEngine {
         if (isCancelled?.call() == true) {
           return finish(cancelled: true);
         }
-        final template = script.replaceString.replaceAll(_matchMacro, r'$0');
-        final references = <String>{};
-        var referenceBytes = 0;
-        for (final reference in _captureReference.allMatches(template)) {
-          final key = _referenceKey(reference);
-          if (!references.contains(key)) {
-            referenceBytes += regexUtf8Length(key) + 16;
-            if (referenceBytes > limits.maxCaptureBytes) {
-              throw const _DisplayLimit('capture-limit', '捕获引用描述超过内部传输上限。');
-            }
-            references.add(key);
-          }
-        }
+        final replacementPlan = script._replacement;
+        final referenceKeys = replacementPlan.referenceKeys(limits.maxCaptureBytes);
         final captures = await worker.findCaptures(
           pattern,
           result,
-          references: references,
+          references: referenceKeys,
           maxMatches: limits.maxReplacements - replacements,
         );
         if (isCancelled?.call() == true) {
@@ -339,6 +358,8 @@ final class RegexEngine {
         if (captures.code == 'literal-fallback') {
           warn(script, index, 'literal-fallback', captures.message!);
         }
+        // The worker already checked this unchanged text against maxOutputBytes.
+        if (captures.matches.isEmpty) continue;
         final output = _BoundedText(limits.maxOutputBytes);
         var previousEnd = 0;
         for (final match in captures.matches) {
@@ -354,7 +375,7 @@ final class RegexEngine {
           replacements++;
           final replacement = _replaceDisplayTemplate(
             script,
-            template,
+            replacementPlan,
             (reference) => _captured(match, result, reference),
             substitute,
             characterOverride,
@@ -435,7 +456,7 @@ final class RegexEngine {
     for (final match in matches) {
       if (trace != null) trace.replacements++;
       output.write(input.substring(previousEnd, match.start));
-      final template = script.replaceString.replaceAll(_matchMacro, r'$0');
+      final template = script._replacement.template;
       final replacement = _replaceTemplate(
         script,
         template,
@@ -601,7 +622,7 @@ String _replaceTemplate(
 // still run on the owner; their internal allocations are outside this worker.
 String _replaceDisplayTemplate(
   RegexScript script,
-  String template,
+  _RegexReplacement plan,
   Object? Function(Match) capture,
   RegexMacroExpansion substitute,
   String? characterOverride,
@@ -611,8 +632,8 @@ String _replaceDisplayTemplate(
   // when expanded. Permit its original size, but no extra capture growth past
   // the greater of that size and the output budget. The outer builder still
   // enforces the strict final-output limit after expansion.
-  final templateBytes = regexUtf8Length(template);
-  final output = _BoundedText(templateBytes > maximum ? templateBytes : maximum);
+  final template = plan.template;
+  final output = _BoundedText(plan.templateBytes > maximum ? plan.templateBytes : maximum);
   var offset = 0;
   for (final reference in _captureReference.allMatches(template)) {
     output.add(template.substring(offset, reference.start));

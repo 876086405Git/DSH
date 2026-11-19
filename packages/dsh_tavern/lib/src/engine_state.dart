@@ -1,7 +1,7 @@
 part of 'engine.dart';
 
 state_core.StateDefinition _stateDefinition(Map<String, Object?> data) {
-  final dshgo = _map(_map(data['extensions'])['dshgo']);
+  final dshgo = _readMap(_readMap(data['extensions'])['dshgo']);
   return state_core.StateDefinition.parse(dshgo['state'], version: dshgo.containsKey('v') ? dshgo['v'] : 1);
 }
 

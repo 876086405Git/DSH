@@ -1,7 +1,7 @@
-// A card's own scripts (酒馆助手's 角色脚本库; docs/design/roleplay-compat.md
-// §8.3): the tree under the card's extensions.tavern_helper.scripts, or the
-// older extensions.TavernHelper_scripts — scripts and folders — of which the
-// enabled ones run in the whole-story canvas, each in its own hidden frame.
+// The 酒馆助手 scripts that run in a chat (docs/design/roleplay-compat.md
+// §8.3), as the engine chooses them: the global library's, the current
+// preset's, then the card's — each in a hidden frame of the whole-story
+// canvas — and what the canvas needs to know about the card itself.
 
 import 'dart:convert';
 import 'dart:isolate';
@@ -11,119 +11,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'tavern_provider.dart';
+import 'tavern_script_wire.dart';
 
-/// One script that runs: its id and name as the card gives them, and its
-/// code. [buttons] are the names of the buttons it shows (for the composer's
-/// row); [buttonList] all it has, shown or not, as getScriptButtons gives
-/// them.
-final class TavernCardScript {
-  const TavernCardScript({
-    required this.id,
-    required this.name,
-    required this.content,
-    this.buttons = const [],
-    this.buttonList = const [],
-  });
+/// The scripts that run in a chat (its id, and the character chosen for it;
+/// null for a group, which gets the global and preset ones), as they change.
+final tavernChatScriptsProvider = StreamProvider.autoDispose.family<TavernChatScripts, (String, String?)>(
+  (ref, chat) => ref.watch(tavernProvider).watchChatScripts(chat.$1, characterId: chat.$2),
+);
 
-  final String id;
-  final String name;
-  final String content;
-  final List<String> buttons;
-  final List<TavernScriptButton> buttonList;
+/// [s] as the canvas page runs it: its key ([tavernScriptKey]), its own id
+/// and name, its code, its owner as the wire gives it, and all its buttons.
+Map<String, Object?> tavernScriptJson(TavernRunnableScript s) => {
+  'key': tavernScriptKey(s.owner),
+  'id': s.owner.scriptId,
+  'name': s.name,
+  'content': s.content,
+  'owner': tavernScriptOwnerJson(s.owner),
+  'buttonList': [for (final b in s.buttons) b.toJson()],
+};
 
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'name': name,
-    'content': content,
-    'buttons': buttons,
-    'buttonList': [for (final b in buttonList) b.toJson()],
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is TavernCardScript &&
-      other.id == id &&
-      other.name == name &&
-      other.content == content &&
-      _sameList(other.buttons, buttons) &&
-      _sameList(
-        [for (final b in other.buttonList) (b.name, b.visible)],
-        [for (final b in buttonList) (b.name, b.visible)],
-      );
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    name,
-    content,
-    Object.hashAll(buttons),
-    Object.hashAll([for (final b in buttonList) (b.name, b.visible)]),
-  );
-}
-
-bool _sameList<T>(List<T> a, List<T> b) {
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
-
-/// The scripts of [card] (a card's JSON, its fields under data or at the top)
-/// that run, in the tree's order: enabled, with code, not in a folder that is
-/// off. Anything not shaped like a script or a folder is passed over.
-List<TavernCardScript> tavernCardScripts(Object? card) {
-  Map<String, Object?>? object(Object? v) => v is Map<String, Object?> ? v : null;
-  final root = object(card);
-  final extensions = object(object(root?['data'])?['extensions']) ?? object(root?['extensions']);
-  if (extensions == null) return const [];
-  final tree = object(extensions['tavern_helper'])?['scripts'] ?? extensions['TavernHelper_scripts'];
-  final out = <TavernCardScript>[];
-  void visit(Object? nodes) {
-    if (nodes is! List<Object?>) return;
-    for (final node in nodes.map(object).nonNulls) {
-      if (node['enabled'] == false) continue;
-      final nested = node['scripts'] ?? node['children'];
-      if (node['type'] == 'folder' || (node['type'] != 'script' && nested is List<Object?>)) {
-        visit(nested);
-        continue;
-      }
-      final content = node['content'];
-      if (node['enabled'] != true || content is! String || content.trim().isEmpty) continue;
-      final button = object(node['button']);
-      final listed = [
-        for (final b in switch (button?['buttons']) {
-          final List<Object?> list => list,
-          _ => const <Object?>[],
-        })
-          if (object(b) case {'name': final String name} when name.isNotEmpty)
-            TavernScriptButton(name: name, visible: object(b)!['visible'] != false),
-      ];
-      out.add(
-        TavernCardScript(
-          id: switch (node['id']) {
-            final String s when s.isNotEmpty => s,
-            _ => 'script-${out.length}',
-          },
-          name: switch (node['name']) {
-            final String s => s,
-            _ => '',
-          },
-          content: content,
-          buttons: [
-            if (button?['enabled'] != false)
-              for (final b in listed)
-                if (b.visible) b.name,
-          ],
-          buttonList: listed,
-        ),
-      );
-    }
-  }
-
-  visit(tree);
-  return out;
-}
+/// The buttons [s] shows over the composer, as its list has them.
+List<String> tavernScriptButtons(TavernRunnableScript s) => [
+  if (s.buttonsEnabled)
+    for (final b in s.buttons)
+      if (b.visible && b.name.isNotEmpty) b.name,
+];
 
 /// Whether [card] (its fields) uses MVU: it says so (extensions.dshgo.mvu),
 /// or something in it — a script, a regex, a greeting — loads MagVarUpdate.
@@ -162,15 +74,6 @@ Map<String, Object?>? tavernCardData(Object? card) {
     _ => card,
   };
 }
-
-/// The scripts a character's card carries; none when it cannot be read.
-final tavernCardScriptsProvider = FutureProvider.autoDispose.family<List<TavernCardScript>, String>((
-  ref,
-  characterId,
-) async {
-  final data = await ref.watch(tavernCardDataProvider(characterId).future);
-  return data == null ? const [] : tavernCardScripts({'data': data});
-});
 
 /// Where it is kept, per chat, that the engine's MVU was turned on for it.
 const tavernMvuOnKey = 'tavern.mvuOn.';

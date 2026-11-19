@@ -200,9 +200,18 @@ void main() {
     ], expectedVersion: storedBefore.version);
     const currentTarget = TavernScriptRegexWriteTarget.preset(preset: TavernScriptPresetRef.current());
     final currentBefore = await h.bridge.readTavernRegexesForWrite(context.id, currentTarget);
+    final beforeWorkingView = await h.bridge.snapshot(context.id);
+    final beforeWorkingRegex = scriptMap(beforeWorkingView.resourceRefs['regex']);
+    expect(scriptMap((await h.bridge.snapshot(context.id)).resourceRefs['regex']), beforeWorkingRegex);
     await h.bridge.replaceTavernRegexes(context.id, currentTarget, [
       TavernScriptRegexWriteItem(raw: _rule('working', '/Y/g', 'P')),
     ], expectedVersion: currentBefore.version);
+    final workingView = await h.bridge.snapshot(context.id);
+    final workingRegex = scriptMap(workingView.resourceRefs['regex']);
+    final workingRule = _rows(workingRegex['rules']).singleWhere((row) => row['source'] == 'preset');
+    expect(scriptMap(workingRule['raw'])['replaceString'], 'P');
+    expect(workingRegex['version'], isNot(beforeWorkingRegex['version']));
+    expect(scriptMap(beforeWorkingView.resourceRefs['regex']), beforeWorkingRegex);
     final savedPreset = await h.bridge.readPreset(context.id, storedRef);
     final savedExtensions = scriptMap(savedPreset.raw['extensions']);
     expect(_rows(savedExtensions['regex_scripts']).single['replaceString'], 'S');

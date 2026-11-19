@@ -79,6 +79,8 @@ node tool/st_differential/compare-all.mjs st-recordings-016 dart-recordings-016 
 
 `dart_capture.dart` 走真实 T8/T9 接线和 T4 HTTP 序列化，捕获实际 `request.bodyBytes`；MockClient 只返回合成 HTTP 响应，不联网。它使用全新输出目录，不覆盖已有录制；内部临时引擎目录在结束时清理。reply-019 的旧文件名版本已实际捕获20组并与020逐字全等；当前规范文件名、括号和变量前后断言由 reply-021 再次实际验证：Dart 3.13.5，format/analyze/capture/compare均exit 0，No issues found，20组捕获、20组原字节相同、20组variableStateMatches为true。提示词 token 仍为估算，必须先有正式T9依赖。
 
+本工具的夹具限定无工具提示词组装。捕获器对 inline/library 都在生成前调用公开 setToolPolicy，显式关闭全局 roll/remember；不改变产品默认。保存真实 raw 后检查 tools、tool_choice 属性均不存在，成功报告 toolsAbsent=true；存在任一属性即失败并保留 raw，不删字段或放宽比较。以上旧回执仍只是其当时版本的证据，当前捕获器是否逐字一致须由对应版本的新录制判定。
+
 `compare.mjs` 退出码 0 只表示这一对原始字节相同；任何字节差异退出 1。报告列出首个不同字节位置、两边长度，以及最多 20 个 JSON 路径差异。`compare-all.mjs` 按夹具清单读取每组 `001.request.raw.json`；缺文件、无法读取、非法 JSON 或字节不同均计失败。它要求全部声明项都有实际录制和 Dart 输出，空清单会报错；额外重试文件不会被悄悄选为 golden。若采用了其它 attempt，应先依据 driver report 在本机明确组织对应输入目录，不能擅自将第一个失败编号当成正确样本。
 
 `--compact` 仍比较全部原始字节，只截短诊断值，把这一段文本输出限制在 18KB 内；可和简短命令结果一起放入 ≤20KB reply。完整请求和详细比较结果留本机。如果回件剩余空间不足，返回完整计数、失败 id、首个不同字节位置与少量 JSON 路径，后续再按明确命令查这些本机文件。
@@ -101,3 +103,7 @@ node tool/st_differential/compare-all.mjs st-recordings-016 dart-recordings-016 
 捕获器实际读取导入后的本地变量与生成结束后的本地变量。正文相同不证明变量类型或副作用相同。reply-020 原生状态给出15的`x="2"`、16的`x=2`、18的`x="new"`，其余组为空；这些已作为夹具的`expectedVariablesAfter`。导入后必须匹配头部variables，生成后必须匹配该期望，否则本组failed、进程非零，不能靠相同请求体掩盖状态差异。reply-021直接重读旧019原件，纠正了019/020的摘要转录错误：三个变量原来就一致。新增断言仍保留，防止后续用正文相同推断变量相同。此断言只读取状态，不展开或修正宏，也不改请求原字节。
 
 变量断言比较JSON值与类型（字符串、布尔、容器结构分别比较；Dart int/double作为同一JSON数值域）。16的元数据原文Dart为`2.0`、ST为`2`，数值相同但原文不同；没有声称变量元数据逐字相同。请求体比较则始终逐字，`1`对`1.0`仍会失败。该元数据表示差异未改变这20组实际请求，也不改变T9声明的JSON值往返契约；不可据此推广到所有宏或任意精度数字。
+
+## 新普通预设验收
+
+两组中性 assembly 与独立原生 UI 导入 smoke 的命令及判定见 [PRESET-INTEROP.md](PRESET-INTEROP.md)。新夹具单独录制；不沿用上述 20 组的历史通过状态。

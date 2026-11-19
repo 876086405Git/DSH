@@ -436,11 +436,9 @@ String? _mvuExecuteCommand(
       }
       final value = _mvuParseArgument(command.args[command.args.length == 2 ? 1 : 2]);
       Object? collection = existing.value;
+      final createCollection = collection == null;
       if (collection is! MvuJson && collection is! List<Object?>) {
         collection = command.args.length == 2 && value is List<Object?> ? <Object?>[] : <String, Object?>{};
-        if (!_mvuSetAt(state, dataPath, collection)) {
-          return reject('command_target', 'The insertion target has no writable JSON parent.');
-        }
       }
       String description;
       if (command.args.length == 2) {
@@ -474,8 +472,9 @@ String? _mvuExecuteCommand(
           strictArrayCast: strictTemplate,
           concatArrays: concatArrays,
         );
-        if (collection is List<Object?> && (key is num || key == '-')) {
-          final rawIndex = key == '-' ? collection.length : (key as num).toInt();
+        final stringIndex = key is String ? _mvuArrayIndex(key) : null;
+        if (collection is List<Object?> && (key is num || key == '-' || stringIndex != null)) {
+          final rawIndex = key == '-' ? collection.length : stringIndex ?? (key as num).toInt();
           final index = rawIndex < 0
               ? math.max(0, collection.length + rawIndex)
               : math.min(rawIndex, collection.length);
@@ -492,6 +491,9 @@ String? _mvuExecuteCommand(
           }
           description = "ASSIGNED key '$name' with value ${_mvuJsonText(inserted)} into object '$path' $reason";
         }
+      }
+      if (createCollection && !_mvuSetAt(state, dataPath, collection)) {
+        return reject('command_target', 'The insertion target has no writable JSON parent.');
       }
       final current = path.isEmpty ? data['stat_data'] : _mvuAt(state, dataPath).value;
       try {
@@ -525,6 +527,12 @@ String? _mvuExecuteCommand(
         key = _mvuParseArgument(command.args[1]);
         if (key is String) {
           key = _mvuTrimQuoted(key);
+        } else if (key is num && found.value is MvuJson) {
+          final keys = _mvuKeys(found.value as MvuJson);
+          if (key < 0 || key >= keys.length || key != key.truncateToDouble()) {
+            return reject('command_target', 'The object property index was not found: $path.');
+          }
+          key = keys[key.toInt()];
         }
       } else {
         if (tokens.isEmpty || tokens.last.isEmpty) {
@@ -568,11 +576,7 @@ String? _mvuExecuteCommand(
       }
       if (collection is MvuJson) {
         if (target is num) {
-          final keys = _mvuKeys(collection);
-          if (target < 0 || target >= keys.length || target != target.truncateToDouble()) {
-            return reject('command_target', 'The object property index was not found: $path.');
-          }
-          final name = keys[target.toInt()];
+          final name = key! as String;
           _mvuUnsetAt(collection, _mvuDataPath(collection, name, _mvuPath(name)));
           final ordinal = _mvuString(target + 1);
           return "REMOVED ${ordinal}th entry ('$name') from object '$path' $reason";

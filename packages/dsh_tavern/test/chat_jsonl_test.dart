@@ -1325,6 +1325,37 @@ void main() {
     expect(identity(again.messages.last['extra'])['future'], {'keep': 3});
   });
 
+  test('prepared long trees preserve physical states, inactive swipes and round trips', () async {
+    final plan = await codec.prepareBatchAsync([
+      _document('prepared-long', [
+        for (var index = 0; index < 45; index++)
+          {
+            ..._row('entry $index', swipes: index == 19 ? ['entry 19', 'side entry 19'] : null),
+            'variables': [
+              {'slot': index},
+              if (index == 19) {'slot': 190},
+            ],
+          },
+      ]),
+    ]);
+    expect(store.listChats(), isEmpty);
+    final chat = codec.commitBatch(store, characterId: 'card', plan: plan).chatIds.single;
+    final nodes = store.allNodes(chat);
+    expect(nodes, hasLength(46));
+    for (final node in nodes) {
+      final text = node.message.text;
+      final slot = text.startsWith('side ') ? 190 : int.parse(text.split(' ').last);
+      expect(store.nodeState(chat, node.message.nodeId)['messageVariables'], {'slot': slot});
+    }
+    final side = store.search('side', chatId: chat).single;
+    expect(side.text, 'side entry 19');
+    store.selectNode(chat, side.nodeId);
+    expect(store.path(chat), hasLength(20));
+    expect(store.path(chat).last.nodeId, side.nodeId);
+    final restored = load(codec.exportChat(store, chat));
+    expect(_tree(store, restored), _tree(store, chat));
+  });
+
   test('a 2005-node chain imports and exports without recursive tree traversal', () {
     final chat = load([
       _document('long', [for (var index = 0; index < 2005; index++) _row('line $index')]),

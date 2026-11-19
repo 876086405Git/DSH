@@ -86,7 +86,7 @@ extension _ScriptBookBindings on _ScriptCoordinator {
       );
     } else if (target.scope == TavernScriptBookBindingScope.chat) {
       try {
-        engine._store.chat(id!);
+        engine._store.chatCurrentLeafId(id!);
       } on StateError {
         throw _scriptError(
           TavernScriptErrorCode.notFound,
@@ -118,9 +118,10 @@ extension _ScriptBookBindings on _ScriptCoordinator {
     TavernScriptBookBindingsTarget target, {
     Map<String, Object?>? document,
     Map<String, Object?>? character,
+    _ScriptChatRead? chatRead,
   }) {
-    final settings = _optionalObject(document ?? engine._document, 'settings');
-    final legacy = _optionalObject(settings, 'lorebooks');
+    final settings = _readOptionalObject(document ?? engine._document, 'settings');
+    final legacy = _readOptionalObject(settings, 'lorebooks');
     TavernScriptBookRef? primary;
     final additional = <TavernScriptBookRef>[];
     final inherited = <TavernScriptBookRef>[];
@@ -141,9 +142,9 @@ extension _ScriptBookBindings on _ScriptCoordinator {
       case TavernScriptBookBindingScope.character:
         final id = target.targetId!;
         final capturedCharacter = character!;
-        final data = _optionalObject(capturedCharacter, 'data');
-        final own = _optionalObject(settings, 'characterLorebooks');
-        final primaries = _optionalObject(settings, 'characterPrimaryLorebooks');
+        final data = _readOptionalObject(capturedCharacter, 'data');
+        final own = _readOptionalObject(settings, 'characterLorebooks');
+        final primaries = _readOptionalObject(settings, 'characterPrimaryLorebooks');
         final explicit = primaries[id];
         if (data.containsKey('character_book')) {
           primary = TavernScriptBookRef.embedded(characterId: id);
@@ -160,14 +161,16 @@ extension _ScriptBookBindings on _ScriptCoordinator {
         });
       case TavernScriptBookBindingScope.persona:
         final id = target.targetId!;
-        final own = _optionalObject(settings, 'personaLorebooks');
+        final own = _readOptionalObject(settings, 'personaLorebooks');
         append(additional, own[id]);
         append(inherited, legacy['persona']);
         evidence.addAll({'own': _bookBindingSlot(own, id), 'inherited': _bookBindingSlot(legacy, 'persona')});
       case TavernScriptBookBindingScope.chat:
-        final chat = engine._store.chat(target.targetId!);
-        source = engine._chatCodec.metadataSourceForNode(engine._store, chat.id);
-        final raw = engine._chatCodec.readMetadataSource(chat.metadata, source);
+        final chat = chatRead?.chat ?? engine._store.chat(target.targetId!);
+        source = chatRead?.source ?? engine._chatCodec.metadataSourceForNode(engine._store, chat.id);
+        final raw = chatRead == null
+            ? engine._chatCodec.readMetadataSource(chat.metadata, source)
+            : chatRead.sourceMetadata;
         if (raw == null) {
           throw _scriptError(
             TavernScriptErrorCode.revisionConflict,
@@ -175,8 +178,8 @@ extension _ScriptBookBindings on _ScriptCoordinator {
             'The selected chat metadata source is absent.',
           );
         }
-        final names = _optionalObject(chat.settings, 'stLorebookIds');
-        final own = _optionalObject(chat.settings, 'lorebooks');
+        final names = _readOptionalObject(chat.settings, 'stLorebookIds');
+        final own = _readOptionalObject(chat.settings, 'lorebooks');
         final name = raw['world_info'];
         final mapped = name is String ? names[name] : null;
         final ownIds = _strings(own['chat']);
@@ -230,6 +233,7 @@ extension _ScriptBookBindings on _ScriptCoordinator {
     String contextId,
     TavernScriptBookBindingsTarget target, {
     Map<String, Object?>? characterData,
+    _ScriptChatRead? chatRead,
   }) async {
     final context = _bookBindingContext(contextId, target);
     final character =
@@ -237,13 +241,13 @@ extension _ScriptBookBindings on _ScriptCoordinator {
         ? characterData
         : await _bookBindingCharacter(contextId, target);
     _checkBookBindingContext(contextId, context, target, character);
-    return _bookBindingView(target, character: character);
+    return _bookBindingView(target, character: character, chatRead: chatRead);
   }
 
   // Cache builders call this after their last awaited resource read. The
   // version includes the selected metadata carrier identity as well as raw
   // source contents; equal JSON from another physical source is not a match.
-  bool _bookBindingViewCurrent(_ScriptBookBindingView view) {
+  bool _bookBindingViewCurrent(_ScriptBookBindingView view, {_ScriptChatRead? chatRead}) {
     final snapshot = view.snapshot;
     final target = TavernScriptBookBindingsTarget(scope: snapshot.scope, targetId: snapshot.targetId);
     final id = target.targetId;
@@ -258,7 +262,8 @@ extension _ScriptBookBindings on _ScriptCoordinator {
       return false;
     }
     try {
-      return _bookBindingView(target, character: view.characterData).snapshot.version == snapshot.version;
+      return _bookBindingView(target, character: view.characterData, chatRead: chatRead).snapshot.version ==
+          snapshot.version;
     } on StateError {
       if (target.scope != TavernScriptBookBindingScope.chat) {
         rethrow;
@@ -322,7 +327,7 @@ extension _ScriptBookBindings on _ScriptCoordinator {
     final chatCapture = target.scope == TavernScriptBookBindingScope.chat ? _captureChat(contextId) : null;
     final character = await _bookBindingCharacter(contextId, target);
     _checkBookBindingContext(contextId, context, target, character);
-    final embedded = character != null && _optionalObject(character, 'data').containsKey('character_book');
+    final embedded = character != null && _readOptionalObject(character, 'data').containsKey('character_book');
     if (target.scope == TavernScriptBookBindingScope.character) {
       if (embedded) {
         if (requestedPrimary != TavernScriptBookRef.embedded(characterId: target.targetId!)) {

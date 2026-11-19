@@ -44240,6 +44240,126 @@ abstract class L10n {
   /// **'导出的来源或选项变了，请重新预览'**
   String get tavernPackExportChanged;
 
+  /// No description provided for @tavernScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本库'**
+  String get tavernScripts;
+
+  /// No description provided for @tavernScriptsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有全局脚本。导入酒馆助手导出的脚本 JSON，打开的脚本会在每个对话的整页画布里运行。'**
+  String get tavernScriptsEmpty;
+
+  /// No description provided for @tavernScriptsImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入脚本'**
+  String get tavernScriptsImport;
+
+  /// No description provided for @tavernScriptsImported.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个脚本加入了脚本库'**
+  String tavernScriptsImported(int count);
+
+  /// No description provided for @tavernScriptsExportAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出全部'**
+  String get tavernScriptsExportAll;
+
+  /// No description provided for @tavernScriptsOrder.
+  ///
+  /// In zh, this message translates to:
+  /// **'调整顺序'**
+  String get tavernScriptsOrder;
+
+  /// No description provided for @tavernScriptsOrderNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'从上到下依次运行，拖动右边的把手调整。'**
+  String get tavernScriptsOrderNote;
+
+  /// No description provided for @tavernScriptCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个'**
+  String tavernScriptCount(int count);
+
+  /// No description provided for @tavernScriptUnnamed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未命名脚本'**
+  String get tavernScriptUnnamed;
+
+  /// No description provided for @tavernScriptOpenFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开文件夹'**
+  String get tavernScriptOpenFolder;
+
+  /// No description provided for @tavernScriptExport.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出'**
+  String get tavernScriptExport;
+
+  /// No description provided for @tavernScriptDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get tavernScriptDelete;
+
+  /// No description provided for @tavernScriptDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除「{name}」？'**
+  String tavernScriptDeleteTitle(String name);
+
+  /// No description provided for @tavernScriptDeleteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'它的变量和按钮会一起删除，找不回来。'**
+  String get tavernScriptDeleteMessage;
+
+  /// No description provided for @tavernChatScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本'**
+  String get tavernChatScripts;
+
+  /// No description provided for @tavernChatScriptsNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'这段对话在整页画布里运行的脚本，按运行顺序。'**
+  String get tavernChatScriptsNote;
+
+  /// No description provided for @tavernScriptSourceGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局'**
+  String get tavernScriptSourceGlobal;
+
+  /// No description provided for @tavernScriptSourcePreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设'**
+  String get tavernScriptSourcePreset;
+
+  /// No description provided for @tavernScriptSourceCard.
+  ///
+  /// In zh, this message translates to:
+  /// **'卡'**
+  String get tavernScriptSourceCard;
+
+  /// No description provided for @tavernChatScriptsSkipped.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个脚本没有运行'**
+  String tavernChatScriptsSkipped(int count);
+
   /// No description provided for @updateCheck.
   ///
   /// In zh, this message translates to:

@@ -101,6 +101,12 @@ void main() {
 
     final chatTarget = TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.chat, targetId: chatId);
     final masked = await bridge.readBookBindings(context.id, chatTarget);
+    final beforeBindingView = await bridge.snapshot(context.id);
+    Map<String, Object?> chatBinding(TavernScriptSnapshot view) => (view.resourceRefs['bookBindings']! as List<Object?>)
+        .cast<Map<String, Object?>>()
+        .singleWhere((row) => row['scope'] == 'chat');
+    expect(chatBinding(beforeBindingView)['version'], masked.version);
+    expect(chatBinding(await bridge.snapshot(context.id)), chatBinding(beforeBindingView));
     expect(masked.primary, isNull);
     expect(masked.additional, [chatBook]);
     expect(
@@ -115,6 +121,8 @@ void main() {
     );
     expect(chatAfter.primary, chatBook);
     expect(chatAfter.additional, isEmpty);
+    expect(chatBinding(await bridge.snapshot(context.id))['version'], chatAfter.version);
+    expect(chatBinding(beforeBindingView)['version'], masked.version);
     final adoptedMetadata = await _metadata(h.engine, chatId);
     expect(adoptedMetadata['world_info'], 'chat-runtime-name');
     expect(adoptedMetadata['binding_note'], 'retain this source field');

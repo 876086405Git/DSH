@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import '../import_report.dart';
 import '../preset_library.dart';
@@ -7,6 +8,36 @@ import '../regex_library.dart';
 import '../state/state_engine.dart' as state_core;
 import '../worldinfo/world_info.dart';
 import 'world_info_intake.dart';
+
+/// Import inspection is CPU work over owned JSON, with no engine/store access.
+/// Materialize iterable inputs before crossing the isolate boundary so a lazy
+/// caller iterator cannot carry an engine or queue into the worker.
+Future<TavernImportReport> assessImportAsync({
+  required TavernImportKind kind,
+  required Map<String, Object?> document,
+  Map<String, Object?>? envelope,
+  Iterable<String> embeddedAssetPaths = const [],
+  Iterable<TavernRegexDiagnostic> regexDiagnostics = const [],
+  Iterable<TavernPresetIssue> presetIssues = const [],
+  required DateTime checkedAt,
+  String path = r'$',
+}) {
+  final assets = embeddedAssetPaths.toList(growable: false);
+  final diagnostics = regexDiagnostics.toList(growable: false);
+  final issues = presetIssues.toList(growable: false);
+  return Isolate.run(
+    () => assessImport(
+      kind: kind,
+      document: document,
+      envelope: envelope,
+      embeddedAssetPaths: assets,
+      regexDiagnostics: diagnostics,
+      presetIssues: issues,
+      checkedAt: checkedAt,
+      path: path,
+    ),
+  );
+}
 
 /// Static capability inspection. JSON, macros, scripts and remote assets are
 /// never executed here. Regex evidence comes from the protected importer.

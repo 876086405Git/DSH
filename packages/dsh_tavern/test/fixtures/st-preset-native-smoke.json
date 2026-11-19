@@ -1,0 +1,341 @@
+[
+  {
+    "id": "23-native-import",
+    "name": "DSH_PRESET_23_NATIVE_IMPORT",
+    "coverage": "原生预设 UI 导入/选择入口 smoke；不作整请求逐字验收",
+    "recordingStatus": "unrecorded",
+    "generationType": "normal",
+    "card": {
+      "spec": "chara_card_v2",
+      "spec_version": "2.0",
+      "data": {
+        "name": "DeskClerk",
+        "description": "",
+        "personality": "",
+        "scenario": "",
+        "first_mes": "Welcome to the reception desk.",
+        "mes_example": "",
+        "creator_notes": "",
+        "system_prompt": "",
+        "post_history_instructions": "",
+        "alternate_greetings": [],
+        "tags": [],
+        "creator": "DSH synthetic fixture",
+        "character_version": "1",
+        "extensions": {}
+      }
+    },
+    "preset": {
+      "chat_completion_source": "deepseek",
+      "openai_model": "gpt-5.6-terra",
+      "claude_model": "claude-sonnet-5",
+      "openrouter_model": "OR_Website",
+      "openrouter_use_fallback": false,
+      "openrouter_group_models": false,
+      "openrouter_sort_models": "alphabetically",
+      "ai21_model": "jamba-large",
+      "mistralai_model": "mistral-large-latest",
+      "chutes_model": "deepseek-ai/DeepSeek-V3-0324",
+      "chutes_sort_models": "alphabetically",
+      "minimax_model": "MiniMax-M2.7",
+      "minimax_endpoint": "global",
+      "electronhub_model": "gpt-4o-mini",
+      "electronhub_sort_models": "alphabetically",
+      "electronhub_group_models": false,
+      "custom_model": "",
+      "custom_url": "",
+      "custom_include_body": "",
+      "custom_exclude_body": "",
+      "custom_include_headers": "",
+      "google_model": "gemini-3.7-flash",
+      "vertexai_model": "gemini-3.7-flash",
+      "temperature": 0.37,
+      "frequency_penalty": 0,
+      "presence_penalty": 0,
+      "top_p": 1,
+      "top_k": 0,
+      "top_a": 0,
+      "min_p": 0,
+      "repetition_penalty": 1,
+      "openai_max_context": 32768,
+      "openai_max_tokens": 256,
+      "names_behavior": 0,
+      "send_if_empty": "",
+      "impersonation_prompt": "",
+      "new_chat_prompt": "[Start a new Chat]",
+      "new_group_chat_prompt": "[Start a new group chat]",
+      "new_example_chat_prompt": "[Example Chat]",
+      "continue_nudge_prompt": "[Continue your last message without repeating its original content.]",
+      "bias_preset_selected": "Default (none)",
+      "reverse_proxy": "",
+      "proxy_password": "",
+      "max_context_unlocked": false,
+      "wi_format": "{0}",
+      "scenario_format": "",
+      "personality_format": "",
+      "group_nudge_prompt": "[Write the next assistant reply.]",
+      "stream_openai": true,
+      "prompts": [
+        {
+          "name": "Main Prompt",
+          "system_prompt": true,
+          "role": "system",
+          "content": "DSH_NATIVE_PRESET_SMOKE_23",
+          "identifier": "main"
+        },
+        {
+          "name": "Auxiliary Prompt",
+          "system_prompt": true,
+          "role": "system",
+          "content": "",
+          "identifier": "nsfw"
+        },
+        {
+          "identifier": "dialogueExamples",
+          "name": "Chat Examples",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "name": "Post-History Instructions",
+          "system_prompt": true,
+          "role": "system",
+          "content": "",
+          "identifier": "jailbreak"
+        },
+        {
+          "identifier": "chatHistory",
+          "name": "Chat History",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "identifier": "worldInfoAfter",
+          "name": "World Info (after)",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "identifier": "worldInfoBefore",
+          "name": "World Info (before)",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "identifier": "enhanceDefinitions",
+          "role": "system",
+          "name": "Enhance Definitions",
+          "content": "",
+          "system_prompt": true,
+          "marker": false
+        },
+        {
+          "identifier": "charDescription",
+          "name": "Char Description",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "identifier": "charPersonality",
+          "name": "Char Personality",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "identifier": "scenario",
+          "name": "Scenario",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        },
+        {
+          "identifier": "personaDescription",
+          "name": "Persona Description",
+          "system_prompt": true,
+          "marker": true,
+          "role": "system"
+        }
+      ],
+      "prompt_order": [
+        {
+          "character_id": 100000,
+          "order": [
+            {
+              "identifier": "main",
+              "enabled": true
+            },
+            {
+              "identifier": "worldInfoBefore",
+              "enabled": true
+            },
+            {
+              "identifier": "charDescription",
+              "enabled": true
+            },
+            {
+              "identifier": "charPersonality",
+              "enabled": true
+            },
+            {
+              "identifier": "scenario",
+              "enabled": true
+            },
+            {
+              "identifier": "enhanceDefinitions",
+              "enabled": false
+            },
+            {
+              "identifier": "nsfw",
+              "enabled": true
+            },
+            {
+              "identifier": "worldInfoAfter",
+              "enabled": true
+            },
+            {
+              "identifier": "dialogueExamples",
+              "enabled": true
+            },
+            {
+              "identifier": "chatHistory",
+              "enabled": true
+            },
+            {
+              "identifier": "jailbreak",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "character_id": 100001,
+          "order": [
+            {
+              "identifier": "main",
+              "enabled": true
+            },
+            {
+              "identifier": "worldInfoBefore",
+              "enabled": true
+            },
+            {
+              "identifier": "personaDescription",
+              "enabled": true
+            },
+            {
+              "identifier": "charDescription",
+              "enabled": true
+            },
+            {
+              "identifier": "charPersonality",
+              "enabled": true
+            },
+            {
+              "identifier": "scenario",
+              "enabled": true
+            },
+            {
+              "identifier": "enhanceDefinitions",
+              "enabled": false
+            },
+            {
+              "identifier": "nsfw",
+              "enabled": true
+            },
+            {
+              "identifier": "worldInfoAfter",
+              "enabled": true
+            },
+            {
+              "identifier": "dialogueExamples",
+              "enabled": true
+            },
+            {
+              "identifier": "chatHistory",
+              "enabled": true
+            },
+            {
+              "identifier": "jailbreak",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "show_external_models": false,
+      "assistant_prefill": "",
+      "assistant_impersonation": "",
+      "use_sysprompt": false,
+      "squash_system_messages": false,
+      "media_inlining": true,
+      "bypass_status_check": false,
+      "continue_prefill": false,
+      "continue_postfix": " ",
+      "seed": -1,
+      "n": 1,
+      "deepseek_model": "deepseek-flash",
+      "show_thoughts": false,
+      "extensions": {}
+    },
+    "settings": {
+      "userName": "Visitor",
+      "persona": "",
+      "personaInPrompt": true,
+      "locale": "en",
+      "pinExamples": false,
+      "stripExamples": false,
+      "stops": [],
+      "worldInfo": {
+        "world_info_depth": 2,
+        "world_info_budget": 100,
+        "world_info_include_names": true,
+        "world_info_recursive": false,
+        "world_info_case_sensitive": false,
+        "world_info_match_whole_words": false,
+        "world_info_character_strategy": 0,
+        "world_info_budget_cap": 0,
+        "world_info_min_activations": 0,
+        "world_info_max_recursion_steps": 0,
+        "world_info_use_group_scoring": false
+      }
+    },
+    "globalVariables": {},
+    "books": [],
+    "chatHeader": {
+      "chat_metadata": {
+        "variables": {},
+        "chat_id_hash": 123479,
+        "integrity": "00000000-0000-4000-8000-000000000023"
+      },
+      "user_name": "Visitor",
+      "character_name": "DeskClerk"
+    },
+    "messages": [
+      {
+        "name": "DeskClerk",
+        "is_user": false,
+        "is_system": false,
+        "send_date": "2024-02-29T12:00:00.000Z",
+        "mes": "Welcome to the reception desk.",
+        "extra": {}
+      },
+      {
+        "name": "Visitor",
+        "is_user": true,
+        "is_system": false,
+        "send_date": "2024-02-29T12:00:00.000Z",
+        "mes": "Please tell me the next step.",
+        "extra": {}
+      }
+    ],
+    "expectedVariablesAfter": {},
+    "presetEntry": "library",
+    "expectedPresetIssues": [],
+    "expectedRegexDiagnostics": [],
+    "expectedGlobalVariablesAfter": {}
+  }
+]

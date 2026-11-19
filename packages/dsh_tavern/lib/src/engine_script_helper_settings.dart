@@ -27,11 +27,13 @@ const _scriptWorldInfoIntegers = <String>{
 
 extension _ScriptHelperSettings on _ScriptCoordinator {
   TavernScriptWorldInfoSettingsSnapshot _scriptWorldInfoSettingsView(Map<String, Object?> document) {
-    final settings = _map(document['settings']);
-    final raw = _map(settings['worldInfo']);
+    final settings = _scriptMapView(document['settings']);
+    final raw = _scriptMapView(settings['worldInfo']);
     final native = WorldInfoSettings.fromJson(raw);
     final value = <String, Object?>{
-      'selected_global_lorebooks': [for (final id in _strings(_map(settings['lorebooks'])['global'])) 'standalone:$id'],
+      'selected_global_lorebooks': [
+        for (final id in _strings(_scriptMapView(settings['lorebooks'])['global'])) 'standalone:$id',
+      ],
       'scan_depth': native.scanDepth,
       'context_percentage': native.budgetPercent,
       'budget_cap': native.budgetCap,
@@ -154,15 +156,16 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
       case TavernScriptOwnerKind.global:
         raw = await engine._settingsDocument((document) async => _globalScriptButtons(document, owner));
       case TavernScriptOwnerKind.character:
-        final found = await engine._library.readAuthority(owner.assetId!, (data) => _ownedScriptButtons(data, owner));
+        final found = await engine._library.readRuntimeAuthority(
+          owner.assetId!,
+          (data) => _ownedScriptButtons(data, owner),
+        );
         if (found == null) {
           throw _scriptError(TavernScriptErrorCode.notFound, 'scriptButtons', 'Script character not found.');
         }
         raw = found;
       case TavernScriptOwnerKind.preset:
-        raw = await engine._presetOperation(
-          () => _ownedScriptButtons(engine._requirePreset(owner.assetId!).raw, owner),
-        );
+        raw = await engine._presetOperation(() => _ownedScriptButtons(engine._presetScriptOwnerRaw(owner), owner));
     }
     _checkHelperSettingsContext(context);
     return _scriptButtonsSnapshot(owner, raw);
@@ -213,6 +216,8 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
               onCommitted: () {
                 adopted = true;
                 engine._document['scriptButtons'] = _copy(container);
+                engine._globalScriptsChanged.add(null);
+                engine._scriptCatalogChanged.add(null);
                 accept(_globalScriptButtons(next, owner));
               },
             );
@@ -247,22 +252,18 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
           engine._cacheCharacterDetail(owner.assetId!, Future.value(stored));
           engine._notifyLists();
         case TavernScriptOwnerKind.preset:
-          await engine._presetOperation(() {
-            final original = engine._requirePreset(owner.assetId!);
-            final raw = original.raw;
-            final extensions = _optionalObject(raw, 'extensions');
-            final entry = _scriptEntry(extensions, owner.scriptId);
-            final rows = prepare(_fieldVariable(entry, 'button'));
-            final button = _optionalObject(entry, 'button');
-            button['buttons'] = rows;
-            entry['button'] = button;
-            raw['extensions'] = extensions;
+          await engine._presetOperation(() async {
             late _ScriptRawVariable actual;
-            engine._store.transaction(
-              () {
-                engine._savePresetEdit(original, raw);
-                actual = _ownedScriptButtons(engine._requirePreset(owner.assetId!).raw, owner);
+            await engine._editPresetScriptOwner(
+              owner,
+              (entry) {
+                final rows = prepare(_fieldVariable(entry, 'button'));
+                final button = _optionalObject(entry, 'button');
+                button['buttons'] = rows;
+                entry['button'] = button;
+                actual = _fieldVariable(entry, 'button');
               },
+              check: () => _checkHelperSettingsContext(context),
               onCommitted: () {
                 accept(actual);
               },
@@ -278,7 +279,7 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
       Error.throwWithStackTrace(
         _resourcePartial(error, 'replaceScriptButtons', contextId, {
           'targetKind': 'scriptButtons',
-          'owner': {'kind': owner.kind.name, 'scriptId': owner.scriptId, 'assetId': ?owner.assetId},
+          'owner': owner.toJson(),
           'version': ?result?.version,
         }),
         stack,
@@ -343,6 +344,18 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
     for (final owner in _helperScriptOwners(TavernScriptOwnerKind.global)) {
       _observeHelperButtons(owner, () => _globalScriptButtons(document, owner));
     }
+    for (final context in contexts.values) {
+      final owner = context.value.script;
+      if (!context.closed &&
+          owner != null &&
+          owner.presetCarrier?.kind == TavernScriptPresetCarrierKind.inline &&
+          owner.presetCarrier!.chatId == null) {
+        _observeHelperButtons(
+          owner,
+          () => _ownedScriptButtons(engine._presetScriptOwnerRaw(owner, document: document), owner),
+        );
+      }
+    }
   }
 
   void scriptHelperCardCommitted(String id, Map<String, Object?> actualData) {
@@ -360,25 +373,28 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
     }
   }
 
-  void scriptHelperPresetsCommitted() {
+  void scriptHelperPresetsCommitted({bool carriersOnly = false}) {
     final owners = <TavernScriptOwner>{
       for (final context in contexts.values)
-        if (!context.closed && context.value.script?.kind == TavernScriptOwnerKind.preset) context.value.script!,
+        if (!context.closed &&
+            context.value.script?.kind == TavernScriptOwnerKind.preset &&
+            (!carriersOnly || context.value.script!.presetCarrier != null))
+          context.value.script!,
     };
     for (final owner in owners) {
-      _observeHelperButtons(owner, () => _ownedScriptButtons(engine._requirePreset(owner.assetId!).raw, owner));
+      _observeHelperButtons(owner, () => _ownedScriptButtons(engine._presetScriptOwnerRaw(owner), owner));
     }
   }
 }
 
 String _scriptButtonsResourceKey(TavernScriptOwner owner) =>
-    'scriptButtons:${jsonEncode([owner.kind.name, owner.assetId, owner.scriptId])}';
+    'scriptButtons:${jsonEncode([owner.kind.name, owner.assetId, owner.scriptId, owner.presetCarrier?.toJson()])}';
 
 _ScriptRawVariable _globalScriptButtons(Map<String, Object?> document, TavernScriptOwner owner) =>
-    _fieldVariable(_optionalObject(document, 'scriptButtons'), owner.scriptId);
+    _fieldVariable(_readOptionalObject(document, 'scriptButtons'), owner.scriptId);
 
 _ScriptRawVariable _ownedScriptButtons(Map<String, Object?> data, TavernScriptOwner owner) =>
-    _fieldVariable(_scriptEntry(_optionalObject(data, 'extensions'), owner.scriptId), 'button');
+    _fieldVariable(_scriptEntry(_readOptionalObject(data, 'extensions'), owner.scriptId), 'button');
 
 List<Map<String, Object?>> _scriptButtonRows(TavernScriptOwner owner, _ScriptRawVariable raw) {
   if (!raw.present) {

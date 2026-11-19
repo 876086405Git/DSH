@@ -24,6 +24,42 @@ enum WorldInfoStrategy { evenly, characterFirst, globalFirst }
 /// ST source names are not interchangeable with this reference.
 typedef WorldInfoEntryRef = (String bookId, String uid);
 
+// Engine cache comparison without exposing either private raw map. Remapped
+// pack books are freshly allocated each turn even when their captured source
+// is identical; public inspection getters must still return detached JSON.
+bool sameWorldInfoBook(WorldInfoBook left, WorldInfoBook right) =>
+    identical(left, right) ||
+    (left.id == right.id &&
+        left.source == right.source &&
+        left.stWorldName == right.stWorldName &&
+        left.entries.length == right.entries.length &&
+        Iterable<int>.generate(left.entries.length).every(
+          (index) =>
+              left.entries[index].uid == right.entries[index].uid &&
+              left.entries[index].sourcePointer == right.entries[index].sourcePointer,
+        ) &&
+        _sameBookJson(left._raw, right._raw));
+
+bool _sameBookJson(Object? left, Object? right) {
+  if (identical(left, right)) return true;
+  if (left is List<Object?> && right is List<Object?>) {
+    return left.length == right.length &&
+        Iterable<int>.generate(left.length).every((index) => _sameBookJson(left[index], right[index]));
+  }
+  if (left is Map<String, Object?> && right is Map<String, Object?>) {
+    if (left.length != right.length) return false;
+    final rightEntries = right.entries.iterator;
+    for (final entry in left.entries) {
+      rightEntries.moveNext();
+      if (entry.key != rightEntries.current.key || !_sameBookJson(entry.value, rightEntries.current.value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return left == right;
+}
+
 /// Per-evaluation external requests and their result rows are bounded together.
 const worldInfoExternalActivationLimit = 64;
 
@@ -46,8 +82,8 @@ enum WorldInfoScanPhase { initial, recursion, minActivations }
 /// Keeps the complete original book, including fields this wave does not use.
 /// A character book is the card's `data.character_book`, not the whole card.
 class WorldInfoBook {
-  WorldInfoBook._(this.id, this.source, this.raw, this.stWorldName) {
-    final original = raw['entries'];
+  WorldInfoBook._(this.id, this.source, this._raw, this.stWorldName, {bool shared = false}) : _shared = shared {
+    final original = _raw['entries'];
     final byId = <String, (Map<String, Object?>, int)>{};
     final parsed = <WorldInfoEntry>[];
     if (original is Map<String, Object?>) {
@@ -78,8 +114,9 @@ class WorldInfoBook {
 
   WorldInfoBook._remapped(WorldInfoBook original, this.id, this.stWorldName, Map<String, String> entryUidsByPointer)
     : source = original.source,
-      raw = _copyTimedValue(original.raw)! as Map<String, Object?> {
-    final rows = raw['entries'];
+      _shared = true,
+      _raw = _copyTimedValue(original._raw)! as Map<String, Object?> {
+    final rows = _raw['entries'];
     final copiedRows = <String, Map<String, Object?>>{
       if (rows is Map<String, Object?>)
         for (final row in rows.entries)
@@ -100,7 +137,7 @@ class WorldInfoBook {
           this,
           uid,
           value,
-          identical(entry._fields, entry.raw) ? value : _copyTimedValue(entry._fields)! as Map<String, Object?>,
+          identical(entry._fields, entry._raw) ? value : _copyTimedValue(entry._fields)! as Map<String, Object?>,
           entry.sourcePointer,
         ),
       );
@@ -115,24 +152,35 @@ class WorldInfoBook {
     String? stWorldName,
   }) => WorldInfoBook._(id, source, jsonDecode(jsonEncode(json)) as Map<String, Object?>, stWorldName ?? id);
 
+  /// A reusable execution view. Public inspection still receives detached JSON.
+  factory WorldInfoBook.cached({
+    required String id,
+    required WorldInfoSource source,
+    required Map<String, Object?> json,
+    String? stWorldName,
+  }) => WorldInfoBook._(id, source, _copyTimedValue(json)! as Map<String, Object?>, stWorldName ?? id, shared: true);
+
   final String id;
 
   /// ST's world filename/name, not the display title. Local IDs may differ.
   final String stWorldName;
   final WorldInfoSource source;
-  final Map<String, Object?> raw;
+  final Map<String, Object?> _raw;
+  final bool _shared;
+  Map<String, Object?> get raw => _shared ? _copyTimedValue(_raw)! as Map<String, Object?> : _raw;
   late final List<WorldInfoEntry> entries;
-  String get name => raw['name'] is String ? raw['name'] as String : id;
+  String get name => _raw['name'] is String ? _raw['name'] as String : id;
 }
 
 class WorldInfoEntry {
-  const WorldInfoEntry._(this.book, this.uid, this.raw, this._fields, this.sourcePointer);
+  const WorldInfoEntry._(this.book, this.uid, this._raw, this._fields, this.sourcePointer);
   final WorldInfoBook book;
   final String uid;
 
   /// The original object location, before V3 uid deduplication and sorting.
   final String sourcePointer;
-  final Map<String, Object?> raw;
+  final Map<String, Object?> _raw;
+  Map<String, Object?> get raw => book._shared ? _copyTimedValue(_raw)! as Map<String, Object?> : _raw;
   final Map<String, Object?> _fields;
 
   /// Actual loader declarations: absence and explicit null remain distinct.
@@ -172,18 +220,20 @@ class WorldInfoEntry {
   bool get groupOverride => _fields['groupOverride'] == true;
   num get groupWeight => _number(_fields['groupWeight']) ?? 100;
   int? get scanDepth => _integer(_fields['scanDepth']);
-  bool? get caseSensitive => _boolean(raw['case_sensitive']) ?? _boolean(_fields['caseSensitive']);
-  bool get useRegex => raw['use_regex'] == true;
+  bool? get caseSensitive => _boolean(_raw['case_sensitive']) ?? _boolean(_fields['caseSensitive']);
+  bool get useRegex => _raw['use_regex'] == true;
   bool? get matchWholeWords => _boolean(_fields['matchWholeWords']);
   bool? get useGroupScoring => _boolean(_fields['useGroupScoring']);
   List<String> get triggers => _strings(_fields['triggers']);
 
   /// Exact ST loader hash, including field order and the original ST decorator parser.
-  int get stHash => _entryHash(this);
+  int get stHash => book._shared ? (_entryHashes[this] ??= _entryHash(this)) : _entryHash(this);
   String get stKey =>
       '${_fields.containsKey('world') ? _jsString(_fields['world']) : book.stWorldName}.'
       '${_fields.containsKey('uid') ? _jsString(_fields['uid']) : 'undefined'}';
 }
+
+final _entryHashes = Expando<int>('world info entry hashes');
 
 /// Engine-only runtime view. The stored book and all loader fields stay intact.
 WorldInfoBook remapWorldInfoBook(
@@ -202,8 +252,8 @@ Map<String, Object?> exportGameplayWorldInfoEntry(
   required String id,
   required bool characterBook,
 }) {
-  final wasCharacterBook = entry.book.raw['entries'] is List<Object?>;
-  final result = _copyTimedValue(entry.raw)! as Map<String, Object?>;
+  final wasCharacterBook = entry.book._raw['entries'] is List<Object?>;
+  final result = _copyTimedValue(entry._raw)! as Map<String, Object?>;
   if (wasCharacterBook == characterBook) {
     result[characterBook ? 'id' : 'uid'] = id;
     return result;
@@ -529,7 +579,7 @@ Iterable<({WorldInfoEntry entry, String path})> worldInfoStoredEntries(WorldInfo
     _regexInspectionEntries(book);
 
 Iterable<({WorldInfoEntry entry, String path})> _regexInspectionEntries(WorldInfoBook book) sync* {
-  final entries = book.raw['entries'];
+  final entries = book._raw['entries'];
   if (entries is List<Object?>) {
     for (var index = 0; index < entries.length; index++) {
       final value = entries[index]! as Map<String, Object?>;
@@ -982,7 +1032,15 @@ class WorldInfoEngine {
     if (settings.budgetCap > 0 && budget > settings.budgetCap) budget = settings.budgetCap;
     final entries = worldInfoExecutionEntries(input.books, strategy: settings.strategy);
     external.resolve(entries);
-    final sorted = entries.map((entry) => _RuntimeEntry(entry, input, packSources[entry.identity])).toList();
+    final sorted = <_RuntimeEntry>[];
+    for (var index = 0; index < entries.length; index++) {
+      if (index > 0 && index % 64 == 0) {
+        await Future<void>.delayed(Duration.zero);
+        input.checkCancelled?.call();
+      }
+      final entry = entries[index];
+      sorted.add(_RuntimeEntry(entry, input, packSources[entry.identity]));
+    }
     final pack = _PackWorldInfoState(input, sorted);
     final timed = _TimedEffects(input, sorted, pack);
     final decoratorHistory = _DecoratorHistory(input, pack);
@@ -1003,7 +1061,9 @@ class WorldInfoEngine {
       WorldInfoScanPhase? next;
       final candidates = <_RuntimeEntry>[];
       final reasons = <_RuntimeEntry, _MatchReason>{};
-      for (final item in sorted) {
+      for (var index = 0; index < sorted.length; index++) {
+        if (index > 0 && index % 64 == 0) await Future<void>.delayed(Duration.zero);
+        final item = sorted[index];
         final entry = item.entry;
         buffer.checkCancelled();
         if (buffer.skippedEntries.contains(entry.identity)) continue;
@@ -1238,7 +1298,7 @@ class WorldInfoEngine {
 class _RuntimeEntry {
   _RuntimeEntry(this.entry, WorldInfoInput input, this.packSource)
     : decorators = _Decorators(entry, input),
-      hash = _entryHash(entry) {
+      hash = entry.stHash {
     content = decorators.content;
   }
   final WorldInfoEntry entry;
@@ -1551,7 +1611,7 @@ class _IndeterminateWorldInfoEntry implements Exception {
 }
 
 String _keywordPath(WorldInfoEntry entry, bool secondary, int index) {
-  final field = entry.book.raw['entries'] is List<Object?>
+  final field = entry.book._raw['entries'] is List<Object?>
       ? (secondary ? 'secondary_keys' : 'keys')
       : (secondary ? 'keysecondary' : 'key');
   final original = entry._fields[secondary ? 'keysecondary' : 'key'];

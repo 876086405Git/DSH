@@ -6,6 +6,7 @@
 // deliveries for that context come back through [deliver] (the page's own
 // copy of variables and messages stays current).
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -75,31 +76,59 @@ class TavernCanvasCalls {
     return id;
   }
 
-  /// A card script's own contexts (its buttons are kept on its script), by
-  /// script id: each opened on the first call made as it ({asScript}). Not
-  /// the page's: what the engine delivers goes to the page's context.
+  /// The scripts the page runs, by key ([tavernScriptKey]), as last chosen
+  /// for this chat, and the character they were chosen with.
+  var _scripts = <String, TavernRunnableScript>{};
+  String? _scriptCharacter;
+
+  /// The page's scripts now: one gone, or whose code changed (its frame
+  /// starts over), has its context closed and its buttons dropped.
+  void setScripts(TavernChatScripts chosen) {
+    final next = {for (final s in chosen.scripts) tavernScriptKey(s.owner): s};
+    final stale = {
+      for (final MapEntry(:key, :value) in _scripts.entries)
+        if (next[key]?.content != value.content) key,
+    };
+    _scripts = next;
+    _scriptCharacter = chosen.characterId;
+    if (stale.isEmpty) return;
+    liveButtons.value = {...liveButtons.value}..removeWhere((key, _) => stale.contains(key));
+    for (final key in stale) {
+      if (_scriptContexts.remove(key) case final context?) unawaited(_closeContext(context));
+    }
+  }
+
+  /// A script's own contexts (its buttons are kept on its owner), by key:
+  /// each opened on the first call made as it ({asScript}). Not the page's:
+  /// what the engine delivers goes to the page's context.
   final _scriptContexts = <String, Future<String>>{};
 
-  Future<String> _openScript(String scriptId) async {
-    final character = characterId();
+  Future<String> _openScript(String key) async {
+    final script =
+        _scripts[key] ??
+        (throw TavernScriptException(
+          code: TavernScriptErrorCode.closedContext,
+          operation: 'openContext',
+          message: 'That script no longer runs on this page.',
+        ));
     final context = await _bridge.openContext(
       TavernScriptContextSpec(
-        instanceId: '$instanceId:$scriptId',
+        instanceId: '$instanceId:$key',
         chatId: chatId,
-        characterId: character,
-        script: TavernScriptOwner(kind: TavernScriptOwnerKind.character, scriptId: scriptId, assetId: character),
+        characterId: _scriptCharacter,
+        script: script.owner,
       ),
     );
     return context.id;
   }
 
-  /// The buttons each card script shows now, by script id, as the page last
-  /// said (replaceScriptButtons…); a script not here shows its card's.
+  /// The buttons each script shows now, by key, as the page last said
+  /// (replaceScriptButtons…); a script not here shows its own list's.
   final liveButtons = ValueNotifier<Map<String, List<String>>>(const {});
 
-  /// The page saying what [scriptId]'s buttons are now.
-  void showButtons(String scriptId, List<String> names) =>
-      liveButtons.value = {...liveButtons.value, scriptId: List.unmodifiable(names)};
+  /// The page saying what the buttons of the script [key] are now.
+  void showButtons(String key, List<String> names) =>
+      liveButtons.value = {...liveButtons.value, key: List.unmodifiable(names)};
 
   void _forget() {
     _released++;
@@ -143,7 +172,7 @@ class TavernCanvasCalls {
     }
     final reply = await _wire.handle({
       ...request,
-      'params': {...params, 'contextId': context, ..._filters(params, context), ..._scriptOwner(params)},
+      'params': {...params, 'contextId': context, ..._filters(params, context)},
     });
     // The engine let it go (reopened, closed): the next call opens anew.
     if (reply['error'] case {'code': 'closedContext' || 'noContext'}) {
@@ -177,25 +206,6 @@ class TavernCanvasCalls {
     return const {};
   }
 
-  /// A card script's own variables, as the page names their script ({kind:
-  /// 'character', scriptId}): on this chat's character's card. A group has
-  /// no one card; the engine says so.
-  Map<String, Object?> _scriptOwner(Map<Object?, Object?> params) {
-    final target = params['target'];
-    if (target case {'scope': 'script', 'scriptOwner': final Map<Object?, Object?> owner}
-        when owner['kind'] == 'character' && owner['assetId'] == null) {
-      final character = characterId();
-      if (character == null) return const {};
-      return {
-        'target': {
-          ...target,
-          'scriptOwner': {...owner, 'assetId': character},
-        },
-      };
-    }
-    return const {};
-  }
-
   /// The page's answer to a filter it ran ({requestId, status, value, …}).
   void invoked(Map<Object?, Object?> answer) {
     if (answer['requestId'] case final String id) pages?.invoked(id, answer);
@@ -219,13 +229,12 @@ class TavernCanvasCalls {
     _scriptContexts.clear();
     _forget();
     for (final script in scripts) {
-      try {
-        await _bridge.closeContext(await script);
-      } on Object {
-        // Never opened, or already closed.
-      }
+      await _closeContext(script);
     }
-    if (context == null) return;
+    if (context != null) await _closeContext(context);
+  }
+
+  Future<void> _closeContext(Future<String> context) async {
     try {
       await _bridge.closeContext(await context);
     } on Object {

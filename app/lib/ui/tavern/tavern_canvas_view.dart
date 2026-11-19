@@ -168,22 +168,21 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     // Card scripts get their libraries first; the page waits for them (and
     // goes without, should they not load) — not when scripts do not run.
     final List<String> libraries;
-    // So with the card's own scripts (none for a group, or when they do not run).
-    final List<TavernCardScript> cardScripts;
     // And the card itself, for the scripts that ask about the character.
     final Map<String, Object?>? card;
     final character = widget.calls?.characterId();
     if (noScripts) {
       libraries = const [];
-      cardScripts = const [];
       card = null;
     } else {
       final loaded = ref.read(tavernCanvasLibrariesProvider);
-      final scripts = character == null ? null : ref.read(tavernCardScriptsProvider(character));
+      // The chat's scripts are told to the page once it is up (_pushScripts),
+      // but it waits for them, so they start with the story.
+      final chat = widget.calls?.chatId;
+      final scripts = chat == null ? null : ref.read(tavernChatScriptsProvider((chat, character)));
       final data = character == null ? null : ref.read(tavernCardDataProvider(character));
       if (loaded.isLoading || (scripts?.isLoading ?? false) || (data?.isLoading ?? false)) return;
       libraries = loaded.value ?? const [];
-      cardScripts = scripts?.value ?? const [];
       card = data?.value;
     }
     final key = (
@@ -195,7 +194,6 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       theme.colorScheme.primary,
       reading,
       themeCss,
-      Object.hashAll(cardScripts),
       card,
       character,
     );
@@ -233,7 +231,6 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       offline: offline,
       libraries: libraries,
       themeCss: themeCss,
-      cardScripts: [for (final s in cardScripts) s.toJson()],
       card: card,
       characterId: character,
     );
@@ -281,6 +278,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         if (_hidden) _suspendAudio(true);
         _pushPersonas();
         _pushAudio();
+        _pushScripts();
         _render();
         _onStream();
       case 'menu':
@@ -296,10 +294,10 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         if (messenger != null) _toasts.show(messenger, data);
       case 'toastClear':
         _toasts.clear(data);
-      // A card script's buttons changed: the composer's row shows them.
+      // A script's buttons changed: the composer's row shows them.
       case 'buttons':
-        if (data case {'scriptId': final String id, 'names': final List<Object?> names}) {
-          widget.calls?.showButtons(id, [for (final n in names) '$n']);
+        if (data case {'key': final String key, 'names': final List<Object?> names}) {
+          widget.calls?.showButtons(key, [for (final n in names) '$n']);
         }
       // What the engine said went wrong with the card's variables (MVU),
       // said as a notice: the page went on.
@@ -329,6 +327,21 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     final state = await tavernLoadAudio(chat);
     if (state.isEmpty || !mounted || !identical(controller, _controller)) return;
     await controller.runJavaScript('window.dsh&&dsh.setAudioState(${jsonEncode(state)})').catchError((_) {});
+  }
+
+  /// The chat's scripts (global, the current preset's, the card's), to who
+  /// answers them and, once the page is up, to the page; not when scripts
+  /// do not run.
+  void _pushScripts() {
+    final calls = widget.calls;
+    if (calls == null || ref.read(tavernSettingsProvider).islandNoScripts) return;
+    final chosen = ref.read(tavernChatScriptsProvider((calls.chatId, calls.characterId()))).value;
+    if (chosen == null) return;
+    calls.setScripts(chosen);
+    final controller = _controller;
+    if (!_ready || controller == null) return;
+    final json = jsonEncode([for (final s in chosen.scripts) tavernScriptJson(s)]);
+    unawaited(controller.runJavaScript('window.dsh&&dsh.setScripts($json)').catchError((_) {}));
   }
 
   /// A dsh.call from the page, answered to the page that asked (not to one
@@ -471,8 +484,14 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       ref.listen(tavernCardDataProvider(character), (_, next) {
         if (!next.isLoading) _open();
       });
-      ref.listen(tavernCardScriptsProvider(character), (_, next) {
-        if (!next.isLoading) _open();
+    }
+    // The chat's scripts as they change: the page starts, keeps or stops
+    // their frames itself, never reloading for them.
+    if (widget.calls case final calls?) {
+      ref.listen(tavernChatScriptsProvider((calls.chatId, calls.characterId())), (_, next) {
+        if (next.isLoading) return;
+        _open();
+        _pushScripts();
       });
     }
     ref.listen(tavernCanvasLibrariesProvider, (_, next) {

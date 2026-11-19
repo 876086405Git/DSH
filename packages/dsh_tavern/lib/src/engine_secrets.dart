@@ -8,9 +8,9 @@ bool _secretsEnabled(Map<String, Object?> settings) =>
     _map(settings['director'])['secretsEnabled'] == true;
 
 state_core.SecretDefinition _secretDefinition(Map<String, Object?> data) {
-  final own = _map(_map(data['extensions'])['dshgo']);
+  final own = _readMap(_readMap(data['extensions'])['dshgo']);
   return state_core.SecretDefinition.parse(
-    _map(own['director'])['secretSlots'],
+    _readMap(own['director'])['secretSlots'],
     state: _stateDefinition(data),
     version: own.containsKey('v') ? own['v'] : 1,
   );

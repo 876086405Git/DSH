@@ -3,6 +3,21 @@ part of 'engine.dart';
 class _ScriptResourceState {
   final observations = <String, _ScriptObservedValue>{};
   final directory = _ScriptBookDirectoryState();
+  final characterDataViews = Expando<Map<String, Object?>>();
+  final avatarViews = Expando<_ScriptCharacterAvatarView>();
+  final standaloneBooks = <String, _ScriptRuntimeStandalone>{};
+}
+
+class _ScriptRuntimeStandalone {
+  _ScriptRuntimeStandalone(this.stat, this.book);
+  final FileStat stat;
+  final _ScriptStandaloneBook book;
+
+  bool matches(FileStat current) =>
+      stat.type == current.type &&
+      stat.size == current.size &&
+      stat.modified == current.modified &&
+      stat.changed == current.changed;
 }
 
 class _ScriptStandaloneBook {
@@ -31,18 +46,22 @@ extension _ScriptRawResources on _ScriptCoordinator {
   }
 
   void scriptResourceBookCommitted(String id, Map<String, Object?>? actualRaw) {
+    scriptResources.standaloneBooks.remove(id);
     _resourceVersion('standalone:$id', actualRaw, present: actualRaw != null);
     _observeStandaloneDirectory(id, actualRaw, engine._bookSourceNames[id]);
     resourcesChanged();
   }
 
   Future<Map<String, Object?>?> _scriptCharacterDataView(String characterId) =>
-      engine._library.readAuthority(characterId, (data) {
+      engine._library.readRuntimeAuthority(characterId, (data) {
+        final cached = scriptResources.characterDataViews[data];
+        if (cached != null && _scriptCharacterDataViewCurrent(cached)) return cached;
         scriptBookDirectoryCardCommitted(characterId, data);
-        return {
+        return scriptResources.characterDataViews[data] = {
           'characterId': characterId,
           'version': _resourceVersion('characterData:$characterId', data),
-          'data': _captureScriptObject(data),
+          // Private runtime authority is read-only; the public DTO captures it.
+          'data': data,
         };
       });
 
@@ -143,8 +162,21 @@ extension _ScriptRawResources on _ScriptCoordinator {
     );
   }
 
+  Future<_ScriptStandaloneBook?> _scriptReadStandaloneRuntime(String id) async {
+    _requireBookId(id);
+    final stat = await File('${engine.directory.path}/lorebooks/$id.json').stat();
+    final cached = scriptResources.standaloneBooks[id];
+    if (cached != null && cached.matches(stat)) return cached.book;
+    final book = await _scriptReadStandaloneNow(id);
+    if (book != null && stat.type == FileSystemEntityType.file) {
+      scriptResources.standaloneBooks[id] = _ScriptRuntimeStandalone(stat, book);
+    }
+    return book;
+  }
+
   Future<_ScriptStandaloneBook?> _scriptReadStandaloneNow(String id) async {
     _requireBookId(id);
+    scriptResources.standaloneBooks.remove(id);
     final file = File('${engine.directory.path}/lorebooks/$id.json');
     final List<int> bytes;
     try {

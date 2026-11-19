@@ -33,6 +33,8 @@ final _preset = {
   ],
 };
 
+final _helperScript = {'type': 'script', 'id': 's1', 'name': '状态栏', 'enabled': true, 'content': 'x'};
+
 final _quickReplies = {
   'version': 2,
   'name': '常用',
@@ -148,6 +150,17 @@ void main() {
       TavernFileKind.regex,
     );
     expect(kind('qr.json', _quickReplies), TavernFileKind.quickReplies);
+    // 酒馆助手's scripts: one, a folder of them, or a list of either.
+    expect(kind('s.json', _helperScript), TavernFileKind.helperScripts);
+    final folder = {
+      'type': 'folder',
+      'id': 'f1',
+      'name': '工具',
+      'scripts': [_helperScript],
+    };
+    expect(kind('f.json', folder), TavernFileKind.helperScripts);
+    expect(kind('all.json', [folder, _helperScript]), TavernFileKind.helperScripts);
+    expect(kind('a.json', {'type': 'script', 'name': 'no code'}), TavernFileKind.unknown);
     expect(kind('a.json', _preset, bom: true), TavernFileKind.preset);
     expect(kind('a.json', {'hello': 1}), TavernFileKind.unknown);
     expect(kind('a.json', [1, 2]), TavernFileKind.unknown);
@@ -156,7 +169,19 @@ void main() {
     expect(tavernFileKindOf('c.jsonl', Uint8List(0)), TavernFileKind.chat);
     expect(tavernFileKindOf('notes.txt', Uint8List.fromList(utf8.encode('just words'))), TavernFileKind.unknown);
     // A PNG is a card only with a chara / ccv3 text chunk.
-    final png = Uint8List.fromList([0x89, ...'PNG'.codeUnits, 13, 10, 26, 10, 0, 0, 0, 9, ...'tEXtchara\u0000eyJ9'.codeUnits]);
+    final png = Uint8List.fromList([
+      0x89,
+      ...'PNG'.codeUnits,
+      13,
+      10,
+      26,
+      10,
+      0,
+      0,
+      0,
+      9,
+      ...'tEXtchara\u0000eyJ9'.codeUnits,
+    ]);
     expect(tavernFileKindOf('card.png', png), TavernFileKind.card);
     expect(
       tavernFileKindOf('photo.png', Uint8List.fromList([0x89, ...'PNG'.codeUnits, ...List.filled(20, 0)])),
@@ -188,11 +213,13 @@ void main() {
       _file('常用.json', _quickReplies),
       _chat('林晚'),
       _chat('不在书架上'),
+      _file('状态栏.json', _helperScript),
       TavernChatFile(fileName: 'notes.txt', bytes: Uint8List.fromList(utf8.encode('hello'))),
     ]);
     await _importFromFile(tester);
 
     expect((await tester.runAsync(() => tavern.watchPresets().first))!.map((p) => p.name), ['长篇小说']);
+    expect((await tester.runAsync(tavern.listGlobalScripts))!.map((s) => s.name), ['状态栏']);
     expect(container.read(tavernQuickRepliesProvider), ['我看了看四周。']);
     // The chat naming 林晚 went to her; the other found no one.
     expect(tavern.chats, [('sample-innkeeper', 'chat.jsonl')]);

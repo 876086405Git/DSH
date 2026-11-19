@@ -113,7 +113,9 @@ _MvuMarkup _mvuScanMarkup(String input) {
       continue;
     }
     if (blockComment) {
+      hide(index, index + 1);
       if (character == '*' && index + 1 < input.length && input[index + 1] == '/') {
+        hide(index + 1, index + 2);
         index++;
         blockComment = false;
       }
@@ -160,7 +162,11 @@ _MvuMarkup _mvuScanMarkup(String input) {
           continue;
         }
       }
-      if (character == '[' || character == '{' || input.startsWith('_.', index)) {
+      if (character == '[' ||
+          character == '{' ||
+          input.startsWith('_.', index) ||
+          input.startsWith('//', index) ||
+          input.startsWith('/*', index)) {
         mode = 'json';
       } else if (RegExp(r'^-(?:\s|$)').hasMatch(input.substring(index)) ||
           RegExp(r'^[\w]+\s*:').hasMatch(input.substring(index))) {
@@ -177,11 +183,13 @@ _MvuMarkup _mvuScanMarkup(String input) {
     if (mode != null && (character == '"' || character == "'") && !proseApostrophe) {
       quote = character;
     } else if (mode == 'json' && input.startsWith('/*', index)) {
+      hide(index, index + 2);
       blockComment = true;
       index++;
     } else if ((mode == 'json' && input.startsWith('//', index)) ||
         (mode == 'yaml' && character == '#' && (index == lineStart || previous.trim().isEmpty))) {
       final nextLine = input.indexOf('\n', index);
+      hide(index, nextLine < 0 ? input.length : nextLine);
       index = (nextLine < 0 ? input.length : nextLine) - 1;
     } else if (mode == 'yaml' && character == ':' && index + 1 < input.length && input[index + 1].trim().isEmpty) {
       final rest = RegExp(r'''^[ \t]+([^\s"'[{|>#\r\n][^\r\n]*)''').firstMatch(input.substring(index + 1));
