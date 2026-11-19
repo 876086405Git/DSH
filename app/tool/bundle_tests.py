@@ -146,28 +146,40 @@ def shard(index, total):
 
 def failed(report):
     """The test files behind the failures in a `--file-reporter json:` report."""
-    suites, tests, again = {}, {}, set()
+    suites, tests, again, finished = {}, {}, set(), False
+    owed = {}  # (bundle, member) -> tests the member declared that have not ended
     for line in Path(report).read_text(encoding='utf-8').splitlines():
         if not line.startswith('{'):
             continue
         event = json.loads(line)
-        if event['type'] == 'suite':
+        kind = event['type']
+        if kind == 'suite':
             suites[event['suite']['id']] = Path(os.path.relpath(event['suite']['path']))
-        elif event['type'] == 'testStart':
+        elif kind == 'group':
+            suite = suites[event['group']['suiteID']]
+            if OUT in suite.parents and event['group']['name'] in MEMBER.findall(text(suite)):
+                owed[suite, event['group']['name']] = event['group']['testCount']
+        elif kind == 'testStart':
             tests[event['test']['id']] = event['test']
-        # `error` as well: an error thrown after its test is over arrives after a `testDone`
-        # that still says success.
-        elif event['type'] == 'error' or (event['type'] == 'testDone' and event['result'] != 'success'):
+        elif kind == 'done':
+            finished = True
+        elif kind in ('testDone', 'error'):
             test = tests[event['testID']]
             suite = suites[test['suiteID']]
-            if OUT not in suite.parents:
-                again.add(suite.as_posix())
-                continue
-            members = MEMBER.findall(text(suite))
-            # Inside a bundle a test's name starts with its file; a bundle that did
-            # not load (one member does not compile) fails as a whole.
+            members = MEMBER.findall(text(suite)) if OUT in suite.parents else []
+            # Inside a bundle a test's name starts with its file.
             named = [member for member in members if test['name'].startswith(member + ' ')]
-            again.update(named or members)
+            if kind == 'testDone' and not event['hidden'] and (suite, *named[:1]) in owed:
+                owed[suite, named[0]] -= 1
+            # `error` as well: an error thrown after its test is over arrives after a
+            # `testDone` that still says success.
+            if kind == 'error' or event['result'] != 'success':
+                # A bundle that did not load (one member does not compile) fails as a whole.
+                again.update(named or members or [suite.as_posix()])
+    if not finished:
+        sys.exit('The run stopped before its report was complete: see its output above.')
+    # A process that died took the rest of its bundle with it: those files have not run.
+    again.update(member for (_, member), count in owed.items() if count > 0)
     if not again:
         sys.exit('The run failed, and not in a test: see its output above.')
     print('\n'.join(sorted(again)))

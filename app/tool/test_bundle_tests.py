@@ -72,23 +72,51 @@ class BundleTests(unittest.TestCase):
             {'type': 'suite', 'suite': {'id': 1, 'path': f'{root}/test/_bundles/state_plain_0_test.dart'}},
             {'type': 'suite', 'suite': {'id': 2, 'path': f'{root}/test/secrets/c_test.dart'}},
             {'type': 'testStart', 'test': {'id': 1, 'name': 'test/chat/a_test.dart x', 'suiteID': 0}},
-            {'type': 'testDone', 'testID': 1, 'result': 'failure'},
+            {'type': 'testDone', 'testID': 1, 'result': 'failure', 'hidden': False},
             {'type': 'testStart', 'test': {'id': 2, 'name': f'loading {root}/test/_bundles/state_plain_0_test.dart', 'suiteID': 1}},
-            {'type': 'testDone', 'testID': 2, 'result': 'error'},
+            {'type': 'testDone', 'testID': 2, 'result': 'error', 'hidden': True},
             {'type': 'testStart', 'test': {'id': 3, 'name': 'x', 'suiteID': 2}},
-            {'type': 'testDone', 'testID': 3, 'result': 'success'},
+            {'type': 'testDone', 'testID': 3, 'result': 'success', 'hidden': False},
+            {'type': 'done', 'success': False},
         ]
-        Path('report.json').write_text('\n'.join(json.dumps(event) for event in events), encoding='utf-8')
+        self.report(events)
         self.assertEqual(self.run_tool(bundle_tests.failed, 'report.json'), ['test/chat/a_test.dart', 'test/state/b_test.dart'])
         # Thrown after the test was over: its testDone said success.
-        events.append({'type': 'error', 'testID': 3, 'error': 'late'})
-        Path('report.json').write_text('\n'.join(json.dumps(event) for event in events), encoding='utf-8')
+        self.report(events + [{'type': 'error', 'testID': 3, 'error': 'late'}])
         self.assertIn('test/secrets/c_test.dart', self.run_tool(bundle_tests.failed, 'report.json'))
 
-    def test_a_failed_run_with_no_failed_test_is_not_a_pass(self):
-        Path('report.json').write_text('{"type":"done","success":false}\n', encoding='utf-8')
+    def test_a_file_whose_tests_never_ended_runs_again_with_the_one_that_failed(self):
+        Path('test/chat/z_test.dart').write_text(WIDGET, encoding='utf-8')
+        self.run_tool(bundle_tests.shard, 0, 1)
+        root = Path.cwd().as_posix()
+        self.report([
+            {'type': 'suite', 'suite': {'id': 0, 'path': f'{root}/test/_bundles/chat_widget_0_test.dart'}},
+            {'type': 'group', 'group': {'suiteID': 0, 'name': '', 'testCount': 3}},
+            {'type': 'group', 'group': {'suiteID': 0, 'name': 'test/chat/a_test.dart', 'testCount': 1}},
+            {'type': 'group', 'group': {'suiteID': 0, 'name': 'test/chat/z_test.dart', 'testCount': 2}},
+            {'type': 'testStart', 'test': {'id': 1, 'name': 'test/chat/a_test.dart x', 'suiteID': 0}},
+            # The process died here: a.x fails with the crash, and z never starts.
+            {'type': 'testDone', 'testID': 1, 'result': 'error', 'hidden': False},
+            {'type': 'done', 'success': False},
+        ])
+        self.assertEqual(self.run_tool(bundle_tests.failed, 'report.json'), ['test/chat/a_test.dart', 'test/chat/z_test.dart'])
+
+    def test_a_failed_run_with_no_failed_test_or_no_end_is_not_a_pass(self):
+        self.run_tool(bundle_tests.shard, 0, 1)
+        root = Path.cwd().as_posix()
+        self.report([{'type': 'done', 'success': False}])
         with self.assertRaises(SystemExit):
             self.run_tool(bundle_tests.failed, 'report.json')
+        self.report([
+            {'type': 'suite', 'suite': {'id': 0, 'path': f'{root}/test/_bundles/chat_widget_0_test.dart'}},
+            {'type': 'testStart', 'test': {'id': 1, 'name': 'test/chat/a_test.dart x', 'suiteID': 0}},
+            {'type': 'testDone', 'testID': 1, 'result': 'failure', 'hidden': False},
+        ])
+        with self.assertRaises(SystemExit):
+            self.run_tool(bundle_tests.failed, 'report.json')
+
+    def report(self, events):
+        Path('report.json').write_text('\n'.join(json.dumps(event) for event in events), encoding='utf-8')
 
 
 if __name__ == '__main__':
