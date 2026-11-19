@@ -69,6 +69,58 @@ void main() {
     expect(raw.html, contains(_status));
   });
 
+  test("a front-end card's greeting: each page an island, whatever its code block's language", () {
+    // As the engine shows such a greeting (its display regexes turned the
+    // tags into pages: packages/dsh_tavern/test/display_frontend_greeting_test.dart).
+    const story =
+        '```html\n<!DOCTYPE html>\n<html><head><style>\n.a{}\n\n.b{}\n</style></head>\n'
+        "<body><script>\nvar who='User';\n\nlet x = a*b*c;\n</script></body></html>\n```";
+    const status = '<!DOCTYPE html>\n<html><body><div>状态</div></body></html>';
+    final parts = tavernParts('$story\n\n```\n$status\n```');
+    expect(parts.map((p) => p.runtimeType), [TavernIslandPart, TavernIslandPart]);
+    expect((parts[0] as TavernIslandPart).html, contains('.a{}\n\n.b{}'));
+    expect((parts[0] as TavernIslandPart).html, contains("var who='User';\n\nlet x = a*b*c;"));
+    expect((parts[1] as TavernIslandPart).html, status);
+    // Any language, indented up to three spaces, CRLF: still a page.
+    for (final text in [
+      '```text\n$status\n```',
+      '   ```\n$status\n   ```',
+      '```\r\n${status.replaceAll('\n', '\r\n')}\r\n```',
+    ]) {
+      expect(tavernParts(text).single, isA<TavernIslandPart>(), reason: text);
+    }
+    // Code that is not a page stays code, as in 酒馆助手.
+    expect(tavernParts('```\n<div>x</div>\n```'), [isA<TavernTextPart>()]);
+    // Beside HTML, in its page, it is still code.
+    final beside = tavernParts('<div>面板</div>\n\n```js\nif (a<b) x();\n```').single as TavernIslandPart;
+    expect(beside.html, '<div>面板</div>\n<pre><code>if (a&lt;b) x();</code></pre>');
+
+    // Unfenced, with blank lines in its CSS and code: those stay as written.
+    final bare =
+        tavernParts(
+              '<div><details><summary>变量</summary>[1]</details></div>\n<style>\n.x{}\n\n.y{}\n</style>\n\n'
+              '<script>\nvar a = 1;\n\nvar b = a*2*3;\n</script>\n\n她*笑*了。',
+            ).single
+            as TavernIslandPart;
+    expect(bare.html, contains('<style>\n.x{}\n\n.y{}\n</style>'));
+    expect(bare.html, contains('<script>\nvar a = 1;\n\nvar b = a*2*3;\n</script>'));
+    expect(bare.html, contains('<p>她<em>笑</em>了。</p>'));
+  });
+
+  test('blank lines part HTML blocks, never inside a style, script, pre, textarea or comment', () {
+    expect(tavernHtmlBlocks('a\n\nb'), ['a', 'b']);
+    expect(tavernHtmlBlocks('<STYLE>\na\n\nb\n</style>\n\nc'), ['<STYLE>\na\n\nb\n</style>', 'c']);
+    expect(tavernHtmlBlocks('<!-- a\n\nb -->\n\n<pre>c\n\n</pre>\n\nd'), ['<!-- a\n\nb -->', '<pre>c\n\n</pre>', 'd']);
+    // A </style> in a script is the script's, until the script ends.
+    expect(tavernHtmlBlocks('<script>\n"</style>"\n\nx\n</script>\n\ny'), [
+      '<script>\n"</style>"\n\nx\n</script>',
+      'y',
+    ]);
+    expect(tavernIsFrontend('<body>'), isTrue);
+    expect(tavernIsFrontend('</html>'), isTrue);
+    expect(tavernIsFrontend('<div>x</div>'), isFalse);
+  });
+
   test('the page reports its height with our script; the protections are choices', () {
     String page({bool noScripts = false, bool offline = false}) => tavernIslandDocument(
       _status,
@@ -101,6 +153,7 @@ void main() {
   test("a status bar's island reads its floor (read only), with jQuery and lodash first", () {
     expect(tavernIslandReadsStory("<script>await waitGlobalInitialized('Mvu');</script>"), isTrue);
     expect(tavernIslandReadsStory("<script>getVariables({type:'message'})</script>"), isTrue);
+    expect(tavernIslandReadsStory('<script>allVars = getAllVariables();</script>'), isTrue);
     expect(tavernIslandReadsStory('<div>Mvu</div>'), isFalse);
     expect(tavernIslandHasScript('<p>x</p>'), isFalse);
     // An inline handler runs as a script does.

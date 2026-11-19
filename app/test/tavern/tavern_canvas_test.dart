@@ -177,6 +177,20 @@ void main() {
     expect(tavernStoryHtml('a_b_c 和 _斜_'), '<p>a_b_c 和 <em>斜</em></p>');
   });
 
+  test("a front-end card's pages go as written, in a code block of any language or bare", () {
+    const page = '<!DOCTYPE html>\n<html><head><style>\n.a{}\n\n.b{}\n</style></head><body><div>状态</div></body></html>';
+    // No language: 酒馆助手 draws a whole page whatever the block says.
+    expect(tavernStoryHtml('```\n$page\n```'), page);
+    expect(tavernStoryHtml('```text\n$page\n```'), page);
+    expect(tavernStoryHtml('```\n<div>x</div>\n```'), '<pre><code>&lt;div&gt;x&lt;/div&gt;</code></pre>');
+    // Bare, its CSS and code across blank lines kept whole.
+    expect(tavernStoryHtml(page), page);
+    expect(
+      tavernStoryHtml('<script>\nvar a = 1;\n\nvar b = a*2*3;\n</script>\n\n她*笑*了。'),
+      '<script>\nvar a = 1;\n\nvar b = a*2*3;\n</script>\n<p>她<em>笑</em>了。</p>',
+    );
+  });
+
   test('the page has ST structure and colour variables, our script by nonce, and the chosen guards', () {
     String page({
       bool noScripts = false,

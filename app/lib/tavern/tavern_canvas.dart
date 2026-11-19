@@ -16,6 +16,7 @@ import 'package:dsh_tavern/dsh_tavern.dart' show PersonaSelection, TavernPersona
 
 import 'tavern_canvas_helpers.dart';
 import 'tavern_card_scripts.dart' show tavernUsesMvu;
+import 'tavern_islands.dart' show tavernFence, tavernFenceIsHtml, tavernHtmlBlocks;
 
 /// One message on the canvas.
 final class TavernCanvasEntry {
@@ -133,21 +134,22 @@ String _words(String text) => text
     .replaceAllMapped(_emUnderscore, (m) => '<em>${m[1]}</em>')
     .replaceAllMapped(_said, (m) => '<q>${m[0]}</q>');
 
-final _fence = RegExp(r'^(`{3,}|~{3,})[ \t]*([\w-]*)[^\n]*\n([\s\S]*?)\n?^\1[ \t]*$', multiLine: true);
 final _blockTag = RegExp(
-  r'^<(div|p|style|script|table|details|section|article|center|ul|ol|blockquote|pre|h[1-6]|hr|img|svg|iframe|form|figure|dsh-[a-z-]+)\b',
+  r'^<(!doctype|html|head|body|link|meta|title|div|p|style|script|table|details|section|article|center|ul|ol|blockquote|pre|h[1-6]|hr|img|svg|iframe|form|figure|dsh-[a-z-]+)\b',
   caseSensitive: false,
 );
 final _heading = RegExp(r'^(#{1,6})\s+(.*)$');
+final _lang = RegExp(r'^[\w-]*');
 
 /// A message's text as the canvas shows it: paragraphs with their line
-/// breaks, Markdown's emphasis, what is said in <q>, ```html blocks and block
-/// HTML as written, other code blocks escaped.
+/// breaks, Markdown's emphasis, what is said in <q>, ```html blocks (and code
+/// blocks holding a whole page, [tavernFenceIsHtml]) and block HTML as
+/// written, other code blocks escaped.
 String tavernStoryHtml(String text) {
   final source = text.replaceAll('\r\n', '\n');
   final out = <String>[];
   void prose(String segment) {
-    for (final block in segment.split(RegExp(r'\n[ \t]*\n'))) {
+    for (final block in tavernHtmlBlocks(segment)) {
       final trimmed = block.trim();
       if (trimmed.isEmpty) continue;
       if (_blockTag.hasMatch(trimmed)) {
@@ -165,12 +167,12 @@ String tavernStoryHtml(String text) {
   }
 
   var at = 0;
-  for (final f in _fence.allMatches(source)) {
+  for (final f in tavernFence.allMatches(source)) {
     prose(source.substring(at, f.start));
-    final lang = f[2]!.toLowerCase();
+    final lang = _lang.stringMatch(f[2]!.trim())!.toLowerCase();
     final body = f[3]!;
     out.add(
-      lang == 'html'
+      tavernFenceIsHtml(f[2]!, body)
           ? body
           : '<pre><code${lang.isEmpty ? '' : ' class="language-$lang"'}>${_escape(body)}</code></pre>',
     );

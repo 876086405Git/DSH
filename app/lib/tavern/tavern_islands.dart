@@ -34,11 +34,54 @@ final class TavernComponentPart extends TavernPart {
   final TavernComponent component;
 }
 
-final _htmlFence = RegExp(
-  r'^(`{3,}|~{3,})[ \t]*html\b[^\n]*\n([\s\S]*?)\n?^\1[ \t]*$',
-  multiLine: true,
+/// A fenced code block (up to three spaces in, as Markdown allows): its
+/// fence, its info string, its body.
+final tavernFence = RegExp(r'^[ ]{0,3}(`{3,}|~{3,})([^\n`]*)\n([\s\S]*?)\n?^[ ]{0,3}\1[ \t]*$', multiLine: true);
+
+/// Whether a code block with [info] (its info string) and [body] is a page
+/// to show rather than code: an ```html block, or — whatever its language,
+/// or none — a whole page, as 酒馆助手 renders any code block whose text has
+/// `html>`, `<head>` or `<body` in it.
+bool tavernFenceIsHtml(String info, String body) =>
+    info.trim().toLowerCase().startsWith(RegExp(r'html\b')) || tavernIsFrontend(body);
+
+/// 酒馆助手's test for a front end (its isFrontend).
+bool tavernIsFrontend(String code) => code.contains('html>') || code.contains('<head>') || code.contains('<body');
+
+/// Elements whose text a blank line does not end: style and script (their
+/// CSS and code), pre and textarea (their text as written), and comments.
+final _rawBound = RegExp(
+  r'<(style|script|pre|textarea)\b[^>]*>|</(style|script|pre|textarea)\s*>|<!--|-->',
   caseSensitive: false,
 );
+
+/// [text]'s blocks, as blank lines part them; never inside a style, script,
+/// pre, textarea or comment, whose blank lines are its own.
+List<String> tavernHtmlBlocks(String text) {
+  final blocks = <String>[];
+  String? open;
+  for (final block in text.split(RegExp(r'\n[ \t]*\n'))) {
+    if (open != null) {
+      blocks.last = '${blocks.last}\n\n$block';
+    } else {
+      blocks.add(block);
+    }
+    for (final m in _rawBound.allMatches(block)) {
+      final tag = m[0]!;
+      if (open == null) {
+        if (tag == '<!--') {
+          open = '-->';
+        } else if (m[1] != null) {
+          open = m[1]!.toLowerCase();
+        }
+      } else if (open == '-->' ? tag == '-->' : m[2]?.toLowerCase() == open) {
+        open = null;
+      }
+    }
+  }
+  return blocks;
+}
+
 final _blockHtml = RegExp(
   r'<(style|script|div|table|details|svg|section|article|center|iframe|canvas|form|button)\b',
   caseSensitive: false,
@@ -49,10 +92,12 @@ final _blockHtml = RegExp(
 final _trailing = RegExp(r'^[\s\p{P}]{1,3}$', unicode: true);
 
 /// [text] cut into parts: each component tag outside an HTML block a part of
-/// its own; with [islands], each ```html block an island and text around them
-/// that carries block HTML an island too (as SillyTavern would show it); the
-/// rest Markdown. One text part, [text] as it is, when there is nothing else.
+/// its own; with [islands], each ```html block (or code block holding a
+/// whole page, [tavernFenceIsHtml]) an island and text around them that
+/// carries block HTML an island too (as SillyTavern would show it); the rest
+/// Markdown. One text part, [text] as it is, when there is nothing else.
 List<TavernPart> tavernParts(String text, {bool islands = true}) {
+  final source = text.replaceAll('\r\n', '\n');
   final parts = <TavernPart>[];
   void prose(String segment) {
     if (segment.trim().isEmpty) return;
@@ -65,7 +110,10 @@ List<TavernPart> tavernParts(String text, {bool islands = true}) {
       }
     }
     parts.add(
-      islands && _blockHtml.hasMatch(segment) ? TavernIslandPart(_htmlOf(segment)) : TavernTextPart(segment.trim()),
+      // HTML in a code block is code, not a reason for a page.
+      islands && _blockHtml.hasMatch(segment.replaceAll(tavernFence, ''))
+          ? TavernIslandPart(_htmlOf(segment))
+          : TavernTextPart(segment.trim()),
     );
   }
 
@@ -82,34 +130,53 @@ List<TavernPart> tavernParts(String text, {bool islands = true}) {
 
   var at = 0;
   if (islands) {
-    for (final fence in _htmlFence.allMatches(text)) {
-      outside(text.substring(at, fence.start));
-      final html = fence.group(2)!;
+    for (final fence in tavernFence.allMatches(source)) {
+      final html = fence[3]!;
+      // Other code stays in the text, Markdown's to draw.
+      if (!tavernFenceIsHtml(fence[2]!, html)) continue;
+      outside(source.substring(at, fence.start));
       if (html.trim().isNotEmpty) parts.add(TavernIslandPart(html));
       at = fence.end;
     }
   }
-  outside(text.substring(at));
+  outside(source.substring(at));
   if (parts.every((p) => p is TavernTextPart)) return [TavernTextPart(text)];
   return parts;
 }
 
-/// Text with HTML in it, as a page: HTML blocks as they are, each other
-/// paragraph a <p> with its line breaks and *actions* in italics.
-String _htmlOf(String segment) => [
-  for (final block in segment.trim().split(RegExp(r'\n[ \t]*\n')))
-    if (block.trimLeft().startsWith('<'))
-      block
-    else
-      '<p>${block.trim().replaceAllMapped(RegExp(r'\*([^*\n]+)\*'), (m) => '<em>${m[1]}</em>').replaceAll('\n', '<br>')}</p>',
-].join('\n');
+/// Text with HTML in it, as a page: HTML blocks as they are, code blocks as
+/// code, each other paragraph a <p> with its line breaks and *actions* in
+/// italics.
+String _htmlOf(String segment) {
+  final out = <String>[];
+  void blocks(String text) {
+    for (final block in tavernHtmlBlocks(text.trim())) {
+      if (block.trim().isEmpty) continue;
+      out.add(
+        block.trimLeft().startsWith('<')
+            ? block
+            : '<p>${block.trim().replaceAllMapped(RegExp(r'\*([^*\n]+)\*'), (m) => '<em>${m[1]}</em>').replaceAll('\n', '<br>')}</p>',
+      );
+    }
+  }
+
+  var at = 0;
+  for (final fence in tavernFence.allMatches(segment)) {
+    blocks(segment.substring(at, fence.start));
+    final code = fence[3]!.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    out.add('<pre><code>$code</code></pre>');
+    at = fence.end;
+  }
+  blocks(segment.substring(at));
+  return out.join('\n');
+}
 
 /// Whether [html]'s scripts read the story (a status bar drawing its
 /// floor's variables): then its island is told them (tavern_island_story.dart).
 bool tavernIslandReadsStory(String html) => _readsStory.hasMatch(html);
 
 final _readsStory = RegExp(
-  r'(<script\b|\son[a-z]+\s*=)[\s\S]*\b(getVariables|Mvu|getChatMessages|getCurrentMessageId|getLastMessageId|waitGlobalInitialized)\b',
+  r'(<script\b|\son[a-z]+\s*=)[\s\S]*\b(getVariables|getAllVariables|Mvu|getChatMessages|getCurrentMessageId|getLastMessageId|waitGlobalInitialized)\b',
   caseSensitive: false,
 );
 
@@ -211,6 +278,13 @@ const _storyJs = r'''
     var f=floor(o&&o.message_id);
     return clone(f===d.messageId?d.data:f===d.last?d.latest:{})||{};
   }
+  // 酒馆助手's getAllVariables: the chat's, then this floor's over them.
+  function merge(a,b){
+    if(!b||typeof b!=='object'||!a||typeof a!=='object')return b===undefined?a:b;
+    for(var k in b)a[k]=merge(a[k],b[k]);
+    return a;
+  }
+  function getAllVariables(){return merge(clone(d.chat)||{},clone(d.data)||{});}
   function steps(p){var out=[];String(p).replace(/[^.[\]]+|\[(\d+)\]/g,function(m,i){out.push(i===undefined?m:+i);return m;});return out;}
   function vwd(v){return Array.isArray(v)&&v.length===2&&typeof v[1]==='string'?v[0]:v;}
   var Mvu={
@@ -229,7 +303,7 @@ const _storyJs = r'''
   };
   function message(){return {message_id:d.messageId,name:d.name,role:d.role,is_hidden:false,message:d.message,data:clone(d.data)||{},extra:{}};}
   function quiet(){return {stop:function(){}};}
-  var api={Mvu:Mvu,getVariables:getVariables,
+  var api={Mvu:Mvu,getVariables:getVariables,getAllVariables:getAllVariables,
     getCurrentMessageId:function(){return d.messageId;},getLastMessageId:function(){return d.last;},
     getChatMessages:function(r){var f=floor(typeof r==='number'?r:parseInt(String(r),10));return f===d.messageId?[message()]:[];},
     waitGlobalInitialized:function(n){return n==='Mvu'?Promise.resolve(Mvu):new Promise(function(){});},
