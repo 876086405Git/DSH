@@ -31,7 +31,8 @@ Map<String, Object?> webReply() => {
 class WebRpc implements RemoteRpcClient {
   final calls = <String>[];
   FutureOr<Object?> Function(String)? handler;
-  final _done = Completer<SecureChannelClosed>();
+  // Bind completion to the widget test zone, not the outer setUp zone.
+  late final _done = Completer<SecureChannelClosed>();
 
   @override
   bool get isClosed => _done.isCompleted;

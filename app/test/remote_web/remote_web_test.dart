@@ -120,9 +120,12 @@ void main() {
   });
 
   testWidgets('Noise done retires entry before the mux reconnect event', (tester) async {
-    await pump(tester);
+    final container = await pump(tester);
+    expect(container.read(remoteWebSessionProvider).value, same(session));
     await rpc.close();
+    expect(session.isClosed, isTrue);
     await _frames(tester);
+    expect(container.read(remoteWebSessionProvider).value, isNull);
     expect(find.text(appL10n.remoteWebOpen), findsNothing);
     await remove(tester);
   });
