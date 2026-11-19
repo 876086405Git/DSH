@@ -327,8 +327,8 @@
     "ohos-plugin-hmr-transaction.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "30e68c69b8a38d58f3e59fece0dbb63bc4f8e79212df91c25e76358502d2bd47",
-          "before": "eb73911bd27c3730bf5d70b9cf7193fff5cb301984f981b6e91edff33c2a8592"
+          "after": "3f95216bd77292275e05a3b14df6b28214c9281ef116826a03c18f3f93016bb1",
+          "before": "dd947bf10aa09247f469cfa8f8332a705040a852eecd243411057ff318844ae1"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "7caff988b77c08a3da2b31f1d0c05dd2ad372af58c0bdd1a8d5a43a461da1c10",
@@ -339,8 +339,8 @@
     "ohos-plugin-linkless.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "4fe63479a0bfa026c578b3e3acc2b775aa3d027b6502a9d72a9135513b3e2cad",
-          "before": "55d3674947850069069733aafa2975982c77e0b743dc59527173f382c0ce77db"
+          "after": "60479860a33d568c63bd89932a21c2f8808d6e450d7eeaad74deed91e672aac5",
+          "before": "495504fd918ba94b9179ca06efa11f447029a213c3fbe1cf284c5ff140a5626a"
         },
         "node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js": {
           "after": "82e895216414eaa3a8f29d5d7aad31366272c8a6382e2ab4fe00fe30601e13c4",
@@ -351,16 +351,16 @@
     "ohos-plugin-locale-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "55d3674947850069069733aafa2975982c77e0b743dc59527173f382c0ce77db",
-          "before": "8c8c617eec295d60e18189949705e04399cd7b7f4ad027e181c4666c99621a1c"
+          "after": "495504fd918ba94b9179ca06efa11f447029a213c3fbe1cf284c5ff140a5626a",
+          "before": "d6c70c26797ad2f0ad862ba9dada6279447c016cc0e5ab4f9989791226a2a68e"
         }
       }
     },
     "ohos-plugin-manifest-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "8c8c617eec295d60e18189949705e04399cd7b7f4ad027e181c4666c99621a1c",
-          "before": "30e68c69b8a38d58f3e59fece0dbb63bc4f8e79212df91c25e76358502d2bd47"
+          "after": "d6c70c26797ad2f0ad862ba9dada6279447c016cc0e5ab4f9989791226a2a68e",
+          "before": "3f95216bd77292275e05a3b14df6b28214c9281ef116826a03c18f3f93016bb1"
         }
       }
     },
@@ -521,6 +521,14 @@
         "node_modules/@deepseek-ai/dsh-agent-preset/lib/index.js": {
           "after": "5c8452bdb9954acd98737297512a3d8cb8d4ea534ee6e6ea5c2050aba8cf08e9",
           "before": "23cd2dd62ac3b27522a2d377e14b5a93f80c2189e733937dcdd02b73a6d3d1da"
+        }
+      }
+    },
+    "profile-root-installation-precedence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d",
+          "before": "0efe3b6c4be30e101982c0740b55d3e035fb754e32ad366a197a9b7ec5be6cdb"
         }
       }
     },
@@ -1905,8 +1913,8 @@
     "zzzzzzzzzzzzzz-ohos-plugin-packages.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "eb73911bd27c3730bf5d70b9cf7193fff5cb301984f981b6e91edff33c2a8592",
-          "before": "0efe3b6c4be30e101982c0740b55d3e035fb754e32ad366a197a9b7ec5be6cdb"
+          "after": "dd947bf10aa09247f469cfa8f8332a705040a852eecd243411057ff318844ae1",
+          "before": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "373ed95b0a5ee0aabdd5a0fb5c15c2b4163bbee41edf67c436dafaa8fb7e79e0",
@@ -2506,7 +2514,8 @@
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
-      "web-empty-reply-notice.diff"
+      "web-empty-reply-notice.diff",
+      "profile-root-installation-precedence.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2662,6 +2671,7 @@
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
+      "profile-root-installation-precedence.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
