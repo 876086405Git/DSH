@@ -328,7 +328,10 @@ const _js = r'''
   function setButtons(s,list){
     var before=buttons[s.key],mine=buttons[s.key]=list;tellButtons(s.key);
     buttonWrites[s.key]=(buttonWrites[s.key]||0)+1;
-    function settled(){if(--buttonWrites[s.key])return false;var moved=listMoved[s.key];delete listMoved[s.key];return moved;}
+    // Counted against the frame that wrote: one taken down since leaves its
+    // successor's count alone.
+    var life=frames[s.key];
+    function settled(){if(frames[s.key]!==life||--buttonWrites[s.key])return false;var moved=listMoved[s.key];delete listMoved[s.key];return moved;}
     return call('replaceScriptButtons',{asScript:s.key,buttons:list}).then(function(r){
       settled();
       if(buttons[s.key]===mine){buttons[s.key]=r.buttons;tellButtons(s.key);}
