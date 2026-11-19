@@ -28,7 +28,12 @@ def _credited(pack: Path) -> bytes:
 
 
 def place(src: Path) -> None:
-    ASSET.write_bytes(_credited(src))
+    pending = ASSET.with_suffix('.zip.tmp')
+    try:
+        pending.write_bytes(_credited(src))
+        pending.replace(ASSET)
+    finally:
+        pending.unlink(missing_ok=True)
     print(f'companion pack: {ASSET.relative_to(REPO)} from {src}')
 
 
