@@ -242,6 +242,19 @@ class _PopupDialog extends StatelessWidget {
   }
 }
 
+/// [theme] for Markdown on the notice's ground (the inverse surface): it
+/// draws in onSurface, which there is the ground's own tone.
+ThemeData _onNotice(ThemeData theme) {
+  final scheme = theme.colorScheme;
+  return theme.copyWith(
+    colorScheme: scheme.copyWith(
+      onSurface: scheme.onInverseSurface,
+      onSurfaceVariant: scheme.onInverseSurface,
+      primary: scheme.inversePrimary,
+    ),
+  );
+}
+
 /// /echo: the app's notice, its title over its words, marked by how much it
 /// matters; a tap puts it away.
 Future<TavernInteractAnswer> _echo(BuildContext context, TavernInteractFields f, Future<void>? withdraw) async {
@@ -275,7 +288,13 @@ Future<TavernInteractAnswer> _echo(BuildContext context, TavernInteractFields f,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (f.title != null) Text(f.title!, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    if (text.isNotEmpty) f.markdown ? MarkdownBody(text: text, selectable: false) : Text(text),
+                    if (text.isNotEmpty)
+                      f.markdown
+                          ? Theme(
+                              data: _onNotice(Theme.of(bar)),
+                              child: MarkdownBody(text: text, selectable: false),
+                            )
+                          : Text(text),
                   ],
                 ),
               ),
