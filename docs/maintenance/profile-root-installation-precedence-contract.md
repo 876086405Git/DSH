@@ -1,6 +1,6 @@
 # Profile 根入口的 installation 选源合同
 
-本改动按第十七波 ADDENDUM-02 的明确决定改变默认优先级，只用于 Android 的引擎覆片。它是新的产品规则；此前 profile 内普通副本优先的行为不能被描述成原本就违反此规则。
+本改动按第十七波 ADDENDUM-02 的明确决定改变默认优先级。它是 Android 与 OHOS 共用链上的引擎覆片：放在 Android 链末尾，OHOS 链里同一位置也有它，因为 OHOS 链必须以 Android 链为前缀（test_shipped_android_chain_is_the_ohos_prefix）。它是新的产品规则；此前 profile 内普通副本优先的行为不能被描述成原本就违反此规则。
 
 ## 生效条件
 
@@ -39,4 +39,4 @@ DSH_PREFIX=/path/to/prepared-runtime node --test runtime/tests/profile-root-inst
 
 没有 prefix 时测试明确失败提示，不静默跳过。本执行器没有完整 prefix；正式测试及 r7 live 未运行，须由本机完整 Linux CI/既有 live 检查验证。
 
-本地只对已校验发布原文抽取出的实际 resolution producer/router 运行真实文件夹具，验证相同选源条件；该结果不等于完整 Host、原生 Node loader 拦截、手机升级现场或 r7 live 已通过。原件为 Android 全覆片末态，不能据此承诺其它 target 的组合结果。pins 由本机按实际 Android series 录制。
+本地只对已校验发布原文抽取出的实际 resolution producer/router 运行真实文件夹具，验证相同选源条件；该结果不等于完整 Host、原生 Node loader 拦截、手机升级现场或 r7 live 已通过。原件为 Android 全覆片末态。pins 由本机分别按 Android 和 OHOS 链录制；OHOS 链上随后改同一文件的 ohos-plugin-* 五片都仍能打上，它们的 pins 随之更新。
