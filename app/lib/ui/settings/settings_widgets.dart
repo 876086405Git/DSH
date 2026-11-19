@@ -123,6 +123,7 @@ class SettingsTile extends StatelessWidget {
     this.danger = false,
     this.chevron,
     this.tinted = true,
+    this.titleMaxLines,
   }) : assert(title != null || spot != null);
 
   /// Null for a plain row that lines up with [InfoRow]s.
@@ -151,6 +152,9 @@ class SettingsTile extends StatelessWidget {
   /// False draws [icon] as a 20dp line icon ([SettingsLineIcon]) instead of a
   /// tinted disc: the default for rows on secondary pages.
   final bool tinted;
+
+  /// Lines the title may take, cut with an ellipsis; null: as many as it needs.
+  final int? titleMaxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +195,8 @@ class SettingsTile extends StatelessWidget {
                     children: [
                       Text(
                         title,
+                        maxLines: titleMaxLines,
+                        overflow: titleMaxLines == null ? null : TextOverflow.ellipsis,
                         style: settingsTitleStyle(context)?.copyWith(color: danger ? colors.danger : scheme.onSurface),
                       ),
                       if (subtitle case final sub?) ...[

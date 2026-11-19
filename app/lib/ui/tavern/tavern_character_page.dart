@@ -26,7 +26,7 @@ import 'tavern_chat_page.dart';
 import 'tavern_drafts_page.dart';
 import 'tavern_pack_bindings_page.dart';
 import 'tavern_pack_export_page.dart';
-import 'tavern_home_page.dart' show plainPreview, plainPreviewLines;
+import 'tavern_home_page.dart' show plainPreviewLines;
 import 'tavern_live2d_tile.dart';
 import 'tavern_lorebooks_page.dart';
 import 'tavern_report_page.dart';
@@ -248,7 +248,8 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
                       key: ValueKey('tavern-chat-${chat.id}'),
                       icon: AppIcons.chat,
                       tinted: false,
-                      title: plainPreview(chat.lastText ?? chat.title),
+                      title: plainPreviewLines(chat.lastText ?? chat.title, 2),
+                      titleMaxLines: 2,
                       subtitle: '${l10n.tavernMessageCount(chat.messageCount)} · ${shortTime(chat.updatedAt)}',
                       onTap: () => Navigator.of(context).push(TavernChatPage.route(chat.id)),
                     ),
