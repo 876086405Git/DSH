@@ -372,6 +372,27 @@ void main() {
       expect(http.urls.where((u) => u.endsWith('.apk')), isEmpty);
     });
 
+    test('an APK already here needs room only for its install copy', () async {
+      http.routes[_manifest] = (_, _) => textResponse(jsonEncode(_release()));
+      http.routes[_apkUrl] = fileRoute(_apk);
+      final c = container();
+      final controller = await ready(c);
+      await controller.check();
+      await controller.startDownload();
+      expect(c.read(appUpdateProvider).task, UpdateTaskPhase.ready);
+      // Room for one more copy, not two: the cached APK is checked and reused.
+      installer.app = InstalledApp(
+        versionName: '1.0.0',
+        versionCode: 1,
+        abi: 'arm64',
+        freeBytes: _apk.length + 64 * 1024 * 1024,
+      );
+      http.requests.clear();
+      await controller.startDownload();
+      expect(c.read(appUpdateProvider).task, UpdateTaskPhase.ready);
+      expect(http.urls.where((u) => u.endsWith('.apk')), isEmpty);
+    });
+
     test('a system dialog that closes without reporting frees the install after a grace period', () async {
       http.routes[_manifest] = (_, _) => textResponse(jsonEncode(_release()));
       http.routes[_apkUrl] = fileRoute(_apk);
