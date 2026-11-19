@@ -66,6 +66,7 @@
   "androidShellErrorAdbNotPaired": "Pair this phone with wireless debugging, then connect ADB.",
   "androidShellErrorConnectFailed": "Connection failed. Check the selected channel and current wireless-debugging connection port, then retry.",
   "androidShellErrorIdentityChanged": "The channel identity changed. Stop, then authorize or connect again.",
+  "androidShellErrorHelperStartFailed": "The Android Shell helper failed to start. The command did not run.",
   "androidShellErrorBusy": "Another operation is still pending. Retry later or stop Android Shell first.",
   "androidShellErrorInvalidArguments": "Invalid input. Use a six-digit pairing code and a port from 1 to 65535.",
   "androidShellErrorCancelled": "The operation was cancelled.",
