@@ -558,7 +558,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
 
   /// The open session, or a new one (create → select → apply the model picked
   /// on the new-chat screen). Null when it could not be created.
-  Future<String?> _ensureSession({required bool Function() isCurrent}) async {
+  /// [onCreated]: the session this call made, once it is selected, even when its
+  /// picks then fail to apply and null comes back.
+  Future<String?> _ensureSession({required bool Function() isCurrent, void Function(String id)? onCreated}) async {
     if (!isCurrent()) return null;
     final current = ref.read(currentSessionProvider);
     if (current != null) {
@@ -617,6 +619,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       if (!ownsCreation() || _draftKey != sessionId) return null;
       ref.read(currentSessionProvider.notifier).select(sessionId);
       if (!ownsCreation() || _draftKey != sessionId || ref.read(currentSessionProvider) != sessionId) return null;
+      onCreated?.call(sessionId);
       ref.read(composerQuoteProvider.notifier).move('new', sessionId);
       ref.read(generateModeProvider.notifier).move('new', sessionId);
       if (!ownsCreation() || _draftKey != sessionId) return null;
@@ -1504,9 +1507,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           if (id == null) {
             // Begun on the new-chat screen: another conversation opened since is not this call's.
             if (ref.read(currentSessionProvider) != null) return null;
-            final made = await _ensureSession(isCurrent: () => mounted);
+            String? created;
+            final made = await _ensureSession(isCurrent: () => mounted, onCreated: (id) => created = id);
             // Made but its picks failed to apply: still this call's, the next line retries them.
-            pinned = made ?? ref.read(currentSessionProvider);
+            pinned = made ?? created;
             return made;
           }
           // Picks it still owes (a failed apply on the new-chat screen) are settled before it is spoken to.
