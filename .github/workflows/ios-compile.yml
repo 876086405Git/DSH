@@ -129,31 +129,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Flutter's download and the simulator's boot take about four and two minutes, mostly
-      # waiting, and nothing before the app build needs them. Started here, they run under the
-      # steps below; "Boot the simulator" and "Install Flutter" pick them up. Only these two:
-      # anything that keeps the runner's three cores busy (the phone runner's Rust build did)
-      # slows every step it runs under by more than it saves.
-      - name: Start Flutter and the simulator early
-        run: |
-          early="$RUNNER_TEMP/early"
-          mkdir -p "$early"
-          (
-            archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
-            status=0
-            {
-              curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive" &&
-                echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c - &&
-                unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP" &&
-                "$RUNNER_TEMP/flutter/bin/flutter" precache --ios
-            } || status=$?
-            echo "$status" > "$early/flutter.exit"
-          ) > "$early/flutter.log" 2>&1 &
-          (xcrun simctl boot "$(python3 tooling/ios/engine-smoke/pick-simulator.py)") > "$early/simulator.log" 2>&1 &
-
       # The phone runner's Rust library takes six minutes to build for its three targets, and
       # what it is built from rarely changes: kept under the hash of those inputs. With the
       # copy for these inputs restored, build-phone-self-runner.sh has nothing to build.
+      # (Tried and dropped: starting this build, Flutter's download or the simulator's boot in
+      # the background. The runner's three cores and its network are already full; the steps
+      # they ran under took three to ten times as long, and the job no less.)
       - name: Restore the phone runner library
         id: phone-runner
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -294,8 +275,8 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           udid="$(python3 tooling/ios/engine-smoke/pick-simulator.py)"
-          # Booting since the first step; -b boots it here if that did not happen.
-          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid"
           echo "DSH_SIMULATOR=$udid" >> "$GITHUB_ENV"
 
       - name: Run a round on the simulator
@@ -402,10 +383,10 @@ jobs:
       - name: Install Flutter
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          # Downloading since the first step.
-          for _ in $(seq 600); do [ -f "$RUNNER_TEMP/early/flutter.exit" ] && break; sleep 2; done
-          cat "$RUNNER_TEMP/early/flutter.log"
-          test "$(cat "$RUNNER_TEMP/early/flutter.exit")" = 0
+          archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+          curl -fsSL -o "$RUNNER_TEMP/$archive"             "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
+          echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Resolve dependencies
