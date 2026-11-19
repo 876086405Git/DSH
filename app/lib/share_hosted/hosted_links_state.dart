@@ -150,7 +150,7 @@ class HostedLinksController extends Notifier<HostedLinksState> {
     try {
       final saved = await ref.read(hostedLinkStoreProvider).load();
       if (!ref.mounted) return false;
-      final cutoff = DateTime.now().subtract(keepExpired);
+      final cutoff = ref.read(hostedLinksClockProvider)().subtract(keepExpired);
       final links = [
         for (final l in saved)
           if (l.expiresAt == null || l.expiresAt!.isAfter(cutoff)) l,
@@ -340,7 +340,7 @@ class HostedLinksController extends Notifier<HostedLinksState> {
     if (!ref.mounted) return;
     _canSave = true;
     _plainPersisted.addAll(saved.map((link) => link.id));
-    final cutoff = DateTime.now().subtract(keepExpired);
+    final cutoff = ref.read(hostedLinksClockProvider)().subtract(keepExpired);
     final links = [
       for (final l in saved)
         if (l.expiresAt == null || l.expiresAt!.isAfter(cutoff)) l,
@@ -392,3 +392,7 @@ class HostedLinksController extends Notifier<HostedLinksState> {
 }
 
 final hostedLinksProvider = NotifierProvider<HostedLinksController, HostedLinksState>(HostedLinksController.new);
+
+/// The time expired links are counted from; tests pin it, as the page's own
+/// clock is pinned, so a link's 已过期 row does not drop off with the date.
+final hostedLinksClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
