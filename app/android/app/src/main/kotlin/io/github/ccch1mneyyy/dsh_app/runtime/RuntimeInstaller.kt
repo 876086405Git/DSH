@@ -62,8 +62,10 @@ class RuntimeInstaller(
         baseDir.mkdirs()
         // The transaction owns its payload outside staging. Finish it before any
         // cleanup, including when a different APK resumes this install.
-        engineUpgrade.recover()
+        val recoveredVersion = engineUpgrade.recover()
         staging.deleteRecursivelySafely()
+        // Recovery already installed this payload. A same-version repair without a journal still extracts.
+        if (recoveredVersion == manifest.runtimeVersion) return
         if (resumeRootfsInstall(baseDir, manifest.runtimeVersion, manifest.abi, manifest.raw,
                 keepDir, dropKept, sync)) return
         val archives = manifest.archivesForInstall(Files.exists(rootfs.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
