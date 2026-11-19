@@ -1498,7 +1498,13 @@ ${tavernCanvasHelpersJs(mvu: mvu)}
   function syncFrames(){
     var want={};scripts.forEach(function(s){want[s.key]=s;});
     Object.keys(frames).forEach(function(k){if(!want[k]||want[k].content!==frames[k].content)stopFrame(k);});
-    scripts.forEach(function(s){var f=frames[s.key];if(f){f.name=s.name;f.buttonList=s.buttonList;}else startFrame(s);});
+    scripts.forEach(function(s){
+      var f=frames[s.key];if(!f){startFrame(s);return;}
+      // Its buttons changed (another page, a library edit): read afresh from
+      // the list. A write of its own still out keeps its answer.
+      if(JSON.stringify(f.buttonList||[])!==JSON.stringify(s.buttonList||[]))delete buttons[s.key];
+      f.name=s.name;f.buttonList=s.buttonList;
+    });
   }
   function stopFrame(k){
     var f=frames[k];delete frames[k];frameAt[f.n]=null;f.el.remove();delete buttons[k];

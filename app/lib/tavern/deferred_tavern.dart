@@ -741,8 +741,10 @@ class DeferredTavern implements Tavern {
       (await _ready).setGlobalScriptEnabled(id, enabled);
 
   @override
-  Future<void> setGlobalScriptOrder(List<String> ids, {String? folderId}) async =>
-      (await _ready).setGlobalScriptOrder(ids, folderId: folderId);
+  Future<void> setGlobalScriptOrder(List<String> ids, {String? folderId}) async {
+    final order = List.of(ids);
+    return (await _ready).setGlobalScriptOrder(order, folderId: folderId);
+  }
 
   @override
   Future<void> deleteGlobalScript(String id) async => (await _ready).deleteGlobalScript(id);

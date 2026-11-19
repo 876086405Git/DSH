@@ -85,7 +85,8 @@ class TavernScriptsPage extends ConsumerWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final dsh = DshColors.of(context);
-    final tree = ref.watch(tavernGlobalScriptsProvider).value;
+    final library = ref.watch(tavernGlobalScriptsProvider);
+    final tree = library.value ?? (library.hasError ? const <TavernScriptLibraryEntry>[] : null);
     final folder = this.folder;
     final items = folder == null ? tree : (tree == null ? null : _find(tree, folder.id)?.children ?? const []);
     String nameOf(TavernScriptLibraryEntry e) => e.name.isEmpty ? l10n.tavernScriptUnnamed : e.name;
@@ -97,7 +98,7 @@ class TavernScriptsPage extends ConsumerWidget {
             key: const ValueKey('tavern-scripts-export'),
             icon: AppIcons.share,
             tooltip: l10n.tavernScriptsExportAll,
-            onPressed: () => unawaited(_export(ref, l10n.tavernScripts)),
+            onPressed: () => unawaited(_change(context, () => _export(ref, l10n.tavernScripts))),
           ),
         if (folder == null)
           GlassIconButton(
@@ -115,7 +116,8 @@ class TavernScriptsPage extends ConsumerWidget {
             key: const ValueKey('tavern-scripts-empty'),
             padding: const EdgeInsets.fromLTRB(28, 8, 28, 16),
             child: Text(
-              l10n.tavernScriptsEmpty,
+              // Not read: why, as the engine said it, where the list would be.
+              library.hasError ? '${library.error}' : l10n.tavernScriptsEmpty,
               style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary, height: 1.5),
             ),
           )
@@ -164,7 +166,7 @@ class TavernScriptsPage extends ConsumerWidget {
                       (
                         AppIcons.share,
                         l10n.tavernScriptExport,
-                        () => unawaited(_export(ref, nameOf(entry), id: entry.id)),
+                        () => unawaited(_change(context, () => _export(ref, nameOf(entry), id: entry.id))),
                       ),
                       (
                         AppIcons.delete,
