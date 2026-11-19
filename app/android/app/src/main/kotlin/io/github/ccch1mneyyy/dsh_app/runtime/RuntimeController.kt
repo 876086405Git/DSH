@@ -604,6 +604,19 @@ class RuntimeController private constructor(private val app: Context) : DshProce
                     if (gen != runGen) return@execute
                     process = null
                     PhoneControl.get(app).onEngineStopped()
+                    if (launched?.tawc == true && stopGen < gen && !resetting) {
+                        // A tawcroot start that threw: the same fallback as onExit's, unless
+                        // onExit (through awaitExit) already took it.
+                        val runtime = manifest.runtimeVersion
+                        if (prefs.getString(K_TAWC_FAILED, null) != runtime) {
+                            prefs.edit().putString(K_TAWC_FAILED, runtime).apply()
+                            log("[dsh-app] tawcroot launch failed (${e.message ?: e.javaClass.simpleName}); starting again with compatible launch", "system")
+                            error = null
+                            setPhase(Phase.STARTING)
+                            restartNow("with compatible launch")
+                        }
+                        return@execute
+                    }
                     val startupError = launched?.startupError
                     if (startupError == null && stopGen >= gen) {
                         // A cancelled preparation can throw before a waiter exists.

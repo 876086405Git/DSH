@@ -39,7 +39,7 @@ OUT="$APP/build/app/outputs/flutter-apk"
 usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "build-apk: $*" >&2; exit 1; }
 
-flavor=arm64 mode=release target='' code='' name='' dry=0 keep_daemon=0 want_beta=0 companion=1
+flavor=arm64 mode=release target='' code='' name='' dry=0 keep_daemon=0 want_beta=0 companion=1 no_companion=0
 extra=()
 while (($#)); do
   case "$1" in
@@ -54,7 +54,7 @@ while (($#)); do
     --build-name=*) name=${1#*=}; shift ;;
     --keep-daemon) keep_daemon=1; shift ;;
     --beta) want_beta=1; shift ;;
-    --no-companion) companion=0; shift ;;
+    --no-companion) companion=0 no_companion=1; shift ;;
     --dry-run) dry=1; shift ;;
     -h | --help) usage; exit 0 ;;
     --) shift; extra=("$@"); break ;;
@@ -161,7 +161,14 @@ stop_daemon() {
   (cd "$APP/android" && ./gradlew --stop -q >/dev/null 2>&1) || true
 }
 drop_beta() { [[ -f $beta_json ]] && shred -u "$beta_json" 2>/dev/null || rm -f "$beta_json"; }
-trap 'drop_beta; stop_daemon' EXIT
+# --no-companion: a pack an earlier build placed waits outside the assets meanwhile.
+pack_asset="$APP/assets/companion/whale-girl.zip" pack_held="$APP/build/.whale-girl.zip.held"
+put_back_pack() { [[ ! -f $pack_held ]] || mv -f "$pack_held" "$pack_asset"; }
+trap 'drop_beta; stop_daemon; put_back_pack' EXIT
+if ((no_companion)) && [[ -f $pack_asset ]]; then
+  mkdir -p "$APP/build"
+  mv -f "$pack_asset" "$pack_held"
+fi
 if ((beta)); then
   mkdir -p "$APP/build"
   (umask 077; python3 -c 'import json, sys; print(json.dumps({"DSH_BETA_CHANNEL_TOKEN": open(sys.argv[1]).read().strip()}))' \

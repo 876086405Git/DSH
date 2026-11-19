@@ -88,8 +88,14 @@ apk.write_bytes(b'fake APK: shell flow only')
         result = self.run_script()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--no-companion", result.stderr)
+        # A pack an earlier build placed sits out a --no-companion build and comes back after.
+        placed = self.root / "app/assets/companion/whale-girl.zip"
+        placed.parent.mkdir(parents=True)
+        placed.write_bytes(b"placed")
         self.assertEqual(self.run_script("--no-companion").returncode, 0)
         self.assertFalse(self.pack_file.exists())
+        self.assertEqual(placed.read_bytes(), b"placed")
+        self.assertFalse((self.root / "app/build/.whale-girl.zip.held").exists())
 
     def test_exit_cleanup_leaves_daemons_outside_gradle_stop_alive(self):
         android = self.root / "app/android"
