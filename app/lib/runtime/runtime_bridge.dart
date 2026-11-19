@@ -200,6 +200,7 @@ class RuntimeStatus {
     this.tawcEngineEnabled = false,
     this.tawcEngineAvailable = false,
     this.tawcEngineActive = false,
+    this.tawcRecoveryAvailable = false,
     this.currentExecutionMode,
     this.launchSelectedMode,
     this.launchSpawned = false,
@@ -278,6 +279,9 @@ class RuntimeStatus {
   final bool tawcEngineEnabled;
   final bool tawcEngineAvailable;
   final bool tawcEngineActive;
+
+  /// Android can offer the opt-in launcher for the most recent PRoot failure.
+  final bool tawcRecoveryAvailable;
 
   /// Native process observation, never inferred from the saved direct preference.
   final String? currentExecutionMode;
@@ -364,6 +368,7 @@ class RuntimeStatus {
     tawcEngineEnabled: map['tawcEngineEnabled'] == true,
     tawcEngineAvailable: map['tawcEngineAvailable'] == true,
     tawcEngineActive: map['tawcEngineActive'] == true,
+    tawcRecoveryAvailable: map['tawcRecoveryAvailable'] == true,
     currentExecutionMode: map['currentExecutionMode'] as String?,
     launchSelectedMode: map['launchSelectedMode'] as String?,
     launchSpawned: map['launchSpawned'] == true,

@@ -43,7 +43,12 @@ class FailureCardModel {
   final StatusTone tone;
 
   /// [held]: the engine won't start by itself until someone says so ([EngineControl.shouldAutoStart]).
-  static FailureCardModel of(RuntimeFailure f, {required bool lkgUseful, bool held = false}) {
+  static FailureCardModel of(
+    RuntimeFailure f, {
+    required bool lkgUseful,
+    bool held = false,
+    bool tawcRecoveryAvailable = false,
+  }) {
     if (f.safeMode && f.kind.isFatal) {
       return FailureCardModel(
         title: appL10n.phoneFailureSafeStartup,
@@ -57,10 +62,11 @@ class FailureCardModel {
       case FailureKind.launchFailed:
         return FailureCardModel(
           title: appL10n.phoneFailureLaunch,
-          body: appL10n.phoneFailureLaunchHint,
+          body: tawcRecoveryAvailable ? appL10n.phoneFailureTawcHint : appL10n.phoneFailureLaunchHint,
           detail: f.causeUnknown ? null : f.summary,
-          primary: FailureAction.retry,
+          primary: tawcRecoveryAvailable ? FailureAction.retryWithTawcroot : FailureAction.retry,
           secondary: [
+            if (tawcRecoveryAvailable) FailureAction.retry,
             // HarmonyOS: a safe run that couldn't launch can still go back to the person's own configuration.
             if (f.safeMode && f.causeUnknown) FailureAction.startNormal,
             FailureAction.remote,
@@ -135,6 +141,7 @@ enum FailureAction {
   restoreLkg,
   enterSafe,
   retry,
+  retryWithTawcroot,
   startNormal,
   background,
   remote,
@@ -144,6 +151,7 @@ enum FailureAction {
     FailureAction.restoreLkg => appL10n.phoneFailureRestore,
     FailureAction.enterSafe => appL10n.phoneFailureEnterSafe,
     FailureAction.retry => appL10n.commonRetry,
+    FailureAction.retryWithTawcroot => appL10n.phoneFailureRetryWithTawcroot,
     FailureAction.startNormal => appL10n.phoneFailureStartNormal,
     FailureAction.background => appL10n.phoneEngineKeepAlive,
     FailureAction.remote => appL10n.commonRemoteHost,
@@ -174,7 +182,12 @@ class EngineFailureCard extends ConsumerWidget {
     final lkg = (failure.kind.isFatal || failure.causeUnknown) && !failure.safeMode
         ? ref.watch(lastKnownGoodProvider).value
         : null;
-    final model = FailureCardModel.of(failure, lkgUseful: lkg?.useful ?? false, held: held);
+    final model = FailureCardModel.of(
+      failure,
+      lkgUseful: lkg?.useful ?? false,
+      held: held,
+      tawcRecoveryAvailable: status.tawcRecoveryAvailable,
+    );
     final hazards = failure.safeMode && failure.kind.isFatal
         ? ref.watch(safePreflightProvider).value ?? const <SafeHazard>[]
         : const <SafeHazard>[];
@@ -189,6 +202,8 @@ class EngineFailureCard extends ConsumerWidget {
           unawaited(SafeModeActions.enter(context));
         case FailureAction.retry:
           unawaited(SafeModeActions.retry(context));
+        case FailureAction.retryWithTawcroot:
+          unawaited(SafeModeActions.retryWithTawcroot(context));
         case FailureAction.startNormal:
           unawaited(SafeModeActions.startNormal(context));
         case FailureAction.showLog:

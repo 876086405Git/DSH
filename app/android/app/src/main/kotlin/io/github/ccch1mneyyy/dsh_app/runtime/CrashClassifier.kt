@@ -51,6 +51,8 @@ data class RunFailure(
     val diagnostics: String?,
     /** Seconds between the ready transition and exit; null when ready was never reported. */
     val upSeconds: Long?,
+    /** The guest shell couldn't resolve its working directory or execute DSH under PRoot. */
+    val prootCompatibilityFailure: Boolean = false,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "kind" to kind.wire,
@@ -63,6 +65,7 @@ data class RunFailure(
         "recent" to recent,
         "diagnostics" to diagnostics,
         "upSeconds" to upSeconds,
+        "prootCompatibilityFailure" to prootCompatibilityFailure,
     )
 }
 
@@ -132,6 +135,11 @@ object CrashClassifier {
         )
 
     fun isFatal(line: String): Boolean = FATAL.any { it.containsMatchIn(line) }
+
+    fun isProotCompatibilityFailure(failure: RunFailure, tail: List<String>): Boolean =
+        failure.kind == FailureKind.LAUNCH_FAILED && failure.exitCode == 126 &&
+            "sh: 0: getcwd() failed: Function not implemented" in tail &&
+            "/bin/sh: 1: exec: /usr/local/bin/dsh: Bad address" in tail
 
     fun redact(line: String): String = TOKEN.replace(line) { "${it.groupValues[1]}=•••" }
 

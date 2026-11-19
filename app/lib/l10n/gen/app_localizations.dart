@@ -22472,6 +22472,18 @@ abstract class L10n {
   /// **'查看日志了解原因，或连接远程主机继续使用'**
   String get phoneFailureLaunchHint;
 
+  /// No description provided for @phoneFailureTawcHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'PRoot 无法执行本机引擎。可以尝试用 tawcroot 启动，继续使用已有的运行环境和数据。'**
+  String get phoneFailureTawcHint;
+
+  /// No description provided for @phoneFailureRetryWithTawcroot.
+  ///
+  /// In zh, this message translates to:
+  /// **'用 tawcroot 启动'**
+  String get phoneFailureRetryWithTawcroot;
+
   /// No description provided for @phoneFailureNoSpaceHint.
   ///
   /// In zh, this message translates to:

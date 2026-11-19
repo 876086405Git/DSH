@@ -50,4 +50,18 @@ class CrashClassifierTest {
         assertFalse(failure.summary!!.contains("private-value"))
         assertTrue(failure.summary!!.contains("token="))
     }
+
+    @Test fun tawcRecoveryMatchesTheObservedEarlyProotFailure() {
+        val cwd = "sh: 0: getcwd() failed: Function not implemented"
+        val exec = "/bin/sh: 1: exec: /usr/local/bin/dsh: Bad address"
+        fun matches(code: Int, tail: List<String>, ready: Long? = null): Boolean {
+            val failure = CrashClassifier.classify(code, ready, 100L, 100L, tail, false)
+            return CrashClassifier.isProotCompatibilityFailure(failure, tail)
+        }
+        assertTrue(matches(126, listOf(cwd, exec)))
+        assertFalse(matches(126, listOf(exec)))
+        assertFalse(matches(127, listOf(cwd, "/usr/bin/env: '/bin/sh': No such file or directory")))
+        assertFalse(matches(126, listOf(cwd, exec), ready = 1L))
+        assertFalse(matches(126, listOf(cwd, exec, "No space left on device")))
+    }
 }

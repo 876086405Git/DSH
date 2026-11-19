@@ -12025,6 +12025,12 @@ class L10nZh extends L10n {
   String get phoneFailureLaunchHint => '查看日志了解原因，或连接远程主机继续使用';
 
   @override
+  String get phoneFailureTawcHint => 'PRoot 无法执行本机引擎。可以尝试用 tawcroot 启动，继续使用已有的运行环境和数据。';
+
+  @override
+  String get phoneFailureRetryWithTawcroot => '用 tawcroot 启动';
+
+  @override
   String get phoneFailureNoSpaceHint => '清理一些空间后重试';
 
   @override
