@@ -13,7 +13,7 @@ observer=private/'observer';observer.mkdir();(observer/'node_modules').symlink_t
 media=private/'dsh-media';shutil.copytree(a.media.resolve(),media,ignore=shutil.ignore_patterns('node_modules','test'));(media/'node_modules').mkdir();(media/'node_modules/@deepseek-ai').symlink_to(prefix/'node_modules/@deepseek-ai',target_is_directory=True);(media/'node_modules/image-size').symlink_to(a.image_size.resolve(),target_is_directory=True)
 for name,target in [('wave10-r6-fixture',fixture),('dsh-media',media)]:(profile/'node_modules'/name).symlink_to(target,target_is_directory=True)
 manifest=profile/'package.json';manifest.write_text(json.dumps({'name':'own-r6-profile','version':'1.0.0','private':True,'dependencies':{'wave10-r6-fixture':'1.0.0','dsh-media':'0.1.0-m0.2'},'dsh':{'profile':{'bundles':['@deepseek-ai/dsh-base','@deepseek-ai/dsh-web-app']}}}))
-raw={'title':'normal','count':1,'explicit':'SYNTHETIC_R6_EXPLICIT','nil':None,'empty':'','bool':False,'zero':0,'equal':'SYNTHETIC_R6_DEFAULT','boundary':'','structEmpty':{},'structArray':[],'structUnknown':{'unused':'public'},'structNonempty':{'token':'SYNTHETIC_R6_EXPLICIT'}}
+raw={'title':'normal','count':1,'explicit':'SYNTHETIC_R6_EXPLICIT','nil':None,'empty':'','bool':False,'zero':0,'equal':'SYNTHETIC_R6_DEFAULT','boundary':'','structEmpty':{},'structArray':[],'structUnknown':{'unused':'public'},'structNonempty':{'token':'SYNTHETIC_R6_EXPLICIT'},'parent':{'ref':'R6_CONFIGURED_REF'},'emptyRef':{'ref':''}}
 inserts=[{'id':id,'name':'wave10-r6-fixture','config':raw if id=='normal' else {'count':1}} for id in ['normal','home-covered','home-same','cli-covered','flag-only']]
 inserts += [{'id':'fallback-label','name':'wave10-r6-fixture/plain'},{'id':'dsh-media','name':'dsh-media','config':{'credentials':{'slot1':{'apiKey':''}}}},{'id':'r6-observer','name':str(observer/'index.mjs')},{'id':'dsh-go-bridge','name':str(a.bridge.resolve()/'lib/index.js')}]
 rows=[{'id':x,'disabled':True} for x in ['session-title-llm','llm-pi-ai','llm-deepseek-account','session-telemetry-otel','web-search-deepseek','web-deepseek-api','web-fetch-http','tool-web']]+[{'insert':inserts}]
@@ -75,8 +75,10 @@ def first(op,stage):
  assert entries['normal']['label']=={'en':'Local R6 fixture','zh':'本地 R6 夹具'},entries['normal']['label'];assert entries['fallback-label']['label']=='fallback-label'
  assert entries['normal']['writable'] and entries['flag-only']['writable']
  view=get(op,stage);facts={'.'.join(x['path']):x['configured'] for x in view['secrets']}
- expected={'explicit':True,'absent':False,'nil':False,'empty':False,'bool':True,'zero':True,'equal':True,'parent.secret':False,'composite.right':False,'rows.0.secret':False,'boundary':False,'structEmpty':False,'structArray':False,'structUnknown':False,'structNonempty':False}
- assert facts==expected,facts;assert all(x['writable'] is False and 'credentialRef' not in x for x in view['secrets'])
+ expected={'explicit':True,'absent':False,'nil':False,'empty':False,'bool':True,'zero':True,'equal':True,'parent.secret':False,'emptyRef.secret':False,'multiple.first':False,'multiple.second':False,'composite.right':False,'rows.0.secret':False,'boundary':False,'structEmpty':False,'structArray':False,'structUnknown':False,'structNonempty':False}
+ assert facts==expected,facts;assert all(x['writable'] is False for x in view['secrets'])
+ assert {'.'.join(x['path']):x['credentialRef'] for x in view['secrets'] if 'credentialRef' in x}=={'parent.secret':'R6_CONFIGURED_REF'}
+ default_view=get(op,stage,'fallback-label');assert next(x for x in default_view['secrets'] if x['path']==['parent','secret'])['credentialRef']=='R6_DEFAULT_REF'
  media_view=get(op,stage,'dsh-media');assert len(media_view['secrets'])==4 and all(not x['configured'] for x in media_view['secrets'])
  assert snapshot('after-read-only-probes')==before
  for id in ['home-covered','home-same','cli-covered','home-insert','cli-insert']:
@@ -124,7 +126,7 @@ try:
   assert restore_patch is not None;patch.write_bytes(restore_patch);save('fixture-restore.json',{'exactSavedSHA256':sha(restore_patch),'restoredSHA256':sha(patch.read_bytes()),'afterOwnHostStopped':True})
   run_host('r6-restart',restart)
  else:run_host('r6-fallback',fallback)
- save('RESULT.json',{'status':'PASS_REAL_RC4_HOST_R6','mode':a.mode,'run':str(run),'httpRequests':len(audit),'ownHostsAllGone':all(x['identity'] is None for x in cleanup),'mediaToolsExecuted':False,'packageManagerInvoked':False,'source':{'prefix':str(prefix),'bridge':str(a.bridge.resolve()),'media':str(a.media.resolve())},'limits':'source-scoped Linux loopback Host; no App/Android/ABI or new binding producer protocol claim'})
+ save('RESULT.json',{'status':'PASS_REAL_RC4_HOST_R6','mode':a.mode,'run':str(run),'httpRequests':len(audit),'ownHostsAllGone':all(x['identity'] is None for x in cleanup),'mediaToolsExecuted':False,'packageManagerInvoked':False,'source':{'prefix':str(prefix),'bridge':str(a.bridge.resolve()),'media':str(a.media.resolve())},'limits':'source-scoped Linux loopback Host; no App/Android/ABI or real credential write claim'})
  print(json.dumps({'pass':True,'run':str(run),'requests':len(audit)}),flush=True)
 except BaseException as error:save('FAILURE.json',{'type':type(error).__name__,'message':str(error)});raise
 finally:
