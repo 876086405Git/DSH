@@ -334,6 +334,8 @@
   "phoneFailureKilledHint": "Likely low memory or battery restrictions",
   "phoneFailureLaunch": "Local runtime couldn’t start",
   "phoneFailureLaunchHint": "Check the logs, or connect to a remote host to continue",
+  "phoneFailureTawcHint": "PRoot couldn’t run the local engine. Try starting with tawcroot to use your existing runtime and data.",
+  "phoneFailureRetryWithTawcroot": "Start with tawcroot",
   "phoneFailureNoSpaceHint": "Free up some space and try again",
   "phoneFailureStartup": "DSH couldn’t start",
   "phoneFailureCrashedEarly": "DSH crashed soon after starting",

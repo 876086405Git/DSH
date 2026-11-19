@@ -12,7 +12,8 @@ import java.util.concurrent.TimeUnit
 internal interface ShellOwnedProcess {
     val stdout: InputStream
     val stderr: InputStream
-    fun prepare(): Boolean = true
+    /** Returns an error code, or null once the command has permission to start. */
+    fun prepare(): String? = null
     fun waitFor(): Int
     fun terminate()
     fun close()
@@ -110,9 +111,10 @@ internal class ShellJobCore(private val launch: (String, Long) -> ShellOwnedProc
                 !job.cancelled && !job.timedOut && !closed
             }
             readers += drain(job, child.stderr, false)
-            if (!wanted || !child.prepare()) {
+            val prepareError = if (wanted) child.prepare() else "cancelled"
+            if (prepareError != null) {
+                synchronized(guard) { if (job.error == null) job.error = prepareError }
                 child.terminate()
-                synchronized(guard) { if (job.error == null) job.error = "identityChanged" }
             } else {
                 synchronized(guard) { job.started = true }
                 readers += drain(job, child.stdout, true)
@@ -120,7 +122,9 @@ internal class ShellJobCore(private val launch: (String, Long) -> ShellOwnedProc
             val exit = child.waitFor()
             synchronized(guard) { job.exitCode = exit }
         } catch (_: Exception) {
-            synchronized(guard) { if (job.error == null) job.error = "executionFailed" }
+            synchronized(guard) {
+                if (job.error == null) job.error = if (job.started) "executionFailed" else "helperStartFailed"
+            }
         } finally {
             // A script cannot leave persistent work in its owned process group, even on normal exit.
             runCatching { process?.terminate() }.onFailure {

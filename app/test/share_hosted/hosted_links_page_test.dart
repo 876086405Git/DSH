@@ -62,6 +62,7 @@ Future<(FakeHost, MemoryStore)> _pump(
       brightness: brightness,
       overrides: [
         hostedLinkStoreProvider.overrideWithValue(store),
+        hostedLinksClockProvider.overrideWithValue(() => _now),
         hostedShareClientProvider.overrideWithValue(
           HostedShareClient(client: host.client, origin: 'https://go.example'),
         ),
@@ -84,6 +85,7 @@ void main() {
           overrides: [
             operatingSystemProvider.overrideWithValue('ohos'),
             hostedLinkStoreProvider.overrideWithValue(SecureHostedLinkStore(storage)),
+            hostedLinksClockProvider.overrideWithValue(() => _now),
           ],
         ),
       );
@@ -110,6 +112,7 @@ void main() {
       overrides: [
         operatingSystemProvider.overrideWithValue('ohos'),
         hostedLinkStoreProvider.overrideWithValue(SecureHostedLinkStore(storage)),
+        hostedLinksClockProvider.overrideWithValue(() => _now),
       ],
     );
     addTearDown(container.dispose);
@@ -148,6 +151,7 @@ void main() {
         overrides: [
           operatingSystemProvider.overrideWithValue('ohos'),
           hostedLinkStoreProvider.overrideWithValue(SecureHostedLinkStore(storage)),
+          hostedLinksClockProvider.overrideWithValue(() => _now),
           hostedShareClientProvider.overrideWithValue(
             HostedShareClient(client: host.client, origin: 'https://go.example'),
           ),

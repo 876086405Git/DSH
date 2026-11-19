@@ -1874,6 +1874,9 @@ class L10nEn extends L10n {
   String get androidShellErrorIdentityChanged => 'The channel identity changed. Stop, then authorize or connect again.';
 
   @override
+  String get androidShellErrorHelperStartFailed => 'The Android Shell helper failed to start. The command did not run.';
+
+  @override
   String get androidShellErrorBusy => 'Another operation is still pending. Retry later or stop Android Shell first.';
 
   @override
@@ -12643,6 +12646,13 @@ class L10nEn extends L10n {
 
   @override
   String get phoneFailureLaunchHint => 'Check the logs, or connect to a remote host to continue';
+
+  @override
+  String get phoneFailureTawcHint =>
+      'PRoot couldn’t run the local engine. Try starting with tawcroot to use your existing runtime and data.';
+
+  @override
+  String get phoneFailureRetryWithTawcroot => 'Start with tawcroot';
 
   @override
   String get phoneFailureNoSpaceHint => 'Free up some space and try again';

@@ -1,6 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone.shell
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -10,7 +11,7 @@ import org.junit.Test
 
 class ShellJobCoreTest {
     private class Child(out: ByteArray = byteArrayOf(), err: ByteArray = byteArrayOf(), val exit: Int = 0,
-                        val waitUntilKilled: Boolean = false) : ShellOwnedProcess {
+                        val waitUntilKilled: Boolean = false, val prepareError: String? = null) : ShellOwnedProcess {
         val killed = CountDownLatch(1)
         val drained = CountDownLatch(2)
         val prepared = CountDownLatch(1)
@@ -27,7 +28,7 @@ class ShellJobCoreTest {
         }
         override val stdout = stream(out, outBytes)
         override val stderr = stream(err, errBytes)
-        override fun prepare(): Boolean { prepareCalls.incrementAndGet(); prepared.countDown(); return true }
+        override fun prepare(): String? { prepareCalls.incrementAndGet(); prepared.countDown(); return prepareError }
         override fun waitFor(): Int {
             if (waitUntilKilled) check(killed.await(5, TimeUnit.SECONDS))
             else check(drained.await(5, TimeUnit.SECONDS))
@@ -191,11 +192,45 @@ class ShellJobCoreTest {
         try {
             core.start("job", "command", 1000)
             val result = finished(core)
-            assertEquals("executionFailed", result["errorCode"])
+            assertEquals("helperStartFailed", result["errorCode"])
             assertEquals(false, result["started"])
             assertEquals("", result["stderr"])
             assertEquals(true, core.start("next", "command", 1000)["ok"])
             finished(core, "next")
+        } finally { core.destroy() }
+    }
+
+    @Test fun helperEofIsAStartupFailureEvenWhenTheProcessExitsSuccessfully() {
+        val permit = ByteArrayOutputStream()
+        val process = object : Process() {
+            override fun getOutputStream() = permit
+            override fun getInputStream() = ByteArrayInputStream(byteArrayOf())
+            override fun getErrorStream() = ByteArrayInputStream("helper error".toByteArray())
+            override fun waitFor() = 0
+            override fun exitValue() = 0
+            override fun destroy() {}
+        }
+        val core = ShellJobCore { _, _ -> AndroidShellProcess(process) }
+        try {
+            core.start("job", "command", 2000)
+            val result = finished(core)
+            assertEquals("helperStartFailed", result["errorCode"])
+            assertEquals(false, result["started"])
+            assertEquals(0, result["exitCode"])
+            assertEquals("helper error", result["stderr"])
+            assertEquals(0, permit.size())
+        } finally { core.destroy() }
+    }
+
+    @Test fun helperIdentityMismatchRemainsDistinctAndStopsTheChild() {
+        val child = Child(waitUntilKilled = true, prepareError = "identityChanged")
+        val core = ShellJobCore { _, _ -> child }
+        try {
+            core.start("job", "command", 2000)
+            val result = finished(core)
+            assertEquals("identityChanged", result["errorCode"])
+            assertEquals(false, result["started"])
+            assertEquals(0L, child.killed.count)
         } finally { core.destroy() }
     }
 

@@ -9,32 +9,35 @@ import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.system.exitProcess
 
-internal class AndroidShellProcess(command: String, timeoutMs: Long, classpath: String) : ShellOwnedProcess {
-    private val process = ProcessBuilder(
-        "/system/bin/app_process", "/system/bin", AndroidShellJobMain::class.java.name,
-        timeoutMs.toString(), command,
-    ).apply {
-        environment().clear()
-        environment().putAll(shellHelperEnvironment(classpath))
-    }.start()
+internal class AndroidShellProcess(private val process: java.lang.Process) : ShellOwnedProcess {
+    constructor(command: String, timeoutMs: Long, classpath: String) : this(
+        ProcessBuilder(
+            "/system/bin/app_process", "/system/bin", AndroidShellJobMain::class.java.name,
+            timeoutMs.toString(), command,
+        ).apply {
+            environment().clear()
+            environment().putAll(shellHelperEnvironment(classpath))
+        }.start(),
+    )
+
     override val stdout = process.inputStream
     override val stderr = process.errorStream
     private val stopped = AtomicBoolean(false)
     private val permitGuard = Any()
     @Volatile private var group: Int? = null
 
-    override fun prepare(): Boolean {
+    override fun prepare(): String? {
         // Only the trusted helper runs before this bounded header; user code has not started.
         val header = StringBuilder()
-        while (header.length < 96) {
+        while (true) {
             val value = stdout.read()
-            if (value < 0) return false
             if (value == 10) break
-            if (value !in 32..126) return false
+            if (value !in 32..126 || header.length == 96) return "helperStartFailed"
             header.append(value.toChar())
         }
-        val pid = header.toString().removePrefix("DSH_SHELL_JOB ").toIntOrNull() ?: return false
-        if (!header.startsWith("DSH_SHELL_JOB ") || pid <= 1) return false
+        val prefix = "DSH_SHELL_JOB "
+        if (!header.startsWith(prefix)) return "helperStartFailed"
+        val pid = header.substring(prefix.length).toIntOrNull()?.takeIf { it > 1 } ?: return "helperStartFailed"
         // Verify the actual helper, not a pid printed by a user command, before releasing stdin.
         val stat = File("/proc/$pid/stat").readText()
         val fields = stat.substringAfterLast(") ").split(' ')
@@ -42,14 +45,14 @@ internal class AndroidShellProcess(command: String, timeoutMs: Long, classpath: 
             lines.firstOrNull { it.startsWith("Uid:") }?.substringAfter(':')?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.toIntOrNull()
         }
         if (fields.size < 4 || fields[1].toIntOrNull() != Process.myPid() ||
-            fields[2].toIntOrNull() != pid || fields[3].toIntOrNull() != pid || realUid != Process.myUid()) return false
+            fields[2].toIntOrNull() != pid || fields[3].toIntOrNull() != pid || realUid != Process.myUid()) return "identityChanged"
         synchronized(permitGuard) {
             group = pid
-            if (stopped.get()) { killGroup(); return false }
+            if (stopped.get()) { killGroup(); return "cancelled" }
             process.outputStream.write(1)
             process.outputStream.flush()
         }
-        return true
+        return null
     }
 
     override fun waitFor(): Int = process.waitFor()

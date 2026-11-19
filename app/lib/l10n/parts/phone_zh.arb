@@ -334,6 +334,8 @@
   "phoneFailureKilledHint": "多半是内存不足或系统省电",
   "phoneFailureLaunch": "本机运行环境未能启动",
   "phoneFailureLaunchHint": "查看日志了解原因，或连接远程主机继续使用",
+  "phoneFailureTawcHint": "PRoot 无法执行本机引擎。可以尝试用 tawcroot 启动，继续使用已有的运行环境和数据。",
+  "phoneFailureRetryWithTawcroot": "用 tawcroot 启动",
   "phoneFailureNoSpaceHint": "清理一些空间后重试",
   "phoneFailureStartup": "DSH 启动失败",
   "phoneFailureCrashedEarly": "DSH 启动后很快崩溃了",
