@@ -80,6 +80,10 @@ class BundleTests(unittest.TestCase):
         ]
         Path('report.json').write_text('\n'.join(json.dumps(event) for event in events), encoding='utf-8')
         self.assertEqual(self.run_tool(bundle_tests.failed, 'report.json'), ['test/chat/a_test.dart', 'test/state/b_test.dart'])
+        # Thrown after the test was over: its testDone said success.
+        events.append({'type': 'error', 'testID': 3, 'error': 'late'})
+        Path('report.json').write_text('\n'.join(json.dumps(event) for event in events), encoding='utf-8')
+        self.assertIn('test/secrets/c_test.dart', self.run_tool(bundle_tests.failed, 'report.json'))
 
     def test_a_failed_run_with_no_failed_test_is_not_a_pass(self):
         Path('report.json').write_text('{"type":"done","success":false}\n', encoding='utf-8')

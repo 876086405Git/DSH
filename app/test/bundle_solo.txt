@@ -7,6 +7,7 @@ test/agents/lineage_test.dart
 test/chat/markdown_golden_test.dart
 test/plugins/native/composer_strip_lifecycle_test.dart
 test/providers/provider_model_test.dart
+test/runtime/runtime_controller_test.dart
 test/settings/voice_model_card_test.dart
 test/settings/voice_settings_test.dart
 test/share/share_card_golden_test.dart

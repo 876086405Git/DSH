@@ -404,8 +404,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
+      # Without the Flutter build task: it compiles the Dart side for the APK, close to a
+      # minute, and the JVM tests read none of it.
       - working-directory: app/android
-        run: gradle --stacktrace :app:testArm64DebugUnitTest
+        run: gradle --stacktrace :app:testArm64DebugUnitTest -x :app:compileFlutterBuildArm64Debug
 
   # Two minutes that need kotlinc and a JVM but nothing of Flutter or Gradle: on a runner of
   # its own they come off the Android job, the longest one left.

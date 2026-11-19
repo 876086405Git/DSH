@@ -30,7 +30,10 @@ from pathlib import Path
 TEST = Path('test')
 OUT = TEST / '_bundles'
 SOLO_LIST = TEST / 'bundle_solo.txt'
-SIZE = 40  # Most files in one bundle.
+# A bundle holds at most this many files and this much estimated work (see `work`):
+# about a minute on a CI runner, so no bundle is what a shard waits for.
+FILES = 40
+WORK = 150
 
 IMPORT = re.compile(r'''^\s*(?:import|export|part)\s+['"]([^'"]+)['"]''', re.M)
 # One binding per process: a file that brings its own cannot share one.
@@ -70,6 +73,12 @@ def own_config(path):
     return any((parent / 'flutter_test_config.dart').is_file() for parent in path.parents if TEST in parent.parents)
 
 
+def work(path):
+    """How long the file takes, near enough to spread files evenly: on CI the time
+    follows the number of widget tests (about 0.4 s each), and goldens count double."""
+    return 1 + text(path).count('testWidgets(') + 2 * text(path).count('matchesGoldenFile')
+
+
 def plan():
     listed = set()
     for line in text(SOLO_LIST).splitlines():
@@ -89,10 +98,13 @@ def plan():
         sys.exit(f'{SOLO_LIST} lists files that are not there: {" ".join(sorted(missing))}')
     bundles = []
     for (area, kind), members in sorted(groups.items()):
-        count = -(-len(members) // SIZE)
-        per = -(-len(members) // count)
-        for index in range(count):
-            bundles.append((OUT / f'{area}_{kind}_{index}_test.dart', kind, members[index * per : (index + 1) * per]))
+        chunks = [[]]
+        for member in members:
+            if chunks[-1] and (len(chunks[-1]) == FILES or sum(map(work, chunks[-1])) + work(member) > WORK):
+                chunks.append([])
+            chunks[-1].append(member)
+        for index, chunk in enumerate(chunks):
+            bundles.append((OUT / f'{area}_{kind}_{index}_test.dart', kind, chunk))
     return solo, bundles
 
 
@@ -108,10 +120,9 @@ def render(kind, members):
 
 def shard(index, total):
     solo, bundles = plan()
-    # Measured on CI: a widget file takes about five times a plain one, and a process
-    # of its own costs about as much again as the file in it.
-    units = [(len(members) * (5 if kind == 'widget' else 1), path, kind, members) for path, kind, members in bundles]
-    units += [(10, path, None, None) for path in solo]
+    # Every target also costs a compile and a process, about as much as eight widget tests.
+    units = [(8 + sum(map(work, members)), path, kind, members) for path, kind, members in bundles]
+    units += [(8 + work(path), path, None, None) for path in solo]
     # Heaviest first onto the lightest shard, so the shards finish together.
     units.sort(key=lambda unit: (-unit[0], unit[1].as_posix()))
     loads, mine = [0] * total, []
@@ -144,7 +155,9 @@ def failed(report):
             suites[event['suite']['id']] = Path(os.path.relpath(event['suite']['path']))
         elif event['type'] == 'testStart':
             tests[event['test']['id']] = event['test']
-        elif event['type'] == 'testDone' and event['result'] != 'success':
+        # `error` as well: an error thrown after its test is over arrives after a `testDone`
+        # that still says success.
+        elif event['type'] == 'error' or (event['type'] == 'testDone' and event['result'] != 'success'):
             test = tests[event['testID']]
             suite = suites[test['suiteID']]
             if OUT not in suite.parents:
