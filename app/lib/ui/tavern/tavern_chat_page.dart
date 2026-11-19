@@ -438,6 +438,16 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
 
   Future<void> _reload() async {
     final window = _window;
+    // While a reply is written (kept every half second), the newest page
+    // tells whether anything besides it changed: the whole window, hundreds
+    // of messages once scrolled back, is not read again twice a second. What
+    // changed further back is read when the reply is done.
+    final loaded = _messages;
+    if (_running && loaded != null && loaded.length > _page && (loaded.length >= window || !_hasOlder)) {
+      final newest = await _tavern.path(widget.chatId, limit: _page);
+      if (!mounted) return;
+      if (_sameBesides(loaded.sublist(loaded.length - _page), newest, _streamNode)) return;
+    }
     final messages = await _tavern.path(widget.chatId, limit: window);
     if (!mounted) return;
     // The engine keeps the reply being written every half second; that one
