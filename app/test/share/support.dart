@@ -11,6 +11,7 @@ import 'package:dsh_app/state/attachments.dart' show sessionImageProvider;
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/ui/share/share_card.dart';
 import 'package:dsh_app/ui/share/share_content.dart';
+import 'package:dsh_app/ui/share/share_export.dart';
 import 'package:dsh_app/ui/share/share_gallery.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -147,7 +148,7 @@ Future<void> pumpShareCard(
         home: SingleChildScrollView(
           child: Align(
             alignment: Alignment.topLeft,
-            child: RepaintBoundary(key: boundary, child: card),
+            child: ShareCaptureBoundary(key: boundary, child: card),
           ),
         ),
       ),

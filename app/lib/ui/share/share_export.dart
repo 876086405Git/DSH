@@ -21,7 +21,20 @@ import 'share_gallery.dart' show shareImagesSettled;
 /// for most, 2× for long ones. Long images are rasterised in strips.
 double sharePixelRatio(double height) => height <= 2000 ? 3 : 2;
 
-/// Renders the [RepaintBoundary] behind [key] as PNG bytes at
+/// A share card's capture boundary. Its render object owns access to the
+/// protected compositing layer used by long-image capture.
+class ShareCaptureBoundary extends RepaintBoundary {
+  const ShareCaptureBoundary({super.key, required super.child});
+
+  @override
+  RenderRepaintBoundary createRenderObject(BuildContext context) => _RenderShareCaptureBoundary();
+}
+
+class _RenderShareCaptureBoundary extends RenderRepaintBoundary {
+  Future<Uint8List> captureLong(double ratio) => _captureLongCard(layer! as OffsetLayer, size, ratio);
+}
+
+/// Renders the [ShareCaptureBoundary] behind [key] as PNG bytes at
 /// [sharePixelRatio], once the card's pictures are decoded (or given up on:
 /// at most [imageTimeout]), so nothing is captured as an empty box. The
 /// boundary is drawn at its own layout size, not at the size a preview
@@ -29,12 +42,12 @@ double sharePixelRatio(double height) => height <= 2000 ? 3 : 2;
 Future<Uint8List> captureShareCard(GlobalKey key, {Duration imageTimeout = const Duration(seconds: 8)}) async {
   if (key.currentContext case final context?) await shareImagesSettled(context, timeout: imageTimeout);
   final boundary = key.currentContext?.findRenderObject();
-  if (boundary is! RenderRepaintBoundary) throw StateError('share card is not on screen');
+  if (boundary is! _RenderShareCaptureBoundary) throw StateError('share card is not on screen');
   // (debugNeedsPaint is debug-only.) A pending frame may still repaint it.
   if (SchedulerBinding.instance.hasScheduledFrame) await SchedulerBinding.instance.endOfFrame;
   final ratio = sharePixelRatio(boundary.size.height);
   if ((boundary.size.height * ratio).ceil() > _stripHeight) {
-    return _captureLongCard(boundary.layer! as OffsetLayer, boundary.size, ratio);
+    return boundary.captureLong(ratio);
   }
   final image = await boundary.toImage(pixelRatio: ratio);
   try {

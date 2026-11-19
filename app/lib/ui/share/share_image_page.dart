@@ -482,7 +482,7 @@ class ShareCardPreview extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.fitWidth,
                       alignment: Alignment.topCenter,
-                      child: RepaintBoundary(
+                      child: ShareCaptureBoundary(
                         key: boundaryKey,
                         child: ExcludeSemantics(child: card),
                       ),

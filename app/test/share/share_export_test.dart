@@ -79,7 +79,7 @@ void main() {
                 width: 4,
                 child: FittedBox(
                   fit: BoxFit.fitWidth,
-                  child: RepaintBoundary(
+                  child: ShareCaptureBoundary(
                     key: key,
                     child: ClipRect(
                       child: SizedBox(
@@ -106,7 +106,7 @@ void main() {
         ),
       );
       final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final layer = boundary.layer! as OffsetLayer;
+      final layer = boundary.debugLayer! as OffsetLayer;
       final previousCreate = ui.Image.onCreate;
       final previousDispose = ui.Image.onDispose;
       var created = 0;
