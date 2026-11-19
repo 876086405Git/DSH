@@ -44,7 +44,6 @@ import 'io/import_intake.dart';
 import 'io/preset_codec.dart';
 import 'io/regex_intake.dart';
 import 'io/script_library_codec.dart';
-import 'io/st_chat_document.dart';
 import 'io/tavern_backup.dart' as backup_io;
 import 'js_string.dart';
 import 'llm/model_client.dart';
@@ -1493,21 +1492,26 @@ class TavernEngine implements Tavern {
     List<TavernChatFile> files, {
     Map<String, String> lorebookIds = const {},
   }) => _operation(() {
-    final documents = [
-      for (final file in List<TavernChatFile>.of(files)) StChatDocument.decode(file.fileName, file.bytes),
-    ];
+    final capturedFiles = List<TavernChatFile>.of(files);
     final mapping = Map<String, String>.of(lorebookIds);
-    for (final entry in mapping.entries) {
-      if (entry.key.isEmpty) throw ArgumentError.value(entry.key, 'lorebookIds', 'ST names must not be empty.');
-      _requireBookId(entry.value);
-    }
+    final profile = _TurnProfile.start();
+    // Reserve the original library queue before decode can yield, preserving
+    // call order even when a later small batch prepares faster than this one.
     return _libraryOperation(() async {
+      profile?.mark('queue');
+      final documents = await ChatJsonlCodec.decodeFiles(capturedFiles);
+      profile?.mark('decode');
+      for (final entry in mapping.entries) {
+        if (entry.key.isEmpty) throw ArgumentError.value(entry.key, 'lorebookIds', 'ST names must not be empty.');
+        _requireBookId(entry.value);
+      }
       if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
       if (await _record(characterId) == null) throw const TavernImportError('角色不存在。');
       for (final id in mapping.values.toSet()) {
         if (await _readBook(id) == null) throw const TavernImportError('映射的世界书不存在。');
       }
       if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
+      profile?.mark('resources');
       final extraNotices = <String>[];
       for (final document in documents) {
         final metadata = _map(document.header['chat_metadata']);
@@ -1516,8 +1520,12 @@ class TavernEngine implements Tavern {
           extraNotices.add('${document.fileName}:${document.headerLineNumber}: 世界书“$name”没有本地映射；保留名称，暂不执行该绑定。');
         }
       }
+      final plan = await _chatCodec.prepareBatchAsync(documents);
+      profile?.mark('prepare');
+      if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
+      final commitStarted = profile?.now;
       final imported = _store.transaction(() {
-        final result = _chatCodec.importBatch(_store, characterId: characterId, documents: documents);
+        final result = _chatCodec.commitBatch(_store, characterId: characterId, plan: plan);
         if (mapping.isNotEmpty) {
           for (final chatId in result.chatIds) {
             _store.updateChat(chatId, settings: {'stLorebookIds': mapping});
@@ -1525,12 +1533,17 @@ class TavernEngine implements Tavern {
         }
         return result;
       });
+      profile?.record('chat_import_commit', commitStarted!);
+      profile?.mark('commit');
       _notifyLists();
+      profile?.mark('publish');
       return TavernChatImportResult(
         chatIds: imported.chatIds,
         chatsByFile: imported.chatsByFile,
         notices: [...imported.notices, ...extraNotices],
       );
+    }).whenComplete(() {
+      profile?.finish('chat_import');
     });
   });
 
@@ -2480,6 +2493,7 @@ class TavernEngine implements Tavern {
           };
     var resourceConflict = false;
     ({Object error, StackTrace stackTrace})? resourceFailure;
+    (int, int)? resourceStamp;
     bool cancelled() {
       if (!current()) {
         return true;
@@ -2489,16 +2503,31 @@ class TavernEngine implements Tavern {
       }
       // Rule-level display catches must not swallow an actual store error.
       // Keep the original worker Future owned until it has really drained.
+      final checkStarted = job.profile?.now;
       try {
-        resourceConflict = !_gameplayResourcesCurrent(this, gameplayCapture);
+        // Read the stamp before the facts: a concurrent commit may cause an
+        // extra miss, but cannot label an older result with a newer stamp.
+        final stamp = _store.readGameplayBindingStamp();
+        if (stamp != null && stamp == resourceStamp) return false;
+        final factsStarted = job.profile?.now;
+        try {
+          resourceConflict = !_gameplayResourcesCurrent(this, gameplayCapture);
+          if (!resourceConflict && stamp != null) resourceStamp = stamp;
+        } finally {
+          job.profile?.record('display_current_facts', factsStarted!);
+        }
       } catch (error, stackTrace) {
         resourceFailure = (error: error, stackTrace: stackTrace);
+      } finally {
+        job.profile?.record('display_current_check', checkStarted!);
       }
       return resourceConflict || resourceFailure != null;
     }
 
+    final regex = environment.regex;
+    job.profile?.mark('regex_setup');
     try {
-      final rendered = await environment.regex.applyDisplay(
+      final rendered = await regex.applyDisplay(
         job.text,
         placement: placement,
         worker: _regexWorker,

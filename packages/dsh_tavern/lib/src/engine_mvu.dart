@@ -213,27 +213,46 @@ TavernScriptException _mvuFailure(
 }
 
 extension _NativeMvuStorage on _ScriptCoordinator {
-  _MvuFrame _mvuFrame(String chatId, String? nodeId) {
-    final chat = engine._store.chat(chatId);
-    if (nodeId == null && engine._store.groupChat(chatId) == null) {
-      throw _scriptError(TavernScriptErrorCode.noContext, 'mvu', 'This chat has no physical message to initialize.');
+  // MVU needs the complete effective state, but not inspection or the imported
+  // body. This accepts only the store's detached display projection.
+  Map<String, Object?> _mvuState(String chatId, StoredNode? node, {StoredChat? chat}) {
+    if (node == null) return engine._store.groupInitialState(chatId);
+    final own = node.extra['dshgo'];
+    final override = own is Map<String, Object?> ? own['tavernState'] : null;
+    final state = override is Map<String, Object?>
+        ? _copy(override)
+        : engine._store.nodeState(chatId, node.message.nodeId);
+    if (!state.containsKey('stChatIdHash')) {
+      engine._withStateHash(chat ?? engine._store.chat(chatId), state);
     }
-    final node = nodeId == null ? null : engine._store.node(chatId, nodeId);
-    final state = node == null
-        ? engine._store.groupInitialState(chatId)
-        : engine._stateFromNode(chatId, node, chat: chat);
-    final raw = _fieldVariable(state, 'messageVariables');
-    final data = _variableObject(raw);
-    final version = nodeId == null
-        ? _variableFingerprint(raw)
-        : _variableVersion(
-            TavernVariableTarget(
-              scope: TavernVariableScope.message,
-              messageRef: TavernScriptMessageRef(chatId: chatId, nodeId: nodeId),
-            ),
-            raw,
-          );
-    return _MvuFrame(chat, node, state, data, version, _pathRevision(chatId), engine._store.displayVersion(chatId));
+    return state;
+  }
+
+  _MvuFrame _mvuFrame(String chatId, String? nodeId) {
+    final profile = engine._turns[chatId]?.profile;
+    final started = profile?.now;
+    try {
+      final chat = engine._store.chat(chatId);
+      if (nodeId == null && engine._store.groupChat(chatId) == null) {
+        throw _scriptError(TavernScriptErrorCode.noContext, 'mvu', 'This chat has no physical message to initialize.');
+      }
+      final node = nodeId == null ? null : engine._store.displayNode(chatId, nodeId);
+      final state = _mvuState(chatId, node, chat: chat);
+      final raw = _fieldVariable(state, 'messageVariables');
+      final data = _variableObject(raw);
+      final version = nodeId == null
+          ? _variableFingerprint(raw)
+          : _variableVersion(
+              TavernVariableTarget(
+                scope: TavernVariableScope.message,
+                messageRef: TavernScriptMessageRef(chatId: chatId, nodeId: nodeId),
+              ),
+              raw,
+            );
+      return _MvuFrame(chat, node, state, data, version, _pathRevision(chatId), engine._store.displayVersion(chatId));
+    } finally {
+      if (started != null) profile?.record('mvu_frame', started);
+    }
   }
 
   void _checkMvuFrame(_MvuFrame frame, {bool samePath = true, bool sameBody = true}) {
@@ -317,57 +336,62 @@ extension _NativeMvuStorage on _ScriptCoordinator {
     _MvuExpansion expansion, {
     bool? enabled,
   }) {
-    _checkMvuResources(resources);
-    _checkMvuFrame(frame);
-    final state = engine._stateAt(frame.chat.id, frame.nodeId);
-    final data = _variableObject(_fieldVariable(state, 'messageVariables'));
-    for (final field in _mvuFields) {
-      if (candidate.containsKey(field)) {
-        data[field] = candidate[field];
+    final profile = engine._turns[frame.chat.id]?.profile;
+    final started = profile?.now;
+    try {
+      _checkMvuResources(resources);
+      _checkMvuFrame(frame);
+      final state = _mvuState(
+        frame.chat.id,
+        frame.nodeId == null ? null : engine._store.displayNode(frame.chat.id, frame.nodeId!),
+      );
+      final data = _variableObject(_fieldVariable(state, 'messageVariables'));
+      for (final field in _mvuFields) {
+        if (candidate.containsKey(field)) {
+          data[field] = candidate[field];
+        } else {
+          data.remove(field);
+        }
+      }
+      // The MVU fields leave dshgo unchanged, so preparation returns before
+      // consuming extra. The commit still merges the fresh full raw extra.
+      final prepared = _prepareMessageData(resources.dataContext, nodeId: frame.nodeId, baseline: state, data: data);
+      if (!_stateJsonEqual(expansion.localBefore, expansion.environment.local)) {
+        if (!_stateJsonEqual(_map(state['variables']), expansion.localBefore)) {
+          throw _scriptError(
+            TavernScriptErrorCode.revisionConflict,
+            'mvu',
+            'Local macro variables changed before MVU adoption.',
+            nodeId: frame.nodeId,
+          );
+        }
+        prepared.state['variables'] = _copy(expansion.environment.local);
+      }
+      if (expansion.environment.chatIdHash != expansion.hashBefore) {
+        if (_finiteNumber(state['stChatIdHash']) != expansion.hashBefore) {
+          throw _scriptError(
+            TavernScriptErrorCode.revisionConflict,
+            'mvu',
+            'The macro chat identity changed before MVU adoption.',
+            nodeId: frame.nodeId,
+          );
+        }
+        prepared.state['stChatIdHash'] = expansion.environment.chatIdHash;
+      }
+      if (frame.nodeId == null) {
+        _ensurePreparedGameplay(prepared);
+        engine._store.setGroupInitialState(frame.chat.id, prepared.state);
       } else {
-        data.remove(field);
+        _commitMessageData(frame.chat.id, frame.nodeId!, prepared);
       }
-    }
-    final prepared = _prepareMessageData(
-      resources.dataContext,
-      nodeId: frame.nodeId,
-      baseline: state,
-      data: data,
-      extra: frame.nodeId == null ? const {} : engine._store.rawNodeExtra(frame.chat.id, frame.nodeId!),
-    );
-    if (!_stateJsonEqual(expansion.localBefore, expansion.environment.local)) {
-      if (!_stateJsonEqual(_map(state['variables']), expansion.localBefore)) {
-        throw _scriptError(
-          TavernScriptErrorCode.revisionConflict,
-          'mvu',
-          'Local macro variables changed before MVU adoption.',
-          nodeId: frame.nodeId,
-        );
+      if (enabled != null) {
+        final chat = engine._store.chat(frame.chat.id);
+        engine._store.updateChat(chat.id, settings: {...chat.settings, 'mvuEnabled': enabled});
       }
-      prepared.state['variables'] = _copy(expansion.environment.local);
+      engine._restoreVariables(frame.chat.id);
+    } finally {
+      if (started != null) profile?.record('mvu_adopt', started);
     }
-    if (expansion.environment.chatIdHash != expansion.hashBefore) {
-      if (_finiteNumber(state['stChatIdHash']) != expansion.hashBefore) {
-        throw _scriptError(
-          TavernScriptErrorCode.revisionConflict,
-          'mvu',
-          'The macro chat identity changed before MVU adoption.',
-          nodeId: frame.nodeId,
-        );
-      }
-      prepared.state['stChatIdHash'] = expansion.environment.chatIdHash;
-    }
-    if (frame.nodeId == null) {
-      _ensurePreparedGameplay(prepared);
-      engine._store.setGroupInitialState(frame.chat.id, prepared.state);
-    } else {
-      _commitMessageData(frame.chat.id, frame.nodeId!, prepared);
-    }
-    if (enabled != null) {
-      final chat = engine._store.chat(frame.chat.id);
-      engine._store.updateChat(chat.id, settings: {...chat.settings, 'mvuEnabled': enabled});
-    }
-    engine._restoreVariables(frame.chat.id);
   }
 
   Future<void> _refreshMvuChat(String chatId, ModelCancellation cancellation) async {
@@ -414,12 +438,7 @@ extension _NativeMvuLifecycle on _ScriptCoordinator {
       final resources = await _captureMvuResources(chatId, state: frame.state, check: check);
       check();
       final needed = _mvuNeedsInitialization(frame, resources);
-      final environment = _mvuEnvironment(
-        resources,
-        state: frame.state,
-        history: engine._historyTo(chatId, frame.nodeId),
-        at: engine._clock(),
-      );
+      final environment = _mvuEnvironment(resources, state: frame.state, nodeId: frame.nodeId, at: engine._clock());
       final computation = _MvuExpansion(engine, environment, check);
       expansion = computation;
       mvu_core.MvuResult? result;
@@ -505,7 +524,9 @@ extension _NativeMvuLifecycle on _ScriptCoordinator {
       _checkMvuFrame(frame);
     }
 
+    final resourcesStarted = turn.profile?.now;
     final resources = await _captureMvuResources(chat.id, state: frame.state, check: check);
+    if (resourcesStarted != null) turn.profile?.recordElapsed('mvu_resources', resourcesStarted);
     check();
     turn.mvuResources = resources;
     turn.hookIssues.addAll(resources.issues);
@@ -515,7 +536,7 @@ extension _NativeMvuLifecycle on _ScriptCoordinator {
     final environment = _mvuEnvironment(
       resources,
       state: frame.state,
-      history: engine._historyTo(chat.id, nodeId),
+      nodeId: nodeId,
       at: turn.at,
       input: turn.input,
       generationType: turn.generationType,
@@ -672,7 +693,7 @@ extension _NativeMvuLifecycle on _ScriptCoordinator {
       final environment = _mvuEnvironment(
         base.resources,
         state: target.state,
-        history: engine._historyTo(turn.chat.id, target.nodeId),
+        nodeId: target.nodeId,
         at: turn.at,
         turnEnvironment: turn.environment,
       );

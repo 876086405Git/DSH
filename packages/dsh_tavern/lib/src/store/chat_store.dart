@@ -85,6 +85,40 @@ class StoredNode {
   final Map<String, Object?> original;
 }
 
+/// A validated node in one newly imported tree, ordered after its parent.
+/// The importer owns these JSON values through the synchronous batch write.
+class StoredChatImportNode {
+  const StoredChatImportNode({
+    required this.key,
+    required this.parentKey,
+    required this.role,
+    required this.speaker,
+    required this.text,
+    required this.at,
+    required this.hidden,
+    required this.state,
+    required this.extra,
+    required this.original,
+    this.reasoning,
+    this.speakerCharacterId,
+    this.usage,
+  });
+
+  final String key;
+  final String? parentKey;
+  final TavernRole role;
+  final String speaker;
+  final String text;
+  final String? reasoning;
+  final String? speakerCharacterId;
+  final DateTime at;
+  final bool hidden;
+  final TavernUsage? usage;
+  final Map<String, Object?> state;
+  final Map<String, Object?> extra;
+  final Map<String, Object?> original;
+}
+
 /// The finite history inputs consumed by display macros. All nodes are
 /// detached display projections, without inspection or original body copies.
 class StoredDisplayHistory {
@@ -971,6 +1005,9 @@ class ChatStore {
   String? chatCurrentLeafId(String chatId) =>
       _chatRow(chatId, columns: 'c.current_leaf_id')['current_leaf_id'] as String?;
 
+  /// Detached variables from the real carrier, without decoding chat metadata.
+  Map<String, Object?> chatVariables(String chatId) => _map(_chatRow(chatId, columns: 'c.variables')['variables']);
+
   /// Allocates an identity without adding a row. A batch can prepare all state
   /// reports against their actual node ids before its first INSERT.
   String newNodeId() {
@@ -1186,29 +1223,24 @@ class ChatStore {
       final depth = parent == null ? 1 : (parent['depth'] as int) + 1;
       final nodeId = id ?? _createId();
       final encodedExtra = _encodeNodeExtra(extra, chatId, nodeId);
-      _db.execute(
-        '''INSERT INTO nodes
-           (id, chat_id, parent_id, depth, role, speaker, text, reasoning, at, hidden, usage, reported_usage, display_context, extra, original, speaker_character_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        [
-          nodeId,
-          chatId,
-          parentId,
-          depth,
-          role.name,
-          speaker,
-          text,
-          reasoning,
-          (at ?? _clock()).millisecondsSinceEpoch,
-          hidden ? 1 : 0,
-          _encodeUsage(usage),
-          encodedExtra.reportedUsage,
-          encodedExtra.displayContext,
-          encodedExtra.raw,
-          jsonEncode(original),
-          role == TavernRole.character ? speakerCharacterId : null,
-        ],
-      );
+      _db.execute(_insertNodeSql, [
+        nodeId,
+        chatId,
+        parentId,
+        depth,
+        role.name,
+        speaker,
+        text,
+        reasoning,
+        (at ?? _clock()).millisecondsSinceEpoch,
+        hidden ? 1 : 0,
+        _encodeUsage(usage),
+        encodedExtra.reportedUsage,
+        encodedExtra.displayContext,
+        encodedExtra.raw,
+        jsonEncode(original),
+        role == TavernRole.character ? speakerCharacterId : null,
+      ]);
       final parentSnapshot = parentId == null ? null : _nodeStateSnapshot(chatId, parentId);
       final parentState = parentSnapshot?.state ?? <String, Object?>{};
       final currentState = state ?? parentState;
@@ -1234,6 +1266,66 @@ class ChatStore {
       return message(chatId, nodeId);
     });
   }
+
+  /// Writes an already prepared, parent-first import tree without rereading
+  /// each parent or decoding a message which the importer only needs by id.
+  /// The outer codec transaction still owns all trees and final selections.
+  Map<String, String> appendImportedNodes(String chatId, List<StoredChatImportNode> nodes) => transaction(() {
+    chatCharacterId(chatId);
+    final written = <String, ({String id, int depth, Map<String, Object?> state})>{};
+    final insertNode = _db.prepare(_insertNodeSql);
+    try {
+      final insertState = _db.prepare('INSERT INTO node_states (node_id, delta_json, full_json) VALUES (?, ?, ?)');
+      try {
+        int? updatedAt;
+        var treeChanges = 0;
+        for (final node in nodes) {
+          final parent = node.parentKey == null ? null : written[node.parentKey]!;
+          final depth = parent == null ? 1 : parent.depth + 1;
+          final id = _createId();
+          final encodedExtra = _encodeNodeExtra(node.extra, chatId, id);
+          insertNode.execute([
+            id,
+            chatId,
+            parent?.id,
+            depth,
+            node.role.name,
+            node.speaker,
+            node.text,
+            node.reasoning,
+            node.at.millisecondsSinceEpoch,
+            node.hidden ? 1 : 0,
+            _encodeUsage(node.usage),
+            encodedExtra.reportedUsage,
+            encodedExtra.displayContext,
+            encodedExtra.raw,
+            jsonEncode(node.original),
+            node.role == TavernRole.character ? node.speakerCharacterId : null,
+          ]);
+          // All parents are new in this tree, so depth checkpoints already
+          // bound the reconstruction chain to at most nineteen deltas.
+          insertState.execute([
+            id,
+            jsonEncode(_stateDiff(parent?.state ?? const <String, Object?>{}, node.state)),
+            depth == 1 || depth % 20 == 0 ? jsonEncode(node.state) : null,
+          ]);
+          // Preserve each clock call in its original position; only the
+          // repeated update of this newly imported chat is combined.
+          updatedAt = _clock().millisecondsSinceEpoch;
+          treeChanges++;
+          written[node.key] = (id: id, depth: depth, state: node.state);
+        }
+        if (updatedAt != null) {
+          _touchAt(chatId, updatedAt, treeChanges: treeChanges);
+        }
+      } finally {
+        insertState.close();
+      }
+    } finally {
+      insertNode.close();
+    }
+    return {for (final entry in written.entries) entry.key: entry.value.id};
+  });
 
   TavernMessage message(String chatId, String nodeId) => _message(_nodeRow(chatId, nodeId));
 
@@ -1418,6 +1510,20 @@ ORDER BY n.seq
     );
     if (rows.isEmpty) throw StateError('Node does not belong to chat: $nodeId');
     return _displayNode(rows.single);
+  }
+
+  /// Detached effective state for script variable/metadata readers. An object
+  /// portable override, including an empty one, replaces the physical state.
+  /// Does not construct a message, decode its source metadata or add a hash.
+  Map<String, Object?> scriptNodeState(String chatId, String nodeId) {
+    final row = _nodeRow(
+      chatId,
+      nodeId,
+      columns: '''CASE WHEN json_type(n.display_context, '\$.dshgo.tavernState') = 'object'
+        THEN json_extract(n.display_context, '\$.dshgo.tavernState') END AS state''',
+    );
+    final encoded = row['state'];
+    return encoded == null ? nodeState(chatId, nodeId) : _map(encoded);
   }
 
   /// Walk only the positions from the current leaf back to the target depth.
@@ -2543,10 +2649,13 @@ ORDER BY n.seq
     return rows.first;
   }
 
-  void _touch(String chatId, {bool tree = false}) {
+  void _touch(String chatId, {bool tree = false}) =>
+      _touchAt(chatId, _clock().millisecondsSinceEpoch, treeChanges: tree ? 1 : 0);
+
+  void _touchAt(String chatId, int milliseconds, {int treeChanges = 0}) {
     _db.execute('UPDATE chats SET updated_at = ?, tree_revision = tree_revision + ? WHERE id = ?', [
-      _clock().millisecondsSinceEpoch,
-      tree ? 1 : 0,
+      milliseconds,
+      treeChanges,
       chatId,
     ]);
     _changedChats.add(chatId);
@@ -2630,9 +2739,9 @@ ORDER BY n.seq
           'model': usage.model,
         });
 
-  // Every writer of extra uses the same already-owned map for both read
-  // projections. Streaming recovery only removes inspection, leaving display
-  // context unchanged while explicitly clearing reported_usage.
+  // Every writer of extra uses the same already-owned map for these read
+  // projections. Streaming recovery only removes inspection, leaving both
+  // state/source and script-visible extra unchanged while clearing reported_usage.
   static _NodeExtraProjection _encodeNodeExtra(Map<String, Object?> extra, String chatId, String nodeId) {
     final own = extra['dshgo'];
     final state = own is Map<String, Object?> ? own['tavernState'] : null;
@@ -2644,6 +2753,10 @@ ORDER BY n.seq
         'dshgo': {
           'tavernState': state is Map<String, Object?> ? state : null,
           'chatJsonl': source is Map<String, Object?> ? source : null,
+        },
+        'scriptExtra': {
+          for (final entry in extra.entries)
+            if (entry.key != 'dshgo') entry.key: entry.value,
         },
       }),
     );
@@ -2714,6 +2827,10 @@ ORDER BY n.seq
         '${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
+  static const _insertNodeSql = '''INSERT INTO nodes
+    (id, chat_id, parent_id, depth, role, speaker, text, reasoning, at, hidden, usage, reported_usage, display_context, extra, original, speaker_character_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''';
+
   // Explicit projections read each potentially long body only once. JSON
   // containers and host-generated identities do not need a decoding guard.
   static const _nodeColumns = '''
@@ -2744,7 +2861,9 @@ ORDER BY n.seq
     NULL AS reasoning, n.at, n.hidden,
     char(1) || n.stream_text AS stream_text, NULL AS stream_reasoning,
     char(1) || n.speaker_character_id AS speaker_character_id, NULL AS usage, NULL AS reported_usage,
-    json_remove(n.extra, '\$.dshgo') AS script_extra,
+    CASE WHEN json_type(n.display_context, '\$.scriptExtra') = 'object'
+      THEN json_extract(n.display_context, '\$.scriptExtra')
+      ELSE json_remove(n.extra, '\$.dshgo') END AS script_extra,
     CASE WHEN json_type(n.display_context, '\$.dshgo.tavernState') = 'object'
       THEN json_extract(n.display_context, '\$.dshgo.tavernState') END AS script_state,
     json_remove(n.original, '\$.mes', '\$.swipes', '\$.extra') AS original''';

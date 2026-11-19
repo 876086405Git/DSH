@@ -4,6 +4,7 @@
 // 7e8663cd9c184a550b37238218bdd32c6efc68e9. Message variables[] are mapped
 // from this project's roleplay-compat.md §7; no JS-Slash-Runner source is used.
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 
 import '../api.dart';
@@ -21,6 +22,69 @@ final class ChatJsonlImportResult {
   final List<String> chatIds;
   final Map<String, String> chatsByFile;
   final List<String> notices;
+}
+
+/// An owned, validated batch which has not yet written anything to SQLite.
+final class ChatJsonlImportPlan {
+  const ChatJsonlImportPlan._(this._groups, this._notices);
+  final List<({_ImportTree tree, List<StoredChatImportNode> nodes})> _groups;
+  final List<String> _notices;
+}
+
+// Keep isolate closures here: their only captured state is sendable data,
+// never a codec clock callback, engine, store, file queue or open connection.
+Future<List<StChatDocument>> _decodeChatFilesInWorker(List<TavernChatFile> files) =>
+    Isolate.run(() => [for (final file in files) StChatDocument.decode(file.fileName, file.bytes)]);
+
+Future<ChatJsonlImportPlan> _prepareChatImportInWorker(List<StChatDocument> documents, DateTime fallbackDate) =>
+    Isolate.run(() => _prepareChatImport(documents, fallbackDate));
+
+ChatJsonlImportPlan _prepareChatImport(Iterable<StChatDocument> documents, DateTime fallbackDate) {
+  final notices = <String>[];
+  final files = <String, _SourceFile>{};
+  for (final document in documents) {
+    final file = _SourceFile(document, fallbackDate, notices);
+    if (files.containsKey(file.key)) {
+      throw StChatFormatException(document.fileName, document.headerLineNumber, 'Duplicate normalized filename.');
+    }
+    files[file.key] = file;
+  }
+  final ordered = _orderFiles(files, notices);
+  final groups = <String, _ImportTree>{};
+  for (final file in ordered) {
+    final parent = files[file.parentKey];
+    final root = parent?.rootKey ?? file.key;
+    file.rootKey = root;
+    final tree = groups.putIfAbsent(root, () => _ImportTree(file));
+    tree.add(file, parent, notices);
+  }
+  for (final tree in groups.values) {
+    tree.finish(notices);
+  }
+  return ChatJsonlImportPlan._([
+    for (final tree in groups.values)
+      (
+        tree: tree,
+        nodes: [
+          for (final node in tree.nodes)
+            StoredChatImportNode(
+              key: node.id,
+              parentKey: node.parent,
+              role: node.variant.role,
+              speaker: node.variant.name,
+              speakerCharacterId: node.variant.speakerCharacterId,
+              text: node.variant.text,
+              reasoning: node.variant.reasoning,
+              at: node.variant.at,
+              hidden: node.variant.hidden,
+              usage: node.variant.usage,
+              state: node.state,
+              extra: _withState(node.extra, node.state),
+              original: node.variant.original,
+            ),
+        ],
+      ),
+  ], notices);
 }
 
 /// A physical metadata carrier, not a node-selection or generation identity.
@@ -46,100 +110,69 @@ final class ChatJsonlCodec {
   final DateTime Function() _clock;
   final String Function() _createIntegrity;
 
+  static Future<List<StChatDocument>> decodeFiles(List<TavernChatFile> files) => _decodeChatFilesInWorker(files);
+
+  Future<ChatJsonlImportPlan> prepareBatchAsync(Iterable<StChatDocument> documents) =>
+      _prepareChatImportInWorker(List<StChatDocument>.of(documents), _clock().toUtc());
+
   ChatJsonlImportResult importBatch(
     ChatStore store, {
     required String characterId,
     required Iterable<StChatDocument> documents,
-  }) {
-    final notices = <String>[];
-    final fallbackDate = _clock().toUtc();
-    final files = <String, _SourceFile>{};
-    for (final document in documents) {
-      final file = _SourceFile(document, fallbackDate, notices);
-      if (files.containsKey(file.key)) {
-        throw StChatFormatException(document.fileName, document.headerLineNumber, 'Duplicate normalized filename.');
-      }
-      files[file.key] = file;
-    }
-    final ordered = _orderFiles(files, notices);
-    final groups = <String, _ImportTree>{};
-    for (final file in ordered) {
-      final parent = files[file.parentKey];
-      final root = parent?.rootKey ?? file.key;
-      file.rootKey = root;
-      final tree = groups.putIfAbsent(root, () => _ImportTree(file));
-      tree.add(file, parent, notices);
-    }
-    for (final tree in groups.values) {
-      tree.finish(notices);
-    }
-    return store.transaction(() {
-      final chatIds = <String>[];
-      final chatsByFile = <String, String>{};
-      for (final tree in groups.values) {
-        final chatId = store.createChat(
-          characterId: characterId,
-          title: _stem(tree.root.document.fileName),
-          metadata: _quarantineMetadata(tree.root.metadata),
-        );
-        chatIds.add(chatId);
-        final ids = <String, String>{};
-        for (final node in tree.nodes) {
-          final message = store.append(
-            chatId,
-            parentId: node.parent == null ? null : ids[node.parent],
-            role: node.variant.role,
-            speaker: node.variant.name,
-            speakerCharacterId: node.variant.speakerCharacterId,
-            text: node.variant.text,
-            reasoning: node.variant.reasoning,
-            at: node.variant.at,
-            hidden: node.variant.hidden,
-            usage: node.variant.usage,
-            makeCurrent: false,
-            state: node.state,
-            extra: _withState(node.extra, node.state),
-            original: node.variant.original,
-          );
-          ids[node.id] = message.nodeId;
-        }
-        store.restoreSelection(
-          chatId,
-          selectedRootId: ids[tree.selectedRoot],
-          selectedChildren: {for (final node in tree.nodes) ids[node.id]!: ids[tree.choices[node.id]]},
-        );
-        final metadata = _quarantineMetadata(tree.root.metadata);
-        final own = _map(_map(metadata['dshgo'])[_namespace]);
-        own.addAll({
-          'version': 1,
-          'rootFile': tree.root.key,
-          'sources': tree.sources,
-          'files': [
-            for (final file in tree.files)
-              {
-                'key': file.key,
-                'fileName': file.document.fileName,
-                'header': _sourceHeader(file.document.header, keepSourceFileName: true),
-                'path': [for (final node in file.path) ids[node.id]],
-                // Shared variants do not own a source row's unused array tail.
-                'unusedTails': {
-                  for (var index = 0; index < file.path.length; index++)
-                    ids[file.path[index].id]!: _unusedMessageTails(file.document.messages[index]),
-                },
+  }) => commitBatch(store, characterId: characterId, plan: _prepareChatImport(documents, _clock().toUtc()));
+
+  ChatJsonlImportResult commitBatch(
+    ChatStore store, {
+    required String characterId,
+    required ChatJsonlImportPlan plan,
+  }) => store.transaction(() {
+    final chatIds = <String>[];
+    final chatsByFile = <String, String>{};
+    for (final group in plan._groups) {
+      final tree = group.tree;
+      final metadata = _quarantineMetadata(tree.root.metadata);
+      final chatId = store.createChat(
+        characterId: characterId,
+        title: _stem(tree.root.document.fileName),
+        metadata: metadata,
+      );
+      chatIds.add(chatId);
+      final ids = store.appendImportedNodes(chatId, group.nodes);
+      store.restoreSelection(
+        chatId,
+        selectedRootId: ids[tree.selectedRoot],
+        selectedChildren: {for (final node in tree.nodes) ids[node.id]!: ids[tree.choices[node.id]]},
+      );
+      final own = _map(_map(metadata['dshgo'])[_namespace]);
+      own.addAll({
+        'version': 1,
+        'rootFile': tree.root.key,
+        'sources': tree.sources,
+        'files': [
+          for (final file in tree.files)
+            {
+              'key': file.key,
+              'fileName': file.document.fileName,
+              'header': _sourceHeader(file.document.header, keepSourceFileName: true),
+              'path': [for (final node in file.path) ids[node.id]],
+              // Shared variants do not own a source row's unused array tail.
+              'unusedTails': {
+                for (var index = 0; index < file.path.length; index++)
+                  ids[file.path[index].id]!: _unusedMessageTails(file.document.messages[index]),
               },
-          ],
-        });
-        metadata['dshgo'] = {..._map(metadata['dshgo']), _namespace: own};
-        final leaf = tree.currentLeaf;
-        final variables = leaf == null ? _map(tree.root.metadata['variables']) : _map(leaf.state['variables']);
-        store.updateChat(chatId, metadata: metadata, variables: variables);
-        for (final file in tree.files) {
-          chatsByFile[file.document.fileName] = chatId;
-        }
+            },
+        ],
+      });
+      metadata['dshgo'] = {..._map(metadata['dshgo']), _namespace: own};
+      final leaf = tree.currentLeaf;
+      final variables = leaf == null ? _map(tree.root.metadata['variables']) : _map(leaf.state['variables']);
+      store.updateChat(chatId, metadata: metadata, variables: variables);
+      for (final file in tree.files) {
+        chatsByFile[file.document.fileName] = chatId;
       }
-      return ChatJsonlImportResult(chatIds: chatIds, chatsByFile: chatsByFile, notices: notices);
-    });
-  }
+    }
+    return ChatJsonlImportResult(chatIds: chatIds, chatsByFile: chatsByFile, notices: plan._notices);
+  });
 
   /// Null [nodeId] means the current leaf. Source metadata is copied; a file's
   /// final variables or world-info state are never presented as the state of

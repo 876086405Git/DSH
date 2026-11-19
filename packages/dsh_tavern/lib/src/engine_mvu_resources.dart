@@ -234,8 +234,21 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         !identical(capture.selectionSettings, settings) ||
         capture.selectionPresetRevision != engine._presetWorkingRevision) {
       final chat = engine._store.chat(chatId);
+      final leaf = chat.currentLeafId;
+      final Map<String, Object?> metadata;
+      if (leaf == null) {
+        metadata = engine._chatCodec.metadataForCapturedNode(engine._store, chat, null);
+      } else {
+        final node = engine._store.displayNode(chatId, leaf);
+        final own = node.extra['dshgo'];
+        final override = own is Map<String, Object?> ? own['tavernState'] : null;
+        // This is the metadata reader's effective state, without the MVU
+        // state reader's legacy hash backfill.
+        final state = override is Map<String, Object?> ? override : engine._store.nodeState(chatId, leaf);
+        metadata = engine._chatCodec.metadataForState(chat, state);
+      }
       final current = _mvuBookSelection(
-        engine._effectiveReadSettings(chat),
+        engine._effectiveReadSettings(chat, metadata),
         capture.dataContext.hostId,
         embedded: capture.dataContext.hostData.containsKey('character_book'),
       );
@@ -267,12 +280,33 @@ extension _ScriptMvuResources on _ScriptCoordinator {
   _MacroEnvironment _mvuEnvironment(
     _MvuResources capture, {
     required Map<String, Object?> state,
-    required List<StoredNode> history,
+    required String? nodeId,
     required DateTime at,
     String input = '',
     String generationType = 'normal',
     _MacroEnvironment? turnEnvironment,
   }) {
+    final profile = engine._turns[capture.chat.id]?.profile;
+    final started = profile?.now;
+    final history = engine._store.displayHistory(capture.chat.id, nodeId);
+    MacroMessage message(StoredNode node) => MacroMessage(
+      text: node.message.text,
+      isUser: node.message.role == TavernRole.user,
+      isSystem: node.message.hidden || _systemMessage(node),
+      swipeId: node.message.siblingIndex,
+      swipeCount: node.message.siblingCount,
+      sentAt: node.message.at,
+    );
+    ({int index, MacroMessage message})? entry(StoredNode? node) =>
+        node == null ? null : (index: node.depth - 1, message: message(node));
+    final macroHistory = MacroHistorySnapshot(
+      length: history.length,
+      last: entry(history.last),
+      user: entry(history.user),
+      character: entry(history.character),
+      previousUser: history.previousUser == null ? null : message(history.previousUser!),
+    );
+    if (started != null) profile?.record('mvu_history', started);
     if (turnEnvironment case final source?) {
       // Keep the actual actor and frozen prompt resources, but bind a fresh
       // macro context to this physical target's current variable table.
@@ -281,7 +315,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         source.settings,
         _map(state['variables']),
         engine._globalVariables,
-        history,
+        const [],
         source.config,
         source.now,
         source.random,
@@ -298,6 +332,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         collapseNewlinesOverride: source.collapseNewlinesOverride,
         messageVariables: state['messageVariables'],
         messageVariablesExists: state.containsKey('messageVariables'),
+        macroHistorySnapshot: macroHistory,
         packRegex: source._capturedPackRegex,
       )..outlets.addAll(source.outlets);
     }
@@ -308,17 +343,11 @@ extension _ScriptMvuResources on _ScriptCoordinator {
       capture.settings,
       _map(state['variables']),
       engine._globalVariables,
-      history,
+      const [],
       capture.config,
       at,
       engine._random,
-      _macroChatIdentity(
-        capture.chat,
-        state,
-        metadata,
-        state['chatJsonlSourceFile'] as String?,
-        node: history.lastOrNull,
-      ),
+      _macroChatIdentity(capture.chat, state, metadata, state['chatJsonlSourceFile'] as String?, node: history.last),
       input,
       generationType,
       characterId: capture.dataContext.hostId,
@@ -328,6 +357,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
       groupNotMuted: capture.groupNames?.enabledNames,
       messageVariables: state['messageVariables'],
       messageVariablesExists: state.containsKey('messageVariables'),
+      macroHistorySnapshot: macroHistory,
       gameplayCapture: admission == null ? null : _GameplayResourceCapture.fromAdmission(admission),
     );
   }

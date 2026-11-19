@@ -178,6 +178,20 @@ extension GameplaySnapshotStore on ChatStore {
     );
   });
 
+  /// A same-connection stamp for one live display job's binding checks.
+  /// Schema/connection replacement happens outside the engine lifetime.
+  /// Never cache a borrowed or managed transaction's uncommitted view.
+  (int, int)? readGameplayBindingStamp() {
+    _ensureOpen();
+    final failure = _transactionFailure;
+    if (failure != null) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+    if (_transactionDepth != 0 || !_db.autocommit) return null;
+    final row = _db.select('SELECT total_changes() AS local_changes, data_version FROM pragma_data_version').single;
+    return (row['local_changes']! as int, row['data_version']! as int);
+  }
+
   /// Reads the same binding/version inputs as [readGameplaySnapshot] without
   /// decoding an imported chat's history-sized metadata on every regex check.
   StoredGameplayBindingFacts readGameplayBindingFacts({

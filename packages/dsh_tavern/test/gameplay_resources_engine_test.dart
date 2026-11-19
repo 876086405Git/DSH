@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -345,6 +346,56 @@ void main() {
       operationId: 'remove-display-version',
     );
     expect((await beforeRemoval).superseded, isTrue);
+    h.expectNoGeneration();
+  });
+
+  test('a display with warm binding checks observes an external change during its worker request', () async {
+    final h = await ScriptFixture.open();
+    final actor = await h.card('Display actor');
+    final chat = await h.engine.createChat(actor);
+    final ref = await _regexPack(h, 'warm-display-regex', 'TOKEN', 'CHANGED');
+    final scope = TavernPackScopeTarget(kind: TavernGameplayScope.chat, targetId: chat);
+    final bound = await _bind(h, scope, ref, 'display');
+    final store = ChatStore.open('${h.root.path}/tavern.sqlite3');
+    addTearDown(store.close);
+
+    final warm = await h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    expect(warm.text, 'CHANGED');
+    expect(warm.superseded, isFalse);
+    var changes = 0;
+    const limits = RegexLimits();
+    final pending = await runZoned(
+      () => h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user),
+      zoneSpecification: ZoneSpecification(
+        createTimer: (self, parent, zone, duration, callback) {
+          final timer = parent.createTimer(zone, duration, callback);
+          // The real worker creates its deadline after this job's initial
+          // guards and before dispatch. Keep the deadline and timer intact.
+          if (changes == 0 && duration == limits.timeout) {
+            changes++;
+            try {
+              store.updateGameplayBindingsData(
+                scope,
+                expected: store.readGameplayScopeData(scope).token,
+                operationId: 'disable-after-display-stamp',
+                edits: [TavernPackBindingEdit.setEnabled(bindingId: bound.createdBindings['display']!, enabled: false)],
+              );
+            } catch (_) {
+              timer.cancel();
+              rethrow;
+            }
+          }
+          return timer;
+        },
+      ),
+    );
+    expect(changes, 1);
+    expect(pending.superseded, isTrue);
+    expect(pending.replacements, 0);
+    expect(pending.text, 'TOKEN');
+    final fresh = await h.engine.displayText(chat, text: 'TOKEN', role: TavernRole.user);
+    expect(fresh.text, 'TOKEN');
+    expect(fresh.superseded, isFalse);
     h.expectNoGeneration();
   });
 

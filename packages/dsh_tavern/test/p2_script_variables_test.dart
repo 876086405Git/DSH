@@ -289,6 +289,51 @@ void main() {
     h.expectNoGeneration();
   });
 
+  test('historical message observations retain physical values and committed ABA revisions', () async {
+    final h = await ScriptFixture.open();
+    final character = await h.card('Observed history', greeting: 'First message.');
+    final chat = await h.engine.createChat(character);
+    final first = (await h.engine.path(chat)).single;
+    // A legacy physical checkpoint without a portable override is read after
+    // reopen, before any bridge observation or managed write is admitted.
+    await h.reopen(
+      whileClosed: () async {
+        h.inspect((db) {
+          final row = db.select('SELECT full_json FROM node_states WHERE node_id = ?', [first.nodeId]).single;
+          final state = scriptMap(jsonDecode(row['full_json'] as String));
+          state['messageVariables'] = {'n': 1};
+          db.execute('UPDATE node_states SET full_json = ? WHERE node_id = ?', [jsonEncode(state), first.nodeId]);
+        }, writable: true);
+      },
+    );
+    final context = await h.context(chat, characterId: character);
+    final target = TavernVariableTarget(
+      scope: TavernVariableScope.message,
+      messageRef: TavernScriptMessageRef(chatId: chat, nodeId: first.nodeId),
+    );
+    final before = await h.bridge.getVariables(context.id, target);
+    expect(before.value, {'n': 1});
+    final oldView = await h.bridge.snapshot(context.id);
+    await h.bridge.snapshot(context.id);
+    await h.engine.sendOnly(chat, 'Later message.');
+    expect((await h.bridge.getVariables(context.id, target)).version, before.version);
+    await h.bridge.replaceVariables(context.id, target, {'n': 2}, expectedVersion: before.version);
+    await h.bridge.replaceVariables(context.id, target, {'n': 1});
+    final after = await h.bridge.getVariables(context.id, target);
+    expect(after.value, before.value);
+    expect(after.version, isNot(before.version));
+    await expectLater(
+      h.bridge.replaceVariables(context.id, target, {'stale': true}, expectedVersion: before.version),
+      throwsA(scriptError(TavernScriptErrorCode.revisionConflict)),
+    );
+    expect((await h.bridge.getVariables(context.id, target)).version, after.version);
+    expect(oldView.messages.single.data, {'n': 1});
+    expect((await h.bridge.snapshot(context.id)).messages.first.data, {'n': 1});
+    await h.bridge.deleteChatMessages(context.id, [0]);
+    await expectLater(h.bridge.getVariables(context.id, target), throwsA(scriptError(TavernScriptErrorCode.notFound)));
+    h.expectNoGeneration();
+  });
+
   test('strict JSON is captured at call time and invalid values never partially save', () async {
     final h = await ScriptFixture.open();
     final character = await h.card('JSON');

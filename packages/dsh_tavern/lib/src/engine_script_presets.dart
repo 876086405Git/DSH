@@ -485,7 +485,11 @@ extension _PresetScriptOwners on TavernEngine {
 }
 
 extension _ScriptPresets on _ScriptCoordinator {
-  TavernScriptPresetSnapshot _scriptPresetViewNow(_ScriptContextState context, TavernScriptPresetRef ref) {
+  TavernScriptPresetSnapshot _scriptPresetViewNow(
+    _ScriptContextState context,
+    TavernScriptPresetRef ref, {
+    StoredChat? capturedChat,
+  }) {
     _checkScriptPresetContext(context);
     if (ref.kind == TavernScriptPresetRefKind.stored) {
       final id = ref.presetId!;
@@ -509,7 +513,7 @@ extension _ScriptPresets on _ScriptCoordinator {
         raw: saved.raw,
       );
     }
-    final value = engine._currentPresetData(context.value.chatId);
+    final value = engine._currentPresetData(context.value.chatId, capturedChat: capturedChat);
     return TavernScriptPresetSnapshot(
       ref: ref,
       version: _resourceVersion('preset:current:${jsonEncode(context.value.chatId)}', {

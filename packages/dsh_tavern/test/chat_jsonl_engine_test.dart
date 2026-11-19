@@ -116,6 +116,31 @@ void main() {
     expect((await engine.path(result.chatIds.single)).single.text, 'one');
   });
 
+  test('concurrent chat imports finish in call order while preparation is asynchronous', () async {
+    final id = await card();
+    final completed = <String>[];
+    final large = engine
+        .importChats(id, [
+          _file('large.jsonl', [for (var index = 0; index < 45; index++) _message('entry $index')]),
+        ])
+        .then((result) {
+          completed.add('large');
+          return result;
+        });
+    final small = engine
+        .importChats(id, [
+          _file('small.jsonl', [_message('one')]),
+        ])
+        .then((result) {
+          completed.add('small');
+          return result;
+        });
+    final imported = await Future.wait([large, small]);
+    expect(completed, ['large', 'small']);
+    expect(await engine.path(imported[0].chatIds.single), hasLength(45));
+    expect((await engine.path(imported[1].chatIds.single)).single.text, 'one');
+  });
+
   test('unhide changes ST is_system together with prompt, WI and macro visibility', () async {
     final id = await card({
       'description': 'LAST_USER={{lastUserMessage}}',

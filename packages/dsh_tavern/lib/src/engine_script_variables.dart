@@ -261,6 +261,13 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
     return snapshot;
   }
 
+  _ScriptRawVariable _readMessageVariable(TavernScriptMessageRef ref) {
+    // Only this raw carrier is observed. Physical state and complete portable
+    // overrides have the same priority as _stateAt, without reading inspection
+    // or adding the unrelated chat hash used by native runtime state.
+    return _fieldVariable(engine._store.scriptNodeState(ref.chatId, ref.nodeId), 'messageVariables');
+  }
+
   Future<T> _readStoredVariable<T>(
     TavernVariableTarget target,
     T Function(_ScriptRawVariable raw) read, {
@@ -283,10 +290,10 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
       case TavernVariableScope.global:
         return engine._settingsDocument((document) async => inspect(() => _fieldVariable(document, 'globalVariables')));
       case TavernVariableScope.chat:
-        return inspect(() => _ScriptRawVariable(true, engine._store.chat(target.chatId!).variables));
+        return inspect(() => _ScriptRawVariable(true, engine._store.chatVariables(target.chatId!)));
       case TavernVariableScope.message:
         final ref = target.messageRef!;
-        return inspect(() => _fieldVariable(engine._stateAt(ref.chatId, ref.nodeId), 'messageVariables'));
+        return inspect(() => _readMessageVariable(ref));
       case TavernVariableScope.character:
         return engine._libraryOperation(() async {
           late T result;
@@ -1019,15 +1026,24 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
     // These observers run after a real commit. A deleted/malformed target
     // invalidates its old token, but no read/shape error can turn COMMIT into
     // an apparent rollback or prevent notification of other targets.
-    String fingerprint;
+    final chatId = entry.target.chatId ?? entry.target.messageRef?.chatId;
+    final profile = chatId == null ? null : engine._turns[chatId]?.profile;
+    final started = profile?.now;
     try {
-      fingerprint = _variableFingerprint(read());
-    } catch (error) {
-      fingerprint = _unavailableVariableFingerprint(error);
-    }
-    if (entry.fingerprint != fingerprint) {
-      entry.fingerprint = fingerprint;
-      entry.revision++;
+      String fingerprint;
+      try {
+        fingerprint = _variableFingerprint(read());
+      } catch (error) {
+        fingerprint = _unavailableVariableFingerprint(error);
+      }
+      if (entry.fingerprint != fingerprint) {
+        entry.fingerprint = fingerprint;
+        entry.revision++;
+      }
+    } finally {
+      if (started != null) {
+        profile?.record('script_store_observe', started);
+      }
     }
   }
 
@@ -1124,7 +1140,7 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
       if (target.scope == TavernVariableScope.chat && chatIds.contains(target.chatId)) {
         // updateChat(variables) also commits for an empty path and need not
         // advance tree_revision. Always inspect this small chat carrier.
-        _observeVariable(entry, () => _ScriptRawVariable(true, engine._store.chat(target.chatId!).variables));
+        _observeVariable(entry, () => _ScriptRawVariable(true, engine._store.chatVariables(target.chatId!)));
       } else if (target.scope == TavernVariableScope.message && chatIds.contains(target.messageRef!.chatId)) {
         final ref = target.messageRef!;
         int? revision;
@@ -1138,7 +1154,7 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
         if (revision != null && revision == entry.messageTreeRevision) {
           continue;
         }
-        _observeVariable(entry, () => _fieldVariable(engine._stateAt(ref.chatId, ref.nodeId), 'messageVariables'));
+        _observeVariable(entry, () => _readMessageVariable(ref));
         entry.messageTreeRevision = revision;
       } else if (target.scope == TavernVariableScope.script &&
           target.scriptOwner!.kind == TavernScriptOwnerKind.preset &&
