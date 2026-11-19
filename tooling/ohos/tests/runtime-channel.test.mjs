@@ -2310,8 +2310,11 @@ test('background protection channel defaults off, validates consent and never fa
     assert.equal(enabled.get('taskEnabled'), true); assert.equal(enabled.get('taskActive'), false);
     assert.equal(enabled.get('error'), 'ohos_background_eligibility_required');
     assert.equal(await invoke('openBackgroundProtectionSettings'), false);
-    const reopened = new RuntimeController(c.context); controllers.push(reopened);
-    assert.equal((await reopened.backgroundProtection()).get('taskEnabled'), true);
+    assert.equal(native.starts.length, 0);
+    plugin.onDetachedFromEngine(binding);
+    const reopened = await reopenCase(c);
+    plugin.onAttachedToEngine(binding);
+    assert.equal((await reopened.controller.backgroundProtection()).get('taskEnabled'), true);
     const off = await invoke('setBackgroundProtection', {taskEnabled: false});
     assert.equal(off.get('taskEnabled'), false); assert.equal(off.get('taskActive'), false);
     assert.equal(nativeModuleLoads, loads); assert.equal(native.starts.length, 0);
@@ -2348,7 +2351,7 @@ test('a newer revocation wins over an in-flight preference enable and survives r
     const results = await Promise.all([enabling, disabling]);
     assert(results.every(status => status.get('taskEnabled') === false));
     assert.equal(applied.includes(true), false);
-    const reopened = new RuntimeController(c.context); controllers.push(reopened);
-    assert.equal((await reopened.backgroundProtection()).get('taskEnabled'), false);
+    const reopened = await reopenCase(c);
+    assert.equal((await reopened.controller.backgroundProtection()).get('taskEnabled'), false);
   } finally { release.resolve(); backgroundPreferenceControl.beforeFlush = null; }
 });
