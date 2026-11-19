@@ -4,6 +4,7 @@ import common from '@ohos.app.ability.common';
 import util from '@ohos.util';
 import connection from '@ohos.net.connection';
 import UIAbility from '@ohos.app.ability.UIAbility';
+import preferences from '@ohos.data.preferences';
 import type { HostState, HostEvent, HostOptions, HostLifecycleSnapshot } from 'libdsh_host.so';
 import { loadNativeHost, peekNativeHost, nativeHostState, nativeHostTouched, configureNativeRecovery, NativeRecoveryGate } from './NativeHost';
 import { RuntimeChannelError, RuntimeManifest, RuntimeFile, RuntimeInstaller, RuntimeLogs, RuntimeLogEntry,
@@ -21,7 +22,7 @@ import { RuntimeLifecycle, HostLifecycleAck } from './RuntimeLifecycle';
 import { OhosLifecycleTransport } from './OhosLifecycleTransport';
 import { LinuxControl, LinuxRunRequest } from './LinuxControl';
 import type { LinuxProxyConfiguration } from './LinuxControl';
-import { agentReminderAccess, backgroundComputePermission } from './BackgroundCompute';
+import { agentReminderAccess, backgroundComputePermission, backgroundComputeStatus } from './BackgroundCompute';
 
 type RuntimeSink = (event: Map<string, Object | null>) => void;
 const LIFECYCLE_NOTICE = '前后台状态尚未同步，本机任务可能仍在暂停或运行；正在重试。';
@@ -106,6 +107,12 @@ export class RuntimeController {
   private resetRequested: boolean = false;
   private attempt: string | null = null;
   private longTaskAllowed: boolean | null = null;
+  private taskEnabled: boolean = false;
+  private backgroundStore: preferences.Preferences | null = null;
+  private backgroundLoaded: Promise<void> | null = null;
+  private backgroundWrite: Promise<void> = Promise.resolve();
+  private backgroundRevision: number = 0;
+  private backgroundError: string | null = null;
   private runningSince: number | null = null;
   private markedHealthy: boolean = false;
   private runMode: string = 'normal';
@@ -198,6 +205,7 @@ export class RuntimeController {
     this.ownerAbility = RuntimeController.ability;
     this.taskOwner = new TransientTaskOwner(host, RuntimeController.foreground,
       (): void => this.lifecycle.observe(RuntimeController.foreground), RuntimeController.ability.context);
+    this.taskOwner.setTaskEnabled(this.taskEnabled);
   }
 
   private retireOwner(): void {
@@ -213,6 +221,69 @@ export class RuntimeController {
     if (ability === undefined || ability !== RuntimeController.ability || !RuntimeController.foreground ||
       this.requestedStop || this.pending !== null) return null;
     return ability.context;
+  }
+
+  private applyTaskEnabled(enabled: boolean): void {
+    this.taskEnabled = enabled;
+    this.taskOwner?.setTaskEnabled(enabled);
+  }
+
+  private loadBackgroundProtection(): Promise<void> {
+    if (this.backgroundLoaded === null) {
+      this.backgroundLoaded = (async (): Promise<void> => {
+        const store = await preferences.getPreferences(this.context, { name: 'dsh-background-protection' });
+        const enabled = await store.get('taskEnabled', false);
+        this.backgroundStore = store;
+        if (this.backgroundRevision === 0) this.applyTaskEnabled(enabled === true);
+        this.backgroundError = null;
+      })().catch((): void => {
+        this.backgroundLoaded = null; this.backgroundStore = null;
+        this.backgroundError = 'ohos_background_storage_failed';
+        this.applyTaskEnabled(false);
+      });
+    }
+    return this.backgroundLoaded;
+  }
+
+  async backgroundProtection(): Promise<Map<string, Object | null>> {
+    await this.backgroundWrite;
+    await this.loadBackgroundProtection();
+    const status = backgroundComputeStatus(this.context.applicationInfo.accessTokenId);
+    status.delete('computePermission');
+    status.set('taskEnabled', this.taskEnabled);
+    status.set('taskActive', this.taskOwner?.continuousActive() === true);
+    status.set('cleanupPending', this.taskOwner?.cleanupPending() === true ||
+      this.retiredOwners.some((owner: TransientTaskOwner): boolean => owner.cleanupPending()));
+    const failure = this.backgroundError ?? this.taskOwner?.continuousError() ??
+      this.retiredOwners.find((owner: TransientTaskOwner): boolean => owner.cleanupPending())?.continuousError() ?? null;
+    if (failure !== null) {
+      status.set('error', failure);
+      status.set('actionRequired', failure === 'ohos_background_storage_failed' ? 'retry_saving_preference' : 'return_to_app_and_retry');
+    }
+    return status;
+  }
+
+  setBackgroundProtection(enabled: boolean): Promise<Map<string, Object | null>> {
+    const revision = ++this.backgroundRevision;
+    // Revocation closes native admission before any asynchronous storage work.
+    if (!enabled) this.applyTaskEnabled(false);
+    this.backgroundWrite = this.backgroundWrite.then(async (): Promise<void> => {
+      await this.loadBackgroundProtection();
+      const store = this.backgroundStore;
+      if (store === null) return;
+      try {
+        await store.put('taskEnabled', enabled);
+        await store.flush();
+        if (revision === this.backgroundRevision) {
+          this.backgroundError = null; this.applyTaskEnabled(enabled);
+        }
+      } catch (_) {
+        if (revision === this.backgroundRevision) {
+          this.backgroundError = 'ohos_background_storage_failed'; this.applyTaskEnabled(false);
+        }
+      }
+    });
+    return this.backgroundWrite.then((): Promise<Map<string, Object | null>> => this.backgroundProtection());
   }
 
   // This read and the toggle deliberately do not initialize, collect or emit.
@@ -244,6 +315,7 @@ export class RuntimeController {
   }
 
   private async prepareRecovery(): Promise<void> {
+    await this.loadBackgroundProtection();
     if (this.resetRequested) throw new RuntimeChannelError('ohos_restart_required', '重置已请求，请重新打开应用后继续。');
     const recovering = this.recovery.status().resetPending;
     await this.readInstallation();

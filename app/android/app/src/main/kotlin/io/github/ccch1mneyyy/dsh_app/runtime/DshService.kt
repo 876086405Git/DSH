@@ -38,6 +38,7 @@ class DshService : Service() {
         val controller = RuntimeController.get(this)
         when (intent?.action) {
             ACTION_INSTALL -> {
+                controller.clearServiceRecovery()
                 // First unpack or an upgrade: keep the process (and the CPU) up until it is done.
                 ensureChannel(this)
                 installUpgrade = intent.getBooleanExtra("upgrade", false)
@@ -82,13 +83,13 @@ class DshService : Service() {
                 if (controller.phase != RuntimeController.Phase.INSTALLING) {
                     val expected = if (intent.hasExtra(EXTRA_STOP_GENERATION))
                         intent.getIntExtra(EXTRA_STOP_GENERATION, -1) else null
-                    if (controller.stopProcess(expected)) {
+                    if (controller.stopProcess(expected, intent.getStringExtra(EXTRA_STOP_OWNER))) {
                         running = false
                         stopForegroundCompat()
                     }
                 }
             }
-            else -> {
+            ACTION_START, null -> if (controller.prepareServiceStart(recreated = intent == null)) {
                 ensureChannel(this)
                 val notification = buildNotification(this, controller)
                 foreground(notification)
@@ -101,7 +102,7 @@ class DshService : Service() {
         }
         // A newer accepted command may still be waiting for onStartCommand, including a no-op stop.
         if (!running && installSink == null) stopSelf(startId)
-        return START_NOT_STICKY
+        return if (running && installSink == null && controller.canRecreateService()) START_STICKY else START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -187,6 +188,7 @@ class DshService : Service() {
         const val ACTION_PHONE_STOP = "io.github.ccch1mneyyy.dsh_app.PHONE_STOP"
         private const val PHONE_TASK_SCHEME = "dsh-phone-task"
         private const val EXTRA_STOP_GENERATION = "stopGeneration"
+        private const val EXTRA_STOP_OWNER = "stopOwner"
 
         /** 停止操作 for exactly [taskId]. The id is the intent's data, so every task gets its own
          * PendingIntent: a newer task's button never rewrites the one still on screen. */
@@ -294,9 +296,10 @@ class DshService : Service() {
             nm.notify(NOTIFICATION_ID, buildNotification(context, RuntimeController.get(context)))
         }
 
-        fun stopSelfIfRunning(context: Context, generation: Int) {
+        fun stopSelfIfRunning(context: Context, generation: Int, owner: String) {
             if (running) context.startService(Intent(context, DshService::class.java).setAction(ACTION_STOP)
-                .putExtra(EXTRA_STOP_GENERATION, generation))
+                .putExtra(EXTRA_STOP_GENERATION, generation)
+                .putExtra(EXTRA_STOP_OWNER, owner))
         }
 
         private fun ensureChannel(context: Context) {

@@ -1831,6 +1831,69 @@ class L10nZh extends L10n {
   String get androidShellErrorUnknown => '未能确认操作结果。先核实结果；已派发的命令不要自动重试。';
 
   @override
+  String get backgroundProtectionDescription => '默认关闭，仅在有本机任务且 App 退到后台时尝试保护；系统仍可能暂停任务。';
+
+  @override
+  String get backgroundProtectionAudio => '静音音频保护';
+
+  @override
+  String get backgroundProtectionAudioHint => '任务期间在后台播放静音音频，会增加耗电；不会抢占录音、通话或朗读。';
+
+  @override
+  String get backgroundProtectionLocation => '后台定位保护';
+
+  @override
+  String get backgroundProtectionLocationHint => '需系统“始终允许”位置权限，会增加耗电并涉及位置隐私；不保存坐标。';
+
+  @override
+  String get backgroundProtectionTask => '连续任务保护';
+
+  @override
+  String get backgroundProtectionTaskHint => '仅在本机任务期间申请系统连续任务，是否生效取决于当前版本和系统许可。';
+
+  @override
+  String get backgroundProtectionStatus => '当前状态';
+
+  @override
+  String get backgroundProtectionOff => '未开启增强保护';
+
+  @override
+  String get backgroundProtectionReady => '已开启，当前未运行；有本机任务且退到后台时才会尝试保护。';
+
+  @override
+  String get backgroundProtectionAudioActive => '静音音频保护正在运行';
+
+  @override
+  String get backgroundProtectionLocationActive => '后台定位保护正在运行';
+
+  @override
+  String get backgroundProtectionBothActive => '静音音频与后台定位保护正在运行';
+
+  @override
+  String get backgroundProtectionTaskActive => '系统连续任务保护正在运行';
+
+  @override
+  String get backgroundProtectionLocationRestricted => '定位权限被系统限制，无法开启定位保护；可保持前台或使用远程主机。';
+
+  @override
+  String get backgroundProtectionNeedsAlways => '定位保护尚未生效，请点此在系统设置中将位置权限设为“始终允许”。';
+
+  @override
+  String get backgroundProtectionLocationServicesOff => '系统定位服务已关闭，请点此检查系统设置。';
+
+  @override
+  String get backgroundProtectionTaskUnavailable => '当前版本缺少系统连续任务资格，请保持 App 在前台或使用远程主机。';
+
+  @override
+  String get backgroundProtectionUnavailable => '保护暂不可用，请返回 App 重试；长任务可保持前台或使用远程主机。';
+
+  @override
+  String get backgroundProtectionCleanup => '正在结束上一次后台保护，尚未完成释放。';
+
+  @override
+  String get backgroundProtectionUpdateFailed => '未能更新后台保护，请查看当前状态后重试。';
+
+  @override
   String get botsFolderGone => '这个文件夹已经不在了';
 
   @override

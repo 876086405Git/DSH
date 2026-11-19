@@ -1,6 +1,6 @@
 # 长期后台回合：TASK_KEEPING
 
-本实现面向调试签名或指定设备安装。构建配置必须声明 KEEP_BACKGROUND_RUNNING、KEEP_BACKGROUND_RUNNING_SYSTEM 和 taskKeeping；受限权限的 ACL/Profile 由签名流程提供。没有权限、模式不支持或系统拒绝开始时，自动使用现有短时任务，不向回合报告权限错误。不得用静音音频或 DATA_TRANSFER 替代。
+本实现面向调试签名或指定设备安装。构建配置必须声明 KEEP_BACKGROUND_RUNNING、KEEP_BACKGROUND_RUNNING_SYSTEM 和 taskKeeping；受限权限的 ACL/Profile 由签名流程提供。用户在后台运行页主动开启长时任务保护后，才会尝试连续任务；默认关闭，短时收尾不受该开关影响。没有权限、模式不支持或系统拒绝开始时，保留现有短时任务，并在后台运行状态中区分权限、签名资格、模式不支持或系统运行错误；不把这些状态伪装成引擎退出。不得用静音音频或 DATA_TRANSFER 替代。
 
 ## 系统合同
 
@@ -16,7 +16,7 @@ SDK 合同支持上述实现；具体手机系统版本、签名 ACL 下发、�
 
 ## 准入与撤销
 
-后台观察仍要求当前原生 owner/revision 的新鲜 busy ACK。权限检查只是申请条件，异步 OS start 成功且 owner/generation 仍当前才写原生 Continuous 状态。它使用新增 phase=7，保持原生快照布局不变；不借用短时任务 deadline，也不声称永不被系统暂停。Node 从原生只读桥读取此状态，HTTP 数据不能授予长期后台权限；手动暂停仍优先。
+后台观察仍要求用户开关开启、当前原生 owner/revision 的新鲜 busy ACK。偏好单独持久化，启用只在保存成功后生效；关闭立即撤销原生准入，并使尚未结束的旧启用不能重新激活。资格不足保留可读状态，不尝试从通知设置授予受限 ACL。权限检查只是申请条件，异步 OS start 成功且 owner/generation 仍当前才写原生 Continuous 状态。它使用新增 phase=7，保持原生快照布局不变；不借用短时任务 deadline，也不声称永不被系统暂停。Node 从原生只读桥读取此状态，HTTP 数据不能授予长期后台权限；手动暂停仍优先。
 
 回到前台、回合 idle、手动暂停、owner 退役先关闭原生准入，再按本任务 id 停止 OS 任务。系统 Cancel 立即撤销，Suspend 立即撤销并停止该任务；随后可走原短时 fallback，不信任随后 Active 事件。旧请求晚成功只清理其返回的 id，不能激活新 owner。停止失败最多三次，保留诊断，不无限重试。
 

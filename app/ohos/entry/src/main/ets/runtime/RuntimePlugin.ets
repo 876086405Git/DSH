@@ -16,7 +16,7 @@ import { PhoneBridge } from '../phone/PhoneBridge';
 import type { HostPhoneKey } from 'libdsh_host.so';
 
 
-const POLLED: string[] = ['getStatus', 'getLogs', 'getLogSnapshot', 'failureLog', 'guestRoot', 'getLinuxStatus', 'getIdleDiagnostics'];
+const POLLED: string[] = ['getStatus', 'getLogs', 'getLogSnapshot', 'failureLog', 'guestRoot', 'getLinuxStatus', 'getIdleDiagnostics', 'backgroundProtection'];
 export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHandler, AbilityAware {
   private methods: MethodChannel | null = null;
   private events: EventChannel | null = null;
@@ -96,6 +96,14 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
   private async handle(call: MethodCall, result: MethodResult): Promise<void> {
     if (this.controller === null) throw new RuntimeChannelError('ohos_detached', '运行时通道已解除连接。');
     const controller = this.controller;
+    if (call.method === 'backgroundProtection') { result.success(await controller.backgroundProtection()); return; }
+    // TASK_KEEPING eligibility comes from the signed build/ACL, not an App settings toggle.
+    if (call.method === 'openBackgroundProtectionSettings') { result.success(false); return; }
+    if (call.method === 'setBackgroundProtection') {
+      const enabled: Any = call.argument('taskEnabled');
+      if (typeof enabled !== 'boolean') throw new RuntimeChannelError('ohos_background_arguments', '后台任务保护开关必须是布尔值。');
+      result.success(await controller.setBackgroundProtection(enabled)); return;
+    }
     if (call.method === 'getIdleDiagnostics') { result.success(controller.getIdleDiagnostics()); return; }
     if (call.method === 'setIdleDiagnosticsEnabled') {
       const enabled: Any = call.argument('enabled');

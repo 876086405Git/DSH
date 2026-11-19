@@ -193,6 +193,8 @@ HomeShell = [ChatScreen] + [SessionsDrawer 左] + [QuickPanel 右] + [SystemEntr
 
 ### 3.2 引擎运行时（`.../runtime/`）
 
+Android/iOS 后台执行的机制、系统回收恢复和三方方案取舍见 [后台运行](design/background-execution.md)。
+
 | 文件 | 职责 |
 |---|---|
 | `RuntimePlugin.kt` | `dsh/runtime` + `dsh/runtime/events`：install/start/stop/reset/safe/LKG |

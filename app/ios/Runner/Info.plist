@@ -11,6 +11,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>location</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -174,7 +175,9 @@
 	<key>NSContactsUsageDescription</key>
 	<string>Looks up or adds contacts when you approve a request from the on-device engine.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Reads your location once when you approve a request from the on-device engine.</string>
+	<string>Reads your location for requests you approve. If you enable background location protection, location updates support active on-device tasks; the protection feature does not store or send coordinates.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Only when you enable background location protection, uses location updates while an on-device task runs in the background. Coordinates are not stored or sent; this can increase battery use.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Opens the calendar editor when you approve adding an event.</string>
 	<key>NSMicrophoneUsageDescription</key>

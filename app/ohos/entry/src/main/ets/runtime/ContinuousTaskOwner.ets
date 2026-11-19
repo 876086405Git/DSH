@@ -25,6 +25,7 @@ export class ContinuousTaskOwner {
 
   private unavailable(id: number, cancelled: boolean): void {
     if (this.task === id) {
+      this.failure = cancelled ? 'ohos_continuous_cancelled' : 'ohos_continuous_suspended';
       this.task = null;
       this.closeNative();
       if (!cancelled) this.stopTask(id);
@@ -45,10 +46,12 @@ export class ContinuousTaskOwner {
   request(): boolean {
     if (!this.eligible()) return false;
     this.wanted = true; this.cancelled.clear();
+    if (!this.unidentifiedTask && this.cleanup.size === 0) this.failure = null;
     const generation = ++this.generation;
     this.pending++;
     this.start(generation).catch((): void => {
       if (this.generation !== generation || !this.wanted) return;
+      if (this.failure === null) this.failure = 'ohos_continuous_start_failed';
       this.stop(); this.fallback();
     }).finally((): void => { this.pending--; if (!this.wanted) this.wake(); });
     return true;
@@ -73,15 +76,21 @@ export class ContinuousTaskOwner {
       throw new Error('Continuous task returned no ownership id');
     }
     if (generation !== this.generation || !this.wanted) { this.stopTask(id); return; }
-    if (this.cancelled.has(id)) { this.stopTask(id); this.stop(); this.fallback(); return; }
+    if (this.cancelled.has(id)) {
+      this.failure = 'ohos_continuous_cancelled';
+      this.stopTask(id); this.stop(); this.fallback(); return;
+    }
     this.task = id;
-    if (this.host.lifecycleUpdate('continuous', this.owner, 0, 1) !== 1) {
-      this.stop(); return;
+    let accepted = false;
+    try { accepted = this.host.lifecycleUpdate('continuous', this.owner, 0, 1) === 1; } catch (_) {}
+    if (!accepted) {
+      this.failure = 'ohos_continuous_native_failed'; this.stop(); return;
     }
     this.wake();
   }
 
   active(): boolean { return this.wanted; }
+  running(): boolean { return this.task !== null; }
   cleanupPending(): boolean { return this.pending > 0 || this.unidentifiedTask || this.cleanup.size > 0; }
   error(): string | null { return this.failure; }
 

@@ -46,7 +46,7 @@ jobs:
             ci: &ci .github/workflows/ci.yml
             app: [*ci, 'app/**', 'packages/**', 'sdk/plugin-kit/**', 'runtime/tests/direct/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
             packages: [*ci, 'packages/**']
-            runtime: [*ci, 'runtime/**', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt']
+            runtime: [*ci, 'runtime/**', 'app/ohos/entry/src/main/ets/runtime/**', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt']
             ios_runtime:
               - *ci
               - '.github/workflows/ios-compile.yml'
@@ -282,6 +282,10 @@ jobs:
       - name: Unit tests
         run: |
           node --test runtime/tests/*.test.mjs app/tool/engine_auth/*.test.mjs
+          node_headers="$(node -p 'require("node:path").resolve(require("node:path").dirname(process.execPath), "../include/node")')"
+          test -f "$node_headers/node_api.h"
+          c++ -std=c++17 -shared -fPIC -I "$node_headers" tooling/ohos/tests/runtime-zip-zlib.cc -lz -o "$RUNNER_TEMP/ohos-test-zlib.node"
+          OHOS_TEST_ZLIB_ADDON="$RUNNER_TEMP/ohos-test-zlib.node" node --test tooling/ohos/tests/lifecycle-host.test.mjs tooling/ohos/tests/transient-task.test.mjs tooling/ohos/tests/runtime-channel.test.mjs
           python3 -I runtime/tests/test_patch_dsh.py
       - name: Media and example plugins
         run: |

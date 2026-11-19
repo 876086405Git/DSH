@@ -42,7 +42,11 @@ Results stay in app memory. Only **Let the AI read diagnostics** or a manual bun
 <!-- nav: commonSettings,phoneEngineKeepAlive -->
 `Settings › Background running` · [Open](dshgo://open/background)
 
-Follow the guide to turn off battery optimization, keep the "engine running" notification, and lock the app in Recents. Limits vary by brand, and Android may still stop the engine.
+Android: follow the guide to turn off battery optimization, keep the "engine running" notification, and lock the app in Recents. After system reclamation of the whole app, a local engine with saved launch options requests restoration. A manual stop is not revived, and launches with temporary environment overrides do not restore automatically. This restarts the engine, not interrupted commands or phone actions. Vendor restrictions still apply.
+
+iOS: this page offers separate audio and location protection switches, both off by default. They are used only while a local task is running in the background, and released when the task ends, the engine stops or the switch is turned off. Audio protection plays silence, uses more battery and yields to recording, calls or other audio use. Location protection needs Always location access and uses extra power and location permissions, but does not store coordinates. If access is denied, this page links to system settings.
+
+The iOS 26 system continued task remains the default path; the system can refuse, cancel or expire it. Enhanced protection is also best-effort, not unlimited background execution or survival after force quit. Keep long tasks in the foreground or use a remote host when reliable execution matters.
 
 For notifications, also turn on the alerts you want in the app's **Notifications** and allow DSH Go notifications in system settings. Alerts from remote hosts need the app running and the connection online.
 

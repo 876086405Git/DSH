@@ -7,12 +7,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/l10n.dart';
 import '../state/settings_state.dart';
 import '../state/read_list_epoch.dart';
+import 'background_protection.dart';
 import 'runtime_bridge.dart';
 
 final runtimeBridgeProvider = Provider<RuntimeBridge>((ref) => RuntimeBridge());
 
 /// [RuntimeBridge.batteryExempt]; invalidate to read it again.
 final batteryExemptProvider = FutureProvider<bool?>((ref) => ref.watch(runtimeBridgeProvider).batteryExempt());
+
+/// Re-read after native status changes and when returning from system settings.
+final backgroundProtectionProvider = FutureProvider.autoDispose<BackgroundProtection?>((ref) {
+  ref.watch(localRuntimeProvider.select((s) => s.status));
+  return ref.watch(runtimeBridgeProvider).backgroundProtection();
+});
 
 /// A one-off message from the runtime (e.g. "已用安全模式启动"); [seq] tells repeats apart.
 class RuntimeNotice {
