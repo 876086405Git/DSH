@@ -279,6 +279,32 @@ Libraries.dev metal-fx, translated to Flutter GLSL.
 - `app/assets/licenses/lodash-4.17.21-LICENSE.txt`：包内 `LICENSE` 原样，SHA256 `f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc`
 - 来源：npm 镜像的 `lodash-4.17.21.tgz`，与 npm 公布的 integrity `sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==` 一致（2026-11-12 核对）
 
+### Zod 4.6.7（MIT）
+
+| 项 | 内容 |
+|---|---|
+| 项目 | Zod 4.6.7，https://zod.dev （npm 包 `zod@4.6.7`） |
+| 版权人 | Copyright (c) 2025 Colin McDonnell |
+| 许可 | MIT（包内 `LICENSE` 原文） |
+| 用途 | 酒馆整页画布和网页岛里给卡脚本用的全局 `z`，和酒馆助手页面一样预先放好（MVU 的 zod 变量结构、状态栏都要它）；「不运行卡的脚本」开着时不载入 |
+
+- `app/assets/tavern/zod-4.6.7.min.js`：npm 包没有单文件浏览器版，由包内 ESM 打成一个 IIFE。入口 `import * as z from 'zod'; globalThis.z = z;`（整个包，`z.object` 和 `z.z.object` 都在，和酒馆助手一样），命令 `esbuild --bundle --minify --format=iife --target=es2019 --legal-comments=inline --banner:js=…`（esbuild 0.28.2，开头一行注释写明出处和许可）。SHA256 `3320c08ae7b97e5a977aac7ea438f9cb1238020e3a8b3bc7cfde2d1965a4e38a`
+- `app/assets/licenses/zod-4.6.7-LICENSE.txt`：包内 `LICENSE` 原样，SHA256 `3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8`
+- 来源：registry.npmjs.org 的 `zod-4.6.7.tgz`，与 npm 公布的 integrity `sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==` 一致（2026-11-20 核对）
+
+### YAML 2.9.1（ISC）
+
+| 项 | 内容 |
+|---|---|
+| 项目 | yaml 2.9.1，https://eemeli.org/yaml/ （npm 包 `yaml@2.9.1`） |
+| 版权人 | Copyright Eemeli Aro <eemeli@gmail.com> |
+| 许可 | ISC（包内 `LICENSE` 原文） |
+| 用途 | 同上，全局 `YAML`（`YAML.parse`／`YAML.stringify`） |
+
+- `app/assets/tavern/yaml-2.9.1.min.js`：同 Zod 的做法，入口 `import YAML from 'yaml'; globalThis.YAML = YAML;`。SHA256 `ccdebd91f1f455d059da218b7f794aaa794705781740e67e94cd0dba0419df29`
+- `app/assets/licenses/yaml-2.9.1-LICENSE.txt`：包内 `LICENSE` 原样，SHA256 `5bba27375d93e9119f76c1015f7672cf9ad5f70952296e0842fb2243d6376869`
+- 来源：registry.npmjs.org 的 `yaml-2.9.1.tgz`，与 npm 公布的 integrity `sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==` 一致（2026-11-20 核对）
+
 ### JetBrains Mono（SIL OFL 1.1）
 
 | 项 | 内容 |

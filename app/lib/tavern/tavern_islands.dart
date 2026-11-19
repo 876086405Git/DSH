@@ -11,6 +11,12 @@ import 'dart:ui' show Color;
 
 import 'tavern_components.dart';
 
+/// Where islands and 整页画布 are loaded from: their pages' origin, so a card's
+/// localStorage works (a page with no base URL has the origin "null", which
+/// has none) and is the tavern's own. `.invalid` never resolves: nothing a
+/// relative URL names is fetched from anywhere.
+const tavernFrameBaseUrl = 'https://tavern.dshgo.invalid/';
+
 /// One part of a message.
 sealed class TavernPart {
   const TavernPart();
@@ -191,12 +197,14 @@ String _htmlOf(String segment) {
   return out.join('\n');
 }
 
-/// Whether [html]'s scripts read the story (a status bar drawing its
-/// floor's variables): then its island is told them (tavern_island_story.dart).
+/// Whether [html]'s scripts read the story or use 酒馆助手's interfaces (a
+/// status bar drawing its floor's variables, a notice by toastr): then its
+/// island is told the story and given them (tavern_island_story.dart).
 bool tavernIslandReadsStory(String html) => _readsStory.hasMatch(html);
 
 final _readsStory = RegExp(
-  r'(<script\b|\son[a-z]+\s*=)[\s\S]*\b(getVariables|getAllVariables|Mvu|getChatMessages|getCurrentMessageId|getLastMessageId|waitGlobalInitialized)\b',
+  r'(<script\b|\son[a-z]+\s*=)[\s\S]*\b(getVariables|getAllVariables|Mvu|getChatMessages|getCurrentMessageId|'
+  r'getLastMessageId|waitGlobalInitialized|initializeGlobal|SillyTavern|getContext|toastr|eventOn|eventOnce)\b',
   caseSensitive: false,
 );
 
@@ -210,7 +218,7 @@ final _script = RegExp(r'<script\b|\son[a-z]+\s*=', caseSensitive: false);
 /// reports the content's height to the `TavernIsland` channel. [noScripts]
 /// keeps the card's own scripts from running; [offline] keeps the page from
 /// loading anything off the network (only what is inline or data:).
-/// [libraries] (jQuery, lodash) come first, for its scripts; [story] is
+/// [libraries] (jQuery, lodash, zod, YAML) come first, for its scripts; [story] is
 /// what they may read of the story (TavernIslandStory.forMessage): read
 /// only, as 酒馆助手's and MVU's getters give it. Neither when scripts do not
 /// run.
@@ -277,36 +285,51 @@ $html
 </script></body></html>''';
 }
 
-/// An island's read-only helpers: 酒馆助手's getters and MVU's over
-/// dshStory; a write is refused, said where it can be done.
+/// An island's helpers over dshStory, as 酒馆助手's pages have them: its
+/// getters (variables, floors, SillyTavern's context) and MVU's, its events
+/// (MVU's update events fire when the app tells the page the story moved,
+/// window.dshStoryUpdate; others are kept and never fire), its globals, and
+/// toastr as the app's own notice. A write is refused, said where it can be
+/// done.
 const _storyJs = r'''
 (function(){
   var d=dshStory;
   function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
-  function readOnly(){
+  function refusal(){
     var e=new Error('Read only in an island: writing to the story is 整页画布\'s');
-    e.code='unsupportedCapability';e.committed=false;return Promise.reject(e);
+    e.code='unsupportedCapability';e.committed=false;return e;
   }
+  function readOnly(){return Promise.reject(refusal());}
+  function readOnlyNow(){throw refusal();}
   function floor(id){
     if(id===undefined||id==='latest')return d.last;
     return typeof id==='number'&&id<0?d.last+1+id:id;
   }
+  function floorData(f){
+    if(f===d.messageId)return d.data;
+    if(f===d.last)return d.latest;
+    var x=d.floors&&d.floors[f];return x?x.data:{};
+  }
   function getVariables(o){
     var t=(o&&o.type)||'chat';
     if(t==='chat')return clone(d.chat)||{};
+    if(t==='global')return clone(d.global)||{};
+    if(t==='character')return clone(d.character)||{};
     if(t!=='message')return {};
-    var f=floor(o&&o.message_id);
-    return clone(f===d.messageId?d.data:f===d.last?d.latest:{})||{};
+    return clone(floorData(floor(o&&o.message_id)))||{};
   }
-  // 酒馆助手's getAllVariables: the chat's, then this floor's over them.
-  // Arrays are replaced, not merged by index, as 酒馆助手 does since 3.5.1.
+  // 酒馆助手's getAllVariables: the global ones, the character's, the chat's,
+  // then this floor's, each over the one before. Arrays are replaced, not
+  // merged by index, as 酒馆助手 does since 3.5.1.
   function plain(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
   function merge(a,b){
     if(!plain(a)||!plain(b))return b===undefined?a:b;
     for(var k in b)a[k]=merge(a[k],b[k]);
     return a;
   }
-  function getAllVariables(){return merge(clone(d.chat)||{},clone(d.data)||{});}
+  function getAllVariables(){
+    return [d.character,d.chat,d.data].reduce(function(a,v){return merge(a,clone(v)||{});},clone(d.global)||{});
+  }
   function steps(p){var out=[];String(p).replace(/[^.[\]]+|\[(\d+)\]/g,function(m,i){out.push(i===undefined?m:+i);return m;});return out;}
   function vwd(v){return Array.isArray(v)&&v.length===2&&typeof v[1]==='string'?v[0]:v;}
   var Mvu={
@@ -323,14 +346,127 @@ const _storyJs = r'''
     replaceMvuData:readOnly,replaceCurrentMvuData:readOnly,parseMessage:readOnly,setMvuVariable:readOnly,
     reloadInitVar:function(){return Promise.resolve(false);}
   };
-  function message(){return {message_id:d.messageId,name:d.name,role:d.role,is_hidden:false,message:d.message,data:clone(d.data)||{},extra:{}};}
-  function quiet(){return {stop:function(){}};}
+  // The floors this page has (its own, the first, the latest), as
+  // getChatMessages gives them: a number, 'n', 'a-b' (negatives from the
+  // end); floors it does not have are not in what it gives.
+  function getChatMessages(range,o){
+    o=o||{};
+    var a,b;
+    if(typeof range==='number'){a=b=range;}
+    else{
+      var m=/^\s*(-?\d+)\s*(?:-\s*(-?\d+)\s*)?$/.exec(String(range));
+      if(!m)throw new Error('getChatMessages: not a floor or a range: '+range);
+      a=parseInt(m[1],10);b=m[2]===undefined?a:parseInt(m[2],10);
+    }
+    a=floor(a);b=floor(b);
+    if(a>b){var t=a;a=b;b=t;}
+    var role=o.role||'all',hide=o.hide_state||'all',out=[];
+    for(var f=Math.max(a,0);f<=b;f++){
+      var x=d.floors&&d.floors[f];
+      if(!x||(role!=='all'&&x.role!==role))continue;
+      if((hide==='hidden'&&!x.is_hidden)||(hide==='unhidden'&&x.is_hidden))continue;
+      var r={message_id:f,name:x.name,role:x.role,is_hidden:!!x.is_hidden,message:x.message,data:clone(x.data)||{},extra:{}};
+      if(o.include_swipes){r.swipe_id=0;r.swipes=[x.message];r.swipes_data=[clone(x.data)||{}];}
+      out.push(r);
+    }
+    return out;
+  }
+  // SillyTavern's context, as far as this page knows the story: the chat as
+  // ST keeps it (the floors above, the rest holes), the two names, the
+  // character (by its id here, not ST's list index), the chat's variables.
+  function stMessage(x){
+    return {name:x.name,is_user:x.role==='user',is_system:!!x.is_hidden,mes:x.message,extra:{},swipe_id:0,
+      swipes:[x.message],variables:[clone(x.data)||{}]};
+  }
+  var context={
+    getContext:function(){return context;},
+    getCurrentChatId:function(){return d.chatId||undefined;},
+    variables:{
+      local:{get:function(n){return (d.chat||{})[n];},set:readOnlyNow},
+      global:{get:function(n){return (d.global||{})[n];},set:readOnlyNow}
+    }
+  };
+  Object.defineProperties(context,{
+    chat:{enumerable:true,get:function(){
+      var c=[];c.length=d.last+1;
+      for(var k in d.floors||{})c[+k]=stMessage(d.floors[k]);
+      return c;
+    }},
+    chatId:{enumerable:true,get:function(){return d.chatId||undefined;}},
+    name1:{enumerable:true,get:function(){return d.name1||undefined;}},
+    name2:{enumerable:true,get:function(){return d.name2||undefined;}},
+    characterId:{enumerable:true,get:function(){return d.characterId==null?undefined:d.characterId;}},
+    chatMetadata:{enumerable:true,get:function(){return {variables:clone(d.chat)||{}};}}
+  });
+  // Events: kept by name; MVU's update events fire when the story moves.
+  var listeners={};
+  function eventOn(name,fn){(listeners[name]||(listeners[name]=[])).push(fn);return {stop:function(){eventRemoveListener(name,fn);}};}
+  function eventMakeFirst(name,fn){(listeners[name]||(listeners[name]=[])).unshift(fn);return {stop:function(){eventRemoveListener(name,fn);}};}
+  function eventOnce(name,fn){
+    function once(){eventRemoveListener(name,once);return fn.apply(this,arguments);}
+    return eventOn(name,once);
+  }
+  function eventRemoveListener(name,fn){var l=listeners[name],i=l?l.indexOf(fn):-1;if(i>=0)l.splice(i,1);}
+  function eventEmit(name){
+    var args=[].slice.call(arguments,1);
+    return (listeners[name]||[]).slice().reduce(function(p,fn){
+      return p.then(function(){return fn.apply(null,args);});
+    },Promise.resolve()).then(function(){});
+  }
+  // The app's newer story (its own floor unchanged): read from now on, and
+  // MVU's update told when the variables moved.
+  window.dshStoryUpdate=function(next){
+    var was=JSON.stringify([d.latest,d.chat,d.global,d.character]),before=clone(d.latest)||{};
+    d=next;
+    if(JSON.stringify([d.latest,d.chat,d.global,d.character])===was)return;
+    eventEmit(Mvu.events.VARIABLE_UPDATE_STARTED,clone(d.latest)||{},before)
+      .then(function(){return eventEmit(Mvu.events.VARIABLE_UPDATE_ENDED,clone(d.latest)||{},before);});
+  };
+  // Globals: what initializeGlobal shares, and what this page has (Mvu, z,
+  // YAML); waiting for any other waits until it is shared.
+  var globals={Mvu:Mvu},waiters={};
+  ['z','YAML'].forEach(function(n){if(window[n]!==undefined)globals[n]=window[n];});
+  function initializeGlobal(n,v){
+    n=String(n);globals[n]=v;window[n]=v;
+    var w=waiters[n]||[];delete waiters[n];w.forEach(function(ok){ok(v);});
+  }
+  function waitGlobalInitialized(n){
+    n=String(n);
+    if(Object.prototype.hasOwnProperty.call(globals,n))return Promise.resolve(globals[n]);
+    return new Promise(function(ok){(waiters[n]||(waiters[n]=[])).push(ok);});
+  }
+  // toastr: the app's own notice, as on the canvas (its text only).
+  function plainText(s){
+    if(s==null)return '';
+    var x=new DOMParser().parseFromString(String(s),'text/html');
+    if(!x.body)return '';
+    [].forEach.call(x.body.querySelectorAll('script,style,template,noscript'),function(e){e.remove();});
+    [].forEach.call(x.body.querySelectorAll('br,p,div,li,tr,h1,h2,h3,h4,h5,h6'),function(e){e.before(' ');e.after(' ');});
+    return String(x.body.textContent).replace(/\s+/g,' ').trim();
+  }
+  function post(o){window.TavernIsland.postMessage(JSON.stringify(o));}
+  var toastSeq=0;
+  function toast(level){
+    return function(message,title){
+      var m=plainText(message),t=plainText(title),id=++toastSeq;
+      if(m||t)post({type:'toast',level:level,title:t,message:m,id:id});
+      var shown=window.jQuery?jQuery():undefined;
+      if(shown)shown.dshToast=id;
+      return shown;
+    };
+  }
+  function clearToast(shown){
+    if(shown==null)post({type:'toastClear',id:null});
+    else if(shown.dshToast)post({type:'toastClear',id:shown.dshToast});
+  }
+  var toastr={options:{},info:toast('info'),success:toast('success'),warning:toast('warning'),error:toast('error'),
+    clear:clearToast,remove:clearToast,subscribe:function(){}};
   var api={Mvu:Mvu,getVariables:getVariables,getAllVariables:getAllVariables,
     getCurrentMessageId:function(){return d.messageId;},getLastMessageId:function(){return d.last;},
-    getChatMessages:function(r){var f=floor(typeof r==='number'?r:parseInt(String(r),10));return f===d.messageId?[message()]:[];},
-    waitGlobalInitialized:function(n){return n==='Mvu'?Promise.resolve(Mvu):new Promise(function(){});},
-    initializeGlobal:function(n,v){window[n]=v;},
-    eventOn:quiet,eventOnce:quiet,eventMakeFirst:quiet,eventMakeLast:quiet,eventRemoveListener:function(){},
+    getChatMessages:getChatMessages,SillyTavern:context,toastr:toastr,
+    waitGlobalInitialized:waitGlobalInitialized,initializeGlobal:initializeGlobal,
+    eventOn:eventOn,eventOnce:eventOnce,eventMakeFirst:eventMakeFirst,eventMakeLast:eventOn,
+    eventRemoveListener:eventRemoveListener,eventEmit:eventEmit,
     tavern_events:{},replaceVariables:readOnly,insertOrAssignVariables:readOnly,insertVariables:readOnly,
     updateVariablesWith:readOnly,deleteVariable:readOnly};
   for(var k in api)if(window[k]===undefined)window[k]=api[k];

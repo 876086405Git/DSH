@@ -22,7 +22,7 @@ import '../../tavern/tavern_canvas.dart';
 import '../../tavern/tavern_canvas_audio.dart';
 import '../../tavern/tavern_canvas_calls.dart';
 import '../../tavern/tavern_canvas_helpers.dart' show tavernMvuIssueText;
-import '../../tavern/tavern_islands.dart' show tavernPageColorsJs;
+import '../../tavern/tavern_islands.dart' show tavernFrameBaseUrl, tavernPageColorsJs;
 import '../../tavern/tavern_card_scripts.dart';
 import '../../tavern/tavern_provider.dart';
 import '../../tavern/tavern_settings.dart';
@@ -45,11 +45,14 @@ typedef TavernCanvasBuilder = Widget Function({
 });
 
 /// The libraries card scripts find on the canvas page, as 酒馆助手's pages
-/// give them: jQuery and lodash (bundled; licences in THIRD_PARTY_NOTICES.md).
+/// give them: jQuery, lodash, zod (`z`) and `YAML` (bundled; licences in
+/// THIRD_PARTY_NOTICES.md). Islands get them too.
 final tavernCanvasLibrariesProvider = FutureProvider<List<String>>(
   (ref) async => [
     await rootBundle.loadString('assets/tavern/jquery-3.7.1.min.js'),
     await rootBundle.loadString('assets/tavern/lodash-4.17.21.min.js'),
+    await rootBundle.loadString('assets/tavern/zod-4.6.7.min.js'),
+    await rootBundle.loadString('assets/tavern/yaml-2.9.1.min.js'),
   ],
 );
 
@@ -268,7 +271,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       if (!mounted || controller != _controller) return;
       await _guard.attach(controller, dark: dark, textZoom: textZoom).catchError((_) {});
       if (!mounted || controller != _controller) return;
-      await controller.loadHtmlString(document).catchError((_) {});
+      await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }
 
@@ -430,7 +433,11 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   /// The page itself stays put; a link opens outside the app.
   NavigationDecision _onNavigation(NavigationRequest request) {
     final url = request.url;
-    if (url == 'about:blank' || url.startsWith('data:') || url.startsWith('about:srcdoc')) {
+    // Its own page, loaded from its base URL (WebKit asks for that load).
+    if (url == 'about:blank' ||
+        url == tavernFrameBaseUrl ||
+        url.startsWith('data:') ||
+        url.startsWith('about:srcdoc')) {
       return NavigationDecision.navigate;
     }
     if (!request.isMainFrame) return NavigationDecision.navigate;

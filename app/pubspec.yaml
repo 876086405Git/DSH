@@ -160,6 +160,8 @@ flutter:
     - assets/licenses/unicode-15.0.txt
     - assets/licenses/jquery-3.7.1-LICENSE.txt
     - assets/licenses/lodash-4.17.21-LICENSE.txt
+    - assets/licenses/zod-4.6.7-LICENSE.txt
+    - assets/licenses/yaml-2.9.1-LICENSE.txt
     # Phone layout for the embedded DSH Web (see lib/ui/web/web_view_page.dart).
     - assets/web/
     # Whale-tail activity sprites (lib/ui/chat/widgets/whale_tail.dart),

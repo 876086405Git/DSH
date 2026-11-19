@@ -48,6 +48,9 @@ const _js = r'''
     return new Promise(function(ok){(globalWaiters[name]||(globalWaiters[name]=[])).push(ok);});
   }
   share('initializeGlobal',initializeGlobal);share('waitGlobalInitialized',waitGlobalInitialized);
+  // The bundled zod and YAML, as 酒馆助手 gives them: on every script's frame,
+  // and what waitGlobalInitialized('z') waits for.
+  ['z','YAML'].forEach(function(n){if(window[n]!==undefined)initializeGlobal(n,window[n]);});
 
   // MVU (MagVarUpdate) as a local module: the engine keeps the variables
   // ([initvar], <UpdateVariable>, its four events); Mvu reads and writes

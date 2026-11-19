@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dsh_app/tavern/tavern_island_story.dart';
 import 'package:dsh_app/tavern/tavern_islands.dart';
 import 'package:dsh_app/tavern/tavern_preview.dart';
@@ -196,20 +199,103 @@ void main() {
         'n0': (floor: 0, data: const {'a': 1}),
         'n1': (floor: 1, data: const {'a': 2}),
       },
+      words: const {
+        0: (name: '林晚', role: 'assistant', hidden: false, message: '你好', data: {'a': 1}),
+        1: (name: '我', role: 'user', hidden: false, message: '嗯', data: {'a': 2}),
+      },
       chat: const {'c': true},
+      global: const {'g': 1},
       last: (floor: 1, data: const {'a': 2}),
+      characterName: '林晚',
+      characterId: 'char-1',
     );
-    expect(story.forMessage('n0', text: '你好', name: '林晚', user: false), {
+    expect(story.forMessage('n0', text: '你好', name: '林晚', user: false, persona: '我', chatId: 'chat-1'), {
       'messageId': 0,
       'last': 1,
       'data': {'a': 1},
       'latest': {'a': 2},
       'chat': {'c': true},
+      'global': {'g': 1},
+      'character': <String, Object?>{},
       'message': '你好',
       'name': '林晚',
       'role': 'assistant',
+      'name1': '我',
+      'name2': '林晚',
+      'characterId': 'char-1',
+      'chatId': 'chat-1',
+      // Its own floor, the first and the latest.
+      'floors': {
+        '1': {
+          'name': '我',
+          'role': 'user',
+          'is_hidden': false,
+          'message': '嗯',
+          'data': {'a': 2},
+        },
+        '0': {
+          'name': '林晚',
+          'role': 'assistant',
+          'is_hidden': false,
+          'message': '你好',
+          'data': {'a': 1},
+        },
+      },
     });
     expect(story.forMessage('gone', text: '', name: '', user: false), isNull);
+  });
+
+  test("an island's scripts find 酒馆助手's interfaces: zod, YAML, variables, floors, context, events, toastr", () async {
+    final story = TavernIslandStory(
+      floors: {
+        'n0': (floor: 0, data: const {}),
+        'n2': (
+          floor: 2,
+          data: const {
+            'stat_data': {
+              '世界': {'日期': '01月17日', '天气': '晴'},
+            },
+          },
+        ),
+        'n4': (floor: 4, data: const {'n': 1}),
+      },
+      words: const {
+        0: (name: '沈鹿笙', role: 'assistant', hidden: false, message: '开场', data: {}),
+        1: (name: '阿青', role: 'user', hidden: false, message: '不在', data: {}),
+        4: (name: '阿青', role: 'user', hidden: false, message: '最新', data: {'n': 1}),
+      },
+      chat: const {'chat': 3},
+      global: const {'g': 1},
+      character: const {'c': 2},
+      last: (floor: 4, data: const {'n': 1}),
+      characterName: '沈鹿笙',
+      characterId: 'char-1',
+    );
+    final document = tavernIslandDocument(
+      '<script>populate()</script>',
+      text: const Color(0xff112233),
+      accent: const Color(0xff445566),
+      fontSize: 15,
+      nonce: 'n0nce',
+      libraries: [
+        File('assets/tavern/zod-4.6.7.min.js').readAsStringSync(),
+        File('assets/tavern/yaml-2.9.1.min.js').readAsStringSync(),
+      ],
+      story: story.forMessage('n2', text: '她坐下。', name: '沈鹿笙', user: false, persona: '阿青', chatId: 'c1'),
+    );
+    // Our scripts before the card's HTML, as the page runs them.
+    final preload = document.substring(0, document.indexOf('<div id="dsh-island">'));
+    final scripts = [for (final m in RegExp(r'<script nonce="n0nce">([\s\S]*?)</script>').allMatches(preload)) m[1]!];
+    expect(scripts, hasLength(3));
+    final dir = Directory.systemTemp.createTempSync('dsh-island-');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}/scripts.json')..writeAsStringSync(jsonEncode(scripts));
+    final result = await Process.run(
+      'node',
+      ['--test', 'test/tavern/support/island_helpers_test.mjs'],
+      environment: {'DSH_ISLAND_SCRIPTS': file.path},
+    );
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   });
 
   testWidgets("a message's HTML is an island; the words around it stay native", (tester) async {
