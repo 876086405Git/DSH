@@ -1500,9 +1500,7 @@ ${tavernCanvasHelpersJs(mvu: mvu)}
     Object.keys(frames).forEach(function(k){if(!want[k]||want[k].content!==frames[k].content)stopFrame(k);});
     scripts.forEach(function(s){
       var f=frames[s.key];if(!f){startFrame(s);return;}
-      // Its buttons changed (another page, a library edit): read afresh from
-      // the list. A write of its own still out keeps its answer.
-      if(JSON.stringify(f.buttonList||[])!==JSON.stringify(s.buttonList||[]))delete buttons[s.key];
+      if(JSON.stringify(f.buttonList||[])!==JSON.stringify(s.buttonList||[]))listButtons(s.key,s.buttonList);
       f.name=s.name;f.buttonList=s.buttonList;
     });
   }
