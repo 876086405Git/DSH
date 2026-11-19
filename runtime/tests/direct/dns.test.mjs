@@ -22,11 +22,12 @@ async function server(t, ipv6 = false, lastOctet = 7, beforeReply = () => {}) {
     offset++;
     const name = parts.join('.'); const type = packet.readUInt16BE(offset); offset += 4;
     queries.push({ name, type });
-    if (name.startsWith('timeout')) return;
-    const absent = name.startsWith('missing');
-    const refused = name.startsWith('refused');
+    const reply = await beforeReply(name, type);
+    if (name.startsWith('timeout') || reply === 'timeout') return;
+    const absent = name.startsWith('missing') || reply === 'missing';
+    const refused = name.startsWith('refused') || reply === 'refused';
     const partial = name.startsWith('partial') && type === 28;
-    const noData = name.startsWith('v4only') && type === 28;
+    const noData = (name.startsWith('v4only') && type === 28) || reply === 'nodata';
     const response = Buffer.from(packet.subarray(0, offset));
     response.writeUInt16BE(refused ? 0x8185 : absent ? 0x8183 : partial ? 0x8182 : 0x8180, 2);
     response.writeUInt16BE(absent || refused || partial || noData ? 0 : 1, 6);
@@ -38,7 +39,6 @@ async function server(t, ipv6 = false, lastOctet = 7, beforeReply = () => {}) {
       answer.writeUInt16BE(0xc00c, 0); answer.writeUInt16BE(type, 2); answer.writeUInt16BE(1, 4);
       answer.writeUInt32BE(60, 6); answer.writeUInt16BE(data.length, 10); data.copy(answer, 12);
     }
-    await beforeReply(name, type);
     socket.send(Buffer.concat([response, answer]), peer.port, peer.address);
   });
   await new Promise((resolve, reject) => { socket.once('error', reject); socket.bind(0, ipv6 ? '::1' : '127.0.0.1', resolve); });
@@ -49,7 +49,8 @@ async function server(t, ipv6 = false, lastOctet = 7, beforeReply = () => {}) {
 function fixture(t, endpoint, watch = false) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-dns-'));
   const resolvConf = path.join(dir, 'resolv.conf'); const hostsFile = path.join(dir, 'hosts');
-  fs.writeFileSync(resolvConf, `nameserver ${endpoint}\noptions timeout:2 attempts:2\n`);
+  const endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
+  fs.writeFileSync(resolvConf, endpoints.map((value) => `nameserver ${value}\n`).join('') + 'options timeout:2 attempts:2\n');
   fs.writeFileSync(hostsFile, '127.0.0.1 localhost fixture.local\n::1 localhost fixture.local\n');
   const adapter = createLookup({ resolvConf, hostsFile, watch });
   t.after(() => { adapter.close(); fs.rmSync(dir, { recursive: true, force: true }); });
@@ -114,6 +115,50 @@ test('partial family success, V4MAPPED, ALL and empty answers retain lookup sema
   assert.deepEqual(all.map((entry) => entry.address), ['2001:db8::7', '::ffff:192.0.2.7']);
   await assert.rejects(adapter.promiseLookup('missing.test'), { code: 'ENOTFOUND', syscall: 'getaddrinfo', hostname: 'missing.test' });
   await assert.rejects(adapter.promiseLookup('refused.test'), { code: 'EAI_AGAIN' });
+});
+
+test('REFUSED falls through to the next configured server for A and AAAA', async (t) => {
+  const first = await server(t, false, 7, () => 'refused');
+  const second = await server(t, false, 8);
+  const adapter = fixture(t, [first.endpoint, second.endpoint]);
+  assert.deepEqual(await adapter.promiseLookup('fallback.test', { all: true, order: 'ipv4first' }), [
+    { address: '192.0.2.8', family: 4 }, { address: '2001:db8::8', family: 6 },
+  ]);
+  assert.deepEqual([...new Set(first.queries.map((query) => query.type))].sort(), [1, 28]);
+  assert.deepEqual(second.queries.map((query) => query.type).sort(), [1, 28]);
+});
+
+test('REFUSED from every configured server remains EAI_AGAIN after trying both', async (t) => {
+  const first = await server(t, false, 7, () => 'refused');
+  const second = await server(t, false, 8, () => 'refused');
+  const adapter = fixture(t, [first.endpoint, second.endpoint]);
+  await assert.rejects(adapter.promiseLookup('fallback.test', { all: true }), { code: 'EAI_AGAIN' });
+  for (const udp of [first, second]) {
+    assert.deepEqual([...new Set(udp.queries.map((query) => query.type))].sort(), [1, 28]);
+  }
+});
+
+for (const [label, reply] of [['NXDOMAIN', 'missing'], ['NODATA', 'nodata']]) {
+  test(`REFUSED fallback stops at ${label} without querying a later positive server`, async (t) => {
+    const first = await server(t, false, 7, () => 'refused');
+    const second = await server(t, false, 8, () => reply);
+    const third = await server(t, false, 9);
+    const adapter = fixture(t, [first.endpoint, second.endpoint, third.endpoint]);
+    await assert.rejects(adapter.promiseLookup('fallback.test', { all: true }), { code: 'ENOTFOUND' });
+    assert.deepEqual(second.queries.map((query) => query.type).sort(), [1, 28]);
+    assert.equal(third.queries.length, 0, 'a definitive negative answer is not bypassed');
+  });
+}
+
+test('partial-family success does not query fallback DNS after REFUSED', async (t) => {
+  const first = await server(t, false, 7, (_name, type) => type === 28 ? 'refused' : undefined);
+  const second = await server(t, false, 8, () => 'timeout');
+  const adapter = fixture(t, [first.endpoint, second.endpoint]);
+  assert.deepEqual(await adapter.promiseLookup('fallback.test', { all: true, order: 'ipv4first' }), [
+    { address: '192.0.2.7', family: 4 },
+  ]);
+  assert.deepEqual(first.queries.map((query) => query.type).sort(), [1, 28]);
+  assert.equal(second.queries.length, 0, 'an existing answer must not start a new fallback');
 });
 
 test('callback is asynchronous, promisify shape, validation stays on the exact Node version', async (t) => {
