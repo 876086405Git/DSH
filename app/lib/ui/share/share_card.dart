@@ -219,6 +219,7 @@ class ShareCard extends StatelessWidget {
               style: theme.textTheme.bodyMedium!.copyWith(color: theme.colorScheme.onSurface),
               child: ShareImageScope(
                 sessionId: content.sessionId,
+                decodeBound: ShareImageScope.decodeBoundFor(blocks),
                 child: SizedBox(
                   width: width,
                   child: template.onField

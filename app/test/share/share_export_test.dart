@@ -39,7 +39,7 @@ class _GatedImage extends ImageProvider<_GatedImage> {
 Future<void> _drainUntil(WidgetTester tester, bool Function() done) async {
   for (var i = 0; i < 80 && !done(); i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
   }
 }
 
@@ -128,7 +128,11 @@ void main() {
       };
       late Uint8List png;
       try {
-        png = (await tester.runAsync(() => captureShareCard(key)))!;
+        Uint8List? captured;
+        final capture = captureShareCard(key).then((value) => captured = value);
+        await _drainUntil(tester, () => captured != null);
+        expect(captured, isNotNull, reason: 'capture must finish while scheduled frames and timers are pumped');
+        png = await capture;
       } finally {
         ui.Image.onCreate = previousCreate;
         ui.Image.onDispose = previousDispose;

@@ -114,12 +114,23 @@ Stream<List<int>> _cardScanlines(List<_ShareStrip> strips, int width) async* {
       final data = await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
       if (data == null) throw StateError('image readback failed');
       final rgba = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      final scanlines = Uint8List(strip.rows * (stride + 1));
-      for (var row = 0; row < strip.rows; row++) {
-        // PNG filter 0 (None); skip the overlap instead of repeating its rows.
-        scanlines.setRange(row * (stride + 1) + 1, (row + 1) * (stride + 1), rgba, (strip.skip + row) * stride);
+      // ZLibEncoder compresses each input event synchronously. Keep events
+      // small and return to the event loop between them so the UI can respond.
+      for (var first = 0; first < strip.rows; first += 64) {
+        final rows = math.min(64, strip.rows - first);
+        final scanlines = Uint8List(rows * (stride + 1));
+        for (var row = 0; row < rows; row++) {
+          // PNG filter 0 (None); skip overlap rather than repeating its rows.
+          scanlines.setRange(
+            row * (stride + 1) + 1,
+            (row + 1) * (stride + 1),
+            rgba,
+            (strip.skip + first + row) * stride,
+          );
+        }
+        yield scanlines;
+        await Future<void>.delayed(Duration.zero);
       }
-      yield scanlines;
     } finally {
       image.dispose();
     }
