@@ -455,7 +455,8 @@ class SettingsSliderTile extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 activeColor: scheme.onSurfaceVariant,
                 inactiveColor: scheme.onSurface.withValues(alpha: 0.1),
-                semanticFormatterCallback: (v) => label(_snap(v)),
+                // What the value is, not the step it would land on: a saved 37% reads 37%.
+                semanticFormatterCallback: label,
                 onChanged: (raw) {
                   final next = _snap(raw);
                   if (next == _snap(v)) return;

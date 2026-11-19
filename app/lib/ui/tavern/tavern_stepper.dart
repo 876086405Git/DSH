@@ -50,24 +50,15 @@ class TavernStepper extends StatelessWidget {
     if (number != null && number != value) onChanged(number.toInt());
   }
 
-  /// The − / + glyph's size, and how far inside its 48 tap box it is drawn.
-  static const _glyph = 18.0;
-  static const _glyphInset = (kMinInteractiveDimension - _glyph) / 2;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Placed as a row's value, the + glyph ends where a switch track or a
-    // chevron does, 16 from the card: what is drawn moves, the 48 tap boxes stay.
-    final rtl = Directionality.of(context) == TextDirection.rtl;
-    Widget shift(Widget child) =>
-        Transform.translate(offset: Offset(rtl ? -_glyphInset : _glyphInset, 0), child: child);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
           key: ValueKey('$keyName-down'),
-          icon: shift(const Icon(AppIcons.decrement, size: _glyph)),
+          icon: const Icon(AppIcons.decrement, size: 18),
           onPressed: value > min ? () => onChanged((value - step).clamp(min, max)) : null,
         ),
         InkWell(
@@ -77,20 +68,18 @@ class TavernStepper extends StatelessWidget {
             width: 48,
             height: 40,
             child: Center(
-              child: shift(
-                Text(
-                  '$value$suffix',
-                  key: ValueKey('$keyName-value'),
-                  textAlign: TextAlign.center,
-                  style: AppType.tabular(theme.textTheme.titleMedium!),
-                ),
+              child: Text(
+                '$value$suffix',
+                key: ValueKey('$keyName-value'),
+                textAlign: TextAlign.center,
+                style: AppType.tabular(theme.textTheme.titleMedium!),
               ),
             ),
           ),
         ),
         IconButton(
           key: ValueKey('$keyName-up'),
-          icon: shift(const Icon(AppIcons.increment, size: _glyph)),
+          icon: const Icon(AppIcons.increment, size: 18),
           onPressed: value < max ? () => onChanged((value + step).clamp(min, max)) : null,
         ),
       ],
