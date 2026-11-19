@@ -91,6 +91,29 @@ void main() {
     expect(_typed(tester), isNull);
   });
 
+  testWidgets('typing builds the typed words again, not the stage around them', (tester) async {
+    await _open(tester);
+    await _back(tester);
+    var views = 0;
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget is TavernVisualNovelView) views++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = null);
+    await tester.tap(find.byKey(_box));
+    String? last;
+    var typed = 0;
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final now = _typed(tester);
+      if (now != null && now != last) typed++;
+      last = now;
+    }
+    debugOnRebuildDirtyWidget = null;
+    expect(typed, greaterThan(10));
+    expect(views, lessThan(5));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('自动 turns the page once it has been read', (tester) async {
     await _open(tester);
     await _back(tester);
