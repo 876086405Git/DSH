@@ -1504,7 +1504,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           if (id == null) {
             // Begun on the new-chat screen: another conversation opened since is not this call's.
             if (ref.read(currentSessionProvider) != null) return null;
-            return pinned = await _ensureSession(isCurrent: () => mounted);
+            final made = await _ensureSession(isCurrent: () => mounted);
+            // Made but its picks failed to apply: still this call's, the next line retries them.
+            pinned = made ?? ref.read(currentSessionProvider);
+            return made;
           }
           // Picks it still owes (a failed apply on the new-chat screen) are settled before it is spoken to.
           final owed = ref.read(owedSetupsProvider.notifier).of(host, id);
