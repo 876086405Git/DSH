@@ -1,7 +1,17 @@
 import 'dart:async';
 import 'dart:io' show FileSystemException;
 
-import 'package:dsh_remote/dsh_remote.dart';
+import 'package:dsh_remote/dsh_remote.dart'
+    show
+        RemoteHostSession,
+        RemoteTunnelCarrier,
+        RemoteSessionTransfer,
+        SessionTransferCancelledException,
+        SessionImportOutcomeUnknownException,
+        RemoteRpcException,
+        SessionImportResult,
+        Workspace,
+        SessionSummary;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +19,7 @@ import '../../l10n/l10n.dart';
 import '../../remote/relay/dsh_remote_backend.dart';
 import '../../remote/session_backup/backup_store.dart';
 import '../../state/hosts_state.dart';
+import '../../state/connection_state.dart' show hostNameProvider;
 import '../../state/read_list_identity.dart';
 import '../../state/sessions_state.dart';
 import '../../state/session_backup_state.dart';
@@ -80,11 +91,12 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
       };
       if (mounted) _message = context.l10n.backupFailed(code);
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _busy = false;
           _committing = false;
         });
+      }
     }
   }
 
@@ -104,7 +116,7 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
   Future<void> _backup(RemoteHostSession session, Workspace workspace, List<SessionSummary> summaries) =>
       _run(() async {
         final peer = await _peer();
-        if (_stopped(session)) throw const SessionTransferCancelledException();
+        if (!mounted || _stopped(session)) throw const SessionTransferCancelledException();
         final store = await ref.read(sessionBackupStoreProvider.future);
         final transfer = RemoteSessionTransfer(session);
         final export = await transfer.openExport(
@@ -151,7 +163,7 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
     SessionBackupStore store,
   ) => _run(() async {
     final target = await _peer();
-    if (_stopped(session)) throw const SessionTransferCancelledException();
+    if (!mounted || _stopped(session)) throw const SessionTransferCancelledException();
     if (store.restores.any(
       (e) => e.backupId == backup.id && e.pending && e.target.hostIdentity == target.hostIdentity,
     )) {
@@ -159,7 +171,7 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
       return;
     }
     if (!await _confirm(context.l10n.backupRestoreConfirm(backup.title, workspace.title))) return;
-    if (_stopped(session)) throw const SessionTransferCancelledException();
+    if (!mounted || _stopped(session)) throw const SessionTransferCancelledException();
     final data = await store.read(backup);
     final pending = BackupRestore(
       backupId: backup.id,
@@ -196,26 +208,27 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
 
   Future<void> _check(RemoteHostSession session, BackupRestore pending, SessionBackupStore store) => _run(() async {
     final target = await _peer();
-    if (_stopped(session)) throw const SessionTransferCancelledException();
+    if (!mounted || _stopped(session)) throw const SessionTransferCancelledException();
     if (target.identity != pending.target.identity) {
       _message = context.l10n.backupOriginalDevice;
       return;
     }
     final result = await RemoteSessionTransfer(session).status(batchId: pending.batchId, requestId: pending.requestId);
     if (result == null) {
-      _message = context.l10n.backupUnknown;
+      if (mounted) _message = context.l10n.backupUnknown;
       return;
     }
     await _recordResult(pending, result, store);
   });
 
   Future<void> _recordResult(BackupRestore pending, SessionImportResult result, SessionBackupStore store) async {
-    if (mounted)
+    if (mounted) {
       setState(
         () => _message = result.workspaceAttached
             ? context.l10n.backupRestored(result.sessionId)
             : context.l10n.backupRestoredDetached(result.sessionId),
       );
+    }
     try {
       await store.saveRestore(pending.completed(result));
     } catch (_) {
@@ -391,14 +404,16 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
                     trailing: PopupMenuButton<String>(
                       enabled: !_busy,
                       onSelected: (value) {
-                        if (value == 'restore' && session != null && workspace != null)
+                        if (value == 'restore' && session != null && workspace != null) {
                           unawaited(_restore(session, workspace, b, store));
-                        if (value == 'delete')
+                        }
+                        if (value == 'delete') {
                           unawaited(
                             _run(() async {
                               if (await _confirm(l10n.backupDeleteConfirm)) await store.delete(b);
                             }),
                           );
+                        }
                       },
                       itemBuilder: (_) => [
                         PopupMenuItem(

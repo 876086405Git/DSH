@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:cryptography/dart.dart';
-import 'package:dsh_remote/dsh_remote.dart';
+import 'package:dsh_remote/dsh_remote.dart' show SessionImportResult, SessionTransferData;
 
 import '../secret_store.dart';
 

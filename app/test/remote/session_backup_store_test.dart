@@ -6,7 +6,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:dsh_app/remote/secret_store.dart';
 import 'package:dsh_app/remote/session_backup/backup_store.dart';
-import 'package:dsh_remote/dsh_remote.dart';
+import 'package:dsh_remote/dsh_remote.dart' show SessionImportResult, SessionTransferData;
 import 'package:flutter_test/flutter_test.dart';
 
 const _keyName = 'session_backup.v1.key';
