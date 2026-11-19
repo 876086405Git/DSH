@@ -233,7 +233,6 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
   void _retireView() {
     final controller = _controller;
     _controller = null;
-    if (controller != null) unawaited(controller.stopLoading().catchError((Object _) {}));
     _guard.dispose();
     final id = controller == null ? null : WebViewGuard.identifierOf(controller);
     // Also destroy a view abandoned during setup, before guard.attach ran.

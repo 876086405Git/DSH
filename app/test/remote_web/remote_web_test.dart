@@ -157,7 +157,6 @@ void main() {
     await _frames(tester);
     expect(rpc.calls, ['dsh.web.open', 'dsh.web.close']);
     expect(islands.destroyed, [web.webViewIdentifier]);
-    expect(web.stops, 1);
     await remove(tester);
   });
 

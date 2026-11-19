@@ -120,7 +120,6 @@ class TestWebPlatform extends FakeWebViewPlatform {
 class TestWebController extends FakeWebViewController {
   TestWebController(super.params);
   final requests = <LoadRequestParams>[];
-  int stops = 0;
   TestWebDelegate get navigation => delegate! as TestWebDelegate;
 
   @override
@@ -134,11 +133,6 @@ class TestWebController extends FakeWebViewController {
       ),
     );
     await super.loadRequest(params);
-  }
-
-  @override
-  Future<void> stopLoading() async {
-    stops++;
   }
 }
 
