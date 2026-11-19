@@ -871,7 +871,7 @@ class PreviewTavern implements Tavern, TavernPreview {
         chat,
         node,
         i == 0 ? _cannedFor(text) : _canned[(_seq++) % _canned.length],
-        started: true,
+        fresh: true,
       )) {
         last = event;
         emit(TavernGroupMemberEvent(progress: speaking, characterId: actorId, event: event));
@@ -990,7 +990,7 @@ class PreviewTavern implements Tavern, TavernPreview {
   Stream<TavernEvent> continueReply(String chatId, String nodeId) {
     final chat = _chats[chatId]!;
     final node = chat.nodes[nodeId]!;
-    return _stream(chat, node, '\n\n她停顿了一下，又接着说：「还有一件事……我晚点再告诉你。」', started: false);
+    return _stream(chat, node, '\n\n她停顿了一下，又接着说：「还有一件事……我晚点再告诉你。」', fresh: false);
   }
 
   @override
@@ -1009,18 +1009,20 @@ class PreviewTavern implements Tavern, TavernPreview {
     final node = _Node(_id('n'), parent, TavernRole.character, c.name, '', _clock());
     chat.add(node);
     chat.chosen[parent] = node.id;
-    return _stream(chat, node, text, started: true);
+    return _stream(chat, node, text, fresh: true);
   }
 
-  Stream<TavernEvent> _stream(_Chat chat, _Node node, String text, {required bool started}) {
+  /// [fresh]: a new reply (it may think first); else one continued, which
+  /// starts, as the engine's do, from what it already says.
+  Stream<TavernEvent> _stream(_Chat chat, _Node node, String text, {required bool fresh}) {
     final out = StreamController<TavernEvent>();
     _running[chat.id] = out;
     var stopped = false;
     out.onCancel = () => stopped = true;
     unawaited(() async {
-      if (started) out.add(TavernTurnStarted(chat.message(node)));
+      out.add(TavernTurnStarted(chat.message(node)));
       chat.touch(_clock());
-      if (_thinking && started) {
+      if (_thinking && fresh) {
         for (final piece in _pieces(_sampleReasoning)) {
           await Future<void>.delayed(tick);
           if (stopped || out.isClosed) break;

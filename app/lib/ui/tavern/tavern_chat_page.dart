@@ -436,14 +436,16 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   bool _hasOlder = false;
   bool _loadingOlder = false;
 
-  Future<void> _reload() async {
+  /// [whole]: read the whole window even while a reply is written (an edit
+  /// further back than the newest page).
+  Future<void> _reload({bool whole = false}) async {
     final window = _window;
     // While a reply is written (kept every half second), the newest page
     // tells whether anything besides it changed: the whole window, hundreds
     // of messages once scrolled back, is not read again twice a second. What
     // changed further back is read when the reply is done.
     final loaded = _messages;
-    if (_running && loaded != null && loaded.length > _page && (loaded.length >= window || !_hasOlder)) {
+    if (!whole && _running && loaded != null && loaded.length > _page && (loaded.length >= window || !_hasOlder)) {
       final newest = await _tavern.path(widget.chatId, limit: _page);
       if (!mounted) return;
       if (_sameBesides(loaded.sublist(loaded.length - _page), newest, _streamNode)) return;
@@ -597,6 +599,9 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
             _refreshTools();
           case TavernTurnStarted(:final message):
             setState(() => _streamNode = message.nodeId);
+            // Continuing a reply: it starts from what the reply already says.
+            _stream.value = (text: message.text, reasoning: message.reasoning ?? '');
+            _live.text = message.text;
             unawaited(_reload());
           case TavernTextDelta(:final nodeId, :final text):
             _adopt(nodeId);
@@ -1509,7 +1514,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   Future<void> _edit(TavernMessage message) async {
     final speaker = message.role == TavernRole.user ? context.l10n.tavernYou : message.speaker;
     final text = await Navigator.of(context).push(TavernMessageEditPage.route(speaker: speaker, text: message.text));
-    if (text != null && text != message.text && mounted) await _tavern.edit(widget.chatId, message.nodeId, text);
+    if (text == null || text == message.text || !mounted) return;
+    await _tavern.edit(widget.chatId, message.nodeId, text);
+    // While a reply is written the newest page alone is read back; this one may be older.
+    if (mounted && _running) await _reload(whole: true);
   }
 
   @override
