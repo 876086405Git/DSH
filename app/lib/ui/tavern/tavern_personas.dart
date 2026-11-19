@@ -24,7 +24,7 @@ import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
-import 'tavern_home_page.dart' show plainPreview;
+import 'tavern_home_page.dart' show plainPreviewLines;
 import 'tavern_lorebooks_page.dart';
 import 'tavern_widgets.dart';
 
@@ -188,7 +188,7 @@ class _PersonaRow extends StatelessWidget {
     return _AvatarRow(
       leading: TavernPersonaAvatar(name: persona.name, path: persona.avatarPath),
       title: persona.name,
-      subtitle: plainPreview(persona.description),
+      subtitle: plainPreviewLines(persona.description, 1),
       onTap: onTap,
       onLongPress: onLongPress,
       trailing: switch (badge) {
