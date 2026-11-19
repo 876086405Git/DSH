@@ -150,6 +150,10 @@ fi
 ((companion)) && [[ $mode == release ]] || companion=0
 if ((companion)) && [[ ! -f $APP/assets/companion/whale-girl.zip ]]; then
   pack=${DSH_COMPANION_PACK-$HOME/keys/dsh-go/companion-pack-whale-girl.zip}
+  # A killed --no-companion build may have left the only copy here.
+  if [[ ! -f $pack && -f $APP/build/.whale-girl.zip.held ]]; then
+    pack="$APP/build/.whale-girl.zip.held"
+  fi
   [[ -f $pack ]] || die "no companion pack at $pack; set DSH_COMPANION_PACK, or pass --no-companion"
   python3 -I "$ROOT/tooling/companion_pack.py" place "$pack"
 fi
