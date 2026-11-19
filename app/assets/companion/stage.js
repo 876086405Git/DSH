@@ -1863,10 +1863,12 @@
       // A gap (paused, hidden) says nothing about how fast she draws.
       if (ts - fpsAt < 2000) {
         fps = (drawn * 1000) / (ts - fpsAt);
-        if (ts >= settleUntil && drawn >= 5) {
+        if (ts >= settleUntil && drawn > 0) {
           const share = late / drawn;
           slowSeconds = share > 0.3 ? slowSeconds + 1 : 0;
-          quickSeconds = share < 0.1 ? quickSeconds + 1 : 0;
+          // A handful of frames can say she's slow (a very slow phone draws only
+          // a few a second) but not that she keeps time.
+          quickSeconds = drawn >= 5 && share < 0.1 ? quickSeconds + 1 : 0;
           if (slowSeconds >= 3 && quality > 0.5) {
             quality = Math.max(0.5, quality - 0.15);
             slowSeconds = 0;
