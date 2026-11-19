@@ -1505,7 +1505,7 @@ ${tavernCanvasHelpersJs(mvu: mvu)}
     });
   }
   function stopFrame(k){
-    var f=frames[k];delete frames[k];frameAt[f.n]=null;f.el.remove();delete buttons[k];delete buttonWrites[k];delete listMoved[k];
+    var f=frames[k];delete frames[k];frameAt[f.n]=null;f.el.remove();delete buttons[k];delete buttonWrites[k];delete listMoved[k];buttonGen[k]=(buttonGen[k]||0)+1;
     for(var e in on)on[e]=on[e].filter(function(h){return h.owner!=='script:'+k;});
   }
   function startFrame(s){

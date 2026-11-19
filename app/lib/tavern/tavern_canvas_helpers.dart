@@ -311,7 +311,9 @@ const _js = r'''
   // owner, by its key; a press is the event getButtonEvent names.
   // buttonWrites: a script's writes still out; listMoved: the list changed
   // under one, so a refused write falls back to the list, not to before.
-  var buttons={},buttonWrites={},listMoved={};
+  // buttonGen: bumped when a script's frame is taken down, so a write from
+  // before then settles against nothing of its successor's.
+  var buttons={},buttonWrites={},listMoved={},buttonGen={};
   function buttonScript(id){
     var s=id==null?callerScript():scriptById(String(id));
     if(!s)throw new Error('Buttons are a script\'s own: called from one, or by its script_id');
@@ -328,10 +330,8 @@ const _js = r'''
   function setButtons(s,list){
     var before=buttons[s.key],mine=buttons[s.key]=list;tellButtons(s.key);
     buttonWrites[s.key]=(buttonWrites[s.key]||0)+1;
-    // Counted against the frame that wrote: one taken down since leaves its
-    // successor's count alone.
-    var life=frames[s.key];
-    function settled(){if(frames[s.key]!==life||--buttonWrites[s.key])return false;var moved=listMoved[s.key];delete listMoved[s.key];return moved;}
+    var gen=buttonGen[s.key]||0;
+    function settled(){if((buttonGen[s.key]||0)!==gen||--buttonWrites[s.key])return false;var moved=listMoved[s.key];delete listMoved[s.key];return moved;}
     return call('replaceScriptButtons',{asScript:s.key,buttons:list}).then(function(r){
       settled();
       if(buttons[s.key]===mine){buttons[s.key]=r.buttons;tellButtons(s.key);}
