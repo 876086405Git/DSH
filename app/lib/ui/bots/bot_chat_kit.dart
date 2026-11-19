@@ -422,8 +422,9 @@ class _BotTranscriptState extends State<BotTranscript> {
   /// A scroll, or a size change without one (a reply growing, the window
   /// resizing): the header's shade follows either; only a scroll asks for more.
   bool _onScroll(Notification note) {
+    // The transcript's own (depth 0), not a code block's sideways scroll in a row.
     final metrics = switch (note) {
-      ScrollNotification(:final metrics) || ScrollMetricsNotification(:final metrics) => metrics,
+      ScrollNotification(:final metrics, depth: 0) || ScrollMetricsNotification(:final metrics, depth: 0) => metrics,
       _ => null,
     };
     if (metrics == null) return false;

@@ -1797,7 +1797,8 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                 : NotificationListener<Notification>(
                     onNotification: (n) {
                       final metrics = switch (n) {
-                        ScrollNotification(:final metrics) || ScrollMetricsNotification(:final metrics) => metrics,
+                        ScrollNotification(:final metrics, depth: 0) ||
+                        ScrollMetricsNotification(:final metrics, depth: 0) => metrics,
                         _ => null,
                       };
                       if (metrics != null && metrics.axis == Axis.vertical) {
