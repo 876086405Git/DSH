@@ -137,3 +137,7 @@ Files and the catalog are encrypted in app-private storage, with the key protect
 If a commit disconnects or its outcome is unclear, **Restores to check** keeps the pending record. Connect to the original target with the original Remote device identity and tap **Check**. The server retains results for about five minutes; if unknown, inspect the target first. The app never automatically imports again. After checking, you can acknowledge and clear the pending record; another import may create a duplicate. If history was restored but not attached to the workspace, find the shown conversation ID instead of importing again. Deleting a local backup never deletes conversations on hosts.
 
 Remote currently connects to one host at a time, so copying uses backup-to-phone followed by switching and restoring, rather than simultaneous host-to-host forwarding.
+
+## DSH Web on a Remote host
+
+HarmonyOS does not yet provide the **Open DSH Web** entry. Native conversations, workspaces and conversation backups are unaffected.

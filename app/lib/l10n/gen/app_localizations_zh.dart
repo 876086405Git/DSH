@@ -17016,6 +17016,48 @@ class L10nZh extends L10n {
   String get stateRemoteUploadTooLarge => '文件超过远程上传协议的大小上限';
 
   @override
+  String get remoteWebOpen => '打开 DSH Web';
+
+  @override
+  String get remoteWebTitle => 'DSH Web';
+
+  @override
+  String get remoteWebOpening => '正在打开 DSH Web…';
+
+  @override
+  String get remoteWebRefresh => '刷新首页';
+
+  @override
+  String get remoteWebBusy => '人太多了，请稍后重试';
+
+  @override
+  String get remoteWebPairingRequired => '连接授权失效，请重新连接或配对主机。';
+
+  @override
+  String get remoteWebHostNotReady => '主机网页版尚未就绪。请启动 DSH Web，并将 Remote 插件更新到 0.6.6 或更新版本。';
+
+  @override
+  String get remoteWebReconnect => '连接已断开，请重新连接主机后再打开。';
+
+  @override
+  String get remoteWebUnsafeUrl => '网页地址无法验证，已停止打开。请检查主机配置。';
+
+  @override
+  String get remoteWebExchangeRejected => '访问验证失败，请返回后重新打开。';
+
+  @override
+  String get remoteWebSessionExpired => '网页连接已过期，请返回后重新打开。';
+
+  @override
+  String get remoteWebPlatformUnavailable => '当前平台暂不支持此网页入口。请使用原生远程界面。';
+
+  @override
+  String get remoteWebTryAgain => '暂时无法打开网页，请检查主机连接后重试。';
+
+  @override
+  String get remoteWebUnavailable => '暂时无法打开，请稍后重试';
+
+  @override
   String get riskDontShowAgain => '不再提示';
 
   @override
