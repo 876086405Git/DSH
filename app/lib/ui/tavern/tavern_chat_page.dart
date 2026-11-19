@@ -103,6 +103,9 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   final _focus = FocusNode();
   final _scrolled = ValueNotifier(0.0);
 
+  /// The HTML page scrolls inside itself: the header is always over the story.
+  final _shaded = ValueNotifier(1.0);
+
   /// Scrolled back into the story, away from the newest lines: the chips over
   /// the box fold away for the reading (back when typing).
   final _readingBack = ValueNotifier(false);
@@ -363,6 +366,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     _input.dispose();
     _focus.dispose();
     _scrolled.dispose();
+    _shaded.dispose();
     _readingBack.dispose();
     _transcript.dispose();
     _immersive.dispose();
@@ -1672,7 +1676,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
             title: name,
             status: status,
             tone: tone,
-            scrolledUnder: _scrolled,
+            scrolledUnder: canvas ? _shaded : _scrolled,
             // The title is the character's: its page; a group's, its settings.
             // The chat's own things are in 舞台 › 本局.
             onDetails: () {
@@ -1797,7 +1801,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                         _ => null,
                       };
                       if (metrics != null && metrics.axis == Axis.vertical) {
-                        _scrolled.value = ((metrics.maxScrollExtent - metrics.pixels) / 24).clamp(0.0, 1.0);
+                        // Shaded whenever the story is longer than the screen, at either
+                        // end too: the oldest message sits close under the header and an
+                        // overscroll pulls the text under it.
+                        _scrolled.value = (metrics.maxScrollExtent / 24).clamp(0.0, 1.0);
                         _readingBack.value = metrics.pixels > 240;
                         if (n is ScrollNotification) {
                           if (novel) _immerse(n);

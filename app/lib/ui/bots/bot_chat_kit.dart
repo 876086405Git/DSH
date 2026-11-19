@@ -423,7 +423,9 @@ class _BotTranscriptState extends State<BotTranscript> {
     final metrics = note.metrics;
     // Reversed: content above the top edge is what lies past the scroll end.
     final above = metrics.maxScrollExtent - metrics.pixels;
-    widget.scrolledUnder?.value = (above / 24).clamp(0.0, 1.0);
+    // Shaded whenever the transcript is longer than the screen, at its oldest end
+    // too, where an overscroll pulls the text under the header.
+    widget.scrolledUnder?.value = (metrics.maxScrollExtent / 24).clamp(0.0, 1.0);
     if (above < 400 && widget.hasEarlier && !widget.loadingEarlier) widget.onEarlier?.call();
     return false;
   }
