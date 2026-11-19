@@ -152,6 +152,12 @@ Protocol reference: [ds-harness-remote 0.6.2, `479b943`](https://github.com/ligu
 
 The app encrypts snapshots and its catalog in private storage, with the key in platform secret storage. Copies use backup-to-phone followed by switching hosts and restoring, because one client device can connect to only one Host. Attachments and workspace source files are not transferred. See the [upstream session-transfer protocol](https://github.com/liguobao/ds-harness-remote/blob/main/docs/protocol.md#跨机器会话传输).
 
+### Remote DSH Web
+
+`RemoteDshWeb(session)` uses the current live `dsh.web.v1` capability. `open()` returns a validated HTTPS tunnel root and operation-local grant; `takePostBody()` consumes the grant exactly once for the native WebView's form POST to `/__remote/session`. Never put that body into URLs, logs or persistent storage. Refresh uses a plain root GET, not the original POST.
+
+`close()` stays on the original Noise session, serialized before a following open even across API instances. A failed or uncertain exchange is not replayed: obtain a new grant after closing. The default trusted parent is `hostc.4ba.io`; self-hosted parents must come from trusted app configuration, never from an RPC response. The App handles explicit `RATE_LIMITED` / HTTP 429 with a short busy message, without automatic retries. Android / iOS native POST, cookies, redirects and streaming still require real-device validation.
+
 ### Device pairing (scan the computer's code)
 
 Upstream `docs/device-pairing-v1.md` and `docs/dsh-go-pairing-integration.md`, the phone side:

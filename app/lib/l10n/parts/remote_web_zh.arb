@@ -1,0 +1,16 @@
+{
+  "remoteWebOpen": "打开 DSH Web",
+  "remoteWebTitle": "DSH Web",
+  "remoteWebOpening": "正在打开 DSH Web…",
+  "remoteWebRefresh": "刷新首页",
+  "remoteWebBusy": "人太多了，请稍后重试",
+  "remoteWebPairingRequired": "连接授权失效，请重新连接或配对主机。",
+  "remoteWebHostNotReady": "主机网页版尚未就绪。请启动 DSH Web，并将 Remote 插件更新到 0.6.6 或更新版本。",
+  "remoteWebReconnect": "连接已断开，请重新连接主机后再打开。",
+  "remoteWebUnsafeUrl": "网页地址无法验证，已停止打开。请检查主机配置。",
+  "remoteWebExchangeRejected": "访问验证失败，请返回后重新打开。",
+  "remoteWebSessionExpired": "网页连接已过期，请返回后重新打开。",
+  "remoteWebPlatformUnavailable": "当前平台暂不支持此网页入口。请使用原生远程界面。",
+  "remoteWebTryAgain": "暂时无法打开网页，请检查主机连接后重试。",
+  "remoteWebUnavailable": "暂时无法打开，请稍后重试"
+}

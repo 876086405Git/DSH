@@ -17924,6 +17924,51 @@ class L10nEn extends L10n {
   String get stateRemoteUploadTooLarge => 'The file exceeds the remote upload protocol\'s size limit';
 
   @override
+  String get remoteWebOpen => 'Open DSH Web';
+
+  @override
+  String get remoteWebTitle => 'DSH Web';
+
+  @override
+  String get remoteWebOpening => 'Opening DSH Web…';
+
+  @override
+  String get remoteWebRefresh => 'Refresh home page';
+
+  @override
+  String get remoteWebBusy => 'Too many people are using this right now. Please try again later.';
+
+  @override
+  String get remoteWebPairingRequired => 'Connection authorization expired. Reconnect or pair the Host again.';
+
+  @override
+  String get remoteWebHostNotReady =>
+      'The Host web page is not ready. Start DSH Web and update the Remote plugin to 0.6.6 or later.';
+
+  @override
+  String get remoteWebReconnect => 'Disconnected. Reconnect to the Host before reopening.';
+
+  @override
+  String get remoteWebUnsafeUrl =>
+      'The web address could not be verified. Opening was stopped. Check the Host configuration.';
+
+  @override
+  String get remoteWebExchangeRejected => 'Access verification failed. Go back and reopen.';
+
+  @override
+  String get remoteWebSessionExpired => 'The web connection expired. Go back and reopen.';
+
+  @override
+  String get remoteWebPlatformUnavailable =>
+      'This platform does not yet support this web entry. Use the native remote interface.';
+
+  @override
+  String get remoteWebTryAgain => 'Temporarily unable to open the page. Check the Host connection and try again.';
+
+  @override
+  String get remoteWebUnavailable => 'Temporarily unable to open. Please try again later.';
+
+  @override
   String get riskDontShowAgain => 'Don’t show again';
 
   @override

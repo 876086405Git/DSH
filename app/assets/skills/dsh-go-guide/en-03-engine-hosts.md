@@ -131,7 +131,7 @@ Connections automatically try LAN / P2P, then TURN, and finally Relay without a 
 
 **Compact history** is off by default. Supporting DSH Remote Hosts summarize historical tool arguments and output to reduce history transfer; message text, live replies, approvals and original Host records stay unchanged. Switch to another host (or this phone) and back, or restart the app, to apply. The current client and its automatic reconnects retain their original mode to avoid mixing cached history. After turning it off, select the host again and reopen the chat to load full history. Older Hosts continue sending full history; SSH is unaffected.
 
-DSH Remote connects to one host at a time; switching disconnects the previous one. Over DSH Remote: you can send images only, DSH Web doesn't open in the app, plugins can only be turned on or off, and DS Bot and chat log export aren't available. Conversation backups use a separate session-transfer capability, not chat log export.
+DSH Remote connects to one host at a time; switching disconnects the previous one. Over DSH Remote: you can send images only, plugins can only be turned on or off, and DS Bot and chat log export aren't available. Conversation backups use a separate session-transfer capability, not chat log export.
 
 ## Conversation backups and restore
 
@@ -145,3 +145,14 @@ Files and the catalog are encrypted in app-private storage, with the key protect
 If a commit disconnects or its outcome is unclear, **Restores to check** keeps the pending record. Connect to the original target with the original Remote device identity and tap **Check**. The server retains results for about five minutes; if unknown, inspect the target first. The app never automatically imports again. After checking, you can acknowledge and clear the pending record; another import may create a duplicate. If history was restored but not attached to the workspace, find the shown conversation ID instead of importing again. Deleting a local backup never deletes conversations on hosts.
 
 Remote currently connects to one host at a time, so copying uses backup-to-phone followed by switching and restoring, rather than simultaneous host-to-host forwarding.
+
+## Open DSH Web on a Remote host
+
+<!-- nav: commonSettings,commonRemoteHost -->
+`Settings › Remote host`
+
+Once connected, **Open DSH Web** appears at the bottom of the page when supported. The host needs DS Harness Remote plugin 0.6.6 or later with DSH Web running; update its plugin and reconnect if the entry is missing. Android and iPhone use an embedded page without another sign-in.
+
+The first load obtains a one-use access grant over the current paired connection; ordinary refresh does not reuse it. Closing the page, disconnecting or switching hosts ends this access. Return to the host page and reopen if it expires. Self-hosted tunnel domains must be included in trusted app configuration beforehand.
+
+If the page says the service is busy, wait a little before opening it again. Reconnect the host for connection errors; the app does not repeatedly retry automatically.

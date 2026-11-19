@@ -31238,6 +31238,90 @@ abstract class L10n {
   /// **'文件超过远程上传协议的大小上限'**
   String get stateRemoteUploadTooLarge;
 
+  /// No description provided for @remoteWebOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 DSH Web'**
+  String get remoteWebOpen;
+
+  /// No description provided for @remoteWebTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH Web'**
+  String get remoteWebTitle;
+
+  /// No description provided for @remoteWebOpening.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在打开 DSH Web…'**
+  String get remoteWebOpening;
+
+  /// No description provided for @remoteWebRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新首页'**
+  String get remoteWebRefresh;
+
+  /// No description provided for @remoteWebBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'人太多了，请稍后重试'**
+  String get remoteWebBusy;
+
+  /// No description provided for @remoteWebPairingRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接授权失效，请重新连接或配对主机。'**
+  String get remoteWebPairingRequired;
+
+  /// No description provided for @remoteWebHostNotReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机网页版尚未就绪。请启动 DSH Web，并将 Remote 插件更新到 0.6.6 或更新版本。'**
+  String get remoteWebHostNotReady;
+
+  /// No description provided for @remoteWebReconnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接已断开，请重新连接主机后再打开。'**
+  String get remoteWebReconnect;
+
+  /// No description provided for @remoteWebUnsafeUrl.
+  ///
+  /// In zh, this message translates to:
+  /// **'网页地址无法验证，已停止打开。请检查主机配置。'**
+  String get remoteWebUnsafeUrl;
+
+  /// No description provided for @remoteWebExchangeRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'访问验证失败，请返回后重新打开。'**
+  String get remoteWebExchangeRejected;
+
+  /// No description provided for @remoteWebSessionExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'网页连接已过期，请返回后重新打开。'**
+  String get remoteWebSessionExpired;
+
+  /// No description provided for @remoteWebPlatformUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前平台暂不支持此网页入口。请使用原生远程界面。'**
+  String get remoteWebPlatformUnavailable;
+
+  /// No description provided for @remoteWebTryAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法打开网页，请检查主机连接后重试。'**
+  String get remoteWebTryAgain;
+
+  /// No description provided for @remoteWebUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法打开，请稍后重试'**
+  String get remoteWebUnavailable;
+
   /// No description provided for @riskDontShowAgain.
   ///
   /// In zh, this message translates to:

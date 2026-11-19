@@ -327,6 +327,11 @@ DshConnection      单个 Host 的物理连接：launch-token → cookie、Host 
 `remote/session_backup/backup_store.dart` 用系统安全存储中的随机密钥加密文件和清单，提交前持久保存待核对记录。
 Remote 一次只连一台主机，跨主机复制采用先备份、再切换恢复，不另建第二套设备身份。
 
+Remote WebUI 通过 `RemoteDshWeb` 在原 Noise 连接上串行调用 `dsh.web.open/close`，不经 Harness 业务白名单。
+`state/remote_web_state.dart` 观察当前会话能力，`ui/remote/remote_web/` 负责一次性表单 POST、同源导航与页面收尾；
+访问票据不进入 URL、日志或持久化存储，普通刷新只 GET 干净根地址。原生 WebView 的隔离能力按平台实际 API 使用，
+不清空全局 Cookie；RPC／HTTP 的明确 429 使用友好繁忙提示，其余连接失败不猜测成限流。
+
 ### 4.3 dsh_tavern / dartssh2
 
 酒馆引擎（SillyTavern 兼容：角色卡/世界书/宏/斜杠命令/正则）纯 Dart；dartssh2 是 vendored 上游加压缩补丁。
