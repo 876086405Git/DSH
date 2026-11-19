@@ -32,6 +32,10 @@
 | `POST /dsh-go/v1/plugin-config/<entryId>` | `{revision, ops}`，ops 同 `settings/mutate` 的 set / unset。live 字段即改即发一次；普通字段攒到「保存」一次发出。成功回包即新条目（含新 revision），以回包为准 |
 | `credentials/describe` · `set` · `unset` | 有 `credentialRef` 绑定的密钥走这里，和配置保存是两个事务；unset 后重新 describe（可能还有环境变量回退） |
 
+`secrets[].credentialRef` 由 bridge 的 `secretFacts()` 提供。同一父对象的实际路径下，恰好一个 `secret` 字段和一个不同的 `credential-ref` 字段才绑定；交集或联合分支在同一字段路径上的重复访问只计一个字段，任一角色有多个字段则不绑定。角色取 schema 节点的 `meta.role`，包括标在包装节点上的角色，不按字段名猜测。同一 ref 路径或其父路径被任一分支标为 secret 时，沿用遮蔽规则，不通过 `credentialRef` 回传隐藏值。
+
+引用先取运行中 `effectiveConfig` 经 `plain()` 得到的 resolved 值，只有 `undefined` 才取该 ref 节点的 `meta.default`；结果须为非空字符串，显式空字符串不回退到默认值。raw 配置继续只用于既有 `configured` 判定，不用原始表达式替代运行中的引用。未绑定时省略 `credentialRef`，App 的显式空绑定保持不可写。fact 的 `writable:false` 保持不变：secret 不能经此配置接口落入 profile YAML；绑定后仍走独立的 `credentials/*`，最终是否可写由凭据服务回答。
+
 错误码与 App 的处理：
 
 | 状态 / code | 含义 | App |

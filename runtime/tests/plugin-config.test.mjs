@@ -21,6 +21,31 @@ async function fixture(t,{connection=true,entries=[],addressable=entries}={}){
 }
 function entry(id,graph,value={}){const schema=Object.assign(v=>v,{toJSON:()=>structuredClone(graph)});return {options:{id,name:'@scope/plugin',config:value},fiber:{uid:7,state:2,runtime:{Config:schema},config:value}};}
 const simple={uid:1,refs:{1:{type:'object',meta:{},dict:{visible:2}},2:{type:'string',meta:{}}}};
+// Same outer-role placement as the recorded Schemastery secret wrapper fixture.
+const credentialPair={uid:1,refs:{1:{type:'object',dict:{apiKey:2,keyRef:4}},2:{type:'transform',inner:3,meta:{role:'secret'}},3:{type:'string'},4:{type:'string',meta:{role:'credential-ref',default:'DEFAULT_REF'}}}};
+test('one secret and one credential-ref bind the running ref or its missing-value default',async t=>{
+ const repeated=structuredClone(credentialPair);repeated.uid=5;repeated.refs[5]={type:'intersect',list:[1,1]};
+ const configured=entry('configured',repeated,{apiKey:'SYNTHETIC_SECRET',keyRef:'RAW_REF'}),fallback=entry('default',credentialPair);
+ configured.fiber.effectiveConfig={apiKey:'SYNTHETIC_SECRET',keyRef:'CONFIGURED_REF'};
+ const f=await fixture(t,{entries:[configured,fallback]});
+ for(const [id,ref,set]of [['configured','CONFIGURED_REF',true],['default','DEFAULT_REF',false]]){
+  const {status,body}=await f.get(root+'/'+id);assert.equal(status,200);
+  assert.deepEqual(body.secrets,[{path:['apiKey'],configured:set,writable:false,credentialRef:ref}]);
+  assert(!JSON.stringify(body).includes('SYNTHETIC_SECRET'));
+ }
+});
+test('multiple secret or credential-ref fields in one parent remain unbound',async t=>{
+ const graph={uid:1,refs:{1:{type:'object',dict:{twoSecrets:2,twoRefs:3,composed:6}},2:{type:'object',dict:{first:4,second:4,ref:5}},3:{type:'object',dict:{secret:4,firstRef:5,secondRef:5}},4:{type:'string',meta:{role:'secret'}},5:{type:'string',meta:{role:'credential-ref',default:'DEFAULT_REF'}},6:{type:'intersect',list:[7,8]},7:{type:'object',dict:{first:4,firstRef:5}},8:{type:'object',dict:{second:4,secondRef:5}}}};
+ const raw={twoSecrets:{first:'SYNTHETIC_SECRET',second:'SYNTHETIC_SECRET'},twoRefs:{secret:'SYNTHETIC_SECRET'},composed:{first:'SYNTHETIC_SECRET',second:'SYNTHETIC_SECRET'}};
+ const f=await fixture(t,{entries:[entry('many',graph,raw)]}),{status,body}=await f.get(root+'/many');assert.equal(status,200);
+ assert.deepEqual(body.secrets.map(x=>x.path.join('.')),['twoSecrets.first','twoSecrets.second','twoRefs.secret','composed.first','composed.second']);
+ assert(body.secrets.every(x=>x.writable===false&&!('credentialRef'in x)));assert(!JSON.stringify(body).includes('SYNTHETIC_SECRET'));
+});
+test('empty credential ref stays unbound without falling back to a nonempty default',async t=>{
+ const emptyDefault=structuredClone(credentialPair);emptyDefault.refs[4].meta.default='';
+ const f=await fixture(t,{entries:[entry('explicit',credentialPair,{apiKey:'SYNTHETIC_SECRET',keyRef:''}),entry('default',emptyDefault,{apiKey:'SYNTHETIC_SECRET'})]});
+ for(const id of ['explicit','default']){const {status,body}=await f.get(root+'/'+id);assert.equal(status,200);assert.deepEqual(body.secrets,[{path:['apiKey'],configured:true,writable:false}]);assert(!JSON.stringify(body).includes('SYNTHETIC_SECRET'));}
+});
 test('missing connection is 503 before both config reads',async t=>{const f=await fixture(t,{connection:false});for(const p of [root,root+'/one'])assert.equal((await f.get(p)).status,503);assert.equal(f.reads(),0);});
 test('duplicate ids cannot select first entry',async t=>{const es=[entry('same',simple),entry('same',simple)],f=await fixture(t,{entries:es});const list=(await f.get()).body.entries;assert(list.every(e=>e.reason==='ambiguous-id'));assert.equal((await f.get(root+'/same')).status,403);});
 test('nested Include not addressable',async t=>{const f=await fixture(t,{entries:[entry('nested',simple)],addressable:[]});assert.equal((await f.get()).body.entries[0].reason,'nested-include');assert.equal((await f.get(root+'/nested')).status,404);});

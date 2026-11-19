@@ -223,20 +223,36 @@ function operations(g,raw,base,ops,resolved){
 }
 function fileBytes(path){try{return readFileSync(path);}catch(e){if(e.code==='ENOENT')return Buffer.from('[]\n');throw e;}}
 function secretFacts(g,raw,value){
- const facts=new Map();
+ const facts=new Map(),parents=new Map();
  const visit=(id,input,resolved,path,known)=>{
   const n=g.refs[id];known=known&&!n.meta?.loose&&!(record(input)&&own(input,'__jsExpr'));
+  const parent=path.length?parents.get(JSON.stringify(path.slice(0,-1))):undefined,field=path.at(-1);
   if(n.meta?.role==='secret'){
+   parent?.secrets.add(field);
    const key=JSON.stringify(path),configured=known&&(typeof input==='string'&&input.length>0||typeof input==='boolean'||typeof input==='number'&&Number.isFinite(input)),prior=facts.get(key);
    facts.set(key,{path,configured:configured&&(prior?.configured??true),writable:false});return;
   }
+  if(n.meta?.role==='credential-ref'&&parent){
+   const ref=resolved===undefined?n.meta.default:resolved;
+   parent.refs.set(field,parent.refs.has(field)&&parent.refs.get(field)!==ref?undefined:ref);
+  }
   if(n.type==='transform'){visit(n.inner,input,resolved,path,false);return;}
   if(n.type==='union'||n.type==='intersect'){for(const child of n.list)visit(child,input,resolved,path,known);return;}
-  if(n.type==='object')for(const [key,child]of Object.entries(n.dict??{}))visit(child,record(input)&&own(input,key)?input[key]:undefined,record(resolved)?resolved[key]:undefined,[...path,key],known&&record(input));
+  if(n.type==='object'){
+   // Branches at the same concrete parent share one set of distinct fields.
+   const key=JSON.stringify(path);if(!parents.has(key))parents.set(key,{path,secrets:new Set(),refs:new Map()});
+   for(const [key,child]of Object.entries(n.dict??{}))visit(child,record(input)&&own(input,key)?input[key]:undefined,record(resolved)?resolved[key]:undefined,[...path,key],known&&record(input));
+  }
   else if(n.type==='array'&&Array.isArray(resolved))resolved.forEach((v,i)=>visit(n.inner,Array.isArray(input)&&own(input,i)?input[i]:undefined,v,[...path,String(i)],known&&Array.isArray(input)));
   else if(n.type==='dict'&&record(resolved))for(const [key,v]of Object.entries(resolved))if(!BAD.has(key))visit(n.inner,record(input)&&own(input,key)?input[key]:undefined,v,[...path,key],known&&record(input));
  };
- visit(g.uid,raw,value,[],true);return [...facts.values()];
+ visit(g.uid,raw,value,[],true);
+ for(const {path,secrets,refs}of parents.values())if(secrets.size===1&&refs.size===1){
+  const [[field,ref]]=refs,refPath=[...path,field],hidden=facts.has('[]')||refPath.some((_,i)=>facts.has(JSON.stringify(refPath.slice(0,i+1))));
+  // A same-path or ancestor secret in another branch still hides this value.
+  if(!hidden&&typeof ref==='string'&&ref.length>0)facts.get(JSON.stringify([...path,...secrets])).credentialRef=ref;
+ }
+ return [...facts.values()];
 }
 export function createPluginConfig(ctx,{readBody,send}){
  const key=randomBytes(32),ids=new WeakMap(),generations=new WeakMap();let seq=0;
