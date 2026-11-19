@@ -2703,11 +2703,9 @@ class _Shown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Expression markers ([表情:x]) pick her picture; they are not words.
-    final display = ref.watch(tavernShownTextProvider((chatId, message.nodeId, message.text)));
-    final shown = tavernStripMarkers(display.value ?? message.text);
-    // Islands wait for the display pass: one built from the raw text would
-    // be thrown away (a web page loaded twice) when it comes.
-    final settled = display.hasValue || display.hasError;
+    // Only the text: a pass that changed nothing builds nothing again.
+    final display = tavernShownTextProvider((chatId, message.nodeId, message.text));
+    final shown = tavernStripMarkers(ref.watch(display.select((d) => d.value ?? message.text)));
     Widget text(String markdown) =>
         MarkdownBody(text: indent ? tavernIndentParagraphs(markdown) : markdown, selectable: false);
     // HTML in it: those parts in islands of their own (酒馆设置 › 显示);
@@ -2717,6 +2715,9 @@ class _Shown extends ConsumerWidget {
       islands: _IslandsScope.of(context) ?? ref.watch(tavernSettingsProvider.select((s) => s.islands)),
     );
     if (parts case [TavernTextPart()]) return text(shown);
+    // Islands wait for the display pass: one built from the raw text would
+    // be thrown away (a web page loaded twice) when it comes.
+    final settled = ref.watch(display.select((d) => d.hasValue || d.hasError));
     final island = ref.watch(tavernIslandBuilderProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
