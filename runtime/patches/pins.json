@@ -524,6 +524,14 @@
         }
       }
     },
+    "profile-root-installation-precedence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d",
+          "before": "0efe3b6c4be30e101982c0740b55d3e035fb754e32ad366a197a9b7ec5be6cdb"
+        }
+      }
+    },
     "provider-discovery-headers.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js": {
@@ -2506,7 +2514,8 @@
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
-      "web-empty-reply-notice.diff"
+      "web-empty-reply-notice.diff",
+      "profile-root-installation-precedence.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",

@@ -1,0 +1,37 @@
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1562,1 +1562,2 @@
+-		localPackageNames: Object.freeze(localPackageNames),
++		localPackageNames: Object.freeze(localPackageNames),
++		declaredPackageNames: Object.freeze(manifest === void 0 ? [] : profileDependencyNames(manifest)),
+@@ -1586,2 +1587,3 @@
+-	localPackageNames;
+-	entries;
++	localPackageNames;
++	declaredPackageNames;
++	entries;
+@@ -1598,1 +1600,2 @@
+-		this.localPackageNames = table.localPackageNames;
++		this.localPackageNames = table.localPackageNames;
++		this.declaredPackageNames = table.declaredPackageNames;
+@@ -2104,1 +2107,3 @@
+-		localPackageNames: new Set(resolution.localPackageNames),
++		localPackageNames: new Set(resolution.localPackageNames),
++		declaredPackageNames: new Set(resolution.declaredPackageNames),
++		linkedPackageNames: new Set(resolution.linkedRoots.map((root) => root.name)),
+@@ -2412,4 +2417,5 @@
+-		const target = resolution.entries.get(name);
+-		const candidates = [];
+-		const localSearchPaths = [];
+-		for (const searchPath of createRequire(parent).resolve.paths(name)) {
++		const target = resolution.entries.get(name);
++		const preferInstallation = layer.active && target?.scope === "installation" && sameResolution(parent, resolution.profileDir) && !resolution.declaredPackageNames.has(name) && !resolution.linkedPackageNames.has(name);
++		const candidates = [];
++		const localSearchPaths = [];
++		for (const searchPath of preferInstallation ? [] : createRequire(parent).resolve.paths(name)) {
+@@ -4653,2 +4659,3 @@
+-	const table = ({ localPackageNames, entries, linkedRoots }) => JSON.stringify([
+-		localPackageNames,
++	const table = ({ localPackageNames, declaredPackageNames, entries, linkedRoots }) => JSON.stringify([
++		localPackageNames,
++		declaredPackageNames,
