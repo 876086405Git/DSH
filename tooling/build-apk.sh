@@ -168,7 +168,8 @@ put_back_pack() { ((!pack_moved)) || mv -f "$pack_held" "$pack_asset"; }
 trap 'drop_beta; stop_daemon; put_back_pack' EXIT
 if ((no_companion)) && [[ -f $pack_asset ]]; then
   mkdir -p "$APP/build"
-  mv -f "$pack_asset" "$pack_held" && pack_moved=1
+  mv -f "$pack_asset" "$pack_held"
+  pack_moved=1
 fi
 if ((beta)); then
   mkdir -p "$APP/build"
