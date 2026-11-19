@@ -21,8 +21,33 @@ const clone = value => structuredClone(value);
 const response = await fetch(`${recorderUrl}/fixtures`);
 if (!response.ok) throw new Error(`Fixture load failed: ${response.status}`);
 export const fixtures = await response.json();
+for (const fixture of fixtures) {
+  const entry = fixture.presetEntry ?? 'inline';
+  if (!['inline', 'library'].includes(entry)) throw new Error(`Unknown presetEntry: ${entry}`);
+  if (entry === 'library' && (!fixture.expectedGlobalVariablesAfter
+      || typeof fixture.expectedGlobalVariablesAfter !== 'object' || Array.isArray(fixture.expectedGlobalVariablesAfter))) {
+    throw new Error('Library fixtures must declare expectedGlobalVariablesAfter as an object.');
+  }
+}
 export const report = [];
 let busy = false;
+
+function sameJson(first, second) {
+  if (first === second) return true;
+  if (first === null || second === null || typeof first !== 'object' || typeof second !== 'object') return false;
+  if (Array.isArray(first) || Array.isArray(second)) {
+    return Array.isArray(first) && Array.isArray(second) && first.length === second.length
+      && first.every((value, index) => sameJson(value, second[index]));
+  }
+  const keys = Object.keys(first);
+  return keys.length === Object.keys(second).length
+    && keys.every(key => Object.hasOwn(second, key) && sameJson(first[key], second[key]));
+}
+function assertState(actual, expected, label) {
+  if (!sameJson(actual, expected)) {
+    throw new Error(`${label} differ: actual=${JSON.stringify(actual)}, expected=${JSON.stringify(expected)}`);
+  }
+}
 
 async function installUiGuard() {
   function requireFreshPage() {
@@ -245,6 +270,7 @@ export async function runFixture(id) {
   const fixture = fixtures.find(value => value.id === id);
   if (!fixture) throw new Error(`Unknown fixture: ${id}`);
   const proxy = connection();
+  const checkGlobalState = Object.hasOwn(fixture, 'expectedGlobalVariablesAfter');
   busy = true;
   const result = {
     id, generationType: fixture.generationType, startedAt: new Date().toISOString(), uiGuardBefore: uiGuard.status(),
@@ -263,6 +289,12 @@ export async function runFixture(id) {
     uiGuard.assertActive();
     result.uiGuardBeforeGeneration = uiGuard.status();
     result.variablesBefore = clone(script.chat_metadata.variables);
+    if (checkGlobalState) {
+      result.presetApplication = 'declared-settings';
+      result.globalVariablesBefore = clone(extensions.extension_settings.variables.global);
+      assertState(result.variablesBefore, fixture.chatHeader.chat_metadata.variables, 'Local variables before generation');
+      assertState(result.globalVariablesBefore, fixture.globalVariables, 'Global variables before generation');
+    }
     result.sampling = {
       temperature: openai.oai_settings.temp_openai, top_p: openai.oai_settings.top_p_openai,
       presence_penalty: openai.oai_settings.pres_pen_openai,
@@ -277,6 +309,13 @@ export async function runFixture(id) {
     result.newCaptures = (after.counts[id] ?? 0) - (before.counts[id] ?? 0);
     result.variablesAfter = clone(script.chat_metadata.variables);
     if (result.newCaptures !== 1) throw new Error(`Expected exactly one capture; saw ${result.newCaptures}.`);
+    if (checkGlobalState) {
+      result.globalVariablesAfter = clone(extensions.extension_settings.variables.global);
+      assertState(result.variablesAfter, fixture.expectedVariablesAfter, 'Local variables after generation');
+      assertState(result.globalVariablesAfter, fixture.expectedGlobalVariablesAfter, 'Global variables after generation');
+      result.variableStateMatches = true;
+      result.globalVariableStateMatches = true;
+    }
     result.status = 'recorded';
     console.info('DSH_RECORDED', clone(result));
     return clone(result);

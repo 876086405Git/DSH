@@ -217,6 +217,7 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
                 adopted = true;
                 engine._document['scriptButtons'] = _copy(container);
                 engine._globalScriptsChanged.add(null);
+                engine._scriptCatalogChanged.add(null);
                 accept(_globalScriptButtons(next, owner));
               },
             );

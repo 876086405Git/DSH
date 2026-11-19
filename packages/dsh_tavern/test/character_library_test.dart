@@ -86,6 +86,34 @@ void main() {
     expect((await library.readRuntimeAvatarMetadata(imported.id)).snapshot.present, isFalse);
   });
 
+  test('runtime projections retain the eight most recently read characters', () async {
+    final bytes = await File('test/fixtures/card-v1.json').readAsBytes();
+    final ids = <String>[];
+    for (var index = 0; index < 9; index++) {
+      ids.add((await library.importCard(bytes)).id);
+    }
+    final authority = <Map<String, Object?>>[];
+    final avatars = <CharacterAvatarMetadata>[];
+    for (final id in ids.take(8)) {
+      authority.add((await library.readRuntimeAuthority(id, (data) => data))!);
+      avatars.add(await library.readRuntimeAvatarMetadata(id));
+    }
+    expect(identical(await library.readRuntimeAuthority(ids.first, (data) => data), authority.first), isTrue);
+    expect(identical(await library.readRuntimeAvatarMetadata(ids.first), avatars.first), isTrue);
+    await library.readRuntimeAuthority(ids.last, (data) => data);
+    await library.readRuntimeAvatarMetadata(ids.last);
+    expect(identical(await library.readRuntimeAuthority(ids.first, (data) => data), authority.first), isTrue);
+    expect(identical(await library.readRuntimeAvatarMetadata(ids.first), avatars.first), isTrue);
+    final reloaded = await library.readRuntimeAuthority(ids[1], (data) => data);
+    final avatar = await library.readRuntimeAvatarMetadata(ids[1]);
+    expect(identical(reloaded, authority[1]), isFalse);
+    expect(reloaded, authority[1]);
+    expect(identical(avatar, avatars[1]), isFalse);
+    expect(avatar.snapshot.sameAs(avatars[1].snapshot), isTrue);
+    expect(avatar.file, avatars[1].file);
+    expect(avatar.sha256, avatars[1].sha256);
+  });
+
   test('concurrent imports are serialized and no partial directory is listed', () async {
     final bytes = await File('test/fixtures/card-v3.json').readAsBytes();
     final first = library.importCard(bytes);

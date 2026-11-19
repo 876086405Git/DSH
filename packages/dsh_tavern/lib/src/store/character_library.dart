@@ -189,6 +189,7 @@ class CharacterLibrary {
   final Directory root;
   final AuthoringAuthority? authority;
   final DateTime Function() _now;
+  static const _runtimeCacheCapacity = 8;
   Future<void> _queue = Future.value();
   final _runtimeAuthority = <String, ({_CharacterFileVersion version, Map<String, Object?> data})>{};
   final _runtimeAvatars =
@@ -269,10 +270,14 @@ class CharacterLibrary {
     }
     final cardVersion = _characterFileVersion(await File('$path/card.json').stat());
     final identityVersion = _characterFileVersion(await File('$path/library.json').stat());
-    final cached = _runtimeAvatars[id];
-    if (cached != null && cached.card == cardVersion && cached.identity == identityVersion) return cached.metadata;
+    final cached = _runtimeAvatars.remove(id);
+    if (cached != null && cached.card == cardVersion && cached.identity == identityVersion) {
+      _runtimeAvatars[id] = cached;
+      return cached.metadata;
+    }
     final metadata = _avatarMetadata(await _readAuthoringResource(id));
     _runtimeAvatars[id] = (card: cardVersion, identity: identityVersion, metadata: metadata);
+    if (_runtimeAvatars.length > _runtimeCacheCapacity) _runtimeAvatars.remove(_runtimeAvatars.keys.first);
     return metadata;
   });
 
@@ -825,11 +830,15 @@ class CharacterLibrary {
     if (type != FileSystemEntityType.directory) throw const FileSystemException('Character folder is not a directory');
     final file = File('$directory/card.json');
     final version = _characterFileVersion(await file.stat());
-    final cached = _runtimeAuthority[id];
-    if (cached != null && cached.version == version) return project(cached.data);
+    final cached = _runtimeAuthority.remove(id);
+    if (cached != null && cached.version == version) {
+      _runtimeAuthority[id] = cached;
+      return project(cached.data);
+    }
     final envelope = await _decodeRuntimeAuthority(await file.readAsBytes());
     final data = envelope['data']! as Map<String, Object?>;
     _runtimeAuthority[id] = (version: version, data: data);
+    if (_runtimeAuthority.length > _runtimeCacheCapacity) _runtimeAuthority.remove(_runtimeAuthority.keys.first);
     return project(data);
   });
 

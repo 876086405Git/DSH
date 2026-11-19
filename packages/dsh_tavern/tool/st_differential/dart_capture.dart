@@ -26,6 +26,14 @@ Future<void> main(List<String> arguments) async {
     if (!RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$').hasMatch(id) || !seen.add(id)) {
       throw FormatException('Invalid or duplicate fixture id: $id');
     }
+    final entry = fixture['presetEntry'] ?? 'inline';
+    if (entry != 'inline' && entry != 'library') throw FormatException('Unknown presetEntry: $entry');
+    if (entry == 'library') {
+      _object(fixture['expectedGlobalVariablesAfter'], 'expectedGlobalVariablesAfter');
+      for (final key in ['expectedPresetIssues', 'expectedRegexDiagnostics']) {
+        if (fixture[key] is! List<Object?>) throw FormatException('$key must be an array.');
+      }
+    }
   }
   final output = Directory(arguments[0]);
   if (await output.exists()) {
@@ -133,7 +141,24 @@ Future<Map<String, Object?>> _capture(Map<String, Object?> fixture, Directory ou
       fileName: '$id.json',
     );
     await tavern.setSettings(_object(fixture['settings'], 'settings'));
-    await tavern.setPreset(ChatPreset(preset));
+    Map<String, Object?>? presetImport;
+    String? importedPresetId;
+    if (fixture['presetEntry'] == 'library') {
+      final imported = await tavern.importPreset(jsonEncode(preset), fileName: '$id.json');
+      importedPresetId = imported.preset.id;
+      final issues = [for (final issue in imported.issues) issue.toJson()];
+      final diagnostics = [for (final diagnostic in imported.regexDiagnostics) diagnostic.toJson()];
+      if (!_sameJson(issues, fixture['expectedPresetIssues']) ||
+          !_sameJson(diagnostics, fixture['expectedRegexDiagnostics'])) {
+        throw StateError(
+          'Preset import diagnostics differ: issues=${jsonEncode(issues)}, '
+          'regexDiagnostics=${jsonEncode(diagnostics)}',
+        );
+      }
+      presetImport = {'id': importedPresetId, 'issues': issues, 'regexDiagnostics': diagnostics};
+    } else {
+      await tavern.setPreset(ChatPreset(preset));
+    }
     await tavern.setGlobalVariables(_object(fixture['globalVariables'], 'globalVariables'));
     final books = fixture['books'];
     if (books is! List<Object?>) throw const FormatException('books must be an array.');
@@ -159,9 +184,24 @@ Future<Map<String, Object?>> _capture(Map<String, Object?> fixture, Directory ou
       throw StateError('Fixture import must be one chat without notices: ${imported.notices}');
     }
     final chatId = imported.chatIds.single;
+    if (importedPresetId != null) {
+      await tavern.bindPreset(chatId, importedPresetId);
+      final selection = await tavern.presetSelection(chatId: chatId);
+      if (selection.source != PresetSelectionSource.chat || selection.effectivePresetId != importedPresetId) {
+        throw StateError('The imported library preset is not the effective chat selection.');
+      }
+      final importReport = presetImport!;
+      importReport['selectionSource'] = selection.source.name;
+      importReport['effectivePresetId'] = selection.effectivePresetId;
+    }
     for (final binding in bindings.entries) {
       await tavern.bindLorebooks(binding.value, source: binding.key, chatId: chatId);
     }
+    // These ST fixtures exercise prompt assembly without tools.
+    await tavern.setToolPolicy({
+      'roll': {'allow': false},
+      'remember': {'allow': false},
+    });
     final beforeVariables = tavern.variables(chatId);
     final metadata = _object(_object(fixture['chatHeader'], 'chatHeader')['chat_metadata'], 'chat_metadata');
     final expectedBefore = _object(metadata['variables'] ?? <String, Object?>{}, 'chat_metadata.variables');
@@ -170,6 +210,11 @@ Future<Map<String, Object?>> _capture(Map<String, Object?> fixture, Directory ou
         'Variables after import differ: actual=${jsonEncode(beforeVariables)}, '
         'expected=${jsonEncode(expectedBefore)}',
       );
+    }
+    final checkGlobalState = fixture.containsKey('expectedGlobalVariablesAfter');
+    final beforeGlobalVariables = checkGlobalState ? tavern.globalVariables : null;
+    if (checkGlobalState && !_sameJson(beforeGlobalVariables, fixture['globalVariables'])) {
+      throw StateError('Global variables after import differ: actual=${jsonEncode(beforeGlobalVariables)}');
     }
     final type = _text(fixture['generationType'], 'generationType');
     final path = await tavern.path(chatId);
@@ -191,6 +236,18 @@ Future<Map<String, Object?>> _capture(Map<String, Object?> fixture, Directory ou
     if (capture.method != 'POST' || Uri.parse(capture.url).path != '/beta/chat/completions') {
       throw StateError('Unexpected transport endpoint: ${capture.method} ${capture.url}');
     }
+    // Keep the actual request available if later state/inspection checks fail.
+    // Only a successful capture report can accompany a valid byte comparison.
+    await output.create(recursive: true);
+    await _writeExclusive(File('${output.path}/001.request.raw.json'), capture.bytes);
+    final requestBody = _object(jsonDecode(utf8.decode(capture.bytes, allowMalformed: false)), 'wire body');
+    await _writeExclusive(
+      File('${output.path}/001.request.json'),
+      utf8.encode('${const JsonEncoder.withIndent('  ').convert(requestBody)}\n'),
+    );
+    if (requestBody.containsKey('tools') || requestBody.containsKey('tool_choice')) {
+      throw StateError('The ST prompt-assembly fixtures require tools and tool_choice to be absent.');
+    }
     final inspection = await tavern.inspectTurn(chatId);
     if (inspection?.prompt == null) throw StateError('The generated turn has no assembly inspection.');
     final afterVariables = tavern.variables(chatId);
@@ -201,12 +258,17 @@ Future<Map<String, Object?>> _capture(Map<String, Object?> fixture, Directory ou
         'expected=${jsonEncode(expectedAfter)}',
       );
     }
-    await output.create(recursive: true);
-    await _writeExclusive(File('${output.path}/001.request.raw.json'), capture.bytes);
-    await _writeExclusive(
-      File('${output.path}/001.request.json'),
-      utf8.encode('${const JsonEncoder.withIndent('  ').convert(jsonDecode(utf8.decode(capture.bytes)))}\n'),
-    );
+    final afterGlobalVariables = checkGlobalState ? tavern.globalVariables : null;
+    if (checkGlobalState &&
+        !_sameJson(
+          afterGlobalVariables,
+          _object(fixture['expectedGlobalVariablesAfter'], 'expectedGlobalVariablesAfter'),
+        )) {
+      throw StateError(
+        'Global variables after generation differ: actual=${jsonEncode(afterGlobalVariables)}, '
+        'expected=${jsonEncode(fixture['expectedGlobalVariablesAfter'])}',
+      );
+    }
     await _writeExclusive(
       File('${output.path}/001.inspection.json'),
       utf8.encode('${jsonEncode(inspection!.toJson())}\n'),
@@ -216,10 +278,17 @@ Future<Map<String, Object?>> _capture(Map<String, Object?> fixture, Directory ou
       'status': 'captured',
       'generationType': type,
       'captures': captured.length,
+      'toolsAbsent': true,
       'bytes': capture.bytes.length,
       'variablesBefore': beforeVariables,
       'variablesAfter': afterVariables,
       'variableStateMatches': true,
+      'presetImport': ?presetImport,
+      if (checkGlobalState) ...{
+        'globalVariablesBefore': beforeGlobalVariables,
+        'globalVariablesAfter': afterGlobalVariables,
+        'globalVariableStateMatches': true,
+      },
       'tokenCount': 'estimated',
       'httpResponse': 'synthetic',
     };

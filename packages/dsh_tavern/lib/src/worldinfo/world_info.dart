@@ -47,8 +47,15 @@ bool _sameBookJson(Object? left, Object? right) {
         Iterable<int>.generate(left.length).every((index) => _sameBookJson(left[index], right[index]));
   }
   if (left is Map<String, Object?> && right is Map<String, Object?>) {
-    return left.length == right.length &&
-        left.entries.every((entry) => right.containsKey(entry.key) && _sameBookJson(entry.value, right[entry.key]));
+    if (left.length != right.length) return false;
+    final rightEntries = right.entries.iterator;
+    for (final entry in left.entries) {
+      rightEntries.moveNext();
+      if (entry.key != rightEntries.current.key || !_sameBookJson(entry.value, rightEntries.current.value)) {
+        return false;
+      }
+    }
+    return true;
   }
   return left == right;
 }

@@ -1507,9 +1507,6 @@ class TavernEngine implements Tavern {
       }
       if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
       if (await _record(characterId) == null) throw const TavernImportError('角色不存在。');
-      for (final id in mapping.values.toSet()) {
-        if (await _readBook(id) == null) throw const TavernImportError('映射的世界书不存在。');
-      }
       if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
       profile?.mark('resources');
       final extraNotices = <String>[];
@@ -1522,18 +1519,30 @@ class TavernEngine implements Tavern {
       }
       final plan = await _chatCodec.prepareBatchAsync(documents);
       profile?.mark('prepare');
-      if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
-      final commitStarted = profile?.now;
-      final imported = _store.transaction(() {
-        final result = _chatCodec.commitBatch(_store, characterId: characterId, plan: plan);
-        if (mapping.isNotEmpty) {
-          for (final chatId in result.chatIds) {
-            _store.updateChat(chatId, settings: {'stLorebookIds': mapping});
+      ChatJsonlImportResult commit() {
+        if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
+        final commitStarted = profile?.now;
+        final imported = _store.transaction(() {
+          final result = _chatCodec.commitBatch(_store, characterId: characterId, plan: plan);
+          if (mapping.isNotEmpty) {
+            for (final chatId in result.chatIds) {
+              _store.updateChat(chatId, settings: {'stLorebookIds': mapping});
+            }
           }
-        }
-        return result;
-      });
-      profile?.record('chat_import_commit', commitStarted!);
+          return result;
+        });
+        profile?.record('chat_import_commit', commitStarted!);
+        return imported;
+      }
+
+      final imported = mapping.isEmpty
+          ? commit()
+          : await _bookOperation(() async {
+              for (final id in mapping.values.toSet()) {
+                if (await _readBookNow(id) == null) throw const TavernImportError('映射的世界书不存在。');
+              }
+              return commit();
+            });
       profile?.mark('commit');
       _notifyLists();
       profile?.mark('publish');

@@ -103,12 +103,13 @@ function environment(options = {}) {
     }
   }
   const ross = { RA_CountCharTokens: nativeCounter };
+  const extensions = { extension_settings: {} };
   const states = {
     'script.js': script, 'scripts/openai.js': openai, 'scripts/group-chats.js': groups,
     'scripts/RossAscends-mods.js': ross,
     'scripts/power-user.js': { power_user: {}, persona_description_positions: { IN_PROMPT: 0, NONE: 9 } },
     'scripts/world-info.js': { worldInfoCache: new Map(), updateWorldInfoSettings() {} },
-    'scripts/extensions.js': { extension_settings: {} }, 'scripts/authors-note.js': { setFloatingPrompt() {} },
+    'scripts/extensions.js': extensions, 'scripts/authors-note.js': { setFloatingPrompt() {} },
   };
   const modules = new Map();
   function setExport(modulePath, name, value) {
@@ -133,7 +134,7 @@ function environment(options = {}) {
       let body;
       if (pathname === '/fixtures') {
         if (options.fixtureFailure) return { ok: false, status: 503 };
-        body = [fixture];
+        body = [options.fixture ?? fixture];
       } else if (pathname === '/api/characters/import') {
         script.characters.push({ avatar: 'one.png' }); body = { file_name: 'one' };
       } else if (pathname === '/health') body = { counts, attempts };
@@ -143,7 +144,7 @@ function environment(options = {}) {
     },
   });
   const api = {
-    script, openai, groups, manager, document, elements, first, second, empty, observers,
+    script, openai, groups, manager, document, elements, first, second, empty, observers, extensions,
     nativePreview, nativeGenerate, nativeCounter, counterStarts, generationInputs, logs, setExport,
     append(value) { const element = new Element(value); elements.push(element); mutated(); return element; },
     detach(element) { elements.splice(elements.indexOf(element), 1); mutated(); },
@@ -302,6 +303,7 @@ test('queued UI previews and editor scans cannot mutate final fixture inputs acr
     assert.equal(result.attempt, attempt);
     assert.equal(result.newCaptures, 1);
     assert.deepEqual(result.variablesBefore, { x: 0 });
+    assert.equal(Object.hasOwn(result, 'globalVariableStateMatches'), false);
     assert.deepEqual(env.generationInputs[attempt - 1].variables, { x: 0 });
     assert.equal(driver.report[attempt - 1].uiGuardAfter.healthy, true);
     assert.equal(driver.guardStatus().active, true);
@@ -354,4 +356,60 @@ test('a different live PM is rejected while cleanup still targets the original i
   driver.dispose();
   assert.equal(env.manager.tryGenerate, env.nativePreview);
   assert.equal(env.openai.promptManager, other);
+});
+
+const stateFixture = {
+  ...fixture, presetEntry: 'library', expectedVariablesAfter: { x: 1 },
+  globalVariables: { deskFlag: 'initial', untouched: { enabled: false, values: [null, 'kept'] } },
+  expectedGlobalVariablesAfter: { deskFlag: 'active', untouched: { enabled: false, values: [null, 'kept'] } },
+};
+
+test('declared local/global states are checked and their before snapshots survive generation', async () => {
+  const env = environment({ fixture: stateFixture, onGenerate: api => {
+    api.script.chat_metadata.variables.x = 1;
+    // Different object key order is the same state, but scalar types are not.
+    api.extensions.extension_settings.variables.global = {
+      untouched: { values: [null, 'kept'], enabled: false }, deskFlag: 'active',
+    };
+  } });
+  const driver = await env.load();
+  const result = await driver.runFixture('one');
+  assert.equal(result.status, 'recorded');
+  assert.equal(result.presetApplication, 'declared-settings');
+  assert.equal(result.variableStateMatches, true);
+  assert.equal(result.globalVariableStateMatches, true);
+  assert.deepEqual(result.variablesBefore, { x: 0 });
+  assert.deepEqual(result.globalVariablesBefore, stateFixture.globalVariables);
+  assert.deepEqual(result.globalVariablesAfter, stateFixture.expectedGlobalVariablesAfter);
+  driver.dispose();
+});
+
+test('one captured request with a wrong local or global state remains a failed attempt', async () => {
+  for (const scope of ['local', 'global']) {
+    const env = environment({ fixture: stateFixture, onGenerate: api => {
+      api.script.chat_metadata.variables.x = scope === 'local' ? '1' : 1;
+      api.extensions.extension_settings.variables.global = copy(stateFixture.expectedGlobalVariablesAfter);
+      if (scope === 'global') api.extensions.extension_settings.variables.global.untouched.values[0] = 'null';
+    } });
+    const driver = await env.load();
+    await assert.rejects(driver.runFixture('one'), /variables after generation differ/);
+    const result = driver.report[0];
+    assert.equal(result.status, 'failed');
+    assert.equal(result.newCaptures, 1);
+    assert.equal(result.attempt, 1);
+    assert.equal(Object.hasOwn(result, 'globalVariableStateMatches'), false);
+    assert.equal(result.uiGuardAfter.healthy, true);
+    assert.ok(result.globalVariablesAfter);
+    driver.dispose();
+  }
+});
+
+test('unknown preset entry and missing declared global state reject before changing the UI', async () => {
+  for (const input of [{ ...fixture, presetEntry: 'libary' }, { ...fixture, presetEntry: 'library' }]) {
+    const env = environment({ fixture: input });
+    await assert.rejects(env.load(), /presetEntry|expectedGlobalVariablesAfter/);
+    assert.equal(env.manager.tryGenerate, env.nativePreview);
+    assert.equal(env.first.getAttribute('data-token-counter'), 'description');
+    assert.equal(env.observers.size, 0);
+  }
 });

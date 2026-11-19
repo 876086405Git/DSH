@@ -1,4 +1,5 @@
 import 'package:dsh_tavern/dsh_tavern.dart';
+import 'package:dsh_tavern/src/worldinfo/world_info.dart' show sameWorldInfoBook;
 import 'package:test/test.dart';
 
 void main() {
@@ -47,5 +48,26 @@ void main() {
     final next = WorldInfoBook.cached(id: 'fixture', source: WorldInfoSource.global, json: raw);
     expect(next.entries.single.content, 'new version');
     expect(next.entries.single.stHash, isNot(hash));
+  });
+
+  test('world-info cache equality preserves nested object order used by ST hashes', () {
+    WorldInfoBook book(Map<String, Object?> extra) => WorldInfoBook.cached(
+      id: 'ordered',
+      source: WorldInfoSource.global,
+      json: {
+        'entries': {
+          '0': {'uid': 0, 'content': 'same', 'extra': extra},
+        },
+      },
+    );
+    final original = book({'first': 1, 'second': 2});
+    final sameOrder = book({'first': 1, 'second': 2});
+    final reordered = book({'second': 2, 'first': 1});
+    expect(sameWorldInfoBook(original, sameOrder), isTrue);
+    expect(original.entries.single.content, reordered.entries.single.content);
+    expect(original.entries.single.uid, reordered.entries.single.uid);
+    expect(original.entries.single.sourcePointer, reordered.entries.single.sourcePointer);
+    expect(original.entries.single.stHash, isNot(reordered.entries.single.stHash));
+    expect(sameWorldInfoBook(original, reordered), isFalse);
   });
 }

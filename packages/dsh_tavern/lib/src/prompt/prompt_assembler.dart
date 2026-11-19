@@ -149,6 +149,7 @@ final class _Prompt {
     this.id,
     this.content,
     this.sources, {
+    String? windowId,
     this.role = 'system',
     this.data = const {},
     this.injected = false,
@@ -158,8 +159,9 @@ final class _Prompt {
     this.explicitRole = false,
     this.trimGroup,
     this.pieces,
-  });
+  }) : windowId = windowId ?? id;
   final String id;
+  final String windowId;
   String content;
   List<PromptSource> sources;
   Object? role;
@@ -185,6 +187,7 @@ final class _Prompt {
     id,
     content,
     [...sources],
+    windowId: windowId,
     role: role,
     data: {...data},
     injected: injected,
@@ -1007,12 +1010,16 @@ final class _AssemblyRun {
     }.toList()..sort();
     var inserted = 0;
     for (final depth in depths) {
-      final atDepth = ownPieces.where((prompt) => prompt.depth == depth && prompt.content.isNotEmpty).toList();
-      final orders = <num>{100, ...atDepth.map((prompt) => prompt.order)}.toList()..sort((a, b) => b.compareTo(a));
+      final atDepth = ownPieces.where((prompt) => prompt.depth == depth).toList();
+      final orders = <num>{
+        100,
+        ...atDepth.where((prompt) => prompt.content.isNotEmpty).map((prompt) => prompt.order),
+      }.toList()..sort((a, b) => b.compareTo(a));
       final injected = <_Prompt>[];
       for (final order in orders) {
         for (final role in ['system', 'user', 'assistant']) {
-          final own = atDepth.where((prompt) => prompt.order == order && prompt.role == role).toList();
+          final allOwn = atDepth.where((prompt) => prompt.order == order && prompt.role == role).toList();
+          final own = allOwn.where((prompt) => prompt.content.isNotEmpty).toList();
           final ext = order == 100
               ? extensionPieces.where((piece) => piece.injection.depth == depth && piece.role == role).toList()
               : <_DepthExtension>[];
@@ -1048,6 +1055,26 @@ final class _AssemblyRun {
           // complete entry together so later refunds cannot erase base AN text
           // or another mandatory entry in the same native depth group.
           final parts = <_Prompt>[];
+          // Other sources can activate between turns. Only this source's own
+          // occurrence distinguishes its pieces; empty declarations still count.
+          final sourceOccurrences = <String, int>{};
+          final windowIds = <Object, String>{};
+          void rememberWindowId(Object piece, List<PromptSource> sources) {
+            final key = jsonEncode([
+              for (final source in sources) [source.kind, source.id],
+            ]);
+            final occurrence = sourceOccurrences[key] ?? 0;
+            sourceOccurrences[key] = occurrence + 1;
+            windowIds[piece] = 'depth-$depth-$order-$role-source-$occurrence';
+          }
+
+          for (final prompt in allOwn) {
+            rememberWindowId(prompt, prompt.sources);
+          }
+          for (final piece in ext) {
+            rememberWindowId(piece, [piece.fragment.source]);
+          }
+
           for (final prompt in own) {
             final text = trimJsWhitespace(prompt.content);
             if (text.isEmpty) continue;
@@ -1056,6 +1083,7 @@ final class _AssemblyRun {
                 'depth-$depth-$order-$role-piece-${parts.length}',
                 text,
                 prompt.sources,
+                windowId: windowIds[prompt]!,
                 role: role,
                 injected: true,
                 trimGroup: prompt.trimGroup,
@@ -1067,11 +1095,13 @@ final class _AssemblyRun {
             final raw = trimJsWhitespace(piece.fragment.content);
             final text = raw.isEmpty ? '' : trimJsWhitespace(piece.fragment.expandMacros ? expand(raw) : raw);
             if (text.isEmpty) continue;
+            final sources = [piece.fragment.source];
             parts.add(
               _Prompt(
                 'depth-$depth-$order-$role-piece-${parts.length}',
                 text,
-                [piece.fragment.source],
+                sources,
+                windowId: windowIds[piece]!,
                 role: role,
                 injected: true,
                 trimGroup: groupFor(piece.fragment),
@@ -1381,7 +1411,7 @@ final class _AssemblyRun {
       !segment.message.containsKey('tool_call_id');
 
   String injectionKey(_Prompt prompt) => jsonEncode([
-    prompt.id,
+    prompt.windowId,
     [
       for (final source in prompt.sources) [source.kind, source.id],
     ],

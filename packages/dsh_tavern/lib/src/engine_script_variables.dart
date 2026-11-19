@@ -525,6 +525,9 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
                   entry['data'] = value;
                   return value;
                 },
+                check: () {
+                  _context(resolved.context.value.id);
+                },
                 onCommitted: () {
                   committed = true;
                 },

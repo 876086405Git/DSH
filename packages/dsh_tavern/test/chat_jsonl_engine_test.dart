@@ -11,11 +11,11 @@ void main() {
   late Directory directory;
   late TavernEngine engine;
   late _Model model;
-  Future<TavernEngine> open() => TavernEngine.openDirectory(
+  Future<TavernEngine> open({DateTime Function()? clock}) => TavernEngine.openDirectory(
     directory,
     config: TavernModelConfig(apiKey: () async => 'fixture', model: 'fixture'),
     modelClient: model,
-    clock: () => _at,
+    clock: clock ?? () => _at,
     random: () => 0.25,
   );
   Future<String> card([Map<String, Object?> fields = const {}]) async => (await engine.importCard(_card(fields))).id;
@@ -392,6 +392,42 @@ void main() {
       throwsA(isA<TavernImportError>()),
     );
     expect(await engine.watchChats().first, hasLength(before));
+  });
+
+  test('mapped lorebook deletion queued during preparation prevents chat import', () async {
+    final id = await card();
+    await engine.putLorebook('mapped', {'entries': <String, Object?>{}});
+    await engine.close();
+    var deleteDuringPreparation = false;
+    Future<void>? deleting;
+    engine = await open(
+      clock: () {
+        if (deleteDuringPreparation) {
+          deleteDuringPreparation = false;
+          deleting = engine.deleteLorebook('mapped');
+        }
+        return _at;
+      },
+    );
+    await engine.character(id);
+    // With the character cached, import's next clock read is the synchronous
+    // prepareBatchAsync call, before it awaits its worker. Queue deletion there.
+    deleteDuringPreparation = true;
+    await expectLater(
+      engine.importChats(
+        id,
+        [
+          _file('mapped.jsonl', [_message('kept')], metadata: {'world_info': 'source'}),
+        ],
+        lorebookIds: {'source': 'mapped'},
+      ),
+      throwsA(isA<TavernImportError>()),
+    );
+    expect(deleteDuringPreparation, isFalse);
+    expect(deleting, isNotNull);
+    await deleting!;
+    expect(await engine.lorebook('mapped'), isNull);
+    expect(await engine.watchChats(characterId: id).first, isEmpty);
   });
 
   test('unhide rolls back the original ST flag if the canonical hidden write fails', () async {

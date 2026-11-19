@@ -114,10 +114,29 @@ final class _RegexReplacement {
   _RegexReplacement(String source) : template = source.replaceAll(_matchMacro, r'$0');
 
   final String template;
-  late final List<Match> references = _captureReference.allMatches(template).toList();
-  late final List<String> referenceKeys = {for (final reference in references) _referenceKey(reference)}.toList();
-  late final int referenceBytes = referenceKeys.fold<int>(0, (sum, key) => sum + regexUtf8Length(key) + 16);
   late final int templateBytes = regexUtf8Length(template);
+  ({List<String> keys, int bytes})? _captureReferences;
+
+  List<String> referenceKeys(int maximum) {
+    final cached = _captureReferences;
+    var bytes = cached?.bytes ?? 0;
+    if (bytes > maximum) {
+      throw const _DisplayLimit('capture-limit', '捕获引用描述超过内部传输上限。');
+    }
+    if (cached != null) return cached.keys;
+    final keys = <String>{};
+    for (final reference in _captureReference.allMatches(template)) {
+      final key = _referenceKey(reference);
+      if (!keys.add(key)) continue;
+      bytes += regexUtf8Length(key, stopAfter: maximum - bytes - 16) + 16;
+      if (bytes > maximum) {
+        throw const _DisplayLimit('capture-limit', '捕获引用描述超过内部传输上限。');
+      }
+    }
+    final result = keys.toList();
+    _captureReferences = (keys: result, bytes: bytes);
+    return result;
+  }
 }
 
 /// Text transforms with legacy synchronous and protected display paths.
@@ -322,13 +341,11 @@ final class RegexEngine {
           return finish(cancelled: true);
         }
         final replacementPlan = script._replacement;
-        if (replacementPlan.referenceBytes > limits.maxCaptureBytes) {
-          throw const _DisplayLimit('capture-limit', '捕获引用描述超过内部传输上限。');
-        }
+        final referenceKeys = replacementPlan.referenceKeys(limits.maxCaptureBytes);
         final captures = await worker.findCaptures(
           pattern,
           result,
-          references: replacementPlan.referenceKeys,
+          references: referenceKeys,
           maxMatches: limits.maxReplacements - replacements,
         );
         if (isCancelled?.call() == true) {
@@ -618,7 +635,7 @@ String _replaceDisplayTemplate(
   final template = plan.template;
   final output = _BoundedText(plan.templateBytes > maximum ? plan.templateBytes : maximum);
   var offset = 0;
-  for (final reference in plan.references) {
+  for (final reference in _captureReference.allMatches(template)) {
     output.add(template.substring(offset, reference.start));
     output.add(_replaceCapture(script, reference, capture(reference), substitute, characterOverride));
     offset = reference.end;

@@ -166,6 +166,47 @@ void main() {
     expect(_texts(retainedNext).where((text) => text == 'D'), hasLength(1));
   });
 
+  test('excluded depth pieces keep their source position when an earlier source activates', () {
+    var reveal = false;
+    String expand(String text, Map<String, String> _) => text == '{{maybe}}' ? (reveal ? 'C' : '') : text;
+    const split = PromptInjection(
+      depth: 9,
+      fragment: PromptFragment('', PromptSource('note', 'b-group')),
+      fragments: [
+        PromptFragment('{{maybe}}', PromptSource('note', 'b')),
+        PromptFragment('BBBB', PromptSource('note', 'b'), expandMacros: false),
+        PromptFragment('B', PromptSource('note', 'b'), expandMacros: false),
+      ],
+    );
+    final first = _assemble(history: _history(12), injections: const [split], expansion: expand);
+    expect(first.historyWindow!.firstNodeId, 'h6');
+    expect(first.historyWindow!.excludedInjections, hasLength(1));
+    expect(_texts(first), isNot(contains('BBBB')));
+    expect(_texts(first).where((text) => text == 'B'), hasLength(1));
+
+    reveal = true;
+    final next = _assemble(
+      history: _history(13),
+      window: first.historyWindow,
+      expansion: expand,
+      injections: const [
+        PromptInjection(depth: 9, fragment: PromptFragment('A', PromptSource('note', 'a'), expandMacros: false)),
+        split,
+      ],
+    );
+    expect(next.historyWindow!.firstNodeId, 'h6');
+    expect(_texts(next).where((text) => text == 'A'), hasLength(1));
+    expect(_texts(next).where((text) => text == 'B'), hasLength(1));
+    expect(_texts(next).where((text) => text == 'C'), hasLength(1));
+    expect(_texts(next), isNot(contains('BBBB')));
+    expect(
+      next.excluded.where(
+        (entry) => entry.reason == 'cache-friendly-window' && entry.sources.any((source) => source.id == 'b'),
+      ),
+      hasLength(1),
+    );
+  });
+
   test('extra trimming reuses expanded messages and old-window macros are never visited', () {
     final visits = <String>[];
     String expand(String text, Map<String, String> _) {

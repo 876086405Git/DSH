@@ -303,6 +303,59 @@ void main() {
     expect((await h.engine.chatScripts(scoped)).scripts.single.buttons.single.name, 'Local');
   });
 
+  test('closed global inline preset context cannot publish a completed temporary write', () async {
+    final h = await ScriptFixture.open();
+    await h.engine.setSettings({
+      'preset': _preset([
+        {
+          ..._script('inline', 'Global inline'),
+          'data': {'kept': 'before'},
+        },
+      ]),
+    });
+    await h.engine.deletePreset((await h.engine.presetSelection()).effectivePresetId!);
+    final character = await h.card('Inline cancellation');
+    final chat = await h.engine.createChat(character);
+    final owner = (await h.engine.chatScripts(chat)).scripts.single.owner;
+    expect(owner.presetCarrier, const TavernScriptPresetCarrier.inline());
+    final context = await h.context(chat, owner: owner, instanceId: 'closing-inline');
+    final before = await h.bridge.getVariables(context.id, scriptOwner);
+    final file = File('${h.root.path}/settings.json');
+    final original = await file.readAsBytes();
+    final parent = Zone.current;
+    final temporary = File('${file.path}.writing').absolute.uri;
+    var closedAfterWrite = false;
+    await IOOverrides.runZoned(
+      () async {
+        await expectLater(
+          h.bridge.replaceVariables(context.id, scriptOwner, {
+            'kept': 'must not publish',
+          }, expectedVersion: before.version),
+          throwsA(
+            scriptError(TavernScriptErrorCode.closedContext).having((error) => error.committed, 'committed', isFalse),
+          ),
+        );
+      },
+      createFile: (path) {
+        final real = parent.run(() => File(path));
+        if (parent.run(() => real.absolute.uri) != temporary) return real;
+        return _AfterWriteFile(real, () async {
+          expect(closedAfterWrite, isFalse);
+          closedAfterWrite = true;
+          await h.bridge.closeContext(context.id);
+        });
+      },
+    );
+    expect(closedAfterWrite, isTrue);
+    expect(await file.readAsBytes(), original);
+    final fresh = await h.context(chat, owner: owner, instanceId: 'after-close');
+    expect((await h.bridge.getVariables(fresh.id, scriptOwner)).value, before.value);
+    await h.reopen();
+    final reopened = await h.context(chat, owner: owner, instanceId: 'reopened-inline');
+    expect((await h.bridge.getVariables(reopened.id, scriptOwner)).value, before.value);
+    h.expectNoGeneration();
+  });
+
   test('catalog watch responds to definitions and ignores ordinary message commits', () async {
     final h = await ScriptFixture.open();
     final character = await h.card('Watching scripts');
@@ -325,6 +378,13 @@ void main() {
     await h.engine.importGlobalScripts(jsonEncode(_script('watch', 'Watch')));
     await next.future.timeout(const Duration(seconds: 5));
     expect(snapshots.last.scripts.single.name, 'Watch');
+    final owner = snapshots.last.scripts.single.owner;
+    final global = await h.context(chat, owner: owner, instanceId: 'watch-global-buttons');
+    next = Completer<void>();
+    await h.bridge.replaceScriptButtons(global.id, const [TavernScriptButton(name: 'Updated', visible: false)]);
+    await next.future.timeout(const Duration(seconds: 5));
+    expect(snapshots.last.scripts.single.buttons.single.name, 'Updated');
+    expect(snapshots.last.scripts.single.buttons.single.visible, isFalse);
     next = Completer<void>();
     await h.engine.setGlobalScriptEnabled('watch', false);
     await next.future.timeout(const Duration(seconds: 5));
@@ -345,3 +405,27 @@ ScriptJson _preset(List<Object?> scripts, {bool legacy = false}) => scriptPreset
   ..['extensions'] = {
     if (legacy) 'TavernHelper_scripts': scripts else 'tavern_helper': {'scripts': scripts},
   };
+
+class _AfterWriteFile implements File {
+  _AfterWriteFile(this.real, this.afterWrite);
+  final File real;
+  final Future<void> Function() afterWrite;
+  @override
+  String get path => real.path;
+  @override
+  Future<File> writeAsString(
+    String contents, {
+    FileMode mode = FileMode.write,
+    Encoding encoding = utf8,
+    bool flush = false,
+  }) async {
+    final written = await real.writeAsString(contents, mode: mode, encoding: encoding, flush: flush);
+    await afterWrite();
+    return written;
+  }
+
+  @override
+  Future<File> rename(String newPath) => real.rename(newPath);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
