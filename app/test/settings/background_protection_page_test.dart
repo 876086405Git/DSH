@@ -293,6 +293,7 @@ void main() {
 
   testWidgets('getter failure after an update never shows a fabricated active grant', (tester) async {
     await pump(tester);
+    final readsBefore = calls.where((call) => call.method == 'backgroundProtection').length;
     update = (call) {
       readFails = true;
       return {'supported': true, 'audioEnabled': true, 'audioActive': true};
@@ -303,5 +304,17 @@ void main() {
     expect(find.text(l10n.backgroundProtectionAudioActive), findsNothing);
     expect(find.text(l10n.backgroundProtectionUnavailable), findsOneWidget);
     expect(find.text(l10n.backgroundProtectionUpdateFailed), findsOneWidget);
+    expect(toggle(tester, audio).onChanged, isNotNull);
+    expect(toggle(tester, location).onChanged, isNotNull);
+    expect(calls.where((call) => call.method == 'backgroundProtection'), hasLength(readsBefore + 1));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    readFails = false;
+    actual = {'supported': true, 'audioEnabled': true};
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(toggle(tester, audio).value, isTrue);
+    expect(find.text(l10n.backgroundProtectionReady), findsOneWidget);
+    expect(calls.where((call) => call.method == 'backgroundProtection'), hasLength(readsBefore + 2));
   });
 }
