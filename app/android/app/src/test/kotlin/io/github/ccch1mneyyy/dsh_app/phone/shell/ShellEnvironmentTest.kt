@@ -35,6 +35,16 @@ class ShellEnvironmentTest {
         assertEquals("/data/local/tmp", result["HOME"])
     }
 
+    @Test fun android10RuntimeRootReachesBothHelperAndShell() {
+        val android10 = (inherited - "ANDROID_ART_ROOT") +
+            ("ANDROID_RUNTIME_ROOT" to "/apex/com.android.runtime")
+        val helper = shellHelperEnvironment("/trusted/probe.jar", android10)
+        assertEquals("/apex/com.android.runtime", helper["ANDROID_RUNTIME_ROOT"])
+        assertEquals("/apex/com.android.runtime", shellEnvironment(helper)["ANDROID_RUNTIME_ROOT"])
+        assertFalse(helper.containsKey("ANDROID_ART_ROOT"))
+        assertFalse(shellEnvironment(mapOf("ANDROID_RUNTIME_ROOT" to "relative")).containsKey("ANDROID_RUNTIME_ROOT"))
+    }
+
     @Test fun helperFallsBackOnlyForMissingBootClasspath() {
         val noBoot = inherited - "BOOTCLASSPATH"
         val result = shellHelperEnvironment("/trusted/probe.jar", noBoot, "/fallback/core.jar")

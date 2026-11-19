@@ -1874,6 +1874,9 @@ class L10nEn extends L10n {
   String get androidShellErrorIdentityChanged => 'The channel identity changed. Stop, then authorize or connect again.';
 
   @override
+  String get androidShellErrorHelperStartFailed => 'The Android Shell helper failed to start. The command did not run.';
+
+  @override
   String get androidShellErrorBusy => 'Another operation is still pending. Retry later or stop Android Shell first.';
 
   @override

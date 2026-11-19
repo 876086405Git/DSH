@@ -6,7 +6,10 @@ internal fun shellEnvironment(inherited: Map<String, String> = System.getenv()):
     put("HOME", "/data/local/tmp")
     put("TMPDIR", "/data/local/tmp")
     put("LANG", "C.UTF-8")
-    for (key in listOf("ANDROID_ROOT", "ANDROID_DATA", "ANDROID_ART_ROOT", "ANDROID_I18N_ROOT", "ANDROID_TZDATA_ROOT")) {
+    for (key in listOf(
+        "ANDROID_ROOT", "ANDROID_DATA", "ANDROID_RUNTIME_ROOT", "ANDROID_ART_ROOT",
+        "ANDROID_I18N_ROOT", "ANDROID_TZDATA_ROOT",
+    )) {
         inherited[key]?.takeIf { it.startsWith('/') }?.let { put(key, it) }
     }
 }

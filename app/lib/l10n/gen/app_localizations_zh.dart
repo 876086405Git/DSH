@@ -1783,6 +1783,9 @@ class L10nZh extends L10n {
   String get androidShellErrorIdentityChanged => '通道身份已改变，请停止后重新授权或连接。';
 
   @override
+  String get androidShellErrorHelperStartFailed => 'Android Shell 辅助进程未能启动，命令未执行。';
+
+  @override
   String get androidShellErrorBusy => '另一项操作尚未结束，请稍后重试，或先停止 Android Shell。';
 
   @override

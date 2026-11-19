@@ -24,6 +24,7 @@ String androidShellErrorText(L10n l10n, String code) => switch (code) {
   'adbNotPaired' => l10n.androidShellErrorAdbNotPaired,
   'connectFailed' => l10n.androidShellErrorConnectFailed,
   'identityChanged' => l10n.androidShellErrorIdentityChanged,
+  'helperStartFailed' => l10n.androidShellErrorHelperStartFailed,
   'busy' => l10n.androidShellErrorBusy,
   'invalidArguments' => l10n.androidShellErrorInvalidArguments,
   'cancelled' => l10n.androidShellErrorCancelled,

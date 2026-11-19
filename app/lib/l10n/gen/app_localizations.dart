@@ -3380,6 +3380,12 @@ abstract class L10n {
   /// **'通道身份已改变，请停止后重新授权或连接。'**
   String get androidShellErrorIdentityChanged;
 
+  /// No description provided for @androidShellErrorHelperStartFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'Android Shell 辅助进程未能启动，命令未执行。'**
+  String get androidShellErrorHelperStartFailed;
+
   /// No description provided for @androidShellErrorBusy.
   ///
   /// In zh, this message translates to:
