@@ -300,6 +300,28 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         : null;
   }
 
+  /// The reply as it grows, fed to the canvas at most once every
+  /// [_EveryBeat.beat] (the last piece always): it is made into HTML whole
+  /// each time, not for every piece that arrives.
+  Timer? _canvasBeat;
+  bool _canvasMissed = false;
+
+  void _feedCanvasOnBeat() {
+    if (!_canvasOn) return;
+    if (_canvasBeat != null) {
+      _canvasMissed = true;
+      return;
+    }
+    _feedCanvas();
+    _canvasBeat = Timer(_EveryBeat.beat, () {
+      _canvasBeat = null;
+      if (_canvasMissed && mounted) {
+        _canvasMissed = false;
+        _feedCanvasOnBeat();
+      }
+    });
+  }
+
   String? _error;
 
   /// [_error] is how a reply ended, not a failure: said without alarm.
@@ -366,7 +388,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     );
     _voiceFlag = ref.read(voiceInputActiveProvider.notifier);
     _voice.addListener(_reportVoice);
-    _live.addListener(_feedCanvas);
+    _live.addListener(_feedCanvasOnBeat);
   }
 
   @override
@@ -382,7 +404,8 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     scheduleMicrotask(() => readAloud.stopWhere((id) => id.startsWith('tavern:')));
     unawaited(_turn?.cancel());
     _stream.dispose();
-    _live.removeListener(_feedCanvas);
+    _live.removeListener(_feedCanvasOnBeat);
+    _canvasBeat?.cancel();
     _live.dispose();
     _canvasStream.dispose();
     unawaited(_calls?.close());
