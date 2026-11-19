@@ -38,6 +38,13 @@ class BuildApkRuntimeTest(unittest.TestCase):
         (self.root / "tooling/check_apk_jni.py").write_text(
             "import os, sys\nopen(os.environ['RUNTIME_GATE_TEST_JNI'], 'a').write(sys.argv[1] + '\\n')\n"
             "sys.exit(int(os.environ.get('JNI_CHECK_EXIT', '0')))\n")
+        # Stand-in for tooling/companion_pack.py: notes each call; the pack is a placeholder file.
+        self.pack_file = self.root / "pack-calls.txt"
+        (self.root / "tooling/companion_pack.py").write_text(
+            "import os, sys\nopen(os.environ['RUNTIME_GATE_TEST_PACK'], 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
+            "sys.exit(int(os.environ.get('PACK_CHECK_EXIT', '0')) if sys.argv[1] == 'check' else 0)\n")
+        pack = self.root / "whale-girl-source.zip"
+        pack.write_bytes(b"pack")
         self.calls_file = self.root / "flutter-calls.jsonl"
         tools = self.root / "bin"
         tools.mkdir()
@@ -60,7 +67,8 @@ apk.write_bytes(b'fake APK: shell flow only')
 ''')
         aapt.chmod(0o755)
         self.env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"],
-                        RUNTIME_GATE_TEST_CALLS=str(self.calls_file), RUNTIME_GATE_TEST_JNI=str(self.jni_file))
+                        RUNTIME_GATE_TEST_CALLS=str(self.calls_file), RUNTIME_GATE_TEST_JNI=str(self.jni_file),
+                        RUNTIME_GATE_TEST_PACK=str(self.pack_file), DSH_COMPANION_PACK=str(pack))
 
     def run_script(self, *args, keep_daemon=True):
         self.calls_file.unlink(missing_ok=True)
@@ -68,6 +76,33 @@ apk.write_bytes(b'fake APK: shell flow only')
                                *(["--keep-daemon"] if keep_daemon else []),
                                "--build-name", "1.0.0", "-n", "10251234", *args],
                               env=self.env, capture_output=True, text=True, timeout=15)
+
+    def test_release_places_and_checks_the_companion_pack(self):
+        self.make_bundle("arm64", 2)
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        place, check = self.pack_file.read_text().splitlines()
+        self.assertTrue(place.startswith("place ") and check.startswith("check "), (place, check))
+
+        self.env["PACK_CHECK_EXIT"] = "1"
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("companion pack", result.stderr)
+        del self.env["PACK_CHECK_EXIT"]
+
+        self.pack_file.unlink()
+        self.env["DSH_COMPANION_PACK"] = str(self.root / "missing.zip")
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--no-companion", result.stderr)
+        # A pack an earlier build placed sits out a --no-companion build and comes back after.
+        placed = self.root / "app/assets/companion/whale-girl.zip"
+        placed.parent.mkdir(parents=True)
+        placed.write_bytes(b"placed")
+        self.assertEqual(self.run_script("--no-companion").returncode, 0)
+        self.assertFalse(self.pack_file.exists())
+        self.assertEqual(placed.read_bytes(), b"placed")
+        self.assertFalse((self.root / "app/build/.whale-girl.zip.held").exists())
 
     def test_exit_cleanup_leaves_daemons_outside_gradle_stop_alive(self):
         android = self.root / "app/android"

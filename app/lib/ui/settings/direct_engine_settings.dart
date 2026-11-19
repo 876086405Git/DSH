@@ -7,7 +7,7 @@ import '../../runtime/runtime_state.dart';
 import '../common/brief_notice.dart';
 import 'settings_widgets.dart';
 
-/// Direct launch and tawcroot launch, both off by default and at most one on; a
+/// Direct launch (off by default) and tawcroot launch (on by default), at most one on; a
 /// change applies only after a deliberate engine stop/start.
 class DirectEngineSettings extends ConsumerStatefulWidget {
   const DirectEngineSettings({super.key});

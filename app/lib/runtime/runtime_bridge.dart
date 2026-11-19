@@ -277,7 +277,7 @@ class RuntimeStatus {
   final bool directEngineActive;
   final String? directEngineFallbackReason;
 
-  /// The opt-in tawcroot launch (native `TawcrootLaunch`); one of it and Direct is on at most.
+  /// The tawcroot launch, on by default (native `TawcrootLaunch`); one of it and Direct is on at most.
   final bool tawcEngineEnabled;
   final bool tawcEngineAvailable;
   final bool tawcEngineActive;
