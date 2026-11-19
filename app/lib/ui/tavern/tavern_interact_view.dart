@@ -244,13 +244,17 @@ class _PopupDialog extends StatelessWidget {
 }
 
 /// [theme] for Markdown on the notice's ground (the inverse surface): it
-/// draws in onSurface, which there is the ground's own tone; its code wells
-/// and table headers take the other brightness's, made for that text.
+/// draws in onSurface, which there is the ground's own tone; its code wells,
+/// table headers and highlighting take the other brightness's, made for that text.
 ThemeData _onNotice(ThemeData theme) {
   final scheme = theme.colorScheme;
   final dsh = theme.extension<DshColors>()!;
-  final other = theme.brightness == Brightness.dark ? DshColors.light : DshColors.dark;
+  final dark = theme.brightness == Brightness.dark;
+  final other = dark ? DshColors.light : DshColors.dark;
   return theme.copyWith(
+    // The notice's ground is the other brightness's: code blocks pick their
+    // highlighting by it.
+    brightness: dark ? Brightness.light : Brightness.dark,
     colorScheme: scheme.copyWith(
       onSurface: scheme.onInverseSurface,
       onSurfaceVariant: scheme.onInverseSurface,

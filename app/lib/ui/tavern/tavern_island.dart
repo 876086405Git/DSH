@@ -114,6 +114,17 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   Map<String, Color>? _shown;
   bool _pageLoaded = false;
 
+  /// The page's own light / dark (prefers-color-scheme), kept with the app's:
+  /// set at attach, then in place on a theme change, as the colours are.
+  bool _wantDark = false;
+  bool? _darkSent;
+
+  void _syncDark() {
+    if (_darkSent == null || _darkSent == _wantDark) return;
+    _darkSent = _wantDark;
+    unawaited(_guard.setDark(_wantDark).catchError((_) {}));
+  }
+
   void _pushColors() {
     final controller = _controller;
     if (!mounted || !_pageLoaded || controller == null || mapEquals(_shown, _colors)) return;
@@ -131,6 +142,8 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     // what they write, once per step.
     final (text, accent) = (theme.colorScheme.onSurface, theme.colorScheme.primary);
     _colors = {'text': text, 'accent': accent};
+    _wantDark = theme.brightness == Brightness.dark;
+    _syncDark();
     final key = (widget.html, noScripts, offline, _libraries.length, _storyKey);
     if (key == _loaded) {
       _pushColors();
@@ -174,6 +187,8 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
       if (!mounted || controller != _controller) return;
       await _guard.attach(controller, dark: dark, textZoom: textZoom).catchError((_) {});
       if (!mounted || controller != _controller) return;
+      _darkSent = dark;
+      _syncDark();
       await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }

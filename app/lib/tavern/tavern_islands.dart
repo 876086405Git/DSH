@@ -97,9 +97,12 @@ final _rawBound = RegExp(
 List<String> tavernHtmlBlocks(String text) {
   final blocks = <String>[];
   String? open;
-  for (final block in text.split(RegExp(r'\n[ \t]*\n'))) {
+  var at = 0;
+  // The blank line kept as written, its spaces too, where it is the block's own.
+  String? gap;
+  void each(String block) {
     if (open != null) {
-      blocks.last = '${blocks.last}\n\n$block';
+      blocks.last = '${blocks.last}$gap$block';
     } else {
       blocks.add(block);
     }
@@ -116,6 +119,13 @@ List<String> tavernHtmlBlocks(String text) {
       }
     }
   }
+
+  for (final blank in RegExp(r'\n[ \t]*\n').allMatches(text)) {
+    each(text.substring(at, blank.start));
+    gap = blank[0];
+    at = blank.end;
+  }
+  each(text.substring(at));
   return blocks;
 }
 

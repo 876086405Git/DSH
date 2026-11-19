@@ -164,6 +164,17 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   Map<String, Color> _colors = const {};
   Map<String, Color>? _pushed;
 
+  /// The page's own light / dark (prefers-color-scheme), kept with the app's:
+  /// set at attach, then in place on a theme change, as the colours are.
+  bool _wantDark = false;
+  bool? _darkSent;
+
+  void _syncDark() {
+    if (_darkSent == null || _darkSent == _wantDark) return;
+    _darkSent = _wantDark;
+    unawaited(_guard.setDark(_wantDark).catchError((_) {}));
+  }
+
   void _pushColors() {
     final controller = _controller;
     if (!_ready || controller == null || mapEquals(_pushed, _colors)) return;
@@ -214,6 +225,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       'quote': ink?.dialogue ?? text,
       'emphasis': ink?.action ?? text,
     };
+    _wantDark = theme.brightness == Brightness.dark;
+    _syncDark();
     final key = (noScripts, offline, reading, themeCss, card, character);
     _character = character;
     if (key == _loaded) {
@@ -274,6 +287,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       if (!mounted || controller != _controller) return;
       await _guard.attach(controller, dark: dark, textZoom: textZoom).catchError((_) {});
       if (!mounted || controller != _controller) return;
+      _darkSent = dark;
+      _syncDark();
       await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }
@@ -466,6 +481,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       _guard = WebViewGuard(onGone: _onGone);
       _controller = null;
       _loaded = null;
+      _darkSent = null;
     });
     _open();
   }

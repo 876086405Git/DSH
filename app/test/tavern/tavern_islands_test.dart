@@ -119,6 +119,11 @@ void main() {
       '<script>\n"</style>"\n\nx\n</script>',
       'y',
     ]);
+    // The blank line inside is kept as written, spaces and all.
+    expect(tavernHtmlBlocks('<script>const s=`a\n  \nb`;</script>\n \nc'), [
+      '<script>const s=`a\n  \nb`;</script>',
+      'c',
+    ]);
     expect(tavernIsFrontend('<body>'), isTrue);
     expect(tavernIsFrontend('</html>'), isTrue);
     expect(tavernIsFrontend('<div>x</div>'), isFalse);
