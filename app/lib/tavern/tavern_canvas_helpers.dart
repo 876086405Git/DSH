@@ -309,7 +309,9 @@ const _js = r'''
 
   // A script's buttons (the app shows them over the composer): kept on its
   // owner, by its key; a press is the event getButtonEvent names.
-  var buttons={},writing={};
+  // buttonWrites: a script's writes still out; listMoved: the list changed
+  // under one, so a refused write falls back to the list, not to before.
+  var buttons={},buttonWrites={},listMoved={};
   function buttonScript(id){
     var s=id==null?callerScript():scriptById(String(id));
     if(!s)throw new Error('Buttons are a script\'s own: called from one, or by its script_id');
@@ -325,14 +327,15 @@ const _js = r'''
   function getScriptButtons(id){return clone(buttons[buttonScript(id).key]);}
   function setButtons(s,list){
     var before=buttons[s.key],mine=buttons[s.key]=list;tellButtons(s.key);
-    writing[s.key]=(writing[s.key]||0)+1;
+    buttonWrites[s.key]=(buttonWrites[s.key]||0)+1;
+    function settled(){if(--buttonWrites[s.key])return false;var moved=listMoved[s.key];delete listMoved[s.key];return moved;}
     return call('replaceScriptButtons',{asScript:s.key,buttons:list}).then(function(r){
-      writing[s.key]--;
+      settled();
       if(buttons[s.key]===mine){buttons[s.key]=r.buttons;tellButtons(s.key);}
     },function(e){
-      writing[s.key]--;
-      // Not kept: the ones that were, back.
-      if(buttons[s.key]===mine){buttons[s.key]=before;tellButtons(s.key);}
+      var moved=settled(),f=frames[s.key];
+      // Not kept: the ones that were back, or the list's if it moved since.
+      if(buttons[s.key]===mine){buttons[s.key]=moved&&f?clone(f.buttonList||[]):before;tellButtons(s.key);}
       throw e;
     });
   }
@@ -340,7 +343,8 @@ const _js = r'''
   // taken as they now are, and told to the composer, unless a write of its
   // own is still out (its answer decides).
   function listButtons(key,list){
-    if(!buttons[key]||writing[key])return;
+    if(!buttons[key])return;
+    if(buttonWrites[key]){listMoved[key]=true;return;}
     buttons[key]=clone(list||[]);tellButtons(key);
   }
   function replaceScriptButtons(a,b){return attempt(function(){
