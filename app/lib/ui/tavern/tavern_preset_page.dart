@@ -332,7 +332,11 @@ class TavernPresetPage extends ConsumerWidget {
 
 /// [text] as one short line: its first line, cut at about 40 characters.
 String _line(String text) {
-  final first = text.trim().split('\n').first.trim();
+  // The first line found, not every line split out: a preset's prompts can
+  // run to many kilobytes each, and the page lists them all.
+  final start = text.trimLeft();
+  final end = start.indexOf('\n');
+  final first = (end < 0 ? start : start.substring(0, end)).trim();
   return first.length > 40 ? '${first.substring(0, 40)}…' : first;
 }
 
