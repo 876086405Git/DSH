@@ -16,6 +16,9 @@ source = (root / "app/ios/Runner/EngineChannel.swift").read_text()
 production = source.split("  // MARK: App lifecycle", 1)[1].split("  // MARK: Phone actions", 1)[0]
 production += "  private func lifecycleChanged()" + source.split(
     "  private func lifecycleChanged()", 1)[1].split("  // MARK: Install", 1)[0]
+# Keep the actual nested escaping closures, not a handwritten copy of their bodies.
+production += "  private func attachProtection() {\n    backgroundProtection.onChange =" + source.split(
+    "    backgroundProtection.onChange =", 1)[1].split("    let protectionStatus =", 1)[0] + "  }\n"
 
 fixture = r'''
 import Foundation
@@ -51,6 +54,7 @@ final class UIApplication {
 }
 final class Phone { func enteredBackground() {} }
 final class Protection {
+  var onChange: (([String: Any]) -> Void)?
   var backgrounds: [Bool] = []
   func update(background: Bool) { backgrounds.append(background) }
 }
@@ -60,7 +64,11 @@ final class Lifecycle {
   var revision = 1
   var acknowledged: Int?
   var foregrounds: [Bool] = []
+  var enhanced: [Bool] = []
   func observe(foreground: Bool) { foregrounds.append(foreground); revision += 1 }
+  func observe(backgroundAudio: Bool, backgroundLocation: Bool) {
+    enhanced = [backgroundAudio, backgroundLocation]; revision += 1
+  }
   func status() -> [String: Any?] { ["revision": revision, "acknowledgedRevision": acknowledged] }
 }
 final class EngineChannel: NSObject {
@@ -72,6 +80,8 @@ final class EngineChannel: NSObject {
   var native: Native? = Native()
   var phone: Phone?
   let backgroundProtection = Protection()
+  var backgroundProtectionActive = false
+  var backgroundProtectionStatus: [String: Any] = [:]
   var lastLifecycleError: String?
   func collect() {}
   func emit(_ event: [String: Any]) {}
@@ -157,6 +167,33 @@ final class EngineChannel: NSObject {
     let idle = owner.backgroundTask
     owner.queue.drain(); DispatchQueue.main.drain()
     precondition(owner.backgroundTask == .invalid && app.endings.last == idle)
+
+    // Execute the real enhanced-protection callback, including all nested captures.
+    let protected = EngineChannel()
+    protected.attachProtection()
+    protected.native = nil
+    protected.backgroundProtection.onChange?(["audioActive": true, "locationActive": false])
+    protected.queue.drain()
+    precondition(protected.backgroundProtectionActive && protected.backgroundTask == .invalid)
+    protected.backgroundProtection.onChange?(["audioActive": false, "locationActive": true])
+    protected.queue.drain()
+    precondition(protected.backgroundProtectionActive && protected.backgroundTask == .invalid, "remaining location is not lost")
+    protected.backgroundProtection.onChange?(["audioActive": false, "locationActive": false])
+    precondition(!protected.backgroundProtectionActive && protected.backgroundTask != .invalid, "withdrawal obtains pause budget before queue")
+    protected.queue.drain(); DispatchQueue.main.drain()
+    precondition(protected.lifecycle.enhanced == [false, false] && protected.backgroundTask == .invalid, "stopped engine releases withdrawal budget")
+
+    protected.backgroundProtection.onChange?(["audioActive": true, "locationActive": false])
+    protected.queue.drain()
+    protected.backgroundProtection.onChange?(["audioActive": false, "locationActive": false])
+    protected.queue.drain() // Withdrawal cleanup is still queued on main.
+    protected.native = Native()
+    protected.enteredBackground()
+    let replacement = protected.backgroundTask
+    DispatchQueue.main.drain()
+    precondition(replacement != .invalid && protected.backgroundTask == replacement, "old withdrawal cannot end a new observation")
+    protected.queue.drain(); DispatchQueue.main.drain()
+    protected.endBackgroundTask()
 
     app.denied = true
     let beforeDenial = app.endings.count

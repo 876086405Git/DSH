@@ -616,7 +616,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
           self.bindPauseObservation(pauseOwner)
           if self.native?.currentState()["phase"] as? String != "running" {
             DispatchQueue.main.async { [self] in
-              if pauseObservation?.owner == pauseOwner { endBackgroundTask() }
+              if self.pauseObservation?.owner == pauseOwner { self.endBackgroundTask() }
             }
           }
         }
