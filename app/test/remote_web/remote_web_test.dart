@@ -302,6 +302,28 @@ void main() {
     await remove(tester);
   });
 
+  for (final path in ['/favicon.ico', '/api/session/list']) {
+    testWidgets('subresource 429 at $path does not retire the Web UI', (tester) async {
+      await pump(tester);
+      await open(tester);
+      final web = platform.last;
+      web.navigation.onPageFinished!(testRoot.toString());
+      web.navigation.httpError!(
+        HttpResponseError(
+          request: WebResourceRequest(uri: testRoot.resolve(path)),
+          response: const WebResourceResponse(uri: null, statusCode: 429),
+        ),
+      );
+      await _frames(tester);
+      expect(rpc.calls, ['dsh.web.open']);
+      expect(web.requests, hasLength(1));
+      expect(islands.destroyed, isEmpty);
+      expect(find.byKey(fakeWebViewKey), findsOneWidget);
+      expect(find.text(appL10n.remoteWebBusy), findsNothing);
+      await remove(tester);
+    });
+  }
+
   for (final withUrl in [true, false]) {
     testWidgets('HTTP 429 with URL=$withUrl is friendly and does not replay POST', (tester) async {
       await pump(tester, os: withUrl ? 'android' : 'ios');

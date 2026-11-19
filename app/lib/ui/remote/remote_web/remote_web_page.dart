@@ -197,14 +197,14 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
     final uri = error.request?.uri ?? error.response?.uri;
     if (_root == null) return;
     if (uri != null && !_allows(uri.toString())) return;
+    // Only document and exchange errors retire the view, not subresource failures.
+    // WKWebView may omit both URLs; preserve its status-based recovery path.
+    if (uri != null && uri.path != '/' && uri.path != '/__remote/session') return;
     final status = error.response?.statusCode;
     if (status == 429) {
       _end('HTTP_429');
       return;
     }
-    // WKWebView's current plugin omits both request and response URLs. Its
-    // actual status still needs a recovery path, not an endless loading state.
-    if (uri != null && uri.path != '/' && uri.path != '/__remote/session') return;
     _end(switch (status) {
       400 || 403 || 405 => 'WEB_EXCHANGE_REJECTED',
       401 || 404 || 410 || 425 => 'WEB_SESSION_EXPIRED',

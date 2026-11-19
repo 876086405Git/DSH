@@ -153,6 +153,6 @@ Remote currently connects to one host at a time, so copying uses backup-to-phone
 
 Once connected, **Open DSH Web** appears at the bottom of the page when supported. The host needs DS Harness Remote plugin 0.6.6 or later with DSH Web running; update its plugin and reconnect if the entry is missing. Android and iPhone use an embedded page without another sign-in.
 
-The first load obtains a one-use access grant over the current paired connection; ordinary refresh does not reuse it. Closing the page, disconnecting or switching hosts ends this access. Return to the host page and reopen if it expires. Self-hosted tunnel domains must be included in trusted app configuration beforehand.
+The first load obtains a one-use access grant over the current paired connection; ordinary refresh does not reuse it. Closing the page, disconnecting or switching hosts requests an end to this access. If that request cannot be delivered, access expires according to the server's validity period. Return to the host page and reopen if it expires. Self-hosted tunnel domains must be included in trusted app configuration beforehand.
 
 If the page says the service is busy, wait a little before opening it again. Reconnect the host for connection errors; the app does not repeatedly retry automatically.
