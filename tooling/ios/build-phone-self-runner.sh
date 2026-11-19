@@ -10,6 +10,12 @@ if [[ "$MODE" != build && "$MODE" != --check ]]; then
   printf 'Usage: %s [--check]\n' "$0" >&2
   exit 2
 fi
+# CI keeps the built library under the hash of what it is built from (ios-compile.yml). When
+# it has restored the copy for this checkout's inputs it says so: nothing is left to build.
+if [[ "$MODE" == build && -n "${DSH_PHONE_SELF_RUNNER_RESTORED:-}" && -s "$OUT/PhoneSelfRunner.xcconfig" ]]; then
+  printf 'Shared CoreDevice/XCTest native owner restored for these inputs; nothing to build.\n'
+  exit 0
+fi
 command -v cargo >/dev/null || { printf 'Install rustup first; this component uses the pinned rust-toolchain.toml.\n' >&2; exit 1; }
 python3 -I -B "$NATIVE/prepare_upstream.py"
 cd "$NATIVE"

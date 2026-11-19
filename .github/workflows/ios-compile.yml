@@ -129,11 +129,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Flutter's download, the phone runner's Rust build and the simulator's boot take about
-      # five, six and two minutes and wait on nothing before the app build. Started here, they
-      # run under the steps below; "Boot the simulator", "Install Flutter" and "Run the engine
-      # inside the app" pick them up.
-      - name: Start Flutter, the phone runner and the simulator early
+      # Flutter's download and the simulator's boot take about four and two minutes, mostly
+      # waiting, and nothing before the app build needs them. Started here, they run under the
+      # steps below; "Boot the simulator" and "Install Flutter" pick them up. Only these two:
+      # anything that keeps the runner's three cores busy (the phone runner's Rust build did)
+      # slows every step it runs under by more than it saves.
+      - name: Start Flutter and the simulator early
         run: |
           early="$RUNNER_TEMP/early"
           mkdir -p "$early"
@@ -148,12 +149,20 @@ jobs:
             } || status=$?
             echo "$status" > "$early/flutter.exit"
           ) > "$early/flutter.log" 2>&1 &
-          (
-            status=0
-            bash tooling/ios/build-phone-self-runner.sh || status=$?
-            echo "$status" > "$early/phone-runner.exit"
-          ) > "$early/phone-runner.log" 2>&1 &
           (xcrun simctl boot "$(python3 tooling/ios/engine-smoke/pick-simulator.py)") > "$early/simulator.log" 2>&1 &
+
+      # The phone runner's Rust library takes six minutes to build for its three targets, and
+      # what it is built from rarely changes: kept under the hash of those inputs. With the
+      # copy for these inputs restored, build-phone-self-runner.sh has nothing to build.
+      - name: Restore the phone runner library
+        id: phone-runner
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/ios/PhoneSelfRunnerNative
+          key: ${{ runner.os }}-${{ runner.arch }}-phone-runner-${{ hashFiles('tooling/ios/phone-self-runner/**', 'tooling/ios/build-phone-self-runner.sh') }}
+      - name: Use the restored phone runner library
+        if: steps.phone-runner.outputs.cache-hit == 'true'
+        run: echo "DSH_PHONE_SELF_RUNNER_RESTORED=1" >> "$GITHUB_ENV"
 
       - name: Check background pause budget and lifecycle grants
         run: |
@@ -410,14 +419,17 @@ jobs:
       - name: Run the engine inside the app
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          # The phone runner has been building since the first step. build.sh builds it again and
-          # finds it up to date, or reports what went wrong; two builds at once would only wait
-          # on each other's lock.
-          for _ in $(seq 900); do [ -f "$RUNNER_TEMP/early/phone-runner.exit" ] && break; sleep 2; done
-          tail -n 20 "$RUNNER_TEMP/early/phone-runner.log"
           (cd app && bash ../tooling/ios/build.sh --simulator --debug -t integration_test/ios_engine_check.dart)
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode engine
+
+      # build.sh just built it, and the app it is linked into ran.
+      - name: Save the phone runner library
+        if: steps.phone-runner.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/ios/PhoneSelfRunnerNative
+          key: ${{ steps.phone-runner.outputs.cache-primary-key }}
 
       - name: Launch the real app
         if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}
