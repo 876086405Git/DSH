@@ -129,6 +129,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check background pause budget and lifecycle grants
+        run: |
+          python3 -B tooling/ios/test-channel-contract.py -v
+          xcrun swiftc -swift-version 5 -typecheck \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -target arm64-apple-ios17.0-simulator \
+            app/ios/Runner/PetOverlay/PetOverlayState.swift \
+            app/ios/Runner/IOSAudioSessionCoordinator.swift app/ios/Runner/IOSBackgroundProtection.swift
+          python3 tooling/ios/engine-smoke/test-pause-task.py
+          python3 tooling/ios/engine-smoke/test-engine-background.py
+          python3 tooling/ios/engine-smoke/test-background-protection.py
+
       - name: Check the shared host profiles
         if: inputs.regression_only
         run: |

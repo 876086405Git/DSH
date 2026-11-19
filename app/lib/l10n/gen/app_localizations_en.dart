@@ -1929,6 +1929,80 @@ class L10nEn extends L10n {
       'The outcome could not be confirmed. Verify it first; never automatically retry a dispatched command.';
 
   @override
+  String get backgroundProtectionDescription =>
+      'Off by default. Protection is attempted only while local tasks are active and the app is in the background; the system may still pause them.';
+
+  @override
+  String get backgroundProtectionAudio => 'Silent audio protection';
+
+  @override
+  String get backgroundProtectionAudioHint =>
+      'Plays silent audio in the background during tasks, using more battery. Does not take over recording, calls, or speech playback.';
+
+  @override
+  String get backgroundProtectionLocation => 'Background location protection';
+
+  @override
+  String get backgroundProtectionLocationHint =>
+      'Requires “Always” location access, uses more battery, and involves location privacy. Coordinates are not saved.';
+
+  @override
+  String get backgroundProtectionTask => 'Continuous task protection';
+
+  @override
+  String get backgroundProtectionTaskHint =>
+      'Requests a system continuous task only during local tasks. Availability depends on this build and system approval.';
+
+  @override
+  String get backgroundProtectionStatus => 'Current status';
+
+  @override
+  String get backgroundProtectionOff => 'Enhanced protection is off';
+
+  @override
+  String get backgroundProtectionReady =>
+      'Enabled, but not running now. Protection is attempted only during local tasks in the background.';
+
+  @override
+  String get backgroundProtectionAudioActive => 'Silent audio protection is running';
+
+  @override
+  String get backgroundProtectionLocationActive => 'Background location protection is running';
+
+  @override
+  String get backgroundProtectionBothActive => 'Silent audio and background location protection are running';
+
+  @override
+  String get backgroundProtectionTaskActive => 'System continuous task protection is running';
+
+  @override
+  String get backgroundProtectionLocationRestricted =>
+      'Location access is restricted by the system. Keep the app in the foreground or use a remote host.';
+
+  @override
+  String get backgroundProtectionNeedsAlways =>
+      'Location protection is not active. Tap here and set location access to “Always” in system settings.';
+
+  @override
+  String get backgroundProtectionLocationServicesOff =>
+      'System location services are off. Tap here to check system settings.';
+
+  @override
+  String get backgroundProtectionTaskUnavailable =>
+      'This build lacks the required system eligibility. Keep the app in the foreground or use a remote host.';
+
+  @override
+  String get backgroundProtectionUnavailable =>
+      'Protection is temporarily unavailable. Return to the app and retry; keep long tasks in the foreground or use a remote host.';
+
+  @override
+  String get backgroundProtectionCleanup => 'The previous background protection is still being released.';
+
+  @override
+  String get backgroundProtectionUpdateFailed =>
+      'Could not update background protection. Check the current status and try again.';
+
+  @override
   String get botsFolderGone => 'This folder is gone';
 
   @override

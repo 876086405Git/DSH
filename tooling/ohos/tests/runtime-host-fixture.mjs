@@ -81,6 +81,26 @@ export class LinuxControl {
 }
 export function agentReminderAccess() { return lifecycleControl.reminders ?? 'denied'; }
 export function backgroundComputePermission() { lifecycleControl.queries++; return lifecycleControl.permission ?? 'denied'; }
+export function backgroundComputeStatus() {
+  const permission = backgroundComputePermission();
+  return new Map([['supported', true], ['computePermission', permission],
+    ['permissionStatus', permission === 'granted' ? 'eligible' : permission === 'denied' ? 'eligibility_required' : 'unknown'],
+    ['error', permission === 'granted' ? null : permission === 'denied' ? 'ohos_background_eligibility_required' : 'ohos_background_permission_unknown'],
+    ['actionRequired', permission === 'granted' ? null : 'obtain_task_keeping_acl_and_install_entitled_build']]);
+}
+
+export const backgroundPreferenceControl = { rows: new Map(), openError: null, flushError: null, beforeFlush: null };
+export const preferences = { async getPreferences(context, { name }) {
+  if (backgroundPreferenceControl.openError) throw backgroundPreferenceControl.openError;
+  const key = context.filesDir + ':' + name;
+  if (!backgroundPreferenceControl.rows.has(key)) backgroundPreferenceControl.rows.set(key, new Map());
+  const values = backgroundPreferenceControl.rows.get(key);
+  return { async get(name, fallback) { return values.has(name) ? values.get(name) : fallback; },
+    async put(name, value) { values.set(name, value); }, async flush() {
+      await backgroundPreferenceControl.beforeFlush?.();
+      if (backgroundPreferenceControl.flushError) throw backgroundPreferenceControl.flushError;
+    } };
+} };
 export class FlutterAbility {
   superCalls = [];
   onForeground() { this.superCalls.push('foreground'); }

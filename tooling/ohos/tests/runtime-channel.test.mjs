@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { makePack, fileIo, inflateActivity, activeInflaters, RUNTIME_ARCHIVE_ASSET } from './runtime-storage-fixture.mjs';
-import { native, MethodCall, nativeModuleLoads, nativeModuleControl, lifecycleControl } from './runtime-host-fixture.mjs';
+import { native, MethodCall, nativeModuleLoads, nativeModuleControl, lifecycleControl, backgroundPreferenceControl } from './runtime-host-fixture.mjs';
 import { prepareManagedSkillModules } from './managed-skill-loader.mjs';
 import { managedSkillIo } from './managed-skill-fixture.mjs';
 
@@ -140,6 +140,7 @@ export const lkgIo={...recoveryIo,async open(...args){try{return await recoveryI
 controllerText = controllerText.replace("import common from '@ohos.app.ability.common';", '')
   .replace("import hilog from '@ohos.hilog';", 'const hilog = { info() {}, warn() {} };')
   .replace("import UIAbility from '@ohos.app.ability.UIAbility';", '')
+  .replace("import preferences from '@ohos.data.preferences';", `import { preferences } from '${hostFixtureUrl}';`)
   .replace("import util from '@ohos.util';", `import { util } from '${fixtureUrl}';`)
   .replace("import connection from '@ohos.net.connection';", `import { connection } from '${hostFixtureUrl}';`)
   .replace("from 'libdsh_host.so'", `from '${hostFixtureUrl}'`)
@@ -166,7 +167,7 @@ let transientText = (await fs.readFile(path.join(source, 'TransientTaskOwner.ets
   .replace("import common from '@ohos.app.ability.common';\n", '')
   // Long background has its own tests; this channel runs as a listing build would, without the permission.
   .replace("import { ContinuousTaskOwner } from './ContinuousTaskOwner';",
-    'class ContinuousTaskOwner { eligible() { return false; } request() { return false; } stop() {} active() { return false; } cleanupPending() { return false; } error() { return null; } }')
+    'class ContinuousTaskOwner { eligible() { return false; } request() { return false; } stop() {} active() { return false; } running() { return false; } cleanupPending() { return false; } error() { return null; } }')
   .replace("import { NativeHostModule } from './NativeHost';", '')
   .replace("import { HostLifecycleAck } from './RuntimeLifecycle';", '');
 await fs.writeFile(path.join(temp, 'TransientTaskOwner.mts'), transientText);
@@ -2286,4 +2287,71 @@ test('1200 background polling: real ability callbacks restore fast foreground co
     current.onDestroy(); RuntimeController.shared = previous;
     native.state.phase = 'idle'; c.controller.collect(); t.mock.timers.reset();
   }
+});
+
+test('background protection channel defaults off, validates consent and never fakes system acceptance', async () => {
+  const c = await controllerCase('background-protection-contract');
+  const plugin = new RuntimePlugin();
+  const binding = { getApplicationContext: () => c.context, getBinaryMessenger: () => ({ setMessageHandler() {} }) };
+  plugin.onAttachedToEngine(binding);
+  const invoke = (method, args = {}) => new Promise(resolve => plugin.onMethodCall(
+    new MethodCall(method, new Map(Object.entries(args))), {
+      success: resolve, error(code) { resolve({ code }); }, notImplemented() { resolve({ missing: true }); },
+    }));
+  const loads = nativeModuleLoads;
+  try {
+    const initial = await invoke('backgroundProtection');
+    assert.equal(initial.get('supported'), true); assert.equal(initial.get('taskEnabled'), false);
+    assert.equal(initial.get('taskActive'), false); assert.equal(initial.get('permissionStatus'), 'eligibility_required');
+    for (const args of [{}, {taskEnabled: 'true'}, {taskEnabled: 1}]) {
+      assert.equal((await invoke('setBackgroundProtection', args)).code, 'ohos_background_arguments');
+    }
+    const enabled = await invoke('setBackgroundProtection', {taskEnabled: true});
+    assert.equal(enabled.get('taskEnabled'), true); assert.equal(enabled.get('taskActive'), false);
+    assert.equal(enabled.get('error'), 'ohos_background_eligibility_required');
+    assert.equal(await invoke('openBackgroundProtectionSettings'), false);
+    assert.equal(native.starts.length, 0);
+    plugin.onDetachedFromEngine(binding);
+    const reopened = await reopenCase(c);
+    plugin.onAttachedToEngine(binding);
+    assert.equal((await reopened.controller.backgroundProtection()).get('taskEnabled'), true);
+    const off = await invoke('setBackgroundProtection', {taskEnabled: false});
+    assert.equal(off.get('taskEnabled'), false); assert.equal(off.get('taskActive'), false);
+    assert.equal(nativeModuleLoads, loads); assert.equal(native.starts.length, 0);
+  } finally { plugin.onDetachedFromEngine(binding); }
+});
+
+test('background consent storage failure does not authorize and can be retried', async () => {
+  const c = await controllerCase('background-storage-retry');
+  try {
+    backgroundPreferenceControl.flushError = new Error('private preference details');
+    const failed = await c.controller.setBackgroundProtection(true);
+    assert.equal(failed.get('taskEnabled'), false); assert.equal(failed.get('taskActive'), false);
+    assert.equal(failed.get('error'), 'ohos_background_storage_failed');
+    assert.equal(failed.get('actionRequired'), 'retry_saving_preference');
+    assert.equal(JSON.stringify([...failed]).includes('private preference details'), false);
+    backgroundPreferenceControl.flushError = null;
+    assert.equal((await c.controller.setBackgroundProtection(true)).get('taskEnabled'), true);
+  } finally { backgroundPreferenceControl.flushError = null; }
+});
+
+test('a newer revocation wins over an in-flight preference enable and survives reopen', async () => {
+  const c = await controllerCase('background-toggle-race');
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  let first = true; const applied = [];
+  const apply = c.controller.applyTaskEnabled.bind(c.controller);
+  c.controller.applyTaskEnabled = value => { applied.push(value); apply(value); };
+  backgroundPreferenceControl.beforeFlush = async () => {
+    if (first) { first = false; entered.resolve(); await release.promise; }
+  };
+  try {
+    const enabling = c.controller.setBackgroundProtection(true); await entered.promise;
+    const disabling = c.controller.setBackgroundProtection(false);
+    assert.equal(c.controller.taskEnabled, false); release.resolve();
+    const results = await Promise.all([enabling, disabling]);
+    assert(results.every(status => status.get('taskEnabled') === false));
+    assert.equal(applied.includes(true), false);
+    const reopened = await reopenCase(c);
+    assert.equal((await reopened.controller.backgroundProtection()).get('taskEnabled'), false);
+  } finally { release.resolve(); backgroundPreferenceControl.beforeFlush = null; }
 });

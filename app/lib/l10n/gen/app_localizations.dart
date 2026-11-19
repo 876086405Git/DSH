@@ -3476,6 +3476,132 @@ abstract class L10n {
   /// **'未能确认操作结果。先核实结果；已派发的命令不要自动重试。'**
   String get androidShellErrorUnknown;
 
+  /// No description provided for @backgroundProtectionDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认关闭，仅在有本机任务且 App 退到后台时尝试保护；系统仍可能暂停任务。'**
+  String get backgroundProtectionDescription;
+
+  /// No description provided for @backgroundProtectionAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'静音音频保护'**
+  String get backgroundProtectionAudio;
+
+  /// No description provided for @backgroundProtectionAudioHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务期间在后台播放静音音频，会增加耗电；不会抢占录音、通话或朗读。'**
+  String get backgroundProtectionAudioHint;
+
+  /// No description provided for @backgroundProtectionLocation.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台定位保护'**
+  String get backgroundProtectionLocation;
+
+  /// No description provided for @backgroundProtectionLocationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'需系统“始终允许”位置权限，会增加耗电并涉及位置隐私；不保存坐标。'**
+  String get backgroundProtectionLocationHint;
+
+  /// No description provided for @backgroundProtectionTask.
+  ///
+  /// In zh, this message translates to:
+  /// **'连续任务保护'**
+  String get backgroundProtectionTask;
+
+  /// No description provided for @backgroundProtectionTaskHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅在本机任务期间申请系统连续任务，是否生效取决于当前版本和系统许可。'**
+  String get backgroundProtectionTaskHint;
+
+  /// No description provided for @backgroundProtectionStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前状态'**
+  String get backgroundProtectionStatus;
+
+  /// No description provided for @backgroundProtectionOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'未开启增强保护'**
+  String get backgroundProtectionOff;
+
+  /// No description provided for @backgroundProtectionReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启，当前未运行；有本机任务且退到后台时才会尝试保护。'**
+  String get backgroundProtectionReady;
+
+  /// No description provided for @backgroundProtectionAudioActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'静音音频保护正在运行'**
+  String get backgroundProtectionAudioActive;
+
+  /// No description provided for @backgroundProtectionLocationActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台定位保护正在运行'**
+  String get backgroundProtectionLocationActive;
+
+  /// No description provided for @backgroundProtectionBothActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'静音音频与后台定位保护正在运行'**
+  String get backgroundProtectionBothActive;
+
+  /// No description provided for @backgroundProtectionTaskActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统连续任务保护正在运行'**
+  String get backgroundProtectionTaskActive;
+
+  /// No description provided for @backgroundProtectionLocationRestricted.
+  ///
+  /// In zh, this message translates to:
+  /// **'定位权限被系统限制，无法开启定位保护；可保持前台或使用远程主机。'**
+  String get backgroundProtectionLocationRestricted;
+
+  /// No description provided for @backgroundProtectionNeedsAlways.
+  ///
+  /// In zh, this message translates to:
+  /// **'定位保护尚未生效，请点此在系统设置中将位置权限设为“始终允许”。'**
+  String get backgroundProtectionNeedsAlways;
+
+  /// No description provided for @backgroundProtectionLocationServicesOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统定位服务已关闭，请点此检查系统设置。'**
+  String get backgroundProtectionLocationServicesOff;
+
+  /// No description provided for @backgroundProtectionTaskUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本缺少系统连续任务资格，请保持 App 在前台或使用远程主机。'**
+  String get backgroundProtectionTaskUnavailable;
+
+  /// No description provided for @backgroundProtectionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'保护暂不可用，请返回 App 重试；长任务可保持前台或使用远程主机。'**
+  String get backgroundProtectionUnavailable;
+
+  /// No description provided for @backgroundProtectionCleanup.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在结束上一次后台保护，尚未完成释放。'**
+  String get backgroundProtectionCleanup;
+
+  /// No description provided for @backgroundProtectionUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能更新后台保护，请查看当前状态后重试。'**
+  String get backgroundProtectionUpdateFailed;
+
   /// No description provided for @botsFolderGone.
   ///
   /// In zh, this message translates to:

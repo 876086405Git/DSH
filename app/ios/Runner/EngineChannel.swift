@@ -294,7 +294,9 @@ private final class EngineLifecycle: NSObject, URLSessionTaskDelegate {
   private(set) var failure: String?
   private var continuedProcessing = false
   private var pictureInPicture = false
-  var continued: Bool { continuedProcessing || pictureInPicture }
+  private var backgroundAudio = false
+  private var backgroundLocation = false
+  var continued: Bool { continuedProcessing || pictureInPicture || backgroundAudio || backgroundLocation }
   private var retryDelay = 1.0
   private var retry: DispatchWorkItem?
   private var task: URLSessionTask?
@@ -348,6 +350,13 @@ private final class EngineLifecycle: NSObject, URLSessionTaskDelegate {
     observed()
   }
 
+  func observe(backgroundAudio: Bool, backgroundLocation: Bool) {
+    guard self.backgroundAudio != backgroundAudio || self.backgroundLocation != backgroundLocation else { return }
+    self.backgroundAudio = backgroundAudio
+    self.backgroundLocation = backgroundLocation
+    observed()
+  }
+
   private func observed() {
     updateNative(foreground, continued)
     resetRetry()
@@ -374,7 +383,8 @@ private final class EngineLifecycle: NSObject, URLSessionTaskDelegate {
 
   func status() -> [String: Any?] {
     ["foreground": foreground, "continued": continued, "pictureInPicture": pictureInPicture,
-     "continuedProcessing": continuedProcessing, "revision": revision,
+     "continuedProcessing": continuedProcessing, "backgroundAudio": backgroundAudio,
+     "backgroundLocation": backgroundLocation, "revision": revision,
      "acknowledgedRevision": acknowledged < 0 ? nil : acknowledged, "error": failure]
   }
 
@@ -453,8 +463,8 @@ private final class EngineLifecycle: NSObject, URLSessionTaskDelegate {
     request.httpMethod = "POST"
     request.setValue(cookie, forHTTPHeaderField: "Cookie")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    // Only actual system-backed execution counts: an active continued task or
-    // a playing, unsuspended PiP with its owned audio session. A setting alone does not.
+    // Only observed execution sources count: continued processing, PiP, playing
+    // owned audio or delivered background location. A setting alone never grants it.
     let foreground = self.foreground
     let continuous = !foreground && continued
     let body: [String: Any] = [
@@ -552,7 +562,12 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
   private var secrets: [String] = []
 
   private var backgroundTask = UIBackgroundTaskIdentifier.invalid
+  // Main-thread owner: replaced before each pause observation, cleared on release.
+  private var pauseObservation: (owner: UUID, revision: Int?)?
   private let continued = ContinuedRun()
+  private let backgroundProtection = IOSBackgroundProtection()
+  private var backgroundProtectionActive = false // Main-thread observation.
+  private var backgroundProtectionStatus: [String: Any] = [:] // Engine queue only.
   // Main-thread sources: a native phone task may begin before Flutter's new
   // conversation has appeared in its session list.
   private var localTurnRunning = false
@@ -577,6 +592,39 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
     queue.async { [self] in
       skillOwner = skills.attachOwner()
     }
+    backgroundProtection.onChange = { [weak self] status in
+      guard let self else { return }
+      let audio = status["audioActive"] as? Bool == true
+      let location = status["locationActive"] as? Bool == true
+      let lost = backgroundProtectionActive && !(audio || location)
+      backgroundProtectionActive = audio || location
+      var pauseOwner: UUID?
+      if lost, UIApplication.shared.applicationState == .background {
+        if backgroundTask == .invalid {
+          backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "dsh.engine.pause") { [weak self] in
+            self?.endBackgroundTask()
+          }
+        }
+        let owner = UUID()
+        pauseObservation = (owner, nil)
+        pauseOwner = owner
+      }
+      queue.async {
+        self.backgroundProtectionStatus = status
+        self.lifecycle.observe(backgroundAudio: audio, backgroundLocation: location)
+        if let pauseOwner {
+          self.bindPauseObservation(pauseOwner)
+          if self.native?.currentState()["phase"] as? String != "running" {
+            DispatchQueue.main.async { [self] in
+              if self.pauseObservation?.owner == pauseOwner { self.endBackgroundTask() }
+            }
+          }
+        }
+        self.emitStatus()
+      }
+    }
+    let protectionStatus = backgroundProtection.status()
+    queue.async { [self] in backgroundProtectionStatus = protectionStatus }
     continued.onChange = { [weak self] running in
       guard let self else { return }
       // Recording the pause takes a moment, and the process is about to stop.
@@ -585,8 +633,11 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
           self?.endBackgroundTask()
         }
       }
+      let pauseOwner = UUID()
+      pauseObservation = (pauseOwner, nil)
       queue.async {
         self.lifecycle.observe(continued: running)
+        self.bindPauseObservation(pauseOwner)
         self.emitStatus()
       }
     }
@@ -595,6 +646,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
         guard let self else { return }
         self.phoneTaskRunning = active
         self.continued.update(running: self.localTurnRunning || active)
+        self.backgroundProtection.update(taskRunning: self.localTurnRunning || active)
       }
       IOSPetOverlay.shared.onKeepingAliveChanged = { [weak self] active in
         self?.queue.async { [weak self] in
@@ -675,6 +727,22 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
     if call.method == "containerPaths" {
       return result(IOSContainerPaths.snapshot(guestRoot: guestRoot, support: filesDirectory))
     }
+    if call.method == "backgroundProtection" { return result(backgroundProtection.status()) }
+    if call.method == "setBackgroundProtection" {
+      for key in ["audioEnabled", "locationEnabled"] where arguments[key] != nil {
+        guard arguments[key] is Bool else {
+          return result(FlutterError(code: "ios_background_invalid_arguments", message: "Expected boolean settings.", details: nil))
+        }
+      }
+      return result(backgroundProtection.set(
+        audioEnabled: arguments["audioEnabled"] as? Bool, locationEnabled: arguments["locationEnabled"] as? Bool))
+    }
+    if call.method == "openBackgroundProtectionSettings" {
+      guard UIApplication.shared.applicationState == .active,
+        let url = URL(string: UIApplication.openSettingsURLString) else { return result(false) }
+      UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
+      return
+    }
     queue.async { [self] in
       do {
         initialize()
@@ -700,6 +768,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
           DispatchQueue.main.async { [self] in
             localTurnRunning = running
             continued.update(running: running || phoneTaskRunning)
+            backgroundProtection.update(taskRunning: running || phoneTaskRunning)
           }
           reply(nil)
         case "reset":
@@ -844,6 +913,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
       "tidyingFiles": false,
       "continuedRun": lifecycle.continued,
       "lifecycle": lifecycle.status(),
+      "backgroundProtection": backgroundProtectionStatus,
     ]
   }
 
@@ -862,7 +932,11 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
     if error != nil, error != lastLifecycleError { emit(["type": "notice", "text": EngineChannel.notice]) }
     lastLifecycleError = error
     emitStatus()
-    if error == nil { endBackgroundTask() }
+    if error == nil, let acknowledged = lifecycle.status()["acknowledgedRevision"] as? Int {
+      DispatchQueue.main.async { [self] in
+        if let required = pauseObservation?.revision, acknowledged >= required { endBackgroundTask() }
+      }
+    }
   }
 
   // MARK: Install
@@ -1189,6 +1263,9 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
     let baseUrl = state["baseUrl"] as? String ?? ""
     finishGuestStartupTemporary(phase: phase)
     let running = phase == "running" && !requestedStop
+    if phase != lastPhase || token != lastToken {
+      DispatchQueue.main.async { [self] in backgroundProtection.update(engineRunning: running) }
+    }
     lifecycle.runtime(baseUrl: running ? baseUrl : nil, token: running ? token : nil)
     if !token.isEmpty { rememberSecret(token) }
 
@@ -1342,29 +1419,47 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
   @objc private func enteredBackground() {
     // A confirmation doesn't survive leaving the app: it would come back stale.
     MainActor.assumeIsolated { phone?.enteredBackground() }
-    queue.async { [self] in
-      guard native?.currentState()["phase"] as? String == "running" else {
-        lifecycle.observe(foreground: false)
-        return
+    backgroundProtection.update(background: true)
+    // Obtain the pause budget before a busy engine queue can leave us suspended.
+    // This is only time to record the pause, not a continued-processing grant.
+    if backgroundTask == .invalid, UIApplication.shared.applicationState == .background {
+      backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "dsh.engine.pause") { [weak self] in
+        self?.endBackgroundTask()
       }
-      DispatchQueue.main.async { [self] in
-        // The queue can be behind the app: it may be back in front by now.
-        if backgroundTask == .invalid, UIApplication.shared.applicationState == .background {
-          backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "dsh.engine.pause") { [weak self] in
-            self?.endBackgroundTask()
-          }
+    }
+    let pauseOwner = UUID()
+    pauseObservation = (pauseOwner, nil)
+    queue.async { [self] in
+      lifecycle.observe(foreground: false)
+      bindPauseObservation(pauseOwner)
+      if native?.currentState()["phase"] as? String != "running" {
+        DispatchQueue.main.async { [self] in
+          if pauseObservation?.owner == pauseOwner { endBackgroundTask() }
         }
       }
-      lifecycle.observe(foreground: false)
     }
   }
 
   @objc private func enteringForeground() {
+    backgroundProtection.update(background: false)
     queue.async { [self] in
       lifecycle.observe(foreground: true)
       collect()
     }
     endBackgroundTask()
+  }
+
+  /// Called on the engine queue; only the latest main-thread pause owner may bind an ACK.
+  private func bindPauseObservation(_ owner: UUID) {
+    let status = lifecycle.status()
+    guard let revision = status["revision"] as? Int else { return }
+    let acknowledged = status["acknowledgedRevision"] as? Int
+    DispatchQueue.main.async { [self] in
+      guard pauseObservation?.owner == owner, backgroundTask != .invalid else { return }
+      pauseObservation = (owner, revision)
+      // A no-op continued observation may already have been acknowledged.
+      if let acknowledged, acknowledged >= revision { endBackgroundTask() }
+    }
   }
 
   /// The expiration handler runs on the main thread and the task has to be over when it returns.
@@ -1376,6 +1471,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
     guard backgroundTask != .invalid else { return }
     UIApplication.shared.endBackgroundTask(backgroundTask)
     backgroundTask = .invalid
+    pauseObservation = nil
   }
 
   // MARK: Phone actions
@@ -1442,6 +1538,7 @@ final class EngineChannel: NSObject, FlutterStreamHandler {
     DispatchQueue.main.sync { [self] in
       MainActor.assumeIsolated {
         phoneLive = false
+        backgroundProtection.update(engineRunning: false)
         phone?.retire()
       }
     }

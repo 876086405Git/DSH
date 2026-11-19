@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E4C7A1D9085B4F23A671C202 /* IOSBackgroundProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C7A1D9085B4F23A671C201 /* IOSBackgroundProtection.swift */; };
 		A08400000000000000000002 /* UnicodeData-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = A08400000000000000000001 /* UnicodeData-LICENSE.txt */; };
 		D55000000000000000000601 /* IOSAudioSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000600 /* IOSAudioSessionCoordinator.swift */; };
 		D55000000000000000000603 /* IOSAudioSessionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000602 /* IOSAudioSessionCoordinatorTests.swift */; };
@@ -172,6 +173,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E4C7A1D9085B4F23A671C201 /* IOSBackgroundProtection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSBackgroundProtection.swift; sourceTree = "<group>"; };
 		A08400000000000000000001 /* UnicodeData-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "UnicodeData-LICENSE.txt"; sourceTree = "<group>"; };
 		D55000000000000000000600 /* IOSAudioSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAudioSessionCoordinator.swift; sourceTree = "<group>"; };
 		D55000000000000000000602 /* IOSAudioSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAudioSessionCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -445,6 +447,7 @@
 				D5480000000000000000A002 /* DshPlugin.swift */,
 				D5480000000000000000A004 /* VoiceChannel.swift */,
 				D55000000000000000000600 /* IOSAudioSessionCoordinator.swift */,
+				E4C7A1D9085B4F23A671C201 /* IOSBackgroundProtection.swift */,
 				D55000000000000000000500 /* IOSCompanionVoice.swift */,
 				D5480000000000000000C090 /* IOSSystemTools.swift */,
 				D5480000000000000000C080 /* IOSPhoneRunner.swift */,
@@ -809,6 +812,7 @@
 				D5480000000000000000A001 /* DshPlugin.swift in Sources */,
 				D5480000000000000000A003 /* VoiceChannel.swift in Sources */,
 				D55000000000000000000601 /* IOSAudioSessionCoordinator.swift in Sources */,
+				E4C7A1D9085B4F23A671C202 /* IOSBackgroundProtection.swift in Sources */,
 				D55000000000000000000501 /* IOSCompanionVoice.swift in Sources */,
 				D5480000000000000000C091 /* IOSSystemTools.swift in Sources */,
 				D5480000000000000000C081 /* IOSPhoneRunner.swift in Sources */,

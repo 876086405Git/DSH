@@ -16,6 +16,7 @@ export class TransientTaskOwner {
   private readonly wake: () => void;
   private owner: number;
   private foreground: boolean;
+  private taskEnabled: boolean = false;
   private retired: boolean = false;
   private grant: number = 0;
   private requestId: number | null = null;
@@ -43,6 +44,21 @@ export class TransientTaskOwner {
     });
   }
 
+  setTaskEnabled(enabled: boolean): void {
+    if (this.retired || this.taskEnabled === enabled) return;
+    this.taskEnabled = enabled;
+    this.continuous?.stop();
+    // Enabling in the background still needs a fresh authenticated busy ACK.
+    this.awaitingActivity = enabled && !this.foreground && this.owner !== 0 && this.continuous?.eligible() === true;
+    try {
+      if (this.awaitingActivity) this.requestedAt = this.host.lifecycleSnapshot().nowMs;
+      this.wake();
+    } catch (_) { this.failure = 'ohos_transient_native_failed'; this.retire(); }
+  }
+
+  continuousActive(): boolean { return this.continuous?.running() === true; }
+  continuousError(): string | null { return this.failure ?? this.continuous?.error() ?? null; }
+
   observe(foreground: boolean): void {
     try { this.observeCurrent(foreground); }
     catch (_) { this.failure = 'ohos_transient_native_failed'; this.retire(); }
@@ -57,13 +73,13 @@ export class TransientTaskOwner {
     // Synchronous shared native state changes before any OS cancellation.
     this.host.lifecycleUpdate('foreground', this.owner, 0, foreground ? 1 : 0);
     this.release(); this.activityBusy = false;
-    this.awaitingActivity = !foreground && (freshBusy || this.continuous?.eligible() === true) && this.owner !== 0;
+    this.awaitingActivity = !foreground && (freshBusy || (this.taskEnabled && this.continuous?.eligible() === true)) && this.owner !== 0;
     this.requestedAt = before.nowMs;
     this.wake();
   }
 
   private request(): void {
-    if (this.continuous?.request() === true) return;
+    if (this.taskEnabled && this.continuous?.request() === true) return;
     this.requestShort();
   }
 

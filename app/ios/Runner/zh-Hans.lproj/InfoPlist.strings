@@ -3,7 +3,8 @@
 "NSRemindersFullAccessUsageDescription" = "你批准本机引擎的请求时，读取或修改提醒事项。";
 "NSRemindersUsageDescription" = "你批准本机引擎的请求时，读取或修改提醒事项。";
 "NSContactsUsageDescription" = "你批准本机引擎的请求时，查找或新建联系人。";
-"NSLocationWhenInUseUsageDescription" = "你批准本机引擎的请求时，读取一次当前位置。";
+"NSLocationWhenInUseUsageDescription" = "读取你批准的定位请求。主动开启后台定位保护后，也用定位更新支持正在后台进行的本机任务；保护功能不保存或发送坐标。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "仅在你主动开启后台定位保护后，在本机任务后台运行期间使用定位更新。保护功能不保存或发送坐标，可能增加耗电。";
 "NSCameraUsageDescription" = "拍照后作为附件发给 DSH。";
 "NSCalendarsUsageDescription" = "你同意添加日程时打开日历编辑器。";
 "NSMicrophoneUsageDescription" = "语音输入时使用麦克风。";

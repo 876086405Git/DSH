@@ -12,7 +12,7 @@ const continuousText=(await fs.readFile(new URL('../../../app/ohos/entry/src/mai
 await fs.writeFile(path.join(directory,'continuous.mts'),`import {backgroundTaskManager,backgroundComputePermission,wantAgent,setTimeout} from '${new URL('./transient-task-fixture.mjs',import.meta.url)}';\n`+continuousText);
 await fs.writeFile(path.join(directory,'owner.mts'),`import {ContinuousTaskOwner} from './continuous.mts';\nimport {backgroundTaskManager,setTimeout,clearTimeout} from '${new URL('./transient-task-fixture.mjs',import.meta.url)}';\n`+text);
 const {TransientTaskOwner}=await import(pathToFileURL(path.join(directory,'owner.mts')));after(()=>fs.rm(directory,{recursive:true,force:true}));
-function setup(t,context){
+function setup(t,context,enabled=context!==undefined){
  Object.assign(continuous,{allowed:true,requests:[],stops:[],startError:null,startDeferred:null,stopError:null});continuous.listeners.clear();
  timers.clear();Object.assign(osTask,{requests:[],cancels:[],failCancel:false,callbackNow:false,duration:30000});
  const s={version:1,engineGeneration:1,ownerGeneration:0,revision:1,grantGeneration:0,nowMs:10000,deadlineMs:0,drainAtMs:0,phase:0,available:1,foreground:0,clockFailed:0};let t0=0,wakes=0;
@@ -28,6 +28,7 @@ function setup(t,context){
  if(op==='retire'){s.available=0;s.phase=4;s.revision++;return 1;}throw Error(op);
  }};
  const owner=new TransientTaskOwner(host,true,()=>{wakes++;},context);
+ if(enabled)owner.setTaskEnabled(true);
  const ack=(busy=true,manualPaused=false)=>({nativeHost:{...s},busy,manualPaused,confirmedPause:s.phase!==2});
  const background=()=>{owner.acknowledge(ack());owner.observe(false);owner.acknowledge(ack());};
  t.after(()=>{osTask.failCancel=false;owner.retire();timers.clear();});
@@ -97,7 +98,7 @@ test('granted TASK_KEEPING starts continuous task and avoids transient quota',as
 
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 test('missing ACL silently falls back to existing short request',async t=>{const f=setup(t,context);continuous.allowed=false;f.background();await flush();assert.equal(continuous.requests.length,0);assert.equal(osTask.requests.length,1);assert.equal(f.owner.status().get('error'),null);});
-test('OS start rejection silently falls back to short request',async t=>{const f=setup(t,context);continuous.startError=Error('denied');f.background();await flush();assert.equal(osTask.requests.length,1);assert.equal(f.owner.status().get('error'),null);assert.equal(f.s.phase,2);});
+test('OS start rejection reports stable failure and falls back to short request',async t=>{const f=setup(t,context);continuous.startError=Error('denied');f.background();await flush();assert.equal(osTask.requests.length,1);assert.equal(f.owner.status().get('error'),'ohos_continuous_start_failed');assert.equal(f.owner.continuousActive(),false);assert.equal(f.s.phase,2);});
 test('eligibility and pending OS acceptance never open native admission',async t=>{const f=setup(t,context);continuous.startDeferred=Promise.withResolvers();f.background();await flush();assert.notEqual(f.s.phase,7);assert.equal(osTask.requests.length,0);continuous.startDeferred.resolve({continuousTaskId:73});await flush();assert.equal(f.s.phase,7);});
 test('foreground before late OS acceptance cleans returned task without admission',async t=>{const f=setup(t,context);continuous.startDeferred=Promise.withResolvers();f.background();await flush();f.owner.observe(true);continuous.startDeferred.resolve({continuousTaskId:73});await flush();assert.equal(continuous.stops.length,1);assert.equal(f.writes.filter(x=>x==='continuous').length,0);assert.equal(osTask.requests.length,0);});
 test('retirement before late OS acceptance cannot activate replacement owner',async t=>{const f=setup(t,context);continuous.startDeferred=Promise.withResolvers();f.background();await flush();f.owner.retire();f.s.ownerGeneration++;continuous.startDeferred.resolve({continuousTaskId:73});await flush();assert.equal(continuous.stops.length,1);assert.equal(f.s.phase,4);assert.equal(osTask.requests.length,0);});
@@ -121,6 +122,7 @@ test('retired pending owner remains observable and missing id never stops a repl
  const f=setup(t,context);const old=Promise.withResolvers();continuous.startDeferred=old;f.background();await flush();
  f.owner.retire();assert.equal(f.owner.cleanupPending(),true);
  continuous.startDeferred=null;const newer=new (await import(pathToFileURL(path.join(directory,'owner.mts')))).TransientTaskOwner(f.host,true,()=>{},context);
+ newer.setTaskEnabled(true);
  const ack=()=>({nativeHost:{...f.s},busy:true,manualPaused:false,confirmedPause:false});
  newer.acknowledge(ack());newer.observe(false);newer.acknowledge(ack());await flush();assert.equal(f.s.phase,7);
  old.resolve({notificationId:91});await flush();assert.equal(f.s.phase,7);assert.equal(continuous.stops.length,0);
@@ -134,3 +136,33 @@ test('same owner reentry missing-id late result cannot stop its newer continuous
 });
 
 test('continuous stop failure retains bounded observable cleanup after retirement',async t=>{const f=setup(t,context);f.background();await flush();continuous.stopError=Error('stop failed');f.owner.retire();assert.equal(f.s.available,0);assert.equal(f.owner.cleanupPending(),true);await flush();for(let i=0;i<5;i++){const row=timers.entries().next().value;if(!row)break;timers.delete(row[0]);row[1].fn();await flush();}assert.equal(continuous.stops.length,3);assert.equal(timers.size,0);assert.equal(f.owner.cleanupPending(),true);assert.equal(f.owner.status().get('error'),'ohos_continuous_cancel_failed');continuous.stopError=null;});
+
+test('continuous protection defaults off despite real eligibility; short completion stays available',async t=>{
+ const f=setup(t,context,false);f.background();await flush();
+ assert.equal(continuous.requests.length,0);assert.equal(f.owner.continuousActive(),false);
+ assert.equal(osTask.requests.length,1);
+});
+
+test('turning off during pending OS start cleans the late task without opening admission',async t=>{
+ const f=setup(t,context);continuous.startDeferred=Promise.withResolvers();f.background();await flush();
+ assert.equal(f.owner.continuousActive(),false);f.owner.setTaskEnabled(false);
+ continuous.startDeferred.resolve({continuousTaskId:73});await flush();
+ assert.equal(f.owner.continuousActive(),false);assert.equal(continuous.stops.length,1);
+ assert.equal(f.writes.includes('continuous'),false);assert.equal(osTask.requests.length,0);
+});
+
+test('turning off an accepted continuous task revokes native admission before OS cleanup',async t=>{
+ const f=setup(t,context);f.background();await flush();assert.equal(f.owner.continuousActive(),true);
+ f.owner.setTaskEnabled(false);assert.equal(f.s.phase,4);assert.equal(f.owner.continuousActive(),false);
+ await flush();assert.deepEqual(continuous.stops.map(row=>row.id),[73]);
+ f.owner.acknowledge(f.ack());assert.equal(continuous.requests.length,1);
+});
+
+test('enabling while background needs a fresh current busy ACK and does not trust idle or pause',async t=>{
+ for(const [busy,paused,starts] of [[true,false,1],[false,false,0],[true,true,0]]){
+  const f=setup(t,context,false);f.owner.observe(false);f.owner.setTaskEnabled(true);
+  assert.equal(continuous.requests.length,0);f.owner.acknowledge(f.ack(busy,paused));await flush();
+  assert.equal(continuous.requests.length,starts);
+  f.owner.retire();await flush();
+ }
+});

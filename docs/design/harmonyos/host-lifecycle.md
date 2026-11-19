@@ -41,11 +41,12 @@ pause/resume归属日志新增 `manualPaused` 布尔字段，仍使用既有版�
 | 查询结果 | 上报 | 能推出的结论 |
 | --- | --- | --- |
 | 自应用KEEP_BACKGROUND_RUNNING明确未授予 | denied | 一个必要前提不满足 |
-| 普通权限已授予，MODE_TASK_KEEPING的isModeSupported返回true | granted | 本次资格检查通过；没有创建后台任务 |
+| 普通权限和 KEEP_BACKGROUND_RUNNING_SYSTEM 受限权限已授予，MODE_TASK_KEEPING 的 isModeSupported 返回 true | granted | 本次资格检查通过；没有创建后台任务 |
+| 普通权限已授予，受限权限明确未授予 | denied | 缺少签名 ACL 等必要资格；不是用户能在通知设置里补齐的开关 |
 | 普通权限已授予，模式检查明确false | denied | 本次模式资格不满足 |
 | 系统能力缺失、异常、未知返回值或9800005 | unknown | 无足够证据判定，不冒充用户拒绝 |
 
-没有请求权限，没有添加manifest权限或backgroundModes，没有调用startBackgroundRunning。granted不表示正在保活、获得不间断CPU或免于系统冻结。公开SDK26.0.0.38的两个声明及官方固定源码在交付research/background-permission内逐SHA保存；实现依据如下：
+该资格查询本身不请求权限、不修改 manifest/backgroundModes，也不调用 startBackgroundRunning。真实连续任务由独立 owner 在用户主动开启且有任务时申请，见 [TASK_KEEPING](continuous-task-keeping.md)；后台运行页另报 taskEnabled、taskActive 与稳定的资格/运行错误。granted 仍不表示正在保活、获得不间断 CPU 或免于系统冻结。公开SDK26.0.0.38的两个声明及官方固定源码在交付research/background-permission内逐SHA保存；实现依据如下：
 
 - [固定公开SDK声明](https://github.com/openharmony/interface_sdk-js/blob/8a86234f0d542e5062e24e948652f5a484d90904/api/@ohos.resourceschedule.backgroundTaskManager.d.ts)。实际工具包已过滤系统API，生产代码只用其公开子集。
 - [固定官方长时任务说明](https://github.com/openharmony/docs/blob/f41b9345badd47c7ab0c263344cd7f4b5a549afb/zh-cn/application-dev/task-management/continuous-task.md)。计算模式、ACL、Ability配置和实际任务创建是不同前提。

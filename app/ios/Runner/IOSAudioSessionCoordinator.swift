@@ -35,25 +35,25 @@ protocol IOSAudioSessionBackend: AnyObject {
 }
 
 enum IOSAudioSessionRole: Equatable {
-  case pictureInPicture, companion, recording, call, nativeMedia, silentVideo
+  case pictureInPicture, companion, recording, call, nativeMedia, silentVideo, backgroundProtection
 
   /// Only these roles produce audible output or own microphone input. Losing
   /// an old output route does not itself invalidate silent PiP/video members.
   fileprivate var stopsForRouteLoss: Bool {
     switch self {
-    case .companion, .recording, .call, .nativeMedia: return true
+    case .companion, .recording, .call, .nativeMedia, .backgroundProtection: return true
     case .pictureInPicture, .silentVideo: return false
     }
   }
   fileprivate var shared: Bool {
     switch self {
     case .pictureInPicture, .companion, .silentVideo: return true
-    case .recording, .call, .nativeMedia: return false
+    case .recording, .call, .nativeMedia, .backgroundProtection: return false
     }
   }
   fileprivate var configuration: IOSAudioSessionConfiguration {
     switch self {
-    case .pictureInPicture, .companion: return .sharedOutput
+    case .pictureInPicture, .companion, .backgroundProtection: return .sharedOutput
     case .recording: return .recording
     case .call: return .call
     case .nativeMedia: return .media
@@ -170,6 +170,9 @@ final class IOSAudioSessionCoordinator: NSObject, @unchecked Sendable {
     if let group {
       guard group.installed == session.configuration else { return .replaced }
       let roles = group.members.values.map(\.role)
+      // Background silence never joins or takes over another audio client.
+      if role == .backgroundProtection { return .busy }
+      if roles.allSatisfy({ $0 == .backgroundProtection }) { return nil }
       if role.shared && roles.allSatisfy(\.shared) { return nil }
       if role == .recording && !roles.contains(.recording) { return nil }
       if role == .nativeMedia && roles.allSatisfy(\.shared) { return nil }
