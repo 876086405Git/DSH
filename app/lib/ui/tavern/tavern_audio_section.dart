@@ -42,14 +42,14 @@ class TavernAudioSection extends ConsumerWidget {
             title: type == 'bgm' ? l10n.tavernAudioBgm : l10n.tavernAudioAmbient,
             subtitle: now.title.isEmpty ? l10n.tavernAudioNothing : now.title,
             // The glyph, not its 48 tap box, ends where the switches below end.
-            trailing: Transform.translate(
-              offset: Offset(Directionality.of(context) == TextDirection.rtl ? -12 : 12, 0),
-              child: IconButton(
-                key: ValueKey('tavern-audio-$type-toggle'),
-                tooltip: now.playing ? l10n.tavernAudioPause : l10n.tavernAudioPlay,
-                icon: Icon(now.playing ? AppIcons.mediaPause : AppIcons.mediaPlay),
-                onPressed: now.enabled && now.tracks > 0 ? () => unawaited(audio.toggle(type)) : null,
+            trailing: IconButton(
+              key: ValueKey('tavern-audio-$type-toggle'),
+              tooltip: now.playing ? l10n.tavernAudioPause : l10n.tavernAudioPlay,
+              icon: Transform.translate(
+                offset: Offset(Directionality.of(context) == TextDirection.rtl ? -12 : 12, 0),
+                child: Icon(now.playing ? AppIcons.mediaPause : AppIcons.mediaPlay),
               ),
+              onPressed: now.enabled && now.tracks > 0 ? () => unawaited(audio.toggle(type)) : null,
             ),
           ),
           SettingsSegmentTile<String>(

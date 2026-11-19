@@ -57,22 +57,17 @@ class TavernStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Placed as a row's value, the + glyph (not its tap box) ends where a
-    // switch track or a chevron does, 16 from the card.
+    // Placed as a row's value, the + glyph ends where a switch track or a
+    // chevron does, 16 from the card: what is drawn moves, the 48 tap boxes stay.
     final rtl = Directionality.of(context) == TextDirection.rtl;
-    return Transform.translate(
-      offset: Offset(rtl ? -_glyphInset : _glyphInset, 0),
-      child: _keys(context, theme),
-    );
-  }
-
-  Widget _keys(BuildContext context, ThemeData theme) {
+    Widget shift(Widget child) =>
+        Transform.translate(offset: Offset(rtl ? -_glyphInset : _glyphInset, 0), child: child);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
           key: ValueKey('$keyName-down'),
-          icon: const Icon(AppIcons.decrement, size: _glyph),
+          icon: shift(const Icon(AppIcons.decrement, size: _glyph)),
           onPressed: value > min ? () => onChanged((value - step).clamp(min, max)) : null,
         ),
         InkWell(
@@ -82,18 +77,20 @@ class TavernStepper extends StatelessWidget {
             width: 48,
             height: 40,
             child: Center(
-              child: Text(
-                '$value$suffix',
-                key: ValueKey('$keyName-value'),
-                textAlign: TextAlign.center,
-                style: AppType.tabular(theme.textTheme.titleMedium!),
+              child: shift(
+                Text(
+                  '$value$suffix',
+                  key: ValueKey('$keyName-value'),
+                  textAlign: TextAlign.center,
+                  style: AppType.tabular(theme.textTheme.titleMedium!),
+                ),
               ),
             ),
           ),
         ),
         IconButton(
           key: ValueKey('$keyName-up'),
-          icon: const Icon(AppIcons.increment, size: _glyph),
+          icon: shift(const Icon(AppIcons.increment, size: _glyph)),
           onPressed: value < max ? () => onChanged((value + step).clamp(min, max)) : null,
         ),
       ],
