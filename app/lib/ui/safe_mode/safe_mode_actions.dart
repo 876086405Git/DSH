@@ -195,6 +195,18 @@ abstract final class SafeModeActions {
   /// Starts again in the current mode.
   static Future<void> retry(BuildContext context) => EngineControl.restart(_container(context));
 
+  static Future<void> retryWithTawcroot(BuildContext context) async {
+    final container = _container(context);
+    try {
+      await container.read(runtimeBridgeProvider).setTawcEngine(true);
+      await EngineControl.ensureStarted(container);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.l10n.commonFailedTryAgain)));
+      }
+    }
+  }
+
   /// Starts normally from a failed safe mode (the two-minute trial applies).
   static Future<void> startNormal(BuildContext context) {
     final container = _container(context);

@@ -12648,6 +12648,13 @@ class L10nEn extends L10n {
   String get phoneFailureLaunchHint => 'Check the logs, or connect to a remote host to continue';
 
   @override
+  String get phoneFailureTawcHint =>
+      'PRoot couldn’t run the local engine. Try starting with tawcroot to use your existing runtime and data.';
+
+  @override
+  String get phoneFailureRetryWithTawcroot => 'Start with tawcroot';
+
+  @override
   String get phoneFailureNoSpaceHint => 'Free up some space and try again';
 
   @override
