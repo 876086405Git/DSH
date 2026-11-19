@@ -129,6 +129,24 @@ jobs:
         with:
           persist-credentials: false
 
+      # The phone runner's Rust library takes six minutes to build for its three targets, and
+      # what it is built from rarely changes: kept under the hash of those inputs. With the
+      # copy for these inputs restored, build-phone-self-runner.sh has nothing to build.
+      # (Tried and dropped: starting this build, Flutter's download or the simulator's boot in
+      # the background. The runner's three cores and its network are already full; the steps
+      # they ran under took three to ten times as long, and the job no less.)
+      # In the key besides the sources: LICENSE, which license_inventory.py copies into the
+      # library's notices, and the Xcode this job builds with.
+      - name: Restore the phone runner library
+        id: phone-runner
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/ios/PhoneSelfRunnerNative
+          key: ${{ runner.os }}-${{ runner.arch }}-phone-runner-${{ env.DEVELOPER_DIR }}-${{ hashFiles('tooling/ios/phone-self-runner/**', 'tooling/ios/build-phone-self-runner.sh', 'LICENSE') }}
+      - name: Use the restored phone runner library
+        if: steps.phone-runner.outputs.cache-hit == 'true'
+        run: echo "DSH_PHONE_SELF_RUNNER_RESTORED=1" >> "$GITHUB_ENV"
+
       - name: Check background pause budget and lifecycle grants
         run: |
           python3 -B tooling/ios/test-channel-contract.py -v
@@ -387,6 +405,14 @@ jobs:
           (cd app && bash ../tooling/ios/build.sh --simulator --debug -t integration_test/ios_engine_check.dart)
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode engine
+
+      # build.sh just built it, and the app it is linked into ran.
+      - name: Save the phone runner library
+        if: steps.phone-runner.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/ios/PhoneSelfRunnerNative
+          key: ${{ steps.phone-runner.outputs.cache-primary-key }}
 
       - name: Launch the real app
         if: ${{ !inputs.regression_only && !cancelled() && steps.prepare.outcome == 'success' }}

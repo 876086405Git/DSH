@@ -109,6 +109,31 @@ jobs:
           (cd services/share-worker && npm ci --ignore-scripts --no-audit --no-fund && npm run build && npm run typecheck && npm test)
           node --test site/share/test/viewer_test.mjs
 
+  # A job of its own: on a test shard its minute was the difference between that shard and the others.
+  analyze:
+    name: Flutter analyze
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - *checkout
+      - &flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Analyze, and generated localization matches its source
+        run: |
+          flutter analyze --no-pub
+          python3 tool/l10n_merge.py
+          git diff --exit-code -- lib/l10n
+
   flutter:
     name: Flutter ${{ matrix.shard }}
     needs: changes
@@ -129,12 +154,7 @@ jobs:
     steps:
       - *checkout
       - *node
-      - &flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
+      - *flutter
       # The goldens have Noto Color Emoji 2.051; Ubuntu's 2.047 draws the glyphs differently.
       # Only the files the tests read, cached: the 206 MB of packages sometimes take apt's
       # mirror longer than the job's whole timeout. Saved right after the download, so a
@@ -166,23 +186,59 @@ jobs:
         run: |
           sudo install -Dm644 -t "$DSH_TEST_FONT_DIR" ~/test-fonts/NotoSansCJK-*.ttc
           sudo install -Dm644 ~/test-fonts/NotoColorEmoji.ttf /usr/share/fonts/noto/NotoColorEmoji.ttf
-      - name: Install account shells for SSH bootstrap tests
+      # fish and zsh for test/remote/ssh_start_completion_test.dart, cached like the fonts and
+      # for the same reason. The packages are whatever this runner image lacks, so the image
+      # version is in the key.
+      - name: Name the runner image
+        id: image
+        run: echo "version=$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: Restore the account shells for SSH bootstrap tests
+        id: shells
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/test-shells
+          key: test-shells-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}
+      - name: Download the shells
+        if: steps.shells.outputs.cache-hit != 'true'
         run: |
-          if find test -name '*_test.dart' | sort | awk 'NR % 3 == ${{ matrix.shard }} && $0 == "test/remote/ssh_start_completion_test.dart" { found = 1 } END { exit !found }'; then
-            if [ '${{ steps.fonts.outputs.cache-hit }}' = 'true' ]; then
-              sudo apt-get update -q
-            fi
-            sudo apt-get install -y --no-install-recommends fish zsh
-          fi
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends --download-only fish zsh
+          mkdir -p ~/test-shells
+          echo "$ImageVersion" > ~/test-shells/image
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp {} ~/test-shells/ \;
+      - name: Save the shells
+        if: steps.shells.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/test-shells
+          key: ${{ steps.shells.outputs.cache-primary-key }}
+      - name: Install the shells
+        run: |
+          debs=(~/test-shells/*.deb)
+          [ ! -e "${debs[0]}" ] || sudo dpkg -i "${debs[@]}"
+          fish --version && zsh --version
       - run: flutter pub get --enforce-lockfile
-      - name: Analyze, and generated localization matches its source
-        if: matrix.shard == 0
+      # `flutter test` compiles each test file by itself and starts a process for it; with 1300
+      # files that was four fifths of a shard. A pull request runs them as bundles
+      # (tool/bundle_tests.py): one compile and one process for a directory's files. A file
+      # that fails in its bundle is run again by itself, and that result is the one that counts.
+      - name: Test this shard's bundles
+        if: github.event_name == 'pull_request'
         run: |
-          flutter analyze --no-pub
-          python3 tool/l10n_merge.py
-          git diff --exit-code -- lib/l10n
+          python3 tool/bundle_tests.py --shard ${{ matrix.shard }}/3 > "$RUNNER_TEMP/targets.txt"
+          flutter test --no-pub --concurrency=4 --reporter github --file-reporter "json:$RUNNER_TEMP/bundles.json" $(cat "$RUNNER_TEMP/targets.txt") && exit
+          python3 tool/bundle_tests.py --failed "$RUNNER_TEMP/bundles.json" > "$RUNNER_TEMP/again.txt"
+          echo "::group::Failed in a bundle, run again alone"
+          cat "$RUNNER_TEMP/again.txt"
+          echo "::endgroup::"
+          find test -path '*/failures/*.png' -delete
+          flutter test --no-pub --concurrency=4 --reporter github $(cat "$RUNNER_TEMP/again.txt")
+          echo "::warning::These passed alone and failed in a bundle; list them in app/test/bundle_solo.txt: $(tr '\n' ' ' < "$RUNNER_TEMP/again.txt")"
+      # main runs every file by itself, as a pull request did before the bundles: the result
+      # the bundles are held to.
       # Split by file, not with --total-shards: that still compiles every file on every shard.
       - name: Test every third file
+        if: github.event_name != 'pull_request'
         run: flutter test --no-pub --concurrency=4 --reporter github $(find test -name '*_test.dart' | sort | awk 'NR % 3 == ${{ matrix.shard }}')
       - name: Keep golden diffs
         if: failure()
@@ -204,25 +260,50 @@ jobs:
     steps:
       - *checkout
       - *flutter
-      - run: |
-          for pkg in packages/dsh_client packages/dsh_remote packages/dsh_tavern; do
-            (cd "$pkg" && dart pub get --enforce-lockfile && dart analyze && dart test)
+      - name: Dependencies, and OpenSSH for the transport interoperability tests
+        run: |
+          for pkg in dsh_client dsh_remote dsh_tavern; do
+            (cd "packages/$pkg" && dart pub get --enforce-lockfile)
           done
-      - name: Install OpenSSH for transport interoperability tests
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends openssh-server
+          (cd packages/dartssh2 && PUB_HOSTED_URL=https://pub.dev dart pub get)
+          # The runner image has sshd; apt only if one day it does not (its mirror can stall for minutes).
+          command -v sshd > /dev/null || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends openssh-server; }
           sudo mkdir -p /run/sshd
-      - name: SSH compression and OpenSSH interoperability
-        working-directory: packages/dartssh2
-        env:
-          SSH_COMPRESSION_TEST: 1
-          PUB_HOSTED_URL: https://pub.dev
+      # The packages share nothing and dsh_tavern alone is most of the time: side by side, each
+      # with its own log, printed in order afterwards.
+      - name: Analyze and test the four packages side by side
         run: |
-          dart pub get
-          dart analyze
-          dart test
-          dart test --platform chrome test/src/ssh_compression_web_test.dart
+          names=(dsh_client dsh_remote dsh_tavern dartssh2)
+          pids=()
+          for pkg in "${names[@]}"; do
+            (
+              cd "packages/$pkg"
+              if [ "$pkg" = dartssh2 ]; then
+                # SSH compression and OpenSSH interoperability.
+                export SSH_COMPRESSION_TEST=1 PUB_HOSTED_URL=https://pub.dev
+                dart analyze
+                dart test
+                dart test --platform chrome test/src/ssh_compression_web_test.dart
+              else
+                dart analyze
+                dart test
+              fi
+            ) > "$RUNNER_TEMP/$pkg.log" 2>&1 &
+            pids+=($!)
+          done
+          failed=0
+          for i in "${!names[@]}"; do
+            status=0
+            wait "${pids[$i]}" || status=$?
+            echo "::group::${names[$i]}: exit $status"
+            cat "$RUNNER_TEMP/${names[$i]}.log"
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "::error::packages/${names[$i]} failed; its log is in the group above"
+              failed=1
+            fi
+          done
+          exit "$failed"
 
   runtime:
     name: Runtime and bridge
@@ -308,7 +389,8 @@ jobs:
       DSH_MAVEN_MIRRORS: 0 # The Aliyun mirrors are slow and unreliable from a US runner.
     steps:
       - *checkout
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - &java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '17'
@@ -322,15 +404,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
+      # Without the Flutter build task: it compiles the Dart side for the APK, close to a
+      # minute, and the JVM tests read none of it.
+      - working-directory: app/android
+        run: gradle --stacktrace :app:testArm64DebugUnitTest -x :app:compileFlutterBuildArm64Debug
+
+  # Two minutes that need kotlinc and a JVM but nothing of Flutter or Gradle: on a runner of
+  # its own they come off the Android job, the longest one left.
+  startup-policy:
+    name: Android startup policy
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - *checkout
+      - *java
       - name: Runtime process cleanup and startup policy
         run: python3 runtime/tests/direct/startup-policy.py --output "$RUNNER_TEMP/startup-policy"
-      - working-directory: app/android
-        run: gradle --stacktrace :app:testArm64DebugUnitTest
 
   ci-ok:
     name: CI OK
     if: always()
-    needs: [changes, checks, flutter, dart, runtime, android, ios-runtime]
+    needs: [changes, checks, analyze, flutter, dart, runtime, android, startup-policy, ios-runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

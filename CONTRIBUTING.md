@@ -47,6 +47,8 @@
 
 [CI](.github/workflows/ci.yml) 会在 PR 和 `main` 上跑这些检查：PR 跑通用检查和改动涉及的部分，合入 `main` 后跑全量，结果看 `CI OK`。CI 不碰真机和真实账号，这部分仍要单独验证。
 
+PR 上的 Flutter 测试按目录打包运行（`app/tool/bundle_tests.py`）：一个目录的测试文件编译一次、共用一个进程，每个文件开始前把共用的状态复位。在包里失败的文件 CI 会单独再跑一次，以单独跑的结果为准；单独能过、在包里不过的文件，CI 会在警告里点名，把它加进 `app/test/bundle_solo.txt`。`main` 上仍然每个文件单独跑。
+
 **Flutter 应用：**
 
 ```bash
