@@ -1161,6 +1161,13 @@ abstract final class Spots {
     keywords: (l) => l.searchKwRemoteAutoConnect,
   );
 
+  static final remoteSessionBackup = SettingSpot(
+    'remote-session-backup',
+    page: SettingsPageId.remote,
+    title: (l) => l.backupTitle,
+    keywords: (l) => l.backupSearchKeywords,
+  );
+
   static final remoteCompactHistory = SettingSpot(
     'remote-compact-history',
     page: SettingsPageId.remote,
@@ -1295,6 +1302,7 @@ final _rows = <SettingSpot>[
   Spots.addSshHost,
   Spots.remoteAutoConnect,
   Spots.remoteCompactHistory,
+  Spots.remoteSessionBackup,
   Spots.subagentDepth,
   Spots.parallelCalls,
   Spots.commandTimeout,

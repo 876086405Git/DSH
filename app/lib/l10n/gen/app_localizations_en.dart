@@ -18505,6 +18505,109 @@ class L10nEn extends L10n {
       'End this wait only after confirming the system is no longer installing. Clearing the record does not cancel a system installation or retry/switch routes. Native confirmation is required again.';
 
   @override
+  String get backupRecordFailed =>
+      'The phone could not save the restore record. Keep the conversation ID above and check the target; do not import again.';
+
+  @override
+  String get backupSearchKeywords => 'backup,restore,migrate,copy conversations,sync';
+
+  @override
+  String get backupTitle => 'Conversation backups';
+
+  @override
+  String get backupHint =>
+      'Back up to this phone, then switch hosts to restore into an existing workspace. Each restore creates a new conversation; attachments, source files and cross-session relationships are not included.';
+
+  @override
+  String get backupCancelled => 'Cancelled. Backups already verified and saved remain available.';
+
+  @override
+  String get backupUnknown =>
+      'Result needs checking. Reconnect to the original target to query, or check on that host first. No automatic re-import.';
+
+  @override
+  String backupFailed(String code) {
+    return 'Operation failed ($code). Check the connection or storage before retrying.';
+  }
+
+  @override
+  String backupSaved(int count) {
+    return 'Saved $count backups.';
+  }
+
+  @override
+  String backupSavedCloseFailed(int count) {
+    return 'Saved $count backups. The source export handle could not be closed; disconnection or inactivity will release it.';
+  }
+
+  @override
+  String backupRestoreConfirm(String title, String workspace) {
+    return 'Restore “$title” into “$workspace”? This creates a new conversation without merging or overwriting existing history.';
+  }
+
+  @override
+  String backupRestored(String id) {
+    return 'Restored. New conversation: $id';
+  }
+
+  @override
+  String backupRestoredDetached(String id) {
+    return 'History restored but not attached to the workspace. Conversation ID: $id. Find it on the target; do not import again.';
+  }
+
+  @override
+  String get backupOriginalDevice =>
+      'Use the original Remote device identity to connect to the original target and query the commit result.';
+
+  @override
+  String get backupStorageFailed =>
+      'Cannot read backups. Check app storage and the system key. Existing backups will not be reset or overwritten.';
+
+  @override
+  String get backupConnectHost => 'Connect a paired Remote host to back up or restore conversations.';
+
+  @override
+  String get backupNoWorkspace => 'Waiting for host workspaces. If none exist, create one on the host first.';
+
+  @override
+  String get backupWorkspace => 'Entire workspace';
+
+  @override
+  String get backupToPhone => 'Back up to phone';
+
+  @override
+  String get backupExportUnsupported => 'This host does not offer session export. Update its Remote plugin.';
+
+  @override
+  String get backupImportUnsupported => 'This host does not offer session import. Update its Remote plugin.';
+
+  @override
+  String get backupPending => 'Restores to check';
+
+  @override
+  String get backupCheck => 'Check';
+
+  @override
+  String get backupAcknowledge => 'Checked on the target';
+
+  @override
+  String get backupAcknowledgeConfirm =>
+      'Have you checked the target? Clearing this pending record permits another manual import, which may create a duplicate conversation.';
+
+  @override
+  String get backupOnPhone => 'Backups on this phone';
+
+  @override
+  String get backupEmpty => 'No backups yet. Backups stay on this phone and are lost when the app is uninstalled.';
+
+  @override
+  String get backupRestore => 'Restore to current workspace';
+
+  @override
+  String get backupDeleteConfirm =>
+      'Delete this local backup and its restore records? Conversations on hosts will not be deleted.';
+
+  @override
   String get shellDeletePermanently => 'Delete permanently';
 
   @override

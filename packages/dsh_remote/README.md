@@ -144,6 +144,14 @@ There is no extra client-side 20 MiB cap. The carrier enforces the protocol's ab
 
 Protocol reference: [ds-harness-remote 0.6.2, `479b943`](https://github.com/liguobao/ds-harness-remote/blob/479b94341c0d0de63846f21d0fcca26997d158d1/docs/protocol.md#L1529-L1618), MIT.
 
+### Conversation snapshots
+
+`RemoteSessionTransfer(client.remoteCarrier!.session!)` binds session backup and restore to one live Noise connection. Check `canExport` and `canImport` independently (`session.transfer.export.v1` / `session.transfer.import.v1`). `openExport` accepts a session or workspace scope, `readSession` returns verified opaque gzip bytes, and `closeExport` releases the handle. Only one session (up to 8 MiB compressed) is buffered at a time; no plaintext temporary file is needed.
+
+`restore` validates the saved length and SHA-256, uploads sequential chunks and awaits `beforeCommit` so the caller can durably record the target device, batch and request IDs. Cancellation or failure before commit aborts the handle. An unknown commit outcome raises `SessionImportOutcomeUnknownException`: retain the pending record and query `status` with the original device identity after reconnecting. `null` means unknown or expired, not permission to retry. A false `workspaceAttached` still means history was restored; show the returned conversation ID instead of importing again. Mutations are never replayed automatically.
+
+The app encrypts snapshots and its catalog in private storage, with the key in platform secret storage. Copies use backup-to-phone followed by switching hosts and restoring, because one client device can connect to only one Host. Attachments and workspace source files are not transferred. See the [upstream session-transfer protocol](https://github.com/liguobao/ds-harness-remote/blob/main/docs/protocol.md#跨机器会话传输).
+
 ### Device pairing (scan the computer's code)
 
 Upstream `docs/device-pairing-v1.md` and `docs/dsh-go-pairing-integration.md`, the phone side:
