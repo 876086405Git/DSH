@@ -378,7 +378,7 @@ void main() {
           request,
           envelope(body, {
             'items': [
-              {'sessionId': 'x', 'large': 'x' * (8 * 1024 * 1024)},
+              {'sessionId': 'x', 'large': 'x' * (64 * 1024 * 1024)},
             ],
           }),
           compressed: true,
@@ -397,7 +397,7 @@ void main() {
     final c = client(server);
     await expectLater(
       c.listSessions(),
-      throwsA(isA<DshProtocolException>().having((e) => e.message, 'message', contains('8388608'))),
+      throwsA(isA<DshProtocolException>().having((e) => e.message, 'message', contains('67108864'))),
     );
     expect((await c.listSessions()).single.sessionId, 'recovered');
   });
