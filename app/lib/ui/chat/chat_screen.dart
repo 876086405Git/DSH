@@ -1474,6 +1474,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     showUsageSheet(context, sessionId: sessionId, model: model);
   }
 
+  /// The header's 语音通话 key: a call with the conversation on screen.
+  void _callFromHeader() {
+    HapticFeedback.selectionClick();
+    final scope = _draftScope;
+    unawaited(_startCall(() => mounted && identical(_draftScope, scope)));
+  }
+
   /// 「语音通话」 with this conversation (a new chat gets its conversation
   /// with the first thing said); [ownsDraft]: still the conversation it was asked from.
   Future<void> _startCall(bool Function() ownsDraft) async {
@@ -1950,6 +1957,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                 HapticFeedback.selectionClick();
                                 ref.read(currentSessionProvider.notifier).select(null);
                               },
+                        onCall: isChild ? null : _callFromHeader,
                         // The title pill opens the whole session's details (on a
                         // wide window it folds and unfolds the panel beside us).
                         onTitleTap: sessionId == null
