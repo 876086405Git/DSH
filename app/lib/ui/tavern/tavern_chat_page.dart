@@ -187,6 +187,39 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   final _canvasStream = ValueNotifier<(String, String)?>(null);
   bool _canvasOn = false;
 
+  /// Each message's HTML on the canvas, by node, with the text it was made
+  /// from.
+  var _canvasHtml = <String, (String, String)>{};
+
+  /// [m] as the pages and the canvas show it. A page of display passes comes
+  /// in one a frame; each building the whole page (and the canvas's every
+  /// message) again would be a page build a frame, so they are taken in
+  /// together ([_takeShown]).
+  String _shownOf(TavernMessage m) {
+    final shown = tavernShownTextProvider((widget.chatId, m.nodeId, m.text));
+    ref.listen(shown, (_, _) => unawaited(_takeShown()));
+    return ref.read(shown).value ?? m.text;
+  }
+
+  bool _takingShown = false;
+
+  /// Builds the page again for the display passes that came in: once all
+  /// those asked for are done, or [_shownBeat] after the first of them,
+  /// whichever is sooner.
+  Future<void> _takeShown() async {
+    if (_takingShown) return;
+    _takingShown = true;
+    final queue = ref.read(_displayQueueProvider);
+    final since = Stopwatch()..start();
+    while (!queue.idle && since.elapsed < _shownBeat) {
+      await SchedulerBinding.instance.endOfFrame;
+    }
+    _takingShown = false;
+    if (mounted) setState(() {});
+  }
+
+  static const _shownBeat = Duration(milliseconds: 200);
+
   /// A card's script on the canvas asking the engine (dsh.call): in this
   /// chat's own script context, opened on its first call.
   TavernCanvasCalls? _calls;
@@ -1623,13 +1656,34 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
           ].length
         : 0;
     // The pages and the canvas read each message as shown, through the
-    // display regex; the bubble and novel rows ask for their own.
+    // display regex; the bubble and novel rows ask for their own. Newest
+    // first: the passes run in the order asked, and the newest are what the
+    // page and the canvas show first.
     final shownText = layout == TavernLayout.visualNovel || canvas
-        ? {
-            for (final m in messages ?? const <TavernMessage>[])
-              m.nodeId: ref.watch(tavernShownTextProvider((widget.chatId, m.nodeId, m.text))).value ?? m.text,
-          }
+        ? {for (final m in (messages ?? const <TavernMessage>[]).reversed) m.nodeId: _shownOf(m)}
         : const <String, String>{};
+    // Each message's HTML made again only when its shown text changed.
+    final canvasEntries = <TavernCanvasEntry>[];
+    if (canvas) {
+      final made = <String, (String, String)>{};
+      for (final (i, m) in (messages ?? const <TavernMessage>[]).indexed) {
+        if (_running && m.nodeId == _streamNode) continue;
+        final source = tavernStripMarkers(shownText[m.nodeId] ?? m.text);
+        final kept = _canvasHtml[m.nodeId];
+        final html = made[m.nodeId] = kept != null && kept.$1 == source ? kept : (source, tavernStoryHtml(source));
+        canvasEntries.add(
+          TavernCanvasEntry(
+            mesid: i,
+            nodeId: m.nodeId,
+            name: tavernSpeaker(context, m),
+            isUser: m.role == TavernRole.user,
+            isSystem: m.role == TavernRole.narrator || m.role == TavernRole.system,
+            html: html.$2,
+          ),
+        );
+      }
+      _canvasHtml = made;
+    }
 
     final cardPicture = cardTheme?.background;
     final scene =
@@ -1767,18 +1821,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                   )
                 : canvas
                 ? ref.watch(tavernCanvasBuilderProvider)(
-                    entries: [
-                      for (final (i, m) in (messages ?? const <TavernMessage>[]).indexed)
-                        if (!(_running && m.nodeId == _streamNode))
-                          TavernCanvasEntry(
-                            mesid: i,
-                            nodeId: m.nodeId,
-                            name: tavernSpeaker(context, m),
-                            isUser: m.role == TavernRole.user,
-                            isSystem: m.role == TavernRole.narrator || m.role == TavernRole.system,
-                            html: tavernStoryHtml(tavernStripMarkers(shownText[m.nodeId] ?? m.text)),
-                          ),
-                    ],
+                    entries: canvasEntries,
                     streaming: _canvasStream,
                     onMenu: (node) {
                       final m = messages?.where((m) => m.nodeId == node).firstOrNull;
@@ -2583,6 +2626,9 @@ final _displayQueueProvider = Provider<_DisplayQueue>((ref) => _DisplayQueue());
 class _DisplayQueue {
   Future<void> _tail = Future<void>.value();
   int _queued = 0;
+
+  /// No pass waiting or running.
+  bool get idle => _queued == 0;
 
   Future<T> run<T>(Future<T> Function() job, {required bool Function() alive, required T orElse}) async {
     final behind = _queued > 0 ? _tail : null;
