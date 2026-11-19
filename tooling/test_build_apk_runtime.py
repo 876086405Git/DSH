@@ -41,7 +41,8 @@ class BuildApkRuntimeTest(unittest.TestCase):
         # Stand-in for tooling/companion_pack.py: notes each call; the pack is a placeholder file.
         self.pack_file = self.root / "pack-calls.txt"
         (self.root / "tooling/companion_pack.py").write_text(
-            "import os, sys\nopen(os.environ['RUNTIME_GATE_TEST_PACK'], 'a').write(' '.join(sys.argv[1:]) + '\\n')\n")
+            "import os, sys\nopen(os.environ['RUNTIME_GATE_TEST_PACK'], 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
+            "sys.exit(int(os.environ.get('PACK_CHECK_EXIT', '0')) if sys.argv[1] == 'check' else 0)\n")
         pack = self.root / "whale-girl-source.zip"
         pack.write_bytes(b"pack")
         self.calls_file = self.root / "flutter-calls.jsonl"
@@ -82,6 +83,12 @@ apk.write_bytes(b'fake APK: shell flow only')
         self.assertEqual(result.returncode, 0, result.stderr)
         place, check = self.pack_file.read_text().splitlines()
         self.assertTrue(place.startswith("place ") and check.startswith("check "), (place, check))
+
+        self.env["PACK_CHECK_EXIT"] = "1"
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("companion pack", result.stderr)
+        del self.env["PACK_CHECK_EXIT"]
 
         self.pack_file.unlink()
         self.env["DSH_COMPANION_PACK"] = str(self.root / "missing.zip")
