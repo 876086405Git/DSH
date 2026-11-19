@@ -47,6 +47,8 @@ Run these commands from the repository root. Select checks relevant to your chan
 
 [CI](.github/workflows/ci.yml) runs these checks on PRs and `main`: a PR runs the general checks plus what it touches, a push to `main` runs everything, and `CI OK` is the result to read. CI has no devices or real accounts, so verify those separately.
 
+On a PR the Flutter tests run as bundles, one per directory (`app/tool/bundle_tests.py`): a directory's test files are compiled once and share a process, and the shared state is reset before each file. CI runs a file that fails in its bundle once more by itself, and that result is the one that counts; a file that passes alone and fails in its bundle is named in a CI warning, and belongs in `app/test/bundle_solo.txt`. `main` still runs every file by itself.
+
 **Flutter app:**
 
 ```bash

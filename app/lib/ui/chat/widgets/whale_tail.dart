@@ -78,6 +78,13 @@ abstract final class WhaleSprites {
     }
   }();
 
+  /// 测试用:回到还没加载的样子。
+  @visibleForTesting
+  static void reset() {
+    _atlas = null;
+    _loading = null;
+  }
+
   static Future<WhaleAtlas> _load(AssetBundle bundle) async {
     final json = jsonDecode(await bundle.loadString(manifest)) as Map<String, Object?>;
     final levels = <int, WhaleSheet>{};
