@@ -32324,6 +32324,174 @@ abstract class L10n {
   /// **'只有确认系统已不在安装时才结束等待。清除本次记录不等于取消系统安装；不会自动重试或切换路线，仍需再次原生确认。'**
   String get selfUpdateEndWaitingNote;
 
+  /// No description provided for @backupRecordFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机未能保存恢复记录。请记下上面的对话 ID 并检查目标主机，不要重复导入。'**
+  String get backupRecordFailed;
+
+  /// No description provided for @backupSearchKeywords.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份,恢复,迁移,复制对话,同步,backup,restore'**
+  String get backupSearchKeywords;
+
+  /// No description provided for @backupTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话备份'**
+  String get backupTitle;
+
+  /// No description provided for @backupHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份到手机后，可切换主机恢复到已有工作区。每次恢复会新建对话；不含附件、源码和跨对话关系。'**
+  String get backupHint;
+
+  /// No description provided for @backupCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消，已校验保存的备份仍可恢复。'**
+  String get backupCancelled;
+
+  /// No description provided for @backupUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'结果待核对：请连接原目标主机查询，或先在目标端检查。不会自动重新导入。'**
+  String get backupUnknown;
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作失败（{code}）。请检查连接或存储后重试。'**
+  String backupFailed(String code);
+
+  /// No description provided for @backupSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存 {count} 条备份。'**
+  String backupSaved(int count);
+
+  /// No description provided for @backupSavedCloseFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存 {count} 条备份，源主机导出句柄未能关闭；断线或闲置后会自动释放。'**
+  String backupSavedCloseFailed(int count);
+
+  /// No description provided for @backupRestoreConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'将“{title}”恢复到“{workspace}”？会创建一条新对话，不合并或覆盖已有历史。'**
+  String backupRestoreConfirm(String title, String workspace);
+
+  /// No description provided for @backupRestored.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复，新对话：{id}'**
+  String backupRestored(String id);
+
+  /// No description provided for @backupRestoredDetached.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史已恢复，未加入工作区。对话 ID：{id}。请在目标端查找，不要重复导入。'**
+  String backupRestoredDetached(String id);
+
+  /// No description provided for @backupOriginalDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'请使用原 Remote 设备身份连接原目标主机，再查询提交结果。'**
+  String get backupOriginalDevice;
+
+  /// No description provided for @backupStorageFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取备份。请检查应用存储和系统密钥；不会重置或覆盖已有备份。'**
+  String get backupStorageFailed;
+
+  /// No description provided for @backupConnectHost.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接一台已配对的 Remote 主机，即可备份或恢复。'**
+  String get backupConnectHost;
+
+  /// No description provided for @backupNoWorkspace.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待主机工作区列表；没有工作区时请先在主机上创建。'**
+  String get backupNoWorkspace;
+
+  /// No description provided for @backupWorkspace.
+  ///
+  /// In zh, this message translates to:
+  /// **'整个工作区'**
+  String get backupWorkspace;
+
+  /// No description provided for @backupToPhone.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份到手机'**
+  String get backupToPhone;
+
+  /// No description provided for @backupExportUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'此主机未提供对话导出能力，请更新主机 Remote 插件。'**
+  String get backupExportUnsupported;
+
+  /// No description provided for @backupImportUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'此主机未提供对话恢复能力，请更新主机 Remote 插件。'**
+  String get backupImportUnsupported;
+
+  /// No description provided for @backupPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'待核对的恢复'**
+  String get backupPending;
+
+  /// No description provided for @backupCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询'**
+  String get backupCheck;
+
+  /// No description provided for @backupAcknowledge.
+  ///
+  /// In zh, this message translates to:
+  /// **'已在目标端核对'**
+  String get backupAcknowledge;
+
+  /// No description provided for @backupAcknowledgeConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认已在目标端核对？清除此待确认记录后，可手动再导入，但可能创建重复对话。'**
+  String get backupAcknowledgeConfirm;
+
+  /// No description provided for @backupOnPhone.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机上的备份'**
+  String get backupOnPhone;
+
+  /// No description provided for @backupEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有备份。备份仅保存在本机，卸载 App 会丢失。'**
+  String get backupEmpty;
+
+  /// No description provided for @backupRestore.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复到当前工作区'**
+  String get backupRestore;
+
+  /// No description provided for @backupDeleteConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除手机上的这条备份及其恢复记录？不会删除主机上的对话。'**
+  String get backupDeleteConfirm;
+
   /// No description provided for @shellDeletePermanently.
   ///
   /// In zh, this message translates to:

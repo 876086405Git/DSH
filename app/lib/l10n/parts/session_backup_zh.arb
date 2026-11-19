@@ -1,0 +1,75 @@
+{
+  "backupRecordFailed": "手机未能保存恢复记录。请记下上面的对话 ID 并检查目标主机，不要重复导入。",
+  "backupSearchKeywords": "备份,恢复,迁移,复制对话,同步,backup,restore",
+  "backupTitle": "对话备份",
+  "backupHint": "备份到手机后，可切换主机恢复到已有工作区。每次恢复会新建对话；不含附件、源码和跨对话关系。",
+  "backupCancelled": "已取消，已校验保存的备份仍可恢复。",
+  "backupUnknown": "结果待核对：请连接原目标主机查询，或先在目标端检查。不会自动重新导入。",
+  "backupFailed": "操作失败（{code}）。请检查连接或存储后重试。",
+  "@backupFailed": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSaved": "已保存 {count} 条备份。",
+  "@backupSaved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupSavedCloseFailed": "已保存 {count} 条备份，源主机导出句柄未能关闭；断线或闲置后会自动释放。",
+  "@backupSavedCloseFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreConfirm": "将“{title}”恢复到“{workspace}”？会创建一条新对话，不合并或覆盖已有历史。",
+  "@backupRestoreConfirm": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestored": "已恢复，新对话：{id}",
+  "@backupRestored": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoredDetached": "历史已恢复，未加入工作区。对话 ID：{id}。请在目标端查找，不要重复导入。",
+  "@backupRestoredDetached": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "backupOriginalDevice": "请使用原 Remote 设备身份连接原目标主机，再查询提交结果。",
+  "backupStorageFailed": "无法读取备份。请检查应用存储和系统密钥；不会重置或覆盖已有备份。",
+  "backupConnectHost": "连接一台已配对的 Remote 主机，即可备份或恢复。",
+  "backupNoWorkspace": "等待主机工作区列表；没有工作区时请先在主机上创建。",
+  "backupWorkspace": "整个工作区",
+  "backupToPhone": "备份到手机",
+  "backupExportUnsupported": "此主机未提供对话导出能力，请更新主机 Remote 插件。",
+  "backupImportUnsupported": "此主机未提供对话恢复能力，请更新主机 Remote 插件。",
+  "backupPending": "待核对的恢复",
+  "backupCheck": "查询",
+  "backupAcknowledge": "已在目标端核对",
+  "backupAcknowledgeConfirm": "确认已在目标端核对？清除此待确认记录后，可手动再导入，但可能创建重复对话。",
+  "backupOnPhone": "手机上的备份",
+  "backupEmpty": "还没有备份。备份仅保存在本机，卸载 App 会丢失。",
+  "backupRestore": "恢复到当前工作区",
+  "backupDeleteConfirm": "删除手机上的这条备份及其恢复记录？不会删除主机上的对话。"
+}
