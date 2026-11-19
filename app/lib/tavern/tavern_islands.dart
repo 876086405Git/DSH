@@ -40,6 +40,17 @@ final class TavernComponentPart extends TavernPart {
   final TavernComponent component;
 }
 
+/// Whether an island's [html] may use the bundled library [name]: jQuery and
+/// lodash always (small, and used bare); zod and YAML when the page names
+/// them, imports a module (an MVU bundle reaches for them) or uses MVU.
+bool tavernIslandNeeds(String name, String html) => switch (name) {
+  'zod' => _wantsZod.hasMatch(html),
+  'YAML' => _wantsYaml.hasMatch(html),
+  _ => true,
+};
+final _wantsZod = RegExp(r'\bz\s*\.|\bimport\b|\bMvu\b|waitGlobalInitialized');
+final _wantsYaml = RegExp(r'\bYAML\b|\bimport\b|\bMvu\b|waitGlobalInitialized');
+
 /// A page's colours as CSS variables (`--dsh-<name>`), and the scheme its form
 /// controls take: light text, a dark page; so a control a card styled without
 /// a text colour (ST gives it the body's) is not black. Set again in place on a

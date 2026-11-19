@@ -47,6 +47,9 @@ typedef TavernCanvasBuilder = Widget Function({
 /// The libraries card scripts find on the canvas page, as 酒馆助手's pages
 /// give them: jQuery, lodash, zod (`z`) and `YAML` (bundled; licences in
 /// THIRD_PARTY_NOTICES.md). Islands get them too.
+/// The libraries' names, in [tavernCanvasLibrariesProvider]'s order.
+const tavernLibraryNames = ['jQuery', 'lodash', 'zod', 'YAML'];
+
 final tavernCanvasLibrariesProvider = FutureProvider<List<String>>(
   (ref) async => [
     await rootBundle.loadString('assets/tavern/jquery-3.7.1.min.js'),

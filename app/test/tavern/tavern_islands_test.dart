@@ -124,6 +124,16 @@ void main() {
     expect(tavernIsFrontend('<div>x</div>'), isFalse);
   });
 
+  test('zod and YAML go only into the islands that could use them', () {
+    expect(tavernIslandNeeds('jQuery', '<div>x</div>'), isTrue);
+    expect(tavernIslandNeeds('zod', r'<div>x</div><script>$(".a").hide()</script>'), isFalse);
+    expect(tavernIslandNeeds('zod', '<script type="module">const s = z.object({});</script>'), isTrue);
+    expect(tavernIslandNeeds('zod', "<script>import 'https://x/mvu.js'</script>"), isTrue);
+    expect(tavernIslandNeeds('YAML', '<script>YAML.parse(t)</script>'), isTrue);
+    expect(tavernIslandNeeds('YAML', '<script>Mvu.getMvuData()</script>'), isTrue);
+    expect(tavernIslandNeeds('YAML', '<script>lazy()</script>'), isFalse);
+  });
+
   test('a fence closes on a run of its own mark at least as long, as CommonMark has it', () {
     expect((tavernParts('```text\n<body>x</body>\n````').single as TavernIslandPart).html, '<body>x</body>');
     expect((tavernParts('~~~~\n<body>y</body>\n~~~~~').single as TavernIslandPart).html, '<body>y</body>');

@@ -18,7 +18,7 @@ import '../../tavern/tavern_islands.dart';
 import '../../tavern/tavern_provider.dart' show tavernPersonaSelectionProvider;
 import '../../tavern/tavern_settings.dart';
 import '../web/web_view_guard.dart';
-import 'tavern_canvas_view.dart' show tavernCanvasLibrariesProvider;
+import 'tavern_canvas_view.dart' show tavernCanvasLibrariesProvider, tavernLibraryNames;
 import 'tavern_toasts.dart';
 
 /// Builds the island for a part's HTML. Tests swap it.
@@ -251,7 +251,11 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     // The reader's name (SillyTavern's name1).
     final persona = at == null ? null : ref.watch(tavernPersonaSelectionProvider(at.chatId));
     final waiting = (libraries?.isLoading ?? false) || (story?.isLoading ?? false) || (persona?.isLoading ?? false);
-    final libs = libraries?.value ?? const <String>[];
+    // zod and YAML (over half a megabyte) only where the page could use them.
+    final libs = [
+      for (final (i, code) in (libraries?.value ?? const <String>[]).indexed)
+        if (tavernIslandNeeds(tavernLibraryNames[i], widget.html)) code,
+    ];
     final name1 = persona?.value?.persona?.name;
     final from = (story?.value, at?.nodeId, at?.text, name1);
     if (waiting == _waiting && libs.length == _libraries.length && from == _storyFrom) return;
