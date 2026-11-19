@@ -370,7 +370,7 @@ class _SessionBackupPageState extends ConsumerState<SessionBackupPage> {
                         ),
                         IconButton(
                           tooltip: l10n.backupAcknowledge,
-                          icon: const Icon(Icons.check),
+                          icon: const Icon(AppIcons.done),
                           onPressed: _busy
                               ? null
                               : () => unawaited(

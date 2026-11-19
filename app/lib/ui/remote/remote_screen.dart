@@ -98,15 +98,6 @@ class RemoteScreen extends ConsumerWidget {
       actions: const [AskAiButton(AskAiTopic.remote)],
       children: [
         _ActiveCard(active: active),
-        SettingsSection(
-          children: [
-            SettingsTile(
-              icon: AppIcons.save,
-              spot: Spots.remoteSessionBackup,
-              onTap: () => push(const SessionBackupPage()),
-            ),
-          ],
-        ),
         _RelaySection(onUse: (h) => _use(context, ref, h)),
         SettingsSection(
           title: l10n.remoteTransferSettings,
@@ -166,6 +157,15 @@ class RemoteScreen extends ConsumerWidget {
               ),
             ],
           ),
+        SettingsSection(
+          children: [
+            SettingsTile(
+              icon: AppIcons.save,
+              spot: Spots.remoteSessionBackup,
+              onTap: () => push(const SessionBackupPage()),
+            ),
+          ],
+        ),
       ],
     );
   }
