@@ -163,11 +163,12 @@ stop_daemon() {
 drop_beta() { [[ -f $beta_json ]] && shred -u "$beta_json" 2>/dev/null || rm -f "$beta_json"; }
 # --no-companion: a pack an earlier build placed waits outside the assets meanwhile.
 pack_asset="$APP/assets/companion/whale-girl.zip" pack_held="$APP/build/.whale-girl.zip.held"
-put_back_pack() { [[ ! -f $pack_held ]] || mv -f "$pack_held" "$pack_asset"; }
+pack_moved=0 # only this build's own move is put back, never one a killed build left
+put_back_pack() { ((!pack_moved)) || mv -f "$pack_held" "$pack_asset"; }
 trap 'drop_beta; stop_daemon; put_back_pack' EXIT
 if ((no_companion)) && [[ -f $pack_asset ]]; then
   mkdir -p "$APP/build"
-  mv -f "$pack_asset" "$pack_held"
+  mv -f "$pack_asset" "$pack_held" && pack_moved=1
 fi
 if ((beta)); then
   mkdir -p "$APP/build"
