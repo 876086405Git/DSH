@@ -451,7 +451,7 @@
   "phoneDirectNeedsRuntime": "This option needs a runtime with direct launch support.",
   "phoneDirectChangeFailed": "Could not change the launch method. Stop the local engine and try again.",
   "phoneTawcEngine": "tawcroot fast launch",
-  "phoneTawcHint": "Experimental and off by default; applies on the next start. Only one of this and direct launch can be on. Runs the local engine with tawcroot instead of compatible launch: it starts about three times faster, and package installs and apt get faster too. If it can’t start, the app goes back to compatible launch on its own. The first start after you turn it off first turns the hard links it made into ordinary files, which can take a little longer.",
+  "phoneTawcHint": "On by default; a change applies on the next start. Only one of this and direct launch can be on. Runs the local engine with tawcroot instead of compatible launch: it starts about three times faster, and package installs and apt get faster too. If it can’t start, the app goes back to compatible launch on its own. The first start after you turn it off first turns the hard links it made into ordinary files, which can take a little longer.",
   "phoneTawcFailedHint": "tawcroot didn’t start on this phone, so compatible launch is used. Stop the engine and turn this on to try again.",
   "phoneTawcUnavailable": "This build doesn’t include tawcroot, or the phone runs a version older than Android 10.",
   "phoneLaunchTawcroot": "tawcroot",

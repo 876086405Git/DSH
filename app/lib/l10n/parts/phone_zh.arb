@@ -666,7 +666,7 @@
   "phoneDirectNeedsRuntime": "此选项需要支持直接启动的运行环境。",
   "phoneDirectChangeFailed": "未能切换启动方式，请停止本机引擎后重试。",
   "phoneTawcEngine": "tawcroot 加速启动",
-  "phoneTawcHint": "实验功能，默认关闭，下次启动生效，和「直接启动」二选一。用 tawcroot 代替兼容启动运行本机引擎：启动快约三倍，装包、apt 也更快。启动不成功会自动改回兼容启动。关掉后的第一次启动会先把它留下的硬链接整理成普通文件，可能要多等一会。",
+  "phoneTawcHint": "默认开启，改动下次启动生效，和「直接启动」二选一。用 tawcroot 代替兼容启动运行本机引擎：启动快约三倍，装包、apt 也更快。启动不成功会自动改回兼容启动。关掉后的第一次启动会先把它留下的硬链接整理成普通文件，可能要多等一会。",
   "phoneTawcFailedHint": "这台手机上 tawcroot 没有启动成功，已改用兼容启动。停止引擎后打开可再试一次。",
   "phoneTawcUnavailable": "这个安装包不含 tawcroot，或系统低于 Android 10。",
   "phoneLaunchTawcroot": "tawcroot",

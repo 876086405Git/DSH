@@ -154,7 +154,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         "tawcEngineAvailable" to (tawcEngineUnavailable() == null),
         "tawcEngineActive" to (process?.executionMode == "tawcroot"),
         "tawcRecoveryAvailable" to (failure?.prootCompatibilityFailure == true && !currentModeSafe() &&
-            !prefs.getBoolean(K_TAWC_ENGINE, false) && tawcEngineUnavailable() == null),
+            tawcEngine().saved != true && tawcEngineUnavailable() == null),
         "currentExecutionMode" to process?.executionMode,
         "launchSelectedMode" to lastLaunch?.selectedMode,
         "launchSpawned" to (lastLaunch?.spawned == true),
@@ -168,12 +168,18 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         failedRuntime = prefs.getString(K_DIRECT_FAILED, null),
         runtime = runCatching { manifest.runtimeVersion }.getOrNull(),
     )
-    private fun tawcEngine() = DirectLaunch.Preference(
-        saved = prefs.getBoolean(K_TAWC_ENGINE, false),
-        available = tawcEngineUnavailable() == null,
-        failedRuntime = prefs.getString(K_TAWC_FAILED, null),
-        runtime = runCatching { manifest.runtimeVersion }.getOrNull(),
-    )
+    private fun tawcEngine(): DirectLaunch.Preference {
+        val available = tawcEngineUnavailable() == null
+        return DirectLaunch.Preference(
+            // On by default where this build can run it, unless Direct was chosen. A start that
+            // never gets DSH up falls back to PRoot for this runtime (K_TAWC_FAILED).
+            saved = if (prefs.contains(K_TAWC_ENGINE)) prefs.getBoolean(K_TAWC_ENGINE, false)
+                else available && !prefs.getBoolean(K_DIRECT_ENGINE, false),
+            available = available,
+            failedRuntime = prefs.getString(K_TAWC_FAILED, null),
+            runtime = runCatching { manifest.runtimeVersion }.getOrNull(),
+        )
+    }
     private fun tawcEngineUnavailable(): String? =
         TawcrootLaunch.unavailable(app.applicationInfo.nativeLibraryDir, android.os.Build.VERSION.SDK_INT)
 
@@ -195,7 +201,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     }
 
     /**
-     * The opt-in tawcroot launch, off by default; same rules as [setDirectEngine]. Only one
+     * The tawcroot launch, on by default; same rules as [setDirectEngine]. Only one
      * of the two is on at a time. Turning it on forgets an earlier failed tawcroot start.
      */
     @Synchronized fun setTawcEngine(enabled: Boolean) {
