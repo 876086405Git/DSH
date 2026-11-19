@@ -33,6 +33,7 @@ import '../../tavern/tavern_islands.dart';
 import '../../tavern/tavern_canvas.dart';
 import '../../tavern/tavern_canvas_calls.dart';
 import '../../tavern/tavern_card_scripts.dart';
+import '../../tavern/tavern_script_wire.dart' show tavernScriptKey;
 import '../../tavern/tavern_components.dart' show tavernComponentTagsOut;
 import '../../tavern/tavern_jump.dart';
 import '../../tavern/tavern_markers.dart';
@@ -1071,10 +1072,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   /// A quick reply sends as it is; on failure it waits in the box.
   /// A card script's button: pressed in the page, where the script listens
   /// for it (eventOn(getButtonEvent(name))).
-  void _pressScriptButton(String scriptId, String name) {
+  void _pressScriptButton(String key, String name) {
     unawaited(HapticFeedback.selectionClick());
     final deliver = _canvasCalls.deliver;
-    if (deliver != null) unawaited(deliver({'kind': 'button', 'scriptId': scriptId, 'name': name}));
+    if (deliver != null) unawaited(deliver({'kind': 'button', 'key': key, 'name': name}));
   }
 
   void _sendQuick(String text) {
@@ -1592,16 +1593,17 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         if (tavernUsesMvu(card.value)) _mvuOn = _turnOnMvu();
       }
     }
-    // The buttons the card's own scripts show: only where those scripts run
-    // (the canvas, scripts on, one character).
-    final scriptCharacter = _canvasCharacter;
+    // The buttons the chat's scripts (global, preset, card) show, by each
+    // one's key: only where those scripts run (the canvas, scripts on).
     // A script that changed its buttons (replaceScriptButtons…) shows those.
     final live = _calls?.liveButtons.value ?? const <String, List<String>>{};
-    final scriptButtons =
-        canvas && scriptCharacter != null && !ref.watch(tavernSettingsProvider.select((s) => s.islandNoScripts))
+    final scriptButtons = canvas && !ref.watch(tavernSettingsProvider.select((s) => s.islandNoScripts))
         ? [
-            for (final s in ref.watch(tavernCardScriptsProvider(scriptCharacter)).value ?? const <TavernCardScript>[])
-              for (final b in live[s.id] ?? s.buttons) (s.id, b),
+            for (final s
+                in ref.watch(tavernChatScriptsProvider((widget.chatId, _canvasCharacter))).value?.scripts ??
+                    const <TavernRunnableScript>[])
+              if (s.buttonsEnabled)
+                for (final b in live[tavernScriptKey(s.owner)] ?? tavernScriptButtons(s)) (tavernScriptKey(s.owner), b),
           ]
         : const <(String, String)>[];
     // The card's own scripts, where they wait on 整页画布 being on (off, and
@@ -1613,7 +1615,12 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         hintCharacter != null &&
             !ref.watch(tavernSettingsProvider.select((s) => s.islandNoScripts)) &&
             ref.watch(tavernScriptsHintOffProvider(hintCharacter)).value == false
-        ? (ref.watch(tavernCardScriptsProvider(hintCharacter)).value ?? const <TavernCardScript>[]).length
+        ? [
+            for (final s
+                in ref.watch(tavernChatScriptsProvider((widget.chatId, hintCharacter))).value?.scripts ??
+                    const <TavernRunnableScript>[])
+              if (s.owner.kind == TavernScriptOwnerKind.character) s,
+          ].length
         : 0;
     // The pages and the canvas read each message as shown, through the
     // display regex; the bubble and novel rows ask for their own.
@@ -1634,6 +1641,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       turn: messages?.lastOrNull?.nodeId,
       topInset: topInset,
       characterId: characterId,
+      scriptsCharacterId: _canvasCharacter,
       name: name,
       busy: _running,
       onSuggest: _suggest,

@@ -1129,7 +1129,7 @@ swipes 留存索引保留原 nodeId，至少一页。裁掉入场目标或选中
 | message | 指定稳定页的有效 state.messageVariables，独立于 chat locals |
 | script | owner(kind,assetId)+scriptId 的 data；卡/预设保留原脚本树，全局为 settings.json 的 scriptData |
 
-卡/预设脚本定位支持公开 folder.scripts 结构，兼容已有 children 容器；同名或相同 scriptId 不跨 owner 合并。脚本数据与 iframe instance 无关。未知 JSON 字段保留，不扩成安装/执行脚本管理器。
+卡/预设脚本定位支持公开 folder.scripts 结构，兼容已有 children 容器；同名或相同 scriptId 不跨 owner 合并。脚本数据与 iframe instance 无关。未知 JSON 字段保留；全局库管理和当前对话运行清单见下文“第七波：脚本库接入”。
 
 输入在调用时严格深拷贝，只接受 null、String、bool、有限 num、字符串键 Map 和 List；循环、自定义对象/函数、非字符串键、NaN/Infinity 报 invalidJson，不调用任意 `toJson`。replace 完整替换对象；对象成员 null 是值，只有 remove 才删除。mutate 使用已拆路径 token；insertIfAbsent 按存在性判断，null/false/0/空串均已存在；数组删除收缩数组，不制造稀疏洞。
 
@@ -1302,3 +1302,48 @@ R5 的修改范围保持有限：
 后续 137 已选执行父链为：**干净 `4af464df` → owner 原始未格式化 `checkpoint-135-P2-B3-r3.patch` 一次 → 真正同时包含 R4 与 R5 的 R5-on-R3 delta 一次**。不能再另叠 R4 delta；不以 raw136 为父，也不在此链叠加 full-on-B2。R5 full-on-B2 累计补丁仍用于完整当前层审查与接入，和上述执行 delta 的用途分开。raw135 原件由 owner 持有，本地 R3 代表只支持静态接点核对；raw136 也只收到 owner 留存的名称、规模与校验元数据，未取得其原始字节。本节编写时 137 尚未正式创建，补丁身份、正式请求 ID 与时钟以真实最终发布记录为准。
 
 完整 HB 仍 OPEN，mixed String/object entries 的 Fuse 合同域仍未定，完整 Unicode/浮点域与任意浏览器运行时的等价未由这些修正证明。App 状态继续按上文 ADDENDUM-04 的 owner 报告：invoke 已接但 filter 尚无真实生成准备验证；interact 原生界面已完成但未接 host；resolveSlash 仍拒绝。真实 App/MVU/device 及其它原未覆盖范围保持。下一阶段已有 owner 决策不撤销，但阶段一实施仍须后继 B3 实际通过、正式交付和 owner 合并主线三项全部完成；本次没有启动该阶段。
+
+# 第七波：脚本库接入
+
+`Tavern` 现在管理全局脚本库，并读取这个对话实际应运行的全局、当前预设、角色卡脚本。引擎仍不执行 JavaScript；App 负责脚本库页面、隐藏 iframe、按钮和既有 host 协议。
+
+| API | 行为 |
+| --- | --- |
+| `listGlobalScripts()` / `watchGlobalScripts()` | 有序树，包含禁用项与文件夹；`TavernScriptLibraryEntry.raw` 是脱离的当前 JSON。 |
+| `importGlobalScripts(text)` | 接收裸 script、裸 folder 或完整树数组；保存原 enabled，不主动运行，返回实际采用的树。 |
+| `setGlobalScriptEnabled(id, enabled)` | 改指定脚本或文件夹；关文件夹屏蔽子树，保留各子项开关。 |
+| `setGlobalScriptOrder(ids, folderId: ...)` | 提交一个父目录的完整同级排列；省略 folderId 表示根，不能借遗漏 id 删除。 |
+| `deleteGlobalScript(id)` | 删除该项/子树及其叶脚本的全局变量和按钮行；其他主人的数据不变。 |
+| `exportGlobalScripts(id: ...)` | 指定 id 导出一个对象，省略则导出完整树数组；从实时载体拼回 data/button，保留 export_with 原值。 |
+| `chatScripts(chatId, characterId: ...)` / `watchChatScripts(...)` | 返回 `TavernChatScripts`：实际 characterId、按全局→当前预设→卡排序的 scripts，以及无法建立唯一主人的旧数据 issues。 |
+
+全局库与既有 `scriptData`、`scriptButtons` 同在 settings.json 的文件队列内提交，成功采用后才通知。导入 data 与 button.buttons 分别进入这两个既有载体；代码/文件夹/按钮开关等元数据放 scriptLibrary，避免脚本运行后导出陈旧变量。已有非空且未占用的 id 保留，缺失或与库/已有全局数据键冲突的 id 取得稳定新 id，不覆盖旧主人。关闭引擎再打开后保持顺序、开关及数据。全库数组是本引擎的往返格式。
+
+预设与卡读取 `extensions.tavern_helper.scripts`；它不存在或为 null 时才读旧 `extensions.TavernHelper_scripts`，现代空数组明确压住旧字段。树内文件夹使用 scripts，已有 children/递归旧结构也保留。脚本须 enabled=true 且代码非空；缺 id 或同一主人树内重复 id 的活动脚本在 issues 中报告并跳过，不创造临时 script-N。不同 scope 的同 id 是不同主人。
+
+“当前预设”包含现有 RAM 工作副本和旧 inline 配置。保存版仍使用原 `TavernScriptOwner(kind:preset,assetId,scriptId)`；临时/内联版另带 `presetCarrier`：kind 为 working 或 inline，chatId 为空表示全局，workingId 仅标识本次引擎中的 RAM 槽位。继承全局工作副本的多个聊天共享这个全局主人，只有实际存在的 chat slot 才有聊天主人。同一槽位中改温度、正则、代码、data 或按钮不换 workingId；切换/重载清除槽位后，旧主人不再重定向到新槽位。RAM 写入不保存到原预设，inline 写入仍落原 settings/chat 载体。carrier 是本引擎接线信息，不进入助手原始 JSON，也不承诺 RAM 身份跨重启恢复。
+
+App 接线示例：
+
+```dart
+final selected = await tavern.chatScripts(chatId);
+for (final script in selected.scripts) {
+  final context = await tavern.scripts.openContext(TavernScriptContextSpec(
+    instanceId: frameInstanceId,
+    chatId: chatId,
+    characterId: selected.characterId,
+    script: script.owner,
+  ));
+  // App 安装 snapshot，随后在该 frame 中执行 script.content。
+}
+```
+
+主线需要在 `app/lib/tavern/deferred_tavern.dart::DeferredTavern` 和 `tavern_preview.dart::PreviewTavern` 补齐这 9 个 Tavern 方法；用 chatScripts/watchChatScripts 替换仅看角色卡的 provider。`tavern_script_wire.dart::_owner/_ownerJson` 必须保留 presetCarrier，现有 `_DeferredScripts.openContext` 已原样转发 typed spec。`tavern_canvas_calls.dart::_openScript` 的 character owner 硬编码、`asScript/id`、`_scriptContexts` 和 liveButtons，以及 `tavern_canvas.dart` 内的 varKey、listenerOwner、按钮缓存均须按完整 owner 路由，例如以 `jsonEncode(script.owner.toJson())` 作缓存键；原 scriptId 仍是助手脚本自身 id。
+
+按 owner/content 的实际差异开关帧，移除帧时关闭对应 context；普通变量或按钮更新不应重执行代码。按钮只显示 buttonsEnabled 且 visible 的非空命名项，后续列表从既有 context snapshot/cache delta 接收，点击按完整 owner 路由。以上 App 接点只作接入说明，本层没有修改 App。
+
+现有 `tavern_canvas_view.dart::_open` 的 `Object.hashAll(cardScripts)` 会令目录变化触发整页 loadHtmlString；此处需换成对应帧的差异更新。`callerScript()` 目前以 sourceURL 数组下标找脚本，增删/排序不能改变存活帧的 owner。`adoptResources` 尚未采用 scriptButtons，`_openScript` 尚未注册该 owner context 到 `TavernScriptPages`；主线需将该 owner 的 snapshot/delta 接入按钮缓存，并保持单次 cache/lifecycle Ack，不能仅替换 provider。
+
+群聊未传 characterId 时只返回全局和当前预设；App 明确选择卡后传入同一个 characterId，并原样传给 openContext。watch 在库管理、实际卡提交、预设/选择/工作载体修改时合并刷新，不订阅普通消息列表或流式 checkpoint；外部直接改卡文件后可主动调用 chatScripts，仍走已有 stat 刷新。导入保存成功后，App 根据用户的 enabled 选择及返回清单启动脚本，不设置额外默认禁用策略。
+
+格式依据是助手[脚本库](https://n0vi028.github.io/JS-Slash-Runner-Doc/guide/基本用法/脚本库.html)和[获取脚本](https://n0vi028.github.io/JS-Slash-Runner-Doc/guide/功能详情/酒馆助手脚本/获取脚本.html)公开文档，以及 [NE-Memory README](https://github.com/Melody-0321/NE-Memory/blob/main/README.md) 的裸 script 导入说明、[SillyTavern-Auto-Summary](https://github.com/Yi-Lings/SillyTavern-Auto-Summary) 的实际单脚本导入包。后两者证明 info/data/button/export_with 可缺省。裸 folder 依据公开 ScriptFolder 结构接收，尚未用真实 folder 导出对拍；不推测未知 wrapper，也不声称上游支持嵌套 folder。未阅读助手实现或 type 仓库，未执行样本脚本。

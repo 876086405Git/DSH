@@ -25410,6 +25410,87 @@ class L10nEn extends L10n {
   String get tavernPackExportChanged => 'The export\'s sources or options changed; preview again';
 
   @override
+  String get tavernScripts => 'Script library';
+
+  @override
+  String get tavernScriptsEmpty =>
+      'No global scripts yet. Import a script JSON exported from Tavern Helper; the ones turned on run on the whole-page canvas of every chat.';
+
+  @override
+  String get tavernScriptsImport => 'Import scripts';
+
+  @override
+  String tavernScriptsImported(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Added $count scripts to the library',
+      one: 'Added a script to the library',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tavernScriptsExportAll => 'Export all';
+
+  @override
+  String get tavernScriptsOrder => 'Reorder';
+
+  @override
+  String get tavernScriptsOrderNote => 'They run top to bottom. Drag the handle on the right to move one.';
+
+  @override
+  String tavernScriptCount(int count) {
+    return '$count';
+  }
+
+  @override
+  String get tavernScriptUnnamed => 'Untitled script';
+
+  @override
+  String get tavernScriptOpenFolder => 'Open folder';
+
+  @override
+  String get tavernScriptExport => 'Export';
+
+  @override
+  String get tavernScriptDelete => 'Delete';
+
+  @override
+  String tavernScriptDeleteTitle(String name) {
+    return 'Delete $name?';
+  }
+
+  @override
+  String get tavernScriptDeleteMessage => 'Its variables and buttons go with it. It can\'t be brought back.';
+
+  @override
+  String get tavernChatScripts => 'Scripts';
+
+  @override
+  String get tavernChatScriptsNote => 'The scripts this chat runs on the whole-page canvas, in the order they run.';
+
+  @override
+  String get tavernScriptSourceGlobal => 'Global';
+
+  @override
+  String get tavernScriptSourcePreset => 'Preset';
+
+  @override
+  String get tavernScriptSourceCard => 'Card';
+
+  @override
+  String tavernChatScriptsSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count scripts didn\'t run',
+      one: 'A script didn\'t run',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get updateCheck => 'Check for updates';
 
   @override

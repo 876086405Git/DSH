@@ -727,6 +727,40 @@ class DeferredTavern implements Tavern {
   Future<void> deletePreset(String presetId) async => (await _ready).deletePreset(presetId);
 
   @override
+  Future<List<TavernScriptLibraryEntry>> listGlobalScripts() async => (await _ready).listGlobalScripts();
+
+  @override
+  Stream<List<TavernScriptLibraryEntry>> watchGlobalScripts() => _stream((t) => t.watchGlobalScripts());
+
+  @override
+  Future<List<TavernScriptLibraryEntry>> importGlobalScripts(String text) async =>
+      (await _ready).importGlobalScripts(text);
+
+  @override
+  Future<TavernScriptLibraryEntry> setGlobalScriptEnabled(String id, bool enabled) async =>
+      (await _ready).setGlobalScriptEnabled(id, enabled);
+
+  @override
+  Future<void> setGlobalScriptOrder(List<String> ids, {String? folderId}) async {
+    final order = List.of(ids);
+    return (await _ready).setGlobalScriptOrder(order, folderId: folderId);
+  }
+
+  @override
+  Future<void> deleteGlobalScript(String id) async => (await _ready).deleteGlobalScript(id);
+
+  @override
+  Future<String> exportGlobalScripts({String? id}) async => (await _ready).exportGlobalScripts(id: id);
+
+  @override
+  Future<TavernChatScripts> chatScripts(String chatId, {String? characterId}) async =>
+      (await _ready).chatScripts(chatId, characterId: characterId);
+
+  @override
+  Stream<TavernChatScripts> watchChatScripts(String chatId, {String? characterId}) =>
+      _stream((t) => t.watchChatScripts(chatId, characterId: characterId));
+
+  @override
   Future<List<TavernRegexScript>> listRegexScripts() async => (await _ready).listRegexScripts();
 
   @override

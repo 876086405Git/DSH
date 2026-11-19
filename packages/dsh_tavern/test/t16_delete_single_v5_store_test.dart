@@ -439,6 +439,7 @@ void main() {
         after['display_context'],
         jsonEncode({
           'dshgo': {'tavernState': (expectedExtra['dshgo']! as Map<String, Object?>)['tavernState'], 'chatJsonl': null},
+          'scriptExtra': {'foreign': expectedExtra['foreign']},
         }),
       );
       for (final key in before.keys.where((key) => !{'parent_id', 'depth', 'extra', 'display_context'}.contains(key))) {

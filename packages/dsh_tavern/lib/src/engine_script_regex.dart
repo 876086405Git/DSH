@@ -11,24 +11,34 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
     TavernScriptRegexQuery? query,
     Map<String, Object?>? characterData,
     bool forCache = false,
+    _ScriptChatRead? chatRead,
   }) async {
     final requested = query ?? TavernScriptRegexQuery();
     final context = _context(contextId);
+    final cached = forCache ? context.regexView : null;
+    if (cached != null && identical(cached.characterData, characterData) && cached.view.current()) {
+      return cached.view;
+    }
     final chatId = context.value.chatId;
-    final chat = chatId == null ? null : engine._store.chat(chatId);
-    final metadata = chat == null ? null : engine._chatCodec.metadataForNode(engine._store, chat.id);
-    final settings = _runtimeCopy(engine._effectiveSettings(chat, metadata));
-    final rootSettings = _map(engine._document['settings']);
+    final chat = chatRead?.chat ?? (chatId == null ? null : engine._store.chat(chatId));
+    final metadata =
+        chatRead?.metadata ?? (chat == null ? null : engine._chatCodec.metadataForNode(engine._store, chat.id));
+    final settings = engine._effectiveReadSettings(chat, metadata);
+    var checkedChatRead = chatRead;
+    var checkedSettings = engine._document['settings'];
+    var checkedPresets = engine._store.presetVersion;
+    var checkedWorkingRevision = engine._presetWorkingRevision;
+    final rootSettings = _scriptMapView(engine._document['settings']);
     final chatSettings = chat?.settings;
     final settingsVersion = _scriptRegexSettingsVersion(rootSettings, chatSettings, settings);
     final presetRef = requested.presetId == null
         ? const TavernScriptPresetRef.current()
         : TavernScriptPresetRef.stored(requested.presetId!);
-    final preset = _scriptPresetViewNow(context, presetRef);
-    final presetSettings = (preset.raw.isEmpty ? ChatPreset.stDefault() : ChatPreset(preset.raw)).settings;
+    final preset = _scriptPresetViewNow(context, presetRef, capturedChat: forCache ? chat : null);
+    final presetSettings = (preset.raw.isEmpty ? ChatPreset.stDefault() : ChatPreset(preset.raw)).executionSettings;
     final managed = engine._regexLibrary.scripts;
     final managedVersion = _scriptManagedRegexVersion(managed);
-    final group = chat == null ? null : engine._store.groupChat(chat.id);
+    final group = chatRead == null ? (chat == null ? null : engine._store.groupChat(chat.id)) : chatRead.group;
     final actorId = requested.characterId ?? context.value.characterId ?? (group == null ? chat?.characterId : null);
     final actorRevision = actorId == null ? null : engine._directors._cardRevisions[actorId] ?? 0;
     final packBuckets = <String>{
@@ -208,7 +218,7 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       addPacks(TavernScriptRegexSource.global);
     }
     if (requested.sources.contains(TavernScriptRegexSource.preset)) {
-      final extensions = _map(presetSettings['extensions']);
+      final extensions = _scriptMapView(presetSettings['extensions']);
       addArray(
         extensions['regex_scripts'],
         TavernScriptRegexSource.preset,
@@ -239,7 +249,7 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
           );
         }
         final card = actorView['data']! as Map<String, Object?>;
-        final extensions = _map(card['extensions']);
+        final extensions = _scriptMapView(card['extensions']);
         addArray(
           extensions['regex_scripts'],
           TavernScriptRegexSource.character,
@@ -273,13 +283,34 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       if (context.closed || _closed || engine._closed || engine._closing || !identical(contexts[contextId], context)) {
         return false;
       }
-      final latest = chatId == null ? null : engine._store.chat(chatId);
-      final currentMetadata = latest == null ? null : engine._chatCodec.metadataForNode(engine._store, latest.id);
-      final currentSettings = engine._effectiveSettings(latest, currentMetadata);
-      if (settingsVersion !=
-              _scriptRegexSettingsVersion(_map(engine._document['settings']), latest?.settings, currentSettings) ||
-          managedVersion != _scriptManagedRegexVersion(engine._regexLibrary.scripts) ||
-          preset.version != _scriptPresetViewNow(context, presetRef).version) {
+      final currentChatRead = forCache ? _scriptChatRead(context) : null;
+      final currentSettingsRoot = engine._document['settings'];
+      final currentPresets = engine._store.presetVersion;
+      final currentWorkingRevision = engine._presetWorkingRevision;
+      final checkedSelection =
+          forCache &&
+          identical(checkedChatRead, currentChatRead) &&
+          identical(checkedSettings, currentSettingsRoot) &&
+          identical(checkedPresets, currentPresets) &&
+          checkedWorkingRevision == currentWorkingRevision;
+      if (!checkedSelection) {
+        final latest = forCache ? currentChatRead?.chat : (chatId == null ? null : engine._store.chat(chatId));
+        final currentMetadata = forCache
+            ? currentChatRead?.metadata
+            : (latest == null ? null : engine._chatCodec.metadataForNode(engine._store, latest.id));
+        final currentSettings = engine._effectiveReadSettings(latest, currentMetadata);
+        if (settingsVersion !=
+                _scriptRegexSettingsVersion(_scriptMapView(currentSettingsRoot), latest?.settings, currentSettings) ||
+            preset.version !=
+                _scriptPresetViewNow(context, presetRef, capturedChat: forCache ? latest : null).version) {
+          return false;
+        }
+        checkedChatRead = currentChatRead;
+        checkedSettings = currentSettingsRoot;
+        checkedPresets = currentPresets;
+        checkedWorkingRevision = currentWorkingRevision;
+      }
+      if (managedVersion != _scriptManagedRegexVersion(engine._regexLibrary.scripts)) {
         return false;
       }
       if (actorId != null && actorRevision != (engine._directors._cardRevisions[actorId] ?? 0)) {
@@ -300,12 +331,15 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
         contextId: contextId,
       );
     }
+    if (forCache) context.regexView = (characterData: characterData, view: view);
     return view;
   }
 
   bool _scriptRegexViewCurrent(_ScriptRegexView view) => view.current();
 
   Map<String, Object?> _scriptRegexViewJson(_ScriptRegexView view) {
+    final cached = view.json;
+    if (cached != null) return cached;
     final value = <String, Object?>{
       'sources': view.sources,
       'rules': [
@@ -324,7 +358,7 @@ extension _ScriptRegexBridge on _ScriptCoordinator {
       'issues': view.issues,
     };
     // This is an execution-cache token. It is not a physical write CAS.
-    return {'version': _scriptRegexVersion(value), ...value};
+    return view.json = {'version': _scriptRegexVersion(value), ...value};
   }
 
   Future<TavernDisplayResult> formatScriptText(
@@ -557,6 +591,7 @@ final class _ScriptRegexView {
   final List<TavernScriptRegex> rules;
   final List<Map<String, Object?>> sources, issues;
   final bool Function() current;
+  Map<String, Object?>? json;
 }
 
 String _scriptManagedRegexVersion(List<TavernRegexScript> records) => _scriptRegexVersion([

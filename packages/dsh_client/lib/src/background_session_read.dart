@@ -99,7 +99,9 @@ const _maxPending = 8;
 // start (proot, ~5 s a read) two slots take well over ten seconds to reach
 // the last of a full queue.
 const _stageTimeout = Duration(seconds: 10);
-const _maxBodyBytes = 8 * 1024 * 1024;
+// A long-used host's list (hundreds of sessions with their context headers)
+// passes 10 MiB; this only stops a runaway response.
+const _maxBodyBytes = 64 * 1024 * 1024;
 const _maxRows = 100000;
 const _maxNodes = 500000;
 const _maxDepth = 64;
@@ -422,7 +424,7 @@ Future<void> _sessionReadWorker(_WorkerInput input) async {
     final bytes = BytesBuilder(copy: false);
     await for (final chunk in response) {
       if (bytes.length + chunk.length > _maxBodyBytes) {
-        throw DshProtocolException('$endpoint: response exceeds 8388608 bytes');
+        throw DshProtocolException('$endpoint: response exceeds $_maxBodyBytes bytes');
       }
       bytes.add(chunk);
     }

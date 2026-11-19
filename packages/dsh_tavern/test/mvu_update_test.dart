@@ -112,6 +112,88 @@ _.add('counter', 1);
     expect(_state(ignoredTail)['counter'], 13);
   });
 
+  test('line and block comments cannot execute commands and preserve source offsets', () async {
+    const message = r'''<UpdateVariable>// _.add('hp', 100);
+/* _.add('hp', 100); */
+_.set('label', 'https://example.invalid/a/*literal*/');
+_.add('hp', -1);
+_.add('missing', 1);
+</UpdateVariable>''';
+    final result = await updateMvu(message, <String, Object?>{
+      'stat_data': <String, Object?>{'hp': 100, 'label': ''},
+    }, blocksOnly: true);
+    expect(_state(result), {'hp': 99, 'label': 'https://example.invalid/a/*literal*/'});
+    expect(result.issues.single.code, 'command_path_missing');
+    expect(result.issues.single.offset, message.indexOf("_.add('missing'"));
+  });
+
+  test('numeric object keys retain the required schema of their children', () async {
+    final result = await updateMvu("_.remove('stats.2026.hp');", <String, Object?>{
+      'stat_data': <String, Object?>{
+        'stats': <String, Object?>{
+          '2026': <String, Object?>{'hp': 100},
+        },
+      },
+      'schema': _objectSchema(<String, Object?>{
+        'stats': _objectSchema(<String, Object?>{
+          '2026': _objectSchema(<String, Object?>{
+            'hp': <String, Object?>{'type': 'number', 'required': true},
+          }),
+        }),
+      }),
+    });
+    expect(_state(result), {
+      'stats': {
+        '2026': {'hp': 100},
+      },
+    });
+    expect(result.issues.single.code, 'command_schema');
+  });
+
+  test('string array positions use bounded insertion without filling sparse gaps', () async {
+    final result = await updateMvu("_.insert('items', '1000000000', 1);", <String, Object?>{
+      'stat_data': <String, Object?>{
+        'items': <Object?>[0],
+      },
+      'schema': _objectSchema(<String, Object?>{
+        'items': <String, Object?>{
+          'type': 'array',
+          'extensible': true,
+          'elementType': <String, Object?>{'type': 'number'},
+        },
+      }),
+    });
+    expect(_state(result)['items'], [0, 1]);
+    expect(result.issues, isEmpty);
+  });
+
+  test('ordinal object removal checks the required property it actually selects', () async {
+    final result = await updateMvu("_.remove('obj', 0);", <String, Object?>{
+      'stat_data': <String, Object?>{
+        'obj': <String, Object?>{'hp': 100, 'label': 'plain'},
+      },
+      'schema': _objectSchema(<String, Object?>{
+        'obj': _objectSchema(<String, Object?>{
+          'hp': <String, Object?>{'type': 'number', 'required': true},
+          'label': <String, Object?>{'type': 'string'},
+        }),
+      }),
+    });
+    expect(_state(result)['obj'], {'hp': 100, 'label': 'plain'});
+    expect(result.issues.single.code, 'command_schema');
+  });
+
+  test('a rejected merge into null leaves the candidate unchanged', () async {
+    final result = await updateMvu("_.insert('x', 42);", <String, Object?>{
+      'stat_data': <String, Object?>{'x': null},
+      'schema': _objectSchema(<String, Object?>{
+        'x': <String, Object?>{'type': 'any'},
+      }),
+    });
+    expect(_state(result), {'x': null});
+    expect(result.issues.single.code, 'command_type');
+  });
+
   test('values, optional old set, arithmetic, VWD and ISO dates use real argument values', () async {
     final previous = <String, Object?>{
       'stat_data': <String, Object?>{

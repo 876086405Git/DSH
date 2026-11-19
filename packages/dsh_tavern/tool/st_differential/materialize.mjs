@@ -2,10 +2,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const fixtureFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../test/fixtures/st-differential.json');
-const output = process.argv[2];
-if (!output) throw new Error('Usage: node materialize.mjs <new-output-directory>');
+const [output, fixtureArgument, ...extra] = process.argv.slice(2);
+if (!output || extra.length) throw new Error('Usage: node materialize.mjs <new-output-directory> [fixtures.json]');
+const fixtureFile = fixtureArgument ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)),
+  '../../test/fixtures/st-differential.json');
 const fixtures = JSON.parse(await fs.readFile(fixtureFile, 'utf8'));
+if (!Array.isArray(fixtures) || !fixtures.length) throw new Error('Expected nonempty fixtures.');
+const ids = fixtures.map(fixture => fixture?.id);
+if (new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id))) {
+  throw new Error('Fixture ids must be unique safe leaf names.');
+}
 await fs.mkdir(output, { recursive: true });
 for (const fixture of fixtures) {
   const directory = path.join(output, fixture.id);

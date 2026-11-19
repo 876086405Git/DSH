@@ -50,17 +50,53 @@ enum TavernScriptErrorCode {
   hookFailure,
 }
 
-/// Persistent script identity. An iframe instance is deliberately not a key.
+enum TavernScriptPresetCarrierKind { inline, working }
+
+/// A current preset's actual carrier when it is not a saved preset record.
+/// Null chatId means the global carrier, including chats inheriting that slot.
+/// Working ids belong to one engine lifetime and never enter helper raw JSON.
+class TavernScriptPresetCarrier {
+  const TavernScriptPresetCarrier.inline({this.chatId}) : kind = TavernScriptPresetCarrierKind.inline, workingId = null;
+  const TavernScriptPresetCarrier.working({this.chatId, required String this.workingId})
+    : kind = TavernScriptPresetCarrierKind.working;
+
+  final TavernScriptPresetCarrierKind kind;
+  final String? chatId;
+  final String? workingId;
+  TavernJsonObject toJson() => {'kind': kind.name, 'chatId': ?chatId, 'workingId': ?workingId};
+  @override
+  bool operator ==(Object other) =>
+      other is TavernScriptPresetCarrier &&
+      kind == other.kind &&
+      chatId == other.chatId &&
+      workingId == other.workingId;
+  @override
+  int get hashCode => Object.hash(kind, chatId, workingId);
+}
+
+/// Script identity in its real store. An iframe instance is not a key.
+/// Without presetCarrier, a preset owner retains its saved-record semantics.
 class TavernScriptOwner {
-  const TavernScriptOwner({required this.kind, required this.scriptId, this.assetId});
+  const TavernScriptOwner({required this.kind, required this.scriptId, this.assetId, this.presetCarrier});
   final TavernScriptOwnerKind kind;
   final String? assetId;
   final String scriptId;
+  final TavernScriptPresetCarrier? presetCarrier;
+  TavernJsonObject toJson() => {
+    'kind': kind.name,
+    'scriptId': scriptId,
+    'assetId': ?assetId,
+    'presetCarrier': ?presetCarrier?.toJson(),
+  };
   @override
   bool operator ==(Object other) =>
-      other is TavernScriptOwner && kind == other.kind && assetId == other.assetId && scriptId == other.scriptId;
+      other is TavernScriptOwner &&
+      kind == other.kind &&
+      assetId == other.assetId &&
+      scriptId == other.scriptId &&
+      presetCarrier == other.presetCarrier;
   @override
-  int get hashCode => Object.hash(kind, assetId, scriptId);
+  int get hashCode => Object.hash(kind, assetId, scriptId, presetCarrier);
 }
 
 class TavernScriptContextSpec {
@@ -365,6 +401,28 @@ class TavernScriptSnapshot {
        variableSnapshots = List.unmodifiable(variableSnapshots),
        memberCharacterIds = List.unmodifiable(memberCharacterIds),
        _resourceRefs = _scriptObject(resourceRefs);
+
+  /// Derives a new chat state while retaining the captured resource values.
+  /// Resource getters remain detached even when snapshots share that capture.
+  TavernScriptSnapshot.withState(
+    TavernScriptSnapshot previous, {
+    required this.lastSeq,
+    String? pathRevision,
+    List<TavernScriptMessage>? messages,
+    List<TavernVariableSnapshot>? variableSnapshots,
+    required this.capabilities,
+  }) : context = previous.context,
+       engineEpoch = previous.engineEpoch,
+       pathRevision = pathRevision ?? previous.pathRevision,
+       messages = messages == null ? previous.messages : List.unmodifiable(messages),
+       variableSnapshots = variableSnapshots == null
+           ? previous.variableSnapshots
+           : List.unmodifiable(variableSnapshots),
+       presetId = previous.presetId,
+       personaId = previous.personaId,
+       memberCharacterIds = previous.memberCharacterIds,
+       _resourceRefs = previous._resourceRefs;
+
   final TavernScriptContext context;
   final String engineEpoch;
   final int lastSeq;
@@ -1154,7 +1212,7 @@ class TavernScriptButtonsSnapshot {
   final String version;
   final List<TavernScriptButton> buttons;
   TavernJsonObject toJson() => {
-    'owner': {'kind': owner.kind.name, 'scriptId': owner.scriptId, 'assetId': ?owner.assetId},
+    'owner': owner.toJson(),
     'version': version,
     'buttons': [for (final button in buttons) button.toJson()],
   };

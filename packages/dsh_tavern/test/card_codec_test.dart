@@ -261,6 +261,25 @@ void main() {
     expect(output.iconBytes, orderedEquals(decoded.png!));
   });
 
+  test('replacing a PNG cover preserves other default portrait resource bytes', () {
+    final decoded = codec.decode(_fixture('card-both.png'));
+    decoded.data['assets'] = [
+      {'type': 'icon', 'name': 'main', 'ext': 'png', 'uri': 'ccdefault:'},
+      {'type': 'icon', 'name': 'archive', 'ext': 'png', 'uri': 'ccdefault:'},
+    ];
+    final originalJson = jsonEncode(decoded.json);
+    final avatar = Uint8List.fromList(image.encodePng(image.Image(width: 3, height: 1)));
+    final card = TavernCard(json: decoded.json, png: decoded.png, avatar: avatar);
+    final bytes = codec.encode(card, modifiedAt: exportedAt);
+    final output = codec.decode(bytes);
+    final assets = (output.data['assets']! as List<Object?>).cast<Map<String, Object?>>();
+    final archive = assets.singleWhere((asset) => asset['name'] == 'archive');
+    expect(output.iconBytes, orderedEquals(avatar));
+    expect(image.decodePng(bytes)!.width, 3);
+    expect(output.assetBytes(archive['uri']! as String), orderedEquals(decoded.png!));
+    expect(jsonEncode(decoded.json), originalJson);
+  });
+
   test('JPEG main icon produces a valid PNG and keeps its original bytes inline', () {
     final json = _json(_fixture('card-v3.json'));
     final jpeg = Uint8List.fromList(image.encodeJpg(image.Image(width: 2, height: 3)));

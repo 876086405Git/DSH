@@ -106,8 +106,7 @@ class _LegacyEvaluation {
     this.inheritOriginal = true,
     this.postProcess,
     this.prepareCharacterFieldsOnDemand = false,
-  }) : contentHash = MacroEngine.stringHash(original),
-       chatIdHash = _truthy(context.chatIdHash) ? context.chatIdHash : MacroEngine.stringHash(context.chatId),
+  }) : chatIdHash = _truthy(context.chatIdHash) ? context.chatIdHash : MacroEngine.stringHash(context.chatId),
        replaceCharacterCard = replaceCharacterCard ?? context.replaceCharacterCard,
        // Only the common history, dice and clock helpers are used. The new
        // parser/evaluate/field preparation never handles a legacy expansion.
@@ -123,7 +122,7 @@ class _LegacyEvaluation {
   final LegacyMacroEngine engine;
   final MacroContext context;
   final Map<String, String> overrides;
-  final int contentHash;
+  int get contentHash => common.contentHash;
   final num chatIdHash;
   final bool replaceCharacterCard;
   final bool prepareCharacterFieldsOnDemand;

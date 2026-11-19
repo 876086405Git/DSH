@@ -1,11 +1,20 @@
 part of 'engine.dart';
 
+typedef _ScriptBuiltView = ({TavernScriptSnapshot snapshot, String resourceKey});
+
 class _ScriptContextState {
   _ScriptContextState(this.value);
   final TavernScriptContext value;
   bool closed = false;
   int seq = 0;
   TavernScriptSnapshot? view;
+  _ScriptBuiltView? resourceView;
+  String? publishedResourceKey;
+  _ScriptChatCapture? chatCapture;
+  Object? chatDisplayVersion;
+  _ScriptChatRead? chatRead;
+  final messageProjections = _ScriptMessageProjections();
+  ({Map<String, Object?>? characterData, _ScriptRegexView view})? regexView;
   Future<void> lifecycle = Future.value();
   Future<void>? refreshing;
   bool refreshAgain = false;
@@ -19,7 +28,21 @@ class _ScriptChatCapture {
   final _ScriptContextState context;
   final String chatId;
   final String revision;
+  // Read-only script projections. A write plan must fetch full fresh rows;
+  // these omit engine-owned inspection and duplicate imported bodies.
   final List<StoredNode> path;
+}
+
+// One complete, private read of a committed chat carrier. Resource builders
+// borrow these values; public DTOs and write/CAS readers retain their own data.
+class _ScriptChatRead {
+  const _ScriptChatRead(this.version, this.chat, this.group, this.metadata, this.source, this.sourceMetadata);
+  final Object version;
+  final StoredChat chat;
+  final TavernGroupChat? group;
+  final Map<String, Object?> metadata;
+  final ChatJsonlMetadataSource source;
+  final Map<String, Object?>? sourceMetadata;
 }
 
 class _ScriptLifecycle {
@@ -285,8 +308,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
       throw _scriptError(TavernScriptErrorCode.noContext, 'chat', 'This context has no chat.', contextId: contextId);
     }
     try {
-      final chat = engine._store.chat(chatId);
-      return _ScriptChatCapture(context, chatId, _pathRevision(chatId), engine._historyTo(chatId, chat.currentLeafId));
+      return _captureChatAt(context, chatId);
     } on StateError {
       throw _scriptError(
         TavernScriptErrorCode.notFound,
@@ -297,15 +319,81 @@ class _ScriptCoordinator implements TavernScriptBridge {
     }
   }
 
+  _ScriptChatCapture _captureChatAt(_ScriptContextState context, String chatId) {
+    // Preserve the fresh existence check even when this context's view matches.
+    final leafId = engine._store.chatCurrentLeafId(chatId);
+    final version = engine._store.displayVersion(chatId);
+    final cached = context.chatCapture;
+    if (cached != null && cached.chatId == chatId && identical(context.chatDisplayVersion, version)) return cached;
+    final profile = engine._turns[chatId]?.profile;
+    final started = profile?.now;
+    try {
+      final capture = _ScriptChatCapture(
+        context,
+        chatId,
+        _pathRevision(chatId),
+        engine._store.scriptHistoryTo(chatId, leafId),
+      );
+      context.chatDisplayVersion = version;
+      return context.chatCapture = capture;
+    } finally {
+      if (started != null) profile?.record('script_capture', started);
+    }
+  }
+
+  ({Map<String, Object?> metadata, ChatJsonlMetadataSource source}) _captureScriptMetadata(
+    StoredChat chat, {
+    String? nodeId,
+  }) {
+    // Capture the chosen node once, before any await. A native regeneration
+    // may name a node outside the currently selected branch.
+    final id = nodeId ?? chat.currentLeafId;
+    final state = id == null ? const <String, Object?>{} : engine._store.scriptNodeState(chat.id, id);
+    return (
+      metadata: id == null
+          ? engine._chatCodec.metadataForCapturedNode(engine._store, chat, null)
+          : engine._chatCodec.metadataForState(chat, state),
+      source: engine._chatCodec.metadataSourceTargetForState(chat, state),
+    );
+  }
+
+  _ScriptChatRead? _scriptChatRead(_ScriptContextState context) {
+    final chatId = context.value.chatId;
+    if (chatId == null) {
+      return null;
+    }
+    final leafId = engine._store.chatCurrentLeafId(chatId);
+    final version = engine._store.displayVersion(chatId);
+    final cached = context.chatRead;
+    if (cached != null &&
+        cached.chat.id == chatId &&
+        cached.chat.currentLeafId == leafId &&
+        identical(cached.version, version)) {
+      return cached;
+    }
+    final profile = engine._turns[chatId]?.profile;
+    final started = profile?.now;
+    try {
+      final chat = engine._store.chat(chatId);
+      final captured = _captureScriptMetadata(chat);
+      return context.chatRead = _ScriptChatRead(
+        version,
+        chat,
+        engine._store.groupChat(chatId),
+        captured.metadata,
+        captured.source,
+        engine._chatCodec.readMetadataSource(chat.metadata, captured.source),
+      );
+    } finally {
+      if (started != null) {
+        profile?.record('script_chat_read', started);
+      }
+    }
+  }
+
   void _checkChatCapture(_ScriptChatCapture capture, {String? expectedRevision, bool requireSamePath = false}) {
     _context(capture.context.value.id);
-    final chat = engine._store.chat(capture.chatId);
-    final current = _ScriptChatCapture(
-      capture.context,
-      capture.chatId,
-      _pathRevision(capture.chatId),
-      engine._historyTo(capture.chatId, chat.currentLeafId),
-    );
+    final current = _captureChatAt(capture.context, capture.chatId);
     if ((expectedRevision != null && current.revision != expectedRevision) ||
         (requireSamePath &&
             !_stateJsonEqual(
@@ -387,7 +475,8 @@ class _ScriptCoordinator implements TavernScriptBridge {
     try {
       final initial = await _buildView(context);
       _context(context.value.id);
-      context.view = initial;
+      context.view = initial?.snapshot;
+      context.publishedResourceKey = initial?.resourceKey;
       return context.value;
     } catch (_) {
       contexts.remove(context.value.id);
@@ -403,7 +492,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
     // a new snapshot must not await the very cache Ack it is meant to repair.
     final current = await _buildView(context);
     _context(contextId);
-    return current!;
+    return current!.snapshot;
   });
 
   @override
@@ -748,13 +837,16 @@ class _ScriptCoordinator implements TavernScriptBridge {
     }
   }
 
-  Future<TavernScriptSnapshot?> _buildView(_ScriptContextState context) async {
+  Future<_ScriptBuiltView?> _buildView(_ScriptContextState context) async {
     if (context.closed) {
       return null;
     }
     rebuildView:
     while (true) {
       final capture = context.value.chatId == null ? null : _captureChat(context.value.id);
+      final chatRead = _scriptChatRead(context);
+      final profile = context.value.chatId == null ? null : engine._turns[context.value.chatId]?.profile;
+      final variablesStarted = profile?.now;
       final variables = <TavernVariableSnapshot>[];
       final shapeIssues = <Map<String, Object?>>[];
       final observedVersions = <String, String>{};
@@ -800,25 +892,34 @@ class _ScriptCoordinator implements TavernScriptBridge {
           });
         }
       }
+      if (variablesStarted != null) {
+        profile?.recordElapsed('script_view_variables', variablesStarted);
+      }
+      final resourcesStarted = profile?.now;
       final scriptButtons = await _scriptButtonsView(context);
       final characterData = context.value.characterId == null
           ? null
           : await engine._libraryOperation(() => _scriptCharacterDataView(context.value.characterId!));
       final _ScriptRegexView regexView;
       try {
-        regexView = await _captureScriptRegexView(context.value.id, characterData: characterData, forCache: true);
+        regexView = await _captureScriptRegexView(
+          context.value.id,
+          characterData: characterData,
+          forCache: true,
+          chatRead: chatRead,
+        );
       } on TavernScriptException catch (error) {
         if (error.code == TavernScriptErrorCode.revisionConflict) {
           continue rebuildView;
         }
         rethrow;
       }
-      final bookDirectory = await _scriptBookDirectoryView(context);
+      final bookDirectory = await _scriptBookDirectoryView(context, chatRead: chatRead);
       final characterAvatars = <_ScriptCharacterAvatarView>[];
       for (final id in bookDirectory.characterIds) {
         characterAvatars.add(await _scriptCharacterAvatarView(id));
       }
-      final bindingChat = capture == null ? null : engine._store.chat(capture.chatId);
+      final bindingChat = chatRead?.chat;
       final bindingPersonaId = engine._personas.resolve(personaId: bindingChat?.personaId).persona?.id;
       final bindingViews = <_ScriptBookBindingView>[];
       final bindingIssues = <Map<String, Object?>>[];
@@ -833,7 +934,9 @@ class _ScriptCoordinator implements TavernScriptBridge {
       ];
       for (final target in bindingTargets) {
         try {
-          bindingViews.add(await _captureBookBindingView(context.value.id, target, characterData: characterData));
+          bindingViews.add(
+            await _captureBookBindingView(context.value.id, target, characterData: characterData, chatRead: chatRead),
+          );
         } on FormatException catch (error) {
           if (target.scope != TavernScriptBookBindingScope.character) {
             rethrow;
@@ -875,27 +978,10 @@ class _ScriptCoordinator implements TavernScriptBridge {
       if (context.closed) {
         return null;
       }
+      if (resourcesStarted != null) {
+        profile?.recordElapsed('script_view_resources', resourcesStarted);
+      }
       if (capture != null && capture.revision != _pathRevision(capture.chatId)) {
-        continue;
-      }
-      // Every resource read can await a different real storage queue. Before
-      // taking lastSeq, synchronously check their commit-observed tokens so an
-      // older value can never be returned with a newer cache water mark.
-      if (observedVersions.entries.any((entry) => _currentVariableVersion(entry.key) != entry.value)) {
-        continue;
-      }
-      if (scriptButtons != null && !_scriptButtonsViewCurrent(scriptButtons)) {
-        continue;
-      }
-      if (!_scriptBookDirectoryViewCurrent(context, bookDirectory) ||
-          bindingViews.any((view) => !_bookBindingViewCurrent(view))) {
-        continue;
-      }
-      if (characterData != null && !_scriptCharacterDataViewCurrent(characterData)) continue;
-      if (!_scriptRegexViewCurrent(regexView)) {
-        continue;
-      }
-      if (characterAvatars.any((view) => !_scriptCharacterAvatarViewCurrent(view))) {
         continue;
       }
       final latest = capture == null ? null : _captureChat(context.value.id);
@@ -906,21 +992,88 @@ class _ScriptCoordinator implements TavernScriptBridge {
               capture.path.indexed.any((item) => item.$2.message.nodeId != latest.path[item.$1].message.nodeId))) {
         continue;
       }
-      // Streaming body checkpoints intentionally do not advance tree_revision.
-      // Project fresh StoredNodes in this final synchronous section, after all
-      // file awaits, instead of pairing an old body with newer variable data.
-      final messages = latest == null ? <TavernScriptMessage>[] : _projectMessages(latest, includeSwipes: true);
-      final chat = capture == null ? null : engine._store.chat(capture.chatId);
-      final group = chat == null ? null : engine._store.groupChat(chat.id);
+      // Body checkpoints do not advance tree_revision. Capture that separate
+      // read token and recheck it after the projection yields between batches.
+      final displayVersion = latest == null ? null : engine._store.displayVersion(latest.chatId);
+      final messages = latest == null ? <TavernScriptMessage>[] : await _projectMessages(latest, includeSwipes: true);
+      if (context.closed) return null;
+      if (messages == null ||
+          latest != null && !identical(displayVersion, engine._store.displayVersion(latest.chatId))) {
+        continue;
+      }
+      // Resource reads and projection batches can yield to other commits.
+      // Check every captured token before taking the public sequence watermark.
+      if (observedVersions.entries.any((entry) => _currentVariableVersion(entry.key) != entry.value)) {
+        continue;
+      }
+      if (scriptButtons != null && !_scriptButtonsViewCurrent(scriptButtons)) {
+        continue;
+      }
+      final currentChatRead = _scriptChatRead(context);
+      if (!identical(chatRead, currentChatRead)) {
+        continue;
+      }
+      if (!_scriptBookDirectoryViewCurrent(context, bookDirectory, chatRead: currentChatRead) ||
+          bindingViews.any((view) => !_bookBindingViewCurrent(view, chatRead: currentChatRead))) {
+        continue;
+      }
+      if (characterData != null && !_scriptCharacterDataViewCurrent(characterData)) continue;
+      if (!_scriptRegexViewCurrent(regexView)) {
+        continue;
+      }
+      if (characterAvatars.any((view) => !_scriptCharacterAvatarViewCurrent(view))) {
+        continue;
+      }
+      final chat = currentChatRead?.chat;
+      final group = currentChatRead?.group;
       if (bindingPersonaId != engine._personas.resolve(personaId: chat?.personaId).persona?.id) {
         continue;
       }
       final preset = engine._resolvePreset(chat).selection.effectivePresetId;
       final memberIds = group == null ? <String>[] : [for (final member in group.members) member.characterId];
       final worldInfoSettings = _scriptWorldInfoSettingsView(engine._document);
-      final currentPreset = _scriptPresetViewNow(context, const TavernScriptPresetRef.current());
+      final currentPreset = _scriptPresetViewNow(context, const TavernScriptPresetRef.current(), capturedChat: chat);
       final presetLibrary = _scriptPresetLibraryViewNow();
-      return TavernScriptSnapshot(
+      final regexJson = _scriptRegexViewJson(regexView);
+      final characterRevision = context.value.characterId == null
+          ? null
+          : '$epoch:card:${engine._directors._cardRevisions[context.value.characterId] ?? 0}';
+      final resourceKey = jsonEncode([
+        preset,
+        chat?.personaId,
+        context.value.characterId,
+        characterRevision,
+        group?.hostCharacterId,
+        memberIds,
+        _hostVersion,
+        characterData?['version'],
+        [for (final view in characterAvatars) view.toJson()],
+        worldInfoSettings.version,
+        currentPreset.version,
+        currentPreset.source,
+        presetLibrary['version'],
+        regexJson['version'],
+        scriptButtons?.version,
+        bookDirectory.snapshot.version,
+        [for (final view in bindingViews) view.snapshot.version],
+        bindingIssues,
+        shapeIssues,
+      ]);
+      final previous = context.resourceView;
+      if (previous != null && previous.resourceKey == resourceKey) {
+        return context.resourceView = (
+          snapshot: TavernScriptSnapshot.withState(
+            previous.snapshot,
+            lastSeq: context.seq,
+            pathRevision: capture?.revision ?? '$epoch:path:none',
+            messages: messages,
+            variableSnapshots: variables,
+            capabilities: capabilities,
+          ),
+          resourceKey: resourceKey,
+        );
+      }
+      final snapshot = TavernScriptSnapshot(
         context: context.value,
         engineEpoch: epoch,
         lastSeq: context.seq,
@@ -934,9 +1087,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
           'presetId': preset,
           'personaId': chat?.personaId,
           'characterId': context.value.characterId,
-          'characterRevision': context.value.characterId == null
-              ? null
-              : '$epoch:card:${engine._directors._cardRevisions[context.value.characterId] ?? 0}',
+          'characterRevision': characterRevision,
           'hostCharacterId': group?.hostCharacterId,
           'memberCharacterIds': memberIds,
           'hostVersion': '$epoch:host:$_hostVersion',
@@ -945,7 +1096,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
           'worldInfoSettings': worldInfoSettings.toJson(),
           'preset': currentPreset.toJson(),
           'presetLibrary': presetLibrary,
-          'regex': _scriptRegexViewJson(regexView),
+          'regex': regexJson,
           'scriptButtons': ?scriptButtons?.toJson(),
           'bookDirectory': _scriptBookDirectoryJson(bookDirectory.snapshot),
           'bookBindings': [for (final view in bindingViews) _scriptBookBindingsJson(view.snapshot)],
@@ -954,6 +1105,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
         },
         capabilities: capabilities,
       );
+      return context.resourceView = (snapshot: snapshot, resourceKey: resourceKey);
     }
   }
 
@@ -976,18 +1128,21 @@ class _ScriptCoordinator implements TavernScriptBridge {
       do {
         context.refreshAgain = false;
         final before = context.view;
+        final beforeResourceKey = context.publishedResourceKey;
         // A turn may stop waiting for this view when a resource mutation is
         // waiting for that turn to finish. The admitted carrier reads still
         // belong to the engine drain; host acknowledgements below do not.
-        final after = await engine._trackOperation(_buildView(context));
+        final built = await engine._trackOperation(_buildView(context));
         if (context.closed) {
           return;
         }
-        if (after == null) {
+        if (built == null) {
           return;
         }
+        final after = built.snapshot;
         // Public snapshot reads do not move this published-delta baseline.
         context.view = after;
+        context.publishedResourceKey = built.resourceKey;
         if (before == null) {
           continue;
         }
@@ -1016,7 +1171,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
           for (final value in after.variableSnapshots)
             if (oldVariables[_targetKey(value.resolvedTarget)] != value.version) value,
         ];
-        final resourcesChanged = !_stateJsonEqual(before.resourceRefs, after.resourceRefs);
+        final resourcesChanged = beforeResourceKey != built.resourceKey;
         if (changed.isEmpty &&
             removed.isEmpty &&
             index.isEmpty &&
@@ -1107,19 +1262,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
     final view = context.view;
     final message = view?.messages.where((item) => item.ref == ref).firstOrNull;
     if (view != null) {
-      context.view = TavernScriptSnapshot(
-        context: view.context,
-        engineEpoch: epoch,
-        lastSeq: context.seq,
-        pathRevision: view.pathRevision,
-        messages: view.messages,
-        variableSnapshots: view.variableSnapshots,
-        presetId: view.presetId,
-        personaId: view.personaId,
-        memberCharacterIds: view.memberCharacterIds,
-        resourceRefs: view.resourceRefs,
-        capabilities: capabilities,
-      );
+      context.view = TavernScriptSnapshot.withState(view, lastSeq: context.seq, capabilities: capabilities);
     }
     final captured =
         location ?? (messageId: message?.messageId, swipeId: message?.swipeId, pathRevision: view?.pathRevision);
@@ -1765,10 +1908,10 @@ class _ScriptCoordinator implements TavernScriptBridge {
     if (!contexts.values.any((context) => !context.closed && context.value.chatId == chatId)) {
       return null;
     }
-    final path = engine._historyTo(chatId, engine._store.chat(chatId).currentLeafId);
+    final path = engine._store.ancestorIds(chatId, engine._store.chatCurrentLeafId(chatId));
     return _ScriptSent(
       TavernScriptMessageRef(chatId: chatId, nodeId: nodeId),
-      path.indexWhere((node) => node.message.nodeId == nodeId),
+      path.indexOf(nodeId),
       _pathRevision(chatId),
     );
   }
@@ -1796,13 +1939,17 @@ class _ScriptCoordinator implements TavernScriptBridge {
   Future<void> beforeTurn(_Turn turn) async {
     turn.scriptWritesAllowed = true;
     try {
+      final mvuStarted = turn.profile?.now;
       await _ensureMvuTurn(turn);
+      if (mvuStarted != null) turn.profile?.recordElapsed('script_before_mvu', mvuStarted);
       final active = contexts.values.where((item) => !item.closed && item.value.chatId == turn.chat.id).toList();
+      final refreshStarted = turn.profile?.now;
       for (final context in active) {
         turn.cancellation.check();
         await turn.cancellation.wait(_refreshContext(context));
         turn.cancellation.check();
       }
+      if (refreshStarted != null) turn.profile?.recordElapsed('script_before_refresh', refreshStarted);
       for (final name in const ['GENERATION_STARTED', 'GENERATION_AFTER_COMMANDS']) {
         for (final context in active) {
           if (context.closed) {
@@ -1821,16 +1968,11 @@ class _ScriptCoordinator implements TavernScriptBridge {
         }
       }
       await drainWrites(turn.chat.id, turn.cancellation);
-      final metadata = engine._chatCodec.metadataForNode(engine._store, turn.chat.id, nodeId: turn.nodeId);
-      final persistentSource = engine._chatCodec.metadataSourceForNode(
-        engine._store,
-        turn.chat.id,
-        nodeId: turn.nodeId,
-      );
+      final captured = _captureScriptMetadata(engine._store.chat(turn.chat.id), nodeId: turn.nodeId);
       final candidates = injectionRegistry.capture(
         chatId: turn.chat.id,
-        metadata: metadata,
-        persistentSource: persistentSource,
+        metadata: captured.metadata,
+        persistentSource: captured.source,
       );
       turn.scriptInjectionUses = await injectionRegistry.filter(
         candidates,
@@ -1861,7 +2003,10 @@ class _ScriptCoordinator implements TavernScriptBridge {
       return;
     }
     try {
+      final mvuStarted = turn.profile?.now;
       await _afterMvuMessage(turn);
+      if (mvuStarted != null) turn.profile?.recordElapsed('script_after_mvu', mvuStarted);
+      final scriptRefreshStarted = turn.profile?.now;
       for (final context
           in contexts.values.where((item) => !item.closed && item.value.chatId == turn.chat.id).toList()) {
         try {
@@ -1899,6 +2044,9 @@ class _ScriptCoordinator implements TavernScriptBridge {
             break;
           }
         }
+      }
+      if (scriptRefreshStarted != null) {
+        turn.profile?.recordElapsed('script_after_refresh_hooks', scriptRefreshStarted);
       }
       // Direct handler writes are flushed by the Ack. The native short queue
       // also drains before the next actor reads state. Derived lifecycle is not
@@ -2107,25 +2255,26 @@ Map<String, Object?> _captureScriptObject(Object? value) {
 }
 
 bool _sameScriptMessage(TavernScriptMessage? a, TavernScriptMessage b) =>
+    identical(a, b) ||
     a != null &&
-    a.messageId == b.messageId &&
-    a.ref == b.ref &&
-    a.name == b.name &&
-    a.role == b.role &&
-    a.nativeRole == b.nativeRole &&
-    a.message == b.message &&
-    a.hidden == b.hidden &&
-    a.speakerCharacterId == b.speakerCharacterId &&
-    a.swipeId == b.swipeId &&
-    a.hasData == b.hasData &&
-    _stateJsonEqual(a.rawData, b.rawData) &&
-    _stateJsonEqual(a.extra, b.extra) &&
-    a.swipes.length == b.swipes.length &&
-    List.generate(a.swipes.length, (i) => i).every((i) {
-      final x = a.swipes[i], y = b.swipes[i];
-      return x.ref == y.ref &&
-          x.text == y.text &&
-          x.hasData == y.hasData &&
-          _stateJsonEqual(x.rawData, y.rawData) &&
-          _stateJsonEqual(x.info, y.info);
-    });
+        a.messageId == b.messageId &&
+        a.ref == b.ref &&
+        a.name == b.name &&
+        a.role == b.role &&
+        a.nativeRole == b.nativeRole &&
+        a.message == b.message &&
+        a.hidden == b.hidden &&
+        a.speakerCharacterId == b.speakerCharacterId &&
+        a.swipeId == b.swipeId &&
+        a.hasData == b.hasData &&
+        _stateJsonEqual(a.rawData, b.rawData) &&
+        _stateJsonEqual(a.extra, b.extra) &&
+        a.swipes.length == b.swipes.length &&
+        List.generate(a.swipes.length, (i) => i).every((i) {
+          final x = a.swipes[i], y = b.swipes[i];
+          return x.ref == y.ref &&
+              x.text == y.text &&
+              x.hasData == y.hasData &&
+              _stateJsonEqual(x.rawData, y.rawData) &&
+              _stateJsonEqual(x.info, y.info);
+        });

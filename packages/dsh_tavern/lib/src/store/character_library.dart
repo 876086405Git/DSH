@@ -189,7 +189,11 @@ class CharacterLibrary {
   final Directory root;
   final AuthoringAuthority? authority;
   final DateTime Function() _now;
+  static const _runtimeCacheCapacity = 8;
   Future<void> _queue = Future.value();
+  final _runtimeAuthority = <String, ({_CharacterFileVersion version, Map<String, Object?> data})>{};
+  final _runtimeAvatars =
+      <String, ({_CharacterFileVersion card, _CharacterFileVersion identity, CharacterAvatarMetadata metadata})>{};
 
   /// Internal synchronous notification of the authoritative card-file commit.
   /// The observer must not throw, write, await, or depend on the derived index.
@@ -254,6 +258,33 @@ class CharacterLibrary {
     _requireId(id);
     return _avatarMetadata(await _readAuthoringResource(id));
   });
+
+  /// Runtime-only projection. Authoring and avatar CAS continue using fresh
+  /// reads; unchanged runtime callers can reuse the same metadata object.
+  Future<CharacterAvatarMetadata> readRuntimeAvatarMetadata(String id) => _exclusive(() async {
+    _requireId(id);
+    final path = '${_characters.path}/$id';
+    if (await FileSystemEntity.type(path, followLinks: false) != FileSystemEntityType.directory) {
+      _runtimeAvatars.remove(id);
+      return _avatarMetadata(await _readAuthoringResource(id));
+    }
+    final cardVersion = _characterFileVersion(await File('$path/card.json').stat());
+    final identityVersion = _characterFileVersion(await File('$path/library.json').stat());
+    final cached = _runtimeAvatars.remove(id);
+    if (cached != null && cached.card == cardVersion && cached.identity == identityVersion) {
+      _runtimeAvatars[id] = cached;
+      return cached.metadata;
+    }
+    final metadata = _avatarMetadata(await _readAuthoringResource(id));
+    _runtimeAvatars[id] = (card: cardVersion, identity: identityVersion, metadata: metadata);
+    if (_runtimeAvatars.length > _runtimeCacheCapacity) _runtimeAvatars.remove(_runtimeAvatars.keys.first);
+    return metadata;
+  });
+
+  void _invalidateRuntimeCharacter(String id) {
+    _runtimeAuthority.remove(id);
+    _runtimeAvatars.remove(id);
+  }
 
   /// Reads only the actual selected avatar, without loading original imports
   /// or walking the resource manifest. The returned bytes belong to this read.
@@ -381,6 +412,7 @@ class CharacterLibrary {
       await pending.rename('$directory/library.json');
       ticket?.knownAdopted = true;
       try {
+        _invalidateRuntimeCharacter(id);
         cardCommitted?.call(id, document['data']! as Map<String, Object?>);
       } finally {
         onCommitted?.call(adopted);
@@ -596,7 +628,7 @@ class CharacterLibrary {
     ({String id, AuthoringExpectation expected})? requiredSource,
     void Function()? check,
   }) async {
-    final rawText = exactText ?? jsonEncode(card.json);
+    final rawText = exactText ?? await _encodeCardDocument(card.json);
     final avatar = card.avatar;
     final avatarDigest = avatar == null ? null : crypto.sha256.convert(avatar).toString();
     final avatarFile = avatarDigest == null ? null : 'avatar-$avatarDigest.png';
@@ -686,6 +718,7 @@ class CharacterLibrary {
       ticket?.enteredEffect = true;
       await staging.rename(destination.path);
       ticket?.knownAdopted = true;
+      _invalidateRuntimeCharacter(id);
       cardCommitted?.call(id, actualData ?? card.data);
       if (ticket != null) owner!.adopted(ticket);
       final record = StoredCharacter(
@@ -781,6 +814,32 @@ class CharacterLibrary {
     final envelope = await _readAuthorityEnvelope(id);
     if (envelope == null) return null;
     return project(envelope['data']! as Map<String, Object?>);
+  });
+
+  /// Internal runtime read of the authority JSON. The projection must not
+  /// mutate its data: unchanged file revisions share this private parse tree.
+  /// Writes and CAS use [readAuthority] or [readAuthoringSnapshot] instead.
+  Future<T?> readRuntimeAuthority<T>(String id, T Function(Map<String, Object?> data) project) => _exclusive(() async {
+    _requireId(id);
+    final directory = '${_characters.path}/$id';
+    final type = await FileSystemEntity.type(directory, followLinks: false);
+    if (type == FileSystemEntityType.notFound) {
+      _invalidateRuntimeCharacter(id);
+      return null;
+    }
+    if (type != FileSystemEntityType.directory) throw const FileSystemException('Character folder is not a directory');
+    final file = File('$directory/card.json');
+    final version = _characterFileVersion(await file.stat());
+    final cached = _runtimeAuthority.remove(id);
+    if (cached != null && cached.version == version) {
+      _runtimeAuthority[id] = cached;
+      return project(cached.data);
+    }
+    final envelope = await _decodeRuntimeAuthority(await file.readAsBytes());
+    final data = envelope['data']! as Map<String, Object?>;
+    _runtimeAuthority[id] = (version: version, data: data);
+    if (_runtimeAuthority.length > _runtimeCacheCapacity) _runtimeAuthority.remove(_runtimeAuthority.keys.first);
+    return project(data);
   });
 
   /// Complete source for a persistent authoring base, without loading or
@@ -1250,6 +1309,7 @@ class CharacterLibrary {
       await pending.rename(cardFile.path);
       ticket?.knownAdopted = true;
       try {
+        _invalidateRuntimeCharacter(record.id);
         cardCommitted?.call(record.id, json['data']! as Map<String, Object?>);
       } finally {
         onCommitted?.call();
@@ -1353,6 +1413,7 @@ class CharacterLibrary {
     try {
       if (!before.present) {
         owner.notAdopted(ticket, noChange: true);
+        _invalidateRuntimeCharacter(id);
         cardRemoved?.call(id);
         await _discardSummary(id);
         return;
@@ -1361,6 +1422,7 @@ class CharacterLibrary {
       ticket.enteredEffect = true;
       await Directory('${_characters.path}/$id').rename(trash.path);
       ticket.knownAdopted = true;
+      _invalidateRuntimeCharacter(id);
       cardRemoved?.call(id);
       owner.adopted(ticket);
       await _discard(trash);
@@ -1549,6 +1611,11 @@ class CharacterLibrary {
 
 final _avatarFilePattern = RegExp(r'^avatar-[0-9a-f]{64}\.png$');
 final _avatarDigestPattern = RegExp(r'^[0-9a-f]{64}$');
+
+typedef _CharacterFileVersion = ({FileSystemEntityType type, int size, DateTime modified, DateTime changed});
+
+_CharacterFileVersion _characterFileVersion(FileStat stat) =>
+    (type: stat.type, size: stat.size, modified: stat.modified, changed: stat.changed);
 
 ({String? file, String? sha256}) _avatarSelection(Map<String, Object?> metadata) {
   if (!metadata.containsKey('avatar')) {
@@ -1910,6 +1977,11 @@ Future<(TavernCard, Uint8List?)> _decodeImport(Uint8List bytes) => Isolate.run((
   final card = codec.decode(bytes);
   return (card, codec.portraitPng(card));
 });
+
+Future<String> _encodeCardDocument(Map<String, Object?> json) => Isolate.run(() => jsonEncode(json));
+
+Future<Map<String, Object?>> _decodeRuntimeAuthority(Uint8List bytes) =>
+    Isolate.run(() => const CardCodec().decodeAuthority(bytes));
 
 Future<TavernCard> _decodeStored(Uint8List bytes) => Isolate.run(() => const CardCodec().decode(bytes));
 

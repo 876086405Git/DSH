@@ -116,17 +116,13 @@ MvuJson? _mvuSchemaAt(Object? schema, List<String> segments) {
       return null;
     }
     final Object? next;
-    if (RegExp(r'^\d+$').hasMatch(segment)) {
-      if (current['type'] != 'array') {
-        return null;
-      }
-      next = current['elementType'];
-    } else {
-      if (current['type'] != 'object') {
-        return null;
-      }
+    if (current['type'] == 'object') {
       final properties = current['properties'];
       next = properties is MvuJson ? properties[segment] : null;
+    } else if (current['type'] == 'array' && RegExp(r'^\d+$').hasMatch(segment)) {
+      next = current['elementType'];
+    } else {
+      return null;
     }
     current = next is MvuJson ? next : null;
   }

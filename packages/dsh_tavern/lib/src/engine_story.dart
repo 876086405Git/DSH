@@ -3,7 +3,7 @@ part of 'engine.dart';
 const _storyRuntimeKey = 'dshgoStoryRuntime';
 
 story_core.StoryDefinition _storyDefinition(Map<String, Object?> data) {
-  final own = _map(_map(data['extensions'])['dshgo']);
+  final own = _readMap(_readMap(data['extensions'])['dshgo']);
   final version = own.containsKey('v') ? own['v'] : 1;
   return story_core.StoryDefinition.parse(own['story'], version: version);
 }

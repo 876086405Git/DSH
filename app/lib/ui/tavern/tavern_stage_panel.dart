@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_backgrounds.dart';
 import '../../tavern/tavern_bookmarks.dart';
+import '../../tavern/tavern_card_scripts.dart' show tavernChatScriptsProvider;
 import '../../tavern/tavern_card_theme.dart';
 import '../../tavern/tavern_provider.dart';
 import '../../tavern/tavern_session_usage.dart';
@@ -56,6 +57,7 @@ class TavernStagePanel extends ConsumerStatefulWidget {
     this.turn,
     this.topInset = 0,
     this.characterId,
+    this.scriptsCharacterId,
     this.name = '',
     this.busy = false,
     this.onSuggest,
@@ -72,6 +74,9 @@ class TavernStagePanel extends ConsumerStatefulWidget {
 
   /// The chat's character, and the name the export and storybook go by.
   final String? characterId;
+
+  /// Whose card's scripts run on the canvas: none in a group.
+  final String? scriptsCharacterId;
   final String name;
 
   /// A reply is being written: the persona waits until it is done.
@@ -139,6 +144,7 @@ class _TavernStagePanelState extends ConsumerState<TavernStagePanel> {
             usage: _usage,
             chatId: widget.chatId,
             characterId: widget.characterId,
+            scriptsCharacterId: widget.scriptsCharacterId,
             name: widget.name,
             busy: widget.busy,
           ),
@@ -188,6 +194,7 @@ class _Session extends ConsumerWidget {
     required this.usage,
     required this.chatId,
     required this.characterId,
+    required this.scriptsCharacterId,
     required this.name,
     required this.busy,
   });
@@ -195,6 +202,7 @@ class _Session extends ConsumerWidget {
   final Future<TavernSessionUsage> usage;
   final String chatId;
   final String? characterId;
+  final String? scriptsCharacterId;
   final String name;
   final bool busy;
 
@@ -287,6 +295,16 @@ class _Session extends ConsumerWidget {
                 ),
               ),
             ),
+            if (ref.watch(tavernChatScriptsProvider((chatId, scriptsCharacterId))).value case final chosen?
+                when chosen.scripts.isNotEmpty || chosen.issues.isNotEmpty)
+              SettingsTile(
+                key: const ValueKey('tavern-chat-scripts'),
+                icon: AppIcons.code,
+                tinted: false,
+                title: l10n.tavernChatScripts,
+                value: Text(l10n.tavernScriptCount(chosen.scripts.length)),
+                onTap: () => unawaited(_showChatScripts(context, chosen)),
+              ),
           ],
         ),
         SettingsSection(
@@ -430,6 +448,59 @@ Future<void> chooseTavernBackground(BuildContext context, WidgetRef ref, String 
 /// what changed this turn carries a mark (「+5」), what the card keeps from the
 /// model is folded like a spoiler, and a tap shows one whole and lets it be
 /// changed (docs/design/roleplay-ui.md §8).
+/// The scripts [chosen] runs, in order, each with where it comes from; and
+/// what the engine passed over, as it says it.
+Future<void> _showChatScripts(BuildContext context, TavernChatScripts chosen) => showAppSheet<void>(
+  context,
+  builder: (sheet) {
+    final l10n = sheet.l10n;
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetTitleBar(l10n.tavernChatScripts),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 12, 0, SheetTitleBar.inset + 12, 6),
+            child: Text(
+              l10n.tavernChatScriptsNote,
+              style: Theme.of(sheet).textTheme.bodySmall?.copyWith(color: DshColors.of(sheet).textTertiary),
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              child: SheetGroup(
+                margin: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                children: [
+                  for (final s in chosen.scripts)
+                    SettingsTile(
+                      tinted: false,
+                      title: s.name.isEmpty ? l10n.tavernScriptUnnamed : s.name,
+                      value: Text(switch (s.owner.kind) {
+                        TavernScriptOwnerKind.global => l10n.tavernScriptSourceGlobal,
+                        TavernScriptOwnerKind.preset => l10n.tavernScriptSourcePreset,
+                        TavernScriptOwnerKind.character => l10n.tavernScriptSourceCard,
+                      }),
+                    ),
+                  if (chosen.issues.isNotEmpty)
+                    SettingsTile(
+                      key: const ValueKey('tavern-chat-scripts-skipped'),
+                      icon: AppIcons.error,
+                      tinted: false,
+                      title: l10n.tavernChatScriptsSkipped(chosen.issues.length),
+                      subtitle: chosen.issues.map((i) => i.message).join('\n'),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  },
+);
+
 class _StateView extends ConsumerStatefulWidget {
   const _StateView({super.key, required this.chatId, required this.turn, this.onChanged});
 

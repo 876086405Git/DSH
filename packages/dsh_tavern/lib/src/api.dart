@@ -28,6 +28,7 @@ import 'lorebook_library.dart';
 import 'persona.dart';
 import 'preset_library.dart';
 import 'regex_library.dart';
+import 'script_library.dart';
 import 'scripts.dart';
 import 'state.dart';
 import 'tools.dart';
@@ -1158,6 +1159,37 @@ abstract interface class Tavern {
   /// Independently stored legacy inline settings remain a fallback; deletion
   /// of a generated legacy record does not erase that separate configuration.
   Future<void> deletePreset(String presetId);
+
+  // Managed helper scripts -------------------------------------------------
+
+  /// Ordered global tree, including disabled scripts/folders. Raw values are
+  /// detached and include current owner data/buttons, not stale import copies.
+  Future<List<TavernScriptLibraryEntry>> listGlobalScripts();
+  Stream<List<TavernScriptLibraryEntry>> watchGlobalScripts();
+
+  /// Saves a bare helper script/folder object or a complete tree array.
+  /// Preserves enabled flags and unknown fields; never executes JavaScript.
+  /// Missing/conflicting ids become new stable ids; existing owners survive.
+  Future<List<TavernScriptLibraryEntry>> importGlobalScripts(String text);
+  Future<TavernScriptLibraryEntry> setGlobalScriptEnabled(String id, bool enabled);
+
+  /// Exact permutation of one folder's children, or of roots when null.
+  Future<void> setGlobalScriptOrder(List<String> ids, {String? folderId});
+
+  /// Removes this item/subtree and its leaf scripts' global data/button rows.
+  Future<void> deleteGlobalScript(String id);
+
+  /// Complete current JSON: one object with id, otherwise a tree array.
+  Future<String> exportGlobalScripts({String? id});
+
+  /// Global + actual current preset (including RAM/legacy inline) + card.
+  /// A group without characterId does not implicitly choose a group member.
+  /// Returned owners must be passed intact to scripts.openContext.
+  Future<TavernChatScripts> chatScripts(String chatId, {String? characterId});
+
+  /// Initial value and catalog changes. Ordinary message commits do not
+  /// reload scripts; runtime data/buttons still use the context cache bridge.
+  Stream<TavernChatScripts> watchChatScripts(String chatId, {String? characterId});
 
   // Managed global regex scripts --------------------------------------------
 

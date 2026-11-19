@@ -42,12 +42,24 @@ _GameplayAdmission _captureGameplayAdmission(
   );
 }
 
-Map<String, Object?> _gameplayBindingIdentity(StoredGameplaySnapshot snapshot) {
-  final savedScopes = {for (final scope in snapshot.scopeSnapshots) (scope.scope.kind, scope.scope.targetId): scope};
+Map<String, Object?> _gameplayBindingIdentity(StoredGameplaySnapshot snapshot) => _gameplayBindingFactsIdentity(
+  snapshot.domainId,
+  snapshot.scopeSnapshots,
+  snapshot.resolvedScopes,
+  (ref) => snapshot.packs[(ref.installedPackId, ref.packVersion)]!.version,
+);
+
+Map<String, Object?> _gameplayBindingFactsIdentity(
+  String domainId,
+  List<TavernPackScopeSnapshot> scopeSnapshots,
+  List<TavernPackScopePreview> resolvedScopes,
+  TavernPackVersion? Function(TavernPackVersionRef) version,
+) {
+  final savedScopes = {for (final scope in scopeSnapshots) (scope.scope.kind, scope.scope.targetId): scope};
   return {
-    'domainId': snapshot.domainId,
+    'domainId': domainId,
     'scopes': [
-      for (final scope in snapshot.resolvedScopes)
+      for (final scope in resolvedScopes)
         {
           'scope': scope.scope.name,
           'targetId': scope.targetId,
@@ -57,7 +69,7 @@ Map<String, Object?> _gameplayBindingIdentity(StoredGameplaySnapshot snapshot) {
               _gameplayBindingIdentityRow(
                 binding,
                 savedScopes[(scope.scope, scope.targetId)]?.bindings ?? const [],
-                snapshot.packs[(binding.packRef.installedPackId, binding.packRef.packVersion)]!.version,
+                version(binding.packRef),
               ),
           ],
         },
@@ -109,23 +121,27 @@ bool _gameplaySnapshotCurrent(
   if (engine._authoringAuthority.domainId != snapshot.domainId) {
     return false;
   }
-  final current = engine._store.readGameplaySnapshot(
+  final current = engine._store.readGameplayBindingFacts(
     characterId: characterId,
     chatId: chatId,
-    readBindings: true,
-    readResources: false,
-    readContext: false,
     additionalCharacterIds: newGroupCharacterIds ?? const [],
   );
-  return _stateJsonEqual(_gameplayBindingIdentity(current), _gameplayBindingIdentity(snapshot)) &&
-      current.chat?.characterId == snapshot.chat?.characterId &&
+  return _stateJsonEqual(
+        _gameplayBindingFactsIdentity(
+          current.domainId,
+          current.scopeSnapshots,
+          current.resolvedScopes,
+          (ref) => current.versions[(ref.installedPackId, ref.packVersion)],
+        ),
+        _gameplayBindingIdentity(snapshot),
+      ) &&
+      current.hostCharacterId == snapshot.chat?.characterId &&
       _stateJsonEqual(
-        newGroupCharacterIds ??
-            [for (final member in current.group?.members ?? const <TavernGroupMember>[]) member.characterId],
+        newGroupCharacterIds ?? current.groupCharacterIds ?? const <String>[],
         newGroupCharacterIds ??
             [for (final member in snapshot.group?.members ?? const <TavernGroupMember>[]) member.characterId],
       ) &&
-      (current.group != null) == (snapshot.group != null);
+      (current.groupCharacterIds != null) == (snapshot.group != null);
 }
 
 List<_GameplayPackInput> _gameplayPackInputs(StoredGameplaySnapshot snapshot) => [

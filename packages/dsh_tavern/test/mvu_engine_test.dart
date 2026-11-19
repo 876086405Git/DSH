@@ -340,7 +340,117 @@ void main() {
     expect(phases, hasLength(phaseCount));
     expect(h.model.generated, 3);
   });
+
+  test('MVU macro history preserves physical tail, filtered roles and old source identity', () async {
+    for (final mode in ['modern', 'legacy']) {
+      final h = await T24Harness.open(thinking: false);
+      addTearDown(h.dispose);
+      await h.engine.setSettings({'macroEngine': mode});
+      final cardJson = _object(jsonDecode(utf8.decode(_mvuCard(enabled: false))));
+      final cardData = _object(cardJson['data']);
+      final entry = _object((_object(cardData['character_book'])['entries']! as List<Object?>).single);
+      entry['comment'] = '[initvar]历史宏';
+      final range = mode == 'legacy' ? '|{{allChatRange}}' : '';
+      entry['content'] =
+          'counter: 1\nlabel: from-book\n'
+          'history: "{{lastMessage}}|{{lastMessageId}}|{{lastUserMessage}}|{{lastCharMessage}}|'
+          '{{idle_duration}}|{{lastSwipeId}}|{{currentSwipeId}}$range"\n'
+          'pick: "{{pick::a::b}}"';
+      final card = await h.engine.importCard(Uint8List.fromList(utf8.encode(jsonEncode(cardJson))));
+      final imported = [
+        {
+          'user_name': 'User',
+          'character_name': card.name,
+          'create_date': '2026-11-10T11:00:00Z',
+          'chat_metadata': {'main_chat': 'Review'},
+        },
+        _historyRow('U-old', minute: 50, user: true),
+        _historyRow('C-old', minute: 51),
+        _historyRow('U-last', minute: 58, user: true),
+        _historyRow('Stage', minute: 59, narrator: true),
+        _historyRow('Hidden', minute: 59, user: true, hidden: true),
+      ];
+      final chatId = (await h.engine.importChats(card.id, [
+        TavernChatFile(
+          fileName: 'mvu-history.jsonl',
+          bytes: Uint8List.fromList(utf8.encode(imported.map(jsonEncode).join('\n'))),
+        ),
+      ])).chatIds.single;
+      final latest = (await h.engine.path(chatId)).last;
+      // Restore a real older portable shape before any script context/cache is
+      // opened. Its source header owns the identity and the missing hash.
+      final store = ChatStore.open('${h.root.path}/tavern.sqlite3', clock: () => T24Harness.at);
+      try {
+        final extra = store.rawNodeExtra(chatId, latest.nodeId);
+        final own = _object(extra['dshgo']);
+        final state = _object(own['tavernState']);
+        state.remove('stChatId');
+        state.remove('stChatIdHash');
+        state['messageVariables'] = {
+          'dshgo': {'keep': 7},
+          'external_note': 'kept',
+        };
+        own['opaque'] = ['retained'];
+        extra['unknown_mvu'] = {'keep': true};
+        store.updateMessage(chatId, latest.nodeId, extra: extra);
+      } finally {
+        await store.close();
+      }
+      final bridge = h.engine.scripts;
+      final context = await bridge.openContext(
+        TavernScriptContextSpec(instanceId: 'mvu-history-$mode', chatId: chatId, characterId: card.id),
+      );
+      expect((await bridge.setMvuEnabled(context.id, true)).issues, isEmpty);
+      final initialized = (await _read(bridge, context.id, chatId, latest.nodeId)).value;
+      expect(_object(initialized['stat_data'])['counter'], 1);
+      expect(_object(initialized['stat_data'])['label'], 'from-book');
+      final wholeRange = mode == 'legacy' ? '|0-4' : '';
+      expect(_object(initialized['stat_data'])['history'], 'Hidden|4|U-last|Stage|2 minutes|1|1$wholeRange');
+      expect(_object(initialized['stat_data'])['pick'], anyOf('a', 'b'));
+      expect(initialized['dshgo'], {'keep': 7});
+      expect(initialized['external_note'], 'kept');
+      final files = await h.engine.exportChat(chatId);
+      final exported = StChatDocument.decode(files.first.fileName, files.first.bytes);
+      final extra = _object(exported.messages.last['extra']);
+      expect(extra['unknown_mvu'], {'keep': true});
+      expect(_object(extra['dshgo'])['opaque'], ['retained']);
+      final saved = _object(_object(extra['dshgo'])['tavernState']);
+      expect(saved['stChatIdHash'], 3994932676295448, reason: 'The existing Review identity hash is restored.');
+
+      final response =
+          '<UpdateVariable>'
+          "_.set('history', '{{lastMessageId}}|{{lastUserMessage}}|{{idle_duration}}|"
+          "{{lastSwipeId}}|{{currentSwipeId}}$range');"
+          '</UpdateVariable>';
+      final reply = await _complete(h, h.engine.send(chatId, 'New user'), response);
+      expect(reply.done.hookIssues, isEmpty);
+      final updated = (await _read(bridge, context.id, chatId, reply.done.message.nodeId)).value;
+      final replyRange = mode == 'legacy' ? '|0-6' : '';
+      expect(_object(updated['stat_data'])['history'], '6|New user|a few seconds|1|1$replyRange');
+      expect(updated['dshgo'], {'keep': 7});
+      expect(updated['external_note'], 'kept');
+    }
+  });
 }
+
+Map<String, Object?> _historyRow(
+  String text, {
+  required int minute,
+  bool user = false,
+  bool hidden = false,
+  bool narrator = false,
+}) => {
+  'name': user
+      ? 'User'
+      : narrator
+      ? 'Stage'
+      : 'MVU计数台',
+  'is_user': user,
+  'is_system': hidden,
+  'send_date': DateTime.utc(2026, 11, 10, 11, minute).toIso8601String(),
+  'mes': text,
+  'extra': <String, Object?>{if (narrator) 'type': 'narrator'},
+};
 
 Future<({TavernTurnDone done, Map<String, Object?> request})> _complete(
   T24Harness h,

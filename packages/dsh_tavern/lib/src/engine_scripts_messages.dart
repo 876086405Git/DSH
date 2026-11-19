@@ -31,7 +31,24 @@ TavernScriptException _messageScriptError(
   fieldPath: fieldPath,
 );
 
-Map<String, Object?> _scriptUserExtra(Map<String, Object?> extra) => _copy(extra)..remove('dshgo');
+Map<String, Object?> _scriptUserExtra(Map<String, Object?> extra) => {
+  for (final entry in extra.entries)
+    if (entry.key != 'dshgo') entry.key: entry.value,
+};
+
+class _ScriptProjection<T> {
+  _ScriptProjection(this.input, this.value);
+  final List<Object?> input;
+  final T value;
+}
+
+class _ScriptMessageProjections {
+  final messages = <String, _ScriptProjection<TavernScriptMessage>>{};
+  final swipes = <String, _ScriptProjection<TavernScriptSwipe>>{};
+  String? stateChatId;
+  Object? stateVersion;
+  final states = <String, Map<String, Object?>>{};
+}
 
 TavernScriptShapeIssue? _scriptMessageShape(Map<String, Object?> state) {
   if (!state.containsKey('messageVariables') || state['messageVariables'] is Map<String, Object?>) {
@@ -63,7 +80,7 @@ Map<String, Object?> _scriptSwipeInfo(StoredNode node) {
       ? index.toInt()
       : 0;
   final info = infos is List<Object?> && originalIndex < infos.length && infos[originalIndex] is Map<String, Object?>
-      ? _copy(infos[originalIndex]! as Map<String, Object?>)
+      ? Map<String, Object?>.of(infos[originalIndex]! as Map<String, Object?>)
       : <String, Object?>{};
   for (final key in const ['send_date', 'gen_started', 'gen_finished', 'extra']) {
     info.remove(key);
@@ -81,10 +98,60 @@ Map<String, Object?> _scriptSwipeInfo(StoredNode node) {
 }
 
 extension _ScriptMessageOperations on _ScriptCoordinator {
-  TavernScriptMessage _projectMessage(String chatId, StoredNode node, int index, {required bool includeSwipes}) {
+  Map<String, Object?> _scriptMessageState(String chatId, StoredNode node, {_ScriptMessageProjections? cache}) {
+    final nodeId = node.message.nodeId;
+    if (cache != null) {
+      final version = engine._store.displayVersion(chatId);
+      if (cache.stateChatId != chatId || !identical(cache.stateVersion, version)) {
+        cache.stateChatId = chatId;
+        cache.stateVersion = version;
+        cache.states.clear();
+      }
+      final previous = cache.states[nodeId];
+      if (previous != null) return previous;
+    }
+    final own = node.extra['dshgo'];
+    final override = own is Map<String, Object?> ? own['tavernState'] : null;
+    final state = override is Map<String, Object?> ? override : engine._store.nodeState(chatId, nodeId);
+    if (cache != null) cache.states[nodeId] = state;
+    return state;
+  }
+
+  TavernScriptMessage _projectMessage(
+    String chatId,
+    StoredNode node,
+    int index, {
+    required bool includeSwipes,
+    _ScriptMessageProjections? cache,
+    Set<String>? usedSwipes,
+  }) {
     final message = node.message;
-    final state = engine._stateAt(chatId, message.nodeId);
-    return TavernScriptMessage(
+    final state = _scriptMessageState(chatId, node, cache: cache);
+    final extra = _scriptUserExtra(node.extra);
+    final swipes = !includeSwipes
+        ? <TavernScriptSwipe>[]
+        : [
+            for (final sibling
+                in message.siblingCount == 1 ? [node] : engine._store.scriptChildren(chatId, message.parentId))
+              _projectSwipe(chatId, sibling, cache: cache, used: usedSwipes),
+          ];
+    final input = <Object?>[
+      chatId,
+      index,
+      message.speaker,
+      message.role,
+      message.text,
+      message.hidden,
+      message.speakerCharacterId,
+      message.siblingIndex,
+      state.containsKey('messageVariables'),
+      state['messageVariables'],
+      extra,
+      swipes,
+    ];
+    final previous = cache?.messages[message.nodeId];
+    if (previous != null && _stateJsonEqual(previous.input, input)) return previous.value;
+    final projected = TavernScriptMessage(
       messageId: index,
       ref: _scriptRef(chatId, message.nodeId),
       name: message.speaker,
@@ -96,31 +163,77 @@ extension _ScriptMessageOperations on _ScriptCoordinator {
       hasData: state.containsKey('messageVariables'),
       rawData: state['messageVariables'],
       dataIssue: _scriptMessageShape(state),
-      extra: _scriptUserExtra(node.extra),
+      extra: extra,
       swipeId: message.siblingIndex,
-      swipes: !includeSwipes
-          ? const []
-          : [for (final sibling in engine._store.children(chatId, message.parentId)) _projectSwipe(chatId, sibling)],
+      swipes: swipes,
     );
+    if (cache != null) cache.messages[message.nodeId] = _ScriptProjection(input, projected);
+    return projected;
   }
 
-  TavernScriptSwipe _projectSwipe(String chatId, StoredNode node) {
-    final state = engine._stateAt(chatId, node.message.nodeId);
-    return TavernScriptSwipe(
+  TavernScriptSwipe _projectSwipe(
+    String chatId,
+    StoredNode node, {
+    _ScriptMessageProjections? cache,
+    Set<String>? used,
+  }) {
+    final state = _scriptMessageState(chatId, node, cache: cache);
+    final info = _scriptSwipeInfo(node);
+    final input = <Object?>[
+      chatId,
+      node.message.siblingIndex,
+      node.message.text,
+      state.containsKey('messageVariables'),
+      state['messageVariables'],
+      info,
+    ];
+    used?.add(node.message.nodeId);
+    final previous = cache?.swipes[node.message.nodeId];
+    if (previous != null && _stateJsonEqual(previous.input, input)) return previous.value;
+    final projected = TavernScriptSwipe(
       ref: _scriptRef(chatId, node.message.nodeId),
       swipeId: node.message.siblingIndex,
       text: node.message.text,
       hasData: state.containsKey('messageVariables'),
       rawData: state['messageVariables'],
       dataIssue: _scriptMessageShape(state),
-      info: _scriptSwipeInfo(node),
+      info: info,
     );
+    if (cache != null) cache.swipes[node.message.nodeId] = _ScriptProjection(input, projected);
+    return projected;
   }
 
-  List<TavernScriptMessage> _projectMessages(_ScriptChatCapture capture, {bool includeSwipes = true}) => [
-    for (var index = 0; index < capture.path.length; index++)
-      _projectMessage(capture.chatId, capture.path[index], index, includeSwipes: includeSwipes),
-  ];
+  Future<List<TavernScriptMessage>?> _projectMessages(_ScriptChatCapture capture, {bool includeSwipes = true}) async {
+    final cache = capture.context.messageProjections;
+    final usedSwipes = <String>{};
+    final version = engine._store.displayVersion(capture.chatId);
+    final projected = <TavernScriptMessage>[];
+    final profile = engine._turns[capture.chatId]?.profile;
+    var batchStarted = profile?.now;
+    for (var index = 0; index < capture.path.length; index++) {
+      projected.add(
+        _projectMessage(
+          capture.chatId,
+          capture.path[index],
+          index,
+          includeSwipes: includeSwipes,
+          cache: cache,
+          usedSwipes: usedSwipes,
+        ),
+      );
+      if ((index + 1) % 64 == 0 && index + 1 < capture.path.length) {
+        if (batchStarted != null) profile?.record('script_projection', batchStarted);
+        await Future<void>.delayed(Duration.zero);
+        batchStarted = profile?.now;
+        if (capture.context.closed || !identical(version, engine._store.displayVersion(capture.chatId))) return null;
+      }
+    }
+    final usedMessages = {for (final node in capture.path) node.message.nodeId};
+    cache.messages.removeWhere((id, _) => !usedMessages.contains(id));
+    cache.swipes.removeWhere((id, _) => !usedSwipes.contains(id));
+    if (batchStarted != null) profile?.record('script_projection', batchStarted);
+    return projected;
+  }
 
   Future<TavernScriptMessagePage> _getChatMessages(
     String contextId,

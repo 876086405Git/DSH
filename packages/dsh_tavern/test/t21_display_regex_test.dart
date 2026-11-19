@@ -111,6 +111,91 @@ void main() {
     expect(context.localVariables['n'], 3);
   });
 
+  test('shared replacement plans keep per-worker limits and per-call macro effects', () async {
+    final small = RegexWorker(limits: const RegexLimits(maxCaptureBytes: 33));
+    addTearDown(small.close);
+    var patterns = 0;
+    var values = 0;
+    final engine = RegexEngine(
+      globalScripts: [
+        _script(
+          pattern: '{{find}}',
+          replacement: r'{{unused}}$1',
+          patch: {
+            'substituteRegex': 1,
+            'trimStrings': ['{{trim}}'],
+          },
+        ),
+        _script(pattern: '(x)', replacement: r'{{value}}-{{match}}-$1', patch: {'id': 'active'}),
+      ],
+    );
+    String expand(String text, {String? characterOverride, Object? Function(Object?)? postProcess}) {
+      if (text == '{{find}}') {
+        patterns++;
+        return '(absent)';
+      }
+      if (text.contains('{{unused}}') || text.contains('{{trim}}')) {
+        throw StateError('An unmatched rule must not expand trim or replacement macros.');
+      }
+      return text.replaceAll('{{value}}', 'v${++values}');
+    }
+
+    final rejected = await engine.applyDisplay('x', placement: 1, worker: small, expand: expand);
+    expect(rejected.text, 'x');
+    expect(rejected.replacements, 0);
+    expect(rejected.warnings.single.reason, 'capture-limit');
+    expect(rejected.warnings.single.ruleId, 'active');
+    final first = await engine.applyDisplay('x', placement: 1, worker: worker, expand: expand);
+    expect(first.text, 'v1-x-x');
+    expect(first.replacements, 1);
+    expect(first.warnings, isEmpty);
+    final second = await engine.applyDisplay('x', placement: 1, worker: worker, expand: expand);
+    expect(second.text, 'v2-x-x');
+    expect(second.warnings, isEmpty);
+    final rejectedAgain = await engine.applyDisplay('x', placement: 1, worker: small, expand: expand);
+    expect(rejectedAgain.text, 'x');
+    expect(rejectedAgain.warnings.single.reason, 'capture-limit');
+    expect(patterns, 4);
+    expect(values, 2);
+  });
+
+  test('named reference budgets reject before replacement effects and remain per worker', () async {
+    final small = RegexWorker(limits: const RegexLimits(maxCaptureBytes: 18));
+    addTearDown(small.close);
+    final missing = List<String>.generate(128, (index) => '\$<missing$index>').join();
+    final engine = RegexEngine(
+      globalScripts: [
+        _script(
+          pattern: '(?<letter>x)',
+          replacement:
+              '$missing{{value}}'
+              r'$<letter>$<letter>',
+        ),
+      ],
+    );
+    var values = 0;
+    String expand(String text, {String? characterOverride, Object? Function(Object?)? postProcess}) =>
+        text.replaceAll('{{value}}', 'v${++values}');
+
+    final rejected = await engine.applyDisplay('x', placement: 1, worker: small, expand: expand);
+    expect(rejected.text, 'x');
+    expect(rejected.replacements, 0);
+    expect(rejected.warnings.single.reason, 'capture-limit');
+    expect(values, 0);
+
+    final admitted = await engine.applyDisplay('x', placement: 1, worker: worker, expand: expand);
+    expect(admitted.text, 'v1xx');
+    expect(admitted.replacements, 1);
+    expect(admitted.warnings, isEmpty);
+    expect(values, 1);
+
+    final rejectedAgain = await engine.applyDisplay('x', placement: 1, worker: small, expand: expand);
+    expect(rejectedAgain.text, 'x');
+    expect(rejectedAgain.replacements, 0);
+    expect(rejectedAgain.warnings.single.reason, 'capture-limit');
+    expect(values, 1);
+  });
+
   test('the 201st eligible display rule is skipped with its stable location', () async {
     var calls = 0;
     final engine = RegexEngine(

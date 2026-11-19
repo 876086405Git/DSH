@@ -8,6 +8,36 @@ import 'package:test/test.dart';
 import 'p2_script_test_support.dart';
 
 void main() {
+  test('runtime character snapshots observe external authority edits and retain old captures', () async {
+    final h = await ScriptFixture.open();
+    final character = await h.card('Runtime authority', extensions: {'tavern_helper': scriptContainer('before')});
+    final chat = await h.emptyChat(character);
+    final owner = TavernScriptOwner(kind: TavernScriptOwnerKind.character, assetId: character, scriptId: 'same-script');
+    final context = await h.context(chat, characterId: character, owner: owner);
+    final before = await h.bridge.snapshot(context.id);
+    final oldData = scriptMap(before.resourceRefs['characterData']);
+    final file = File('${h.root.path}/characters/$character/card.json');
+    final envelope = scriptMap(jsonDecode(await file.readAsString()));
+    scriptMap(envelope['data'])['extensions'] = {'tavern_helper': scriptContainer('external replacement')};
+    await file.writeAsString(jsonEncode(envelope), flush: true);
+    expect((await h.bridge.getVariables(context.id, scriptCharacter)).value, {'card-variable': 'external replacement'});
+    expect((await h.bridge.getVariables(context.id, scriptOwner)).value, {'start': 'external replacement'});
+    final after = await h.bridge.snapshot(context.id);
+    final newData = scriptMap(after.resourceRefs['characterData']);
+    expect(newData['version'], isNot(oldData['version']));
+    expect(scriptMap(scriptMap(scriptMap(newData['data'])['extensions'])['tavern_helper'])['variables'], {
+      'card-variable': 'external replacement',
+    });
+    expect(
+      before.variableSnapshots
+          .singleWhere((value) => value.resolvedTarget.scope == TavernVariableScope.character)
+          .value,
+      {'card-variable': 'before'},
+    );
+    expect(scriptMap(before.resourceRefs['characterData']), oldData);
+    h.expectNoGeneration();
+  });
+
   test('five persistent scopes keep script owners and iframe instances distinct', () async {
     final h = await ScriptFixture.open();
     final first = await h.card('Twin', extensions: {'tavern_helper': scriptContainer('A')});
@@ -256,6 +286,51 @@ void main() {
       throwsA(scriptError(TavernScriptErrorCode.revisionConflict)),
     );
     expect((await h.bridge.getVariables(context.id, scriptChat)).value['native'], 'NATIVE');
+    h.expectNoGeneration();
+  });
+
+  test('historical message observations retain physical values and committed ABA revisions', () async {
+    final h = await ScriptFixture.open();
+    final character = await h.card('Observed history', greeting: 'First message.');
+    final chat = await h.engine.createChat(character);
+    final first = (await h.engine.path(chat)).single;
+    // A legacy physical checkpoint without a portable override is read after
+    // reopen, before any bridge observation or managed write is admitted.
+    await h.reopen(
+      whileClosed: () async {
+        h.inspect((db) {
+          final row = db.select('SELECT full_json FROM node_states WHERE node_id = ?', [first.nodeId]).single;
+          final state = scriptMap(jsonDecode(row['full_json'] as String));
+          state['messageVariables'] = {'n': 1};
+          db.execute('UPDATE node_states SET full_json = ? WHERE node_id = ?', [jsonEncode(state), first.nodeId]);
+        }, writable: true);
+      },
+    );
+    final context = await h.context(chat, characterId: character);
+    final target = TavernVariableTarget(
+      scope: TavernVariableScope.message,
+      messageRef: TavernScriptMessageRef(chatId: chat, nodeId: first.nodeId),
+    );
+    final before = await h.bridge.getVariables(context.id, target);
+    expect(before.value, {'n': 1});
+    final oldView = await h.bridge.snapshot(context.id);
+    await h.bridge.snapshot(context.id);
+    await h.engine.sendOnly(chat, 'Later message.');
+    expect((await h.bridge.getVariables(context.id, target)).version, before.version);
+    await h.bridge.replaceVariables(context.id, target, {'n': 2}, expectedVersion: before.version);
+    await h.bridge.replaceVariables(context.id, target, {'n': 1});
+    final after = await h.bridge.getVariables(context.id, target);
+    expect(after.value, before.value);
+    expect(after.version, isNot(before.version));
+    await expectLater(
+      h.bridge.replaceVariables(context.id, target, {'stale': true}, expectedVersion: before.version),
+      throwsA(scriptError(TavernScriptErrorCode.revisionConflict)),
+    );
+    expect((await h.bridge.getVariables(context.id, target)).version, after.version);
+    expect(oldView.messages.single.data, {'n': 1});
+    expect((await h.bridge.snapshot(context.id)).messages.first.data, {'n': 1});
+    await h.bridge.deleteChatMessages(context.id, [0]);
+    await expectLater(h.bridge.getVariables(context.id, target), throwsA(scriptError(TavernScriptErrorCode.notFound)));
     h.expectNoGeneration();
   });
 

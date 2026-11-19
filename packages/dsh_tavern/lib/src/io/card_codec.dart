@@ -274,7 +274,7 @@ class CardCodec {
       _projectAvatar(data, avatar);
     }
     if (format == TavernCardFormat.charx) return _encodeCharx(card, json);
-    _inlineAssets(card, data, inlinePortrait: format == TavernCardFormat.json);
+    _inlineAssets(card, data, inlinePortrait: format == TavernCardFormat.json || avatar != null);
     if (format == TavernCardFormat.json) return Uint8List.fromList(utf8.encode(jsonEncode(json)));
 
     final cover = avatar ?? card.png ?? portraitPng(card) ?? _blankPng();

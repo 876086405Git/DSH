@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_tavern/src/api.dart';
@@ -6,6 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
 void main() {
+  late Database database;
   late ChatStore store;
   var serial = 0;
   var milliseconds = 1000;
@@ -13,7 +15,9 @@ void main() {
   setUp(() {
     serial = 0;
     milliseconds = 1000;
-    store = ChatStore.inMemory(
+    database = sqlite3.openInMemory();
+    store = ChatStore.fromDatabase(
+      database,
       clock: () => DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true),
       createId: () => 'generated-${serial++}',
     );
@@ -63,6 +67,313 @@ void main() {
     expect(store.chat(id).personaId, isNull);
     expect(store.chat(id).presetId, isNull);
     expect(store.chat(id).metadata, chat.metadata);
+  });
+
+  test('script reads keep variable shapes and swipe evidence without private payloads', () {
+    final chat = store.createChat(characterId: 'card');
+    final extra = <String, Object?>{
+      'foreign': {
+        'items': [null, '\ufeffkept'],
+      },
+      'scriptExtra': ['ordinary user key'],
+      'dshgo': {
+        'inspection': {'private': 'prompt evidence'},
+        'branchName': 'private label',
+        'tavernState': {
+          'messageVariables': null,
+          'other': [1, false],
+        },
+      },
+    };
+    final original = <String, Object?>{
+      'mes': 'imported body',
+      'swipes': ['imported body', 'other body'],
+      'extra': {'duplicate': true},
+      'swipe_id': 1,
+      'swipe_info': [
+        null,
+        {
+          'unknown': [false, 'kept'],
+          'send_date': null,
+          'gen_started': false,
+        },
+      ],
+      'send_date': null,
+      'gen_finished': [1, 'opaque'],
+      'vendor': {'keep': true},
+    };
+    final saved = store.append(
+      chat,
+      parentId: null,
+      role: TavernRole.character,
+      speaker: '\ufeffSpeaker',
+      text: '\ufeffcurrent body',
+      extra: extra,
+      original: original,
+      state: {
+        'messageVariables': {'physical': true},
+      },
+    );
+    final expectedOriginal = Map<String, Object?>.of(original)
+      ..remove('mes')
+      ..remove('swipes')
+      ..remove('extra');
+    final projected =
+        jsonDecode(
+              database.select('SELECT display_context FROM nodes WHERE id = ?', [
+                    saved.nodeId,
+                  ]).single['display_context']
+                  as String,
+            )
+            as Map<String, Object?>;
+    expect(projected, {
+      'dshgo': {
+        'tavernState': {
+          'messageVariables': null,
+          'other': [1, false],
+        },
+        'chatJsonl': null,
+      },
+      'scriptExtra': {'foreign': extra['foreign'], 'scriptExtra': extra['scriptExtra']},
+    });
+    for (final node in [store.scriptHistoryTo(chat, saved.nodeId).single, store.scriptChildren(chat, null).single]) {
+      expect([node.message.speaker, node.message.text], ['\ufeffSpeaker', '\ufeffcurrent body']);
+      expect(node.extra, {
+        'foreign': extra['foreign'],
+        'scriptExtra': extra['scriptExtra'],
+        'dshgo': {
+          'tavernState': {
+            'messageVariables': null,
+            'other': [1, false],
+          },
+        },
+      });
+      expect(node.original, expectedOriginal);
+      (node.extra['foreign']! as Map<String, Object?>)['items'] = 'caller mutation';
+      (node.original['vendor']! as Map<String, Object?>)['keep'] = false;
+    }
+    expect(store.node(chat, saved.nodeId).extra, extra);
+    expect(store.node(chat, saved.nodeId).original, original);
+    expect(store.nodeState(chat, saved.nodeId), {
+      'messageVariables': {'physical': true},
+    });
+    store.beginStreamingWrites();
+    try {
+      store.writeStreamingBody(chat, saved.nodeId, text: '\ufeffdraft', reasoning: null);
+      expect(store.scriptHistoryTo(chat, saved.nodeId).single.message.text, '\ufeffdraft');
+      expect(store.scriptChildren(chat, null).single.message.text, '\ufeffdraft');
+      expect(store.rawNodeExtra(chat, saved.nodeId), extra);
+    } finally {
+      store.endStreamingWrites();
+    }
+  });
+
+  test('script extra projection supports legacy rows and rolls back with its raw carrier', () {
+    final chat = store.createChat(characterId: 'card');
+    final saved = store.append(
+      chat,
+      parentId: null,
+      role: TavernRole.character,
+      speaker: 'Speaker',
+      text: 'Body',
+      extra: {
+        'foreign': [null, '\ufeffold'],
+        'dshgo': {
+          'inspection': {'private': true},
+        },
+      },
+    );
+    Map<String, Object?> scriptExtra() => store.scriptHistoryTo(chat, saved.nodeId).single.extra;
+    Map<String, Object?> rawRow() => Map<String, Object?>.from(
+      database.select('SELECT extra, display_context FROM nodes WHERE id = ?', [saved.nodeId]).single,
+    );
+    final before = rawRow();
+    database.execute("UPDATE nodes SET display_context = json_remove(display_context, '\$.scriptExtra') WHERE id = ?", [
+      saved.nodeId,
+    ]);
+    expect(scriptExtra(), {
+      'foreign': [null, '\ufeffold'],
+    });
+    // An explicitly present empty projection is complete, not an absent cache.
+    database.execute(
+      "UPDATE nodes SET display_context = json_set(display_context, '\$.scriptExtra', json('{}')) WHERE id = ?",
+      [saved.nodeId],
+    );
+    expect(scriptExtra(), isEmpty);
+    database.execute('UPDATE nodes SET display_context = ? WHERE id = ?', [before['display_context'], saved.nodeId]);
+    expect(
+      () => store.transaction<void>(() {
+        store.updateMessage(
+          chat,
+          saved.nodeId,
+          extra: {
+            'replacement': {'n': 2},
+          },
+        );
+        expect(scriptExtra(), {
+          'replacement': {'n': 2},
+        });
+        throw StateError('rollback');
+      }),
+      throwsStateError,
+    );
+    expect(rawRow(), before);
+    store.updateMessage(chat, saved.nodeId, extra: {'replacement': null});
+    expect(scriptExtra(), {'replacement': null});
+    expect(store.scriptChildren(chat, null).single.extra, {'replacement': null});
+    expect(store.rawNodeExtra(chat, saved.nodeId), {'replacement': null});
+  });
+
+  test('script state reads preserve complete portable priority and fresh physical state', () async {
+    final chat = store.createChat(characterId: 'card');
+    final other = store.createChat(characterId: 'other');
+    final saved = append(
+      chat,
+      'Body',
+      state: {
+        'messageVariables': {'n': 1},
+        'other': [null, false],
+      },
+    );
+    final physical = store.scriptNodeState(chat, saved.nodeId);
+    expect(physical, {
+      'messageVariables': {'n': 1},
+      'other': [null, false],
+    });
+    (physical['messageVariables']! as Map<String, Object?>)['n'] = 'caller mutation';
+    expect(store.scriptNodeState(chat, saved.nodeId)['messageVariables'], {'n': 1});
+    for (final override in <Object?>[
+      null,
+      ['invalid'],
+      'invalid',
+    ]) {
+      store.updateMessage(
+        chat,
+        saved.nodeId,
+        extra: {
+          'dshgo': {'tavernState': override},
+        },
+      );
+      expect(store.scriptNodeState(chat, saved.nodeId), store.nodeState(chat, saved.nodeId));
+    }
+    store.updateMessage(
+      chat,
+      saved.nodeId,
+      extra: {
+        'dshgo': {'tavernState': <String, Object?>{}},
+      },
+    );
+    expect(store.scriptNodeState(chat, saved.nodeId), isEmpty);
+    final portable = <String, Object?>{
+      'messageVariables': null,
+      'unknown': [1, false],
+    };
+    store.updateMessage(
+      chat,
+      saved.nodeId,
+      extra: {
+        'dshgo': {'tavernState': portable},
+      },
+    );
+    store.writeNodeState(chat, saved.nodeId, {
+      'messageVariables': {'n': 2},
+    });
+    expect(store.scriptNodeState(chat, saved.nodeId), portable);
+    (store.scriptNodeState(chat, saved.nodeId)['unknown']! as List<Object?>).clear();
+    expect(store.scriptNodeState(chat, saved.nodeId), portable);
+    store.updateMessage(chat, saved.nodeId, extra: {});
+    expect(store.scriptNodeState(chat, saved.nodeId), {
+      'messageVariables': {'n': 2},
+    });
+    expect(
+      () => store.transaction<void>(() {
+        store.writeNodeState(chat, saved.nodeId, {
+          'messageVariables': ['raw-array'],
+        });
+        expect(store.scriptNodeState(chat, saved.nodeId), {
+          'messageVariables': ['raw-array'],
+        });
+        throw StateError('rollback');
+      }),
+      throwsStateError,
+    );
+    expect(store.scriptNodeState(chat, saved.nodeId), {
+      'messageVariables': {'n': 2},
+    });
+    expect(() => store.scriptNodeState(other, saved.nodeId), throwsStateError);
+    final token = store.softDeleteFrom(chat, saved.nodeId);
+    expect(() => store.scriptNodeState(chat, saved.nodeId), throwsStateError);
+    expect(store.undoDeleteFrom(chat, token), isTrue);
+    expect(store.scriptNodeState(chat, saved.nodeId), {
+      'messageVariables': {'n': 2},
+    });
+    await store.close();
+    expect(() => store.scriptNodeState(chat, saved.nodeId), throwsStateError);
+  });
+
+  test('read tokens and scalar identities observe state commits and isolate rollbacks', () {
+    final chat = store.createChat(characterId: 'host', variables: {'n': 1});
+    final other = store.createChat(characterId: 'other');
+    final root = append(
+      chat,
+      'root',
+      state: {
+        'messageVariables': {'n': 1},
+      },
+    );
+    final before = store.displayVersion(chat);
+    final otherBefore = store.displayVersion(other);
+    final revision = store.treeRevision(chat);
+    store.chatVariables(chat)['n'] = 'detached';
+    expect(store.chatVariables(chat), {'n': 1});
+    Object? temporary;
+    expect(
+      () => store.transaction<void>(() {
+        store.writeNodeState(chat, root.nodeId, {
+          'messageVariables': {'n': 2},
+        });
+        store.updateChat(chat, variables: {'n': 2});
+        final child = append(chat, 'temporary', parent: root.nodeId);
+        temporary = store.displayVersion(chat);
+        expect(identical(temporary, before), isFalse);
+        expect(store.chatCharacterId(chat), 'host');
+        expect(store.chatCurrentLeafId(chat), child.nodeId);
+        expect(store.chatVariables(chat), {'n': 2});
+        expect(store.contextAnchor(chat).selectedLeaf?.nodeId, child.nodeId);
+        expect(store.treeRevision(chat), greaterThan(revision));
+        expect(store.nodeState(chat, root.nodeId), {
+          'messageVariables': {'n': 2},
+        });
+        throw StateError('rollback');
+      }),
+      throwsStateError,
+    );
+    expect(identical(store.displayVersion(chat), before), isTrue);
+    expect(identical(store.displayVersion(chat), temporary), isFalse);
+    expect(store.chatCurrentLeafId(chat), root.nodeId);
+    expect(store.chatVariables(chat), {'n': 1});
+    expect(store.treeRevision(chat), revision);
+    expect(store.nodeState(chat, root.nodeId), {
+      'messageVariables': {'n': 1},
+    });
+    store.writeNodeState(chat, root.nodeId, {
+      'messageVariables': {'n': 3},
+    });
+    expect(identical(store.displayVersion(chat), before), isFalse);
+    expect(identical(store.displayVersion(other), otherBefore), isTrue);
+    expect(store.nodeState(chat, root.nodeId), {
+      'messageVariables': {'n': 3},
+    });
+    for (final read in <void Function()>[
+      () => store.chatCharacterId('missing'),
+      () => store.chatCurrentLeafId('missing'),
+      () => store.chatVariables('missing'),
+      () => store.treeRevision('missing'),
+      () => store.contextAnchor('missing'),
+      () => store.scriptHistoryTo('missing', null),
+    ]) {
+      expect(read, throwsA(isA<StateError>().having((error) => error.message, 'message', 'Chat not found: missing')));
+    }
   });
 
   test('summaries count the selected path and sort by last change', () {
@@ -219,6 +530,59 @@ void main() {
     expect(store.allNodes(b).length, 1);
     expect(() => store.selectSibling(b, other.nodeId, -1), throwsRangeError);
     expect(() => store.selectSibling(b, other.nodeId, 1), throwsRangeError);
+  });
+
+  test('import batches preserve id and clock order, revision counts and the last timestamp', () async {
+    await store.close();
+    final events = <String>[];
+    const times = [1000, 3000, 4000, 2000];
+    var clockIndex = 0;
+    var idIndex = 0;
+    store = ChatStore.inMemory(
+      clock: () {
+        final value = times[clockIndex++];
+        events.add('clock:$value');
+        return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+      },
+      createId: () {
+        final id = 'batch-${idIndex++}';
+        events.add('id:$id');
+        return id;
+      },
+    );
+    final chat = store.createChat(characterId: 'card');
+    final ids = store.appendImportedNodes(chat, [
+      for (var index = 0; index < 3; index++)
+        StoredChatImportNode(
+          key: 'key-$index',
+          parentKey: index == 0 ? null : 'key-${index - 1}',
+          role: TavernRole.character,
+          speaker: '鲸鱼',
+          text: 'entry $index',
+          at: DateTime.utc(2026),
+          hidden: false,
+          state: {'slot': index},
+          extra: const {},
+          original: const {},
+        ),
+    ]);
+    expect(ids, {'key-0': 'batch-1', 'key-1': 'batch-2', 'key-2': 'batch-3'});
+    expect(store.treeRevision(chat), 3);
+    expect(store.chat(chat).createdAt.millisecondsSinceEpoch, 1000);
+    expect(store.chat(chat).updatedAt.millisecondsSinceEpoch, 2000);
+    expect(store.appendImportedNodes(chat, const []), isEmpty);
+    expect(store.treeRevision(chat), 3);
+    expect(store.chat(chat).updatedAt.millisecondsSinceEpoch, 2000);
+    expect(events, [
+      'id:batch-0',
+      'clock:1000',
+      'id:batch-1',
+      'clock:3000',
+      'id:batch-2',
+      'clock:4000',
+      'id:batch-3',
+      'clock:2000',
+    ]);
   });
 
   test('a failed batch rolls back nodes, selected path, search index and notifications', () async {

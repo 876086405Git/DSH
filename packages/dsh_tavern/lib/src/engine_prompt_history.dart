@@ -35,11 +35,10 @@ _PromptHistoryWindow? _plainPromptHistory(
   required PromptTokenCounter counter,
   required WorldInfoSettings worldSettings,
 }) {
-  final settings = preset.settings;
+  final settings = preset.executionSettings;
   if (engine._counter is! EstimatedTokenCounter ||
       (turn.kind != _TurnKind.send && turn.kind != _TurnKind.regenerate) ||
       turn.groupView != null ||
-      engine._scripts.contexts.values.any((context) => !context.closed && context.value.chatId == turn.chat.id) ||
       turn.scriptInjectionUses?.used.isNotEmpty == true ||
       _map(turn.settings['reasoning'])['add_to_prompts'] == true ||
       _hasWorldTimers(turn.state['timedWorldInfo']) ||
@@ -49,9 +48,9 @@ _PromptHistoryWindow? _plainPromptHistory(
       !_literalPromptName(data['nickname']) ||
       !_literalPromptName(turn.settings['userName']) ||
       !_plainPromptData(turn.input) ||
-      !_plainPromptData(data) ||
-      !_plainPromptData(turn.settings) ||
-      !_plainPromptData(settings) ||
+      !_plainPromptResource(data) ||
+      !_plainPromptSettings(turn.settings) ||
+      !_plainPromptResource(settings) ||
       _hasTurnHistoryRules(data, turn.settings, settings, turn.actorId, packRegex: turn.gameplayResources.regex)) {
     return null;
   }
@@ -168,11 +167,10 @@ bool _hasTurnHistoryRules(
       if (rule.effective) rule.execution,
     ...RegexEngine.readScripts(settings['globalRegexScripts'] ?? settings['regex']),
     ...RegexEngine.readScripts(settings['managedRegexScripts']),
-    if (settings['presetRegexEnabled'] != false)
-      ...RegexEngine.readScripts(_map(preset['extensions'])['regex_scripts']),
+    if (settings['presetRegexEnabled'] != false) ..._readRegexScripts(_readMap(preset['extensions'])['regex_scripts']),
     if (settings['characterRegexEnabled'] != false &&
         !_strings(settings['disabledCharacterRegex']).contains(characterId))
-      ...RegexEngine.readScripts(_map(data['extensions'])['regex_scripts']),
+      ..._readRegexScripts(_readMap(data['extensions'])['regex_scripts']),
   ];
   // WI captures can synthesize a history macro absent from every raw string.
   // Keep its prompt replacements on the complete-history path as well.
@@ -188,6 +186,57 @@ bool _hasTurnHistoryRules(
               (placement == RegexPlacement.worldInfo && script.promptOnly),
         ),
   );
+}
+
+// Helper script bodies and regex replacement programs are not card macro
+// fields. Active prompt regex is checked separately by _hasTurnHistoryRules.
+// All other extension carriers retain the conservative complete-history rule.
+bool _plainPromptSettings(Map<String, Object?> settings) {
+  for (final entry in settings.entries) {
+    if (const {'globalRegexScripts', 'managedRegexScripts', 'regex'}.contains(entry.key)) continue;
+    if (entry.key == 'preset' && entry.value is Map<String, Object?>) {
+      if (!_plainPromptResource(entry.value! as Map<String, Object?>)) return false;
+    } else if (!_plainPromptData(entry.value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _plainPromptResource(Map<String, Object?> value) {
+  for (final entry in value.entries) {
+    if (entry.key != 'extensions' || entry.value is! Map<String, Object?>) {
+      if (!_plainPromptData(entry.value)) return false;
+      continue;
+    }
+    for (final extension in (entry.value! as Map<String, Object?>).entries) {
+      if (const {'regex_scripts', 'tavern_helper', 'tavern_helper_scripts'}.contains(extension.key)) continue;
+      if (!_plainPromptData(extension.value)) return false;
+    }
+  }
+  return true;
+}
+
+// Dynamic macros still see the whole ancestry. Their prompt-only rows omit
+// inspection/state/unused import bodies and yield between bounded SQL pages.
+Future<List<StoredNode>> _completePromptHistory(TavernEngine engine, _Turn turn, String? leaf) async {
+  final reversed = <StoredNode>[];
+  final seen = <String>{};
+  var cursor = leaf;
+  while (cursor != null) {
+    final page = engine._store.promptHistoryTo(turn.chat.id, cursor, limit: 32, includeRuntime: true);
+    for (final node in page.reversed) {
+      if (!seen.add(node.message.nodeId)) throw StateError('Cycle in the ancestor path: ${node.message.nodeId}');
+      reversed.add(node);
+    }
+    cursor = page.first.message.parentId;
+    if (cursor != null) {
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(engine, turn, StoredToolPhase.native);
+    }
+  }
+  return reversed.reversed.toList();
 }
 
 bool _plainPromptData(Object? value) {
@@ -261,4 +310,118 @@ bool _hasGameplayWorldTimers(Map<String, Object?> state, _GameplayResources reso
     }
   }
   return false;
+}
+
+// Persist only the prompt admission boundary, never a second chat history.
+// Source/content versions let ordinary appends reuse the boundary while edits,
+// hiding, deletion, branch changes and imported replacements start a new one.
+class _CachedPromptWindow {
+  const _CachedPromptWindow(this.window, this.path, this.configuration);
+  final PromptHistoryWindow window;
+  final List<StoredHistoryLink> path;
+  final _PromptWindowConfiguration configuration;
+
+  bool accepts(List<StoredHistoryLink> current, _PromptWindowConfiguration next) {
+    if (!configuration.matches(next) || current.length < path.length) return false;
+    for (var index = 0; index < path.length; index++) {
+      final before = path[index], after = current[index];
+      if (before.nodeId != after.nodeId ||
+          before.seq != after.seq ||
+          before.sourceEpoch != after.sourceEpoch ||
+          before.contentVersion != after.contentVersion ||
+          before.role != after.role ||
+          before.speaker != after.speaker ||
+          before.speakerCharacterId != after.speakerCharacterId ||
+          before.hidden != after.hidden ||
+          before.isSystem != after.isSystem) {
+        return false;
+      }
+    }
+    return current.any((node) => node.nodeId == window.firstNodeId);
+  }
+}
+
+class _PromptWindowConfiguration {
+  _PromptWindowConfiguration(_Turn turn, this.card, this.hostCard, this.books)
+    : settings = turn.settings,
+      values = {
+        'actor': turn.actorId,
+        'preset': turn.presetId,
+        'persona': turn.chat.personaId,
+        'model': turn.config.model,
+        'generationType': turn.generationType,
+        'thinking': turn.config.thinking,
+        'deepseek': turn.config.deepseek,
+        'tools': _ordinaryTurnTools(turn),
+        'groupNames': turn.groupView?.names,
+      };
+
+  // This is the turn's actual captured input. Current library/document tokens
+  // may already describe newer data after a held preparation hook, so they
+  // cannot stand in for the preset and overrides used by this assembly.
+  final Map<String, Object?> settings, values, card, hostCard;
+  final List<WorldInfoBook> books;
+
+  bool matches(_PromptWindowConfiguration other) =>
+      _samePromptSettings(settings, other.settings) &&
+      _samePromptSettings(card, other.card) &&
+      _samePromptSettings(hostCard, other.hostCard) &&
+      _samePromptBooks(books, other.books) &&
+      _stateJsonEqual(values, other.values);
+}
+
+bool _samePromptBooks(List<WorldInfoBook> left, List<WorldInfoBook> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    final before = left[index], after = right[index];
+    if (identical(before, after)) continue;
+    // Pack remapping creates fresh book objects from the same captured source.
+    // Compare those actual projections; current library tokens are unrelated
+    // to a previously captured turn and would miss a concurrent replacement.
+    if (!sameWorldInfoBook(before, after)) return false;
+  }
+  return true;
+}
+
+bool _samePromptSettings(Map<String, Object?> left, Map<String, Object?> right) {
+  if (left.length != right.length) return false;
+  for (final entry in left.entries) {
+    if (!right.containsKey(entry.key)) return false;
+    final other = right[entry.key];
+    // Read projections share unmodified source containers. Only a genuinely
+    // different override/source needs structural comparison, never encoding.
+    if (!identical(entry.value, other) && !_stateJsonEqual(entry.value, other)) return false;
+  }
+  return true;
+}
+
+class _PendingPromptWindow {
+  const _PendingPromptWindow(this.window, this.contextLeaf, this.configuration);
+  final PromptHistoryWindow window;
+  final String? contextLeaf;
+  final _PromptWindowConfiguration configuration;
+}
+
+extension _PromptWindowState on TavernEngine {
+  PromptHistoryWindow? _reusePromptWindow(_Turn turn, String? leaf, _PromptWindowConfiguration configuration) {
+    final previous = _promptCacheWindows[turn.chat.id];
+    if (previous == null) return null;
+    final path = _store.historyLinksTo(turn.chat.id, leaf);
+    if (previous.accepts(path, configuration)) return previous.window;
+    _promptCacheWindows.remove(turn.chat.id);
+    return null;
+  }
+
+  void _adoptPromptWindow(_Turn turn) {
+    final pending = turn.pendingPromptWindow;
+    if (pending == null) return;
+    // Called after the model stream accepts its first subscription. Preparation
+    // failures and authoring previews therefore never advance the chat window.
+    _promptCacheWindows[turn.chat.id] = _CachedPromptWindow(
+      pending.window,
+      _store.historyLinksTo(turn.chat.id, pending.contextLeaf),
+      pending.configuration,
+    );
+    turn.pendingPromptWindow = null;
+  }
 }

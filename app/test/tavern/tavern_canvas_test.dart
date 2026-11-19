@@ -4,6 +4,7 @@ import 'package:dsh_app/tavern/tavern_canvas.dart';
 import 'package:dsh_app/tavern/tavern_canvas_calls.dart';
 import 'package:dsh_app/tavern/tavern_card_scripts.dart';
 import 'package:dsh_app/tavern/tavern_preview.dart';
+import 'package:dsh_app/tavern/tavern_script_wire.dart' show tavernScriptKey;
 import 'package:dsh_app/tavern/tavern_provider.dart';
 import 'package:dsh_app/tavern/tavern_settings.dart';
 import 'package:dsh_app/ui/tavern/tavern_canvas_view.dart';
@@ -29,6 +30,27 @@ class _Canvas {
   TavernCanvasCalls? calls;
   var builds = 0;
 }
+
+/// A script the chat runs: the card's, unless [kind] says otherwise.
+TavernRunnableScript _script(
+  String id, {
+  TavernScriptOwnerKind kind = TavernScriptOwnerKind.character,
+  List<String> buttons = const [],
+}) => TavernRunnableScript(
+  owner: TavernScriptOwner(
+    kind: kind,
+    scriptId: id,
+    assetId: kind == TavernScriptOwnerKind.character ? 'sample-innkeeper' : null,
+  ),
+  name: id,
+  content: 'x',
+  buttons: [for (final b in buttons) TavernScriptButton(name: b, visible: true)],
+);
+
+/// Every chat runs [scripts].
+Override _scripts(List<TavernRunnableScript> scripts) => tavernChatScriptsProvider.overrideWith(
+  (ref, chat) => Stream.value(TavernChatScripts(chatId: chat.$1, characterId: chat.$2, scripts: scripts)),
+);
 
 Future<(PreviewTavern, String, _Canvas)> _chat(
   WidgetTester tester, {
@@ -270,10 +292,11 @@ void main() {
     // SillyTavern: only what the page can truly give (checked in Edge).
     expect(open, contains("Object.defineProperty(SillyTavern,'chat',{get:function(){return msgs.map(stMessage);}"));
     expect(open, contains('if(!window.SillyTavern)window.SillyTavern=SillyTavern;'));
-    // A card's own scripts go in as JSON, a closing tag in one not ending
-    // ours; each runs in a hidden frame named for it (checked in Edge). None
-    // when scripts do not run.
-    expect(open, contains('var cardScripts=[],'));
+    // The chat's scripts come later (dsh.setScripts), each kept in its frame
+    // by its whole owner's key while its code stays the same.
+    expect(open, contains('var scripts=[],frames={},frameAt=[],started=null,drawn=false;'));
+    expect(open, contains('dsh.setScripts=function(list){scripts=list;if(started)started.then(syncFrames);'));
+    expect(open, contains("if(!want[k]||want[k].content!==frames[k].content)stopFrame(k);"));
     String withScripts({
       bool noScripts = false,
       Map<String, Object?> card = const {'name': '林晚', 'description': '店主</script>'},
@@ -288,22 +311,9 @@ void main() {
       lineHeight: 1.65,
       nonce: 'n0nce',
       noScripts: noScripts,
-      cardScripts: const [
-        {'id': 's1', 'name': '状态栏', 'content': "x = '</script>';", 'buttons': <String>[]},
-      ],
       card: card,
       characterId: 'char-1',
     );
-    expect(
-      withScripts(),
-      contains(
-        r'var cardScripts=[{"id":"s1","name":"状态栏","content":"x = '
-        "'"
-        r'\u003c/script>',
-      ),
-    );
-    expect(withScripts(), isNot(contains("x = '</script>'")));
-    expect(withScripts(noScripts: true), contains('var cardScripts=[],'));
     // The chat's card likewise (its questions checked in Edge); none for a
     // group, or when scripts do not run.
     expect(withScripts(), contains(r'var card={"name":"林晚","description":"店主\u003c/script>"},cardId="char-1";'));
@@ -313,7 +323,7 @@ void main() {
     expect(opener, contains(r'"description":"\u003c!--\u003cscript>"'));
     expect(withScripts(noScripts: true), contains('var card=null,cardId=null;'));
     expect(open, contains('var card=null,cardId=null;'));
-    expect(open, contains(r"el.textContent=withoutMvuImport(s.content)+'\n//# sourceURL=dsh-script-'+n+'.js';"));
+    expect(open, contains(r"el.textContent=withoutMvuImport(s.content)+'\n//# sourceURL=dsh-script-'+f.n+'.js';"));
     // MVU: on for a card that uses it, Mvu shared once the engine has it on;
     // off otherwise, and when scripts do not run.
     expect(open, contains('var mvuWanted=false;'));
@@ -330,7 +340,7 @@ void main() {
     expect(mvu, contains('var mvuWanted=true;'));
     expect(mvu, contains("ask('setMvuEnabled',{enabled:true})"));
     expect(mvu, contains("initializeGlobal('Mvu',Mvu)"));
-    expect(mvu, contains('function runCardScripts(){mvuStart().then(startCardScripts);}'));
+    expect(mvu, contains('started=dsh.scripts.ready().then(go,go);'));
     // Its events answered with the candidate; the engine's resources kept
     // from the snapshot and each delivery, before a same-revision return.
     expect(mvu, contains('if(mvu)ack.mvu=mvu;'));
@@ -467,22 +477,22 @@ void main() {
     expect(find.byKey(const ValueKey('tavern-transcript')), findsOneWidget);
   });
 
-  testWidgets("the card's script buttons sit above the composer, before 掷骰; a tap is pressed in the page", (
+  testWidgets("the chat's script buttons sit above the composer, before 掷骰; a tap is pressed in the page, by owner", (
     tester,
   ) async {
-    final scripts = [
-      const TavernCardScript(id: 's1', name: '地图', content: 'x', buttons: ['前往', '查看背包']),
-      const TavernCardScript(id: 's2', name: '无按钮', content: 'y'),
-    ];
+    final global = _script('s1', kind: TavernScriptOwnerKind.global, buttons: ['全局']);
+    final card = _script('s1', buttons: ['前往', '查看背包']);
     final (_, _, canvas) = await _chat(
       tester,
-      overrides: [tavernCardScriptsProvider('sample-innkeeper').overrideWith((ref) async => scripts)],
+      overrides: [
+        _scripts([global, card, _script('s2')]),
+      ],
     );
     await tester.pumpAndSettle();
     final row = find.byKey(const ValueKey('tavern-quick-replies'));
     expect(find.descendant(of: row, matching: find.text('前往')), findsOneWidget);
     expect(find.descendant(of: row, matching: find.text('查看背包')), findsOneWidget);
-    // In order: the script buttons, then 掷骰.
+    // In order: global, then the card's, then 掷骰.
     final first = tester.getTopLeft(find.byKey(const ValueKey('tavern-script-button-0'))).dx;
     final second = tester.getTopLeft(find.byKey(const ValueKey('tavern-script-button-1'))).dx;
     final dice = tester.getTopLeft(find.byKey(const ValueKey('tavern-dice'))).dx;
@@ -493,18 +503,20 @@ void main() {
       pressed.add(d);
       return true;
     };
-    await tester.tap(find.byKey(const ValueKey('tavern-script-button-1')));
+    // The same script id in two places: each button goes to its own.
+    await tester.tap(find.byKey(const ValueKey('tavern-script-button-2')));
+    await tester.tap(find.byKey(const ValueKey('tavern-script-button-0')));
     await tester.pump();
     expect(pressed, [
-      {'kind': 'button', 'scriptId': 's1', 'name': '查看背包'},
+      {'kind': 'button', 'key': tavernScriptKey(card.owner), 'name': '查看背包'},
+      {'kind': 'button', 'key': tavernScriptKey(global.owner), 'name': '全局'},
     ]);
   });
 
   testWidgets('no script buttons where the scripts do not run: 不运行卡的脚本 on, or the native list', (tester) async {
-    final scripts = [
-      const TavernCardScript(id: 's1', name: '地图', content: 'x', buttons: ['前往']),
-    ];
-    final override = tavernCardScriptsProvider('sample-innkeeper').overrideWith((ref) async => scripts);
+    final override = _scripts([
+      _script('s1', buttons: ['前往']),
+    ]);
     await _chat(tester, prefs: {TavernSettingsController.islandNoScriptsKey: true}, overrides: [override]);
     expect(find.byKey(const ValueKey('tavern-script-button-0')), findsNothing);
     expect(find.byKey(const ValueKey('tavern-dice')), findsOneWidget);
@@ -514,11 +526,8 @@ void main() {
   });
 
   testWidgets("with the switch off, a card's scripts are said to wait on it; 打开 turns it on", (tester) async {
-    final scripts = [
-      const TavernCardScript(id: 's1', name: '地图', content: 'x'),
-      const TavernCardScript(id: 's2', name: '状态栏', content: 'y'),
-    ];
-    final override = tavernCardScriptsProvider('sample-innkeeper').overrideWith((ref) async => scripts);
+    // The card's own are counted; a global one is not the card's.
+    final override = _scripts([_script('g', kind: TavernScriptOwnerKind.global), _script('s1'), _script('s2')]);
     final (_, _, canvas) = await _chat(
       tester,
       prefs: {TavernSettingsController.canvasKey: false},
@@ -557,8 +566,7 @@ void main() {
   });
 
   testWidgets('put away, it is not said again for that card', (tester) async {
-    final override = tavernCardScriptsProvider('sample-innkeeper')
-        .overrideWith((ref) async => [const TavernCardScript(id: 's1', name: '地图', content: 'x')]);
+    final override = _scripts([_script('s1')]);
     await _chat(tester, prefs: {TavernSettingsController.canvasKey: false}, overrides: [override]);
     await tester.pumpAndSettle();
     final hint = find.byKey(const ValueKey('tavern-scripts-hint'));
@@ -579,14 +587,9 @@ void main() {
   });
 
   testWidgets('not said where it would not help: no scripts, 不运行卡的脚本 on, or 视觉小说', (tester) async {
-    final override = tavernCardScriptsProvider('sample-innkeeper')
-        .overrideWith((ref) async => [const TavernCardScript(id: 's1', name: '地图', content: 'x')]);
+    final override = _scripts([_script('s1')]);
     final hint = find.byKey(const ValueKey('tavern-scripts-hint'));
-    await _chat(
-      tester,
-      prefs: {TavernSettingsController.canvasKey: false},
-      overrides: [tavernCardScriptsProvider('sample-innkeeper').overrideWith((ref) async => const [])],
-    );
+    await _chat(tester, prefs: {TavernSettingsController.canvasKey: false}, overrides: [_scripts(const [])]);
     await tester.pumpAndSettle();
     expect(hint, findsNothing);
     await _chat(

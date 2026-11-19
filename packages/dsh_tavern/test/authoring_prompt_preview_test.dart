@@ -679,9 +679,12 @@ void main() {
     final files = await _persistentFiles(h.root);
     expect(
       h.inspect(
-        (db) => db.select('SELECT raw_text FROM authoring_resources WHERE physical_resource_id = ?', [
-          'character:$character',
-        ]).single['raw_text'],
+        (db) => db.select(
+          'SELECT COALESCE(p.raw_text, r.raw_text) AS raw_text '
+          'FROM authoring_resources r LEFT JOIN authoring_payloads p ON p.payload_id = r.raw_text_id '
+          'WHERE r.physical_resource_id = ?',
+          ['character:$character'],
+        ).single['raw_text'],
       ),
       contains('OLD_RAW'),
     );

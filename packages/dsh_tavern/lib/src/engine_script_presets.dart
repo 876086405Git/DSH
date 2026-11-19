@@ -34,28 +34,33 @@ final class _PresetWorkingSlot {
     required Map<String, Object?> raw,
     required Set<String> samplingOwned,
     required this.revision,
+    String? workingId,
   }) : raw = _copy(raw),
-       samplingOwned = Set.unmodifiable(samplingOwned);
+       samplingOwned = Set.unmodifiable(samplingOwned),
+       workingId = workingId ?? _newStateId();
   final String selectionIdentity;
   final PresetSelectionSource loadedSource;
   final String? loadedPresetId;
   final Map<String, Object?> raw;
   final Set<String> samplingOwned;
   final int revision;
+  final String workingId;
 
-  _PresetWorkingSlot copy({Set<String>? samplingOwned, int? revision}) => _PresetWorkingSlot(
+  _PresetWorkingSlot copy({Map<String, Object?>? raw, Set<String>? samplingOwned, int? revision}) => _PresetWorkingSlot(
     selectionIdentity: selectionIdentity,
     loadedSource: loadedSource,
     loadedPresetId: loadedPresetId,
-    raw: raw,
+    raw: raw ?? this.raw,
     samplingOwned: samplingOwned ?? this.samplingOwned,
     revision: revision ?? this.revision,
+    workingId: workingId,
   );
 
   Map<String, Object?> toJson() => {
     'selectionIdentity': selectionIdentity,
     'loadedSource': loadedSource.name,
     'loadedPresetId': ?loadedPresetId,
+    'workingId': workingId,
     'raw': _copy(raw),
     'samplingOwned': [
       for (final key in _presetSamplingKeys)
@@ -310,6 +315,8 @@ extension _PresetWorkingState on TavernEngine {
       return;
     }
     _presetWorkingNotifiedRevision = _presetWorkingRevision;
+    _scripts.presetScriptCarriersChanged();
+    _scriptCatalogChanged.add(null);
     _scripts.resourcesChanged();
   }
 
@@ -400,8 +407,89 @@ extension _PresetWorkingState on TavernEngine {
   }
 }
 
+extension _PresetScriptOwners on TavernEngine {
+  Map<String, Object?> _presetScriptOwnerRaw(TavernScriptOwner owner, {Map<String, Object?>? document}) {
+    final carrier = owner.presetCarrier;
+    if (carrier == null) return _requirePreset(owner.assetId!).raw;
+    if (carrier.kind == TavernScriptPresetCarrierKind.working) {
+      final slot = _presetWorkingSlots[carrier.chatId];
+      if (slot == null || slot.workingId != carrier.workingId || slot.loadedPresetId != owner.assetId) {
+        throw _scriptError(TavernScriptErrorCode.notFound, 'script', 'The preset working owner no longer exists.');
+      }
+      return slot.raw;
+    }
+    final settings = carrier.chatId == null
+        ? _readOptionalObject(document ?? _document, 'settings')
+        : _store.chat(carrier.chatId!).settings;
+    final raw = settings['preset'];
+    if (raw is! Map<String, Object?>) {
+      throw _scriptError(TavernScriptErrorCode.notFound, 'script', 'The inline preset owner no longer exists.');
+    }
+    return raw;
+  }
+
+  // Caller owns the preset queue, as do the existing saved-preset writers.
+  Future<T> _editPresetScriptOwner<T>(
+    TavernScriptOwner owner,
+    T Function(Map<String, Object?> entry) edit, {
+    required void Function() onCommitted,
+    void Function()? check,
+  }) async {
+    T prepare(Map<String, Object?> raw) => edit(_scriptEntry(_readOptionalObject(raw, 'extensions'), owner.scriptId));
+    final carrier = owner.presetCarrier;
+    if (carrier == null) {
+      final original = _requirePreset(owner.assetId!);
+      final raw = original.raw;
+      final result = prepare(raw);
+      _store.transaction(() => _savePresetEdit(original, raw), onCommitted: onCommitted);
+      return result;
+    }
+    if (carrier.kind == TavernScriptPresetCarrierKind.working) {
+      final raw = _copy(_presetScriptOwnerRaw(owner));
+      final slot = _presetWorkingSlots[carrier.chatId]!;
+      final result = prepare(raw);
+      final next = Map<String?, _PresetWorkingSlot>.of(_presetWorkingSlots)
+        ..[carrier.chatId] = slot.copy(raw: raw, revision: _presetWorkingRevision + 1);
+      _adoptPresetWorking(_presetMutation(next));
+      onCommitted();
+      _notifyPresetWorking();
+      return result;
+    }
+    if (carrier.chatId == null) {
+      return _settingsDocument((document) async {
+        final result = prepare(_presetScriptOwnerRaw(owner, document: document));
+        await _commitSettingsDocument(
+          document,
+          check: check,
+          onCommitted: () {
+            _document['settings'] = document['settings'];
+            _adoptPresetWorking(_preparePresetSettingsAdoption(const {}));
+            onCommitted();
+            _notifyPresetWorking();
+          },
+        );
+        return result;
+      });
+    }
+    final chat = _store.chat(carrier.chatId!);
+    final settings = chat.settings;
+    final raw = settings['preset'];
+    if (raw is! Map<String, Object?>) {
+      throw _scriptError(TavernScriptErrorCode.notFound, 'script', 'The inline preset owner no longer exists.');
+    }
+    final result = prepare(raw);
+    _store.transaction(() => _store.updateChat(chat.id, settings: settings), onCommitted: onCommitted);
+    _scriptCatalogChanged.add(null);
+    return result;
+  }
+}
+
 extension _ScriptPresets on _ScriptCoordinator {
-  TavernScriptPresetSnapshot _scriptPresetViewNow(_ScriptContextState context, TavernScriptPresetRef ref) {
+  TavernScriptPresetSnapshot _scriptPresetViewNow(
+    _ScriptContextState context,
+    TavernScriptPresetRef ref, {
+    StoredChat? capturedChat,
+  }) {
     _checkScriptPresetContext(context);
     if (ref.kind == TavernScriptPresetRefKind.stored) {
       final id = ref.presetId!;
@@ -425,7 +513,7 @@ extension _ScriptPresets on _ScriptCoordinator {
         raw: saved.raw,
       );
     }
-    final value = engine._currentPresetData(context.value.chatId);
+    final value = engine._currentPresetData(context.value.chatId, capturedChat: capturedChat);
     return TavernScriptPresetSnapshot(
       ref: ref,
       version: _resourceVersion('preset:current:${jsonEncode(context.value.chatId)}', {
@@ -530,6 +618,7 @@ extension _ScriptPresets on _ScriptCoordinator {
                           : value.working.chat?.samplingOwned) ??
                       const {},
             revision: engine._presetWorkingRevision + 1,
+            workingId: (context.value.chatId == null ? value.working.global : value.working.chat)?.workingId,
           );
           final next = Map<String?, _PresetWorkingSlot>.of(engine._presetWorkingSlots)..[context.value.chatId] = slot;
           engine._adoptPresetWorking(engine._presetMutation(next));

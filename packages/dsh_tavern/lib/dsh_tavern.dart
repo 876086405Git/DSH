@@ -33,6 +33,7 @@ export 'src/macros/macro_engine.dart'
 export 'src/persona.dart';
 export 'src/preset_library.dart';
 export 'src/regex_library.dart';
+export 'src/script_library.dart';
 export 'src/scripts.dart';
 export 'src/state.dart';
 export 'src/tools.dart';
@@ -93,4 +94,5 @@ export 'src/store/chat_store.dart'
         StoredRememberMemory,
         StoredDisplayHistory,
         StoredHistoryLink;
-export 'src/worldinfo/world_info.dart' hide remapWorldInfoBook, WorldInfoPackSource, exportGameplayWorldInfoEntry;
+export 'src/worldinfo/world_info.dart'
+    hide remapWorldInfoBook, sameWorldInfoBook, WorldInfoPackSource, exportGameplayWorldInfoEntry;

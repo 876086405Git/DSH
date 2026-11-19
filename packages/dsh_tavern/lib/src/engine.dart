@@ -43,7 +43,7 @@ import 'io/gameplay_pack_codec.dart';
 import 'io/import_intake.dart';
 import 'io/preset_codec.dart';
 import 'io/regex_intake.dart';
-import 'io/st_chat_document.dart';
+import 'io/script_library_codec.dart';
 import 'io/tavern_backup.dart' as backup_io;
 import 'js_string.dart';
 import 'llm/model_client.dart';
@@ -61,6 +61,7 @@ import 'prompt/prompt_types.dart';
 import 'regex/regex_engine.dart';
 import 'regex/regex_worker.dart';
 import 'regex_library.dart';
+import 'script_library.dart';
 import 'scripts.dart';
 import 'slash/slash_language.dart';
 import 'slash/st_fuse.dart';
@@ -144,6 +145,7 @@ part 'engine_slash_generation_lock.dart';
 part 'engine_script_resources.dart';
 part 'engine_script_helper_settings.dart';
 part 'engine_script_presets.dart';
+part 'engine_script_library.dart';
 part 'engine_script_avatars.dart';
 part 'engine_script_book_directory.dart';
 part 'engine_script_book_bindings.dart';
@@ -247,12 +249,16 @@ class TavernEngine implements Tavern {
   ) {
     _globalVariables = _NativeGlobals(_map(_document['globalVariables']));
     _store.committedObserver = _scripts.storeCommitted;
-    _regexLibrary.committedObserver = _scripts.resourcesChanged;
+    _regexLibrary.committedObserver = () {
+      _managedRegexView = null;
+      _scripts.resourcesChanged();
+    };
     _library.cardCommitted = (id, data) {
       _characterCache = null;
       unawaited(_characterDetails.remove(id));
       _scripts.cardCommitted(id, data);
       _directors.characterChanged(id);
+      _scriptCatalogChanged.add(null);
       _notifyLists();
     };
     _library.cardRemoved = (id) {
@@ -260,14 +266,17 @@ class TavernEngine implements Tavern {
       unawaited(_characterDetails.remove(id));
       _scripts.cardRemoved(id);
       _directors.characterChanged(id);
+      _scriptCatalogChanged.add(null);
       _notifyLists();
     };
-    _storeSubscription = _store.changes.listen((chatId) {
+    _storeSubscription = _store.chatCommits.listen((change) {
       if (_closed) return;
+      final chatId = change.chatId;
       _paths.add(chatId);
+      if (change.bodyOnly) return;
       _directors.changed(chatId);
       _scripts.nativeChanged(chatId);
-      if (!_mainBusy(chatId)) _notifyLists();
+      if (!_mainBusy(chatId)) _notifyLists(resourcesChanged: false);
     });
     _personaSubscription = _personas.changes.listen((_) => _directors.changedAll());
   }
@@ -360,6 +369,7 @@ class TavernEngine implements Tavern {
       if (document['version'] != 1) {
         throw const FormatException('Unsupported Tavern settings version.');
       }
+      validateStoredScriptLibrary(document['scriptLibrary']);
       final now = clock ?? DateTime.now;
       final personas = await PersonaStore.open(directory);
       acquired = true;
@@ -428,10 +438,12 @@ class TavernEngine implements Tavern {
   late final _chatCodec = ChatJsonlCodec(clock: _clock);
   final _presetCodec = const PresetCodec();
   late final _NativeGlobals _globalVariables;
-  late final StreamSubscription<String> _storeSubscription;
+  late final StreamSubscription<({String chatId, bool bodyOnly})> _storeSubscription;
   late final StreamSubscription<void> _personaSubscription;
   final _charactersChanged = StreamController<void>.broadcast();
   final _chatsChanged = StreamController<void>.broadcast();
+  final _globalScriptsChanged = StreamController<void>.broadcast();
+  final _scriptCatalogChanged = StreamController<void>.broadcast();
   final _paths = StreamController<String>.broadcast();
   final _turns = <String, _Turn>{};
   final _manualTools = <String, _ManualToolAction>{};
@@ -464,6 +476,10 @@ class TavernEngine implements Tavern {
   final _bookRevisions = <String, int>{};
   final _displayQueues = <(String, String?, bool), _DisplayQueue>{};
   final _displayChats = <String, _DisplayChatView>{};
+  final _promptCacheWindows = <String, _CachedPromptWindow>{};
+  final _executionPresets = <String, StoredPreset?>{};
+  Object? _executionPresetVersion;
+  List<Map<String, Object?>>? _managedRegexView;
   Future<List<StoredCharacterSummary>>? _characterCache;
   final _characterDetails = <String, Future<StoredCharacter?>>{};
   static const _detailCacheCapacity = 8;
@@ -806,9 +822,9 @@ class TavernEngine implements Tavern {
     return result;
   }
 
-  void _notifyLists() {
+  void _notifyLists({bool resourcesChanged = true}) {
     if (_closed || _closing) return;
-    _scripts.resourcesChanged();
+    if (resourcesChanged) _scripts.resourcesChanged();
     _charactersChanged.add(null);
     _chatsChanged.add(null);
   }
@@ -916,7 +932,7 @@ class TavernEngine implements Tavern {
             (chat == null ? null : _map(_map(chat.metadata['dshgo'])['chatJsonl'])['rootFile']);
         final sourceFile = provenance is String ? provenance : null;
         final selection = _personas.resolve(personaId: chat?.personaId);
-        final settings = _personaSettings(_effectiveSettings(chat, metadata), selection);
+        final settings = _personaSettings(_effectiveReadSettings(chat, metadata), selection);
         final cached = chat == null ? null : _liveVariables[chat.id];
         final local = cached != null && cached.leaf == leaf
             ? _runtimeCopy(cached.values)
@@ -1095,7 +1111,7 @@ class TavernEngine implements Tavern {
       fileName: fileName,
       inspect: (card) async {
         diagnostics = await _checkCardRegex(card.data);
-        return assessImport(
+        return assessImportAsync(
           kind: TavernImportKind.character,
           document: card.json,
           embeddedAssetPaths: card.assets.keys,
@@ -1147,6 +1163,7 @@ class TavernEngine implements Tavern {
             _inspections.remove(id);
             _latestInspections.remove(id);
             _liveVariables.remove(id);
+            _promptCacheWindows.remove(id);
           }
           _characterCache = null;
           _notifyLists();
@@ -1267,7 +1284,7 @@ class TavernEngine implements Tavern {
       RangeError.checkValidIndex(greeting, greetings, 'greeting');
       final selection = _personas.resolve();
       if (_deletingPersonas.contains(selection.persona?.id)) throw StateError('Persona deletion is running.');
-      final settings = _personaSettings(_effectiveSettings(), selection);
+      final settings = _personaSettings(_effectiveReadSettings(), selection);
       final gameplay = gameplayAdmission.hasActivePacks
           ? await _prepareGameplayRuntime(this, gameplayAdmission, hostData: record.card.data, settings: settings)
           : null;
@@ -1475,21 +1492,23 @@ class TavernEngine implements Tavern {
     List<TavernChatFile> files, {
     Map<String, String> lorebookIds = const {},
   }) => _operation(() {
-    final documents = [
-      for (final file in List<TavernChatFile>.of(files)) StChatDocument.decode(file.fileName, file.bytes),
-    ];
+    final capturedFiles = List<TavernChatFile>.of(files);
     final mapping = Map<String, String>.of(lorebookIds);
-    for (final entry in mapping.entries) {
-      if (entry.key.isEmpty) throw ArgumentError.value(entry.key, 'lorebookIds', 'ST names must not be empty.');
-      _requireBookId(entry.value);
-    }
+    final profile = _TurnProfile.start();
+    // Reserve the original library queue before decode can yield, preserving
+    // call order even when a later small batch prepares faster than this one.
     return _libraryOperation(() async {
-      if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
-      if (await _record(characterId) == null) throw const TavernImportError('角色不存在。');
-      for (final id in mapping.values.toSet()) {
-        if (await _readBook(id) == null) throw const TavernImportError('映射的世界书不存在。');
+      profile?.mark('queue');
+      final documents = await ChatJsonlCodec.decodeFiles(capturedFiles);
+      profile?.mark('decode');
+      for (final entry in mapping.entries) {
+        if (entry.key.isEmpty) throw ArgumentError.value(entry.key, 'lorebookIds', 'ST names must not be empty.');
+        _requireBookId(entry.value);
       }
       if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
+      if (await _record(characterId) == null) throw const TavernImportError('角色不存在。');
+      if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
+      profile?.mark('resources');
       final extraNotices = <String>[];
       for (final document in documents) {
         final metadata = _map(document.header['chat_metadata']);
@@ -1498,21 +1517,42 @@ class TavernEngine implements Tavern {
           extraNotices.add('${document.fileName}:${document.headerLineNumber}: 世界书“$name”没有本地映射；保留名称，暂不执行该绑定。');
         }
       }
-      final imported = _store.transaction(() {
-        final result = _chatCodec.importBatch(_store, characterId: characterId, documents: documents);
-        if (mapping.isNotEmpty) {
-          for (final chatId in result.chatIds) {
-            _store.updateChat(chatId, settings: {'stLorebookIds': mapping});
+      final plan = await _chatCodec.prepareBatchAsync(documents);
+      profile?.mark('prepare');
+      ChatJsonlImportResult commit() {
+        if (_deletingCharacters.contains(characterId)) throw StateError('Character deletion is running.');
+        final commitStarted = profile?.now;
+        final imported = _store.transaction(() {
+          final result = _chatCodec.commitBatch(_store, characterId: characterId, plan: plan);
+          if (mapping.isNotEmpty) {
+            for (final chatId in result.chatIds) {
+              _store.updateChat(chatId, settings: {'stLorebookIds': mapping});
+            }
           }
-        }
-        return result;
-      });
+          return result;
+        });
+        profile?.record('chat_import_commit', commitStarted!);
+        return imported;
+      }
+
+      final imported = mapping.isEmpty
+          ? commit()
+          : await _bookOperation(() async {
+              for (final id in mapping.values.toSet()) {
+                if (await _readBookNow(id) == null) throw const TavernImportError('映射的世界书不存在。');
+              }
+              return commit();
+            });
+      profile?.mark('commit');
       _notifyLists();
+      profile?.mark('publish');
       return TavernChatImportResult(
         chatIds: imported.chatIds,
         chatsByFile: imported.chatsByFile,
         notices: [...imported.notices, ...extraNotices],
       );
+    }).whenComplete(() {
+      profile?.finish('chat_import');
     });
   });
 
@@ -1540,9 +1580,11 @@ class TavernEngine implements Tavern {
     () => _withMutation(chatId, () async {
       await _directors.cancelChat(chatId);
       _store.deleteChat(chatId);
+      _scriptCatalogChanged.add(null);
       _inspections.remove(chatId);
       _latestInspections.remove(chatId);
       _liveVariables.remove(chatId);
+      _promptCacheWindows.remove(chatId);
     }),
   );
 
@@ -1745,7 +1787,7 @@ class TavernEngine implements Tavern {
   Future<TavernPresetImportResult> importPreset(String text, {String? fileName}) => _operation(() async {
     final decoded = _presetCodec.decode(text, fileName: fileName);
     final diagnostics = await inspectRegexScripts(_map(decoded.raw['extensions'])['regex_scripts'], _regexWorker);
-    final report = assessImport(
+    final report = await assessImportAsync(
       kind: TavernImportKind.preset,
       document: decoded.raw,
       envelope: decoded.envelope,
@@ -1929,6 +1971,15 @@ class TavernEngine implements Tavern {
         }),
       );
 
+  StoredPreset? _executionPreset(String id) {
+    final version = _store.presetVersion;
+    if (!identical(_executionPresetVersion, version)) {
+      _executionPresets.clear();
+      _executionPresetVersion = version;
+    }
+    return _executionPresets.putIfAbsent(id, () => _store.preset(id));
+  }
+
   ({StoredPreset? preset, TavernPresetSelection selection}) _resolvePreset([StoredChat? chat]) {
     final bound = chat?.presetId;
     final defaultId = _store.defaultPresetId;
@@ -1947,17 +1998,17 @@ class TavernEngine implements Tavern {
       ),
     );
     if (bound != null) {
-      final value = _store.preset(bound);
+      final value = _executionPreset(bound);
       if (value != null) return result(PresetSelectionSource.chat, value);
       missing.add(bound);
     }
     if (chat != null && chat.settings.containsKey('preset')) return result(PresetSelectionSource.chatInline);
     if (defaultId != null) {
-      final value = _store.preset(defaultId);
+      final value = _executionPreset(defaultId);
       if (value != null) return result(PresetSelectionSource.globalDefault, value);
       missing.add(defaultId);
     }
-    if (_map(_document['settings']).containsKey('preset')) return result(PresetSelectionSource.globalInline);
+    if (_readMap(_document['settings']).containsKey('preset')) return result(PresetSelectionSource.globalInline);
     return result(PresetSelectionSource.stDefault);
   }
 
@@ -2388,7 +2439,10 @@ class TavernEngine implements Tavern {
               : _map(state['variables'])),
     );
     final global = _runtimeCopy(_globalVariables);
-    final settings = _personaSettings(_effectiveSettings(chat, metadata), _personas.resolve(personaId: chat.personaId));
+    final settings = _personaSettings(
+      _effectiveReadSettings(chat, metadata),
+      _personas.resolve(personaId: chat.personaId),
+    );
     final config = _config;
     final now = _clock();
     job.profile?.mark('context');
@@ -2448,6 +2502,7 @@ class TavernEngine implements Tavern {
           };
     var resourceConflict = false;
     ({Object error, StackTrace stackTrace})? resourceFailure;
+    (int, int)? resourceStamp;
     bool cancelled() {
       if (!current()) {
         return true;
@@ -2457,16 +2512,31 @@ class TavernEngine implements Tavern {
       }
       // Rule-level display catches must not swallow an actual store error.
       // Keep the original worker Future owned until it has really drained.
+      final checkStarted = job.profile?.now;
       try {
-        resourceConflict = !_gameplayResourcesCurrent(this, gameplayCapture);
+        // Read the stamp before the facts: a concurrent commit may cause an
+        // extra miss, but cannot label an older result with a newer stamp.
+        final stamp = _store.readGameplayBindingStamp();
+        if (stamp != null && stamp == resourceStamp) return false;
+        final factsStarted = job.profile?.now;
+        try {
+          resourceConflict = !_gameplayResourcesCurrent(this, gameplayCapture);
+          if (!resourceConflict && stamp != null) resourceStamp = stamp;
+        } finally {
+          job.profile?.record('display_current_facts', factsStarted!);
+        }
       } catch (error, stackTrace) {
         resourceFailure = (error: error, stackTrace: stackTrace);
+      } finally {
+        job.profile?.record('display_current_check', checkStarted!);
       }
       return resourceConflict || resourceFailure != null;
     }
 
+    final regex = environment.regex;
+    job.profile?.mark('regex_setup');
     try {
-      final rendered = await environment.regex.applyDisplay(
+      final rendered = await regex.applyDisplay(
         job.text,
         placement: placement,
         worker: _regexWorker,
@@ -2621,7 +2691,7 @@ class TavernEngine implements Tavern {
             issues = error.issues;
           }
           final diagnostics = await inspectRegexScripts(_map(raw['extensions'])['regex_scripts'], _regexWorker);
-          final report = assessImport(
+          final report = await assessImportAsync(
             kind: kind,
             document: raw,
             envelope: envelope,
@@ -2639,7 +2709,7 @@ class TavernEngine implements Tavern {
           if (raw == null) throw const TavernImportError('世界书不存在。');
           final book = WorldInfoBook.fromJson(id: assetId, source: WorldInfoSource.global, json: raw);
           final diagnostics = await _checkWorldBookRegex(book);
-          final report = assessImport(
+          final report = await assessImportAsync(
             kind: kind,
             document: raw,
             regexDiagnostics: diagnostics,
@@ -2655,7 +2725,7 @@ class TavernEngine implements Tavern {
 
   Future<TavernImportReport> _inspectCardReport(TavernCard card) async {
     final diagnostics = await _checkCardRegex(card.data);
-    return assessImport(
+    return assessImportAsync(
       kind: TavernImportKind.character,
       document: card.json,
       embeddedAssetPaths: card.assets.keys,
@@ -2673,6 +2743,37 @@ class TavernEngine implements Tavern {
     if (report == null) return null;
     if (report.kind != kind) throw const FormatException('Import report does not match its asset kind.');
     return report.withStale(report.fingerprint != importFingerprint(kind, raw, envelope: envelope));
+  }
+
+  @override
+  Future<List<TavernScriptLibraryEntry>> listGlobalScripts() => _operation(() => _globalScriptViews(_document));
+  @override
+  Stream<List<TavernScriptLibraryEntry>> watchGlobalScripts() {
+    _ensureOpen();
+    return _watch(_globalScriptsChanged.stream, () => _globalScriptViews(_document));
+  }
+
+  @override
+  Future<List<TavernScriptLibraryEntry>> importGlobalScripts(String text) =>
+      _operation(() => _importGlobalScripts(text));
+  @override
+  Future<TavernScriptLibraryEntry> setGlobalScriptEnabled(String id, bool enabled) =>
+      _operation(() => _setGlobalScriptEnabled(id, enabled));
+  @override
+  Future<void> setGlobalScriptOrder(List<String> ids, {String? folderId}) =>
+      _operation(() => _setGlobalScriptOrder(ids, folderId));
+  @override
+  Future<void> deleteGlobalScript(String id) => _operation(() => _deleteGlobalScript(id));
+  @override
+  Future<String> exportGlobalScripts({String? id}) =>
+      _operation(() => const JsonEncoder.withIndent('  ').convert(_globalScriptExportRaw(_document, id)));
+  @override
+  Future<TavernChatScripts> chatScripts(String chatId, {String? characterId}) =>
+      _operation(() => _readChatScripts(chatId, characterId: characterId));
+  @override
+  Stream<TavernChatScripts> watchChatScripts(String chatId, {String? characterId}) {
+    _ensureOpen();
+    return _watch(_scriptCatalogChanged.stream, () => _readChatScripts(chatId, characterId: characterId));
   }
 
   @override
@@ -2801,7 +2902,7 @@ class TavernEngine implements Tavern {
       throw const TavernImportError('世界书只能包含合法JSON数值。');
     }
     final diagnostics = await _checkWorldBookRegex(parsed);
-    final report = assessImport(
+    final report = await assessImportAsync(
       kind: TavernImportKind.lorebook,
       document: parsed.raw,
       regexDiagnostics: diagnostics,
@@ -3153,16 +3254,21 @@ class TavernEngine implements Tavern {
         },
       });
 
-  Map<String, Object?> _effectiveSettings([StoredChat? chat, Map<String, Object?>? metadata]) {
-    final global = _map(_document['settings']);
+  Map<String, Object?> _effectiveSettings([StoredChat? chat, Map<String, Object?>? metadata]) =>
+      _copy(_effectiveReadSettings(chat, metadata));
+
+  // Internal read projection. Only merged containers are new; source payloads
+  // stay owned by their revision, while the public settings() result is copied.
+  Map<String, Object?> _effectiveReadSettings([StoredChat? chat, Map<String, Object?>? metadata]) {
+    final global = _readMap(_document['settings']);
     var result = Map<String, Object?>.of(global);
     if (chat != null) {
       final source = metadata ?? _chatCodec.metadataForNode(_store, chat.id);
-      result = _merge(
+      result = _mergeReadMaps(
         result,
         _chatMetadataSettings(source, _map(chat.settings['stLorebookIds']), _map(result['authorNote'])),
       );
-      result = _merge(result, chat.settings);
+      result = _mergeReadMaps(result, chat.settings);
     }
     // A selected preset is one complete preset, not a field-by-field mixture
     // with whichever global preset happened to be selected previously.
@@ -3170,20 +3276,24 @@ class TavernEngine implements Tavern {
     if (selection.preset != null) {
       result['preset'] = selection.preset!.raw;
     } else if (chat != null && chat.settings.containsKey('preset')) {
-      result['preset'] = _map(chat.settings['preset']);
+      result['preset'] = _readMap(chat.settings['preset']);
     }
-    result = _applyPresetWorkingSettings(
-      result,
-      global: global,
-      chat: chat,
-      selectedSource: selection.selection.source,
-      selectedPresetId: selection.selection.effectivePresetId,
-      working: _presetWorkingSlots.isEmpty ? null : _currentPresetData(chat?.id, capturedChat: chat).working,
-    );
+    if (_presetWorkingSlots.isNotEmpty ||
+        _readMap(global['presetOverrides']).isNotEmpty ||
+        _readMap(chat?.settings['presetOverrides']).isNotEmpty) {
+      result = _applyPresetWorkingSettings(
+        result,
+        global: global,
+        chat: chat,
+        selectedSource: selection.selection.source,
+        selectedPresetId: selection.selection.effectivePresetId,
+        working: _presetWorkingSlots.isEmpty ? null : _currentPresetData(chat?.id, capturedChat: chat).working,
+      );
+    }
     // Project only after every global/source/chat merge. A read->set roundtrip
     // cannot duplicate the collection or replace it with a supplied snapshot.
     result.remove('managedRegexScripts');
-    final managed = _regexLibrary.executionScripts;
+    final managed = _managedRegexView ??= _regexLibrary.executionScripts;
     if (managed.isNotEmpty) result['managedRegexScripts'] = managed;
     return result;
   }
@@ -3445,7 +3555,7 @@ class TavernEngine implements Tavern {
           : _map(state['variables']);
       final metadata = _chatCodec.metadataForNode(_store, chatId, nodeId: leaf);
       final settings = _personaSettings(
-        _effectiveSettings(chat, metadata),
+        _effectiveReadSettings(chat, metadata),
         _personas.resolve(personaId: chat.personaId),
       );
       void checkGameplay() {
@@ -3760,7 +3870,7 @@ class TavernEngine implements Tavern {
         : _copy(chat.variables);
     final settings =
         settingsOverride ??
-        _personaSettings(_effectiveSettings(chat, metadata), _personas.resolve(personaId: chat.personaId));
+        _personaSettings(_effectiveReadSettings(chat, metadata), _personas.resolve(personaId: chat.personaId));
     final config = configOverride ?? _config;
     final previousGameplay = _gameplayHistoricalConfig(this, state).config;
     final gameplay =
@@ -4049,7 +4159,7 @@ class TavernEngine implements Tavern {
             nodeId,
             controller,
             actorConfig,
-            _personaSettings(_effectiveSettings(chat, metadata), selection),
+            _personaSettings(_effectiveReadSettings(chat, metadata), selection),
             _clock(),
             selection,
             metadata,
@@ -4108,6 +4218,7 @@ class TavernEngine implements Tavern {
       } finally {
         turn.profile?.recordElapsed('prepare_before_hooks', beforeHooksAt!);
       }
+      await Future<void>.delayed(Duration.zero);
       turn.cancellation.check();
       // Preparation handlers may write locals or message variables. Capture
       // their committed state after their direct writes have drained. An
@@ -4152,8 +4263,9 @@ class TavernEngine implements Tavern {
       turn.cancellation.check();
       _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       final data = _effectiveCard(record.card.data, turn.settings);
-      final hostData = _effectiveCard(turn.groupView?.host.card.data ?? record.card.data, turn.settings);
-      turn.directorCard = _copy(hostData);
+      final hostRaw = turn.groupView?.host.card.data ?? record.card.data;
+      final hostData = identical(hostRaw, record.card.data) ? data : _effectiveCard(hostRaw, turn.settings);
+      turn.directorCard = hostData;
       StoredNode? target = turn.originalTarget;
       if (turn.nodeId != null) {
         target ??= _store.node(chatId, turn.nodeId!);
@@ -4233,7 +4345,7 @@ class TavernEngine implements Tavern {
       _prepareStateTurn(turn, hostData);
       turn.gameplayInitialized =
           turn.gameplay != null && !hadGameplayValue && _map(turn.state['messageVariables']).containsKey('dshgo');
-      final presetRaw = _map(turn.settings['preset']);
+      final presetRaw = _readMap(turn.settings['preset']);
       final preset = ChatPreset({
         ...(presetRaw.isEmpty ? ChatPreset.stDefault().raw : presetRaw),
         'show_thoughts': turn.config.thinking,
@@ -4241,6 +4353,9 @@ class TavernEngine implements Tavern {
       final worldSettings = WorldInfoSettings.fromJson(_map(turn.settings['worldInfo']));
       turn.profile?.record('prepare_context', prepareContextAt!);
       turn.profile?.mark('prepare');
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       final historyAt = turn.profile?.now;
       final _PromptHistoryWindow? historyWindow;
       final List<StoredNode> history;
@@ -4254,9 +4369,9 @@ class TavernEngine implements Tavern {
           counter: counter,
           worldSettings: worldSettings,
         );
-        history = historyWindow?.nodes ?? _historyTo(chatId, parent);
+        history = historyWindow?.nodes ?? await _completePromptHistory(this, turn, parent);
       } finally {
-        turn.profile?.record('history_read', historyAt!);
+        turn.profile?.recordElapsed('history_read', historyAt!);
       }
       var pathNodes = historyWindow?.path.length ?? history.length;
       final bodyNodes = historyWindow?.bodyNodes ?? history.length;
@@ -4297,6 +4412,9 @@ class TavernEngine implements Tavern {
         }
       }
       turn.profile?.mark('history');
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       final environment = _MacroEnvironment(
         data,
         turn.settings,
@@ -4352,10 +4470,14 @@ class TavernEngine implements Tavern {
         turn.expandedFirstMessage = expandedFirst;
         turn.firstMessageSource = _store.sourceToken(chatId, first!.message.nodeId);
       }
-      final promptHistory = _preparePromptHistory(
+      final promptHistory = await _preparePromptHistoryAsync(
         history,
         environment,
         continuing: turn.kind == _TurnKind.continueReply,
+        check: () {
+          turn.cancellation.check();
+          _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
+        },
       );
       var eligibleHistory = promptHistory.where((node) => !node.message.hidden && !_systemMessage(node)).toList();
       final activeWorldName = turn.metadata['world_info'];
@@ -4363,6 +4485,9 @@ class TavernEngine implements Tavern {
           ? _map(turn.chat.settings['stLorebookIds'])[activeWorldName]
           : null;
       turn.profile?.mark('fields');
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       // Own the complete walk, and stop before admitting its next book read.
       final books = await turn.cancellation.wait(
         _trackOperation(
@@ -4382,13 +4507,16 @@ class TavernEngine implements Tavern {
       _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       final directorBooks = _directorBooks(this, turn, books.loaded, requestedLeafId: parent);
       turn.profile?.mark('books');
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       var completeMacroHistory = false;
       int? scanDepth;
       if (historyWindow != null) {
         final worldHistoryAt = turn.profile?.now;
         try {
-          if (directorBooks.any((book) => !_plainPromptData(book.raw))) {
-            final complete = _historyTo(chatId, parent);
+          if (directorBooks.any((book) => !(_plainBookViews[book] ?? _plainPromptData(book.raw)))) {
+            final complete = await _completePromptHistory(this, turn, parent);
             historyWindow.bodyNodes += complete.length;
             // The macro context owns this live list. Earlier admitted fields
             // only used pure names; do not replay them or the independent
@@ -4470,6 +4598,9 @@ class TavernEngine implements Tavern {
         for (final entry in world.outlets.entries) entry.key: entry.value.map((hit) => hit.content).join('\n'),
       });
       turn.profile?.mark('world_info');
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       final injections = [
         ..._finishInjections(initialInjections, world, deepseek: turn.config.deepseek),
         ...?scriptInjections?.prompts,
@@ -4478,6 +4609,8 @@ class TavernEngine implements Tavern {
         ..._secretTurnInjections(this, turn, hostData),
         ..._directorInjections(turn),
       ];
+      final windowConfiguration = _PromptWindowConfiguration(turn, data, hostData, books.loaded);
+      final cacheWindow = _reusePromptWindow(turn, parent, windowConfiguration);
       final assembly = _assemblePreparedPrompt(
         turn: turn,
         data: data,
@@ -4489,8 +4622,17 @@ class TavernEngine implements Tavern {
         injections: injections,
         counter: counter,
         prefix: historyWindow?.prefix ?? const [],
+        cacheWindow: cacheWindow,
       );
+      if (assembly.historyWindow case final window?) {
+        turn.pendingPromptWindow = _PendingPromptWindow(window, parent, windowConfiguration);
+      } else {
+        _promptCacheWindows.remove(chatId);
+      }
       turn.profile?.mark('assembly');
+      await Future<void>.delayed(Duration.zero);
+      turn.cancellation.check();
+      _requireOrdinaryOwnership(this, turn, StoredToolPhase.native);
       final excludedWorldEntries = <(String, String)>{
         for (final exclusion in assembly.excluded)
           if (exclusion.reason == 'v3-ignore-on-max-context')
@@ -4543,7 +4685,7 @@ class TavernEngine implements Tavern {
       }
       turn.profile?.mark('inspection');
       turn.cancellation.check();
-      turn.postfix = presetString(preset.settings['continue_postfix']);
+      turn.postfix = presetString(preset.executionSettings['continue_postfix']);
       if (turn.kind == _TurnKind.impersonate) {
         turn.begin(
           TavernMessage(
@@ -4748,7 +4890,7 @@ class TavernEngine implements Tavern {
         cancellation: turn.cancellation,
       );
       _scripts.ended(turn);
-      _notifyLists();
+      _notifyLists(resourcesChanged: false);
       turn.profile?.mark('cleanup');
       turn.profile?.finish(turn.kind.name);
     }
@@ -4792,12 +4934,7 @@ class TavernEngine implements Tavern {
           continue;
         }
         result.add(
-          WorldInfoBook.fromJson(
-            id: id,
-            source: source,
-            json: saved.raw,
-            stWorldName: stWorldNames[id] ?? saved.stWorldName,
-          ),
+          _compiledBook(id: id, source: source, json: saved.raw, stWorldName: stWorldNames[id] ?? saved.stWorldName),
         );
       }
     }
@@ -4812,9 +4949,7 @@ class TavernEngine implements Tavern {
     for (final card in embeddedCards.entries) {
       final embedded = card.value['character_book'];
       if (embedded is Map<String, Object?>) {
-        embeddedBooks.add(
-          WorldInfoBook.fromJson(id: '${card.key}:card', source: WorldInfoSource.character, json: embedded),
-        );
+        embeddedBooks.add(_compiledBook(id: '${card.key}:card', source: WorldInfoSource.character, json: embedded));
       }
     }
     return (loaded: _mergeGameplayBooks(result, embeddedBooks, gameplayResources), missing: missing);
@@ -4960,6 +5095,7 @@ class TavernEngine implements Tavern {
             },
             cancelOnError: true,
           );
+      _adoptPromptWindow(turn);
       await completed.future;
     } finally {
       requestContext?.closeObservations();
@@ -5452,6 +5588,8 @@ class TavernEngine implements Tavern {
     _closed = true;
     unawaited(_charactersChanged.close());
     unawaited(_chatsChanged.close());
+    unawaited(_globalScriptsChanged.close());
+    unawaited(_scriptCatalogChanged.close());
     unawaited(_paths.close());
     await _personas.close();
     await _store.close();
@@ -5708,6 +5846,7 @@ class _Turn {
   }
   late TavernTurnInspection inspection;
   final _TurnProfile? profile;
+  _PendingPromptWindow? pendingPromptWindow;
   StoredChat chat;
   final _TurnKind kind;
   final String input;
@@ -5907,8 +6046,8 @@ class _MacroEnvironment {
     this.packRegex = const [],
     this.gameplayCapture,
   }) {
-    final raw = _map(settings['preset']);
-    _presetSettings = (preset ?? (raw.isEmpty ? ChatPreset.stDefault() : ChatPreset(raw))).settings;
+    final raw = _readMap(settings['preset']);
+    _presetSettings = (preset ?? _readPreset(raw)).executionSettings;
     _regexPresetSettings = regexPresetSettings ?? _presetSettings;
   }
   final Map<String, Object?> card;
@@ -5956,12 +6095,12 @@ class _MacroEnvironment {
     ],
     presetScripts: settings['presetRegexEnabled'] == false
         ? const []
-        : RegexEngine.readScripts(_map(_regexPresetSettings['extensions'])['regex_scripts']),
+        : _readRegexScripts(_readMap(_regexPresetSettings['extensions'])['regex_scripts']),
     characterScripts:
         settings['characterRegexEnabled'] == false || _strings(settings['disabledCharacterRegex']).contains(characterId)
         ? const []
         : [
-            ...RegexEngine.readScripts(_map(card['extensions'])['regex_scripts']),
+            ..._readRegexScripts(_readMap(card['extensions'])['regex_scripts']),
             for (final rule in _capturedPackRegex)
               if (rule.source == TavernScriptRegexSource.character) rule.execution,
           ],
@@ -6116,7 +6255,7 @@ List<_ConfiguredInjection> _configuredInjections(
       ),
     );
   }
-  final depth = _map(_map(card['extensions'])['depth_prompt']);
+  final depth = _readMap(_readMap(card['extensions'])['depth_prompt']);
   if (prepared['charDepthPrompt'].isNotEmpty) {
     result.add(
       _ConfiguredInjection(
@@ -6325,6 +6464,43 @@ List<StoredNode> _preparePromptHistory(
   int depthOffset = 0,
   List<Map<String, Object?>>? regexTrace,
 }) {
+  final result = <StoredNode>[];
+  for (final _ in _preparePromptHistorySteps(
+    history,
+    environment,
+    result,
+    continuing: continuing,
+    depthOffset: depthOffset,
+    regexTrace: regexTrace,
+  )) {}
+  return result;
+}
+
+Future<List<StoredNode>> _preparePromptHistoryAsync(
+  List<StoredNode> history,
+  _MacroEnvironment environment, {
+  required bool continuing,
+  required void Function() check,
+}) async {
+  final result = <StoredNode>[];
+  var processed = 0;
+  for (final _ in _preparePromptHistorySteps(history, environment, result, continuing: continuing)) {
+    if (++processed % 32 == 0) {
+      await Future<void>.delayed(Duration.zero);
+      check();
+    }
+  }
+  return result;
+}
+
+Iterable<int> _preparePromptHistorySteps(
+  List<StoredNode> history,
+  _MacroEnvironment environment,
+  List<StoredNode> result, {
+  required bool continuing,
+  int depthOffset = 0,
+  List<Map<String, Object?>>? regexTrace,
+}) sync* {
   final visible = history.where((node) => !node.message.hidden && !_systemMessage(node)).toList();
   final transformed = <StoredNode>[];
   for (var index = 0; index < visible.length; index++) {
@@ -6340,6 +6516,7 @@ List<StoredNode> _preparePromptHistory(
       trace: regexTrace,
     );
     transformed.add(_nodeWithText(node, text));
+    yield 1;
   }
   final options = _map(environment.settings['reasoning']);
   final add = options['add_to_prompts'] == true;
@@ -6376,14 +6553,15 @@ List<StoredNode> _preparePromptHistory(
           : '$prefix$reasoning$suffix$separator${node.message.text}';
       transformed[index] = _nodeWithText(node, text);
     }
+    yield 1;
     if (!add || additions >= maximum) break;
   }
   final byId = {for (final node in transformed) node.message.nodeId: node};
-  return [for (final node in history) byId[node.message.nodeId] ?? node];
+  result.addAll([for (final node in history) byId[node.message.nodeId] ?? node]);
 }
 
 Set<String> _availableWorldSections(ChatPreset preset, String generationType) {
-  final settings = preset.settings;
+  final settings = preset.executionSettings;
   final definitions = (settings['prompts']! as List<Object?>).whereType<Map<String, Object?>>();
   final groups = (settings['prompt_order']! as List<Object?>).whereType<Map<String, Object?>>();
   final order = groups.firstWhere((group) => '${group['character_id']}' == '100001')['order']! as List<Object?>;
@@ -6612,7 +6790,7 @@ Map<String, Object?> _chatMetadataSettings(
 }
 
 Map<String, Object?> _effectiveCard(Map<String, Object?> raw, Map<String, Object?> settings) {
-  final card = _copy(raw);
+  final card = Map<String, Object?>.of(raw);
   for (final key in const {
     'scenarioOverride': 'scenario',
     'systemPromptOverride': 'system_prompt',
@@ -6625,6 +6803,46 @@ Map<String, Object?> _effectiveCard(Map<String, Object?> raw, Map<String, Object
 }
 
 Map<String, Object?> _map(Object? value) => value is Map<String, Object?> ? _copy(value) : <String, Object?>{};
+// Borrow only engine-owned JSON on read paths. Mutations continue to use _map.
+Map<String, Object?> _readMap(Object? value) => value is Map<String, Object?> ? value : const {};
+
+final _regexViews = Expando<List<RegexScript>>('tavern regex projections');
+List<RegexScript> _readRegexScripts(Object? value) {
+  if (value is! List<Object?>) return const [];
+  return _regexViews[value] ??= RegexEngine.readScripts(value);
+}
+
+final _plainBookViews = Expando<bool>('plain book projections');
+final _bookViews = Expando<Map<(String, WorldInfoSource, String?), WorldInfoBook>>('tavern world book projections');
+WorldInfoBook _compiledBook({
+  required String id,
+  required WorldInfoSource source,
+  required Map<String, Object?> json,
+  String? stWorldName,
+}) {
+  final views = _bookViews[json] ??= {};
+  return views.putIfAbsent((id, source, stWorldName), () {
+    final book = WorldInfoBook.cached(id: id, source: source, json: json, stWorldName: stWorldName);
+    _plainBookViews[book] = _plainPromptData(json);
+    return book;
+  });
+}
+
+final _presetViews = Expando<ChatPreset>('preset projections');
+ChatPreset _readPreset(Map<String, Object?> raw) =>
+    raw.isEmpty ? ChatPreset.stDefault() : (_presetViews[raw] ??= ChatPreset(raw));
+
+Map<String, Object?> _mergeReadMaps(Map<String, Object?> base, Map<String, Object?> patch) {
+  final result = Map<String, Object?>.of(base);
+  for (final entry in patch.entries) {
+    final previous = result[entry.key];
+    result[entry.key] = previous is Map<String, Object?> && entry.value is Map<String, Object?>
+        ? _mergeReadMaps(previous, entry.value! as Map<String, Object?>)
+        : entry.value;
+  }
+  return result;
+}
+
 Map<String, Object?> _merge(Map<String, Object?> base, Map<String, Object?> patch) {
   final result = _copy(base);
   for (final entry in _copy(patch).entries) {

@@ -188,6 +188,43 @@ final class PromptExclusion {
   Map<String, Object?> toJson() => {'id': id, 'reason': reason, 'sources': sources.map((s) => s.toJson()).toList()};
 }
 
+/// Admission choices retained after history first exceeds its available budget.
+/// The caller owns path/configuration invalidation and commits this value only
+/// when the assembled request is admitted. Dynamic prompt text may still change.
+final class PromptHistoryWindow {
+  PromptHistoryWindow({
+    required this.firstNodeId,
+    Iterable<({String kind, String id, int block})> admittedExamples = const [],
+    Iterable<({String kind, String id})> excludedOptionalSources = const [],
+    Iterable<String> excludedInjections = const [],
+  }) : admittedExamples = Set.unmodifiable(admittedExamples),
+       excludedOptionalSources = Set.unmodifiable(excludedOptionalSources),
+       excludedInjections = Set.unmodifiable(excludedInjections);
+
+  final String firstNodeId;
+
+  /// Block ordinals are local to their source, so another WI source appearing
+  /// ahead of an admitted example does not change its identity.
+  final Set<({String kind, String id, int block})> admittedExamples;
+  final Set<({String kind, String id})> excludedOptionalSources;
+
+  /// Opaque identities of depth pieces previously excluded by the budget.
+  /// Keeping those choices prevents freed history space from refilling with
+  /// an older injection in front of the retained history prefix.
+  final Set<String> excludedInjections;
+
+  Map<String, Object?> toJson() => {
+    'firstNodeId': firstNodeId,
+    'admittedExamples': [
+      for (final example in admittedExamples) {'kind': example.kind, 'id': example.id, 'block': example.block},
+    ],
+    'excludedOptionalSources': [
+      for (final source in excludedOptionalSources) {'kind': source.kind, 'id': source.id},
+    ],
+    'excludedInjections': excludedInjections.toList(),
+  };
+}
+
 final class PromptAssembly {
   const PromptAssembly({
     required this.body,
@@ -198,6 +235,7 @@ final class PromptAssembly {
     required this.remainingBudget,
     required this.counterName,
     required this.exactTokenCounts,
+    this.historyWindow,
   });
   final Map<String, Object?> body;
   final List<PromptSegment> beforePostProcessing;
@@ -207,6 +245,7 @@ final class PromptAssembly {
   final int remainingBudget;
   final String counterName;
   final bool exactTokenCounts;
+  final PromptHistoryWindow? historyWindow;
   Map<String, Object?> toJson() => {
     'body': body,
     'beforePostProcessing': beforePostProcessing.map((s) => s.toJson()).toList(),
@@ -216,6 +255,7 @@ final class PromptAssembly {
     'remainingBudget': remainingBudget,
     'counter': counterName,
     'exactTokenCounts': exactTokenCounts,
+    if (historyWindow != null) 'historyWindow': historyWindow!.toJson(),
   };
 }
 

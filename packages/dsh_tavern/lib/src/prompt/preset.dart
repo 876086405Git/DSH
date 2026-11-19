@@ -15,7 +15,9 @@ final class ChatPreset {
     return ChatPreset(value);
   }
 
-  factory ChatPreset.stDefault() => ChatPreset.decode(stDefaultPresetJson);
+  factory ChatPreset.stDefault() => _defaultPreset;
+
+  static final _defaultPreset = ChatPreset.decode(stDefaultPresetJson);
 
   final Map<String, Object?> _raw;
 
@@ -32,7 +34,15 @@ final class ChatPreset {
     return const JsonEncoder.withIndent('  ').convert(value);
   }
 
-  Map<String, Object?> get settings {
+  /// Detached normalized settings for callers that need to edit a copy.
+  Map<String, Object?> get settings => _copy(executionSettings);
+
+  /// Recursively immutable normalized projection, compiled once per preset.
+  /// Read-only execution paths can retain this view without copying extension
+  /// payloads; [raw] and [settings] keep their independent mutable contracts.
+  late final Map<String, Object?> executionSettings = _freeze(_normalize()) as Map<String, Object?>;
+
+  Map<String, Object?> _normalize() {
     final defaults = jsonDecode(stDefaultPresetJson) as Map<String, Object?>;
     // Runtime defaults differ slightly from the bundled named Default preset.
     defaults['stream_openai'] = false;
@@ -94,6 +104,14 @@ final class ChatPreset {
     }
     result['prompt_order'] = groups;
     return result;
+  }
+
+  static Object? _freeze(Object? value) {
+    if (value is Map<String, Object?>) {
+      return Map<String, Object?>.unmodifiable({for (final entry in value.entries) entry.key: _freeze(entry.value)});
+    }
+    if (value is List<Object?>) return List<Object?>.unmodifiable(value.map(_freeze));
+    return value;
   }
 
   static Map<String, Object?> _copy(Map<String, Object?> value) =>

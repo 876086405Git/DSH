@@ -162,12 +162,12 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     _updateStandaloneDirectoryVersion();
   }
 
-  List<String> _scriptDirectoryCharacterIds(_ScriptContextState context) {
+  List<String> _scriptDirectoryCharacterIds(_ScriptContextState context, {_ScriptChatRead? chatRead}) {
     final ids = <String>{?context.value.characterId};
     final chatId = context.value.chatId;
     if (chatId != null) {
-      final chat = engine._store.chat(chatId);
-      final group = engine._store.groupChat(chatId);
+      final chat = chatRead?.chat ?? engine._store.chat(chatId);
+      final group = chatRead == null ? engine._store.groupChat(chatId) : chatRead.group;
       if (group == null) {
         ids.add(chat.characterId);
       } else {
@@ -178,18 +178,21 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     return ids.toList()..sort();
   }
 
-  Future<_ScriptBookDirectoryView> _scriptBookDirectoryView(_ScriptContextState context) async {
+  Future<_ScriptBookDirectoryView> _scriptBookDirectoryView(
+    _ScriptContextState context, {
+    _ScriptChatRead? chatRead,
+  }) async {
     await engine._bookOperation(_ensureStandaloneDirectory);
     final state = scriptResources.directory;
     final standaloneVersion = state.standaloneVersion!;
     final books = state.standalone.values.toList();
     final issues = state.issues.values.toList();
-    final ids = _scriptDirectoryCharacterIds(context);
+    final ids = _scriptDirectoryCharacterIds(context, chatRead: chatRead);
     final embeddedVersions = <String, String>{};
     for (final id in ids) {
       if (!state.embedded.containsKey(id)) {
         try {
-          final found = await engine._library.readAuthority(id, (data) {
+          final found = await engine._library.readRuntimeAuthority(id, (data) {
             scriptBookDirectoryCardCommitted(id, data);
             return true;
           });
@@ -238,9 +241,13 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     );
   }
 
-  bool _scriptBookDirectoryViewCurrent(_ScriptContextState context, _ScriptBookDirectoryView view) =>
+  bool _scriptBookDirectoryViewCurrent(
+    _ScriptContextState context,
+    _ScriptBookDirectoryView view, {
+    _ScriptChatRead? chatRead,
+  }) =>
       scriptResources.directory.standaloneVersion == view.standaloneVersion &&
-      _stateJsonEqual(_scriptDirectoryCharacterIds(context), view.characterIds) &&
+      _stateJsonEqual(_scriptDirectoryCharacterIds(context, chatRead: chatRead), view.characterIds) &&
       view.embeddedVersions.entries.every(
         (entry) => _scriptBookObservedVersion('bookDirectoryEmbedded:${entry.key}') == entry.value,
       );

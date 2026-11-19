@@ -1,5 +1,13 @@
 part of 'engine.dart';
 
+class _MvuBookProjection {
+  const _MvuBookProjection(this.version, this.book);
+  final String version;
+  final mvu_core.MvuBook book;
+}
+
+final _mvuBookViews = Expando<Map<(String, WorldInfoSource), _MvuBookProjection>>('mvu book projections');
+
 class _MvuResources {
   _MvuResources({
     required this.dataContext,
@@ -23,6 +31,9 @@ class _MvuResources {
   final books = <mvu_core.MvuBook>[];
   final issues = <TavernScriptIssue>[];
   final _bookVersions = <String, String?>{};
+  Object? selectionChatVersion;
+  Object? selectionSettings;
+  int? selectionPresetRevision;
 }
 
 List<({String handle, TavernScriptBookRef ref, WorldInfoSource source})> _mvuBookSelection(
@@ -62,6 +73,60 @@ List<({String handle, TavernScriptBookRef ref, WorldInfoSource source})> _mvuBoo
 }
 
 extension _ScriptMvuResources on _ScriptCoordinator {
+  _MvuBookProjection _mvuBookProjection(
+    Map<String, Object?> raw,
+    String handle,
+    WorldInfoSource source, {
+    String? version,
+  }) {
+    final views = _mvuBookViews[raw] ??= {};
+    final key = (handle, source);
+    final cached = views[key];
+    if (cached != null && cached.version == (version ?? _mvuObservedVersion(handle))) return cached;
+    final observed = version ?? _resourceVersion(handle, raw);
+    final book = _compiledBook(id: handle, source: source, json: raw);
+    return views[key] = _MvuBookProjection(
+      observed,
+      mvu_core.MvuBook(
+        name: handle,
+        entries: List.unmodifiable([
+          for (final entry in book.entries)
+            mvu_core.MvuInitEntry(id: entry.uid, comment: entry.comment, content: entry.content),
+        ]),
+      ),
+    );
+  }
+
+  Future<_MvuBookProjection> _readMvuBook(TavernScriptBookRef ref, String handle, WorldInfoSource source) async {
+    switch (ref) {
+      case TavernScriptStandaloneBookRef(:final bookId):
+        return engine._bookOperation(() async {
+          final value = await _scriptReadStandaloneRuntime(bookId);
+          if (value == null) throw _scriptError(TavernScriptErrorCode.notFound, 'readBook', 'The book does not exist.');
+          return _mvuBookProjection(value.raw, handle, source, version: value.version);
+        });
+      case TavernScriptEmbeddedBookRef(:final characterId):
+        final result = await engine._library.readRuntimeAuthority(characterId, (data) {
+          final value = data['character_book'];
+          if (!data.containsKey('character_book') || value is! Map<String, Object?>) {
+            _resourceVersion(handle, value, present: data.containsKey('character_book'));
+            throw _scriptError(
+              data.containsKey('character_book') ? TavernScriptErrorCode.shapeMismatch : TavernScriptErrorCode.notFound,
+              'readBook',
+              data.containsKey('character_book')
+                  ? 'The embedded book root is not an object.'
+                  : 'The character has no embedded book.',
+            );
+          }
+          return _mvuBookProjection(value, handle, source);
+        });
+        if (result == null) {
+          throw _scriptError(TavernScriptErrorCode.notFound, 'readBook', 'The character does not exist.');
+        }
+        return result;
+    }
+  }
+
   String? _mvuObservedVersion(String key) {
     final observed = scriptResources.observations[key];
     return observed == null ? null : '$epoch:resource:$key:${observed.revision}';
@@ -117,11 +182,11 @@ extension _ScriptMvuResources on _ScriptCoordinator {
     );
     _checkMvuResources(capture);
     for (final item in selection) {
-      WorldInfoBook? book;
+      mvu_core.MvuBook? book;
       try {
-        final snapshot = await _readScriptBook(item.ref);
+        final snapshot = await _readMvuBook(item.ref, item.handle, item.source);
         capture._bookVersions[item.handle] = snapshot.version;
-        book = WorldInfoBook.fromJson(id: item.handle, source: item.source, json: snapshot.book);
+        book = snapshot.book;
       } on TavernScriptException catch (error) {
         if (error.code != TavernScriptErrorCode.notFound &&
             error.code != TavernScriptErrorCode.invalidJson &&
@@ -153,15 +218,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
       check();
       _checkMvuResources(capture);
       if (book != null) {
-        capture.books.add(
-          mvu_core.MvuBook(
-            name: item.handle,
-            entries: [
-              for (final entry in book.entries)
-                mvu_core.MvuInitEntry(id: entry.uid, comment: entry.comment, content: entry.content),
-            ],
-          ),
-        );
+        capture.books.add(book);
       }
     }
     return capture;
@@ -169,22 +226,48 @@ extension _ScriptMvuResources on _ScriptCoordinator {
 
   void _checkMvuResources(_MvuResources capture) {
     _checkDataContext(capture.dataContext);
-    final chat = engine._store.chat(capture.dataContext.chatId);
-    final current = _mvuBookSelection(
-      engine._effectiveSettings(chat),
-      capture.dataContext.hostId,
-      embedded: capture.dataContext.hostData.containsKey('character_book'),
-    );
-    final sameSelection =
-        current.length == capture.selection.length &&
-        Iterable<int>.generate(current.length).every(
-          (index) =>
-              current[index].handle == capture.selection[index].handle &&
-              current[index].source == capture.selection[index].source,
-        );
+    final chatId = capture.dataContext.chatId;
+    final chatVersion = engine._store.displayVersion(chatId);
+    final settings = engine._document['settings'];
+    var sameSelection = true;
+    if (!identical(capture.selectionChatVersion, chatVersion) ||
+        !identical(capture.selectionSettings, settings) ||
+        capture.selectionPresetRevision != engine._presetWorkingRevision) {
+      final chat = engine._store.chat(chatId);
+      final leaf = chat.currentLeafId;
+      final Map<String, Object?> metadata;
+      if (leaf == null) {
+        metadata = engine._chatCodec.metadataForCapturedNode(engine._store, chat, null);
+      } else {
+        final node = engine._store.displayNode(chatId, leaf);
+        final own = node.extra['dshgo'];
+        final override = own is Map<String, Object?> ? own['tavernState'] : null;
+        // This is the metadata reader's effective state, without the MVU
+        // state reader's legacy hash backfill.
+        final state = override is Map<String, Object?> ? override : engine._store.nodeState(chatId, leaf);
+        metadata = engine._chatCodec.metadataForState(chat, state);
+      }
+      final current = _mvuBookSelection(
+        engine._effectiveReadSettings(chat, metadata),
+        capture.dataContext.hostId,
+        embedded: capture.dataContext.hostData.containsKey('character_book'),
+      );
+      sameSelection =
+          current.length == capture.selection.length &&
+          Iterable<int>.generate(current.length).every(
+            (index) =>
+                current[index].handle == capture.selection[index].handle &&
+                current[index].source == capture.selection[index].source,
+          );
+      if (sameSelection) {
+        capture.selectionChatVersion = chatVersion;
+        capture.selectionSettings = settings;
+        capture.selectionPresetRevision = engine._presetWorkingRevision;
+      }
+    }
     if (!sameSelection ||
         _mvuObservedVersion('characterData:${capture.dataContext.hostId}') != capture.hostVersion ||
-        _mvuGroupIdentity(engine._store.groupChat(chat.id)) != capture.groupIdentity) {
+        _mvuGroupIdentity(engine._store.groupChat(chatId)) != capture.groupIdentity) {
       throw _scriptError(TavernScriptErrorCode.revisionConflict, 'mvu', 'The captured initialization sources changed.');
     }
     for (final item in capture._bookVersions.entries) {
@@ -197,12 +280,33 @@ extension _ScriptMvuResources on _ScriptCoordinator {
   _MacroEnvironment _mvuEnvironment(
     _MvuResources capture, {
     required Map<String, Object?> state,
-    required List<StoredNode> history,
+    required String? nodeId,
     required DateTime at,
     String input = '',
     String generationType = 'normal',
     _MacroEnvironment? turnEnvironment,
   }) {
+    final profile = engine._turns[capture.chat.id]?.profile;
+    final started = profile?.now;
+    final history = engine._store.displayHistory(capture.chat.id, nodeId);
+    MacroMessage message(StoredNode node) => MacroMessage(
+      text: node.message.text,
+      isUser: node.message.role == TavernRole.user,
+      isSystem: node.message.hidden || _systemMessage(node),
+      swipeId: node.message.siblingIndex,
+      swipeCount: node.message.siblingCount,
+      sentAt: node.message.at,
+    );
+    ({int index, MacroMessage message})? entry(StoredNode? node) =>
+        node == null ? null : (index: node.depth - 1, message: message(node));
+    final macroHistory = MacroHistorySnapshot(
+      length: history.length,
+      last: entry(history.last),
+      user: entry(history.user),
+      character: entry(history.character),
+      previousUser: history.previousUser == null ? null : message(history.previousUser!),
+    );
+    if (started != null) profile?.record('mvu_history', started);
     if (turnEnvironment case final source?) {
       // Keep the actual actor and frozen prompt resources, but bind a fresh
       // macro context to this physical target's current variable table.
@@ -211,7 +315,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         source.settings,
         _map(state['variables']),
         engine._globalVariables,
-        history,
+        const [],
         source.config,
         source.now,
         source.random,
@@ -223,11 +327,12 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         pickRerollSeed: source.pickRerollSeed,
         groupNames: source.groupNames,
         groupNotMuted: source.groupNotMuted,
-        preset: ChatPreset(source._presetSettings),
+        preset: _readPreset(source._presetSettings),
         regexPresetSettings: source._regexPresetSettings,
         collapseNewlinesOverride: source.collapseNewlinesOverride,
         messageVariables: state['messageVariables'],
         messageVariablesExists: state.containsKey('messageVariables'),
+        macroHistorySnapshot: macroHistory,
         packRegex: source._capturedPackRegex,
       )..outlets.addAll(source.outlets);
     }
@@ -238,17 +343,11 @@ extension _ScriptMvuResources on _ScriptCoordinator {
       capture.settings,
       _map(state['variables']),
       engine._globalVariables,
-      history,
+      const [],
       capture.config,
       at,
       engine._random,
-      _macroChatIdentity(
-        capture.chat,
-        state,
-        metadata,
-        state['chatJsonlSourceFile'] as String?,
-        node: history.lastOrNull,
-      ),
+      _macroChatIdentity(capture.chat, state, metadata, state['chatJsonlSourceFile'] as String?, node: history.last),
       input,
       generationType,
       characterId: capture.dataContext.hostId,
@@ -258,6 +357,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
       groupNotMuted: capture.groupNames?.enabledNames,
       messageVariables: state['messageVariables'],
       messageVariablesExists: state.containsKey('messageVariables'),
+      macroHistorySnapshot: macroHistory,
       gameplayCapture: admission == null ? null : _GameplayResourceCapture.fromAdmission(admission),
     );
   }

@@ -35,6 +35,7 @@ import 'tavern_lorebooks_page.dart';
 import 'tavern_personas.dart';
 import 'tavern_presets_page.dart';
 import 'tavern_regex_page.dart';
+import 'tavern_scripts_page.dart';
 import 'tavern_quick_replies_page.dart';
 import 'tavern_settings_page.dart';
 import 'tavern_widgets.dart';
@@ -467,6 +468,16 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
               final n => l10n.tavernRegexCount(n),
             }),
             onTap: () => unawaited(Navigator.of(context).push(TavernRegexPage.route())),
+          ),
+          SettingsTile(
+            key: const ValueKey('tavern-library-scripts'),
+            icon: AppIcons.code,
+            title: l10n.tavernScripts,
+            value: Text(switch (tavernScriptCount(ref.watch(tavernGlobalScriptsProvider).value ?? const [])) {
+              0 => l10n.tavernPersonaNotSet,
+              final n => l10n.tavernScriptCount(n),
+            }),
+            onTap: () => unawaited(Navigator.of(context).push(TavernScriptsPage.route())),
           ),
           SettingsTile(
             key: const ValueKey('tavern-library-personas'),

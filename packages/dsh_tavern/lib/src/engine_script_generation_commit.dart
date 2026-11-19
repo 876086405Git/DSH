@@ -145,8 +145,9 @@ extension _ScriptGenerationCommit on _ScriptCoordinator {
     if (request is! TavernScriptRawRequest && chat == null && record.slashSpec?.raw != true) {
       throw _scriptError(TavernScriptErrorCode.noContext, 'generate', 'Normal generation requires a chat.');
     }
-    final metadata = chat == null ? <String, Object?>{} : engine._chatCodec.metadataForNode(engine._store, chat.id);
-    final persistentSource = chat == null ? null : engine._chatCodec.metadataSourceForNode(engine._store, chat.id);
+    final capturedMetadata = chat == null ? null : _captureScriptMetadata(chat);
+    final metadata = capturedMetadata?.metadata ?? <String, Object?>{};
+    final persistentSource = capturedMetadata?.source;
     final candidates = includeInjections
         ? injectionRegistry.capture(
             chatId: chatId,

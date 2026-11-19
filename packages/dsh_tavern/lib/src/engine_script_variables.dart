@@ -99,8 +99,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         if (target.messageRef != null && target.messageRef!.chatId != id) {
           invalid('Message and chat identities disagree.');
         }
-        final chat = engine._store.chat(id);
-        capture = _ScriptChatCapture(context, id, _pathRevision(id), engine._historyTo(id, chat.currentLeafId));
+        capture = _captureChatAt(context, id);
         if (target.scope == TavernVariableScope.chat) {
           resolved = TavernVariableTarget(scope: target.scope, chatId: id);
           break;
@@ -122,7 +121,10 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
           }
           ref = numbered;
         }
-        engine._store.node(id, ref.nodeId);
+        final nodeId = ref.nodeId;
+        if (!capture.path.any((node) => node.message.nodeId == nodeId)) {
+          engine._store.node(id, nodeId);
+        }
         resolved = TavernVariableTarget(scope: target.scope, chatId: id, messageRef: ref);
     }
     return _ResolvedScriptVariable(
@@ -259,6 +261,13 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
     return snapshot;
   }
 
+  _ScriptRawVariable _readMessageVariable(TavernScriptMessageRef ref) {
+    // Only this raw carrier is observed. Physical state and complete portable
+    // overrides have the same priority as _stateAt, without reading inspection
+    // or adding the unrelated chat hash used by native runtime state.
+    return _fieldVariable(engine._store.scriptNodeState(ref.chatId, ref.nodeId), 'messageVariables');
+  }
+
   Future<T> _readStoredVariable<T>(
     TavernVariableTarget target,
     T Function(_ScriptRawVariable raw) read, {
@@ -281,41 +290,50 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
       case TavernVariableScope.global:
         return engine._settingsDocument((document) async => inspect(() => _fieldVariable(document, 'globalVariables')));
       case TavernVariableScope.chat:
-        return inspect(() => _ScriptRawVariable(true, engine._store.chat(target.chatId!).variables));
+        return inspect(() => _ScriptRawVariable(true, engine._store.chatVariables(target.chatId!)));
       case TavernVariableScope.message:
         final ref = target.messageRef!;
-        return inspect(() => _fieldVariable(engine._stateAt(ref.chatId, ref.nodeId), 'messageVariables'));
+        return inspect(() => _readMessageVariable(ref));
       case TavernVariableScope.character:
         return engine._libraryOperation(() async {
-          final record = await engine._library.read(target.characterId!);
-          if (record == null) {
+          late T result;
+          final present = await engine._library.readRuntimeAuthority(target.characterId!, (data) {
+            result = inspect(() {
+              final extensions = _readOptionalObject(data, 'extensions');
+              final helper = _readOptionalObject(extensions, 'tavern_helper');
+              return _fieldVariable(helper, 'variables');
+            });
+            return true;
+          });
+          if (present != true) {
             throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Character not found.');
           }
-          return inspect(() {
-            final extensions = _optionalObject(record.card.data, 'extensions');
-            final helper = _optionalObject(extensions, 'tavern_helper');
-            return _fieldVariable(helper, 'variables');
-          });
+          return result;
         });
       case TavernVariableScope.script:
         final owner = target.scriptOwner!;
         if (owner.kind == TavernScriptOwnerKind.global) {
           return engine._settingsDocument(
-            (document) async => inspect(() => _fieldVariable(_optionalObject(document, 'scriptData'), owner.scriptId)),
+            (document) async =>
+                inspect(() => _fieldVariable(_readOptionalObject(document, 'scriptData'), owner.scriptId)),
           );
         }
         if (owner.kind == TavernScriptOwnerKind.character) {
           return engine._libraryOperation(() async {
-            final record = await engine._library.read(owner.assetId!);
-            if (record == null) {
+            late T result;
+            final present = await engine._library.readRuntimeAuthority(owner.assetId!, (data) {
+              result = inspect(() => _scriptData(_readOptionalObject(data, 'extensions'), owner.scriptId));
+              return true;
+            });
+            if (present != true) {
               throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Script character not found.');
             }
-            return inspect(() => _scriptData(_optionalObject(record.card.data, 'extensions'), owner.scriptId));
+            return result;
           });
         }
         return engine._presetOperation(
           () => inspect(
-            () => _scriptData(_optionalObject(engine._requirePreset(owner.assetId!).raw, 'extensions'), owner.scriptId),
+            () => _scriptData(_readOptionalObject(engine._presetScriptOwnerRaw(owner), 'extensions'), owner.scriptId),
           ),
         );
     }
@@ -479,6 +497,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
               await engine._commitSettingsDocument(next);
               committed = true;
               engine._document['scriptData'] = _copy(container);
+              engine._globalScriptsChanged.add(null);
               return result(value);
             });
           } else if (owner.kind == TavernScriptOwnerKind.character) {
@@ -498,16 +517,17 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
               return result(value);
             });
           } else {
-            saved = await engine._presetOperation(() {
-              final original = engine._requirePreset(owner.assetId!);
-              final raw = original.raw;
-              final extensions = _optionalObject(raw, 'extensions');
-              final entry = _scriptEntry(extensions, owner.scriptId);
-              final value = prepare(_fieldVariable(entry, 'data'));
-              entry['data'] = value;
-              raw['extensions'] = extensions;
-              engine._store.transaction(
-                () => engine._savePresetEdit(original, raw),
+            saved = await engine._presetOperation(() async {
+              final value = await engine._editPresetScriptOwner(
+                owner,
+                (entry) {
+                  final value = prepare(_fieldVariable(entry, 'data'));
+                  entry['data'] = value;
+                  return value;
+                },
+                check: () {
+                  _context(resolved.context.value.id);
+                },
                 onCommitted: () {
                   committed = true;
                 },
@@ -626,7 +646,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
     );
     final useGameplay = admission.hasActivePacks || forceGameplay;
     final settings = useGameplay
-        ? engine._effectiveSettings(admittedChat, engine._chatCodec.metadataForNode(engine._store, chatId))
+        ? engine._effectiveReadSettings(admittedChat, engine._chatCodec.metadataForNode(engine._store, chatId))
         : null;
     while (true) {
       final chat = engine._store.chat(chatId);
@@ -670,9 +690,9 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         chatId,
         chat.characterId,
         revision,
-        _copy(record.card.data),
+        record.card.data,
         gameplay?.state ?? _stateDefinition(record.card.data),
-        settings ?? engine._effectiveSettings(chat, engine._chatCodec.metadataForNode(engine._store, chatId)),
+        settings ?? engine._effectiveReadSettings(chat, engine._chatCodec.metadataForNode(engine._store, chatId)),
         gameplay: gameplay,
         gameplayAdmission: admission,
       );
@@ -705,8 +725,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
   }
 
   void _checkDataContext(_ScriptDataContext dataContext) {
-    final chat = engine._store.chat(dataContext.chatId);
-    if (chat.characterId != dataContext.hostId ||
+    if (engine._store.chatCharacterId(dataContext.chatId) != dataContext.hostId ||
         engine._deletingCharacters.contains(dataContext.hostId) ||
         dataContext.hostRevision != (engine._directors._cardRevisions[dataContext.hostId] ?? 0)) {
       throw _scriptError(TavernScriptErrorCode.revisionConflict, 'data', 'The captured host definition changed.');
@@ -895,15 +914,29 @@ _ScriptPreparedData _prepareScriptMessageData(
 }
 
 void _checkOwnerIdentity(TavernScriptOwner owner) {
-  if (owner.scriptId.isEmpty ||
-      (owner.kind == TavernScriptOwnerKind.global
-          ? owner.assetId != null
-          : owner.assetId == null || owner.assetId!.isEmpty)) {
+  final carrier = owner.presetCarrier;
+  final invalid = switch (owner.kind) {
+    TavernScriptOwnerKind.global => owner.assetId != null || carrier != null,
+    TavernScriptOwnerKind.character => owner.assetId == null || carrier != null,
+    TavernScriptOwnerKind.preset =>
+      carrier == null
+          ? owner.assetId == null
+          : carrier.chatId == '' ||
+                (carrier.kind == TavernScriptPresetCarrierKind.inline
+                    ? owner.assetId != null
+                    : carrier.workingId == ''),
+  };
+  if (owner.scriptId.isEmpty || owner.assetId == '' || invalid) {
     throw _scriptError(TavernScriptErrorCode.invalidArgument, 'scriptOwner', 'Invalid persistent script identity.');
   }
 }
 
-Map<String, Object?> _optionalObject(Map<String, Object?> parent, String key) {
+Map<String, Object?> _optionalObject(Map<String, Object?> parent, String key) =>
+    _copy(_readOptionalObject(parent, key));
+
+Map<String, Object?> _scriptMapView(Object? value) => value is Map<String, Object?> ? value : <String, Object?>{};
+
+Map<String, Object?> _readOptionalObject(Map<String, Object?> parent, String key) {
   if (!parent.containsKey(key)) {
     return <String, Object?>{};
   }
@@ -916,7 +949,7 @@ Map<String, Object?> _optionalObject(Map<String, Object?> parent, String key) {
       fieldPath: key,
     );
   }
-  return _copy(value);
+  return value;
 }
 
 _ScriptRawVariable _fieldVariable(Map<String, Object?> object, String key) =>
@@ -944,6 +977,7 @@ String _targetKey(TavernVariableTarget target) => jsonEncode([
   target.scriptOwner?.kind.name,
   target.scriptOwner?.assetId,
   target.scriptOwner?.scriptId,
+  target.scriptOwner?.presetCarrier?.toJson(),
 ]);
 
 Object? _canonicalScriptValue(Object? value) {
@@ -995,15 +1029,24 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
     // These observers run after a real commit. A deleted/malformed target
     // invalidates its old token, but no read/shape error can turn COMMIT into
     // an apparent rollback or prevent notification of other targets.
-    String fingerprint;
+    final chatId = entry.target.chatId ?? entry.target.messageRef?.chatId;
+    final profile = chatId == null ? null : engine._turns[chatId]?.profile;
+    final started = profile?.now;
     try {
-      fingerprint = _variableFingerprint(read());
-    } catch (error) {
-      fingerprint = _unavailableVariableFingerprint(error);
-    }
-    if (entry.fingerprint != fingerprint) {
-      entry.fingerprint = fingerprint;
-      entry.revision++;
+      String fingerprint;
+      try {
+        fingerprint = _variableFingerprint(read());
+      } catch (error) {
+        fingerprint = _unavailableVariableFingerprint(error);
+      }
+      if (entry.fingerprint != fingerprint) {
+        entry.fingerprint = fingerprint;
+        entry.revision++;
+      }
+    } finally {
+      if (started != null) {
+        profile?.record('script_store_observe', started);
+      }
     }
   }
 
@@ -1022,6 +1065,17 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
         _observeVariable(
           entry,
           () => _fieldVariable(_optionalObject(document, 'scriptData'), target.scriptOwner!.scriptId),
+        );
+      } else if (target.scope == TavernVariableScope.script &&
+          target.scriptOwner!.presetCarrier?.kind == TavernScriptPresetCarrierKind.inline &&
+          target.scriptOwner!.presetCarrier!.chatId == null) {
+        final owner = target.scriptOwner!;
+        _observeVariable(
+          entry,
+          () => _scriptData(
+            _readOptionalObject(engine._presetScriptOwnerRaw(owner, document: document), 'extensions'),
+            owner.scriptId,
+          ),
         );
       }
     }
@@ -1079,6 +1133,7 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
     engine._presetWorkingStoreCommitted(chatIds, presetsChanged);
     generationStoreCommitted(chatIds);
     if (presetsChanged) {
+      engine._scriptCatalogChanged.add(null);
       _scriptPresetLibraryCommitted();
       scriptHelperPresetsCommitted();
       resourcesChanged();
@@ -1088,7 +1143,7 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
       if (target.scope == TavernVariableScope.chat && chatIds.contains(target.chatId)) {
         // updateChat(variables) also commits for an empty path and need not
         // advance tree_revision. Always inspect this small chat carrier.
-        _observeVariable(entry, () => _ScriptRawVariable(true, engine._store.chat(target.chatId!).variables));
+        _observeVariable(entry, () => _ScriptRawVariable(true, engine._store.chatVariables(target.chatId!)));
       } else if (target.scope == TavernVariableScope.message && chatIds.contains(target.messageRef!.chatId)) {
         final ref = target.messageRef!;
         int? revision;
@@ -1102,18 +1157,33 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
         if (revision != null && revision == entry.messageTreeRevision) {
           continue;
         }
-        _observeVariable(entry, () => _fieldVariable(engine._stateAt(ref.chatId, ref.nodeId), 'messageVariables'));
+        _observeVariable(entry, () => _readMessageVariable(ref));
         entry.messageTreeRevision = revision;
-      } else if (presetsChanged &&
-          target.scope == TavernVariableScope.script &&
-          target.scriptOwner!.kind == TavernScriptOwnerKind.preset) {
+      } else if (target.scope == TavernVariableScope.script &&
+          target.scriptOwner!.kind == TavernScriptOwnerKind.preset &&
+          (presetsChanged ||
+              (target.scriptOwner!.presetCarrier?.kind == TavernScriptPresetCarrierKind.inline &&
+                  chatIds.contains(target.scriptOwner!.presetCarrier!.chatId)))) {
         final owner = target.scriptOwner!;
         _observeVariable(
           entry,
-          () => _scriptData(_optionalObject(engine._requirePreset(owner.assetId!).raw, 'extensions'), owner.scriptId),
+          () => _scriptData(_readOptionalObject(engine._presetScriptOwnerRaw(owner), 'extensions'), owner.scriptId),
         );
       }
     }
+  }
+
+  void presetScriptCarriersChanged() {
+    for (final entry in _variableVersions.values) {
+      final owner = entry.target.scriptOwner;
+      if (entry.target.scope == TavernVariableScope.script && owner != null && owner.presetCarrier != null) {
+        _observeVariable(
+          entry,
+          () => _scriptData(_readOptionalObject(engine._presetScriptOwnerRaw(owner), 'extensions'), owner.scriptId),
+        );
+      }
+    }
+    scriptHelperPresetsCommitted(carriersOnly: true);
   }
 }
 
@@ -1124,38 +1194,17 @@ String _unavailableVariableFingerprint(Object error) => error is TavernScriptExc
     : jsonEncode(['unavailable', error.runtimeType.toString()]);
 
 Map<String, Object?> _scriptEntry(Map<String, Object?> extensions, String scriptId) {
-  final helper = extensions['tavern_helper'];
-  Object? scripts;
-  if (helper is Map<String, Object?> && helper['scripts'] != null) {
-    scripts = helper['scripts'];
-  } else {
-    scripts = extensions['TavernHelper_scripts'];
-  }
+  final scripts = scriptTreeFromExtensions(extensions);
   if (scripts == null) {
     throw _scriptError(TavernScriptErrorCode.notFound, 'script', 'The script container has no matching script.');
   }
   if (scripts is! List<Object?>) {
     throw _scriptError(TavernScriptErrorCode.shapeMismatch, 'script', 'Scripts must be an array.');
   }
-  final found = <Map<String, Object?>>[];
-  void visit(List<Object?> values) {
-    for (final value in values) {
-      if (value is! Map<String, Object?>) {
-        continue;
-      }
-      final nested = value['scripts'] ?? value['children'];
-      final folder = value['type'] == 'folder' || (value['type'] != 'script' && nested is List<Object?>);
-      if (folder) {
-        if (nested is List<Object?>) {
-          visit(nested);
-        }
-      } else if (value['id'] == scriptId) {
-        found.add(value);
-      }
-    }
-  }
-
-  visit(scripts);
+  final found = [
+    for (final leaf in scriptTreeLeaves(scripts))
+      if (leaf.raw['id'] == scriptId) leaf.raw,
+  ];
   if (found.isEmpty) {
     throw _scriptError(TavernScriptErrorCode.notFound, 'script', 'Script not found in its owner.');
   }

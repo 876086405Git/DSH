@@ -70,6 +70,7 @@ void main() {
       TavernScriptInjection(id: 'shared', content: 'TRANSIENT', depth: 1),
     ]);
     final before = generationNodes(h, chat);
+    expect(before, isEmpty, reason: 'Persistent root metadata remains available without a selected leaf.');
     final response = h.reply('done');
     final generation = await h.bridge.generateRaw(
       context.id,
