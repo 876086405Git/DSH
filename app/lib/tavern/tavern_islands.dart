@@ -214,6 +214,9 @@ String tavernIslandDocument(
         ].join('\n');
   String css(Color c) =>
       'rgba(${(c.r * 255).round()},${(c.g * 255).round()},${(c.b * 255).round()},${c.a.toStringAsFixed(3)})';
+  // Light text: a dark page. Form controls take the page's scheme, so one a
+  // card styled without a text colour (ST gives it the body's) is not black.
+  final scheme = text.computeLuminance() > 0.5 ? 'dark' : 'light';
   final policy = noScripts || offline
       ? [
           if (offline) "default-src 'none'",
@@ -236,6 +239,7 @@ html,body{margin:0;padding:0;background:transparent;}
 #dsh-island{display:flow-root;}
 body{color:${css(text)};font:${fontSize}px/1.5 system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;overflow-wrap:anywhere;}
 a{color:${css(accent)};}
+button,input,select,textarea{color-scheme:$scheme;}
 img,video,svg{max-width:100%;height:auto;}
 p{margin:0 0 .6em;}
 </style></head>

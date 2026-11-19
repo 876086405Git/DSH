@@ -188,7 +188,10 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     final key = (
       noScripts,
       offline,
-      theme.brightness,
+      // The colours, not only the brightness: it flips halfway through the
+      // theme's cross-fade, with the text still grey.
+      text,
+      dsh.textTertiary,
       ink?.dialogue,
       ink?.action,
       theme.colorScheme.primary,

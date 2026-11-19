@@ -70,7 +70,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   late final WebViewGuard _guard = WebViewGuard(onGone: _onGone);
   double _height = 48;
   bool _gone = false;
-  (String, bool, bool, Brightness, int, String?)? _loaded;
+  (String, bool, bool, Color, Color, int, String?)? _loaded;
 
   /// What its scripts get (build works it out): jQuery and lodash, what
   /// they may read of the story; not loaded while either is on its way.
@@ -101,13 +101,16 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     final theme = Theme.of(context);
     if (_waiting) return;
     final (noScripts, offline) = ref.read(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)));
-    final key = (widget.html, noScripts, offline, theme.brightness, _libraries.length, _storyKey);
+    // By its colours, not the brightness: a light / dark switch cross-fades
+    // the theme, and the brightness flips halfway, with the text still grey.
+    final (text, accent) = (theme.colorScheme.onSurface, theme.colorScheme.primary);
+    final key = (widget.html, noScripts, offline, text, accent, _libraries.length, _storyKey);
     if (key == _loaded) return;
     _loaded = key;
     final document = tavernIslandDocument(
       widget.html,
-      text: theme.colorScheme.onSurface,
-      accent: theme.colorScheme.primary,
+      text: text,
+      accent: accent,
       fontSize: theme.textTheme.bodyLarge?.fontSize ?? 15,
       nonce: _nonce(),
       noScripts: noScripts,

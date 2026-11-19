@@ -311,6 +311,7 @@ body{color:var(--dsh-text);font:var(--mainFontSize)/$lineHeight system-ui,-apple
 .mes_text q::before,.mes_text q::after{content:none;}
 .mes_text em{color:var(--SmartThemeEmColor);}
 .mes_text a{color:var(--dsh-accent);}
+button,input,select,textarea{color-scheme:${text.computeLuminance() > 0.5 ? 'dark' : 'light'};}
 .mes_text img,.mes_text video,.mes_text svg{max-width:100%;height:auto;}
 .mes_text pre{white-space:pre-wrap;}
 .mes[data-streaming] .mes_text>:last-child::after,.mes[data-streaming] .mes_text:empty::after{content:"\\25CF" / "";color:var(--dsh-muted);margin-left:3px;font-size:.6em;vertical-align:middle;}
