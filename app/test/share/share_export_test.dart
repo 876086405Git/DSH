@@ -112,12 +112,13 @@ void main() {
       var created = 0;
       var live = 0;
       var peak = 0;
+      final heights = <int>[];
       ui.Image.onCreate = (image) {
         previousCreate?.call(image);
         created++;
         live++;
         if (live > peak) peak = live;
-        expect(image.height, lessThanOrEqualTo(4096));
+        heights.add(image.height);
         // Simulate a preview repaint/dismissal between the first and later
         // rasterisations. Every scene must already own the old picture tree.
         if (!blur && created == 1) layer.removeAllChildren();
@@ -138,6 +139,7 @@ void main() {
         ui.Image.onDispose = previousDispose;
       }
       expect(created, ((height * ratio).ceil() / coreHeight).ceil());
+      expect(heights, everyElement(lessThanOrEqualTo(4096)));
       expect(peak, 1, reason: 'only one strip bitmap is live at a time');
       expect(live, 0, reason: 'all raster images were disposed');
       final decoded = img.decodePng(png)!;
