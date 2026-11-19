@@ -7,6 +7,7 @@
 // picture is in ([shareImagesSettled]).
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -23,17 +24,44 @@ import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'share_content.dart';
 
-/// The conversation a card's pictures come from.
+/// The conversation and shared decode limit for a card's galleries.
 class ShareImageScope extends InheritedWidget {
-  const ShareImageScope({super.key, required this.sessionId, required super.child});
+  const ShareImageScope({super.key, required this.sessionId, this.decodeBound = maxDecodeBound, required super.child});
 
   final String? sessionId;
+  final int decodeBound;
+
+  static const maxDecodeBound = 1200;
+  // Eight full-size square pictures, about 44 MiB of retained RGBA pixels.
+  static const _decodePixelBudget = 8 * maxDecodeBound * maxDecodeBound;
+
+  /// Count mounted cells, not URLs hidden behind a gallery's +N tile.
+  static int decodeBoundFor(Iterable<ShareBlock> blocks) {
+    var cells = 0;
+    for (final block in blocks) {
+      switch (block) {
+        case ShareQuestion(:final images):
+          cells += ShareGalleryLayout.cells(images.length);
+        case ShareAnswer(:final markdown):
+          for (final segment in shareSegments(markdown)) {
+            cells += ShareGalleryLayout.cells(segment.images.length);
+          }
+        default:
+      }
+    }
+    if (cells <= 8) return maxDecodeBound;
+    return math.max(1, math.sqrt(_decodePixelBudget / cells).floor());
+  }
 
   static String? sessionIdOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ShareImageScope>()?.sessionId;
 
+  static int decodeBoundOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ShareImageScope>()?.decodeBound ?? maxDecodeBound;
+
   @override
-  bool updateShouldNotify(ShareImageScope oldWidget) => sessionId != oldWidget.sessionId;
+  bool updateShouldNotify(ShareImageScope oldWidget) =>
+      sessionId != oldWidget.sessionId || decodeBound != oldWidget.decodeBound;
 }
 
 /// Waits (at most [timeout]) until every picture under [context] has been
@@ -94,6 +122,7 @@ class ShareGallery extends StatelessWidget {
     Widget cell(int index, Size? size, BorderRadius radius, {int more = 0}) => _ShareImageCell(
       key: ValueKey('share-image-$index'),
       image: images[index],
+      decodeBound: ShareImageScope.decodeBoundOf(context),
       size: size,
       maxWidth: w,
       question: question,
@@ -183,16 +212,13 @@ class ShareGallery extends StatelessWidget {
   }
 }
 
-/// Bytes are decoded to at most this many pixels a side: a 3× export of the
-/// widest picture, no more (a phone screenshot is ~1 MB decoded, not ~12).
-const _decodeBound = 1200;
-
 /// One picture of a gallery: [size] (cover) in a grid, or its own shape
 /// within [maxWidth] and the layout's height when alone.
 class _ShareImageCell extends ConsumerStatefulWidget {
   const _ShareImageCell({
     super.key,
     required this.image,
+    required this.decodeBound,
     required this.size,
     required this.maxWidth,
     required this.question,
@@ -201,6 +227,7 @@ class _ShareImageCell extends ConsumerStatefulWidget {
   });
 
   final ShareImage image;
+  final int decodeBound;
   final Size? size;
   final double maxWidth;
   final bool question;
@@ -214,7 +241,7 @@ class _ShareImageCell extends ConsumerStatefulWidget {
 }
 
 class _ShareImageCellState extends ConsumerState<_ShareImageCell> {
-  final _settled = Completer<void>();
+  var _settled = Completer<void>();
 
   /// Done once the picture is drawn or given up on.
   Future<void> get settled => _settled.future;
@@ -240,8 +267,10 @@ class _ShareImageCellState extends ConsumerState<_ShareImageCell> {
   @override
   void didUpdateWidget(_ShareImageCell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_sameSource(oldWidget.image, widget.image)) {
+    if (!_sameSource(oldWidget.image, widget.image) || oldWidget.decodeBound != widget.decodeBound) {
       _reset();
+      if (!_settled.isCompleted) _settled.complete();
+      _settled = Completer<void>();
       _start();
     }
   }
@@ -349,7 +378,12 @@ class _ShareImageCellState extends ConsumerState<_ShareImageCell> {
 
   void _decode(ImageProvider provider) {
     if (!mounted) return;
-    final resized = ResizeImage(provider, width: _decodeBound, height: _decodeBound, policy: ResizeImagePolicy.fit);
+    final resized = ResizeImage(
+      provider,
+      width: widget.decodeBound,
+      height: widget.decodeBound,
+      policy: ResizeImagePolicy.fit,
+    );
     _stream?.removeListener(_listener);
     _stream = resized.resolve(createLocalImageConfiguration(context))..addListener(_listener);
   }

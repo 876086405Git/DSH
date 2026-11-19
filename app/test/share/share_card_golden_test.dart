@@ -1,6 +1,6 @@
 // Goldens of the share card itself at its export size (390 logical wide):
-// a reply with code / table / maths in every template, a long reply cut
-// with 「…」, a file, a plugin (also with its own landing link, too long for
+// a reply with code / table / maths in every template, a file,
+// a plugin (also with its own landing link, too long for
 // a QR code), cards with pictures (a prompt's attachments, a
 // reply's own, too many for the grid, ones that cannot be had), a
 // chat-style long image of several exchanges, and the accent colour.
@@ -26,12 +26,6 @@ void main() {
       await expectLater(find.byKey(_cardKey), matchesGoldenFile('goldens/card_reply_${template.name}.png'));
     });
   }
-
-  softShadowTest('long reply is cut with an ellipsis', (tester) async {
-    await pumpShareCard(tester, ShareCard(content: sampleLongContent()));
-    expect(find.text('…'), findsOneWidget);
-    await expectLater(find.byKey(_cardKey), matchesGoldenFile('goldens/card_long_light.png'));
-  });
 
   softShadowTest('file card with its first lines', (tester) async {
     await pumpShareCard(

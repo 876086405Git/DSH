@@ -6,6 +6,7 @@
 // with equal room either side of their text; the galleries' even gaps and
 // edges on the column; and the card unchanged by the phone's text size.
 
+import 'package:dsh_app/ui/chat/render/markdown_body.dart';
 import 'package:dsh_app/ui/share/qr_code.dart';
 import 'package:dsh_app/ui/share/share_card.dart';
 import 'package:dsh_app/ui/share/share_content.dart';
@@ -20,6 +21,46 @@ const _eps = 0.01;
 Rect _rect(WidgetTester tester, String key) => tester.getRect(find.byKey(ValueKey(key)));
 
 void main() {
+  for (final template in ShareTemplate.values) {
+    testWidgets('${template.name}: long prompts, paragraphs, code and later exchanges stay above the footer', (
+      tester,
+    ) async {
+      final question = List.filled(12, 'Full question line').join('\n');
+      final paragraph = List.filled(180, 'This paragraph must remain complete. ').join().trim();
+      final code = [for (var i = 0; i < 200; i++) 'print($i)'].join('\n');
+      await pumpShareCard(
+        tester,
+        ShareCard(
+          template: template,
+          content: ShareContent(
+            blocks: [
+              ShareQuestion(question),
+              ShareAnswer(paragraph),
+              ShareAnswer('```python\n$code\n```'),
+              const ShareQuestion('One more question'),
+              const ShareAnswer('FINAL ANSWER SENTINEL'),
+            ],
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final text = tester.widget<Text>(find.text(question));
+      expect(text.maxLines, isNull);
+      expect(text.overflow, isNot(TextOverflow.ellipsis));
+      expect(tester.widget<ShareCodeWell>(find.byType(ShareCodeWell)).code, code);
+      final tailFinder = find.byWidgetPredicate((w) => w is MarkdownBody && w.text == 'FINAL ANSWER SENTINEL');
+      expect(tailFinder, findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is MarkdownBody && w.text == paragraph), findsOneWidget);
+      expect(find.byKey(const ValueKey('share-more')), findsNothing);
+      final footer = _rect(tester, 'share-brand');
+      final tail = tester.getRect(tailFinder);
+      final card = tester.getRect(find.byType(ShareCard));
+      expect(card.height, greaterThan(4680), reason: 'grows beyond both former body caps');
+      expect(tail.bottom, lessThan(footer.top), reason: 'the final text is not clipped under the footer');
+      expect(footer.bottom, lessThan(card.bottom));
+    });
+  }
+
   for (final template in ShareTemplate.values.where((t) => !t.onField)) {
     testWidgets('${template.name}: one inset left, right and under the QR code', (tester) async {
       await pumpShareCard(tester, ShareCard(content: sampleReplyContent(), template: template));

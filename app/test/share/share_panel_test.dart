@@ -5,6 +5,7 @@
 //
 //   flutter test --update-goldens test/share/share_panel_test.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -52,10 +53,13 @@ class _Exporter extends ShareExporter {
   final shared = <ShareParams>[];
   final saved = <File>[];
   Object? saveError;
+  Completer<void>? shareGate;
 
   @override
-  Future<void> share(File image, {String? text}) async =>
-      shared.add(ShareParams(files: [XFile(image.path)], text: text));
+  Future<void> share(File image, {String? text}) async {
+    shared.add(ShareParams(files: [XFile(image.path)], text: text));
+    if (shareGate case final gate?) await gate.future;
+  }
 
   @override
   Future<String> save(File image) async {
@@ -799,6 +803,54 @@ void main() {
     expect(home.template, ShareTemplate.card);
     expect(home.showQuestion, isFalse);
     expect(home.showMeta, isFalse);
+  });
+
+  testWidgets('图片: exporting pins the resolved style and disables toggle semantics until cleanup', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final panel = await _open(tester);
+      await _key(tester, 'share-to-image');
+      final original = _card(tester);
+      final gate = Completer<void>();
+      panel.exporter.shareGate = gate;
+      await tester.tap(find.byKey(const ValueKey('share-send')));
+      try {
+        for (var i = 0; i < 80 && panel.exporter.shared.isEmpty; i++) {
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        expect(panel.exporter.shared, hasLength(1));
+        final style = SharePanelScope.of(tester.element(find.byType(ShareImagePage))).style;
+        style
+          ..template = ShareTemplate.dark
+          ..showQuestion = false
+          ..showMeta = false;
+        await tester.pump();
+        final pinned = _card(tester);
+        expect(pinned.template, original.template);
+        expect(pinned.accent, original.accent);
+        expect(pinned.accent, isNotNull, reason: 'the ambient accent was resolved at export start');
+        expect(pinned.showQuestion, original.showQuestion);
+        expect(pinned.showMeta, original.showMeta);
+        expect(find.byType(ShareToggle), findsNWidgets(2));
+        for (final element in find.byType(ShareToggle).evaluate()) {
+          final toggle = element.widget as ShareToggle;
+          expect(toggle.onSelected, isNull);
+          final data = tester.getSemantics(find.byWidget(toggle)).getSemanticsData();
+          expect(data.flagsCollection.isEnabled, ui.Tristate.isFalse);
+          expect(data.hasAction(ui.SemanticsAction.tap), isFalse);
+        }
+      } finally {
+        gate.complete();
+        await _settle(tester);
+      }
+      expect(_card(tester).template, ShareTemplate.dark);
+      expect(_card(tester).showQuestion, isFalse);
+      expect(_card(tester).showMeta, isFalse);
+      expect(tester.widget<ShareToggle>(find.byType(ShareToggle).first).onSelected, isNotNull);
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('图片: 分享 hands a 1170 px wide PNG over, 保存图片 confirms in place', (tester) async {

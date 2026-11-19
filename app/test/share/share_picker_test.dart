@@ -173,7 +173,6 @@ void main() {
   test('the long image needs no more than a stretch of exchanges', () {
     final state = ChatState(items: _items(), title: '对话', loading: false);
     final content = shareContentForItems(state, {'u11', 'a1', 'u21', 'a2'});
-    expect(content.isLong, isTrue);
     expect(content.blocks.map((b) => b.runtimeType), [ShareQuestion, ShareAnswer, ShareQuestion, ShareAnswer]);
     expect((content.blocks[2] as ShareQuestion).images, hasLength(1));
   });

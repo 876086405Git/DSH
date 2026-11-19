@@ -5,7 +5,6 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/app_info.dart';
@@ -55,8 +54,7 @@ enum ShareTemplate {
   Brightness get brightness => this == dark ? Brightness.dark : Brightness.light;
 }
 
-/// A share card, [width] logical pixels wide and as tall as its content
-/// (the body is cut by [layoutShareBlocks], with a hard cap behind it).
+/// A share card, [width] logical pixels wide and as tall as its full content.
 ///
 /// ```
 /// ┌──────────────────────────────────────┐
@@ -68,7 +66,6 @@ enum ShareTemplate {
 /// │                  │ 登录按钮连点…     │  │  the question
 /// │                  ╰─────────────────╯  │
 /// │ The answer, as Markdown, ▢ pictures…  │
-/// │ …                                     │  when cut
 /// │ ───────────────────────────────────── │
 /// │ ◖● dsh-go                     ▣▣▣▣    │  brand + QR; the QR's corner
 /// │    手机上的 DSH · 扫码获取       ▣▣▣▣    │  as far from both edges
@@ -110,13 +107,6 @@ class ShareCard extends StatelessWidget {
 
   /// The panel's corner radius.
   static const panelRadius = 24.0;
-
-  /// Where the body of a one-reply card is clipped if the estimate in
-  /// [layoutShareBlocks] fell short.
-  static const hardCap = shareBodyBudget * 1.3;
-
-  /// The hard cap for [content] (a long image has a taller budget).
-  static double capFor(ShareContent content) => (content.isLong ? shareLongBudget : shareBodyBudget) * 1.3;
 
   static const qrSize = 72.0;
 
@@ -214,12 +204,6 @@ class ShareCard extends StatelessWidget {
       for (final block in content.blocks)
         if (showQuestion || block is! ShareQuestion) block,
     ];
-    final layout = layoutShareBlocks(
-      blocks,
-      budget: content.isLong ? shareLongBudget : shareBodyBudget,
-      width: contentWidth(template),
-      leading: leadingFor(template),
-    );
     final theme = themeFor(template, accent: accent);
     final look = _Look(template, accent);
     return MediaQuery(
@@ -235,11 +219,12 @@ class ShareCard extends StatelessWidget {
               style: theme.textTheme.bodyMedium!.copyWith(color: theme.colorScheme.onSurface),
               child: ShareImageScope(
                 sessionId: content.sessionId,
+                decodeBound: ShareImageScope.decodeBoundFor(blocks),
                 child: SizedBox(
                   width: width,
                   child: template.onField
-                      ? _FieldLayout(card: this, layout: layout, look: look)
-                      : _PageLayout(card: this, layout: layout, look: look),
+                      ? _FieldLayout(card: this, blocks: blocks, look: look)
+                      : _PageLayout(card: this, blocks: blocks, look: look),
                 ),
               ),
             ),
@@ -292,10 +277,10 @@ abstract final class _PaperLook {
 
 /// 浅色 / 深色 / 纸张: content straight on the page.
 class _PageLayout extends StatelessWidget {
-  const _PageLayout({required this.card, required this.layout, required this.look});
+  const _PageLayout({required this.card, required this.blocks, required this.look});
 
   final ShareCard card;
-  final ShareLayout layout;
+  final List<ShareBlock> blocks;
   final _Look look;
 
   @override
@@ -303,7 +288,6 @@ class _PageLayout extends StatelessWidget {
     final surfaces = DshSurfaces.of(context);
     final scheme = Theme.of(context).colorScheme;
     final paper = card.template == ShareTemplate.paper;
-    final background = paper ? _PaperLook.bottom : surfaces.backdropBottom;
     return CustomPaint(
       painter: paper
           ? _PaperPainter(top: _PaperLook.top, bottom: _PaperLook.bottom)
@@ -319,7 +303,7 @@ class _PageLayout extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Body(card: card, layout: layout, look: look, background: background),
+            _Body(card: card, blocks: blocks, look: look),
             const SizedBox(height: 28),
             Divider(
               key: const ValueKey('share-footer-rule'),
@@ -342,10 +326,10 @@ class _PageLayout extends StatelessWidget {
 /// line under it on the field. The panel's margin, the gap below it and the
 /// brand line's margin are all [ShareCard.fieldInset].
 class _FieldLayout extends StatelessWidget {
-  const _FieldLayout({required this.card, required this.layout, required this.look});
+  const _FieldLayout({required this.card, required this.blocks, required this.look});
 
   final ShareCard card;
-  final ShareLayout layout;
+  final List<ShareBlock> blocks;
   final _Look look;
 
   @override
@@ -361,13 +345,9 @@ class _FieldLayout extends StatelessWidget {
         offset: Offset(0, glass ? 14 : 10),
       ),
     ];
-    // The glass panel is translucent: the body's clip fades into what the
-    // panel roughly shows, the card glass over the page.
-    final surfaces = DshSurfaces.of(context);
-    final background = glass ? Color.alphaBlend(surfaces.card.fill, surfaces.backdropTop) : scheme.surface;
     final body = Padding(
       padding: const EdgeInsets.all(ShareCard.panelInset),
-      child: _Body(card: card, layout: layout, look: look, background: background),
+      child: _Body(card: card, blocks: blocks, look: look),
     );
     final Widget panel = glass
         ? _GlassPanel(radius: radius, shadows: shadow, child: body)
@@ -480,18 +460,14 @@ class _GlassRimPainter extends CustomPainter {
 
 /// Title, meta, what the agent did, and the blocks.
 class _Body extends StatelessWidget {
-  const _Body({required this.card, required this.layout, required this.look, required this.background});
+  const _Body({required this.card, required this.blocks, required this.look});
 
   final ShareCard card;
-  final ShareLayout layout;
+  final List<ShareBlock> blocks;
   final _Look look;
-
-  /// Behind the body: the hard cap fades into it.
-  final Color background;
 
   @override
   Widget build(BuildContext context) {
-    final colors = DshColors.of(context);
     final content = card.content;
     final width = ShareCard.contentWidth(card.template);
     final children = <Widget>[];
@@ -507,7 +483,7 @@ class _Body extends StatelessWidget {
     );
     if (header.isNotEmpty) children.add(header);
     ShareBlock? previous;
-    for (final block in layout.blocks) {
+    for (final block in blocks) {
       // 28 under the header; an answer close under its own question; a new
       // exchange of a long image further apart than paragraphs.
       gap(switch ((previous, block)) {
@@ -519,21 +495,7 @@ class _Body extends StatelessWidget {
       children.add(_block(block, width));
       previous = block;
     }
-    if (layout.truncated) {
-      gap(6);
-      children.add(
-        Text(
-          '…',
-          key: const ValueKey('share-more'),
-          style: AppType.chatBody(context, color: colors.textTertiary),
-        ),
-      );
-    }
-    return _ClampHeight(
-      maxHeight: ShareCard.capFor(content),
-      fadeColor: background,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children);
   }
 
   Widget _block(ShareBlock block, double width) => switch (block) {
@@ -719,8 +681,6 @@ class _Question extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Text(
                   text,
-                  maxLines: 6,
-                  overflow: TextOverflow.ellipsis,
                   // The bubble hugs its longest line, not the column.
                   textWidthBasis: TextWidthBasis.longestLine,
                   style: AppType.chatBody(context, color: surfaces.onUserBubble),
@@ -1165,86 +1125,4 @@ class _FieldPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FieldPainter old) => old.top != top || old.bottom != bottom || old.orb != orb || old.pool != pool;
-}
-
-/// At most [maxHeight] tall; content below is clipped under a short fade
-/// into [fadeColor]. The safety net behind the estimate in [layoutShareBlocks].
-class _ClampHeight extends SingleChildRenderObjectWidget {
-  const _ClampHeight({required this.maxHeight, required this.fadeColor, super.child});
-
-  final double maxHeight;
-  final Color fadeColor;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) => _RenderClampHeight(maxHeight, fadeColor);
-
-  @override
-  void updateRenderObject(BuildContext context, _RenderClampHeight renderObject) {
-    renderObject
-      ..maxHeight = maxHeight
-      ..fadeColor = fadeColor;
-  }
-}
-
-class _RenderClampHeight extends RenderProxyBox {
-  _RenderClampHeight(this._maxHeight, this._fadeColor);
-
-  double _maxHeight;
-  set maxHeight(double value) {
-    if (value == _maxHeight) return;
-    _maxHeight = value;
-    markNeedsLayout();
-  }
-
-  Color _fadeColor;
-  set fadeColor(Color value) {
-    if (value == _fadeColor) return;
-    _fadeColor = value;
-    markNeedsPaint();
-  }
-
-  bool _clipped = false;
-  final _clip = LayerHandle<ClipRectLayer>();
-
-  static const _fade = 56.0;
-
-  @override
-  void performLayout() {
-    final child = this.child!;
-    child.layout(constraints.copyWith(maxHeight: double.infinity), parentUsesSize: true);
-    _clipped = child.size.height > _maxHeight;
-    size = constraints.constrain(Size(child.size.width, _clipped ? _maxHeight : child.size.height));
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    if (!_clipped) {
-      _clip.layer = null;
-      super.paint(context, offset);
-      return;
-    }
-    _clip.layer = context.pushClipRect(
-      needsCompositing,
-      offset,
-      Offset.zero & size,
-      super.paint,
-      oldLayer: _clip.layer,
-    );
-    final band = Rect.fromLTWH(offset.dx, offset.dy + size.height - _fade, size.width, _fade);
-    context.canvas.drawRect(
-      band,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_fadeColor.withValues(alpha: 0), _fadeColor],
-        ).createShader(band),
-    );
-  }
-
-  @override
-  void dispose() {
-    _clip.layer = null;
-    super.dispose();
-  }
 }
