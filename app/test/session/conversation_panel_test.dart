@@ -62,8 +62,8 @@ void main() {
       expect(find.byType(ModelChip), findsNothing);
       expect(find.descendant(of: find.byType(ChatHeader), matching: find.textContaining('V4 Pro')), findsNothing);
       final title = tester.getRect(find.byKey(const ValueKey('chat-title-pill')));
-      final fresh = tester.getRect(find.byKey(const ValueKey('chat-new-chat')));
-      expect(fresh.left - title.right, lessThan(12), reason: 'a long title reaches the key');
+      final call = tester.getRect(find.byKey(const ValueKey('chat-call')));
+      expect(call.left - title.right, lessThan(12), reason: 'a long title reaches the keys');
       expect(tester.takeException(), isNull);
     });
 
