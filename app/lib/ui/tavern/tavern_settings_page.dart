@@ -2,6 +2,7 @@
 // §3.4 has it): 模型与连接, 生成, 显示, 安全, 数据, 你.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter/material.dart';
@@ -66,15 +67,14 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
   final defaultPreset = ref.watch(tavernPresetSelectionProvider(null)).value?.defaultPresetId;
   final defaultName = tavernPresetName(context, presets, defaultPreset);
   final storage = ref.watch(tavernStorageProvider);
-  final you = SheetGroup(
+  final you = SettingsSection(
     title: l10n.tavernSettingsYou,
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     children: [
       SettingsTile(
         key: const ValueKey('tavern-personas'),
         icon: AppIcons.profile,
         title: l10n.tavernDefaultPersona,
-        value: Text(defaultPersona?.name ?? l10n.tavernPersonaNotSet),
+        value: _ValueText(defaultPersona?.name ?? l10n.tavernPersonaNotSet),
         onTap: () => unawaited(Navigator.of(context).push(TavernPersonasPage.route())),
       ),
       SettingsTile(
@@ -89,10 +89,9 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
       ),
     ],
   );
-  final model = SheetGroup(
+  final model = SettingsSection(
     key: const ValueKey('tavern-connection'),
     title: l10n.tavernSettingsConnection,
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     children: [
       ...tavernModelRows(context, ref, keyPrefix: 'tavern'),
       const TavernAuxiliaryTile(),
@@ -108,16 +107,16 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
         ),
     ],
   );
-  final generating = SheetGroup(
+  final generating = SettingsSection(
     key: const ValueKey('tavern-generation'),
     title: l10n.tavernSettingsGeneration,
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    footer: Text(defaultPreset == null ? l10n.tavernGenerationNote : l10n.tavernGenerationPresetNote(defaultName)),
     children: [
       SettingsTile(
         key: const ValueKey('tavern-default-preset'),
         icon: AppIcons.article,
         title: l10n.tavernDefaultPreset,
-        value: Text(defaultName),
+        value: _ValueText(defaultName),
         onTap: () => unawaited(showTavernDefaultPresetPicker(context)),
       ),
       if (defaultPreset != null)
@@ -163,13 +162,6 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
           onChanged: (t) => unawaited(generate.setTemperature(t.toDouble())),
         ),
       ],
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-        child: Text(
-          defaultPreset == null ? l10n.tavernGenerationNote : l10n.tavernGenerationPresetNote(defaultName),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
-        ),
-      ),
       TavernNumberTile(
         key: const ValueKey('tavern-cost-alert'),
         icon: AppIcons.notifications,
@@ -185,13 +177,12 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
       ),
     ],
   );
-  final display = SheetGroup(
+  final display = SettingsSection(
     title: l10n.tavernSettingsDisplay,
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     children: [
       SettingsSegmentTile<TavernLayout>(
         key: const ValueKey('tavern-layout'),
-        icon: AppIcons.article,
+        icon: AppIcons.phoneLayout,
         title: l10n.tavernLayout,
         segments: [
           PillSegment(TavernLayout.bubble, l10n.tavernLayoutBubble),
@@ -261,6 +252,12 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
         selected: settings.palette == TavernPalette.st && stTheme == null ? TavernPalette.ember : settings.palette,
         onChanged: (palette) => unawaited(controller.setPalette(palette)),
       ),
+      // What a reply will look like, right under the rows that shape it.
+      Padding(
+        key: const ValueKey('tavern-reading-preview'),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        child: TavernReading(child: MarkdownBody(text: l10n.tavernReadingSample, selectable: false)),
+      ),
       // The ST theme the colours can come from: taken in through 导入, like
       // every other file; here to see which, or to let it go.
       if (stTheme != null)
@@ -298,12 +295,12 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
           value: stTheme!.useCss,
           onChanged: (on) => unawaited(ref.read(tavernStThemeProvider.notifier).setUseCss(on)),
         ),
-      // What a reply will look like.
-      Padding(
-        key: const ValueKey('tavern-reading-preview'),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-        child: TavernReading(child: MarkdownBody(text: l10n.tavernReadingSample, selectable: false)),
-      ),
+    ],
+  );
+  // What goes into each message: a card of its own, under 显示's.
+  final messages = SettingsSection(
+    key: const ValueKey('tavern-messages'),
+    children: [
       SettingsSwitchTile(
         key: const ValueKey('tavern-show-usage'),
         icon: AppIcons.chart,
@@ -314,7 +311,7 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
       ),
       SettingsSwitchTile(
         key: const ValueKey('tavern-card-theme'),
-        icon: AppIcons.theme,
+        icon: AppIcons.color,
         title: l10n.tavernCardTheme,
         subtitle: l10n.tavernCardThemeSubtitle,
         value: settings.cardTheme,
@@ -330,7 +327,7 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
       ),
       SettingsSwitchTile(
         key: const ValueKey('tavern-islands'),
-        icon: AppIcons.code,
+        icon: AppIcons.web,
         title: l10n.tavernIslands,
         subtitle: l10n.tavernIslandsSubtitle,
         value: settings.islands,
@@ -347,10 +344,9 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
     ],
   );
   // Protections the user may choose; off unless they do.
-  final safety = SheetGroup(
+  final safety = SettingsSection(
     key: const ValueKey('tavern-safety'),
     title: l10n.tavernSettingsSafety,
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     children: [
       SettingsSwitchTile(
         key: const ValueKey('tavern-island-no-scripts'),
@@ -370,8 +366,7 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
       ),
     ],
   );
-  final startupGroup = SheetGroup(
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  final startupGroup = SettingsSection(
     children: [
       SettingsTile(
         key: const ValueKey('tavern-startup'),
@@ -383,10 +378,9 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
     ],
   );
   // The whole tavern in one ZIP, and back (engine T24); and how much room it takes.
-  final data = SheetGroup(
+  final data = SettingsSection(
     key: const ValueKey('tavern-data'),
     title: l10n.tavernData,
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     children: [
       SettingsTile(
         key: const ValueKey('tavern-backup'),
@@ -425,7 +419,7 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
       ),
     ],
   );
-  return [model, generating, const TavernToolPolicyGroup(), display, safety, data, you, startupGroup];
+  return [model, generating, const TavernToolPolicyGroup(), display, messages, safety, data, you, startupGroup];
 }
 
 /// What the room goes to, part by part.
@@ -470,3 +464,22 @@ Future<void> _showStorage(BuildContext context, TavernStorage storage) => showAp
     );
   },
 );
+
+/// A row's value that may be long (a preset's or a persona's name): one line, cut short
+/// where it would push the row's four-character title onto two lines, as it would on a 320 wide
+/// phone. What the rest of the row takes: the page's gutters (16 a side), the card's inset (16),
+/// the icon and its gap (32 + 12), the gap before the value (12), the chevron with its gap and
+/// pad (4 + 20 + 12), the title (4 × 15), and 4 to spare.
+class _ValueText extends StatelessWidget {
+  const _ValueText(this.text);
+
+  final String text;
+
+  static const _rest = 16 * 2 + 16 + 32 + 12 + 12 + 4 + 20 + 12 + 4 * 15 + 4.0;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: BoxConstraints(maxWidth: math.max(80, MediaQuery.sizeOf(context).width - _rest)),
+    child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+  );
+}

@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../settings/settings_widgets.dart';
-import '../theme/theme.dart';
 import 'tavern_tool_policy_group.dart';
 
 /// A chat leaf (roll.enabled, remember.enabled, remember.mode) as a segment:
@@ -53,7 +52,6 @@ class TavernChatToolSection extends ConsumerWidget {
     final auto = scope['rememberMode'] == 'auto';
     // On here, off in the settings: on here does not count.
     final held = (roll == 'on' && !rolls) || (remember == 'on' && !remembers);
-    final quiet = Theme.of(context).textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary);
     void write(String tool, String key, String segment) => unawaited(
       TavernToolPolicyGroup.write(context, ref, {
         tool: {key: _value(segment)},
@@ -68,6 +66,26 @@ class TavernChatToolSection extends ConsumerWidget {
       key: const ValueKey('tavern-chat-tools'),
       title: l10n.tavernChatTools,
       margin: const EdgeInsets.only(bottom: 12),
+      // What the chat ends up with, under the card as every settings note is.
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 4,
+        children: [
+          Text(
+            l10n.tavernChatToolNow(
+              rolls ? l10n.tavernChatToolOn : l10n.tavernChatToolOff,
+              !remembers
+                  ? l10n.tavernChatToolOff
+                  : auto
+                  ? l10n.tavernToolPolicyModeAuto
+                  : l10n.tavernToolPolicyModeAsk,
+            ),
+            key: const ValueKey('tavern-chat-tool-now'),
+          ),
+          if (held) Text(l10n.tavernChatToolHeld, key: const ValueKey('tavern-chat-tool-held')),
+          if (policy.diagnostics.isNotEmpty) Text(l10n.tavernToolPolicyDiagnostics),
+        ],
+      ),
       children: [
         SettingsSegmentTile<String>(
           key: const ValueKey('tavern-chat-tool-roll'),
@@ -98,29 +116,6 @@ class TavernChatToolSection extends ConsumerWidget {
             selected: mode,
             onChanged: (s) => write('remember', 'mode', s),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 4,
-            children: [
-              Text(
-                l10n.tavernChatToolNow(
-                  rolls ? l10n.tavernChatToolOn : l10n.tavernChatToolOff,
-                  !remembers
-                      ? l10n.tavernChatToolOff
-                      : auto
-                      ? l10n.tavernToolPolicyModeAuto
-                      : l10n.tavernToolPolicyModeAsk,
-                ),
-                key: const ValueKey('tavern-chat-tool-now'),
-                style: quiet,
-              ),
-              if (held) Text(l10n.tavernChatToolHeld, key: const ValueKey('tavern-chat-tool-held'), style: quiet),
-              if (policy.diagnostics.isNotEmpty) Text(l10n.tavernToolPolicyDiagnostics, style: quiet),
-            ],
-          ),
-        ),
       ],
     );
   }

@@ -168,10 +168,9 @@ class TavernPresetPage extends ConsumerWidget {
     return AppPage.list(
       title: preset.name,
       children: [
-        SheetGroup(
+        SettingsSection(
           key: const ValueKey('tavern-preset-numbers'),
           title: l10n.tavernPresetParams,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: [
             TavernNumberTile(
               key: const ValueKey('tavern-preset-context'),
@@ -209,10 +208,10 @@ class TavernPresetPage extends ConsumerWidget {
             ),
           ],
         ),
-        SheetGroup(
+        SettingsSection(
           key: const ValueKey('tavern-preset-prefill-group'),
           title: l10n.tavernPrefill,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          footer: Text(l10n.tavernPrefillNote),
           children: [
             SettingsSwitchTile(
               key: const ValueKey('tavern-preset-prefill'),
@@ -223,8 +222,6 @@ class TavernPresetPage extends ConsumerWidget {
             ),
             SettingsTile(
               key: const ValueKey('tavern-preset-prefill-text'),
-              icon: AppIcons.edit,
-              tinted: false,
               title: l10n.tavernPrefillText,
               subtitle: prefillText.trim().isEmpty ? l10n.tavernPrefillTextEmpty : _line(prefillText),
               onTap: () => unawaited(editPrefill()),
@@ -238,14 +235,9 @@ class TavernPresetPage extends ConsumerWidget {
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(32, 0, 32, 16),
-          child: Text(l10n.tavernPrefillNote, style: quiet),
-        ),
-        SheetGroup(
+        SettingsSection(
           key: const ValueKey('tavern-preset-prompts'),
           title: l10n.tavernPresetPrompts,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           children: [
             if (prompts.isEmpty)
               Padding(
@@ -282,8 +274,6 @@ class TavernPresetPage extends ConsumerWidget {
             if (prompts.length > 1)
               SettingsTile(
                 key: const ValueKey('tavern-preset-order'),
-                icon: AppIcons.dragHandle,
-                tinted: false,
                 title: l10n.tavernPresetOrder,
                 onTap: () => unawaited(showTavernPresetOrder(context, presetId, prompts)),
               ),
@@ -291,10 +281,9 @@ class TavernPresetPage extends ConsumerWidget {
         ),
         // The rest of what the preset sends, less often touched: last, in a
         // group of their own, without icons.
-        SheetGroup(
+        SettingsSection(
           key: const ValueKey('tavern-preset-sampling'),
           title: l10n.tavernPresetSampling,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: [
             TavernNumberTile(
               key: const ValueKey('tavern-preset-top-p'),
@@ -427,12 +416,11 @@ class _PromptSheetState extends ConsumerState<_PromptSheet> {
           children: [
             SheetTitleBar(widget.prompt.name),
             SheetGroup(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              // The sheet's gutter, as its title has.
+              margin: const EdgeInsets.fromLTRB(kSheetGutter, 0, kSheetGutter, 8),
               children: [
                 SettingsTile(
                   key: const ValueKey('tavern-prompt-content'),
-                  icon: AppIcons.edit,
-                  tinted: false,
                   title: l10n.tavernPromptContent,
                   subtitle: _content.trim().isEmpty ? l10n.tavernPresetPromptEmpty : _line(_content),
                   onTap: () => unawaited(_editContent()),
@@ -503,7 +491,7 @@ class _PromptSheetState extends ConsumerState<_PromptSheet> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(32, 0, 32, 16),
+              padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 12, 0, SheetTitleBar.inset + 12, 16),
               child: Text(
                 _inChat
                     ? '${l10n.tavernPromptDepthNote(_depth)}${l10n.tavernPromptOrderNote}'
