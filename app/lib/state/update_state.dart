@@ -819,11 +819,6 @@ class AppUpdateController extends Notifier<AppUpdateState> {
       // Unknown free space and no APK to patch: let the download find out.
     }
     if (!owns()) return;
-    // Room for the APK and its install staging copy. A patch needs no more:
-    // it builds the APK from the installed one and goes before the install.
-    if (app?.freeBytes case final free? when asset.size != null && free < asset.size! * 2 + _spareBytes) {
-      return fail(UpdateProblem.noSpace);
-    }
 
     final sources = ref.read(updateSourcesProvider);
     final mirror = _prefs?.getString(_mirrorKey);
@@ -849,6 +844,15 @@ class AppUpdateController extends Notifier<AppUpdateState> {
       return fail(UpdateProblem.storage);
     }
     if (!owns()) return;
+    // Room for the APK and its install staging copy; a whole APK already here
+    // (checked below) only needs the staging copy. A patch needs no more:
+    // it builds the APK from the installed one and goes before the install.
+    final cached = File('${dir.path}/${asset.name}');
+    final copies = await cached.exists() && await cached.length() == asset.size ? 1 : 2;
+    if (!owns()) return;
+    if (app?.freeBytes case final free? when asset.size != null && free < asset.size! * copies + _spareBytes) {
+      return fail(UpdateProblem.noSpace);
+    }
     final downloader = ApkDownloader(http: _http, directory: dir);
     final patch = state.patch;
     final base = app?.apkPath;
