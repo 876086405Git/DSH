@@ -844,10 +844,11 @@ class AppUpdateController extends Notifier<AppUpdateState> {
       return fail(UpdateProblem.storage);
     }
     if (!owns()) return;
-    // Room for the APK and its install staging copy; an APK already here
+    // Room for the APK and its install staging copy; a whole APK already here
     // (checked below) only needs the staging copy. A patch needs no more:
     // it builds the APK from the installed one and goes before the install.
-    final copies = await File('${dir.path}/${asset.name}').exists() ? 1 : 2;
+    final cached = File('${dir.path}/${asset.name}');
+    final copies = await cached.exists() && await cached.length() == asset.size ? 1 : 2;
     if (!owns()) return;
     if (app?.freeBytes case final free? when asset.size != null && free < asset.size! * copies + _spareBytes) {
       return fail(UpdateProblem.noSpace);
