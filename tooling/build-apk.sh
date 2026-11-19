@@ -19,6 +19,8 @@
 #   --keep-daemon                    leave the Gradle daemon running afterwards
 #   --no-companion                   release without the licensed companion pack
 #   --beta                           embed the beta channel token (internal builds only)
+#   --side                           test build that installs next to the released app
+#                                    (package ...dsh_app.test, named DSH Go 测试, own data)
 #   --dry-run                        print what would run
 #
 # The version name comes from app/pubspec.yaml; its `+N` is only a placeholder.
@@ -36,10 +38,10 @@ ROOT=$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 APP="$ROOT/app"
 OUT="$APP/build/app/outputs/flutter-apk"
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "build-apk: $*" >&2; exit 1; }
 
-flavor=arm64 mode=release target='' code='' name='' dry=0 keep_daemon=0 want_beta=0 companion=1 no_companion=0
+flavor=arm64 mode=release target='' code='' name='' dry=0 keep_daemon=0 want_beta=0 side=0 companion=1 no_companion=0
 extra=()
 while (($#)); do
   case "$1" in
@@ -54,6 +56,7 @@ while (($#)); do
     --build-name=*) name=${1#*=}; shift ;;
     --keep-daemon) keep_daemon=1; shift ;;
     --beta) want_beta=1; shift ;;
+    --side) side=1; shift ;;
     --no-companion) companion=0 no_companion=1; shift ;;
     --dry-run) dry=1; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -128,7 +131,15 @@ for f in "${flavors[@]}"; do
   commands+=("$(printf '%q ' "${cmd[@]}")")
 done
 
-echo "dsh-go $name ($code, $when) · $mode · ${flavors[*]}$( ((beta)) && echo ' · beta channel')"
+# Side builds: own package (app/build.gradle.kts). Their in-app updater still
+# fetches the released APK, which installs as the released app, not over this one.
+if ((side)); then
+  [[ $mode == release ]] || die "--side is for release builds"
+  export DSH_SIDE_BUILD=1
+else
+  unset DSH_SIDE_BUILD
+fi
+echo "dsh-go $name ($code, $when) · $mode · ${flavors[*]}$( ((beta)) && echo ' · beta channel')$( ((side)) && echo ' · side (dsh_app.test)')"
 if ((dry)); then
   for c in "${commands[@]}"; do echo "(cd app && ${c% })"; done
   ((keep_daemon)) || echo "(cd app/android && ./gradlew --stop)"

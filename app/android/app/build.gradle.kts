@@ -19,6 +19,21 @@ val hasWholeReleaseKey = listOf("storeFile", "keyAlias").all { !keyProps.getProp
     listOf("storePassword", "keyPassword").all { !keyProps.getProperty(it).isNullOrEmpty() } &&
     file(keyProps.getProperty("storeFile")).exists()
 
+// Side-by-side test builds (tooling/build-apk.sh --side): their own package and launcher
+// name, so they install next to the released app instead of over it. Same signing key.
+val sideBuild = providers.environmentVariable("DSH_SIDE_BUILD").orNull == "1"
+val sideSuffix = ".test"
+// Static shortcuts name their target package literally; a side build gets a copy naming its own.
+val sideRes = layout.buildDirectory.dir("generated/side-res").get().asFile
+if (sideBuild) {
+    val main = "android:targetPackage=\"io.github.ccch1mneyyy.dsh_app\""
+    val text = file("src/main/res/xml/shortcuts.xml").readText()
+    check(main in text) { "shortcuts.xml no longer names the package as $main" }
+    File(sideRes, "xml").mkdirs()
+    File(sideRes, "xml/shortcuts.xml").writeText(
+        text.replace(main, "android:targetPackage=\"io.github.ccch1mneyyy.dsh_app$sideSuffix\""))
+}
+
 // Per-ABI runtime bundles produced by runtime/build-runtime.sh.
 val runtimeOut = rootProject.file("../../runtime/out")
 // libtawcroot.so for the opt-in tawcroot launch method (runtime/tawcroot/build.py; missing = unavailable).
@@ -50,6 +65,8 @@ android {
 
     defaultConfig {
         applicationId = "io.github.ccch1mneyyy.dsh_app"
+        if (sideBuild) applicationIdSuffix = sideSuffix
+        manifestPlaceholders["appLabel"] = if (sideBuild) "DSH Go 测试" else "DSH Go"
         // java.nio.file (symlinks while unpacking the rootfs) needs API 26.
         minSdk = 26
         // Target 28 like Termux, so the API 29+ exec restriction on app-private
@@ -75,6 +92,8 @@ android {
         getByName("main") {
             jniLibs.srcDir(File(tawcrootOut, "jniLibs"))
         }
+        // Build-type resources override main's; only release builds may be side builds.
+        if (sideBuild) getByName("release") { res.srcDir(sideRes) }
         getByName("arm64") {
             assets.srcDir(File(runtimeOut, "arm64-v8a/assets"))
             jniLibs.srcDir(File(runtimeOut, "arm64-v8a/jniLibs"))
