@@ -78,7 +78,6 @@ class _TavernPacksPageState extends ConsumerState<TavernPacksPage> {
     }
     return AppPage.list(
       title: l10n.tavernPacks,
-      subtitle: Text(l10n.tavernPacksSubtitle),
       actions: [
         GlassIconButton(
           key: const ValueKey('tavern-packs-import'),
@@ -89,13 +88,11 @@ class _TavernPacksPageState extends ConsumerState<TavernPacksPage> {
       ],
       children: [
         SettingsSection(
+          footer: Text(l10n.tavernPacksSubtitle),
           children: [
             SettingsTile(
               key: const ValueKey('tavern-packs-global'),
-              icon: AppIcons.allFeatures,
-              tinted: false,
               title: l10n.tavernPackScopeGlobal,
-              subtitle: l10n.tavernPackScopeGlobalSubtitle,
               onTap: () =>
                   Navigator.of(context)
                       .push(TavernPackBindingsPage.route((kind: TavernGameplayScope.global, targetId: null))),
@@ -127,8 +124,6 @@ class _TavernPacksPageState extends ConsumerState<TavernPacksPage> {
               for (final versions in byPack.values)
                 SettingsTile(
                   key: ValueKey('tavern-pack-${versions.last.ref.installedPackId}'),
-                  icon: AppIcons.zip,
-                  tinted: false,
                   title: tavernPackTitle(versions.last),
                   subtitle: versions.length == 1 ? null : l10n.tavernPackVersionCount(versions.length),
                   value: Text(

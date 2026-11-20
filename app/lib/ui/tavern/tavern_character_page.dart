@@ -49,15 +49,27 @@ class TavernCharacterPage extends ConsumerStatefulWidget {
 enum TavernCharacterTab { chats, card, setup }
 
 class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
-  final _greetings = PageController(viewportFraction: 0.9);
+  PageController? _greetings;
+  double? _greetingsWidth;
   int _greeting = 0;
   bool _starting = false;
   var _tab = TavernCharacterTab.chats;
 
   @override
   void dispose() {
-    _greetings.dispose();
+    _greetings?.dispose();
     super.dispose();
+  }
+
+  /// The greetings' pager for [width]: a page 24 narrower than the screen,
+  /// so the card in view lines up with the page's 16 gutters and the next one
+  /// shows 8 at the edge.
+  PageController _greetingsFor(double width) {
+    if (_greetings case final pager? when _greetingsWidth == width) return pager;
+    final old = _greetings;
+    if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    _greetingsWidth = width;
+    return _greetings = PageController(initialPage: _greeting, viewportFraction: (width - 24) / width);
   }
 
   Future<void> _start() async {
@@ -183,22 +195,24 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
               children: [
                 SizedBox(
                   height: 168,
-                  child: PageView.builder(
-                    key: const ValueKey('tavern-greetings'),
-                    controller: _greetings,
-                    itemCount: greetings.length,
-                    onPageChanged: (i) => setState(() => _greeting = i),
-                    itemBuilder: (context, i) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: GlassSurface(
-                        tier: GlassTier.card,
-                        borderRadius: AppShape.radiusLg,
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                        child: Text(
-                          plainPreviewLines(greetings[i], 6),
-                          maxLines: 6,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
+                  child: LayoutBuilder(
+                    builder: (context, box) => PageView.builder(
+                      key: const ValueKey('tavern-greetings'),
+                      controller: _greetingsFor(box.maxWidth),
+                      itemCount: greetings.length,
+                      onPageChanged: (i) => setState(() => _greeting = i),
+                      itemBuilder: (context, i) => Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: GlassSurface(
+                          tier: GlassTier.card,
+                          borderRadius: AppShape.radiusLg,
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                          child: Text(
+                            plainPreviewLines(greetings[i], 6),
+                            maxLines: 6,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
+                          ),
                         ),
                       ),
                     ),
@@ -228,9 +242,8 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
           ),
         if (_tab == TavernCharacterTab.chats && chats.isNotEmpty)
           SliverToBoxAdapter(
-            child: SheetGroup(
+            child: SettingsSection(
               title: l10n.tavernChats,
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
                 for (final chat in chats)
                   GestureDetector(
@@ -257,99 +270,104 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
               ],
             ),
           ),
+        // Rows without icons, as on settings' secondary pages: every title
+        // starts at the card's 16.
         if (_tab == TavernCharacterTab.setup)
           SliverToBoxAdapter(
-            child: SheetGroup(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
               children: [
-                // Every card: one without a book starts one here (engine T16).
-                SettingsTile(
-                  key: const ValueKey('tavern-lorebook'),
-                  icon: AppIcons.lorebook,
-                  tinted: false,
-                  title: l10n.tavernLorebook,
-                  subtitle: l10n.tavernLorebookSubtitle,
-                  onTap: () => Navigator.of(context).push(TavernLorebookPage.route(character.id)),
-                ),
-                TavernLorebookBindingTile(
-                  key: const ValueKey('tavern-character-lorebooks'),
-                  scope: (source: WorldInfoSource.character, id: character.id),
-                  title: l10n.tavernLorebooksBound,
-                  subtitle: l10n.tavernLorebooksBoundCharacter,
-                  sheetTitle: l10n.tavernLorebookForCharacter(character.name),
-                  note: l10n.tavernLorebookCharacterNote,
-                ),
-                TavernLive2dTile(character: character),
-                // A copy to change with the AI, applied when chosen.
-                SettingsTile(
-                  key: const ValueKey('tavern-character-drafts'),
-                  icon: AppIcons.askAi,
-                  tinted: false,
-                  title: l10n.tavernDraftsForCard,
-                  subtitle: l10n.tavernDraftsForCardSubtitle,
-                  onTap: () => Navigator.of(context).push(TavernDraftsPage.route(characterId: character.id)),
-                ),
-                // The 玩法包 every chat of this card uses.
-                SettingsTile(
-                  key: const ValueKey('tavern-character-packs'),
-                  icon: AppIcons.zip,
-                  tinted: false,
-                  title: l10n.tavernPacks,
-                  subtitle: l10n.tavernPackForCardSubtitle,
-                  onTap: () => Navigator.of(context).push(
-                    TavernPackBindingsPage.route((
-                      kind: TavernGameplayScope.character,
-                      targetId: character.id,
-                    ), characterId: character.id),
-                  ),
-                ),
-                // How its chats show the card: its own, or as 酒馆设置 say.
-                ...switch (ref.watch(tavernCharacterRenderProvider(character.id))) {
-                  final own => [
-                    SettingsSegmentTile<TavernRender>(
-                      key: const ValueKey('tavern-character-render'),
-                      title: l10n.tavernRender,
-                      subtitle: l10n.tavernRenderSubtitle,
-                      tinted: false,
-                      segments: [
-                        PillSegment(TavernRender.text, l10n.tavernRenderText),
-                        PillSegment(TavernRender.islands, l10n.tavernRenderIslands),
-                        PillSegment(TavernRender.canvas, l10n.tavernRenderCanvas),
-                      ],
-                      selected: own ?? tavernRenderOf(ref.watch(tavernSettingsProvider)),
-                      onChanged: (r) =>
-                          unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(r)),
+                // What its chats are told: books and packs.
+                SettingsSection(
+                  children: [
+                    // Every card: one without a book starts one here (engine T16).
+                    SettingsTile(
+                      key: const ValueKey('tavern-lorebook'),
+                      title: l10n.tavernLorebook,
+                      subtitle: l10n.tavernLorebookSubtitle,
+                      onTap: () => Navigator.of(context).push(TavernLorebookPage.route(character.id)),
                     ),
-                    if (own != null)
-                      SettingsTile(
-                        key: const ValueKey('tavern-character-render-follow'),
-                        icon: AppIcons.restart,
-                        tinted: false,
-                        title: l10n.tavernFollowSettings,
-                        onTap: () =>
-                            unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(null)),
+                    TavernLorebookBindingTile(
+                      key: const ValueKey('tavern-character-lorebooks'),
+                      scope: (source: WorldInfoSource.character, id: character.id),
+                      icon: null,
+                      title: l10n.tavernLorebooksBound,
+                      subtitle: l10n.tavernLorebooksBoundCharacter,
+                      sheetTitle: l10n.tavernLorebookForCharacter(character.name),
+                      note: l10n.tavernLorebookCharacterNote,
+                    ),
+                    // The 玩法包 every chat of this card uses.
+                    SettingsTile(
+                      key: const ValueKey('tavern-character-packs'),
+                      title: l10n.tavernPacks,
+                      subtitle: l10n.tavernPackForCardSubtitle,
+                      onTap: () => Navigator.of(context).push(
+                        TavernPackBindingsPage.route((
+                          kind: TavernGameplayScope.character,
+                          targetId: character.id,
+                        ), characterId: character.id),
                       ),
-                  ],
-                },
-                // What of the card runs here, and what is kept but not run.
-                SettingsTile(
-                  key: const ValueKey('tavern-character-report'),
-                  icon: AppIcons.info,
-                  tinted: false,
-                  title: l10n.tavernReport,
-                  value: Text(switch (ref
-                      .watch(tavernImportReportProvider((TavernImportKind.character, character.id)))
-                      .value) {
-                    final report? => tavernVerdictText(l10n, report.verdict),
-                    null => '',
-                  }),
-                  onTap: () => Navigator.of(context).push(
-                    TavernImportReportPage.route(
-                      kind: TavernImportKind.character,
-                      assetId: character.id,
-                      name: character.name,
                     ),
-                  ),
+                  ],
+                ),
+                // How its chats show the card.
+                SettingsSection(
+                  footer: Text(l10n.tavernRenderSubtitle),
+                  children: [
+                    // How its chats show the card: its own, or as 酒馆设置 say.
+                    ...switch (ref.watch(tavernCharacterRenderProvider(character.id))) {
+                      final own => [
+                        SettingsSegmentTile<TavernRender>(
+                          key: const ValueKey('tavern-character-render'),
+                          title: l10n.tavernRender,
+                          tinted: false,
+                          segments: [
+                            PillSegment(TavernRender.text, l10n.tavernRenderText),
+                            PillSegment(TavernRender.islands, l10n.tavernRenderIslands),
+                            PillSegment(TavernRender.canvas, l10n.tavernRenderCanvas),
+                          ],
+                          selected: own ?? tavernRenderOf(ref.watch(tavernSettingsProvider)),
+                          onChanged: (r) =>
+                              unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(r)),
+                        ),
+                        if (own != null)
+                          SettingsTile(
+                            key: const ValueKey('tavern-character-render-follow'),
+                            title: l10n.tavernFollowSettings,
+                            onTap: () =>
+                                unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(null)),
+                          ),
+                      ],
+                    },
+                  ],
+                ),
+                SettingsSection(
+                  children: [
+                    TavernLive2dTile(character: character),
+                    // A copy to change with the AI, applied when chosen.
+                    SettingsTile(
+                      key: const ValueKey('tavern-character-drafts'),
+                      title: l10n.tavernDraftsForCard,
+                      onTap: () => Navigator.of(context).push(TavernDraftsPage.route(characterId: character.id)),
+                    ),
+                    // What of the card runs here, and what is kept but not run.
+                    SettingsTile(
+                      key: const ValueKey('tavern-character-report'),
+                      title: l10n.tavernReport,
+                      value: Text(switch (ref
+                          .watch(tavernImportReportProvider((TavernImportKind.character, character.id)))
+                          .value) {
+                        final report? => tavernVerdictText(l10n, report.verdict),
+                        null => '',
+                      }),
+                      onTap: () => Navigator.of(context).push(
+                        TavernImportReportPage.route(
+                          kind: TavernImportKind.character,
+                          assetId: character.id,
+                          name: character.name,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -388,7 +406,7 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
       top: false,
       child: SingleChildScrollView(
         child: SheetGroup(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          margin: kTavernSheetMargin,
           children: [
             SettingsTile(
               key: const ValueKey('tavern-export-png'),
@@ -469,15 +487,14 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-            child: Text(title, style: theme.textTheme.titleSmall?.copyWith(color: DshColors.of(context).textTertiary)),
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Semantics(header: true, child: Text(title, style: SettingsSection.titleStyle(context))),
           ),
           GlassSurface(
             tier: GlassTier.card,

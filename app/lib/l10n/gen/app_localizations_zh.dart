@@ -20655,7 +20655,7 @@ class L10nZh extends L10n {
   String get tavernReady => '就绪';
 
   @override
-  String get tavernPreviewStatus => '预览 · 回复是示例，还没接上模型';
+  String get tavernPreviewStatus => '预览 · 示例回复';
 
   @override
   String get tavernRegenerate => '重新生成';
@@ -20676,7 +20676,7 @@ class L10nZh extends L10n {
   String get tavernErrorNoKey => '先在设置里填 DeepSeek API Key';
 
   @override
-  String get tavernKeyMissing => '还没填 DeepSeek API Key，填好就能开始。';
+  String get tavernKeyMissing => '还没填 DeepSeek API Key';
 
   @override
   String get tavernKeyMissingAction => '去填写';
@@ -20694,10 +20694,10 @@ class L10nZh extends L10n {
   String get tavernErrorTooLong => '对话太长了，超出了模型的上下文';
 
   @override
-  String get tavernCutShort => '回复写到回复上限，在这里断开了。可以接着写，或在酒馆设置 › 生成里把回复上限调高。';
+  String get tavernCutShort => '回复到了回复上限。可以接着写，或调高这段对话所用预设的回复上限。';
 
   @override
-  String get tavernFiltered => '这条回复被模型的内容过滤拦下了一部分。';
+  String get tavernFiltered => '回复有一部分被内容过滤拦下了。';
 
   @override
   String get tavernErrorBalance => 'DeepSeek 账户余额不足，充值后再试';
@@ -20823,9 +20823,6 @@ class L10nZh extends L10n {
   String get tavernPresetNotText => '这个文件不是文本';
 
   @override
-  String get tavernPresetsEmpty => '还没有预设';
-
-  @override
   String get tavernPresetsEmptyMessage => 'SillyTavern 导出的预设 JSON 和 dsh-preset-enhance 的分享包都能导入。';
 
   @override
@@ -20877,7 +20874,7 @@ class L10nZh extends L10n {
   String get tavernRegexEmpty => '还没有全局正则';
 
   @override
-  String get tavernRegexEmptyMessage => 'SillyTavern 导出的正则 JSON（一条或一组）都能导入。全局正则对所有对话生效；卡和预设自带的正则跟着它们走。';
+  String get tavernRegexEmptyMessage => '可以导入 SillyTavern 导出的正则 JSON，一条或一组';
 
   @override
   String get tavernRegexUnnamed => '未命名';
@@ -20925,7 +20922,7 @@ class L10nZh extends L10n {
   String get tavernLorebooksEmpty => '还没有独立世界书';
 
   @override
-  String get tavernLorebooksEmptyMessage => 'SillyTavern 导出的世界书 JSON 都能导入。设为全局后对所有对话生效；卡自带的世界书跟着卡走。';
+  String get tavernLorebooksEmptyMessage => '可以导入 SillyTavern 导出的世界书 JSON';
 
   @override
   String tavernLorebookCount(int count) {
@@ -21178,7 +21175,7 @@ class L10nZh extends L10n {
   String get tavernPersonasEmptyMessage => '人设是你在对话里扮演的人：一个名字和一段介绍，角色就知道你是谁。';
 
   @override
-  String get tavernPersonasNote => '长按设为默认或删除。没有单独选人设的对话用默认的。';
+  String get tavernPersonasNote => '长按可设为默认或删除';
 
   @override
   String get tavernPersonaUnsetDefault => '不再作为默认';
@@ -21210,13 +21207,13 @@ class L10nZh extends L10n {
   String get tavernPersonaNameHint => '角色怎么称呼你';
 
   @override
-  String get tavernPersonaDescriptionHelp => '模型会读到这段：你是谁、什么样子、和角色是什么关系。';
+  String get tavernPersonaDescriptionHelp => '你是谁、什么样子、和角色的关系';
 
   @override
   String get tavernPersonaDescriptionHint => '比如：镇上新来的医生，话不多，总拎着一个旧皮箱。';
 
   @override
-  String get tavernPersonaDefaultSubtitle => '新对话和没有单独选人设的对话都用它';
+  String get tavernPersonaDefaultSubtitle => '没单独选人设的对话都用它';
 
   @override
   String get tavernPersonaDelete => '删除人设';
@@ -21260,7 +21257,7 @@ class L10nZh extends L10n {
   String get tavernExportPng => '导出角色卡（PNG）';
 
   @override
-  String get tavernExportPngSubtitle => '设定藏在图片里，SillyTavern 等酒馆都能导入';
+  String get tavernExportPngSubtitle => 'SillyTavern 等酒馆都能导入';
 
   @override
   String get tavernExportJson => '导出为 JSON';
@@ -21461,7 +21458,7 @@ class L10nZh extends L10n {
   String get tavernLorebook => '世界书';
 
   @override
-  String get tavernLorebookSubtitle => '这张卡自带的设定条目';
+  String get tavernLorebookSubtitle => '卡里自带的条目';
 
   @override
   String tavernLorebookEntries(int count) {
@@ -21489,13 +21486,13 @@ class L10nZh extends L10n {
   String get tavernImportFromFile => '从文件导入';
 
   @override
-  String get tavernImportFromFileSubtitle => '角色卡、预设、世界书、正则、快速回复或聊天记录，会自己认出来';
+  String get tavernImportFromFileSubtitle => '角色卡、预设、世界书等，自动识别';
 
   @override
   String get tavernImportFromLink => '从链接导入';
 
   @override
-  String get tavernImportFromLinkSubtitle => 'Chub、RisuRealm 的角色页，或卡文件的直链';
+  String get tavernImportFromLinkSubtitle => 'Chub、RisuRealm 或卡文件的链接';
 
   @override
   String get tavernLinkInvalid => '这不是一个网址';
@@ -21613,7 +21610,7 @@ class L10nZh extends L10n {
 
   @override
   String tavernStorybookWholeNote(int count) {
-    return '一共 $count 句，隐藏的消息不放进去。EPUB 能用微信读书、Apple 图书等打开。';
+    return '一共 $count 句，隐藏的消息不放进去';
   }
 
   @override
@@ -21670,7 +21667,7 @@ class L10nZh extends L10n {
   String get tavernLive2d => 'Live2D 形象';
 
   @override
-  String get tavernLive2dSubtitle => '视觉小说排版里用它代替卡面，会动、说话时会张嘴';
+  String get tavernLive2dSubtitle => '视觉小说排版里代替卡面';
 
   @override
   String get tavernLive2dNone => '未导入';
@@ -21838,14 +21835,13 @@ class L10nZh extends L10n {
   String get tavernStageStateEmpty => '这张卡还没有状态';
 
   @override
-  String get tavernStageStateNote => '卡里定义了状态以后，好感、属性、背包、时间地点都会在这里，每回合变了什么会标出来（「+5」），你也能直接改。没定义的老卡会在这里列出它的变量。';
+  String get tavernStageStateNote => '卡里定义了状态，好感、属性、背包等就会显示在这里。';
 
   @override
   String get tavernStageDirectorEmpty => '导演还没上场';
 
   @override
-  String get tavernStageDirectorNote =>
-      '打开导演后，它会在每回合之后在后台读剧情：给下一回合留一条看不见的提示，记下自己的笔记（默认藏着，怕剧透），再在输入框上方给你三个建议回复。它不替你说话，也不写正文。';
+  String get tavernStageDirectorNote => '导演会读剧情，给下一回合留提示，并在输入框上方给出三条建议。';
 
   @override
   String get tavernStageTurnNone => '还没有可看的回合';
@@ -21894,7 +21890,7 @@ class L10nZh extends L10n {
   }
 
   @override
-  String get tavernLorebookChatNote => '只在这段对话里用。标着「全局」的本来就对所有对话生效。';
+  String get tavernLorebookChatNote => '只对这段对话。「全局」的对所有对话都生效。';
 
   @override
   String get tavernLorebookCharacterNote => '这个角色的每段对话都会用，卡自带的世界书照常一起用。';
@@ -21948,7 +21944,7 @@ class L10nZh extends L10n {
   String get tavernPrefillReasoning => '思考';
 
   @override
-  String get tavernPrefillNote => '开着时，这段文字作为回复的开头发给模型，模型从这里接着写。放在「思考」只在开了思考时生效，没开就放进正文。「接着写」的回合不用它。';
+  String get tavernPrefillNote => '放在「思考」只在开了思考时生效，没开就放进正文。「接着写」的回合不用它。';
 
   @override
   String get tavernPresetPromptEmpty => '空着';
@@ -22126,13 +22122,7 @@ class L10nZh extends L10n {
   String get tavernSendOnly => '只发，不回复';
 
   @override
-  String get tavernSendOnlySubtitle => '这句放进故事，她先不接话';
-
-  @override
   String get tavernNarrate => '以旁白身份发';
-
-  @override
-  String get tavernNarrateSubtitle => '作为叙述插进故事，不算你说的话';
 
   @override
   String get tavernSendFailed => '没能发出去';
@@ -22141,7 +22131,7 @@ class L10nZh extends L10n {
   String get tavernStateVariables => '变量';
 
   @override
-  String get tavernStateVariablesNote => '卡和对话里 {{setvar}} 这类宏记下的变量，到当前这条为止。点一项看全部，也能直接改。';
+  String get tavernStateVariablesNote => '宏（如 {{setvar}}）记下的变量，到当前这条为止。点一项可查看或修改。';
 
   @override
   String get tavernData => '数据';
@@ -22482,7 +22472,7 @@ class L10nZh extends L10n {
 
   @override
   String tavernSessionUsageNote(int count) {
-    return '当前这条线上 $count 条回复的合计；换掉的备选不算';
+    return '当前分支 $count 条回复的合计，换掉的备选不算';
   }
 
   @override
@@ -22491,6 +22481,11 @@ class L10nZh extends L10n {
   @override
   String tavernSessionUsageCost(String usd) {
     return '约 $usd，按 DeepSeek 官方价，分高峰和低谷时段算；法定节假日全天是低谷价，那几天这里会算高一点';
+  }
+
+  @override
+  String tavernStageCost(String usd) {
+    return '约 $usd，按 DeepSeek 官方价估算';
   }
 
   @override
@@ -22505,7 +22500,7 @@ class L10nZh extends L10n {
   String get tavernWriteOwn => '自己写一个角色';
 
   @override
-  String get tavernWriteOwnSubtitle => '从一张空白卡开始，名字、设定和开场白都自己填';
+  String get tavernWriteOwnSubtitle => '从一张空白卡开始';
 
   @override
   String get tavernNewCharacterName => '新角色';
@@ -22589,10 +22584,10 @@ class L10nZh extends L10n {
   }
 
   @override
-  String get tavernStateNote => '卡定义的状态，到当前这条消息为止。这回合变了的标着「+5」这样的记号；点一项看全部，也能直接改，改动记在这条消息上，换回答、切分支会跟着回退。';
+  String get tavernStateNote => '到当前这条消息为止。点一项可查看或修改，改动随这条消息回退。';
 
   @override
-  String get tavernStatePreview => '还没开始记，下面是卡给的初始值。';
+  String get tavernStatePreview => '还没有记录，下面是初始值。';
 
   @override
   String get tavernStateChanged => '变了';
@@ -22630,7 +22625,7 @@ class L10nZh extends L10n {
   String get tavernDirectorAuto => '自动导演';
 
   @override
-  String get tavernDirectorAutoNote => '只对这段对话。开了以后每隔几个回合，在回复写完后多问一次模型：下一拍往哪走、给你三条可以做的事。每次都会多用一些额度。';
+  String get tavernDirectorAutoNote => '只对这段对话。每隔几个回合多请求一次模型，会多用一些额度。';
 
   @override
   String get tavernDirectorRun => '让导演想一想';
@@ -22645,13 +22640,13 @@ class L10nZh extends L10n {
   String get tavernDirectorSuggestions => '你可以…';
 
   @override
-  String get tavernDirectorSuggestionsNote => '点一条放进输入框，改不改、发不发由你。';
+  String get tavernDirectorSuggestionsNote => '点一条放进输入框';
 
   @override
   String get tavernDirectorNotes => '导演笔记';
 
   @override
-  String get tavernDirectorStale => '这是之前的情况下想的，现在不一定合适，只供参考。';
+  String get tavernDirectorStale => '基于之前的剧情，仅供参考。';
 
   @override
   String tavernDirectorFailed(String reason) {
@@ -22980,7 +22975,7 @@ class L10nZh extends L10n {
   String get tavernRegexFieldName => '名字';
 
   @override
-  String get tavernRegexFieldFindHelp => 'SillyTavern 的写法：/规则/标志，比如 /(早安|晚安)/gi';
+  String get tavernRegexFieldFindHelp => '写法 /规则/标志，如 /(早安|晚安)/gi';
 
   @override
   String get tavernRegexFieldReplaceHelp => '\$1 是第一组，{{match}} 是整段匹配';
@@ -23025,7 +23020,7 @@ class L10nZh extends L10n {
   String get tavernRegexPhaseBoth => '显示和发出';
 
   @override
-  String get tavernRegexPhaseNote => '原文：直接改写存下来的消息。只改显示：存档不变，只是看起来不同。只改发出：只改发给模型的那一份。';
+  String get tavernRegexPhaseNote => '原文：改写存下的消息；只改显示：存档不变；只改发出：只改发给模型的那份';
 
   @override
   String get tavernRegexMinDepth => '最浅';
@@ -23074,7 +23069,7 @@ class L10nZh extends L10n {
 
   @override
   String tavernCardScriptsHint(int count) {
-    return '这张卡带了 $count 个脚本，打开「整页画布（试用）」才会运行';
+    return '$count 个卡片脚本要在整页画布里运行';
   }
 
   @override
@@ -23084,7 +23079,7 @@ class L10nZh extends L10n {
   String get tavernRender => '显示方式';
 
   @override
-  String get tavernRenderSubtitle => '只管这个角色的单人对话：卡里的状态栏、美化要选网页或画布才显示，脚本只在画布里运行';
+  String get tavernRenderSubtitle => '只管这个角色的单人对话。状态栏、美化要选网页或画布，脚本只在画布里运行';
 
   @override
   String get tavernRenderText => '文字';
@@ -23125,7 +23120,7 @@ class L10nZh extends L10n {
   String get tavernGroupMembers => '谁在里面';
 
   @override
-  String get tavernGroupMembersNote => '按点选的顺序排；第一个是主持，故事共用的状态记在它的卡上。';
+  String get tavernGroupMembersNote => '按点选的顺序排，第一个是主持';
 
   @override
   String get tavernGroupHost => '主持';
@@ -23152,7 +23147,7 @@ class L10nZh extends L10n {
   String get tavernGroupDirector => '导演';
 
   @override
-  String get tavernGroupNaturalNote => '像 SillyTavern：被点到名的先说，其余看各自的话多话少；每轮最多几个人说在群设置里改。';
+  String get tavernGroupNaturalNote => '像 SillyTavern：被点到名的先说，其余看各自的话多话少';
 
   @override
   String get tavernGroupListOrderNote => '每轮按名单从头轮一遍（静音的跳过）。';
@@ -23191,17 +23186,17 @@ class L10nZh extends L10n {
   String get tavernGroupSettings => '群聊设置';
 
   @override
-  String get tavernGroupMaxSpeakers => '每轮最多几人说';
+  String get tavernGroupMaxSpeakers => '每轮最多几人';
 
   @override
   String get tavernGroupSelfResponses => '可以接着自己说';
 
   @override
-  String get tavernGroupSelfResponsesNote => '上一句是谁说的，这一轮还能先轮到他。';
+  String get tavernGroupSelfResponsesNote => '刚说完的人这一轮还能再说';
 
   @override
   String tavernGroupHostNote(String name) {
-    return '主持是「$name」：故事共用的状态、导演和秘密记在它的卡上；它可以不在发言名单里。';
+    return '主持是「$name」，故事共用的状态记在它的卡上';
   }
 
   @override
@@ -23670,9 +23665,6 @@ class L10nZh extends L10n {
   String get tavernDraftsForCard => '用 AI 改这张卡';
 
   @override
-  String get tavernDraftsForCardSubtitle => '在草稿里改，挑好再应用';
-
-  @override
   String get tavernDraftsEmpty => '还没有草稿';
 
   @override
@@ -23955,14 +23947,14 @@ class L10nZh extends L10n {
   String get tavernImportFromDeepSeek => '从 DeepSeek 接回来';
 
   @override
-  String get tavernImportFromDeepSeekSubtitle => '在 DeepSeek 的设置里导出全部历史对话，再选那个 ZIP';
+  String get tavernImportFromDeepSeekSubtitle => '选 DeepSeek 设置里导出的 ZIP';
 
   @override
   String get tavernDeepSeekTitle => '接回 DeepSeek 的对话';
 
   @override
   String tavernDeepSeekFound(int count) {
-    return '找到 $count 段对话，聊得最多的排在前面。勾上想接着聊的。';
+    return '找到 $count 段对话，勾上要接回来的';
   }
 
   @override
@@ -24007,7 +23999,7 @@ class L10nZh extends L10n {
   String get tavernPacks => '玩法包';
 
   @override
-  String get tavernPacksSubtitle => '装进来的玩法包；装上不等于启用，要在全局、角色或对话里加上才生效';
+  String get tavernPacksSubtitle => '装上后要在全局、角色或对话里加上才生效';
 
   @override
   String get tavernPacksEmpty => '还没有玩法包';
@@ -24046,9 +24038,6 @@ class L10nZh extends L10n {
 
   @override
   String get tavernPackScopeGlobal => '全局启用';
-
-  @override
-  String get tavernPackScopeGlobalSubtitle => '所有对话都用的玩法包';
 
   @override
   String get tavernPackScopeCharacter => '这个角色的玩法包';
@@ -24115,13 +24104,13 @@ class L10nZh extends L10n {
   String get tavernPackAddGlobal => '加到全局';
 
   @override
-  String get tavernPackAddNote => '只给某个角色或对话用，在角色页或对话的舞台面板里加';
+  String get tavernPackAddNote => '只给某个角色或对话：在角色页或舞台面板里加';
 
   @override
   String get tavernPackCast => '角色';
 
   @override
-  String get tavernPackCastNote => '导入会新建一个角色，不改原来的卡，也不会自动加进群聊';
+  String get tavernPackCastNote => '导入会新建角色，不改原来的卡';
 
   @override
   String get tavernPackCastFromCard => '完整角色卡';
@@ -24324,7 +24313,10 @@ class L10nZh extends L10n {
   String get tavernScripts => '脚本库';
 
   @override
-  String get tavernScriptsEmpty => '还没有全局脚本。导入酒馆助手导出的脚本 JSON，打开的脚本会在每个对话的整页画布里运行。';
+  String get tavernScriptsEmpty => '还没有全局脚本';
+
+  @override
+  String get tavernScriptsEmptyMessage => '可以导入酒馆助手导出的脚本 JSON，打开的在整页画布里运行';
 
   @override
   String get tavernScriptsImport => '导入脚本';
@@ -24372,7 +24364,7 @@ class L10nZh extends L10n {
   String get tavernChatScripts => '脚本';
 
   @override
-  String get tavernChatScriptsNote => '这段对话在整页画布里运行的脚本，按运行顺序。';
+  String get tavernChatScriptsNote => '按运行顺序';
 
   @override
   String get tavernScriptSourceGlobal => '全局';

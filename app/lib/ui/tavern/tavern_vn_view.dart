@@ -442,6 +442,7 @@ class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with Sing
     final stage = widget.stage;
     final sprite = stage == null ? _spriteAt(at) : null;
     final cast = _castAt(at);
+    final footer = page == null ? null : widget.footer(page.message, at == _last);
     return Stack(
       children: [
         Positioned.fill(
@@ -516,50 +517,70 @@ class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with Sing
             child: GlassSurface(
               tier: GlassTier.sheet,
               borderRadius: AppShape.radiusXl,
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+              // The keys' rows (the name's, the alternatives') bring their own
+              // air: the box's own is even all round.
+              padding: EdgeInsets.fromLTRB(16, 8, 16, footer == null ? 16 : 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Text(
-                        speaker,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: user ? dsh.textTertiary : tavernNameColor(context, speaker, lead: widget.name),
-                          fontWeight: FontWeight.w600,
-                          fontFamily: user ? null : tavernNameFont(context),
+                      Expanded(
+                        child: Text(
+                          speaker,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: user ? dsh.textTertiary : tavernNameColor(context, speaker, lead: widget.name),
+                            fontWeight: FontWeight.w600,
+                            fontFamily: user ? null : tavernNameFont(context),
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      if (pages.length > 1)
-                        Text(
-                          '${at + 1}/${pages.length}',
-                          style: AppType.tabular(theme.textTheme.labelSmall!.copyWith(color: dsh.textTertiary)),
-                        ),
-                      _BoxKey(
-                        key: const ValueKey('tavern-vn-auto'),
-                        label: context.l10n.tavernVnAuto,
-                        on: _auto,
-                        onTap: () => _setAuto(!_auto),
-                      ),
-                      if (at < _last)
-                        _BoxKey(key: const ValueKey('tavern-vn-skip'), label: context.l10n.tavernVnSkip, onTap: _skip),
-                      SizedBox.square(
-                        dimension: 32,
-                        child: IconButton(
-                          key: const ValueKey('tavern-vn-log'),
-                          tooltip: context.l10n.tavernLog,
-                          padding: EdgeInsets.zero,
-                          iconSize: 18,
-                          color: dsh.textTertiary,
-                          onPressed: _openLog,
-                          icon: Icon(AppIcons.history),
+                      // The last key's glyph on the box's edge, as the name is on the other.
+                      Transform.translate(
+                        offset: const Offset((_BoxKey.height - _BoxKey.glyph) / 2, 0),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (pages.length > 1) ...[
+                              Text(
+                                '${at + 1}/${pages.length}',
+                                style: AppType.tabular(theme.textTheme.labelSmall!.copyWith(color: dsh.textTertiary)),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            _BoxKey(
+                              key: const ValueKey('tavern-vn-auto'),
+                              label: context.l10n.tavernVnAuto,
+                              on: _auto,
+                              onTap: () => _setAuto(!_auto),
+                            ),
+                            if (at < _last)
+                              _BoxKey(
+                                key: const ValueKey('tavern-vn-skip'),
+                                label: context.l10n.tavernVnSkip,
+                                onTap: _skip,
+                              ),
+                            SizedBox.square(
+                              dimension: _BoxKey.height,
+                              child: IconButton(
+                                key: const ValueKey('tavern-vn-log'),
+                                tooltip: context.l10n.tavernLog,
+                                padding: EdgeInsets.zero,
+                                iconSize: _BoxKey.glyph,
+                                color: dsh.textTertiary,
+                                onPressed: _openLog,
+                                icon: Icon(AppIcons.history),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   ConstrainedBox(
                     constraints: const BoxConstraints(minHeight: 72, maxHeight: 220),
                     child: SingleChildScrollView(
@@ -606,7 +627,7 @@ class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with Sing
                       ),
                     ),
                   ),
-                  if (page != null) ?widget.footer(page.message, at == _last),
+                  ?footer,
                 ],
               ),
             ),
@@ -695,6 +716,10 @@ List<int> _cuts(String text) {
 class _BoxKey extends StatelessWidget {
   const _BoxKey({super.key, required this.label, required this.onTap, this.on = false});
 
+  /// The row's keys: this tall, the log's glyph this size in a square of it.
+  static const height = 32.0;
+  static const glyph = 18.0;
+
   final String label;
   final VoidCallback onTap;
   final bool on;
@@ -708,8 +733,10 @@ class _BoxKey extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 32),
+        // The same air each side as the log key's glyph has in its square.
+        child: Container(
+          constraints: const BoxConstraints(minHeight: height),
+          padding: const EdgeInsets.symmetric(horizontal: (height - glyph) / 2),
           child: Center(
             child: Text(
               label,

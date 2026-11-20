@@ -342,7 +342,7 @@ class _TavernPersonaEditPageState extends ConsumerState<TavernPersonaEditPage> {
               builder: (sheet) => SafeArea(
                 top: false,
                 child: SheetGroup(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  margin: kTavernSheetMargin,
                   children: [
                     SettingsTile(
                       icon: AppIcons.image,
@@ -511,7 +511,6 @@ class _TavernPersonaEditPageState extends ConsumerState<TavernPersonaEditPage> {
         children: [
           SettingsSwitchTile(
             key: const ValueKey('tavern-persona-default'),
-            icon: AppIcons.profile,
             title: l10n.tavernPersonaSetDefault,
             subtitle: l10n.tavernPersonaDefaultSubtitle,
             value: _default ?? false,
@@ -522,6 +521,7 @@ class _TavernPersonaEditPageState extends ConsumerState<TavernPersonaEditPage> {
             TavernLorebookBindingTile(
               key: const ValueKey('tavern-persona-lorebooks'),
               scope: (source: WorldInfoSource.persona, id: persona.id),
+              icon: null,
               title: l10n.tavernLorebooksBound,
               subtitle: l10n.tavernLorebooksBoundPersona,
               sheetTitle: l10n.tavernLorebookForPersona(persona.name),

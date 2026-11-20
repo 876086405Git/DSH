@@ -12,7 +12,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_provider.dart';
 import '../bots/bot_format.dart' show shortTime;
-import '../common/app_sheet.dart';
 import '../features/feature_kit.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
@@ -85,7 +84,7 @@ class _TavernImportReportPageState extends ConsumerState<TavernImportReportPage>
         AsyncData(value: final report?) => [
           Padding(
             key: const ValueKey('tavern-report-verdict'),
-            padding: const EdgeInsets.fromLTRB(28, 4, 28, 16),
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -113,13 +112,10 @@ class _TavernImportReportPageState extends ConsumerState<TavernImportReportPage>
             ),
           ),
           if (report.stale)
-            SheetGroup(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            SettingsSection(
               children: [
                 SettingsTile(
                   key: const ValueKey('tavern-report-stale'),
-                  icon: AppIcons.restart,
-                  tinted: false,
                   title: l10n.tavernReportStale,
                   value: Text(l10n.tavernReportRecheck),
                   onTap: _checking ? null : () => unawaited(_check()),
@@ -127,17 +123,15 @@ class _TavernImportReportPageState extends ConsumerState<TavernImportReportPage>
               ],
             ),
           if (report.counts.entries.where((e) => e.value > 0).toList() case final counts when counts.isNotEmpty)
-            SheetGroup(
+            SettingsSection(
               title: l10n.tavernReportCounts,
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
                 for (final MapEntry(:key, :value) in counts)
                   SettingsTile(tinted: false, title: _countName(context, key), value: Text('$value'), chevron: false),
               ],
             ),
-          SheetGroup(
+          SettingsSection(
             title: l10n.tavernReportFindings,
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
               if (report.findings.isEmpty)
                 SettingsTile(

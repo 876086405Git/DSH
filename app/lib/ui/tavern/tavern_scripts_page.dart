@@ -83,8 +83,6 @@ class TavernScriptsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final dsh = DshColors.of(context);
     final library = ref.watch(tavernGlobalScriptsProvider);
     final tree = library.value ?? (library.hasError ? const <TavernScriptLibraryEntry>[] : null);
     final folder = this.folder;
@@ -112,23 +110,22 @@ class TavernScriptsPage extends ConsumerWidget {
         if (items == null)
           const QuietSpinner()
         else if (items.isEmpty)
-          Padding(
+          EmptyView(
             key: const ValueKey('tavern-scripts-empty'),
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 16),
-            child: Text(
-              // Not read: why, as the engine said it, where the list would be.
-              library.hasError ? '${library.error}' : l10n.tavernScriptsEmpty,
-              style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary, height: 1.5),
-            ),
+            icon: AppIcons.terminal,
+            title: l10n.tavernScriptsEmpty,
+            // Not read: why, as the engine said it.
+            message: library.hasError ? '${library.error}' : l10n.tavernScriptsEmptyMessage,
+            compact: true,
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
           )
         else
-          SheetGroup(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          SettingsSection(
             children: [
               for (final entry in items)
                 SettingsTile(
                   key: ValueKey('tavern-script-${entry.id}'),
-                  icon: entry.isFolder ? AppIcons.folder : AppIcons.code,
+                  icon: entry.isFolder ? AppIcons.folder : AppIcons.terminal,
                   tinted: false,
                   title: nameOf(entry),
                   subtitle: entry.isFolder ? l10n.tavernScriptCount(tavernScriptCount(entry.children)) : null,

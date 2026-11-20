@@ -143,7 +143,7 @@ void main() {
         reason: text,
       );
     }
-    expect(find.descendant(of: usage, matching: find.textContaining('当前这条线上 135 条回复')), findsOneWidget);
+    expect(find.descendant(of: usage, matching: find.textContaining('当前分支 135 条回复')), findsOneWidget);
   });
 
   testWidgets('本局 says about what the line cost, and says which replies it could not price', (tester) async {
