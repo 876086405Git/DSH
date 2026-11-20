@@ -53,10 +53,10 @@ const tavernCanvasHostJs = r'''
     stTimer=0;
     if(stSaving){if(stAgain)stBusy--;stAgain=true;return;}
     var target=stTarget;stTarget=null;
+    if(presetIdentity(res.preset)!==target){dropEdit();return;}
     var changed={},n=0;
     for(var k in stCopy||{})if(k!=='preset_settings_openai'&&JSON.stringify(stCopy[k])!==JSON.stringify(stBase[k])){changed[k]=clone(stCopy[k]);n++;}
     if(!n){stBusy--;return;}
-    if(presetIdentity(res.preset)!==target){dropEdit();return;}
     // The library's preset the chat uses, unless a working copy of it is what
     // generation reads: then that.
     var src=res.preset.source||{},id=src.loadedPresetId;
@@ -65,7 +65,7 @@ const tavernCanvasHostJs = r'''
       return call('replacePreset',{ref:s.ref,raw:Object.assign(clone(s.raw),changed),expectedVersion:s.version});
     }).then(function(r){
       stBase=Object.assign({},stBase,changed);
-      if(r.ref.kind==='current')res.preset=r;
+      if(r.ref.kind==='current'&&presetIdentity(res.preset)===target)res.preset=r;
       stSaving=false;stBusy--;
       if(stAgain){stAgain=false;if(stTimer)stBusy--;else saveSettings();}
     },function(e){

@@ -189,6 +189,19 @@ test('another preset chosen while an edit waits: the edit is not written into it
   assert.equal(extra(w.SillyTavern.chatCompletionSettings).enabled, true);
 });
 
+test('an edit undone, and another preset chosen while it waited: listeners told to read again', async () => {
+  const { w, calls, fired } = page();
+  const s = w.SillyTavern.chatCompletionSettings;
+  extra(s).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  extra(s).enabled = true;
+  w.res.preset = { ref: { kind: 'current' }, raw: preset(false), version: 'b1', source: { loadedPresetId: 'p2' } };
+  await wait(400);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(fired, [['SETTINGS_UPDATED', []]]);
+  assert.equal(extra(w.SillyTavern.chatCompletionSettings).enabled, false);
+});
+
 test('a working copy in use: written there, as generation reads it, not to the library one', async () => {
   const { w, calls } = page({ working: true });
   extra(w.SillyTavern.chatCompletionSettings).enabled = false;
