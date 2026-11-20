@@ -8,6 +8,8 @@
 
 import 'dart:ui' show GestureSettings;
 
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
+
 import 'package:dsh_app/state/adaptive_layout_state.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/quick_panel_state.dart';
