@@ -56,7 +56,8 @@ class _MessageSelectionState extends State<MessageSelection> {
             label: MessageAction.readAloud.label,
             onPressed: () {
               region.hideToolbar();
-              readAloudReply(this.context, 'selection', selected);
+              // Its own id: another passage starts over, the same one stops.
+              readAloudReply(this.context, 'selection:$selected', selected);
             },
           ),
         // Before 全选: a narrow toolbar folds its last items away, and 「更多」
