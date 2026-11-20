@@ -19,6 +19,29 @@ val hasWholeReleaseKey = listOf("storeFile", "keyAlias").all { !keyProps.getProp
     listOf("storePassword", "keyPassword").all { !keyProps.getProperty(it).isNullOrEmpty() } &&
     file(keyProps.getProperty("storeFile")).exists()
 
+// Side-by-side test builds (tooling/build-apk.sh --side): their own package and launcher
+// name, so they install next to the released app instead of over it. Same signing key.
+val sideBuild = providers.environmentVariable("DSH_SIDE_BUILD").orNull == "1"
+val sideSuffix = ".test"
+// Static shortcuts name their target package literally; a side build's release
+// resources get a copy naming its own (registered further down).
+abstract class SideShortcuts : DefaultTask() {
+    @get:InputFile abstract val source: RegularFileProperty
+    @get:Input abstract val suffix: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val main = "android:targetPackage=\"io.github.ccch1mneyyy.dsh_app\""
+        val text = source.get().asFile.readText()
+        check(main in text) { "shortcuts.xml no longer names the package as $main" }
+        val out = outputDir.get().asFile.resolve("xml")
+        out.mkdirs()
+        out.resolve("shortcuts.xml").writeText(
+            text.replace(main, "android:targetPackage=\"io.github.ccch1mneyyy.dsh_app${suffix.get()}\""))
+    }
+}
+
 // Per-ABI runtime bundles produced by runtime/build-runtime.sh.
 val runtimeOut = rootProject.file("../../runtime/out")
 // libtawcroot.so for the opt-in tawcroot launch method (runtime/tawcroot/build.py; missing = unavailable).
@@ -50,6 +73,8 @@ android {
 
     defaultConfig {
         applicationId = "io.github.ccch1mneyyy.dsh_app"
+        if (sideBuild) applicationIdSuffix = sideSuffix
+        manifestPlaceholders["appLabel"] = if (sideBuild) "DSH Go 测试" else "DSH Go"
         // java.nio.file (symlinks while unpacking the rootfs) needs API 26.
         minSdk = 26
         // Target 28 like Termux, so the API 29+ exec restriction on app-private
@@ -177,4 +202,16 @@ dependencies {
     // pulls in (bcprov-jdk15to18:1.81); adding jdk18on next to it duplicates every class.
     implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
     implementation("androidx.webkit:webkit:1.15.0") // Apache-2.0: web islands' force dark (webview_flutter's own version)
+}
+
+if (sideBuild) {
+    val sideShortcuts = tasks.register<SideShortcuts>("sideShortcuts") {
+        source.set(file("src/main/res/xml/shortcuts.xml"))
+        suffix.set(sideSuffix)
+        outputDir.set(layout.buildDirectory.dir("generated/side-res"))
+    }
+    // Generated resources sit above main's; only release builds may be side builds.
+    androidComponents.onVariants(androidComponents.selector().withBuildType("release")) { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(sideShortcuts, SideShortcuts::outputDir)
+    }
 }
