@@ -513,7 +513,11 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     final now = keys.toSet();
     return {
       for (var i = start; i < keys.length; i++)
-        if (!(keys[i].startsWith('stream-') ? before.contains('stream-pending') : before.contains('stream-${keys[i]}')))
+        // A reply being written goes on from the pending row, or from itself
+        // when it is continued; a written reply goes on from its stream row.
+        if (!(keys[i].startsWith('stream-')
+            ? before.contains('stream-pending') || before.contains(keys[i].substring('stream-'.length))
+            : before.contains('stream-${keys[i]}')))
           keys[i]: i < last.length && !last[i].startsWith('stream-') && !now.contains(last[i]),
     };
   }

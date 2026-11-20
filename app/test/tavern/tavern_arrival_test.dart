@@ -91,6 +91,22 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a reply being continued does not fade in again', (tester) async {
+    await _open(tester, PreviewTavern(tick: const Duration(milliseconds: 20)));
+    await tester.enterText(find.byType(TextField), '/continue');
+    await tester.pump();
+    await tester.tap(find.byIcon(AppIcons.send));
+    // The greeting goes on as it is written: its row was there, it does not arrive.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(_fades(tester).where((f) => f.opacity.value < 1), isEmpty);
+    }
+    for (var i = 0; i < 300; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('with motion reduced nothing fades', (tester) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
