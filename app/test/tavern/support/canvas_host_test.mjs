@@ -22,7 +22,7 @@ function preset(on = true) {
   };
 }
 
-function page({ loadedPresetId = 'p1', refuse = false, working = false } = {}) {
+function page({ loadedPresetId = 'p1', refuse = false, working = false, slow = 0 } = {}) {
   const fired = [];
   const calls = [];
   const posts = [];
@@ -58,7 +58,8 @@ function page({ loadedPresetId = 'p1', refuse = false, working = false } = {}) {
       if (method === 'replacePreset') {
         if (refuse) return Promise.reject(new Error('changed meanwhile'));
         stored = { ref: params.ref, raw: params.raw, version: 's2' };
-        return Promise.resolve(params.ref.kind === 'current' ? { ...stored, version: 'v2' } : stored);
+        const done = params.ref.kind === 'current' ? { ...stored, version: 'v2' } : stored;
+        return slow ? wait(slow).then(() => done) : Promise.resolve(done);
       }
       return Promise.reject(new Error('unexpected ' + method));
     },
@@ -199,6 +200,20 @@ test('a working copy in use: written there, as generation reads it, not to the l
   );
   assert.deepEqual(calls[0][1].ref, { kind: 'current' });
   assert.equal(calls[0][1].expectedVersion, 'v1');
+});
+
+test('an edit due while a write is out: written after it, against what it wrote', async () => {
+  const { w, calls } = page({ slow: 300 });
+  const s = w.SillyTavern.chatCompletionSettings;
+  extra(s).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(350);
+  extra(s).enabled = true;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(900);
+  const writes = calls.filter((c) => c[0] === 'replacePreset');
+  assert.equal(writes.length, 2);
+  assert.equal(extra(writes[1][1].raw).enabled, true);
 });
 
 test('presetDelivered: SETTINGS_UPDATED when the preset changed, OAI_PRESET_CHANGED_AFTER when it is another', () => {

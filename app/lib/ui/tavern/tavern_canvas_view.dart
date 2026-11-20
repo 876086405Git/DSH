@@ -244,6 +244,11 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     _document++;
     _ready = false;
     _rendered = null;
+    // The old page's script buttons go with it, now (a press could not reach
+    // them); after this frame, as this can run while the chat page builds.
+    if (widget.calls case final calls? when calls.hostButtons.value.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => calls.hostButtons.value = const []);
+    }
     final document = tavernCanvasDocument(
       text: text,
       accent: theme.colorScheme.primary,

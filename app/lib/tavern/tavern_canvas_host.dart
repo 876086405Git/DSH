@@ -39,7 +39,9 @@ const tavernCanvasHostJs = r'''
   }
   // Which preset an edit is of: the one in use when it began.
   function presetIdentity(p){var s=(p&&p.source)||{};return JSON.stringify([p&&p.ref,s.loadedPresetId||null]);}
-  var stTarget=null;
+  // One write at a time: an edit due while one is out waits for it, then is
+  // compared with what that wrote (stAgain; a later one joins it).
+  var stTarget=null,stSaving=false,stAgain=false;
   function saveSettingsDebounced(){
     if(!stTimer){stBusy++;stTarget=presetIdentity(res.preset);}
     clearTimeout(stTimer);stTimer=setTimeout(saveSettings,300);
@@ -49,6 +51,7 @@ const tavernCanvasHostJs = r'''
   function dropEdit(){stBusy--;stOf=null;fire('SETTINGS_UPDATED',[]);}
   function saveSettings(){
     stTimer=0;
+    if(stSaving){if(stAgain)stBusy--;stAgain=true;return;}
     var target=stTarget;stTarget=null;
     var changed={},n=0;
     for(var k in stCopy||{})if(k!=='preset_settings_openai'&&JSON.stringify(stCopy[k])!==JSON.stringify(stBase[k])){changed[k]=clone(stCopy[k]);n++;}
@@ -57,13 +60,18 @@ const tavernCanvasHostJs = r'''
     // The library's preset the chat uses, unless a working copy of it is what
     // generation reads: then that.
     var src=res.preset.source||{},id=src.loadedPresetId;
+    stSaving=true;
     (id&&!src.working?call('readPreset',{ref:{kind:'stored',presetId:id}}):Promise.resolve(res.preset)).then(function(s){
       return call('replacePreset',{ref:s.ref,raw:Object.assign(clone(s.raw),changed),expectedVersion:s.version});
     }).then(function(r){
       stBase=Object.assign({},stBase,changed);
       if(r.ref.kind==='current')res.preset=r;
-      stBusy--;
+      stSaving=false;stBusy--;
+      if(stAgain){stAgain=false;if(stTimer)stBusy--;else saveSettings();}
     },function(e){
+      // What waited on it goes too: the preset is read again as it is.
+      stSaving=false;
+      if(stAgain){stAgain=false;stBusy--;}
       dropEdit();
       toastr.error(String(e&&e.message||e));
     });
