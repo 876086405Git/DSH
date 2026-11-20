@@ -41,10 +41,14 @@ class TavernAudioSection extends ConsumerWidget {
             tinted: false,
             title: type == 'bgm' ? l10n.tavernAudioBgm : l10n.tavernAudioAmbient,
             subtitle: now.title.isEmpty ? l10n.tavernAudioNothing : now.title,
+            // The glyph, not its 48 tap box, ends where the switches below end.
             trailing: IconButton(
               key: ValueKey('tavern-audio-$type-toggle'),
               tooltip: now.playing ? l10n.tavernAudioPause : l10n.tavernAudioPlay,
-              icon: Icon(now.playing ? AppIcons.mediaPause : AppIcons.mediaPlay),
+              icon: Transform.translate(
+                offset: Offset(Directionality.of(context) == TextDirection.rtl ? -12 : 12, 0),
+                child: Icon(now.playing ? AppIcons.mediaPause : AppIcons.mediaPlay),
+              ),
               onPressed: now.enabled && now.tracks > 0 ? () => unawaited(audio.toggle(type)) : null,
             ),
           ),
@@ -105,7 +109,8 @@ class TavernAudioSection extends ConsumerWidget {
   }
 }
 
-/// How loud, 0–100: follows the finger, said to the page when let go.
+/// How loud, 0–100, as every slider in settings is drawn (title and percent above, the track
+/// from text edge to text edge): follows the finger, said to the page when let go.
 class _Volume extends StatefulWidget {
   const _Volume({super.key, required this.volume, required this.onChanged});
 
@@ -120,29 +125,13 @@ class _VolumeState extends State<_Volume> {
   double? _dragging;
 
   @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final value = _dragging ?? widget.volume;
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 8),
-      child: Row(
-        children: [
-          Text(l10n.tavernAudioVolume),
-          Expanded(
-            child: Slider(
-              value: value.clamp(0, 100),
-              max: 100,
-              label: '${value.round()}',
-              semanticFormatterCallback: (v) => '${v.round()}',
-              onChanged: (v) => setState(() => _dragging = v),
-              onChangeEnd: (v) {
-                setState(() => _dragging = null);
-                widget.onChanged(v);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SettingsSliderTile(
+    title: context.l10n.tavernAudioVolume,
+    value: (_dragging ?? widget.volume) / 100,
+    onChanged: (v) => setState(() => _dragging = v * 100),
+    onChangeEnd: (v) {
+      setState(() => _dragging = null);
+      widget.onChanged(v * 100);
+    },
+  );
 }

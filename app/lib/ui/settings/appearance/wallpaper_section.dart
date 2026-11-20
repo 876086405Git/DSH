@@ -23,7 +23,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
@@ -200,76 +199,8 @@ class _WallpaperSectionState extends ConsumerState<WallpaperSection> {
   }
 }
 
-/// A title with its percent, the slider under it (16 from the card on both sides). Neutral, like
-/// every slider in settings: the page's accent stays with the switches.
-class WallpaperSliderRow extends StatelessWidget {
-  const WallpaperSliderRow({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.onChanged,
-    required this.onChangeEnd,
-  });
-
-  final String title;
-
-  /// 0–1.
-  final double value;
-  final ValueChanged<double> onChanged;
-  final ValueChanged<double> onChangeEnd;
-
-  /// Values land on 5% steps (no tick marks on the track: it stays one quiet line).
-  static const steps = 20;
-
-  static double snap(double v) => (v * steps).round() / steps;
-
-  static String label(double v) => '${(v * 100).round()}%';
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final v = value.clamp(0.0, 1.0);
-    return MergeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(SettingsMetrics.inset, 14, SettingsMetrics.inset, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ExcludeSemantics(
-              child: Row(
-                children: [
-                  Expanded(child: Text(title, style: settingsTitleStyle(context))),
-                  const SizedBox(width: 12),
-                  Text(label(v), style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Semantics(
-              label: title,
-              child: Slider(
-                value: v,
-                padding: EdgeInsets.zero,
-                activeColor: scheme.onSurfaceVariant,
-                inactiveColor: scheme.onSurface.withValues(alpha: 0.1),
-                semanticFormatterCallback: (v) => label(snap(v)),
-                onChanged: (raw) {
-                  final next = snap(raw);
-                  if (next == snap(v)) return;
-                  HapticFeedback.selectionClick();
-                  onChanged(next);
-                },
-                onChangeEnd: (raw) => onChangeEnd(snap(raw)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+/// The blur / tone rows: [SettingsSliderTile] with its defaults (5% steps, read as a percent).
+typedef WallpaperSliderRow = SettingsSliderTile;
 
 /// 默认 and 自定义 as two small phones, centred as a pair: the launch screen card's geometry
 /// ([LaunchScreenPicker]'s ring, radius and shape).

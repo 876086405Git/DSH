@@ -12,11 +12,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_preview.dart';
 import '../../tavern/tavern_provider.dart';
-import '../common/app_sheet.dart';
 import '../common/brief_notice.dart';
 import '../settings/settings_widgets.dart';
 import '../theme/app_icons.dart';
-import '../theme/theme.dart';
 
 /// The tool scope as the engine has it now (no chat: the global one); none
 /// for the preview, which keeps none.
@@ -60,11 +58,17 @@ class TavernToolPolicyGroup extends ConsumerWidget {
       {'remember': final Map<String, Object?> r} => r,
       _ => const <String, Object?>{},
     };
-    final quiet = Theme.of(context).textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary);
-    return SheetGroup(
+    return SettingsSection(
       key: const ValueKey('tavern-tool-policy'),
       title: l10n.tavernToolPolicy,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 4,
+        children: [
+          if (policy.diagnostics.isNotEmpty) Text(l10n.tavernToolPolicyDiagnostics),
+          Text(l10n.tavernToolPolicyNote),
+        ],
+      ),
       children: [
         SettingsSwitchTile(
           key: const ValueKey('tavern-tool-roll'),
@@ -93,6 +97,8 @@ class TavernToolPolicyGroup extends ConsumerWidget {
         if (remember)
           SettingsSegmentTile<String>(
             key: const ValueKey('tavern-tool-remember-mode'),
+            // Its own glyph, so its title starts where the switches' do.
+            icon: AppIcons.askFirst,
             title: l10n.tavernToolPolicyMode,
             segments: [
               PillSegment('ask', l10n.tavernToolPolicyModeAsk),
@@ -105,15 +111,6 @@ class TavernToolPolicyGroup extends ConsumerWidget {
               }),
             ),
           ),
-        if (policy.diagnostics.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Text(l10n.tavernToolPolicyDiagnostics, style: quiet),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-          child: Text(l10n.tavernToolPolicyNote, style: quiet),
-        ),
       ],
     );
   }
