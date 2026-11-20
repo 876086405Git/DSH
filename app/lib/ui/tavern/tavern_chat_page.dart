@@ -511,6 +511,9 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   Map<String, bool> _arrivals(List<String> keys) {
     final last = _lastRows;
     _lastRows = keys;
+    final streamed = _streamed;
+    // Its stored row is drawn: from here on it is a reply like any other.
+    if (keys.contains(streamed)) _streamed = null;
     if (last == null) return const {};
     final before = last.toSet();
     var start = keys.length;
@@ -526,7 +529,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         if (!(keys[i] == 'stream-pending' && _continuing) &&
             !(keys[i].startsWith('stream-')
                 ? before.contains('stream-pending') || before.contains(keys[i].substring('stream-'.length))
-                : before.contains('stream-${keys[i]}') || keys[i] == _streamed))
+                : before.contains('stream-${keys[i]}') || keys[i] == streamed))
           keys[i]: i < last.length && !last[i].startsWith('stream-') && !now.contains(last[i]),
     };
   }
