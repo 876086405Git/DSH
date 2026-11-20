@@ -75,7 +75,7 @@ void main() {
 
     expect(find.text('外面怎么了？'), findsOneWidget);
     expect(find.textContaining('地下室'), findsOneWidget);
-    expect(find.text('1/1'), findsOneWidget);
+    expect(find.text('1/1'), findsNothing); // one version: only ↻
 
     // Past the last alternative, › writes a new one.
     await tester.tap(find.byKey(const ValueKey('tavern-next')).first);
@@ -103,7 +103,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byIcon(AppIcons.send));
     await _finishReply(tester);
-    expect(find.text('1/1'), findsOneWidget);
+    expect(find.text('1/1'), findsNothing); // one version: only ↻
 
     // Left past the last alternative writes a new one.
     await tester.drag(find.textContaining('地下室'), const Offset(-200, 0));

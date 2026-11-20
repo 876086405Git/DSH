@@ -2892,13 +2892,16 @@ class _Alternatives extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          key(
-            const ValueKey('tavern-prev'),
-            l10n.tavernPrevious,
-            AppIcons.keyLeft,
-            busy || message.siblingIndex == 0 ? null : () => onSibling(-1),
-          ),
-          Text('${message.siblingIndex + 1}/${message.siblingCount}', style: style),
+          // One version: nothing to page through, only ↻.
+          if (message.siblingCount > 1) ...[
+            key(
+              const ValueKey('tavern-prev'),
+              l10n.tavernPrevious,
+              AppIcons.keyLeft,
+              busy || message.siblingIndex == 0 ? null : () => onSibling(-1),
+            ),
+            Text('${message.siblingIndex + 1}/${message.siblingCount}', style: style),
+          ],
           key(
             const ValueKey('tavern-next'),
             atEnd ? l10n.tavernRegenerate : l10n.tavernNext,

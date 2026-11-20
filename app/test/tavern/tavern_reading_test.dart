@@ -99,7 +99,9 @@ void main() {
 
     // The greeting has two (1/2) and is older: its count, no keys.
     expect(find.text('1/2'), findsOneWidget);
-    expect(find.byKey(const ValueKey('tavern-prev')), findsOneWidget); // the reply's alone
+    // The reply has one version: no ‹ and no 1/1, only ↻.
+    expect(find.byKey(const ValueKey('tavern-prev')), findsNothing);
+    expect(find.text('1/1'), findsNothing);
     expect(find.byKey(const ValueKey('tavern-next')), findsOneWidget);
   });
 
