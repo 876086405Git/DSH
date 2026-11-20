@@ -1513,7 +1513,7 @@ internal object PetOverlay {
         val rest = restPos(pv, pp)
         val body = loaded?.frames?.body?.at(rest) ?: return false
         val g = PetWheelGeometry.fit(
-            if (view.hosts) machine.last?.hosts?.size?.coerceAtLeast(1) ?: 1 else menuItems(machine.last).size,
+            view.rowCount.coerceAtLeast(1),
             dock.side, body.centerX.toFloat(), body.centerY.toFloat(), safeArea(), ctx.resources.displayMetrics.density,
             if (view.hosts) 2f else ctx.resources.configuration.fontScale,
             view.labelWidth(),
