@@ -36,16 +36,24 @@ class ImageSnapshots {
   final int _maxBytes;
   final _pending = <String, Future<File>>{};
 
-  // Serialize only disk transactions, never the potentially remote source load.
-  static Future<void> _tail = Future<void>.value();
+  // Serialize only transactions on the same physical directory. Unrelated roots
+  // must not inherit a pending transaction (or its caller zone). Empty queues
+  // are removed when their last transaction completes.
+  static final _tails = <String, Future<void>>{};
   // A miss registers a token; its finally removes it and empty groups. Session
   // removal invalidates and drops the group, so late loads cannot restore it.
   static final _loading = <(String, String), Set<_SnapshotLoad>>{};
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
 
-  static Future<T> _exclusive<T>(Future<T> Function() action) {
-    final result = _tail.then((_) => action());
-    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+  static Future<T> _exclusive<T>(String directory, Future<T> Function() action) {
+    final result = (_tails[directory] ?? Future<void>.value()).then((_) => action());
+    late final Future<void> tail;
+    void release() {
+      if (identical(_tails[directory], tail)) _tails.remove(directory);
+    }
+
+    tail = result.then<void>((_) => release(), onError: (Object _, StackTrace _) => release());
+    _tails[directory] = tail;
     return result;
   }
 
@@ -84,7 +92,7 @@ class ImageSnapshots {
     final directory = await _directory();
     final scopeKey = (await directory.resolveSymbolicLinks(), scope);
     final token = _SnapshotLoad(cancelPending);
-    final cached = await _exclusive(() async {
+    final cached = await _exclusive(scopeKey.$1, () async {
       final index = await _readIndex(directory);
       final file = await _find(directory, index, scope, key, maxBytes);
       if (file == null) _loading.putIfAbsent(scopeKey, () => <_SnapshotLoad>{}).add(token);
@@ -94,7 +102,7 @@ class ImageSnapshots {
     try {
       final bytes = await load();
       final content = bytes.length > maxBytes || bytes.length > _maxBytes ? null : sha256.convert(bytes).toString();
-      return await _exclusive(() async {
+      return await _exclusive(scopeKey.$1, () async {
         if (!token.valid) throw const ImageSnapshotMissing();
         // Another store may have fixed the same key while this load was out of
         // the transaction. Its first successful snapshot wins, even a tombstone.
@@ -110,7 +118,7 @@ class ImageSnapshots {
         return target;
       });
     } finally {
-      await _exclusive(() async {
+      await _exclusive(scopeKey.$1, () async {
         final loading = _loading[scopeKey];
         loading?.remove(token);
         if (loading != null && loading.isEmpty) _loading.remove(scopeKey);
@@ -144,7 +152,7 @@ class ImageSnapshots {
     final directory = await _directory();
     final scope = _identity([host, sessionId]);
     final scopeKey = (await directory.resolveSymbolicLinks(), scope);
-    await _exclusive(() async {
+    await _exclusive(scopeKey.$1, () async {
       final index = await _readIndex(directory);
       index.references.remove(scope);
       final retained = <String>{

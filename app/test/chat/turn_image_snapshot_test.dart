@@ -289,7 +289,15 @@ void main() {
       Navigator.of(tester.element(find.byType(ArtifactPreviewPage))).pop();
       await _settle(tester);
     }
-    expect(pictures.channel.resolved, [_path, _path]);
+    // Thumbnail and inline readers have different byte limits and can race
+    // their first read. Their common immutable content, not a mock call count,
+    // is the contract: all pixel/path assertions above must match per turn.
+    expect(pictures.channel.resolved.toSet(), {_path});
+    expect(pictures.channel.resolved.length, inInclusiveRange(2, 3));
+    await tester.runAsync(() async {
+      final payloads = await Directory('${pictures.dir.path}/image-snapshots/contents').list().toList();
+      expect(payloads.whereType<File>(), hasLength(2));
+    });
     expect(tester.takeException(), isNull);
   });
 
