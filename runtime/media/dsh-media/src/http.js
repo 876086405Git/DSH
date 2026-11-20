@@ -116,9 +116,9 @@ function createHttpPreparer({ allowLoopback = false, lookup = dnsLookup } = {}) 
           method,
           headers,
           agent: false,
-          family: selected.family,
+          family: 0,
           servername: literal ? undefined : host,
-          autoSelectFamily: false,
+          autoSelectFamily: true,
           maxHeaderSize: 16384,
           signal,
           // The TLS hostname remains the original host. DNS is not repeated.
@@ -127,7 +127,7 @@ function createHttpPreparer({ allowLoopback = false, lookup = dnsLookup } = {}) 
               callback = options;
               options = {};
             }
-            if (options?.all) callback(null, [selected]);
+            if (options?.all) callback(null, addresses);
             else callback(null, selected.address, selected.family);
           },
         }, res => {

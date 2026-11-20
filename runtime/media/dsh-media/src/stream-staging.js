@@ -123,11 +123,11 @@ export function createStreamStager({ allowLoopback = false, lookup = dnsLookup }
       response = await new Promise((resolve, reject) => {
         const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
         req = send(url, { method: 'GET', headers: { 'Accept-Encoding': 'identity' }, agent: false,
-          family: selected.family, servername: literal ? undefined : host, autoSelectFamily: false,
+          family: 0, servername: literal ? undefined : host, autoSelectFamily: true,
           maxHeaderSize: 16384, signal: control.signal,
           lookup: (_hostname, options, callback) => {
             if (typeof options === 'function') { callback = options; options = {}; }
-            callback(null, options?.all ? [selected] : selected.address, selected.family);
+            callback(null, options?.all ? addresses : selected.address, selected.family);
           },
         }, resolve);
         req.on('error', reject);
