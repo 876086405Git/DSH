@@ -9,6 +9,7 @@ import 'package:dsh_app/ui/chat/artifact_preview.dart';
 import 'package:dsh_app/ui/chat/render/markdown_body.dart';
 import 'package:dsh_app/ui/chat/render/markdown_image.dart';
 import 'package:dsh_app/ui/chat/widgets/artifact_card.dart';
+import 'package:dsh_app/ui/share/share_card.dart';
 import 'package:dsh_app/ui/share/share_content.dart';
 import 'package:dsh_app/ui/share/share_gallery.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -294,6 +295,88 @@ void main() {
       expect(answers.map((answer) => answer.turn), [1, 2]);
       expect(answers.map((answer) => shareSegments(answer.markdown).single.images.single), [_path, _path]);
     }
+  });
+
+  testWidgets('HTML share images keep their turn while unversioned and offline cards remain usable', (tester) async {
+    usePhoneView(tester);
+    final pictures = _Pictures();
+    final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
+    const html = '<img src="$_path">';
+    expect(shareSegments(html).single.isImages, isFalse);
+    await tester.pumpWidget(
+      pictures.app(
+        const Scaffold(
+          body: MarkdownImageScope(
+            sessionId: _session,
+            turn: 1,
+            child: MarkdownBody(text: html, selectable: false),
+          ),
+        ),
+      ),
+    );
+    await _decode(tester);
+    final inline = find.byType(MarkdownImage);
+    final oldPath = _fileImage(tester, inline).file.path;
+    _expectPixels(tester, inline, 4, 4);
+    pictures.source.writeAsBytesSync(changed);
+
+    for (final (turn, width, height) in [(1, 4, 4), (2, 7, 3), (null, 7, 3)]) {
+      await tester.pumpWidget(
+        pictures.app(
+          Scaffold(
+            body: SingleChildScrollView(
+              child: ShareCard(
+                content: ShareContent(
+                  sessionId: _session,
+                  blocks: [ShareAnswer(html, turn: turn)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await _decode(tester);
+      expect(find.byType(ShareGallery), findsNothing);
+      final scope = MarkdownImageScope.maybeOf(tester.element(inline));
+      expect(scope?.sessionId, _session);
+      expect(scope?.turn, turn);
+      _expectPixels(tester, inline, width, height);
+      final path = _fileImage(tester, inline).file.path;
+      if (turn == 1) {
+        expect(path, oldPath);
+      } else if (turn == 2) {
+        expect(path, isNot(oldPath));
+        expect(path, isNot(pictures.source.path));
+      } else {
+        expect(path, pictures.source.path);
+      }
+    }
+    expect(pictures.channel.resolved, [_path, _path, _path]);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    final data = Uri.dataFromBytes(tinyPng, mimeType: 'image/png');
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ShareCard(content: ShareContent(blocks: [ShareAnswer('<img src="$data">')])),
+        ),
+        overrides: [
+          artifactFilesProvider.overrideWithValue(
+            ArtifactFiles(
+              connection: null,
+              channel: pictures.channel,
+              cacheRoot: () async => pictures.dir,
+              snapshots: pictures.files.snapshots,
+            ),
+          ),
+        ],
+      ),
+    );
+    await _decode(tester);
+    expect(MarkdownImageScope.maybeOf(tester.element(inline)), isNull);
+    _expectPixels(tester, inline, 4, 4);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a share gallery keeps old turn pixels and reloads the same cell for a new turn', (tester) async {

@@ -23,6 +23,7 @@ flutter test --no-pub \
   test/chat/reply_gallery_test.dart \
   test/chat/workspace_gallery_refresh_test.dart \
   test/chat/image_snapshots_test.dart \
+  test/chat/image_snapshot_export_test.dart \
   test/chat/turn_image_snapshot_test.dart \
   test/chat/image_viewer_theme_test.dart \
   test/chat/inline_image_provider_test.dart \
@@ -32,7 +33,9 @@ flutter test --no-pub \
   test/media/media_card_test.dart \
   test/plugins/view/plugin_view_figures_test.dart \
   test/files/file_preview_test.dart \
-  test/forum/forum_image_gallery_test.dart
+  test/forum/forum_image_gallery_test.dart \
+  test/state/session_deletion_test.dart \
+  test/state/drawer_delete_test.dart
 ```
 
 Set `DSH_TEST_FONT_DIR` if Noto CJK fonts are installed somewhere other than the test harness's default. Widget tests must use a tester engine matching the host architecture. From the repository root, also run `python3 app/tool/guide_sync.py --check`.

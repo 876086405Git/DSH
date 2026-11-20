@@ -256,34 +256,61 @@ class ArtifactFiles {
     }
   }
 
-  /// Opens [artifact] in the app Android picks for its type ([chooser]: the
-  /// person picks).
-  Future<void> open(
+  Future<T> _fileAction<T>(
     String sessionId,
-    Artifact artifact, {
-    bool chooser = false,
+    Artifact artifact,
+    Future<T> Function(File) action, {
     void Function(double?)? onProgress,
   }) async {
-    final file = await materialize(sessionId, artifact, onProgress: onProgress);
-    await channel.open(file.path, name: artifact.name, mime: artifact.mimeType, chooser: chooser);
+    final source = await materialize(sessionId, artifact, onProgress: onProgress);
+    if (_operatingSystem != 'ohos' || !artifact.snapshotImage || artifact.kind != ArtifactKind.image) {
+      return action(source);
+    }
+    // Harmony admits cache/temp inputs, not the durable support-directory store.
+    // Open/share make their own native copies; save reads before replying. Keep
+    // this bridge copy until that Future settles, not for the external reader.
+    final root = await _cacheRoot();
+    await root.create(recursive: true);
+    final directory = await root.createTemp('image-snapshot-export-');
+    try {
+      final file = await source.copy('${directory.path}/${_safeName(artifact.name)}');
+      return await action(file);
+    } finally {
+      await directory.delete(recursive: true);
+    }
   }
 
+  /// Opens [artifact] in the app Android picks for its type ([chooser]: the
+  /// person picks).
+  Future<void> open(String sessionId, Artifact artifact, {bool chooser = false, void Function(double?)? onProgress}) =>
+      _fileAction(
+        sessionId,
+        artifact,
+        (file) => channel.open(file.path, name: artifact.name, mime: artifact.mimeType, chooser: chooser),
+        onProgress: onProgress,
+      );
+
   /// The system share sheet with the file.
-  Future<void> share(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) async {
-    final file = await materialize(sessionId, artifact, onProgress: onProgress);
-    await _share(
+  Future<void> share(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) => _fileAction(
+    sessionId,
+    artifact,
+    (file) => _share(
       ShareParams(
         files: [XFile(file.path, mimeType: artifact.mimeType, name: artifact.name)],
         fileNameOverrides: [artifact.name],
       ),
-    );
-  }
+    ),
+    onProgress: onProgress,
+  );
 
   /// Copies the file into the phone's public Downloads; returns where.
-  Future<String> saveToDownloads(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) async {
-    final file = await materialize(sessionId, artifact, onProgress: onProgress);
-    return channel.saveToDownloads(file.path, name: artifact.name, mime: artifact.mimeType);
-  }
+  Future<String> saveToDownloads(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) =>
+      _fileAction(
+        sessionId,
+        artifact,
+        (file) => channel.saveToDownloads(file.path, name: artifact.name, mime: artifact.mimeType),
+        onProgress: onProgress,
+      );
 
   /// A small image of [artifact] for its card; null when it is not an image
   /// Flutter can draw, or too big to fetch just for this.

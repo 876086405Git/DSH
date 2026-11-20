@@ -10,6 +10,7 @@ import '../../l10n/l10n.dart';
 import '../../state/app_info.dart';
 import '../chat/render/code_block.dart' show highlightCode;
 import '../chat/render/markdown_body.dart';
+import '../chat/render/markdown_image.dart' show MarkdownImageScope;
 import '../common/tool_glyph.dart' show ToolGlyphs;
 import '../plugins/plugin_detail_sheet.dart' show PluginHero, PluginStats;
 import '../plugins/plugin_widgets.dart' show PluginAvatar;
@@ -706,7 +707,7 @@ class _Answer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final segments = shareSegments(markdown);
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -727,6 +728,9 @@ class _Answer extends StatelessWidget {
         ],
       ],
     );
+    // HTML images stay in MarkdownBody instead of becoming ShareGallery cells.
+    final sessionId = ShareImageScope.sessionIdOf(context);
+    return sessionId == null ? body : MarkdownImageScope(sessionId: sessionId, turn: turn, child: body);
   }
 }
 

@@ -123,8 +123,7 @@ class ImageSnapshots {
     index.references.remove(_identity([host, sessionId]));
     final retained = <String>{
       for (final references in index.references.values)
-        for (final digest in references.values)
-          if (digest != null) digest,
+        for (final digest in references.values) ?digest,
     };
     index.accessed.removeWhere((digest, _) => !retained.contains(digest));
     final discarded = <File>[];

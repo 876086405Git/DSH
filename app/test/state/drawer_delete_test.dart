@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/drawer_view_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/image_snapshots.dart';
 import 'package:dsh_app/state/session_deletion_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/workspaces_state.dart';
@@ -23,6 +24,11 @@ import '../drawer/support.dart';
 import '../shell/golden_harness.dart';
 import '../workspace/support.dart';
 import 'read_list_refresh_test.dart' show SwitchConnection, switchConnectionProvider;
+
+class _NoSnapshots extends ImageSnapshots {
+  @override
+  Future<void> removeSession(String host, String sessionId) async {}
+}
 
 class _DeletionBackend implements SessionDeletionBackend {
   final hosts = <DshClient, DrawerHost>{};
@@ -91,6 +97,7 @@ Future<({DrawerHost host, HostConnection connection, ProviderContainer container
         switchConnectionProvider.overrideWith(() => SwitchConnection(connection)),
         activeConnectionProvider.overrideWith((ref) => ref.watch(switchConnectionProvider)),
         sessionDeletionBackendProvider.overrideWithValue(fake),
+        imageSnapshotsProvider.overrideWithValue(_NoSnapshots()),
       ],
     ),
   );
