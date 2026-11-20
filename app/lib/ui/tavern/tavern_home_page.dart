@@ -463,7 +463,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> with SingleTick
                 icon: AppIcons.article,
                 title: l10n.tavernPresets,
                 value: Text(switch (ref.watch(tavernPresetsProvider).value?.length ?? 0) {
-                  0 => l10n.tavernPersonaNotSet,
+                  0 => l10n.tavernLibraryNone,
                   final n => l10n.tavernPresetCount(n),
                 }),
                 onTap: () => unawaited(Navigator.of(context).push(TavernPresetsPage.route())),
@@ -473,7 +473,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> with SingleTick
                 icon: AppIcons.lorebook,
                 title: l10n.tavernLorebooks,
                 value: Text(switch (ref.watch(tavernLorebooksProvider).value?.books.length ?? 0) {
-                  0 => l10n.tavernPersonaNotSet,
+                  0 => l10n.tavernLibraryNone,
                   final n => l10n.tavernLorebookCount(n),
                 }),
                 onTap: () => unawaited(Navigator.of(context).push(TavernLorebooksPage.route())),
@@ -483,7 +483,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> with SingleTick
                 icon: AppIcons.code,
                 title: l10n.tavernRegex,
                 value: Text(switch (ref.watch(tavernRegexProvider).value?.length ?? 0) {
-                  0 => l10n.tavernPersonaNotSet,
+                  0 => l10n.tavernLibraryNone,
                   final n => l10n.tavernRegexCount(n),
                 }),
                 onTap: () => unawaited(Navigator.of(context).push(TavernRegexPage.route())),
@@ -493,7 +493,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> with SingleTick
                 icon: AppIcons.terminal,
                 title: l10n.tavernScripts,
                 value: Text(switch (tavernScriptCount(ref.watch(tavernGlobalScriptsProvider).value ?? const [])) {
-                  0 => l10n.tavernPersonaNotSet,
+                  0 => l10n.tavernLibraryNone,
                   final n => l10n.tavernScriptCount(n),
                 }),
                 onTap: () => unawaited(Navigator.of(context).push(TavernScriptsPage.route())),
@@ -520,7 +520,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> with SingleTick
                 icon: AppIcons.reply,
                 title: l10n.tavernQuickReplies,
                 value: Text(switch (ref.watch(tavernQuickRepliesProvider).length) {
-                  0 => l10n.tavernPersonaNotSet,
+                  0 => l10n.tavernLibraryNone,
                   final n => l10n.tavernQuickReplyCount(n),
                 }),
                 onTap: () => unawaited(Navigator.of(context).push(TavernQuickRepliesPage.route())),

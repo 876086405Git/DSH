@@ -21245,6 +21245,9 @@ class L10nZh extends L10n {
   String get tavernPersonaNotSet => '未设置';
 
   @override
+  String get tavernLibraryNone => '无';
+
+  @override
   String get tavernFieldName => '名字';
 
   @override

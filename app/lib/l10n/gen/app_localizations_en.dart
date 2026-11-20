@@ -22417,6 +22417,9 @@ class L10nEn extends L10n {
   String get tavernPersonaNotSet => 'Not set';
 
   @override
+  String get tavernLibraryNone => 'None';
+
+  @override
   String get tavernFieldName => 'Name';
 
   @override

@@ -307,6 +307,7 @@
   "tavernSettingsYou": "你",
   "tavernDefaultPersona": "默认人设",
   "tavernPersonaNotSet": "未设置",
+  "tavernLibraryNone": "无",
   "tavernFieldName": "名字",
   "tavernOpenFailed": "酒馆没能打开",
   "tavernOpenFailedMessage": "存角色和对话的数据没能打开。重试一下；还不行的话，重启 App 再试。",
