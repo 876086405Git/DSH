@@ -56,7 +56,7 @@ function page({ loadedPresetId = 'p1', refuse = false, working = false, slow = 0
       calls.push([method, params]);
       if (method === 'readPreset') return Promise.resolve(stored);
       if (method === 'replacePreset') {
-        if (refuse) return Promise.reject(new Error('changed meanwhile'));
+        if (refuse) return wait(slow).then(() => Promise.reject(new Error('changed meanwhile')));
         stored = { ref: params.ref, raw: params.raw, version: 's2' };
         const done = params.ref.kind === 'current' ? { ...stored, version: 'v2' } : stored;
         return slow ? wait(slow).then(() => done) : Promise.resolve(done);
@@ -178,6 +178,22 @@ test('a write refused: a listener reading the settings then gets the preset as i
   assert.deepEqual(seen, [true]);
 });
 
+test('a write refused while another edit waits: that goes too, and listeners read the preset as it is', async () => {
+  // The first write is out from 300 ms and refused at 400; the second edit would be due at 650.
+  const { w, calls } = page({ refuse: true, slow: 100 });
+  const s = w.SillyTavern.chatCompletionSettings;
+  extra(s).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(350);
+  s.temperature = 2;
+  w.SillyTavern.saveSettingsDebounced();
+  const seen = [];
+  w.fire = () => seen.push(w.SillyTavern.chatCompletionSettings.temperature);
+  await wait(600);
+  assert.deepEqual(seen, [1]);
+  assert.equal(calls.filter((c) => c[0] === 'replacePreset').length, 1);
+});
+
 test('another preset chosen while an edit waits: the edit is not written into it', async () => {
   const { w, calls, fired } = page();
   extra(w.SillyTavern.chatCompletionSettings).enabled = false;
@@ -216,14 +232,17 @@ test('a working copy in use: written there, as generation reads it, not to the l
 });
 
 test('an edit due while a write is out: written after it, against what it wrote', async () => {
-  const { w, calls } = page({ slow: 300 });
+  // The first write is out from 300 ms to 900; the second edit is due at 650.
+  const { w, calls } = page({ slow: 600 });
   const s = w.SillyTavern.chatCompletionSettings;
   extra(s).enabled = false;
   w.SillyTavern.saveSettingsDebounced();
   await wait(350);
   extra(s).enabled = true;
   w.SillyTavern.saveSettingsDebounced();
-  await wait(900);
+  await wait(400);
+  assert.equal(calls.filter((c) => c[0] === 'replacePreset').length, 1);
+  await wait(1000);
   const writes = calls.filter((c) => c[0] === 'replacePreset');
   assert.equal(writes.length, 2);
   assert.equal(extra(writes[1][1].raw).enabled, true);

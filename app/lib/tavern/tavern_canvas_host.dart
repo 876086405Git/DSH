@@ -72,9 +72,11 @@ const tavernCanvasHostJs = r'''
       stSaving=false;stBusy--;
       if(stAgain){stAgain=false;if(stTimer)stBusy--;else saveSettings();}
     },function(e){
-      // What waited on it goes too: the preset is read again as it is.
+      // What waited on it, or is still to come, goes too: the preset is read
+      // again as it is.
       stSaving=false;
       if(stAgain){stAgain=false;stBusy--;}
+      if(stTimer){clearTimeout(stTimer);stTimer=0;stTarget=null;stBusy--;}
       dropEdit();
       toastr.error(String(e&&e.message||e));
     });
