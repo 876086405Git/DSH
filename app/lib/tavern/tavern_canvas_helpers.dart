@@ -22,8 +22,9 @@ const _js = r'''
   function adoptResources(r,context){
     if(context)ctx=context;
     if(!r||!Object.keys(r).length)return;
-    var before=(res.presetLibrary||{}).version;
+    var before=(res.presetLibrary||{}).version,was=res.preset;
     res=r;
+    presetDelivered(was,r.preset);
     if(card&&r.characterData&&r.characterData.data)card=r.characterData.data;
     if(r.regex)regexes=regexBuckets(r.regex);
     if((r.presetLibrary||{}).version!==before)storedPresets={};

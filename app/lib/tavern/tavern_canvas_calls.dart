@@ -130,6 +130,11 @@ class TavernCanvasCalls {
   void showButtons(String key, List<String> names) =>
       liveButtons.value = {...liveButtons.value, key: List.unmodifiable(names)};
 
+  /// What scripts put in ST's places for buttons on the page (its QR bar,
+  /// its extensions menu), as the page last said: each its id there and its
+  /// words. A press goes back as {kind: press, id}.
+  final hostButtons = ValueNotifier<List<({String id, String label})>>(const []);
+
   void _forget() {
     _released++;
     if (_registered case final id?) pages?.remove(id);

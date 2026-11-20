@@ -15,6 +15,7 @@ import 'dart:ui' show Color;
 import 'package:dsh_tavern/dsh_tavern.dart' show PersonaSelection, TavernPersona;
 
 import 'tavern_canvas_helpers.dart';
+import 'tavern_canvas_host.dart';
 import 'tavern_card_scripts.dart' show tavernUsesMvu;
 import 'tavern_islands.dart' show tavernFence, tavernFenceIsHtml, tavernHtmlBlocks, tavernPageColors;
 import 'tavern_page_perf.dart';
@@ -591,6 +592,8 @@ ${lowPower ? tavernCalmJs : ''}
       if(d.kind==='generation'){generationEvent(d);return;}
       // A script's button pressed in the app: the event getButtonEvent names.
       if(d.kind==='button'){var f=frames[d.key];if(f)fire(evName(buttonEvent(f,d.name)),[]);return;}
+      // One the app shows from ST's places for buttons (tavernCanvasHostJs).
+      if(d.kind==='press'){press(d.id);return;}
       if(d.kind!=='cache')return;
       // Not asked for yet: a snapshot taken later covers what was dropped.
       if(!loaded){if(!loading&&held.length>=200)held=[];held.push(d);return;}
@@ -751,7 +754,8 @@ ${lowPower ? tavernCalmJs : ''}
   // extensions): what this page can truly give — the chat as ST keeps it
   // (name, is_user, is_system for a hidden one, mes, its swipes and their
   // variables), fresh from this page's copy at each reading; getContext();
-  // the chat's id. The rest of ST's interface is not here, rather than faked.
+  // the chat's id; its events and the preset in use (tavernCanvasHostJs).
+  // The rest of ST's interface is not here, rather than faked.
   function stMessage(x){
     var ss=x.swipes&&x.swipes.length?x.swipes:null;
     var out={name:x.name,is_user:x.role==='user',is_system:!!x.hidden,mes:x.message,extra:x.extra||{},
@@ -1509,6 +1513,7 @@ ${lowPower ? tavernCalmJs : ''}
     dsh.scripts[f[0]]=f[1];if(!window[f[0]])window[f[0]]=f[1];
   });
 ${tavernCanvasHelpersJs(mvu: mvu)}
+$tavernCanvasHostJs
   // MVU (when the card uses it) is on for this chat and Mvu shared before
   // any of them runs.
   function startScripts(){
@@ -1534,6 +1539,7 @@ ${tavernCanvasHelpersJs(mvu: mvu)}
     for(var e in on)on[e]=on[e].filter(function(h){return h.owner!=='script:'+k;});
   }
   function startFrame(s){
+    hostAnchors();
     var f=Object.assign({},s,{n:frameAt.length});frames[s.key]=f;frameAt.push(f);
     var frame=f.el=document.createElement('iframe');
     frame.style.display='none';frame.setAttribute('aria-hidden','true');frame.dataset.script=s.key;

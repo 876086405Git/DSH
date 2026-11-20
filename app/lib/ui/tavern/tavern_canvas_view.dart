@@ -244,6 +244,11 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     _document++;
     _ready = false;
     _rendered = null;
+    // The old page's script buttons go with it, now (a press could not reach
+    // them); after this frame, as this can run while the chat page builds.
+    if (widget.calls case final calls? when calls.hostButtons.value.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => calls.hostButtons.value = const []);
+    }
     final document = tavernCanvasDocument(
       text: text,
       accent: theme.colorScheme.primary,
@@ -322,6 +327,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         _rendered = null;
         _streamSent = null;
         _avatars.reset();
+        widget.calls?.hostButtons.value = const [];
         _audio?.report(null);
         if (_hidden) _suspendAudio(true);
         _pushPersonas();
@@ -346,6 +352,14 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       case 'buttons':
         if (data case {'key': final String key, 'names': final List<Object?> names}) {
           widget.calls?.showButtons(key, [for (final n in names) '$n']);
+        }
+      // What scripts put in ST's places for buttons: the same row shows them.
+      case 'hostButtons':
+        if (data['buttons'] case final List<Object?> list) {
+          widget.calls?.hostButtons.value = [
+            for (final b in list)
+              if (b case {'id': final String id, 'label': final String label}) (id: id, label: label),
+          ];
         }
       // What the engine said went wrong with the card's variables (MVU),
       // said as a notice: the page went on.
@@ -489,6 +503,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     // The handlers the lost page was running will not answer; its music
     // stopped with it.
     widget.calls?.pageLost();
+    // Its script buttons too, even while the new page waits for what it loads.
+    widget.calls?.hostButtons.value = const [];
     _audio?.report(null);
     setState(() {
       _guard = WebViewGuard(onGone: _onGone);
