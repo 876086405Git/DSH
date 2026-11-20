@@ -36803,7 +36803,7 @@ abstract class L10n {
   /// No description provided for @stateProviderModelsMissing.
   ///
   /// In zh, this message translates to:
-  /// **'找不到模型列表，检查 Base URL'**
+  /// **'找不到模型列表。检查 Base URL；有的服务不提供模型列表，可以手动添加模型'**
   String get stateProviderModelsMissing;
 
   /// No description provided for @stateProviderRateLimited.

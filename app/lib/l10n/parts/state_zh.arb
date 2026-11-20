@@ -279,7 +279,7 @@
   "stateProviderConflict": "渠道刚被改过，返回后重试",
   "stateProviderUnsupported": "当前引擎版本不支持这个操作",
   "stateProviderKeyRejected": "API Key 无效或没有权限",
-  "stateProviderModelsMissing": "找不到模型列表，检查 Base URL",
+  "stateProviderModelsMissing": "找不到模型列表。检查 Base URL；有的服务不提供模型列表，可以手动添加模型",
   "stateProviderRateLimited": "请求太频繁，稍后再试",
   "stateProviderResponseTooLarge": "返回的内容过大",
   "stateProviderUnreachable": "连不上这个地址，检查 Base URL 和网络",
