@@ -95,26 +95,35 @@ class _MessageSelectionState extends State<MessageSelection> {
 /// [selected] without any part of a credential in [message]: a whole one, one
 /// cut at either end of the selection, or a selection inside one (nothing is
 /// left). Neither a voice service nor the speaker gets it, as with a whole
-/// reply.
+/// reply. Text only, without positions: a cut counts from [_least] characters,
+/// so an ordinary word that merely shares a letter with a key stays.
 @visibleForTesting
 String speakableSelection(String selected, String message) {
-  var spoken = selected;
+  final cut = List.filled(selected.length, false);
   for (final secret in findSecrets(message)) {
     final value = message.substring(secret.start, secret.end);
-    if (value.contains(spoken.trim())) return '';
-    spoken = spoken.replaceAll(value, '');
-    for (var n = math.min(value.length, spoken.length); n > 0; n--) {
-      if (spoken.startsWith(value.substring(value.length - n))) {
-        spoken = spoken.substring(n);
+    final words = selected.trim();
+    if (words.length >= _least && value.contains(words)) return '';
+    for (var at = selected.indexOf(value); at >= 0; at = selected.indexOf(value, at + 1)) {
+      cut.fillRange(at, at + value.length, true);
+    }
+    for (var n = math.min(value.length, selected.length); n >= _least; n--) {
+      if (selected.startsWith(value.substring(value.length - n))) {
+        cut.fillRange(0, n, true);
         break;
       }
     }
-    for (var n = math.min(value.length, spoken.length); n > 0; n--) {
-      if (spoken.endsWith(value.substring(0, n))) {
-        spoken = spoken.substring(0, spoken.length - n);
+    for (var n = math.min(value.length, selected.length); n >= _least; n--) {
+      if (selected.endsWith(value.substring(0, n))) {
+        cut.fillRange(selected.length - n, selected.length, true);
         break;
       }
     }
   }
-  return spoken;
+  return String.fromCharCodes([
+    for (var i = 0; i < selected.length; i++)
+      if (!cut[i]) selected.codeUnitAt(i),
+  ]);
 }
+
+const _least = 4;
