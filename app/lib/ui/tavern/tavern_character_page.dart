@@ -26,7 +26,7 @@ import 'tavern_chat_page.dart';
 import 'tavern_drafts_page.dart';
 import 'tavern_pack_bindings_page.dart';
 import 'tavern_pack_export_page.dart';
-import 'tavern_home_page.dart' show plainPreview;
+import 'tavern_home_page.dart' show plainPreviewLines;
 import 'tavern_live2d_tile.dart';
 import 'tavern_lorebooks_page.dart';
 import 'tavern_report_page.dart';
@@ -149,7 +149,7 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
                   Text(
                     [
                       shortTime(last.updatedAt),
-                      plainPreview(last.lastText ?? ''),
+                      plainPreviewLines(last.lastText ?? '', 1),
                     ].where((s) => s.isNotEmpty).join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -195,7 +195,7 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
                         borderRadius: AppShape.radiusLg,
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                         child: Text(
-                          plainPreview(greetings[i]),
+                          plainPreviewLines(greetings[i], 6),
                           maxLines: 6,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
@@ -248,7 +248,8 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
                       key: ValueKey('tavern-chat-${chat.id}'),
                       icon: AppIcons.chat,
                       tinted: false,
-                      title: plainPreview(chat.lastText ?? chat.title),
+                      title: plainPreviewLines(chat.lastText ?? chat.title, 2),
+                      titleMaxLines: 2,
                       subtitle: '${l10n.tavernMessageCount(chat.messageCount)} · ${shortTime(chat.updatedAt)}',
                       onTap: () => Navigator.of(context).push(TavernChatPage.route(chat.id)),
                     ),

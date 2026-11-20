@@ -109,4 +109,26 @@ void main() {
     final path = (await tester.runAsync(() => tavern.path(chat)))!;
     expect(path.where((m) => m.role == TavernRole.user).single.text, '/hello 你好');
   });
+
+  testWidgets('a reply being continued keeps what it said while the rest comes', (tester) async {
+    final (tavern, chat) = await _open(tester);
+    final greeting = (await tester.runAsync(() => tavern.path(chat)))!.single;
+    final opening = greeting.text.trim().split('\n').first.replaceAll('*', '').substring(0, 6);
+    await tester.enterText(find.byType(TextField), '/continue');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('发送'));
+    // Part way: the added words have begun, the old ones are still there.
+    final row = find.byWidgetPredicate(
+      (w) => w.runtimeType.toString() == '_StreamingReply' && w.key == ValueKey('stream-${greeting.nodeId}'),
+    );
+    for (var i = 0; i < 200 && row.evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 5));
+    }
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.textContaining(opening, findRichText: true)), findsWidgets);
+    for (var i = 0; i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 5));
+    }
+    await tester.pumpAndSettle();
+  });
 }

@@ -583,7 +583,7 @@ class _ChatRow extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  plainPreview(chat.lastText ?? ''),
+                  plainPreviewLines(chat.lastText ?? '', 2),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary, height: 1.4),
@@ -877,7 +877,7 @@ class _ContinueCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    plainPreview(chat.lastText ?? ''),
+                    plainPreviewLines(chat.lastText ?? '', 4),
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary, height: 1.4),
@@ -896,6 +896,19 @@ class _ContinueCard extends ConsumerWidget {
 /// white space folded.
 String plainPreview(String text) =>
     text.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll(RegExp(r'[*_`#>]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+
+/// [plainPreview] for a text of at most [lines] lines, cut to more than any
+/// of its lines could hold: a text is laid out whole however few lines it
+/// shows (a 4,000-character reply in two lines takes 13 times what 300
+/// characters do).
+String plainPreviewLines(String text, int lines) {
+  final plain = plainPreview(text);
+  var end = lines * 300;
+  if (plain.length <= end) return plain;
+  // Not between the halves of a surrogate pair.
+  if (plain.codeUnitAt(end - 1) & 0xFC00 == 0xD800) end--;
+  return plain.substring(0, end);
+}
 
 /// The most used tags, most used first.
 /// The shelf's most used tags, leaving out any every character has: picking

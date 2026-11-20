@@ -362,8 +362,9 @@ class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with Sing
     if (typing == null || rate == null) return _ticker.stop();
     final shown = (elapsed.inMicroseconds * rate / Duration.microsecondsPerSecond).floor() + 1;
     if (shown >= typing.cuts.length) return setState(_stopTyping);
-    if (shown == typing.shown) return;
-    setState(() => typing.shown = shown);
+    if (shown == typing.shown.value) return;
+    // Only the typed text builds again, not the stage around it.
+    typing.shown.value = shown;
     // A page taller than the box: keep the newest typed line in sight.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final typed = _typedKey.currentContext?.findRenderObject();
@@ -588,11 +589,14 @@ class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with Sing
                                   top: 0,
                                   left: 0,
                                   right: 0,
-                                  child: MarkdownBody(
-                                    key: _typedKey,
-                                    text: typing.typed,
-                                    streaming: true,
-                                    selectable: false,
+                                  child: ValueListenableBuilder(
+                                    valueListenable: typing.shown,
+                                    builder: (context, _, _) => MarkdownBody(
+                                      key: _typedKey,
+                                      text: typing.typed,
+                                      streaming: true,
+                                      selectable: false,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -657,9 +661,9 @@ class _Typing {
   final List<int> cuts;
 
   /// How many of [cuts] show.
-  int shown = 1;
+  final shown = ValueNotifier(1);
 
-  String get typed => text.substring(0, cuts[shown - 1]);
+  String get typed => text.substring(0, cuts[shown.value - 1]);
 }
 
 /// What comes at once, whole: an HTML tag, an image, a link.

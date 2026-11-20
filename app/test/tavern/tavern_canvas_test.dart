@@ -58,6 +58,7 @@ Future<(PreviewTavern, String, _Canvas)> _chat(
   bool group = false,
   Duration tick = Duration.zero,
   List<Override> overrides = const [],
+  int lines = 0,
 }) async {
   SharedPreferences.setMockInitialValues({TavernSettingsController.canvasKey: true, ...prefs});
   final tavern = PreviewTavern(tick: tick);
@@ -72,7 +73,13 @@ Future<(PreviewTavern, String, _Canvas)> _chat(
     ))!;
   } else {
     chat = (await tester.runAsync(() => tavern.createChat('sample-innkeeper')))!;
-    await tester.runAsync(() => tavern.narrate(chat, '*雨停了。*\n\n"进来吧，" 她说。'));
+    await tester.runAsync(() async {
+      // [lines] of yours before the narration.
+      for (var i = 1; i <= lines; i++) {
+        await tavern.sendOnly(chat, '第$i句');
+      }
+      await tavern.narrate(chat, '*雨停了。*\n\n"进来吧，" 她说。');
+    });
   }
   tester.view.physicalSize = const Size(390, 844) * 2;
   tester.view.devicePixelRatio = 2;
@@ -438,6 +445,13 @@ void main() {
     canvas.onMenu!(narration.nodeId);
     await tester.pumpAndSettle();
     expect(find.text('复制'), findsOneWidget);
+  });
+
+  testWidgets('a page of display passes, one a frame, is taken in together: not a canvas build each', (tester) async {
+    final (_, _, canvas) = await _chat(tester, lines: 58);
+    expect(canvas.entries, hasLength(60));
+    expect(canvas.entries.where((e) => e.html == '<p>第58句</p>'), hasLength(1));
+    expect(canvas.builds, lessThan(15));
   });
 
   testWidgets('in a group, the reply being written goes under whoever speaks now', (tester) async {
