@@ -229,6 +229,26 @@ test('an edit due while a write is out: written after it, against what it wrote'
   assert.equal(extra(writes[1][1].raw).enabled, true);
 });
 
+test('another preset chosen while a write is out: its settings at once, and an edit of it its own', async () => {
+  const { w, calls } = page({ slow: 300 });
+  extra(w.SillyTavern.chatCompletionSettings).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(350);
+  const b = preset(false);
+  b.temperature = 2;
+  w.res.preset = { ref: { kind: 'current' }, raw: b, version: 'b1', source: { loadedPresetId: 'p2' } };
+  const s = w.SillyTavern.chatCompletionSettings;
+  assert.equal(s.temperature, 2);
+  s.temperature = 3;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(900);
+  const writes = calls.filter((c) => c[0] === 'replacePreset');
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1][1].raw.temperature, 3);
+  // Written into B, the one the copy is.
+  assert.equal(calls.filter((c) => c[0] === 'readPreset')[1][1].ref.presetId, 'p2');
+});
+
 test('presetDelivered: SETTINGS_UPDATED when the preset changed, OAI_PRESET_CHANGED_AFTER when it is another', () => {
   const { w, fired } = page();
   const a = { version: 'v1', source: { loadedPresetId: 'p1' } };

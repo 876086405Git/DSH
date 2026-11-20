@@ -503,6 +503,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     // The handlers the lost page was running will not answer; its music
     // stopped with it.
     widget.calls?.pageLost();
+    // Its script buttons too, even while the new page waits for what it loads.
+    widget.calls?.hostButtons.value = const [];
     _audio?.report(null);
     setState(() {
       _guard = WebViewGuard(onGone: _onGone);

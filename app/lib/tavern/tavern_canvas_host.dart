@@ -24,11 +24,14 @@ const tavernCanvasHostJs = r'''
     emit:eventEmit,makeFirst:eventMakeFirst,makeLast:eventMakeLast};
   SillyTavern.eventTypes=SillyTavern.event_types=events;
   SillyTavern.mainApi='openai';
-  var stCopy=null,stBase=null,stOf=null,stTimer=0,stBusy=0;
+  // stCopyOf: which preset the copy is (presetIdentity); another chosen, the
+  // copy is that one's at once, an edit of the last one going on or not.
+  var stCopy=null,stBase=null,stOf=null,stCopyOf=null,stTimer=0,stBusy=0;
   Object.defineProperty(SillyTavern,'chatCompletionSettings',{enumerable:true,get:function(){
     var p=res.preset;if(!p)return undefined;
-    if(!stBusy&&stOf!==p.version){
-      stOf=p.version;stBase=p.raw;stCopy=clone(p.raw);stCopy.preset_settings_openai=getLoadedPresetName();
+    var of=presetIdentity(p);
+    if(of!==stCopyOf||!stBusy&&stOf!==p.version){
+      stOf=p.version;stCopyOf=of;stBase=p.raw;stCopy=clone(p.raw);stCopy.preset_settings_openai=getLoadedPresetName();
     }
     return stCopy;
   }});
@@ -37,13 +40,13 @@ const tavernCanvasHostJs = r'''
     if((was.source||{}).loadedPresetId!==(now.source||{}).loadedPresetId)fire('OAI_PRESET_CHANGED_AFTER',[]);
     fire('SETTINGS_UPDATED',[]);
   }
-  // Which preset an edit is of: the one in use when it began.
+  // Which preset an edit is of: the one its copy is.
   function presetIdentity(p){var s=(p&&p.source)||{};return JSON.stringify([p&&p.ref,s.loadedPresetId||null]);}
   // One write at a time: an edit due while one is out waits for it, then is
   // compared with what that wrote (stAgain; a later one joins it).
   var stTarget=null,stSaving=false,stAgain=false;
   function saveSettingsDebounced(){
-    if(!stTimer){stBusy++;stTarget=presetIdentity(res.preset);}
+    if(!stTimer){stBusy++;stTarget=stCopyOf;}
     clearTimeout(stTimer);stTimer=setTimeout(saveSettings,300);
   }
   // Not kept (refused, or another preset chosen meanwhile): the preset as it
@@ -53,7 +56,7 @@ const tavernCanvasHostJs = r'''
     stTimer=0;
     if(stSaving){if(stAgain)stBusy--;stAgain=true;return;}
     var target=stTarget;stTarget=null;
-    if(presetIdentity(res.preset)!==target){dropEdit();return;}
+    if(presetIdentity(res.preset)!==target||stCopyOf!==target){dropEdit();return;}
     var changed={},n=0;
     for(var k in stCopy||{})if(k!=='preset_settings_openai'&&JSON.stringify(stCopy[k])!==JSON.stringify(stBase[k])){changed[k]=clone(stCopy[k]);n++;}
     if(!n){stBusy--;return;}
@@ -64,7 +67,7 @@ const tavernCanvasHostJs = r'''
     (id&&!src.working?call('readPreset',{ref:{kind:'stored',presetId:id}}):Promise.resolve(res.preset)).then(function(s){
       return call('replacePreset',{ref:s.ref,raw:Object.assign(clone(s.raw),changed),expectedVersion:s.version});
     }).then(function(r){
-      stBase=Object.assign({},stBase,changed);
+      if(stCopyOf===target)stBase=Object.assign({},stBase,changed);
       if(r.ref.kind==='current'&&presetIdentity(res.preset)===target)res.preset=r;
       stSaving=false;stBusy--;
       if(stAgain){stAgain=false;if(stTimer)stBusy--;else saveSettings();}
