@@ -248,16 +248,15 @@ class _TavernRegexEditPageState extends ConsumerState<TavernRegexEditPage> {
           ),
         ],
       ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: OutlinedButton(
+      // A row like the rest, under the fields it tries.
+      SettingsSection(
+        children: [
+          SettingsTile(
             key: const ValueKey('tavern-regex-edit-try'),
-            onPressed: enabled ? _try : null,
-            child: Text(l10n.tavernRegexTryDraft),
+            title: l10n.tavernRegexTryDraft,
+            onTap: enabled ? _try : null,
           ),
-        ),
+        ],
       ),
       SettingsSection(
         title: l10n.tavernRegexPlacement,

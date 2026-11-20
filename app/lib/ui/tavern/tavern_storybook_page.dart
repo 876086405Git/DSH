@@ -24,7 +24,6 @@ import '../settings/settings_widgets.dart';
 import '../share/share_export.dart' show shareExporterProvider;
 import '../share/share_gallery.dart' show shareImagesSettled;
 import '../shell/page_frame.dart';
-import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'tavern_chat_files.dart' show tavernChatSinkProvider, tavernChatFileName;
 import 'tavern_ink.dart';
@@ -229,6 +228,9 @@ class _TavernStorybookPageState extends ConsumerState<TavernStorybookPage> {
                           textInputAction: TextInputAction.done,
                           decoration: InputDecoration(
                             hintText: l10n.tavernStorybookDefaultTitle(widget.character),
+                            // The text starts where the rows' titles below do.
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
@@ -244,13 +246,11 @@ class _TavernStorybookPageState extends ConsumerState<TavernStorybookPage> {
                     children: [
                       SettingsTile(
                         key: const ValueKey('tavern-book-epub'),
-                        icon: AppIcons.bookmark,
                         title: l10n.tavernStorybookEpub,
                         onTap: empty || _busy ? null : _epub,
                       ),
                       SettingsTile(
                         key: const ValueKey('tavern-book-text'),
-                        icon: AppIcons.shareText,
                         title: l10n.tavernStorybookText,
                         onTap: empty || _busy ? null : _text,
                       ),
@@ -274,14 +274,12 @@ class _TavernStorybookPageState extends ConsumerState<TavernStorybookPage> {
                       ),
                       SettingsTile(
                         key: const ValueKey('tavern-book-save'),
-                        icon: AppIcons.save,
                         title: l10n.tavernStorybookSave,
                         chevron: false,
                         onTap: empty || _busy ? null : () => _image(save: true),
                       ),
                       SettingsTile(
                         key: const ValueKey('tavern-book-share'),
-                        icon: AppIcons.shareImage,
                         title: l10n.tavernStorybookShare,
                         chevron: false,
                         onTap: empty || _busy ? null : () => _image(save: false),

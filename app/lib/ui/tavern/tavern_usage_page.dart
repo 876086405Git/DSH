@@ -11,7 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_provider.dart';
 import '../../tavern/tavern_session_usage.dart';
-import '../common/app_sheet.dart';
 import '../features/feature_kit.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
@@ -41,10 +40,12 @@ class TavernUsagePage extends ConsumerWidget {
         if (all == null)
           const QuietSpinner()
         else if (all.isEmpty)
-          Padding(
+          EmptyView(
             key: const ValueKey('tavern-usage-none'),
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 16),
-            child: Text(l10n.tavernSessionUsageNone, style: quiet),
+            icon: AppIcons.chart,
+            title: l10n.tavernSessionUsageNone,
+            compact: true,
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
           )
         else ...[
           // The whole, as 本局用量 shows one chat.
@@ -92,14 +93,11 @@ class TavernUsagePage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
             child: Text(l10n.tavernUsageAllNote, style: quiet),
           ),
-          SheetGroup(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          SettingsSection(
             children: [
               for (final c in all)
                 SettingsTile(
                   key: ValueKey('tavern-usage-${c.chat.id}'),
-                  icon: AppIcons.chat,
-                  tinted: false,
                   title: [
                     ?names[c.chat.characterId],
                     if (c.chat.title.trim().isNotEmpty) c.chat.title.trim(),
