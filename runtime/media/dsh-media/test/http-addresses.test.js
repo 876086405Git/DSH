@@ -50,11 +50,11 @@ test('public A plus DNS64 AAAA reaches the existing pinned HTTPS request', async
     assert.equal(mocked.mock.callCount(), 1);
     assert.equal(sent.url.href, 'https://media.test/image');
     assert.equal(sent.options.servername, 'media.test');
-    assert.equal(sent.options.family, 4);
-    assert.equal(sent.options.autoSelectFamily, false);
+    assert.equal(sent.options.family, 0);
+    assert.equal(sent.options.autoSelectFamily, true);
     sent.options.lookup('media.test', { all: true }, (error, pinned) => {
       assert.equal(error, null);
-      assert.deepEqual(pinned, [addresses[0]]);
+      assert.deepEqual(pinned, addresses);
     });
     addresses.push({ address: '64:ff9b::169.254.169.254', family: 6 });
     await assert.rejects(transport('https://media.test/image', { maxBytes: 100 }), { code: 'unsafe_url' });
