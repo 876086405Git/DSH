@@ -60,6 +60,7 @@ internal class PetMenuView(
     private val shadowAlpha = if (night) 0.5f else 0.22f
 
     private var rows = rows
+    val rowCount: Int get() = rows.size
     private var geometry: PetWheelGeometry? = null
     private var gesture: PetWheelGesture? = null
     /** The gesture began on this window (a tap on the open fan), not on the pet. */
