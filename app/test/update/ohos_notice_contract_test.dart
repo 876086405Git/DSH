@@ -149,7 +149,8 @@ void main() {
   for (final missing in [true, false]) {
     test('OH bundle ${missing ? 'missing' : 'invalid'} retains compiled version and can check', () async {
       device = missing ? null : {'versionName': 'not-a-version', 'versionCode': 42};
-      http.routes[feed] = (_, _) => textResponse(jsonEncode(manifest()));
+      // The compiled version moves with every release; the feed must stay ahead of it.
+      http.routes[feed] = (_, _) => textResponse(jsonEncode(manifest()..['version'] = '99.0.0+1'));
       final c = container();
       final control = c.read(appUpdateProvider.notifier);
       await control.ready;

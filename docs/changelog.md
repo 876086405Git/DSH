@@ -2,6 +2,44 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.3.0 · 2026-11-21
+
+### 中文
+
+- **顶栏一键语音通话。** 首页右上角、新对话按钮旁边多了通话按钮，新对话里也能直接打。
+- **长按就能选字。** 长按回复或自己发的消息直接选中按到的词，拖两端改范围；选区上有复制、引用、分享、朗读、全选，「更多」里是原来的消息菜单。自己发的消息也能引用了。朗读选中的文字时，里面的密码、密钥不会念出来。
+- **远程主机：对话备份和网页版。** 远程主机页可以把主机上的对话加密备份到手机，再恢复到原来的或另一台主机（每次恢复新建对话，不覆盖；附件和工作区源码不迁移）。主机支持时，还能在 App 里直接打开主机的 DSH 网页版，不用把登录凭据交给浏览器；服务繁忙时会提示「人太多了，请稍后重试」。
+- **后台保护（需要自己打开）。** 设置里新增后台运行保护，默认关闭。打开后本机长任务切到后台更不容易被系统杀掉，被系统收回时如实显示，不会假装还在运行。iOS 可以选静音音频或后台定位来保活，都要自己授权，不保存也不上传位置。
+- **酒馆。**
+  - 支持酒馆助手脚本库：全局、预设、角色卡里的脚本都能运行。预设的脚本能拿到 SillyTavern 的事件和当前预设，像小猫之神这类预设的菜单现在能出来；脚本面板在画布里显示，开关会写回预设。
+  - 大卡明显不卡了：重卡导入、卡库列表、长历史显示快了数倍，卡库占用减少约三分之二。前端卡只渲染屏幕上看得见的消息，写回复时少了很多多余重建。新增「省电渲染」开关（酒馆设置 › 显示，默认关）：关掉卡片网页里的毛玻璃，循环动画只播一遍。
+  - 上下文满了一次裁掉一截，而不是每条都裁，模型的缓存能持续命中，更快也更省钱（默认开）。
+  - 前端卡的开场白不再显示成一堆代码；深色模式下卡片颜色和网页文字看得清；酒馆界面统一了间距、样式和文案，加了克制的动效。
+- **伙伴小屋更清晰。** 小屋按屏幕本身的像素密度渲染（之前最多按 2 倍），卡顿时临时降低的清晰度流畅后会自己升回来。
+- **新桌宠「小粉鱼」。** 第三只内置宠物，带 18 种状态动画和 3 段待机小动作；切换动作时淡入淡出。
+- **分享长图。** 分享成图片时保留完整正文，生成一张长图，不再截掉后半段。
+- **本机引擎默认用 tawcroot 启动**（Android 10 及以上）：启动更快；起不来会自动退回原来的兼容启动（PRoot），不弹故障卡。之前手动关过的保持原样。卓易通上 PRoot 启动失败时，故障卡上会出现「用 tawcroot 启动」。
+- **修复。** 升级到 1.1.0 后本机新建对话失败；本机用久了会话列表超过 8 MB 就整个加载失败；配了多台 DNS 时第一台拒绝就联网失败；插件配置里 API Key 填不进去；Android 10 用 Shizuku 授权后手机操控报「身份改变」；HyperOS / Android 16 一直 60 Hz（刷新率设置现在也作用到画面本身）；APK 已下好但空间只够一份时误报空间不足；同一路径的图片被覆盖后，旧消息里显示成新图；模型列表接口返回 404 时现在会提示可以手动添加模型；模型选择里过长的名字显示不全；伙伴自动想起记忆时误把子代理配置当成对话内容；桌宠、悬浮窗菜单、伙伴小组件和网页岛的几处显示问题。
+- **验证情况。** 这一版的新功能大部分只经过自动测试和编译检查，tawcroot 默认启动、后台保护、远程备份和网页版都没有在各种真机上完整走过。iOS 安装包等 CI 编完会补到这个版本下；鸿蒙 HAP 这一版仍不提供。遇到问题请导出诊断并开 issue。
+
+### English
+
+- **One-tap voice call in the top bar.** A call button sits next to New chat in the top right, and works from a new chat too.
+- **Long-press to select text.** Long-press a reply or your own message to select the word under your finger, then drag the handles. The selection bar has Copy, Quote, Share, Read aloud and Select all; More opens the usual message menu. Your own messages can be quoted too. Reading a selection aloud skips any passwords or keys in it.
+- **Remote hosts: chat backup and the web app.** The remote host page can back up the host's chats to the phone, encrypted, and restore them to the same or another host (each restore makes a new chat and overwrites nothing; attachments and workspace source are not moved). When the host supports it, you can open its DSH web app inside the app without handing your credentials to a browser; when the service is busy it says so and asks you to try later.
+- **Background protection (opt-in).** Settings has a new background protection option, off by default. When on, long local tasks are less likely to be killed in the background, and when the system takes the time back the app says so instead of pretending the engine is still running. On iOS you can choose silent audio or background location to keep it alive; both need your permission, and location is never stored or sent.
+- **Tavern.**
+  - Tavern Helper script library: scripts from global settings, presets and character cards all run. Preset scripts get SillyTavern's event source and the current preset, so menus from presets such as Meowssiah now show up; the script panel shows in the canvas and its switches are written back to the preset.
+  - Large cards no longer stutter: importing heavy cards, the card library list and long histories are several times faster, and the card library takes about a third of the space. Frontend cards only render the messages on screen, and writing a reply triggers far fewer rebuilds. A new Power-saving rendering switch (Tavern settings › Display, off by default) turns off frosted glass in card pages and plays looping animations once.
+  - When the context fills up, it is trimmed in one larger step instead of one message at a time, so the model's cache keeps hitting: faster and cheaper (on by default).
+  - Frontend cards' opening messages no longer show as raw code; card colors and web text are readable in dark mode; the Tavern screens have consistent spacing, styles and wording, with restrained motion.
+- **Sharper companion room.** The room renders at the screen's own pixel density (it was capped at 2x before), and resolution lowered during stutters comes back once things are smooth.
+- **New pet: Pink Fish.** A third built-in pet with 18 state animations and 3 idle moments; switching animations now fades.
+- **Long share images.** Sharing as an image keeps the whole message and makes one long image instead of cutting off the end.
+- **The local engine starts with tawcroot by default** (Android 10 and later): faster to start; if it can't start, the app falls back to the compatible launcher (PRoot) on its own without an error card. If you turned tawcroot off before, that is kept. On Zhuoyitong, when PRoot fails to start the error card offers Start with tawcroot.
+- **Fixes.** New local chats failing after upgrading to 1.1.0; the local chat list failing to load once it grew past 8 MB; no network when the first of several configured DNS servers refused; API keys that couldn't be entered in plugin settings; phone control reporting "identity changed" on Android 10 after Shizuku authorization; HyperOS / Android 16 stuck at 60 Hz (the refresh rate setting now applies to the drawing surface too); a false out-of-space error when the APK was already downloaded; older messages showing the new image after a file at the same path was overwritten; a 404 from the model list now says models can be added by hand; long model names cut off in the model picker; the companion's automatic memory recall mistaking subagent settings for conversation; several display issues in pets, the floating menu, the companion widget and web islands.
+- **Testing.** Most new features in this version have only been checked by automated tests and builds; tawcroot by default, background protection, remote backup and the web app have not been fully tried on a range of real devices. The iOS package will be added to this release once CI finishes; there is still no HarmonyOS HAP in this version. If you run into a problem, please export diagnostics and open an issue.
+
 ## 1.2.0 · 2026-11-18
 
 ### 中文
