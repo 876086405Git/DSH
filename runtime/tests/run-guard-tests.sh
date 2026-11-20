@@ -68,7 +68,7 @@ if [[ "$rc" == 0 && "$TITLE_TESTS" == 1 ]]; then
   "$NODE" "$HERE/title-cache-regression.mjs" "$PREFIX"
   "$NODE" "$HERE/title-cache-stat-regression.mjs" "$PREFIX"
   "$NODE" "$HERE/title-cache-scale.mjs" "$PREFIX"
-  PATH="$(dirname "$NODE"):$PATH" TITLE_CACHE_PORT="$((PORT + 1))" \
+  PATH="$(dirname "$NODE"):$PATH" TITLE_CACHE_PORT=0 \
     python3 "$HERE/title-cache-live.py" patched "$PREFIX" "$TMP/title-live"
 fi
 exit $rc

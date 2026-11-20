@@ -4,17 +4,18 @@ mode=sys.argv[1]; prefix=pathlib.Path(sys.argv[2]).resolve(); home=pathlib.Path(
 procs=[]; logs=[]
 def start(port,role):
  path=root/(mode+'-'+role+'.log'); f=open(path,'w');logs.append(f)
- p=subprocess.Popen(['node',str(prefix/'node_modules/@deepseek-ai/dsh/lib/bin.js'),'web','--no-open','--port',str(port)],stdout=f,stderr=subprocess.STDOUT,env={**os.environ,'DSH_HOME':str(home),'TZ':'Asia/Shanghai'});procs.append(p)
+ p=subprocess.Popen(['node',str(prefix/'node_modules/@deepseek-ai/dsh/lib/bin.js'),'web','--no-open','--host','127.0.0.1','--port',str(port)],stdout=f,stderr=subprocess.STDOUT,env={**os.environ,'DSH_HOME':str(home),'TZ':'Asia/Shanghai'});procs.append(p)
  for _ in range(300):
-  txt=path.read_text();m=re.search(r'token=([\w-]+)',txt)
+  txt=path.read_text();m=re.search(r'dsh web: (http://127\.0\.0\.1:\d+)/\?token=([\w-]+)',txt)
   if m: break
   if p.poll() is not None:raise RuntimeError(txt[-2000:])
   time.sleep(.1)
  else:raise TimeoutError('boot')
- op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor());op.open(f'http://127.0.0.1:{port}/?token='+m[1])
+ base=m[1]
+ op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor());op.open(base+'/?token='+m[2])
  def rpc(method,args):
   data=dict(type='client-request',rpcId='title-test',method=method,payload={'args':args})
-  req=urllib.request.Request(f'http://127.0.0.1:{port}/api/'+method,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'})
+  req=urllib.request.Request(base+'/api/'+method,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'})
   result=json.load(op.open(req,timeout=15))['result']
   if not result['ok']:raise RuntimeError(result)
   return result.get('value')
@@ -31,7 +32,7 @@ def sample(rpc,label):
  start=time.perf_counter();rows=rpc('session/list',{'_request':{}})['items'];elapsed=(time.perf_counter()-start)*1000
  row=next(x for x in rows if x['sessionId']=='title-two-process'); print(json.dumps({'case':label,'title':row.get('projections',{}).get('values',{}).get('title'),'blank':row['blank'],'elapsed_ms':round(elapsed,3)},ensure_ascii=False),flush=True);return row
 try:
- port=int(os.environ.get('TITLE_CACHE_PORT','38942'));reader=start(port,'reader');writer=start(port+1,'writer')
+ port=int(os.environ.get('TITLE_CACHE_PORT','38942'));reader=start(port,'reader');writer=start(0 if port==0 else port+1,'writer')
  writer('session/create',{'request':{'sessionId':'title-two-process','cwd':str(home)}})
  writer('session/rename',{'request':{'sessionId':'title-two-process','title':'First title'}});durable('First title')
  row=sample(reader,'external-create')
