@@ -132,7 +132,7 @@ class UserBubble extends StatelessWidget {
         decoration: ShapeDecoration(color: surfaces.userBubble, shape: AppShape.bubble),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: MessageSelection(onQuote: onQuote, onMore: () => _menu(context), child: content),
+          child: MessageSelection(text: _shown, onQuote: onQuote, onMore: () => _menu(context), child: content),
         ),
       ),
     );

@@ -195,6 +195,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
         // when the turn ends.
         if (text.isNotEmpty)
           MessageSelection(
+            text: text,
             onQuote: widget.onQuote,
             onMore: () => _menu(text),
             child: _textAfterThinking ? _FirstTextIn(child: _markdown(text, streaming)) : _markdown(text, streaming),
