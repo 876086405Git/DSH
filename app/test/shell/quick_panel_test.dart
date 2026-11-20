@@ -8,8 +8,6 @@
 
 import 'dart:ui' show GestureSettings;
 
-import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
-
 import 'package:dsh_app/state/adaptive_layout_state.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/quick_panel_state.dart';
@@ -218,9 +216,6 @@ void main() {
       await pull(3);
       expect(_panel, findsNothing);
 
-      // Past the double-tap window: a second touch-and-drag on message text
-      // right after the first is the selection's double-tap drag.
-      await tester.pump(kDoubleTapTimeout);
       await pull(8);
       expect(_panelIn(tester), _panelWidth);
     });

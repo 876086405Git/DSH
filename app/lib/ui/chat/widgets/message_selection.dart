@@ -75,10 +75,23 @@ class _MessageSelectionState extends State<MessageSelection> {
     );
   }
 
+  /// The selection's own touch slop. Its touch recognizer claims a sideways
+  /// drag past the slop, though a one-finger drag selects nothing on touch:
+  /// the drawer's and 快捷入口's swipes over a message would end there. Out of
+  /// reach, the long-press still starts a selection and the handles still drag.
+  static const _unreachable = DeviceGestureSettings(touchSlop: double.infinity);
+
   @override
-  Widget build(BuildContext context) => SelectionArea(
-    onSelectionChanged: (content) => _selected = content?.plainText ?? '',
-    contextMenuBuilder: _toolbar,
-    child: widget.child,
-  );
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(gestureSettings: _unreachable),
+      child: SelectionArea(
+        onSelectionChanged: (content) => _selected = content?.plainText ?? '',
+        contextMenuBuilder: _toolbar,
+        // The message keeps the real slop: a code block still scrolls sideways.
+        child: MediaQuery(data: media, child: widget.child),
+      ),
+    );
+  }
 }
