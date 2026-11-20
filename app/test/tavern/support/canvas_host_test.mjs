@@ -22,7 +22,7 @@ function preset(on = true) {
   };
 }
 
-function page({ loadedPresetId = 'p1', refuse = false } = {}) {
+function page({ loadedPresetId = 'p1', refuse = false, working = false } = {}) {
   const fired = [];
   const calls = [];
   const posts = [];
@@ -38,7 +38,7 @@ function page({ loadedPresetId = 'p1', refuse = false } = {}) {
     SillyTavern: {},
     events: { MESSAGE_RECEIVED: 'MESSAGE_RECEIVED' },
     res: {
-      preset: { ref: { kind: 'current' }, raw: preset(), version: 'v1', source: { loadedPresetId } },
+      preset: { ref: { kind: 'current' }, raw: preset(), version: 'v1', source: { loadedPresetId, working } },
     },
     clone: (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v))),
     // Kept as plain values of this realm, to compare.
@@ -165,6 +165,40 @@ test('a write refused: said so, and the preset as it is read again by whoever li
   assert.deepEqual(errors, ['changed meanwhile']);
   assert.deepEqual(fired, [['SETTINGS_UPDATED', []]]);
   assert.equal(extra(w.SillyTavern.chatCompletionSettings).enabled, true);
+});
+
+test('a write refused: a listener reading the settings then gets the preset as it is', async () => {
+  const { w } = page({ refuse: true });
+  extra(w.SillyTavern.chatCompletionSettings).enabled = false;
+  const seen = [];
+  w.fire = () => seen.push(extra(w.SillyTavern.chatCompletionSettings).enabled);
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(400);
+  assert.deepEqual(seen, [true]);
+});
+
+test('another preset chosen while an edit waits: the edit is not written into it', async () => {
+  const { w, calls, fired } = page();
+  extra(w.SillyTavern.chatCompletionSettings).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  w.res.preset = { ref: { kind: 'current' }, raw: preset(), version: 'b1', source: { loadedPresetId: 'p2' } };
+  await wait(400);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(fired, [['SETTINGS_UPDATED', []]]);
+  assert.equal(extra(w.SillyTavern.chatCompletionSettings).enabled, true);
+});
+
+test('a working copy in use: written there, as generation reads it, not to the library one', async () => {
+  const { w, calls } = page({ working: true });
+  extra(w.SillyTavern.chatCompletionSettings).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(400);
+  assert.deepEqual(
+    calls.map((c) => c[0]),
+    ['replacePreset'],
+  );
+  assert.deepEqual(calls[0][1].ref, { kind: 'current' });
+  assert.equal(calls[0][1].expectedVersion, 'v1');
 });
 
 test('presetDelivered: SETTINGS_UPDATED when the preset changed, OAI_PRESET_CHANGED_AFTER when it is another', () => {
