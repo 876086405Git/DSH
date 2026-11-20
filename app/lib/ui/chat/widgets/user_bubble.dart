@@ -38,6 +38,7 @@ class UserBubble extends StatelessWidget {
     this.pendingIcon = AppIcons.queued,
     this.pendingActions = const [],
     this.onEdit,
+    this.onQuote,
   });
 
   final String text;
@@ -57,31 +58,39 @@ class UserBubble extends StatelessWidget {
   /// bubbles: they have "撤回" instead).
   final VoidCallback? onEdit;
 
+  /// "引用" in the long-press menu (and in 选择文字); null leaves it out.
+  final ValueChanged<String>? onQuote;
+
   /// What the bubble shows: a generation request without its header.
   String get _shown => GenerateHeader.parse(text)?.description ?? text;
 
   Future<void> _menu(BuildContext context) async {
     final onEdit = this.onEdit;
+    final onQuote = this.onQuote;
     final action = await showMessageMenu(
       context,
       // 菜单顶部的预览也是显示,同样遮挡;预览会把 `**` 当粗体删掉,
       // 所以这里用 •。
       text: maskSecrets(_shown, mark: '•'),
-      actions: [MessageAction.copy, MessageAction.selectText, if (onEdit != null) MessageAction.edit],
+      actions: [
+        MessageAction.copy,
+        MessageAction.selectText,
+        if (onQuote != null) MessageAction.quote,
+        if (onEdit != null) MessageAction.edit,
+      ],
     );
     if (!context.mounted || action == null) return;
     switch (action) {
       case MessageAction.copy:
         await copyMessage(context, _shown);
       case MessageAction.selectText:
-        await showSelectTextSheet(context, _shown);
+        await showSelectTextSheet(context, _shown, onQuote: onQuote);
       case MessageAction.edit:
         onEdit?.call();
-      case MessageAction.quote ||
-          MessageAction.share ||
-          MessageAction.readAloud ||
-          MessageAction.regenerate ||
-          MessageAction.branch:
+      case MessageAction.quote:
+        // The message's own words: an earlier quote it opened with stays out.
+        onQuote?.call(splitQuote(_shown).body);
+      case MessageAction.share || MessageAction.readAloud || MessageAction.regenerate || MessageAction.branch:
         break;
     }
   }
