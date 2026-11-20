@@ -214,6 +214,10 @@ class TavernVisualNovelView extends StatefulWidget {
 }
 
 class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with SingleTickerProviderStateMixin {
+  /// A name and the one it replaces, both at the line's start.
+  static Widget _startAligned(Widget? current, List<Widget> previous) =>
+      Stack(alignment: AlignmentDirectional.centerStart, children: [...previous, ?current]);
+
   /// The sprite for page [at]: by her words on it, or on her page before
   /// yours; her neutral one before she has said anything.
   String? _spriteAt(int at) {
@@ -526,15 +530,21 @@ class _TavernVisualNovelViewState extends State<TavernVisualNovelView> with Sing
                 children: [
                   Row(
                     children: [
+                      // Who speaks changes with the page, in the same cross-fade.
                       Expanded(
-                        child: Text(
-                          speaker,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: user ? dsh.textTertiary : tavernNameColor(context, speaker, lead: widget.name),
-                            fontWeight: FontWeight.w600,
-                            fontFamily: user ? null : tavernNameFont(context),
+                        child: AnimatedSwitcher(
+                          duration: AppMotion.of(context, AppMotion.quick),
+                          layoutBuilder: _startAligned,
+                          child: Text(
+                            speaker,
+                            key: ValueKey(speaker),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: user ? dsh.textTertiary : tavernNameColor(context, speaker, lead: widget.name),
+                              fontWeight: FontWeight.w600,
+                              fontFamily: user ? null : tavernNameFont(context),
+                            ),
                           ),
                         ),
                       ),

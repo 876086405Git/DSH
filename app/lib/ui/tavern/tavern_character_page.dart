@@ -31,6 +31,7 @@ import 'tavern_live2d_tile.dart';
 import 'tavern_lorebooks_page.dart';
 import 'tavern_report_page.dart';
 import 'tavern_lorebook_page.dart';
+import 'tavern_arrive.dart';
 import 'tavern_widgets.dart';
 
 class TavernCharacterPage extends ConsumerStatefulWidget {
@@ -48,7 +49,9 @@ class TavernCharacterPage extends ConsumerStatefulWidget {
 /// The character page's tabs.
 enum TavernCharacterTab { chats, card, setup }
 
-class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
+class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> with SingleTickerProviderStateMixin {
+  /// The tab switched to fades in.
+  late final _swap = TavernSwapFade(this);
   PageController? _greetings;
   double? _greetingsWidth;
   int _greeting = 0;
@@ -57,6 +60,7 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
 
   @override
   void dispose() {
+    _swap.dispose();
     _greetings?.dispose();
     super.dispose();
   }
@@ -185,216 +189,223 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
                 PillSegment(TavernCharacterTab.setup, l10n.tavernCharacterTabSetup),
               ],
               selected: _tab,
-              onChanged: (tab) => setState(() => _tab = tab),
+              onChanged: (tab) {
+                setState(() => _tab = tab);
+                _swap.play(context);
+              },
             ),
           ),
         ),
-        if (_tab == TavernCharacterTab.chats)
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 168,
-                  child: LayoutBuilder(
-                    builder: (context, box) => PageView.builder(
-                      key: const ValueKey('tavern-greetings'),
-                      controller: _greetingsFor(box.maxWidth),
-                      itemCount: greetings.length,
-                      onPageChanged: (i) => setState(() => _greeting = i),
-                      itemBuilder: (context, i) => Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: GlassSurface(
-                          tier: GlassTier.card,
-                          borderRadius: AppShape.radiusLg,
-                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                          child: Text(
-                            plainPreviewLines(greetings[i], 6),
-                            maxLines: 6,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  greetings.length > 1 ? l10n.tavernGreetingOf(_greeting + 1, greetings.length) : l10n.tavernGreeting,
-                  style: AppType.tabular(theme.textTheme.labelSmall!.copyWith(color: dsh.textTertiary)),
-                ),
-                const SizedBox(height: 16),
-                if (last == null)
-                  FilledButton(
-                    key: const ValueKey('tavern-start'),
-                    onPressed: _starting ? null : _start,
-                    child: Text(l10n.tavernStart),
-                  )
-                else
-                  OutlinedButton(
-                    key: const ValueKey('tavern-start'),
-                    onPressed: _starting ? null : _start,
-                    child: Text(l10n.tavernStartNew),
-                  ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-        if (_tab == TavernCharacterTab.chats && chats.isNotEmpty)
-          SliverToBoxAdapter(
-            child: SettingsSection(
-              title: l10n.tavernChats,
-              children: [
-                for (final chat in chats)
-                  GestureDetector(
-                    onLongPress: () => unawaited(
-                      showTavernActions(context, [
-                        (
-                          AppIcons.share,
-                          l10n.tavernExportChat,
-                          () => unawaited(exportTavernChat(context, ref, chat.id, title: _chatTitle(character, chat))),
-                        ),
-                        (AppIcons.delete, l10n.tavernDeleteChat, () => deleteTavernChat(context, ref, chat.id)),
-                      ]),
-                    ),
-                    child: SettingsTile(
-                      key: ValueKey('tavern-chat-${chat.id}'),
-                      icon: AppIcons.chat,
-                      tinted: false,
-                      title: plainPreviewLines(chat.lastText ?? chat.title, 2),
-                      titleMaxLines: 2,
-                      subtitle: '${l10n.tavernMessageCount(chat.messageCount)} · ${shortTime(chat.updatedAt)}',
-                      onTap: () => Navigator.of(context).push(TavernChatPage.route(chat.id)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        // Rows without icons, as on settings' secondary pages: every title
-        // starts at the card's 16.
-        if (_tab == TavernCharacterTab.setup)
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                // What its chats are told: books and packs.
-                SettingsSection(
-                  children: [
-                    // Every card: one without a book starts one here (engine T16).
-                    SettingsTile(
-                      key: const ValueKey('tavern-lorebook'),
-                      title: l10n.tavernLorebook,
-                      subtitle: l10n.tavernLorebookSubtitle,
-                      onTap: () => Navigator.of(context).push(TavernLorebookPage.route(character.id)),
-                    ),
-                    TavernLorebookBindingTile(
-                      key: const ValueKey('tavern-character-lorebooks'),
-                      scope: (source: WorldInfoSource.character, id: character.id),
-                      icon: null,
-                      title: l10n.tavernLorebooksBound,
-                      subtitle: l10n.tavernLorebooksBoundCharacter,
-                      sheetTitle: l10n.tavernLorebookForCharacter(character.name),
-                      note: l10n.tavernLorebookCharacterNote,
-                    ),
-                    // The 玩法包 every chat of this card uses.
-                    SettingsTile(
-                      key: const ValueKey('tavern-character-packs'),
-                      title: l10n.tavernPacks,
-                      subtitle: l10n.tavernPackForCardSubtitle,
-                      onTap: () => Navigator.of(context).push(
-                        TavernPackBindingsPage.route((
-                          kind: TavernGameplayScope.character,
-                          targetId: character.id,
-                        ), characterId: character.id),
-                      ),
-                    ),
-                  ],
-                ),
-                // How its chats show the card.
-                SettingsSection(
-                  footer: Text(l10n.tavernRenderSubtitle),
-                  children: [
-                    // How its chats show the card: its own, or as 酒馆设置 say.
-                    ...switch (ref.watch(tavernCharacterRenderProvider(character.id))) {
-                      final own => [
-                        SettingsSegmentTile<TavernRender>(
-                          key: const ValueKey('tavern-character-render'),
-                          title: l10n.tavernRender,
-                          tinted: false,
-                          segments: [
-                            PillSegment(TavernRender.text, l10n.tavernRenderText),
-                            PillSegment(TavernRender.islands, l10n.tavernRenderIslands),
-                            PillSegment(TavernRender.canvas, l10n.tavernRenderCanvas),
-                          ],
-                          selected: own ?? tavernRenderOf(ref.watch(tavernSettingsProvider)),
-                          onChanged: (r) =>
-                              unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(r)),
-                        ),
-                        if (own != null)
-                          SettingsTile(
-                            key: const ValueKey('tavern-character-render-follow'),
-                            title: l10n.tavernFollowSettings,
-                            onTap: () =>
-                                unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(null)),
-                          ),
-                      ],
-                    },
-                  ],
-                ),
-                SettingsSection(
-                  children: [
-                    TavernLive2dTile(character: character),
-                    // A copy to change with the AI, applied when chosen.
-                    SettingsTile(
-                      key: const ValueKey('tavern-character-drafts'),
-                      title: l10n.tavernDraftsForCard,
-                      onTap: () => Navigator.of(context).push(TavernDraftsPage.route(characterId: character.id)),
-                    ),
-                    // What of the card runs here, and what is kept but not run.
-                    SettingsTile(
-                      key: const ValueKey('tavern-character-report'),
-                      title: l10n.tavernReport,
-                      value: Text(switch (ref
-                          .watch(tavernImportReportProvider((TavernImportKind.character, character.id)))
-                          .value) {
-                        final report? => tavernVerdictText(l10n, report.verdict),
-                        null => '',
-                      }),
-                      onTap: () => Navigator.of(context).push(
-                        TavernImportReportPage.route(
-                          kind: TavernImportKind.character,
-                          assetId: character.id,
-                          name: character.name,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        if (_tab == TavernCharacterTab.card)
-          SliverToBoxAdapter(
-            child: Padding(
-              key: const ValueKey('tavern-character-card'),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        for (final sliver in [
+          if (_tab == TavernCharacterTab.chats)
+            SliverToBoxAdapter(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (full.creatorNotes.isNotEmpty) _Section(title: l10n.tavernCreatorNotes, text: full.creatorNotes),
-                  if (full.description.isNotEmpty) _Section(title: l10n.tavernDefinition, text: full.description),
-                  if (full.creatorNotes.isEmpty && full.description.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                      child: Text(
-                        l10n.tavernCharacterNoDefinition,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary),
+                  SizedBox(
+                    height: 168,
+                    child: LayoutBuilder(
+                      builder: (context, box) => PageView.builder(
+                        key: const ValueKey('tavern-greetings'),
+                        controller: _greetingsFor(box.maxWidth),
+                        itemCount: greetings.length,
+                        onPageChanged: (i) => setState(() => _greeting = i),
+                        itemBuilder: (context, i) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: GlassSurface(
+                            tier: GlassTier.card,
+                            borderRadius: AppShape.radiusLg,
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                            child: Text(
+                              plainPreviewLines(greetings[i], 6),
+                              maxLines: 6,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    greetings.length > 1 ? l10n.tavernGreetingOf(_greeting + 1, greetings.length) : l10n.tavernGreeting,
+                    style: AppType.tabular(theme.textTheme.labelSmall!.copyWith(color: dsh.textTertiary)),
+                  ),
+                  const SizedBox(height: 16),
+                  if (last == null)
+                    FilledButton(
+                      key: const ValueKey('tavern-start'),
+                      onPressed: _starting ? null : _start,
+                      child: Text(l10n.tavernStart),
+                    )
+                  else
+                    OutlinedButton(
+                      key: const ValueKey('tavern-start'),
+                      onPressed: _starting ? null : _start,
+                      child: Text(l10n.tavernStartNew),
+                    ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          if (_tab == TavernCharacterTab.chats && chats.isNotEmpty)
+            SliverToBoxAdapter(
+              child: SettingsSection(
+                title: l10n.tavernChats,
+                children: [
+                  for (final chat in chats)
+                    GestureDetector(
+                      onLongPress: () => unawaited(
+                        showTavernActions(context, [
+                          (
+                            AppIcons.share,
+                            l10n.tavernExportChat,
+                            () =>
+                                unawaited(exportTavernChat(context, ref, chat.id, title: _chatTitle(character, chat))),
+                          ),
+                          (AppIcons.delete, l10n.tavernDeleteChat, () => deleteTavernChat(context, ref, chat.id)),
+                        ]),
+                      ),
+                      child: SettingsTile(
+                        key: ValueKey('tavern-chat-${chat.id}'),
+                        icon: AppIcons.chat,
+                        tinted: false,
+                        title: plainPreviewLines(chat.lastText ?? chat.title, 2),
+                        titleMaxLines: 2,
+                        subtitle: '${l10n.tavernMessageCount(chat.messageCount)} · ${shortTime(chat.updatedAt)}',
+                        onTap: () => Navigator.of(context).push(TavernChatPage.route(chat.id)),
                       ),
                     ),
                 ],
               ),
             ),
-          ),
+          // Rows without icons, as on settings' secondary pages: every title
+          // starts at the card's 16.
+          if (_tab == TavernCharacterTab.setup)
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  // What its chats are told: books and packs.
+                  SettingsSection(
+                    children: [
+                      // Every card: one without a book starts one here (engine T16).
+                      SettingsTile(
+                        key: const ValueKey('tavern-lorebook'),
+                        title: l10n.tavernLorebook,
+                        subtitle: l10n.tavernLorebookSubtitle,
+                        onTap: () => Navigator.of(context).push(TavernLorebookPage.route(character.id)),
+                      ),
+                      TavernLorebookBindingTile(
+                        key: const ValueKey('tavern-character-lorebooks'),
+                        scope: (source: WorldInfoSource.character, id: character.id),
+                        icon: null,
+                        title: l10n.tavernLorebooksBound,
+                        subtitle: l10n.tavernLorebooksBoundCharacter,
+                        sheetTitle: l10n.tavernLorebookForCharacter(character.name),
+                        note: l10n.tavernLorebookCharacterNote,
+                      ),
+                      // The 玩法包 every chat of this card uses.
+                      SettingsTile(
+                        key: const ValueKey('tavern-character-packs'),
+                        title: l10n.tavernPacks,
+                        subtitle: l10n.tavernPackForCardSubtitle,
+                        onTap: () => Navigator.of(context).push(
+                          TavernPackBindingsPage.route((
+                            kind: TavernGameplayScope.character,
+                            targetId: character.id,
+                          ), characterId: character.id),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // How its chats show the card.
+                  SettingsSection(
+                    footer: Text(l10n.tavernRenderSubtitle),
+                    children: [
+                      // How its chats show the card: its own, or as 酒馆设置 say.
+                      ...switch (ref.watch(tavernCharacterRenderProvider(character.id))) {
+                        final own => [
+                          SettingsSegmentTile<TavernRender>(
+                            key: const ValueKey('tavern-character-render'),
+                            title: l10n.tavernRender,
+                            tinted: false,
+                            segments: [
+                              PillSegment(TavernRender.text, l10n.tavernRenderText),
+                              PillSegment(TavernRender.islands, l10n.tavernRenderIslands),
+                              PillSegment(TavernRender.canvas, l10n.tavernRenderCanvas),
+                            ],
+                            selected: own ?? tavernRenderOf(ref.watch(tavernSettingsProvider)),
+                            onChanged: (r) =>
+                                unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(r)),
+                          ),
+                          if (own != null)
+                            SettingsTile(
+                              key: const ValueKey('tavern-character-render-follow'),
+                              title: l10n.tavernFollowSettings,
+                              onTap: () =>
+                                  unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(null)),
+                            ),
+                        ],
+                      },
+                    ],
+                  ),
+                  SettingsSection(
+                    children: [
+                      TavernLive2dTile(character: character),
+                      // A copy to change with the AI, applied when chosen.
+                      SettingsTile(
+                        key: const ValueKey('tavern-character-drafts'),
+                        title: l10n.tavernDraftsForCard,
+                        onTap: () => Navigator.of(context).push(TavernDraftsPage.route(characterId: character.id)),
+                      ),
+                      // What of the card runs here, and what is kept but not run.
+                      SettingsTile(
+                        key: const ValueKey('tavern-character-report'),
+                        title: l10n.tavernReport,
+                        value: Text(switch (ref
+                            .watch(tavernImportReportProvider((TavernImportKind.character, character.id)))
+                            .value) {
+                          final report? => tavernVerdictText(l10n, report.verdict),
+                          null => '',
+                        }),
+                        onTap: () => Navigator.of(context).push(
+                          TavernImportReportPage.route(
+                            kind: TavernImportKind.character,
+                            assetId: character.id,
+                            name: character.name,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          if (_tab == TavernCharacterTab.card)
+            SliverToBoxAdapter(
+              child: Padding(
+                key: const ValueKey('tavern-character-card'),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (full.creatorNotes.isNotEmpty) _Section(title: l10n.tavernCreatorNotes, text: full.creatorNotes),
+                    if (full.description.isNotEmpty) _Section(title: l10n.tavernDefinition, text: full.description),
+                    if (full.creatorNotes.isEmpty && full.description.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                        child: Text(
+                          l10n.tavernCharacterNoDefinition,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ])
+          SliverFadeTransition(opacity: _swap.opacity, sliver: sliver),
       ],
     );
   }

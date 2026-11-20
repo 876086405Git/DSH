@@ -307,6 +307,7 @@
   "tavernSettingsYou": "You",
   "tavernDefaultPersona": "Default persona",
   "tavernPersonaNotSet": "Not set",
+  "tavernLibraryNone": "None",
   "tavernFieldName": "Name",
   "tavernOpenFailed": "The tavern couldn't open",
   "tavernOpenFailedMessage": "The data for characters and chats couldn't be opened. Try again; if it still fails, restart the app.",

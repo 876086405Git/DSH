@@ -39080,6 +39080,12 @@ abstract class L10n {
   /// **'未设置'**
   String get tavernPersonaNotSet;
 
+  /// No description provided for @tavernLibraryNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'无'**
+  String get tavernLibraryNone;
+
   /// No description provided for @tavernFieldName.
   ///
   /// In zh, this message translates to:

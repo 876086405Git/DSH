@@ -93,9 +93,18 @@ class TavernStagePanel extends ConsumerStatefulWidget {
   ConsumerState<TavernStagePanel> createState() => _TavernStagePanelState();
 }
 
-class _TavernStagePanelState extends ConsumerState<TavernStagePanel> {
+class _TavernStagePanelState extends ConsumerState<TavernStagePanel> with SingleTickerProviderStateMixin {
   /// 本局 first: what is used most.
   TavernStageTab _tab = TavernStageTab.session;
+
+  /// The tab switched to fades in.
+  late final _swap = TavernSwapFade(this);
+
+  @override
+  void dispose() {
+    _swap.dispose();
+    super.dispose();
+  }
 
   /// Read when 本回合 is first shown: a whole turn's prompt is large, and
   /// opening the panel should not wait on it.
@@ -135,52 +144,58 @@ class _TavernStagePanelState extends ConsumerState<TavernStagePanel> {
             PillSegment(TavernStageTab.turn, l10n.tavernStageTurn),
           ],
           selected: _tab,
-          onChanged: (tab) => setState(() => _tab = tab),
+          onChanged: (tab) {
+            setState(() => _tab = tab);
+            _swap.play(context);
+          },
         ),
         const SizedBox(height: 16),
-        switch (_tab) {
-          TavernStageTab.session => _Session(
-            key: const ValueKey('tavern-stage-session'),
-            usage: _usage,
-            chatId: widget.chatId,
-            characterId: widget.characterId,
-            scriptsCharacterId: widget.scriptsCharacterId,
-            name: widget.name,
-            busy: widget.busy,
-          ),
-          // The card's state (engine T17), or what an older card's macros saved.
-          TavernStageTab.state => _StateView(
-            key: const ValueKey('tavern-stage-state-view'),
-            chatId: widget.chatId,
-            turn: widget.turn,
-            onChanged: widget.onStateChanged,
-          ),
-          TavernStageTab.director => _DirectorView(
-            key: const ValueKey('tavern-stage-director-view'),
-            chatId: widget.chatId,
-            onSuggest: widget.onSuggest,
-          ),
-          TavernStageTab.turn => FutureBuilder<TavernTurnInspection?>(
-            future: _record ??= _read(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: QuietSpinner()),
-                );
-              }
-              final record = snapshot.data;
-              if (snapshot.hasError || record == null) {
-                return _Waiting(
-                  key: const ValueKey('tavern-stage-turn-none'),
-                  title: l10n.tavernStageTurnNone,
-                  message: l10n.tavernInspectNoneMessage,
-                );
-              }
-              return _ThisTurn(chatId: widget.chatId, record: record);
-            },
-          ),
-        },
+        FadeTransition(
+          opacity: _swap.opacity,
+          child: switch (_tab) {
+            TavernStageTab.session => _Session(
+              key: const ValueKey('tavern-stage-session'),
+              usage: _usage,
+              chatId: widget.chatId,
+              characterId: widget.characterId,
+              scriptsCharacterId: widget.scriptsCharacterId,
+              name: widget.name,
+              busy: widget.busy,
+            ),
+            // The card's state (engine T17), or what an older card's macros saved.
+            TavernStageTab.state => _StateView(
+              key: const ValueKey('tavern-stage-state-view'),
+              chatId: widget.chatId,
+              turn: widget.turn,
+              onChanged: widget.onStateChanged,
+            ),
+            TavernStageTab.director => _DirectorView(
+              key: const ValueKey('tavern-stage-director-view'),
+              chatId: widget.chatId,
+              onSuggest: widget.onSuggest,
+            ),
+            TavernStageTab.turn => FutureBuilder<TavernTurnInspection?>(
+              future: _record ??= _read(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: QuietSpinner()),
+                  );
+                }
+                final record = snapshot.data;
+                if (snapshot.hasError || record == null) {
+                  return _Waiting(
+                    key: const ValueKey('tavern-stage-turn-none'),
+                    title: l10n.tavernStageTurnNone,
+                    message: l10n.tavernInspectNoneMessage,
+                  );
+                }
+                return _ThisTurn(chatId: widget.chatId, record: record);
+              },
+            ),
+          },
+        ),
       ],
     );
   }

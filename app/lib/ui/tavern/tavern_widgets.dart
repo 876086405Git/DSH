@@ -72,14 +72,9 @@ class TavernPortrait extends StatelessWidget {
   Widget _initial(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final initial = name.characters.isEmpty ? '?' : name.characters.first;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primaryContainer, scheme.surfaceContainerHighest],
-        ),
-      ),
+    // A flat tint of the theme's accent: the initial says who it is.
+    return ColoredBox(
+      color: scheme.primaryContainer.withValues(alpha: 0.55),
       child: Center(
         child: Text(
           initial,
