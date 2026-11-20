@@ -18,6 +18,7 @@ import '../../l10n/l10n.dart';
 import '../../media/gallery.dart' show imageProviderBytes;
 import '../../state/artifact_files.dart';
 import '../../state/artifacts.dart';
+import '../../state/image_snapshots.dart';
 import '../../state/sheet_files.dart';
 import '../../state/workspace_state.dart';
 import '../common/capsule_chip.dart';
@@ -191,7 +192,8 @@ Future<void> runArtifactAction(
 
 /// [artifact] with an absolute path (the Host resolves a relative one).
 Future<Artifact> _absolute(WidgetRef ref, String sessionId, Artifact artifact) async {
-  if (artifact.path.startsWith('/')) return artifact;
+  // A historical image must remain readable even after its source was deleted.
+  if (artifact.snapshotImage || artifact.path.startsWith('/')) return artifact;
   final source = ref.read(workspaceSourceProvider(sessionId));
   if (source == null) throw const ArtifactError('offline');
   final stat = await source.stat(artifact.path);
@@ -209,12 +211,15 @@ Future<Artifact> _absolute(WidgetRef ref, String sessionId, Artifact artifact) a
 /// A preview failure in words, and whether it is about the file itself.
 ({String title, String? message, _Fix fix}) _problemOf(Object error) {
   final code = switch (error) {
+    ImageSnapshotMissing() => 'missing',
+    ImageSnapshotTooLarge() => 'snapshot-too-large',
     DshRemoteException(:final code) => code,
     ArtifactError(:final code) => code,
     SheetFormatException() => 'sheet',
     _ => '',
   };
   return switch (code) {
+    'snapshot-too-large' => (title: appL10n.viewArtifactLarge, message: null, fix: _Fix.none),
     'sheet' => (title: appL10n.viewArtifactNoPreview, message: null, fix: _Fix.open),
     'workspace-file/not-text' => (
       title: appL10n.viewArtifactNoPreview,
@@ -331,6 +336,7 @@ class _ArtifactPreviewPageState extends ConsumerState<ArtifactPreviewPage> {
 
   /// Watches the file: a new version reloads, deletion says so.
   void _follow() {
+    if (_artifact.snapshotImage) return;
     final epoch = _watchEpoch;
     final source = ref.read(workspaceSourceProvider(widget.sessionId));
     if (source == null) return;
@@ -1414,7 +1420,7 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview> {
     final token = ++_token;
     final files = ref.read(artifactFilesProvider);
     try {
-      if (!files.isLocal) {
+      if (!files.isLocal && !widget.artifact.snapshotImage) {
         final stat = await ref.read(workspaceSourceProvider(widget.sessionId))?.stat(widget.artifact.path);
         _bytes = stat?.bytes;
         if ((stat?.bytes ?? 0) > _remoteImageBytes) {

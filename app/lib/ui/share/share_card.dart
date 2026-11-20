@@ -10,6 +10,7 @@ import '../../l10n/l10n.dart';
 import '../../state/app_info.dart';
 import '../chat/render/code_block.dart' show highlightCode;
 import '../chat/render/markdown_body.dart';
+import '../chat/render/markdown_image.dart' show MarkdownImageScope;
 import '../common/tool_glyph.dart' show ToolGlyphs;
 import '../plugins/plugin_detail_sheet.dart' show PluginHero, PluginStats;
 import '../plugins/plugin_widgets.dart' show PluginAvatar;
@@ -500,7 +501,7 @@ class _Body extends StatelessWidget {
 
   Widget _block(ShareBlock block, double width) => switch (block) {
     final ShareQuestion q => _Question(q, width: width),
-    ShareAnswer(:final markdown) => _Answer(markdown, width: width),
+    ShareAnswer(:final markdown, :final turn) => _Answer(markdown, width: width, turn: turn),
     final ShareFile file => _File(file),
     final SharePlugin plugin => _Plugin(plugin),
   };
@@ -697,15 +698,16 @@ class _Question extends StatelessWidget {
 /// blocks as [ShareCodeWell]s (wrapped, no buttons: an image can't scroll
 /// or copy), its pictures as galleries where they stood.
 class _Answer extends StatelessWidget {
-  const _Answer(this.markdown, {required this.width});
+  const _Answer(this.markdown, {required this.width, this.turn});
 
   final String markdown;
   final double width;
+  final int? turn;
 
   @override
   Widget build(BuildContext context) {
     final segments = shareSegments(markdown);
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -715,7 +717,10 @@ class _Answer extends StatelessWidget {
               height: segment.code || segment.isImages || segments[i - 1].code || segments[i - 1].isImages ? 12 : 8,
             ),
           if (segment.isImages)
-            ShareGallery(images: [for (final url in segment.images) ShareUrlImage(url)], width: width)
+            ShareGallery(
+              images: [for (final url in segment.images) ShareUrlImage(url, turn: turn)],
+              width: width,
+            )
           else if (segment.code)
             ShareCodeWell(code: segment.text, language: segment.language)
           else
@@ -723,6 +728,9 @@ class _Answer extends StatelessWidget {
         ],
       ],
     );
+    // HTML images stay in MarkdownBody instead of becoming ShareGallery cells.
+    final sessionId = ShareImageScope.sessionIdOf(context);
+    return sessionId == null ? body : MarkdownImageScope(sessionId: sessionId, turn: turn, child: body);
   }
 }
 

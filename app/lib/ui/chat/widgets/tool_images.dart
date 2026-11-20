@@ -5,11 +5,12 @@ import '../../../l10n/l10n.dart';
 import '../../../state/artifact_files.dart';
 import '../../../state/artifacts.dart';
 import '../../../state/attachments.dart';
+import '../../../state/chat_state.dart';
 import '../../../state/sessions_state.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../artifact_preview.dart' show ArtifactPreviewPage, ImageViewerPage;
-import '../render/markdown_image.dart' show MarkdownImageScope;
+import '../render/markdown_image.dart' show MarkdownImageScope, workspaceImagePath;
 import '../tool_view.dart';
 import 'image_gallery.dart' show ViewerImage;
 
@@ -22,7 +23,9 @@ class ToolImages extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = MarkdownImageScope.maybeOf(context)?.sessionId ?? ref.watch(currentSessionProvider);
+    final scope = MarkdownImageScope.maybeOf(context);
+    final sessionId = scope?.sessionId ?? ref.watch(currentSessionProvider);
+    final turn = scope?.turn;
     final sources = <({String name, ImageProvider? image, String? path})>[];
     for (final attachment in view.images) {
       ImageProvider? image;
@@ -32,8 +35,22 @@ class ToolImages extends ConsumerWidget {
       }
       sources.add((name: attachment.name ?? context.l10n.chatFile, image: image, path: null));
     }
-    if (view.imagePath case final path?) {
-      final image = sessionId == null ? null : ref.watch(artifactThumbnailProvider((sessionId, path))).value;
+    if (view.imagePath case final rawPath?) {
+      final chat = sessionId == null ? null : chatProvider(sessionId);
+      final header = chat != null && ref.exists(chat) ? ref.read(chat.notifier).header : null;
+      final knownSessions = ref.exists(sessionsProvider) ? ref.read(sessionsProvider).value : null;
+      final cwd = header?.cwd ?? knownSessions?.where((s) => s.sessionId == sessionId).firstOrNull?.cwd;
+      final path = workspaceImagePath(
+        rawPath,
+        baseDir: scope?.baseDir,
+        cwd: cwd,
+        local: ref.read(artifactFilesProvider).isLocal,
+      );
+      final image = sessionId == null
+          ? null
+          : turn == null
+          ? ref.watch(artifactThumbnailProvider((sessionId, path))).value
+          : ref.watch(turnArtifactThumbnailProvider((sessionId, path, turn))).value;
       sources.add((name: path.split('/').last, image: image, path: path));
     }
     final gallery = [
@@ -47,7 +64,7 @@ class ToolImages extends ConsumerWidget {
         Navigator.of(context).push(
           ArtifactPreviewPage.route(
             sessionId: sessionId,
-            artifact: Artifact(path: path, origin: ArtifactOrigin.linked, turn: 0),
+            artifact: Artifact(path: path, origin: ArtifactOrigin.linked, turn: turn ?? 0, snapshotImage: turn != null),
           ),
         );
         return;

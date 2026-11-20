@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/painting.dart';
@@ -16,6 +17,7 @@ import '../l10n/l10n.dart';
 import 'android_features.dart' show operatingSystemProvider;
 import 'artifacts.dart';
 import 'connection_state.dart';
+import 'image_snapshots.dart';
 
 /// Largest file fetched from a remote Host for open / share / save.
 const maxRemoteArtifactBytes = 300 * 1024 * 1024;
@@ -37,6 +39,8 @@ class ArtifactError implements Exception {
 /// A sentence for a failed artifact action.
 String artifactErrorText(Object error) {
   final code = switch (error) {
+    ImageSnapshotMissing() => 'missing',
+    ImageSnapshotTooLarge() => 'workspace-file/too-large',
     ArtifactError(:final code) => code,
     PlatformException(:final code) => code,
     DshRemoteException(:final code) => code,
@@ -68,13 +72,16 @@ class ArtifactFiles {
     required this.channel,
     Future<void> Function(ShareParams params)? share,
     Future<Directory> Function()? cacheRoot,
+    ImageSnapshots? snapshots,
     String? operatingSystem,
   }) : _share = share ?? _systemShare,
        _cacheRoot = cacheRoot ?? getTemporaryDirectory,
+       snapshots = snapshots ?? ImageSnapshots(root: cacheRoot),
        _operatingSystem = operatingSystem ?? Platform.operatingSystem;
 
   final HostConnection? connection;
   final FilesChannel channel;
+  final ImageSnapshots snapshots;
   final Future<void> Function(ShareParams params) _share;
   final Future<Directory> Function() _cacheRoot;
   final String _operatingSystem;
@@ -133,6 +140,58 @@ class ArtifactFiles {
   /// An Android file holding [artifact]; [onProgress] gets 0–1 (null while
   /// the size is unknown) during a download.
   Future<File> materialize(
+    String sessionId,
+    Artifact artifact, {
+    void Function(double? progress)? onProgress,
+    int maxBytes = maxRemoteArtifactBytes,
+  }) async {
+    if (!artifact.snapshotImage || artifact.kind != ArtifactKind.image) {
+      return _materializeCurrent(sessionId, artifact, onProgress: onProgress, maxBytes: maxBytes);
+    }
+    final conn = connection;
+    if (conn == null) throw const ArtifactError('offline');
+    final limit = maxBytes < 20 * 1024 * 1024 ? maxBytes : 20 * 1024 * 1024;
+    return snapshots.get(
+      host: imageSnapshotHost(conn),
+      sessionId: sessionId,
+      turn: artifact.turn,
+      path: artifact.path,
+      maxBytes: limit,
+      load: () async {
+        final bytes = BytesBuilder(copy: false);
+        void append(List<int> chunk) {
+          if (bytes.length + chunk.length > limit) throw const ImageSnapshotTooLarge();
+          bytes.add(chunk);
+        }
+
+        final sessionCopy = conn.isLocal && _operatingSystem == 'ohos' && artifact.path.startsWith('/workspaces/');
+        if (conn.isLocal && !sessionCopy) {
+          final host = await channel.resolveGuest(artifact.path);
+          if (host == null) throw const ArtifactError('missing');
+          final file = File(host);
+          if (await file.length() > limit) throw const ImageSnapshotTooLarge();
+          await for (final chunk in file.openRead()) {
+            append(chunk);
+          }
+        } else {
+          if (!conn.client.canReadFileBytes) throw const ArtifactError('unsupported');
+          // A new turn reads the Host, not the mutable per-path download cache.
+          await conn.client.readFile(
+            sessionId,
+            artifact.path,
+            maxBytes: limit,
+            onChunk: (chunk) async => append(chunk),
+            onProgress: onProgress == null
+                ? null
+                : (received, total) => onProgress(total == null || total == 0 ? null : received / total),
+          );
+        }
+        return bytes.takeBytes();
+      },
+    );
+  }
+
+  Future<File> _materializeCurrent(
     String sessionId,
     Artifact artifact, {
     void Function(double? progress)? onProgress,
@@ -197,45 +256,72 @@ class ArtifactFiles {
     }
   }
 
-  /// Opens [artifact] in the app Android picks for its type ([chooser]: the
-  /// person picks).
-  Future<void> open(
+  Future<T> _fileAction<T>(
     String sessionId,
-    Artifact artifact, {
-    bool chooser = false,
+    Artifact artifact,
+    Future<T> Function(File) action, {
     void Function(double?)? onProgress,
   }) async {
-    final file = await materialize(sessionId, artifact, onProgress: onProgress);
-    await channel.open(file.path, name: artifact.name, mime: artifact.mimeType, chooser: chooser);
+    final source = await materialize(sessionId, artifact, onProgress: onProgress);
+    if (_operatingSystem != 'ohos' || !artifact.snapshotImage || artifact.kind != ArtifactKind.image) {
+      return action(source);
+    }
+    // Harmony admits cache/temp inputs, not the durable support-directory store.
+    // Open/share make their own native copies; save reads before replying. Keep
+    // this bridge copy until that Future settles, not for the external reader.
+    final root = await _cacheRoot();
+    await root.create(recursive: true);
+    final directory = await root.createTemp('image-snapshot-export-');
+    try {
+      final file = await source.copy('${directory.path}/${_safeName(artifact.name)}');
+      return await action(file);
+    } finally {
+      await directory.delete(recursive: true);
+    }
   }
 
+  /// Opens [artifact] in the app Android picks for its type ([chooser]: the
+  /// person picks).
+  Future<void> open(String sessionId, Artifact artifact, {bool chooser = false, void Function(double?)? onProgress}) =>
+      _fileAction(
+        sessionId,
+        artifact,
+        (file) => channel.open(file.path, name: artifact.name, mime: artifact.mimeType, chooser: chooser),
+        onProgress: onProgress,
+      );
+
   /// The system share sheet with the file.
-  Future<void> share(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) async {
-    final file = await materialize(sessionId, artifact, onProgress: onProgress);
-    await _share(
+  Future<void> share(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) => _fileAction(
+    sessionId,
+    artifact,
+    (file) => _share(
       ShareParams(
         files: [XFile(file.path, mimeType: artifact.mimeType, name: artifact.name)],
         fileNameOverrides: [artifact.name],
       ),
-    );
-  }
+    ),
+    onProgress: onProgress,
+  );
 
   /// Copies the file into the phone's public Downloads; returns where.
-  Future<String> saveToDownloads(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) async {
-    final file = await materialize(sessionId, artifact, onProgress: onProgress);
-    return channel.saveToDownloads(file.path, name: artifact.name, mime: artifact.mimeType);
-  }
+  Future<String> saveToDownloads(String sessionId, Artifact artifact, {void Function(double?)? onProgress}) =>
+      _fileAction(
+        sessionId,
+        artifact,
+        (file) => channel.saveToDownloads(file.path, name: artifact.name, mime: artifact.mimeType),
+        onProgress: onProgress,
+      );
 
   /// A small image of [artifact] for its card; null when it is not an image
   /// Flutter can draw, or too big to fetch just for this.
-  Future<ImageProvider?> thumbnail(String sessionId, String path) async {
-    final artifact = Artifact(path: path, origin: ArtifactOrigin.linked, turn: 0);
+  Future<ImageProvider?> thumbnail(String sessionId, String path, {int? turn}) async {
+    final artifact = Artifact(path: path, origin: ArtifactOrigin.linked, turn: turn ?? 0, snapshotImage: turn != null);
     if (artifact.kind != ArtifactKind.image || path.toLowerCase().endsWith('.svg')) {
       return null;
     }
     final conn = connection;
     if (conn == null) return null;
-    if (!conn.isLocal) {
+    if (!conn.isLocal && turn == null) {
       final stat = await conn.client.statFile(sessionId, artifact.path);
       if ((stat.bytes ?? maxThumbnailBytes + 1) > maxThumbnailBytes) {
         return null;
@@ -282,13 +368,30 @@ String _fnv(String text) {
   return hash.toRadixString(16).padLeft(8, '0');
 }
 
+/// Host names are editable; only the selected transport and stable id own history.
+String imageSnapshotHost(HostConnection connection) => '${connection.kind.name}:${connection.hostId ?? ''}';
+
 final artifactFilesProvider = Provider<ArtifactFiles>(
   (ref) => ArtifactFiles(
     connection: ref.watch(activeConnectionProvider).value,
     channel: ref.watch(filesChannelProvider),
+    snapshots: ref.watch(imageSnapshotsProvider),
     operatingSystem: ref.watch(operatingSystemProvider),
   ),
 );
+
+/// Chat thumbnails share the same immutable file as the turn's inline image.
+final turnArtifactThumbnailProvider = FutureProvider.autoDispose.family<ImageProvider?, (String, String, int)>((
+  ref,
+  key,
+) async {
+  final (sessionId, path, turn) = key;
+  try {
+    return await ref.watch(artifactFilesProvider).thumbnail(sessionId, path, turn: turn);
+  } catch (_) {
+    return null;
+  }
+});
 
 /// [ArtifactFiles.thumbnail], cached per (session, path) while shown.
 final artifactThumbnailProvider = FutureProvider.autoDispose.family<ImageProvider?, (String, String)>((ref, key) async {

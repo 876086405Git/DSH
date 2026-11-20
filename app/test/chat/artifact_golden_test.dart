@@ -156,6 +156,7 @@ void main() {
             sessionArtifactsProvider('s1').overrideWithValue([_delivered, _generated]),
             activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(fakeConnection)),
             artifactThumbnailProvider.overrideWith((ref, key) async => key.$2.endsWith('.png') ? thumbnail : null),
+            turnArtifactThumbnailProvider.overrideWith((ref, key) async => key.$2.endsWith('.png') ? thumbnail : null),
           ],
         ),
       );
@@ -216,6 +217,7 @@ void main() {
             sessionArtifactsProvider('s1').overrideWithValue([_delivered, _generated]),
             activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(fakeConnection)),
             artifactThumbnailProvider.overrideWith((ref, key) async => null),
+            turnArtifactThumbnailProvider.overrideWith((ref, key) async => null),
           ],
         ),
       );

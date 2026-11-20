@@ -5,6 +5,7 @@ import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/draft_store.dart';
 import 'package:dsh_app/state/drawer_view_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/image_snapshots.dart';
 import 'package:dsh_app/state/read_list_identity.dart';
 import 'package:dsh_app/state/session_deletion_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
@@ -45,11 +46,25 @@ class _Backend implements SessionDeletionBackend {
   }
 }
 
+class _Snapshots extends ImageSnapshots {
+  final calls = <(String, String)>[];
+  Future<void>? pending;
+
+  @override
+  Future<void> removeSession(String host, String sessionId) async {
+    calls.add((host, sessionId));
+    await pending;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<(ProviderContainer, FakeWorkspaceHost, _Backend)> start({bool running = false}) async {
+  Future<(ProviderContainer, FakeWorkspaceHost, _Backend)> start({
+    bool running = false,
+    ImageSnapshots? snapshots,
+  }) async {
     final host = FakeWorkspaceHost();
     host.seedSession('s1', 'First', DateTime.now(), running: running);
     host.seedSession('s2', 'Second', DateTime.now());
@@ -63,6 +78,7 @@ void main() {
         activeHostProvider.overrideWith(_SwitchHost.new),
         readListIdentityProvider.overrideWithValue(null),
         sessionDeletionBackendProvider.overrideWithValue(backend),
+        imageSnapshotsProvider.overrideWithValue(snapshots ?? _Snapshots()),
       ],
     );
     addTearDown(() async {
@@ -80,6 +96,32 @@ void main() {
     addTearDown(value.close);
     return value;
   }
+
+  test('snapshot cleanup cannot delay the deletion receipt or the next batch item', () async {
+    final cleanup = Completer<void>();
+    final snapshots = _Snapshots()..pending = cleanup.future;
+    final (container, _, backend) = await start(snapshots: snapshots);
+    final result = await container.read(sessionDeletionProvider.notifier).delete(['s1', 's2'], owner: owner(container));
+    expect(result.deleted, ['s1', 's2']);
+    expect(result.failures, isEmpty);
+    expect(backend.calls, ['s1', 's2']);
+    expect(container.read(sessionDeletionProvider), isFalse);
+    expect(snapshots.calls, [('local:', 's1'), ('local:', 's2')]);
+    cleanup.complete();
+    await pumpEventQueue();
+  });
+
+  test('a snapshot cleanup failure does not turn a confirmed deletion into failure', () async {
+    final cleanup = Completer<void>();
+    final snapshots = _Snapshots()..pending = cleanup.future;
+    final (container, _, _) = await start(snapshots: snapshots);
+    final result = await container.read(sessionDeletionProvider.notifier).delete(['s1'], owner: owner(container));
+    cleanup.completeError(StateError('controlled cleanup failure'));
+    await pumpEventQueue();
+    expect(result.deleted, ['s1']);
+    expect(result.failures, isEmpty);
+    expect(container.read(sessionDeletionProvider), isFalse);
+  });
 
   test('only acknowledged rows, selection and drafts are cleared; failed row stays', () async {
     final (container, _, backend) = await start();

@@ -284,7 +284,13 @@ class MarkdownBody extends StatefulWidget {
     Navigator.of(context).push(
       ArtifactPreviewPage.route(
         sessionId: sessionId,
-        artifact: Artifact(path: path, origin: ArtifactOrigin.linked, turn: 0),
+        artifact: Artifact(
+          path: path,
+          origin: ArtifactOrigin.linked,
+          turn: MarkdownImageScope.maybeOf(context)?.turn ?? 0,
+          snapshotImage:
+              MarkdownImageScope.maybeOf(context)?.turn != null && artifactKindOf(path) == ArtifactKind.image,
+        ),
       ),
     );
   }

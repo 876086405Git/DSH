@@ -193,6 +193,7 @@ class Artifact {
     this.description,
     this.seq,
     this.bytes,
+    this.snapshotImage = false,
   });
 
   /// Absolute path in the Host's filesystem (as declared when it could not
@@ -200,6 +201,22 @@ class Artifact {
   final String path;
   final ArtifactOrigin origin;
   final int turn;
+
+  /// Chat previews keep the first successful read of this turn; workspace
+  /// previews continue following the live file.
+  final bool snapshotImage;
+
+  Artifact withImageSnapshot() => kind != ArtifactKind.image || snapshotImage
+      ? this
+      : Artifact(
+          path: path,
+          origin: origin,
+          turn: turn,
+          description: description,
+          seq: seq,
+          bytes: bytes,
+          snapshotImage: true,
+        );
 
   /// The model's description (deliverables only).
   final String? description;

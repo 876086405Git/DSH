@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'artifact_files.dart' show imageSnapshotHost;
 import 'composer_quote.dart';
 import 'connection_state.dart';
 import 'draft_store.dart';
 import 'drawer_view_state.dart';
 import 'hosts_state.dart';
+import 'image_snapshots.dart';
 import 'read_list_cache.dart';
 import 'read_list_identity.dart';
 import 'sessions_state.dart';
@@ -136,6 +139,8 @@ class SessionDeletionController extends Notifier<bool> {
     final backend = ref.read(sessionDeletionBackendProvider);
     final client = owner.connection.client;
     final identity = ref.read(readListIdentityProvider);
+    final snapshots = ref.read(imageSnapshotsProvider);
+    final snapshotHost = imageSnapshotHost(owner.connection);
     state = true;
     try {
       if (!owned()) return const SessionDeletionResult(retired: true);
@@ -153,6 +158,13 @@ class SessionDeletionController extends Notifier<bool> {
         try {
           if (!owned()) break;
           await backend.delete(client, id);
+          // Disk cleanup must not delay an acknowledged deletion or the next
+          // item in the batch. It belongs to the captured Host, even if retired.
+          unawaited(
+            snapshots.removeSession(snapshotHost, id).catchError((Object error) {
+              debugPrint('Image snapshot cleanup failed: ${error.runtimeType}');
+            }),
+          );
           // A late response belongs to its old Host, never to a new screen.
           if (!owned()) break;
           deleted.add(id);

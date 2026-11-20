@@ -11,6 +11,7 @@ import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/session_modes.dart';
+import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/chat/chat_list.dart';
 import 'package:dsh_app/ui/chat/chat_rows.dart';
@@ -265,6 +266,11 @@ void main() {
     g.chunk(const TextDeltaChunk(0, '回答'));
     g.chunk(const ToolCallDeltaChunk(1, id: 'live-call', name: 'bash', argumentsDelta: '{'));
     await g.settle(tester);
+    expect(
+      g.container.exists(sessionsProvider),
+      isFalse,
+      reason: 'image scope metadata must not start the sessions watcher',
+    );
     final items = g.state.items;
     final status = await _count(() async {
       g.client.events.add(const SessionStatusEvent(_session, true));
