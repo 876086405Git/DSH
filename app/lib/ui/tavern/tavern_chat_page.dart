@@ -495,6 +495,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   /// is not an arrival but another branch: it shows at once.
   static const _arrivalMost = 3;
 
+  /// A reply is being continued and its turn has not said which yet: the
+  /// pending row standing in for it is no arrival.
+  bool _continuing = false;
+
   /// The rows arriving in this build of [keys]: true for one that took
   /// another message's place (an alternative switched to), which only fades; false
   /// for a new one, which also rises. A row that goes on with what was
@@ -515,9 +519,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       for (var i = start; i < keys.length; i++)
         // A reply being written goes on from the pending row, or from itself
         // when it is continued; a written reply goes on from its stream row.
-        if (!(keys[i].startsWith('stream-')
-            ? before.contains('stream-pending') || before.contains(keys[i].substring('stream-'.length))
-            : before.contains('stream-${keys[i]}')))
+        if (!(keys[i] == 'stream-pending' && _continuing) &&
+            !(keys[i].startsWith('stream-')
+                ? before.contains('stream-pending') || before.contains(keys[i].substring('stream-'.length))
+                : before.contains('stream-${keys[i]}')))
           keys[i]: i < last.length && !last[i].startsWith('stream-') && !now.contains(last[i]),
     };
   }
@@ -589,11 +594,12 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     if (mounted) setState(() => _loadingOlder = false);
   }
 
-  void _run(Stream<TavernEvent> Function() start, {String? draft, bool rejoin = false}) {
+  void _run(Stream<TavernEvent> Function() start, {String? draft, bool rejoin = false, bool continuing = false}) {
     // A rejoin still listening for nothing must not end this turn when it closes.
     unawaited(_turn?.cancel());
     _immersive.value = false;
     _rejoining = rejoin;
+    _continuing = continuing;
     if (!rejoin) {
       setState(() {
         _error = null;
@@ -639,6 +645,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
           case TavernToolActivity():
             _refreshTools();
           case TavernTurnStarted(:final message):
+            _continuing = false;
             setState(() => _streamNode = message.nodeId);
             // Continuing a reply: it starts from what the reply already says.
             _stream.value = (text: message.text, reasoning: message.reasoning ?? '');
@@ -669,7 +676,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                   calm: true,
                   action: (
                     label: l10n.tavernContinueReply,
-                    onPressed: () => _run(() => _tavern.continueReply(widget.chatId, message.nodeId)),
+                    onPressed: () => _run(() => _tavern.continueReply(widget.chatId, message.nodeId), continuing: true),
                   ),
                 );
               case 'content_filter':
@@ -1094,7 +1101,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     _input.clear();
     switch (command) {
       case TavernSlash.continueReply:
-        _run(() => _tavern.continueReply(widget.chatId, last.nodeId));
+        _run(() => _tavern.continueReply(widget.chatId, last.nodeId), continuing: true);
       case TavernSlash.regenerate:
         _run(() => _tavern.regenerate(widget.chatId, last.nodeId));
       case TavernSlash.narrate || TavernSlash.sendOnly || TavernSlash.impersonate:
@@ -1265,7 +1272,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     final last = _messages?.lastOrNull;
     if (_running || last == null || last.role != TavernRole.character) return;
     unawaited(HapticFeedback.selectionClick());
-    _run(() => _tavern.continueReply(widget.chatId, last.nodeId));
+    _run(() => _tavern.continueReply(widget.chatId, last.nodeId), continuing: true);
   }
 
   /// 掷骰: what came up joins whatever is in the box, on a line of its own.
@@ -1453,7 +1460,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       case _MessageAction.regenerate:
         if (!_running) _run(() => _tavern.regenerate(widget.chatId, message.nodeId));
       case _MessageAction.continueReply:
-        if (!_running) _run(() => _tavern.continueReply(widget.chatId, message.nodeId));
+        if (!_running) _run(() => _tavern.continueReply(widget.chatId, message.nodeId), continuing: true);
       case _MessageAction.inspect:
         await Navigator.of(context).push(TavernInspectorPage.route(widget.chatId, nodeId: message.nodeId));
       case _MessageAction.branchHere:
