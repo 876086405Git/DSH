@@ -28,7 +28,9 @@ function page({ loadedPresetId = 'p1', refuse = false, working = false, slow = 0
   const posts = [];
   const errors = [];
   const observers = [];
-  let stored = { ref: { kind: 'stored', presetId: 'p1' }, raw: preset(), version: 's1' };
+  // The library's presets, by id; any not written yet as preset() at s1.
+  const library = {};
+  const stored = (id) => library[id] ?? { ref: { kind: 'stored', presetId: id }, raw: preset(), version: 's1' };
   const w = {
     console,
     setTimeout,
@@ -54,11 +56,15 @@ function page({ loadedPresetId = 'p1', refuse = false, working = false, slow = 0
     getLoadedPresetName: () => '小猫',
     call(method, params) {
       calls.push([method, params]);
-      if (method === 'readPreset') return Promise.resolve(stored);
+      if (method === 'readPreset') return Promise.resolve(stored(params.ref.presetId));
       if (method === 'replacePreset') {
-        if (refuse) return wait(slow).then(() => Promise.reject(new Error('changed meanwhile')));
-        stored = { ref: params.ref, raw: params.raw, version: 's2' };
-        const done = params.ref.kind === 'current' ? { ...stored, version: 'v2' } : stored;
+        // refuse: every write, or those to the library preset of that id.
+        if (refuse === true || refuse === params.ref.presetId) {
+          return wait(slow).then(() => Promise.reject(new Error('changed meanwhile')));
+        }
+        const saved = { ref: params.ref, raw: params.raw, version: 's2' };
+        if (params.ref.kind === 'stored') library[params.ref.presetId] = saved;
+        const done = params.ref.kind === 'current' ? { ...saved, version: 'v2' } : saved;
         return slow ? wait(slow).then(() => done) : Promise.resolve(done);
       }
       return Promise.reject(new Error('unexpected ' + method));
@@ -265,8 +271,37 @@ test('another preset chosen while a write is out: its settings at once, and an e
   assert.equal(writes.length, 2);
   assert.equal(writes[1][1].raw.temperature, 3);
   // Written into B, the one the copy is.
-  assert.equal(calls.filter((c) => c[0] === 'readPreset')[1][1].ref.presetId, 'p2');
+  assert.equal(writes[1][1].ref.presetId, 'p2');
 });
+
+/** A's toggle written (refused, slow ms on), and at 350 ms B chosen and its temperature set to 3. */
+async function editAThenB(w) {
+  extra(w.SillyTavern.chatCompletionSettings).enabled = false;
+  w.SillyTavern.saveSettingsDebounced();
+  await wait(350);
+  w.res.preset = { ref: { kind: 'current' }, raw: preset(), version: 'b1', source: { loadedPresetId: 'p2' } };
+  w.SillyTavern.chatCompletionSettings.temperature = 3;
+  w.SillyTavern.saveSettingsDebounced();
+}
+
+for (const [when, slow] of [
+  ['still waiting', 300],
+  ['queued behind it', 600],
+]) {
+  test(`A's write refused with an edit of B ${when}: B's is written all the same`, async () => {
+    const { w, calls, errors } = page({ refuse: 'p1', slow });
+    await editAThenB(w);
+    await wait(1500);
+    const writes = calls.filter((c) => c[0] === 'replacePreset');
+    assert.deepEqual(
+      writes.map((c) => c[1].ref.presetId),
+      ['p1', 'p2'],
+    );
+    assert.equal(writes[1][1].raw.temperature, 3);
+    assert.deepEqual(errors, ['changed meanwhile']);
+    assert.equal(w.SillyTavern.chatCompletionSettings.temperature, 3);
+  });
+}
 
 test('presetDelivered: SETTINGS_UPDATED when the preset changed, OAI_PRESET_CHANGED_AFTER when it is another', () => {
   const { w, fired } = page();

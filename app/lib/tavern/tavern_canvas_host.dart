@@ -70,17 +70,24 @@ const tavernCanvasHostJs = r'''
       if(stCopyOf===target)stBase=Object.assign({},stBase,changed);
       if(r.ref.kind==='current'&&presetIdentity(res.preset)===target)res.preset=r;
       stSaving=false;stBusy--;
-      if(stAgain){stAgain=false;if(stTimer)stBusy--;else saveSettings();}
+      saveQueued();
     },function(e){
-      // What waited on it, or is still to come, goes too: the preset is read
-      // again as it is.
       stSaving=false;
-      if(stAgain){stAgain=false;stBusy--;}
-      if(stTimer){clearTimeout(stTimer);stTimer=0;stTarget=null;stBusy--;}
-      dropEdit();
+      // An edit of another preset, waiting or queued, goes on as it was.
+      if(stTarget!==null&&stTarget!==target){stBusy--;saveQueued();}
+      else{
+        // One of this preset goes too: the preset is read again as it is.
+        if(stAgain){stAgain=false;stBusy--;}
+        if(stTimer){clearTimeout(stTimer);stTimer=0;stBusy--;}
+        stTarget=null;
+        dropEdit();
+      }
       toastr.error(String(e&&e.message||e));
     });
   }
+  // The edit that came due while a write was out, now (or with the next
+  // one still waiting, then).
+  function saveQueued(){if(stAgain){stAgain=false;if(stTimer)stBusy--;else saveSettings();}}
   SillyTavern.saveSettingsDebounced=saveSettingsDebounced;
 
   // ST's places for a script's buttons and menu items, out of sight here:
