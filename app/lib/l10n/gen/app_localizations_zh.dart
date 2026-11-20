@@ -20694,7 +20694,7 @@ class L10nZh extends L10n {
   String get tavernErrorTooLong => '对话太长了，超出了模型的上下文';
 
   @override
-  String get tavernCutShort => '回复到了回复上限。可在酒馆设置 › 生成里调高。';
+  String get tavernCutShort => '回复到了回复上限。可以接着写，或调高这段对话所用预设的回复上限。';
 
   @override
   String get tavernFiltered => '回复有一部分被内容过滤拦下了。';
@@ -22472,7 +22472,7 @@ class L10nZh extends L10n {
 
   @override
   String tavernSessionUsageNote(int count) {
-    return '当前分支 $count 条回复的合计';
+    return '当前分支 $count 条回复的合计，换掉的备选不算';
   }
 
   @override

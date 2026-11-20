@@ -21847,7 +21847,8 @@ class L10nEn extends L10n {
   String get tavernErrorTooLong => 'The chat is longer than the model\'s context';
 
   @override
-  String get tavernCutShort => 'The reply hit the reply limit. Raise it in Tavern settings › Generation.';
+  String get tavernCutShort =>
+      'The reply hit the reply limit. Continue it, or raise the limit in the preset this chat uses.';
 
   @override
   String get tavernFiltered => 'The content filter stopped part of this reply.';
@@ -23729,7 +23730,7 @@ class L10nEn extends L10n {
       other: '$count replies on this branch',
       one: '1 reply on this branch',
     );
-    return '$_temp0, added up';
+    return '$_temp0, added up; replaced alternatives not counted';
   }
 
   @override

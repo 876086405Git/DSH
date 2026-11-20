@@ -38063,7 +38063,7 @@ abstract class L10n {
   /// No description provided for @tavernCutShort.
   ///
   /// In zh, this message translates to:
-  /// **'回复到了回复上限。可在酒馆设置 › 生成里调高。'**
+  /// **'回复到了回复上限。可以接着写，或调高这段对话所用预设的回复上限。'**
   String get tavernCutShort;
 
   /// No description provided for @tavernFiltered.
@@ -41279,7 +41279,7 @@ abstract class L10n {
   /// No description provided for @tavernSessionUsageNote.
   ///
   /// In zh, this message translates to:
-  /// **'当前分支 {count} 条回复的合计'**
+  /// **'当前分支 {count} 条回复的合计，换掉的备选不算'**
   String tavernSessionUsageNote(int count);
 
   /// No description provided for @tavernSessionUsageNone.

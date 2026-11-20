@@ -12301,7 +12301,7 @@
   "tavernErrorBusy": "模型现在有点忙，稍后再试",
   "tavernErrorNetwork": "连不上，检查网络后重试",
   "tavernErrorTooLong": "对话太长了，超出了模型的上下文",
-  "tavernCutShort": "回复到了回复上限。可在酒馆设置 › 生成里调高。",
+  "tavernCutShort": "回复到了回复上限。可以接着写，或调高这段对话所用预设的回复上限。",
   "tavernFiltered": "回复有一部分被内容过滤拦下了。",
   "tavernErrorBalance": "DeepSeek 账户余额不足，充值后再试",
   "tavernErrorParameters": "模型不接受这次请求的参数",
@@ -13426,7 +13426,7 @@
   "tavernIslandOffline": "网页不联网",
   "tavernIslandOfflineSubtitle": "只用卡里自带的图片和字体，不从网上加载任何东西",
   "tavernSessionUsage": "本局用量",
-  "tavernSessionUsageNote": "当前分支 {count} 条回复的合计",
+  "tavernSessionUsageNote": "当前分支 {count} 条回复的合计，换掉的备选不算",
   "@tavernSessionUsageNote": {
     "placeholders": {
       "count": {
