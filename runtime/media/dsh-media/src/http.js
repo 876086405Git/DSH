@@ -7,16 +7,21 @@ import { MediaError, checkAbort, abortError, fail } from './errors.js';
 // Deliberately conservative: production accepts HTTPS to public address ranges.
 // A test-only transport instance may admit literal loopback HTTP mock servers.
 const denied4 = new BlockList();
+const denied6 = new BlockList();
 for (const [address, prefix] of [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10],
   ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
   ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24],
   ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24],
   ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4],
-]) denied4.addSubnet(address, prefix, 'ipv4');
+]) {
+  denied4.addSubnet(address, prefix, 'ipv4');
+  // RFC 6052: the well-known prefix retains its embedded IPv4 exclusions.
+  denied6.addSubnet(`64:ff9b::${address}`, 96 + prefix, 'ipv6');
+}
 const global6 = new BlockList();
 global6.addSubnet('2000::', 3, 'ipv6');
-const denied6 = new BlockList();
+global6.addSubnet('64:ff9b::', 96, 'ipv6');
 for (const [address, prefix] of [
   ['2001::', 23], ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20],
 ]) denied6.addSubnet(address, prefix, 'ipv6');
