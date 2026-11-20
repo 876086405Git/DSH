@@ -21983,9 +21983,6 @@ class L10nEn extends L10n {
   String get tavernPresetNotText => 'This file isn\'t text';
 
   @override
-  String get tavernPresetsEmpty => 'No presets yet';
-
-  @override
   String get tavernPresetsEmptyMessage =>
       'Presets exported from SillyTavern as JSON, and dsh-preset-enhance share packages, can be imported.';
 
@@ -22038,8 +22035,7 @@ class L10nEn extends L10n {
   String get tavernRegexEmpty => 'No global regex yet';
 
   @override
-  String get tavernRegexEmptyMessage =>
-      'Regex JSON exported from SillyTavern, one script or a list, can be imported. Global regex applies to every chat; the regex a card or preset brings goes with it.';
+  String get tavernRegexEmptyMessage => 'Regex JSON exported from SillyTavern, one script or a list, can be imported.';
 
   @override
   String get tavernRegexUnnamed => 'Untitled';
@@ -22087,8 +22083,7 @@ class L10nEn extends L10n {
   String get tavernLorebooksEmpty => 'No standalone lorebooks yet';
 
   @override
-  String get tavernLorebooksEmptyMessage =>
-      'Lorebook JSON exported from SillyTavern can be imported. Made global, it applies to every chat; a card\'s own lorebook goes with the card.';
+  String get tavernLorebooksEmptyMessage => 'Lorebook JSON exported from SillyTavern can be imported.';
 
   @override
   String tavernLorebookCount(int count) {
@@ -22351,8 +22346,7 @@ class L10nEn extends L10n {
       'A persona is who you play in chats: a name and a few lines, so characters know who you are.';
 
   @override
-  String get tavernPersonasNote =>
-      'Long-press to make one the default or delete it. Chats without their own persona use the default.';
+  String get tavernPersonasNote => 'Long-press to make one the default or delete it.';
 
   @override
   String get tavernPersonaUnsetDefault => 'Stop using as default';
@@ -22385,14 +22379,13 @@ class L10nEn extends L10n {
   String get tavernPersonaNameHint => 'What characters call you';
 
   @override
-  String get tavernPersonaDescriptionHelp =>
-      'The model reads this: who you are, what you\'re like, how you know the character.';
+  String get tavernPersonaDescriptionHelp => 'Who you are, what you\'re like, how you know the character';
 
   @override
   String get tavernPersonaDescriptionHint => 'e.g. The town\'s new doctor: quiet, always carrying an old leather case.';
 
   @override
-  String get tavernPersonaDefaultSubtitle => 'New chats, and chats without their own persona, use it';
+  String get tavernPersonaDefaultSubtitle => 'Chats without their own persona use it';
 
   @override
   String get tavernPersonaDelete => 'Delete persona';
@@ -22437,8 +22430,7 @@ class L10nEn extends L10n {
   String get tavernExportPng => 'Export card (PNG)';
 
   @override
-  String get tavernExportPngSubtitle =>
-      'The card rides inside the picture; SillyTavern and other taverns can import it';
+  String get tavernExportPngSubtitle => 'SillyTavern and other taverns can import it';
 
   @override
   String get tavernExportJson => 'Export as JSON';
@@ -22659,7 +22651,7 @@ class L10nEn extends L10n {
   String get tavernLorebook => 'Lorebook';
 
   @override
-  String get tavernLorebookSubtitle => 'The entries this card carries';
+  String get tavernLorebookSubtitle => 'The card\'s own entries';
 
   @override
   String tavernLorebookEntries(int count) {
@@ -22689,14 +22681,13 @@ class L10nEn extends L10n {
   String get tavernImportFromFile => 'From a file';
 
   @override
-  String get tavernImportFromFileSubtitle =>
-      'Cards, presets, lorebooks, regex, quick replies or chats, told apart for you';
+  String get tavernImportFromFileSubtitle => 'Cards, presets, lorebooks and more, recognized for you';
 
   @override
   String get tavernImportFromLink => 'From a link';
 
   @override
-  String get tavernImportFromLinkSubtitle => 'A character page on Chub or RisuRealm, or a direct link to the card file';
+  String get tavernImportFromLinkSubtitle => 'Chub, RisuRealm, or a link to the card file';
 
   @override
   String get tavernLinkInvalid => 'That isn\'t a web address';
@@ -22818,7 +22809,7 @@ class L10nEn extends L10n {
   @override
   String tavernStorybookWholeNote(int count) {
     String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count lines', one: '1 line');
-    return '$_temp0; hidden messages are left out. The EPUB opens in Apple Books and most reading apps.';
+    return '$_temp0; hidden messages are left out.';
   }
 
   @override
@@ -22883,7 +22874,7 @@ class L10nEn extends L10n {
   String get tavernLive2d => 'Live2D model';
 
   @override
-  String get tavernLive2dSubtitle => 'Stands in for the card picture in the visual novel layout, moving as she talks';
+  String get tavernLive2dSubtitle => 'Stands in for the card picture in the visual novel layout';
 
   @override
   String get tavernLive2dNone => 'None';
@@ -23168,7 +23159,7 @@ class L10nEn extends L10n {
 
   @override
   String get tavernPrefillNote =>
-      'When on, this goes to the model as the start of the reply, and it writes on from there. In Thinking it applies only with thinking on; otherwise it goes in the reply. Continuing a reply doesn\'t use it.';
+      'In Thinking it applies only with thinking on; otherwise it goes in the reply. Continuing a reply doesn\'t use it.';
 
   @override
   String get tavernPresetPromptEmpty => 'Empty';
@@ -23775,7 +23766,7 @@ class L10nEn extends L10n {
   String get tavernWriteOwn => 'Write your own character';
 
   @override
-  String get tavernWriteOwnSubtitle => 'Start from a blank card and fill in the name, setting and greeting';
+  String get tavernWriteOwnSubtitle => 'Start from a blank card';
 
   @override
   String get tavernNewCharacterName => 'New character';
@@ -24260,7 +24251,7 @@ class L10nEn extends L10n {
   String get tavernRegexFieldName => 'Name';
 
   @override
-  String get tavernRegexFieldFindHelp => 'SillyTavern\'s form: /pattern/flags, e.g. /(hi|bye)/gi';
+  String get tavernRegexFieldFindHelp => 'Written /pattern/flags, e.g. /(hi|bye)/gi';
 
   @override
   String get tavernRegexFieldReplaceHelp => '\$1 is the first group; {{match}} is the whole match';
@@ -24306,7 +24297,7 @@ class L10nEn extends L10n {
 
   @override
   String get tavernRegexPhaseNote =>
-      'The text: rewrites the saved message. Display: the saved text stays; only what you see changes. Prompt: only what is sent to the model.';
+      'The text: rewrites the saved message. Display: only what you see. Prompt: only what is sent to the model.';
 
   @override
   String get tavernRegexMinDepth => 'From depth';
@@ -24372,7 +24363,7 @@ class L10nEn extends L10n {
 
   @override
   String get tavernRenderSubtitle =>
-      'Only this character\'s own chats: a card\'s status bars and styling need pages or the canvas, and its scripts run only on the canvas';
+      'Only this character\'s own chats. Status bars and styling need pages or the canvas; scripts run only on the canvas';
 
   @override
   String get tavernRenderText => 'Text';
@@ -24413,8 +24404,7 @@ class L10nEn extends L10n {
   String get tavernGroupMembers => 'Who\'s in it';
 
   @override
-  String get tavernGroupMembersNote =>
-      'In the order picked; the first hosts it, and the story\'s shared state lives on that card.';
+  String get tavernGroupMembersNote => 'In the order picked; the first one hosts.';
 
   @override
   String get tavernGroupHost => 'Host';
@@ -24442,7 +24432,7 @@ class L10nEn extends L10n {
 
   @override
   String get tavernGroupNaturalNote =>
-      'As SillyTavern does: whoever is named speaks first, the rest by how talkative each is; the most per turn is in the group\'s settings.';
+      'As SillyTavern does: whoever is named speaks first, the rest by how talkative each is.';
 
   @override
   String get tavernGroupListOrderNote => 'Each turn goes down the list from the top (the muted are skipped).';
@@ -24481,17 +24471,17 @@ class L10nEn extends L10n {
   String get tavernGroupSettings => 'Group settings';
 
   @override
-  String get tavernGroupMaxSpeakers => 'Most to speak each turn';
+  String get tavernGroupMaxSpeakers => 'Most per turn';
 
   @override
   String get tavernGroupSelfResponses => 'May answer themselves';
 
   @override
-  String get tavernGroupSelfResponsesNote => 'Whoever spoke last may still go first this turn.';
+  String get tavernGroupSelfResponsesNote => 'Whoever spoke last may speak again this turn.';
 
   @override
   String tavernGroupHostNote(String name) {
-    return 'Hosted by $name: the story\'s shared state, director and secrets live on that card; the host need not be among the speakers.';
+    return 'Hosted by $name: the story\'s shared state lives on that card.';
   }
 
   @override
@@ -24967,9 +24957,6 @@ class L10nEn extends L10n {
   String get tavernDraftsForCard => 'Change this card with AI';
 
   @override
-  String get tavernDraftsForCardSubtitle => 'In a draft; apply what you pick';
-
-  @override
   String get tavernDraftsEmpty => 'No drafts yet';
 
   @override
@@ -25255,14 +25242,14 @@ class L10nEn extends L10n {
   String get tavernImportFromDeepSeek => 'Bring over from DeepSeek';
 
   @override
-  String get tavernImportFromDeepSeekSubtitle => 'Export all chats in DeepSeek\'s settings, then pick that ZIP';
+  String get tavernImportFromDeepSeekSubtitle => 'Pick the ZIP exported in DeepSeek\'s settings';
 
   @override
   String get tavernDeepSeekTitle => 'Bring chats over from DeepSeek';
 
   @override
   String tavernDeepSeekFound(int count) {
-    return '$count chats found, the longest first. Tick the ones to continue.';
+    return '$count chats found. Tick the ones to continue.';
   }
 
   @override
@@ -25307,8 +25294,7 @@ class L10nEn extends L10n {
   String get tavernPacks => 'Gameplay packs';
 
   @override
-  String get tavernPacksSubtitle =>
-      'Installed packs. Installing doesn\'t turn one on: add it globally, to a character or to a chat.';
+  String get tavernPacksSubtitle => 'A pack takes effect once added globally, to a character or to a chat.';
 
   @override
   String get tavernPacksEmpty => 'No gameplay packs yet';
@@ -25348,9 +25334,6 @@ class L10nEn extends L10n {
 
   @override
   String get tavernPackScopeGlobal => 'On everywhere';
-
-  @override
-  String get tavernPackScopeGlobalSubtitle => 'Packs every chat uses';
 
   @override
   String get tavernPackScopeCharacter => 'This character\'s packs';
@@ -25418,15 +25401,13 @@ class L10nEn extends L10n {
   String get tavernPackAddGlobal => 'Turn on everywhere';
 
   @override
-  String get tavernPackAddNote =>
-      'For one character or chat only, add it from the character\'s page or the chat\'s stage panel';
+  String get tavernPackAddNote => 'For one character or chat: add it on the character page or the stage panel';
 
   @override
   String get tavernPackCast => 'Characters';
 
   @override
-  String get tavernPackCastNote =>
-      'Importing makes a new character; the original card is untouched and no group chat is joined';
+  String get tavernPackCastNote => 'Importing makes a new character; the original card is untouched.';
 
   @override
   String get tavernPackCastFromCard => 'Full character card';
@@ -25636,8 +25617,11 @@ class L10nEn extends L10n {
   String get tavernScripts => 'Script library';
 
   @override
-  String get tavernScriptsEmpty =>
-      'No global scripts yet. Import a script JSON exported from Tavern Helper; the ones turned on run on the whole-page canvas of every chat.';
+  String get tavernScriptsEmpty => 'No global scripts yet';
+
+  @override
+  String get tavernScriptsEmptyMessage =>
+      'Import a script JSON from Tavern Helper; the ones turned on run on the whole-page canvas.';
 
   @override
   String get tavernScriptsImport => 'Import scripts';

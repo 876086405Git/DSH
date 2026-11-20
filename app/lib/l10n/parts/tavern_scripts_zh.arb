@@ -1,6 +1,7 @@
 {
   "tavernScripts": "脚本库",
-  "tavernScriptsEmpty": "还没有全局脚本。导入酒馆助手导出的脚本 JSON，打开的脚本会在每个对话的整页画布里运行。",
+  "tavernScriptsEmpty": "还没有全局脚本",
+  "tavernScriptsEmptyMessage": "可以导入酒馆助手导出的脚本 JSON，打开的在整页画布里运行",
   "tavernScriptsImport": "导入脚本",
   "tavernScriptsImported": "{count} 个脚本加入了脚本库",
   "@tavernScriptsImported": {"placeholders": {"count": {"type": "int"}}},

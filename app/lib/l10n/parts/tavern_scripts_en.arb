@@ -1,6 +1,7 @@
 {
   "tavernScripts": "Script library",
-  "tavernScriptsEmpty": "No global scripts yet. Import a script JSON exported from Tavern Helper; the ones turned on run on the whole-page canvas of every chat.",
+  "tavernScriptsEmpty": "No global scripts yet",
+  "tavernScriptsEmptyMessage": "Import a script JSON from Tavern Helper; the ones turned on run on the whole-page canvas.",
   "tavernScriptsImport": "Import scripts",
   "tavernScriptsImported": "{count, plural, =1{Added a script to the library} other{Added {count} scripts to the library}}",
   "@tavernScriptsImported": {"placeholders": {"count": {"type": "int"}}},

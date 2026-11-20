@@ -38288,12 +38288,6 @@ abstract class L10n {
   /// **'这个文件不是文本'**
   String get tavernPresetNotText;
 
-  /// No description provided for @tavernPresetsEmpty.
-  ///
-  /// In zh, this message translates to:
-  /// **'还没有预设'**
-  String get tavernPresetsEmpty;
-
   /// No description provided for @tavernPresetsEmptyMessage.
   ///
   /// In zh, this message translates to:
@@ -38387,7 +38381,7 @@ abstract class L10n {
   /// No description provided for @tavernRegexEmptyMessage.
   ///
   /// In zh, this message translates to:
-  /// **'SillyTavern 导出的正则 JSON（一条或一组）都能导入。全局正则对所有对话生效；卡和预设自带的正则跟着它们走。'**
+  /// **'可以导入 SillyTavern 导出的正则 JSON，一条或一组'**
   String get tavernRegexEmptyMessage;
 
   /// No description provided for @tavernRegexUnnamed.
@@ -38471,7 +38465,7 @@ abstract class L10n {
   /// No description provided for @tavernLorebooksEmptyMessage.
   ///
   /// In zh, this message translates to:
-  /// **'SillyTavern 导出的世界书 JSON 都能导入。设为全局后对所有对话生效；卡自带的世界书跟着卡走。'**
+  /// **'可以导入 SillyTavern 导出的世界书 JSON'**
   String get tavernLorebooksEmptyMessage;
 
   /// No description provided for @tavernLorebookCount.
@@ -38957,7 +38951,7 @@ abstract class L10n {
   /// No description provided for @tavernPersonasNote.
   ///
   /// In zh, this message translates to:
-  /// **'长按设为默认或删除。没有单独选人设的对话用默认的。'**
+  /// **'长按可设为默认或删除'**
   String get tavernPersonasNote;
 
   /// No description provided for @tavernPersonaUnsetDefault.
@@ -39017,7 +39011,7 @@ abstract class L10n {
   /// No description provided for @tavernPersonaDescriptionHelp.
   ///
   /// In zh, this message translates to:
-  /// **'模型会读到这段：你是谁、什么样子、和角色是什么关系。'**
+  /// **'你是谁、什么样子、和角色的关系'**
   String get tavernPersonaDescriptionHelp;
 
   /// No description provided for @tavernPersonaDescriptionHint.
@@ -39029,7 +39023,7 @@ abstract class L10n {
   /// No description provided for @tavernPersonaDefaultSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'新对话和没有单独选人设的对话都用它'**
+  /// **'没单独选人设的对话都用它'**
   String get tavernPersonaDefaultSubtitle;
 
   /// No description provided for @tavernPersonaDelete.
@@ -39113,7 +39107,7 @@ abstract class L10n {
   /// No description provided for @tavernExportPngSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'设定藏在图片里，SillyTavern 等酒馆都能导入'**
+  /// **'SillyTavern 等酒馆都能导入'**
   String get tavernExportPngSubtitle;
 
   /// No description provided for @tavernExportJson.
@@ -39479,7 +39473,7 @@ abstract class L10n {
   /// No description provided for @tavernLorebookSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'这张卡自带的设定条目'**
+  /// **'卡里自带的条目'**
   String get tavernLorebookSubtitle;
 
   /// No description provided for @tavernLorebookEntries.
@@ -39527,7 +39521,7 @@ abstract class L10n {
   /// No description provided for @tavernImportFromFileSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'角色卡、预设、世界书、正则、快速回复或聊天记录，会自己认出来'**
+  /// **'角色卡、预设、世界书等，自动识别'**
   String get tavernImportFromFileSubtitle;
 
   /// No description provided for @tavernImportFromLink.
@@ -39539,7 +39533,7 @@ abstract class L10n {
   /// No description provided for @tavernImportFromLinkSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'Chub、RisuRealm 的角色页，或卡文件的直链'**
+  /// **'Chub、RisuRealm 或卡文件的链接'**
   String get tavernImportFromLinkSubtitle;
 
   /// No description provided for @tavernLinkInvalid.
@@ -39749,7 +39743,7 @@ abstract class L10n {
   /// No description provided for @tavernStorybookWholeNote.
   ///
   /// In zh, this message translates to:
-  /// **'一共 {count} 句，隐藏的消息不放进去。EPUB 能用微信读书、Apple 图书等打开。'**
+  /// **'一共 {count} 句，隐藏的消息不放进去'**
   String tavernStorybookWholeNote(int count);
 
   /// No description provided for @tavernStorybookEpub.
@@ -39845,7 +39839,7 @@ abstract class L10n {
   /// No description provided for @tavernLive2dSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'视觉小说排版里用它代替卡面，会动、说话时会张嘴'**
+  /// **'视觉小说排版里代替卡面'**
   String get tavernLive2dSubtitle;
 
   /// No description provided for @tavernLive2dNone.
@@ -40391,7 +40385,7 @@ abstract class L10n {
   /// No description provided for @tavernPrefillNote.
   ///
   /// In zh, this message translates to:
-  /// **'开着时，这段文字作为回复的开头发给模型，模型从这里接着写。放在「思考」只在开了思考时生效，没开就放进正文。「接着写」的回合不用它。'**
+  /// **'放在「思考」只在开了思考时生效，没开就放进正文。「接着写」的回合不用它。'**
   String get tavernPrefillNote;
 
   /// No description provided for @tavernPresetPromptEmpty.
@@ -41333,7 +41327,7 @@ abstract class L10n {
   /// No description provided for @tavernWriteOwnSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'从一张空白卡开始，名字、设定和开场白都自己填'**
+  /// **'从一张空白卡开始'**
   String get tavernWriteOwnSubtitle;
 
   /// No description provided for @tavernNewCharacterName.
@@ -42203,7 +42197,7 @@ abstract class L10n {
   /// No description provided for @tavernRegexFieldFindHelp.
   ///
   /// In zh, this message translates to:
-  /// **'SillyTavern 的写法：/规则/标志，比如 /(早安|晚安)/gi'**
+  /// **'写法 /规则/标志，如 /(早安|晚安)/gi'**
   String get tavernRegexFieldFindHelp;
 
   /// No description provided for @tavernRegexFieldReplaceHelp.
@@ -42293,7 +42287,7 @@ abstract class L10n {
   /// No description provided for @tavernRegexPhaseNote.
   ///
   /// In zh, this message translates to:
-  /// **'原文：直接改写存下来的消息。只改显示：存档不变，只是看起来不同。只改发出：只改发给模型的那一份。'**
+  /// **'原文：改写存下的消息；只改显示：存档不变；只改发出：只改发给模型的那份'**
   String get tavernRegexPhaseNote;
 
   /// No description provided for @tavernRegexMinDepth.
@@ -42407,7 +42401,7 @@ abstract class L10n {
   /// No description provided for @tavernRenderSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'只管这个角色的单人对话：卡里的状态栏、美化要选网页或画布才显示，脚本只在画布里运行'**
+  /// **'只管这个角色的单人对话。状态栏、美化要选网页或画布，脚本只在画布里运行'**
   String get tavernRenderSubtitle;
 
   /// No description provided for @tavernRenderText.
@@ -42479,7 +42473,7 @@ abstract class L10n {
   /// No description provided for @tavernGroupMembersNote.
   ///
   /// In zh, this message translates to:
-  /// **'按点选的顺序排；第一个是主持，故事共用的状态记在它的卡上。'**
+  /// **'按点选的顺序排，第一个是主持'**
   String get tavernGroupMembersNote;
 
   /// No description provided for @tavernGroupHost.
@@ -42533,7 +42527,7 @@ abstract class L10n {
   /// No description provided for @tavernGroupNaturalNote.
   ///
   /// In zh, this message translates to:
-  /// **'像 SillyTavern：被点到名的先说，其余看各自的话多话少；每轮最多几个人说在群设置里改。'**
+  /// **'像 SillyTavern：被点到名的先说，其余看各自的话多话少'**
   String get tavernGroupNaturalNote;
 
   /// No description provided for @tavernGroupListOrderNote.
@@ -42599,7 +42593,7 @@ abstract class L10n {
   /// No description provided for @tavernGroupMaxSpeakers.
   ///
   /// In zh, this message translates to:
-  /// **'每轮最多几人说'**
+  /// **'每轮最多几人'**
   String get tavernGroupMaxSpeakers;
 
   /// No description provided for @tavernGroupSelfResponses.
@@ -42611,13 +42605,13 @@ abstract class L10n {
   /// No description provided for @tavernGroupSelfResponsesNote.
   ///
   /// In zh, this message translates to:
-  /// **'上一句是谁说的，这一轮还能先轮到他。'**
+  /// **'刚说完的人这一轮还能再说'**
   String get tavernGroupSelfResponsesNote;
 
   /// No description provided for @tavernGroupHostNote.
   ///
   /// In zh, this message translates to:
-  /// **'主持是「{name}」：故事共用的状态、导演和秘密记在它的卡上；它可以不在发言名单里。'**
+  /// **'主持是「{name}」，故事共用的状态记在它的卡上'**
   String tavernGroupHostNote(String name);
 
   /// No description provided for @tavernGroupMuted.
@@ -43448,12 +43442,6 @@ abstract class L10n {
   /// **'用 AI 改这张卡'**
   String get tavernDraftsForCard;
 
-  /// No description provided for @tavernDraftsForCardSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'在草稿里改，挑好再应用'**
-  String get tavernDraftsForCardSubtitle;
-
   /// No description provided for @tavernDraftsEmpty.
   ///
   /// In zh, this message translates to:
@@ -43961,7 +43949,7 @@ abstract class L10n {
   /// No description provided for @tavernImportFromDeepSeekSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'在 DeepSeek 的设置里导出全部历史对话，再选那个 ZIP'**
+  /// **'选 DeepSeek 设置里导出的 ZIP'**
   String get tavernImportFromDeepSeekSubtitle;
 
   /// No description provided for @tavernDeepSeekTitle.
@@ -43973,7 +43961,7 @@ abstract class L10n {
   /// No description provided for @tavernDeepSeekFound.
   ///
   /// In zh, this message translates to:
-  /// **'找到 {count} 段对话，聊得最多的排在前面。勾上想接着聊的。'**
+  /// **'找到 {count} 段对话，勾上要接回来的'**
   String tavernDeepSeekFound(int count);
 
   /// No description provided for @tavernDeepSeekMessages.
@@ -44045,7 +44033,7 @@ abstract class L10n {
   /// No description provided for @tavernPacksSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'装进来的玩法包；装上不等于启用，要在全局、角色或对话里加上才生效'**
+  /// **'装上后要在全局、角色或对话里加上才生效'**
   String get tavernPacksSubtitle;
 
   /// No description provided for @tavernPacksEmpty.
@@ -44107,12 +44095,6 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'全局启用'**
   String get tavernPackScopeGlobal;
-
-  /// No description provided for @tavernPackScopeGlobalSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'所有对话都用的玩法包'**
-  String get tavernPackScopeGlobalSubtitle;
 
   /// No description provided for @tavernPackScopeCharacter.
   ///
@@ -44237,7 +44219,7 @@ abstract class L10n {
   /// No description provided for @tavernPackAddNote.
   ///
   /// In zh, this message translates to:
-  /// **'只给某个角色或对话用，在角色页或对话的舞台面板里加'**
+  /// **'只给某个角色或对话：在角色页或舞台面板里加'**
   String get tavernPackAddNote;
 
   /// No description provided for @tavernPackCast.
@@ -44249,7 +44231,7 @@ abstract class L10n {
   /// No description provided for @tavernPackCastNote.
   ///
   /// In zh, this message translates to:
-  /// **'导入会新建一个角色，不改原来的卡，也不会自动加进群聊'**
+  /// **'导入会新建角色，不改原来的卡'**
   String get tavernPackCastNote;
 
   /// No description provided for @tavernPackCastFromCard.
@@ -44627,8 +44609,14 @@ abstract class L10n {
   /// No description provided for @tavernScriptsEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'还没有全局脚本。导入酒馆助手导出的脚本 JSON，打开的脚本会在每个对话的整页画布里运行。'**
+  /// **'还没有全局脚本'**
   String get tavernScriptsEmpty;
+
+  /// No description provided for @tavernScriptsEmptyMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以导入酒馆助手导出的脚本 JSON，打开的在整页画布里运行'**
+  String get tavernScriptsEmptyMessage;
 
   /// No description provided for @tavernScriptsImport.
   ///
