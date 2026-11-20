@@ -575,7 +575,9 @@ ${lowPower ? tavernCalmJs : ''}
         var waiting=held;held=[];waiting.forEach(apply);
         // The library's presets, for getPreset by name, on the way.
         preloadPresets();
-        return true;
+        // A held delivery that moved the path read the snapshot again: wait
+        // for that one, or a message just written runs before its floor is in.
+        return loaded?true:loading;
       },function(x){loading=null;throw x;});
       return loading;
     },
