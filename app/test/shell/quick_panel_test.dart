@@ -216,6 +216,9 @@ void main() {
       await pull(3);
       expect(_panel, findsNothing);
 
+      // Past the double-tap window: a second touch-and-drag on message text
+      // right after the first is the selection's double-tap drag.
+      await tester.pump(kDoubleTapTimeout);
       await pull(8);
       expect(_panelIn(tester), _panelWidth);
     });
