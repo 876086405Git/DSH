@@ -26,9 +26,10 @@
   const SHADERS = `${PACK}runtime/shaders/`;
   const MAX_TEXTURE = Number(query.get('maxTexture')) || 4096;
   let REDUCED = query.get('reduceMotion') === '1';
-  // Float draws at the screen's own density: its viewport is at most 640 view px tall, and a
-  // 1x buffer stretched over a 3x screen reads as out of focus.
-  const DPR_CAP = FLOAT ? 4 : 2;
+  // Both draw at the screen's own density (phones are about 3x): a 2x buffer
+  // stretched over a 3x screen reads as out of focus. The room sheds resolution
+  // itself when frames can't keep up (`quality` below).
+  const DPR_CAP = FLOAT ? 4 : 3;
   // Clip masks: the renderer packs them into textures of four channels, at
   // most 36 different masks in one texture, 32 each when there are several.
   // A model that needs more (a detailed one: 49 for 大肥鱼 4096) gets more
@@ -1801,11 +1802,16 @@
   let drawn = 0;
   let fpsAt = performance.now();
   let fps = 0;
-  // Share of the full resolution drawn: steps down while frames can't keep
-  // up with what was asked (an old phone, a heavy model), never below half.
+  // Share of the full resolution drawn: steps down while frames come late
+  // (an old phone, a heavy model), never below half, and back up once they
+  // keep time again. A frame is late against the rate asked when it was drawn,
+  // so a second that is part busy (60) and part idle (30) isn't counted slow.
   let quality = 1;
   let slowSeconds = 0;
-  let asked = 30;
+  let quickSeconds = 0;
+  let late = 0;
+  // Loading the model (texture upload, mipmaps) stalls a few frames; not the phone's pace.
+  let settleUntil = 0;
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP) * quality;
@@ -1834,8 +1840,10 @@
       home.show !== null ||
       scene.busy();
     const target = life.sleep > 0.9 ? 12 : busy ? 60 : 30;
-    asked = Math.max(asked, target);
     if (ts - last < 1000 / target - 2) return;
+    // Over half a second is a gap (paused, hidden, waking), not a late frame.
+    const gap = ts - last;
+    if (gap > 1500 / target && gap < 500) late++;
     const dt = clamp((ts - last) / 1000, 0.001, 0.05);
     last = ts;
     life.hop.step(0, dt);
@@ -1855,15 +1863,24 @@
       // A gap (paused, hidden) says nothing about how fast she draws.
       if (ts - fpsAt < 2000) {
         fps = (drawn * 1000) / (ts - fpsAt);
-        slowSeconds = fps < Math.min(asked, 60) * 0.7 ? slowSeconds + 1 : 0;
-        if (slowSeconds >= 3 && quality > 0.5) {
-          quality = Math.max(0.5, quality - 0.15);
-          slowSeconds = 0;
+        if (ts >= settleUntil && drawn > 0) {
+          const share = late / drawn;
+          slowSeconds = share > 0.3 ? slowSeconds + 1 : 0;
+          // A handful of frames can say she's slow (a very slow phone draws only
+          // a few a second) but not that she keeps time.
+          quickSeconds = drawn >= 5 && share < 0.1 ? quickSeconds + 1 : 0;
+          if (slowSeconds >= 3 && quality > 0.5) {
+            quality = Math.max(0.5, quality - 0.15);
+            slowSeconds = 0;
+          } else if (quickSeconds >= 10 && quality < 1) {
+            quality = Math.min(1, quality + 0.15);
+            quickSeconds = 0;
+          }
         }
       }
       drawn = 0;
+      late = 0;
       fpsAt = ts;
-      asked = 12;
     }
   }
 
@@ -2174,6 +2191,7 @@
       next.adapt(character, adapter);
       model = next;
       loadingModel = null;
+      settleUntil = performance.now() + 3000;
       applyCharacter();
       applyTimeOfDay();
       if (!FLOAT) setInterval(applyTimeOfDay, 10 * 60 * 1000);
@@ -2243,6 +2261,7 @@
     // For the verification harness; nothing in the app reads it.
     debug: () => ({
       fps,
+      quality,
       quality,
       masks: model?.masks ?? null,
       zones,
