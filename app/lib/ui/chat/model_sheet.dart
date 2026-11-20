@@ -805,6 +805,47 @@ class _ModelGrid extends StatelessWidget {
       selected: selected?.id == model.id && selected?.provider == model.provider,
       onTap: onPick == null ? null : () => onPick!(model),
     );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Two columns while every name fits its card in two lines; a longer
+        // one (a channel's own model name, a price tag after it) gets the
+        // whole row, the group in one column.
+        if (!_namesFit(context, (constraints.maxWidth - gap) / 2)) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < models.length; i++) ...[if (i > 0) const SizedBox(height: gap), card(models[i])],
+            ],
+          );
+        }
+        return _pairs(card);
+      },
+    );
+  }
+
+  /// Every name in two lines on a card [cardWidth] wide.
+  bool _namesFit(BuildContext context, double cardWidth) {
+    final room = cardWidth - 2 * _ModelCard.padding - 8 - _CheckMark.size;
+    final painter = TextPainter(
+      maxLines: 2,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+    try {
+      final style = _ModelCard.nameStyle(Theme.of(context));
+      for (final model in models) {
+        painter.text = TextSpan(text: shortModelName(model.name), style: style);
+        painter.layout(maxWidth: room);
+        if (painter.didExceedMaxLines) return false;
+      }
+      return true;
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  Widget _pairs(Widget Function(ModelInfo) card) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -840,6 +881,9 @@ class _ModelCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   static const radius = BorderRadius.all(Radius.circular(AppShape.lg));
+  static const padding = 16.0;
+
+  static TextStyle? nameStyle(ThemeData theme) => theme.textTheme.titleSmall?.copyWith(height: 1.35);
 
   @override
   Widget build(BuildContext context) {
@@ -866,7 +910,7 @@ class _ModelCard extends StatelessWidget {
           child: AnimatedContainer(
             duration: duration,
             curve: AppMotion.std,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(padding),
             decoration: ShapeDecoration(
               color: selected
                   ? colors.primary.withValues(alpha: dark ? 0.14 : 0.07)
@@ -891,12 +935,7 @@ class _ModelCard extends StatelessWidget {
                     // 390 dp phone, so "GPT 5.6 Terra" at titleMedium's 16 was
                     // cut after the first words.
                     Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(height: 1.35),
-                      ),
+                      child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle(theme)),
                     ),
                     const SizedBox(width: 8),
                     _CheckMark(selected: selected),
