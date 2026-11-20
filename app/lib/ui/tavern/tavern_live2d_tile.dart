@@ -93,8 +93,6 @@ class _TavernLive2dTileState extends ConsumerState<TavernLive2dTile> {
     final store = ref.watch(tavernLive2dProvider(_id)).value;
     return SettingsTile(
       key: const ValueKey('tavern-live2d'),
-      icon: AppIcons.pet,
-      tinted: false,
       title: l10n.tavernLive2d,
       subtitle: l10n.tavernLive2dSubtitle,
       value: _busy
