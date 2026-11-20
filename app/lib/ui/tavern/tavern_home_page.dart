@@ -38,6 +38,7 @@ import 'tavern_regex_page.dart';
 import 'tavern_scripts_page.dart';
 import 'tavern_quick_replies_page.dart';
 import 'tavern_settings_page.dart';
+import 'tavern_arrive.dart';
 import 'tavern_widgets.dart';
 
 /// The home's four sections.
@@ -54,7 +55,10 @@ class TavernHomePage extends ConsumerStatefulWidget {
   ConsumerState<TavernHomePage> createState() => _TavernHomePageState();
 }
 
-class _TavernHomePageState extends ConsumerState<TavernHomePage> {
+class _TavernHomePageState extends ConsumerState<TavernHomePage> with SingleTickerProviderStateMixin {
+  /// A section's content fades in as it is switched to, and the shelf as it
+  /// first comes in.
+  late final _swap = TavernSwapFade(this);
   final _search = TextEditingController();
   String _query = '';
 
@@ -91,6 +95,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
 
   @override
   void dispose() {
+    _swap.dispose();
     _search.dispose();
     _chatSearch.dispose();
     super.dispose();
@@ -132,6 +137,10 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    // The shelf in after its spinner: faded in, once.
+    ref.listen(tavernCharactersProvider, (before, now) {
+      if (before?.value == null && now.value != null) _swap.play(context);
+    });
     final characters = ref.watch(tavernCharactersProvider);
     final chats = ref.watch(tavernChatsProvider(null)).value ?? const [];
     final byId = {for (final c in characters.value ?? const <TavernCharacter>[]) c.id: c};
@@ -160,11 +169,14 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
                 PillSegment(TavernSection.me, l10n.tavernSectionMe),
               ],
               selected: _section,
-              onChanged: (section) => setState(() => _section = section),
+              onChanged: (section) {
+                setState(() => _section = section);
+                _swap.play(context);
+              },
             ),
           ),
         ),
-        ...switch (_section) {
+        for (final sliver in switch (_section) {
           TavernSection.shelf => _shelf(characters, chats, byId),
           TavernSection.chats => _chats(chats, byId),
           TavernSection.library => [_library()],
@@ -176,7 +188,8 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
               sliver: SliverList.list(children: tavernSettingsGroups(context, ref)),
             ),
           ],
-        },
+        })
+          SliverFadeTransition(opacity: _swap.opacity, sliver: sliver),
       ],
     );
   }
@@ -775,56 +788,63 @@ class _CharacterTile extends ConsumerWidget {
                 ]),
               ),
         behavior: HitTestBehavior.opaque,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  TavernPortrait(name: character.name, path: character.avatarPath),
-                  if (picked case final picked?)
-                    Positioned(
-                      key: ValueKey('tavern-pick-${character.id}'),
-                      top: 6,
-                      left: 6,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: picked ? theme.colorScheme.primary : Colors.black.withValues(alpha: 0.32),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: Icon(AppIcons.done, size: 14, color: picked ? Colors.white : Colors.transparent),
-                        ),
-                      ),
-                    ),
-                  if (favorite)
-                    Positioned(
-                      key: ValueKey('tavern-favorite-${character.id}'),
-                      top: 6,
-                      right: 6,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.32), shape: BoxShape.circle),
-                        child: const Padding(
-                          padding: EdgeInsets.all(5),
-                          child: Icon(AppIcons.favoriteActive, size: 14, color: Colors.white),
+        // Gives under the finger as the app's cards do; the tap stays the detector's.
+        child: Pressable(
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    TavernPortrait(name: character.name, path: character.avatarPath),
+                    if (picked case final picked?)
+                      Positioned(
+                        key: ValueKey('tavern-pick-${character.id}'),
+                        top: 6,
+                        left: 6,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: picked ? theme.colorScheme.primary : Colors.black.withValues(alpha: 0.32),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(3),
+                            child: Icon(AppIcons.done, size: 14, color: picked ? Colors.white : Colors.transparent),
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                    if (favorite)
+                      Positioned(
+                        key: ValueKey('tavern-favorite-${character.id}'),
+                        top: 6,
+                        right: 6,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.32),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(5),
+                            child: Icon(AppIcons.favoriteActive, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(character.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
-            Text(
-              character.tags.isEmpty ? (character.creator ?? '') : character.tags.take(3).join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(color: dsh.textTertiary),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(character.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+              Text(
+                character.tags.isEmpty ? (character.creator ?? '') : character.tags.take(3).join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(color: dsh.textTertiary),
+              ),
+            ],
+          ),
         ),
       ),
     );
