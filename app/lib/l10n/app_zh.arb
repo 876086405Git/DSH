@@ -13797,6 +13797,8 @@
   "tavernRenderCanvas": "整页画布",
   "tavernCanvasSubtitle": "整段对话放进一张网页，按 SillyTavern 的结构排，卡写给 ST 的样式能跨消息生效。卡里的脚本会运行，不想让它跑就打开「网页里不运行卡的脚本」。视觉小说不用它。",
   "tavernCanvasReloaded": "画面重新加载了",
+  "tavernLowPower": "省电渲染",
+  "tavernLowPowerSubtitle": "去掉卡片网页里的模糊和循环动画，手机更流畅",
   "tavernGroupSpeaking": "{name} 在说",
   "@tavernGroupSpeaking": {
     "placeholders": {

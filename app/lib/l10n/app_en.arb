@@ -7057,6 +7057,8 @@
   "tavernRenderCanvas": "Canvas",
   "tavernCanvasSubtitle": "The whole chat in one web page laid out as SillyTavern does, so a card's ST styles reach across messages. Card scripts run here; turn on \"No card scripts in those pages\" to stop them. Not for visual novel.",
   "tavernCanvasReloaded": "The page reloaded",
+  "tavernLowPower": "Power-saving pages",
+  "tavernLowPowerSubtitle": "No blur or looping animations in cards' web pages, so the phone runs smoother",
   "tavernGroupSpeaking": "{name} is speaking",
   "tavernGroupThen": "then {names}",
   "tavernGroupNoSpeakers": "No one took this turn. Tap a name above to have them speak.",

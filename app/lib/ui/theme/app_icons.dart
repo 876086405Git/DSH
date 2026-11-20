@@ -355,6 +355,9 @@ abstract final class AppIcons {
   static const agentLoop = DshGlyphs.arrowsClockwise;
   static const webSearch = DshGlyphs.globeHemisphereWest;
   static const webApp = DshGlyphs.globe;
+
+  /// 酒馆设置 › 省电渲染.
+  static const lowPower = DshGlyphs.batteryPlus;
   static const mention = DshGlyphs.at;
   static const translate = DshGlyphs.translate;
   static const history = DshGlyphs.clockCounterClockwise;

@@ -223,10 +223,11 @@ void main() {
     );
     final open = page();
     expect(open, contains('<div id="chat"></div>'));
-    // A long story: only the latest messages are always laid out, and one
-    // drawn as it was is kept (the script itself was checked in Edge).
-    expect(open, contains('.mes.far{content-visibility:auto;'));
-    expect(open, contains("m.classList.toggle('far',i<list.length-$tavernCanvasNear)"));
+    // A long story: only the latest messages are always drawn, the rest while
+    // in sight (tavern_page_perf_test.dart), and one drawn as it was is kept
+    // (the script itself was checked in Edge).
+    expect(open, contains('.mes.dsh-off{content-visibility:auto;}'));
+    expect(open, contains('sight.watch(m,i>=list.length-$tavernCanvasTail)'));
     expect(open, contains('if(m&&m._dsh===key)'));
     // A card's scripts run unless 不运行卡的脚本 is on; never with our nonce.
     expect(open, contains('var runScripts=true'));

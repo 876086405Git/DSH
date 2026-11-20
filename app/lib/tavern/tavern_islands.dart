@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:ui' show Color;
 
 import 'tavern_components.dart';
+import 'tavern_page_perf.dart';
 
 /// Where islands and 整页画布 are loaded from: their pages' origin, so a card's
 /// localStorage works (a page with no base URL has the origin "null", which
@@ -41,15 +42,31 @@ final class TavernComponentPart extends TavernPart {
 }
 
 /// Whether an island's [html] may use the bundled library [name]: jQuery and
-/// lodash always (small, and used bare); zod and YAML when the page names
-/// them, imports a module (an MVU bundle reaches for them) or uses MVU.
+/// lodash always (small, and used bare); zod and YAML (over half a megabyte)
+/// when a script of the page builds a zod schema or names YAML, imports a
+/// module (an MVU bundle reaches for them) or uses MVU. What the page's text
+/// and CSS say (an `@import`) does not count.
 bool tavernIslandNeeds(String name, String html) => switch (name) {
-  'zod' => _wantsZod.hasMatch(html),
-  'YAML' => _wantsYaml.hasMatch(html),
+  'zod' => _wantsZod.hasMatch(_scriptsOf(html)),
+  'YAML' => _wantsYaml.hasMatch(_scriptsOf(html)),
   _ => true,
 };
-final _wantsZod = RegExp(r'\bz\s*\.|\bimport\b|\bMvu\b|waitGlobalInitialized');
-final _wantsYaml = RegExp(r'\bYAML\b|\bimport\b|\bMvu\b|waitGlobalInitialized');
+
+/// The page's code: its script elements and its inline handlers (onclick=…).
+String _scriptsOf(String html) => [
+  for (final m in _scriptBody.allMatches(html)) m[1]!,
+  for (final m in _handler.allMatches(html)) m[1] ?? m[2]!,
+].join('\n');
+final _scriptBody = RegExp(r'<script\b[^>]*>([\s\S]*?)</script\s*>', caseSensitive: false);
+final _handler = RegExp(r'''\son[a-z]+\s*=\s*(?:"([^"]*)"|'([^']*)')''', caseSensitive: false);
+const _module = r'''(?<![@.\w$])import\b\s*[\w${*'"(]|\bMvu\b|waitGlobalInitialized''';
+// Any member of a bare `z` (z.object, z.coerce.number, z.infer…), or the global
+// one by name (window.z); not another object's `x.z.`, nor `$z`.
+final _wantsZod = RegExp(
+  r'(?<![\w$.])z\s*\.\s*[A-Za-z_$]|\b(?:window|globalThis|self)\s*\.\s*z\b|'
+  '$_module',
+);
+final _wantsYaml = RegExp('\\bYAML\\b|$_module');
 
 /// A page's colours as CSS variables (`--dsh-<name>`), and the scheme its form
 /// controls take: light text, a dark page; so a control a card styled without
@@ -242,7 +259,8 @@ final _script = RegExp(r'<script\b|\son[a-z]+\s*=', caseSensitive: false);
 /// [libraries] (jQuery, lodash, zod, YAML) come first, for its scripts; [story] is
 /// what they may read of the story (TavernIslandStory.forMessage): read
 /// only, as 酒馆助手's and MVU's getters give it. Neither when scripts do not
-/// run.
+/// run. [lowPower] is 省电渲染 ([tavernCalmJs]); [perf] the frame log
+/// ([tavernPerfJs]), posted to the channel as JSON.
 String tavernIslandDocument(
   String html, {
   required Color text,
@@ -253,6 +271,8 @@ String tavernIslandDocument(
   bool offline = false,
   List<String> libraries = const [],
   Map<String, Object?>? story,
+  bool lowPower = false,
+  bool perf = false,
 }) {
   final preload = noScripts
       ? ''
@@ -287,6 +307,7 @@ a{color:var(--dsh-accent);}
 button,input,select,textarea{color-scheme:var(--dsh-scheme);}
 img,video,svg{max-width:100%;height:auto;}
 p{margin:0 0 .6em;}
+${lowPower ? tavernCalmCss : ''}
 </style></head>
 <body>$preload<div id="dsh-island">
 $html
@@ -303,7 +324,7 @@ $html
   document.addEventListener('toggle',report,true);
   setTimeout(report,0);setTimeout(report,300);setTimeout(report,1200);
 })();
-</script></body></html>''';
+</script>${lowPower ? '\n<script nonce="$nonce">(function(){$tavernCalmJs  dshCalm();window.addEventListener(\'load\',function(){dshCalm();});})();</script>' : ''}${perf ? '\n<script nonce="$nonce">(function(){$tavernPerfJs  dshPerf(function(o){TavernIsland.postMessage(JSON.stringify(o));},function(){return {};});})();</script>' : ''}</body></html>''';
 }
 
 /// An island's helpers over dshStory, as 酒馆助手's pages have them: its

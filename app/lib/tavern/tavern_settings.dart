@@ -75,6 +75,7 @@ class TavernSettings {
     this.islandNoScripts = false,
     this.islandOffline = false,
     this.canvas = false,
+    this.lowPower = false,
     this.costAlert = 0,
     this.loaded = false,
   });
@@ -124,6 +125,10 @@ class TavernSettings {
   /// for 视觉小说; card scripts don't run there yet.
   final bool canvas;
 
+  /// 省电渲染: the cards' web pages (整页画布 and islands) without their blur
+  /// and with endless animations played once (tavern_page_perf.dart).
+  final bool lowPower;
+
   /// 单回合费用提醒: a turn whose reply cost more than this (US dollars, at
   /// DeepSeek's list prices) is said to over the composer. One of
   /// [tavernCostAlerts]; 0 is off.
@@ -170,6 +175,7 @@ class TavernSettings {
     bool? islandNoScripts,
     bool? islandOffline,
     bool? canvas,
+    bool? lowPower,
     double? costAlert,
   }) => TavernSettings(
     model: model ?? this.model,
@@ -189,6 +195,7 @@ class TavernSettings {
     islandNoScripts: islandNoScripts ?? this.islandNoScripts,
     islandOffline: islandOffline ?? this.islandOffline,
     canvas: canvas ?? this.canvas,
+    lowPower: lowPower ?? this.lowPower,
     costAlert: costAlert ?? this.costAlert,
     loaded: true,
   );
@@ -214,6 +221,7 @@ class TavernSettingsController extends Notifier<TavernSettings> {
   static const islandNoScriptsKey = 'tavern.islandNoScripts';
   static const islandOfflineKey = 'tavern.islandOffline';
   static const canvasKey = 'tavern.canvas';
+  static const lowPowerKey = 'tavern.lowPower';
   static const costAlertKey = 'tavern.costAlert';
 
   @override
@@ -252,6 +260,7 @@ class TavernSettingsController extends Notifier<TavernSettings> {
         islandNoScripts: prefs.getBool(islandNoScriptsKey) ?? false,
         islandOffline: prefs.getBool(islandOfflineKey) ?? false,
         canvas: prefs.getBool(canvasKey) ?? false,
+        lowPower: prefs.getBool(lowPowerKey) ?? false,
         costAlert: _within(prefs.getDouble(costAlertKey), tavernCostAlertRange, 0),
         loaded: true,
       );
@@ -368,6 +377,11 @@ class TavernSettingsController extends Notifier<TavernSettings> {
   Future<void> setCanvas(bool on) async {
     state = state.copyWith(canvas: on);
     await _save((prefs) => prefs.setBool(canvasKey, on));
+  }
+
+  Future<void> setLowPower(bool on) async {
+    state = state.copyWith(lowPower: on);
+    await _save((prefs) => prefs.setBool(lowPowerKey, on));
   }
 
   Future<void> setCostAlert(double usd) async {

@@ -139,6 +139,36 @@ void main() {
     expect(tavernIslandNeeds('YAML', '<script>lazy()</script>'), isFalse);
   });
 
+  test("zod and YAML only for what a page's scripts use, not its CSS or text", () {
+    // A card's page: Google Fonts by @import, the word import in its text,
+    // jQuery and a z-index in its script.
+    const card = '''
+<style>@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC');.a{z-index:2}</style>
+<p>Import your save: import it here.</p>
+<script>\$(function(){ var z = 1; \$('.a').css('z-index', z); localStorage.x = 1; });</script>''';
+    expect(tavernIslandNeeds('zod', card), isFalse);
+    expect(tavernIslandNeeds('YAML', card), isFalse);
+    expect(tavernIslandNeeds('jQuery', card), isTrue);
+    // Names that only look like z are not zod; a page's own `z.` takes it, to be
+    // safe (one too many costs time, one too few breaks the card).
+    expect(tavernIslandNeeds('zod', r'<script>var a={z:1};a.z++;$z.x;importScripts;</script>'), isFalse);
+    expect(tavernIslandNeeds('zod', '<script>const n = z.coerce.number();</script>'), isTrue);
+    expect(tavernIslandNeeds('zod', '<script>const s = window.z.object({});</script>'), isTrue);
+    expect(tavernIslandNeeds('zod', '<script>globalThis.z.string()</script>'), isTrue);
+    // Inline handlers are the page's code too.
+    expect(tavernIslandNeeds('zod', '<button onclick="z.string().parse(v)">ok</button>'), isTrue);
+    expect(tavernIslandNeeds('YAML', "<button onclick='show(YAML.parse(t))'>ok</button>"), isTrue);
+    // A zod schema, a module import, a dynamic import, MVU.
+    expect(tavernIslandNeeds('zod', '<script type="module">const s = z.object({a: z.string()});</script>'), isTrue);
+    expect(tavernIslandNeeds('zod', '<script type="module">import { x } from "https://a/b.js";</script>'), isTrue);
+    expect(tavernIslandNeeds('YAML', "<script>import('https://a/mvu.js')</script>"), isTrue);
+    expect(tavernIslandNeeds('YAML', '<script>await waitGlobalInitialized("Mvu")</script>'), isTrue);
+    expect(tavernIslandNeeds('YAML', '<script>YAML.parse(t)</script>'), isTrue);
+    // Named only outside a script: not needed.
+    expect(tavernIslandNeeds('YAML', '<p>YAML 和 z.object( 在正文里</p>'), isFalse);
+    expect(tavernIslandNeeds('zod', '<p>YAML 和 z.object( 在正文里</p>'), isFalse);
+  });
+
   test('a fence closes on a run of its own mark at least as long, as CommonMark has it', () {
     expect((tavernParts('```text\n<body>x</body>\n````').single as TavernIslandPart).html, '<body>x</body>');
     expect((tavernParts('~~~~\n<body>y</body>\n~~~~~').single as TavernIslandPart).html, '<body>y</body>');

@@ -24382,6 +24382,12 @@ class L10nEn extends L10n {
   String get tavernCanvasReloaded => 'The page reloaded';
 
   @override
+  String get tavernLowPower => 'Power-saving pages';
+
+  @override
+  String get tavernLowPowerSubtitle => 'No blur or looping animations in cards\' web pages, so the phone runs smoother';
+
+  @override
   String tavernGroupSpeaking(String name) {
     return '$name is speaking';
   }

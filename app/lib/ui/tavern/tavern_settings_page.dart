@@ -341,6 +341,14 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
         value: settings.canvas,
         onChanged: (on) => unawaited(controller.setCanvas(on)),
       ),
+      SettingsSwitchTile(
+        key: const ValueKey('tavern-low-power'),
+        icon: AppIcons.lowPower,
+        title: l10n.tavernLowPower,
+        subtitle: l10n.tavernLowPowerSubtitle,
+        value: settings.lowPower,
+        onChanged: (on) => unawaited(controller.setLowPower(on)),
+      ),
     ],
   );
   // Protections the user may choose; off unless they do.

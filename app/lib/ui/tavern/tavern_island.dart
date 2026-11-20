@@ -15,6 +15,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../tavern/tavern_island_story.dart';
 import '../../tavern/tavern_islands.dart';
+import '../../tavern/tavern_page_perf.dart';
 import '../../tavern/tavern_provider.dart' show tavernPersonaSelectionProvider;
 import '../../tavern/tavern_settings.dart';
 import '../web/web_view_guard.dart';
@@ -73,7 +74,10 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   late final WebViewGuard _guard = WebViewGuard(onGone: _onGone);
   double _height = 48;
   bool _gone = false;
-  (String, bool, bool, int, String?)? _loaded;
+  (String, bool, bool, bool, int, String?)? _loaded;
+
+  /// Its turn to load came ([_IslandQueue]).
+  bool _turn = false;
 
   /// What its scripts get (build works it out): jQuery, lodash, zod and
   /// YAML, what they may read of the story; not loaded while either is on
@@ -136,7 +140,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   void _open() {
     final theme = Theme.of(context);
     if (_waiting) return;
-    final (noScripts, offline) = ref.read(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)));
+    final (noScripts, offline, lowPower) = ref.read(
+      tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline, s.lowPower)),
+    );
     // The colours are set in place on the loaded page (_pushColors), never by
     // loading it again: a theme's cross-fade would run the card's scripts, and
     // what they write, once per step.
@@ -144,11 +150,17 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     _colors = {'text': text, 'accent': accent};
     _wantDark = theme.brightness == Brightness.dark;
     _syncDark();
-    final key = (widget.html, noScripts, offline, _libraries.length, _storyKey);
+    final key = (widget.html, noScripts, offline, lowPower, _libraries.length, _storyKey);
     if (key == _loaded) {
       _pushColors();
       return;
     }
+    // Islands that come at once (a chat opened) load one after another.
+    if (!_turn) {
+      _IslandQueue.instance.wait(this);
+      return;
+    }
+    _turn = false;
     _pageLoaded = false;
     _loaded = key;
     final document = tavernIslandDocument(
@@ -161,6 +173,8 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
       offline: offline,
       libraries: _libraries,
       story: _story,
+      lowPower: lowPower,
+      perf: tavernPerfLog,
     );
     final controller = _controller ??= WebViewController();
     final textZoom = MediaQuery.textScalerOf(context).scale(100).round().clamp(50, 300);
@@ -213,6 +227,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
           if (messenger != null) _toasts.show(messenger, data);
         case 'toastClear':
           _toasts.clear(data);
+        case 'perf':
+          final id = (widget.html.hashCode & 0xffff).toRadixString(16).padLeft(4, '0');
+          debugPrint(tavernPerfLine('island:$id', data, lowPower: ref.read(tavernSettingsProvider).lowPower));
       }
       return;
     }
@@ -311,8 +328,26 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_guard.destroy()));
   }
 
+  /// Its turn: it loads now.
+  void _go() {
+    _turn = true;
+    setState(_open);
+  }
+
+  /// How far it is from the screen (logical px; 0 on it), for the queue.
+  double _distance() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return double.infinity;
+    final top = box.localToGlobal(Offset.zero).dy;
+    final view = View.of(context);
+    final screen = view.physicalSize.height / view.devicePixelRatio;
+    final bottom = top + box.size.height;
+    return bottom < 0 ? -bottom : max(0, top - screen);
+  }
+
   @override
   void dispose() {
+    _IslandQueue.instance.leave(this);
     _guard.dispose();
     _toasts.dispose();
     super.dispose();
@@ -320,8 +355,11 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
 
   @override
   Widget build(BuildContext context) {
-    // Its guards changed: load again.
-    ref.listen(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)), (_, _) => _open());
+    // Its guards or 省电渲染 changed: load again.
+    ref.listen(
+      tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline, s.lowPower)),
+      (_, _) => _open(),
+    );
     _prepare();
     final controller = _controller;
     if (_gone || controller == null) return const SizedBox(height: TavernHtmlIsland.minHeight);
@@ -333,5 +371,39 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
         child: WebViewWidget(controller: controller),
       ),
     );
+  }
+}
+
+/// Islands waiting to load, started one at a time, the nearest the screen
+/// first, a beat apart: islands that come at once (a chat opened) do not each
+/// build a web view and parse their page, libraries and all, in the same
+/// frames.
+class _IslandQueue {
+  _IslandQueue._();
+
+  static final instance = _IslandQueue._();
+
+  /// How long after one starts the next may.
+  static const beat = Duration(milliseconds: 48);
+
+  final _waiting = <_TavernHtmlIslandState>{};
+  Timer? _timer;
+
+  /// [island] loads when its turn comes. Those that ask in the same frame
+  /// are all there before the first is picked.
+  void wait(_TavernHtmlIslandState island) {
+    _waiting.add(island);
+    _timer ??= Timer(Duration.zero, _next);
+  }
+
+  void leave(_TavernHtmlIslandState island) => _waiting.remove(island);
+
+  void _next() {
+    _timer = null;
+    if (_waiting.isEmpty) return;
+    final first = _waiting.reduce((a, b) => b._distance() < a._distance() ? b : a);
+    _waiting.remove(first);
+    first._go();
+    _timer = Timer(beat, _next);
   }
 }
