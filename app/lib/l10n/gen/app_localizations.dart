@@ -37985,7 +37985,7 @@ abstract class L10n {
   /// No description provided for @tavernPreviewStatus.
   ///
   /// In zh, this message translates to:
-  /// **'预览 · 回复是示例，还没接上模型'**
+  /// **'预览 · 示例回复'**
   String get tavernPreviewStatus;
 
   /// No description provided for @tavernRegenerate.
@@ -38027,7 +38027,7 @@ abstract class L10n {
   /// No description provided for @tavernKeyMissing.
   ///
   /// In zh, this message translates to:
-  /// **'还没填 DeepSeek API Key，填好就能开始。'**
+  /// **'还没填 DeepSeek API Key'**
   String get tavernKeyMissing;
 
   /// No description provided for @tavernKeyMissingAction.
@@ -38063,13 +38063,13 @@ abstract class L10n {
   /// No description provided for @tavernCutShort.
   ///
   /// In zh, this message translates to:
-  /// **'回复写到回复上限，在这里断开了。可以接着写，或在酒馆设置 › 生成里把回复上限调高。'**
+  /// **'回复到了回复上限。可在酒馆设置 › 生成里调高。'**
   String get tavernCutShort;
 
   /// No description provided for @tavernFiltered.
   ///
   /// In zh, this message translates to:
-  /// **'这条回复被模型的内容过滤拦下了一部分。'**
+  /// **'回复有一部分被内容过滤拦下了。'**
   String get tavernFiltered;
 
   /// No description provided for @tavernErrorBalance.
@@ -40181,7 +40181,7 @@ abstract class L10n {
   /// No description provided for @tavernStageStateNote.
   ///
   /// In zh, this message translates to:
-  /// **'卡里定义了状态以后，好感、属性、背包、时间地点都会在这里，每回合变了什么会标出来（「+5」），你也能直接改。没定义的老卡会在这里列出它的变量。'**
+  /// **'卡里定义了状态，好感、属性、背包等就会显示在这里。'**
   String get tavernStageStateNote;
 
   /// No description provided for @tavernStageDirectorEmpty.
@@ -40193,7 +40193,7 @@ abstract class L10n {
   /// No description provided for @tavernStageDirectorNote.
   ///
   /// In zh, this message translates to:
-  /// **'打开导演后，它会在每回合之后在后台读剧情：给下一回合留一条看不见的提示，记下自己的笔记（默认藏着，怕剧透），再在输入框上方给你三个建议回复。它不替你说话，也不写正文。'**
+  /// **'导演会读剧情，给下一回合留提示，并在输入框上方给出三条建议。'**
   String get tavernStageDirectorNote;
 
   /// No description provided for @tavernStageTurnNone.
@@ -40283,7 +40283,7 @@ abstract class L10n {
   /// No description provided for @tavernLorebookChatNote.
   ///
   /// In zh, this message translates to:
-  /// **'只在这段对话里用。标着「全局」的本来就对所有对话生效。'**
+  /// **'只对这段对话。「全局」的对所有对话都生效。'**
   String get tavernLorebookChatNote;
 
   /// No description provided for @tavernLorebookCharacterNote.
@@ -40676,23 +40676,11 @@ abstract class L10n {
   /// **'只发，不回复'**
   String get tavernSendOnly;
 
-  /// No description provided for @tavernSendOnlySubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'这句放进故事，她先不接话'**
-  String get tavernSendOnlySubtitle;
-
   /// No description provided for @tavernNarrate.
   ///
   /// In zh, this message translates to:
   /// **'以旁白身份发'**
   String get tavernNarrate;
-
-  /// No description provided for @tavernNarrateSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'作为叙述插进故事，不算你说的话'**
-  String get tavernNarrateSubtitle;
 
   /// No description provided for @tavernSendFailed.
   ///
@@ -40709,7 +40697,7 @@ abstract class L10n {
   /// No description provided for @tavernStateVariablesNote.
   ///
   /// In zh, this message translates to:
-  /// **'卡和对话里 {{setvar}} 这类宏记下的变量，到当前这条为止。点一项看全部，也能直接改。'**
+  /// **'宏（如 {{setvar}}）记下的变量，到当前这条为止。点一项可查看或修改。'**
   String get tavernStateVariablesNote;
 
   /// No description provided for @tavernData.
@@ -41297,7 +41285,7 @@ abstract class L10n {
   /// No description provided for @tavernSessionUsageNote.
   ///
   /// In zh, this message translates to:
-  /// **'当前这条线上 {count} 条回复的合计；换掉的备选不算'**
+  /// **'当前分支 {count} 条回复的合计'**
   String tavernSessionUsageNote(int count);
 
   /// No description provided for @tavernSessionUsageNone.
@@ -41311,6 +41299,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'约 {usd}，按 DeepSeek 官方价，分高峰和低谷时段算；法定节假日全天是低谷价，那几天这里会算高一点'**
   String tavernSessionUsageCost(String usd);
+
+  /// No description provided for @tavernStageCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'约 {usd}，按 DeepSeek 官方价估算'**
+  String tavernStageCost(String usd);
 
   /// No description provided for @tavernSessionUsageUnpriced.
   ///
@@ -41489,13 +41483,13 @@ abstract class L10n {
   /// No description provided for @tavernStateNote.
   ///
   /// In zh, this message translates to:
-  /// **'卡定义的状态，到当前这条消息为止。这回合变了的标着「+5」这样的记号；点一项看全部，也能直接改，改动记在这条消息上，换回答、切分支会跟着回退。'**
+  /// **'到当前这条消息为止。点一项可查看或修改，改动随这条消息回退。'**
   String get tavernStateNote;
 
   /// No description provided for @tavernStatePreview.
   ///
   /// In zh, this message translates to:
-  /// **'还没开始记，下面是卡给的初始值。'**
+  /// **'还没有记录，下面是初始值。'**
   String get tavernStatePreview;
 
   /// No description provided for @tavernStateChanged.
@@ -41567,7 +41561,7 @@ abstract class L10n {
   /// No description provided for @tavernDirectorAutoNote.
   ///
   /// In zh, this message translates to:
-  /// **'只对这段对话。开了以后每隔几个回合，在回复写完后多问一次模型：下一拍往哪走、给你三条可以做的事。每次都会多用一些额度。'**
+  /// **'只对这段对话。每隔几个回合多请求一次模型，会多用一些额度。'**
   String get tavernDirectorAutoNote;
 
   /// No description provided for @tavernDirectorRun.
@@ -41597,7 +41591,7 @@ abstract class L10n {
   /// No description provided for @tavernDirectorSuggestionsNote.
   ///
   /// In zh, this message translates to:
-  /// **'点一条放进输入框，改不改、发不发由你。'**
+  /// **'点一条放进输入框'**
   String get tavernDirectorSuggestionsNote;
 
   /// No description provided for @tavernDirectorNotes.
@@ -41609,7 +41603,7 @@ abstract class L10n {
   /// No description provided for @tavernDirectorStale.
   ///
   /// In zh, this message translates to:
-  /// **'这是之前的情况下想的，现在不一定合适，只供参考。'**
+  /// **'基于之前的剧情，仅供参考。'**
   String get tavernDirectorStale;
 
   /// No description provided for @tavernDirectorFailed.
@@ -42389,7 +42383,7 @@ abstract class L10n {
   /// No description provided for @tavernCardScriptsHint.
   ///
   /// In zh, this message translates to:
-  /// **'这张卡带了 {count} 个脚本，打开「整页画布（试用）」才会运行'**
+  /// **'{count} 个卡片脚本要在整页画布里运行'**
   String tavernCardScriptsHint(int count);
 
   /// No description provided for @tavernCardScriptsHintAction.
@@ -44711,7 +44705,7 @@ abstract class L10n {
   /// No description provided for @tavernChatScriptsNote.
   ///
   /// In zh, this message translates to:
-  /// **'这段对话在整页画布里运行的脚本，按运行顺序。'**
+  /// **'按运行顺序'**
   String get tavernChatScriptsNote;
 
   /// No description provided for @tavernScriptSourceGlobal.

@@ -17,7 +17,7 @@
   "@tavernScriptDeleteTitle": {"placeholders": {"name": {"type": "String"}}},
   "tavernScriptDeleteMessage": "Its variables and buttons go with it. It can't be brought back.",
   "tavernChatScripts": "Scripts",
-  "tavernChatScriptsNote": "The scripts this chat runs on the whole-page canvas, in the order they run.",
+  "tavernChatScriptsNote": "In the order they run",
   "tavernScriptSourceGlobal": "Global",
   "tavernScriptSourcePreset": "Preset",
   "tavernScriptSourceCard": "Card",
