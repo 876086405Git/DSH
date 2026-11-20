@@ -15,6 +15,7 @@ import 'package:dsh_app/ui/share/share_content.dart';
 import 'package:dsh_app/ui/share/share_gallery.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' as rendering;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../files/support/files_harness.dart';
@@ -109,6 +110,14 @@ class _Pictures {
   );
 }
 
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pumpAndSettle(
+    const Duration(milliseconds: 100),
+    rendering.EnginePhase.sendSemanticsUpdate,
+    const Duration(seconds: 5),
+  );
+}
+
 Widget _reply(int turn) => SizedBox(
   width: 320,
   child: MarkdownImageScope(
@@ -139,7 +148,7 @@ Future<void> _decode(WidgetTester tester, {required Finder root, int count = 1})
   });
   expect(decoded, isTrue, reason: 'the target images must load before leaving real async');
   expect(images, findsNWidgets(count));
-  await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
+  await _settle(tester);
 }
 
 Future<void> _decodeShare(WidgetTester tester) async {
@@ -154,7 +163,7 @@ Future<void> _decodeShare(WidgetTester tester) async {
   });
   expect(decoded, isTrue);
   expect(shareImagesPending(context), 0);
-  await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
+  await _settle(tester);
 }
 
 FileImage _fileImage(WidgetTester tester, Finder root) {
@@ -215,7 +224,7 @@ void main() {
     await _expectPreview(tester, turn: 2, filePath: secondPath, width: 7, height: 3);
     expect(pictures.workspace.watching('chart.png'), 0);
     Navigator.of(tester.element(find.byType(ArtifactPreviewPage))).pop();
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
+    await _settle(tester);
 
     // Dispose the widgets and Riverpod readers, not just the visible image.
     await tester.pumpWidget(const SizedBox.shrink());
@@ -279,7 +288,7 @@ void main() {
       await _expectPreview(tester, turn: turn, filePath: path, width: width, height: height);
       expect(pictures.workspace.watching('chart.png'), 0);
       Navigator.of(tester.element(find.byType(ArtifactPreviewPage))).pop();
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
+      await _settle(tester);
     }
     expect(pictures.channel.resolved, [_path, _path]);
     expect(tester.takeException(), isNull);
