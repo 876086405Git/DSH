@@ -1481,6 +1481,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
             ? null
             : SentAttachments.echoed(sessionId: widget.sessionId, images: item.images, files: item.files),
         onEdit: widget.onEditPrompt == null ? null : () => _editPrompt(item),
+        onQuote: widget.onQuote == null ? null : _quote,
       ),
       PendingRow(:final prompt) => _pendingBubble(prompt),
       AssistantRow(:final item, :final showActions, :final footnote) => _reply(item, showActions, footnote),
