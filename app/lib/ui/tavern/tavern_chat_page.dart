@@ -499,8 +499,8 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   /// pending row standing in for it is no arrival.
   bool _continuing = false;
 
-  /// The reply this page's turn wrote: when it is stored before its row was
-  /// ever drawn as its own, its row goes on from the pending one.
+  /// The reply this page's turn wrote: it was on screen as it was written, so
+  /// its stored row goes on from that, however many builds came between.
   String? _streamed;
 
   /// The rows arriving in this build of [keys]: true for one that took
@@ -526,7 +526,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         if (!(keys[i] == 'stream-pending' && _continuing) &&
             !(keys[i].startsWith('stream-')
                 ? before.contains('stream-pending') || before.contains(keys[i].substring('stream-'.length))
-                : before.contains('stream-${keys[i]}') || (keys[i] == _streamed && before.contains('stream-pending'))))
+                : before.contains('stream-${keys[i]}') || keys[i] == _streamed))
           keys[i]: i < last.length && !last[i].startsWith('stream-') && !now.contains(last[i]),
     };
   }
