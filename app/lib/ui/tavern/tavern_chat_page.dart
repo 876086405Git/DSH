@@ -499,6 +499,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   /// pending row standing in for it is no arrival.
   bool _continuing = false;
 
+  /// The reply this page's turn wrote: when it is stored before its row was
+  /// ever drawn as its own, its row goes on from the pending one.
+  String? _streamed;
+
   /// The rows arriving in this build of [keys]: true for one that took
   /// another message's place (an alternative switched to), which only fades; false
   /// for a new one, which also rises. A row that goes on with what was
@@ -522,7 +526,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         if (!(keys[i] == 'stream-pending' && _continuing) &&
             !(keys[i].startsWith('stream-')
                 ? before.contains('stream-pending') || before.contains(keys[i].substring('stream-'.length))
-                : before.contains('stream-${keys[i]}')))
+                : before.contains('stream-${keys[i]}') || (keys[i] == _streamed && before.contains('stream-pending'))))
           keys[i]: i < last.length && !last[i].startsWith('stream-') && !now.contains(last[i]),
     };
   }
@@ -646,6 +650,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
             _refreshTools();
           case TavernTurnStarted(:final message):
             _continuing = false;
+            _streamed = message.nodeId;
             setState(() => _streamNode = message.nodeId);
             // Continuing a reply: it starts from what the reply already says.
             _stream.value = (text: message.text, reasoning: message.reasoning ?? '');
@@ -712,7 +717,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                   onPressed: switch (partial) {
                     null when draft != null => _send,
                     final p? => () => _run(() => _tavern.regenerate(widget.chatId, p.nodeId)),
-                    null => () => _run(start),
+                    null => () => _run(start, continuing: continuing),
                   },
                 ),
               },
@@ -965,6 +970,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
 
   /// The reply's node, once known: the page places the reply by it.
   void _adopt(String nodeId) {
+    _streamed = nodeId;
     if (_streamNode == null) setState(() => _streamNode = nodeId);
   }
 
