@@ -17,6 +17,7 @@ import 'package:dsh_tavern/dsh_tavern.dart' show PersonaSelection, TavernPersona
 import 'tavern_canvas_helpers.dart';
 import 'tavern_card_scripts.dart' show tavernUsesMvu;
 import 'tavern_islands.dart' show tavernFence, tavernFenceIsHtml, tavernHtmlBlocks, tavernPageColors;
+import 'tavern_page_perf.dart';
 
 /// One message on the canvas.
 final class TavernCanvasEntry {
@@ -182,9 +183,10 @@ String tavernStoryHtml(String text) {
   return out.join('\n');
 }
 
-/// How many of the latest messages the canvas always lays out; older ones
-/// are skipped while off screen (CSS content-visibility).
-const tavernCanvasNear = 20;
+/// How many of the latest messages the canvas always draws, so scrolling to
+/// the bottom lands on what is there; any other is skipped and paused while
+/// out of sight ([tavernOffscreenJs]).
+const tavernCanvasTail = 2;
 
 /// The user's personas as the page is told them (dsh.setPersonas): each one's
 /// id, name, description and its position (ST's own numbers); which this
@@ -294,8 +296,10 @@ ${policy == null ? '' : '<meta http-equiv="Content-Security-Policy" content="$po
 html,body{margin:0;padding:0;background:transparent;}
 body{color:var(--dsh-text);font:var(--mainFontSize)/$lineHeight system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;overflow-wrap:anywhere;-webkit-text-size-adjust:100%;}
 #chat{display:flex;flex-direction:column;gap:14px;padding:12px 16px 24px;}
-.mes{display:flex;flex-direction:column;}
-.mes.far{content-visibility:auto;contain-intrinsic-size:auto 160px;}
+.mes{display:flex;flex-direction:column;contain-intrinsic-size:auto 160px;}
+.mes.dsh-off{content-visibility:auto;}
+.mes.dsh-off *{animation-play-state:paused!important;}
+.mes[data-streaming]{contain:content;}
 .mes .ch_name{font-size:.82em;font-weight:600;color:var(--dsh-accent);margin-bottom:2px;}
 .mes[is_user="true"] .ch_name{color:var(--dsh-muted);}
 .mes[is_user="true"] .mes_text{background:var(--dsh-user);border-radius:16px;padding:8px 12px;align-self:flex-end;max-width:85%;box-sizing:border-box;}
@@ -355,6 +359,8 @@ $preload
       });
     });
   }
+$tavernOffscreenJs
+  var sight=dshOffscreen();
   function nearBottom(){return window.innerHeight+window.scrollY>=document.body.scrollHeight-80;}
   function toBottom(){window.scrollTo(0,document.body.scrollHeight);}
   function sig(e){return JSON.stringify([e.name||'',!!e.user,!!e.system,e.html||'']);}
@@ -427,13 +433,12 @@ $preload
         var e=list[i],key=sig(e),m=kept[e.node||''];
         if(m&&m._dsh===key){delete kept[e.node];m.setAttribute('mesid',String(e.mesid));}
         else{m=mes(e);m._dsh=key;fresh.push(m);}
-        // Only the latest few are always laid out; older ones are skipped
-        // while off screen.
-        m.classList.toggle('far',i<list.length-$tavernCanvasNear);
+        // Only the latest are always drawn; the rest while in sight.
+        sight.watch(m,i>=list.length-$tavernCanvasTail);
         var at=chat.children[i];
         if(at!==m)chat.insertBefore(m,at||null);
       }
-      while(chat.children.length>list.length)chat.lastElementChild.remove();
+      while(chat.children.length>list.length){sight.unwatch(chat.lastElementChild);chat.lastElementChild.remove();}
       lastList=list;
       if(loaded)renumber();
       // A newly drawn message's scripts run, once the page has the engine's
@@ -715,6 +720,7 @@ $preload
         return Promise.resolve();
       }
       m.parentNode.replaceChild(fresh,m);
+      sight.unwatch(m);fresh._dshIn=m._dshIn;sight.watch(fresh,m._dshTail);
       if(runScripts&&fresh.querySelector('script')){var go=function(){runIn([fresh]);};return dsh.scripts.ready().then(go,go);}
       return Promise.resolve();
     });
