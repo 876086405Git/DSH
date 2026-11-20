@@ -44,12 +44,17 @@ function dshScope(m){
   var seen=dshScope.seen||(dshScope.seen=new WeakSet());
   var id=box.dataset.dshScope||(box.dataset.dshScope=String(dshScope.next=(dshScope.next||0)+1));
   var at='.mes_text[data-dsh-scope="'+id+'"]';
-  var top=/(^|[\s,>+~(])(?:html|body|:root)(?=$|[\s,>+~.#:\[)])/gi;
+  // The page's root, as an element name (not a ::part(body) argument), and
+  // `html body` / `html > body` / `:root body`, which are one root here.
+  var chain=/(^|[\s,>+~(])(?:html|:root)\s*>?\s*(?=body(?![\w-]))/gi;
+  var top=/(^|[\s,>+~]|(?<!::part)\()(?:html|body|:root)(?=$|[\s,>+~.#:\[)])/gi;
   function rules(list){
     for(var i=0;i<list.length;i++){
-      var r=list[i];
-      if(r.selectorText&&top.test(r.selectorText)){top.lastIndex=0;r.selectorText=r.selectorText.replace(top,'$1'+at);}
-      top.lastIndex=0;
+      var r=list[i],sel=r.selectorText;
+      if(sel){
+        var scoped=sel.replace(chain,'$1').replace(top,'$1'+at);
+        if(scoped!==sel)r.selectorText=scoped;
+      }
       if(r.cssRules)rules(r.cssRules);
     }
   }

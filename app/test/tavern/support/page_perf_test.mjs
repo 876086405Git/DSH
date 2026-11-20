@@ -204,6 +204,11 @@ test("dshScope: a page's html, body and :root styles stay in its message", () =>
     rule(':root'),
     rule('.tbody, #body, .x body-y'),
     { cssRules: [rule('body')] }, // an @media block
+    rule('html body .card'),
+    rule('html > body'),
+    rule(':root body, body'),
+    rule('body, dsh-letter::part(body)'),
+    rule(':is(body) .x'),
   ];
   const box = {
     dataset: {},
@@ -218,6 +223,13 @@ test("dshScope: a page's html, body and :root styles stay in its message", () =>
   assert.equal(rules[3].selectorText, at);
   assert.equal(rules[4].selectorText, '.tbody, #body, .x body-y'); // not the element names
   assert.equal(rules[5].cssRules[0].selectorText, at);
+  // html body, html > body and :root body are one root here, not one inside another.
+  assert.equal(rules[6].selectorText, `${at} .card`);
+  assert.equal(rules[7].selectorText, at);
+  assert.equal(rules[8].selectorText, `${at}, ${at}`);
+  // A ::part() argument is a part's name, not the page's body.
+  assert.equal(rules[9].selectorText, `${at}, dsh-letter::part(body)`);
+  assert.equal(rules[10].selectorText, `:is(${at}) .x`);
   // A sheet already done is left as it is.
   vm.runInContext('dshScope', w)(box);
   assert.equal(rules[1].selectorText, at);
