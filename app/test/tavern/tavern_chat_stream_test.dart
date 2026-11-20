@@ -81,6 +81,11 @@ void main() {
     await _sendCountingRows(tester);
     expect(find.textContaining('地下室'), findsOneWidget);
     expect(shade(), greaterThan(0));
+
+    // Scrolled back to the oldest message, and pulled past it: still shaded.
+    await tester.drag(find.byKey(const ValueKey('tavern-transcript')), const Offset(0, 3000));
+    await tester.pumpAndSettle();
+    expect(shade(), 1);
   });
 
   testWidgets('a piece of the reply rebuilds the reply, not the messages above it', (tester) async {

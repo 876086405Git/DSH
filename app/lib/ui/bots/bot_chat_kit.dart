@@ -419,12 +419,23 @@ class BotTranscript extends StatefulWidget {
 }
 
 class _BotTranscriptState extends State<BotTranscript> {
-  bool _onScroll(ScrollNotification note) {
-    final metrics = note.metrics;
+  /// A scroll, or a size change without one (a reply growing, the window
+  /// resizing): the header's shade follows either; only a scroll asks for more.
+  bool _onScroll(Notification note) {
+    // The transcript's own (depth 0), not a code block's sideways scroll in a row.
+    final metrics = switch (note) {
+      ScrollNotification(:final metrics, depth: 0) || ScrollMetricsNotification(:final metrics, depth: 0) => metrics,
+      _ => null,
+    };
+    if (metrics == null) return false;
+    // Shaded whenever the transcript is longer than the screen, at its oldest end
+    // too, where an overscroll pulls the text under the header.
+    widget.scrolledUnder?.value = (metrics.maxScrollExtent / 24).clamp(0.0, 1.0);
     // Reversed: content above the top edge is what lies past the scroll end.
     final above = metrics.maxScrollExtent - metrics.pixels;
-    widget.scrolledUnder?.value = (above / 24).clamp(0.0, 1.0);
-    if (above < 400 && widget.hasEarlier && !widget.loadingEarlier) widget.onEarlier?.call();
+    if (note is ScrollNotification && above < 400 && widget.hasEarlier && !widget.loadingEarlier) {
+      widget.onEarlier?.call();
+    }
     return false;
   }
 
@@ -438,7 +449,7 @@ class _BotTranscriptState extends State<BotTranscript> {
       );
     }
     final extra = widget.hasEarlier ? 1 : 0;
-    return NotificationListener<ScrollNotification>(
+    return NotificationListener<Notification>(
       onNotification: _onScroll,
       child: ListView.builder(
         reverse: true,
