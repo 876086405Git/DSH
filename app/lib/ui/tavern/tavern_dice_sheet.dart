@@ -336,7 +336,9 @@ class _TavernDiceSheetState extends ConsumerState<TavernDiceSheet> {
                       ],
                     ),
                   const SizedBox(height: 16),
+                  // Centred under the result, as its number is.
                   Wrap(
+                    alignment: WrapAlignment.center,
                     spacing: 8,
                     runSpacing: 8,
                     children: [
