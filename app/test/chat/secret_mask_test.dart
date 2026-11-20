@@ -278,6 +278,8 @@ void main() {
       await pump(tester, UserBubble(text: text));
       await tester.longPress(find.byType(SecretText));
       await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
+      await tester.pumpAndSettle();
       expect(find.text(maskSecrets(text, mark: '•')), findsOneWidget);
       await tester.tap(find.text('复制'));
       await tester.pumpAndSettle();

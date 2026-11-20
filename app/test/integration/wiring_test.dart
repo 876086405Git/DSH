@@ -222,6 +222,8 @@ void main() {
       await pumpFrames(tester, 6);
       await tester.longPress(find.text('给设置页加深色模式'));
       await pumpFrames(tester, 8);
+      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
+      await pumpFrames(tester, 8);
       expect(find.text('分享'), findsOneWidget);
       expect(find.text('分享图片'), findsNothing);
       expect(find.text('分享对话'), findsNothing);

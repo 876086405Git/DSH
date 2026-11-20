@@ -48,6 +48,8 @@ Future<FakeComposer> pumpReply(WidgetTester tester, FakeBridge bridge, {bool inC
 Future<void> openMenu(WidgetTester tester) async {
   await tester.longPress(find.textContaining('正文'));
   await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
+  await tester.pumpAndSettle();
 }
 
 void main() {

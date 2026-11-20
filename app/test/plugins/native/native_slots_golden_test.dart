@@ -290,6 +290,8 @@ void main() {
         await pumpFrames(tester);
         await tester.longPress(find.textContaining(english ? 'Sure' : '可以'));
         await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, english ? 'More' : '更多'));
+        await tester.pumpAndSettle();
         await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/message_menu_$suffix.png'));
       });
 
