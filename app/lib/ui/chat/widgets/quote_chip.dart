@@ -10,6 +10,7 @@ import '../../../state/composer_quote.dart';
 import '../../common/expand_reveal.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
+import '../secret_mask.dart';
 
 /// 引用片:输入框上方的一行,引号 + 单行省略的引文 + ✕。
 ///
@@ -50,7 +51,8 @@ class QuoteChip extends StatelessWidget {
     final colors = theme.colorScheme;
     final muted = DshColors.of(context).textTertiary;
     final height = heightOf(context);
-    final line = quoteLine(quote);
+    // Display only, like the bubbles: the message sent keeps the original.
+    final line = quoteLine(maskSecrets(quote, mark: '•'));
     return Semantics(
       container: true,
       explicitChildNodes: true,
