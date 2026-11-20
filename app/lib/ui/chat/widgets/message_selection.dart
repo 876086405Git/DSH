@@ -10,8 +10,8 @@ import 'message_menu.dart';
 
 /// A message's text, selectable where it is: a long-press selects the word
 /// under the finger, the handles drag the range. The toolbar over the
-/// selection: 复制 · 引用 ([onQuote]) · 分享 · 朗读 · 全选 · 更多 ([onMore],
-/// the message's own menu), then the system's text actions.
+/// selection: 复制 · 引用 ([onQuote]) · 分享 · 朗读 · 更多 ([onMore], the
+/// message's own menu) · 全选, then the system's text actions.
 ///
 /// It copies, shares and reads what is drawn: a masked credential stays
 /// masked (the eye shows it, the menu's 「复制」 takes the original).
@@ -59,8 +59,8 @@ class _MessageSelectionState extends State<MessageSelection> {
               readAloudReply(this.context, 'selection', selected);
             },
           ),
-        ?item(ContextMenuButtonType.selectAll),
-        ...system.where((i) => !ours.contains(i.type)),
+        // Before 全选: a narrow toolbar folds its last items away, and 「更多」
+        // is the way to the message's menu.
         if (onMore != null)
           ContextMenuButtonItem(
             label: context.l10n.commonMore,
@@ -69,6 +69,8 @@ class _MessageSelectionState extends State<MessageSelection> {
               onMore();
             },
           ),
+        ?item(ContextMenuButtonType.selectAll),
+        ...system.where((i) => !ours.contains(i.type)),
       ],
     );
   }

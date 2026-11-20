@@ -361,7 +361,8 @@ void main() {
       await tester.tap(find.widgetWithText(SettingsTile, '选择文字'));
       await pumpFrames(tester);
       expect(find.text('全部复制'), findsOneWidget);
-      expect(find.byType(SelectionArea), findsOneWidget);
+      final sheet = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_SelectTextSheet');
+      expect(find.descendant(of: sheet, matching: find.byType(SelectionArea)), findsOneWidget);
     });
 
   });
