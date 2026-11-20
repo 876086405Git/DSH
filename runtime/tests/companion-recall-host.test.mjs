@@ -114,6 +114,14 @@ integration('real clean projection rejects existing transcript, legacy persona r
   assert.equal(f.requests.length, 1, 'A binding refusal does not start an explanation or resend prior work');
 });
 
+integration('real clean projection accepts a subagent model-selection policy', { timeout: 15000 }, async (t) => {
+  const f = await fixture(t), { agent } = await f.createAgent('MODEL_POLICY');
+  agent.session.append('subagent/model-selection-policy', {
+    allowedModels: [{ provider: 'deepseek-official', model: 'deepseek-flash' }],
+  });
+  assert.equal((await f.bind(agent.id)).status, 'ready');
+});
+
 integration('actual preset switch retires permanently and old full Agent cannot send after switching back', { timeout: 15000 }, async (t) => {
   const f = await fixture(t), a = await f.createAgent('SWITCH');
   const binding = await f.bind(a.agent.id);
