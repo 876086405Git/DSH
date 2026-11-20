@@ -21023,7 +21023,8 @@ class L10nEn extends L10n {
   String get stateProviderKeyRejected => 'API key is invalid or lacks permission';
 
   @override
-  String get stateProviderModelsMissing => 'Model list not found. Check the Base URL.';
+  String get stateProviderModelsMissing =>
+      'Model list not found. Check the Base URL; some services don\'t list models, so you can add them by hand.';
 
   @override
   String get stateProviderRateLimited => 'Too many requests. Try again later.';

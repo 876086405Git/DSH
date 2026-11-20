@@ -279,7 +279,7 @@
   "stateProviderConflict": "Provider changed. Go back and try again.",
   "stateProviderUnsupported": "This engine version doesn’t support this action",
   "stateProviderKeyRejected": "API key is invalid or lacks permission",
-  "stateProviderModelsMissing": "Model list not found. Check the Base URL.",
+  "stateProviderModelsMissing": "Model list not found. Check the Base URL; some services don't list models, so you can add them by hand.",
   "stateProviderRateLimited": "Too many requests. Try again later.",
   "stateProviderResponseTooLarge": "Response is too large",
   "stateProviderUnreachable": "Can’t reach this address. Check the Base URL and network.",

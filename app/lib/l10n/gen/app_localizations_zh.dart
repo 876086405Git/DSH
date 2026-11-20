@@ -19948,7 +19948,7 @@ class L10nZh extends L10n {
   String get stateProviderKeyRejected => 'API Key 无效或没有权限';
 
   @override
-  String get stateProviderModelsMissing => '找不到模型列表，检查 Base URL';
+  String get stateProviderModelsMissing => '找不到模型列表。检查 Base URL；有的服务不提供模型列表，可以手动添加模型';
 
   @override
   String get stateProviderRateLimited => '请求太频繁，稍后再试';

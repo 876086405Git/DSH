@@ -191,7 +191,7 @@ void main() {
 
     test('discovery failures name what to fix, in Chinese', () {
       expect(copy('https://gw.example.com/v1/models answered 401; check the API key'), 'API Key 无效或没有权限');
-      expect(copy('https://gw.example.com/models answered 404'), '找不到模型列表，检查 Base URL');
+      expect(copy('https://gw.example.com/models answered 404'), '找不到模型列表。检查 Base URL；有的服务不提供模型列表，可以手动添加模型');
       expect(copy('https://gw.example.com/v1/models answered 429'), '请求太频繁，稍后再试');
       expect(copy('https://gw.example.com/v1/models answered 502'), '服务暂时不可用（502）');
       expect(copy('https://gw.example.com/v1/models answered 418'), '服务返回了 418');
