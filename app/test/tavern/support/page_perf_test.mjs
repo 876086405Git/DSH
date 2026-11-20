@@ -1,5 +1,5 @@
 // Runs the cards' pages' lightening helpers (tavern_page_perf.dart:
-// dshOffscreen; tavern_page_perf_test.dart writes them to
+// dshOffscreen, dshCalm, dshPerf; tavern_page_perf_test.dart writes them to
 // the file DSH_PAGE_SCRIPTS names) on a bare global with just enough of a
 // page, and checks what they do.
 import assert from 'node:assert/strict';
@@ -117,4 +117,79 @@ test('dshOffscreen: playing media pause out of sight and go on when back; paused
   assert.equal(video.plays, plays + 1);
   assert.equal(still.paused, true);
   assert.equal(still.plays, 0);
+});
+
+test('dshCalm: blur and backdrop blur go, other filters stay, endless animations play once', () => {
+  const style = (s) => ({ filter: '', backdropFilter: '', animationIterationCount: '', ...s });
+  const glass = style({ backdropFilter: 'blur(12px) saturate(1.4)', filter: 'blur(4px) brightness(1.2)' });
+  const pulse = style({ animationIterationCount: 'infinite, 2' });
+  const frame = style({ filter: 'blur(2px)' });
+  const keep = style({ filter: 'drop-shadow(0 0 2px red)', animationIterationCount: '3' });
+  const inline = style({ filter: 'blur(1px)' });
+  let readsOfLocked = 0;
+  const sheets = [
+    { cssRules: [{ style: glass }, { cssRules: [{ style: pulse }] }, { cssRules: [{ style: frame }] }, { style: keep }] },
+    {
+      get cssRules() {
+        readsOfLocked++;
+        throw new Error('SecurityError');
+      },
+    },
+  ];
+  let asked = null;
+  const w = page({
+    document: {
+      styleSheets: sheets,
+      querySelectorAll: (q) => {
+        asked = q;
+        return [{ style: inline }];
+      },
+    },
+  });
+  vm.runInContext('dshCalm()', w);
+  assert.equal(glass.backdropFilter, 'none');
+  assert.equal(glass.filter, 'brightness(1.2)');
+  assert.equal(pulse.animationIterationCount, '1, 2');
+  assert.equal(frame.filter, 'none');
+  assert.deepEqual(keep, style({ filter: 'drop-shadow(0 0 2px red)', animationIterationCount: '3' }));
+  assert.equal(inline.filter, 'none');
+  assert.match(asked, /\[style\*="blur"\]/);
+  // A sheet is gone through once.
+  glass.backdropFilter = 'blur(1px)';
+  vm.runInContext('dshCalm()', w);
+  assert.equal(glass.backdropFilter, 'blur(1px)');
+  assert.equal(readsOfLocked, 1);
+  // Under a root: only its inline styles are looked at.
+  let rootAsked = false;
+  vm.runInContext('dshCalm', w)({ querySelectorAll: () => ((rootAsked = true), []) });
+  assert.equal(rootAsked, true);
+});
+
+test('dshPerf: frames, those over 50 ms, the longest, every 5 s; nothing for a span without frames', () => {
+  let frame = null;
+  let every = null;
+  let now = 0;
+  const posted = [];
+  const w = page({
+    performance: { now: () => now },
+    requestAnimationFrame: (f) => {
+      frame = f;
+    },
+    setInterval: (f, ms) => {
+      every = { f, ms };
+    },
+  });
+  vm.runInContext('dshPerf', w)(
+    (o) => posted.push(JSON.parse(JSON.stringify(o))),
+    () => ({ mes: 3 }),
+  );
+  assert.equal(every.ms, 5000);
+  for (const t of [16, 32, 48, 130, 146, 2000, 2016]) frame(t);
+  now = 5000;
+  every.f();
+  // 2000 after 146 is a pause, not a frame.
+  assert.deepEqual(posted, [{ type: 'perf', span: 5000, frames: 5, long: 1, worst: 82, mes: 3 }]);
+  now = 10000;
+  every.f();
+  assert.equal(posted.length, 1);
 });

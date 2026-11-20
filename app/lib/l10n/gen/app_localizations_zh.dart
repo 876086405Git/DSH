@@ -23101,6 +23101,12 @@ class L10nZh extends L10n {
   String get tavernCanvasReloaded => '画面重新加载了';
 
   @override
+  String get tavernLowPower => '省电渲染';
+
+  @override
+  String get tavernLowPowerSubtitle => '去掉卡片网页里的模糊和循环动画，手机更流畅';
+
+  @override
   String tavernGroupSpeaking(String name) {
     return '$name 在说';
   }

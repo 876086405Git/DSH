@@ -238,7 +238,8 @@ const tavernToastMax = 300;
 /// (dsh.setScripts), each run in a hidden frame once the story is drawn; not
 /// when scripts do not run.
 /// [card] (its fields) and [characterId] are the chat's character, for the
-/// scripts that ask about it; none for a group.
+/// scripts that ask about it; none for a group. [lowPower] is 省电渲染
+/// ([tavernCalmJs]); [perf] the frame log ([tavernPerfJs]).
 String tavernCanvasDocument({
   required Color text,
   required Color accent,
@@ -257,6 +258,8 @@ String tavernCanvasDocument({
   String themeCss = '',
   Map<String, Object?>? card,
   String? characterId,
+  bool lowPower = false,
+  bool perf = false,
 }) {
   // The card goes in as JSON (see [_inScript]).
   final cardJson = noScripts || card == null ? 'null' : _inScript(card);
@@ -317,6 +320,7 @@ button,input,select,textarea{color-scheme:var(--dsh-scheme);}
 .mes_text pre{white-space:pre-wrap;}
 .mes[data-streaming] .mes_text>:last-child::after,.mes[data-streaming] .mes_text:empty::after{content:"\\25CF" / "";color:var(--dsh-muted);margin-left:3px;font-size:.6em;vertical-align:middle;}
 #dsh-live{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+${lowPower ? tavernCalmCss : ''}
 </style>
 ${themeCss.trim().isEmpty ? '' : '<style id="st-theme-css">${themeCss.replaceAll(RegExp('</style', caseSensitive: false), r'<\/style')}</style>'}
 </head>
@@ -358,9 +362,14 @@ $preload
         });});
       });
     });
+    // What the scripts drew, calmed too.
+    if(lowPower)running.then(function(){dshCalm();});
   }
 $tavernOffscreenJs
   var sight=dshOffscreen();
+  // 省电渲染: each newly drawn piece's styles calmed.
+  var lowPower=$lowPower;
+${lowPower ? tavernCalmJs : ''}
   function nearBottom(){return window.innerHeight+window.scrollY>=document.body.scrollHeight-80;}
   function toBottom(){window.scrollTo(0,document.body.scrollHeight);}
   function sig(e){return JSON.stringify([e.name||'',!!e.user,!!e.system,e.html||'']);}
@@ -439,6 +448,7 @@ $tavernOffscreenJs
         if(at!==m)chat.insertBefore(m,at||null);
       }
       while(chat.children.length>list.length){sight.unwatch(chat.lastElementChild);chat.lastElementChild.remove();}
+      if(lowPower)dshCalm();
       lastList=list;
       if(loaded)renumber();
       // A newly drawn message's scripts run, once the page has the engine's
@@ -465,6 +475,7 @@ $tavernOffscreenJs
       if(!stream){stream=mes({mesid:chat.children.length,node:'',name:name,html:'',user:false,system:false});stream.dataset.streaming='1';stream.setAttribute('aria-busy','true');chat.appendChild(stream);}
       else if(stream.getAttribute('ch_name')!==(name||'')){stream.setAttribute('ch_name',name||'');stream.setAttribute('aria-label',name||'');stream.querySelector('.name_text').textContent=name||'';}
       stream.querySelector('.mes_text').innerHTML=html;
+      if(lowPower)dshCalm(stream);
       if(stay)toBottom();
     }
   };
@@ -721,6 +732,7 @@ $tavernOffscreenJs
       }
       m.parentNode.replaceChild(fresh,m);
       sight.unwatch(m);fresh._dshIn=m._dshIn;sight.watch(fresh,m._dshTail);
+      if(lowPower)dshCalm(fresh);
       if(runScripts&&fresh.querySelector('script')){var go=function(){runIn([fresh]);};return dsh.scripts.ready().then(go,go);}
       return Promise.resolve();
     });
@@ -1535,6 +1547,7 @@ ${tavernCanvasHelpersJs(mvu: mvu)}
     frame.srcdoc='<!doctype html><meta charset="utf-8">';
     document.body.appendChild(frame);
   }
+${perf ? '$tavernPerfJs  dshPerf(post,function(){return {mes:chat.children.length,off:chat.getElementsByClassName("dsh-off").length};});' : ''}
   post({type:'ready'});
   // The app's player learns there is a page to play on, music or not.
   audioReport();

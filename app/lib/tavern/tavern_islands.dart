@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:ui' show Color;
 
 import 'tavern_components.dart';
+import 'tavern_page_perf.dart';
 
 /// Where islands and 整页画布 are loaded from: their pages' origin, so a card's
 /// localStorage works (a page with no base URL has the origin "null", which
@@ -251,7 +252,8 @@ final _script = RegExp(r'<script\b|\son[a-z]+\s*=', caseSensitive: false);
 /// [libraries] (jQuery, lodash, zod, YAML) come first, for its scripts; [story] is
 /// what they may read of the story (TavernIslandStory.forMessage): read
 /// only, as 酒馆助手's and MVU's getters give it. Neither when scripts do not
-/// run.
+/// run. [lowPower] is 省电渲染 ([tavernCalmJs]); [perf] the frame log
+/// ([tavernPerfJs]), posted to the channel as JSON.
 String tavernIslandDocument(
   String html, {
   required Color text,
@@ -262,6 +264,8 @@ String tavernIslandDocument(
   bool offline = false,
   List<String> libraries = const [],
   Map<String, Object?>? story,
+  bool lowPower = false,
+  bool perf = false,
 }) {
   final preload = noScripts
       ? ''
@@ -296,6 +300,7 @@ a{color:var(--dsh-accent);}
 button,input,select,textarea{color-scheme:var(--dsh-scheme);}
 img,video,svg{max-width:100%;height:auto;}
 p{margin:0 0 .6em;}
+${lowPower ? tavernCalmCss : ''}
 </style></head>
 <body>$preload<div id="dsh-island">
 $html
@@ -312,7 +317,7 @@ $html
   document.addEventListener('toggle',report,true);
   setTimeout(report,0);setTimeout(report,300);setTimeout(report,1200);
 })();
-</script></body></html>''';
+</script>${lowPower ? '\n<script nonce="$nonce">(function(){$tavernCalmJs  dshCalm();window.addEventListener(\'load\',function(){dshCalm();});})();</script>' : ''}${perf ? '\n<script nonce="$nonce">(function(){$tavernPerfJs  dshPerf(function(o){TavernIsland.postMessage(JSON.stringify(o));},function(){return {};});})();</script>' : ''}</body></html>''';
 }
 
 /// An island's helpers over dshStory, as 酒馆助手's pages have them: its

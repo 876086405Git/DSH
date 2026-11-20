@@ -42434,6 +42434,18 @@ abstract class L10n {
   /// **'画面重新加载了'**
   String get tavernCanvasReloaded;
 
+  /// No description provided for @tavernLowPower.
+  ///
+  /// In zh, this message translates to:
+  /// **'省电渲染'**
+  String get tavernLowPower;
+
+  /// No description provided for @tavernLowPowerSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'去掉卡片网页里的模糊和循环动画，手机更流畅'**
+  String get tavernLowPowerSubtitle;
+
   /// No description provided for @tavernGroupSpeaking.
   ///
   /// In zh, this message translates to:

@@ -15,6 +15,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../tavern/tavern_island_story.dart';
 import '../../tavern/tavern_islands.dart';
+import '../../tavern/tavern_page_perf.dart';
 import '../../tavern/tavern_provider.dart' show tavernPersonaSelectionProvider;
 import '../../tavern/tavern_settings.dart';
 import '../web/web_view_guard.dart';
@@ -73,7 +74,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   late final WebViewGuard _guard = WebViewGuard(onGone: _onGone);
   double _height = 48;
   bool _gone = false;
-  (String, bool, bool, int, String?)? _loaded;
+  (String, bool, bool, bool, int, String?)? _loaded;
 
   /// What its scripts get (build works it out): jQuery, lodash, zod and
   /// YAML, what they may read of the story; not loaded while either is on
@@ -136,7 +137,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   void _open() {
     final theme = Theme.of(context);
     if (_waiting) return;
-    final (noScripts, offline) = ref.read(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)));
+    final (noScripts, offline, lowPower) = ref.read(
+      tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline, s.lowPower)),
+    );
     // The colours are set in place on the loaded page (_pushColors), never by
     // loading it again: a theme's cross-fade would run the card's scripts, and
     // what they write, once per step.
@@ -144,7 +147,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     _colors = {'text': text, 'accent': accent};
     _wantDark = theme.brightness == Brightness.dark;
     _syncDark();
-    final key = (widget.html, noScripts, offline, _libraries.length, _storyKey);
+    final key = (widget.html, noScripts, offline, lowPower, _libraries.length, _storyKey);
     if (key == _loaded) {
       _pushColors();
       return;
@@ -161,6 +164,8 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
       offline: offline,
       libraries: _libraries,
       story: _story,
+      lowPower: lowPower,
+      perf: tavernPerfLog,
     );
     final controller = _controller ??= WebViewController();
     final textZoom = MediaQuery.textScalerOf(context).scale(100).round().clamp(50, 300);
@@ -213,6 +218,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
           if (messenger != null) _toasts.show(messenger, data);
         case 'toastClear':
           _toasts.clear(data);
+        case 'perf':
+          final id = (widget.html.hashCode & 0xffff).toRadixString(16).padLeft(4, '0');
+          debugPrint(tavernPerfLine('island:$id', data, lowPower: ref.read(tavernSettingsProvider).lowPower));
       }
       return;
     }
@@ -320,8 +328,11 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
 
   @override
   Widget build(BuildContext context) {
-    // Its guards changed: load again.
-    ref.listen(tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline)), (_, _) => _open());
+    // Its guards or 省电渲染 changed: load again.
+    ref.listen(
+      tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline, s.lowPower)),
+      (_, _) => _open(),
+    );
     _prepare();
     final controller = _controller;
     if (_gone || controller == null) return const SizedBox(height: TavernHtmlIsland.minHeight);
