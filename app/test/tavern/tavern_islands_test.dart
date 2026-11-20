@@ -153,6 +153,8 @@ void main() {
     // safe (one too many costs time, one too few breaks the card).
     expect(tavernIslandNeeds('zod', r'<script>var a={z:1};a.z++;$z.x;importScripts;</script>'), isFalse);
     expect(tavernIslandNeeds('zod', '<script>const n = z.coerce.number();</script>'), isTrue);
+    expect(tavernIslandNeeds('zod', '<script>const s = window.z.object({});</script>'), isTrue);
+    expect(tavernIslandNeeds('zod', '<script>globalThis.z.string()</script>'), isTrue);
     // Inline handlers are the page's code too.
     expect(tavernIslandNeeds('zod', '<button onclick="z.string().parse(v)">ok</button>'), isTrue);
     expect(tavernIslandNeeds('YAML', "<button onclick='show(YAML.parse(t))'>ok</button>"), isTrue);

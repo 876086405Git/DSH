@@ -60,9 +60,10 @@ String _scriptsOf(String html) => [
 final _scriptBody = RegExp(r'<script\b[^>]*>([\s\S]*?)</script\s*>', caseSensitive: false);
 final _handler = RegExp(r'''\son[a-z]+\s*=\s*(?:"([^"]*)"|'([^']*)')''', caseSensitive: false);
 const _module = r'''(?<![@.\w$])import\b\s*[\w${*'"(]|\bMvu\b|waitGlobalInitialized''';
-// Any member of a bare `z` (z.object, z.coerce.number, z.infer…), not `x.z.` or `$z`.
+// Any member of a bare `z` (z.object, z.coerce.number, z.infer…), or the global
+// one by name (window.z); not another object's `x.z.`, nor `$z`.
 final _wantsZod = RegExp(
-  r'(?<![\w$.])z\s*\.\s*[A-Za-z_$]|'
+  r'(?<![\w$.])z\s*\.\s*[A-Za-z_$]|\b(?:window|globalThis|self)\s*\.\s*z\b|'
   '$_module',
 );
 final _wantsYaml = RegExp('\\bYAML\\b|$_module');
