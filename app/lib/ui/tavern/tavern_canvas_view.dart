@@ -322,6 +322,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         _rendered = null;
         _streamSent = null;
         _avatars.reset();
+        widget.calls?.hostButtons.value = const [];
         _audio?.report(null);
         if (_hidden) _suspendAudio(true);
         _pushPersonas();
@@ -346,6 +347,14 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       case 'buttons':
         if (data case {'key': final String key, 'names': final List<Object?> names}) {
           widget.calls?.showButtons(key, [for (final n in names) '$n']);
+        }
+      // What scripts put in ST's places for buttons: the same row shows them.
+      case 'hostButtons':
+        if (data['buttons'] case final List<Object?> list) {
+          widget.calls?.hostButtons.value = [
+            for (final b in list)
+              if (b case {'id': final String id, 'label': final String label}) (id: id, label: label),
+          ];
         }
       // What the engine said went wrong with the card's variables (MVU),
       // said as a notice: the page went on.

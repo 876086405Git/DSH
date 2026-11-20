@@ -545,6 +545,42 @@ void main() {
     ]);
   });
 
+  testWidgets("what scripts put in ST's QR bar sits after their own buttons; a tap is pressed in the page", (
+    tester,
+  ) async {
+    final (_, _, canvas) = await _chat(
+      tester,
+      overrides: [
+        _scripts([
+          _script('s1', buttons: ['前往']),
+        ]),
+      ],
+    );
+    await tester.pumpAndSettle();
+    canvas.calls!.hostButtons.value = [(id: '7', label: '猫神·剧场')];
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('tavern-quick-replies'));
+    expect(find.descendant(of: row, matching: find.text('猫神·剧场')), findsOneWidget);
+    final own = tester.getTopLeft(find.byKey(const ValueKey('tavern-script-button-0'))).dx;
+    final host = tester.getTopLeft(find.byKey(const ValueKey('tavern-script-button-1'))).dx;
+    expect(own < host, isTrue);
+
+    final pressed = <Map<String, Object?>>[];
+    canvas.calls!.deliver = (d) async {
+      pressed.add(d);
+      return true;
+    };
+    await tester.tap(find.byKey(const ValueKey('tavern-script-button-1')));
+    await tester.pump();
+    expect(pressed, [
+      {'kind': 'press', 'id': '7'},
+    ]);
+    // A new page: none until it says.
+    canvas.calls!.hostButtons.value = const [];
+    await tester.pumpAndSettle();
+    expect(find.text('猫神·剧场'), findsNothing);
+  });
+
   testWidgets('no script buttons where the scripts do not run: 不运行卡的脚本 on, or the native list', (tester) async {
     final override = _scripts([
       _script('s1', buttons: ['前往']),
