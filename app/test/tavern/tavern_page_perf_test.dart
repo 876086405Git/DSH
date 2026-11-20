@@ -49,7 +49,7 @@ void main() {
     final dir = Directory.systemTemp.createTempSync('dsh-page-perf-');
     addTearDown(() => dir.deleteSync(recursive: true));
     final file = File('${dir.path}/scripts.json')
-      ..writeAsStringSync(jsonEncode({'calm': tavernCalmJs, 'offscreen': tavernOffscreenJs, 'perf': tavernPerfJs}));
+      ..writeAsStringSync(jsonEncode({'calm': tavernCalmJs, 'offscreen': tavernOffscreenJs, 'perf': tavernPerfJs, 'scope': tavernScopeJs}));
     final result = await Process.run(
       'node',
       ['--test', 'test/tavern/support/page_perf_test.mjs'],

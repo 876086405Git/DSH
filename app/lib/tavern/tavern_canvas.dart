@@ -366,6 +366,7 @@ $preload
     if(lowPower)running.then(function(){dshCalm();});
   }
 $tavernOffscreenJs
+$tavernScopeJs
   var sight=dshOffscreen();
   // 省电渲染: each newly drawn piece's styles calmed.
   var lowPower=$lowPower;
@@ -448,6 +449,7 @@ ${lowPower ? tavernCalmJs : ''}
         if(at!==m)chat.insertBefore(m,at||null);
       }
       while(chat.children.length>list.length){sight.unwatch(chat.lastElementChild);chat.lastElementChild.remove();}
+      fresh.forEach(dshScope);
       if(lowPower)dshCalm();
       lastList=list;
       if(loaded)renumber();
@@ -475,6 +477,7 @@ ${lowPower ? tavernCalmJs : ''}
       if(!stream){stream=mes({mesid:chat.children.length,node:'',name:name,html:'',user:false,system:false});stream.dataset.streaming='1';stream.setAttribute('aria-busy','true');chat.appendChild(stream);}
       else if(stream.getAttribute('ch_name')!==(name||'')){stream.setAttribute('ch_name',name||'');stream.setAttribute('aria-label',name||'');stream.querySelector('.name_text').textContent=name||'';}
       stream.querySelector('.mes_text').innerHTML=html;
+      dshScope(stream);
       if(lowPower)dshCalm(stream);
       if(stay)toBottom();
     }
@@ -729,11 +732,13 @@ ${lowPower ? tavernCalmJs : ''}
         if(t){
           t.innerHTML=fresh.querySelector('.mes_text').innerHTML;
           [].forEach.call(t.querySelectorAll('script'),function(x){if(!inert(x))x.remove();});
+          dshScope(t);
         }
         return Promise.resolve();
       }
       m.parentNode.replaceChild(fresh,m);
       sight.unwatch(m);fresh._dshIn=m._dshIn;sight.watch(fresh,m._dshTail);
+      dshScope(fresh);
       if(lowPower)dshCalm(fresh);
       if(runScripts&&fresh.querySelector('script')){var go=function(){runIn([fresh]);};return dsh.scripts.ready().then(go,go);}
       return Promise.resolve();

@@ -193,3 +193,32 @@ test('dshPerf: frames, those over 50 ms, the longest, every 5 s; nothing for a s
   every.f();
   assert.equal(posted.length, 1);
 });
+
+test("dshScope: a page's html, body and :root styles stay in its message", () => {
+  const w = page();
+  const rule = (selectorText, inner) => ({ selectorText, ...(inner ? { cssRules: inner } : {}) });
+  const rules = [
+    rule('html, body'),
+    rule('body'),
+    rule('body.dark .card > p'),
+    rule(':root'),
+    rule('.tbody, #body, .x body-y'),
+    { cssRules: [rule('body')] }, // an @media block
+  ];
+  const box = {
+    dataset: {},
+    classList: { contains: (c) => c === 'mes_text' },
+    querySelectorAll: () => [{ sheet: { cssRules: rules } }],
+  };
+  vm.runInContext('dshScope', w)(box);
+  const at = `.mes_text[data-dsh-scope="${box.dataset.dshScope}"]`;
+  assert.equal(rules[0].selectorText, `${at}, ${at}`);
+  assert.equal(rules[1].selectorText, at);
+  assert.equal(rules[2].selectorText, `${at}.dark .card > p`);
+  assert.equal(rules[3].selectorText, at);
+  assert.equal(rules[4].selectorText, '.tbody, #body, .x body-y'); // not the element names
+  assert.equal(rules[5].cssRules[0].selectorText, at);
+  // A sheet already done is left as it is.
+  vm.runInContext('dshScope', w)(box);
+  assert.equal(rules[1].selectorText, at);
+});

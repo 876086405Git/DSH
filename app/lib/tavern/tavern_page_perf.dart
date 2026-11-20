@@ -32,6 +32,34 @@ function dshCalm(root){
 }
 ''';
 
+/// The canvas's hold on a message's own page styles, `dshScope(m)`: a card or
+/// preset page written for a frame of its own styles `html`, `body` and
+/// `:root`; on the canvas they would reach the whole chat (its
+/// `body{overflow:hidden}` stopping the chat from scrolling). In each style
+/// sheet under [m] (a message, or its text) not seen yet, those selectors are
+/// made the message's text.
+const tavernScopeJs = r'''
+function dshScope(m){
+  var box=m.classList.contains('mes_text')?m:m.querySelector('.mes_text');if(!box)return;
+  var seen=dshScope.seen||(dshScope.seen=new WeakSet());
+  var id=box.dataset.dshScope||(box.dataset.dshScope=String(dshScope.next=(dshScope.next||0)+1));
+  var at='.mes_text[data-dsh-scope="'+id+'"]';
+  var top=/(^|[\s,>+~(])(?:html|body|:root)(?=$|[\s,>+~.#:\[)])/gi;
+  function rules(list){
+    for(var i=0;i<list.length;i++){
+      var r=list[i];
+      if(r.selectorText&&top.test(r.selectorText)){top.lastIndex=0;r.selectorText=r.selectorText.replace(top,'$1'+at);}
+      top.lastIndex=0;
+      if(r.cssRules)rules(r.cssRules);
+    }
+  }
+  [].forEach.call(box.querySelectorAll('style'),function(s){
+    if(!s.sheet||seen.has(s.sheet))return;seen.add(s.sheet);
+    try{rules(s.sheet.cssRules);}catch(e){}
+  });
+}
+''';
+
 /// The canvas's watch on its messages, `dshOffscreen()`: one
 /// IntersectionObserver, a screen's margin above and below. A message out of
 /// that is marked `dsh-off` (the page's CSS skips drawing it and pauses its
