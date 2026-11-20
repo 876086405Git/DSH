@@ -51,12 +51,18 @@ bool tavernIslandNeeds(String name, String html) => switch (name) {
   'YAML' => _wantsYaml.hasMatch(_scriptsOf(html)),
   _ => true,
 };
-String _scriptsOf(String html) => [for (final m in _scriptBody.allMatches(html)) m[1]!].join('\n');
+
+/// The page's code: its script elements and its inline handlers (onclick=…).
+String _scriptsOf(String html) => [
+  for (final m in _scriptBody.allMatches(html)) m[1]!,
+  for (final m in _handler.allMatches(html)) m[1] ?? m[2]!,
+].join('\n');
 final _scriptBody = RegExp(r'<script\b[^>]*>([\s\S]*?)</script\s*>', caseSensitive: false);
+final _handler = RegExp(r'''\son[a-z]+\s*=\s*(?:"([^"]*)"|'([^']*)')''', caseSensitive: false);
 const _module = r'''(?<![@.\w$])import\b\s*[\w${*'"(]|\bMvu\b|waitGlobalInitialized''';
+// Any member of a bare `z` (z.object, z.coerce.number, z.infer…), not `x.z.` or `$z`.
 final _wantsZod = RegExp(
-  r'\bz\s*\.\s*(?:object|string|number|boolean|array|enum|union|literal|coerce|record|any|unknown|tuple|'
-  r'discriminatedUnion|preprocess|lazy|date|bigint|nativeEnum|intersection|custom)\s*\(|'
+  r'(?<![\w$.])z\s*\.\s*[A-Za-z_$]|'
   '$_module',
 );
 final _wantsYaml = RegExp('\\bYAML\\b|$_module');

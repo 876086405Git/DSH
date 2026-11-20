@@ -149,8 +149,13 @@ void main() {
     expect(tavernIslandNeeds('zod', card), isFalse);
     expect(tavernIslandNeeds('YAML', card), isFalse);
     expect(tavernIslandNeeds('jQuery', card), isTrue);
-    // A script's z-ish names are not zod.
-    expect(tavernIslandNeeds('zod', '<script>var z={a:1};z.a++;importScripts;</script>'), isFalse);
+    // Names that only look like z are not zod; a page's own `z.` takes it, to be
+    // safe (one too many costs time, one too few breaks the card).
+    expect(tavernIslandNeeds('zod', r'<script>var a={z:1};a.z++;$z.x;importScripts;</script>'), isFalse);
+    expect(tavernIslandNeeds('zod', '<script>const n = z.coerce.number();</script>'), isTrue);
+    // Inline handlers are the page's code too.
+    expect(tavernIslandNeeds('zod', '<button onclick="z.string().parse(v)">ok</button>'), isTrue);
+    expect(tavernIslandNeeds('YAML', "<button onclick='show(YAML.parse(t))'>ok</button>"), isTrue);
     // A zod schema, a module import, a dynamic import, MVU.
     expect(tavernIslandNeeds('zod', '<script type="module">const s = z.object({a: z.string()});</script>'), isTrue);
     expect(tavernIslandNeeds('zod', '<script type="module">import { x } from "https://a/b.js";</script>'), isTrue);
