@@ -15,7 +15,6 @@ import 'package:dsh_app/ui/share/share_content.dart';
 import 'package:dsh_app/ui/share/share_gallery.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' as rendering;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../files/support/files_harness.dart';
@@ -113,7 +112,7 @@ class _Pictures {
 Future<void> _settle(WidgetTester tester) async {
   await tester.pumpAndSettle(
     const Duration(milliseconds: 100),
-    rendering.EnginePhase.sendSemanticsUpdate,
+    EnginePhase.sendSemanticsUpdate,
     const Duration(seconds: 5),
   );
 }
