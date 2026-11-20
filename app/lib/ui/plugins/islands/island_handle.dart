@@ -222,7 +222,10 @@ class IslandHandle extends ChangeNotifier {
     // Closed (e.g. evicted by the budget) before the id existed: close() had
     // nothing to destroy then, so the WebView is ours to destroy now.
     if (_phase == IslandPhase.closed) {
-      if (id != null) await _platform.destroy(id);
+      if (id != null) {
+        if (views > 0) await SchedulerBinding.instance.endOfFrame;
+        await _platform.destroy(id);
+      }
       return;
     }
     if (id != null) await _platform.attach(id, dark: _theme.dark, textZoom: _theme.textZoom);
