@@ -826,14 +826,16 @@ class _ModelGrid extends StatelessWidget {
 
   /// Every name in two lines on a card [cardWidth] wide.
   bool _namesFit(BuildContext context, double cardWidth) {
-    final room = cardWidth - 2 * _ModelCard.padding - 8 - _CheckMark.size;
+    final room = cardWidth - 2 * (_ModelCard.padding + _ModelCard.border) - 8 - _CheckMark.size;
     final painter = TextPainter(
       maxLines: 2,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
     );
     try {
-      final style = _ModelCard.nameStyle(Theme.of(context));
+      var style = _ModelCard.nameStyle(Theme.of(context));
+      // As [Text] draws it under the system's bold text.
+      if (MediaQuery.boldTextOf(context)) style = style?.merge(const TextStyle(fontWeight: FontWeight.bold));
       for (final model in models) {
         painter.text = TextSpan(text: shortModelName(model.name), style: style);
         painter.layout(maxWidth: room);
@@ -882,6 +884,7 @@ class _ModelCard extends StatelessWidget {
 
   static const radius = BorderRadius.all(Radius.circular(AppShape.lg));
   static const padding = 16.0;
+  static const border = 1.5;
 
   static TextStyle? nameStyle(ThemeData theme) => theme.textTheme.titleSmall?.copyWith(height: 1.35);
 
@@ -921,7 +924,7 @@ class _ModelCard extends StatelessWidget {
                   color: selected
                       ? colors.primary.withValues(alpha: dark ? 0.7 : 0.55)
                       : colors.primary.withValues(alpha: 0),
-                  width: 1.5,
+                  width: border,
                 ),
               ),
             ),
