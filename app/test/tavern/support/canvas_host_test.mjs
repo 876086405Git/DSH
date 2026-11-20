@@ -271,7 +271,7 @@ test('another preset chosen while a write is out: its settings at once, and an e
   assert.equal(writes.length, 2);
   assert.equal(writes[1][1].raw.temperature, 3);
   // Written into B, the one the copy is.
-  assert.equal(writes[1][1].ref.presetId, 'p2');
+  assert.deepEqual({ ...writes[1][1].ref }, { kind: 'stored', presetId: 'p2' });
 });
 
 /** A's toggle written (refused, slow ms on), and at 350 ms B chosen and its temperature set to 3. */
