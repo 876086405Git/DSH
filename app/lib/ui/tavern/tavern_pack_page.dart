@@ -22,7 +22,7 @@ import '../theme/app_icons.dart';
 import 'tavern_chat_files.dart' show tavernChatFileName;
 import 'tavern_pack_bindings_page.dart';
 import 'tavern_pack_widgets.dart';
-import 'tavern_widgets.dart' show tavernCardSinkProvider;
+import 'tavern_widgets.dart' show kTavernSheetMargin, tavernCardSinkProvider;
 
 class TavernPackPage extends ConsumerStatefulWidget {
   const TavernPackPage({super.key, required this.packRef});
@@ -95,7 +95,7 @@ class _TavernPackPageState extends ConsumerState<TavernPackPage> {
       top: false,
       child: SingleChildScrollView(
         child: SheetGroup(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          margin: kTavernSheetMargin,
           children: [
             for (final v in versions.reversed)
               SettingsTile(
@@ -151,14 +151,14 @@ class _TavernPackPageState extends ConsumerState<TavernPackPage> {
     ];
     return AppPage.list(
       title: tavernPackTitle(version),
-      subtitle: Text(version.externalPackId),
+      // The pack's id, unless the title already is it.
+      subtitle: tavernPackTitle(version) == version.externalPackId ? null : Text(version.externalPackId),
       children: [
         SettingsSection(
+          footer: version.removed ? null : Text(l10n.tavernPackAddNote),
           children: [
             SettingsTile(
               key: const ValueKey('tavern-pack-version'),
-              icon: AppIcons.history,
-              tinted: false,
               title: l10n.tavernPackVersion,
               value: Text(version.removed ? l10n.tavernPackWithdrawnShort(_version) : _version),
               onTap: versions.length > 1 ? () => unawaited(_pickVersion(versions)) : null,
@@ -167,10 +167,7 @@ class _TavernPackPageState extends ConsumerState<TavernPackPage> {
             if (!version.removed)
               SettingsTile(
                 key: const ValueKey('tavern-pack-enable-global'),
-                icon: AppIcons.allFeatures,
-                tinted: false,
                 title: l10n.tavernPackAddGlobal,
-                subtitle: l10n.tavernPackAddNote,
                 onTap: () => Navigator.of(context).push(
                   TavernPackBindingsPage.route((kind: TavernGameplayScope.global, targetId: null), adding: version.ref),
                 ),
@@ -186,8 +183,6 @@ class _TavernPackPageState extends ConsumerState<TavernPackPage> {
               for (final member in cast)
                 SettingsTile(
                   key: ValueKey('tavern-pack-cast-${member.resource ? 'r' : 'm'}-${member.localId}'),
-                  icon: AppIcons.profile,
-                  tinted: false,
                   title: member.name,
                   subtitle: member.resource ? l10n.tavernPackCastFromCard : null,
                   value: Text(l10n.tavernPackCastImportAction),

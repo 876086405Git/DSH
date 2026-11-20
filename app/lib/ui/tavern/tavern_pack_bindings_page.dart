@@ -24,7 +24,7 @@ import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import 'tavern_pack_preview_page.dart';
 import 'tavern_pack_widgets.dart';
-import 'tavern_widgets.dart' show showTavernActions;
+import 'tavern_widgets.dart' show kTavernSheetMargin, showTavernActions;
 
 class TavernPackBindingsPage extends ConsumerStatefulWidget {
   const TavernPackBindingsPage({super.key, required this.scope, this.adding, this.characterId, this.chatId});
@@ -221,7 +221,7 @@ class _TavernPackBindingsPageState extends ConsumerState<TavernPackBindingsPage>
               )
             : SingleChildScrollView(
                 child: SheetGroup(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  margin: kTavernSheetMargin,
                   children: [
                     for (final v in newest.values)
                       SettingsTile(
@@ -313,7 +313,7 @@ class _TavernPackBindingsPageState extends ConsumerState<TavernPackBindingsPage>
       top: false,
       child: SingleChildScrollView(
         child: SheetGroup(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          margin: kTavernSheetMargin,
           children: [
             for (final v in versions.reversed)
               SettingsTile(
@@ -342,7 +342,7 @@ class _TavernPackBindingsPageState extends ConsumerState<TavernPackBindingsPage>
         top: false,
         child: SingleChildScrollView(
           child: SheetGroup(
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            margin: kTavernSheetMargin,
             title: context.l10n.tavernPackCastMapping,
             children: [
               for (final member in tavernPackCast(version))

@@ -18,9 +18,11 @@ import '../features/feature_kit.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
+import '../theme/theme.dart';
 import '../workspace/text_prompt.dart';
 import 'tavern_group_new_page.dart';
 import 'tavern_stepper.dart';
+import 'tavern_widgets.dart' show kTavernSheetMargin;
 
 /// A group as the engine has it now; null once it is not one.
 final tavernGroupProvider = StreamProvider.autoDispose.family<TavernGroupChat?, String>(
@@ -82,7 +84,7 @@ class TavernGroupPage extends ConsumerWidget {
         child: SingleChildScrollView(
           child: SheetGroup(
             title: l10n.tavernGroupAdd,
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            margin: kTavernSheetMargin,
             children: [
               if (others.isEmpty)
                 SettingsTile(tinted: false, title: l10n.tavernGroupNoOthers, chevron: false)
@@ -90,7 +92,6 @@ class TavernGroupPage extends ConsumerWidget {
                 for (final c in others)
                   SettingsTile(
                     key: ValueKey('tavern-group-add-${c.id}'),
-                    icon: AppIcons.addMember,
                     tinted: false,
                     title: c.name,
                     chevron: false,
@@ -123,7 +124,7 @@ class TavernGroupPage extends ConsumerWidget {
             child: SingleChildScrollView(
               child: SheetGroup(
                 title: name,
-                margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                margin: kTavernSheetMargin,
                 children: [
                   SettingsSwitchTile(
                     key: const ValueKey('tavern-group-member-muted'),
@@ -169,7 +170,6 @@ class TavernGroupPage extends ConsumerWidget {
                   if (at > 0)
                     SettingsTile(
                       key: const ValueKey('tavern-group-member-up'),
-                      icon: AppIcons.scrollToTop,
                       tinted: false,
                       title: l10n.tavernGroupMoveUp,
                       chevron: false,
@@ -178,7 +178,6 @@ class TavernGroupPage extends ConsumerWidget {
                   if (at < members.length - 1)
                     SettingsTile(
                       key: const ValueKey('tavern-group-member-down'),
-                      icon: AppIcons.scrollToBottom,
                       tinted: false,
                       title: l10n.tavernGroupMoveDown,
                       chevron: false,
@@ -186,7 +185,6 @@ class TavernGroupPage extends ConsumerWidget {
                     ),
                   SettingsTile(
                     key: const ValueKey('tavern-group-member-remove'),
-                    icon: AppIcons.removeMember,
                     danger: true,
                     tinted: false,
                     title: l10n.tavernGroupRemove,
@@ -229,7 +227,6 @@ class TavernGroupPage extends ConsumerWidget {
             children: [
               SettingsTile(
                 key: const ValueKey('tavern-group-rename'),
-                icon: AppIcons.rename,
                 title: l10n.tavernGroupTitle,
                 value: Text(group.title),
                 onTap: () => unawaited(_rename(context, ref, group)),
@@ -288,20 +285,24 @@ class TavernGroupPage extends ConsumerWidget {
                   key: ValueKey('tavern-group-member-${m.characterId}'),
                   tinted: false,
                   title: names[m.characterId] ?? m.characterId,
-                  subtitle: [
+                  // Nothing to say: a one-line row, its title centred.
+                  subtitle: switch ([
                     if (m.characterId == group.hostCharacterId) l10n.tavernGroupHost,
                     if (m.muted) l10n.tavernGroupMuted,
                     if (m.modelRole == TavernGroupModelRole.helper) l10n.tavernGroupHelperModel,
                     if (!m.available) l10n.tavernGroupUnavailable,
-                  ].join(' · '),
+                  ]) {
+                    [] => null,
+                    final notes => notes.join(' · '),
+                  },
                   value: Text('${(m.talkativeness * 100).round()}%'),
                   onTap: () => unawaited(_member(context, ref, m.characterId, names[m.characterId] ?? m.characterId)),
                 ),
               SettingsTile(
                 key: const ValueKey('tavern-group-add'),
-                icon: AppIcons.addMember,
                 title: l10n.tavernGroupAdd,
-                chevron: false,
+                // Ends where the members' chevrons do.
+                trailing: Icon(AppIcons.add, size: 20, color: DshColors.of(context).textTertiary),
                 onTap: () => unawaited(_add(context, ref, group)),
               ),
             ],

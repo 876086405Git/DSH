@@ -566,7 +566,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final hint = find.byKey(const ValueKey('tavern-scripts-hint'));
-    expect(find.descendant(of: hint, matching: find.text('这张卡带了 2 个脚本，打开「整页画布（试用）」才会运行')), findsOneWidget);
+    expect(find.descendant(of: hint, matching: find.text('2 个卡片脚本要在整页画布里运行')), findsOneWidget);
     expect(find.byKey(const ValueKey('fake-canvas')), findsNothing);
 
     await tester.tap(find.descendant(of: hint, matching: find.text('打开')));
@@ -601,7 +601,7 @@ void main() {
     await _chat(tester, prefs: {TavernSettingsController.canvasKey: false}, overrides: [override]);
     await tester.pumpAndSettle();
     final hint = find.byKey(const ValueKey('tavern-scripts-hint'));
-    expect(find.descendant(of: hint, matching: find.text('这张卡带了 1 个脚本，打开「整页画布（试用）」才会运行')), findsOneWidget);
+    expect(find.descendant(of: hint, matching: find.text('1 个卡片脚本要在整页画布里运行')), findsOneWidget);
     await tester.tap(find.descendant(of: hint, matching: find.byType(IconButton)));
     await tester.pumpAndSettle();
     expect(hint, findsNothing);

@@ -14,13 +14,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_provider.dart';
-import '../common/app_sheet.dart';
 import '../common/brief_notice.dart';
 import '../features/feature_kit.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
-import '../theme/theme.dart';
 import 'tavern_chat_files.dart';
 import 'tavern_presets_page.dart' show tavernTextOf;
 import 'tavern_regex_edit_page.dart';
@@ -81,8 +79,6 @@ class TavernRegexPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final dsh = DshColors.of(context);
     final scripts = ref.watch(tavernRegexProvider).value;
     return AppPage.list(
       title: l10n.tavernRegex,
@@ -98,17 +94,16 @@ class TavernRegexPage extends ConsumerWidget {
         if (scripts == null)
           const QuietSpinner()
         else if (scripts.isEmpty)
-          Padding(
+          EmptyView(
             key: const ValueKey('tavern-regex-empty'),
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 16),
-            child: Text(
-              '${l10n.tavernRegexEmpty}。${l10n.tavernRegexEmptyMessage}',
-              style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary, height: 1.5),
-            ),
+            icon: AppIcons.code,
+            title: l10n.tavernRegexEmpty,
+            message: l10n.tavernRegexEmptyMessage,
+            compact: true,
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
           )
         else
-          SheetGroup(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          SettingsSection(
             children: [
               for (final script in scripts)
                 () {
@@ -116,8 +111,6 @@ class TavernRegexPage extends ConsumerWidget {
                   final find = '${script.raw['findRegex'] ?? ''}';
                   return SettingsTile(
                     key: ValueKey('tavern-regex-${script.id}'),
-                    icon: script.compatible ? AppIcons.code : AppIcons.error,
-                    tinted: false,
                     title: name,
                     subtitle: script.compatible ? find : l10n.tavernRegexIncompatible,
                     value: Text(script.enabled ? l10n.tavernRegexOn : l10n.tavernRegexOff),

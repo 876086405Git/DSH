@@ -103,7 +103,6 @@ class TavernLorebooksPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
     final library = ref.watch(tavernLorebooksProvider).value;
     return AppPage.list(
       title: l10n.tavernLorebooks,
@@ -119,25 +118,22 @@ class TavernLorebooksPage extends ConsumerWidget {
         if (library == null)
           const QuietSpinner()
         else if (library.books.isEmpty)
-          Padding(
+          EmptyView(
             key: const ValueKey('tavern-lorebooks-empty'),
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 16),
-            child: Text(
-              '${l10n.tavernLorebooksEmpty}。${l10n.tavernLorebooksEmptyMessage}',
-              style: theme.textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary, height: 1.5),
-            ),
+            icon: AppIcons.lorebook,
+            title: l10n.tavernLorebooksEmpty,
+            message: l10n.tavernLorebooksEmptyMessage,
+            compact: true,
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
           )
         else
-          SheetGroup(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          SettingsSection(
             children: [
               for (final book in library.books)
                 () {
                   final global = library.global.contains(book.id);
                   return SettingsTile(
                     key: ValueKey('tavern-lorebook-${book.id}'),
-                    icon: AppIcons.lorebook,
-                    tinted: false,
                     title: book.name,
                     subtitle: l10n.tavernLorebookEntries(book.entryCount),
                     value: Text(global ? l10n.tavernLorebookGlobal : ''),
@@ -235,12 +231,16 @@ class TavernLorebookBindingTile extends ConsumerWidget {
     required this.sheetTitle,
     required this.note,
     this.subtitle,
+    this.icon = AppIcons.lorebook,
     this.enabled = true,
   });
 
   final TavernLorebookScope scope;
   final String title;
   final String? subtitle;
+
+  /// Null in a card whose rows have none.
+  final IconData? icon;
 
   /// The picker's title, and what the binding does, under it.
   final String sheetTitle;
@@ -252,7 +252,7 @@ class TavernLorebookBindingTile extends ConsumerWidget {
     final l10n = context.l10n;
     final bound = ref.watch(tavernLorebookBindingProvider(scope)).value;
     return SettingsTile(
-      icon: AppIcons.lorebook,
+      icon: icon,
       tinted: false,
       title: title,
       subtitle: subtitle,

@@ -194,7 +194,7 @@ void main() {
     testWidgets('the whole story goes out as an EPUB or as text, under the title typed', (tester) async {
       await tester.runAsync(() => converse(2));
       await open(tester, TavernStorybookPage(chatId: chat, character: '林晚'));
-      expect(find.text('一共 5 句，隐藏的消息不放进去。EPUB 能用微信读书、Apple 图书等打开。'), findsOneWidget);
+      expect(find.text('一共 5 句，隐藏的消息不放进去'), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('tavern-book-title')), '雨夜');
       await tester.pump();

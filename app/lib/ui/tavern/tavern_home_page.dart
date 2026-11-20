@@ -232,7 +232,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
                   ),
                   child: Text(l10n.tavernImportFromDeepSeek),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 TextButton(
                   key: const ValueKey('tavern-empty-import'),
                   onPressed: () => unawaited(_import()),
@@ -307,7 +307,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: chats.length.clamp(0, 8),
-                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, i) => _ContinueCard(chat: chats[i], character: byId[chats[i].characterId]),
               ),
             ),
@@ -350,18 +350,23 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
   List<Widget> _chats(List<TavernChatSummary> chats, Map<String, TavernCharacter> byId) {
     final l10n = context.l10n;
     // 新建群聊: two characters or more on the shelf.
+    final canGroup = byId.length >= 2;
     final newGroup = SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: OutlinedButton.icon(
-            key: const ValueKey('tavern-group-new'),
-            icon: const Icon(AppIcons.newGroupChat, size: 18),
-            label: Text(l10n.tavernGroupNew),
-            onPressed: byId.length < 2 ? null : () => unawaited(Navigator.of(context).push(TavernGroupNewPage.route())),
+      child: SheetGroup(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        children: [
+          Opacity(
+            opacity: canGroup ? 1 : 0.38,
+            child: SettingsTile(
+              key: const ValueKey('tavern-group-new'),
+              icon: AppIcons.newGroupChat,
+              tinted: false,
+              title: l10n.tavernGroupNew,
+              chevron: canGroup,
+              onTap: canGroup ? () => unawaited(Navigator.of(context).push(TavernGroupNewPage.route())) : null,
+            ),
           ),
-        ),
+        ],
       ),
     );
     if (chats.isEmpty) {
@@ -422,7 +427,7 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         sliver: SliverList.separated(
           itemCount: shown.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, i) => _ChatRow(chat: shown[i], character: byId[shown[i].characterId]),
         ),
       ),
@@ -435,78 +440,85 @@ class _TavernHomePageState extends ConsumerState<TavernHomePage> {
     final l10n = context.l10n;
     final persona = ref.watch(tavernPersonaSelectionProvider(null)).value?.persona;
     return SliverToBoxAdapter(
-      child: SheetGroup(
-        key: const ValueKey('tavern-library'),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      key: const ValueKey('tavern-library'),
+      child: Column(
         children: [
-          SettingsTile(
-            key: const ValueKey('tavern-library-presets'),
-            icon: AppIcons.article,
-            title: l10n.tavernPresets,
-            value: Text(switch (ref.watch(tavernPresetsProvider).value?.length ?? 0) {
-              0 => l10n.tavernPersonaNotSet,
-              final n => l10n.tavernPresetCount(n),
-            }),
-            onTap: () => unawaited(Navigator.of(context).push(TavernPresetsPage.route())),
+          SettingsSection(
+            children: [
+              SettingsTile(
+                key: const ValueKey('tavern-library-presets'),
+                icon: AppIcons.article,
+                title: l10n.tavernPresets,
+                value: Text(switch (ref.watch(tavernPresetsProvider).value?.length ?? 0) {
+                  0 => l10n.tavernPersonaNotSet,
+                  final n => l10n.tavernPresetCount(n),
+                }),
+                onTap: () => unawaited(Navigator.of(context).push(TavernPresetsPage.route())),
+              ),
+              SettingsTile(
+                key: const ValueKey('tavern-library-lorebooks'),
+                icon: AppIcons.lorebook,
+                title: l10n.tavernLorebooks,
+                value: Text(switch (ref.watch(tavernLorebooksProvider).value?.books.length ?? 0) {
+                  0 => l10n.tavernPersonaNotSet,
+                  final n => l10n.tavernLorebookCount(n),
+                }),
+                onTap: () => unawaited(Navigator.of(context).push(TavernLorebooksPage.route())),
+              ),
+              SettingsTile(
+                key: const ValueKey('tavern-library-regex'),
+                icon: AppIcons.code,
+                title: l10n.tavernRegex,
+                value: Text(switch (ref.watch(tavernRegexProvider).value?.length ?? 0) {
+                  0 => l10n.tavernPersonaNotSet,
+                  final n => l10n.tavernRegexCount(n),
+                }),
+                onTap: () => unawaited(Navigator.of(context).push(TavernRegexPage.route())),
+              ),
+              SettingsTile(
+                key: const ValueKey('tavern-library-scripts'),
+                icon: AppIcons.terminal,
+                title: l10n.tavernScripts,
+                value: Text(switch (tavernScriptCount(ref.watch(tavernGlobalScriptsProvider).value ?? const [])) {
+                  0 => l10n.tavernPersonaNotSet,
+                  final n => l10n.tavernScriptCount(n),
+                }),
+                onTap: () => unawaited(Navigator.of(context).push(TavernScriptsPage.route())),
+              ),
+              SettingsTile(
+                key: const ValueKey('tavern-library-packs'),
+                icon: AppIcons.zip,
+                title: l10n.tavernPacks,
+                onTap: () => unawaited(Navigator.of(context).push(TavernPacksPage.route())),
+              ),
+            ],
           ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-lorebooks'),
-            icon: AppIcons.lorebook,
-            title: l10n.tavernLorebooks,
-            value: Text(switch (ref.watch(tavernLorebooksProvider).value?.books.length ?? 0) {
-              0 => l10n.tavernPersonaNotSet,
-              final n => l10n.tavernLorebookCount(n),
-            }),
-            onTap: () => unawaited(Navigator.of(context).push(TavernLorebooksPage.route())),
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-regex'),
-            icon: AppIcons.code,
-            title: l10n.tavernRegex,
-            value: Text(switch (ref.watch(tavernRegexProvider).value?.length ?? 0) {
-              0 => l10n.tavernPersonaNotSet,
-              final n => l10n.tavernRegexCount(n),
-            }),
-            onTap: () => unawaited(Navigator.of(context).push(TavernRegexPage.route())),
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-scripts'),
-            icon: AppIcons.code,
-            title: l10n.tavernScripts,
-            value: Text(switch (tavernScriptCount(ref.watch(tavernGlobalScriptsProvider).value ?? const [])) {
-              0 => l10n.tavernPersonaNotSet,
-              final n => l10n.tavernScriptCount(n),
-            }),
-            onTap: () => unawaited(Navigator.of(context).push(TavernScriptsPage.route())),
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-personas'),
-            icon: AppIcons.profile,
-            title: l10n.tavernDefaultPersona,
-            value: Text(persona?.name ?? l10n.tavernPersonaNotSet),
-            onTap: () => unawaited(Navigator.of(context).push(TavernPersonasPage.route())),
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-quick-replies'),
-            icon: AppIcons.reply,
-            title: l10n.tavernQuickReplies,
-            value: Text(switch (ref.watch(tavernQuickRepliesProvider).length) {
-              0 => l10n.tavernPersonaNotSet,
-              final n => l10n.tavernQuickReplyCount(n),
-            }),
-            onTap: () => unawaited(Navigator.of(context).push(TavernQuickRepliesPage.route())),
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-drafts'),
-            icon: AppIcons.askAi,
-            title: l10n.tavernDrafts,
-            onTap: () => unawaited(Navigator.of(context).push(TavernDraftsPage.route())),
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-library-packs'),
-            icon: AppIcons.zip,
-            title: l10n.tavernPacks,
-            onTap: () => unawaited(Navigator.of(context).push(TavernPacksPage.route())),
+          SettingsSection(
+            children: [
+              SettingsTile(
+                key: const ValueKey('tavern-library-personas'),
+                icon: AppIcons.profile,
+                title: l10n.tavernDefaultPersona,
+                value: Text(persona?.name ?? l10n.tavernPersonaNotSet),
+                onTap: () => unawaited(Navigator.of(context).push(TavernPersonasPage.route())),
+              ),
+              SettingsTile(
+                key: const ValueKey('tavern-library-quick-replies'),
+                icon: AppIcons.reply,
+                title: l10n.tavernQuickReplies,
+                value: Text(switch (ref.watch(tavernQuickRepliesProvider).length) {
+                  0 => l10n.tavernPersonaNotSet,
+                  final n => l10n.tavernQuickReplyCount(n),
+                }),
+                onTap: () => unawaited(Navigator.of(context).push(TavernQuickRepliesPage.route())),
+              ),
+              SettingsTile(
+                key: const ValueKey('tavern-library-drafts'),
+                icon: AppIcons.askAi,
+                title: l10n.tavernDrafts,
+                onTap: () => unawaited(Navigator.of(context).push(TavernDraftsPage.route())),
+              ),
+            ],
           ),
         ],
       ),
@@ -605,11 +617,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SliverToBoxAdapter(
     child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(color: DshColors.of(context).textTertiary),
-      ),
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+      child: Semantics(header: true, child: Text(text, style: SettingsSection.titleStyle(context))),
     ),
   );
 }
@@ -646,20 +655,19 @@ class _ShelfLabel extends ConsumerWidget {
     };
     final shelf = ref.read(tavernShelfProvider.notifier);
     final label = theme.textTheme.labelMedium?.copyWith(color: dsh.textTertiary);
+    final heading = SettingsSection.titleStyle(context);
+    // The last control's ink ends 16 from the screen, where the grid does.
+    final compact = TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8));
     final picked = this.picked;
     // Picking: how many, and what to do with them.
     if (picked != null) {
       return SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 8, 2),
+          padding: const EdgeInsets.fromLTRB(24, 0, 8, 4),
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  l10n.tavernShelfPicked(picked),
-                  key: const ValueKey('tavern-shelf-picked'),
-                  style: theme.textTheme.titleSmall?.copyWith(color: dsh.textTertiary),
-                ),
+                child: Text(l10n.tavernShelfPicked(picked), key: const ValueKey('tavern-shelf-picked'), style: heading),
               ),
               IconButton(
                 key: const ValueKey('tavern-shelf-export'),
@@ -675,6 +683,7 @@ class _ShelfLabel extends ConsumerWidget {
               ),
               TextButton(
                 key: const ValueKey('tavern-shelf-done'),
+                style: compact,
                 onPressed: onDone,
                 child: Text(l10n.commonCancel, style: label),
               ),
@@ -685,19 +694,21 @@ class _ShelfLabel extends ConsumerWidget {
     }
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 8, 2),
+        padding: const EdgeInsets.fromLTRB(24, 0, 8, 4),
         child: Row(
           children: [
             Expanded(
-              child: Text(l10n.tavernCharacters, style: theme.textTheme.titleSmall?.copyWith(color: dsh.textTertiary)),
+              child: Semantics(header: true, child: Text(l10n.tavernCharacters, style: heading)),
             ),
             TextButton(
               key: const ValueKey('tavern-shelf-select'),
+              style: compact,
               onPressed: onPick,
               child: Text(l10n.tavernShelfSelect, style: label),
             ),
             TextButton.icon(
               key: const ValueKey('tavern-shelf-sort'),
+              style: compact,
               onPressed: () => unawaited(
                 showTavernActions(context, [
                   for (final o in TavernShelfOrder.values)
@@ -833,7 +844,7 @@ class _ContinueCard extends ConsumerWidget {
     final dsh = DshColors.of(context);
     final name = chat.kind == TavernChatKind.group ? chat.title : character?.name ?? chat.title;
     return SizedBox(
-      width: 236,
+      width: 256,
       child: GlassSurface(
         key: ValueKey('tavern-continue-${chat.id}'),
         tier: GlassTier.card,
@@ -849,9 +860,9 @@ class _ContinueCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 56,
-              height: 84,
-              child: TavernPortrait(name: name, path: character?.avatarPath, radius: AppShape.md, initialSize: 24),
+              width: 72,
+              height: 108,
+              child: TavernPortrait(name: name, path: character?.avatarPath, radius: AppShape.md, initialSize: 28),
             ),
             const SizedBox(width: 12),
             Expanded(
