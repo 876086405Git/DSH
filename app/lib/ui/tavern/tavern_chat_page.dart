@@ -1097,22 +1097,22 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       builder: (sheet) => SafeArea(
         top: false,
         child: SheetGroup(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          margin: _sheetMargin,
           children: [
             SettingsTile(
               key: const ValueKey('tavern-send-only'),
               icon: AppIcons.send,
               tinted: false,
+              chevron: false,
               title: l10n.tavernSendOnly,
-              subtitle: l10n.tavernSendOnlySubtitle,
               onTap: () => Navigator.of(sheet).pop(false),
             ),
             SettingsTile(
               key: const ValueKey('tavern-narrate'),
               icon: AppIcons.quote,
               tinted: false,
+              chevron: false,
               title: l10n.tavernNarrate,
-              subtitle: l10n.tavernNarrateSubtitle,
               onTap: () => Navigator.of(sheet).pop(true),
             ),
           ],
@@ -1179,7 +1179,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
         child: SingleChildScrollView(
           child: SheetGroup(
             title: l10n.tavernQuickReplies,
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            margin: _sheetMargin,
             children: [
               for (final (i, reply) in replies.indexed)
                 SettingsTile(
@@ -1355,6 +1355,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
           icon: icon,
           tinted: false,
           danger: danger,
+          chevron: false,
           title: title,
           onTap: () => Navigator.of(sheet).pop(action),
         );
@@ -1363,7 +1364,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
           top: false,
           child: SingleChildScrollView(
             child: SheetGroup(
-              margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              margin: _sheetMargin,
               children: [
                 row(_MessageAction.copy, AppIcons.copy, l10n.commonCopy),
                 if (character)
@@ -2093,6 +2094,10 @@ class _IslandsScope extends InheritedWidget {
 
 final _none = TavernMessage(nodeId: '', role: TavernRole.system, speaker: '', text: '', at: DateTime(0));
 
+/// Around the group in this page's sheets (the message menu, sending another
+/// way, every quick reply): the same air under the handle in each.
+const _sheetMargin = EdgeInsets.fromLTRB(16, 8, 16, 16);
+
 /// A quiet round key beside the composer's send key, the size of its others.
 class _ComposerKey extends StatelessWidget {
   const _ComposerKey({super.key, required this.icon, required this.label, required this.onPressed});
@@ -2111,9 +2116,9 @@ class _ComposerKey extends StatelessWidget {
         message: label,
         child: InkResponse(
           onTap: onPressed,
-          radius: 22,
+          radius: 20,
           child: SizedBox.square(
-            dimension: 40,
+            dimension: TavernPersonaKey.size,
             child: Icon(icon, size: 20, color: scheme.onSurface.withValues(alpha: 0.7)),
           ),
         ),
@@ -2260,7 +2265,7 @@ class _MessageRow extends StatelessWidget {
         children: [
           if (showName && message.role == TavernRole.character)
             Padding(
-              padding: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 tavernSpeaker(context, message),
                 key: ValueKey('tavern-speaker-${message.nodeId}'),
@@ -2274,7 +2279,7 @@ class _MessageRow extends StatelessWidget {
           // Narration says so: it is no one's line.
           if (message.role == TavernRole.narrator)
             Padding(
-              padding: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 tavernSpeaker(context, message),
                 key: ValueKey('tavern-narrator-${message.nodeId}'),
@@ -2365,6 +2370,22 @@ class _UsageLine extends StatelessWidget {
   }
 }
 
+/// A row of capsules in the composer's tray: its first capsule on the
+/// persona key's edge, and as much air under the capsules as over them.
+class _TrayRow extends StatelessWidget {
+  const _TrayRow({required this.child});
+
+  static const gap = 8.0;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 2),
+    child: SizedBox(height: 36, child: child),
+  );
+}
+
 /// While the box starts with a slash: the commands, each filling the box.
 class _SlashRow extends StatelessWidget {
   const _SlashRow({required this.onPick});
@@ -2381,26 +2402,21 @@ class _SlashRow extends StatelessWidget {
       TavernSlash.regenerate => l10n.tavernRegenerate,
       TavernSlash.impersonate => l10n.tavernWriteForMe,
     };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SizedBox(
-        height: 36,
-        child: ListView.separated(
-          key: const ValueKey('tavern-slash-row'),
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          itemCount: TavernSlash.values.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (context, i) {
-            final c = TavernSlash.values[i];
-            return CapsuleChoiceChip(
-              key: ValueKey('tavern-slash-${c.word}'),
-              label: '/${c.word} ${label(c)}',
-              selected: false,
-              onSelected: () => onPick(c),
-            );
-          },
-        ),
+    return _TrayRow(
+      child: ListView.separated(
+        key: const ValueKey('tavern-slash-row'),
+        scrollDirection: Axis.horizontal,
+        itemCount: TavernSlash.values.length,
+        separatorBuilder: (_, _) => const SizedBox(width: _TrayRow.gap),
+        itemBuilder: (context, i) {
+          final c = TavernSlash.values[i];
+          return CapsuleChoiceChip(
+            key: ValueKey('tavern-slash-${c.word}'),
+            label: '/${c.word} ${label(c)}',
+            selected: false,
+            onSelected: () => onPick(c),
+          );
+        },
       ),
     );
   }
@@ -2453,28 +2469,23 @@ class _QuickReplyRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: SizedBox(
-      height: 36,
-      child: ListView.separated(
-        key: const ValueKey('tavern-quick-replies'),
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        itemCount: members.length + directed.length + replies.length + scriptButtons.length + (replies.isEmpty ? 1 : 2),
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        // The director's suggestions arrive whenever it has them: each new
-        // one fades in, a beat after the one before it.
-        itemBuilder: (context, i) => i < members.length
-            ? CapsuleChoiceChip(
-                key: ValueKey('tavern-speak-${members[i].$1}'),
-                icon: AppIcons.mention,
-                label: members[i].$2,
-                selected: false,
-                onSelected: () => onSpeak?.call(members[i].$1),
-              )
-            : _directedOrReply(context, i - members.length),
-      ),
+  Widget build(BuildContext context) => _TrayRow(
+    child: ListView.separated(
+      key: const ValueKey('tavern-quick-replies'),
+      scrollDirection: Axis.horizontal,
+      itemCount: members.length + directed.length + replies.length + scriptButtons.length + (replies.isEmpty ? 1 : 2),
+      separatorBuilder: (_, _) => const SizedBox(width: _TrayRow.gap),
+      // The director's suggestions arrive whenever it has them: each new
+      // one fades in, a beat after the one before it.
+      itemBuilder: (context, i) => i < members.length
+          ? CapsuleChoiceChip(
+              key: ValueKey('tavern-speak-${members[i].$1}'),
+              icon: AppIcons.mention,
+              label: members[i].$2,
+              selected: false,
+              onSelected: () => onSpeak?.call(members[i].$1),
+            )
+          : _directedOrReply(context, i - members.length),
     ),
   );
 
@@ -2847,6 +2858,10 @@ class _AlternativesCount extends StatelessWidget {
 class _Alternatives extends StatelessWidget {
   const _Alternatives({required this.message, required this.last, required this.busy, required this.onSibling});
 
+  /// Each key's box and its glyph: as the VN box's own keys.
+  static const _key = 32.0;
+  static const _glyph = 18.0;
+
   final TavernMessage message;
   final bool last;
   final bool busy;
@@ -2859,30 +2874,36 @@ class _Alternatives extends StatelessWidget {
     final style = AppType.tabular(Theme.of(context).textTheme.labelSmall!.copyWith(color: dsh.textTertiary));
     final atEnd = message.siblingIndex >= message.siblingCount - 1;
     final canNext = !atEnd || last;
-    // The keys' own padding would indent the row; line its ‹ up with the text.
+    Widget key(Key key, String tooltip, IconData icon, VoidCallback? onPressed) => IconButton(
+      key: key,
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: _key, height: _key),
+      // The box is the key: no wider tap target around it to throw the row off.
+      style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      iconSize: _glyph,
+      color: dsh.textTertiary,
+      onPressed: onPressed,
+      icon: Icon(icon),
+    );
+    // The keys' own air would indent the row; line its ‹ up with the text.
     return Transform.translate(
-      offset: const Offset(-10, 0),
+      offset: const Offset(-(_key - _glyph) / 2, 0),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            key: const ValueKey('tavern-prev'),
-            tooltip: l10n.tavernPrevious,
-            visualDensity: VisualDensity.compact,
-            iconSize: 18,
-            color: dsh.textTertiary,
-            onPressed: busy || message.siblingIndex == 0 ? null : () => onSibling(-1),
-            icon: Icon(AppIcons.keyLeft),
+          key(
+            const ValueKey('tavern-prev'),
+            l10n.tavernPrevious,
+            AppIcons.keyLeft,
+            busy || message.siblingIndex == 0 ? null : () => onSibling(-1),
           ),
           Text('${message.siblingIndex + 1}/${message.siblingCount}', style: style),
-          IconButton(
-            key: const ValueKey('tavern-next'),
-            tooltip: atEnd ? l10n.tavernRegenerate : l10n.tavernNext,
-            visualDensity: VisualDensity.compact,
-            iconSize: 18,
-            color: dsh.textTertiary,
-            onPressed: busy || !canNext ? null : () => onSibling(1),
-            icon: Icon(atEnd ? AppIcons.regenerate : AppIcons.keyRight),
+          key(
+            const ValueKey('tavern-next'),
+            atEnd ? l10n.tavernRegenerate : l10n.tavernNext,
+            atEnd ? AppIcons.regenerate : AppIcons.keyRight,
+            busy || !canNext ? null : () => onSibling(1),
           ),
         ],
       ),
@@ -2956,7 +2977,7 @@ class _StreamingReply extends StatelessWidget {
         children: [
           if (speaker case final who? when who.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 who,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(

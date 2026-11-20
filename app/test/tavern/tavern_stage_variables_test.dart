@@ -259,7 +259,7 @@ void main() {
   testWidgets("before anything is saved, the card's starting values say so", (tester) async {
     await _openState(tester, _Saved({'好感': 0}, legacy: false, preview: true));
     expect(find.descendant(of: _row('好感'), matching: find.text('0')), findsOneWidget);
-    expect(find.textContaining('卡给的初始值'), findsOneWidget);
+    expect(find.textContaining('下面是初始值'), findsOneWidget);
   });
 
   testWidgets('a value changed by hand goes to the engine at that message, and shows', (tester) async {
