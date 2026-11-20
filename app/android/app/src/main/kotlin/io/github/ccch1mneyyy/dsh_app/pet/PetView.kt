@@ -6,9 +6,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
@@ -63,6 +66,23 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
     private var sprites: PetSprites.Loaded? = null
     private var anim: PetAnimation? = null
     private var cell = -1
+
+    /** Whether an animation change may crossfade: the overlay's motion policy (reduce motion, paused). */
+    var blends = true
+        set(value) {
+            field = value
+            if (!value && fromAnim != null) {
+                fromAnim = null
+                invalidate()
+            }
+        }
+
+    /** The picture fading out after an animation change (smooth art only), and since when. */
+    private var fromAnim: PetAnimation? = null
+    private var fromCell = -1
+    private var fadeStart = 0L
+    private val fadeOut = Paint()
+    private val fadeIn = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
     var companionGeometry: CompanionFloatGeometry? = null
         private set
     var companionBounds = FramePx(0, 0, 0, 0)
@@ -108,6 +128,7 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
         paint.isFilterBitmap = loaded?.pack?.crisp == false
         anim = null
         cell = -1
+        fromAnim = null
         frame = loaded?.frames?.rest ?: FramePx(0, 0, 0, 0)
         requestLayout()
         invalidate()
@@ -135,6 +156,12 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
         if (s.sheet(animation) == null) return false
         val c = animation.frames.getOrNull(frameIndex)?.cell ?: return false
         if (animation === anim && c == cell) return true
+        val previous = anim
+        if (blends && previous != null && previous !== animation && cell >= 0 && !s.pack.pixelArt) {
+            fromAnim = previous
+            fromCell = cell
+            fadeStart = SystemClock.uptimeMillis()
+        }
         anim = animation
         cell = c
         invalidate()
@@ -172,6 +199,26 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
         val s = sprites ?: return
         val a = anim ?: return
         if (cell < 0) return
+        val from = fromAnim
+        val t = (SystemClock.uptimeMillis() - fadeStart).toFloat() / BLEND_MS
+        if (from != null && t < 1f && s.sheet(from) != null) {
+            // Old × (1 − t) plus new × t in one layer: a true crossfade, the body never goes see-through.
+            val layer = canvas.saveLayer(null, null)
+            fadeOut.set(paint)
+            fadeOut.alpha = ((1f - t) * 255).roundToInt()
+            drawCell(canvas, s, from, fromCell, fadeOut)
+            fadeIn.isFilterBitmap = paint.isFilterBitmap
+            fadeIn.alpha = (t * 255).roundToInt()
+            drawCell(canvas, s, a, cell, fadeIn)
+            canvas.restoreToCount(layer)
+            postInvalidateOnAnimation()
+        } else {
+            fromAnim = null
+            drawCell(canvas, s, a, cell, paint)
+        }
+    }
+
+    private fun drawCell(canvas: Canvas, s: PetSprites.Loaded, a: PetAnimation, cell: Int, paint: Paint) {
         val sheet = s.sheet(a) ?: return
         val r = sheet.perLogical
         val cw = (a.box.w * r).toInt()
@@ -335,5 +382,10 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
         AccessibilityNodeInfo.ACTION_CLICK -> { listener.onTap(false); true }
         AccessibilityNodeInfo.ACTION_LONG_CLICK -> { listener.onLongPress(null, null); true }
         else -> super.performAccessibilityAction(action, arguments)
+    }
+
+    private companion object {
+        /** Crossfade between two animations of a smooth (non-pixel) pack; matches Dart's petBlend. */
+        const val BLEND_MS = 180f
     }
 }

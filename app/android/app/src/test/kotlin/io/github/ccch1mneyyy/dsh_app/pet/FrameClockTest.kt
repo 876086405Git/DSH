@@ -110,6 +110,23 @@ class FrameClockTest {
         assertTrue("bonus=$bonus", bonus in 480..720)
     }
 
+    @Test fun aBonusPlaysItsTimeThenTheStateLoopsFromItsFirstFrame() {
+        val think = anim(100, 100, name = "think")
+        val intro = anim(50, 50, 50, loop = false, name = "think-in")
+        val p = PetPlayer(Random(1))
+        p.setState(think, null, PetBonus(listOf(intro), 1f), now = 0, playMs = { it.totalMs })
+        val first = p.frame(0)!!
+        assertEquals("think-in", first.anim.name)
+        assertEquals(50L, first.nextInMs)
+        assertEquals(2, p.frame(120)!!.index)
+        assertEquals(30L, p.frame(120)!!.nextInMs)
+        val back = p.frame(150)!!
+        assertEquals("think", back.anim.name)
+        assertEquals(0, back.index)
+        assertEquals(1, p.frame(260)!!.index)
+        assertEquals("think", p.frame(10_000)!!.anim.name)
+    }
+
     @Test fun reactionsPlayOnTopAndGiveTheStateBack() {
         val idle = anim(100, name = "idle")
         val poke = anim(100, 100, loop = false, name = "poke")

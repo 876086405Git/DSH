@@ -73,7 +73,8 @@ class IdleRhythm(private val random: Random = Random.Default) {
  *
  * - **calm** states (idle, sleeping): the still first frame of the primary, and every
  *   [IdleRhythm] gap one action from [calmPool] for its time;
- * - other states: their animation at full speed (a [PetBonus] replaces it now and then);
+ * - other states: their animation at full speed; a [PetBonus] drawn on entering plays first for
+ *   its one-off time (`PetPack.playMsOf`), then the state's own animation from its first frame;
  * - a reaction (drag, a tap) plays on top and then gives the state back;
  * - [still] (system animations off): first frame without per-frame scheduling; a one-shot
  *   reaction still schedules its return to the state when its time ends.
@@ -99,7 +100,13 @@ class PetPlayer(private val random: Random = Random.Default) {
     var still = false
 
     /** Starts [primary] for a state; [calmPool] non-null makes it a calm state. */
-    fun setState(primary: PetAnimation, calmPool: List<PetIdleItem>?, bonus: PetBonus?, now: Long) {
+    fun setState(
+        primary: PetAnimation,
+        calmPool: List<PetIdleItem>?,
+        bonus: PetBonus?,
+        now: Long,
+        playMs: (PetAnimation) -> Long = { if (it.loop) 2 * it.totalMs else it.totalMs },
+    ) {
         this.primary = primary
         calm = calmPool != null
         this.calmPool = calmPool.orEmpty()
@@ -108,9 +115,10 @@ class PetPlayer(private val random: Random = Random.Default) {
             nextPlayAt = now + rhythm.nextDelayMs()
         } else {
             val b = bonus?.takeIf { it.anims.isNotEmpty() && random.nextFloat() < it.chance }
-            playing = b?.anims?.get(random.nextInt(b.anims.size)) ?: primary
+            val variant = b?.anims?.get(random.nextInt(b.anims.size))
+            playing = variant ?: primary
             playStart = now
-            playUntil = Long.MAX_VALUE
+            playUntil = if (variant != null) now + playMs(variant) else Long.MAX_VALUE
         }
     }
 
@@ -139,10 +147,16 @@ class PetPlayer(private val random: Random = Random.Default) {
         }
         val p = primary ?: return null
         if (!calm) {
+            if (playing !== p && now >= playUntil) {
+                playing = p
+                playStart = playUntil
+                playUntil = Long.MAX_VALUE
+            }
             val a = playing ?: p
-            if (still) return Frame(a, 0, null)
+            val end = if (playUntil == Long.MAX_VALUE) null else playUntil - now
+            if (still) return Frame(a, 0, end)
             val e = now - playStart
-            return Frame(a, FrameClock.frameAt(a, e), FrameClock.nextChange(a, e))
+            return Frame(a, FrameClock.frameAt(a, e), listOfNotNull(FrameClock.nextChange(a, e), end).minOrNull())
         }
         if (still) return Frame(p, 0, null)
         playing?.let { a ->

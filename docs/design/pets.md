@@ -475,7 +475,8 @@ pet_svg_frames.py；整张精灵表要先拆帧或导出 Aseprite JSON。
 
 - **像素画包**（`pixelArt: true` 且 `scale: 1`）：最近邻采样，`FilterQuality.none`，按 §2.10 的整数 `k` 绘制，左上角对齐物理像素。
 - **高倍率包**（`scale > 1` 或 `pixelArt: false`）：用 `FilterQuality.medium`，`k` 不要求是整数，但锚点仍然对齐物理像素。
-- 用 `CustomPainter` 或 `RawImage` 画当前帧，只在帧号变化时重绘，不要每个 vsync 都重绘。
+- **换动画时的过渡**（2026-11-20）：`pixelArt: false` 的包从上一段动画停住的那一帧淡入到新动画，用时 180ms（Dart 的 `petBlend`、Kotlin `PetView` 的 `BLEND_MS`），两张在同一图层里按 `旧 × (1 − t) + 新 × t` 叠加，身体中途不会变透明。像素画包照旧直接切，淡入会把硬边糊掉。换宠物、系统关了动画、暂停或只显示首帧时不淡入。需要更长的过渡（手从下沿伸上来、躺下去）时，在包里给该状态写一段 `bonus`，`chance: 1`，进入状态时先播它再接循环。
+- 用 `CustomPainter` 或 `RawImage` 画当前帧，只在帧号变化时重绘，不要每个 vsync 都重绘；淡入的 180ms 里每帧重绘。
 - 宠物所在的子树用 `RepaintBoundary` 隔开，宠物动起来时不能让聊天列表跟着重绘。
 - 浅色和深色主题下都不给宠物描边、不调色。气泡用现有的玻璃表面令牌，跟随 App 字号。
 

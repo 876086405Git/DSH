@@ -38,8 +38,10 @@ data class FramePx(val left: Int, val top: Int, val right: Int, val bottom: Int)
  * clear of the bars, so a grown frame never has to move the pet. [hit] is where a touch is the
  * pet's: the body, not the air a grown frame adds.
  *
- * Cells are placed as [PetView] draws them: the box offset rounded to whole physical pixels, the
- * size rounded on its own. Pure, for the JVM tests.
+ * Cells are placed as [PetView] draws them: each edge rounded to whole physical pixels, so a box
+ * inside another stays inside it at any scale (pixel art's whole k rounds nothing; smooth art's
+ * fractional k would otherwise push a cell flush with the rest frame one pixel past it). Pure,
+ * for the JVM tests.
  */
 class PetFrames(
     val restBox: PetBox,
@@ -56,9 +58,12 @@ class PetFrames(
 
     /** [box] (canvas px) in physical px around the rest origin, placed as cells are. */
     fun place(box: PetBox): FramePx {
-        val l = ((box.x - restBox.x) * k).roundToInt()
-        val t = ((box.y - restBox.y) * k).roundToInt()
-        return FramePx(l, t, l + (box.w * k).roundToInt(), t + (box.h * k).roundToInt())
+        val x = box.x - restBox.x
+        val y = box.y - restBox.y
+        return FramePx(
+            (x * k).roundToInt(), (y * k).roundToInt(),
+            ((x + box.w) * k).roundToInt(), ((y + box.h) * k).roundToInt(),
+        )
     }
 
     /** Where [anim]'s cell is drawn, relative to the rest frame's origin. */

@@ -679,7 +679,7 @@ internal object PetOverlay {
             PetPush.SLEEPING -> pack.primary(state, 0).let { listOf(PetIdleItem(it, it.totalMs, 1)) }
             else -> null
         }
-        player.setState(pack.primary(state, p.tier), calmPool, pack.bonusOf(state, p.tier), SystemClock.uptimeMillis())
+        player.setState(pack.primary(state, p.tier), calmPool, pack.bonusOf(state, p.tier), SystemClock.uptimeMillis(), pack::playMsOf)
         if (looping) restartLoop() else petView?.let { drawStill() }
     }
 
@@ -730,6 +730,7 @@ internal object PetOverlay {
         val view = petView ?: return
         val l = loaded ?: return
         player.still = !animationsOn()
+        view.blends = !player.still
         val f = player.frame(SystemClock.uptimeMillis()) ?: return
         if (!view.show(f.anim, f.index)) {
             l.request(f.anim) { if (alive(ticket) && loaded === l) redraw() }
@@ -756,6 +757,7 @@ internal object PetOverlay {
         if (!alive(ticket)) return
         val view = petView ?: return
         val l = loaded ?: return
+        view.blends = false
         val f = player.frame(SystemClock.uptimeMillis()) ?: return
         if (view.show(f.anim, f.index)) onShown() else l.request(f.anim) { if (alive(ticket) && loaded === l) redraw() }
     }

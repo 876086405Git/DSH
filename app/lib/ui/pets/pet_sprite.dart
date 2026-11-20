@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../pets/pet_pack.dart';
@@ -38,12 +39,17 @@ double petScale(PetPack pack, PetSize size, double devicePixelRatio, {double cus
     ? petDevicePixels(pack, size, devicePixelRatio, customHeight: customHeight) / devicePixelRatio
     : (size == PetSize.custom ? customHeight : size.bodyHeight) / pack.contentBox.height;
 
+/// How long smooth (non-pixel) art crossfades from one animation into the
+/// next. Pixel art cuts: a blend would smear its hard edges.
+const petBlend = Duration(milliseconds: 180);
+
 /// One animation of [pack], as big as the canvas × [scale].
 ///
 /// Loops when the animation loops; otherwise plays once, holds the last
 /// frame and calls [onEnd]. With animations turned off in the system it
 /// shows the first frame (and still calls [onEnd] after one pass's time).
 /// Until a new animation's sheet is decoded the previous one keeps showing.
+/// Smooth art then crossfades into the new one over [petBlend].
 /// Playback freezes while the app has no visible view, including in the
 /// background where Dart timers can outlive Flutter's frame scheduling.
 class PetSprite extends StatefulWidget {
@@ -87,9 +93,17 @@ class PetSprite extends StatefulWidget {
   State<PetSprite> createState() => PetSpriteState();
 }
 
-class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver {
+class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final _repaint = ValueNotifier<int>(0);
   ui.Image? _image;
+  PetPack? _imagePack;
+
+  /// The picture being faded out ([_blend] 0 → 1), frozen on its last frame.
+  ui.Image? _fromImage;
+  PetAnimation? _fromAnim;
+  int _fromFrame = 0;
+  double _blend = 1;
+  Ticker? _fade;
 
   /// The animation [_image] belongs to (the previous one while the new
   /// sheet decodes).
@@ -113,6 +127,10 @@ class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver {
   /// The animation on screen (null until its sheet is decoded).
   @visibleForTesting
   PetAnimation? get shown => _shown;
+
+  /// Still fading out the previous animation.
+  @visibleForTesting
+  bool get blending => _fromImage != null;
 
   @override
   void initState() {
@@ -147,6 +165,7 @@ class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver {
       if (first) {
         _start();
       } else {
+        if (_still) _settleFade();
         _schedule();
       }
     }
@@ -167,6 +186,8 @@ class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _cancelTimer();
     _clock.stop();
+    _stopFade();
+    _fade?.dispose();
     _image?.dispose();
     _repaint.dispose();
     super.dispose();
@@ -194,13 +215,52 @@ class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver {
   }
 
   void _show(PetAnimation anim, ui.Image image) {
-    _image?.dispose();
+    final previous = _image;
+    final previousAnim = _shown;
+    _stopFade();
+    if (previous != null &&
+        previousAnim != null &&
+        previousAnim != anim &&
+        _imagePack == widget.pack &&
+        !widget.pack.pixelArt &&
+        !_still &&
+        !_paused) {
+      _fromImage = previous;
+      _fromAnim = previousAnim;
+      _fromFrame = _frame;
+      _blend = 0;
+      (_fade ??= createTicker(_onFade)).start();
+    } else {
+      previous?.dispose();
+    }
     _image = image;
+    _imagePack = widget.pack;
     _shown = anim;
     _frame = 0;
     _repaint.value++;
     _schedule();
     widget.onShown?.call();
+  }
+
+  void _onFade(Duration elapsed) {
+    _blend = (elapsed.inMicroseconds / petBlend.inMicroseconds).clamp(0.0, 1.0);
+    if (_blend >= 1) _stopFade();
+    _repaint.value++;
+  }
+
+  /// Ends a fade at once on the new picture (playback paused, or motion turned off).
+  void _settleFade() {
+    if (_fromImage == null) return;
+    _stopFade();
+    _repaint.value++;
+  }
+
+  void _stopFade() {
+    _fade?.stop();
+    _fromImage?.dispose();
+    _fromImage = null;
+    _fromAnim = null;
+    _blend = 1;
   }
 
   bool get _still => widget.still || _reduced || !_ticking;
@@ -248,6 +308,7 @@ class PetSpriteState extends State<PetSprite> with WidgetsBindingObserver {
 
   void _pauseChanged() {
     if (_paused) {
+      _settleFade();
       final due = _due;
       if (due != null) {
         final left = due - _clock.elapsed;
@@ -321,23 +382,47 @@ class _SpritePainter extends CustomPainter {
     final image = state._image;
     final anim = state._shown;
     if (image == null || anim == null) return;
-    final frame = anim.frames[state._frame.clamp(0, anim.frames.length - 1)];
-    final box = anim.box;
-    final dst = Rect.fromLTWH(box.left * scale, box.top * scale, box.width * scale, box.height * scale);
     if (flip) {
       canvas.save();
       canvas.translate(2 * pack.anchorX * scale, 0);
       canvas.scale(-1, 1);
     }
+    final from = state._fromImage;
+    final fromAnim = state._fromAnim;
+    if (from != null && fromAnim != null && state._blend < 1) {
+      // Old × (1 − t) plus new × t in one layer: a true crossfade of
+      // premultiplied colour, so the body never turns see-through midway.
+      final t = state._blend;
+      canvas.saveLayer(Offset.zero & size, Paint());
+      _draw(canvas, from, fromAnim, state._fromFrame, Paint()..color = Color.fromRGBO(0, 0, 0, 1 - t));
+      _draw(
+        canvas,
+        image,
+        anim,
+        state._frame,
+        Paint()
+          ..color = Color.fromRGBO(0, 0, 0, t)
+          ..blendMode = BlendMode.plus,
+      );
+      canvas.restore();
+    } else {
+      _draw(canvas, image, anim, state._frame, Paint());
+    }
+    if (flip) canvas.restore();
+  }
+
+  void _draw(Canvas canvas, ui.Image image, PetAnimation anim, int index, Paint paint) {
+    final frame = anim.frames[index.clamp(0, anim.frames.length - 1)];
+    final box = anim.box;
+    final dst = Rect.fromLTWH(box.left * scale, box.top * scale, box.width * scale, box.height * scale);
     canvas.drawImageRect(
       image,
       anim.sourceRect(frame.i),
       dst,
-      Paint()
+      paint
         ..isAntiAlias = false
         ..filterQuality = pack.pixelArt ? FilterQuality.none : FilterQuality.medium,
     );
-    if (flip) canvas.restore();
   }
 
   @override

@@ -5474,6 +5474,12 @@ abstract class L10n {
   /// **'鲸娘'**
   String get botsPetWhaleGirl;
 
+  /// No description provided for @botsPetPinkFish.
+  ///
+  /// In zh, this message translates to:
+  /// **'小粉鱼'**
+  String get botsPetPinkFish;
+
   /// No description provided for @botsPetNone.
   ///
   /// In zh, this message translates to:

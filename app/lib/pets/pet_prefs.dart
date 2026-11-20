@@ -13,7 +13,7 @@ import 'pet_library.dart';
 import 'pet_state.dart';
 
 /// The pets that ship with the app, in picker order.
-const builtInPets = ['deepy-whale', 'whale-girl'];
+const builtInPets = ['deepy-whale', 'whale-girl', 'pink-fish'];
 
 /// The default pet.
 const defaultPetId = 'deepy-whale';
