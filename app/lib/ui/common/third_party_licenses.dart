@@ -35,6 +35,12 @@ void registerThirdPartyLicenses({String? os}) {
     yield LicenseEntryWithLineBreaks(<String>[
       'Lodash',
     ], await rootBundle.loadString('assets/licenses/lodash-4.17.21-LICENSE.txt'));
+    yield LicenseEntryWithLineBreaks(<String>[
+      'Zod',
+    ], await rootBundle.loadString('assets/licenses/zod-4.6.7-LICENSE.txt'));
+    yield LicenseEntryWithLineBreaks(<String>[
+      'YAML (eemeli/yaml)',
+    ], await rootBundle.loadString('assets/licenses/yaml-2.9.1-LICENSE.txt'));
     // The streaming recognizer's model, downloaded on demand (語音 › 实时识别). HarmonyOS
     // has no streaming recognizer (sherpa-onnx ships Android's libraries only).
     if (!harmony) {
@@ -231,6 +237,7 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.''';
+
 /// Libraries.dev (UI effects in lib/ui/fx), commit 387b049.
 const _librariesDevMit = '''
 MIT License

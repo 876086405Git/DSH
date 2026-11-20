@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../tavern/tavern_settings.dart';
 import '../../tavern/tavern_st_theme.dart';
+import '../chat/dsh_ui/dsh_ui_model.dart' show dshUiReadableColor;
 import '../chat/render/markdown_body.dart';
 import 'tavern_ink.dart';
 
@@ -63,7 +64,15 @@ class TavernReading extends ConsumerWidget {
       tavernSettingsProvider.select((s) => (s.textSize, s.lineHeight, s.palette)),
     );
     final st = palette == TavernPalette.st ? ref.watch(tavernStThemeProvider) : null;
-    final accent = this.accent;
+    // A card's colours are made for one page, light or dark: on this one,
+    // each moved toward black or white until it reads, hue kept.
+    final page = Theme.of(context).colorScheme.surface.toARGB32() & 0xFFFFFF;
+    Color readable(Color c) => Color(0xFF000000 | dshUiReadableColor(c.toARGB32() & 0xFFFFFF, page));
+    final accent = switch (this.accent) {
+      final own? => readable(own),
+      null => null,
+    };
+    final names = this.names.isEmpty ? this.names : {for (final e in this.names.entries) e.key: readable(e.value)};
     final theme = accent == null ? Theme.of(context) : tavernAccentTheme(Theme.of(context), accent);
     final ink = st == null ? TavernInk.of(palette, theme.brightness) : TavernInk.st(st, theme.colorScheme.surface);
     final read = Theme(

@@ -22,6 +22,7 @@ import '../../tavern/tavern_canvas.dart';
 import '../../tavern/tavern_canvas_audio.dart';
 import '../../tavern/tavern_canvas_calls.dart';
 import '../../tavern/tavern_canvas_helpers.dart' show tavernMvuIssueText;
+import '../../tavern/tavern_islands.dart' show tavernFrameBaseUrl, tavernPageColorsJs;
 import '../../tavern/tavern_card_scripts.dart';
 import '../../tavern/tavern_provider.dart';
 import '../../tavern/tavern_settings.dart';
@@ -44,11 +45,17 @@ typedef TavernCanvasBuilder = Widget Function({
 });
 
 /// The libraries card scripts find on the canvas page, as 酒馆助手's pages
-/// give them: jQuery and lodash (bundled; licences in THIRD_PARTY_NOTICES.md).
+/// give them: jQuery, lodash, zod (`z`) and `YAML` (bundled; licences in
+/// THIRD_PARTY_NOTICES.md). Islands get them too.
+/// The libraries' names, in [tavernCanvasLibrariesProvider]'s order.
+const tavernLibraryNames = ['jQuery', 'lodash', 'zod', 'YAML'];
+
 final tavernCanvasLibrariesProvider = FutureProvider<List<String>>(
   (ref) async => [
     await rootBundle.loadString('assets/tavern/jquery-3.7.1.min.js'),
     await rootBundle.loadString('assets/tavern/lodash-4.17.21.min.js'),
+    await rootBundle.loadString('assets/tavern/zod-4.6.7.min.js'),
+    await rootBundle.loadString('assets/tavern/yaml-2.9.1.min.js'),
   ],
 );
 
@@ -153,6 +160,28 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   /// The character the page was last built for.
   String? _character;
 
+  /// The theme's colours for the page, and the last set it was given.
+  Map<String, Color> _colors = const {};
+  Map<String, Color>? _pushed;
+
+  /// The page's own light / dark (prefers-color-scheme), kept with the app's:
+  /// set at attach, then in place on a theme change, as the colours are.
+  bool _wantDark = false;
+  bool? _darkSent;
+
+  void _syncDark() {
+    if (_darkSent == null || _darkSent == _wantDark) return;
+    _darkSent = _wantDark;
+    unawaited(_guard.setDark(_wantDark).catchError((_) {}));
+  }
+
+  void _pushColors() {
+    final controller = _controller;
+    if (!_ready || controller == null || mapEquals(_pushed, _colors)) return;
+    _pushed = _colors;
+    unawaited(controller.runJavaScript(tavernPageColorsJs(_colors)).catchError((_) {}));
+  }
+
   /// Loads the page, again when its look or its guards change.
   void _open() {
     final theme = Theme.of(context);
@@ -185,20 +214,25 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       libraries = loaded.value ?? const [];
       card = data?.value;
     }
-    final key = (
-      noScripts,
-      offline,
-      theme.brightness,
-      ink?.dialogue,
-      ink?.action,
-      theme.colorScheme.primary,
-      reading,
-      themeCss,
-      card,
-      character,
-    );
+    // The colours are set in place on the loaded page (_pushColors), never by
+    // loading it again: that would start the card's scripts, and what they
+    // write, once more on every step of a theme's cross-fade.
+    _colors = {
+      'text': text,
+      'accent': theme.colorScheme.primary,
+      'muted': dsh.textTertiary,
+      'user': theme.colorScheme.primary.withValues(alpha: 0.12),
+      'quote': ink?.dialogue ?? text,
+      'emphasis': ink?.action ?? text,
+    };
+    _wantDark = theme.brightness == Brightness.dark;
+    _syncDark();
+    final key = (noScripts, offline, reading, themeCss, card, character);
     _character = character;
-    if (key == _loaded) return;
+    if (key == _loaded) {
+      _pushColors();
+      return;
+    }
     _loaded = key;
     _ready = false;
     _rendered = null;
@@ -253,7 +287,9 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       if (!mounted || controller != _controller) return;
       await _guard.attach(controller, dark: dark, textZoom: textZoom).catchError((_) {});
       if (!mounted || controller != _controller) return;
-      await controller.loadHtmlString(document).catchError((_) {});
+      _darkSent = dark;
+      _syncDark();
+      await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }
 
@@ -271,6 +307,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     switch (data['type']) {
       case 'ready':
         _ready = true;
+        _pushed = null;
+        _pushColors();
         _rendered = null;
         _streamSent = null;
         _avatars.reset();
@@ -413,7 +451,11 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   /// The page itself stays put; a link opens outside the app.
   NavigationDecision _onNavigation(NavigationRequest request) {
     final url = request.url;
-    if (url == 'about:blank' || url.startsWith('data:') || url.startsWith('about:srcdoc')) {
+    // Its own page, loaded from its base URL (WebKit asks for that load).
+    if (url == 'about:blank' ||
+        url == tavernFrameBaseUrl ||
+        url.startsWith('data:') ||
+        url.startsWith('about:srcdoc')) {
       return NavigationDecision.navigate;
     }
     if (!request.isMainFrame) return NavigationDecision.navigate;
@@ -439,6 +481,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       _guard = WebViewGuard(onGone: _onGone);
       _controller = null;
       _loaded = null;
+      _darkSent = null;
     });
     _open();
   }

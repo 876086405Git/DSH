@@ -16,6 +16,7 @@ import 'package:dsh_tavern/dsh_tavern.dart' show PersonaSelection, TavernPersona
 
 import 'tavern_canvas_helpers.dart';
 import 'tavern_card_scripts.dart' show tavernUsesMvu;
+import 'tavern_islands.dart' show tavernFence, tavernFenceIsHtml, tavernHtmlBlocks, tavernPageColors;
 
 /// One message on the canvas.
 final class TavernCanvasEntry {
@@ -133,21 +134,22 @@ String _words(String text) => text
     .replaceAllMapped(_emUnderscore, (m) => '<em>${m[1]}</em>')
     .replaceAllMapped(_said, (m) => '<q>${m[0]}</q>');
 
-final _fence = RegExp(r'^(`{3,}|~{3,})[ \t]*([\w-]*)[^\n]*\n([\s\S]*?)\n?^\1[ \t]*$', multiLine: true);
 final _blockTag = RegExp(
-  r'^<(div|p|style|script|table|details|section|article|center|ul|ol|blockquote|pre|h[1-6]|hr|img|svg|iframe|form|figure|dsh-[a-z-]+)\b',
+  r'^<(!doctype|html|head|body|link|meta|title|div|p|style|script|table|details|section|article|center|ul|ol|blockquote|pre|textarea|h[1-6]|hr|img|svg|iframe|form|figure|dsh-[a-z-]+)\b',
   caseSensitive: false,
 );
 final _heading = RegExp(r'^(#{1,6})\s+(.*)$');
+final _lang = RegExp(r'^[\w-]*');
 
 /// A message's text as the canvas shows it: paragraphs with their line
-/// breaks, Markdown's emphasis, what is said in <q>, ```html blocks and block
-/// HTML as written, other code blocks escaped.
+/// breaks, Markdown's emphasis, what is said in <q>, ```html blocks (and code
+/// blocks holding a whole page, [tavernFenceIsHtml]) and block HTML as
+/// written, other code blocks escaped.
 String tavernStoryHtml(String text) {
   final source = text.replaceAll('\r\n', '\n');
   final out = <String>[];
   void prose(String segment) {
-    for (final block in segment.split(RegExp(r'\n[ \t]*\n'))) {
+    for (final block in tavernHtmlBlocks(segment)) {
       final trimmed = block.trim();
       if (trimmed.isEmpty) continue;
       if (_blockTag.hasMatch(trimmed)) {
@@ -165,12 +167,12 @@ String tavernStoryHtml(String text) {
   }
 
   var at = 0;
-  for (final f in _fence.allMatches(source)) {
+  for (final f in tavernFence.allMatches(source)) {
     prose(source.substring(at, f.start));
-    final lang = f[2]!.toLowerCase();
+    final lang = _lang.stringMatch(f[2]!.trim())!.toLowerCase();
     final body = f[3]!;
     out.add(
-      lang == 'html'
+      tavernFenceIsHtml(f[2]!, body)
           ? body
           : '<pre><code${lang.isEmpty ? '' : ' class="language-$lang"'}>${_escape(body)}</code></pre>',
     );
@@ -179,9 +181,6 @@ String tavernStoryHtml(String text) {
   prose(source.substring(at));
   return out.join('\n');
 }
-
-String _css(Color c) =>
-    'rgba(${(c.r * 255).round()},${(c.g * 255).round()},${(c.b * 255).round()},${c.a.toStringAsFixed(3)})';
 
 /// How many of the latest messages the canvas always lays out; older ones
 /// are skipped while off screen (CSS content-visibility).
@@ -287,8 +286,8 @@ String tavernCanvasDocument({
 ${policy == null ? '' : '<meta http-equiv="Content-Security-Policy" content="$policy">'}
 <style>
 :root{
-  --dsh-text:${_css(text)};--dsh-accent:${_css(accent)};--dsh-muted:${_css(muted)};--dsh-user:${_css(userTint)};
-  --SmartThemeBodyColor:var(--dsh-text);--SmartThemeQuoteColor:${_css(quote)};--SmartThemeEmColor:${_css(emphasis)};
+  ${tavernPageColors({'text': text, 'accent': accent, 'muted': muted, 'user': userTint, 'quote': quote, 'emphasis': emphasis}).entries.map((e) => '${e.key}:${e.value};').join()}
+  --SmartThemeBodyColor:var(--dsh-text);--SmartThemeQuoteColor:var(--dsh-quote);--SmartThemeEmColor:var(--dsh-emphasis);
   --SmartThemeUnderlineColor:var(--dsh-accent);--SmartThemeBorderColor:var(--dsh-muted);
   --mainFontSize:${fontSize}px;
 }
@@ -309,6 +308,7 @@ body{color:var(--dsh-text);font:var(--mainFontSize)/$lineHeight system-ui,-apple
 .mes_text q::before,.mes_text q::after{content:none;}
 .mes_text em{color:var(--SmartThemeEmColor);}
 .mes_text a{color:var(--dsh-accent);}
+button,input,select,textarea{color-scheme:var(--dsh-scheme);}
 .mes_text img,.mes_text video,.mes_text svg{max-width:100%;height:auto;}
 .mes_text pre{white-space:pre-wrap;}
 .mes[data-streaming] .mes_text>:last-child::after,.mes[data-streaming] .mes_text:empty::after{content:"\\25CF" / "";color:var(--dsh-muted);margin-left:3px;font-size:.6em;vertical-align:middle;}
