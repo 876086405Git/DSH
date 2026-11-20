@@ -41,15 +41,24 @@ final class TavernComponentPart extends TavernPart {
 }
 
 /// Whether an island's [html] may use the bundled library [name]: jQuery and
-/// lodash always (small, and used bare); zod and YAML when the page names
-/// them, imports a module (an MVU bundle reaches for them) or uses MVU.
+/// lodash always (small, and used bare); zod and YAML (over half a megabyte)
+/// when a script of the page builds a zod schema or names YAML, imports a
+/// module (an MVU bundle reaches for them) or uses MVU. What the page's text
+/// and CSS say (an `@import`) does not count.
 bool tavernIslandNeeds(String name, String html) => switch (name) {
-  'zod' => _wantsZod.hasMatch(html),
-  'YAML' => _wantsYaml.hasMatch(html),
+  'zod' => _wantsZod.hasMatch(_scriptsOf(html)),
+  'YAML' => _wantsYaml.hasMatch(_scriptsOf(html)),
   _ => true,
 };
-final _wantsZod = RegExp(r'\bz\s*\.|\bimport\b|\bMvu\b|waitGlobalInitialized');
-final _wantsYaml = RegExp(r'\bYAML\b|\bimport\b|\bMvu\b|waitGlobalInitialized');
+String _scriptsOf(String html) => [for (final m in _scriptBody.allMatches(html)) m[1]!].join('\n');
+final _scriptBody = RegExp(r'<script\b[^>]*>([\s\S]*?)</script\s*>', caseSensitive: false);
+const _module = r'''(?<![@.\w$])import\b\s*[\w${*'"(]|\bMvu\b|waitGlobalInitialized''';
+final _wantsZod = RegExp(
+  r'\bz\s*\.\s*(?:object|string|number|boolean|array|enum|union|literal|coerce|record|any|unknown|tuple|'
+  r'discriminatedUnion|preprocess|lazy|date|bigint|nativeEnum|intersection|custom)\s*\(|'
+  '$_module',
+);
+final _wantsYaml = RegExp('\\bYAML\\b|$_module');
 
 /// A page's colours as CSS variables (`--dsh-<name>`), and the scheme its form
 /// controls take: light text, a dark page; so a control a card styled without
