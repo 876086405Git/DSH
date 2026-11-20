@@ -59,11 +59,7 @@ class TavernPortrait extends StatelessWidget {
                       policy: ResizeImagePolicy.fit,
                     )
                   : FileImage(File(file));
-              return Image(
-                image: picture,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => _initial(context),
-              );
+              return Image(image: picture, fit: BoxFit.cover, errorBuilder: (_, _, _) => _initial(context));
             },
           )
         : _initial(context);
@@ -190,6 +186,10 @@ Future<bool> _confirmDelete(
   return ok == true;
 }
 
+/// The one card of a sheet without a title bar: the sheet's 20 gutter at
+/// the sides, as every sheet's cards and title have.
+const kTavernSheetMargin = EdgeInsets.fromLTRB(kSheetGutter, 16, kSheetGutter, 12);
+
 /// A one-row sheet of actions on something the person long-pressed.
 Future<void> showTavernActions(BuildContext context, List<(IconData, String, VoidCallback)> actions) =>
     showAppSheet<void>(
@@ -197,7 +197,7 @@ Future<void> showTavernActions(BuildContext context, List<(IconData, String, Voi
       builder: (sheet) => SafeArea(
         top: false,
         child: SheetGroup(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          margin: kTavernSheetMargin,
           children: [
             for (final (icon, title, onTap) in actions)
               SettingsTile(
@@ -257,7 +257,7 @@ Future<({TavernCharacter character, bool blank})?> showTavernImport(BuildContext
       // Four ways in: on a short screen they scroll rather than run off it.
       child: SingleChildScrollView(
         child: SheetGroup(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          margin: kTavernSheetMargin,
           children: [
             SettingsTile(
               key: const ValueKey('tavern-import-file'),
