@@ -9,6 +9,7 @@ import { canonicalUuid, recallError, validRecallSessionId } from './recall-schem
 const RECORD = 'plugin:dsh-go/companion-recall';
 const FULL_PRESET = 'dsh-go-companion-full';
 const CONFIG_RECORDS = new Set(['agent-preset/selected', 'model/selection',
+  'subagent/model-selection-policy',
   'permission/preset', 'approval/policy', 'sandbox/mode', 'plan/mode']);
 const unavailable = () => recallError(503, 'adapter-unavailable', 'Automatic recall is unavailable for this engine route');
 const denied = (reason) => ({ supported: false, reason });
