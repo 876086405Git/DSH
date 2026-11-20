@@ -84,6 +84,10 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   late WebViewGuard _guard = WebViewGuard(onGone: _onGone);
   bool _ready = false;
   Object? _loaded;
+
+  /// Which document the page is: one asked by a page since reloaded is not
+  /// answered into the new one (its call ids start again).
+  int _document = 0;
   String? _rendered;
   Timer? _streamTimer;
   (String, String)? _streamSent;
@@ -237,6 +241,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       return;
     }
     _loaded = key;
+    _document++;
     _ready = false;
     _rendered = null;
     final document = tavernCanvasDocument(
@@ -393,6 +398,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   /// built since, after the renderer went).
   Future<void> _answer(Map<Object?, Object?> request) async {
     final controller = _controller;
+    final document = _document;
     final calls = widget.calls;
     final reply = calls == null
         ? {
@@ -401,7 +407,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
             'error': {'code': 'unsupportedCapability', 'message': 'Nothing answers here.', 'committed': false},
           }
         : await calls.handle(request);
-    if (!mounted || controller == null || !identical(controller, _controller)) return;
+    if (!mounted || controller == null || !identical(controller, _controller) || document != _document) return;
     await controller.runJavaScript('window.dsh&&dsh.answer(${jsonEncode(reply)})').catchError((_) {});
   }
 
