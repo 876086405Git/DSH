@@ -14,8 +14,8 @@ Widget _row(List<String> items, {bool reduced = false}) => MediaQuery(
 
 /// How far [text] has faded in: 1 when nothing fades it.
 double _shown(WidgetTester tester, String text) {
-  final fades = find.ancestor(of: find.text(text), matching: find.byType(Opacity));
-  return fades.evaluate().isEmpty ? 1 : tester.widget<Opacity>(fades.first).opacity;
+  final fades = find.ancestor(of: find.text(text), matching: find.byType(FadeTransition));
+  return fades.evaluate().isEmpty ? 1 : tester.widget<FadeTransition>(fades.first).opacity.value;
 }
 
 void main() {
@@ -39,7 +39,7 @@ void main() {
 
   testWidgets('with motion reduced they are there at once', (tester) async {
     await tester.pumpWidget(_row(['A', 'B'], reduced: true));
-    expect(find.byType(Opacity), findsNothing);
+    expect(find.byType(FadeTransition), findsNothing);
     expect(find.text('B'), findsOneWidget);
   });
 }
