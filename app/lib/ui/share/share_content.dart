@@ -34,8 +34,9 @@ final class ShareQuestion extends ShareBlock {
 /// A reply: Markdown (code, maths, tables, pictures) drawn with the chat's
 /// renderer; its `![…](…)` pictures become galleries ([shareSegments]).
 final class ShareAnswer extends ShareBlock {
-  const ShareAnswer(this.markdown);
+  const ShareAnswer(this.markdown, {this.turn});
   final String markdown;
+  final int? turn;
 }
 
 /// A delivered file: an image preview, or a file tile with an excerpt.
@@ -117,8 +118,9 @@ final class ShareAttachmentImage extends ShareImage {
 /// A picture a reply points at (`![…](chart.png)`): a workspace file, a web
 /// address or a `data:` URL.
 final class ShareUrlImage extends ShareImage {
-  const ShareUrlImage(this.url);
+  const ShareUrlImage(this.url, {this.turn});
   final String url;
+  final int? turn;
 }
 
 /// A picture already in hand (tests, a file's preview).
@@ -581,6 +583,12 @@ ShareQuestion shareQuestionOf(UserChatItem item, {bool images = true}) => ShareQ
   ],
 );
 
+int? _imageTurn(ChatState state, AssistantChatItem reply) {
+  final key = reply.rowKey;
+  final match = key == null ? null : RegExp(r'^m([0-9]+)[.]').firstMatch(key);
+  return match == null ? turnOf(state.turns, reply.seq)?.turn : int.tryParse(match.group(1)!);
+}
+
 /// A reply's card: the conversation title, the question above it, the reply
 /// and its turn's model, time and work. [sessionId] is where its pictures
 /// are fetched from (null: the conversation open in the chat).
@@ -602,7 +610,7 @@ ShareContent shareContentForReply(
     title: shareTitleText(state.title),
     blocks: [
       if (question != null) shareQuestionOf(question, images: images),
-      ShareAnswer(shareMarkdown(reply.text, images: images)),
+      ShareAnswer(shareMarkdown(reply.text, images: images), turn: _imageTurn(state, reply)),
     ],
     model: reply.model ?? trace?.lastModel.model ?? state.model?.model,
     stats: shareStats(trace),
@@ -645,7 +653,10 @@ ShareContent shareContentForItems(
       for (final item in picked)
         switch (item) {
           final UserChatItem prompt => shareQuestionOf(prompt, images: images),
-          AssistantChatItem(:final text) => ShareAnswer(shareMarkdown(text, images: images)),
+          final AssistantChatItem reply => ShareAnswer(
+            shareMarkdown(reply.text, images: images),
+            turn: _imageTurn(state, reply),
+          ),
           _ => throw StateError('not shareable'),
         },
     ],

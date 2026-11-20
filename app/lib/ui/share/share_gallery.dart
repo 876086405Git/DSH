@@ -277,7 +277,7 @@ class _ShareImageCellState extends ConsumerState<_ShareImageCell> {
 
   static bool _sameSource(ShareImage a, ShareImage b) => switch ((a, b)) {
     (ShareAttachmentImage(attachmentId: final x), ShareAttachmentImage(attachmentId: final y)) => x == y,
-    (ShareUrlImage(url: final x), ShareUrlImage(url: final y)) => x == y,
+    (ShareUrlImage(url: final x, turn: final tx), ShareUrlImage(url: final y, turn: final ty)) => x == y && tx == ty,
     (ShareProvidedImage(provider: final x), ShareProvidedImage(provider: final y)) => x == y,
     _ => false,
   };
@@ -318,12 +318,12 @@ class _ShareImageCellState extends ConsumerState<_ShareImageCell> {
             default:
           }
         }, fireImmediately: true);
-      case ShareUrlImage(:final url):
-        _fromUrl(url);
+      case ShareUrlImage(:final url, :final turn):
+        _fromUrl(url, turn: turn);
     }
   }
 
-  void _fromUrl(String url) {
+  void _fromUrl(String url, {int? turn}) {
     switch (imageSourceOf(url)) {
       case WebImageSource(:final url) when isSvgUrl(url):
         _fail();
@@ -347,7 +347,7 @@ class _ShareImageCellState extends ConsumerState<_ShareImageCell> {
         );
         final source = widget.image;
         ref
-            .read(workspaceImageReaderProvider)
+            .read(turn == null ? workspaceImageReaderProvider : turnWorkspaceImageReaderProvider(turn))
             .read(sessionId, resolved)
             .then(
               (image) {

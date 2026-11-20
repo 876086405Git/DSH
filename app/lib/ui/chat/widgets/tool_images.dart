@@ -22,7 +22,9 @@ class ToolImages extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = MarkdownImageScope.maybeOf(context)?.sessionId ?? ref.watch(currentSessionProvider);
+    final scope = MarkdownImageScope.maybeOf(context);
+    final sessionId = scope?.sessionId ?? ref.watch(currentSessionProvider);
+    final turn = scope?.turn;
     final sources = <({String name, ImageProvider? image, String? path})>[];
     for (final attachment in view.images) {
       ImageProvider? image;
@@ -33,7 +35,11 @@ class ToolImages extends ConsumerWidget {
       sources.add((name: attachment.name ?? context.l10n.chatFile, image: image, path: null));
     }
     if (view.imagePath case final path?) {
-      final image = sessionId == null ? null : ref.watch(artifactThumbnailProvider((sessionId, path))).value;
+      final image = sessionId == null
+          ? null
+          : turn == null
+          ? ref.watch(artifactThumbnailProvider((sessionId, path))).value
+          : ref.watch(turnArtifactThumbnailProvider((sessionId, path, turn))).value;
       sources.add((name: path.split('/').last, image: image, path: path));
     }
     final gallery = [
@@ -47,7 +53,7 @@ class ToolImages extends ConsumerWidget {
         Navigator.of(context).push(
           ArtifactPreviewPage.route(
             sessionId: sessionId,
-            artifact: Artifact(path: path, origin: ArtifactOrigin.linked, turn: 0),
+            artifact: Artifact(path: path, origin: ArtifactOrigin.linked, turn: turn ?? 0, snapshotImage: turn != null),
           ),
         );
         return;

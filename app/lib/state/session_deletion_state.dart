@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'artifact_files.dart' show imageSnapshotHost;
 import 'composer_quote.dart';
 import 'connection_state.dart';
 import 'draft_store.dart';
 import 'drawer_view_state.dart';
 import 'hosts_state.dart';
+import 'image_snapshots.dart';
 import 'read_list_cache.dart';
 import 'read_list_identity.dart';
 import 'sessions_state.dart';
@@ -136,6 +138,8 @@ class SessionDeletionController extends Notifier<bool> {
     final backend = ref.read(sessionDeletionBackendProvider);
     final client = owner.connection.client;
     final identity = ref.read(readListIdentityProvider);
+    final snapshots = ref.read(imageSnapshotsProvider);
+    final snapshotHost = imageSnapshotHost(owner.connection);
     state = true;
     try {
       if (!owned()) return const SessionDeletionResult(retired: true);
@@ -166,6 +170,7 @@ class SessionDeletionController extends Notifier<bool> {
           if (ref.read(currentSessionProvider) == id) ref.read(currentSessionProvider.notifier).select(null);
           if (!owned()) break;
           await ref.read(drawerViewProvider.notifier).forgetSessions({id}, isCurrent: owned);
+          await snapshots.removeSession(snapshotHost, id);
         } catch (error) {
           if (!owned()) break;
           // A cleanup failure must not relabel an acknowledged deletion as a

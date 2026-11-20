@@ -500,7 +500,7 @@ class _Body extends StatelessWidget {
 
   Widget _block(ShareBlock block, double width) => switch (block) {
     final ShareQuestion q => _Question(q, width: width),
-    ShareAnswer(:final markdown) => _Answer(markdown, width: width),
+    ShareAnswer(:final markdown, :final turn) => _Answer(markdown, width: width, turn: turn),
     final ShareFile file => _File(file),
     final SharePlugin plugin => _Plugin(plugin),
   };
@@ -697,10 +697,11 @@ class _Question extends StatelessWidget {
 /// blocks as [ShareCodeWell]s (wrapped, no buttons: an image can't scroll
 /// or copy), its pictures as galleries where they stood.
 class _Answer extends StatelessWidget {
-  const _Answer(this.markdown, {required this.width});
+  const _Answer(this.markdown, {required this.width, this.turn});
 
   final String markdown;
   final double width;
+  final int? turn;
 
   @override
   Widget build(BuildContext context) {
@@ -715,7 +716,10 @@ class _Answer extends StatelessWidget {
               height: segment.code || segment.isImages || segments[i - 1].code || segments[i - 1].isImages ? 12 : 8,
             ),
           if (segment.isImages)
-            ShareGallery(images: [for (final url in segment.images) ShareUrlImage(url)], width: width)
+            ShareGallery(
+              images: [for (final url in segment.images) ShareUrlImage(url, turn: turn)],
+              width: width,
+            )
           else if (segment.code)
             ShareCodeWell(code: segment.text, language: segment.language)
           else

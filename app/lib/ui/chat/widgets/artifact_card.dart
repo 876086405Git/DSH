@@ -70,7 +70,7 @@ class _ArtifactCardState extends State<ArtifactCard> {
         : l10n.chatGeneratedFiles(files.length);
 
     ArtifactTile tile(Artifact file) =>
-        ArtifactTile(key: ValueKey(file.path), sessionId: widget.sessionId, artifact: file);
+        ArtifactTile(key: ValueKey(file.path), sessionId: widget.sessionId, artifact: file.withImageSnapshot());
 
     return ChatCard(
       icon: widget.group.delivered ? AppIcons.artifacts : AppIcons.generating,
@@ -352,7 +352,9 @@ class ArtifactThumb extends ConsumerWidget {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final image = artifact.kind == ArtifactKind.image
-        ? ref.watch(artifactThumbnailProvider((sessionId, artifact.path))).value
+        ? artifact.snapshotImage
+              ? ref.watch(turnArtifactThumbnailProvider((sessionId, artifact.path, artifact.turn))).value
+              : ref.watch(artifactThumbnailProvider((sessionId, artifact.path))).value
         : null;
     final border = BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6), width: 0.5);
     if (image != null) {
@@ -524,7 +526,8 @@ Future<ArtifactAction?> showArtifactMenu(
   final l10n = context.l10n;
   final harmony = ProviderScope.containerOf(context, listen: false).read(operatingSystemProvider) == 'ohos';
   // HarmonyOS has no /sdcard: a path that reads like one isn't in this phone's Downloads.
-  final inDownloads = !harmony && artifact.inPhoneDownloads;
+  // A turn snapshot can differ from the current file at its original path.
+  final inDownloads = !harmony && !artifact.snapshotImage && artifact.inPhoneDownloads;
   HapticFeedback.selectionClick();
   return showAppSheet<ArtifactAction>(
     context,
