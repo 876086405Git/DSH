@@ -1464,9 +1464,11 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     }
     final body = _rowContent(row);
     if (turn == null) return body;
+    // A row must not start the global sessions watcher just to supply an image base.
+    final knownSessions = ref.exists(sessionsProvider) ? ref.read(sessionsProvider).value : null;
     final cwd =
         ref.read(chatProvider(widget.sessionId).notifier).header?.cwd ??
-        ref.read(sessionsProvider).value?.where((session) => session.sessionId == widget.sessionId).firstOrNull?.cwd;
+        knownSessions?.where((session) => session.sessionId == widget.sessionId).firstOrNull?.cwd;
     return MarkdownImageScope(sessionId: widget.sessionId, baseDir: cwd, turn: turn, child: body);
   }
 

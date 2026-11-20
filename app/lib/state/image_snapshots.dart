@@ -36,10 +36,11 @@ class ImageSnapshots {
   final int _maxBytes;
   final _pending = <String, Future<File>>{};
 
-  // Also coordinate replacement stores using the same on-disk directory. No
-  // cached index can overwrite another instance's references. Load is included
-  // so removeSession cannot race a late read into recreating deleted references.
+  // Serialize only disk transactions, never the potentially remote source load.
   static Future<void> _tail = Future<void>.value();
+  // A miss registers a token; its finally removes it and empty groups. Session
+  // removal invalidates and drops the group, so late loads cannot restore it.
+  static final _loading = <(String, String), Set<_SnapshotLoad>>{};
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
 
   static Future<T> _exclusive<T>(Future<T> Function() action) {
@@ -60,81 +61,114 @@ class ImageSnapshots {
     final scope = _identity([host, sessionId]);
     final key = _identity([turn, path]);
     final pendingKey = '$scope/$key/$maxBytes';
-    var result = _pending[pendingKey];
-    if (result == null) {
-      result = _exclusive(() => _get(scope, key, load, maxBytes));
-      _pending[pendingKey] = result;
-      result.then<void>(
-        (_) {
-          _pending.remove(pendingKey);
-        },
-        onError: (Object _, StackTrace _) {
-          _pending.remove(pendingKey);
-        },
-      );
+    final pending = _pending[pendingKey];
+    if (pending != null) return pending;
+    late final Future<File> result;
+    void forget() {
+      if (identical(_pending[pendingKey], result)) _pending.remove(pendingKey);
     }
+
+    result = _get(scope, key, load, maxBytes, forget);
+    _pending[pendingKey] = result;
+    result.then<void>((_) => forget(), onError: (Object _, StackTrace _) => forget());
     return result;
   }
 
-  Future<File> _get(String scope, String key, Future<Uint8List> Function() load, int maxBytes) async {
+  Future<File> _get(
+    String scope,
+    String key,
+    Future<Uint8List> Function() load,
+    int maxBytes,
+    void Function() cancelPending,
+  ) async {
     final directory = await _directory();
-    final index = await _readIndex(directory);
-    final references = index.references.putIfAbsent(scope, () => <String, String?>{});
-    final known = references.containsKey(key);
-    final digest = references[key];
-    late File file;
-    late int size;
-    late String content;
-    if (known) {
-      // Null is a persistent tombstone. Even identical bytes saved by a later
-      // turn must not resurrect a reference whose history was reclaimed.
-      if (digest == null) throw const ImageSnapshotMissing();
-      file = _contentFile(directory, digest);
-      if (!await file.exists()) throw const ImageSnapshotMissing();
-      size = await file.length();
-      if (size > maxBytes) throw const ImageSnapshotTooLarge();
-      content = digest;
-    } else {
+    final scopeKey = (await directory.resolveSymbolicLinks(), scope);
+    final token = _SnapshotLoad(cancelPending);
+    final cached = await _exclusive(() async {
+      final index = await _readIndex(directory);
+      final file = await _find(directory, index, scope, key, maxBytes);
+      if (file == null) _loading.putIfAbsent(scopeKey, () => <_SnapshotLoad>{}).add(token);
+      return file;
+    });
+    if (cached != null) return cached;
+    try {
       final bytes = await load();
-      size = bytes.length;
-      // An image that cannot fit the whole-store budget cannot be retained.
-      if (size > maxBytes || size > _maxBytes) throw const ImageSnapshotTooLarge();
-      content = sha256.convert(bytes).toString();
-      file = _contentFile(directory, content);
-      if (!await file.exists()) await _writeAtomic(file, bytes);
-      references[key] = content;
+      final content = bytes.length > maxBytes || bytes.length > _maxBytes ? null : sha256.convert(bytes).toString();
+      return await _exclusive(() async {
+        if (!token.valid) throw const ImageSnapshotMissing();
+        // Another store may have fixed the same key while this load was out of
+        // the transaction. Its first successful snapshot wins, even a tombstone.
+        final index = await _readIndex(directory);
+        final file = await _find(directory, index, scope, key, maxBytes);
+        if (file != null) return file;
+        if (content == null) throw const ImageSnapshotTooLarge();
+        final target = _contentFile(directory, content);
+        if (!await target.exists()) await _writeAtomic(target, bytes);
+        index.references.putIfAbsent(scope, () => <String, String?>{})[key] = content;
+        _touch(index, content);
+        await _commit(directory, index);
+        return target;
+      });
+    } finally {
+      await _exclusive(() async {
+        final loading = _loading[scopeKey];
+        loading?.remove(token);
+        if (loading != null && loading.isEmpty) _loading.remove(scopeKey);
+      });
     }
+  }
+
+  static Future<File?> _find(Directory directory, _SnapshotIndex index, String scope, String key, int maxBytes) async {
+    final references = index.references[scope];
+    if (references == null || !references.containsKey(key)) return null;
+    // Null is a durable tombstone, not permission to reload today's source.
+    final digest = references[key];
+    if (digest == null) throw const ImageSnapshotMissing();
+    final file = _contentFile(directory, digest);
+    if (!await file.exists()) throw const ImageSnapshotMissing();
+    if (await file.length() > maxBytes) throw const ImageSnapshotTooLarge();
+    _touch(index, digest);
+    await _saveIndex(directory, index);
+    return file;
+  }
+
+  static void _touch(_SnapshotIndex index, String content) {
     var clock = 0;
     for (final tick in index.accessed.values) {
       if (tick > clock) clock = tick;
     }
     index.accessed[content] = clock + 1;
-    if (known) {
-      await _saveIndex(directory, index);
-    } else {
-      await _commit(directory, index);
-    }
-    return file;
   }
 
-  Future<void> removeSession(String host, String sessionId) => _exclusive(() async {
+  Future<void> removeSession(String host, String sessionId) async {
     final directory = await _directory();
-    final index = await _readIndex(directory);
-    index.references.remove(_identity([host, sessionId]));
-    final retained = <String>{
-      for (final references in index.references.values)
-        for (final digest in references.values) ?digest,
-    };
-    index.accessed.removeWhere((digest, _) => !retained.contains(digest));
-    final discarded = <File>[];
-    await for (final file in _contentDirectory(directory).list(followLinks: false)) {
-      if (file is File && !retained.contains(file.uri.pathSegments.last)) discarded.add(file);
-    }
-    await _saveIndex(directory, index);
-    for (final file in discarded) {
-      await file.delete();
-    }
-  });
+    final scope = _identity([host, sessionId]);
+    final scopeKey = (await directory.resolveSymbolicLinks(), scope);
+    await _exclusive(() async {
+      final index = await _readIndex(directory);
+      index.references.remove(scope);
+      final retained = <String>{
+        for (final references in index.references.values)
+          for (final digest in references.values) ?digest,
+      };
+      index.accessed.removeWhere((digest, _) => !retained.contains(digest));
+      final discarded = <File>[];
+      await for (final file in _contentDirectory(directory).list(followLinks: false)) {
+        if (file is File && !retained.contains(file.uri.pathSegments.last)) discarded.add(file);
+      }
+      await _saveIndex(directory, index);
+      final loading = _loading.remove(scopeKey);
+      if (loading != null) {
+        for (final token in loading) {
+          token.valid = false;
+          token.cancelPending();
+        }
+      }
+      for (final file in discarded) {
+        await file.delete();
+      }
+    });
+  }
 
   Future<Directory> _directory() async {
     final directory = Directory('${(await _root()).path}/image-snapshots');
@@ -212,6 +246,13 @@ class ImageSnapshots {
       if (await staging.exists()) await staging.delete();
     }
   }
+}
+
+class _SnapshotLoad {
+  _SnapshotLoad(this.cancelPending);
+
+  final void Function() cancelPending;
+  bool valid = true;
 }
 
 class _SnapshotIndex {

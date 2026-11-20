@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dsh_app/state/artifact_files.dart';
 import 'package:dsh_app/state/artifacts.dart';
@@ -73,9 +74,17 @@ class _RemotePictures extends DshCarrier {
 }
 
 class _Pictures {
-  _Pictures() {
+  _Pictures([WidgetTester? tester]) {
     addTearDown(() => dir.deleteSync(recursive: true));
     addTearDown(client.close);
+    if (tester != null) {
+      addTearDown(
+        () => tester.runAsync(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump();
+        }),
+      );
+    }
   }
 
   final dir = Directory.systemTemp.createTempSync('turn-image-snapshot-');
@@ -83,11 +92,12 @@ class _Pictures {
   final workspace = MemoryWorkspace(files: {'chart.png': 'image'});
   late final source = File('${dir.path}/chart.png')..writeAsBytesSync(tinyPng);
   late final channel = _MappedFiles(source);
+  late final snapshots = ImageSnapshots(root: () async => dir);
   late final files = ArtifactFiles(
     connection: HostConnection(client: client, isLocal: true),
     channel: channel,
     cacheRoot: () async => dir,
-    snapshots: ImageSnapshots(root: () async => dir),
+    snapshots: snapshots,
     operatingSystem: 'android',
   );
 
@@ -101,7 +111,6 @@ class _Pictures {
 
 Widget _reply(int turn) => SizedBox(
   width: 320,
-  height: 180,
   child: MarkdownImageScope(
     sessionId: _session,
     turn: turn,
@@ -109,34 +118,43 @@ Widget _reply(int turn) => SizedBox(
   ),
 );
 
-Future<void> _decode(WidgetTester tester, {int count = 1}) async {
-  // Static placeholders do not keep pumpAndSettle alive during file I/O.
-  // Build FileImage and decode it in the real-async zone once bytes arrive.
-  await tester.runAsync(() async {
-    for (var i = 0; i < 100 && find.byType(Image).evaluate().length < count; i++) {
+Future<void> _decode(WidgetTester tester, {required Finder root, int count = 1}) async {
+  final images = find.descendant(of: root, matching: find.byType(Image));
+  // Keep file I/O and FileImage construction in real async. A transition can
+  // still expose the previous route's Image, so callers select their own root.
+  final decoded = await tester.runAsync(() async {
+    for (var i = 0; i < 250; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      if (images.evaluate().length == count) {
+        for (final element in images.evaluate().toList()) {
+          final provider = (element.widget as Image).image;
+          await precacheImage(provider, element).timeout(const Duration(seconds: 5));
+        }
+        await tester.pump();
+        return true;
+      }
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      await tester.pumpAndSettle();
     }
-    final images = find.byType(Image);
-    expect(images, findsNWidgets(count));
-    for (final element in images.evaluate().toList()) {
-      final provider = (element.widget as Image).image;
-      await precacheImage(provider, element).timeout(const Duration(seconds: 5));
-    }
+    return false;
   });
-  await tester.pumpAndSettle();
+  expect(decoded, isTrue, reason: 'the target images must load before leaving real async');
+  expect(images, findsNWidgets(count));
+  await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
 }
 
 Future<void> _decodeShare(WidgetTester tester) async {
   final context = tester.element(find.byType(ShareImageScope));
-  for (var i = 0; i < 100 && shareImagesPending(context) > 0; i++) {
-    await tester.runAsync(() async {
+  final decoded = await tester.runAsync(() async {
+    for (var i = 0; i < 250; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      if (shareImagesPending(context) == 0) return true;
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      await tester.pumpAndSettle();
-    });
-  }
+    }
+    return false;
+  });
+  expect(decoded, isTrue);
   expect(shareImagesPending(context), 0);
-  await tester.pumpAndSettle();
+  await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
 }
 
 FileImage _fileImage(WidgetTester tester, Finder root) {
@@ -159,8 +177,8 @@ Future<void> _expectPreview(
   required int width,
   required int height,
 }) async {
-  await _decode(tester);
   final preview = find.byType(ArtifactPreviewPage);
+  await _decode(tester, root: preview);
   final artifact = tester.widget<ArtifactPreviewPage>(preview).artifact;
   expect(artifact.path, _path);
   expect(artifact.turn, turn);
@@ -174,12 +192,12 @@ void main() {
 
   testWidgets('the same Markdown path keeps distinct turn pixels after remount and full-screen open', (tester) async {
     usePhoneView(tester);
-    final pictures = _Pictures();
+    final pictures = _Pictures(tester);
     final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
     final inline = find.byType(MarkdownImage);
 
     await tester.pumpWidget(pictures.app(Scaffold(body: _reply(1))));
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     final firstState = tester.state(inline);
     final firstPath = _fileImage(tester, inline).file.path;
     expect(firstPath, isNot(pictures.source.path));
@@ -187,7 +205,7 @@ void main() {
 
     pictures.source.writeAsBytesSync(changed);
     await tester.pumpWidget(pictures.app(Scaffold(body: _reply(2))));
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     expect(tester.state(inline), same(firstState));
     final secondPath = _fileImage(tester, inline).file.path;
     expect(secondPath, isNot(firstPath));
@@ -197,7 +215,7 @@ void main() {
     await _expectPreview(tester, turn: 2, filePath: secondPath, width: 7, height: 3);
     expect(pictures.workspace.watching('chart.png'), 0);
     Navigator.of(tester.element(find.byType(ArtifactPreviewPage))).pop();
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
 
     // Dispose the widgets and Riverpod readers, not just the visible image.
     await tester.pumpWidget(const SizedBox.shrink());
@@ -205,7 +223,7 @@ void main() {
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
     await tester.pumpWidget(pictures.app(Scaffold(body: _reply(1))));
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     expect(tester.state(inline), isNot(same(firstState)));
     expect(_fileImage(tester, inline).file.path, firstPath);
     _expectPixels(tester, inline, 4, 4);
@@ -220,12 +238,12 @@ void main() {
 
   testWidgets('artifact cards share their turn snapshot with Markdown and full-screen pixels', (tester) async {
     usePhoneView(tester);
-    final pictures = _Pictures();
+    final pictures = _Pictures(tester);
     final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
     final inline = find.byType(MarkdownImage);
 
     await tester.pumpWidget(pictures.app(Scaffold(body: _reply(1))));
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     final firstPath = _fileImage(tester, inline).file.path;
     pictures.source.writeAsBytesSync(changed);
 
@@ -247,7 +265,7 @@ void main() {
           ),
         ),
       );
-      await _decode(tester, count: 2);
+      await _decode(tester, root: find.byType(Scaffold), count: 2);
       final path = _fileImage(tester, inline).file.path;
       expect(path, turn == 1 ? firstPath : isNot(firstPath));
       expect(path, isNot(pictures.source.path));
@@ -261,7 +279,7 @@ void main() {
       await _expectPreview(tester, turn: turn, filePath: path, width: width, height: height);
       expect(pictures.workspace.watching('chart.png'), 0);
       Navigator.of(tester.element(find.byType(ArtifactPreviewPage))).pop();
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(timeout: const Duration(seconds: 5));
     }
     expect(pictures.channel.resolved, [_path, _path]);
     expect(tester.takeException(), isNull);
@@ -299,7 +317,7 @@ void main() {
 
   testWidgets('HTML share images keep their turn while unversioned and offline cards remain usable', (tester) async {
     usePhoneView(tester);
-    final pictures = _Pictures();
+    final pictures = _Pictures(tester);
     final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
     const html = '<img src="$_path">';
     expect(shareSegments(html).single.isImages, isFalse);
@@ -314,7 +332,7 @@ void main() {
         ),
       ),
     );
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     final inline = find.byType(MarkdownImage);
     final oldPath = _fileImage(tester, inline).file.path;
     _expectPixels(tester, inline, 4, 4);
@@ -335,7 +353,7 @@ void main() {
           ),
         ),
       );
-      await _decode(tester);
+      await _decode(tester, root: find.byType(MarkdownImage));
       expect(find.byType(ShareGallery), findsNothing);
       final scope = MarkdownImageScope.maybeOf(tester.element(inline));
       expect(scope?.sessionId, _session);
@@ -367,13 +385,13 @@ void main() {
               connection: null,
               channel: pictures.channel,
               cacheRoot: () async => pictures.dir,
-              snapshots: pictures.files.snapshots,
+              snapshots: pictures.snapshots,
             ),
           ),
         ],
       ),
     );
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     expect(MarkdownImageScope.maybeOf(tester.element(inline)), isNull);
     _expectPixels(tester, inline, 4, 4);
     expect(tester.takeException(), isNull);
@@ -381,10 +399,10 @@ void main() {
 
   testWidgets('a share gallery keeps old turn pixels and reloads the same cell for a new turn', (tester) async {
     usePhoneView(tester);
-    final pictures = _Pictures();
+    final pictures = _Pictures(tester);
     final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
     await tester.pumpWidget(pictures.app(Scaffold(body: _reply(1))));
-    await _decode(tester);
+    await _decode(tester, root: find.byType(MarkdownImage));
     pictures.source.writeAsBytesSync(changed);
 
     Widget gallery(int turn) => Scaffold(
@@ -407,7 +425,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('remote turns read new bytes despite an unchanged stat and an older mutable cache', (tester) async {
+  test('remote turns read new bytes despite an unchanged stat and an older mutable cache', () async {
     final pictures = _Pictures();
     final wire = _RemotePictures(pictures.source);
     final client = DshClient.withCarrier(wire);
@@ -416,50 +434,47 @@ void main() {
       connection: HostConnection(client: client, isLocal: false, hostId: 'snapshot-remote'),
       channel: pictures.channel,
       cacheRoot: () async => pictures.dir,
-      snapshots: pictures.files.snapshots,
+      snapshots: pictures.snapshots,
       operatingSystem: 'android',
     );
-    final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
+    // This case checks byte transport, not decoding: no widget fake-async zone.
+    final original = Uint8List.fromList([1, 2, 3]);
+    final changed = Uint8List.fromList([7, 8, 9]);
+    pictures.source.writeAsBytesSync(original);
     const first = Artifact(path: _path, origin: ArtifactOrigin.linked, turn: 1, snapshotImage: true);
     const second = Artifact(path: _path, origin: ArtifactOrigin.linked, turn: 2, snapshotImage: true);
 
-    await tester.runAsync(() async {
-      // Seed the old per-path download cache before the turn snapshots.
-      final live = await files.materialize(
-        _session,
-        const Artifact(path: _path, origin: ArtifactOrigin.linked, turn: 0),
-      );
-      expect(await live.readAsBytes(), tinyPng);
-      wire.calls.clear();
-      final oldSnapshot = await files.materialize(_session, first);
-      expect(oldSnapshot.path, isNot(live.path));
-      expect(await oldSnapshot.readAsBytes(), tinyPng);
+    // Seed the old per-path download cache before the turn snapshots.
+    final live = await files.materialize(_session, const Artifact(path: _path, origin: ArtifactOrigin.linked, turn: 0));
+    expect(await live.readAsBytes(), original);
+    wire.calls.clear();
+    final oldSnapshot = await files.materialize(_session, first);
+    expect(oldSnapshot.path, isNot(live.path));
+    expect(await oldSnapshot.readAsBytes(), original);
 
-      await pictures.source.writeAsBytes(changed);
-      final newSnapshot = await files.materialize(_session, second);
-      expect(newSnapshot.path, isNot(oldSnapshot.path));
-      expect(await newSnapshot.readAsBytes(), changed);
-      expect(await live.readAsBytes(), tinyPng);
-      expect((await files.materialize(_session, first)).path, oldSnapshot.path);
+    await pictures.source.writeAsBytes(changed);
+    final newSnapshot = await files.materialize(_session, second);
+    expect(newSnapshot.path, isNot(oldSnapshot.path));
+    expect(await newSnapshot.readAsBytes(), changed);
+    expect(await live.readAsBytes(), original);
+    expect((await files.materialize(_session, first)).path, oldSnapshot.path);
 
-      await pictures.source.delete();
-      expect(await (await files.materialize(_session, first)).readAsBytes(), tinyPng);
-      expect(await (await files.materialize(_session, second)).readAsBytes(), changed);
-      // readFile itself stats once; snapshot materialization adds no extra stat.
-      expect(wire.calls, [
-        'workspaceFiles/stat',
-        'workspaceFiles/readBytes',
-        'workspaceFiles/stat',
-        'workspaceFiles/readBytes',
-      ]);
-      expect(pictures.channel.resolved, isEmpty);
-    });
-    expect(tester.takeException(), isNull);
+    await pictures.source.delete();
+    expect(await (await files.materialize(_session, first)).readAsBytes(), original);
+    expect(await (await files.materialize(_session, second)).readAsBytes(), changed);
+    // readFile itself stats once; snapshot materialization adds no extra stat.
+    expect(wire.calls, [
+      'workspaceFiles/stat',
+      'workspaceFiles/readBytes',
+      'workspaceFiles/stat',
+      'workspaceFiles/readBytes',
+    ]);
+    expect(pictures.channel.resolved, isEmpty);
   });
 
   testWidgets('a standalone workspace preview stays live even when its turn has a snapshot', (tester) async {
     usePhoneView(tester);
-    final pictures = _Pictures();
+    final pictures = _Pictures(tester);
     const artifact = Artifact(path: _path, origin: ArtifactOrigin.linked, turn: 1);
     final snapshot = (await tester.runAsync(() => pictures.files.materialize(_session, artifact.withImageSnapshot())))!;
     final changed = (await tester.runAsync(() => drawPicture(7, 3)))!;
@@ -468,8 +483,8 @@ void main() {
 
     expect(artifact.snapshotImage, isFalse);
     await tester.pumpWidget(pictures.app(const ArtifactPreviewPage(sessionId: _session, artifact: artifact)));
-    await _decode(tester);
     final preview = find.byType(ArtifactPreviewPage);
+    await _decode(tester, root: preview);
     expect(_fileImage(tester, preview).file.path, pictures.source.path);
     _expectPixels(tester, preview, 7, 3);
     expect(pictures.workspace.watching('chart.png'), 1);
@@ -478,7 +493,7 @@ void main() {
     pictures.workspace.write('chart.png', latest);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 450));
-    await _decode(tester);
+    await _decode(tester, root: preview);
     _expectPixels(tester, preview, 9, 5);
     expect(snapshot.readAsBytesSync(), tinyPng);
     expect(pictures.workspace.watching('chart.png'), 1);

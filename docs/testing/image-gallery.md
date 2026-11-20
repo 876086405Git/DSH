@@ -25,6 +25,8 @@ flutter test --no-pub \
   test/chat/image_snapshots_test.dart \
   test/chat/image_snapshot_export_test.dart \
   test/chat/turn_image_snapshot_test.dart \
+  test/chat/turn_artifact_paths_test.dart \
+  test/chat/stream_rebuild_guard_test.dart \
   test/chat/image_viewer_theme_test.dart \
   test/chat/inline_image_provider_test.dart \
   test/chat/tool_images_test.dart \

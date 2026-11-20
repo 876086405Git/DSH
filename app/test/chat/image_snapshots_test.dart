@@ -291,7 +291,74 @@ void main() {
     expect(await contents(), hasLength(2));
   });
 
-  test('session cleanup waits for in-flight reads and cannot be undone by late completion', () async {
+  test('a slow load does not block cached keys across sessions hosts stores or roots', () async {
+    await get(text: 'cached');
+    await get(session: 'other', text: 'session');
+    await get(host: 'other', text: 'host');
+    final otherRoot = await root.createTemp('other-root-');
+    final separate = ImageSnapshots(root: () async => otherRoot);
+    await get(from: separate, text: 'root');
+    final reopened = ImageSnapshots(root: () async => root);
+    final entered = Completer<void>();
+    final bytes = Completer<Uint8List>();
+    final slow = get(
+      turn: 2,
+      load: () {
+        entered.complete();
+        return bytes.future;
+      },
+    );
+    await entered.future;
+    final reads = [
+      get(load: _unexpectedLoad),
+      get(from: reopened, load: _unexpectedLoad),
+      get(session: 'other', load: _unexpectedLoad),
+      get(host: 'other', load: _unexpectedLoad),
+      get(from: separate, load: _unexpectedLoad),
+    ];
+    try {
+      final files = await Future.wait(reads).timeout(const Duration(seconds: 5));
+      expect(await Future.wait(files.map((file) => file.readAsString())), [
+        'cached',
+        'cached',
+        'session',
+        'host',
+        'root',
+      ]);
+      await separate.removeSession('host', 'session').timeout(const Duration(seconds: 5));
+      expect(bytes.isCompleted, isFalse);
+    } finally {
+      bytes.complete(_bytes('slow'));
+      await Future.wait([slow, ...reads]);
+    }
+  });
+
+  test('competing stores recheck a key before publishing a late source load', () async {
+    final entered = Completer<void>();
+    final bytes = Completer<Uint8List>();
+    final slow = get(
+      load: () {
+        entered.complete();
+        return bytes.future;
+      },
+    );
+    await entered.future;
+    final other = ImageSnapshots(root: () async => root);
+    final winner = get(from: other, text: 'first successful snapshot');
+    try {
+      final file = await winner.timeout(const Duration(seconds: 5));
+      expect(await file.readAsString(), 'first successful snapshot');
+      expect(bytes.isCompleted, isFalse);
+    } finally {
+      bytes.complete(_bytes('late different bytes'));
+      await Future.wait([slow, winner]);
+    }
+    expect((await slow).path, (await winner).path);
+    expect(await (await slow).readAsString(), 'first successful snapshot');
+    expect(await contents(), hasLength(1));
+  });
+
+  test('cleanup finishes before a blocked load and late bytes cannot revive the session', () async {
     final entered = Completer<void>();
     final bytes = Completer<Uint8List>();
     final first = get(
@@ -300,14 +367,23 @@ void main() {
         return bytes.future;
       },
     );
+    final observed = first.then<Object>((file) => file, onError: (Object error, StackTrace _) => error);
     await entered.future;
     final other = ImageSnapshots(root: () async => root);
     final cleanup = other.removeSession('host', 'session');
-    bytes.complete(_bytes('old'));
-    final file = await first;
-    await cleanup;
-    expect(await file.exists(), isFalse);
-    expect(await contents(), isEmpty);
-    expect(await get(text: 'new').then((file) => file.readAsString()), 'new');
+    try {
+      await cleanup.timeout(const Duration(seconds: 5));
+      expect(bytes.isCompleted, isFalse);
+      expect(await contents(), isEmpty);
+      // A new request must not join the cancelled request in the old instance.
+      expect(await get(text: 'new').timeout(const Duration(seconds: 5)).then((file) => file.readAsString()), 'new');
+    } finally {
+      bytes.complete(_bytes('late old'));
+      await observed;
+      await cleanup;
+    }
+    expect(await observed, isA<ImageSnapshotMissing>());
+    expect(await get(from: other, load: _unexpectedLoad).then((file) => file.readAsString()), 'new');
+    expect(await contents(), hasLength(1));
   });
 }

@@ -5,11 +5,12 @@ import '../../../l10n/l10n.dart';
 import '../../../state/artifact_files.dart';
 import '../../../state/artifacts.dart';
 import '../../../state/attachments.dart';
+import '../../../state/chat_state.dart';
 import '../../../state/sessions_state.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../artifact_preview.dart' show ArtifactPreviewPage, ImageViewerPage;
-import '../render/markdown_image.dart' show MarkdownImageScope;
+import '../render/markdown_image.dart' show MarkdownImageScope, workspaceImagePath;
 import '../tool_view.dart';
 import 'image_gallery.dart' show ViewerImage;
 
@@ -34,7 +35,17 @@ class ToolImages extends ConsumerWidget {
       }
       sources.add((name: attachment.name ?? context.l10n.chatFile, image: image, path: null));
     }
-    if (view.imagePath case final path?) {
+    if (view.imagePath case final rawPath?) {
+      final chat = sessionId == null ? null : chatProvider(sessionId);
+      final header = chat != null && ref.exists(chat) ? ref.read(chat.notifier).header : null;
+      final knownSessions = ref.exists(sessionsProvider) ? ref.read(sessionsProvider).value : null;
+      final cwd = header?.cwd ?? knownSessions?.where((s) => s.sessionId == sessionId).firstOrNull?.cwd;
+      final path = workspaceImagePath(
+        rawPath,
+        baseDir: scope?.baseDir,
+        cwd: cwd,
+        local: ref.read(artifactFilesProvider).isLocal,
+      );
       final image = sessionId == null
           ? null
           : turn == null

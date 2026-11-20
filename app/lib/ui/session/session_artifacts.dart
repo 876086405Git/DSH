@@ -140,7 +140,7 @@ class SessionArtifactsPage extends ConsumerWidget {
                     ArtifactTile(
                       key: ValueKey('${group.endSeq}:${file.path}'),
                       sessionId: sessionId,
-                      artifact: file,
+                      artifact: file.withImageSnapshot(),
                       dense: true,
                     ),
                 ],

@@ -217,6 +217,7 @@ void main() {
             sessionArtifactsProvider('s1').overrideWithValue([_delivered, _generated]),
             activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(fakeConnection)),
             artifactThumbnailProvider.overrideWith((ref, key) async => null),
+            turnArtifactThumbnailProvider.overrideWith((ref, key) async => null),
           ],
         ),
       );
