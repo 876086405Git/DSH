@@ -123,6 +123,31 @@ class FrameClockTest {
         assertTrue(!p.reacting)
     }
 
+    @Test fun reducedMotionTapStaysOnItsFirstFrameAndSchedulesItsReturnToTheState() {
+        val idle = anim(100, name = "idle")
+        val poke = anim(100, 100, loop = false, name = "poke")
+        val p = PetPlayer(Random(2))
+        p.still = true
+        p.setState(idle, emptyList(), null, now = 0)
+        p.react(poke, loop = false, now = 500)
+
+        val first = p.frame(500)!!
+        assertEquals("poke", first.anim.name)
+        assertEquals(0, first.index)
+        assertEquals(200L, first.nextInMs)
+        val held = p.frame(650)!!
+        assertEquals("poke", held.anim.name)
+        assertEquals(0, held.index)
+        assertEquals(50L, held.nextInMs)
+        assertTrue(p.reacting)
+
+        val after = p.frame(700)!!
+        assertEquals("idle", after.anim.name)
+        assertEquals(0, after.index)
+        assertNull(after.nextInMs)
+        assertTrue(!p.reacting)
+    }
+
     @Test fun dragLoopsUntilEnded() {
         val idle = anim(100, name = "idle")
         val drag = anim(90, 90, name = "drag")

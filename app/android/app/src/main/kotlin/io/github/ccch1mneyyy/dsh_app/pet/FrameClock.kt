@@ -75,7 +75,8 @@ class IdleRhythm(private val random: Random = Random.Default) {
  *   [IdleRhythm] gap one action from [calmPool] for its time;
  * - other states: their animation at full speed (a [PetBonus] replaces it now and then);
  * - a reaction (drag, a tap) plays on top and then gives the state back;
- * - [still] (system animations off): first frame of whatever would play, nothing scheduled.
+ * - [still] (system animations off): first frame without per-frame scheduling; a one-shot
+ *   reaction still schedules its return to the state when its time ends.
  *
  * [frame] says what to draw now and how long until the picture changes, so the caller only
  * wakes up then.
@@ -129,9 +130,9 @@ class PetPlayer(private val random: Random = Random.Default) {
         reaction?.let { r ->
             val e = now - reactionStart
             if (reactionLoops || e < r.totalMs) {
-                if (still) return Frame(r, 0, null)
-                val next = FrameClock.nextChange(r, e)
                 val end = if (reactionLoops) null else r.totalMs - e
+                if (still) return Frame(r, 0, end)
+                val next = FrameClock.nextChange(r, e)
                 return Frame(r, FrameClock.frameAt(r, e), listOfNotNull(next, end).minOrNull())
             }
             reaction = null
