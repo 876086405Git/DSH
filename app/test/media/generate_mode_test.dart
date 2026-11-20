@@ -181,6 +181,8 @@ void main() {
     Future<void> editAndResend(WidgetTester tester, String shown) async {
       await tester.longPress(find.text(shown));
       await pumpFrames(tester);
+      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
+      await pumpFrames(tester);
       await tester.tap(find.widgetWithText(SettingsTile, '编辑后重发'));
       await pumpFrames(tester);
       // The fork's own toast would hold the queue for a few seconds.

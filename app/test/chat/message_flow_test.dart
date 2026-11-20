@@ -166,6 +166,8 @@ void main() {
       final harness = await _pump(tester);
       await tester.longPress(find.textContaining('多发了一次请求', findRichText: true).first);
       await pumpFrames(tester);
+      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
+      await pumpFrames(tester);
       await tester.tap(find.widgetWithText(SettingsTile, '重新回答'));
       await pumpFrames(tester);
       expect(harness.controllers['fork-session']!.sent, [_question]);
@@ -203,6 +205,8 @@ void main() {
       final harness = await _pump(tester);
       await tester.longPress(find.textContaining('多发了一次请求', findRichText: true).first);
       await pumpFrames(tester);
+      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
+      await pumpFrames(tester);
       await tester.tap(find.widgetWithText(SettingsTile, '引用'));
       await pumpFrames(tester);
       await tester.tap(find.byIcon(AppIcons.send), warnIfMissed: false);
@@ -237,6 +241,8 @@ void main() {
       expect(find.text('那为什么会重试？'), findsOneWidget);
 
       await tester.longPress(find.text('那为什么会重试？'));
+      await pumpFrames(tester);
+      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
       await pumpFrames(tester);
       await tester.tap(find.widgetWithText(SettingsTile, '编辑后重发'));
       await pumpFrames(tester);

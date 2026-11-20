@@ -203,6 +203,13 @@ void main() {
       var time = Duration.zero;
       Future<void> pull(int steps) async {
         final finger = await tester.startGesture(_chatMiddle);
+        // Past the device slop and short of Flutter's default 18: the
+        // message text's selection recognizer measures sideways drags against
+        // the default, so a single event jumping both would be its to claim.
+        // A phone's touch events come far denser than that.
+        time += const Duration(milliseconds: 16);
+        await finger.moveBy(const Offset(-10, 0), timeStamp: time);
+        await tester.pump(const Duration(milliseconds: 16));
         for (var i = 0; i < steps; i++) {
           time += const Duration(milliseconds: 16);
           await finger.moveBy(const Offset(-24, 0), timeStamp: time);

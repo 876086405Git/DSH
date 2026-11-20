@@ -288,7 +288,9 @@ void main() {
           ),
         );
         await pumpFrames(tester);
-        await tester.longPress(find.textContaining(english ? 'Sure' : '可以'));
+        // ⋯ under the reply: a long-press selects text now, and on a narrow
+        // English toolbar 「More」 folds into the overflow.
+        await tester.tap(find.byTooltip(english ? 'More' : '更多'));
         await tester.pumpAndSettle();
         await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/message_menu_$suffix.png'));
       });
