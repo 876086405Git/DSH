@@ -76,6 +76,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   bool _gone = false;
   (String, bool, bool, bool, int, String?)? _loaded;
 
+  /// Its turn to load came ([_IslandQueue]).
+  bool _turn = false;
+
   /// What its scripts get (build works it out): jQuery, lodash, zod and
   /// YAML, what they may read of the story; not loaded while either is on
   /// its way.
@@ -152,6 +155,12 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
       _pushColors();
       return;
     }
+    // Islands that come at once (a chat opened) load one after another.
+    if (!_turn) {
+      _IslandQueue.instance.wait(this);
+      return;
+    }
+    _turn = false;
     _pageLoaded = false;
     _loaded = key;
     final document = tavernIslandDocument(
@@ -319,8 +328,26 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_guard.destroy()));
   }
 
+  /// Its turn: it loads now.
+  void _go() {
+    _turn = true;
+    setState(_open);
+  }
+
+  /// How far it is from the screen (logical px; 0 on it), for the queue.
+  double _distance() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return double.infinity;
+    final top = box.localToGlobal(Offset.zero).dy;
+    final view = View.of(context);
+    final screen = view.physicalSize.height / view.devicePixelRatio;
+    final bottom = top + box.size.height;
+    return bottom < 0 ? -bottom : max(0, top - screen);
+  }
+
   @override
   void dispose() {
+    _IslandQueue.instance.leave(this);
     _guard.dispose();
     _toasts.dispose();
     super.dispose();
@@ -344,5 +371,39 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
         child: WebViewWidget(controller: controller),
       ),
     );
+  }
+}
+
+/// Islands waiting to load, started one at a time, the nearest the screen
+/// first, a beat apart: islands that come at once (a chat opened) do not each
+/// build a web view and parse their page, libraries and all, in the same
+/// frames.
+class _IslandQueue {
+  _IslandQueue._();
+
+  static final instance = _IslandQueue._();
+
+  /// How long after one starts the next may.
+  static const beat = Duration(milliseconds: 48);
+
+  final _waiting = <_TavernHtmlIslandState>{};
+  Timer? _timer;
+
+  /// [island] loads when its turn comes. Those that ask in the same frame
+  /// are all there before the first is picked.
+  void wait(_TavernHtmlIslandState island) {
+    _waiting.add(island);
+    _timer ??= Timer(Duration.zero, _next);
+  }
+
+  void leave(_TavernHtmlIslandState island) => _waiting.remove(island);
+
+  void _next() {
+    _timer = null;
+    if (_waiting.isEmpty) return;
+    final first = _waiting.reduce((a, b) => b._distance() < a._distance() ? b : a);
+    _waiting.remove(first);
+    first._go();
+    _timer = Timer(beat, _next);
   }
 }
