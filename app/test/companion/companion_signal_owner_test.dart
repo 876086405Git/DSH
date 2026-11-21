@@ -2,17 +2,10 @@ import 'dart:convert';
 
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
+import 'package:dsh_client/companion.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
-
-class FailingStore extends InMemorySharedPreferencesStore {
-  FailingStore() : super.empty();
-  bool fail = true;
-  @override
-  Future<bool> setValue(String type, String key, Object value) =>
-      fail ? Future.value(false) : super.setValue(type, key, value);
-}
 
 class Clock {
   int wall = DateTime.utc(2026, 11, 5, 8).millisecondsSinceEpoch;
@@ -52,9 +45,14 @@ CompanionInitiativeView view({String key = 'room', bool blocked = false, bool ac
     );
 CompanionInitiativeSignal candidate(Clock clock, {String id = 'signal', int ttl = 120000}) =>
     CompanionInitiativeSignal(id: id, contextKey: 'room', expiresAtMonoMs: clock.mono + ttl);
+Database? _database;
+CompanionMemoryStore? _memory;
+
 Future<CompanionInitiative> make(WidgetTester tester, Clock clock) async {
   final owner = CompanionInitiative(clock.call);
-  await tester.runAsync(() => owner.ready);
+  _database ??= sqlite3.openInMemory();
+  _memory ??= CompanionMemoryStore(_database!, nowMilliseconds: () => clock.wall);
+  await tester.runAsync(() => owner.attachMemory(_memory!));
   return owner;
 }
 
@@ -69,13 +67,11 @@ Future<void> pass(WidgetTester tester, Clock clock, int ms) async {
   }
 }
 
-Future<Map<String, dynamic>> saved(WidgetTester tester) async {
-  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
-  return jsonDecode((await SharedPreferences.getInstance()).getString(companionInitiativeKey)!) as Map<String, dynamic>;
-}
+Map<String, Object?> saved() => _memory!.initiativeRecord()!;
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() { SharedPreferences.setMockInitialValues({}); _database = null; _memory = null; });
+  tearDown(() => _memory?.close());
 
   testWidgets('signal cannot accept an invitation but can decline into the shared refusal', (tester) async {
     final clock = Clock();
@@ -90,6 +86,8 @@ void main() {
       candidate(clock),
       isCurrent: () => true,
       present: (d) {
+        expect(_database!.select("SELECT kind,state FROM memory_initiative_spends").single,
+          containsPair('state', 'reserved'), reason: 'the actual render happens after the durable reservation');
         shown.add(d);
         return true;
       },
@@ -102,7 +100,7 @@ void main() {
     expect(owner.decline(room, id, view()), isTrue);
     expect(hidden, [id]);
     expect(owner.decline(room, id, view()), isFalse);
-    final ledger = await saved(tester);
+    final ledger = saved();
     expect(ledger['declinedUntilMs'], clock.wall + CompanionInitiativeRules.inviteGapMs);
     expect(ledger['signalAtMs'], [shown.single.committedAtWallMs]);
     owner.requestSignal(
@@ -152,30 +150,32 @@ void main() {
     );
     await pass(tester, clock, 46000);
     expect(renders, 0);
-    expect((await saved(tester))['signalAtMs'], isEmpty);
+    expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
 
-  testWidgets('a failed durable write closes the owner even if storage later recovers', (tester) async {
-    final original = SharedPreferencesStorePlatform.instance;
-    final store = FailingStore();
-    SharedPreferencesStorePlatform.instance = store;
+  testWidgets('metadata failure after rendering hides the display and keeps its shared spend', (tester) async {
     final clock = Clock();
     final owner = await make(tester, clock);
     final room = Room();
+    room.onShow = (_) => _database!.execute("""
+        CREATE TRIGGER fail_metadata BEFORE UPDATE ON memory_initiative_state
+        BEGIN SELECT RAISE(ABORT,'fixture'); END
+      """);
     try {
       owner.enter(room, view());
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await pass(tester, clock, 46000);
+      expect(room.shown, hasLength(1));
+      expect(room.hidden, [room.shown.single.ticket.id]);
+      expect(saved()['inviteAtMs'], hasLength(1));
+      expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'shown');
       expect(owner.fault, 'storage-failed');
-      store.fail = false;
+      _database!.execute('DROP TRIGGER fail_metadata');
       owner.observe(room, view());
       await pass(tester, clock, 46000);
-      expect(room.shown, isEmpty);
+      expect(room.shown, hasLength(1));
       expect(owner.fault, 'storage-failed');
-    } finally {
-      owner.dispose();
-      SharedPreferencesStorePlatform.instance = original;
-    }
+    } finally { owner.dispose(); }
   });
 
   testWidgets('unbounded observer reentrancy closes after a bounded queue drain', (tester) async {
@@ -220,7 +220,7 @@ void main() {
     await pass(tester, clock, 46000);
     expect(displays, hasLength(1));
     expect(room.shown, isEmpty);
-    final ledger = await saved(tester);
+    final ledger = saved();
     expect(ledger['signalAtMs'], [displays.single.committedAtWallMs]);
     expect(ledger['inviteAtMs'], isEmpty);
     await pass(tester, clock, 8000);
@@ -229,7 +229,7 @@ void main() {
   });
 
   for (final throws in [false, true]) {
-    testWidgets('actual presentation ${throws ? 'throw' : 'false'} never spends quota', (tester) async {
+    testWidgets('actual presentation ${throws ? 'throw retains an unknown spend' : 'false releases its reservation'}', (tester) async {
       final clock = Clock();
       final owner = await make(tester, clock);
       final room = Room();
@@ -251,9 +251,11 @@ void main() {
       await pass(tester, clock, 46000);
       expect(attempts, 1);
       expect(hides, hasLength(1));
-      final ledger = await saved(tester);
-      expect(ledger['signalAtMs'], isEmpty);
+      final ledger = saved();
+      expect(ledger['signalAtMs'], throws ? hasLength(1) : isEmpty);
       expect(ledger['inviteAtMs'], isEmpty);
+      expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'],
+        throws ? 'unknown' : 'released');
       expect(owner.fault, isNull);
       owner.dispose();
     });
@@ -282,7 +284,7 @@ void main() {
     owner.observe(room, view());
     await pass(tester, clock, 16000);
     expect(renders, 0);
-    expect((await saved(tester))['signalAtMs'], isEmpty);
+    expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
 
@@ -314,7 +316,7 @@ void main() {
     replace = true;
     await pass(tester, clock, 46000);
     expect(renders, 0);
-    expect((await saved(tester))['signalAtMs'], isEmpty);
+    expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
 
@@ -341,7 +343,7 @@ void main() {
     );
     await pass(tester, clock, 46000);
     expect(renders, 0);
-    expect((await saved(tester))['signalAtMs'], isEmpty);
+    expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
 
@@ -368,7 +370,7 @@ void main() {
     expect(displayed, hasLength(1));
     expect(signalHides, [displayed.single.ticket.id]);
     expect(room.hidden, isEmpty);
-    expect((await saved(tester))['signalAtMs'], [displayed.single.committedAtWallMs]);
+    expect(saved()['signalAtMs'], [displayed.single.committedAtWallMs]);
     owner.dispose();
   });
 
@@ -393,7 +395,7 @@ void main() {
     owner.observe(room, view());
     await pass(tester, clock, 26000);
     expect(renders, 0);
-    expect((await saved(tester))['signalAtMs'], isEmpty);
+    expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
 
@@ -425,14 +427,16 @@ void main() {
       );
       await pass(tester, clock, 46000);
       expect(renders, 0);
-      final ledger = await saved(tester);
+      final ledger = saved();
       expect(ledger['inviteAtMs'], hasLength(1));
       expect(ledger['signalAtMs'], isEmpty);
+      expect(owner.fault, isNull);
       owner.dispose();
+      SharedPreferences.setMockInitialValues({companionInitiativeKey: 'stale corrupt key after migration'});
     }
   });
 
-  testWidgets('showing an invitation uses the same render-before-charge protocol', (tester) async {
+  testWidgets('an invitation render that throws keeps an unknown shared spend', (tester) async {
     final clock = Clock();
     final owner = await make(tester, clock);
     final room = Room();
@@ -441,7 +445,30 @@ void main() {
     await pass(tester, clock, 46000);
     expect(room.shown, hasLength(1));
     expect(room.hidden, hasLength(1));
-    expect((await saved(tester))['inviteAtMs'], isEmpty);
+    expect(saved()['inviteAtMs'], hasLength(1));
+    expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'unknown');
+    owner.dispose();
+  });
+
+  testWidgets('a settlement write failure hides a real display and retains the reserved debit', (tester) async {
+    final clock = Clock();
+    final owner = await make(tester, clock);
+    final room = Room();
+    final shown = <CompanionInitiativeDisplay>[];
+    final hidden = <String>[];
+    _database!.execute("""
+      CREATE TRIGGER fail_settlement BEFORE UPDATE ON memory_initiative_spends
+      BEGIN SELECT RAISE(ABORT,'fixture'); END
+    """);
+    owner.enter(room, view());
+    owner.requestSignal(room, view(), candidate(clock), isCurrent: () => true,
+      present: (display) { shown.add(display); return true; }, hide: hidden.add);
+    await pass(tester, clock, 46000);
+    expect(shown, hasLength(1));
+    expect(hidden, [shown.single.ticket.id]);
+    expect(owner.fault, 'storage-failed');
+    expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
+    expect(saved()['signalAtMs'], hasLength(1));
     owner.dispose();
   });
 
@@ -464,7 +491,7 @@ void main() {
     );
     await pass(tester, clock, 46000);
     expect(renders, 0);
-    expect((await saved(tester))['signalAtMs'], isEmpty);
+    expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
 }

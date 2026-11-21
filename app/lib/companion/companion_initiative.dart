@@ -385,7 +385,7 @@ class CompanionInitiativeTicket {
     'kind': kind.name,
     'ownerEpoch': ownerEpoch,
     'stayId': stayId,
-    if (signalId != null) 'signalId': signalId,
+    'signalId': ?signalId,
     'contextKey': contextKey,
   };
 }
@@ -639,6 +639,10 @@ class CompanionInitiativeController {
       case CompanionInitiativeEventType.userActivation:
         _userAction(s, effects);
       case CompanionInitiativeEventType.dropOffer:
+        if (s.display?.ticket.id == event.ticketId) {
+          // An uncertain render consumes its quota but owns no visible slot.
+          _cancel(s, effects, 'presentation-unconfirmed');
+        }
         if (s.ticket?.id == event.ticketId) {
           effects.add(
             CompanionInitiativeEffect._(

@@ -229,6 +229,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   String? _myLine;
   String? _lastLine;
   Timer? _bubbleTimer;
+  String? _memoryFollowupTicket;
   Timer? _settleTimer;
   Timer? _objectTimer;
 
@@ -330,7 +331,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         _observeLateUse();
       },
     );
-    _lateUseTimer = Timer.periodic(const Duration(minutes: 1), (_) => _observeLateUse());
+    _lateUseTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _observeLateUse();
+      _observeInitiative();
+    });
     _hostUsageTimer = Timer.periodic(const Duration(seconds: 15), (_) => _refreshHostChatUsage());
     ref.listenManual(companionSignalConsentProvider, (_, _) => _syncSignals());
     _bindingHost = ref.read(activeHostProvider);
@@ -462,11 +466,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _memoryOwner = memory;
     _memoryControlRevision = memory.store.archive['control_revision']! as int;
     memory.addListener(_memoryChanged);
+    await _initiative.attachMemory(memory.store);
     try {
-      final complete = await memory.migrateLocal();
-      if (!complete && mounted) _notice(context.l10n.companionMemoryMigrationPending);
+      await memory.migrateLocal();
     } on Object {
-      if (mounted) _notice(context.l10n.companionMemoryMigrationPending);
+      // A pending local migration retries on the next visit.
     }
     if (mounted) {
       _attachMemoryWorker();
@@ -477,6 +481,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         final binding = ref.read(companionSessionsProvider.notifier).of(ref.read(activeHostProvider));
         if (_stageReady && binding != null) _bind(binding.sessionId);
       }
+      _observeInitiative();
     }
     return memory;
   }
@@ -586,6 +591,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     } else {
       setState(() {});
     }
+    _observeInitiative();
   }
 
   Future<bool> _clearMemoryWidget() async {
@@ -1461,12 +1467,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   void _showBubble(String text, {Duration? hold, bool error = false}) {
     _retireGreeting();
     _bubbleTimer?.cancel();
+    _memoryFollowupTicket = null;
     setState(() {
       _bubble = text;
       _bubbleIsError = error;
     });
     if (hold != null) {
       _bubbleTimer = Timer(hold, () {
+        // The owner still owns any pending speech until its ticket ends.
         if (mounted) setState(() => _bubble = null);
       });
     }
@@ -1517,12 +1525,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     inputBusy: _focus.hasFocus || _input.text.trim().isNotEmpty,
     generating: _sending || _running || _lightReply != null,
     // Her mouth still settling counts: the words may still be on their way out.
-    audioBusy: _voice.active || (_settleTimer?.isActive ?? false) || _ttsPending.isNotEmpty,
+    audioBusy: _voice.active || (_settleTimer?.isActive ?? false) ||
+        (_ttsPending.isNotEmpty && _memoryFollowupTicket == null),
     activityBusy: _home != 'idle' || _asleep || (_objectTimer?.isActive ?? false),
     approvalPending: _needsAttention,
     // The "take a look" pill is not here: it comes with the very signal she may
     // mention, and would drop it. It still keeps invitations away (canPresent).
-    externalPromptBusy: _bubble != null || _myLine != null || _logOpen || _adaptOffer != null,
+    externalPromptBusy: (_bubble != null && _memoryFollowupTicket == null) ||
+        _myLine != null || _logOpen || _adaptOffer != null,
     quietHoursBlocked: false,
     enabled: ref.read(companionInitiativeEnabledProvider) ?? false,
     accessible: _accessible,
@@ -1550,6 +1560,51 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _entered = true;
       _initiative.enter(this, view);
     }
+    _requestMemoryFollowup(view);
+  }
+
+  /// A current invitation becomes one ordinary signal, in this room only.
+  /// The captured source and window are checked again at the actual render.
+  void _requestMemoryFollowup(CompanionInitiativeView view) {
+    final memory = _memoryOwner;
+    if (memory == null || !_presentable(view) || _initiative.fault != null) return;
+    final now = _clock();
+    MemoryRow? opportunity;
+    try {
+      opportunity = memory.store.nextFollowup(nowMs: now.wallMs);
+    } on Object {
+      // An optional local question must not interrupt ordinary chat on a read failure.
+      return;
+    }
+    if (opportunity == null) return;
+    final captured = opportunity;
+    final candidate = CompanionInitiativeSignal(
+      id: 'followup:${captured['id']}:${captured['row_rev']}:${captured['control_revision']}',
+      contextKey: _initiativeContext,
+      expiresAtMonoMs: now.monoMs + min(120000, (captured['expires_at_ms']! as int) - now.wallMs),
+    );
+    bool current() => mounted && !_leaving && candidate.contextKey == _initiativeContext &&
+        memory.store.isFollowupCurrent(captured, nowMs: _clock().wallMs);
+    _initiative.requestSignal(this, view, candidate,
+      followupId: captured['id']! as String,
+      isCurrent: current,
+      present: (display) {
+        if (!current()) return false;
+        _say(context.l10n.companionMemoryFollowup, widgetLine: false);
+        _memoryFollowupTicket = display.ticket.id;
+        return true;
+      },
+      hide: _hideMemoryFollowup,
+    );
+  }
+
+  void _hideMemoryFollowup(String ticketId) {
+    if (_memoryFollowupTicket != ticketId) return;
+    _memoryFollowupTicket = null;
+    _bubbleTimer?.cancel();
+    _hush();
+    _stage.command('quiet');
+    if (mounted) setState(() => _bubble = null);
   }
 
   /// Something the person really did here: no invitation this visit.
@@ -1710,6 +1765,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _memoryRouteClient = null;
     if (!_light) _memoryOwner?.leave(this);
     _bubble = null;
+    _memoryFollowupTicket = null;
     _myLine = null;
     _home = 'idle';
     _asleep = false;
@@ -1976,6 +2032,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             'less' => l10n.companionMemoryLessDone,
             'normal' => l10n.companionMemoryNormalDone,
             'cancel' => l10n.companionMemoryCancelledDone,
+            'postpone' => l10n.companionMemoryPostponedDone,
             _ => l10n.companionMemoryCorrected,
           };
     // A local acknowledgement must not write a fresh widget line immediately
