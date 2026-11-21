@@ -1,7 +1,7 @@
-// 消息里的组件 (docs/design/roleplay-ui.md §5), drawn natively for now: a
+// 消息里的组件 (docs/design/roleplay-ui.md §5), drawn natively in the list: a
 // letter on paper, an item that was given, a clue on a note, a message on the
 // story's phone, a check's roll, a quiet line of notice. They take the app's
-// look and the story's colours; the whole-page canvas will draw them as Web
+// look and the story's colours; the whole-page canvas draws them as Web
 // Components that a card's CSS can restyle. A mini-game needs that canvas, so
 // it only says one is there.
 

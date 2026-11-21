@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 import '../../pets/pet_state.dart';
 import '../theme/theme.dart';
 
-/// The bubble's make-up, measured in `test/pets/pet_bubble_test.dart`.
+/// The bubble's make-up, measured in `test/pets/pet_parts_test.dart`.
 abstract final class PetBubbleMetrics {
   static const height = 32.0;
 

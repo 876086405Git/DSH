@@ -1,5 +1,5 @@
-// 酒馆设置 (docs/design/roleplay-ui.md §1; grouped as the optimization doc's
-// §3.4 has it): 模型与连接, 生成, 显示, 安全, 数据, 你.
+// 酒馆设置 (docs/design/roleplay-ui.md §1): 模型与连接, 生成, 工具, 显示,
+// 安全, 数据, 你.
 
 import 'dart:async';
 import 'dart:math' as math;

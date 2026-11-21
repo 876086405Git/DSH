@@ -1,4 +1,4 @@
-// 舞台 › 本局 › 本局用量 (docs/design/roleplay-optimization.md §2, 费用可见): what
+// 舞台 › 本局 › 本局用量 (费用可见): what
 // the replies on a chat's current line took, as the model reported it,
 // added up. Alternatives swiped away are not on the line and not counted.
 

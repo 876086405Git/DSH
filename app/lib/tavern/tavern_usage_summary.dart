@@ -1,7 +1,8 @@
 // What a turn that asked the model more than once (dice, memories between
-// requests) was reported to use, from the engine's ToolTurn.usageSummary
-// (STAGE1-APP-INTEGRATION §7): per field, the sum of what was reported and
-// which requests it is short of. A sum short of any request is never a total.
+// requests) was reported to use, from the engine's
+// TavernToolTurnSnapshot.usageSummary (STAGE1-APP-INTEGRATION §7): per field,
+// the sum of what was reported and which requests it is short of. A sum short
+// of any request is never a total.
 
 /// One field (prompt_tokens, completion_tokens, cache_hit_tokens) across the
 /// turn's requests.

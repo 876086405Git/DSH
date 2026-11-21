@@ -1268,14 +1268,6 @@ class SSHClient {
     }
   }
 
-  // void _handleGlobalRequestHostkey(SSH_Message_Global_Request request) {
-  //   printDebug?.call('SSHClient._handleGlobalRequestHostkey');
-  //   // sendMessage(SSH_Message_Request_Success.e
-  //   if (onHostKeys != null) {
-  //     // onHostKeys(request.hostKeyAlgorithms);
-  //   }
-  // }
-
   void _handleGlobalRequestSuccess(Uint8List payload) {
     final message = SSH_Message_Request_Success.decode(payload);
     printTrace?.call('<- $socket: $message');

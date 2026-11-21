@@ -1,8 +1,7 @@
 // CR-33caa7c B1: a live field refused with 409 conflict (the entry changed
 // since it was read). Over the real BridgePluginConfigApi, DshClient and the
-// HTTP fake bridge. Started from the review's counterexample
-// (review_live_conflict_test), where both edits went out against r1 four
-// times and never landed.
+// HTTP fake bridge. Started from the review's counterexample, where both edits
+// went out against r1 four times and never landed.
 
 import 'package:dsh_app/state/engine_settings_state.dart';
 import 'package:dsh_app/state/plugin_config/plugin_config_state.dart';
@@ -115,9 +114,9 @@ void main() {
   });
 
   // CR-e0b8ece B1: an edit already queued when the one before it met a
-  // same-field conflict. Started from the review's counterexample
-  // (independent_queued_conflict_test), where the second edit went out on the
-  // revision the first one's re-read confirmed and overwrote 'ja' with 'en'.
+  // same-field conflict. Started from the review's counterexample, where the
+  // second edit went out on the revision the first one's re-read confirmed and
+  // overwrote 'ja' with 'en'.
   group('an edit waiting behind another goes out only on what the person saw', () {
     test('the same field changed elsewhere: the edit queued behind the refused one is not sent either', () async {
       host.entries[_ns]!

@@ -26,6 +26,20 @@ class _Inner implements BinaryMessenger {
   void setMessageHandler(String channel, MessageHandler? handler) => handlers.add(channel);
 }
 
+class _Answer implements BinaryMessenger {
+  _Answer(this.reply);
+  final ByteData reply;
+
+  @override
+  Future<ByteData?>? send(String channel, ByteData? message) => Future.value(reply);
+
+  @override
+  Future<void> handlePlatformMessage(String channel, ByteData? data, PlatformMessageResponseCallback? callback) async {}
+
+  @override
+  void setMessageHandler(String channel, MessageHandler? handler) {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const codec = JSONMethodCodec();
@@ -33,11 +47,34 @@ void main() {
   ByteData call(String method, [Object? args]) => codec.encodeMethodCall(MethodCall(method, args));
   Future<Object?> answer(Future<ByteData?>? reply) async => codec.decodeEnvelope((await reply)!);
 
-  test('only HarmonyOS gets it; Android keeps the messenger it had', () {
+  test('HarmonyOS reads through the paste button, Android filters, others keep theirs', () {
     final inner = _Inner();
-    expect(clipboardMessengerFor('android', inner), same(inner));
+    expect(clipboardMessengerFor('android', inner), isA<ClipboardTextMessenger>());
     expect(clipboardMessengerFor('linux', inner), same(inner));
     expect(clipboardMessengerFor('ohos', inner), isA<PasteButtonMessenger>());
+  });
+
+  group('Android', () {
+    ClipboardTextMessenger answering(Object? text) =>
+        ClipboardTextMessenger(_Answer(codec.encodeSuccessEnvelope(text == null ? null : {'text': text})));
+
+    test('a copied picture read as its bytes pastes nothing (#1684)', () async {
+      final messenger = answering('\u00ff\u00d8\u00ff\u00e1\u0000\u0010Exif\u0000\u0000MM');
+      expect(await answer(messenger.send(platform, call('Clipboard.getData', 'text/plain'))), isNull);
+    });
+
+    test('text, emoji and an odd replacement character paste as they are', () async {
+      const text = '中文 😀 a\ufffdb\n  ';
+      final messenger = answering(text);
+      expect(await answer(messenger.send(platform, call('Clipboard.getData', 'text/plain'))), {'text': text});
+    });
+
+    test('other messages pass through untouched', () async {
+      final inner = _Inner();
+      final messenger = ClipboardTextMessenger(inner);
+      await messenger.send(platform, call('Clipboard.setData', {'text': 'x'}));
+      expect(inner.sent, hasLength(1));
+    });
   });
 
   test('Clipboard.getData is answered through the paste button, never reaching the embedding', () async {

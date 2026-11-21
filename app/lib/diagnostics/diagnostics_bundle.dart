@@ -3,12 +3,15 @@
 // itself is built by pure functions (and tested as such).
 //
 //   dsh-go-diagnostics-20261024-153012.zip
-//   ├── summary.json   app and DSH versions, device, Android, runtime manifest,
-//   │                  engine state, connection kind
-//   ├── settings.json  app settings, secrets reduced to "set or not"
-//   ├── crash.json     the last crash classification (when there is one)
-//   ├── engine.log     recent engine output
-//   └── failure.log    output around the last failure (when there is one)
+//   ├── summary.json       app and DSH versions, device, Android, runtime
+//   │                      manifest, engine state, connection kind
+//   ├── settings.json      app settings, secrets reduced to "set or not"
+//   ├── system-ime.json    input-method evidence, only when the person agreed
+//   ├── crash.json         the last crash classification (when there is one)
+//   ├── app-evidence.json  bounded failure evidence the native side kept
+//   ├── engine.log         recent engine output
+//   ├── failure.log        output around the last failure (when there is one)
+//   └── app-errors.json    the app's own error log (when there are errors)
 //
 // Every string goes through `redactDiagnostics` on the way in.
 
