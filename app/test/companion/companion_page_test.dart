@@ -575,7 +575,9 @@ void main() {
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
       }
 
-      testWidgets('fixture 6 original Tavern chat reopens with its story name while the real Page keeps its own name', (tester) async {
+      testWidgets('fixture 6 original Tavern chat reopens with its story name while the real Page keeps its own name', (
+        tester,
+      ) async {
         await tester.binding.setSurfaceSize(const Size(390, 844));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final storyRoot = Directory('${root.path}/tavern');
@@ -618,36 +620,53 @@ void main() {
           await tester.runAsync(() async {
             engine = await story.TavernEngine.openDirectory(
               storyRoot,
-              config: story.TavernModelConfig(
-                apiKey: () async => 'sk-story-test',
-                baseUrl: 'https://example.invalid',
+              config: story.TavernModelConfig(apiKey: () async => 'sk-story-test', baseUrl: 'https://example.invalid'),
+              modelClient: story.TavernModelClient(
+                clientFactory: () => MockClient((request) async {
+                  expect(request.method, 'POST');
+                  expect(request.url.path, endsWith('/chat/completions'));
+                  storyPosts.add(jsonDecode(request.body) as Map<String, Object?>);
+                  storyEntered.complete();
+                  return storyResponse!.future;
+                }),
               ),
-              modelClient: story.TavernModelClient(clientFactory: () => MockClient((request) async {
-                expect(request.method, 'POST');
-                expect(request.url.path, endsWith('/chat/completions'));
-                storyPosts.add(jsonDecode(request.body) as Map<String, Object?>);
-                storyEntered.complete();
-                return storyResponse!.future;
-              })),
             );
             engines.add(engine);
             if (first) {
-              final character = await engine.importCard(Uint8List.fromList(utf8.encode(jsonEncode({
-                'spec': 'chara_card_v3', 'spec_version': '3.0',
-                'data': {
-                  'name': '故事同行者', 'nickname': '', 'description': '',
-                  'personality': '', 'scenario': '', 'first_mes': '故事从这里开始。',
-                  'alternate_greetings': [], 'mes_example': '', 'system_prompt': '',
-                  'post_history_instructions': '', 'creator_notes': '', 'tags': [], 'extensions': {},
-                },
-              }))));
+              final character = await engine.importCard(
+                Uint8List.fromList(
+                  utf8.encode(
+                    jsonEncode({
+                      'spec': 'chara_card_v3',
+                      'spec_version': '3.0',
+                      'data': {
+                        'name': '故事同行者',
+                        'nickname': '',
+                        'description': '',
+                        'personality': '',
+                        'scenario': '',
+                        'first_mes': '故事从这里开始。',
+                        'alternate_greetings': [],
+                        'mes_example': '',
+                        'system_prompt': '',
+                        'post_history_instructions': '',
+                        'creator_notes': '',
+                        'tags': [],
+                        'extensions': {},
+                      },
+                    }),
+                  ),
+                ),
+              );
               characterId = character.id;
               chatId = await engine.createChat(characterId);
             }
-            final scope = ProviderContainer(overrides: [
-              tavernProvider.overrideWithValue(engine),
-              settingsProvider.overrideWith(() => _Settings('sk-story-test')),
-            ]);
+            final scope = ProviderContainer(
+              overrides: [
+                tavernProvider.overrideWithValue(engine),
+                settingsProvider.overrideWith(() => _Settings('sk-story-test')),
+              ],
+            );
             storyScope = scope;
             await scope.read(tavernCharactersProvider.future);
             await scope.read(tavernChatsProvider(null).future);
@@ -660,10 +679,9 @@ void main() {
             await scope.read(scripts.future);
             await readStoryRows();
           });
-          await tester.pumpWidget(UncontrolledProviderScope(
-            container: storyScope!,
-            child: _app(const TavernHomePage()),
-          ));
+          await tester.pumpWidget(
+            UncontrolledProviderScope(container: storyScope!, child: _app(const TavernHomePage())),
+          );
           await tester.pumpAndSettle();
           final resume = find.byKey(ValueKey('tavern-continue-$chatId'));
           expect(resume, findsOneWidget);
@@ -683,11 +701,28 @@ void main() {
           await settleMixed(tester, storyEntered.future);
           // Subscribe to the actual Page-started turn while HTTP is held.
           final done = engine.resumeTurn(chatId).toList();
-          response.complete(http.Response([
-            'data: ${jsonEncode({'choices': [{'index': 0, 'delta': {'content': '故事继续了。'}}]})}\n\n',
-            'data: ${jsonEncode({'choices': [{'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'}]})}\n\n',
-            'data: [DONE]\n\n',
-          ].join(), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'}));
+          response.complete(
+            http.Response(
+              [
+                'data: ${jsonEncode({
+                  'choices': [
+                    {
+                      'index': 0,
+                      'delta': {'content': '故事继续了。'},
+                    },
+                  ],
+                })}\n\n',
+                'data: ${jsonEncode({
+                  'choices': [
+                    {'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'},
+                  ],
+                })}\n\n',
+                'data: [DONE]\n\n',
+              ].join(),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            ),
+          );
           final events = await settleMixed(tester, done);
           expect(events.whereType<story.TavernTurnFailed>(), isEmpty);
           expect(events.whereType<story.TavernTurnDone>(), hasLength(1));
@@ -713,8 +748,14 @@ void main() {
         expect(storyPosts, isEmpty);
         await storySay(storyName);
         expect(storyPosts, hasLength(1));
-        expect((storyPosts.single['messages']! as List).cast<Map>()
-          .where((row) => row['role'] == 'user').map((row) => row['content']).join('\n'), contains(storyName));
+        expect(
+          (storyPosts.single['messages']! as List)
+              .cast<Map>()
+              .where((row) => row['role'] == 'user')
+              .map((row) => row['content'])
+              .join('\n'),
+          contains(storyName),
+        );
         final before = (await tester.runAsync(() => engine.path(chatId)))!;
         expect(before.where((row) => row.role == story.TavernRole.user).single.text, storyName);
         final oldPath = [for (final row in before) (row.nodeId, row.parentId, row.role, row.text, row.at)];
@@ -723,8 +764,10 @@ void main() {
         // The phone owner lives across room visits, as in the app. The test
         // adds only a receipt observer; the Page still submits and extracts.
         final memory = _ReceiptMemory(
-          CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
-            nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch),
+          CompanionMemoryStore(
+            sqlite3.open('${root.path}/memory.sqlite'),
+            nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
+          ),
           CompanionLocal.at(root),
         );
         phoneMemory = memory;
@@ -735,27 +778,45 @@ void main() {
         final phoneClient = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['system'] == companionMemoryExtractionPrompt) {
-            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            final input =
+                jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
             extracts.add(input);
             final source = (input['source']! as List).cast<Map>().single;
             expect(source['text'], realName);
-            return http.Response(_sse([jsonEncode({
-              'schema_version': 2, 'batch_id': input['batch_id'],
-              'covered_message_ids': [source['id']], 'completion': 'complete',
-              'operations': [{
-                'op': 'create', 'kind': 'fact', 'text': realName, 'keywords': ['称呼', '阿橙'],
-                'evidence': [{'message_id': source['id'], 'quote': source['text']}],
-              }],
-            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            return http.Response(
+              _sse([
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': input['batch_id'],
+                  'covered_message_ids': [source['id']],
+                  'completion': 'complete',
+                  'operations': [
+                    {
+                      'op': 'create',
+                      'kind': 'fact',
+                      'text': realName,
+                      'keywords': ['称呼', '阿橙'],
+                      'evidence': [
+                        {'message_id': source['id'], 'quote': source['text']},
+                      ],
+                    },
+                  ],
+                }),
+              ]),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            );
           }
           chats.add(body);
           phoneEntered.complete();
-          return http.Response(_sse(['我听到了。']), 200,
-            headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          return http.Response(_sse(['我听到了。']), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
         });
-        await openLight(tester, apiKey: 'sk-test', client: phoneClient, extra: [
-          companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
-        ]);
+        await openLight(
+          tester,
+          apiKey: 'sk-test',
+          client: phoneClient,
+          extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+        );
         expect(await memoryOf(tester), same(memory));
         await settleMixed(tester, memory.migrateLocal());
         await tester.pumpAndSettle();
@@ -790,7 +851,9 @@ void main() {
         expect(chats, hasLength(2));
         expect(jsonEncode(chats), isNot(contains('校长')));
         final lastContent = (((chats.last['messages']! as List).last as Map)['content']! as List).cast<Map>();
-        final block = lastContent.map((part) => part['text'] as String).singleWhere((text) => text.contains('companion_memory'));
+        final block = lastContent
+            .map((part) => part['text'] as String)
+            .singleWhere((text) => text.contains('companion_memory'));
         expect((jsonDecode(block) as Map)['items'], [
           {'id': card['id'], 'kind': 'fact', 'text': realName},
         ]);
@@ -821,7 +884,9 @@ void main() {
         expect(outgoing, isNot(contains('companion_memory')));
         expect(outgoing, isNot(contains('phoneMemory')));
         final after = (await tester.runAsync(() => engine.path(chatId)))!;
-        expect([for (final row in after.take(before.length)) (row.nodeId, row.parentId, row.role, row.text, row.at)], oldPath);
+        expect([
+          for (final row in after.take(before.length)) (row.nodeId, row.parentId, row.role, row.text, row.at),
+        ], oldPath);
         expect(memory.store.messages(), phoneMessages);
         expect(memory.store.cards(), phoneCards);
         expect(memory.store.requests(), phoneReceipts);
@@ -829,125 +894,193 @@ void main() {
       });
 
       for (final changedPreference in [false, true]) {
-        testWidgets(changedPreference
-            ? 'fixture 4 a personal writing change reaches the next Page request with its own complete source'
-            : 'fixture 4 joining a writing group keeps the original preference in the next Page request', (tester) async {
-          final posts = <Map<String, Object?>>[];
-          await openLight(tester, apiKey: 'sk-test', client: MockClient((request) async {
-            posts.add(jsonDecode(request.body) as Map<String, Object?>);
-            return http.Response(_sse(['我们按你的习惯慢慢来。']), 200,
-              headers: {'content-type': 'text/event-stream; charset=utf-8'});
-          }));
-          final memory = await memoryOf(tester);
-          Map<String, Object?> source(String id, String text, {String role = 'user'}) =>
-              memory.store.submitMessage(id: id, sessionId: memory.store.lightSessionId, text: text,
-                role: role, saidAtUtc: DateTime.now().millisecondsSinceEpoch, offsetMinutes: 0);
-          void commit(MemoryBatch batch, List<Map<String, Object?>> operations) {
-            final proposal = parseExtractionProposal(jsonEncode({
-              'schema_version': 2, 'batch_id': batch.id,
-              'covered_message_ids': batch.sources.map((row) => row['id']).toList(),
-              'operations': operations, 'completion': 'complete',
-            }), batch);
-            expect(memory.store.commitExtraction(batch, proposal), isTrue);
-            memory.changed();
-          }
-          const originalText = '我练写作喜欢先看一个例子';
-          final originalSource = source('writing-original', originalText);
-          final first = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-          expect(first.sources.map((row) => row['id']), ['writing-original']);
-          commit(first, [{
-            'op': 'create', 'kind': 'preference', 'text': originalText, 'keywords': ['写作', '例子'],
-            'evidence': [{'message_id': 'writing-original', 'quote': originalText}],
-          }]);
-          final originalCard = memory.store.cards().single;
-          expect(isMemoryResponsePreference(originalCard), isTrue);
-          // The group-membership fact and an assistant's steps do not stand in
-          // for the person's own statement of a new response preference.
-          const groupText = '我最近加入了写作小组';
-          final groupSource = source('writing-group', groupText);
-          const assistantText = '练写作先列三个步骤，例子放最后。';
-          source('assistant-suggestion', assistantText, role: 'assistant');
-          final joining = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-          expect(joining.sources.map((row) => row['id']), ['writing-group']);
-          expect(() => parseExtractionProposal(jsonEncode({
-            'schema_version': 2, 'batch_id': joining.id, 'covered_message_ids': ['writing-group'],
-            'completion': 'complete', 'operations': [{
-              'op': 'replace', 'target_id': originalCard['id'], 'expected_row_rev': originalCard['row_rev'],
-              'kind': 'preference', 'text': assistantText, 'keywords': ['写作', '步骤'],
-              'evidence': [{'message_id': 'assistant-suggestion', 'quote': assistantText}],
-              'change_kind': 'new_current_value',
-            }],
-          }), joining), throwsFormatException);
-          commit(joining, [{
-            'op': 'create', 'kind': 'fact', 'text': groupText, 'keywords': ['写作', '小组'],
-            'evidence': [{'message_id': 'writing-group', 'quote': groupText}],
-          }]);
-          expect(memory.store.cards().singleWhere((row) => row['id'] == originalCard['id']), originalCard);
-          final groupCard = memory.store.cards().singleWhere((row) => row['text'] == groupText);
-          var expectedSource = originalSource;
-          var expectedText = originalText;
-          if (changedPreference) {
-            const newText = '我现在改习惯了，练写作时先给我三个步骤，例子放最后';
-            expectedSource = source('writing-new-preference', newText);
-            expectedText = newText;
-            final replacement = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-            expect(replacement.sources.map((row) => row['id']), ['writing-new-preference']);
-            expect(replacement.existing.singleWhere((row) => row['id'] == originalCard['id'])['row_rev'],
-              originalCard['row_rev']);
-            commit(replacement, [{
-              'op': 'replace', 'target_id': originalCard['id'], 'expected_row_rev': originalCard['row_rev'],
-              'kind': 'preference', 'text': newText, 'keywords': ['写作', '步骤', '例子'],
-              'evidence': [{'message_id': 'writing-new-preference', 'quote': newText}],
-              'change_kind': 'new_current_value',
-            }]);
-          }
-          final preference = memory.store.cards().singleWhere((row) => row['kind'] == 'preference');
-          expect(preference['id'], originalCard['id']);
-          expect(preference['text'], expectedText);
-          expect(preference['row_rev'], (originalCard['row_rev']! as int) + (changedPreference ? 1 : 0));
-          expect(preference['current_basis_seq'], expectedSource['first_seq']);
-          expect(isMemoryResponsePreference(preference), isTrue);
-          final proof = (preference['evidence']! as List).cast<Map>().single;
-          expect(proof['message_id'], expectedSource['id']);
-          expect(proof['source_rev'], expectedSource['source_rev']);
-          expect(proof['first_seq'], expectedSource['first_seq']);
-          expect(proof['said_at_utc'], expectedSource['said_at_utc']);
-          expect(proof['offset_minutes'], expectedSource['offset_minutes']);
-          expect(proof['role'], 'user');
-          expect(proof['scope'], 'real');
-          expect(proof['quote'], expectedText);
-          final groupProof = (groupCard['evidence']! as List).cast<Map>().single;
-          expect(groupProof['message_id'], groupSource['id']);
-          expect(groupProof['source_rev'], groupSource['source_rev']);
-          expect(groupProof['quote'], groupText);
-          for (final original in [originalSource, groupSource]) {
-            final saved = memory.store.messages().singleWhere((row) => row['id'] == original['id']);
-            expect({for (final key in original.keys) key: saved[key]}, original);
-          }
-          expect(memory.store.messages().singleWhere((row) => row['id'] == 'assistant-suggestion')['role'], 'assistant');
-          const query = '今天练写作，怎么起手？';
-          await say(tester, query);
-          expect(posts, hasLength(1));
-          final content = (((posts.single['messages']! as List).last as Map)['content']! as List).cast<Map>();
-          expect(content.first['text'], changedPreference ? '$expectedText\n$query' : query);
-          // Check the actual selected block, not matching words in old chat
-          // history (which legitimately still includes the assistant's idea).
-          final block = content.where((part) => part['type'] == 'text')
-              .map((part) => part['text'] as String)
-              .singleWhere((text) => text.startsWith('{"type":"companion_memory",'));
-          final items = ((jsonDecode(block) as Map)['items']! as List).cast<Map>();
-          expect(items.map((row) => row['id']), unorderedEquals([originalCard['id'], groupCard['id']]));
-          expect(items.singleWhere((row) => row['kind'] == 'preference')['text'], expectedText);
-          expect(items.singleWhere((row) => row['kind'] == 'fact')['text'], groupText);
-          if (!changedPreference) {
-            expect(items.any((row) => (row['text'] as String).contains('三个步骤')), isFalse);
-          }
-          await tester.pumpWidget(const SizedBox());
-          await tester.pump(const Duration(seconds: 10));
-        });
+        testWidgets(
+          changedPreference
+              ? 'fixture 4 a personal writing change reaches the next Page request with its own complete source'
+              : 'fixture 4 joining a writing group keeps the original preference in the next Page request',
+          (tester) async {
+            final posts = <Map<String, Object?>>[];
+            await openLight(
+              tester,
+              apiKey: 'sk-test',
+              client: MockClient((request) async {
+                posts.add(jsonDecode(request.body) as Map<String, Object?>);
+                return http.Response(
+                  _sse(['我们按你的习惯慢慢来。']),
+                  200,
+                  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+                );
+              }),
+            );
+            final memory = await memoryOf(tester);
+            Map<String, Object?> source(String id, String text, {String role = 'user'}) => memory.store.submitMessage(
+              id: id,
+              sessionId: memory.store.lightSessionId,
+              text: text,
+              role: role,
+              saidAtUtc: DateTime.now().millisecondsSinceEpoch,
+              offsetMinutes: 0,
+            );
+            void commit(MemoryBatch batch, List<Map<String, Object?>> operations) {
+              final proposal = parseExtractionProposal(
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': batch.id,
+                  'covered_message_ids': batch.sources.map((row) => row['id']).toList(),
+                  'operations': operations,
+                  'completion': 'complete',
+                }),
+                batch,
+              );
+              expect(memory.store.commitExtraction(batch, proposal), isTrue);
+              memory.changed();
+            }
+
+            const originalText = '我练写作喜欢先看一个例子';
+            final originalSource = source('writing-original', originalText);
+            final first = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+            expect(first.sources.map((row) => row['id']), ['writing-original']);
+            commit(first, [
+              {
+                'op': 'create',
+                'kind': 'preference',
+                'text': originalText,
+                'keywords': ['写作', '例子'],
+                'evidence': [
+                  {'message_id': 'writing-original', 'quote': originalText},
+                ],
+              },
+            ]);
+            final originalCard = memory.store.cards().single;
+            expect(isMemoryResponsePreference(originalCard), isTrue);
+            // The group-membership fact and an assistant's steps do not stand in
+            // for the person's own statement of a new response preference.
+            const groupText = '我最近加入了写作小组';
+            final groupSource = source('writing-group', groupText);
+            const assistantText = '练写作先列三个步骤，例子放最后。';
+            source('assistant-suggestion', assistantText, role: 'assistant');
+            final joining = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+            expect(joining.sources.map((row) => row['id']), ['writing-group']);
+            expect(
+              () => parseExtractionProposal(
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': joining.id,
+                  'covered_message_ids': ['writing-group'],
+                  'completion': 'complete',
+                  'operations': [
+                    {
+                      'op': 'replace',
+                      'target_id': originalCard['id'],
+                      'expected_row_rev': originalCard['row_rev'],
+                      'kind': 'preference',
+                      'text': assistantText,
+                      'keywords': ['写作', '步骤'],
+                      'evidence': [
+                        {'message_id': 'assistant-suggestion', 'quote': assistantText},
+                      ],
+                      'change_kind': 'new_current_value',
+                    },
+                  ],
+                }),
+                joining,
+              ),
+              throwsFormatException,
+            );
+            commit(joining, [
+              {
+                'op': 'create',
+                'kind': 'fact',
+                'text': groupText,
+                'keywords': ['写作', '小组'],
+                'evidence': [
+                  {'message_id': 'writing-group', 'quote': groupText},
+                ],
+              },
+            ]);
+            expect(memory.store.cards().singleWhere((row) => row['id'] == originalCard['id']), originalCard);
+            final groupCard = memory.store.cards().singleWhere((row) => row['text'] == groupText);
+            var expectedSource = originalSource;
+            var expectedText = originalText;
+            if (changedPreference) {
+              const newText = '我现在改习惯了，练写作时先给我三个步骤，例子放最后';
+              expectedSource = source('writing-new-preference', newText);
+              expectedText = newText;
+              final replacement = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+              expect(replacement.sources.map((row) => row['id']), ['writing-new-preference']);
+              expect(
+                replacement.existing.singleWhere((row) => row['id'] == originalCard['id'])['row_rev'],
+                originalCard['row_rev'],
+              );
+              commit(replacement, [
+                {
+                  'op': 'replace',
+                  'target_id': originalCard['id'],
+                  'expected_row_rev': originalCard['row_rev'],
+                  'kind': 'preference',
+                  'text': newText,
+                  'keywords': ['写作', '步骤', '例子'],
+                  'evidence': [
+                    {'message_id': 'writing-new-preference', 'quote': newText},
+                  ],
+                  'change_kind': 'new_current_value',
+                },
+              ]);
+            }
+            final preference = memory.store.cards().singleWhere((row) => row['kind'] == 'preference');
+            expect(preference['id'], originalCard['id']);
+            expect(preference['text'], expectedText);
+            expect(preference['row_rev'], (originalCard['row_rev']! as int) + (changedPreference ? 1 : 0));
+            expect(preference['current_basis_seq'], expectedSource['first_seq']);
+            expect(isMemoryResponsePreference(preference), isTrue);
+            final proof = (preference['evidence']! as List).cast<Map>().single;
+            expect(proof['message_id'], expectedSource['id']);
+            expect(proof['source_rev'], expectedSource['source_rev']);
+            expect(proof['first_seq'], expectedSource['first_seq']);
+            expect(proof['said_at_utc'], expectedSource['said_at_utc']);
+            expect(proof['offset_minutes'], expectedSource['offset_minutes']);
+            expect(proof['role'], 'user');
+            expect(proof['scope'], 'real');
+            expect(proof['quote'], expectedText);
+            final groupProof = (groupCard['evidence']! as List).cast<Map>().single;
+            expect(groupProof['message_id'], groupSource['id']);
+            expect(groupProof['source_rev'], groupSource['source_rev']);
+            expect(groupProof['quote'], groupText);
+            for (final original in [originalSource, groupSource]) {
+              final saved = memory.store.messages().singleWhere((row) => row['id'] == original['id']);
+              expect({for (final key in original.keys) key: saved[key]}, original);
+            }
+            expect(
+              memory.store.messages().singleWhere((row) => row['id'] == 'assistant-suggestion')['role'],
+              'assistant',
+            );
+            const query = '今天练写作，怎么起手？';
+            await say(tester, query);
+            expect(posts, hasLength(1));
+            final content = (((posts.single['messages']! as List).last as Map)['content']! as List).cast<Map>();
+            expect(content.first['text'], changedPreference ? '$expectedText\n$query' : query);
+            // Check the actual selected block, not matching words in old chat
+            // history (which legitimately still includes the assistant's idea).
+            final block = content
+                .where((part) => part['type'] == 'text')
+                .map((part) => part['text'] as String)
+                .singleWhere((text) => text.startsWith('{"type":"companion_memory",'));
+            final items = ((jsonDecode(block) as Map)['items']! as List).cast<Map>();
+            expect(items.map((row) => row['id']), unorderedEquals([originalCard['id'], groupCard['id']]));
+            expect(items.singleWhere((row) => row['kind'] == 'preference')['text'], expectedText);
+            expect(items.singleWhere((row) => row['kind'] == 'fact')['text'], groupText);
+            if (!changedPreference) {
+              expect(items.any((row) => (row['text'] as String).contains('三个步骤')), isFalse);
+            }
+            await tester.pumpWidget(const SizedBox());
+            await tester.pump(const Duration(seconds: 10));
+          },
+        );
       }
 
-      testWidgets('fixture 15 ordinary Page chat still sends after a real organize request reaches the daily limit', (tester) async {
+      testWidgets('fixture 15 ordinary Page chat still sends after a real organize request reaches the daily limit', (
+        tester,
+      ) async {
         late CompanionMemoryOwner memory;
         final categories = <String>[];
         final posts = <Map<String, Object?>>[];
@@ -955,11 +1088,15 @@ void main() {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           posts.add(body);
           final system = body['system'];
-          final category = system == companionMemoryExtractionPrompt ? 'extract'
-              : system == companionMemoryConsolidationPrompt ? 'organize' : 'chat';
+          final category = system == companionMemoryExtractionPrompt
+              ? 'extract'
+              : system == companionMemoryConsolidationPrompt
+              ? 'organize'
+              : 'chat';
           categories.add(category);
-          final receipt = memory.store.requests().singleWhere((row) =>
-            row['category'] == category && row['state'] == 'sent');
+          final receipt = memory.store.requests().singleWhere(
+            (row) => row['category'] == category && row['state'] == 'sent',
+          );
           expect(receipt['sent_at_ms'], isNotNull);
           var answer = '可以，我们慢慢聊。';
           if (category != 'chat') {
@@ -968,30 +1105,70 @@ void main() {
             expect(receipt['batch_id'], input['batch_id']);
             if (category == 'extract') {
               answer = jsonEncode({
-                'schema_version': 2, 'batch_id': input['batch_id'],
-                'covered_message_ids': ['yogurt-a', 'yogurt-b'], 'completion': 'complete',
+                'schema_version': 2,
+                'batch_id': input['batch_id'],
+                'covered_message_ids': ['yogurt-a', 'yogurt-b'],
+                'completion': 'complete',
                 'operations': [
-                  {'op': 'create', 'kind': 'preference', 'text': '你买酸奶只选原味。', 'keywords': ['酸奶'],
-                    'evidence': [{'message_id': 'yogurt-a', 'quote': '酸奶我只买原味。'}]},
-                  {'op': 'create', 'kind': 'preference', 'text': '酸奶你只买原味的。', 'keywords': ['酸奶'],
-                    'evidence': [{'message_id': 'yogurt-b', 'quote': '我买酸奶一直只选原味。'}]},
+                  {
+                    'op': 'create',
+                    'kind': 'preference',
+                    'text': '你买酸奶只选原味。',
+                    'keywords': ['酸奶'],
+                    'evidence': [
+                      {'message_id': 'yogurt-a', 'quote': '酸奶我只买原味。'},
+                    ],
+                  },
+                  {
+                    'op': 'create',
+                    'kind': 'preference',
+                    'text': '酸奶你只买原味的。',
+                    'keywords': ['酸奶'],
+                    'evidence': [
+                      {'message_id': 'yogurt-b', 'quote': '我买酸奶一直只选原味。'},
+                    ],
+                  },
                 ],
               });
             } else {
               expect(input['rows'] as List, hasLength(2));
-              answer = jsonEncode({'schema_version': 2, 'batch_id': input['batch_id'],
-                'operations': [], 'completion': 'complete'});
+              answer = jsonEncode({
+                'schema_version': 2,
+                'batch_id': input['batch_id'],
+                'operations': [],
+                'completion': 'complete',
+              });
             }
           }
-          return http.Response.bytes(utf8.encode([
-            {'type': 'message_start', 'message': {'usage': {'input_tokens': 900}}},
-            {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': answer}},
-            {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'},
-              'usage': {'input_tokens': 20, 'cache_read_input_tokens': 3,
-                'cache_creation_input_tokens': 0, 'output_tokens': category == 'chat' ? 7 : 12}},
-            {'type': 'message_stop'},
-          ].map((event) => 'data: ${jsonEncode(event)}\n\n').join()), 200,
-            headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          return http.Response.bytes(
+            utf8.encode(
+              [
+                {
+                  'type': 'message_start',
+                  'message': {
+                    'usage': {'input_tokens': 900},
+                  },
+                },
+                {
+                  'type': 'content_block_delta',
+                  'delta': {'type': 'text_delta', 'text': answer},
+                },
+                {
+                  'type': 'message_delta',
+                  'delta': {'stop_reason': 'end_turn'},
+                  'usage': {
+                    'input_tokens': 20,
+                    'cache_read_input_tokens': 3,
+                    'cache_creation_input_tokens': 0,
+                    'output_tokens': category == 'chat' ? 7 : 12,
+                  },
+                },
+                {'type': 'message_stop'},
+              ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+            ),
+            200,
+            headers: {'content-type': 'text/event-stream; charset=utf-8'},
+          );
         });
         await openLight(tester, apiKey: 'sk-test', client: client);
         memory = await memoryOf(tester);
@@ -1000,8 +1177,13 @@ void main() {
         // Use the Page's already attached real owner/transport. No second
         // worker, prefilled usage row or replacement budget implementation.
         for (final (id, text) in [('yogurt-a', '酸奶我只买原味。'), ('yogurt-b', '我买酸奶一直只选原味。')]) {
-          memory.store.submitMessage(id: id, sessionId: memory.store.lightSessionId, text: text,
-            saidAtUtc: DateTime.now().millisecondsSinceEpoch, offsetMinutes: 0);
+          memory.store.submitMessage(
+            id: id,
+            sessionId: memory.store.lightSessionId,
+            text: text,
+            saidAtUtc: DateTime.now().millisecondsSinceEpoch,
+            offsetMinutes: 0,
+          );
         }
         expect(await tester.runAsync(() => memory.extract(page, forceTail: true)), CompanionMemoryWork.committed);
         expect(await tester.runAsync(() => memory.consolidate(page)), CompanionMemoryWork.committed);
@@ -1034,7 +1216,10 @@ void main() {
         expect((chat['sent_at_ms']! as int) - (organized['sent_at_ms']! as int), inInclusiveRange(0, 86399999));
         expect(chat['output_tokens'], 7);
         expect((chat['raw_usage']! as Map)['final_usage'], {
-          'input_tokens': 20, 'cache_read_input_tokens': 3, 'cache_creation_input_tokens': 0, 'output_tokens': 7,
+          'input_tokens': 20,
+          'cache_read_input_tokens': 3,
+          'cache_creation_input_tokens': 0,
+          'output_tokens': 7,
         });
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 10));
@@ -1089,18 +1274,33 @@ void main() {
         final client = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['system'] == companionMemoryExtractionPrompt) {
-            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            final input =
+                jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
             extracts.add(input);
             final sources = (input['source']! as List).cast<Map>();
-            return http.Response(_sse([jsonEncode({
-              'schema_version': 2, 'batch_id': input['batch_id'],
-              'covered_message_ids': sources.map((row) => row['id']).toList(),
-              'operations': [for (final row in sources) {
-                'op': 'create', 'kind': 'fact', 'text': row['text'],
-                'evidence': [{'message_id': row['id'], 'quote': row['text']}],
-              }],
-              'completion': 'complete',
-            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            return http.Response(
+              _sse([
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': input['batch_id'],
+                  'covered_message_ids': sources.map((row) => row['id']).toList(),
+                  'operations': [
+                    for (final row in sources)
+                      {
+                        'op': 'create',
+                        'kind': 'fact',
+                        'text': row['text'],
+                        'evidence': [
+                          {'message_id': row['id'], 'quote': row['text']},
+                        ],
+                      },
+                  ],
+                  'completion': 'complete',
+                }),
+              ]),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            );
           }
           chats.add(body);
           return http.Response('{"error":"bad key"}', 401);
@@ -1138,12 +1338,21 @@ void main() {
           final content = message['content'];
           return content is String ? content : ((content! as List).first as Map)['text'] as String;
         }
+
         expect(chats.map(sentText), [firstText, '$firstText\n$secondText']);
         final receipts = memory.store.requests();
         expect(receipts, hasLength(2));
         expect(receipts.map((row) => row['id']).toSet(), hasLength(2));
-        expect(receipts.every((row) => row['category'] == 'chat' && row['state'] == 'finished' &&
-          row['terminal'] == 'http_error' && row['sent_at_ms'] != null), isTrue);
+        expect(
+          receipts.every(
+            (row) =>
+                row['category'] == 'chat' &&
+                row['state'] == 'finished' &&
+                row['terminal'] == 'http_error' &&
+                row['sent_at_ms'] != null,
+          ),
+          isTrue,
+        );
         await tester.tap(find.byIcon(AppIcons.history));
         await settleMixed(tester, CompanionLightHistory.at(root).load());
         await tester.pumpAndSettle();
@@ -1154,8 +1363,11 @@ void main() {
         expect(entries.every((entry) => entry.speaker == CompanionLogSpeaker.you), isTrue);
         expect(find.descendant(of: log, matching: find.text(firstText)), findsOneWidget);
         expect(find.descendant(of: log, matching: find.text(secondText)), findsOneWidget);
-        expect(find.descendant(of: log, matching: find.text('你')), findsOneWidget,
-          reason: 'the real Log groups names while keeping two separately rendered originals');
+        expect(
+          find.descendant(of: log, matching: find.text('你')),
+          findsOneWidget,
+          reason: 'the real Log groups names while keeping two separately rendered originals',
+        );
         expect(find.descendant(of: log, matching: find.text('$firstText\n$secondText')), findsNothing);
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
@@ -1171,6 +1383,7 @@ void main() {
             extracted.complete();
           }
         }
+
         reopened.addListener(observeExtraction);
         observeExtraction();
         try {
@@ -1183,7 +1396,15 @@ void main() {
         expect(restored.keys, unorderedEquals([first['id'], second['id']]));
         for (final original in [first, second]) {
           final saved = restored[original['id']]!;
-          for (final field in ['id', 'session_id', 'first_seq', 'source_rev', 'said_at_utc', 'offset_minutes', 'text']) {
+          for (final field in [
+            'id',
+            'session_id',
+            'first_seq',
+            'source_rev',
+            'said_at_utc',
+            'offset_minutes',
+            'text',
+          ]) {
             expect(saved[field], original[field], reason: field);
           }
         }
@@ -1202,9 +1423,13 @@ void main() {
           for (final field in ['id', 'first_seq', 'source_rev', 'offset_minutes', 'text']) {
             expect(sent[field], original[field], reason: field);
           }
-          expect(sent['said_at_utc'],
-            DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String());
-          final proof = (cards.singleWhere((row) => row['text'] == original['text'])['evidence']! as List).cast<Map>().single;
+          expect(
+            sent['said_at_utc'],
+            DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String(),
+          );
+          final proof = (cards.singleWhere((row) => row['text'] == original['text'])['evidence']! as List)
+              .cast<Map>()
+              .single;
           expect(proof['message_id'], original['id']);
           expect(proof['source_rev'], original['source_rev']);
           expect(proof['quote'], original['text']);
@@ -1724,13 +1949,22 @@ void main() {
         final client = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['system'] == companionMemoryExtractionPrompt) {
-            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            final input =
+                jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
             extracts.add(input);
-            return http.Response(_sse([jsonEncode({
-              'schema_version': 2, 'batch_id': input['batch_id'],
-              'covered_message_ids': (input['source']! as List).cast<Map>().map((row) => row['id']).toList(),
-              'operations': [], 'completion': 'complete',
-            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            return http.Response(
+              _sse([
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': input['batch_id'],
+                  'covered_message_ids': (input['source']! as List).cast<Map>().map((row) => row['id']).toList(),
+                  'operations': [],
+                  'completion': 'complete',
+                }),
+              ]),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            );
           }
           chats.add(body);
           return chats.length == 1
@@ -1773,6 +2007,7 @@ void main() {
             extracted.complete();
           }
         }
+
         reopened.addListener(observeExtraction);
         observeExtraction();
         try {
@@ -1794,8 +2029,10 @@ void main() {
         for (final field in ['id', 'first_seq', 'source_rev', 'offset_minutes', 'text']) {
           expect(sentSource[field], original[field], reason: field);
         }
-        expect(sentSource['said_at_utc'],
-          DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String());
+        expect(
+          sentSource['said_at_utc'],
+          DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String(),
+        );
         final after = reopened.store.requests();
         expect(after.where((row) => row['category'] == 'chat').toList(), receipts);
         final extract = after.singleWhere((row) => row['category'] == 'extract');
@@ -1818,7 +2055,9 @@ void main() {
         final memory = await memoryOf(tester);
         final before = memory.store.archive['next_seq'];
         final db = sqlite3.open('${root.path}/memory.sqlite');
-        db.execute("CREATE TRIGGER reject_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+        db.execute(
+          "CREATE TRIGGER reject_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
+        );
         db.close();
 
         await say(tester, '我改学长笛了');
@@ -1842,7 +2081,9 @@ void main() {
         await tester.pump(const Duration(seconds: 20));
       });
 
-      testWidgets('explicit story and generic unconfirmed cards survive reentry but stay out of the real request', (tester) async {
+      testWidgets('explicit story and generic unconfirmed cards survive reentry but stay out of the real request', (
+        tester,
+      ) async {
         final asked = <Map<String, Object?>>[];
         final client = MockClient((request) async {
           asked.add(jsonDecode(request.body) as Map<String, Object?>);
@@ -1850,19 +2091,44 @@ void main() {
         });
         await openLight(tester, apiKey: 'sk-test', client: client);
         final memory = await memoryOf(tester);
-        memory.store.submitMessage(id: 'original-story', sessionId: memory.store.lightSessionId,
-          text: '故事里叫我校长。', scope: 'story', saidAtUtc: 1793899800000, offsetMinutes: 480);
+        memory.store.submitMessage(
+          id: 'original-story',
+          sessionId: memory.store.lightSessionId,
+          text: '故事里叫我校长。',
+          scope: 'story',
+          saidAtUtc: 1793899800000,
+          offsetMinutes: 480,
+        );
         // Explicit SDK eligibility fixtures; the App legacy importer still
         // treats the owner's old handwritten cards as real.
-        memory.store.saveManual(const CompanionMemory(id: '11111111-1111-4111-8111-111111111111',
-          text: '这是剧本，我是海盗。', keywords: ['称呼'], pinned: true), expectedRowRev: null,
-          currentValueChange: false, realityKnown: false);
-        memory.store.saveManual(const CompanionMemory(id: '22222222-2222-4222-8222-222222222222',
-          text: '归属未知的称呼是店长。', keywords: ['称呼'], pinned: true), expectedRowRev: null,
-          currentValueChange: false, realityKnown: false);
-        memory.store.saveManual(const CompanionMemory(id: '33333333-3333-4333-8333-333333333333',
-          text: '本人现实称呼是阿橙。', keywords: ['称呼']), expectedRowRev: null,
-          currentValueChange: true, realityKnown: true);
+        memory.store.saveManual(
+          const CompanionMemory(
+            id: '11111111-1111-4111-8111-111111111111',
+            text: '这是剧本，我是海盗。',
+            keywords: ['称呼'],
+            pinned: true,
+          ),
+          expectedRowRev: null,
+          currentValueChange: false,
+          realityKnown: false,
+        );
+        memory.store.saveManual(
+          const CompanionMemory(
+            id: '22222222-2222-4222-8222-222222222222',
+            text: '归属未知的称呼是店长。',
+            keywords: ['称呼'],
+            pinned: true,
+          ),
+          expectedRowRev: null,
+          currentValueChange: false,
+          realityKnown: false,
+        );
+        memory.store.saveManual(
+          const CompanionMemory(id: '33333333-3333-4333-8333-333333333333', text: '本人现实称呼是阿橙。', keywords: ['称呼']),
+          expectedRowRev: null,
+          currentValueChange: true,
+          realityKnown: true,
+        );
         memory.changed();
         await _settle(tester);
         await tester.pumpWidget(const SizedBox());

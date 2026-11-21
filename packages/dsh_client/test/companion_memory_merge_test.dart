@@ -9,29 +9,52 @@ import 'support/old_memory_schema.dart';
 
 int _estimate(String text) => (text.runes.length / 4).ceil();
 
-MemoryRow _create(MemoryRow source, String text, {String kind = 'preference',
-  List<String> keywords = const ['酸奶'], List<MemoryRow>? evidence}) => {
-  'op': 'create', 'kind': kind, 'text': text, 'keywords': keywords,
-  'evidence': evidence ?? <MemoryRow>[{'message_id': source['id'], 'quote': source['text']}],
+MemoryRow _create(
+  MemoryRow source,
+  String text, {
+  String kind = 'preference',
+  List<String> keywords = const ['酸奶'],
+  List<MemoryRow>? evidence,
+}) => {
+  'op': 'create',
+  'kind': kind,
+  'text': text,
+  'keywords': keywords,
+  'evidence':
+      evidence ??
+      <MemoryRow>[
+        {'message_id': source['id'], 'quote': source['text']},
+      ],
 };
 
-MemoryRow _proposal(MemoryMergeBatch batch, {String? target, String? from, Set<String>? citations}) => parseMergeProposal(jsonEncode({
-  'schema_version': 2, 'batch_id': batch.id, 'completion': 'complete',
-  'operations': target == null ? <Object?>[] : [
-    {
-      'op': 'merge', 'target_id': target,
-      'expected_row_rev': batch.rows.singleWhere((row) => row['id'] == target)['row_rev'],
-      'from': [{'id': from, 'expected_row_rev': batch.rows.singleWhere((row) => row['id'] == from)['row_rev']}],
-      'text': batch.rows.singleWhere((row) => row['id'] == target)['text'],
-      'evidence': [
-        for (final row in batch.rows.where((row) => row['id'] == target || row['id'] == from))
-          for (final proof in (row['evidence'] as List<Object?>).cast<MemoryRow>())
-            if (citations == null || citations.contains(proof['message_id']))
-              {'message_id': proof['message_id'], 'quote': proof['quote']},
-      ],
-    },
-  ],
-}), batch);
+MemoryRow _proposal(MemoryMergeBatch batch, {String? target, String? from, Set<String>? citations}) =>
+    parseMergeProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'completion': 'complete',
+        'operations': target == null
+            ? <Object?>[]
+            : [
+                {
+                  'op': 'merge',
+                  'target_id': target,
+                  'expected_row_rev': batch.rows.singleWhere((row) => row['id'] == target)['row_rev'],
+                  'from': [
+                    {'id': from, 'expected_row_rev': batch.rows.singleWhere((row) => row['id'] == from)['row_rev']},
+                  ],
+                  'text': batch.rows.singleWhere((row) => row['id'] == target)['text'],
+                  'evidence': [
+                    for (final row in batch.rows.where((row) => row['id'] == target || row['id'] == from))
+                      for (final proof in (row['evidence'] as List<Object?>).cast<MemoryRow>())
+                        if (citations == null || citations.contains(proof['message_id']))
+                          {'message_id': proof['message_id'], 'quote': proof['quote']},
+                  ],
+                },
+              ],
+      }),
+      batch,
+    );
 
 void main() {
   late Directory directory;
@@ -44,35 +67,62 @@ void main() {
     database = sqlite3.open('${directory.path}/memory.sqlite');
     store = CompanionMemoryStore(database, nowMilliseconds: () => now, createId: createId);
   }
+
   void reopen() {
     store.close();
     open();
   }
+
   MemoryRow source(String id, String text, {int? saidAt, String scope = 'real', String role = 'user'}) =>
-      store.submitMessage(id: id, sessionId: 'room', text: text, scope: scope, role: role,
-        saidAtUtc: saidAt ?? now, offsetMinutes: 480);
+      store.submitMessage(
+        id: id,
+        sessionId: 'room',
+        text: text,
+        scope: scope,
+        role: role,
+        saidAtUtc: saidAt ?? now,
+        offsetMinutes: 480,
+      );
   void extract(List<MemoryRow> operations) {
     final batch = store.nextBatch(forceTail: true, estimateTokens: _estimate)!;
-    final parsed = parseExtractionProposal(jsonEncode({
-      'schema_version': 2, 'batch_id': batch.id, 'completion': 'complete',
-      'covered_message_ids': [for (final row in batch.sources) row['id']], 'operations': operations,
-    }), batch);
+    final parsed = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'completion': 'complete',
+        'covered_message_ids': [for (final row in batch.sources) row['id']],
+        'operations': operations,
+      }),
+      batch,
+    );
     expect(store.commitExtraction(batch, parsed), isTrue);
   }
+
   List<MemoryRow> pair() {
     final a = source('s11', '酸奶我只买原味。', saidAt: now - 60000);
     final b = source('s12', '我买酸奶还是只选原味。');
     extract([_create(a, '你买酸奶只选原味。'), _create(b, '酸奶你只买原味的。')]);
     return store.cards();
   }
-  MemoryMergeBatch claim({int Function(String) estimate = _estimate}) => store.nextMergeBatch(estimateTokens: estimate)!;
+
+  MemoryMergeBatch claim({int Function(String) estimate = _estimate}) =>
+      store.nextMergeBatch(estimateTokens: estimate)!;
   void merge(MemoryMergeBatch batch, MemoryRow target, MemoryRow from) {
-    expect(store.commitMerge(batch, _proposal(batch, target: target['id'] as String, from: from['id'] as String)), isTrue);
+    expect(
+      store.commitMerge(batch, _proposal(batch, target: target['id'] as String, from: from['id'] as String)),
+      isTrue,
+    );
   }
-  Set<String> proofIds(MemoryRow row) => (row['evidence'] as List<Object?>).cast<MemoryRow>()
-      .map((proof) => proof['message_id'] as String).toSet();
-  String? reserveOrganize() => store.reserveRequest(category: 'organize', provider: 'deepseek',
-      model: 'deepseek-flash', inputTokens: 6000, outputTokens: 800);
+
+  Set<String> proofIds(MemoryRow row) =>
+      (row['evidence'] as List<Object?>).cast<MemoryRow>().map((proof) => proof['message_id'] as String).toSet();
+  String? reserveOrganize() => store.reserveRequest(
+    category: 'organize',
+    provider: 'deepseek',
+    model: 'deepseek-flash',
+    inputTokens: 6000,
+    outputTokens: 800,
+  );
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('companion-memory-merge-');
@@ -92,14 +142,24 @@ void main() {
       store.finishUnresolvedControl(messageId: 'unclear', expectedSourceRev: 1);
       expect(store.archive['followup_after_seq'], unresolved['first_seq']);
       final initiative = {
-        'v': 2, 'lastGreetingAtMs': now - 3600000, 'inviteAtMs': <int>[now - 60000],
-        'signalAtMs': <int>[], 'declinedUntilMs': 0, 'night': null,
+        'v': 2,
+        'lastGreetingAtMs': now - 3600000,
+        'inviteAtMs': <int>[now - 60000],
+        'signalAtMs': <int>[],
+        'declinedUntilMs': 0,
+        'night': null,
       };
       store.initializeInitiative(initiative);
-      final request = version == 6 ? reserveOrganize()! : store.reserveRequest(
-        category: 'followup', provider: 'deepseek', model: 'deepseek-flash',
-        inputTokens: 2000, outputTokens: 128, batchId: 'followup:upgrade:1',
-      )!;
+      final request = version == 6
+          ? reserveOrganize()!
+          : store.reserveRequest(
+              category: 'followup',
+              provider: 'deepseek',
+              model: 'deepseek-flash',
+              inputTokens: 2000,
+              outputTokens: 128,
+              batchId: 'followup:upgrade:1',
+            )!;
       store.markRequestUncertain(request);
       final before = store.cards();
       final meta = store.archive;
@@ -198,8 +258,12 @@ void main() {
     final target = batch.rows.singleWhere((row) => row['id'] == rows.first['id']);
     final from = batch.rows.singleWhere((row) => row['id'] != rows.first['id']);
     // A model can cite one proof of the target; the store must keep its others.
-    final proposal = _proposal(batch, target: target['id'] as String, from: from['id'] as String,
-      citations: {'s12', 's13'});
+    final proposal = _proposal(
+      batch,
+      target: target['id'] as String,
+      from: from['id'] as String,
+      citations: {'s12', 's13'},
+    );
     expect(store.commitMerge(batch, proposal), isTrue);
     expect(proofIds(store.cards().single), {'s11', 's12', 's13'});
     store.deleteMessage(id: 's11', expectedSourceRev: 1);
@@ -215,9 +279,14 @@ void main() {
     final b = source('b', '这是我一直买酸奶的习惯。');
     final c = source('c', '我买酸奶还是只选原味。');
     extract([
-      _create(a, '你买酸奶只选原味。', evidence: [
-        {'message_id': a['id'], 'quote': a['text']}, {'message_id': b['id'], 'quote': b['text']},
-      ]),
+      _create(
+        a,
+        '你买酸奶只选原味。',
+        evidence: [
+          {'message_id': a['id'], 'quote': a['text']},
+          {'message_id': b['id'], 'quote': b['text']},
+        ],
+      ),
       _create(c, '酸奶你只买原味的。'),
     ]);
     final rows = store.cards();
@@ -234,8 +303,9 @@ void main() {
       test('whole ${empty ? 'empty' : 'merge'} response is stale after $change', () {
         final rows = pair();
         final batch = claim();
-        final proposal = empty ? _proposal(batch) : _proposal(batch,
-          target: rows.first['id'] as String, from: rows.last['id'] as String);
+        final proposal = empty
+            ? _proposal(batch)
+            : _proposal(batch, target: rows.first['id'] as String, from: rows.last['id'] as String);
         switch (change) {
           case 'pin':
             store.setPinned(id: rows.first['id'] as String, expectedRowRev: rows.first['row_rev'] as int, pinned: true);
@@ -244,9 +314,17 @@ void main() {
             store.editMessage(id: 's11', expectedSourceRev: 1, text: '酸奶我现在也买桃味。');
             break;
           case 'manual edit':
-            store.saveManual(CompanionMemory(id: rows.first['id'] as String,
-              kind: 'preference', text: '酸奶你也买桃味。', keywords: const ['酸奶']),
-              expectedRowRev: rows.first['row_rev'] as int, currentValueChange: true, realityKnown: true);
+            store.saveManual(
+              CompanionMemory(
+                id: rows.first['id'] as String,
+                kind: 'preference',
+                text: '酸奶你也买桃味。',
+                keywords: const ['酸奶'],
+              ),
+              expectedRowRev: rows.first['row_rev'] as int,
+              currentValueChange: true,
+              realityKnown: true,
+            );
             break;
           case 'delete':
             store.deleteCard(id: rows.first['id'] as String, expectedRowRev: rows.first['row_rev'] as int);
@@ -269,7 +347,9 @@ void main() {
   test('old source text cannot cross the archive boundary into consolidation', () {
     pair();
     final unrelated = source('clinic', '我周五去复诊。');
-    extract([_create(unrelated, '你周五去复诊。', kind: 'episode', keywords: ['复诊'])]);
+    extract([
+      _create(unrelated, '你周五去复诊。', kind: 'episode', keywords: ['复诊']),
+    ]);
     final clinic = store.cards().singleWhere((row) => row['kind'] == 'episode');
     store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'never');
     expect(store.nextMergeBatch(estimateTokens: _estimate), isNull);
@@ -292,7 +372,8 @@ void main() {
     source('control', '别再提复诊');
     final recent = source('recent', '我买酸奶还是只选原味。');
     extract([
-      _create(old, '你买酸奶只选原味。'), _create(recent, '酸奶你只买原味的。'),
+      _create(old, '你买酸奶只选原味。'),
+      _create(recent, '酸奶你只买原味的。'),
       _create(clinic, '你周五去复诊。', kind: 'episode', keywords: ['复诊']),
     ]);
     final first = claim();
@@ -313,10 +394,18 @@ void main() {
 
   test('expiry invalidates a captured complete result without changing a plan into an outcome', () {
     for (final row in pair()) {
-      store.saveManual(CompanionMemory(id: row['id'] as String, kind: row['kind'] as String,
-        text: row['text'] as String, keywords: row['keywords'] as List<String>,
-        expiresAt: DateTime.fromMillisecondsSinceEpoch(now + 1000, isUtc: true)),
-        expectedRowRev: row['row_rev'] as int, currentValueChange: false, realityKnown: true);
+      store.saveManual(
+        CompanionMemory(
+          id: row['id'] as String,
+          kind: row['kind'] as String,
+          text: row['text'] as String,
+          keywords: row['keywords'] as List<String>,
+          expiresAt: DateTime.fromMillisecondsSinceEpoch(now + 1000, isUtc: true),
+        ),
+        expectedRowRev: row['row_rev'] as int,
+        currentValueChange: false,
+        realityKnown: true,
+      );
     }
     final batch = claim();
     final before = store.cards();
@@ -353,7 +442,10 @@ void main() {
     expect(store.messages().singleWhere((row) => row['id'] == 'roleplay')['text'], '故事里的我开了茶馆。');
     final a = source('new-a', '我爱吃酸苹果。');
     final b = source('new-b', '酸苹果是我爱吃的。');
-    extract([_create(a, '你爱吃酸苹果。', keywords: ['苹果']), _create(b, '酸苹果是你爱吃的。', keywords: ['苹果'])]);
+    extract([
+      _create(a, '你爱吃酸苹果。', keywords: ['苹果']),
+      _create(b, '酸苹果是你爱吃的。', keywords: ['苹果']),
+    ]);
     final body = jsonEncode(consolidationInput(claim()));
     for (final absent in ['s11', 's12', '酸奶', '茶馆', 'roleplay']) {
       expect(body, isNot(contains(absent)), reason: absent);
@@ -373,10 +465,16 @@ void main() {
     final batch = claim();
     final wrong = _proposal(batch, target: batch.rows.first['id'] as String, from: batch.rows.last['id'] as String);
     (wrong['operations'] as List<MemoryRow>).single['text'] = '你的面试已经成功。';
-    final before = store.cards().map((row) => [row['text'], row['row_rev'], row['event_time'], row['plan_state']]).toList();
+    final before = store
+        .cards()
+        .map((row) => [row['text'], row['row_rev'], row['event_time'], row['plan_state']])
+        .toList();
     expect(() => parseMergeProposal(jsonEncode(wrong), batch), throwsFormatException);
     store.releaseMergeBatch(batch, examined: true);
-    expect(store.cards().map((row) => [row['text'], row['row_rev'], row['event_time'], row['plan_state']]).toList(), before);
+    expect(
+      store.cards().map((row) => [row['text'], row['row_rev'], row['event_time'], row['plan_state']]).toList(),
+      before,
+    );
     expect(store.nextMergeBatch(estimateTokens: _estimate), isNull);
   });
 
@@ -450,14 +548,20 @@ void main() {
     pair();
     final a = source('apple-a', '我爱吃酸苹果。');
     final b = source('apple-b', '酸苹果是我爱吃的。');
-    extract([_create(a, '你爱吃酸苹果。', keywords: ['苹果']), _create(b, '酸苹果是你爱吃的。', keywords: ['苹果'])]);
+    extract([
+      _create(a, '你爱吃酸苹果。', keywords: ['苹果']),
+      _create(b, '酸苹果是你爱吃的。', keywords: ['苹果']),
+    ]);
     int oneGroup(String text) => RegExp('"row_rev":').allMatches(text).length * 2500;
     final first = claim(estimate: oneGroup);
     expect(first.rows, hasLength(2));
     expect(store.commitMerge(first, _proposal(first)), isTrue);
     final second = claim(estimate: oneGroup);
     expect(second.rows, hasLength(2));
-    expect(second.rows.map((row) => row['id']).toSet().intersection(first.rows.map((row) => row['id']).toSet()), isEmpty);
+    expect(
+      second.rows.map((row) => row['id']).toSet().intersection(first.rows.map((row) => row['id']).toSet()),
+      isEmpty,
+    );
     expect(store.commitMerge(second, _proposal(second)), isTrue);
     expect(store.nextMergeBatch(estimateTokens: oneGroup), isNull);
   });
@@ -518,9 +622,16 @@ void main() {
     final rows = pair();
     final batch = claim();
     final before = jsonEncode(store.cards());
-    database.execute("CREATE TRIGGER fail_merge BEFORE INSERT ON memory_card_sources BEGIN SELECT RAISE(ABORT,'fixture'); END");
-    expect(() => store.commitMerge(batch, _proposal(batch,
-      target: rows.first['id'] as String, from: rows.last['id'] as String)), throwsA(isA<SqliteException>()));
+    database.execute(
+      "CREATE TRIGGER fail_merge BEFORE INSERT ON memory_card_sources BEGIN SELECT RAISE(ABORT,'fixture'); END",
+    );
+    expect(
+      () => store.commitMerge(
+        batch,
+        _proposal(batch, target: rows.first['id'] as String, from: rows.last['id'] as String),
+      ),
+      throwsA(isA<SqliteException>()),
+    );
     expect(jsonEncode(store.cards()), before);
     expect(store.isMergeBatchCurrent(batch), isTrue);
   });
@@ -529,20 +640,35 @@ void main() {
     const oldStore = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const oldCard = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     final legacy = CompanionMigrationSnapshot.fromJson({
-      'v': 1, 'storeId': oldStore, 'revision': 2, 'memoryRevision': 2,
-      'memories': [{
-        'id': oldCard, 'kind': 'preference', 'text': '你买酸奶只选原味。',
-        'keywords': ['酸奶'], 'pinned': true, 'source': {'kind': 'manual'},
-        'createdAt': 1000, 'updatedAt': 2000, 'expiresAt': null,
-      }],
+      'v': 1,
+      'storeId': oldStore,
+      'revision': 2,
+      'memoryRevision': 2,
+      'memories': [
+        {
+          'id': oldCard,
+          'kind': 'preference',
+          'text': '你买酸奶只选原味。',
+          'keywords': ['酸奶'],
+          'pinned': true,
+          'source': {'kind': 'manual'},
+          'createdAt': 1000,
+          'updatedAt': 2000,
+          'expiresAt': null,
+        },
+      ],
     });
     store.importLegacy(legacy, realityKnownIds: {oldCard});
     final imported = store.cards().single;
     final a = source('a', '酸奶我只买原味。');
     final b = source('b', '我买酸奶还是只选原味。');
     extract([
-      {..._create(a, '你买酸奶只选原味。'), 'op': 'replace', 'target_id': imported['id'],
-        'expected_row_rev': imported['row_rev']},
+      {
+        ..._create(a, '你买酸奶只选原味。'),
+        'op': 'replace',
+        'target_id': imported['id'],
+        'expected_row_rev': imported['row_rev'],
+      },
       _create(b, '酸奶你只买原味的。'),
     ]);
     final batch = claim();
@@ -562,20 +688,33 @@ void main() {
   for (final outcome in ['shown', 'unknown']) {
     test('merging an already $outcome invitation preserves consumption and invalidates the old ticket', () {
       store.initializeInitiative({
-        'v': 2, 'lastGreetingAtMs': null, 'inviteAtMs': <int>[], 'signalAtMs': <int>[],
-        'declinedUntilMs': 0, 'night': null,
+        'v': 2,
+        'lastGreetingAtMs': null,
+        'inviteAtMs': <int>[],
+        'signalAtMs': <int>[],
+        'declinedUntilMs': 0,
+        'night': null,
       });
       MemoryRow invitation(MemoryRow source, String text) => {
         ..._create(source, text, kind: 'episode', keywords: ['修琴']),
-        'followup': {'local_date': '2026-11-20', 'precision': 'day',
-          'wording': '周五可以问我修琴的进展', 'basis': 'explicit_invitation'},
+        'followup': {
+          'local_date': '2026-11-20',
+          'precision': 'day',
+          'wording': '周五可以问我修琴的进展',
+          'basis': 'explicit_invitation',
+        },
       };
       final a = source('invitation-a', '我周五去修琴，周五可以问我修琴的进展。');
       extract([invitation(a, '你周五去修琴。')]);
       final originalCard = store.cards().single;
       final original = store.nextFollowup(nowMs: now)!;
-      final spend = store.reserveInitiative(kind: 'followup', nowMs: now, maxPerDay: 2, gapMs: 0,
-        followupId: original['id'] as String)!;
+      final spend = store.reserveInitiative(
+        kind: 'followup',
+        nowMs: now,
+        maxPerDay: 2,
+        gapMs: 0,
+        followupId: original['id'] as String,
+      )!;
       store.settleInitiative(spend, outcome: outcome);
       final consumed = store.followups().single;
       now += 100;
@@ -586,8 +725,20 @@ void main() {
       final removed = batch.rows.singleWhere((row) => row['id'] == originalCard['id']);
       merge(batch, retained, removed);
       final moved = store.followups().singleWhere((row) => row['id'] == original['id']);
-      for (final field in ['id', 'time_key', 'message_id', 'source_rev', 'invitation', 'said_at_utc',
-        'offset_minutes', 'opens_at_ms', 'expires_at_ms', 'state', 'reason', 'presented_at_ms']) {
+      for (final field in [
+        'id',
+        'time_key',
+        'message_id',
+        'source_rev',
+        'invitation',
+        'said_at_utc',
+        'offset_minutes',
+        'opens_at_ms',
+        'expires_at_ms',
+        'state',
+        'reason',
+        'presented_at_ms',
+      ]) {
         expect(moved[field], consumed[field], reason: field);
       }
       expect(moved['card_id'], retained['id']);
@@ -597,8 +748,10 @@ void main() {
       expect(database.select("SELECT * FROM memory_initiative_spends WHERE state!='released'"), hasLength(1));
       reopen();
       expect(store.nextFollowup(nowMs: now), isNull);
-      expect(store.followups().singleWhere((row) => row['id'] == original['id'])['state'],
-        outcome == 'shown' ? 'asked' : 'maybe_shown');
+      expect(
+        store.followups().singleWhere((row) => row['id'] == original['id'])['state'],
+        outcome == 'shown' ? 'asked' : 'maybe_shown',
+      );
     });
   }
 }

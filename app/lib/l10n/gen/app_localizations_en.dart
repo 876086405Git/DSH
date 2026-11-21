@@ -6267,6 +6267,10 @@ class L10nEn extends L10n {
   String get companionMemoryNoSource => 'This was written by hand, or its original source is no longer available.';
 
   @override
+  String get companionMemoryCleanupUnknown =>
+      'I can\'t confirm all the original messages that should be deleted. Nothing was deleted.';
+
+  @override
   String get companionMemoryTooLong => 'Too long to extract automatically from this version';
 
   @override
@@ -6377,9 +6381,6 @@ class L10nEn extends L10n {
   @override
   String get companionMemoryHostUnsupported =>
       'This host is a bit out of date, so here she can\'t recall what you\'ve talked about. Updating the host fixes it.';
-
-  @override
-  String get companionMemoryFollowup => 'Would you like to talk about that thing you mentioned?';
 
   @override
   String get companionMemoryPostponedDone => 'Okay, let\'s pick it up once you have a new time.';

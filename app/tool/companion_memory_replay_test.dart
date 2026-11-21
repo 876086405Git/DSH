@@ -30,9 +30,9 @@ import '../test/companion/companion_stream_state_test.dart' as stream_state;
 import '../test/companion/companion_widget_memory_test.dart' as widget_memory;
 
 final _offline = CompanionOfflineHttpOverrides();
-final _blocked = throwsA(isA<SocketException>().having(
-  (error) => error.message, 'message', startsWith('offline companion replay'),
-));
+final _blocked = throwsA(
+  isA<SocketException>().having((error) => error.message, 'message', startsWith('offline companion replay')),
+);
 
 Future<void> main() => config.testExecutable(() {
   HttpOverrides.global = _offline;

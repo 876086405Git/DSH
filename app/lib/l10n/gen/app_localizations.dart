@@ -10982,6 +10982,12 @@ abstract class L10n {
   /// **'这条是手写的，或原来的出处已经找不到了。'**
   String get companionMemoryNoSource;
 
+  /// No description provided for @companionMemoryCleanupUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'还不能确认所有该删的原话，这次没有删除。'**
+  String get companionMemoryCleanupUnknown;
+
   /// No description provided for @companionMemoryTooLong.
   ///
   /// In zh, this message translates to:
@@ -11197,12 +11203,6 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'这台主机的版本有点旧，在这里她暂时想不起你们聊过的事。升级主机就好。'**
   String get companionMemoryHostUnsupported;
-
-  /// No description provided for @companionMemoryFollowup.
-  ///
-  /// In zh, this message translates to:
-  /// **'上次提到的这件事，现在想聊聊吗？'**
-  String get companionMemoryFollowup;
 
   /// No description provided for @companionMemoryPostponedDone.
   ///

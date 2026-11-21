@@ -4,7 +4,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
@@ -96,7 +95,12 @@ class _Bridge extends DshConnection {
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
-    if (path == '/api/session/cancel') return json({'ok': true, 'value': {'accepted': true}});
+    if (path == '/api/session/cancel') {
+      return json({
+        'ok': true,
+        'value': {'accepted': true},
+      });
+    }
     revision++;
     return snapshot();
   }
@@ -139,27 +143,47 @@ class _FollowupBridge extends _Bridge {
   int discovery = 0;
 
   @override
-  Future<DshHttpResponse> get(String path, {
-    Map<String, String>? query, Map<String, String>? headers, Duration? timeout,
-    bool followRedirects = true, int? maxResponseBytes,
+  Future<DshHttpResponse> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
   }) async {
     if (path == '/dsh-go/v1/companion/auxiliary') {
       discovery++;
       expect(query, {'sessionId': _session});
-      return json({
-        'v': 1, 'instanceId': 'full-followup-host', 'provider': 'selected-followup-provider',
-        'model': 'selected-followup-model', 'supported': true,
-        'capability': {'noTools': true, 'physicalDispatch': 'unknown',
-          'rawUsage': 'unavailable', 'maxPhysicalRequests': null},
+      return this.json({
+        'v': 1,
+        'instanceId': 'full-followup-host',
+        'provider': 'selected-followup-provider',
+        'model': 'selected-followup-model',
+        'supported': true,
+        'capability': {
+          'noTools': true,
+          'physicalDispatch': 'unknown',
+          'rawUsage': 'unavailable',
+          'maxPhysicalRequests': null,
+        },
       });
     }
-    return super.get(path, query: query, headers: headers, timeout: timeout,
-      followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+    return super.get(
+      path,
+      query: query,
+      headers: headers,
+      timeout: timeout,
+      followRedirects: followRedirects,
+      maxResponseBytes: maxResponseBytes,
+    );
   }
 
   @override
-  Future<DshHttpStreamResponse> postJsonStream(String path, Object? body, {
-    required DshHttpAbort abort, Duration? headerTimeout,
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path,
+    Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
     Duration idleTimeout = const Duration(seconds: 20),
   }) async {
     expect(path, '/dsh-go/v1/companion/auxiliary');
@@ -167,40 +191,98 @@ class _FollowupBridge extends _Bridge {
     posts.add(sent);
     await release.future; // Deliberately late even if the Page cancels meanwhile.
     final frames = [
-      {'type': 'accepted', 'requestId': sent['requestId'], 'instanceId': 'full-followup-host',
-        'provider': 'selected-followup-provider', 'model': 'selected-followup-model'},
-      {'type': 'text', 'requestId': sent['requestId'],
-        'text': jsonEncode({'action': 'line', 'text': _followupLine})},
-      {'type': 'finish', 'requestId': sent['requestId'], 'dispatched': null, 'dispatchAtMs': null,
-        'terminal': 'complete', 'complete': true, 'httpStatus': 200, 'stopReason': null,
-        'usage': {'provider': 'selected-followup-provider', 'model': 'selected-followup-model',
-          'start_usage': null, 'final_usage': null, 'start_event': null, 'final_event': null,
-          'usage_semantics': 'unknown', 'input_uncached': null, 'input_cache_read': null,
-          'input_cache_write': null, 'output_tokens': null, 'terminal': 'complete',
-          'complete': true, 'http_status': 200, 'stop_reason': null,
-          'runtime_normalized_usage': [{'inputTokens': 40, 'outputTokens': 15}],
-          'runtime_normalized_usage_semantics': 'runtime-normalized-events'}},
+      {
+        'type': 'accepted',
+        'requestId': sent['requestId'],
+        'instanceId': 'full-followup-host',
+        'provider': 'selected-followup-provider',
+        'model': 'selected-followup-model',
+      },
+      {
+        'type': 'text',
+        'requestId': sent['requestId'],
+        'text': jsonEncode({'action': 'line', 'text': _followupLine}),
+      },
+      {
+        'type': 'finish',
+        'requestId': sent['requestId'],
+        'dispatched': null,
+        'dispatchAtMs': null,
+        'terminal': 'complete',
+        'complete': true,
+        'httpStatus': 200,
+        'stopReason': null,
+        'usage': {
+          'provider': 'selected-followup-provider',
+          'model': 'selected-followup-model',
+          'start_usage': null,
+          'final_usage': null,
+          'start_event': null,
+          'final_event': null,
+          'usage_semantics': 'unknown',
+          'input_uncached': null,
+          'input_cache_read': null,
+          'input_cache_write': null,
+          'output_tokens': null,
+          'terminal': 'complete',
+          'complete': true,
+          'http_status': 200,
+          'stop_reason': null,
+          'runtime_normalized_usage': [
+            {'inputTokens': 40, 'outputTokens': 15},
+          ],
+          'runtime_normalized_usage_semantics': 'runtime-normalized-events',
+        },
+      },
     ];
-    return DshHttpStreamResponse(200, 'application/x-ndjson', Stream.value(
-      Uint8List.fromList(utf8.encode('${frames.map(jsonEncode).join('\n')}\n'))), () async {
+    return DshHttpStreamResponse(
+      200,
+      'application/x-ndjson',
+      Stream.value(Uint8List.fromList(utf8.encode('${frames.map(jsonEncode).join('\n')}\n'))),
+      () async {
         if (!responseClosed.isCompleted) responseClosed.complete();
-      });
+      },
+    );
   }
 }
 
 void _seedFullFollowup(CompanionMemoryOwner memory) {
-  memory.store.submitMessage(id: 'full-followup-source', sessionId: _session, text: _followupSource,
-    role: 'user', scope: 'real', saidAtUtc: DateTime.utc(2026, 11, 5, 12).millisecondsSinceEpoch, offsetMinutes: 0);
+  memory.store.submitMessage(
+    id: 'full-followup-source',
+    sessionId: _session,
+    text: _followupSource,
+    role: 'user',
+    scope: 'real',
+    saidAtUtc: DateTime.utc(2026, 11, 5, 12).millisecondsSinceEpoch,
+    offsetMinutes: 0,
+  );
   final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-  final proposal = parseExtractionProposal(jsonEncode({
-    'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': ['full-followup-source'],
-    'completion': 'complete', 'operations': [{
-      'op': 'create', 'kind': 'episode', 'text': '我周四打算去面试', 'keywords': ['面试'],
-      'evidence': [{'message_id': 'full-followup-source', 'quote': _followupSource}],
-      'followup': {'local_date': '2026-11-06', 'precision': 'day',
-        'wording': '周五你可以问我面试的进展', 'basis': 'explicit_invitation'},
-    }],
-  }), batch);
+  final proposal = parseExtractionProposal(
+    jsonEncode({
+      'schema_version': 2,
+      'batch_id': batch.id,
+      'covered_message_ids': ['full-followup-source'],
+      'completion': 'complete',
+      'operations': [
+        {
+          'op': 'create',
+          'kind': 'episode',
+          'text': '我周四打算去面试',
+          'keywords': ['面试'],
+          'evidence': [
+            {'message_id': 'full-followup-source', 'quote': _followupSource},
+          ],
+          'followup': {
+            'local_date': '2026-11-06',
+            'precision': 'day',
+            'wording': '周五你可以问我面试的进展',
+            'basis': 'explicit_invitation',
+          },
+        },
+      ],
+    }),
+    batch,
+  );
   expect(memory.store.commitExtraction(batch, proposal), isTrue);
   memory.changed();
 }
@@ -231,10 +313,7 @@ class _Room {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          if (clock != null) ...[
-            companionInitiativeClockProvider.overrideWithValue(clock!),
-            initiativeMemory(clock!),
-          ],
+          if (clock != null) ...[companionInitiativeClockProvider.overrideWithValue(clock!), initiativeMemory(clock!)],
           if (initiative != null)
             companionInitiativeProvider.overrideWith((ref) {
               ref.onDispose(initiative!.dispose);
@@ -321,13 +400,19 @@ class _FollowupObserver extends CompanionInitiative {
     String? followupId,
     Future<bool> Function()? prepare,
   }) {
-    final accepted = super.requestSignal(room, view, candidate,
+    final accepted = super.requestSignal(
+      room,
+      view,
+      candidate,
       isCurrent: isCurrent,
       present: (display) {
         if (followupId != null) presentations++;
         return present(display);
       },
-      hide: hide, nightCareEnabled: nightCareEnabled, followupId: followupId, prepare: prepare,
+      hide: hide,
+      nightCareEnabled: nightCareEnabled,
+      followupId: followupId,
+      prepare: prepare,
     );
     if (accepted && followupId != null) captured.add(candidate);
     return accepted;
@@ -568,94 +653,108 @@ void main() {
   tearDown(() => temporary.deleteSync(recursive: true));
 
   for (final approvalDuringRequest in [false, true]) {
-    testWidgets('full Page drafts its actual followup through the selected auxiliary route, approval=$approvalDuringRequest', (tester) async {
-      await tester.runAsync(() async {
-        final preferences = await SharedPreferences.getInstance();
-        await preferences.setBool('companion_initiative_enabled', true);
-        await preferences.setString('companion_initiative_pace', 'often');
-        await preferences.setString('companion_persona_v1', jsonEncode({
-          'custom': '说话简短温和。', 'callMe': '阿禾',
-        }));
-      });
-      final start = tester.binding.clock.now();
-      CompanionInitiativeClock clock() => CompanionInitiativeClock(
-        wallMs: DateTime.utc(2026, 11, 6, 12).millisecondsSinceEpoch +
-          tester.binding.clock.now().difference(start).inMilliseconds,
-        monoMs: tester.binding.clock.now().difference(start).inMilliseconds,
-      );
-      final bridge = _FollowupBridge();
-      final room = _Room(temporary, client: _Client(bridge), clock: clock);
-      await room.open(tester, seed: _seedFullFollowup);
-      try {
-        for (var i = 0; i < 120 && bridge.posts.isEmpty; i++) {
-          await tester.pump(const Duration(seconds: 1));
-        }
-        expect(bridge.discovery, greaterThan(0));
-        expect(bridge.posts, hasLength(1));
-        final sent = bridge.posts.single;
-        expect(sent['kind'], 'followup');
-        expect(sent['sessionId'], _session);
-        expect(sent['instanceId'], 'full-followup-host');
-        expect(sent['provider'], 'selected-followup-provider');
-        expect(sent['model'], 'selected-followup-model');
-        expect(sent['system'], companionMemoryFollowupPrompt);
-        expect(sent['maxTokens'], 128);
-        final input = jsonDecode(sent['input']! as String) as Map<String, Object?>;
-        expect(input['card'], {'text': '我周四打算去面试'});
-        expect(input['invitation'], {
-          'message_id': 'full-followup-source', 'source_rev': 1,
-          'said_at_utc': '2026-11-05T12:00:00.000Z', 'offset_minutes': 0,
-          'quote': _followupSource,
+    testWidgets(
+      'full Page drafts its actual followup through the selected auxiliary route, approval=$approvalDuringRequest',
+      (tester) async {
+        await tester.runAsync(() async {
+          final preferences = await SharedPreferences.getInstance();
+          await preferences.setBool('companion_initiative_enabled', true);
+          await preferences.setString('companion_initiative_pace', 'often');
+          await preferences.setString('companion_persona_v1', jsonEncode({'custom': '说话简短温和。', 'callMe': '阿禾'}));
         });
-        expect(input['persona'], allOf(contains('说话简短温和。'), contains('阿禾')));
-        expect(input['support'], isEmpty);
-        expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-        final held = room.memory.store.requests().where((row) => row['category'] == 'followup').single;
-        expect(held['state'], 'interrupted');
-        expect(held['sent_at_ms'], isNull);
-        expect(held['uncertain_at_ms'], isNotNull);
-        expect(room.speech(tester), isNot(_followupLine));
-
-        if (approvalDuringRequest) {
-          room.client.events.add(HostEvent.fromFrame({
-            'type': 'waterfall', 'event': 'approval/request', 'eventId': 'followup-approval',
-            'agentId': _session, 'request': {'toolName': 'bash', 'callId': 'followup-command'},
-          }));
-          await flush(tester);
-          expect(room.state.openApproval?.eventId, 'followup-approval');
-        }
-        bridge.release.complete();
-        await settleMixed(tester, bridge.responseClosed.future);
-        await flush(tester);
-        for (var i = 0; i < 20 && room.speech(tester) != _followupLine; i++) {
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-        final receipt = room.memory.store.requests().where((row) => row['category'] == 'followup').single;
-        expect(receipt['provider'], 'selected-followup-provider');
-        expect(receipt['state'], 'interrupted', reason: 'a generic adapter does not prove physical dispatch');
-        expect(receipt['sent_at_ms'], isNull);
-        expect(receipt['uncertain_at_ms'], isNotNull);
-        expect(receipt['estimated_cny'], isNull);
-        expect(receipt['raw_usage'], isNotNull);
-        if (approvalDuringRequest) {
-          expect(room.speech(tester), isNot(_followupLine));
+        final start = tester.binding.clock.now();
+        CompanionInitiativeClock clock() => CompanionInitiativeClock(
+          wallMs:
+              DateTime.utc(2026, 11, 6, 12).millisecondsSinceEpoch +
+              tester.binding.clock.now().difference(start).inMilliseconds,
+          monoMs: tester.binding.clock.now().difference(start).inMilliseconds,
+        );
+        final bridge = _FollowupBridge();
+        final room = _Room(temporary, client: _Client(bridge), clock: clock);
+        await room.open(tester, seed: _seedFullFollowup);
+        try {
+          for (var i = 0; i < 120 && bridge.posts.isEmpty; i++) {
+            await tester.pump(const Duration(seconds: 1));
+          }
+          expect(bridge.discovery, greaterThan(0));
+          expect(bridge.posts, hasLength(1));
+          final sent = bridge.posts.single;
+          expect(sent['kind'], 'followup');
+          expect(sent['sessionId'], _session);
+          expect(sent['instanceId'], 'full-followup-host');
+          expect(sent['provider'], 'selected-followup-provider');
+          expect(sent['model'], 'selected-followup-model');
+          expect(sent['system'], companionMemoryFollowupPrompt);
+          expect(sent['maxTokens'], 128);
+          final input = jsonDecode(sent['input']! as String) as Map<String, Object?>;
+          expect(input['card'], {'text': '我周四打算去面试'});
+          expect(input['invitation'], {
+            'message_id': 'full-followup-source',
+            'source_rev': 1,
+            'said_at_utc': '2026-11-05T12:00:00.000Z',
+            'offset_minutes': 0,
+            'quote': _followupSource,
+          });
+          expect(input['persona'], allOf(contains('说话简短温和。'), contains('阿禾')));
+          expect(input['support'], isEmpty);
           expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-        } else {
-          expect(room.speech(tester), _followupLine);
-          expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-          expect(room.memory.store.nextFollowup(nowMs: clock().wallMs), isNull);
+          final held = room.memory.store.requests().where((row) => row['category'] == 'followup').single;
+          expect(held['state'], 'interrupted');
+          expect(held['sent_at_ms'], isNull);
+          expect(held['uncertain_at_ms'], isNotNull);
+          expect(room.speech(tester), isNot(_followupLine));
+
+          if (approvalDuringRequest) {
+            room.client.events.add(
+              HostEvent.fromFrame({
+                'type': 'waterfall',
+                'event': 'approval/request',
+                'eventId': 'followup-approval',
+                'agentId': _session,
+                'request': {'toolName': 'bash', 'callId': 'followup-command'},
+              }),
+            );
+            await flush(tester);
+            expect(room.state.openApproval?.eventId, 'followup-approval');
+          }
+          bridge.release.complete();
+          await settleMixed(tester, bridge.responseClosed.future);
+          await flush(tester);
+          for (var i = 0; i < 20 && room.speech(tester) != _followupLine; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          final receipt = room.memory.store.requests().where((row) => row['category'] == 'followup').single;
+          expect(receipt['provider'], 'selected-followup-provider');
+          expect(receipt['state'], 'interrupted', reason: 'a generic adapter does not prove physical dispatch');
+          expect(receipt['sent_at_ms'], isNull);
+          expect(receipt['uncertain_at_ms'], isNotNull);
+          expect(receipt['estimated_cny'], isNull);
+          expect(receipt['raw_usage'], isNotNull);
+          if (approvalDuringRequest) {
+            expect(room.speech(tester), isNot(_followupLine));
+            expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+          } else {
+            expect(room.speech(tester), _followupLine);
+            expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
+            expect(room.memory.store.nextFollowup(nowMs: clock().wallMs), isNull);
+          }
+          expect(bridge.posts, hasLength(1));
+          expect(
+            room.state.items.whereType<AssistantChatItem>(),
+            isEmpty,
+            reason: 'auxiliary wording is not a committed ordinary chat turn',
+          );
+        } finally {
+          if (!bridge.release.isCompleted) bridge.release.complete();
+          await room.close(tester);
         }
-        expect(bridge.posts, hasLength(1));
-        expect(room.state.items.whereType<AssistantChatItem>(), isEmpty,
-          reason: 'auxiliary wording is not a committed ordinary chat turn');
-      } finally {
-        if (!bridge.release.isCompleted) bridge.release.complete();
-        await room.close(tester);
-      }
-    });
+      },
+    );
   }
 
-  testWidgets('fixture 4 a composer correction retires a late full reply before speech and last-line writes', (tester) async {
+  testWidgets('fixture 4 a composer correction retires a late full reply before speech and last-line writes', (
+    tester,
+  ) async {
     await tester.runAsync(() async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('companion_voice_enabled', true);
@@ -672,18 +771,29 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voiceChannel, (call) async {
       voiceCalls.add(call);
       if (call.method == 'ready' && !voiceReady.isCompleted) voiceReady.complete();
-      return switch (call.method) {'ready' || 'speak' => true, _ => null};
+      return switch (call.method) {
+        'ready' || 'speak' => true,
+        _ => null,
+      };
     });
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, (call) async {
       final values = Map<String, Object?>.from(call.arguments as Map);
       updates.add(values);
       for (final entry in values.entries) {
-        if (entry.value == null) { native.remove(entry.key); } else { native[entry.key] = entry.value; }
+        if (entry.value == null) {
+          native.remove(entry.key);
+        } else {
+          native[entry.key] = entry.value;
+        }
       }
       final before = controlBefore;
-      if (before != null && (values['memoryControlRevision'] as int? ?? -1) > before &&
-          values.containsKey('line') && values['line'] == null &&
-          values.containsKey('saidAt') && values['saidAt'] == null && !cleared.isCompleted) {
+      if (before != null &&
+          (values['memoryControlRevision'] as int? ?? -1) > before &&
+          values.containsKey('line') &&
+          values['line'] == null &&
+          values.containsKey('saidAt') &&
+          values['saidAt'] == null &&
+          !cleared.isCompleted) {
         cleared.complete();
       }
       return true;
@@ -693,35 +803,62 @@ void main() {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, null);
     });
     final room = _Room(temporary);
-    await room.open(tester, seed: (memory) {
-      const original = '我琴课一直在周四。';
-      memory.store.submitMessage(id: 'lesson-original', sessionId: 'full:local:$_session',
-        text: original, saidAtUtc: _now, offsetMinutes: 0);
-      final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-      final proposal = parseExtractionProposal(jsonEncode({
-        'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': ['lesson-original'],
-        'completion': 'complete', 'operations': [{
-          'op': 'create', 'kind': 'fact', 'text': original, 'keywords': ['琴课'],
-          'evidence': [{'message_id': 'lesson-original', 'quote': original}],
-        }],
-      }), batch);
-      expect(memory.store.commitExtraction(batch, proposal), isTrue);
-      memory.changed();
-    });
+    await room.open(
+      tester,
+      seed: (memory) {
+        const original = '我琴课一直在周四。';
+        memory.store.submitMessage(
+          id: 'lesson-original',
+          sessionId: 'full:local:$_session',
+          text: original,
+          saidAtUtc: _now,
+          offsetMinutes: 0,
+        );
+        final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+        final proposal = parseExtractionProposal(
+          jsonEncode({
+            'schema_version': 2,
+            'batch_id': batch.id,
+            'covered_message_ids': ['lesson-original'],
+            'completion': 'complete',
+            'operations': [
+              {
+                'op': 'create',
+                'kind': 'fact',
+                'text': original,
+                'keywords': ['琴课'],
+                'evidence': [
+                  {'message_id': 'lesson-original', 'quote': original},
+                ],
+              },
+            ],
+          }),
+          batch,
+        );
+        expect(memory.store.commitExtraction(batch, proposal), isTrue);
+        memory.changed();
+      },
+    );
     // Keep the old real ChatController alive after Page unbinds so the late
     // frame demonstrably arrives there, rather than falling into a closed stream.
     final held = room.container.listen(chatProvider(_session), (_, _) {});
     try {
       await settleMixed(tester, voiceReady.future);
       await flush(tester);
-      final wire = _Wire(room)..beginTurn()..start('reply-before-correction');
+      final wire = _Wire(room)
+        ..beginTurn()
+        ..start('reply-before-correction');
       const prefix = '我记得琴课在周四。';
       wire.text(prefix);
       await flush(tester);
       expect(room.state.running, isTrue);
       expect(room.speech(tester), prefix);
-      final oldSpeech = voiceCalls.where((call) => call.method == 'speak' &&
-        (call.arguments as Map)['text'] == prefix).single.arguments as Map;
+      final oldSpeech =
+          voiceCalls
+                  .where((call) => call.method == 'speak' && (call.arguments as Map)['text'] == prefix)
+                  .single
+                  .arguments
+              as Map;
       final stops = voiceCalls.where((call) => call.method == 'stop').length;
       final before = room.memory.store.archive['control_revision']! as int;
       controlBefore = before;
@@ -747,8 +884,11 @@ void main() {
       final mouth = room.commands.where((command) => command.$1 == 'say').length;
       final writes = updates.length;
       // Even a native callback for the already stopped prefix must stay old.
-      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(voiceChannel.name,
-        const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': oldSpeech['id']})), (_) {});
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        voiceChannel.name,
+        const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': oldSpeech['id']})),
+        (_) {},
+      );
       const late = '旧回复晚到，还是周四。';
       wire.text(late);
       wire.finish('stop');
@@ -766,10 +906,16 @@ void main() {
       expect(room.memory.select('琴课在什么时候').block, allOf(contains('周五'), isNot(contains('周四'))));
       // A metadata-only write waits behind the real widget queue without
       // clearing a late line and thereby hiding a broken Page gate.
-      expect(await settleMixed(tester, room.container.read(companionWidgetProvider).update({
-        'memoryArchiveId': room.memory.store.archive['id'],
-        'memoryControlRevision': room.memory.store.archive['control_revision'],
-      })), isTrue);
+      expect(
+        await settleMixed(
+          tester,
+          room.container.read(companionWidgetProvider).update({
+            'memoryArchiveId': room.memory.store.archive['id'],
+            'memoryControlRevision': room.memory.store.archive['control_revision'],
+          }),
+        ),
+        isTrue,
+      );
       expect(updates.skip(writes).where((value) => value['line'] != null), isEmpty);
       expect(native.containsKey('line'), isFalse);
       expect(native.containsKey('saidAt'), isFalse);
@@ -787,6 +933,7 @@ void main() {
       final elapsed = tester.binding.clock.now().difference(started).inMilliseconds;
       return CompanionInitiativeClock(wallMs: wall + elapsed, monoMs: elapsed);
     }
+
     final observer = _FollowupObserver(clock);
     final bridge = _FollowupBridge();
     final room = _Room(temporary, client: _Client(bridge), clock: clock, initiative: observer);
@@ -799,11 +946,15 @@ void main() {
       expect(room.state.running, isFalse);
       // This is the real watch decoder and ChatController approval path. No
       // synthetic Page blocked flag, generating turn, or fake canPresent gate.
-      room.client.events.add(HostEvent.fromFrame({
-        'type': 'waterfall', 'event': 'approval/request',
-        'eventId': 'approval-before-followup', 'agentId': _session,
-        'request': {'toolName': 'web_fetch', 'callId': 'pending-call', 'reason': '要打开一个网页'},
-      }));
+      room.client.events.add(
+        HostEvent.fromFrame({
+          'type': 'waterfall',
+          'event': 'approval/request',
+          'eventId': 'approval-before-followup',
+          'agentId': _session,
+          'request': {'toolName': 'web_fetch', 'callId': 'pending-call', 'reason': '要打开一个网页'},
+        }),
+      );
       await flush(tester);
       expect(room.state.openApproval?.eventId, 'approval-before-followup');
       expect(room.state.running, isFalse);
@@ -835,6 +986,7 @@ void main() {
       final elapsed = tester.binding.clock.now().difference(started).inMilliseconds;
       return CompanionInitiativeClock(wallMs: wall + elapsed, monoMs: elapsed);
     }
+
     final observer = _FollowupObserver(clock);
     final bridge = _FollowupBridge();
     final room = _Room(temporary, client: _Client(bridge), clock: clock, initiative: observer);

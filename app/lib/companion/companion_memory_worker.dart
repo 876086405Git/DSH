@@ -174,7 +174,10 @@ class CompanionMemoryWorker {
       return {
         'message_id': source['id'],
         'source_rev': source['source_rev'],
-        'said_at_utc': DateTime.fromMillisecondsSinceEpoch(source['said_at_utc']! as int, isUtc: true).toIso8601String(),
+        'said_at_utc': DateTime.fromMillisecondsSinceEpoch(
+          source['said_at_utc']! as int,
+          isUtc: true,
+        ).toIso8601String(),
         'offset_minutes': source['offset_minutes'],
         'quote': quote,
       };
@@ -273,7 +276,10 @@ class CompanionMemoryWorker {
     if (route == null || !route.configured) return CompanionMemoryWork.configuration;
     final batch = store.nextBatch(forceTail: forceTail, estimateTokens: estimateTokens);
     if (batch == null) return CompanionMemoryWork.idle;
-    return _runBatch(route, category: 'extract', batchId: batch.id,
+    return _runBatch(
+      route,
+      category: 'extract',
+      batchId: batch.id,
       system: companionMemoryExtractionPrompt,
       input: jsonEncode(extractionInput(batch, processedAtUtc: nowMilliseconds())),
       isCurrent: () => store.isBatchCurrent(batch),
@@ -294,8 +300,12 @@ class CompanionMemoryWorker {
       store.releaseMergeBatch(batch);
       return CompanionMemoryWork.configuration;
     }
-    return _runBatch(route, category: 'organize', batchId: batch.id,
-      system: companionMemoryConsolidationPrompt, input: jsonEncode(consolidationInput(batch)),
+    return _runBatch(
+      route,
+      category: 'organize',
+      batchId: batch.id,
+      system: companionMemoryConsolidationPrompt,
+      input: jsonEncode(consolidationInput(batch)),
       isCurrent: () => store.isMergeBatchCurrent(batch),
       parse: (text) => parseMergeProposal(text, batch),
       commit: (proposal) => store.commitMerge(batch, proposal),
@@ -305,8 +315,12 @@ class CompanionMemoryWorker {
   }
 
   /// Extraction and consolidation share the same physical request lifetime.
-  Future<CompanionMemoryWork> _runBatch(CompanionMemoryTransport route, {
-    required String category, required String batchId, required String system, required String input,
+  Future<CompanionMemoryWork> _runBatch(
+    CompanionMemoryTransport route, {
+    required String category,
+    required String batchId,
+    required String system,
+    required String input,
     required bool Function() isCurrent,
     required MemoryRow Function(String) parse,
     required bool Function(MemoryRow) commit,

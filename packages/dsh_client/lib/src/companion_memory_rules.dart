@@ -16,7 +16,12 @@ class MemoryBatch {
 }
 
 class MemoryMergeBatch {
-  const MemoryMergeBatch({required this.id, required this.controlRevision, required this.memoryRevision, required this.rows});
+  const MemoryMergeBatch({
+    required this.id,
+    required this.controlRevision,
+    required this.memoryRevision,
+    required this.rows,
+  });
 
   final String id;
   final int controlRevision;
@@ -78,16 +83,23 @@ MemoryRow consolidationInput(MemoryMergeBatch batch) => {
   'batch_id': batch.id,
   'scope': 'real',
   'rows': [
-    for (final row in batch.rows) {
-      'id': row['id'], 'row_rev': row['row_rev'], 'kind': row['kind'], 'text': row['text'],
-      'evidence': [
-        for (final source in (row['evidence'] as List<Object?>).cast<MemoryRow>()) {
-          'message_id': source['message_id'], 'source_rev': source['source_rev'],
-          'said_at_utc': _utc(source['said_at_utc'] as int),
-          'offset_minutes': source['offset_minutes'], 'quote': source['quote'],
-        },
-      ],
-    },
+    for (final row in batch.rows)
+      {
+        'id': row['id'],
+        'row_rev': row['row_rev'],
+        'kind': row['kind'],
+        'text': row['text'],
+        'evidence': [
+          for (final source in (row['evidence'] as List<Object?>).cast<MemoryRow>())
+            {
+              'message_id': source['message_id'],
+              'source_rev': source['source_rev'],
+              'said_at_utc': _utc(source['said_at_utc'] as int),
+              'offset_minutes': source['offset_minutes'],
+              'quote': source['quote'],
+            },
+        ],
+      },
   ],
 };
 
@@ -117,16 +129,22 @@ List<List<MemoryRow>> memoryMergeGroups(List<MemoryRow> rows) {
   final texts = [for (final row in rows) normalizeMemoryText(row['text'] as String)];
   final words = [
     for (final row in rows)
-      _keywords(row).where((word) => (row['evidence'] as List<Object?>).cast<MemoryRow>().any(
-        (proof) => _containsTerm(normalizeMemoryText(proof['quote'] as String), word))).toSet(),
+      _keywords(row)
+          .where(
+            (word) => (row['evidence'] as List<Object?>).cast<MemoryRow>().any(
+              (proof) => _containsTerm(normalizeMemoryText(proof['quote'] as String), word),
+            ),
+          )
+          .toSet(),
   ];
   bool related(int left, int right) {
     if (!sameMemoryMergeConditions(rows[left], rows[right])) return false;
     return texts[left] == texts[right] ||
-      (_searchable(texts[left]) && _containsTerm(texts[right], texts[left])) ||
-      (_searchable(texts[right]) && _containsTerm(texts[left], texts[right])) ||
-      words[left].any(words[right].contains);
+        (_searchable(texts[left]) && _containsTerm(texts[right], texts[left])) ||
+        (_searchable(texts[right]) && _containsTerm(texts[left], texts[right])) ||
+        words[left].any(words[right].contains);
   }
+
   final seen = <int>{};
   final groups = <List<MemoryRow>>[];
   for (var start = 0; start < rows.length; start++) {
@@ -151,8 +169,10 @@ List<List<MemoryRow>> memoryMergeGroups(List<MemoryRow> rows) {
 MemoryRow parseMergeProposal(String raw, MemoryMergeBatch batch) {
   final proposal = _object(jsonDecode(raw));
   _fields(proposal, const ['schema_version', 'batch_id', 'operations', 'completion']);
-  if (proposal['schema_version'] is! int || proposal['schema_version'] != 2 ||
-      proposal['batch_id'] != batch.id || proposal['completion'] != 'complete') {
+  if (proposal['schema_version'] is! int ||
+      proposal['schema_version'] != 2 ||
+      proposal['batch_id'] != batch.id ||
+      proposal['completion'] != 'complete') {
     throw const FormatException('Invalid consolidation envelope');
   }
   final rows = {for (final row in batch.rows) row['id']: row};
@@ -167,10 +187,16 @@ MemoryRow parseMergeProposal(String raw, MemoryMergeBatch batch) {
     _fields(origin, const ['id', 'expected_row_rev']);
     final target = rows[operation['target_id']];
     final source = rows[origin['id']];
-    if (target == null || source == null || operation['expected_row_rev'] is! int ||
-        operation['expected_row_rev'] != target['row_rev'] || origin['expected_row_rev'] is! int ||
-        origin['expected_row_rev'] != source['row_rev'] || !used.add(target['id']) || !used.add(source['id']) ||
-        operation['text'] != target['text'] || !sameMemoryMergeConditions(target, source)) {
+    if (target == null ||
+        source == null ||
+        operation['expected_row_rev'] is! int ||
+        operation['expected_row_rev'] != target['row_rev'] ||
+        origin['expected_row_rev'] is! int ||
+        origin['expected_row_rev'] != source['row_rev'] ||
+        !used.add(target['id']) ||
+        !used.add(source['id']) ||
+        operation['text'] != target['text'] ||
+        !sameMemoryMergeConditions(target, source)) {
       throw const FormatException('Invalid merge rows, revisions or retained text');
     }
     final targetEvidence = (target['evidence'] as List<Object?>).cast<MemoryRow>();
@@ -180,7 +206,8 @@ MemoryRow parseMergeProposal(String raw, MemoryMergeBatch batch) {
     for (final value in _list(operation['evidence'])) {
       final reference = _object(value);
       _fields(reference, const ['message_id', 'quote']);
-      bool matches(MemoryRow proof) => proof['message_id'] == reference['message_id'] && proof['quote'] == reference['quote'];
+      bool matches(MemoryRow proof) =>
+          proof['message_id'] == reference['message_id'] && proof['quote'] == reference['quote'];
       final targetMatch = targetEvidence.any(matches);
       final sourceMatch = sourceEvidence.any(matches);
       if (!targetMatch && !sourceMatch) throw const FormatException('Merge evidence was not supplied by either row');
@@ -662,6 +689,7 @@ final _followupAsk = RegExp(
   r'(?:上午|下午|晚上)?)|(到时|到时候|过后|事后|结束后))?'
   r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(?:我)?',
 );
+
 /// A small literal invitation grammar. Unsupported language remains waiting
 /// or has no opportunity; a model's explicit_invitation label is not authority.
 /// Source and card storage eligibility are checked by the caller separately.

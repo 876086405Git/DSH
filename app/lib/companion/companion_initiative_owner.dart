@@ -552,11 +552,7 @@ class CompanionInitiative {
     }
   }
 
-  void _prepare(
-    CompanionInitiativeController controller,
-    CompanionInitiativeTicket ticket,
-    _SignalRequest request,
-  ) {
+  void _prepare(CompanionInitiativeController controller, CompanionInitiativeTicket ticket, _SignalRequest request) {
     request.preparing = true;
     unawaited(() async {
       var ready = false;

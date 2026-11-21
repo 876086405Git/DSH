@@ -78,7 +78,9 @@ void main() {
   });
   tearDown(() => _memory?.close());
 
-  testWidgets('B03 preparation waits for the real quiet offer and reserves only after a fresh observation', (tester) async {
+  testWidgets('B03 preparation waits for the real quiet offer and reserves only after a fresh observation', (
+    tester,
+  ) async {
     final clock = Clock();
     final owner = await make(tester, clock);
     final room = Room();

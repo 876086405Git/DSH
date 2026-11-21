@@ -5909,6 +5909,9 @@ class L10nZh extends L10n {
   String get companionMemoryNoSource => '这条是手写的，或原来的出处已经找不到了。';
 
   @override
+  String get companionMemoryCleanupUnknown => '还不能确认所有该删的原话，这次没有删除。';
+
+  @override
   String get companionMemoryTooLong => '原话太长，这一版未自动提取';
 
   @override
@@ -6015,9 +6018,6 @@ class L10nZh extends L10n {
 
   @override
   String get companionMemoryHostUnsupported => '这台主机的版本有点旧，在这里她暂时想不起你们聊过的事。升级主机就好。';
-
-  @override
-  String get companionMemoryFollowup => '上次提到的这件事，现在想聊聊吗？';
 
   @override
   String get companionMemoryPostponedDone => '好，那等你定了新时间再说。';
