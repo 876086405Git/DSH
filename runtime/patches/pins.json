@@ -24,6 +24,18 @@
         }
       }
     },
+    "companion-auxiliary-single-request.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "b9476975c7dc365cc065694d2658715eedaa2bfbfce4fce50b6d6a7d620aa809",
+          "before": "0ace65d8cf477ebaeaeaaf3af7080ea4695d46f5cc8a34c7f92d5107715e08a9"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "after": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1",
+          "before": "a800e1c863e7d64f2fee292676b6e96c2184b8d6c73ffbd56a5fc89101893aaa"
+        }
+      }
+    },
     "companion-phone-memory-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
@@ -2524,7 +2536,8 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
-      "companion-phone-memory-request.diff"
+      "companion-phone-memory-request.diff",
+      "companion-auxiliary-single-request.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2682,6 +2695,7 @@
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
       "companion-phone-memory-request.diff",
+      "companion-auxiliary-single-request.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
