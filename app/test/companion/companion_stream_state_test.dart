@@ -1292,7 +1292,7 @@ void main() {
         final old = tester.widget<ApprovalCard>(find.byType(ApprovalCard));
         expect(old.request.sessionId, _notesAgent);
         expect(old.request.eventId, 'gateway-E1');
-        expect(find.text('继续尝试原任务'), findsNothing);
+        expect(find.text('让电脑接着做'), findsNothing);
         expect(target.callId, 'call-E1');
         expect(room.memory.store.hostTask(id)!['source_session_id'], 'full:$hostKey');
         expect(room.memory.store.hostTask(id)!['host_session_id'], _session);
@@ -1311,7 +1311,7 @@ void main() {
         expect(find.byType(ApprovalCard), findsNothing);
 
         hostSnapshot('E2', 2);
-        await tester.tap(find.byTooltip('重新核对'));
+        await tester.tap(find.byTooltip('刷新'));
         await settleMixed(
           tester,
           room.memory.hostTasks.run(room.memory.store.hostTask(id)!, client: client, hostKey: hostKey),
@@ -1361,7 +1361,7 @@ void main() {
           // a durable task or that deletion was exercised here.
           final target = tester.widget<CompanionAsk>(find.byType(CompanionAsk)).approvalTarget!;
           bridge.taskMissing = true;
-          await tester.tap(find.byTooltip('重新核对'));
+          await tester.tap(find.byTooltip('刷新'));
           await settleMixed(
             tester,
             room.memory.hostTasks.run(room.memory.store.hostTask(id)!, client: client, hostKey: hostKey),

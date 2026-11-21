@@ -739,7 +739,7 @@ void main() {
           await settleMixed(tester, clockRead.future);
           if (scenario == 'source-failure') {
             await tester.pumpAndSettle();
-            expect(find.text('这次处理没能核清，请查看这件事的原记录；不会另建一项重做。'), findsOneWidget);
+            expect(find.text('刚才没办成，这件事还在，等会儿再试试？'), findsOneWidget);
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             expect(memory.store.messages(), isEmpty);
             expect(memory.store.tasks(), isEmpty);
@@ -776,7 +776,7 @@ void main() {
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             await tester.tap(find.byIcon(AppIcons.send).last);
             await tester.pumpAndSettle();
-            expect(find.text('想取消哪一项笔记整理？请到事情列表里选它。'), findsOneWidget);
+            expect(find.text('想撤哪一件整理？去「交代的事」里点一下。'), findsOneWidget);
           }
           releaseBind.complete();
           if (scenario == 'leave-after-acceptance') {
@@ -823,18 +823,18 @@ void main() {
             expect(task['cancel_requested'], 0);
             expect(task['directory_labels'], {'source': '/实际笔记', 'output': '/实际笔记'});
             if (scenario == 'accepted') {
-              expect(find.text('查看这件事'), findsOneWidget);
-              await tester.tap(find.text('查看这件事'));
+              expect(find.text('看看这件事'), findsOneWidget);
+              await tester.tap(find.text('看看这件事'));
               await _notesVisible(tester, find.byType(CompanionTasksPage));
               await settleMixed(tester, memory.lastReceipt);
               await tester.pump();
               expect(find.byType(CompanionTasksPage), findsOneWidget);
-              expect(find.text('笔记目录：/实际笔记'), findsOneWidget);
-              expect(find.textContaining('目前无法可靠执行这一条件'), findsOneWidget);
-              expect(find.text('继续尝试原任务'), findsNothing);
+              expect(find.text('笔记在：/实际笔记'), findsOneWidget);
+              expect(find.textContaining('没法确定你离没离开'), findsOneWidget);
+              expect(find.text('让电脑接着做'), findsNothing);
             } else {
-              expect(find.text('查看这件事'), findsNothing);
-              expect(find.text('电脑已接下，等待后续结果。'), findsNothing);
+              expect(find.text('看看这件事'), findsNothing);
+              expect(find.text('电脑接手了，正在整理。'), findsNothing);
               expect(find.textContaining('2026-11-21-待办.md'), findsNothing);
               expect(memory.store.tasks(sourceSessionId: memory.store.lightSessionId), isEmpty);
             }
@@ -975,7 +975,7 @@ void main() {
           await settleMixed(tester, clockRead.future);
           if (rejectSource) {
             await tester.pumpAndSettle();
-            expect(find.text('这次约定没保存好，原输入还在。'), findsOneWidget);
+            expect(find.text('刚才没记下来，你写的还在，再试一次？'), findsOneWidget);
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             expect(memory.store.messages(), isEmpty);
             expect(memory.store.tasks(), isEmpty);
@@ -1001,7 +1001,7 @@ void main() {
             expect(posts.where((request) => request.url.toString() == companionLookupSearchEndpoint), hasLength(1));
             expect(posts.where((request) => request.url.toString() == companionLookupFetchEndpoint), hasLength(1));
             final postsBeforeOpening = posts.length;
-            await tester.tap(find.text('查看来源 · 青桥美术馆'));
+            await tester.tap(find.text('看看出处 · 青桥美术馆'));
             await tester.pumpAndSettle();
             expect(find.byType(CompanionTasksPage), findsOneWidget);
             expect(find.text('2026-11-21 Asia/Shanghai'), findsOneWidget);
@@ -1009,11 +1009,8 @@ void main() {
             final link = find.widgetWithText(TextButton, 'https://museum.example/notice');
             expect(link, findsOneWidget);
             expect(tester.widget<TextButton>(link).onPressed, isNotNull);
-            await tester.ensureVisible(find.text('费用与用量'));
-            await tester.tap(find.text('费用与用量'));
-            await tester.pumpAndSettle();
-            expect(find.textContaining('¥0.010'), findsOneWidget);
-            expect(find.textContaining('问号表示未报告'), findsOneWidget);
+            expect(find.byType(ExpansionTile), findsNothing);
+            expect(find.textContaining('¥'), findsNothing);
             expect(
               posts,
               hasLength(postsBeforeOpening),
@@ -1390,7 +1387,7 @@ void main() {
             expect(memory.store.tasks(), isEmpty);
             expect(calls.where((call) => call.method == 'resolve' || call.method == 'wake'), isEmpty);
             expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
-            expect(find.text('这次约定没保存好，原输入还在。'), findsOneWidget);
+            expect(find.text('刚才没记下来，你写的还在，再试一次？'), findsOneWidget);
           } else {
             await settleMixed(tester, twoWakes.future);
             await settleMixed(tester, memory.lastReceipt);
@@ -1408,7 +1405,7 @@ void main() {
             expect(waiting['state'], 'waiting');
             expect(waiting['wait_reason'], 'notifications_disabled');
             expect(memory.store.taskReceipts(waiting['task_id']! as String).single['outcome'], 'not_performed');
-            expect(find.text('带钥匙：这条提醒设好了。\n带证件：通知没有打开，这条提醒还没设好。'), findsOneWidget);
+            expect(find.text('带钥匙：设好了，到点我叫你。\n带证件：通知没开，这条还没设上。去系统设置里打开通知就好。'), findsOneWidget);
           }
           expect(posts, 0);
         });

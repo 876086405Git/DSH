@@ -281,9 +281,9 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text(missing ? '现在还无法核对这台手机的提醒安排。' : '这条旧安排没有在当前安装中接管，不能在这里修改或撤销。'), findsOneWidget);
-        expect(find.text('原记录显示，这条提醒曾经登记成功。'), findsOneWidget);
-        expect(find.text('这条提醒设好了。'), findsNothing);
+        expect(find.text(missing ? '现在看不到手机上的提醒，等会儿再看看？' : '这条不是在这台手机上设的，我在这儿改不了也撤不了。'), findsOneWidget);
+        expect(find.text('之前是设好过的。'), findsOneWidget);
+        expect(find.text('设好了，到点我叫你。'), findsNothing);
         expect(find.byType(OutlinedButton), findsNothing);
         await tester.tap(find.byIcon(AppIcons.refresh));
         await tester.pumpAndSettle();
@@ -324,8 +324,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('已经请求停下，但还没确认全部停成。'), findsOneWidget);
-    expect(find.text('这条提醒可能已经安排，我还没核清。'), findsNothing);
+    expect(find.text('我在撤了，但不太确定撤干净没；要是到点还响，别理它就好。'), findsOneWidget);
+    expect(find.text('这条提醒我不太确定设上没，你看一眼系统闹钟？'), findsNothing);
     expect(find.byType(OutlinedButton), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
@@ -420,14 +420,6 @@ void main() {
       expect(
         find.text(l10n.companionReminderUnknownNotification),
         scenario == 'old_skipped' || scenario == 'old_active_observed' ? findsNothing : findsOneWidget,
-      );
-      expect(
-        find.text(l10n.companionReminderSubmittedNotification),
-        scenario == 'old_unknown_new_returned' ? findsOneWidget : findsNothing,
-      );
-      expect(
-        find.text(l10n.companionReminderOpened),
-        scenario == 'old_opened_new_unknown' ? findsOneWidget : findsNothing,
       );
       expect(store.taskReceipts(first['task_id']! as String), before);
       expect(calls.where((call) => call.method == 'wake' || call.method == 'resolve'), isEmpty);

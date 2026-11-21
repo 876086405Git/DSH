@@ -181,18 +181,18 @@ void main() {
         };
         await open(tester, id);
         try {
-          expect(find.text('后续整理已停止，此前生成的文件保留。'), findsOneWidget);
-          expect(find.text('版本 1'), findsOneWidget);
-          expect(find.text('笔记目录：/本人选的笔记'), findsOneWidget);
-          expect(find.text('输出目录：/本人选的输出'), findsOneWidget);
-          expect(find.text('继续尝试原任务'), findsNothing);
-          await tester.ensureVisible(find.text('打开原产物'));
-          await tester.tap(find.text('打开原产物'));
+          expect(find.text('好，不整理了，已经写好的文件还在。'), findsOneWidget);
+          expect(find.textContaining('版本'), findsNothing);
+          expect(find.text('笔记在：/本人选的笔记'), findsOneWidget);
+          expect(find.text('存到：/本人选的输出'), findsOneWidget);
+          expect(find.text('让电脑接着做'), findsNothing);
+          await tester.ensureVisible(find.text('看看这页待办'));
+          await tester.tap(find.text('看看这页待办'));
           final expected = switch (status) {
             'available' => '# 原任务产物\n- 核对材料',
-            'missing' => '原产物已找不到；没有自动重新生成。',
-            'changed' => '原产物已改变，不能把现内容当作原结果。',
-            _ => '原产物目前无法核读；保留原记录。',
+            'missing' => '这个文件找不到了，我没重新生成。',
+            'changed' => '这个文件后来被改过，已经不是我当时写的样子了。',
+            _ => '这个文件现在打不开。',
           };
           for (var i = 0; i < 200 && find.text(expected).evaluate().isEmpty; i++) {
             await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
@@ -232,8 +232,8 @@ void main() {
     try {
       expect(peer.calls.map((call) => call.method), ['GET']);
       expect(memory.store.hostTask(id)!['state'], 'unknown');
-      await tester.ensureVisible(find.text('补送原约定（同一任务）'));
-      await tester.tap(find.text('补送原约定（同一任务）'));
+      await tester.ensureVisible(find.text('再交给电脑一次'));
+      await tester.tap(find.text('再交给电脑一次'));
       await settleMixed(tester, memory.settled);
       await tester.pumpAndSettle();
       expect(peer.calls.map((call) => call.method), ['GET', 'GET', 'POST']);
@@ -242,7 +242,7 @@ void main() {
       expect(memory.store.hostTaskCommands(id), hasLength(1));
       expect(memory.store.hostTask(id)!['task_rev'], 1);
       expect(((memory.store.hostTask(id)!['agreement']! as Map)['args']! as Map)['localDate'], '2026-11-21');
-      expect(find.text('电脑已接下，等待后续结果。'), findsOneWidget);
+      expect(find.text('电脑接手了，正在整理。'), findsOneWidget);
     } finally {
       await close(tester);
     }
@@ -267,12 +267,12 @@ void main() {
       await open(tester, id);
       try {
         expect(peer.calls.map((call) => call.method), ['GET']);
-        expect(find.text('补送原约定（同一任务）'), findsNothing);
+        expect(find.text('再交给电脑一次'), findsNothing);
         if (state == 'unknown') {
-          expect(find.text('继续尝试原任务'), findsNothing);
+          expect(find.text('让电脑接着做'), findsNothing);
         } else {
-          await tester.ensureVisible(find.text('继续尝试原任务'));
-          await tester.tap(find.text('继续尝试原任务'));
+          await tester.ensureVisible(find.text('让电脑接着做'));
+          await tester.tap(find.text('让电脑接着做'));
           await settleMixed(tester, memory.settled);
           await tester.pumpAndSettle();
           expect(peer.calls.map((call) => call.method), ['GET', 'GET', 'POST']);
@@ -288,76 +288,70 @@ void main() {
   }
 
   for (final completed in [false, true]) {
-    testWidgets(
-      'F task page uses one raw model usage observation and leaves unavailable fields unknown: completion=$completed',
-      (tester) async {
-        final create = command();
-        final id = create['taskId']! as String;
-        final snapshot = notesSnapshot(
-          create,
-          state: 'unknown',
-          steps: [
-            {
-              'taskRev': 1,
-              'stepKey': 'model',
-              'attemptId': 'actual-model-step',
-              'state': completed ? 'done' : 'unknown',
-              'startedAtMs': _now,
-              'finishedAtMs': completed ? _now + 1 : null,
-              'reason': completed ? null : 'receipt_unknown',
-              'result': {
-                'observations': [
-                  {
-                    'type': 'model-finish',
-                    'usage': {
-                      'input_uncached': 11,
-                      'input_cache_read': null,
-                      'input_cache_write': null,
-                      'output_tokens': 7,
-                      'runtime_normalized_usage': [
-                        {'inputTokens': 9999, 'outputTokens': 8888},
-                      ],
-                    },
+    testWidgets('F task page keeps step and model usage records off the page: completion=$completed', (tester) async {
+      final create = command();
+      final id = create['taskId']! as String;
+      final snapshot = notesSnapshot(
+        create,
+        state: 'unknown',
+        steps: [
+          {
+            'taskRev': 1,
+            'stepKey': 'model',
+            'attemptId': 'actual-model-step',
+            'state': completed ? 'done' : 'unknown',
+            'startedAtMs': _now,
+            'finishedAtMs': completed ? _now + 1 : null,
+            'reason': completed ? null : 'receipt_unknown',
+            'result': {
+              'observations': [
+                {
+                  'type': 'model-finish',
+                  'usage': {
+                    'input_uncached': 11,
+                    'input_cache_read': null,
+                    'input_cache_write': null,
+                    'output_tokens': 7,
+                    'runtime_normalized_usage': [
+                      {'inputTokens': 9999, 'outputTokens': 8888},
+                    ],
                   },
-                ],
-                if (completed)
-                  'completion': {
-                    'sourceCount': 2,
-                    'itemCount': 1,
-                    'inputBudget': {'estimatedTokens': 900},
-                    'usage': {
-                      'input_uncached': 11,
-                      'input_cache_read': null,
-                      'input_cache_write': null,
-                      'output_tokens': 7,
-                      'start_usage': {'input_tokens': 11},
-                      'final_usage': {'output_tokens': 7},
-                      'runtime_normalized_usage': [
-                        {'inputTokens': 9999, 'outputTokens': 8888},
-                      ],
-                    },
+                },
+              ],
+              if (completed)
+                'completion': {
+                  'sourceCount': 2,
+                  'itemCount': 1,
+                  'inputBudget': {'estimatedTokens': 900},
+                  'usage': {
+                    'input_uncached': 11,
+                    'input_cache_read': null,
+                    'input_cache_write': null,
+                    'output_tokens': 7,
+                    'start_usage': {'input_tokens': 11},
+                    'final_usage': {'output_tokens': 7},
+                    'runtime_normalized_usage': [
+                      {'inputTokens': 9999, 'outputTokens': 8888},
+                    ],
                   },
-              },
+                },
             },
-          ],
-        );
-        peer.respond = (request, _) => NotesPeer.json(request, snapshot);
-        await open(tester, id);
-        try {
-          await tester.ensureVisible(find.text('各版本步骤与用量'));
-          await tester.tap(find.text('各版本步骤与用量'));
-          await tester.pumpAndSettle();
-          expect(find.text('这一版内容列出 1 项待办；是否已保存以产物记录为准。'), completed ? findsOneWidget : findsNothing);
-          expect(find.text('答案用量：未缓存输入 11，缓存读取 ?，缓存写入 ?，输出 7；问号表示未报告。'), findsOneWidget);
-          expect(find.textContaining('9999'), findsNothing);
-          expect(find.textContaining('8888'), findsNothing);
-          expect(find.textContaining('未缓存输入 22'), findsNothing);
-          expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
-        } finally {
-          await close(tester);
-        }
-      },
-    );
+          },
+        ],
+      );
+      peer.respond = (request, _) => NotesPeer.json(request, snapshot);
+      await open(tester, id);
+      try {
+        expect(find.text('电脑那边现在什么情况，我还不太清楚。'), findsOneWidget);
+        expect(find.byType(ExpansionTile), findsNothing);
+        expect(find.textContaining('9999'), findsNothing);
+        expect(find.textContaining('8888'), findsNothing);
+        expect(find.textContaining('用量'), findsNothing);
+        expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
+      } finally {
+        await close(tester);
+      }
+    });
   }
 
   for (final operation in ['amend', 'cancel']) {
@@ -413,14 +407,14 @@ void main() {
       await open(tester, id);
       try {
         if (operation == 'amend') {
-          await tester.ensureVisible(find.text('修改约定'));
-          await tester.tap(find.text('修改约定'));
+          await tester.ensureVisible(find.text('改一下'));
+          await tester.tap(find.text('改一下'));
           await tester.pumpAndSettle();
           await tester.enterText(find.byType(TextFormField).at(1), '新清单.md');
           await tester.tap(find.widgetWithText(FilledButton, '保存'));
         } else {
-          await tester.ensureVisible(find.text('取消后续整理'));
-          await tester.tap(find.text('取消后续整理'));
+          await tester.ensureVisible(find.text('不用整理了'));
+          await tester.tap(find.text('不用整理了'));
         }
         await settleMixed(tester, returned.future);
         await settleMixed(tester, memory.settled);
@@ -459,12 +453,12 @@ void main() {
       await open(tester, id);
       try {
         final expected = switch (reason) {
-          'no_matching_inputs' => '没有找到该日修改的本层笔记，这一版没有新建待办页。',
-          'output_exists' => '同名文件已经在那儿，没有覆盖。可以修改约定换个新文件名。',
-          _ => '符合条件的本层笔记超过 20 份。请改选更小的目录或另拆一批。',
+          'no_matching_inputs' => '那天这个文件夹里没有改过的笔记，所以没写待办。',
+          'output_exists' => '已经有同名文件了，我没覆盖它。改个新文件名就好。',
+          _ => '符合的笔记超过 20 份，有点多。换个小点的文件夹，或者分几次来？',
         };
         expect(find.text(expected), findsOneWidget);
-        expect(find.text('打开原产物'), findsNothing);
+        expect(find.text('看看这页待办'), findsNothing);
         expect(peer.calls.map((call) => call.method), ['GET']);
         expect((memory.store.hostTask(id)!['snapshot']! as Map)['artifacts'], isEmpty);
       } finally {
@@ -516,14 +510,14 @@ void main() {
           expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 1);
           await open(tester, id, connected: false);
           if (operation == 'amend') {
-            await tester.ensureVisible(find.text('修改约定'));
-            await tester.tap(find.text('修改约定'));
+            await tester.ensureVisible(find.text('改一下'));
+            await tester.tap(find.text('改一下'));
             await tester.pumpAndSettle();
             await tester.enterText(find.byType(TextFormField).at(1), '离线修改.md');
             await tester.tap(find.widgetWithText(FilledButton, '保存'));
           } else {
-            await tester.ensureVisible(find.text('取消后续整理'));
-            await tester.tap(find.text('取消后续整理'));
+            await tester.ensureVisible(find.text('不用整理了'));
+            await tester.tap(find.text('不用整理了'));
           }
           await tester.pumpAndSettle();
           expect(memory.store.hostTask(id)!['task_rev'], 2);
@@ -563,8 +557,8 @@ void main() {
             expect(peer.calls.map((call) => call.method), ['GET', 'GET']);
             expect(memory.store.hostTask(id)!['task_rev'], 2);
             expect((memory.store.hostTask(id)!['snapshot']! as Map)['taskRev'], 1);
-            final label = operation == 'cancel' ? '补送已保存的取消' : '补送已保存的修改';
-            expect(find.text('继续尝试原任务'), findsNothing);
+            final label = operation == 'cancel' ? '再跟电脑说一次不做了' : '再把改动发给电脑';
+            expect(find.text('让电脑接着做'), findsNothing);
             await tester.ensureVisible(find.text(label));
             await tester.tap(find.text(label));
             await settleMixed(tester, memory.settled);

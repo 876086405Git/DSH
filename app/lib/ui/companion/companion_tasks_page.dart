@@ -28,6 +28,14 @@ import '../workspace/directory_picker.dart';
 import 'companion_ask.dart';
 import 'companion_memory_page.dart' show companionMemoryId;
 
+/// 「11月21日 08:00」 in this phone's local time; the year only when it is not this one.
+String _moment(L10n l10n, int epochMs) {
+  final at = DateTime.fromMillisecondsSinceEpoch(epochMs).toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  final day = at.year == DateTime.now().year ? l10n.monthDay(at) : '${at.year}-${two(at.month)}-${two(at.day)}';
+  return '$day ${two(at.hour)}:${two(at.minute)}';
+}
+
 String companionReminderFailure(L10n l10n, Object error) {
   if (error is PlatformException && error.code == 'reminder_executor_changed') {
     return l10n.companionReminderNotHere;
@@ -543,10 +551,6 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final l10n = context.l10n;
     final receipts = _memory!.store.taskReceipts(task['task_id']! as String);
     final notification = receipts.where((receipt) => receipt['step_key'] == 'notification').toList();
-    final opened = notification.any((receipt) => receipt['event_kind'] == 'opened');
-    final submitted = notification.any(
-      (receipt) => receipt['event_kind'] == 'returned' && receipt['outcome'] == 'succeeded',
-    );
     // Another revision's returned/opened receipt cannot settle this claim.
     // Active observations use their own attempt ID but the same revision/tag.
     final unknown = notification.any(
@@ -587,8 +591,6 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
           if (!_owns(task) && task['state'] == 'done') Text(l10n.companionReminderPastRegistration),
           if (widget.openedRevision != null && widget.openedRevision != task['task_rev'])
             Text(l10n.companionTaskChanged),
-          if (opened) Text(l10n.companionReminderOpened),
-          if (submitted) Text(l10n.companionReminderSubmittedNotification),
           if (unknown) Text(l10n.companionReminderUnknownNotification),
           const SizedBox(height: 16),
           Wrap(
@@ -979,8 +981,6 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final snapshot = task['snapshot'] as Map?;
     final approval = snapshot?['approval'];
     final artifacts = (snapshot?['artifacts'] as List?) ?? const [];
-    final steps = (snapshot?['steps'] as List?) ?? const [];
-    final budget = snapshot?['budget'] as Map?;
     final pendingCommand =
         task['host_store_id'] != null &&
         const ['amend', 'cancel'].contains(task['operation']) &&
@@ -998,18 +998,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
           if (labels['output'] case final String path) Text(l10n.companionNotesOutputDirectory(path)),
           Text(agreement['afterExit'] == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue),
           if (agreement['allowQueue'] == true) Text(l10n.companionNotesAllowQueue),
-          if (agreement['deadlineAtMs'] case final int at)
-            Text(l10n.companionNotesDue(DateTime.fromMillisecondsSinceEpoch(at, isUtc: true).toIso8601String())),
+          if (agreement['deadlineAtMs'] case final int at) Text(l10n.companionNotesDue(_moment(l10n, at))),
           const SizedBox(height: 8),
           Text(companionNotesLine(l10n, task)),
           if (!_notesHostHere(task)) Text(l10n.companionNotesOriginalHost),
-          if (budget != null)
-            Text(
-              l10n.companionNotesBudget(
-                ((budget['spentMs']! as int) / 1000).toStringAsFixed(1),
-                ((budget['heldMs']! as int) / 1000).toStringAsFixed(1),
-              ),
-            ),
           if (approval is Map && _notesApprovalCurrent(task, approval)) ...[
             Text(l10n.companionNotesApproval),
             CompanionAsk(
@@ -1024,24 +1016,12 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
           ],
           for (final value in artifacts) ...[
             const SizedBox(height: 16),
-            Text(l10n.companionNotesArtifactRevision('${(value as Map)['taskRev']}')),
-            Text(value['relativePath']! as String),
-            Text(
-              l10n.companionNotesArtifactDetails(
-                '${value['sourceCount']}',
-                DateTime.fromMillisecondsSinceEpoch(value['verifiedAtMs']! as int, isUtc: true).toIso8601String(),
-              ),
-            ),
+            Text((value as Map)['relativePath']! as String),
             OutlinedButton(
               onPressed: _busy || !_notesHostHere(task) ? null : () => _openNotesArtifact(task, value),
               child: Text(l10n.companionNotesOpenFile),
             ),
           ],
-          if (steps.isNotEmpty)
-            ExpansionTile(
-              title: Text(l10n.companionNotesSteps),
-              children: [for (final value in steps) _notesStep(Map<String, Object?>.from(value as Map))],
-            ),
           if (_notesHostHere(task) && pendingCommand)
             OutlinedButton(
               onPressed: _busy ? null : () => _retryNotes(task, pendingCommand: true),
@@ -1112,62 +1092,6 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     }
   }
 
-  Widget _notesStep(MemoryRow step) {
-    final l10n = context.l10n;
-    final title = switch (step['stepKey']) {
-      'selectInputs' => l10n.companionNotesSelectStep,
-      'readInputs' => l10n.companionNotesReadStep,
-      'model' => l10n.companionNotesModelStep,
-      'writePage' => l10n.companionNotesWriteStep,
-      _ => l10n.companionNotesTitle,
-    };
-    final result = step['result'];
-    final completion = result is Map ? result['completion'] : null;
-    Map? usage;
-    if (result is Map) {
-      if (completion is Map && completion['usage'] is Map) {
-        usage = completion['usage'] as Map;
-      } else if (result['observations'] is List) {
-        for (final observation in (result['observations']! as List).reversed) {
-          if (observation is Map && observation['type'] == 'model-finish' && observation['usage'] is Map) {
-            usage = observation['usage'] as Map;
-            break;
-          }
-        }
-      }
-    }
-    return ListTile(
-      title: Text('$title · ${l10n.companionNotesArtifactRevision('${step['taskRev']}')}'),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(switch (step['state']) {
-            'done' => l10n.companionNotesStepDone,
-            'partial' => l10n.companionNotesStepPartial,
-            'running' => l10n.companionNotesStepRunning,
-            'waiting' || 'queued' => l10n.companionNotesStepWaiting,
-            'failed' => l10n.companionNotesStepFailed,
-            'cancelled' => l10n.companionNotesStepCancelled,
-            _ => l10n.companionNotesStepUnknown,
-          }),
-          if (step['stepKey'] == 'model' && completion is Map && completion['itemCount'] is int)
-            Text(l10n.companionNotesItemCount('${completion['itemCount']}')),
-          if (step['stepKey'] == 'model')
-            Text(
-              usage == null
-                  ? l10n.companionLookupUsageUnknown
-                  : l10n.companionLookupModelUsage(
-                      '${usage['input_uncached'] ?? '?'}',
-                      '${usage['input_cache_read'] ?? '?'}',
-                      '${usage['input_cache_write'] ?? '?'}',
-                      '${usage['output_tokens'] ?? '?'}',
-                    ),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _lookupDetail(MemoryRow task) {
     final l10n = context.l10n;
     final attempts = _memory!.store.lookupAttempts(task['task_id']! as String);
@@ -1183,10 +1107,6 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     }
     final result = task['result'];
     final evidence = result is Map && result['evidence'] is List ? result['evidence'] as List : const [];
-    final toolCalls = attempts.where((row) => row['kind'] != 'answer').toList();
-    final knownCosts = toolCalls.map((row) => row['estimated_tool_micro_cny']).whereType<int>().toList();
-    final cost = knownCosts.fold<int>(0, (a, b) => a + b) / 1000000;
-    final answers = attempts.where((row) => row['kind'] == 'answer').toList();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -1213,37 +1133,12 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
                 ),
                 child: Text(source['url']! as String),
               ),
-              Text(
-                l10n.companionLookupObservedAt(
-                  DateTime.fromMillisecondsSinceEpoch(source['observedAtMs']! as int).toLocal().toIso8601String(),
-                ),
-              ),
+              Text(l10n.companionLookupObservedAt(_moment(l10n, source['observedAtMs']! as int))),
               if (source['kind'] == 'search') Text(l10n.companionLookupSearchOnly),
               for (final proof in evidence)
                 if ((proof as Map)['url'] == source['url']) Text(proof['quote']! as String),
             ],
           ],
-          if (attempts.isNotEmpty)
-            ExpansionTile(
-              title: Text(l10n.companionLookupCostDetails),
-              children: [
-                if (knownCosts.isNotEmpty) Text(l10n.companionLookupToolCost(cost.toStringAsFixed(3))),
-                if (toolCalls.any((row) => row['estimated_tool_micro_cny'] == null))
-                  Text(l10n.companionLookupCostUnknown),
-                for (final answer in answers)
-                  if (answer['rawUsage'] case final Map usage)
-                    Text(
-                      l10n.companionLookupModelUsage(
-                        '${usage['input_uncached'] ?? '?'}',
-                        '${usage['input_cache_read'] ?? '?'}',
-                        '${usage['input_cache_write'] ?? '?'}',
-                        '${usage['output_tokens'] ?? '?'}',
-                      ),
-                    )
-                  else
-                    Text(l10n.companionLookupUsageUnknown),
-              ],
-            ),
           const SizedBox(height: 16),
           if (_owns(task) &&
               task['cancel_requested'] == 0 &&

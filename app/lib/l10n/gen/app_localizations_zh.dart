@@ -6026,67 +6026,67 @@ class L10nZh extends L10n {
   String get companionTasksTitle => '交代的事';
 
   @override
-  String get companionTasksEmpty => '这里还没有交代过提醒。';
+  String get companionTasksEmpty => '你还没交代我什么事呢。';
 
   @override
-  String get companionTaskMissing => '这条约定现在找不到了。';
+  String get companionTaskMissing => '这件事我这儿找不到了。';
 
   @override
-  String get companionTaskChanged => '约定已经改过，下面是现在这一条。';
+  String get companionTaskChanged => '这件事后来又改过了，我按最新的来。';
 
   @override
   String get companionReminderEdit => '改提醒';
 
   @override
-  String get companionReminderCancel => '取消提醒';
+  String get companionReminderCancel => '不用提醒了';
 
   @override
-  String get companionReminderText => '提醒什么';
+  String get companionReminderText => '提醒你什么';
 
   @override
-  String get companionReminderWhen => '日期和当地时间';
+  String get companionReminderWhen => '哪天几点';
 
   @override
-  String get companionReminderWhenHint => '例如 2026-11-21 08:00';
+  String get companionReminderWhenHint => '比如 2026-11-21 08:00';
 
   @override
   String get companionReminderZone => '时区';
 
   @override
-  String get companionReminderZoneHint => '例如 Asia/Shanghai 或 +08:00';
+  String get companionReminderZoneHint => '比如 Asia/Shanghai 或 +08:00';
 
   @override
-  String get companionReminderQueued => '这条提醒已收下，还没确认设好。';
+  String get companionReminderQueued => '好，记下了，正在帮你设。';
 
   @override
-  String get companionReminderDone => '这条提醒设好了。';
+  String get companionReminderDone => '设好了，到点我叫你。';
 
   @override
-  String get companionReminderUnknown => '这条提醒可能已经安排，我还没核清。';
+  String get companionReminderUnknown => '这条提醒我不太确定设上没，你看一眼系统闹钟？';
 
   @override
-  String get companionReminderFailed => '这条提醒还没设好。';
+  String get companionReminderFailed => '这条提醒没设上，抱歉。';
 
   @override
-  String get companionReminderCancelled => '这条提醒后续的安排已停。';
+  String get companionReminderCancelled => '好，这条不提醒了。';
 
   @override
-  String get companionReminderTextMissing => '要提醒你什么？';
+  String get companionReminderTextMissing => '要提醒你什么呀？';
 
   @override
-  String get companionReminderDateMissing => '要在哪一天提醒？';
+  String get companionReminderDateMissing => '哪天提醒你？';
 
   @override
-  String get companionReminderTimeMissing => '那天具体几点提醒？';
+  String get companionReminderTimeMissing => '那天几点提醒你？';
 
   @override
-  String get companionReminderZoneMissing => '这次用哪个时区？';
+  String get companionReminderZoneMissing => '按哪个时区算？';
 
   @override
-  String get companionReminderGap => '这个当地时间不存在，请改一个时间。';
+  String get companionReminderGap => '那天这个钟点会被跳过去（夏令时），换个时间吧。';
 
   @override
-  String get companionReminderOverlap => '这个当地时间有两次，要第一次还是第二次？';
+  String get companionReminderOverlap => '那天这个钟点有两次，要哪一次？';
 
   @override
   String get companionReminderFirst => '第一次';
@@ -6095,143 +6095,131 @@ class L10nZh extends L10n {
   String get companionReminderSecond => '第二次';
 
   @override
-  String get companionReminderExactMissing => '这台手机现在不能安排准点提醒，还没设好。';
+  String get companionReminderExactMissing => '手机还没让我准点提醒，这条没设上。去系统设置里打开「闹钟和提醒」就好。';
 
   @override
-  String get companionReminderNotificationsMissing => '通知没有打开，这条提醒还没设好。';
+  String get companionReminderNotificationsMissing => '通知没开，这条还没设上。去系统设置里打开通知就好。';
 
   @override
-  String get companionReminderChannelMissing => '提醒通知的渠道没有打开，还没设好。';
+  String get companionReminderChannelMissing => '「提醒」这类通知被关掉了，这条还没设上。去系统设置里打开就好。';
 
   @override
-  String get companionReminderGroupMissing => '提醒所属的通知组没有打开，还没设好。';
+  String get companionReminderGroupMissing => '提醒所在的那组通知被关掉了，这条还没设上。去系统设置里打开就好。';
 
   @override
-  String get companionReminderTimePassed => '约定的时间已经过去，没有补响。';
+  String get companionReminderTimePassed => '约好的时间已经过了，我就没再补响。';
 
   @override
-  String get companionReminderInvalidTime => '这次时间还不能确定，请重新指定日期、时间和时区。';
+  String get companionReminderInvalidTime => '这个时间我没弄明白，再告诉我一次哪天、几点、哪个时区？';
 
   @override
-  String get companionReminderCancelUnknown => '已经请求停下，但还没确认全部停成。';
+  String get companionReminderCancelUnknown => '我在撤了，但不太确定撤干净没；要是到点还响，别理它就好。';
 
   @override
-  String get companionReminderWhich => '你指哪一条提醒？请在「交代的事」里选一下。';
+  String get companionReminderWhich => '你说的是哪一条？去「交代的事」里点给我看看。';
 
   @override
-  String get companionReminderSyntax => '请写完整日期和时间，例如“明早八点提醒我带证件”。';
+  String get companionReminderSyntax => '告诉我哪天几点吧，比如“明早八点提醒我带证件”。';
 
   @override
-  String get companionReminderSaveFailed => '这次约定没保存好，原输入还在。';
+  String get companionReminderSaveFailed => '刚才没记下来，你写的还在，再试一次？';
 
   @override
-  String get companionReminderSettings => '打开系统设置';
+  String get companionReminderSettings => '去系统设置';
 
   @override
-  String get companionReminderCheck => '重新核对';
+  String get companionReminderCheck => '刷新';
 
   @override
-  String get companionReminderSubmittedNotification => '这条提醒有过通知提交记录；这不表示你已经看到。';
-
-  @override
-  String get companionReminderUnknownNotification => '这条提醒的通知可能已经发出，还没核清。';
-
-  @override
-  String get companionReminderOpened => '这条提醒的通知已打开。';
+  String get companionReminderUnknownNotification => '这条提醒可能已经响过了，我不太确定。';
 
   @override
   String companionReminderUnhandled(String text) {
-    return '这部分还没办理：$text';
+    return '这句我还没法帮你办：$text';
   }
 
   @override
   String companionReminderCancelSource(String text) {
-    return '取消提醒：$text';
+    return '取消$text的提醒';
   }
 
   @override
-  String get companionReminderNotHere => '这条旧安排没有在当前安装中接管，不能在这里修改或撤销。';
+  String get companionReminderNotHere => '这条不是在这台手机上设的，我在这儿改不了也撤不了。';
 
   @override
-  String get companionReminderPlatformUnavailable => '现在还无法核对这台手机的提醒安排。';
+  String get companionReminderPlatformUnavailable => '现在看不到手机上的提醒，等会儿再看看？';
 
   @override
-  String get companionReminderPastRegistration => '原记录显示，这条提醒曾经登记成功。';
+  String get companionReminderPastRegistration => '之前是设好过的。';
 
   @override
-  String get companionLookupAccepted => '我来查一下，结果会留在这件事里。';
+  String get companionLookupAccepted => '好，我去查一下，查完放在「交代的事」里。';
 
   @override
-  String get companionLookupSyntax => '想查哪家馆、哪一天？请告诉我完整馆名和当地日期。';
+  String get companionLookupSyntax => '想查哪家馆、哪一天？告诉我全名和日期吧。';
 
   @override
-  String get companionLookupDateMissing => '想查当地哪一天的安排？请给我具体日期。';
+  String get companionLookupDateMissing => '想查哪一天的？给我个具体日期。';
 
   @override
-  String get companionLookupZoneMissing => '这个地点用哪个时区？请把当地日期和时区一起告诉我。';
+  String get companionLookupZoneMissing => '那边是哪个时区？日期和时区一起告诉我吧。';
 
   @override
-  String get companionLookupWhich => '你想取消哪一项查询？可以到这间屋子的事情列表里选它。';
+  String get companionLookupWhich => '你想撤哪个查询？去「交代的事」里点一下。';
 
   @override
-  String get companionLookupQueued => '正在查证公开资料。';
+  String get companionLookupQueued => '我在查了，稍等。';
 
   @override
-  String get companionLookupDone => '本次查证已完成，依据留在下面。';
+  String get companionLookupDone => '查到了，出处放在下面。';
 
   @override
-  String get companionLookupPartial => '查到了一部分，还不能确认所问日期的安排。';
+  String get companionLookupPartial => '查到一些，但那天到底怎样还说不准。';
 
   @override
-  String get companionLookupFailed => '这次没有取得足够材料，没法确认。';
+  String get companionLookupFailed => '这次没找到靠得住的说法，没法确定。';
 
   @override
-  String get companionLookupUnknown => '这次请求的回执还没核清。我会保留原记录，不重新发同一步。';
+  String get companionLookupUnknown => '这次没得到明确结果，我先不重复去查。';
 
   @override
-  String get companionLookupCancelled => '这项查询已取消；已经发生的请求仍保留在记录里。';
+  String get companionLookupCancelled => '好，不查了。';
 
   @override
-  String get companionLookupCancelUnknown => '已经要求停止，主机是否收到还没核清。';
+  String get companionLookupCancelUnknown => '我让它停了，不过还不确定停下没。';
 
   @override
-  String get companionLookupUnavailable => '暂时连不上查证通道，结果还没有确认。';
+  String get companionLookupUnavailable => '现在连不上能查的地方，还没查到结果。';
 
   @override
-  String get companionLookupDeadline => '原定查询时间已过，保留已取得的材料，不再继续请求。';
+  String get companionLookupDeadline => '约好的时间过了，就查到这儿，不再接着查了。';
 
   @override
-  String get companionLookupInputLimit => '完整资料超过这次可读范围，已保留来源供继续核对。';
+  String get companionLookupInputLimit => '资料太多，我一次读不完，先把出处给你。';
 
   @override
-  String get companionLookupQueryLong => '馆名和日期合起来太长，先确认更简短且明确的名称。';
+  String get companionLookupQueryLong => '名字有点长，换个简短点、不会认错的叫法？';
 
   @override
-  String get companionLookupAnswerIncomplete => '材料已取得，但这次答案没有完整核好，先把来源留给你。';
+  String get companionLookupAnswerIncomplete => '资料找到了，但我还没理清楚，先把出处给你。';
 
   @override
-  String get companionLookupNotHere => '这项查询由原安装环境受理，当前只查看记录，不在这里自动重做。';
+  String get companionLookupNotHere => '这个不是在这台手机上查的，在这儿我只能给你看看结果。';
 
   @override
-  String get companionLookupSources => '本次实际来源';
+  String get companionLookupSources => '我看过的地方';
 
   @override
-  String get companionLookupSearchOnly => '搜索摘要，尚未作为正文依据';
+  String get companionLookupSearchOnly => '只看了搜索摘要，没点进去细看';
 
   @override
-  String get companionLookupNoTitle => '未提供标题';
+  String get companionLookupNoTitle => '没有标题';
 
   @override
-  String get companionLookupCancel => '取消查询';
+  String get companionLookupCancel => '不用查了';
 
   @override
-  String get companionLookupSaveFailed => '这次处理没完成，请先查看事情列表里的原记录。';
-
-  @override
-  String get companionLookupUsageUnknown => '答案模型用量未完整报告，不能当作免费。';
-
-  @override
-  String get companionLookupCostUnknown => '另有请求费用尚未核清。';
+  String get companionLookupSaveFailed => '刚才没办成，等会儿再试试？';
 
   @override
   String companionLookupCancelSource(String name) {
@@ -6240,241 +6228,177 @@ class L10nZh extends L10n {
 
   @override
   String companionLookupObservedAt(String time) {
-    return '取得于 $time';
+    return '$time 看的';
   }
-
-  @override
-  String companionLookupToolCost(String amount) {
-    return '工具按已核成功请求和公开费率估算：¥$amount。答案模型用量另列。';
-  }
-
-  @override
-  String companionLookupModelUsage(String input, String read, String write, String output) {
-    return '答案用量：未缓存输入 $input，缓存读取 $read，缓存写入 $write，输出 $output；问号表示未报告。';
-  }
-
-  @override
-  String get companionLookupCostDetails => '费用与用量';
 
   @override
   String companionLookupViewSources(String name) {
-    return '查看来源 · $name';
+    return '看看出处 · $name';
   }
 
   @override
-  String get companionNotesTitle => '电脑整理笔记';
+  String get companionNotesTitle => '把笔记整理成待办';
 
   @override
-  String get companionNotesView => '查看这件事';
+  String get companionNotesView => '看看这件事';
 
   @override
-  String get companionNotesSyntax => '请说明电脑要整理哪一天的笔记，是否离开后继续；随后可以选择目录。';
+  String get companionNotesSyntax => '要整理哪天的笔记？你离开以后要不要接着做？说好了我再请你选文件夹。';
 
   @override
-  String get companionNotesDateMissing => '原话的日期、时区或截止时刻还没确定，请补充明确时间。';
+  String get companionNotesDateMissing => '日期、时区或者截止时间还没说清楚，再告诉我一下？';
 
   @override
-  String get companionNotesConnect => '先连接要整理笔记的那台电脑，再选目录。';
+  String get companionNotesConnect => '先连上放笔记的那台电脑，再选文件夹。';
 
   @override
-  String get companionNotesOriginalHost => '请连接原先那台电脑再核对或继续；这里保留原记录。';
+  String get companionNotesOriginalHost => '这件事在原来那台电脑上，连上它我才能接着看。';
 
   @override
-  String get companionNotesUnavailable => '这台电脑目前还不能可靠接下这项整理。';
+  String get companionNotesUnavailable => '这台电脑现在还接不了这件事。';
 
   @override
-  String get companionNotesNoDirectory => '还没有选定目录，这项整理尚未受理。';
+  String get companionNotesNoDirectory => '还没选文件夹，所以还没开始。';
 
   @override
-  String get companionNotesChooseDirectory => '选择笔记目录';
+  String get companionNotesChooseDirectory => '选笔记文件夹';
 
   @override
-  String get companionNotesChooseOutput => '选择输出目录';
+  String get companionNotesChooseOutput => '选存放的文件夹';
 
   @override
-  String get companionNotesKeepDirectory => '保留原笔记目录';
+  String get companionNotesKeepDirectory => '笔记文件夹不变';
 
   @override
-  String get companionNotesKeepOutput => '保留原输出目录';
+  String get companionNotesKeepOutput => '存放的文件夹不变';
 
   @override
-  String get companionNotesWhich => '想取消哪一项笔记整理？请到事情列表里选它。';
+  String get companionNotesWhich => '想撤哪一件整理？去「交代的事」里点一下。';
 
   @override
-  String get companionNotesQueued => '约定已记下，电脑是否接到还未确认。';
+  String get companionNotesQueued => '记下了，等电脑接手。';
 
   @override
-  String get companionNotesRunning => '电脑已接下，等待后续结果。';
+  String get companionNotesRunning => '电脑接手了，正在整理。';
 
   @override
-  String get companionNotesDone => '待办文件已经另存，可以查看原产物。';
+  String get companionNotesDone => '整理好了，待办存成了新文件，点开就能看。';
 
   @override
-  String get companionNotesPartial => '自动整理已停止，已有部分产物可查看。';
+  String get companionNotesPartial => '只整理了一部分就停了，已有的可以先看看。';
 
   @override
-  String get companionNotesFailed => '这次整理没有完成，原记录仍保留。';
+  String get companionNotesFailed => '这次没整理成。';
 
   @override
-  String get companionNotesWaiting => '电脑正在等必要条件或原批准，尚未完成。';
+  String get companionNotesWaiting => '电脑那边停下来在等，可能要你点个头。';
 
   @override
-  String get companionNotesUnknown => '电脑是否接到、做到哪一步，还没有核清。';
+  String get companionNotesUnknown => '电脑那边现在什么情况，我还不太清楚。';
 
   @override
-  String get companionNotesCancelUnknown => '取消约定已保存，电脑是否停止还没核清；已有文件保留。';
+  String get companionNotesCancelUnknown => '我让电脑停了，不过还不确定它停下没；已经写好的文件会留着。';
 
   @override
-  String get companionNotesCancelled => '后续整理已停止，此前生成的文件保留。';
+  String get companionNotesCancelled => '好，不整理了，已经写好的文件还在。';
 
   @override
-  String get companionNotesPauseUnavailable => '已保留“离开就停”的约定，但目前无法可靠执行这一条件，因此尚未开始。可修改为“离开后继续”。';
+  String get companionNotesPauseUnavailable => '你说过离开就先停，可我现在没法确定你离没离开，所以还没开始。要不改成离开也接着做？';
 
   @override
-  String get companionNotesOpportunityLost => '这次没有及时交给电脑，也未允许上线后再做。请重新说明是否继续。';
+  String get companionNotesOpportunityLost => '刚才没赶上交给电脑，你又说过别等它上线。要继续的话再跟我说一声。';
 
   @override
-  String get companionNotesDeadline => '原定截止时间已过，不再安排新的执行；已发生的效果仍保留待核。';
+  String get companionNotesDeadline => '约好的截止时间过了，就不再接着做了。';
 
   @override
-  String get companionNotesOriginalPending => '电脑已收到修改，原任务身份还在核对。';
+  String get companionNotesOriginalPending => '电脑收到你的修改了，稍等它理一理。';
 
   @override
-  String get companionNotesSaveFailed => '这次处理没能核清，请查看这件事的原记录；不会另建一项重做。';
+  String get companionNotesSaveFailed => '刚才没办成，这件事还在，等会儿再试试？';
 
   @override
-  String get companionNotesModifiedDay => '按原时区内这一天修改的本层 Markdown／纯文本笔记整理；原件不改。';
+  String get companionNotesModifiedDay => '我会把这个文件夹里那天改过的笔记（Markdown 和纯文本）整理成一页待办，原文件不动。';
 
   @override
-  String get companionNotesNoInputs => '没有找到该日修改的本层笔记，这一版没有新建待办页。';
+  String get companionNotesNoInputs => '那天这个文件夹里没有改过的笔记，所以没写待办。';
 
   @override
-  String get companionNotesOutputExists => '同名文件已经在那儿，没有覆盖。可以修改约定换个新文件名。';
+  String get companionNotesOutputExists => '已经有同名文件了，我没覆盖它。改个新文件名就好。';
 
   @override
-  String get companionNotesFileCountLimit => '符合条件的本层笔记超过 20 份。请改选更小的目录或另拆一批。';
+  String get companionNotesFileCountLimit => '符合的笔记超过 20 份，有点多。换个小点的文件夹，或者分几次来？';
 
   @override
-  String get companionNotesFileSizeLimit => '所选笔记中有单份超过 64 KiB。请缩小范围；没有截掉文件的一部分继续。';
+  String get companionNotesFileSizeLimit => '有一份笔记超过 64 KiB，太长了。缩小点范围吧，我不想只读一半。';
 
   @override
-  String get companionNotesTotalSizeLimit => '所选笔记合计超过 256 KiB。请缩小范围或另拆一批。';
+  String get companionNotesTotalSizeLimit => '这些笔记加起来超过 256 KiB，有点多。缩小范围，或者分几次来？';
 
   @override
-  String get companionNotesModelLimit => '整理请求超过模型输入限额。请缩小笔记范围；原文没有被截断后继续。';
+  String get companionNotesModelLimit => '笔记太多，我一次读不下。缩小点范围吧，我不想只读一半。';
 
   @override
   String get companionNotesPause => '离开就先停';
 
   @override
-  String get companionNotesContinue => '离开后继续';
+  String get companionNotesContinue => '离开也接着做';
 
   @override
-  String get companionNotesAllowQueue => '允许电脑上线后再做';
+  String get companionNotesAllowQueue => '电脑不在线就等它上线再做';
 
   @override
-  String get companionNotesNoQueue => '不允许另行排队';
+  String get companionNotesNoQueue => '电脑不在线就别等了';
 
   @override
-  String get companionNotesApproval => '这里是这一步的原批准卡。响应后仍以电脑的实际执行回执为准。';
+  String get companionNotesApproval => '电脑那边要你点个头，才能接着做。';
 
   @override
-  String get companionNotesSteps => '各版本步骤与用量';
+  String get companionNotesOpenFile => '看看这页待办';
 
   @override
-  String get companionNotesOpenFile => '打开原产物';
+  String get companionNotesFileMissing => '这个文件找不到了，我没重新生成。';
 
   @override
-  String get companionNotesFileMissing => '原产物已找不到；没有自动重新生成。';
+  String get companionNotesFileChanged => '这个文件后来被改过，已经不是我当时写的样子了。';
 
   @override
-  String get companionNotesFileChanged => '原产物已改变，不能把现内容当作原结果。';
+  String get companionNotesFileUnknown => '这个文件现在打不开。';
 
   @override
-  String get companionNotesFileUnknown => '原产物目前无法核读；保留原记录。';
+  String get companionNotesCancel => '不用整理了';
 
   @override
-  String get companionNotesCancel => '取消后续整理';
+  String get companionNotesEdit => '改一下';
 
   @override
-  String get companionNotesEdit => '修改约定';
-
-  @override
-  String get companionNotesDate => '笔记日期';
+  String get companionNotesDate => '哪天的笔记';
 
   @override
   String get companionNotesFilename => '新文件名（.md 或 .txt）';
 
   @override
-  String get companionNotesDeadlineField => '新截止时刻（留空保留原约定）';
+  String get companionNotesDeadlineField => '新的截止时间（不填就不变）';
 
   @override
-  String get companionNotesClearDeadline => '取消用户指定的截止时刻';
+  String get companionNotesClearDeadline => '不设截止时间';
 
   @override
-  String get companionNotesKeepDeadline => '保留原截止约定';
-
-  @override
-  String get companionNotesSelectStep => '选定原笔记';
-
-  @override
-  String get companionNotesReadStep => '读取并核对笔记';
-
-  @override
-  String get companionNotesModelStep => '整理待办';
-
-  @override
-  String get companionNotesWriteStep => '另存并核读产物';
-
-  @override
-  String get companionNotesStepDone => '这一步已完成。';
-
-  @override
-  String get companionNotesStepPartial => '这一步只完成了一部分。';
-
-  @override
-  String get companionNotesStepRunning => '这一步正在进行。';
-
-  @override
-  String get companionNotesStepWaiting => '这一步正在等待。';
-
-  @override
-  String get companionNotesStepFailed => '这一步没有完成。';
-
-  @override
-  String get companionNotesStepCancelled => '这一步的后续已停止。';
-
-  @override
-  String get companionNotesStepUnknown => '这一步的结果尚未核清。';
+  String get companionNotesKeepDeadline => '截止时间不变';
 
   @override
   String companionNotesSourceDirectory(String path) {
-    return '笔记目录：$path';
+    return '笔记在：$path';
   }
 
   @override
   String companionNotesOutputDirectory(String path) {
-    return '输出目录：$path';
+    return '存到：$path';
   }
 
   @override
   String companionNotesDue(String time) {
-    return '原定截止：$time';
-  }
-
-  @override
-  String companionNotesBudget(String spent, String held) {
-    return '已用执行时间 $spent 秒，尚未核清的预留 $held 秒；累计上限 300 秒。批准等待不计入。';
-  }
-
-  @override
-  String companionNotesArtifactRevision(String revision) {
-    return '版本 $revision';
-  }
-
-  @override
-  String companionNotesArtifactDetails(String count, String time) {
-    return '来源 $count 份；核读于 $time';
+    return '$time 前做完';
   }
 
   @override
@@ -6492,28 +6416,23 @@ class L10nZh extends L10n {
     String source,
     String output,
   ) {
-    return '修改笔记整理：日期 $date，文件名《$name》，截止：$deadline；$afterExit；$queue；$source；$output。';
+    return '把笔记整理改成：$date的笔记，存成《$name》，截止时间：$deadline；$afterExit；$queue；$source；$output。';
   }
 
   @override
-  String get companionNotesRetry => '继续尝试原任务';
+  String get companionNotesRetry => '让电脑接着做';
 
   @override
-  String get companionNotesSubmitSaved => '提交已保存约定';
+  String get companionNotesSubmitSaved => '现在交给电脑';
 
   @override
-  String get companionNotesResendOriginal => '补送原约定（同一任务）';
+  String get companionNotesResendOriginal => '再交给电脑一次';
 
   @override
-  String get companionNotesResendCancel => '补送已保存的取消';
+  String get companionNotesResendCancel => '再跟电脑说一次不做了';
 
   @override
-  String get companionNotesResendAmend => '补送已保存的修改';
-
-  @override
-  String companionNotesItemCount(String count) {
-    return '这一版内容列出 $count 项待办；是否已保存以产物记录为准。';
-  }
+  String get companionNotesResendAmend => '再把改动发给电脑';
 
   @override
   String get automaticDiagnosticsRecover => '恢复本地记录';
