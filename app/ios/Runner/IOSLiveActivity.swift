@@ -11,6 +11,8 @@ import UIKit
 /// - Swiped away, it stays away until nothing runs or another conversation takes over.
 /// - While the app runs it renews its stale date every minute; once iOS suspends the app
 ///   the card says it has stopped updating, rather than a clock that may be wrong.
+/// - A run that ends in the background keeps its card up to 20 seconds for its result,
+///   which arrives a moment after the run leaves the list.
 /// - A finished turn stays on the lock screen for a while and goes when the app is opened.
 final class IOSLiveActivity {
   static let shared = IOSLiveActivity()
@@ -95,10 +97,12 @@ private final class LiveActivityEngine {
   private var episode: String?
   private var dismissed = false
   private var shown = false
-  private var waitingForFront = false
   /// The pet's conversation's run: when it started and, once over, when it ended.
   private var run: (session: String, since: Date, until: Date?)?
   private var refresh: Timer?
+  /// A run that just ended in the background: its card waits this long for the
+  /// result, which comes a moment after the run leaves the list.
+  private var hold: Timer?
 
   init() {
     NotificationCenter.default.addObserver(
@@ -124,22 +128,42 @@ private final class LiveActivityEngine {
   }
 
   @MainActor
-  private func render(_ args: [String: Any], art: Data?) async {
+  private func render(_ args: [String: Any], art: Data?, mayHold: Bool = true) async {
     let all = Activity<DSHLiveAttributes>.activities
     let live = all.filter { $0.activityState == .active || $0.activityState == .stale }
-    guard args["enabled"] as? Bool == true, let state = content(args) else {
-      await finish(live)
+    let enabled = args["enabled"] as? Bool == true
+    guard enabled, let state = content(args) else {
+      // The last run left the list and its 做完了 / 出错了 is still on the way. iOS
+      // won't start a new card from the background, so this one waits for it.
+      if enabled, mayHold, UIApplication.shared.applicationState != .active,
+        live.contains(where: { $0.content.state.running }) {
+        holdForResult()
+        return
+      }
+      await finish(all)
       return
     }
+    hold?.invalidate()
+    hold = nil
     if let art, let key = state.art { LiveArtStore.save(key: key, png: art) }
     if let activity = live.first {
       for extra in live.dropFirst() { await extra.end(nil, dismissalPolicy: .immediate) }
-      await activity.update(ActivityContent(state: state, staleDate: staleDate(state)))
       episode = state.session
-      shown = true
       keepFresh(state)
+      if !state.running && UIApplication.shared.applicationState != .active {
+        // The turn is over: end it now with its 15 minutes, while the app still runs
+        // to say so. Suspended before the next push, it would otherwise stay up for hours.
+        await activity.end(ActivityContent(state: state, staleDate: nil),
+          dismissalPolicy: .after(Date().addingTimeInterval(15 * 60)))
+        shown = false
+      } else {
+        await activity.update(ActivityContent(state: state, staleDate: staleDate(state)))
+        shown = true
+      }
       return
     }
+    // A turn that is over doesn't start a card, or replace the one it left on the lock screen.
+    guard state.running else { return }
     // Ours, and gone without us ending it: swiped away (or iOS's eight hours were up).
     if shown {
       shown = false
@@ -152,40 +176,56 @@ private final class LiveActivityEngine {
     guard !dismissed else { return }
     // A finished turn's card still on the lock screen goes first: one DSH card at a time.
     for old in all { await old.end(nil, dismissalPolicy: .immediate) }
-    guard UIApplication.shared.applicationState == .active else {
-      waitingForFront = true
-      return
-    }
+    // Only in front; one that can't start now does when the app comes back (cameToFront).
+    guard UIApplication.shared.applicationState == .active else { return }
     do {
       _ = try Activity.request(attributes: DSHLiveAttributes(),
         content: ActivityContent(state: state, staleDate: staleDate(state)), pushType: nil)
       shown = true
-      waitingForFront = false
       keepFresh(state)
     } catch {
-      // Off in Settings, too many activities, or not in front after all.
-      waitingForFront = true
+      // Off in Settings, or too many activities.
       NSLog("dsh live activity: not started (%@)", String(describing: error))
     }
   }
 
-  /// Nothing to show: a finished turn's card stays on the lock screen for a while
-  /// (unless the person is looking at the app), anything else goes now.
   @MainActor
-  private func finish(_ live: [Activity<DSHLiveAttributes>]) async {
+  private func holdForResult() {
+    guard hold == nil else { return }
+    hold = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
+      self?.enqueue { engine in
+        engine.hold = nil
+        await engine.render(engine.latest, art: nil, mayHold: false)
+      }
+    }
+  }
+
+  /// Nothing to show: a finished turn's card stays on the lock screen for a while
+  /// (unless the person is looking at the app), anything else goes now. That includes
+  /// a card an earlier run of the app left there, which no foreground event will clear.
+  @MainActor
+  private func finish(_ all: [Activity<DSHLiveAttributes>]) async {
     episode = nil
     dismissed = false
     shown = false
-    waitingForFront = false
     run = nil
     refresh?.invalidate()
     refresh = nil
+    hold?.invalidate()
+    hold = nil
     let away = UIApplication.shared.applicationState != .active
-    for activity in live {
-      let last = activity.content.state
-      let keep = away && (last.kind == "done" || last.kind == "failed")
-      await activity.end(ActivityContent(state: last, staleDate: nil),
-        dismissalPolicy: keep ? .after(Date().addingTimeInterval(15 * 60)) : .immediate)
+    for activity in all {
+      switch activity.activityState {
+      case .active, .stale:
+        let last = activity.content.state
+        let keep = away && !last.running
+        await activity.end(ActivityContent(state: last, staleDate: nil),
+          dismissalPolicy: keep ? .after(Date().addingTimeInterval(15 * 60)) : .immediate)
+      case .ended where !away:
+        await activity.end(nil, dismissalPolicy: .immediate)
+      default:
+        break
+      }
     }
   }
 
@@ -195,7 +235,9 @@ private final class LiveActivityEngine {
       for activity in Activity<DSHLiveAttributes>.activities where activity.activityState == .ended {
         await activity.end(nil, dismissalPolicy: .immediate)
       }
-      if engine.waitingForFront { await engine.render(engine.latest, art: nil) }
+      // Whatever waited for the front settles now: a card that couldn't start, one
+      // held for a result, one whose app was suspended mid-run.
+      await engine.render(engine.latest, art: nil)
     }
   }
 

@@ -108,7 +108,11 @@ class _IosLiveSender {
       'tintDark': live.tintDark,
       'canStop': live.canStop,
       'labels': {'stop': l10n.liveStop, 'stale': l10n.liveStale},
-      if (art != null) ...{'artKey': art.key, 'artPixel': art.pixelArt, if (art.key != _sent) 'art': art.png},
+      // Null says so: native keeps extras a push leaves out, so the last pet's
+      // picture would otherwise stay on a pet that has none.
+      'artKey': art?.key,
+      'artPixel': art?.pixelArt ?? false,
+      if (art != null && art.key != _sent) 'art': art.png,
     });
     if (art != null) _sent = art.key;
   }

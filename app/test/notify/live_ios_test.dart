@@ -60,7 +60,7 @@ void main() {
     final channel = _Channel();
     final container = _container(channel);
     addTearDown(container.dispose);
-    container.read(liveActivityBridgeProvider);
+    container.listen<void>(liveActivityBridgeProvider, (_, _) {});
     await pumpEventQueue();
 
     expect(channel.plain, 0);
@@ -72,14 +72,16 @@ void main() {
     expect(sent['canStop'], isFalse);
     expect(sent['labels'], {'stop': appL10n.liveStop, 'stale': appL10n.liveStale});
     expect(sent.containsKey('art'), isFalse);
-    expect(sent.containsKey('artKey'), isFalse);
+    // Sent as null, so native drops the last pet's picture instead of keeping it.
+    expect(sent.containsKey('artKey'), isTrue);
+    expect(sent['artKey'], isNull);
   });
 
   test('pushes go out once each and in order', () async {
     final channel = _Channel();
     final container = _container(channel);
     addTearDown(container.dispose);
-    container.read(liveActivityBridgeProvider);
+    container.listen<void>(liveActivityBridgeProvider, (_, _) {});
     await pumpEventQueue();
     final push = container.read(_pushProvider.notifier);
     for (final next in [

@@ -121,7 +121,8 @@ private struct LivePet: View {
   }
 }
 
-/// Counting up while it runs; how long it took once done; else its symbol.
+/// Counting up while it runs; how long it took once done; else its symbol. Once the
+/// app has stopped updating it, a pause: a clock that may have stopped doesn't tick on.
 @available(iOS 16.2, *)
 private struct LiveClock: View {
   let state: DSHLiveAttributes.ContentState
@@ -132,7 +133,11 @@ private struct LiveClock: View {
 
   var body: some View {
     Group {
-      if let since = state.since, let until = state.until, since < until {
+      if stale && state.running {
+        Image(systemName: "pause.fill")
+          .font(.system(size: size * 0.7, weight: .semibold))
+          .accessibilityLabel(state.staleLabel)
+      } else if let since = state.since, let until = state.until, since < until {
         Text(timerInterval: since...until, pauseTime: until, countsDown: false, showsHours: !compact)
       } else if let since = state.since, state.running, since < Date.distantFuture {
         Text(timerInterval: since...Date.distantFuture, countsDown: false, showsHours: !compact)
