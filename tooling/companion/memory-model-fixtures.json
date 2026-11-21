@@ -4,7 +4,7 @@
   "sources": [
     {
       "path": "app/test/companion/companion_host_memory_transport_test.dart",
-      "sha256": "db461acd275285def3448585ee9f9a4c7fba9270a03fdf5b1b98f222e800df1a"
+      "sha256": "7089632a8aa508a14f50abef4e8d064c12c49dac372ff79d3cdb180289e831a3"
     },
     {
       "path": "app/test/companion/companion_host_usage_owner_test.dart",

@@ -360,11 +360,9 @@ void main() {
     room.connect(nextHost);
     await room.open(tester);
     await tester.enterText(find.byType(TextField), '属于 A 的句子');
-    await tester.runAsync(() async {
-      tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
-      // The source must be durable before this session-read race starts.
-      await room.sessions.ensureStarted.future;
-    });
+    tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
+    // The source must be durable before this session-read race starts.
+    await settleMixed(tester, room.sessions.ensureStarted.future);
     await flush(tester);
     room.host.change(nextHost);
     await flush(tester);

@@ -299,7 +299,7 @@ class _Host {
         onPost?.call();
         final wire = wireReply;
         if (wire == null) {
-          request.response.headers.contentType = ContentType('application', 'x-ndjson');
+          request.response.headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
           for (final value in frames) {
             request.response.write('${jsonEncode(value)}\n');
           }
@@ -307,7 +307,7 @@ class _Host {
           request.response.statusCode = wire['status']! as int;
           final payload = wire['body'];
           if (payload is List) {
-            request.response.headers.contentType = ContentType('application', 'x-ndjson');
+            request.response.headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
             for (final value in payload) {
               // Rebind only identities for the worker's freshly generated ID
               // and this HTTP fixture's capability. Error/status/usage values
