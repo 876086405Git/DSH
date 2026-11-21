@@ -28,8 +28,11 @@ class _Store extends CompanionMemoryStore {
 class _Fixture {
   int now = _at;
   late final store = _Store(sqlite3.openInMemory(), () => now);
-  late final owner = CompanionMemoryOwner(store, CompanionLocal.at(Directory('/unused-usage-owner')),
-    nowMilliseconds: () => now);
+  late final owner = CompanionMemoryOwner(
+    store,
+    CompanionLocal.at(Directory('/unused-usage-owner')),
+    nowMilliseconds: () => now,
+  );
   late final HttpServer server;
   late final DshClient client;
   final queries = <Map<String, String>>[];
@@ -69,9 +72,14 @@ class _Fixture {
   }
 
   MemoryRow delivery([String id = 'request']) => store.rememberHostChatDelivery(
-    hostKey: _host, instanceId: 'original-instance', sessionId: 'old-session', requestId: id,
-    archiveId: store.archive['id']! as String, controlRevision: store.archive['control_revision']! as int,
-    historyAfterSeq: store.archive['history_after_seq']! as int, observedAt: now,
+    hostKey: _host,
+    instanceId: 'original-instance',
+    sessionId: 'old-session',
+    requestId: id,
+    archiveId: store.archive['id']! as String,
+    controlRevision: store.archive['control_revision']! as int,
+    historyAfterSeq: store.archive['history_after_seq']! as int,
+    observedAt: now,
   );
 
   Future<void> pull() => owner.refreshHostChatUsage(client, _host);
@@ -80,35 +88,76 @@ class _Fixture {
 Map<String, Object?> _snapshot(MemoryRow delivery, {String state = 'settled', int revision = 3}) {
   final running = state == 'running';
   return {
-    'v': 1, 'instanceId': delivery['instance_id'], 'sessionId': delivery['session_id'],
+    'v': 1,
+    'instanceId': delivery['instance_id'],
+    'sessionId': delivery['session_id'],
     'requestId': delivery['request_id'],
-    'binding': {'archiveId': delivery['archive_id'], 'controlRevision': delivery['control_revision'],
-      'historyAfterSeq': delivery['history_after_seq']},
-    'state': state, 'complete': !running, 'revision': revision, 'gaps': [],
-    'observedAdapterCalls': 1, 'activeCalls': running ? 1 : 0, 'physicalRequests': 1,
-    'receipts': [{
-      'receiptId': 'physical-${delivery['request_id']}', 'callId': 'call-${delivery['request_id']}',
-      'revision': revision, 'requestIds': [delivery['request_id']], 'provider': 'deepseek', 'model': 'deepseek-flash',
-      'phase': running ? 'active' : 'finished', 'observation': 'fetch-invoked', 'dispatched': true,
-      'dispatchAtMs': _at - 1200, 'handoffAtMs': _at - 1300, 'physicalRequests': 1,
-      'terminal': running ? 'incomplete' : 'complete', 'complete': !running, 'httpStatus': 200, 'errorCode': null,
-      'usage': {
-        'provider': 'deepseek', 'model': 'deepseek-flash', 'start_usage': {'input_tokens': 90, 'vendor_extra': 7},
-        'final_usage': {'input_tokens': 9, 'cache_read_input_tokens': 4, 'output_tokens': 3, 'vendor_extra': 11},
-        'start_event': 'message_start', 'final_event': 'message_delta', 'usage_semantics': 'cumulative',
-        'input_uncached': 9, 'input_cache_read': 4, 'input_cache_write': null, 'output_tokens': 3,
-        'stop_reason': running ? null : 'end_turn', 'terminal': running ? 'incomplete' : 'complete',
-        'complete': !running, 'http_status': 200,
+    'binding': {
+      'archiveId': delivery['archive_id'],
+      'controlRevision': delivery['control_revision'],
+      'historyAfterSeq': delivery['history_after_seq'],
+    },
+    'state': state,
+    'complete': !running,
+    'revision': revision,
+    'gaps': [],
+    'observedAdapterCalls': 1,
+    'activeCalls': running ? 1 : 0,
+    'physicalRequests': 1,
+    'receipts': [
+      {
+        'receiptId': 'physical-${delivery['request_id']}',
+        'callId': 'call-${delivery['request_id']}',
+        'revision': revision,
+        'requestIds': [delivery['request_id']],
+        'provider': 'deepseek',
+        'model': 'deepseek-flash',
+        'phase': running ? 'active' : 'finished',
+        'observation': 'fetch-invoked',
+        'dispatched': true,
+        'dispatchAtMs': _at - 1200,
+        'handoffAtMs': _at - 1300,
+        'physicalRequests': 1,
+        'terminal': running ? 'incomplete' : 'complete',
+        'complete': !running,
+        'httpStatus': 200,
+        'errorCode': null,
+        'usage': {
+          'provider': 'deepseek',
+          'model': 'deepseek-flash',
+          'start_usage': {'input_tokens': 90, 'vendor_extra': 7},
+          'final_usage': {'input_tokens': 9, 'cache_read_input_tokens': 4, 'output_tokens': 3, 'vendor_extra': 11},
+          'start_event': 'message_start',
+          'final_event': 'message_delta',
+          'usage_semantics': 'cumulative',
+          'input_uncached': 9,
+          'input_cache_read': 4,
+          'input_cache_write': null,
+          'output_tokens': 3,
+          'stop_reason': running ? null : 'end_turn',
+          'terminal': running ? 'incomplete' : 'complete',
+          'complete': !running,
+          'http_status': 200,
+        },
       },
-    }],
+    ],
   };
 }
 
 Map<String, Object?> _unknown(MemoryRow delivery, {String instance = 'new-instance'}) => {
-  'v': 1, 'instanceId': instance, 'sessionId': delivery['session_id'], 'requestId': delivery['request_id'],
-  'binding': null, 'state': 'unknown', 'complete': false, 'revision': 0,
+  'v': 1,
+  'instanceId': instance,
+  'sessionId': delivery['session_id'],
+  'requestId': delivery['request_id'],
+  'binding': null,
+  'state': 'unknown',
+  'complete': false,
+  'revision': 0,
   'gaps': [if (instance != delivery['instance_id']) 'instance-changed' else 'missing-root'],
-  'observedAdapterCalls': 0, 'activeCalls': 0, 'physicalRequests': null, 'receipts': [],
+  'observedAdapterCalls': 0,
+  'activeCalls': 0,
+  'physicalRequests': null,
+  'receipts': [],
 };
 
 void main() {
@@ -120,7 +169,11 @@ void main() {
     await fixture.pull();
     await fixture.pull();
     expect(fixture.methods, ['GET']);
-    expect(fixture.queries.single, {'instanceId': 'original-instance', 'sessionId': 'old-session', 'requestId': 'request'});
+    expect(fixture.queries.single, {
+      'instanceId': 'original-instance',
+      'sessionId': 'old-session',
+      'requestId': 'request',
+    });
     final receipt = fixture.store.requests().single;
     expect(receipt['input_uncached'], 9);
     expect(receipt['input_cache_read'], 4);
@@ -136,14 +189,21 @@ void main() {
     final fixture = _Fixture();
     final saved = fixture.delivery();
     final release = Completer<void>();
-    fixture.answer = (_) async { await release.future; return _snapshot(saved); };
+    fixture.answer = (_) async {
+      await release.future;
+      return _snapshot(saved);
+    };
     await fixture.open();
     final first = fixture.pull();
     await fixture.started.future;
     final second = fixture.pull();
     expect(identical(first, second), isTrue);
-    fixture.store.saveManual(const CompanionMemory(id: '11111111-1111-4111-8111-111111111111', text: '新的现况'),
-      expectedRowRev: null, currentValueChange: true, realityKnown: true);
+    fixture.store.saveManual(
+      const CompanionMemory(id: '11111111-1111-4111-8111-111111111111', text: '新的现况'),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     expect(fixture.store.archive['control_revision'], isNot(saved['control_revision']));
     release.complete();
     await first;
@@ -182,7 +242,9 @@ void main() {
     final fixture = _Fixture();
     fixture.delivery();
     fixture.status = 404;
-    fixture.answer = (_) async => {'error': {'code': 'companion/not-found'}};
+    fixture.answer = (_) async => {
+      'error': {'code': 'companion/not-found'},
+    };
     await fixture.open();
     await fixture.pull();
     expect(fixture.store.hostChatDeliveries().single['state'], 'pending');
@@ -192,7 +254,9 @@ void main() {
     expect(fixture.queries, hasLength(1));
     fixture.now++;
     fixture.status = 503;
-    fixture.answer = (_) async => {'error': {'code': 'companion/usage-unavailable', 'message': 'fixture'}};
+    fixture.answer = (_) async => {
+      'error': {'code': 'companion/usage-unavailable', 'message': 'fixture'},
+    };
     await fixture.pull();
     expect(fixture.queries, hasLength(2));
     expect(fixture.store.hostChatDeliveries().single['state'], 'pending');
@@ -203,7 +267,10 @@ void main() {
     final fixture = _Fixture();
     final saved = fixture.delivery();
     final release = Completer<void>();
-    fixture.answer = (_) async { await release.future; return _snapshot(saved); };
+    fixture.answer = (_) async {
+      await release.future;
+      return _snapshot(saved);
+    };
     await fixture.open();
     final read = fixture.pull();
     await fixture.started.future;
@@ -233,11 +300,21 @@ void main() {
     final root = Directory.systemTemp.createTempSync('companion-pending-usage');
     addTearDown(() => root.deleteSync(recursive: true));
     final first = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => _at);
-    final saved = first.rememberHostChatDelivery(hostKey: _host, instanceId: 'old', sessionId: 'old-session',
-      requestId: 'unsettled', archiveId: first.archive['id']! as String, controlRevision: 0,
-      historyAfterSeq: 0, observedAt: _at);
+    final saved = first.rememberHostChatDelivery(
+      hostKey: _host,
+      instanceId: 'old',
+      sessionId: 'old-session',
+      requestId: 'unsettled',
+      archiveId: first.archive['id']! as String,
+      controlRevision: 0,
+      historyAfterSeq: 0,
+      observedAt: _at,
+    );
     first.close();
-    final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => _at + 60000);
+    final reopened = CompanionMemoryStore(
+      sqlite3.open('${root.path}/memory.sqlite'),
+      nowMilliseconds: () => _at + 60000,
+    );
     addTearDown(reopened.close);
     expect(reopened.pendingHostChatDeliveries(_host).single['id'], saved['id']);
     expect(reopened.pendingHostChatDeliveries(_host).single['instance_id'], 'old');

@@ -68,8 +68,10 @@ String _utc(int milliseconds) => DateTime.fromMillisecondsSinceEpoch(millisecond
 MemoryRow parseExtractionProposal(String raw, MemoryBatch batch) {
   final proposal = _object(jsonDecode(raw));
   _fields(proposal, const ['schema_version', 'batch_id', 'covered_message_ids', 'operations', 'completion']);
-  if (proposal['schema_version'] is! int || proposal['schema_version'] != 2 ||
-      proposal['batch_id'] != batch.id || proposal['completion'] != 'complete') {
+  if (proposal['schema_version'] is! int ||
+      proposal['schema_version'] != 2 ||
+      proposal['batch_id'] != batch.id ||
+      proposal['completion'] != 'complete') {
     throw const FormatException('Invalid extraction envelope');
   }
   final covered = _list(proposal['covered_message_ids']);
@@ -85,13 +87,17 @@ MemoryRow parseExtractionProposal(String raw, MemoryBatch batch) {
     final operation = _object(value);
     final op = operation['op'];
     if (op != 'create' && op != 'replace') throw const FormatException('Unknown extraction operation');
-    _fields(operation, [
-      'op', 'kind', 'text', 'evidence',
-      if (op == 'replace') ...['target_id', 'expected_row_rev'],
-    ], [
-      'keywords', 'event_time', 'followup',
-      if (op == 'replace') 'change_kind',
-    ]);
+    _fields(
+      operation,
+      [
+        'op',
+        'kind',
+        'text',
+        'evidence',
+        if (op == 'replace') ...['target_id', 'expected_row_rev'],
+      ],
+      ['keywords', 'event_time', 'followup', if (op == 'replace') 'change_kind'],
+    );
     if (!const ['fact', 'preference', 'episode'].contains(operation['kind'])) {
       throw const FormatException('Unknown memory kind');
     }
@@ -104,7 +110,9 @@ MemoryRow parseExtractionProposal(String raw, MemoryBatch batch) {
       _fields(reference, const ['message_id', 'quote']);
       final source = sources[reference['message_id']];
       final quote = _text(reference['quote']);
-      if (source == null || source['role'] != 'user' || source['scope'] != 'real' ||
+      if (source == null ||
+          source['role'] != 'user' ||
+          source['scope'] != 'real' ||
           !(source['text']! as String).contains(quote)) {
         throw const FormatException('Evidence is not from this real source version');
       }
@@ -115,16 +123,18 @@ MemoryRow parseExtractionProposal(String raw, MemoryBatch batch) {
     final distinct = <String>{};
     for (final keyword in keywords) {
       final word = normalizeMemoryText(_text(keyword));
-      if (!distinct.add(word) || !evidenceSources.any((source) =>
-          normalizeMemoryText(source['text']! as String).contains(word))) {
+      if (!distinct.add(word) ||
+          !evidenceSources.any((source) => normalizeMemoryText(source['text']! as String).contains(word))) {
         throw const FormatException('Keyword has no distinct literal source');
       }
     }
     if (op == 'replace') {
       final id = _text(operation['target_id']);
       final target = existing[id];
-      if (target == null || operation['expected_row_rev'] is! int ||
-          operation['expected_row_rev'] != target['row_rev'] || !replaced.add(id)) {
+      if (target == null ||
+          operation['expected_row_rev'] is! int ||
+          operation['expected_row_rev'] != target['row_rev'] ||
+          !replaced.add(id)) {
         throw const FormatException('Invalid replacement target revision');
       }
       if (operation.containsKey('change_kind') &&
@@ -144,7 +154,8 @@ void _timeProposal(Object? value, String firstQuote, {required bool followup}) {
   final time = _object(value);
   _fields(time, ['local_date', 'precision', 'wording', if (followup) 'basis']);
   if (!const ['day', 'part_of_day', 'clock', 'unspecified'].contains(time['precision']) ||
-      (followup && time['basis'] != 'explicit_invitation') || !firstQuote.contains(_text(time['wording']))) {
+      (followup && time['basis'] != 'explicit_invitation') ||
+      !firstQuote.contains(_text(time['wording']))) {
     throw const FormatException('Time wording has no first-source anchor');
   }
   final date = time['local_date'];
@@ -170,7 +181,8 @@ List<Object?> _list(Object? value) {
 }
 
 void _fields(MemoryRow object, List<String> required, [List<String> optional = const []]) {
-  if (!required.every(object.containsKey) || object.keys.any((key) => !required.contains(key) && !optional.contains(key))) {
+  if (!required.every(object.containsKey) ||
+      object.keys.any((key) => !required.contains(key) && !optional.contains(key))) {
     throw const FormatException('Unexpected or missing proposal field');
   }
 }
@@ -203,7 +215,9 @@ String _text(Object? value, {bool card = false}) {
 // Match the repository's ECMAScript whitespace set, without NFKC or changing
 // the original card/source text. ASCII case folding leaves other scripts alone.
 final _whitespace = RegExp(r'[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+');
-String normalizeMemoryText(String text) => text.replaceAll(_whitespace, ' ').replaceAll(RegExp(r'^ +| +$'), '')
+String normalizeMemoryText(String text) => text
+    .replaceAll(_whitespace, ' ')
+    .replaceAll(RegExp(r'^ +| +$'), '')
     .replaceAllMapped(RegExp(r'[A-Z]'), (match) => String.fromCharCode(match.group(0)!.codeUnitAt(0) + 32));
 
 final _word = RegExp(r'[\p{L}\p{N}]', unicode: true);
@@ -226,8 +240,8 @@ bool _containsTerm(String text, String term) {
   return false;
 }
 
-List<String> _keywords(MemoryRow card) => (card['keywords']! as List<Object?>).cast<String>()
-    .map(normalizeMemoryText).where(_searchable).toSet().toList();
+List<String> _keywords(MemoryRow card) =>
+    (card['keywords']! as List<Object?>).cast<String>().map(normalizeMemoryText).where(_searchable).toSet().toList();
 
 int _hits(MemoryRow card, String query) {
   final keywords = _keywords(card);
@@ -258,8 +272,9 @@ bool isMemoryResponsePreference(MemoryRow card) {
   final evidence = (card['evidence']! as List<Object?>).cast<MemoryRow>();
   final wording = card['manual'] == true
       ? [card['text']! as String]
-      : evidence.where((source) => source['role'] == 'user' && source['scope'] == 'real')
-          .map((source) => source['quote']! as String);
+      : evidence
+            .where((source) => source['role'] == 'user' && source['scope'] == 'real')
+            .map((source) => source['quote']! as String);
   return wording.any((text) {
     final normalized = normalizeMemoryText(text);
     return !_storyWording.hasMatch(normalized) && _responseWording.hasMatch(normalized);
@@ -270,7 +285,9 @@ String _memoryBlock(List<MemoryRow> cards) => jsonEncode({
   'type': 'companion_memory',
   'version': 2,
   'scope': 'real',
-  'items': [for (final card in cards) {'id': card['id'], 'kind': card['kind'], 'text': card['text']}],
+  'items': [
+    for (final card in cards) {'id': card['id'], 'kind': card['kind'], 'text': card['text']},
+  ],
 });
 
 MemorySelection selectMemoryContext(
@@ -284,15 +301,20 @@ MemorySelection selectMemoryContext(
   if (limit < 1 || limit > memoryContextHardLimit) throw ArgumentError.value(limit, 'limit');
   final query = normalizeMemoryText(input);
   final eligible = cards.where((card) {
-    if (card['scope'] != 'real' || card['eligible'] != true || card['status'] == 'withdrawn' ||
-        card['plan_state'] == 'cancelled') return false;
+    if (card['scope'] != 'real' ||
+        card['eligible'] != true ||
+        card['status'] == 'withdrawn' ||
+        card['plan_state'] == 'cancelled')
+      return false;
     // Older stored automatic rows can predate the proposal text boundary.
     // Keep the exact same control-character contract as the v2 bridge.
     if (_memoryControls.hasMatch(card['text']! as String)) return false;
     final expiry = card['expires_at_ms'] as int?;
     if (expiry != null && expiry <= nowMs) return false;
     if (card['status'] == 'past' &&
-        ((card['evidence']! as List<Object?>).isEmpty || !_pastWording.hasMatch(normalizeMemoryText(card['text']! as String)))) return false;
+        ((card['evidence']! as List<Object?>).isEmpty ||
+            !_pastWording.hasMatch(normalizeMemoryText(card['text']! as String))))
+      return false;
     return card['topic_mode'] != 'never' || explicitTopicIds.contains(card['topic_id']);
   }).toList();
   final hits = {for (final card in eligible) card['id']! as String: _hits(card, query)};
@@ -313,6 +335,7 @@ MemorySelection selectMemoryContext(
     ids.add(card['id']! as String);
     return true;
   }
+
   var preferences = 0;
   for (final card in eligible) {
     if (preferences == 2) break;
@@ -350,26 +373,44 @@ bool _nonLiteralControl(String text) =>
 
 bool _correctionAnchor(MemoryRow card, String replacement) {
   final body = normalizeMemoryText(card['text']! as String);
-  final support = card['manual'] == true ? [body] : [
-    for (final source in (card['evidence']! as List<Object?>).cast<MemoryRow>())
-      if (source['role'] == 'user' && source['scope'] == 'real') normalizeMemoryText(source['quote']! as String),
-  ];
-  return _keywords(card).any((word) => _containsTerm(body, word) && _containsTerm(replacement, word) &&
-      support.any((source) => _containsTerm(source, word)));
+  final support = card['manual'] == true
+      ? [body]
+      : [
+          for (final source in (card['evidence']! as List<Object?>).cast<MemoryRow>())
+            if (source['role'] == 'user' && source['scope'] == 'real') normalizeMemoryText(source['quote']! as String),
+        ];
+  return _keywords(card).any(
+    (word) =>
+        _containsTerm(body, word) &&
+        _containsTerm(replacement, word) &&
+        support.any((source) => _containsTerm(source, word)),
+  );
 }
 
 MemoryRow _correction(String replacement, String? target, List<MemoryRow> cards) {
   final normalized = normalizeMemoryText(replacement);
-  final candidates = cards.where((card) => card['scope'] == 'real' && card['eligible'] == true &&
-    card['status'] == 'current' && (target == null
-      ? normalized.startsWith('我') && !_storyWording.hasMatch(normalized) && _correctionAnchor(card, normalized)
-      : _matchesControlTarget(card, target))).toList();
+  final candidates = cards
+      .where(
+        (card) =>
+            card['scope'] == 'real' &&
+            card['eligible'] == true &&
+            card['status'] == 'current' &&
+            (target == null
+                ? normalized.startsWith('我') &&
+                      !_storyWording.hasMatch(normalized) &&
+                      _correctionAnchor(card, normalized)
+                : _matchesControlTarget(card, target)),
+      )
+      .toList();
   final unique = candidates.length == 1;
   return {
-    'kind': 'correct', 'replacement_text': replacement,
+    'kind': 'correct',
+    'replacement_text': replacement,
     'target_card_id': unique ? candidates.single['id'] : null,
     'topic_ids': unique ? [candidates.single['topic_id']! as String] : <String>[],
-    'target': target, 'delete_chat': false, 'ambiguous': !unique || normalized.isEmpty,
+    'target': target,
+    'delete_chat': false,
+    'ambiguous': !unique || normalized.isEmpty,
   };
 }
 
@@ -378,14 +419,17 @@ MemoryRow _correction(String replacement, String? target, List<MemoryRow> cards)
 Set<String> explicitMemoryTopics(String input, List<MemoryRow> cards) {
   final text = normalizeMemoryText(_controlInput(input));
   if (_nonLiteralControl(text)) return {};
-  final match = RegExp(r'^(?:聊聊|我想问)(.+?)[。！？.!?]*$').firstMatch(text) ??
-      RegExp(r'^(.+?)(?:怎么样|是哪天)[。！？.!?]*$').firstMatch(text);
+  final match =
+      RegExp(r'^(?:聊聊|我想问)(.+?)[。！？.!?]*$').firstMatch(text) ?? RegExp(r'^(.+?)(?:怎么样|是哪天)[。！？.!?]*$').firstMatch(text);
   if (match == null) return {};
   final target = match.group(1)!.trim();
   final topics = <String>{
     for (final card in cards)
-      if (card['scope'] == 'real' && card['eligible'] == true && card['status'] != 'withdrawn' &&
-          _matchesControlTarget(card, target)) card['topic_id']! as String,
+      if (card['scope'] == 'real' &&
+          card['eligible'] == true &&
+          card['status'] != 'withdrawn' &&
+          _matchesControlTarget(card, target))
+        card['topic_id']! as String,
   };
   return topics.length == 1 ? topics : {};
 }
@@ -398,8 +442,7 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
   if (_nonLiteralControl(text)) return null;
   final directCorrection = RegExp(r'^(?:把|将)?(.+?)(?:改成|改为)[：: ]*(.+)$', dotAll: true).firstMatch(raw);
   if (directCorrection != null) {
-    return _correction(directCorrection.group(2)!.trim(),
-      normalizeMemoryText(directCorrection.group(1)!), cards);
+    return _correction(directCorrection.group(2)!.trim(), normalizeMemoryText(directCorrection.group(1)!), cards);
   }
   final correction = RegExp(r'^你记错了[，,：: ]*(.*)$', dotAll: true).firstMatch(raw);
   if (correction != null) return _correction(correction.group(1)!.trim(), null, cards);

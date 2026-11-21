@@ -65,20 +65,33 @@ class _Bridge extends DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
   }) async {
-    if (path == '$dshGoCompanionPath/memories') return json({
-      'v': 1, 'storeId': '33333333-3333-4333-8333-333333333333', 'revision': 0, 'memoryRevision': 0, 'memories': [],
-    });
-    if (path != dshGoCompanionPath) return json({'error': {'code': 'companion/not-found'}}, 404);
+    if (path == '$dshGoCompanionPath/memories')
+      return json({
+        'v': 1,
+        'storeId': '33333333-3333-4333-8333-333333333333',
+        'revision': 0,
+        'memoryRevision': 0,
+        'memories': [],
+      });
+    if (path != dshGoCompanionPath)
+      return json({
+        'error': {'code': 'companion/not-found'},
+      }, 404);
     getPaths.add(path);
     getCount++;
     return getCount == 1 ? initialRead.future : snapshot();
   }
 
   @override
-  Future<DshHttpResponse> getBounded(String path, {
-    Map<String, String>? query, required int maxBytes, bool autoUncompress = false,
+  Future<DshHttpResponse> getBounded(
+    String path, {
+    Map<String, String>? query,
+    required int maxBytes,
+    bool autoUncompress = false,
     Duration timeout = const Duration(seconds: 30),
-  }) async => json({'error': {'code': 'companion/not-found'}}, 404);
+  }) async => json({
+    'error': {'code': 'companion/not-found'},
+  }, 404);
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -356,8 +369,12 @@ void main() {
     final memory = CompanionMemoryStore(sqlite3.open('${temporary.path}/memory.sqlite'), nowMilliseconds: () => _now);
     SharedPreferences.setMockInitialValues({
       'companion_sessions': jsonEncode({
-        '${HostRef.local.kind.name}:${HostRef.local.id}': {'id': _session, 'full': true,
-          'memoryArchiveId': memory.archive['id'], 'memoryControlRevision': memory.archive['control_revision']},
+        '${HostRef.local.kind.name}:${HostRef.local.id}': {
+          'id': _session,
+          'full': true,
+          'memoryArchiveId': memory.archive['id'],
+          'memoryControlRevision': memory.archive['control_revision'],
+        },
       }),
     });
     memory.close();

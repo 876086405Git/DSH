@@ -19,7 +19,13 @@ int estimateCompanionMemoryTokens(String text) {
         (rune >= 0x20000 && rune <= 0x3ffff)) {
       tenths += 6;
     } else {
-      tenths += (rune <= 0x7ff ? 2 : rune <= 0xffff ? 3 : 4) * 10;
+      tenths +=
+          (rune <= 0x7ff
+              ? 2
+              : rune <= 0xffff
+              ? 3
+              : 4) *
+          10;
     }
   }
   return (tenths + 9) ~/ 10;
@@ -206,8 +212,9 @@ List<Map<String, Object?>> companionRequestMessages(
     if (line.role != 'user' && line.role != 'assistant') throw const FormatException('Unsupported message role');
     out.add({
       'role': line.role,
-      'content': i == history.length - 1 &&
-          ((context != null && !context.isEmpty) || (memory != null && memory.ids.isNotEmpty))
+      'content':
+          i == history.length - 1 &&
+              ((context != null && !context.isEmpty) || (memory != null && memory.ids.isNotEmpty))
           ? [
               {'type': 'text', 'text': line.text},
               if (context != null && !context.isEmpty) {'type': 'text', 'text': context.text},

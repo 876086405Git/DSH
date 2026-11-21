@@ -25,8 +25,11 @@ const _channel = MethodChannel('dsh/companion_widget');
 class _Phone {
   _Phone() {
     store = CompanionMemoryStore(db, nowMilliseconds: () => now);
-    owner = CompanionMemoryOwner(store, CompanionLocal.at(Directory('/unused-companion-ui-test')),
-      nowMilliseconds: () => now);
+    owner = CompanionMemoryOwner(
+      store,
+      CompanionLocal.at(Directory('/unused-companion-ui-test')),
+      nowMilliseconds: () => now,
+    );
     addTearDown(owner.dispose);
   }
 
@@ -36,32 +39,59 @@ class _Phone {
   late final CompanionMemoryOwner owner;
 
   MemoryRow manual(String text) {
-    store.saveManual(CompanionMemory(id: _id, text: text), expectedRowRev: null,
-      currentValueChange: true, realityKnown: true);
+    store.saveManual(
+      CompanionMemory(id: _id, text: text),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     return store.cards().single;
   }
 
-  MemoryRow automatic(String text, {String source = 'original', String kind = 'fact', List<String> keywords = const []}) {
-    store.submitMessage(id: source, sessionId: store.lightSessionId, text: text,
-      saidAtUtc: now, offsetMinutes: 480);
+  MemoryRow automatic(
+    String text, {
+    String source = 'original',
+    String kind = 'fact',
+    List<String> keywords = const [],
+  }) {
+    store.submitMessage(id: source, sessionId: store.lightSessionId, text: text, saidAtUtc: now, offsetMinutes: 480);
     final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-    final proposal = parseExtractionProposal(jsonEncode({
-      'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': [source],
-      'completion': 'complete', 'operations': [
-        {'op': 'create', 'kind': kind, 'text': text, 'keywords': keywords,
-          'evidence': [{'message_id': source, 'quote': text}]},
-      ],
-    }), batch);
+    final proposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'covered_message_ids': [source],
+        'completion': 'complete',
+        'operations': [
+          {
+            'op': 'create',
+            'kind': kind,
+            'text': text,
+            'keywords': keywords,
+            'evidence': [
+              {'message_id': source, 'quote': text},
+            ],
+          },
+        ],
+      }),
+      batch,
+    );
     expect(store.commitExtraction(batch, proposal), isTrue);
-    return store.cards().singleWhere((row) => (row['evidence'] as List)
-      .any((evidence) => (evidence as Map)['message_id'] == source));
+    return store.cards().singleWhere(
+      (row) => (row['evidence'] as List).any((evidence) => (evidence as Map)['message_id'] == source),
+    );
   }
 
-  Widget app() => ProviderScope(overrides: [
-    activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-  ], child: MaterialApp(theme: buildDarkTheme(), localizationsDelegates: L10n.localizationsDelegates,
-    supportedLocales: L10n.supportedLocales, locale: const Locale('zh'),
-    home: CompanionMemoryPage(memory: owner)));
+  Widget app() => ProviderScope(
+    overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
+    child: MaterialApp(
+      theme: buildDarkTheme(),
+      localizationsDelegates: L10n.localizationsDelegates,
+      supportedLocales: L10n.supportedLocales,
+      locale: const Locale('zh'),
+      home: CompanionMemoryPage(memory: owner),
+    ),
+  );
 }
 
 Future<void> _edit(WidgetTester tester, String text, {bool save = true}) async {
@@ -89,7 +119,9 @@ void main() {
       return true;
     });
   });
-  tearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, null));
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, null),
+  );
 
   testWidgets('the phone page opens without any host and saves directly to its shared owner', (tester) async {
     final phone = _Phone();
@@ -113,8 +145,12 @@ void main() {
     await tester.tap(find.text('我的咖啡甜度是低糖'));
     await tester.pumpAndSettle();
     await _edit(tester, '我的咖啡甜度是无糖', save: false);
-    phone.store.saveManual(const CompanionMemory(id: _id, text: '我的咖啡甜度是半糖'),
-      expectedRowRev: initial['row_rev']! as int, currentValueChange: true, realityKnown: true);
+    phone.store.saveManual(
+      const CompanionMemory(id: _id, text: '我的咖啡甜度是半糖'),
+      expectedRowRev: initial['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     phone.owner.changed();
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
@@ -123,7 +159,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('current details and wording use different explicit edit actions, without inventing history', (tester) async {
+  testWidgets('current details and wording use different explicit edit actions, without inventing history', (
+    tester,
+  ) async {
     final phone = _Phone();
     final initial = phone.manual('我的咖啡甜度是低糖');
     await tester.pumpWidget(phone.app());
@@ -159,12 +197,27 @@ void main() {
 
   testWidgets('legacy reality confirmation is reachable and pin does not grant it', (tester) async {
     final phone = _Phone();
-    phone.store.importLegacy(CompanionMigrationSnapshot.fromJson({
-      'v': 1, 'storeId': _oldStore, 'revision': 2, 'memoryRevision': 2,
-      'memories': [{'id': _id, 'kind': 'fact', 'text': '我的咖啡甜度是无糖', 'keywords': [],
-        'pinned': false, 'source': {'kind': 'manual'}, 'expiresAt': null,
-        'createdAt': 1000, 'updatedAt': 2000}],
-    }));
+    phone.store.importLegacy(
+      CompanionMigrationSnapshot.fromJson({
+        'v': 1,
+        'storeId': _oldStore,
+        'revision': 2,
+        'memoryRevision': 2,
+        'memories': [
+          {
+            'id': _id,
+            'kind': 'fact',
+            'text': '我的咖啡甜度是无糖',
+            'keywords': [],
+            'pinned': false,
+            'source': {'kind': 'manual'},
+            'expiresAt': null,
+            'createdAt': 1000,
+            'updatedAt': 2000,
+          },
+        ],
+      }),
+    );
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
     expect(phone.owner.select('咖啡甜度').ids, isEmpty);
@@ -180,7 +233,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('never keeps the card and forget removes it; both clear line and saidAt with native acknowledgement', (tester) async {
+  testWidgets('never keeps the card and forget removes it; both clear line and saidAt with native acknowledgement', (
+    tester,
+  ) async {
     final phone = _Phone();
     phone.automatic('我的咖啡甜度是无糖');
     await tester.pumpWidget(phone.app());
@@ -207,7 +262,10 @@ void main() {
   testWidgets('native failure leaves clear pending after a successful local control', (tester) async {
     final phone = _Phone();
     phone.manual('我的咖啡甜度是无糖');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (_) async => null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      _channel,
+      (_) async => null,
+    );
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
     await _menu(tester, '别主动提');
@@ -242,19 +300,38 @@ void main() {
 
   testWidgets('usage view keeps four components separate and pending coverage is never shown as free', (tester) async {
     final phone = _Phone();
-    final id = phone.store.reserveRequest(category: 'chat', provider: 'deepseek', model: 'deepseek-flash',
-      inputTokens: 100, outputTokens: 800)!;
+    final id = phone.store.reserveRequest(
+      category: 'chat',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      inputTokens: 100,
+      outputTokens: 800,
+    )!;
     phone.store.markRequestSent(id);
     phone.store.recordUsage(id, {
-      'provider': 'deepseek', 'model': 'deepseek-flash',
-      'start_usage': {'input_tokens': 90}, 'final_usage': {'input_tokens': 9, 'output_tokens': 3},
-      'usage_semantics': 'cumulative', 'input_uncached': 9, 'input_cache_read': null,
-      'input_cache_write': null, 'output_tokens': 3, 'terminal': 'incomplete', 'complete': false,
+      'provider': 'deepseek',
+      'model': 'deepseek-flash',
+      'start_usage': {'input_tokens': 90},
+      'final_usage': {'input_tokens': 9, 'output_tokens': 3},
+      'usage_semantics': 'cumulative',
+      'input_uncached': 9,
+      'input_cache_read': null,
+      'input_cache_write': null,
+      'output_tokens': 3,
+      'terminal': 'incomplete',
+      'complete': false,
     });
     phone.store.finishRequest(id, terminal: 'incomplete');
-    phone.store.rememberHostChatDelivery(hostKey: 'host', instanceId: 'old-instance', sessionId: 'old-session',
-      requestId: 'unsettled', archiveId: phone.store.archive['id']! as String,
-      controlRevision: 0, historyAfterSeq: 0, observedAt: phone.now);
+    phone.store.rememberHostChatDelivery(
+      hostKey: 'host',
+      instanceId: 'old-instance',
+      sessionId: 'old-session',
+      requestId: 'unsettled',
+      archiveId: phone.store.archive['id']! as String,
+      controlRevision: 0,
+      historyAfterSeq: 0,
+      observedAt: phone.now,
+    );
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('模型用量'));

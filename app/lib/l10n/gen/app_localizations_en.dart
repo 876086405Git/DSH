@@ -5383,7 +5383,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionContextUnsupported =>
-      'This host can\'t take her context yet: her name, persona and what just happened won\'t reach her, only what you say. Update the host or switch to light mode.';
+      'This host can\'t take her context yet: her name, persona, recent events and memories on your phone won\'t reach her, only what you say. Update the host or switch to light mode.';
 
   @override
   String get companionLogEmpty => 'Nothing said yet.';
@@ -5597,14 +5597,14 @@ class L10nEn extends L10n {
 
   @override
   String companionMemoryScope(String host) {
-    return 'Kept on $host. She doesn\'t bring these up by herself yet; a later version will.';
+    return 'Saved on $host, shared by both modes. You can edit or forget these anytime.';
   }
 
   @override
   String get companionMemoryAdd => 'Add';
 
   @override
-  String get companionMemoryEdit => 'Edit';
+  String get companionMemoryEdit => 'Update current details';
 
   @override
   String get companionMemorySave => 'Save';
@@ -5623,7 +5623,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionMemoryEmptyHint =>
-      'Write down what you\'d like her to remember. It stays on the current host, and you can edit or delete it anytime.';
+      'You can write down real details you want her to remember. Both modes share these memories, and you can edit them offline.';
 
   @override
   String get companionMemoryUnsupported => 'This host can\'t keep her memories yet';
@@ -5712,11 +5712,11 @@ class L10nEn extends L10n {
       'I can\'t reach the host right now. If you just want to chat, switch to Light in the menu at the top right.';
 
   @override
-  String get companionMenuRestartLightHint => 'Clear the chat on this phone';
+  String get companionMenuRestartLightHint => 'Start a new conversation and keep earlier records';
 
   @override
   String get companionMenuRestartLightConfirm =>
-      'She will forget this conversation, and the chat on this phone is deleted.';
+      'Start a new conversation. Memories and earlier chat records will be kept.';
 
   @override
   String get companionInviteRest => 'Rest on the cushion with me for a bit?';
@@ -6223,6 +6223,161 @@ class L10nEn extends L10n {
 
   @override
   String get companionAdaptNetwork => 'no connection';
+
+  @override
+  String get companionMemoryMigrationPending =>
+      'Some older memories have not moved yet. The originals are still kept. You can try again later.';
+
+  @override
+  String get companionMemoryWaiting => 'Memory extraction is waiting. Your original words are saved on this phone.';
+
+  @override
+  String get companionMemoryWidgetPending =>
+      'Your memories are updated. The widget’s previous line has not cleared yet; it will be retried.';
+
+  @override
+  String get companionMemoryConfiguration =>
+      'This channel is not ready to save new memories automatically. Your words are kept; you can still edit memories.';
+
+  @override
+  String get companionMemoryWording => 'Edit wording only';
+
+  @override
+  String get companionMemoryPin => 'Pin';
+
+  @override
+  String get companionMemoryUnpin => 'Unpin';
+
+  @override
+  String get companionMemoryConfirmReality => 'This is true of my real life';
+
+  @override
+  String get companionMemorySources => 'My original words';
+
+  @override
+  String get companionMemoryEditSource => 'Edit these words';
+
+  @override
+  String get companionMemoryDeleteSource => 'Delete the phone copy';
+
+  @override
+  String get companionMemoryDeleteSourceHint =>
+      'Delete these words from the phone and memories supported only by them. Old host conversations and separate copies remain.';
+
+  @override
+  String get companionMemoryNoSource => 'This was written by hand, or its original source is no longer available.';
+
+  @override
+  String get companionMemoryTooLong => 'Too long to extract automatically from this version';
+
+  @override
+  String get companionMemoryNotExtracted => 'This batch was not saved as memories';
+
+  @override
+  String get companionMemoryPending => 'Not processed yet';
+
+  @override
+  String get companionMemorySourceKept => 'Original words kept';
+
+  @override
+  String get companionMemoryDisplayOnly => 'Old record, kept for viewing';
+
+  @override
+  String get companionMemoryCancelled => 'Plan cancelled';
+
+  @override
+  String get companionMemoryLess => 'Bring this up less';
+
+  @override
+  String get companionMemoryNever => 'Do not bring this up';
+
+  @override
+  String get companionMemoryNormal => 'Okay to bring up again';
+
+  @override
+  String get companionMemoryCancelPlan => 'Cancel this plan';
+
+  @override
+  String get companionMemoryActions => 'Options for this memory';
+
+  @override
+  String get companionMemoryWhich => 'Which matter do you mean? You can choose it in What she remembers.';
+
+  @override
+  String get companionMemoryForgotten => 'Okay, I have removed this from my memories.';
+
+  @override
+  String get companionMemoryNeverDone => 'Okay, I will not bring this up on my own.';
+
+  @override
+  String get companionMemoryLessDone => 'Okay, I will bring this up less.';
+
+  @override
+  String get companionMemoryNormalDone => 'Okay, we can talk about it when it comes up again.';
+
+  @override
+  String get companionMemoryCancelledDone => 'Got it. I will not follow up on the old plan.';
+
+  @override
+  String get companionMemoryCorrected => 'I have corrected that memory.';
+
+  @override
+  String get companionMemoryHostSourceRemaining =>
+      'The phone copy is deleted. The old host conversation remains; you can delete that conversation from the chat list.';
+
+  @override
+  String get companionMemoryHostRestarted =>
+      'The host has restarted. Your message is saved; tap Send again to continue.';
+
+  @override
+  String get companionMemoryUsage => 'Model usage';
+
+  @override
+  String get companionMemoryUsageHint =>
+      'Recent request records. Unknown does not mean free; costs are estimates using verified rates, not provider bills. Host records cover only captured companion chat calls.';
+
+  @override
+  String get companionMemoryUsageUnknown => 'Unknown';
+
+  @override
+  String get companionMemoryUsageExtract => 'Memory extraction';
+
+  @override
+  String get companionMemoryUsageOrganize => 'Memory consolidation';
+
+  @override
+  String get companionMemoryUsageChat => 'Chat';
+
+  @override
+  String get companionMemoryUsageWaiting => 'Waiting for usage records';
+
+  @override
+  String get companionMemoryUsageIncomplete => 'Usage coverage is incomplete; known records are kept';
+
+  @override
+  String get companionMemoryUsageInput => 'Uncached input';
+
+  @override
+  String get companionMemoryUsageCacheRead => 'Cache read';
+
+  @override
+  String get companionMemoryUsageCacheWrite => 'Cache write';
+
+  @override
+  String get companionMemoryUsageOutput => 'Output';
+
+  @override
+  String get companionMemoryUsageCost => 'Estimated cost';
+
+  @override
+  String get companionMemoryUsageNotSent => 'Not sent locally';
+
+  @override
+  String get companionMemoryUsageEmpty => 'No usage recorded yet';
+
+  @override
+  String get companionMemoryHostUnsupported =>
+      'This host can\'t receive memories from your phone yet, so she can\'t use what she remembers in this chat. Update the host or switch to light mode.';
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

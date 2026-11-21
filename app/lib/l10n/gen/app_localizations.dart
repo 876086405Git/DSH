@@ -9329,7 +9329,7 @@ abstract class L10n {
   /// No description provided for @companionContextUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'这台主机的伙伴还不支持上下文：她的名字、设定和刚才发生的事传不过去，只发你说的话。升级主机或换成轻量模式就好。'**
+  /// **'这台主机还不支持她的上下文：名字、设定、刚才发生的事和手机里的记忆都传不过去，只发你说的话。升级主机或换成轻量模式就好。'**
   String get companionContextUnsupported;
 
   /// No description provided for @companionLogEmpty.
@@ -9731,7 +9731,7 @@ abstract class L10n {
   /// No description provided for @companionMemoryScope.
   ///
   /// In zh, this message translates to:
-  /// **'保存在{host}上。她现在还不会自己想起这些，之后的版本会接上。'**
+  /// **'保存在{host}，两种模式共用。你可以随时改或忘。'**
   String companionMemoryScope(String host);
 
   /// No description provided for @companionMemoryAdd.
@@ -9743,7 +9743,7 @@ abstract class L10n {
   /// No description provided for @companionMemoryEdit.
   ///
   /// In zh, this message translates to:
-  /// **'修改'**
+  /// **'更新现况'**
   String get companionMemoryEdit;
 
   /// No description provided for @companionMemorySave.
@@ -9779,7 +9779,7 @@ abstract class L10n {
   /// No description provided for @companionMemoryEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'想让她记住的事，可以在这里写下来。只存在当前主机上，随时能改能删。'**
+  /// **'想让她记住的现实情况，可以在这里写下来。两种模式用同一份手记，断网也能改。'**
   String get companionMemoryEmptyHint;
 
   /// No description provided for @companionMemoryUnsupported.
@@ -9953,13 +9953,13 @@ abstract class L10n {
   /// No description provided for @companionMenuRestartLightHint.
   ///
   /// In zh, this message translates to:
-  /// **'清掉这台手机上的聊天记录'**
+  /// **'开始新对话，保留旧记录'**
   String get companionMenuRestartLightHint;
 
   /// No description provided for @companionMenuRestartLightConfirm.
   ///
   /// In zh, this message translates to:
-  /// **'她会忘记这段对话，这台手机上的聊天记录会被删掉。'**
+  /// **'开始一段新对话。她记得的事和旧聊天记录都会保留。'**
   String get companionMenuRestartLightConfirm;
 
   /// No description provided for @companionInviteRest.
@@ -10903,6 +10903,300 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'网络不通'**
   String get companionAdaptNetwork;
+
+  /// No description provided for @companionMemoryMigrationPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧记忆还没搬完，原来的资料已保留。稍后可以再试。'**
+  String get companionMemoryMigrationPending;
+
+  /// No description provided for @companionMemoryWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次还没整理好，原话已保存在手机上。'**
+  String get companionMemoryWaiting;
+
+  /// No description provided for @companionMemoryWidgetPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机记忆已更新，小组件的旧一句还没清掉，稍后会再试。'**
+  String get companionMemoryWidgetPending;
+
+  /// No description provided for @companionMemoryConfiguration.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前通道还不能自动记下新内容。原话已留好，也可以直接改手记。'**
+  String get companionMemoryConfiguration;
+
+  /// No description provided for @companionMemoryWording.
+  ///
+  /// In zh, this message translates to:
+  /// **'只改文字'**
+  String get companionMemoryWording;
+
+  /// No description provided for @companionMemoryPin.
+  ///
+  /// In zh, this message translates to:
+  /// **'置顶'**
+  String get companionMemoryPin;
+
+  /// No description provided for @companionMemoryUnpin.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消置顶'**
+  String get companionMemoryUnpin;
+
+  /// No description provided for @companionMemoryConfirmReality.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是我的现实情况'**
+  String get companionMemoryConfirmReality;
+
+  /// No description provided for @companionMemorySources.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的原话'**
+  String get companionMemorySources;
+
+  /// No description provided for @companionMemoryEditSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改这句原话'**
+  String get companionMemoryEditSource;
+
+  /// No description provided for @companionMemoryDeleteSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除手机原话'**
+  String get companionMemoryDeleteSource;
+
+  /// No description provided for @companionMemoryDeleteSourceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除手机保存的这句原话及只靠它的记忆。主机旧对话和你另存的副本不会随之删除。'**
+  String get companionMemoryDeleteSourceHint;
+
+  /// No description provided for @companionMemoryNoSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条是手写的，或原来的出处已经找不到了。'**
+  String get companionMemoryNoSource;
+
+  /// No description provided for @companionMemoryTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'原话太长，这一版未自动提取'**
+  String get companionMemoryTooLong;
+
+  /// No description provided for @companionMemoryNotExtracted.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一批没有自动记下来'**
+  String get companionMemoryNotExtracted;
+
+  /// No description provided for @companionMemoryPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没自动整理'**
+  String get companionMemoryPending;
+
+  /// No description provided for @companionMemorySourceKept.
+  ///
+  /// In zh, this message translates to:
+  /// **'原话保留'**
+  String get companionMemorySourceKept;
+
+  /// No description provided for @companionMemoryDisplayOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧记录，仅保留原文'**
+  String get companionMemoryDisplayOnly;
+
+  /// No description provided for @companionMemoryCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'计划已取消'**
+  String get companionMemoryCancelled;
+
+  /// No description provided for @companionMemoryLess.
+  ///
+  /// In zh, this message translates to:
+  /// **'少主动提'**
+  String get companionMemoryLess;
+
+  /// No description provided for @companionMemoryNever.
+  ///
+  /// In zh, this message translates to:
+  /// **'别主动提'**
+  String get companionMemoryNever;
+
+  /// No description provided for @companionMemoryNormal.
+  ///
+  /// In zh, this message translates to:
+  /// **'以后可以聊'**
+  String get companionMemoryNormal;
+
+  /// No description provided for @companionMemoryCancelPlan.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消这项计划'**
+  String get companionMemoryCancelPlan;
+
+  /// No description provided for @companionMemoryActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'这件事的选项'**
+  String get companionMemoryActions;
+
+  /// No description provided for @companionMemoryWhich.
+  ///
+  /// In zh, this message translates to:
+  /// **'你指哪件事？可以在「她记得的事」里选一下。'**
+  String get companionMemoryWhich;
+
+  /// No description provided for @companionMemoryForgotten.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，这件事从手记里删掉了。'**
+  String get companionMemoryForgotten;
+
+  /// No description provided for @companionMemoryNeverDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，我不主动提这件事了。'**
+  String get companionMemoryNeverDone;
+
+  /// No description provided for @companionMemoryLessDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，这件事我少提一点。'**
+  String get companionMemoryLessDone;
+
+  /// No description provided for @companionMemoryNormalDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，以后聊到时可以接着说。'**
+  String get companionMemoryNormalDone;
+
+  /// No description provided for @companionMemoryCancelledDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'知道了，不再按原计划等着问你。'**
+  String get companionMemoryCancelledDone;
+
+  /// No description provided for @companionMemoryCorrected.
+  ///
+  /// In zh, this message translates to:
+  /// **'记错的那条已经改过来了。'**
+  String get companionMemoryCorrected;
+
+  /// No description provided for @companionMemoryHostSourceRemaining.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机原话已删除。主机的旧对话仍保留；需要时可在对话列表删除那段对话。'**
+  String get companionMemoryHostSourceRemaining;
+
+  /// No description provided for @companionMemoryHostRestarted.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机刚重启过。这句话已留好，再点一次发送就能接着聊。'**
+  String get companionMemoryHostRestarted;
+
+  /// No description provided for @companionMemoryUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型用量'**
+  String get companionMemoryUsage;
+
+  /// No description provided for @companionMemoryUsageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近的请求记录。未知不表示免费；费用按已核费率估算，不是供应商账单。主机记录只覆盖已捕获的伙伴聊天。'**
+  String get companionMemoryUsageHint;
+
+  /// No description provided for @companionMemoryUsageUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知'**
+  String get companionMemoryUsageUnknown;
+
+  /// No description provided for @companionMemoryUsageExtract.
+  ///
+  /// In zh, this message translates to:
+  /// **'记下内容'**
+  String get companionMemoryUsageExtract;
+
+  /// No description provided for @companionMemoryUsageOrganize.
+  ///
+  /// In zh, this message translates to:
+  /// **'整理记忆'**
+  String get companionMemoryUsageOrganize;
+
+  /// No description provided for @companionMemoryUsageChat.
+  ///
+  /// In zh, this message translates to:
+  /// **'聊天'**
+  String get companionMemoryUsageChat;
+
+  /// No description provided for @companionMemoryUsageWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待本次的用量记录'**
+  String get companionMemoryUsageWaiting;
+
+  /// No description provided for @companionMemoryUsageIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次用量范围仍不完整，已知记录已保留'**
+  String get companionMemoryUsageIncomplete;
+
+  /// No description provided for @companionMemoryUsageInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'未缓存输入'**
+  String get companionMemoryUsageInput;
+
+  /// No description provided for @companionMemoryUsageCacheRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓存读取'**
+  String get companionMemoryUsageCacheRead;
+
+  /// No description provided for @companionMemoryUsageCacheWrite.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓存写入'**
+  String get companionMemoryUsageCacheWrite;
+
+  /// No description provided for @companionMemoryUsageOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出'**
+  String get companionMemoryUsageOutput;
+
+  /// No description provided for @companionMemoryUsageCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'估算费用'**
+  String get companionMemoryUsageCost;
+
+  /// No description provided for @companionMemoryUsageNotSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地未发出'**
+  String get companionMemoryUsageNotSent;
+
+  /// No description provided for @companionMemoryUsageEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有记录到用量'**
+  String get companionMemoryUsageEmpty;
+
+  /// No description provided for @companionMemoryHostUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台主机还接不了手机里的记忆，这次聊天用不上她已经记住的事。升级主机或换成轻量模式就好。'**
+  String get companionMemoryHostUnsupported;
 
   /// No description provided for @automaticDiagnosticsRecover.
   ///

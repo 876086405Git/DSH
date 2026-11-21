@@ -295,10 +295,7 @@ void main() {
     test('an answer with nothing usable in it', () async {
       final receipts = <CompanionUsage>[];
       final prose = MockClient.streaming(
-        (_, _) async => http.StreamedResponse(
-          Stream.value(utf8.encode(sse('我不确定', usage: {'output_tokens': 4}))),
-          200,
-        ),
+        (_, _) async => http.StreamedResponse(Stream.value(utf8.encode(sse('我不确定', usage: {'output_tokens': 4}))), 200),
       );
       await expectLater(
         companionAdaptAsk(client: prose, apiKey: 'k', probe: probe(), onUsage: receipts.add),
@@ -404,13 +401,7 @@ void main() {
       final receipts = <CompanionUsage>[];
       var sent = 0;
       await expectLater(
-        companionAdaptAsk(
-          client: refused,
-          apiKey: 'k',
-          probe: probe(),
-          onSent: () => sent++,
-          onUsage: receipts.add,
-        ),
+        companionAdaptAsk(client: refused, apiKey: 'k', probe: probe(), onSent: () => sent++, onUsage: receipts.add),
         throwsA(isA<CompanionLightError>().having((e) => e.failure, 'failure', CompanionLightFailure.badKey)),
       );
       expect(sent, 1);

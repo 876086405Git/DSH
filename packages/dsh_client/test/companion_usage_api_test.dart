@@ -434,7 +434,8 @@ Map<String, Object?> _usage(Map<String, Object?> body) => _receipt(body)['usage'
 class _Host {
   _Host._(this.server) {
     server.listen((request) async {
-      paths.add(request.uri); methods.add(request.method);
+      paths.add(request.uri);
+      methods.add(request.method);
       cookies.add(request.headers.value(HttpHeaders.cookieHeader));
       bodies.add(await utf8.decoder.bind(request).join());
       await answer(request);
@@ -447,10 +448,13 @@ class _Host {
   late Future<void> Function(HttpRequest) answer = (request) async {
     request.response.statusCode = wire['status'] as int;
     request.response.headers.contentType = ContentType.json;
-    request.response.write(jsonEncode(wire['body'])); await request.response.close();
+    request.response.write(jsonEncode(wire['body']));
+    await request.response.close();
   };
   Uri get uri => Uri.parse('http://127.0.0.1:${server.port}');
-  Future<void> close() async { await server.close(force: true); }
+  Future<void> close() async {
+    await server.close(force: true);
+  }
 }
 
 class _NoHttpCarrier extends DshCarrier {
@@ -467,8 +471,11 @@ class _NoHttpCarrier extends DshCarrier {
   Future<DshMuxLink> openLink(MuxOptions options) => throw StateError('Usage must not open mux');
 }
 
-Future<CompanionChatUsageSnapshot?> _read(DshClient client, {
-  String instanceId = 'chat-instance', String requestId = 'phone-request', String sessionId = 'chat-session',
+Future<CompanionChatUsageSnapshot?> _read(
+  DshClient client, {
+  String instanceId = 'chat-instance',
+  String requestId = 'phone-request',
+  String sessionId = 'chat-session',
 }) => client.readCompanionChatUsage(instanceId: instanceId, sessionId: sessionId, requestId: requestId);
 
 void main() {
@@ -476,99 +483,188 @@ void main() {
   late DshClient client;
   setUp(() async {
     host = await _Host.start();
-    client = DshClient(DshConnection(host.uri, hostHeader: host.uri.authority,
-      cookie: DshCookie(name: 'dsh-auth-test', value: 'synthetic-cookie', authority: host.uri.authority)));
+    client = DshClient(
+      DshConnection(
+        host.uri,
+        hostHeader: host.uri.authority,
+        cookie: DshCookie(name: 'dsh-auth-test', value: 'synthetic-cookie', authority: host.uri.authority),
+      ),
+    );
   });
-  tearDown(() async { await client.close(); await host.close(); });
+  tearDown(() async {
+    await client.close();
+    await host.close();
+  });
 
   test('actual authenticated GET preserves exact frozen identity and raw final missing components', () async {
     final result = (await _read(client))!, receipt = result.receipts.single;
-    expect(host.methods, ['GET']); expect(host.paths.single.path, '/dsh-go/v1/companion/usage');
-    expect(host.paths.single.queryParameters,
-      {'instanceId': 'chat-instance', 'sessionId': 'chat-session', 'requestId': 'phone-request'});
-    expect(host.bodies, ['']); expect(host.cookies.single, contains('dsh-auth-test=synthetic-cookie'));
-    expect(result.toJson(), _body('complete')); expect(result.state, 'settled'); expect(result.complete, isTrue);
-    expect(result.binding!.archiveId, 'phone-archive'); expect(result.binding!.controlRevision, 0);
-    expect(result.physicalRequests, 1); expect(result.observedAdapterCalls, 1);
-    expect(receipt.requestIds, ['phone-request']); expect(receipt.dispatched, isTrue);
-    expect(receipt.dispatchAtMs, isA<int>()); expect(receipt.physicalRequests, 1); expect(receipt.complete, isTrue);
+    expect(host.methods, ['GET']);
+    expect(host.paths.single.path, '/dsh-go/v1/companion/usage');
+    expect(host.paths.single.queryParameters, {
+      'instanceId': 'chat-instance',
+      'sessionId': 'chat-session',
+      'requestId': 'phone-request',
+    });
+    expect(host.bodies, ['']);
+    expect(host.cookies.single, contains('dsh-auth-test=synthetic-cookie'));
+    expect(result.toJson(), _body('complete'));
+    expect(result.state, 'settled');
+    expect(result.complete, isTrue);
+    expect(result.binding!.archiveId, 'phone-archive');
+    expect(result.binding!.controlRevision, 0);
+    expect(result.physicalRequests, 1);
+    expect(result.observedAdapterCalls, 1);
+    expect(receipt.requestIds, ['phone-request']);
+    expect(receipt.dispatched, isTrue);
+    expect(receipt.dispatchAtMs, isA<int>());
+    expect(receipt.physicalRequests, 1);
+    expect(receipt.complete, isTrue);
     expect(receipt.usage['start_usage'], {'input_tokens': 90, 'cache_read_input_tokens': 3});
-    expect(receipt.usage['final_usage'], {'output_tokens': 7, 'original_extra': {'retained': true}});
-    expect(receipt.usage['input_uncached'], isNull); expect(receipt.usage['input_cache_read'], isNull);
-    expect(receipt.usage['input_cache_write'], isNull); expect(receipt.usage['output_tokens'], 7);
+    expect(receipt.usage['final_usage'], {
+      'output_tokens': 7,
+      'original_extra': {'retained': true},
+    });
+    expect(receipt.usage['input_uncached'], isNull);
+    expect(receipt.usage['input_cache_read'], isNull);
+    expect(receipt.usage['input_cache_write'], isNull);
+    expect(receipt.usage['output_tokens'], 7);
     expect(() => result.toJson()['complete'] = false, throwsUnsupportedError);
     expect(() => receipt.usage['output_tokens'] = 0, throwsUnsupportedError);
     expect(() => (receipt.usage['final_usage'] as Map)['output_tokens'] = 0, throwsUnsupportedError);
   });
 
-  test('generic receipt keeps original normalized observations separately with unknown physical dispatch and raw', () async {
-    host.wire = _wire('generic'); final result = (await _read(client))!, receipt = result.receipts.single;
-    expect(result.toJson(), _body('generic')); expect(result.state, 'settled'); expect(result.complete, isFalse);
-    expect(result.physicalRequests, isNull); expect(result.gaps, ['physical-count-unknown']);
-    expect(receipt.dispatched, isNull); expect(receipt.dispatchAtMs, isNull); expect(receipt.physicalRequests, isNull);
-    expect(receipt.usage['input_uncached'], isNull); expect(receipt.usage['output_tokens'], isNull);
-    expect(receipt.usage['start_usage'], isNull); expect(receipt.usage['final_usage'], isNull);
-    expect(receipt.usage['runtime_normalized_usage'], [{'inputTokens': 4, 'outputTokens': 2, 'totalTokens': 6}]);
-    expect(receipt.usage['runtime_normalized_usage_semantics'], 'runtime-normalized-events');
-  });
+  test(
+    'generic receipt keeps original normalized observations separately with unknown physical dispatch and raw',
+    () async {
+      host.wire = _wire('generic');
+      final result = (await _read(client))!, receipt = result.receipts.single;
+      expect(result.toJson(), _body('generic'));
+      expect(result.state, 'settled');
+      expect(result.complete, isFalse);
+      expect(result.physicalRequests, isNull);
+      expect(result.gaps, ['physical-count-unknown']);
+      expect(receipt.dispatched, isNull);
+      expect(receipt.dispatchAtMs, isNull);
+      expect(receipt.physicalRequests, isNull);
+      expect(receipt.usage['input_uncached'], isNull);
+      expect(receipt.usage['output_tokens'], isNull);
+      expect(receipt.usage['start_usage'], isNull);
+      expect(receipt.usage['final_usage'], isNull);
+      expect(receipt.usage['runtime_normalized_usage'], [
+        {'inputTokens': 4, 'outputTokens': 2, 'totalTokens': 6},
+      ]);
+      expect(receipt.usage['runtime_normalized_usage_semantics'], 'runtime-normalized-events');
+    },
+  );
 
-  test('provider final then EOF keeps raw known usage and distinguishes root coverage from response completion', () async {
-    host.wire = _wire('incomplete'); final result = (await _read(client))!, receipt = result.receipts.single;
-    expect(result.complete, isTrue); expect(receipt.complete, isFalse); expect(receipt.terminal, 'incomplete');
-    expect(receipt.errorCode, 'STREAM_CLOSED'); expect(receipt.usage['output_tokens'], 7);
-    expect(receipt.usage['input_uncached'], isNull); expect(receipt.usage['final_usage'], _usage(_body('incomplete'))['final_usage']);
-  });
+  test(
+    'provider final then EOF keeps raw known usage and distinguishes root coverage from response completion',
+    () async {
+      host.wire = _wire('incomplete');
+      final result = (await _read(client))!, receipt = result.receipts.single;
+      expect(result.complete, isTrue);
+      expect(receipt.complete, isFalse);
+      expect(receipt.terminal, 'incomplete');
+      expect(receipt.errorCode, 'STREAM_CLOSED');
+      expect(receipt.usage['output_tokens'], 7);
+      expect(receipt.usage['input_uncached'], isNull);
+      expect(receipt.usage['final_usage'], _usage(_body('incomplete'))['final_usage']);
+    },
+  );
 
   test('only actual preflight proof carries false and zero physical requests', () async {
-    host.wire = _wire('preflight'); final result = (await _read(client))!, receipt = result.receipts.single;
-    expect(result.physicalRequests, 0); expect(receipt.dispatched, isFalse); expect(receipt.observation, 'preflight');
-    expect(receipt.dispatchAtMs, isNull); expect(receipt.usage['output_tokens'], isNull);
+    host.wire = _wire('preflight');
+    final result = (await _read(client))!, receipt = result.receipts.single;
+    expect(result.physicalRequests, 0);
+    expect(receipt.dispatched, isFalse);
+    expect(receipt.observation, 'preflight');
+    expect(receipt.dispatchAtMs, isNull);
+    expect(receipt.usage['output_tokens'], isNull);
   });
 
   for (final name in ['pending', 'running']) {
     test('captured $name root remains incomplete independently of a receipt terminal', () async {
-      host.wire = _wire(name); final result = (await _read(client))!;
-      expect(result.state, name); expect(result.complete, isFalse); expect(result.toJson(), _body(name));
+      host.wire = _wire(name);
+      final result = (await _read(client))!;
+      expect(result.state, name);
+      expect(result.complete, isFalse);
+      expect(result.toJson(), _body(name));
     });
   }
 
-  test('restart unknown revision zero is accepted after a high revision without rewriting original delivery identity', () async {
-    final prior = (await _read(client))!; expect(prior.revision, greaterThan(0));
-    host.wire = _wire('instanceChanged'); final unknown = (await _read(client, instanceId: 'previous-instance'))!;
-    expect(unknown.state, 'unknown'); expect(unknown.revision, 0); expect(unknown.instanceId, 'chat-instance');
-    expect(unknown.gaps, ['instance-changed']); expect(unknown.physicalRequests, isNull); expect(unknown.binding, isNull);
-    expect(unknown.receipts, isEmpty); expect(unknown.complete, isFalse);
-    expect(host.paths.last.queryParameters['instanceId'], 'previous-instance', 'SDK must not rediscover and rebind');
-    expect(prior.receipts.single.usage['output_tokens'], 7, 'a separate unknown snapshot does not mutate prior evidence');
-  });
+  test(
+    'restart unknown revision zero is accepted after a high revision without rewriting original delivery identity',
+    () async {
+      final prior = (await _read(client))!;
+      expect(prior.revision, greaterThan(0));
+      host.wire = _wire('instanceChanged');
+      final unknown = (await _read(client, instanceId: 'previous-instance'))!;
+      expect(unknown.state, 'unknown');
+      expect(unknown.revision, 0);
+      expect(unknown.instanceId, 'chat-instance');
+      expect(unknown.gaps, ['instance-changed']);
+      expect(unknown.physicalRequests, isNull);
+      expect(unknown.binding, isNull);
+      expect(unknown.receipts, isEmpty);
+      expect(unknown.complete, isFalse);
+      expect(host.paths.last.queryParameters['instanceId'], 'previous-instance', 'SDK must not rediscover and rebind');
+      expect(
+        prior.receipts.single.usage['output_tokens'],
+        7,
+        'a separate unknown snapshot does not mutate prior evidence',
+      );
+    },
+  );
 
   test('evicted identity is explicit unknown and is not converted to a free empty receipt', () async {
-    host.wire = _wire('notRetained'); final unknown = (await _read(client, requestId: 'evicted-request'))!;
-    expect(unknown.state, 'unknown'); expect(unknown.revision, 0); expect(unknown.gaps, ['not-retained']);
-    expect(unknown.physicalRequests, isNull); expect(unknown.complete, isFalse);
+    host.wire = _wire('notRetained');
+    final unknown = (await _read(client, requestId: 'evicted-request'))!;
+    expect(unknown.state, 'unknown');
+    expect(unknown.revision, 0);
+    expect(unknown.gaps, ['not-retained']);
+    expect(unknown.physicalRequests, isNull);
+    expect(unknown.complete, isFalse);
   });
 
   test('actual original bridge namespace 404 returns null without a model or RPC fallback', () async {
-    host.wire = _wire('oldRoute'); expect(await _read(client), isNull); expect(host.methods, ['GET']);
+    host.wire = _wire('oldRoute');
+    expect(await _read(client), isNull);
+    expect(host.methods, ['GET']);
   });
 
   test('non-HTTP carrier returns null without RPC or mux work', () async {
     final other = DshClient.withCarrier(_NoHttpCarrier());
-    try { expect(await _read(other), isNull); expect(host.paths, isEmpty); }
-    finally { await other.close(); }
+    try {
+      expect(await _read(other), isNull);
+      expect(host.paths, isEmpty);
+    } finally {
+      await other.close();
+    }
   });
 
   test('real prefixed owner refusal remains a remote error and is never treated as unclaimed route', () async {
     host.wire = _wire('forbidden');
-    await expectLater(_read(client), throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/usage-forbidden')));
-    host.wire = {'status': 404, 'body': {'error': {'code': 'companion/usage-unavailable'}}};
-    await expectLater(_read(client), throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/usage-unavailable')));
+    await expectLater(
+      _read(client),
+      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/usage-forbidden')),
+    );
+    host.wire = {
+      'status': 404,
+      'body': {
+        'error': {'code': 'companion/usage-unavailable'},
+      },
+    };
+    await expectLater(
+      _read(client),
+      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/usage-unavailable')),
+    );
     expect(host.methods, ['GET', 'GET']);
   });
 
   test('redirects are not followed or retried', () async {
     host.answer = (request) async {
-      request.response.statusCode = 302; request.response.headers.set(HttpHeaders.locationHeader, '/other');
+      request.response.statusCode = 302;
+      request.response.headers.set(HttpHeaders.locationHeader, '/other');
       await request.response.close();
     };
     await expectLater(_read(client), throwsA(isA<DshHttpException>().having((e) => e.statusCode, 'status', 302)));
@@ -577,21 +673,28 @@ void main() {
 
   test('malformed success is a protocol error with no retry or fallback', () async {
     host.answer = (request) async {
-      request.response.headers.contentType = ContentType.json; request.response.write('{'); await request.response.close();
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{');
+      await request.response.close();
     };
-    await expectLater(_read(client), throwsA(isA<DshProtocolException>())); expect(host.paths, hasLength(1));
+    await expectLater(_read(client), throwsA(isA<DshProtocolException>()));
+    expect(host.paths, hasLength(1));
   });
 
   for (final name in ['instanceId', 'sessionId', 'requestId']) {
     test('a known receipt for a different $name is rejected', () async {
-      final body = _body('complete'); body[name] = 'other';
+      final body = _body('complete');
+      body[name] = 'other';
       host.wire = {'status': 200, 'body': body};
-      await expectLater(_read(client), throwsA(isA<DshProtocolException>())); expect(host.paths, hasLength(1));
+      await expectLater(_read(client), throwsA(isA<DshProtocolException>()));
+      expect(host.paths, hasLength(1));
     });
   }
 
   test('Unicode identity is encoded exactly and does not widen the allowed HTTP query', () async {
-    final body = _body('complete'); body['requestId'] = 'phone🐋?/&'; _receipt(body)['requestIds'] = ['phone🐋?/&'];
+    final body = _body('complete');
+    body['requestId'] = 'phone🐋?/&';
+    _receipt(body)['requestIds'] = ['phone🐋?/&'];
     host.wire = {'status': 200, 'body': body};
     expect((await _read(client, requestId: 'phone🐋?/&'))!.requestId, 'phone🐋?/&');
     expect(host.paths.single.queryParameters['requestId'], 'phone🐋?/&');
@@ -616,34 +719,49 @@ void main() {
     'finished root with active receipt': (body) => _receipt(body)['phase'] = 'active',
     'unsafe component': (body) => _usage(body)['output_tokens'] = 9007199254740992,
     'usage model relabeled': (body) => _usage(body)['model'] = 'other-model',
-    'unknown carries known receipts': (body) { body['state'] = 'unknown'; body['complete'] = false; body['revision'] = 0; },
+    'unknown carries known receipts': (body) {
+      body['state'] = 'unknown';
+      body['complete'] = false;
+      body['revision'] = 0;
+    },
   };
   for (final entry in invalid.entries) {
     test('rejects inconsistent evidence: ${entry.key}', () {
-      final body = _body('complete'); entry.value(body);
+      final body = _body('complete');
+      entry.value(body);
       expect(() => CompanionChatUsageSnapshot.fromJson(body), throwsA(isA<DshProtocolException>()));
     });
   }
 
   test('generic normalized zeros cannot masquerade as known raw components', () {
-    final body = _body('generic'); _usage(body)['input_uncached'] = 0;
+    final body = _body('generic');
+    _usage(body)['input_uncached'] = 0;
     expect(() => CompanionChatUsageSnapshot.fromJson(body), throwsA(isA<DshProtocolException>()));
   });
 
   test('actual route names and an unusual provider stop reason are metadata, not local provider allow-lists', () {
     final body = _body('complete'), name = List.filled(160, 'm').join();
-    _receipt(body)['model'] = name; _usage(body)['model'] = name; _usage(body)['stop_reason'] = '';
+    _receipt(body)['model'] = name;
+    _usage(body)['model'] = name;
+    _usage(body)['stop_reason'] = '';
     final snapshot = CompanionChatUsageSnapshot.fromJson(body);
-    expect(snapshot.receipts.single.model, name); expect(snapshot.receipts.single.usage['stop_reason'], '');
+    expect(snapshot.receipts.single.model, name);
+    expect(snapshot.receipts.single.usage['stop_reason'], '');
   });
 
   test('same global physical receipt is legal in two root snapshots and retains shared ownership', () {
-    final first = _body('complete'); _receipt(first)['requestIds'] = ['phone-request', 'second-root'];
-    final second = jsonDecode(jsonEncode(first)) as Map<String, Object?>; second['requestId'] = 'second-root';
+    final first = _body('complete');
+    _receipt(first)['requestIds'] = ['phone-request', 'second-root'];
+    final second = jsonDecode(jsonEncode(first)) as Map<String, Object?>;
+    second['requestId'] = 'second-root';
     final a = CompanionChatUsageSnapshot.fromJson(first), b = CompanionChatUsageSnapshot.fromJson(second);
     expect(a.receipts.single.receiptId, b.receipts.single.receiptId);
     expect(a.receipts.single.callId, b.receipts.single.callId);
     expect(a.receipts.single.requestIds, ['phone-request', 'second-root']);
-    expect(a.receipts.single.toJson(), b.receipts.single.toJson(), 'SDK does not mint per-root duplicate billing identities');
+    expect(
+      a.receipts.single.toJson(),
+      b.receipts.single.toJson(),
+      'SDK does not mint per-root duplicate billing identities',
+    );
   });
 }

@@ -183,9 +183,11 @@ Stream<String> streamCompanionReply({
       'max_tokens': maxTokens,
       'thinking': {'type': 'disabled'},
       'system': system,
-      'messages': companionRequestMessages([
-        for (final line in lines) (role: line.role, text: line.text),
-      ], context: context, memory: memory),
+      'messages': companionRequestMessages(
+        [for (final line in lines) (role: line.role, text: line.text)],
+        context: context,
+        memory: memory,
+      ),
     });
   Map<String, Object?>? startUsage;
   Map<String, Object?>? finalUsage;
@@ -282,23 +284,25 @@ Stream<String> streamCompanionReply({
 
     // DeepSeek's final message_delta.usage is cumulative. Do not add the
     // initial values, take maxima, or fill absent final fields from the start.
-    onUsage?.call(CompanionUsage(
-      provider: 'deepseek',
-      model: companionLightModel,
-      startUsage: startUsage,
-      finalUsage: finalUsage,
-      startEvent: startUsage == null ? null : 'message_start',
-      finalEvent: finalUsage == null ? null : 'message_delta',
-      semantics: 'cumulative',
-      inputUncached: tokens('input_tokens'),
-      inputCacheRead: tokens('cache_read_input_tokens'),
-      inputCacheWrite: tokens('cache_creation_input_tokens'),
-      outputTokens: tokens('output_tokens'),
-      stopReason: stopReason,
-      terminal: terminal,
-      complete: complete,
-      httpStatus: httpStatus,
-    ));
+    onUsage?.call(
+      CompanionUsage(
+        provider: 'deepseek',
+        model: companionLightModel,
+        startUsage: startUsage,
+        finalUsage: finalUsage,
+        startEvent: startUsage == null ? null : 'message_start',
+        finalEvent: finalUsage == null ? null : 'message_delta',
+        semantics: 'cumulative',
+        inputUncached: tokens('input_tokens'),
+        inputCacheRead: tokens('cache_read_input_tokens'),
+        inputCacheWrite: tokens('cache_creation_input_tokens'),
+        outputTokens: tokens('output_tokens'),
+        stopReason: stopReason,
+        terminal: terminal,
+        complete: complete,
+        httpStatus: httpStatus,
+      ),
+    );
   }
 }
 

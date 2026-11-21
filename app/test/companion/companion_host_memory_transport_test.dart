@@ -269,8 +269,7 @@ const _hostWireJson = r'''
 }
 ''';
 
-Map<String, Object?> _wire(String name) =>
-    Map<String, Object?>.from((jsonDecode(_hostWireJson) as Map)[name] as Map);
+Map<String, Object?> _wire(String name) => Map<String, Object?>.from((jsonDecode(_hostWireJson) as Map)[name] as Map);
 
 class _Host {
   _Host._(this.server, {required this.generic}) {
@@ -279,14 +278,21 @@ class _Host {
       final body = await utf8.decoder.bind(request).join();
       if (request.method == 'GET') {
         request.response.headers.contentType = ContentType.json;
-        request.response.write(jsonEncode({
-          'v': 1, 'instanceId': 'host-generation', 'provider': provider, 'model': model, 'supported': true,
-          'capability': {
-            'physicalDispatch': generic ? 'unknown' : 'fetch-invoked',
-            'rawUsage': generic ? 'unavailable' : 'deepseek-messages-cumulative',
-            'maxPhysicalRequests': generic ? null : 1, 'noTools': true,
-          },
-        }));
+        request.response.write(
+          jsonEncode({
+            'v': 1,
+            'instanceId': 'host-generation',
+            'provider': provider,
+            'model': model,
+            'supported': true,
+            'capability': {
+              'physicalDispatch': generic ? 'unknown' : 'fetch-invoked',
+              'rawUsage': generic ? 'unavailable' : 'deepseek-messages-cumulative',
+              'maxPhysicalRequests': generic ? null : 1,
+              'noTools': true,
+            },
+          }),
+        );
       } else {
         expect(request.uri.path, _path);
         posts.add(jsonDecode(body) as Map<String, Object?>);
@@ -343,8 +349,11 @@ class _Host {
   String get model => generic ? 'selected-other-model' : 'deepseek-flash';
 
   Map<String, Object?> get accepted => {
-    'type': 'accepted', 'requestId': 'request-1', 'instanceId': 'host-generation',
-    'provider': provider, 'model': model,
+    'type': 'accepted',
+    'requestId': 'request-1',
+    'instanceId': 'host-generation',
+    'provider': provider,
+    'model': model,
   };
 
   Map<String, Object?> finish({
@@ -354,24 +363,43 @@ class _Host {
     String? code,
     int? status,
   }) => {
-    'type': 'finish', 'requestId': 'request-1', 'dispatched': dispatched,
+    'type': 'finish',
+    'requestId': 'request-1',
+    'dispatched': dispatched,
     'dispatchAtMs': dispatched == true ? _time : null,
-    'terminal': terminal, 'complete': complete, 'stopReason': null, 'httpStatus': status,
+    'terminal': terminal,
+    'complete': complete,
+    'stopReason': null,
+    'httpStatus': status,
     if (code != null) 'error': {'code': code},
     'usage': {
-      'provider': provider, 'model': model, 'start_usage': null, 'final_usage': null,
-      'start_event': null, 'final_event': null, 'usage_semantics': 'unknown',
-      'input_uncached': null, 'input_cache_read': null, 'input_cache_write': null, 'output_tokens': null,
-      'stop_reason': null, 'terminal': terminal, 'complete': complete, 'http_status': status,
+      'provider': provider,
+      'model': model,
+      'start_usage': null,
+      'final_usage': null,
+      'start_event': null,
+      'final_event': null,
+      'usage_semantics': 'unknown',
+      'input_uncached': null,
+      'input_cache_read': null,
+      'input_cache_write': null,
+      'output_tokens': null,
+      'stop_reason': null,
+      'terminal': terminal,
+      'complete': complete,
+      'http_status': status,
       if (generic) ...{
-        'runtime_normalized_usage': [{'inputTokens': 10, 'outputTokens': 5}],
+        'runtime_normalized_usage': [
+          {'inputTokens': 10, 'outputTokens': 5},
+        ],
         'runtime_normalized_usage_semantics': 'runtime-normalized-events',
       },
     },
   };
 
   Future<CompanionHostMemoryTransport> transport() async => CompanionHostMemoryTransport(
-    client: client, capability: (await client.readCompanionAuxiliaryCapability('full-session'))!,
+    client: client,
+    capability: (await client.readCompanionAuxiliaryCapability('full-session'))!,
   );
 
   Future<void> close() async {
@@ -386,14 +414,23 @@ class _Probe {
   final cancelled = Completer<void>();
 
   Future<CompanionAuxiliaryReply> call(CompanionMemoryTransport transport) => transport.call(
-    requestId: 'request-1', category: 'extract', system: 'Extract JSON.', input: 'Synthetic batch.', maxTokens: 1400,
+    requestId: 'request-1',
+    category: 'extract',
+    system: 'Extract JSON.',
+    input: 'Synthetic batch.',
+    maxTokens: 1400,
     cancelled: cancelled.future,
     onDispatchUncertain: () => events.add('uncertain'),
     onSent: () => events.add('sent'),
-    onUsage: (usage) { events.add('usage'); receipts.add(usage); },
+    onUsage: (usage) {
+      events.add('usage');
+      receipts.add(usage);
+    },
   );
 
-  void close() { if (!cancelled.isCompleted) cancelled.complete(); }
+  void close() {
+    if (!cancelled.isCompleted) cancelled.complete();
+  }
 }
 
 void main() {
@@ -403,8 +440,11 @@ void main() {
     final probe = _Probe();
     addTearDown(probe.close);
     final transport = await host.transport();
-    host.frames = [host.accepted,
-      {'type': 'text', 'requestId': 'request-1', 'text': '{"items":[]}'}, host.finish()];
+    host.frames = [
+      host.accepted,
+      {'type': 'text', 'requestId': 'request-1', 'text': '{"items":[]}'},
+      host.finish(),
+    ];
     final result = await probe.call(transport);
     expect(transport.configured, isTrue);
     expect(transport.provider, 'selected-other-provider');
@@ -413,7 +453,9 @@ void main() {
     expect(result.text, '{"items":[]}');
     expect(probe.events, ['uncertain', 'usage']);
     expect(probe.receipts.single['input_uncached'], isNull);
-    expect(probe.receipts.single['runtime_normalized_usage'], [{'inputTokens': 10, 'outputTokens': 5}]);
+    expect(probe.receipts.single['runtime_normalized_usage'], [
+      {'inputTokens': 10, 'outputTokens': 5},
+    ]);
     expect(host.posts.single['provider'], 'selected-other-provider');
   });
 
@@ -423,11 +465,18 @@ void main() {
     final probe = _Probe();
     addTearDown(probe.close);
     final transport = await host.transport();
-    host.frames = [host.accepted, host.finish(
-      dispatched: false, terminal: 'preflight_error', complete: false, code: 'INVALID_CREDENTIAL',
-    )];
-    await expectLater(probe.call(transport), throwsA(isA<CompanionAuxiliaryError>()
-      .having((e) => e.configuration, 'configuration', true).having((e) => e.notSent, 'notSent', true)));
+    host.frames = [
+      host.accepted,
+      host.finish(dispatched: false, terminal: 'preflight_error', complete: false, code: 'INVALID_CREDENTIAL'),
+    ];
+    await expectLater(
+      probe.call(transport),
+      throwsA(
+        isA<CompanionAuxiliaryError>()
+            .having((e) => e.configuration, 'configuration', true)
+            .having((e) => e.notSent, 'notSent', true),
+      ),
+    );
     expect(probe.events, ['uncertain', 'usage']);
     expect(host.posts, hasLength(1));
   });
@@ -438,12 +487,19 @@ void main() {
     final probe = _Probe();
     addTearDown(probe.close);
     final transport = await host.transport();
-    host.frames = [host.accepted,
+    host.frames = [
+      host.accepted,
       {'type': 'dispatch', 'requestId': 'request-1', 'boundary': 'fetch-invoked', 'atMs': _time},
       host.finish(dispatched: true, terminal: 'http_error', complete: false, code: 'AUTH', status: 401),
     ];
-    await expectLater(probe.call(transport), throwsA(isA<CompanionAuxiliaryError>()
-      .having((e) => e.configuration, 'configuration', true).having((e) => e.notSent, 'notSent', false)));
+    await expectLater(
+      probe.call(transport),
+      throwsA(
+        isA<CompanionAuxiliaryError>()
+            .having((e) => e.configuration, 'configuration', true)
+            .having((e) => e.notSent, 'notSent', false),
+      ),
+    );
     expect(probe.events, ['uncertain', 'sent', 'usage']);
     expect(probe.receipts.single['host_dispatch_at_ms'], _time);
     expect(host.posts, hasLength(1));
@@ -469,16 +525,29 @@ void main() {
     addTearDown(probe.close);
     final transport = await host.transport();
     host.frames = [host.accepted];
-    await expectLater(probe.call(transport), throwsA(isA<CompanionAuxiliaryError>()
-      .having((e) => e.notSent, 'notSent', false).having((e) => e.terminal, 'terminal', 'incomplete')));
+    await expectLater(
+      probe.call(transport),
+      throwsA(
+        isA<CompanionAuxiliaryError>()
+            .having((e) => e.notSent, 'notSent', false)
+            .having((e) => e.terminal, 'terminal', 'incomplete'),
+      ),
+    );
     expect(probe.events, ['uncertain', 'usage']);
     expect(probe.receipts.single['proxy_finish_observed'], isFalse);
     expect(host.posts, hasLength(1));
   });
 
   for (final name in [
-    'forbidden', 'busy', 'busy429', 'instanceChanged', 'requestUsed', 'requestConflict',
-    'requestUnknown', 'sessionUnavailable', 'modelUnavailable',
+    'forbidden',
+    'busy',
+    'busy429',
+    'instanceChanged',
+    'requestUsed',
+    'requestConflict',
+    'requestUnknown',
+    'sessionUnavailable',
+    'modelUnavailable',
   ]) {
     final uncertain = const {'instanceChanged', 'requestUsed', 'requestConflict', 'requestUnknown'}.contains(name);
     for (final forceFalse in uncertain ? [false, true] : [false]) {
@@ -493,11 +562,23 @@ void main() {
         final route = await host.transport();
         final db = sqlite3.openInMemory();
         final store = CompanionMemoryStore(db, nowMilliseconds: () => _time);
-        final worker = CompanionMemoryWorker(store: store, transport: () => route,
-          nowMilliseconds: () => _time, estimateTokens: (text) => text.runes.length);
-        addTearDown(() async { await worker.stop(); store.close(); });
-        store.submitMessage(id: 'u1', sessionId: 'full-session', text: '我的咖啡不加糖。',
-          saidAtUtc: _time, offsetMinutes: 480);
+        final worker = CompanionMemoryWorker(
+          store: store,
+          transport: () => route,
+          nowMilliseconds: () => _time,
+          estimateTokens: (text) => text.runes.length,
+        );
+        addTearDown(() async {
+          await worker.stop();
+          store.close();
+        });
+        store.submitMessage(
+          id: 'u1',
+          sessionId: 'full-session',
+          text: '我的咖啡不加糖。',
+          saidAtUtc: _time,
+          offsetMinutes: 480,
+        );
         host.onPost = () {
           final request = store.requests().single;
           expect(request['uncertain_at_ms'], _time, reason: 'durable before HTTP reaches the Host');
@@ -505,10 +586,15 @@ void main() {
           expect(request['sent_at_ms'], isNull);
         };
         final configuration = const {
-          'forbidden', 'requestUnknown', 'sessionUnavailable', 'modelUnavailable',
+          'forbidden',
+          'requestUnknown',
+          'sessionUnavailable',
+          'modelUnavailable',
         }.contains(name);
-        expect(await worker.extract(forceTail: true),
-          configuration ? CompanionMemoryWork.configuration : CompanionMemoryWork.waiting);
+        expect(
+          await worker.extract(forceTail: true),
+          configuration ? CompanionMemoryWork.configuration : CompanionMemoryWork.waiting,
+        );
         final receipt = store.requests().single;
         expect(receipt['state'], uncertain ? 'interrupted' : 'released');
         expect(receipt['terminal'], uncertain ? 'dispatch_unknown' : 'not_sent');
@@ -526,8 +612,13 @@ void main() {
         expect(host.posts, hasLength(1), reason: 'no replay or automatic fallback');
         // Exactly 3000 new output tokens fit only if the prior preflight is
         // proven unsent. An uncertain attempt retains its 800-token hold.
-        final next = store.reserveRequest(category: 'extract', provider: route.provider,
-          model: route.model, inputTokens: 1, outputTokens: 3000);
+        final next = store.reserveRequest(
+          category: 'extract',
+          provider: route.provider,
+          model: route.model,
+          inputTokens: 1,
+          outputTokens: 3000,
+        );
         expect(next, uncertain ? isNull : isNotNull);
       });
     }

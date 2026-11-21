@@ -168,14 +168,27 @@ void main() {
   });
 
   test('only the matching archive and control revision can reuse a full session', () async {
-    SharedPreferences.setMockInitialValues({'companion_sessions': jsonEncode({
-      'local:local': {'id': 'a-existing', 'full': true, 'memoryArchiveId': 'phone-archive', 'memoryControlRevision': 2},
-    })});
+    SharedPreferences.setMockInitialValues({
+      'companion_sessions': jsonEncode({
+        'local:local': {
+          'id': 'a-existing',
+          'full': true,
+          'memoryArchiveId': 'phone-archive',
+          'memoryControlRevision': 2,
+        },
+      }),
+    });
     final room = _Room();
     await room.loaded();
-    expect((await room.sessions.ensure(memoryArchiveId: 'phone-archive', memoryControlRevision: 2)).sessionId, 'a-existing');
+    expect(
+      (await room.sessions.ensure(memoryArchiveId: 'phone-archive', memoryControlRevision: 2)).sessionId,
+      'a-existing',
+    );
     expect(room.a.argsOf('session/create'), isEmpty);
-    expect((await room.sessions.ensure(memoryArchiveId: 'phone-archive', memoryControlRevision: 3)).sessionId, 'a-created');
+    expect(
+      (await room.sessions.ensure(memoryArchiveId: 'phone-archive', memoryControlRevision: 3)).sessionId,
+      'a-created',
+    );
     expect(room.a.argsOf('session/create'), hasLength(1));
   });
 

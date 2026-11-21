@@ -5054,7 +5054,7 @@ class L10nZh extends L10n {
   String get companionLogTitle => '聊天记录';
 
   @override
-  String get companionContextUnsupported => '这台主机的伙伴还不支持上下文：她的名字、设定和刚才发生的事传不过去，只发你说的话。升级主机或换成轻量模式就好。';
+  String get companionContextUnsupported => '这台主机还不支持她的上下文：名字、设定、刚才发生的事和手机里的记忆都传不过去，只发你说的话。升级主机或换成轻量模式就好。';
 
   @override
   String get companionLogEmpty => '还没有说过话。';
@@ -5262,14 +5262,14 @@ class L10nZh extends L10n {
 
   @override
   String companionMemoryScope(String host) {
-    return '保存在$host上。她现在还不会自己想起这些，之后的版本会接上。';
+    return '保存在$host，两种模式共用。你可以随时改或忘。';
   }
 
   @override
   String get companionMemoryAdd => '添加';
 
   @override
-  String get companionMemoryEdit => '修改';
+  String get companionMemoryEdit => '更新现况';
 
   @override
   String get companionMemorySave => '保存';
@@ -5287,7 +5287,7 @@ class L10nZh extends L10n {
   String get companionMemoryEmpty => '还没有记下什么';
 
   @override
-  String get companionMemoryEmptyHint => '想让她记住的事，可以在这里写下来。只存在当前主机上，随时能改能删。';
+  String get companionMemoryEmptyHint => '想让她记住的现实情况，可以在这里写下来。两种模式用同一份手记，断网也能改。';
 
   @override
   String get companionMemoryUnsupported => '这台主机还不能保存她的记忆';
@@ -5374,10 +5374,10 @@ class L10nZh extends L10n {
   String get companionNotConnectedTryLight => '现在连不上主机。只想聊天的话，可以在右上角菜单换成轻量模式。';
 
   @override
-  String get companionMenuRestartLightHint => '清掉这台手机上的聊天记录';
+  String get companionMenuRestartLightHint => '开始新对话，保留旧记录';
 
   @override
-  String get companionMenuRestartLightConfirm => '她会忘记这段对话，这台手机上的聊天记录会被删掉。';
+  String get companionMenuRestartLightConfirm => '开始一段新对话。她记得的事和旧聊天记录都会保留。';
 
   @override
   String get companionInviteRest => '要不要陪我在软垫上歇一会儿？';
@@ -5868,6 +5868,153 @@ class L10nZh extends L10n {
 
   @override
   String get companionAdaptNetwork => '网络不通';
+
+  @override
+  String get companionMemoryMigrationPending => '旧记忆还没搬完，原来的资料已保留。稍后可以再试。';
+
+  @override
+  String get companionMemoryWaiting => '这次还没整理好，原话已保存在手机上。';
+
+  @override
+  String get companionMemoryWidgetPending => '手机记忆已更新，小组件的旧一句还没清掉，稍后会再试。';
+
+  @override
+  String get companionMemoryConfiguration => '当前通道还不能自动记下新内容。原话已留好，也可以直接改手记。';
+
+  @override
+  String get companionMemoryWording => '只改文字';
+
+  @override
+  String get companionMemoryPin => '置顶';
+
+  @override
+  String get companionMemoryUnpin => '取消置顶';
+
+  @override
+  String get companionMemoryConfirmReality => '这是我的现实情况';
+
+  @override
+  String get companionMemorySources => '我的原话';
+
+  @override
+  String get companionMemoryEditSource => '修改这句原话';
+
+  @override
+  String get companionMemoryDeleteSource => '删除手机原话';
+
+  @override
+  String get companionMemoryDeleteSourceHint => '删除手机保存的这句原话及只靠它的记忆。主机旧对话和你另存的副本不会随之删除。';
+
+  @override
+  String get companionMemoryNoSource => '这条是手写的，或原来的出处已经找不到了。';
+
+  @override
+  String get companionMemoryTooLong => '原话太长，这一版未自动提取';
+
+  @override
+  String get companionMemoryNotExtracted => '这一批没有自动记下来';
+
+  @override
+  String get companionMemoryPending => '还没自动整理';
+
+  @override
+  String get companionMemorySourceKept => '原话保留';
+
+  @override
+  String get companionMemoryDisplayOnly => '旧记录，仅保留原文';
+
+  @override
+  String get companionMemoryCancelled => '计划已取消';
+
+  @override
+  String get companionMemoryLess => '少主动提';
+
+  @override
+  String get companionMemoryNever => '别主动提';
+
+  @override
+  String get companionMemoryNormal => '以后可以聊';
+
+  @override
+  String get companionMemoryCancelPlan => '取消这项计划';
+
+  @override
+  String get companionMemoryActions => '这件事的选项';
+
+  @override
+  String get companionMemoryWhich => '你指哪件事？可以在「她记得的事」里选一下。';
+
+  @override
+  String get companionMemoryForgotten => '好，这件事从手记里删掉了。';
+
+  @override
+  String get companionMemoryNeverDone => '好，我不主动提这件事了。';
+
+  @override
+  String get companionMemoryLessDone => '好，这件事我少提一点。';
+
+  @override
+  String get companionMemoryNormalDone => '好，以后聊到时可以接着说。';
+
+  @override
+  String get companionMemoryCancelledDone => '知道了，不再按原计划等着问你。';
+
+  @override
+  String get companionMemoryCorrected => '记错的那条已经改过来了。';
+
+  @override
+  String get companionMemoryHostSourceRemaining => '手机原话已删除。主机的旧对话仍保留；需要时可在对话列表删除那段对话。';
+
+  @override
+  String get companionMemoryHostRestarted => '主机刚重启过。这句话已留好，再点一次发送就能接着聊。';
+
+  @override
+  String get companionMemoryUsage => '模型用量';
+
+  @override
+  String get companionMemoryUsageHint => '最近的请求记录。未知不表示免费；费用按已核费率估算，不是供应商账单。主机记录只覆盖已捕获的伙伴聊天。';
+
+  @override
+  String get companionMemoryUsageUnknown => '未知';
+
+  @override
+  String get companionMemoryUsageExtract => '记下内容';
+
+  @override
+  String get companionMemoryUsageOrganize => '整理记忆';
+
+  @override
+  String get companionMemoryUsageChat => '聊天';
+
+  @override
+  String get companionMemoryUsageWaiting => '等待本次的用量记录';
+
+  @override
+  String get companionMemoryUsageIncomplete => '本次用量范围仍不完整，已知记录已保留';
+
+  @override
+  String get companionMemoryUsageInput => '未缓存输入';
+
+  @override
+  String get companionMemoryUsageCacheRead => '缓存读取';
+
+  @override
+  String get companionMemoryUsageCacheWrite => '缓存写入';
+
+  @override
+  String get companionMemoryUsageOutput => '输出';
+
+  @override
+  String get companionMemoryUsageCost => '估算费用';
+
+  @override
+  String get companionMemoryUsageNotSent => '本地未发出';
+
+  @override
+  String get companionMemoryUsageEmpty => '还没有记录到用量';
+
+  @override
+  String get companionMemoryHostUnsupported => '这台主机还接不了手机里的记忆，这次聊天用不上她已经记住的事。升级主机或换成轻量模式就好。';
 
   @override
   String get automaticDiagnosticsRecover => '恢复本地记录';

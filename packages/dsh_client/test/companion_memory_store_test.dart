@@ -11,12 +11,22 @@ const oldCard = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const otherCard = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 Map<String, Object?> legacyCard({String id = oldCard, String text = '明天去听演出'}) => {
-  'id': id, 'kind': 'fact', 'text': text, 'keywords': <String>[], 'pinned': true,
-  'source': {'kind': 'manual'}, 'expiresAt': null, 'createdAt': 1000, 'updatedAt': 2000,
+  'id': id,
+  'kind': 'fact',
+  'text': text,
+  'keywords': <String>[],
+  'pinned': true,
+  'source': {'kind': 'manual'},
+  'expiresAt': null,
+  'createdAt': 1000,
+  'updatedAt': 2000,
 };
 
 Map<String, Object?> legacy({int revision = 2, List<Map<String, Object?>>? rows}) => {
-  'v': 1, 'storeId': oldStore, 'revision': revision, 'memoryRevision': 2,
+  'v': 1,
+  'storeId': oldStore,
+  'revision': revision,
+  'memoryRevision': 2,
   'memories': rows ?? [legacyCard()],
 };
 
@@ -61,10 +71,24 @@ void main() {
     for (final broken in [
       {...legacy()}..remove('memories'),
       {...legacy()}..remove('memoryRevision'),
-      legacy(rows: [legacyCard(), legacyCard(id: otherCard)..remove('createdAt')]),
+      legacy(
+        rows: [
+          legacyCard(),
+          legacyCard(id: otherCard)..remove('createdAt'),
+        ],
+      ),
       legacy(rows: [legacyCard()..['createdAt'] = 9007199254740991]),
-      legacy(rows: [legacyCard()..['source'] = {'kind': 'automatic'}]),
-      legacy(rows: [legacyCard(), legacyCard(id: oldCard.toUpperCase())]),
+      legacy(
+        rows: [
+          legacyCard()..['source'] = {'kind': 'automatic'},
+        ],
+      ),
+      legacy(
+        rows: [
+          legacyCard(),
+          legacyCard(id: oldCard.toUpperCase()),
+        ],
+      ),
     ]) {
       expect(() => CompanionMigrationSnapshot.fromJson(broken), throwsA(isA<DshProtocolException>()));
       expect(store.cards(), isEmpty);
@@ -101,9 +125,14 @@ void main() {
       CREATE TRIGGER fail_import BEFORE INSERT ON memory_cards
       WHEN NEW.text = 'synthetic failure' BEGIN SELECT RAISE(ABORT, 'fixture'); END
     """);
-    final read = CompanionMigrationSnapshot.fromJson(legacy(rows: [
-      legacyCard(), legacyCard(id: otherCard, text: 'synthetic failure'),
-    ]));
+    final read = CompanionMigrationSnapshot.fromJson(
+      legacy(
+        rows: [
+          legacyCard(),
+          legacyCard(id: otherCard, text: 'synthetic failure'),
+        ],
+      ),
+    );
     expect(() => store.importLegacy(read), throwsA(isA<SqliteException>()));
     expect(store.cards(), isEmpty);
     expect(store.migrationCleanup(), isEmpty);
@@ -118,11 +147,11 @@ void main() {
     expect(row['eligible'], isTrue);
     store.saveManual(
       CompanionMemory(id: row['id']! as String, text: '演出已经取消'),
-      expectedRowRev: 1, currentValueChange: true, realityKnown: true,
+      expectedRowRev: 1,
+      currentValueChange: true,
+      realityKnown: true,
     );
-    final changedRemote = CompanionMigrationSnapshot.fromJson(legacy(
-      revision: 3, rows: [legacyCard(text: '另一份旧内容')],
-    ));
+    final changedRemote = CompanionMigrationSnapshot.fromJson(legacy(revision: 3, rows: [legacyCard(text: '另一份旧内容')]));
     expect(store.importLegacy(changedRemote), isEmpty);
     expect(store.cards().single['text'], '演出已经取消');
     expect(store.migrationCleanup().single['cleanup_state'], 'pending');
@@ -138,10 +167,12 @@ void main() {
   test('conditional local migration removes only imported cards and preserves vitals', () async {
     final local = CompanionLocalStore(appDirectory: directory, nowMilliseconds: () => now);
     final initial = await local.companionSnapshot();
-    final revision = await local.saveCompanionMemory(initial.storeId, initial.revision,
-      const CompanionMemory(id: oldCard, text: '合成旧手记'));
-    await local.saveCompanionMemory(initial.storeId, revision,
-      const CompanionMemory(id: otherCard, text: '留在旧库'));
+    final revision = await local.saveCompanionMemory(
+      initial.storeId,
+      initial.revision,
+      const CompanionMemory(id: oldCard, text: '合成旧手记'),
+    );
+    await local.saveCompanionMemory(initial.storeId, revision, const CompanionMemory(id: otherCard, text: '留在旧库'));
     final read = (await local.probeForMigration())!;
     final file = File('${directory.path}/light-state.json');
     final before = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
@@ -159,19 +190,30 @@ void main() {
   test('external r+1 stops local cleanup without erasing the new row', () async {
     final local = CompanionLocalStore(appDirectory: directory, nowMilliseconds: () => now);
     final initial = await local.companionSnapshot();
-    await local.saveCompanionMemory(initial.storeId, initial.revision,
-      const CompanionMemory(id: oldCard, text: '先前读到的内容'));
+    await local.saveCompanionMemory(
+      initial.storeId,
+      initial.revision,
+      const CompanionMemory(id: oldCard, text: '先前读到的内容'),
+    );
     final read = (await local.probeForMigration())!;
     store.importLegacy(read);
-    await local.saveCompanionMemory(read.storeId, read.revision,
-      const CompanionMemory(id: oldCard, text: '刚刚修改的内容'));
-    await expectLater(local.removeMigratedMemories(read.storeId, read.revision, {oldCard}),
-      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/conflict')));
+    await local.saveCompanionMemory(read.storeId, read.revision, const CompanionMemory(id: oldCard, text: '刚刚修改的内容'));
+    await expectLater(
+      local.removeMigratedMemories(read.storeId, read.revision, {oldCard}),
+      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/conflict')),
+    );
     expect((await local.companionMemories()).memories.single.text, '刚刚修改的内容');
   });
 
   test('only exact conditional delete acknowledgements advance the host revision', () {
-    final read = CompanionMigrationSnapshot.fromJson(legacy(rows: [legacyCard(), legacyCard(id: otherCard)]));
+    final read = CompanionMigrationSnapshot.fromJson(
+      legacy(
+        rows: [
+          legacyCard(),
+          legacyCard(id: otherCard),
+        ],
+      ),
+    );
     final receipt = {'v': 1, 'storeId': oldStore, 'revision': 3, 'memoryRevision': 3, 'deleted': true};
     final next = read.afterDeletion(oldCard, receipt);
     expect(next.revision, 3);
@@ -188,18 +230,37 @@ void main() {
   });
 
   test('manual current values use the archive sequence; pinning does not create a statement', () {
-    store.saveManual(const CompanionMemory(id: oldCard, text: '我喝无糖咖啡'),
-      expectedRowRev: null, currentValueChange: true, realityKnown: true);
+    store.saveManual(
+      const CompanionMemory(id: oldCard, text: '我喝无糖咖啡'),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     final first = store.cards().single;
     now++;
-    store.saveManual(const CompanionMemory(id: oldCard, text: '我喝无糖咖啡', pinned: true),
-      expectedRowRev: 1, currentValueChange: false, realityKnown: true);
+    store.saveManual(
+      const CompanionMemory(id: oldCard, text: '我喝无糖咖啡', pinned: true),
+      expectedRowRev: 1,
+      currentValueChange: false,
+      realityKnown: true,
+    );
     expect(store.cards().single['current_basis_seq'], first['current_basis_seq']);
-    store.saveManual(const CompanionMemory(id: oldCard, text: '我喝半糖咖啡', pinned: true),
-      expectedRowRev: 2, currentValueChange: true, realityKnown: true);
+    store.saveManual(
+      const CompanionMemory(id: oldCard, text: '我喝半糖咖啡', pinned: true),
+      expectedRowRev: 2,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     expect(store.cards().single['current_basis_seq'], greaterThan(first['current_basis_seq']! as int));
-    expect(() => store.saveManual(const CompanionMemory(id: oldCard, text: '旧编辑框'),
-      expectedRowRev: 2, currentValueChange: true, realityKnown: true), throwsA(isA<DshRemoteException>()));
+    expect(
+      () => store.saveManual(
+        const CompanionMemory(id: oldCard, text: '旧编辑框'),
+        expectedRowRev: 2,
+        currentValueChange: true,
+        realityKnown: true,
+      ),
+      throwsA(isA<DshRemoteException>()),
+    );
   });
 
   test('manual writes reject malformed user text before changing the database', () {
@@ -209,24 +270,41 @@ void main() {
       const CompanionMemory(id: 'not-an-id', text: '可见文字'),
       const CompanionMemory(id: oldCard, text: '   '),
     ]) {
-      expect(() => store.saveManual(memory, expectedRowRev: null,
-        currentValueChange: true, realityKnown: true), throwsA(isA<DshRemoteException>()));
+      expect(
+        () => store.saveManual(memory, expectedRowRev: null, currentValueChange: true, realityKnown: true),
+        throwsA(isA<DshRemoteException>()),
+      );
     }
     now = -1;
-    expect(() => store.saveManual(const CompanionMemory(id: oldCard, text: '合成文字'),
-      expectedRowRev: null, currentValueChange: true, realityKnown: true), throwsA(isA<DshRemoteException>()));
+    expect(
+      () => store.saveManual(
+        const CompanionMemory(id: oldCard, text: '合成文字'),
+        expectedRowRev: null,
+        currentValueChange: true,
+        realityKnown: true,
+      ),
+      throwsA(isA<DshRemoteException>()),
+    );
     expect(store.cards(), isEmpty);
     expect(store.archive['next_seq'], 1);
   });
 
   test('pinning a stored past or withdrawn automatic card does not revive or confirm it', () {
-    store.saveManual(const CompanionMemory(id: oldCard, text: '以前喝半糖'),
-      expectedRowRev: null, currentValueChange: true, realityKnown: true);
+    store.saveManual(
+      const CompanionMemory(id: oldCard, text: '以前喝半糖'),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     for (final status in ['past', 'withdrawn']) {
       database.execute('UPDATE memory_cards SET status=?, manual=0, eligible=0 WHERE id=?', [status, oldCard]);
       final row = store.cards(includeInactive: true).single;
-      store.saveManual(const CompanionMemory(id: oldCard, text: '以前喝半糖', pinned: true),
-        expectedRowRev: row['row_rev']! as int, currentValueChange: false, realityKnown: true);
+      store.saveManual(
+        const CompanionMemory(id: oldCard, text: '以前喝半糖', pinned: true),
+        expectedRowRev: row['row_rev']! as int,
+        currentValueChange: false,
+        realityKnown: true,
+      );
       final saved = store.cards(includeInactive: true).single;
       expect(saved['status'], status);
       expect(saved['manual'], isFalse);

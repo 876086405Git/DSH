@@ -97,13 +97,28 @@ void main() {
         'service_tier': 'standard',
         'server_tool_use': {'web_search_requests': 1},
       };
-      final result = await _heard(_answering(200, _sse([
-        {'type': 'message_start', 'message': {'usage': start}},
-        _text('你来啦。'),
-        {'type': 'message_delta', 'usage': {'output_tokens': 50}},
-        {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'}, 'usage': finalUsage},
-        {'type': 'message_stop'},
-      ])));
+      final result = await _heard(
+        _answering(
+          200,
+          _sse([
+            {
+              'type': 'message_start',
+              'message': {'usage': start},
+            },
+            _text('你来啦。'),
+            {
+              'type': 'message_delta',
+              'usage': {'output_tokens': 50},
+            },
+            {
+              'type': 'message_delta',
+              'delta': {'stop_reason': 'end_turn'},
+              'usage': finalUsage,
+            },
+            {'type': 'message_stop'},
+          ]),
+        ),
+      );
       expect(result.error, isNull);
       expect(result.words, '你来啦。');
       expect(result.sent, 1);
@@ -154,12 +169,25 @@ void main() {
         'cache_creation_input_tokens': 2.5,
         'output_tokens': 0,
       };
-      final result = await _heard(_answering(200, _sse([
-        {'type': 'message_start', 'message': {'usage': {'input_tokens': 900, 'cache_read_input_tokens': 300}}},
-        {'type': 'message_delta', 'usage': {'input_tokens': 1000, 'output_tokens': 50}},
-        {'type': 'message_delta', 'usage': raw},
-        {'type': 'message_stop'},
-      ])));
+      final result = await _heard(
+        _answering(
+          200,
+          _sse([
+            {
+              'type': 'message_start',
+              'message': {
+                'usage': {'input_tokens': 900, 'cache_read_input_tokens': 300},
+              },
+            },
+            {
+              'type': 'message_delta',
+              'usage': {'input_tokens': 1000, 'output_tokens': 50},
+            },
+            {'type': 'message_delta', 'usage': raw},
+            {'type': 'message_stop'},
+          ]),
+        ),
+      );
       final usage = result.usage.single;
       expect(usage.finalUsage, raw);
       expect(usage.inputUncached, isNull);
@@ -168,10 +196,18 @@ void main() {
       expect(usage.outputTokens, 0);
       expect(usage.reportedInputTokens, isNull);
 
-      final partial = await _heard(_answering(200, _sse([
-        {'type': 'message_delta', 'usage': {'cache_read_input_tokens': 12}},
-        {'type': 'message_stop'},
-      ])));
+      final partial = await _heard(
+        _answering(
+          200,
+          _sse([
+            {
+              'type': 'message_delta',
+              'usage': {'cache_read_input_tokens': 12},
+            },
+            {'type': 'message_stop'},
+          ]),
+        ),
+      );
       expect(partial.usage.single.inputUncached, isNull);
       expect(partial.usage.single.outputTokens, isNull);
       expect(partial.usage.single.reportedInputTokens, 12);
@@ -179,11 +215,16 @@ void main() {
     });
 
     test('a finished request without usage still has one receipt with unknown components', () async {
-      final result = await _heard(_answering(200, _sse([
-        {'type': 'message_start', 'message': <String, Object?>{}},
-        _text('你来啦。'),
-        {'type': 'message_stop'},
-      ])));
+      final result = await _heard(
+        _answering(
+          200,
+          _sse([
+            {'type': 'message_start', 'message': <String, Object?>{}},
+            _text('你来啦。'),
+            {'type': 'message_stop'},
+          ]),
+        ),
+      );
       final usage = result.usage.single;
       expect(usage.complete, isTrue);
       expect(usage.startUsage, isNull);
@@ -198,11 +239,20 @@ void main() {
 
     test('max_tokens and refusal are distinct terminal states even with message_stop', () async {
       for (final reason in ['max_tokens', 'refusal']) {
-        final result = await _heard(_answering(200, _sse([
-          _text('still delivered'),
-          {'type': 'message_delta', 'delta': {'stop_reason': reason}, 'usage': {'output_tokens': 8}},
-          {'type': 'message_stop'},
-        ])));
+        final result = await _heard(
+          _answering(
+            200,
+            _sse([
+              _text('still delivered'),
+              {
+                'type': 'message_delta',
+                'delta': {'stop_reason': reason},
+                'usage': {'output_tokens': 8},
+              },
+              {'type': 'message_stop'},
+            ]),
+          ),
+        );
         expect(result.error, isNull);
         expect(result.words, 'still delivered');
         expect(result.usage.single.stopReason, reason);
@@ -214,7 +264,13 @@ void main() {
 
     test('onSent occurs at client.send, while no-key and failed local reservation never send', () async {
       final order = <String>[];
-      final client = _answering(200, _sse([{'type': 'message_stop'}]), seen: (_, _) => order.add('send'));
+      final client = _answering(
+        200,
+        _sse([
+          {'type': 'message_stop'},
+        ]),
+        seen: (_, _) => order.add('send'),
+      );
       addTearDown(client.close);
       final stream = streamCompanionReply(
         client: client,
@@ -333,11 +389,24 @@ void main() {
       const start = {'input_tokens': 100, 'cache_read_input_tokens': 25, 'output_tokens': 1};
       const finalUsage = {'input_tokens': 100, 'cache_read_input_tokens': 25, 'output_tokens': 37};
       for (final finalArrived in [false, true]) {
-        final result = await _heard(_answering(200, _sse([
-          {'type': 'message_start', 'message': {'usage': start}},
-          _text('说到一半'),
-          if (finalArrived) {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'}, 'usage': finalUsage},
-        ])));
+        final result = await _heard(
+          _answering(
+            200,
+            _sse([
+              {
+                'type': 'message_start',
+                'message': {'usage': start},
+              },
+              _text('说到一半'),
+              if (finalArrived)
+                {
+                  'type': 'message_delta',
+                  'delta': {'stop_reason': 'end_turn'},
+                  'usage': finalUsage,
+                },
+            ]),
+          ),
+        );
         expect(result.words, '说到一半');
         expect(result.error?.failure, CompanionLightFailure.network);
         final usage = result.usage.single;
@@ -353,11 +422,22 @@ void main() {
     });
 
     test('a provider error retains the reported usage and the original stream failure', () async {
-      final result = await _heard(_answering(200, _sse([
-        _text('嗯'),
-        {'type': 'message_delta', 'usage': {'input_tokens': 5, 'output_tokens': 2}},
-        {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}},
-      ])));
+      final result = await _heard(
+        _answering(
+          200,
+          _sse([
+            _text('嗯'),
+            {
+              'type': 'message_delta',
+              'usage': {'input_tokens': 5, 'output_tokens': 2},
+            },
+            {
+              'type': 'error',
+              'error': {'type': 'overloaded_error', 'message': 'Overloaded'},
+            },
+          ]),
+        ),
+      );
       expect(result.words, '嗯');
       expect(result.error?.failure, CompanionLightFailure.busy);
       expect(result.usage.single.terminal, 'provider_error');
@@ -381,10 +461,19 @@ void main() {
         lines: const [CompanionLine.user('hi')],
         onUsage: usage.add,
       ).listen((_) => unawaited(sub.cancel().then((_) => cancelled.complete())));
-      body.add(utf8.encode(_sse([
-        {'type': 'message_start', 'message': {'usage': {'input_tokens': 100, 'output_tokens': 1}}},
-        _text('等等'),
-      ])));
+      body.add(
+        utf8.encode(
+          _sse([
+            {
+              'type': 'message_start',
+              'message': {
+                'usage': {'input_tokens': 100, 'output_tokens': 1},
+              },
+            },
+            _text('等等'),
+          ]),
+        ),
+      );
       await cancelled.future;
       expect(usage, hasLength(1));
       expect(usage.single.terminal, 'cancelled');

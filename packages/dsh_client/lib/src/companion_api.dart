@@ -248,17 +248,19 @@ class CompanionMigrationSnapshot extends CompanionMemories {
     final memories = <CompanionMemory>[];
     for (final row in rows) {
       final memory = CompanionMemory.fromJson(row)!;
-      memories.add(CompanionMemory(
-        id: memory.id,
-        text: memory.text,
-        kind: memory.kind,
-        keywords: List.unmodifiable(memory.keywords),
-        pinned: memory.pinned,
-        source: memory.source,
-        expiresAt: memory.expiresAt,
-        createdAt: memory.createdAt,
-        updatedAt: memory.updatedAt,
-      ));
+      memories.add(
+        CompanionMemory(
+          id: memory.id,
+          text: memory.text,
+          kind: memory.kind,
+          keywords: List.unmodifiable(memory.keywords),
+          pinned: memory.pinned,
+          source: memory.source,
+          expiresAt: memory.expiresAt,
+          createdAt: memory.createdAt,
+          updatedAt: memory.updatedAt,
+        ),
+      );
     }
     if (memories.map((m) => m.id.toLowerCase()).toSet().length != memories.length) {
       throw const DshProtocolException('Duplicate companion migration memory');

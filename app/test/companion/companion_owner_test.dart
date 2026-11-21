@@ -57,11 +57,18 @@ class _Bridge extends DshConnection {
     int? maxResponseBytes,
   }) async {
     if (path == '$dshGoCompanionPath/memories') {
-      return _json({'v': 1, 'storeId': '33333333-3333-4333-8333-333333333333',
-        'revision': 0, 'memoryRevision': 0, 'memories': []});
+      return _json({
+        'v': 1,
+        'storeId': '33333333-3333-4333-8333-333333333333',
+        'revision': 0,
+        'memoryRevision': 0,
+        'memories': [],
+      });
     }
     if (path != dshGoCompanionPath) {
-      return _json({'error': {'code': 'companion/not-found'}}, 404);
+      return _json({
+        'error': {'code': 'companion/not-found'},
+      }, 404);
     }
     final handler = nextGet;
     nextGet = null;
@@ -69,10 +76,15 @@ class _Bridge extends DshConnection {
   }
 
   @override
-  Future<DshHttpResponse> getBounded(String path, {
-    Map<String, String>? query, required int maxBytes, bool autoUncompress = false,
+  Future<DshHttpResponse> getBounded(
+    String path, {
+    Map<String, String>? query,
+    required int maxBytes,
+    bool autoUncompress = false,
     Duration timeout = const Duration(seconds: 30),
-  }) async => _json({'error': {'code': 'companion/not-found'}}, 404);
+  }) async => _json({
+    'error': {'code': 'companion/not-found'},
+  }, 404);
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -104,14 +116,21 @@ class _Sessions extends CompanionSessions {
   Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
     final host = ref.read(activeHostProvider);
     final result = await (pending ?? Future.value(CompanionBinding('companion-${host.id}')));
-    final binding = CompanionBinding(result.sessionId, inlinePersona: result.inlinePersona, full: result.full,
-      memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
+    final binding = CompanionBinding(
+      result.sessionId,
+      inlinePersona: result.inlinePersona,
+      full: result.full,
+      memoryArchiveId: memoryArchiveId,
+      memoryControlRevision: memoryControlRevision,
+    );
     bindings[host] = binding;
     return binding;
   }
 
   @override
-  Future<void> forgetAll() async { bindings.clear(); }
+  Future<void> forgetAll() async {
+    bindings.clear();
+  }
 }
 
 class _Chat extends ChatController {

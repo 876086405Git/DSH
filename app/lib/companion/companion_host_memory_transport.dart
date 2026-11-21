@@ -71,12 +71,24 @@ class CompanionHostMemoryTransport implements CompanionMemoryTransport {
   }
 }
 
-bool _configuration(String? code, int? status) => const {400, 401, 403, 404, 413, 422}.contains(status) ||
+bool _configuration(String? code, int? status) =>
+    const {400, 401, 403, 404, 413, 422}.contains(status) ||
     const {
-      'route-unavailable', 'invalid-request', 'request-limit',
-      'companion/auxiliary-forbidden', 'companion/auxiliary-unavailable',
-      'companion/auxiliary-model-unavailable', 'companion/auxiliary-session-unavailable',
-      'INVALID_CREDENTIAL', 'MISSING_CREDENTIAL', 'AUTH',
-      'UNKNOWN_MODEL', 'NO_ADAPTER', 'MODEL_UNSUPPORTED', 'CLIENT_UPGRADE_REQUIRED',
-      'UNSUPPORTED_REASONING_EFFORT', 'INVALID_REQUEST', 'COMPANION_AUXILIARY_UNAVAILABLE',
+      'route-unavailable',
+      'invalid-request',
+      'request-limit',
+      'companion/auxiliary-forbidden',
+      'companion/auxiliary-unavailable',
+      'companion/auxiliary-model-unavailable',
+      'companion/auxiliary-session-unavailable',
+      'INVALID_CREDENTIAL',
+      'MISSING_CREDENTIAL',
+      'AUTH',
+      'UNKNOWN_MODEL',
+      'NO_ADAPTER',
+      'MODEL_UNSUPPORTED',
+      'CLIENT_UPGRADE_REQUIRED',
+      'UNSUPPORTED_REASONING_EFFORT',
+      'INVALID_REQUEST',
+      'COMPANION_AUXILIARY_UNAVAILABLE',
     }.contains(code);

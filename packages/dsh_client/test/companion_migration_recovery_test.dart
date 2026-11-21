@@ -61,8 +61,10 @@ void main() {
   }
 
   Map<String, Object?> mapping([String id = _oldCard]) => Map<String, Object?>.from(
-    database.select('SELECT * FROM memory_migrations WHERE legacy_store_id=? AND legacy_card_id=?',
-      [_oldStore, id]).single,
+    database.select('SELECT * FROM memory_migrations WHERE legacy_store_id=? AND legacy_card_id=?', [
+      _oldStore,
+      id,
+    ]).single,
   );
 
   // This fixture removes only A06's two columns. The v4 ledger tables and the
@@ -113,15 +115,19 @@ void main() {
     final receipt = mapping();
     // Independently computed using Python hashlib.sha256 over the documented
     // UTF-8 JSON tuple; this expected value does not call the Dart hash helper.
-    expect(receipt['source_fingerprint'],
-      'sha256-v1:298541073299e45ff7571324f61cdc0d0ec20b90a8e66c5b452938c13daf9142');
+    expect(receipt['source_fingerprint'], 'sha256-v1:298541073299e45ff7571324f61cdc0d0ec20b90a8e66c5b452938c13daf9142');
     expect(jsonEncode(receipt), isNot(contains(_originalText)));
     expect(receipt['read_revision'], 2);
     expect(receipt['cleanup_read_revision'], 2);
   });
 
   test('same proof revision remains valid for both deletes in an r -> r+1 -> r+2 receipt chain', () {
-    final source = _read(cards: [_card(), _card(id: _otherCard)]);
+    final source = _read(
+      cards: [
+        _card(),
+        _card(id: _otherCard),
+      ],
+    );
     final ids = store.importLegacy(source);
     expect(store.verifyLegacyImport(source, ids), isTrue);
     final afterA = source.afterDeletion(_oldCard, _ack(3, 3));
@@ -135,7 +141,12 @@ void main() {
   });
 
   test('a later unchanged full read re-proves remaining source after close and reopen', () {
-    final source = _read(cards: [_card(), _card(id: _otherCard)]);
+    final source = _read(
+      cards: [
+        _card(),
+        _card(id: _otherCard),
+      ],
+    );
     store.importLegacy(source);
     final originalIds = store.cards().map((card) => card['id']).toList();
     final revision = store.archive['memory_revision'];
@@ -144,9 +155,13 @@ void main() {
     reopen();
 
     // A new complete read can have a higher revision without changing B.
-    final fresh = CompanionMigrationSnapshot.fromJson(_wire(
-      revision: afterA.revision, memoryRevision: afterA.memoryRevision, cards: [_card(id: _otherCard)],
-    ));
+    final fresh = CompanionMigrationSnapshot.fromJson(
+      _wire(
+        revision: afterA.revision,
+        memoryRevision: afterA.memoryRevision,
+        cards: [_card(id: _otherCard)],
+      ),
+    );
     final ids = store.importLegacy(fresh);
     store.finishMissingLegacyCleanup(fresh);
     expect(ids, [_otherCard]);
@@ -260,7 +275,13 @@ void main() {
 
   test('a same-ID mismatch does not stop an independent new source card being imported', () {
     store.importLegacy(_read());
-    final fresh = _read(revision: 3, cards: [_card(text: '旧源改动'), _card(id: _otherCard)]);
+    final fresh = _read(
+      revision: 3,
+      cards: [
+        _card(text: '旧源改动'),
+        _card(id: _otherCard),
+      ],
+    );
     expect(store.importLegacy(fresh), [_otherCard]);
     expect(store.verifyLegacyImport(fresh, [_otherCard]), isTrue);
     expect(store.verifyLegacyImport(fresh, [_oldCard]), isFalse);
@@ -270,8 +291,12 @@ void main() {
   test('a local edit is preserved while unchanged original source becomes cleanable', () {
     store.importLegacy(_read(), realityKnownIds: {_oldCard});
     final card = store.cards().single;
-    store.saveManual(CompanionMemory(id: card['id']! as String, text: '手机上已经取消演出'),
-      expectedRowRev: 1, currentValueChange: true, realityKnown: true);
+    store.saveManual(
+      CompanionMemory(id: card['id']! as String, text: '手机上已经取消演出'),
+      expectedRowRev: 1,
+      currentValueChange: true,
+      realityKnown: true,
+    );
     final edited = store.cards().single;
     final fresh = _read(revision: 3);
     expect(store.importLegacy(fresh), [_oldCard]);
@@ -331,8 +356,10 @@ void main() {
     expect(store.verifyLegacyImport(source, [_oldCard]), isTrue);
     expect(mapping()['source_fingerprint'], startsWith('sha256-v1:'));
     expect(store.cards().single, card);
-    expect(database.select("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'memory_host_chat_%'"),
-      hasLength(3));
+    expect(
+      database.select("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'memory_host_chat_%'"),
+      hasLength(3),
+    );
   });
 
   for (final forgotten in [false, true]) {
@@ -342,8 +369,12 @@ void main() {
       if (forgotten) {
         store.deleteCard(id: card['id']! as String, expectedRowRev: 1);
       } else {
-        store.saveManual(CompanionMemory(id: card['id']! as String, text: '手机修改后的文字'),
-          expectedRowRev: 1, currentValueChange: true, realityKnown: true);
+        store.saveManual(
+          CompanionMemory(id: card['id']! as String, text: '手机修改后的文字'),
+          expectedRowRev: 1,
+          currentValueChange: true,
+          realityKnown: true,
+        );
       }
       reopenFromV4();
       final fresh = _read(revision: 3);
@@ -378,7 +409,13 @@ void main() {
       CREATE TRIGGER fail_new_card BEFORE INSERT ON memory_cards
       WHEN NEW.text = 'synthetic failure' BEGIN SELECT RAISE(ABORT, 'fixture'); END
     """);
-    final fresh = _read(revision: 3, cards: [_card(), _card(id: _otherCard, text: 'synthetic failure')]);
+    final fresh = _read(
+      revision: 3,
+      cards: [
+        _card(),
+        _card(id: _otherCard, text: 'synthetic failure'),
+      ],
+    );
     expect(() => store.importLegacy(fresh), throwsA(isA<SqliteException>()));
     expect(mapping(), before);
     expect(store.archive, archive);
@@ -390,13 +427,18 @@ void main() {
     final oldDirectory = Directory('${directory.path}/legacy');
     final local = CompanionLocalStore(appDirectory: oldDirectory, nowMilliseconds: () => now);
     final initial = await local.companionSnapshot();
-    await local.saveCompanionMemory(initial.storeId, initial.revision,
-      const CompanionMemory(id: _oldCard, text: _originalText));
+    await local.saveCompanionMemory(
+      initial.storeId,
+      initial.revision,
+      const CompanionMemory(id: _oldCard, text: _originalText),
+    );
     final source = (await local.probeForMigration())!;
     store.importLegacy(source);
     await local.companionEvent(source.storeId, source.revision, 'pet');
-    await expectLater(local.removeMigratedMemories(source.storeId, source.revision, {_oldCard}),
-      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/conflict')));
+    await expectLater(
+      local.removeMigratedMemories(source.storeId, source.revision, {_oldCard}),
+      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/conflict')),
+    );
     reopen();
     final fresh = (await local.probeForMigration())!;
     expect(fresh.revision, source.revision + 1);
@@ -418,10 +460,12 @@ void main() {
 
   test('actual SDK HTTP migration resumes after one strict delete and SQLite reopen', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final client = DshClient(DshConnection(
-      Uri.parse('http://127.0.0.1:${server.port}'),
-      cookie: DshCookie(name: 'dsh-auth-fixture', value: 'synthetic', authority: '127.0.0.1:${server.port}'),
-    ));
+    final client = DshClient(
+      DshConnection(
+        Uri.parse('http://127.0.0.1:${server.port}'),
+        cookie: DshCookie(name: 'dsh-auth-fixture', value: 'synthetic', authority: '127.0.0.1:${server.port}'),
+      ),
+    );
     final sent = <Map<String, Object?>>[];
     var step = 0;
     // Synthetic full v1 responses exercise the production HTTP client and
@@ -432,7 +476,12 @@ void main() {
       if (step == 0) {
         expect(request.method, 'GET');
         expect(request.uri.path, '$dshGoCompanionPath/memories');
-        body = _wire(cards: [_card(), _card(id: _otherCard)]);
+        body = _wire(
+          cards: [
+            _card(),
+            _card(id: _otherCard),
+          ],
+        );
       } else if (step == 2) {
         expect(request.method, 'GET');
         expect(request.uri.path, '$dshGoCompanionPath/memories');
@@ -440,7 +489,9 @@ void main() {
       } else {
         expect(request.method, 'POST');
         expect(request.uri.path, '$dshGoCompanionPath/memories/delete');
-        sent.add(Map<String, Object?>.from(jsonDecode(await utf8.decoder.bind(request).join()) as Map<String, dynamic>));
+        sent.add(
+          Map<String, Object?>.from(jsonDecode(await utf8.decoder.bind(request).join()) as Map<String, dynamic>),
+        );
         body = step == 1 ? _ack(3, 3) : _ack(4, 4);
       }
       step++;
@@ -480,7 +531,13 @@ void main() {
   test('malformed full source remains rejected before any new cleanup proof', () {
     store.importLegacy(_read());
     final before = mapping();
-    final broken = _wire(revision: 3, cards: [_card(), _card(id: _otherCard)..remove('updatedAt')]);
+    final broken = _wire(
+      revision: 3,
+      cards: [
+        _card(),
+        _card(id: _otherCard)..remove('updatedAt'),
+      ],
+    );
     expect(() => CompanionMigrationSnapshot.fromJson(broken), throwsA(isA<DshProtocolException>()));
     expect(mapping(), before);
     expect(store.cards(), hasLength(1));

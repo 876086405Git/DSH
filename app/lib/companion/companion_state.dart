@@ -27,12 +27,21 @@ const _lastSeenKey = 'companion_last_seen';
 
 @immutable
 class CompanionBinding {
-  const CompanionBinding(this.sessionId, {this.inlinePersona = false, this.full = true,
-    this.memoryArchiveId, this.memoryControlRevision});
+  const CompanionBinding(
+    this.sessionId, {
+    this.inlinePersona = false,
+    this.full = true,
+    this.memoryArchiveId,
+    this.memoryControlRevision,
+  });
 
-  factory CompanionBinding.fromJson(Map<String, Object?> json) =>
-      CompanionBinding(json['id']! as String, inlinePersona: json['inline'] == true, full: json['full'] == true,
-        memoryArchiveId: json['memoryArchiveId'] as String?, memoryControlRevision: json['memoryControlRevision'] as int?);
+  factory CompanionBinding.fromJson(Map<String, Object?> json) => CompanionBinding(
+    json['id']! as String,
+    inlinePersona: json['inline'] == true,
+    full: json['full'] == true,
+    memoryArchiveId: json['memoryArchiveId'] as String?,
+    memoryControlRevision: json['memoryControlRevision'] as int?,
+  );
 
   final String sessionId;
 
@@ -46,9 +55,13 @@ class CompanionBinding {
   final String? memoryArchiveId;
   final int? memoryControlRevision;
 
-  Map<String, Object?> toJson() => {'id': sessionId, if (inlinePersona) 'inline': true, if (full) 'full': true,
+  Map<String, Object?> toJson() => {
+    'id': sessionId,
+    if (inlinePersona) 'inline': true,
+    if (full) 'full': true,
     if (memoryArchiveId != null) 'memoryArchiveId': memoryArchiveId,
-    if (memoryControlRevision != null) 'memoryControlRevision': memoryControlRevision};
+    if (memoryControlRevision != null) 'memoryControlRevision': memoryControlRevision,
+  };
 }
 
 String _hostKey(HostRef host) => '${host.kind.name}:${host.id}';
@@ -115,8 +128,10 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     await _loaded.future;
     checkCurrent();
     final existing = of(host);
-    if (existing != null && existing.full && (memoryArchiveId == null ||
-        (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision))) {
+    if (existing != null &&
+        existing.full &&
+        (memoryArchiveId == null ||
+            (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision))) {
       final gone = await _gone(conn.client, existing.sessionId);
       checkCurrent();
       if (!gone) return existing;
@@ -130,8 +145,12 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     // Before the first message, so it never shows in the drawer.
     final selected = await _selectPreset(conn.client, id, current);
     checkCurrent();
-    final binding = CompanionBinding(id, inlinePersona: !selected,
-      memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
+    final binding = CompanionBinding(
+      id,
+      inlinePersona: !selected,
+      memoryArchiveId: memoryArchiveId,
+      memoryControlRevision: memoryControlRevision,
+    );
     state = {...state, _hostKey(host): binding};
     await _save(current);
     checkCurrent();
@@ -454,5 +473,4 @@ $_noToolsLine''';
 
 /// The persona and stable memory-reading rules. Selected cards travel only
 /// with the current request, never in this reusable system prefix.
-String companionLightSystem({String persona = companionPersonaCore}) =>
-    '$persona\n\n$companionMemoryChatPrompt';
+String companionLightSystem({String persona = companionPersonaCore}) => '$persona\n\n$companionMemoryChatPrompt';

@@ -268,8 +268,7 @@ const _hostWireJson = r'''
 }
 ''';
 
-Map<String, Object?> _wire(String name) =>
-    Map<String, Object?>.from((jsonDecode(_hostWireJson) as Map)[name] as Map);
+Map<String, Object?> _wire(String name) => Map<String, Object?>.from((jsonDecode(_hostWireJson) as Map)[name] as Map);
 
 Map<String, Object?> _capability({bool generic = false, bool supported = true}) => {
   'v': 1,
@@ -277,26 +276,34 @@ Map<String, Object?> _capability({bool generic = false, bool supported = true}) 
   'provider': generic ? 'selected-provider' : 'deepseek',
   'model': generic ? 'selected-model' : 'deepseek-flash',
   'supported': supported,
-  if (supported) 'capability': {
-    'physicalDispatch': generic ? 'unknown' : 'fetch-invoked',
-    'rawUsage': generic ? 'unavailable' : 'deepseek-messages-cumulative',
-    'maxPhysicalRequests': generic ? null : 1,
-    'noTools': true,
-  },
+  if (supported)
+    'capability': {
+      'physicalDispatch': generic ? 'unknown' : 'fetch-invoked',
+      'rawUsage': generic ? 'unavailable' : 'deepseek-messages-cumulative',
+      'maxPhysicalRequests': generic ? null : 1,
+      'noTools': true,
+    },
   if (!supported) 'reason': 'adapter-call-unavailable',
 };
 
 Map<String, Object?> _accepted(Map<String, Object?> cap) => {
-  'type': 'accepted', 'requestId': _request, 'instanceId': cap['instanceId'],
-  'provider': cap['provider'], 'model': cap['model'],
+  'type': 'accepted',
+  'requestId': _request,
+  'instanceId': cap['instanceId'],
+  'provider': cap['provider'],
+  'model': cap['model'],
 };
 
 Map<String, Object?> _dispatch() => {
-  'type': 'dispatch', 'requestId': _request, 'atMs': _hostTime, 'boundary': 'fetch-invoked',
+  'type': 'dispatch',
+  'requestId': _request,
+  'atMs': _hostTime,
+  'boundary': 'fetch-invoked',
 };
 
 Map<String, Object?> _usage(Map<String, Object?> cap, {bool generic = false, bool complete = true}) => {
-  'provider': cap['provider'], 'model': cap['model'],
+  'provider': cap['provider'],
+  'model': cap['model'],
   'start_usage': generic ? null : {'input_tokens': 90, 'cache_read_input_tokens': 3},
   'final_usage': generic ? null : {'input_tokens': 7, 'cache_read_input_tokens': 3, 'output_tokens': 5},
   'start_event': generic ? null : 'message_start',
@@ -311,7 +318,9 @@ Map<String, Object?> _usage(Map<String, Object?> cap, {bool generic = false, boo
   'complete': complete,
   'http_status': generic ? null : 200,
   if (generic) ...{
-    'runtime_normalized_usage': [{'inputTokens': 10, 'outputTokens': 5}],
+    'runtime_normalized_usage': [
+      {'inputTokens': 10, 'outputTokens': 5},
+    ],
     'runtime_normalized_usage_semantics': 'runtime-normalized-events',
     'host_adapter_handoff_at_ms': _hostTime,
     'runtime_finish_kind': 'stop',
@@ -319,10 +328,15 @@ Map<String, Object?> _usage(Map<String, Object?> cap, {bool generic = false, boo
 };
 
 Map<String, Object?> _finish(Map<String, Object?> cap, {bool? dispatched = true, bool generic = false}) => {
-  'type': 'finish', 'requestId': _request, 'dispatched': dispatched,
+  'type': 'finish',
+  'requestId': _request,
+  'dispatched': dispatched,
   'dispatchAtMs': dispatched == true ? _hostTime : null,
-  'terminal': 'complete', 'complete': true, 'stopReason': generic ? null : 'end_turn',
-  'httpStatus': generic ? null : 200, 'usage': _usage(cap, generic: generic),
+  'terminal': 'complete',
+  'complete': true,
+  'stopReason': generic ? null : 'end_turn',
+  'httpStatus': generic ? null : 200,
+  'usage': _usage(cap, generic: generic),
 };
 
 Future<void> _json(HttpRequest request, Object? value, {int status = 200}) async {
@@ -363,7 +377,9 @@ class _Host {
   Map<String, Object?> capability = _capability();
   late Future<void> Function(HttpRequest request) answer = (request) => _json(request, capability);
   Uri get baseUri => Uri.parse('http://127.0.0.1:${server.port}');
-  Future<void> close() async { await server.close(force: true); }
+  Future<void> close() async {
+    await server.close(force: true);
+  }
 }
 
 class _Probe {
@@ -420,12 +436,14 @@ void main() {
   setUp(() async {
     host = await _Host.start();
     http = _ObservedHttpClient();
-    client = DshClient(DshConnection(
-      host.baseUri,
-      httpClient: http,
-      hostHeader: host.baseUri.authority,
-      cookie: DshCookie(name: 'dsh-auth-test', value: 'fixture-cookie', authority: host.baseUri.authority),
-    ));
+    client = DshClient(
+      DshConnection(
+        host.baseUri,
+        httpClient: http,
+        hostHeader: host.baseUri.authority,
+        cookie: DshCookie(name: 'dsh-auth-test', value: 'fixture-cookie', authority: host.baseUri.authority),
+      ),
+    );
   });
   tearDown(() async {
     await client.close();
@@ -444,9 +462,15 @@ void main() {
     host.answer = (request) {
       expect(probe.events, ['uncertain', 'http-open']);
       return _frames(request, [
-        _accepted(host.capability), _dispatch(),
-        {'type': 'usage', 'requestId': _request, 'event': 'message_start',
-          'semantics': 'cumulative', 'raw': {'input_tokens': 90, 'cache_read_input_tokens': 3}},
+        _accepted(host.capability),
+        _dispatch(),
+        {
+          'type': 'usage',
+          'requestId': _request,
+          'event': 'message_start',
+          'semantics': 'cumulative',
+          'raw': {'input_tokens': 90, 'cache_read_input_tokens': 3},
+        },
         {'type': 'text', 'requestId': _request, 'text': '{"items":[]}'},
         _finish(host.capability),
       ]);
@@ -464,10 +488,16 @@ void main() {
     expect(host.cookies, everyElement('dsh-auth-test=fixture-cookie'));
     expect(host.hosts, everyElement(host.baseUri.authority));
     expect(host.bodies.last, {
-      'v': 1, 'instanceId': _instance, 'requestId': _request, 'sessionId': _session,
-      'provider': 'deepseek', 'model': 'deepseek-flash', 'kind': 'extract',
+      'v': 1,
+      'instanceId': _instance,
+      'requestId': _request,
+      'sessionId': _session,
+      'provider': 'deepseek',
+      'model': 'deepseek-flash',
+      'kind': 'extract',
       'system': 'Extract a JSON proposal from the given batch.',
-      'input': 'synthetic conversation batch', 'maxTokens': 1400,
+      'input': 'synthetic conversation batch',
+      'maxTokens': 1400,
     });
   });
 
@@ -477,8 +507,12 @@ void main() {
     final probe = _Probe();
     host.answer = (request) => _frames(request, [
       _accepted(host.capability),
-      {'type': 'runtime-usage', 'requestId': _request, 'semantics': 'runtime-normalized',
-        'usage': {'inputTokens': 10, 'outputTokens': 5}},
+      {
+        'type': 'runtime-usage',
+        'requestId': _request,
+        'semantics': 'runtime-normalized',
+        'usage': {'inputTokens': 10, 'outputTokens': 5},
+      },
       {'type': 'text', 'requestId': _request, 'text': '{"items":[]}'},
       _finish(host.capability, generic: true, dispatched: null),
     ]);
@@ -490,7 +524,9 @@ void main() {
     expect(probe.events, ['uncertain', 'usage']);
     expect(result.usage['final_usage'], isNull);
     expect(result.usage['input_uncached'], isNull);
-    expect(result.usage['runtime_normalized_usage'], [{'inputTokens': 10, 'outputTokens': 5}]);
+    expect(result.usage['runtime_normalized_usage'], [
+      {'inputTokens': 10, 'outputTokens': 5},
+    ]);
     expect(host.bodies.last?['provider'], 'selected-provider');
     expect(host.bodies.last?['model'], 'selected-model');
   });
@@ -499,15 +535,27 @@ void main() {
     final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
     final probe = _Probe();
     host.answer = (request) => _frames(request, [
-      _accepted(host.capability), _dispatch(),
-      {'type': 'usage', 'requestId': _request, 'event': 'message_start',
-        'semantics': 'cumulative', 'raw': {'input_tokens': 90, 'cache_read_input_tokens': 3}},
-      {'type': 'usage', 'requestId': _request, 'event': 'message_delta',
-        'semantics': 'cumulative', 'raw': {'input_tokens': 7, 'output_tokens': 5}},
+      _accepted(host.capability),
+      _dispatch(),
+      {
+        'type': 'usage',
+        'requestId': _request,
+        'event': 'message_start',
+        'semantics': 'cumulative',
+        'raw': {'input_tokens': 90, 'cache_read_input_tokens': 3},
+      },
+      {
+        'type': 'usage',
+        'requestId': _request,
+        'event': 'message_delta',
+        'semantics': 'cumulative',
+        'raw': {'input_tokens': 7, 'output_tokens': 5},
+      },
     ]);
-    await expectLater(_call(client, cap, probe), throwsA(
-      isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false),
-    ));
+    await expectLater(
+      _call(client, cap, probe),
+      throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false)),
+    );
     expect(probe.events, ['uncertain', 'sent', 'usage']);
     expect(probe.usage.single['input_uncached'], 7);
     expect(probe.usage.single['input_cache_read'], isNull);
@@ -522,9 +570,10 @@ void main() {
     final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
     final probe = _Probe();
     host.answer = (request) => _frames(request, [_accepted(host.capability)]);
-    await expectLater(_call(client, cap, probe), throwsA(
-      isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false),
-    ));
+    await expectLater(
+      _call(client, cap, probe),
+      throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false)),
+    );
     expect(probe.events, ['uncertain', 'usage']);
     expect(probe.usage.single['host_dispatch_at_ms'], isNull);
     expect(host.paths, hasLength(2));
@@ -541,9 +590,18 @@ void main() {
     };
     host.answer = (request) => _frames(request, [
       _accepted(host.capability),
-      {'type': 'finish', 'requestId': _request, 'dispatched': false, 'dispatchAtMs': null,
-        'terminal': 'preflight_error', 'complete': false, 'stopReason': null, 'httpStatus': null,
-        'usage': usage, 'error': {'code': 'INVALID_CREDENTIAL'}},
+      {
+        'type': 'finish',
+        'requestId': _request,
+        'dispatched': false,
+        'dispatchAtMs': null,
+        'terminal': 'preflight_error',
+        'complete': false,
+        'stopReason': null,
+        'httpStatus': null,
+        'usage': usage,
+        'error': {'code': 'INVALID_CREDENTIAL'},
+      },
     ]);
     final result = await _call(client, cap, probe);
     expect(result.dispatched, isFalse);
@@ -562,11 +620,14 @@ void main() {
         // Only this explicit fault variant changes the captured wire payload.
         if (forceFalse) body['dispatched'] = false;
         host.answer = (request) => _json(request, body, status: wire['status']! as int);
-        await expectLater(_call(client, cap, probe), throwsA(
-          isA<CompanionAuxiliaryFailure>()
-            .having((e) => e.code, 'raw wire code', code)
-            .having((e) => e.notSent, 'notSent', false),
-        ));
+        await expectLater(
+          _call(client, cap, probe),
+          throwsA(
+            isA<CompanionAuxiliaryFailure>()
+                .having((e) => e.code, 'raw wire code', code)
+                .having((e) => e.notSent, 'notSent', false),
+          ),
+        );
         expect(probe.events, ['uncertain', 'usage']);
         expect(probe.usage.single['host_dispatch_at_ms'], isNull);
         expect(probe.usage.single['output_tokens'], isNull);
@@ -582,11 +643,14 @@ void main() {
       final wire = _wire(name);
       final code = ((wire['body']! as Map)['error']! as Map)['code'];
       host.answer = (request) => _json(request, wire['body'], status: wire['status']! as int);
-      await expectLater(_call(client, cap, probe), throwsA(
-        isA<CompanionAuxiliaryFailure>()
-          .having((e) => e.code, 'raw wire code', code)
-          .having((e) => e.notSent, 'notSent', true),
-      ));
+      await expectLater(
+        _call(client, cap, probe),
+        throwsA(
+          isA<CompanionAuxiliaryFailure>()
+              .having((e) => e.code, 'raw wire code', code)
+              .having((e) => e.notSent, 'notSent', true),
+        ),
+      );
       expect(probe.events, ['uncertain', 'usage']);
       expect(host.paths, hasLength(2));
     });
@@ -597,11 +661,14 @@ void main() {
     final probe = _Probe();
     // The captured A02h busy status is 409. This is an explicit status variant.
     host.answer = (request) => _json(request, _wire('busy')['body'], status: 429);
-    await expectLater(_call(client, cap, probe), throwsA(
-      isA<CompanionAuxiliaryFailure>()
-        .having((e) => e.code, 'raw wire code', 'companion/auxiliary-busy')
-        .having((e) => e.notSent, 'notSent', true),
-    ));
+    await expectLater(
+      _call(client, cap, probe),
+      throwsA(
+        isA<CompanionAuxiliaryFailure>()
+            .having((e) => e.code, 'raw wire code', 'companion/auxiliary-busy')
+            .having((e) => e.notSent, 'notSent', true),
+      ),
+    );
     expect(probe.events, ['uncertain', 'usage']);
     expect(host.paths, hasLength(2));
   });
@@ -610,21 +677,24 @@ void main() {
     final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
     final probe = _Probe();
     host.answer = (request) => _json(request, {
-      'error': {'code': 'auxiliary-forbidden'}, 'dispatched': false,
+      'error': {'code': 'auxiliary-forbidden'},
+      'dispatched': false,
     }, status: 403);
-    await expectLater(_call(client, cap, probe), throwsA(
-      isA<CompanionAuxiliaryFailure>()
-        .having((e) => e.code, 'unmodified code', 'auxiliary-forbidden')
-        .having((e) => e.notSent, 'notSent', false),
-    ));
+    await expectLater(
+      _call(client, cap, probe),
+      throwsA(
+        isA<CompanionAuxiliaryFailure>()
+            .having((e) => e.code, 'unmodified code', 'auxiliary-forbidden')
+            .having((e) => e.notSent, 'notSent', false),
+      ),
+    );
     expect(probe.events, ['uncertain', 'usage']);
   });
 
   for (final name in ['sessionUnavailable', 'modelUnavailable']) {
     test('actual accepted then $name preserves the qualified finish code and usage', () async {
       final wire = _wire(name);
-      final frames = (wire['body']! as List)
-          .map((value) => Map<String, Object?>.from(value as Map)).toList();
+      final frames = (wire['body']! as List).map((value) => Map<String, Object?>.from(value as Map)).toList();
       host.capability = {..._capability(generic: true), 'instanceId': frames.first['instanceId']};
       final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
       final probe = _Probe();
@@ -636,7 +706,8 @@ void main() {
       expect(result.httpStatus, isNull);
       expect(probe.events, ['uncertain', 'usage']);
       expect(probe.usage.single, {
-        ...Map<String, Object?>.from(frames.last['usage']! as Map), 'host_dispatch_at_ms': null,
+        ...Map<String, Object?>.from(frames.last['usage']! as Map),
+        'host_dispatch_at_ms': null,
       });
     });
   }
@@ -650,9 +721,10 @@ void main() {
         ..headers.set('location', '/leak');
       await request.response.close();
     };
-    await expectLater(_call(client, cap, probe), throwsA(
-      isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false),
-    ));
+    await expectLater(
+      _call(client, cap, probe),
+      throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false)),
+    );
     expect(host.paths.map((uri) => uri.path), [_path, _path]);
   });
 
@@ -662,9 +734,10 @@ void main() {
       final probe = _Probe();
       final abort = DshHttpAbort();
       if (cancelled) abort.abort();
-      await expectLater(_call(client, cap, probe, abort: abort, input: cancelled ? 'batch' : 'x' * 65536), throwsA(
-        isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', true),
-      ));
+      await expectLater(
+        _call(client, cap, probe, abort: abort, input: cancelled ? 'batch' : 'x' * 65536),
+        throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', true)),
+      );
       expect(probe.events, isEmpty);
     }
     expect(host.paths, hasLength(1));
@@ -673,11 +746,21 @@ void main() {
   test('failed durable uncertain callback prevents opening the model POST', () async {
     final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
     final probe = _Probe();
-    await expectLater(client.callCompanionAuxiliary(
-      cap, requestId: _request, kind: 'extract', system: 'system', input: 'batch', maxTokens: 1400,
-      abort: DshHttpAbort(), onDispatchUncertain: () => throw StateError('reservation retired'),
-      onSent: probe.sent, onUsage: probe.received,
-    ), throwsStateError);
+    await expectLater(
+      client.callCompanionAuxiliary(
+        cap,
+        requestId: _request,
+        kind: 'extract',
+        system: 'system',
+        input: 'batch',
+        maxTokens: 1400,
+        abort: DshHttpAbort(),
+        onDispatchUncertain: () => throw StateError('reservation retired'),
+        onSent: probe.sent,
+        onUsage: probe.received,
+      ),
+      throwsStateError,
+    );
     expect(probe.events, isEmpty);
     expect(host.paths, hasLength(1));
   });
@@ -687,9 +770,10 @@ void main() {
     final other = DshClient(DshConnection(host.baseUri));
     addTearDown(other.close);
     final probe = _Probe();
-    await expectLater(_call(other, cap, probe), throwsA(
-      isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', true),
-    ));
+    await expectLater(
+      _call(other, cap, probe),
+      throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', true)),
+    );
     expect(probe.events, isEmpty);
     expect(host.paths, hasLength(1));
   });
@@ -721,11 +805,13 @@ void main() {
 
   test('claimed auxiliary 404 remains an error rather than old-Host detection', () async {
     host.answer = (request) => _json(request, {
-      'error': {'code': 'companion/auxiliary-invalid-request'}, 'dispatched': false,
+      'error': {'code': 'companion/auxiliary-invalid-request'},
+      'dispatched': false,
     }, status: 404);
-    await expectLater(client.readCompanionAuxiliaryCapability(_session), throwsA(
-      isA<DshHttpException>().having((e) => e.statusCode, 'status', 404),
-    ));
+    await expectLater(
+      client.readCompanionAuxiliaryCapability(_session),
+      throwsA(isA<DshHttpException>().having((e) => e.statusCode, 'status', 404)),
+    );
     expect(host.paths, hasLength(1));
   });
 
@@ -734,10 +820,14 @@ void main() {
     final probe = _Probe();
     host.answer = (request) async {
       request.response.headers.contentType = ContentType('application', 'x-ndjson');
-      final bytes = utf8.encode([
-        _accepted(host.capability), _dispatch(),
-        {'type': 'text', 'requestId': _request, 'text': '记忆🙂'}, _finish(host.capability),
-      ].map((frame) => '${jsonEncode(frame)}\n').join());
+      final bytes = utf8.encode(
+        [
+          _accepted(host.capability),
+          _dispatch(),
+          {'type': 'text', 'requestId': _request, 'text': '记忆🙂'},
+          _finish(host.capability),
+        ].map((frame) => '${jsonEncode(frame)}\n').join(),
+      );
       for (final byte in bytes) {
         request.response.add([byte]);
         await request.response.flush();
@@ -772,9 +862,10 @@ void main() {
         }
         await request.response.close();
       };
-      await expectLater(_call(client, cap, probe), throwsA(
-        isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false),
-      ));
+      await expectLater(
+        _call(client, cap, probe),
+        throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false)),
+      );
       expect(probe.usage, hasLength(1));
       expect(host.paths, hasLength(2));
     });
@@ -800,9 +891,10 @@ void main() {
         // The caller owns the abort.
       }
     };
-    final expected = expectLater(_call(client, cap, probe, abort: abort), throwsA(
-      isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false),
-    ));
+    final expected = expectLater(
+      _call(client, cap, probe, abort: abort),
+      throwsA(isA<CompanionAuxiliaryFailure>().having((e) => e.notSent, 'notSent', false)),
+    );
     await accepted.future;
     abort.abort();
     await expected;

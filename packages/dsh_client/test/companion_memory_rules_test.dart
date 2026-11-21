@@ -61,26 +61,26 @@ MemoryRow support(String quote) => {
   'scope': 'real',
 };
 
-MemoryBatch batch({List<MemoryRow>? sources, List<MemoryRow> existing = const []}) => MemoryBatch(
-  id: 'batch-1',
-  controlRevision: 4,
-  sources: sources ?? [source('u1', '我现在咖啡喝无糖。')],
-  existing: existing,
-);
+MemoryBatch batch({List<MemoryRow>? sources, List<MemoryRow> existing = const []}) =>
+    MemoryBatch(id: 'batch-1', controlRevision: 4, sources: sources ?? [source('u1', '我现在咖啡喝无糖。')], existing: existing);
 
 MemoryRow proposal({List<MemoryRow>? operations, List<String> covered = const ['u1']}) => {
   'schema_version': 2,
   'batch_id': 'batch-1',
   'covered_message_ids': covered,
-  'operations': operations ?? [
-    {
-      'op': 'create',
-      'kind': 'preference',
-      'text': '你现在咖啡喝无糖。',
-      'keywords': ['咖啡', '无糖'],
-      'evidence': [{'message_id': 'u1', 'quote': '我现在咖啡喝无糖。'}],
-    },
-  ],
+  'operations':
+      operations ??
+      [
+        {
+          'op': 'create',
+          'kind': 'preference',
+          'text': '你现在咖啡喝无糖。',
+          'keywords': ['咖啡', '无糖'],
+          'evidence': [
+            {'message_id': 'u1', 'quote': '我现在咖啡喝无糖。'},
+          ],
+        },
+      ],
   'completion': 'complete',
 };
 
@@ -105,9 +105,13 @@ void main() {
       }
       const original = '我现在咖啡喝无糖。\u0007';
       final value = proposal();
-      firstOperation(value)['evidence'] = [{'message_id': 'u1', 'quote': original}];
+      firstOperation(value)['evidence'] = [
+        {'message_id': 'u1', 'quote': original},
+      ];
       final kept = parseExtractionProposal(jsonEncode(value), batch(sources: [source('u1', original)]));
-      expect(firstOperation(kept)['evidence'], [{'message_id': 'u1', 'quote': original}]);
+      expect(firstOperation(kept)['evidence'], [
+        {'message_id': 'u1', 'quote': original},
+      ]);
     });
 
     test('valid complete proposals retain their wording; omitted keywords stay empty', () {
@@ -122,9 +126,20 @@ void main() {
 
     test('a complete empty result still must cover every source in order', () {
       final two = batch(sources: [source('u1', '只是台词。'), source('u2', '不是我的经历。', sequence: 102)]);
-      expect(parseExtractionProposal(jsonEncode(proposal(operations: [], covered: ['u1', 'u2'])), two)['operations'], isEmpty);
-      for (final covered in <List<String>>[[], ['u1'], ['u2', 'u1'], ['u1', 'u1']]) {
-        expect(() => parseExtractionProposal(jsonEncode(proposal(operations: [], covered: covered)), two), throwsFormatException);
+      expect(
+        parseExtractionProposal(jsonEncode(proposal(operations: [], covered: ['u1', 'u2'])), two)['operations'],
+        isEmpty,
+      );
+      for (final covered in <List<String>>[
+        [],
+        ['u1'],
+        ['u2', 'u1'],
+        ['u1', 'u1'],
+      ]) {
+        expect(
+          () => parseExtractionProposal(jsonEncode(proposal(operations: [], covered: covered)), two),
+          throwsFormatException,
+        );
       }
     });
 
@@ -140,7 +155,13 @@ void main() {
       for (final value in invalid) {
         expect(() => parseExtractionProposal(jsonEncode(value), batch()), throwsFormatException);
       }
-      for (final text in ['', '不想整理。', '{"operations":[', '```json\n${jsonEncode(proposal())}\n```', '${jsonEncode(proposal())}\n好了']) {
+      for (final text in [
+        '',
+        '不想整理。',
+        '{"operations":[',
+        '```json\n${jsonEncode(proposal())}\n```',
+        '${jsonEncode(proposal())}\n好了',
+      ]) {
         expect(() => parseExtractionProposal(text, batch()), throwsFormatException);
       }
     });
@@ -148,10 +169,18 @@ void main() {
     test('each fact needs a verbatim quote from the referenced real user version', () {
       for (final evidence in <Object?>[
         [],
-        [{'message_id': 'other', 'quote': '我现在咖啡喝无糖。'}],
-        [{'message_id': 'u1', 'quote': '我以前咖啡喝无糖。'}],
-        [{'message_id': 'u1', 'quote': ''}],
-        [{'message_id': 'u1', 'quote': '我现在咖啡喝无糖。', 'source_rev': 1}],
+        [
+          {'message_id': 'other', 'quote': '我现在咖啡喝无糖。'},
+        ],
+        [
+          {'message_id': 'u1', 'quote': '我以前咖啡喝无糖。'},
+        ],
+        [
+          {'message_id': 'u1', 'quote': ''},
+        ],
+        [
+          {'message_id': 'u1', 'quote': '我现在咖啡喝无糖。', 'source_rev': 1},
+        ],
       ]) {
         final value = proposal();
         firstOperation(value)['evidence'] = evidence;
@@ -168,7 +197,12 @@ void main() {
     test('keywords cannot borrow another message or invent an absent alias', () {
       final two = batch(sources: [source('u1', '我现在咖啡喝无糖。'), source('u2', '我还弹钢琴。', sequence: 102)]);
       for (final words in <List<Object?>>[
-        ['钢琴'], ['去糖'], ['咖啡', '咖啡'], [''], [null], List.filled(9, '咖啡'),
+        ['钢琴'],
+        ['去糖'],
+        ['咖啡', '咖啡'],
+        [''],
+        [null],
+        List.filled(9, '咖啡'),
       ]) {
         final value = proposal(covered: ['u1', 'u2']);
         firstOperation(value)['keywords'] = words;
@@ -178,20 +212,30 @@ void main() {
       firstOperation(ascii)
         ..['text'] = '你喜欢 coffee。'
         ..['keywords'] = ['coffee']
-        ..['evidence'] = [{'message_id': 'u1', 'quote': '我喜欢 COFFEE。'}];
+        ..['evidence'] = [
+          {'message_id': 'u1', 'quote': '我喜欢 COFFEE。'},
+        ];
       expect(parseExtractionProposal(jsonEncode(ascii), batch(sources: [source('u1', '我喜欢 COFFEE。')])), ascii);
     });
 
     test('create cannot carry replacement authority or set controls and pinning', () {
       for (final extra in <MemoryRow>[
-        {'target_id': 'k1'}, {'expected_row_rev': 8}, {'change_kind': 'new_current_value'},
-        {'pinned': true}, {'topic_mode': 'never'}, {'scope': 'story'},
+        {'target_id': 'k1'},
+        {'expected_row_rev': 8},
+        {'change_kind': 'new_current_value'},
+        {'pinned': true},
+        {'topic_mode': 'never'},
+        {'scope': 'story'},
       ]) {
         final value = proposal();
         firstOperation(value).addAll(extra);
         expect(() => parseExtractionProposal(jsonEncode(value), batch()), throwsFormatException);
       }
-      for (final change in <MemoryRow>[{'op': 'delete'}, {'kind': 'identity'}, {'text': String.fromCharCode(0xd800)}]) {
+      for (final change in <MemoryRow>[
+        {'op': 'delete'},
+        {'kind': 'identity'},
+        {'text': String.fromCharCode(0xd800)},
+      ]) {
         final value = proposal();
         firstOperation(value).addAll(change);
         expect(() => parseExtractionProposal(jsonEncode(value), batch()), throwsFormatException);
@@ -201,10 +245,15 @@ void main() {
     test('replace targets the captured row revision; the store must recheck its current revision', () {
       final current = batch(existing: [card('k1', '你现在咖啡喝半糖。', kind: 'preference')]);
       final value = proposal();
-      firstOperation(value).addAll({'op': 'replace', 'target_id': 'k1', 'expected_row_rev': 8, 'change_kind': 'correction_of_error'});
+      firstOperation(
+        value,
+      ).addAll({'op': 'replace', 'target_id': 'k1', 'expected_row_rev': 8, 'change_kind': 'correction_of_error'});
       expect(parseExtractionProposal(jsonEncode(value), current), value);
       for (final change in <MemoryRow>[
-        {'target_id': 'missing'}, {'expected_row_rev': 7}, {'expected_row_rev': 8.0}, {'change_kind': 'mark_historical'},
+        {'target_id': 'missing'},
+        {'expected_row_rev': 7},
+        {'expected_row_rev': 8.0},
+        {'change_kind': 'mark_historical'},
       ]) {
         final changed = copy(value);
         firstOperation(changed).addAll(change);
@@ -217,14 +266,26 @@ void main() {
 
     test('event and invitation wording anchor to the first quote and preserve vague time', () {
       const words = '小露，我明天下午去纸展。周四你可以问问我。';
-      final value = proposal(operations: [
-        {
-          'op': 'create', 'kind': 'episode', 'text': '你打算11月17日下午去纸展。', 'keywords': ['纸展'],
-          'evidence': [{'message_id': 'u1', 'quote': words}],
-          'event_time': {'local_date': '2026-11-17', 'precision': 'part_of_day', 'wording': '明天下午'},
-          'followup': {'basis': 'explicit_invitation', 'local_date': '2026-11-19', 'precision': 'day', 'wording': '周四你可以问问我'},
-        },
-      ]);
+      final value = proposal(
+        operations: [
+          {
+            'op': 'create',
+            'kind': 'episode',
+            'text': '你打算11月17日下午去纸展。',
+            'keywords': ['纸展'],
+            'evidence': [
+              {'message_id': 'u1', 'quote': words},
+            ],
+            'event_time': {'local_date': '2026-11-17', 'precision': 'part_of_day', 'wording': '明天下午'},
+            'followup': {
+              'basis': 'explicit_invitation',
+              'local_date': '2026-11-19',
+              'precision': 'day',
+              'wording': '周四你可以问问我',
+            },
+          },
+        ],
+      );
       final current = batch(sources: [source('u1', words)]);
       expect(parseExtractionProposal(jsonEncode(value), current), value);
       for (final date in ['2026-02-29', '2026-13-01', '2026-11-00', '2026-1-17', 'null']) {
@@ -236,7 +297,9 @@ void main() {
       (firstOperation(unknown)['event_time']! as MemoryRow)['local_date'] = null;
       expect(parseExtractionProposal(jsonEncode(unknown), current), unknown);
       for (final change in <MemoryRow>[
-        {'wording': '明天下午三点'}, {'precision': 'hour'}, {'hour': 15},
+        {'wording': '明天下午三点'},
+        {'precision': 'hour'},
+        {'hour': 15},
       ]) {
         final changed = copy(value);
         (firstOperation(changed)['event_time']! as MemoryRow).addAll(change);
@@ -252,7 +315,12 @@ void main() {
           {'message_id': 'u1', 'quote': '我现在咖啡喝无糖。'},
           {'message_id': 'u2', 'quote': '周四你可以问问我。'},
         ]
-        ..['followup'] = {'basis': 'explicit_invitation', 'local_date': '2026-11-19', 'precision': 'day', 'wording': '周四你可以问问我'};
+        ..['followup'] = {
+          'basis': 'explicit_invitation',
+          'local_date': '2026-11-19',
+          'precision': 'day',
+          'wording': '周四你可以问问我',
+        };
       final splitBatch = batch(sources: [source('u1', '我现在咖啡喝无糖。'), source('u2', '周四你可以问问我。', sequence: 102)]);
       expect(() => parseExtractionProposal(jsonEncode(split), splitBatch), throwsFormatException);
     });
@@ -267,13 +335,21 @@ void main() {
       final request = extractionInput(current, processedAtUtc: processed);
       final sent = (request['source']! as List<Object?>).single! as MemoryRow;
       expect(sent, {
-        'id': 'u1', 'first_seq': 101, 'source_rev': 2,
-        'said_at_utc': '2026-11-16T15:30:00.000Z', 'offset_minutes': 480,
-        'text': '小露，我明天下午去纸展。', 'edited_at_utc': '2026-11-18T01:00:00.000Z',
+        'id': 'u1',
+        'first_seq': 101,
+        'source_rev': 2,
+        'said_at_utc': '2026-11-16T15:30:00.000Z',
+        'offset_minutes': 480,
+        'text': '小露，我明天下午去纸展。',
+        'edited_at_utc': '2026-11-18T01:00:00.000Z',
       });
       expect(request['processed_at_utc'], '2026-11-18T02:00:00.000Z');
       expect((request['existing']! as List<Object?>).single, {
-        'id': 'k1', 'row_rev': 8, 'kind': 'fact', 'text': '你现在咖啡喝半糖。', 'current_basis_seq': 102,
+        'id': 'k1',
+        'row_rev': 8,
+        'kind': 'fact',
+        'text': '你现在咖啡喝半糖。',
+        'current_basis_seq': 102,
       });
       expect(request.containsKey('control_revision'), isFalse);
     });
@@ -287,17 +363,28 @@ void main() {
   });
 
   group('09e-r2 two-pass recall', () {
-    MemoryRow listening({String id = 'p', String mode = 'normal', List<String> keywords = const ['先听', '讲完', '建议']}) => card(
-      id, '先听我讲完，再给建议。', kind: 'preference', pinned: true, keywords: keywords, mode: mode,
-      evidence: [support('先听我讲完，再给建议。')],
-    );
+    MemoryRow listening({String id = 'p', String mode = 'normal', List<String> keywords = const ['先听', '讲完', '建议']}) =>
+        card(
+          id,
+          '先听我讲完，再给建议。',
+          kind: 'preference',
+          pinned: true,
+          keywords: keywords,
+          mode: mode,
+          evidence: [support('先听我讲完，再给建议。')],
+        );
 
     test('a zero-hit response preference remains before a matching topic', () {
-      final result = select([card('c', '你这周在准备面试。', keywords: ['这周', '准备', '面试']), listening()], '今天面试真烦。');
+      final result = select([
+        card('c', '你这周在准备面试。', keywords: ['这周', '准备', '面试']),
+        listening(),
+      ], '今天面试真烦。');
       expect(result.ids, ['p', 'c']);
       expect(result.controlRevision, 4);
       expect(jsonDecode(result.block), {
-        'type': 'companion_memory', 'version': 2, 'scope': 'real',
+        'type': 'companion_memory',
+        'version': 2,
+        'scope': 'real',
         'items': [
           {'id': 'p', 'kind': 'preference', 'text': '先听我讲完，再给建议。'},
           {'id': 'c', 'kind': 'fact', 'text': '你这周在准备面试。'},
@@ -307,14 +394,18 @@ void main() {
 
     test('both passes share six slots; a third matching preference can join pass two once', () {
       final result = select([
-        listening(id: 'p1'), listening(id: 'p2'), listening(id: 'p3'),
+        listening(id: 'p1'),
+        listening(id: 'p2'),
+        listening(id: 'p3'),
         for (var i = 0; i < 6; i++) card('c$i', '练习建议$i', keywords: ['建议']),
       ], '给我建议');
       expect(result.ids, hasLength(6));
       expect(result.ids.take(3), ['p1', 'p2', 'p3']);
       expect(result.ids.toSet(), hasLength(6));
       expect(select([listening()], '建议').ids, ['p']);
-      final short = [for (var i = 0; i < 13; i++) card('m$i', '琴', keywords: ['琴课'])];
+      final short = [
+        for (var i = 0; i < 13; i++) card('m$i', '琴', keywords: ['琴课']),
+      ];
       expect(select(short, '琴课', limit: 12).ids, hasLength(12));
       expect(() => select(short, '琴课', limit: 13), throwsArgumentError);
     });
@@ -325,7 +416,15 @@ void main() {
         card('taste', '你喜欢无糖拿铁。', kind: 'preference', pinned: true, keywords: ['无糖'], evidence: [support('我喜欢无糖拿铁。')]),
         card('mixed-source', '你喜欢无糖拿铁。', kind: 'preference', pinned: true, evidence: [support('我喜欢无糖拿铁。先听我讲完，再给建议。')]),
         card('taste-result', '你希望咖啡最后的结果是无糖。', kind: 'preference', pinned: true, evidence: [support('我希望咖啡最后的结果是无糖。')]),
-        card('assistant', '先听我讲完，再给建议。', kind: 'preference', pinned: true, evidence: [{...support('先听我讲完，再给建议。'), 'role': 'assistant'}]),
+        card(
+          'assistant',
+          '先听我讲完，再给建议。',
+          kind: 'preference',
+          pinned: true,
+          evidence: [
+            {...support('先听我讲完，再给建议。'), 'role': 'assistant'},
+          ],
+        ),
         card('story', '先听我讲完，再给建议。', kind: 'preference', pinned: true, evidence: [support('剧本台词是“先听我讲完，再给建议”。')]),
       ];
       expect(select(rows, '你好').ids, isEmpty);
@@ -385,9 +484,24 @@ void main() {
       expect(select([coffee], 'noncoffee').ids, isEmpty);
       expect(select([coffee], 'ＣＯＦＦＥＥ').ids, isEmpty);
       expect(normalizeMemoryText('  A\u3000Ｂ\nÉ '), 'a Ｂ É');
-      expect(select([card('sugar', '糖', keywords: ['糖'])], '糖').ids, isEmpty);
-      expect(select([card('sugar', '无糖', keywords: ['无糖'])], '我喝无糖').ids, ['sugar']);
-      expect(select([card('punctuation', '??', keywords: ['??'])], '??').ids, isEmpty);
+      expect(
+        select([
+          card('sugar', '糖', keywords: ['糖']),
+        ], '糖').ids,
+        isEmpty,
+      );
+      expect(
+        select([
+          card('sugar', '无糖', keywords: ['无糖']),
+        ], '我喝无糖').ids,
+        ['sugar'],
+      );
+      expect(
+        select([
+          card('punctuation', '??', keywords: ['??']),
+        ], '??').ids,
+        isEmpty,
+      );
     });
 
     test('keywordless manual cards use the entire literal input only in pass two', () {
@@ -395,20 +509,62 @@ void main() {
       expect(select([manual], '咖啡甜度').ids, ['m']);
       expect(select([manual], '咖啡甜度？').ids, isEmpty);
       expect(select([manual], '照平常的点').ids, isEmpty);
-      expect(select([{...manual, 'text': '练琴在周五'}], '咖啡甜度').ids, isEmpty);
-      expect(select([{...manual, 'text': '我最近的咖啡甜度是无糖'}], '最近').ids, ['m']);
-      expect(select([{...manual, 'keywords': ['拿铁']}], '咖啡甜度').ids, isEmpty);
-      expect(select([{...manual, 'manual': false}], '咖啡甜度').ids, isEmpty);
-      expect(select([{...manual, 'topic_mode': 'never'}], '咖啡甜度').ids, isEmpty);
-      expect(select([{...manual, 'eligible': false}], '咖啡甜度').ids, isEmpty);
-      expect(select([{...manual, 'pinned': true}], '你好').ids, isEmpty);
+      expect(
+        select([
+          {...manual, 'text': '练琴在周五'},
+        ], '咖啡甜度').ids,
+        isEmpty,
+      );
+      expect(
+        select([
+          {...manual, 'text': '我最近的咖啡甜度是无糖'},
+        ], '最近').ids,
+        ['m'],
+      );
+      expect(
+        select([
+          {
+            ...manual,
+            'keywords': ['拿铁'],
+          },
+        ], '咖啡甜度').ids,
+        isEmpty,
+      );
+      expect(
+        select([
+          {...manual, 'manual': false},
+        ], '咖啡甜度').ids,
+        isEmpty,
+      );
+      expect(
+        select([
+          {...manual, 'topic_mode': 'never'},
+        ], '咖啡甜度').ids,
+        isEmpty,
+      );
+      expect(
+        select([
+          {...manual, 'eligible': false},
+        ], '咖啡甜度').ids,
+        isEmpty,
+      );
+      expect(
+        select([
+          {...manual, 'pinned': true},
+        ], '你好').ids,
+        isEmpty,
+      );
     });
 
     test('the serialized block accepts 1200 scalars including emoji and escaping; 1201 skips the whole card', () {
       const prefix = '😀"e\u0301';
       final emptyEnvelope = jsonEncode({
-        'type': 'companion_memory', 'version': 2, 'scope': 'real',
-        'items': [{'id': 'long', 'kind': 'fact', 'text': ''}],
+        'type': 'companion_memory',
+        'version': 2,
+        'scope': 'real',
+        'items': [
+          {'id': 'long', 'kind': 'fact', 'text': ''},
+        ],
       });
       final escapedPrefix = jsonEncode(prefix).runes.length - 2;
       final text = prefix + List.filled(1200 - emptyEnvelope.runes.length - escapedPrefix, '鲸').join();
@@ -419,7 +575,13 @@ void main() {
       expect(exact.block.length, greaterThan(1200));
       final tooLong = {...long, 'text': '${text}界'};
       expect(select([tooLong], '长笛').ids, isEmpty);
-      expect(select([tooLong, card('short', '你学长笛。', keywords: ['长笛'])], '长笛').ids, ['short']);
+      expect(
+        select([
+          tooLong,
+          card('short', '你学长笛。', keywords: ['长笛']),
+        ], '长笛').ids,
+        ['short'],
+      );
       expect((jsonDecode(exact.block) as MemoryRow)['items'], [
         {'id': 'long', 'kind': 'fact', 'text': text},
       ]);
@@ -463,7 +625,10 @@ void main() {
 
     test('fact commands retain the exact card even when independent facts share an expression topic', () {
       final sugar = card('sugar', '我咖啡喝半糖', keywords: ['咖啡']);
-      final morning = {...card('morning', '我只在上午喝咖啡', keywords: ['咖啡']), 'topic_id': 'sugar'};
+      final morning = {
+        ...card('morning', '我只在上午喝咖啡', keywords: ['咖啡']),
+        'topic_id': 'sugar',
+      };
       for (final input in ['忘掉我咖啡喝半糖', '我咖啡喝半糖取消了']) {
         final result = parseMemoryControl(input, [sugar, morning])!;
         expect(result['topic_ids'], ['sugar']);
@@ -492,7 +657,13 @@ void main() {
       expect(parseMemoryControl('那件事少提一点', [interview])!['ambiguous'], isTrue);
       expect(parseMemoryControl('我朋友的蓝桥面试取消了', [interview])!['ambiguous'], isTrue);
       expect(parseMemoryControl('忘掉我的', [interview])!['ambiguous'], isTrue);
-      expect(parseMemoryControl('忘掉蓝桥面试', [interview, {...interview, 'id': 'other', 'topic_id': 'other'}])!['topic_ids'], isEmpty);
+      expect(
+        parseMemoryControl('忘掉蓝桥面试', [
+          interview,
+          {...interview, 'id': 'other', 'topic_id': 'other'},
+        ])!['topic_ids'],
+        isEmpty,
+      );
       expect(parseMemoryControl('忘掉旅游', [interview])!['ambiguous'], isTrue);
     });
 
@@ -506,11 +677,24 @@ void main() {
       final anchored = parseMemoryControl('你记错了，我咖啡一直喝无糖。', [coffee])!;
       expect(anchored['target_card_id'], 'coffee');
       expect(anchored['replacement_text'], '我咖啡一直喝无糖。');
-      expect(parseMemoryControl('你记错了，我一直喝无糖。', [coffee])!['ambiguous'], isTrue,
-        reason: 'a new sugar value alone does not name coffee');
-      expect(parseMemoryControl('你记错了，我咖啡一直喝无糖。', [coffee,
-        {...coffee, 'id': 'other', 'topic_id': 'other'}])!['ambiguous'], isTrue);
-      expect(parseMemoryControl('咖啡改成我一直喝无糖。', [{...coffee, 'scope': 'story'}])!['ambiguous'], isTrue);
+      expect(
+        parseMemoryControl('你记错了，我一直喝无糖。', [coffee])!['ambiguous'],
+        isTrue,
+        reason: 'a new sugar value alone does not name coffee',
+      );
+      expect(
+        parseMemoryControl('你记错了，我咖啡一直喝无糖。', [
+          coffee,
+          {...coffee, 'id': 'other', 'topic_id': 'other'},
+        ])!['ambiguous'],
+        isTrue,
+      );
+      expect(
+        parseMemoryControl('咖啡改成我一直喝无糖。', [
+          {...coffee, 'scope': 'story'},
+        ])!['ambiguous'],
+        isTrue,
+      );
       expect(parseMemoryControl('如果咖啡改成我喝无糖会怎样', [coffee]), isNull);
       expect(parseMemoryControl('“咖啡改成我喝无糖”是台词。', [coffee]), isNull);
       expect(parseMemoryControl('你记错了，我在扮演喝无糖咖啡的角色', [coffee])!['ambiguous'], isTrue);
@@ -520,7 +704,12 @@ void main() {
     test('an implicit correction anchor must survive in the current evidence, not just a keyword list', () {
       final unsupported = card('coffee', '我咖啡喝半糖。', keywords: ['咖啡'], evidence: [support('我在学长笛')]);
       expect(parseMemoryControl('你记错了，我咖啡一直喝无糖。', [unsupported])!['ambiguous'], isTrue);
-      expect(parseMemoryControl('你记错了，我咖啡一直喝无糖。', [{...unsupported, 'manual': true}])!['ambiguous'], isFalse);
+      expect(
+        parseMemoryControl('你记错了，我咖啡一直喝无糖。', [
+          {...unsupported, 'manual': true},
+        ])!['ambiguous'],
+        isFalse,
+      );
     });
 
     test('one explicit topic question grants a single selection without persistently reopening it', () {
@@ -533,8 +722,13 @@ void main() {
       for (final text in ['你好', '面试？', '如果蓝桥面试怎么样', '我想问面试这个词的英文', '“聊聊蓝桥面试”是台词']) {
         expect(explicitMemoryTopics(text, [muted]), isEmpty);
       }
-      expect(explicitMemoryTopics('聊聊蓝桥面试', [muted,
-        {...muted, 'id': 'second', 'topic_id': 'second'}]), isEmpty);
+      expect(
+        explicitMemoryTopics('聊聊蓝桥面试', [
+          muted,
+          {...muted, 'id': 'second', 'topic_id': 'second'},
+        ]),
+        isEmpty,
+      );
       expect(muted['topic_mode'], 'never');
       expect(select([muted], '蓝桥面试').ids, isEmpty);
     });

@@ -20,8 +20,10 @@ final companionMemoryOwnerProvider = FutureProvider.family<CompanionMemoryOwner,
   await root.create(recursive: true);
   if (!ref.mounted) throw const DshClosedException('Memory owner closed');
   final memory = CompanionMemoryOwner(
-    CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
-      nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch),
+    CompanionMemoryStore(
+      sqlite3.open('${root.path}/memory.sqlite'),
+      nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
+    ),
     CompanionLocal.at(root),
   );
   ref.onDispose(memory.dispose);
@@ -30,7 +32,7 @@ final companionMemoryOwnerProvider = FutureProvider.family<CompanionMemoryOwner,
 
 class CompanionMemoryOwner extends ChangeNotifier {
   CompanionMemoryOwner(this.store, this.legacy, {int Function()? nowMilliseconds})
-      : _now = nowMilliseconds ?? (() => DateTime.now().millisecondsSinceEpoch);
+    : _now = nowMilliseconds ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final CompanionMemoryStore store;
   final CompanionLocal legacy;
@@ -46,15 +48,20 @@ class CompanionMemoryOwner extends ChangeNotifier {
   Object? _room;
   bool _disposed = false;
 
-  void enter(Object room, {
+  void enter(
+    Object room, {
     required CompanionMemoryTransport Function() transport,
     required int Function(String) estimateTokens,
   }) {
     if (!identical(_room, room)) _worker?.cancel();
     _room = room;
     _route = transport;
-    _worker ??= CompanionMemoryWorker(store: store, transport: () => _route!(),
-      nowMilliseconds: _now, estimateTokens: estimateTokens);
+    _worker ??= CompanionMemoryWorker(
+      store: store,
+      transport: () => _route!(),
+      nowMilliseconds: _now,
+      estimateTokens: estimateTokens,
+    );
   }
 
   Future<CompanionMemoryWork> extract(Object room, {bool forceTail = false}) async {
@@ -76,8 +83,16 @@ class CompanionMemoryOwner extends ChangeNotifier {
   /// registers the drain before sending, so disposal cannot close SQLite first.
   void retainReceipt(Future<void> settled) {
     _receipts.add(settled);
-    unawaited(settled.then<void>((_) { _receipts.remove(settled); },
-      onError: (Object _) { _receipts.remove(settled); }));
+    unawaited(
+      settled.then<void>(
+        (_) {
+          _receipts.remove(settled);
+        },
+        onError: (Object _) {
+          _receipts.remove(settled);
+        },
+      ),
+    );
   }
 
   /// Pull metadata for saved deliveries, including an old Session or bridge
@@ -87,21 +102,25 @@ class CompanionMemoryOwner extends ChangeNotifier {
     return _usageReads.putIfAbsent(hostKey, () {
       final read = _readHostChatUsage(client, hostKey);
       retainReceipt(read);
-      return read.whenComplete(() { _usageReads.remove(hostKey); });
+      return read.whenComplete(() {
+        _usageReads.remove(hostKey);
+      });
     });
   }
 
   Future<void> _readHostChatUsage(DshClient client, String hostKey) async {
     final now = _now();
-    final pending = store.pendingHostChatDeliveries(hostKey).where((row) {
-      final attempt = _usageAttempts[row['id']];
-      return attempt == null || now < attempt.at || now - attempt.at >= attempt.delay;
-    }).toList()..sort((a, b) {
-      final first = _usageAttempts[a['id']]?.at ?? -1;
-      final second = _usageAttempts[b['id']]?.at ?? -1;
-      return first != second ? first.compareTo(second) :
-        (a['observed_at_ms'] as int).compareTo(b['observed_at_ms'] as int);
-    });
+    final pending =
+        store.pendingHostChatDeliveries(hostKey).where((row) {
+          final attempt = _usageAttempts[row['id']];
+          return attempt == null || now < attempt.at || now - attempt.at >= attempt.delay;
+        }).toList()..sort((a, b) {
+          final first = _usageAttempts[a['id']]?.at ?? -1;
+          final second = _usageAttempts[b['id']]?.at ?? -1;
+          return first != second
+              ? first.compareTo(second)
+              : (a['observed_at_ms'] as int).compareTo(b['observed_at_ms'] as int);
+        });
     // Bound one read opportunity and let the next room tick visit older roots.
     // Completed immutable receipts leave the queue even when fees are unknown.
     for (final delivery in pending.take(4)) {
@@ -144,8 +163,12 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   /// Every card is first imported and read back from the original snapshot.
   /// Each subsequent delete uses only the revision in our own strict receipt.
-  Future<bool> migrateHost(DshClient client) => _hostMigrations.putIfAbsent(client,
-    () => _migrateHost(client).whenComplete(() { _hostMigrations.remove(client); }));
+  Future<bool> migrateHost(DshClient client) => _hostMigrations.putIfAbsent(
+    client,
+    () => _migrateHost(client).whenComplete(() {
+      _hostMigrations.remove(client);
+    }),
+  );
 
   Future<bool> _migrateHost(DshClient client) async {
     final source = await client.companionMemoriesForMigration();
@@ -166,15 +189,19 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   MemorySelection select(String input) {
     final cards = store.cards();
-    return selectMemoryContext(cards, input: input, nowMs: _now(),
+    return selectMemoryContext(
+      cards,
+      input: input,
+      nowMs: _now(),
       controlRevision: store.archive['control_revision']! as int,
-      explicitTopicIds: explicitMemoryTopics(input, cards));
+      explicitTopicIds: explicitMemoryTopics(input, cards),
+    );
   }
 
   /// A control transaction leaves this pending until native storage confirms
   /// both fields cleared. Room and memory page share the same draining write.
-  Future<bool> clearWidget(CompanionWidget widget) => _widgetClear ??= _clearWidget(widget)
-      .whenComplete(() => _widgetClear = null);
+  Future<bool> clearWidget(CompanionWidget widget) =>
+      _widgetClear ??= _clearWidget(widget).whenComplete(() => _widgetClear = null);
 
   Future<bool> _clearWidget(CompanionWidget widget) async {
     while (true) {
@@ -219,8 +246,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
       store.close();
     } else {
       // Receipts from a cancelled request finish before its connection closes.
-      unawaited(Future.wait([for (final task in pending) task.catchError((Object _) {})])
-        .then((_) => store.close()));
+      unawaited(Future.wait([for (final task in pending) task.catchError((Object _) {})]).then((_) => store.close()));
     }
     super.dispose();
   }

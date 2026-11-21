@@ -511,7 +511,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (memory == null) return;
     memory.leave(this);
     if (_light) {
-      memory.enter(this,
+      memory.enter(
+        this,
         transport: () => CompanionLightMemoryTransport(
           apiKey: () => ref.read(settingsProvider).apiKey,
           client: ref.read(companionLightClientProvider),
@@ -521,10 +522,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     } else {
       final route = _memoryRoute;
       final client = _memoryRouteClient;
-      if (route == null || client == null || route.sessionId != _sessionId ||
-          !identical(client, ref.read(activeConnectionProvider).value?.client)) return;
-      memory.enter(this, transport: () => CompanionHostMemoryTransport(client: client, capability: route),
-        estimateTokens: estimateCompanionMemoryTokens);
+      if (route == null ||
+          client == null ||
+          route.sessionId != _sessionId ||
+          !identical(client, ref.read(activeConnectionProvider).value?.client))
+        return;
+      memory.enter(
+        this,
+        transport: () => CompanionHostMemoryTransport(client: client, capability: route),
+        estimateTokens: estimateCompanionMemoryTokens,
+      );
     }
   }
 
@@ -1670,8 +1677,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (memory == null) return;
     final binding = ref.read(companionSessionsProvider.notifier).of(ref.read(activeHostProvider));
     final archive = memory.store.archive;
-    if (binding?.sessionId != sessionId || binding?.memoryArchiveId != archive['id'] ||
-        binding?.memoryControlRevision != archive['control_revision']) return;
+    if (binding?.sessionId != sessionId ||
+        binding?.memoryArchiveId != archive['id'] ||
+        binding?.memoryControlRevision != archive['control_revision'])
+      return;
     if (_sessionId == sessionId && _chat != null) return;
     _chat?.close();
     _sessionId = sessionId;
@@ -1744,8 +1753,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   }
 
   void _onChat(ChatState state) {
-    if (!mounted || _memoryOwner == null ||
-        _fullControlRevision != _memoryOwner!.store.archive['control_revision']) return;
+    if (!mounted || _memoryOwner == null || _fullControlRevision != _memoryOwner!.store.archive['control_revision'])
+      return;
     _spendCommitted(state);
     if (_running && !state.running && state.pending.isEmpty) _refreshHostChatUsage();
     final asking = state.openApproval?.eventId ?? state.questions.firstOrNull?.eventId;
@@ -1922,8 +1931,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     });
   }
 
-  bool _isMemoryControl(String input) => _memoryOwner != null &&
-      parseMemoryControl(input, _memoryOwner!.store.cards()) != null;
+  bool _isMemoryControl(String input) =>
+      _memoryOwner != null && parseMemoryControl(input, _memoryOwner!.store.cards()) != null;
 
   Future<bool> _handleMemoryControl(CompanionMemoryOwner memory, MemoryRow source, String raw) async {
     final cards = memory.store.cards();
@@ -1933,20 +1942,32 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final kind = control['kind']! as String;
     var hostSourceRemoved = false;
     if (control['ambiguous'] == true) {
-      memory.store.finishUnresolvedControl(messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int);
+      memory.store.finishUnresolvedControl(
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+      );
     } else if (kind == 'correct') {
       final card = cards.singleWhere((row) => row['id'] == control['target_card_id']);
-      memory.store.correctFromMessage(cardId: card['id']! as String, expectedRowRev: card['row_rev']! as int,
-        messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int,
-        text: control['replacement_text']! as String);
+      memory.store.correctFromMessage(
+        cardId: card['id']! as String,
+        expectedRowRev: card['row_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        text: control['replacement_text']! as String,
+      );
     } else {
-      final hostSources = control['delete_chat'] == true ? {
-        for (final row in memory.store.messages())
-          if ((row['session_id']! as String).startsWith('full:')) row['id']! as String,
-      } : <String>{};
-      memory.store.applyControl(topicIds: (control['topic_ids']! as List).cast<String>(), kind: kind,
-        controlMessageId: source['id']! as String, deleteChat: control['delete_chat'] == true);
+      final hostSources = control['delete_chat'] == true
+          ? {
+              for (final row in memory.store.messages())
+                if ((row['session_id']! as String).startsWith('full:')) row['id']! as String,
+            }
+          : <String>{};
+      memory.store.applyControl(
+        topicIds: (control['topic_ids']! as List).cast<String>(),
+        kind: kind,
+        controlMessageId: source['id']! as String,
+        deleteChat: control['delete_chat'] == true,
+      );
       if (hostSources.isNotEmpty) {
         final remaining = memory.store.messages().map((row) => row['id']).toSet();
         hostSourceRemoved = hostSources.any((id) => !remaining.contains(id));
@@ -1957,14 +1978,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final current = _currentRoom();
     final cleared = await memory.clearWidget(ref.read(companionWidgetProvider));
     if (!current()) return true;
-    final line = control['ambiguous'] == true ? l10n.companionMemoryWhich : switch (kind) {
-      'forget' => l10n.companionMemoryForgotten,
-      'never' => l10n.companionMemoryNeverDone,
-      'less' => l10n.companionMemoryLessDone,
-      'normal' => l10n.companionMemoryNormalDone,
-      'cancel' => l10n.companionMemoryCancelledDone,
-      _ => l10n.companionMemoryCorrected,
-    };
+    final line = control['ambiguous'] == true
+        ? l10n.companionMemoryWhich
+        : switch (kind) {
+            'forget' => l10n.companionMemoryForgotten,
+            'never' => l10n.companionMemoryNeverDone,
+            'less' => l10n.companionMemoryLessDone,
+            'normal' => l10n.companionMemoryNormalDone,
+            'cancel' => l10n.companionMemoryCancelledDone,
+            _ => l10n.companionMemoryCorrected,
+          };
     // A local acknowledgement must not write a fresh widget line immediately
     // after the control deliberately cleared both persisted fields.
     _say(line, widgetLine: false);
@@ -2005,12 +2028,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (!current()) return;
       final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
       final retry = _retryMemorySource;
-      final reuse = retry != null && retry['text'] == raw && retry['session_id'] == sourceSession &&
+      final reuse =
+          retry != null &&
+          retry['text'] == raw &&
+          retry['session_id'] == sourceSession &&
           (retry['first_seq']! as int) > (memory.store.archive['history_after_seq']! as int);
-      final source = _retryMemorySource = reuse ? retry : memory.store.submitMessage(
-        id: companionMemoryId(), sessionId: sourceSession, text: raw,
-        saidAtUtc: submittedAt.toUtc().millisecondsSinceEpoch, offsetMinutes: submittedAt.timeZoneOffset.inMinutes,
-      );
+      final source = _retryMemorySource = reuse
+          ? retry
+          : memory.store.submitMessage(
+              id: companionMemoryId(),
+              sessionId: sourceSession,
+              text: raw,
+              saidAtUtc: submittedAt.toUtc().millisecondsSinceEpoch,
+              offsetMinutes: submittedAt.timeZoneOffset.inMinutes,
+            );
       // Do not clear the composer's only copy before SQLite commits. If the
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
@@ -2022,8 +2053,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         return;
       }
       final sessions = ref.read(companionSessionsProvider.notifier);
-      final binding = await sessions.ensure(memoryArchiveId: memory.store.archive['id']! as String,
-        memoryControlRevision: memory.store.archive['control_revision']! as int);
+      final binding = await sessions.ensure(
+        memoryArchiveId: memory.store.archive['id']! as String,
+        memoryControlRevision: memory.store.archive['control_revision']! as int,
+      );
       if (!current()) return;
       _bind(binding.sessionId);
       final chat = ref.read(chatProvider(binding.sessionId).notifier);
@@ -2161,12 +2194,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         profile: entry.profile,
       );
     }
-    if (!current() || (selected != null && selected['controlRevision'] != memory.store.archive['control_revision'])) return false;
+    if (!current() || (selected != null && selected['controlRevision'] != memory.store.archive['control_revision']))
+      return false;
     if (answer.chatUsage && selected != null) {
       memory.store.rememberHostChatDelivery(
-        hostKey: _recallHostKey, instanceId: answer.instanceId, sessionId: sessionId, requestId: requestId,
-        archiveId: selected['archiveId']! as String, controlRevision: selected['controlRevision']! as int,
-        historyAfterSeq: selected['historyAfterSeq']! as int, observedAt: DateTime.now().millisecondsSinceEpoch,
+        hostKey: _recallHostKey,
+        instanceId: answer.instanceId,
+        sessionId: sessionId,
+        requestId: requestId,
+        archiveId: selected['archiveId']! as String,
+        controlRevision: selected['controlRevision']! as int,
+        historyAfterSeq: selected['historyAfterSeq']! as int,
+        observedAt: DateTime.now().millisecondsSinceEpoch,
       );
       _refreshHostChatUsage();
     }
@@ -2245,8 +2284,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final memory = _memoryOwner!;
     final selection = memory.select(raw);
     final lines = companionLightContext([
-      for (final row in memory.store.messages(sessionId: source['session_id']! as String,
-          forModel: true, limit: CompanionLightHistory.window))
+      for (final row in memory.store.messages(
+        sessionId: source['session_id']! as String,
+        forModel: true,
+        limit: CompanionLightHistory.window,
+      ))
         row['role'] == 'user' ? CompanionLine.user(row['text']! as String) : CompanionLine.her(row['text']! as String),
     ]);
     final system = companionLightSystem(persona: _persona());
@@ -2267,7 +2309,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _lightText = '';
     _lightAsked = raw;
     final requestId = _lightReceiptId = memory.store.reserveRequest(
-      category: 'chat', provider: 'deepseek', model: companionLightModel,
+      category: 'chat',
+      provider: 'deepseek',
+      model: companionLightModel,
       inputTokens: estimateTokens('$system\n${lines.map((line) => line.text).join('\n')}\n${selection.block}').ceil(),
       outputTokens: 800,
     )!;
@@ -2310,10 +2354,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             _onReply(turn, _lightText, running: true);
           },
           onError: (Object error) {
-            try { _endLight(turn, error: error); } finally { if (!settled.isCompleted) settled.complete(); }
+            try {
+              _endLight(turn, error: error);
+            } finally {
+              if (!settled.isCompleted) settled.complete();
+            }
           },
           onDone: () {
-            try { _endLight(turn); } finally { if (!settled.isCompleted) settled.complete(); }
+            try {
+              _endLight(turn);
+            } finally {
+              if (!settled.isCompleted) settled.complete();
+            }
           },
           cancelOnError: true,
         );
@@ -2347,9 +2399,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (answered) {
       final now = DateTime.now();
       try {
-        memory.store.submitMessage(id: 'reply:$_lightSourceId:$requestId',
-          sessionId: memory.store.lightSessionId, role: 'assistant', text: _lightText,
-          saidAtUtc: now.toUtc().millisecondsSinceEpoch, offsetMinutes: now.timeZoneOffset.inMinutes);
+        memory.store.submitMessage(
+          id: 'reply:$_lightSourceId:$requestId',
+          sessionId: memory.store.lightSessionId,
+          role: 'assistant',
+          text: _lightText,
+          saidAtUtc: now.toUtc().millisecondsSinceEpoch,
+          offsetMinutes: now.timeZoneOffset.inMinutes,
+        );
         _retryMemorySource = null;
       } on Object catch (saveError) {
         failure ??= saveError;
@@ -2391,9 +2448,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     } else {
       _endLight(_lightTurn);
     }
-    unawaited(reply.cancel().catchError((Object _) {}).whenComplete(() {
-      if (settled != null && !settled.isCompleted) settled.complete();
-    }));
+    unawaited(
+      reply.cancel().catchError((Object _) {}).whenComplete(() {
+        if (settled != null && !settled.isCompleted) settled.complete();
+      }),
+    );
   }
 
   Future<void> _stop() async {
@@ -3105,7 +3164,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _retireLight(discard: true);
       _hush();
       _settleTimer?.cancel();
-      setState(() { _running = false; _myLine = null; });
+      setState(() {
+        _running = false;
+        _myLine = null;
+      });
       _refreshMood();
       final memory = await _openMemory();
       memory.store.startLightConversation();

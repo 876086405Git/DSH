@@ -936,9 +936,12 @@ void main() {
         });
         await openLight(tester, apiKey: 'sk-test', client: client);
         final memory = await memoryOf(tester);
-        memory.store.saveManual(const CompanionMemory(id: '11111111-1111-4111-8111-111111111111',
-          text: '对方最喜欢海盐柠檬味的点心', pinned: true), expectedRowRev: null,
-          currentValueChange: true, realityKnown: true);
+        memory.store.saveManual(
+          const CompanionMemory(id: '11111111-1111-4111-8111-111111111111', text: '对方最喜欢海盐柠檬味的点心', pinned: true),
+          expectedRowRev: null,
+          currentValueChange: true,
+          realityKnown: true,
+        );
         memory.changed();
         await _settle(tester);
 

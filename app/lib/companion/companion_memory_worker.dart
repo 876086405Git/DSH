@@ -51,7 +51,8 @@ abstract interface class CompanionMemoryTransport {
 }
 
 class CompanionLightMemoryTransport implements CompanionMemoryTransport {
-  CompanionLightMemoryTransport({required this.apiKey, http.Client Function()? client}) : _client = client ?? http.Client.new;
+  CompanionLightMemoryTransport({required this.apiKey, http.Client Function()? client})
+    : _client = client ?? http.Client.new;
 
   final String Function() apiKey;
   final http.Client Function() _client;
@@ -105,7 +106,9 @@ class CompanionLightMemoryTransport implements CompanionMemoryTransport {
       return CompanionAuxiliaryReply(text: text.toString(), terminal: receipt!.terminal, complete: receipt!.complete);
     } on CompanionLightError catch (error) {
       throw CompanionAuxiliaryError(
-        configuration: error.failure == CompanionLightFailure.noKey || error.failure == CompanionLightFailure.badKey ||
+        configuration:
+            error.failure == CompanionLightFailure.noKey ||
+            error.failure == CompanionLightFailure.badKey ||
             const {400, 404, 413, 422}.contains(receipt?.httpStatus),
         notSent: !sent,
         terminal: receipt?.terminal ?? 'preflight',

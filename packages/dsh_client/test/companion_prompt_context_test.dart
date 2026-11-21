@@ -62,7 +62,8 @@ void main() {
     expect(requests, ['GET']);
   });
   test('phone selection and chat usage are explicit typed capabilities', () async {
-    handler = (req) => reply(req, 200, {...capability(), 'memoryMode': 'phone', 'phoneMemory': true, 'chatUsage': true});
+    handler = (req) =>
+        reply(req, 200, {...capability(), 'memoryMode': 'phone', 'phoneMemory': true, 'chatUsage': true});
     final value = (await client.companionPromptCapability(session))!;
     expect(value.phoneMemory, isTrue);
     expect(value.chatUsage, isTrue);

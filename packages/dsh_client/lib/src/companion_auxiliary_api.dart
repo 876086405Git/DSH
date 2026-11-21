@@ -78,12 +78,7 @@ class CompanionAuxiliaryResult {
 /// A broken pipe, a missing finish, an old bridge generation and a repeated ID
 /// cannot establish [notSent]. No exception message contains prompt text.
 class CompanionAuxiliaryFailure implements Exception {
-  const CompanionAuxiliaryFailure({
-    required this.code,
-    required this.terminal,
-    required this.notSent,
-    this.httpStatus,
-  });
+  const CompanionAuxiliaryFailure({required this.code, required this.terminal, required this.notSent, this.httpStatus});
 
   final String code;
   final String terminal;
@@ -123,23 +118,28 @@ extension CompanionAuxiliaryApi on DshClient {
     // The original companion bridge claims its namespace but returns this
     // exact code for an unknown subroute. An auxiliary-specific 404 is still
     // an error from an existing route, not an older Host without the route.
-    if (response.statusCode == 404 &&
-        (discoveryCode == null || discoveryCode == 'companion/not-found')) return null;
+    if (response.statusCode == 404 && (discoveryCode == null || discoveryCode == 'companion/not-found')) return null;
     if (response.statusCode != 200) {
       throw DshHttpException(response.statusCode, 'Auxiliary capability request failed');
     }
-    if (map == null || map['v'] != 1 || map['supported'] is! bool ||
-        !_id(map['instanceId']) || !_id(map['provider']) || !_id(map['model'])) {
+    if (map == null ||
+        map['v'] != 1 ||
+        map['supported'] is! bool ||
+        !_id(map['instanceId']) ||
+        !_id(map['provider']) ||
+        !_id(map['model'])) {
       throw const DshProtocolException('invalid auxiliary capability');
     }
     final supported = map['supported'] as bool;
     final detail = _map(map['capability']);
-    if (supported && (detail == null || detail['noTools'] != true ||
-        !const {'fetch-invoked', 'unknown'}.contains(detail['physicalDispatch']) ||
-        !const {'deepseek-messages-cumulative', 'unavailable'}.contains(detail['rawUsage']) ||
-        !detail.containsKey('maxPhysicalRequests') ||
-        (detail['maxPhysicalRequests'] != null &&
-            (detail['maxPhysicalRequests'] is! int || detail['maxPhysicalRequests'] != 1)))) {
+    if (supported &&
+        (detail == null ||
+            detail['noTools'] != true ||
+            !const {'fetch-invoked', 'unknown'}.contains(detail['physicalDispatch']) ||
+            !const {'deepseek-messages-cumulative', 'unavailable'}.contains(detail['rawUsage']) ||
+            !detail.containsKey('maxPhysicalRequests') ||
+            (detail['maxPhysicalRequests'] != null &&
+                (detail['maxPhysicalRequests'] is! int || detail['maxPhysicalRequests'] != 1)))) {
       throw const DshProtocolException('invalid auxiliary observation capability');
     }
     return CompanionAuxiliaryCapability._(
@@ -181,9 +181,14 @@ extension CompanionAuxiliaryApi on DshClient {
     if (!identical(host._owner, this) || transport is! DshHttpCarrier || !host.supported) {
       throw const CompanionAuxiliaryFailure(code: 'route-unavailable', terminal: 'preflight_error', notSent: true);
     }
-    if (!_id(requestId) || !const {'extract', 'consolidate'}.contains(kind) ||
-        !_text(system) || !_text(input) || maxTokens < 1 || maxTokens > 3000 ||
-        headerTimeout <= Duration.zero || idleTimeout <= Duration.zero) {
+    if (!_id(requestId) ||
+        !const {'extract', 'consolidate'}.contains(kind) ||
+        !_text(system) ||
+        !_text(input) ||
+        maxTokens < 1 ||
+        maxTokens > 3000 ||
+        headerTimeout <= Duration.zero ||
+        idleTimeout <= Duration.zero) {
       throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
     }
     final body = <String, Object?>{
@@ -212,7 +217,11 @@ extension CompanionAuxiliaryApi on DshClient {
     var terminal = 'incomplete';
     try {
       response = await transport.connection.postJsonStream(
-        _path, body, abort: abort, headerTimeout: headerTimeout, idleTimeout: idleTimeout,
+        _path,
+        body,
+        abort: abort,
+        headerTimeout: headerTimeout,
+        idleTimeout: idleTimeout,
       );
       if (response.statusCode != 200) {
         final bytes = await _boundedBytes(response.body, 16384);
@@ -223,11 +232,17 @@ extension CompanionAuxiliaryApi on DshClient {
           // These refer to an earlier request/generation. Even a malformed
           // response claiming false may not release that earlier reservation.
           final uncertainId = const {
-            'companion/auxiliary-instance-changed', 'companion/auxiliary-request-used',
-            'companion/auxiliary-request-conflict', 'companion/auxiliary-request-unknown',
+            'companion/auxiliary-instance-changed',
+            'companion/auxiliary-request-used',
+            'companion/auxiliary-request-conflict',
+            'companion/auxiliary-request-unknown',
           }.contains(code);
-          final notSent = response.statusCode >= 400 && code is String &&
-              code.startsWith('companion/auxiliary-') && map?['dispatched'] == false && !uncertainId;
+          final notSent =
+              response.statusCode >= 400 &&
+              code is String &&
+              code.startsWith('companion/auxiliary-') &&
+              map?['dispatched'] == false &&
+              !uncertainId;
           throw CompanionAuxiliaryFailure(
             code: code is String ? code : 'http-error',
             terminal: notSent ? 'preflight_error' : 'http_error',
@@ -236,7 +251,10 @@ extension CompanionAuxiliaryApi on DshClient {
           );
         }
         throw CompanionAuxiliaryFailure(
-          code: 'http-error', terminal: 'http_error', notSent: false, httpStatus: response.statusCode,
+          code: 'http-error',
+          terminal: 'http_error',
+          notSent: false,
+          httpStatus: response.statusCode,
         );
       }
       if (response.contentType != 'application/x-ndjson') _protocol();
@@ -291,8 +309,11 @@ class _Receipt {
     if (frame['requestId'] != requestId || frame['type'] is! String) _protocol();
     final type = frame['type'];
     if (type == 'accepted') {
-      if (_accepted || frame['instanceId'] != host.instanceId ||
-          frame['provider'] != host.provider || frame['model'] != host.model) _protocol();
+      if (_accepted ||
+          frame['instanceId'] != host.instanceId ||
+          frame['provider'] != host.provider ||
+          frame['model'] != host.model)
+        _protocol();
       _accepted = true;
       return null;
     }
@@ -309,8 +330,10 @@ class _Receipt {
       _textOutput.write(text);
     } else if (type == 'usage') {
       final raw = _map(frame['raw']);
-      if (frame['semantics'] != 'cumulative' || raw == null ||
-          !const {'message_start', 'message_delta'}.contains(frame['event'])) _protocol();
+      if (frame['semantics'] != 'cumulative' ||
+          raw == null ||
+          !const {'message_start', 'message_delta'}.contains(frame['event']))
+        _protocol();
       if (frame['event'] == 'message_start') {
         _startUsage = raw;
       } else {
@@ -330,19 +353,27 @@ class _Receipt {
       final status = frame['httpStatus'];
       final value = _map(frame['usage']);
       final error = _map(frame['error']);
-      if (!frame.containsKey('dispatched') || (dispatched != null && dispatched is! bool) ||
-          !frame.containsKey('dispatchAtMs') || (atMs != null && !_count(atMs)) ||
+      if (!frame.containsKey('dispatched') ||
+          (dispatched != null && dispatched is! bool) ||
+          !frame.containsKey('dispatchAtMs') ||
+          (atMs != null && !_count(atMs)) ||
           (dispatched == true) != (atMs != null) ||
           (_dispatchAtMs != null && (dispatched != true || atMs != _dispatchAtMs)) ||
-          complete is! bool || terminal is! String || terminal.isEmpty ||
-          !frame.containsKey('httpStatus') || (status != null && !_status(status)) ||
-          value == null || value['provider'] != host.provider || value['model'] != host.model ||
-          value['terminal'] != terminal || value['complete'] != complete || value['http_status'] != status ||
-          (frame.containsKey('error') && (error == null || error['code'] is! String))) _protocol();
+          complete is! bool ||
+          terminal is! String ||
+          terminal.isEmpty ||
+          !frame.containsKey('httpStatus') ||
+          (status != null && !_status(status)) ||
+          value == null ||
+          value['provider'] != host.provider ||
+          value['model'] != host.model ||
+          value['terminal'] != terminal ||
+          value['complete'] != complete ||
+          value['http_status'] != status ||
+          (frame.containsKey('error') && (error == null || error['code'] is! String)))
+        _protocol();
       // Keep the complete receipt even if the owner cancels in onSent.
-      _finishUsage = Map<String, Object?>.unmodifiable({
-        ...value, 'host_dispatch_at_ms': atMs,
-      });
+      _finishUsage = Map<String, Object?>.unmodifiable({...value, 'host_dispatch_at_ms': atMs});
       // A final observation may establish dispatch even if no earlier dispatch
       // callback ran; no entry into a stream is itself treated as a send.
       if (dispatched == true && _dispatchAtMs == null) {
@@ -429,10 +460,14 @@ Stream<String> _lines(Stream<Uint8List> body) async* {
 Map<String, Object?>? _map(Object? value) => value is Map<String, Object?> ? value : null;
 bool _count(Object? value) => value is int && value >= 0 && value <= _maxSafe;
 bool _status(Object? value) => value is int && value >= 100 && value <= 599;
-bool _id(Object? value) => value is String && value.isNotEmpty && value.runes.length <= 128 &&
-    !RegExp(r'[\x00-\x1f\x7f]').hasMatch(value) && _unicode(value);
-bool _text(String value) => value.trim().isNotEmpty &&
-    !RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]').hasMatch(value) && _unicode(value);
+bool _id(Object? value) =>
+    value is String &&
+    value.isNotEmpty &&
+    value.runes.length <= 128 &&
+    !RegExp(r'[\x00-\x1f\x7f]').hasMatch(value) &&
+    _unicode(value);
+bool _text(String value) =>
+    value.trim().isNotEmpty && !RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]').hasMatch(value) && _unicode(value);
 
 bool _unicode(String value) {
   for (var i = 0; i < value.length; i++) {
@@ -448,6 +483,5 @@ bool _unicode(String value) {
   return true;
 }
 
-Never _protocol() => throw const CompanionAuxiliaryFailure(
-  code: 'invalid-response', terminal: 'incomplete', notSent: false,
-);
+Never _protocol() =>
+    throw const CompanionAuxiliaryFailure(code: 'invalid-response', terminal: 'incomplete', notSent: false);

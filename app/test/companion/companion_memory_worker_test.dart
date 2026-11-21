@@ -10,14 +10,34 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-const _usage = {'input_tokens': 20, 'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0, 'output_tokens': 12};
+const _usage = {
+  'input_tokens': 20,
+  'cache_read_input_tokens': 0,
+  'cache_creation_input_tokens': 0,
+  'output_tokens': 12,
+};
 
-http.Response _reply(String text, {String stop = 'end_turn', bool complete = true}) => http.Response([
-  {'type': 'message_start', 'message': {'usage': {'input_tokens': 900}}},
-  {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': text}},
-  {'type': 'message_delta', 'delta': {'stop_reason': stop}, 'usage': _usage},
-  if (complete) {'type': 'message_stop'},
-].map((event) => 'data: ${jsonEncode(event)}\n\n').join(), 200);
+http.Response _reply(String text, {String stop = 'end_turn', bool complete = true}) => http.Response(
+  [
+    {
+      'type': 'message_start',
+      'message': {
+        'usage': {'input_tokens': 900},
+      },
+    },
+    {
+      'type': 'content_block_delta',
+      'delta': {'type': 'text_delta', 'text': text},
+    },
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': stop},
+      'usage': _usage,
+    },
+    if (complete) {'type': 'message_stop'},
+  ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+  200,
+);
 
 Map<String, Object?> _input(http.Request request) {
   final body = jsonDecode(request.body) as Map<String, Object?>;
@@ -51,14 +71,17 @@ class _Phone {
   late final CompanionMemoryStore store;
   CompanionMemoryWorker? worker;
 
-  void say(String id, String text) => store.submitMessage(
-    id: id, sessionId: 'light', text: text, saidAtUtc: now, offsetMinutes: 480,
-  );
+  void say(String id, String text) =>
+      store.submitMessage(id: id, sessionId: 'light', text: text, saidAtUtc: now, offsetMinutes: 480);
 
   CompanionMemoryWorker withHttp(Future<http.Response> Function(http.Request) answer, {String key = 'test'}) {
     final route = CompanionLightMemoryTransport(apiKey: () => key, client: () => MockClient(answer));
-    return worker = CompanionMemoryWorker(store: store, transport: () => route,
-      nowMilliseconds: () => now, estimateTokens: (text) => text.runes.length);
+    return worker = CompanionMemoryWorker(
+      store: store,
+      transport: () => route,
+      nowMilliseconds: () => now,
+      estimateTokens: (text) => text.runes.length,
+    );
   }
 }
 
@@ -127,8 +150,7 @@ void main() {
     final worker = phone.withHttp((request) async => _reply(_empty(_input(request)), complete: false));
     expect(await worker.extract(forceTail: true), CompanionMemoryWork.waiting);
     expect(phone.store.requests().single['terminal'], 'incomplete');
-    expect(phone.db.select('SELECT state,format_failures FROM memory_events').single,
-      containsPair('state', 'pending'));
+    expect(phone.db.select('SELECT state,format_failures FROM memory_events').single, containsPair('state', 'pending'));
     expect(phone.db.select('SELECT format_failures FROM memory_events').single['format_failures'], 0);
   });
 

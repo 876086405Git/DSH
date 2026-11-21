@@ -13,24 +13,19 @@ import 'companion_usage_api.dart';
 import 'errors.dart';
 import 'json.dart' show uuidV4;
 
-const _conflict = DshRemoteException(
-  'companion/conflict', 'Companion memory changed; read it again', {'status': 409},
-);
+const _conflict = DshRemoteException('companion/conflict', 'Companion memory changed; read it again', {'status': 409});
 
 class CompanionMemoryStore {
   /// Takes ownership of [database]. Use one connection on the owning isolate.
-  CompanionMemoryStore(
-    Database database, {
-    required int Function() nowMilliseconds,
-    String Function()? createId,
-  }) : _db = database, _now = nowMilliseconds, _createId = createId ?? uuidV4 {
+  CompanionMemoryStore(Database database, {required int Function() nowMilliseconds, String Function()? createId})
+    : _db = database,
+      _now = nowMilliseconds,
+      _createId = createId ?? uuidV4 {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
       if (version > 5) {
-        throw const DshRemoteException(
-          'companion/newer-store', 'This memory store needs a newer app', {'status': 409},
-        );
+        throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
         _transaction(() {
@@ -106,10 +101,14 @@ class CompanionMemoryStore {
         });
       }
       _transaction(() {
-        _db.execute("UPDATE memory_requests SET state='released', terminal='not_sent' "
-          "WHERE sent_at_ms IS NULL AND state='reserved'");
-        _db.execute("UPDATE memory_requests SET state='interrupted', terminal='interrupted' "
-          "WHERE sent_at_ms IS NOT NULL AND terminal IS NULL");
+        _db.execute(
+          "UPDATE memory_requests SET state='released', terminal='not_sent' "
+          "WHERE sent_at_ms IS NULL AND state='reserved'",
+        );
+        _db.execute(
+          "UPDATE memory_requests SET state='interrupted', terminal='interrupted' "
+          "WHERE sent_at_ms IS NOT NULL AND terminal IS NULL",
+        );
       });
     } catch (_) {
       _db.close();
@@ -140,7 +139,8 @@ class CompanionMemoryStore {
       JOIN memory_topics t ON t.id = c.topic_id
       ${includeInactive ? '' : "WHERE c.status != 'withdrawn'"}
       ORDER BY c.id
-    ''')) _card(row),
+    '''))
+      _card(row),
   ];
 
   MemoryRow _card(Row row) => {
@@ -149,17 +149,26 @@ class CompanionMemoryStore {
     'pinned': row['pinned'] == 1,
     'eligible': row['eligible'] == 1,
     'manual': row['manual'] == 1,
-    'reality_unconfirmed': row['scope'] == 'real' && row['status'] == 'current' && row['eligible'] == 0 &&
-        _db.select("SELECT 1 FROM memory_migrations WHERE local_card_id=? AND result='display_only'", [row['id']]).isNotEmpty,
+    'reality_unconfirmed':
+        row['scope'] == 'real' &&
+        row['status'] == 'current' &&
+        row['eligible'] == 0 &&
+        _db.select("SELECT 1 FROM memory_migrations WHERE local_card_id=? AND result='display_only'", [
+          row['id'],
+        ]).isNotEmpty,
     'event_time': row['event_time'] == null ? null : jsonDecode(row['event_time'] as String),
     'followup': row['followup'] == null ? null : jsonDecode(row['followup'] as String),
     'evidence': [
-      for (final source in _db.select('''
+      for (final source in _db.select(
+        '''
         SELECT s.*, m.role, m.scope, m.first_seq, m.said_at_utc, m.offset_minutes,
           m.edited_at_utc FROM memory_card_sources s
         JOIN memory_messages m ON m.id = s.message_id AND m.source_rev = s.source_rev
         WHERE s.card_id = ? ORDER BY s.support_group, m.first_seq
-      ''', [row['id']])) Map<String, Object?>.from(source),
+      ''',
+        [row['id']],
+      ))
+        Map<String, Object?>.from(source),
     ],
   };
 
@@ -170,17 +179,19 @@ class CompanionMemoryStore {
       revision: meta['memory_revision']! as int,
       memoryRevision: meta['memory_revision']! as int,
       memories: [
-        for (final row in cards()) CompanionMemory(
-          id: row['id']! as String,
-          text: row['text']! as String,
-          kind: row['kind']! as String,
-          keywords: row['keywords']! as List<String>,
-          pinned: row['pinned']! as bool,
-          createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at_ms']! as int, isUtc: true),
-          updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at_ms']! as int, isUtc: true),
-          expiresAt: row['expires_at_ms'] == null ? null :
-              DateTime.fromMillisecondsSinceEpoch(row['expires_at_ms']! as int, isUtc: true),
-        ),
+        for (final row in cards())
+          CompanionMemory(
+            id: row['id']! as String,
+            text: row['text']! as String,
+            kind: row['kind']! as String,
+            keywords: row['keywords']! as List<String>,
+            pinned: row['pinned']! as bool,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at_ms']! as int, isUtc: true),
+            updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at_ms']! as int, isUtc: true),
+            expiresAt: row['expires_at_ms'] == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(row['expires_at_ms']! as int, isUtc: true),
+          ),
       ],
     );
   }
@@ -188,60 +199,86 @@ class CompanionMemoryStore {
   /// Returns IDs whose original source fingerprint matches this complete read.
   /// A newer source revision can re-prove unchanged cards after partial cleanup.
   /// Reality needs separate evidence; a legacy manual/pinned label is not it.
-  List<String> importLegacy(
-    CompanionMigrationSnapshot snapshot, {
-    Set<String> realityKnownIds = const {},
-  }) => _transaction(() {
-    final cleanup = <String>[];
-    final realIds = realityKnownIds.map((id) => id.toLowerCase()).toSet();
-    var changed = false;
-    for (final memory in snapshot.memories) {
-      final oldId = memory.id.toLowerCase();
-      final fingerprint = _legacyFingerprint(snapshot.storeId, memory);
-      final mapping = _db.select('''
+  List<String> importLegacy(CompanionMigrationSnapshot snapshot, {Set<String> realityKnownIds = const {}}) =>
+      _transaction(() {
+        final cleanup = <String>[];
+        final realIds = realityKnownIds.map((id) => id.toLowerCase()).toSet();
+        var changed = false;
+        for (final memory in snapshot.memories) {
+          final oldId = memory.id.toLowerCase();
+          final fingerprint = _legacyFingerprint(snapshot.storeId, memory);
+          final mapping = _db.select(
+            '''
         SELECT * FROM memory_migrations WHERE legacy_store_id = ? AND legacy_card_id = ?
-      ''', [snapshot.storeId, oldId]);
-      if (mapping.isNotEmpty) {
-        final read = mapping.single;
-        if (snapshot.revision < (read['cleanup_read_revision'] as int)) continue;
-        var original = read['source_fingerprint'] as String?;
-        // Pre-v5 mappings did not retain the original source bytes. Only the
-        // exact original source revision can supply that missing fingerprint.
-        if (original == null && read['read_revision'] == snapshot.revision) original = fingerprint;
-        // Even a mismatch is a newer observation: an old cleanup ACK must not
-        // complete this pending identity after a different source was seen.
-        _db.execute('''
+      ''',
+            [snapshot.storeId, oldId],
+          );
+          if (mapping.isNotEmpty) {
+            final read = mapping.single;
+            if (snapshot.revision < (read['cleanup_read_revision'] as int)) continue;
+            var original = read['source_fingerprint'] as String?;
+            // Pre-v5 mappings did not retain the original source bytes. Only the
+            // exact original source revision can supply that missing fingerprint.
+            if (original == null && read['read_revision'] == snapshot.revision) original = fingerprint;
+            // Even a mismatch is a newer observation: an old cleanup ACK must not
+            // complete this pending identity after a different source was seen.
+            _db.execute(
+              '''
           UPDATE memory_migrations SET source_fingerprint=?, cleanup_read_revision=?, cleanup_state='pending'
           WHERE legacy_store_id=? AND legacy_card_id=?
-        ''', [original, snapshot.revision, snapshot.storeId, oldId]);
-        if (original == fingerprint) {
-          cleanup.add(oldId);
-        }
-        continue;
-      }
-      final id = _createId();
-      final topic = _createId();
-      final real = realIds.contains(oldId);
-      _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
-      _db.execute('''
+        ''',
+              [original, snapshot.revision, snapshot.storeId, oldId],
+            );
+            if (original == fingerprint) {
+              cleanup.add(oldId);
+            }
+            continue;
+          }
+          final id = _createId();
+          final topic = _createId();
+          final real = realIds.contains(oldId);
+          _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
+          _db.execute(
+            '''
         INSERT INTO memory_cards(id, row_rev, kind, text, keywords, pinned, eligible,
           manual, topic_id, source_at_ms, created_at_ms, updated_at_ms, expires_at_ms)
         VALUES(?, 1, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
-      ''', [id, memory.kind, memory.text, jsonEncode(memory.keywords), memory.pinned ? 1 : 0,
-        real ? 1 : 0, topic, memory.updatedAt!.millisecondsSinceEpoch,
-        memory.createdAt!.millisecondsSinceEpoch, memory.updatedAt!.millisecondsSinceEpoch,
-        memory.expiresAt?.millisecondsSinceEpoch]);
-      _db.execute('''
+      ''',
+            [
+              id,
+              memory.kind,
+              memory.text,
+              jsonEncode(memory.keywords),
+              memory.pinned ? 1 : 0,
+              real ? 1 : 0,
+              topic,
+              memory.updatedAt!.millisecondsSinceEpoch,
+              memory.createdAt!.millisecondsSinceEpoch,
+              memory.updatedAt!.millisecondsSinceEpoch,
+              memory.expiresAt?.millisecondsSinceEpoch,
+            ],
+          );
+          _db.execute(
+            '''
         INSERT INTO memory_migrations(legacy_store_id, legacy_card_id, read_revision,
           local_card_id, result, source_fingerprint, cleanup_read_revision) VALUES(?, ?, ?, ?, ?, ?, ?)
-      ''', [snapshot.storeId, oldId, snapshot.revision, id, real ? 'imported' : 'display_only',
-        fingerprint, snapshot.revision]);
-      cleanup.add(oldId);
-      changed = true;
-    }
-    if (changed) _bumpMemory();
-    return cleanup;
-  });
+      ''',
+            [
+              snapshot.storeId,
+              oldId,
+              snapshot.revision,
+              id,
+              real ? 'imported' : 'display_only',
+              fingerprint,
+              snapshot.revision,
+            ],
+          );
+          cleanup.add(oldId);
+          changed = true;
+        }
+        if (changed) _bumpMemory();
+        return cleanup;
+      });
 
   /// Must be called after the import transaction committed and before source deletion.
   bool verifyLegacyImport(CompanionMigrationSnapshot snapshot, Iterable<String> ids) {
@@ -249,12 +286,15 @@ class CompanionMemoryStore {
     for (final id in ids) {
       final memory = source[id.toLowerCase()];
       if (memory == null) return false;
-      final rows = _db.select('''
+      final rows = _db.select(
+        '''
         SELECT m.result, c.id AS card_id FROM memory_migrations m
         LEFT JOIN memory_cards c ON c.id = m.local_card_id
         WHERE m.legacy_store_id = ? AND m.legacy_card_id = ? AND m.cleanup_read_revision = ?
           AND m.cleanup_state = 'pending' AND m.source_fingerprint = ?
-      ''', [snapshot.storeId, id.toLowerCase(), snapshot.revision, _legacyFingerprint(snapshot.storeId, memory)]);
+      ''',
+        [snapshot.storeId, id.toLowerCase(), snapshot.revision, _legacyFingerprint(snapshot.storeId, memory)],
+      );
       if (rows.isEmpty || (rows.single['result'] != 'forgotten' && rows.single['card_id'] == null)) return false;
     }
     return true;
@@ -263,47 +303,59 @@ class CompanionMemoryStore {
   /// [expectedReadRevision] is the original full read for this proof batch. It
   /// stays fixed while this batch's own delete receipts advance the remote CAS.
   /// A later full read fences late acknowledgements from an older proof batch.
-  void finishLegacyCleanup(
-    String legacyStoreId,
-    Iterable<String> ids, {
-    required int expectedReadRevision,
-  }) => _transaction(() {
-    if (expectedReadRevision < 0 || expectedReadRevision > 9007199254740991) {
-      throw ArgumentError.value(expectedReadRevision, 'expectedReadRevision');
-    }
-    for (final id in ids) {
-      _db.execute('''
+  void finishLegacyCleanup(String legacyStoreId, Iterable<String> ids, {required int expectedReadRevision}) =>
+      _transaction(() {
+        if (expectedReadRevision < 0 || expectedReadRevision > 9007199254740991) {
+          throw ArgumentError.value(expectedReadRevision, 'expectedReadRevision');
+        }
+        for (final id in ids) {
+          _db.execute(
+            '''
         UPDATE memory_migrations SET cleanup_state = 'done'
         WHERE legacy_store_id = ? AND legacy_card_id = ? AND cleanup_read_revision = ?
           AND cleanup_state = 'pending' AND source_fingerprint IS NOT NULL
-      ''', [legacyStoreId.toLowerCase(), id.toLowerCase(), expectedReadRevision]);
-    }
-  });
+      ''',
+            [legacyStoreId.toLowerCase(), id.toLowerCase(), expectedReadRevision],
+          );
+        }
+      });
 
   /// A complete source read can prove absence even for a pre-v5 mapping without
   /// a fingerprint. An older read cannot erase a more recent pending observation.
   void finishMissingLegacyCleanup(CompanionMigrationSnapshot snapshot) => _transaction(() {
     final present = snapshot.memories.map((memory) => memory.id.toLowerCase()).toSet();
-    final rows = _db.select('''
+    final rows = _db.select(
+      '''
       SELECT legacy_card_id FROM memory_migrations
       WHERE legacy_store_id=? AND cleanup_state='pending' AND cleanup_read_revision<=?
-    ''', [snapshot.storeId, snapshot.revision]);
+    ''',
+      [snapshot.storeId, snapshot.revision],
+    );
     for (final row in rows) {
       if (present.contains(row['legacy_card_id'])) continue;
-      _db.execute('''
+      _db.execute(
+        '''
         UPDATE memory_migrations SET cleanup_state='done', cleanup_read_revision=?
         WHERE legacy_store_id=? AND legacy_card_id=? AND cleanup_state='pending' AND cleanup_read_revision<=?
-      ''', [snapshot.revision, snapshot.storeId, row['legacy_card_id'], snapshot.revision]);
+      ''',
+        [snapshot.revision, snapshot.storeId, row['legacy_card_id'], snapshot.revision],
+      );
     }
   });
 
   static String _legacyFingerprint(String storeId, CompanionMemory memory) {
     final encoded = jsonEncode([
-      'companion-legacy-card-v1', storeId.toLowerCase(), memory.id.toLowerCase(),
-      memory.kind, memory.text, memory.keywords, memory.pinned,
+      'companion-legacy-card-v1',
+      storeId.toLowerCase(),
+      memory.id.toLowerCase(),
+      memory.kind,
+      memory.text,
+      memory.keywords,
+      memory.pinned,
       [memory.source.kind, memory.source.sessionId, memory.source.messageId],
       memory.expiresAt?.millisecondsSinceEpoch,
-      memory.createdAt!.millisecondsSinceEpoch, memory.updatedAt!.millisecondsSinceEpoch,
+      memory.createdAt!.millisecondsSinceEpoch,
+      memory.updatedAt!.millisecondsSinceEpoch,
     ]);
     return 'sha256-v1:${sha256.convert(utf8.encode(encoded))}';
   }
@@ -325,28 +377,41 @@ class CompanionMemoryStore {
     required int offsetMinutes,
   }) {
     _messageText(text);
-    if (id.trim().isEmpty || sessionId.trim().isEmpty ||
-        !const ['user', 'assistant'].contains(role) || !const ['real', 'story'].contains(scope) ||
-        saidAtUtc < 0 || saidAtUtc > 8640000000000000) {
+    if (id.trim().isEmpty ||
+        sessionId.trim().isEmpty ||
+        !const ['user', 'assistant'].contains(role) ||
+        !const ['real', 'story'].contains(scope) ||
+        saidAtUtc < 0 ||
+        saidAtUtc > 8640000000000000) {
       throw const DshRemoteException('companion/invalid-request', 'Invalid companion source', {'status': 400});
     }
     return _transaction(() {
       if (_db.select('SELECT 1 FROM memory_deleted_messages WHERE id=?', [id]).isNotEmpty) {
-        throw const DshRemoteException('companion/deleted-source', 'This original companion message was deleted', {'status': 410});
+        throw const DshRemoteException('companion/deleted-source', 'This original companion message was deleted', {
+          'status': 410,
+        });
       }
       final previous = _db.select('SELECT * FROM memory_messages WHERE id=?', [id]);
       if (previous.isNotEmpty) {
         final row = previous.single;
-        if (row['session_id'] != sessionId || row['text'] != text || row['role'] != role || row['scope'] != scope ||
-            row['said_at_utc'] != saidAtUtc || row['offset_minutes'] != offsetMinutes) throw _conflict;
+        if (row['session_id'] != sessionId ||
+            row['text'] != text ||
+            row['role'] != role ||
+            row['scope'] != scope ||
+            row['said_at_utc'] != saidAtUtc ||
+            row['offset_minutes'] != offsetMinutes)
+          throw _conflict;
         return Map<String, Object?>.from(row);
       }
       final at = _checkedNow();
       final sequence = _sequence();
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_messages(id,session_id,first_seq,source_rev,event_seq,role,scope,text,
           said_at_utc,offset_minutes) VALUES(?,?,?,1,?,?,?,?,?,?)
-      ''', [id, sessionId, sequence, sequence, role, scope, text, saidAtUtc, offsetMinutes]);
+      ''',
+        [id, sessionId, sequence, sequence, role, scope, text, saidAtUtc, offsetMinutes],
+      );
       _queueMessage(id, sequence, 1, role: role, scope: scope, firstSeq: sequence, at: at);
       _advanceCursor();
       return Map<String, Object?>.from(_db.select('SELECT * FROM memory_messages WHERE id=?', [id]).single);
@@ -363,12 +428,25 @@ class CompanionMemoryStore {
       final at = _checkedNow();
       final sequence = _sequence();
       _removeSourceGroups(id, expectedSourceRev);
-      _db.execute("UPDATE memory_events SET state='superseded', reason='edited' WHERE message_id=? AND source_rev=?",
-        [id, expectedSourceRev]);
-      _db.execute('UPDATE memory_messages SET text=?,source_rev=source_rev+1,event_seq=?,edited_at_utc=? WHERE id=?',
-        [text, sequence, at, id]);
-      _queueMessage(id, sequence, expectedSourceRev + 1, role: previous['role'] as String,
-        scope: previous['scope'] as String, firstSeq: previous['first_seq'] as int, at: at);
+      _db.execute("UPDATE memory_events SET state='superseded', reason='edited' WHERE message_id=? AND source_rev=?", [
+        id,
+        expectedSourceRev,
+      ]);
+      _db.execute('UPDATE memory_messages SET text=?,source_rev=source_rev+1,event_seq=?,edited_at_utc=? WHERE id=?', [
+        text,
+        sequence,
+        at,
+        id,
+      ]);
+      _queueMessage(
+        id,
+        sequence,
+        expectedSourceRev + 1,
+        role: previous['role'] as String,
+        scope: previous['scope'] as String,
+        firstSeq: previous['first_seq'] as int,
+        at: at,
+      );
       if (previous['scope'] == 'real') _bumpControl();
       _advanceCursor();
       return Map<String, Object?>.from(_db.select('SELECT * FROM memory_messages WHERE id=?', [id]).single);
@@ -387,35 +465,55 @@ class CompanionMemoryStore {
       where.add("m.scope='real' AND m.first_seq>?");
       values.add(archive['history_after_seq']);
     }
-    final rows = _db.select('''
+    final rows = _db.select(
+      '''
       SELECT m.*, e.state AS extraction_state, e.reason AS extraction_reason, e.format_failures
       FROM memory_messages m JOIN memory_events e ON e.seq=m.event_seq
       ${where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}'}
       ORDER BY m.first_seq ${limit == null ? 'ASC' : 'DESC LIMIT ?'}
-    ''', [...values, if (limit != null) limit]);
+    ''',
+      [...values, if (limit != null) limit],
+    );
     return [for (final row in limit == null ? rows : rows.reversed) Map<String, Object?>.from(row)];
   }
 
-  void _queueMessage(String id, int sequence, int revision, {
-    required String role, required String scope, required int firstSeq, required int at,
+  void _queueMessage(
+    String id,
+    int sequence,
+    int revision, {
+    required String role,
+    required String scope,
+    required int firstSeq,
+    required int at,
   }) {
-    final reason = role != 'user' || scope != 'real' ? 'not_real_user' :
-        firstSeq <= (archive['history_after_seq'] as int) ? 'history_cutoff' : null;
-    _db.execute('''
+    final reason = role != 'user' || scope != 'real'
+        ? 'not_real_user'
+        : firstSeq <= (archive['history_after_seq'] as int)
+        ? 'history_cutoff'
+        : null;
+    _db.execute(
+      '''
       INSERT INTO memory_events(seq,message_id,source_rev,state,reason,queued_at_ms) VALUES(?,?,?,?,?,?)
-    ''', [sequence, id, revision, reason == null ? 'pending' : 'skipped', reason, at]);
+    ''',
+      [sequence, id, revision, reason == null ? 'pending' : 'skipped', reason, at],
+    );
   }
 
   /// Each support group is a complete proof. Removing one member withdraws the
   /// whole group before we ask whether another independent group still holds.
   void _removeSourceGroups(String messageId, int revision, {bool eraseUnsupported = false}) {
     final affected = <String>{};
-    for (final group in _db.select('''
+    for (final group in _db.select(
+      '''
       SELECT DISTINCT card_id,support_group FROM memory_card_sources WHERE message_id=? AND source_rev=?
-    ''', [messageId, revision])) {
+    ''',
+      [messageId, revision],
+    )) {
       affected.add(group['card_id'] as String);
-      _db.execute('DELETE FROM memory_card_sources WHERE card_id=? AND support_group=?',
-        [group['card_id'], group['support_group']]);
+      _db.execute('DELETE FROM memory_card_sources WHERE card_id=? AND support_group=?', [
+        group['card_id'],
+        group['support_group'],
+      ]);
     }
     _refreshSources(affected, eraseUnsupported: eraseUnsupported);
   }
@@ -423,29 +521,54 @@ class CompanionMemoryStore {
   void _refreshSources(Set<String> affected, {bool eraseUnsupported = false}) {
     for (final id in affected) {
       final card = _db.select('SELECT * FROM memory_cards WHERE id=?', [id]).single;
-      final sources = _db.select('''
+      final sources = _db.select(
+        '''
         SELECT m.first_seq,m.text,COALESCE(m.edited_at_utc,m.said_at_utc) AS at FROM memory_card_sources s
         JOIN memory_messages m ON m.id=s.message_id AND m.source_rev=s.source_rev WHERE s.card_id=?
-      ''', [id]);
+      ''',
+        [id],
+      );
       final manual = card['manual'] == 1;
       final supported = sources.isNotEmpty;
       if (eraseUnsupported && !manual && !supported) {
         _deleteCards([id]);
         continue;
       }
-      final sourceAt = manual || !supported ? card['source_at_ms'] :
-          sources.map((source) => source['at'] as int).reduce(math.max);
+      final sourceAt = manual || !supported
+          ? card['source_at_ms']
+          : sources.map((source) => source['at'] as int).reduce(math.max);
       // Cancellation is an explicit later user control, not an inferred tense
       // or the timestamp of a remaining older proof.
-      final basis = manual || card['plan_state'] == 'cancelled' ? card['current_basis_seq'] : supported ?
-          sources.map((source) => source['first_seq'] as int).reduce(math.max) : null;
-      final keywords = (jsonDecode(card['keywords'] as String) as List).cast<String>().where((keyword) => manual ||
-          sources.any((source) => normalizeMemoryText(source['text'] as String).contains(normalizeMemoryText(keyword)))).toList();
-      _db.execute('''
+      final basis = manual || card['plan_state'] == 'cancelled'
+          ? card['current_basis_seq']
+          : supported
+          ? sources.map((source) => source['first_seq'] as int).reduce(math.max)
+          : null;
+      final keywords = (jsonDecode(card['keywords'] as String) as List)
+          .cast<String>()
+          .where(
+            (keyword) =>
+                manual ||
+                sources.any(
+                  (source) => normalizeMemoryText(source['text'] as String).contains(normalizeMemoryText(keyword)),
+                ),
+          )
+          .toList();
+      _db.execute(
+        '''
         UPDATE memory_cards SET row_rev=row_rev+1,eligible=?,status=?,keywords=?,
           current_basis_seq=?,source_at_ms=?,updated_at_ms=? WHERE id=?
-      ''', [manual || supported ? card['eligible'] : 0, manual || supported ? card['status'] : 'withdrawn',
-        jsonEncode(keywords), basis, sourceAt, _checkedNow(), id]);
+      ''',
+        [
+          manual || supported ? card['eligible'] : 0,
+          manual || supported ? card['status'] : 'withdrawn',
+          jsonEncode(keywords),
+          basis,
+          sourceAt,
+          _checkedNow(),
+          id,
+        ],
+      );
     }
     if (affected.isNotEmpty) _bumpMemory();
   }
@@ -460,9 +583,13 @@ class CompanionMemoryStore {
     bool deleteChat = false,
   }) {
     if (!const ['forget', 'never', 'less', 'normal', 'cancel'].contains(kind) ||
-        topicIds.isEmpty || topicIds.any((id) => id.isEmpty) || (deleteChat && kind != 'forget') ||
-        (targetCardIds != null && (!const ['forget', 'cancel'].contains(kind) ||
-          targetCardIds.isEmpty || targetCardIds.any((id) => id.isEmpty)))) {
+        topicIds.isEmpty ||
+        topicIds.any((id) => id.isEmpty) ||
+        (deleteChat && kind != 'forget') ||
+        (targetCardIds != null &&
+            (!const ['forget', 'cancel'].contains(kind) ||
+                targetCardIds.isEmpty ||
+                targetCardIds.any((id) => id.isEmpty)))) {
       throw ArgumentError('Invalid companion control');
     }
     _transaction(() {
@@ -479,9 +606,14 @@ class CompanionMemoryStore {
         final control = parseMemoryControl(message['text'] as String, cards());
         final resolved = control == null ? <String>[] : (control['topic_ids'] as List<Object?>).cast<String>();
         resolved.sort();
-        if (control == null || control['ambiguous'] != false || control['kind'] != kind ||
-            control['delete_chat'] != deleteChat || jsonEncode(resolved) != jsonEncode(topics)) {
-          throw const DshRemoteException('companion/invalid-request', 'Control needs an explicit source and target', {'status': 400});
+        if (control == null ||
+            control['ambiguous'] != false ||
+            control['kind'] != kind ||
+            control['delete_chat'] != deleteChat ||
+            jsonEncode(resolved) != jsonEncode(topics)) {
+          throw const DshRemoteException('companion/invalid-request', 'Control needs an explicit source and target', {
+            'status': 400,
+          });
         }
         if (kind == 'forget' || kind == 'cancel') {
           final actual = (control['target_card_ids'] as List<Object?>).cast<String>()..sort();
@@ -497,19 +629,26 @@ class CompanionMemoryStore {
       final at = _checkedNow();
       final sequence = message?['first_seq'] as int? ?? _sequence();
       if (kind == 'forget') {
-        if (targets == null) _forgetTopics(topics, deleteChat: deleteChat);
-        else _removeFactRelations(targets.toSet(), deleteChat: deleteChat);
+        if (targets == null)
+          _forgetTopics(topics, deleteChat: deleteChat);
+        else
+          _removeFactRelations(targets.toSet(), deleteChat: deleteChat);
       } else if (kind == 'cancel') {
-        final selected = targets ?? [
-          for (final row in _db.select('SELECT id,topic_id FROM memory_cards'))
-            if (topics.contains(row['topic_id'])) row['id'] as String,
-        ];
+        final selected =
+            targets ??
+            [
+              for (final row in _db.select('SELECT id,topic_id FROM memory_cards'))
+                if (topics.contains(row['topic_id'])) row['id'] as String,
+            ];
         for (final target in selected) {
-          _db.execute('''
+          _db.execute(
+            '''
             UPDATE memory_cards SET plan_state='cancelled',followup=NULL,current_basis_seq=?,
               row_rev=row_rev+1,updated_at_ms=? WHERE id=?
               AND (current_basis_seq IS NULL OR current_basis_seq<=?)
-          ''', [sequence, at, target, sequence]);
+          ''',
+            [sequence, at, target, sequence],
+          );
         }
       } else {
         for (final topic in topics) {
@@ -517,10 +656,13 @@ class CompanionMemoryStore {
             _db.execute('UPDATE memory_topics SET mode=? WHERE id=?', [kind, topic]);
           }
           if (kind == 'never' || kind == 'less') {
-            _db.execute('''
+            _db.execute(
+              '''
               UPDATE memory_cards SET followup=NULL,row_rev=row_rev+1,updated_at_ms=?
               WHERE topic_id=? AND followup IS NOT NULL
-            ''', [at, topic]);
+            ''',
+              [at, topic],
+            );
           }
         }
       }
@@ -564,7 +706,9 @@ class CompanionMemoryStore {
     final card = rows.single;
     final legacy = _db.select("SELECT 1 FROM memory_migrations WHERE local_card_id=? AND result='display_only'", [id]);
     if (legacy.isEmpty || card['scope'] != 'real' || card['status'] != 'current' || card['eligible'] != 0) {
-      throw const DshRemoteException('companion/invalid-request', 'This card is not awaiting a reality confirmation', {'status': 400});
+      throw const DshRemoteException('companion/invalid-request', 'This card is not awaiting a reality confirmation', {
+        'status': 400,
+      });
     }
     _db.execute('UPDATE memory_cards SET eligible=1,row_rev=row_rev+1,updated_at_ms=? WHERE id=?', [_checkedNow(), id]);
     _db.execute("UPDATE memory_migrations SET result='imported' WHERE local_card_id=? AND result='display_only'", [id]);
@@ -586,8 +730,9 @@ class CompanionMemoryStore {
 
   /// A stale native callback must not acknowledge a newer pending clear.
   void acknowledgeWidgetClear({required int controlRevision}) => _transaction(() {
-    _db.execute('UPDATE memory_archive SET widget_clear_pending=0 WHERE singleton=1 AND control_revision=?',
-      [controlRevision]);
+    _db.execute('UPDATE memory_archive SET widget_clear_pending=0 WHERE singleton=1 AND control_revision=?', [
+      controlRevision,
+    ]);
   });
 
   /// An unresolved command is not a new fact or a format failure. The caller
@@ -598,7 +743,9 @@ class CompanionMemoryStore {
     if (_alreadyControlled(message, 'ambiguous_control')) return;
     final control = parseMemoryControl(message['text'] as String, cards());
     if (control == null || control['ambiguous'] != true) {
-      throw const DshRemoteException('companion/invalid-request', 'This source is not an unresolved control', {'status': 400});
+      throw const DshRemoteException('companion/invalid-request', 'This source is not an unresolved control', {
+        'status': 400,
+      });
     }
     _checkedNow();
     _finishControlMessage(message, 'ambiguous_control');
@@ -626,29 +773,45 @@ class CompanionMemoryStore {
       if (rows.isEmpty || rows.single['row_rev'] != expectedRowRev) throw _conflict;
       final previous = rows.single;
       final control = parseMemoryControl(message['text'] as String, cards());
-      if (control == null || control['kind'] != 'correct' || control['ambiguous'] != false ||
-          control['target_card_id'] != cardId || control['replacement_text'] != text ||
+      if (control == null ||
+          control['kind'] != 'correct' ||
+          control['ambiguous'] != false ||
+          control['target_card_id'] != cardId ||
+          control['replacement_text'] != text ||
           !(message['text'] as String).contains(text)) {
-        throw const DshRemoteException('companion/invalid-request', 'Correction needs an explicit current source and target', {'status': 400});
+        throw const DshRemoteException(
+          'companion/invalid-request',
+          'Correction needs an explicit current source and target',
+          {'status': 400},
+        );
       }
       final basis = message['first_seq'] as int;
-      if (!canApplyMemoryCurrentValue(proposedBasisSeq: basis,
-          currentBasisSeq: previous['current_basis_seq'] as int?)) throw _conflict;
+      if (!canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: previous['current_basis_seq'] as int?))
+        throw _conflict;
       final at = _checkedNow();
-      final keywords = (jsonDecode(previous['keywords'] as String) as List).cast<String>().where((word) =>
-          normalizeMemoryText(message['text'] as String).contains(normalizeMemoryText(word))).toList();
+      final keywords = (jsonDecode(previous['keywords'] as String) as List)
+          .cast<String>()
+          .where((word) => normalizeMemoryText(message['text'] as String).contains(normalizeMemoryText(word)))
+          .toList();
       // Resolve dependence against the old value and old proof snapshot before
       // writing the correction. A shared expression topic is not dependence.
       _removeFactRelations({cardId}, retainTargetId: cardId);
       _db.execute('DELETE FROM memory_card_sources WHERE card_id=?', [cardId]);
-      _db.execute('''
+      _db.execute(
+        '''
         UPDATE memory_cards SET text=?,keywords=?,row_rev=row_rev+1,scope='real',eligible=1,status='current',manual=0,
           current_basis_seq=?,source_at_ms=?,event_time=NULL,followup=NULL,plan_state=NULL,expires_at_ms=NULL,
           updated_at_ms=? WHERE id=?
-      ''', [text, jsonEncode(keywords), basis, message['edited_at_utc'] ?? message['said_at_utc'], at, cardId]);
-      _db.execute('INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)',
-        [cardId, _createId(), messageId, expectedSourceRev, message['text']]);
-      _db.execute("UPDATE memory_migrations SET result='imported' WHERE local_card_id=? AND result='display_only'", [cardId]);
+      ''',
+        [text, jsonEncode(keywords), basis, message['edited_at_utc'] ?? message['said_at_utc'], at, cardId],
+      );
+      _db.execute(
+        'INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)',
+        [cardId, _createId(), messageId, expectedSourceRev, message['text']],
+      );
+      _db.execute("UPDATE memory_migrations SET result='imported' WHERE local_card_id=? AND result='display_only'", [
+        cardId,
+      ]);
       _finishControlMessage(message, reason);
       _bumpMemory();
       _bumpControl();
@@ -667,13 +830,17 @@ class CompanionMemoryStore {
     final event = _db.select('SELECT state,reason FROM memory_events WHERE seq=?', [message['event_seq']]).single;
     if (event['state'] == 'done' && event['reason'] is String) {
       Object? decoded;
-      try { decoded = jsonDecode(event['reason'] as String); }
-      on FormatException { decoded = null; }
+      try {
+        decoded = jsonDecode(event['reason'] as String);
+      } on FormatException {
+        decoded = null;
+      }
       if (decoded is Map<String, Object?> && decoded.containsKey('control')) {
         final applied = Map<String, Object?>.from(decoded);
         final targets = applied.remove('target_card_ids');
         if (jsonEncode(applied) == jsonEncode(action) &&
-            (requestedTargets == null || jsonEncode(targets) == jsonEncode(requestedTargets))) return true;
+            (requestedTargets == null || jsonEncode(targets) == jsonEncode(requestedTargets)))
+          return true;
         throw _conflict;
       }
     }
@@ -700,8 +867,10 @@ class CompanionMemoryStore {
       if (rows.isEmpty) continue;
       _db.execute("UPDATE memory_migrations SET result='forgotten' WHERE local_card_id=?", [id]);
       _db.execute('DELETE FROM memory_cards WHERE id=?', [id]);
-      _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)',
-        [rows.single['topic_id'], rows.single['topic_id']]);
+      _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)', [
+        rows.single['topic_id'],
+        rows.single['topic_id'],
+      ]);
     }
   }
 
@@ -759,7 +928,8 @@ class CompanionMemoryStore {
         for (final proof in group) {
           // Adding a composite card must not turn an unrelated member of its
           // multi-message AND group into a raw-chat deletion target.
-          if (roots.contains(card['id']) || sameMessage ||
+          if (roots.contains(card['id']) ||
+              sameMessage ||
               rootCards.any((root) => _containsCardText(proof['quote'] as String, root))) {
             rawSources.add(proof['message_id'] as String);
           }
@@ -771,9 +941,16 @@ class CompanionMemoryStore {
       for (final group in _supportGroups(card).entries) {
         // Every member must be present in this ONE group. Independent groups
         // cannot be stitched together to manufacture a copied AND proof.
-        final copied = removedGroups.any((removed) => removed.every((proof) => group.value.any((member) =>
-          member['message_id'] == proof['message_id'] && member['source_rev'] == proof['source_rev'] &&
-          (member['quote'] as String).contains(proof['quote'] as String))));
+        final copied = removedGroups.any(
+          (removed) => removed.every(
+            (proof) => group.value.any(
+              (member) =>
+                  member['message_id'] == proof['message_id'] &&
+                  member['source_rev'] == proof['source_rev'] &&
+                  (member['quote'] as String).contains(proof['quote'] as String),
+            ),
+          ),
+        );
         if (!copied) continue;
         final id = card['id'] as String;
         affected.add(id);
@@ -792,18 +969,24 @@ class CompanionMemoryStore {
   }
 
   void _bumpControl({int? historyAfterSeq}) {
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE memory_archive SET control_revision=control_revision+1,widget_clear_pending=1,
         history_after_seq=MAX(history_after_seq,?) WHERE singleton=1
-    ''', [historyAfterSeq ?? 0]);
+    ''',
+      [historyAfterSeq ?? 0],
+    );
     for (final claim in _db.select('SELECT id FROM memory_batches')) {
       _dropBatch(claim['id'] as String);
     }
     if (historyAfterSeq != null) {
-      _db.execute('''
+      _db.execute(
+        '''
         UPDATE memory_events SET state='skipped',reason='history_cutoff',batch_id=NULL
         WHERE state='pending' AND message_id IN (SELECT id FROM memory_messages WHERE first_seq<=?)
-      ''', [archive['history_after_seq']]);
+      ''',
+        [archive['history_after_seq']],
+      );
     }
     _advanceCursor();
   }
@@ -818,10 +1001,13 @@ class CompanionMemoryStore {
       }
       _dropBatch(claim['id'] as String);
     }
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE memory_events SET state='skipped',reason='history_cutoff',batch_id=NULL
       WHERE state='pending' AND message_id IN (SELECT id FROM memory_messages WHERE first_seq<=?)
-    ''', [archive['history_after_seq']]);
+    ''',
+      [archive['history_after_seq']],
+    );
     _advanceCursor();
     final pending = _db.select('''
       SELECT m.*,e.queued_at_ms,e.format_failures FROM memory_events e JOIN memory_messages m
@@ -831,23 +1017,34 @@ class CompanionMemoryStore {
     if (pending.isEmpty) return null;
     final sourceTokens = pending.fold<int>(0, (sum, row) => sum + estimateTokens(row['text'] as String));
     final latest = pending.map((row) => row['queued_at_ms'] as int).reduce(math.max);
-    if (!forceTail && pending.first['format_failures'] == 0 &&
-        pending.length < 8 && sourceTokens < 1500 && at - latest < 120000) return null;
+    if (!forceTail &&
+        pending.first['format_failures'] == 0 &&
+        pending.length < 8 &&
+        sourceTokens < 1500 &&
+        at - latest < 120000)
+      return null;
     final id = _createId();
     final control = archive['control_revision'] as int;
     final sources = <MemoryRow>[];
     final existing = <MemoryRow>[];
     int size(List<MemoryRow> input, List<MemoryRow> cards) => estimateTokens(
       '$companionMemoryExtractionPrompt\n${jsonEncode(extractionInput(
-        MemoryBatch(id: id, controlRevision: control, sources: input, existing: cards), processedAtUtc: at))}',
+        MemoryBatch(id: id, controlRevision: control, sources: input, existing: cards),
+        processedAtUtc: at,
+      ))}',
     );
     for (final row in pending) {
       // An edited/stale batch can leave an old retry ahead of fresh events.
       // Its final permitted attempt must not consume a fresh event's retry.
-      if (sources.length == memoryBatchMessageLimit || row['format_failures'] != pending.first['format_failures']) break;
-      final source = Map<String, Object?>.from(row)..remove('queued_at_ms')..remove('format_failures');
+      if (sources.length == memoryBatchMessageLimit || row['format_failures'] != pending.first['format_failures'])
+        break;
+      final source = Map<String, Object?>.from(row)
+        ..remove('queued_at_ms')
+        ..remove('format_failures');
       if (size([source], const []) > memoryBatchInputTokens) {
-        _db.execute("UPDATE memory_events SET state='skipped',reason='input_too_long' WHERE seq=?", [source['event_seq']]);
+        _db.execute("UPDATE memory_events SET state='skipped',reason='input_too_long' WHERE seq=?", [
+          source['event_seq'],
+        ]);
         continue;
       }
       if (size([...sources, source], const []) > memoryBatchInputTokens) break;
@@ -863,8 +1060,11 @@ class CompanionMemoryStore {
     for (final card in candidates) {
       if (size(sources, [...existing, card]) <= memoryBatchInputTokens) existing.add(card);
     }
-    _db.execute('INSERT INTO memory_batches(id,control_revision,existing_revisions,state) VALUES(?,?,?,\'claimed\')',
-      [id, control, jsonEncode({for (final card in existing) card['id'] as String: card['row_rev']})]);
+    _db.execute('INSERT INTO memory_batches(id,control_revision,existing_revisions,state) VALUES(?,?,?,\'claimed\')', [
+      id,
+      control,
+      jsonEncode({for (final card in existing) card['id'] as String: card['row_rev']}),
+    ]);
     for (final source in sources) {
       _db.execute('UPDATE memory_events SET batch_id=? WHERE seq=?', [id, source['event_seq']]);
     }
@@ -872,18 +1072,30 @@ class CompanionMemoryStore {
   });
 
   List<MemoryRow>? _currentBatchSources(String id) {
-    final rows = _db.select('''
+    final rows = _db.select(
+      '''
       SELECT m.*,e.state AS claim_state,e.source_rev AS claim_rev,e.seq AS claim_seq
       FROM memory_events e JOIN memory_messages m ON m.id=e.message_id WHERE e.batch_id=? ORDER BY e.seq
-    ''', [id]);
+    ''',
+      [id],
+    );
     if (rows.isEmpty) return null;
     final cutoff = archive['history_after_seq'] as int;
     final sources = <MemoryRow>[];
     for (final row in rows) {
-      if (row['claim_state'] != 'pending' || row['claim_rev'] != row['source_rev'] ||
-          row['claim_seq'] != row['event_seq'] || row['role'] != 'user' || row['scope'] != 'real' ||
-          (row['first_seq'] as int) <= cutoff) return null;
-      sources.add(Map<String, Object?>.from(row)..remove('claim_state')..remove('claim_rev')..remove('claim_seq'));
+      if (row['claim_state'] != 'pending' ||
+          row['claim_rev'] != row['source_rev'] ||
+          row['claim_seq'] != row['event_seq'] ||
+          row['role'] != 'user' ||
+          row['scope'] != 'real' ||
+          (row['first_seq'] as int) <= cutoff)
+        return null;
+      sources.add(
+        Map<String, Object?>.from(row)
+          ..remove('claim_state')
+          ..remove('claim_rev')
+          ..remove('claim_seq'),
+      );
     }
     return sources;
   }
@@ -892,8 +1104,11 @@ class CompanionMemoryStore {
   // future wording is not a current item in 09s existing or model selection.
   bool _currentCard(MemoryRow card, int at) => _currentAnchor(card, at) && card['plan_state'] != 'cancelled';
 
-  bool _currentAnchor(MemoryRow card, int at) => card['scope'] == 'real' && card['eligible'] == true &&
-      card['status'] == 'current' && (card['expires_at_ms'] == null || (card['expires_at_ms'] as int) > at);
+  bool _currentAnchor(MemoryRow card, int at) =>
+      card['scope'] == 'real' &&
+      card['eligible'] == true &&
+      card['status'] == 'current' &&
+      (card['expires_at_ms'] == null || (card['expires_at_ms'] as int) > at);
 
   MemoryBatch? _restoreBatch(Row claim, int at) {
     if (claim['control_revision'] != archive['control_revision']) return null;
@@ -902,29 +1117,40 @@ class CompanionMemoryStore {
     final revisions = jsonDecode(claim['existing_revisions'] as String) as Map<String, Object?>;
     final existing = <MemoryRow>[];
     for (final entry in revisions.entries) {
-      final rows = _db.select('''
+      final rows = _db.select(
+        '''
         SELECT c.*,t.mode AS topic_mode FROM memory_cards c JOIN memory_topics t ON t.id=c.topic_id WHERE c.id=?
-      ''', [entry.key]);
+      ''',
+        [entry.key],
+      );
       if (rows.isEmpty || rows.single['row_rev'] != entry.value) return null;
       final card = _card(rows.single);
       if (!_currentCard(card, at)) return null;
       existing.add(card);
     }
-    return MemoryBatch(id: claim['id'] as String, controlRevision: claim['control_revision'] as int,
-      sources: sources, existing: existing);
+    return MemoryBatch(
+      id: claim['id'] as String,
+      controlRevision: claim['control_revision'] as int,
+      sources: sources,
+      existing: existing,
+    );
   }
 
   bool isBatchCurrent(MemoryBatch batch) {
     final claims = _db.select("SELECT * FROM memory_batches WHERE id=? AND state='claimed'", [batch.id]);
     if (claims.isEmpty) return false;
-    if (claims.single['control_revision'] != batch.controlRevision || archive['control_revision'] != batch.controlRevision) return false;
+    if (claims.single['control_revision'] != batch.controlRevision ||
+        archive['control_revision'] != batch.controlRevision)
+      return false;
     final sources = _currentBatchSources(batch.id);
     if (sources == null || sources.length != batch.sources.length) return false;
     for (var i = 0; i < sources.length; i++) {
       final expected = batch.sources[i];
       final actual = sources[i];
-      if (expected['id'] != actual['id'] || expected['source_rev'] != actual['source_rev'] ||
-          expected['event_seq'] != actual['event_seq']) return false;
+      if (expected['id'] != actual['id'] ||
+          expected['source_rev'] != actual['source_rev'] ||
+          expected['event_seq'] != actual['event_seq'])
+        return false;
     }
     return true;
   }
@@ -938,8 +1164,10 @@ class CompanionMemoryStore {
     final operations = (proposal['operations'] as List<Object?>).cast<MemoryRow>();
     for (final operation in operations.where((op) => op['op'] == 'replace')) {
       final rows = _db.select('SELECT * FROM memory_cards WHERE id=?', [operation['target_id']]);
-      if (rows.isEmpty || rows.single['row_rev'] != operation['expected_row_rev'] ||
-          !_currentCard(_card(rows.single), at)) return false;
+      if (rows.isEmpty ||
+          rows.single['row_rev'] != operation['expected_row_rev'] ||
+          !_currentCard(_card(rows.single), at))
+        return false;
     }
     final skipped = <MemoryRow>[];
     var changed = false;
@@ -948,11 +1176,14 @@ class CompanionMemoryStore {
       final evidence = (operation['evidence'] as List<Object?>).cast<MemoryRow>();
       final referenced = [for (final reference in evidence) sources[reference['message_id']]!];
       final basis = referenced.map((source) => source['first_seq'] as int).reduce(math.max);
-      final sourceAt = referenced.map((source) => (source['edited_at_utc'] ?? source['said_at_utc']) as int).reduce(math.max);
+      final sourceAt = referenced
+          .map((source) => (source['edited_at_utc'] ?? source['said_at_utc']) as int)
+          .reduce(math.max);
       final target = operation['op'] == 'replace'
-          ? _db.select('SELECT * FROM memory_cards WHERE id=?', [operation['target_id']]).single : null;
-      if (target != null && !canApplyMemoryCurrentValue(proposedBasisSeq: basis,
-          currentBasisSeq: target['current_basis_seq'] as int?)) {
+          ? _db.select('SELECT * FROM memory_cards WHERE id=?', [operation['target_id']]).single
+          : null;
+      if (target != null &&
+          !canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: target['current_basis_seq'] as int?)) {
         skipped.add({'operation': index, 'reason': 'older_than_current', 'card_id': target['id']});
         continue;
       }
@@ -972,7 +1203,8 @@ class CompanionMemoryStore {
       final topic = target?['topic_id'] ?? (controlledTopics.isEmpty ? _createId() : controlledTopics.single);
       if (target == null && controlledTopics.isEmpty) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
       final mode = _db.select('SELECT mode FROM memory_topics WHERE id=?', [topic]).single['mode'];
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_cards(id,row_rev,kind,text,keywords,pinned,scope,eligible,status,manual,
           topic_id,current_basis_seq,source_at_ms,event_time,followup,created_at_ms,updated_at_ms)
         VALUES(?,?,?,?,?,?,'real',1,?,0,?,?,?,?,?,?,?)
@@ -981,24 +1213,42 @@ class CompanionMemoryStore {
           current_basis_seq=excluded.current_basis_seq,source_at_ms=excluded.source_at_ms,
           event_time=excluded.event_time,followup=excluded.followup,plan_state=NULL,
           updated_at_ms=excluded.updated_at_ms,expires_at_ms=NULL
-      ''', [id, target == null ? 1 : (target['row_rev'] as int) + 1, operation['kind'], operation['text'],
-        jsonEncode(operation['keywords']), target?['pinned'] ?? 0, 'current', topic,
-        basis, sourceAt, operation['event_time'] == null ? null : jsonEncode(operation['event_time']),
-        operation['followup'] == null || mode != 'normal' ? null : jsonEncode(operation['followup']),
-        target?['created_at_ms'] ?? at, at]);
+      ''',
+        [
+          id,
+          target == null ? 1 : (target['row_rev'] as int) + 1,
+          operation['kind'],
+          operation['text'],
+          jsonEncode(operation['keywords']),
+          target?['pinned'] ?? 0,
+          'current',
+          topic,
+          basis,
+          sourceAt,
+          operation['event_time'] == null ? null : jsonEncode(operation['event_time']),
+          operation['followup'] == null || mode != 'normal' ? null : jsonEncode(operation['followup']),
+          target?['created_at_ms'] ?? at,
+          at,
+        ],
+      );
       if (target != null) _db.execute('DELETE FROM memory_card_sources WHERE card_id=?', [id]);
       final group = _createId();
       for (final reference in evidence) {
         final source = sources[reference['message_id']]!;
-        _db.execute('''
+        _db.execute(
+          '''
           INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)
           ON CONFLICT(card_id,support_group,message_id,source_rev,quote) DO NOTHING
-        ''', [id, group, source['id'], source['source_rev'], reference['quote']]);
+        ''',
+          [id, group, source['id'], source['source_rev'], reference['quote']],
+        );
       }
       changed = true;
     }
-    _db.execute("UPDATE memory_events SET state='done',reason=? WHERE batch_id=? AND state='pending'",
-      [skipped.isEmpty ? null : jsonEncode({'skipped_operations': skipped}), batch.id]);
+    _db.execute("UPDATE memory_events SET state='done',reason=? WHERE batch_id=? AND state='pending'", [
+      skipped.isEmpty ? null : jsonEncode({'skipped_operations': skipped}),
+      batch.id,
+    ]);
     _db.execute('DELETE FROM memory_batches WHERE id=?', [batch.id]);
     if (changed) _bumpMemory();
     _advanceCursor();
@@ -1012,7 +1262,8 @@ class CompanionMemoryStore {
     final text = _operationText(operation);
     for (final card in cards()) {
       if (!_currentAnchor(card, at) ||
-          canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: card['current_basis_seq'] as int?)) continue;
+          canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: card['current_basis_seq'] as int?))
+        continue;
       if (_supportedWords(card).any((word) => _containsAnchor(text, word))) return card['id'] as String;
     }
     return null;
@@ -1024,14 +1275,23 @@ class CompanionMemoryStore {
   }
 
   List<String> _supportedWords(MemoryRow card) {
-    final support = card['manual'] == true ? [card['text'] as String] : [
-      for (final source in _db.select('''
+    final support = card['manual'] == true
+        ? [card['text'] as String]
+        : [
+            for (final source in _db.select(
+              '''
         SELECT m.text FROM memory_card_sources s JOIN memory_messages m
           ON m.id=s.message_id AND m.source_rev=s.source_rev WHERE s.card_id=?
-      ''', [card['id']])) source['text'] as String,
-    ];
-    return (card['keywords'] as List<String>).map(normalizeMemoryText).where((word) => _anchorWord(word) &&
-      support.any((source) => normalizeMemoryText(source).contains(word))).toSet().toList();
+      ''',
+              [card['id']],
+            ))
+              source['text'] as String,
+          ];
+    return (card['keywords'] as List<String>)
+        .map(normalizeMemoryText)
+        .where((word) => _anchorWord(word) && support.any((source) => normalizeMemoryText(source).contains(word)))
+        .toSet()
+        .toList();
   }
 
   /// A new card cannot turn one uniquely matched controlled topic back to
@@ -1041,20 +1301,25 @@ class CompanionMemoryStore {
     final text = _operationText(operation);
     return {
       for (final card in cards())
-        if (card['scope'] == 'real' && card['eligible'] == true &&
+        if (card['scope'] == 'real' &&
+            card['eligible'] == true &&
             const ['less', 'never'].contains(card['topic_mode']) &&
-            _supportedWords(card).any((word) => _containsAnchor(text, word))) card['topic_id'] as String,
+            _supportedWords(card).any((word) => _containsAnchor(text, word)))
+          card['topic_id'] as String,
     }.toList()..sort();
   }
 
   void recordInvalidProposal(MemoryBatch batch) => _transaction(() {
     if (!isBatchCurrent(batch)) return;
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE memory_events SET format_failures=format_failures+1,
         state=CASE WHEN format_failures>=1 THEN 'skipped' ELSE 'pending' END,
         reason=CASE WHEN format_failures>=1 THEN 'invalid_proposal' ELSE 'retry_invalid_proposal' END
       WHERE batch_id=? AND state='pending'
-    ''', [batch.id]);
+    ''',
+      [batch.id],
+    );
     if (_db.select("SELECT 1 FROM memory_events WHERE batch_id=? AND state='pending' LIMIT 1", [batch.id]).isEmpty) {
       _db.execute('DELETE FROM memory_batches WHERE id=?', [batch.id]);
     } else {
@@ -1096,8 +1361,11 @@ class CompanionMemoryStore {
     required int outputTokens,
     String? batchId,
   }) {
-    if (!const ['chat', 'extract', 'organize'].contains(category) || provider.isEmpty || model.isEmpty ||
-        _usageCount(inputTokens) == null || _usageCount(outputTokens) == null) {
+    if (!const ['chat', 'extract', 'organize'].contains(category) ||
+        provider.isEmpty ||
+        model.isEmpty ||
+        _usageCount(inputTokens) == null ||
+        _usageCount(outputTokens) == null) {
       throw ArgumentError('Invalid companion request reservation');
     }
     return _transaction(() {
@@ -1119,7 +1387,10 @@ class CompanionMemoryStore {
           var monthly = reservedCost;
           for (final row in rows) {
             final time = row['sent_at_ms'] ?? row['uncertain_at_ms'] ?? row['reserved_at_ms'];
-            if ((time as int) <= at - 30 * 86400000 || row['provider'] != 'deepseek' || row['model'] != 'deepseek-flash') continue;
+            if ((time as int) <= at - 30 * 86400000 ||
+                row['provider'] != 'deepseek' ||
+                row['model'] != 'deepseek-flash')
+              continue;
             monthly += _heldCost(row);
             // Stop before another large but valid integer observation could
             // overflow the running 64-bit sum.
@@ -1129,11 +1400,23 @@ class CompanionMemoryStore {
         }
       }
       final id = _createId();
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_requests(id,category,batch_id,provider,model,reserved_at_ms,reserved_input,
           reserved_output,reserved_cny,state) VALUES(?,?,?,?,?,?,?,?,?,'reserved')
-      ''', [id, category, batchId, provider, model, at, inputTokens, outputTokens,
-        reservedCost == null ? null : reservedCost / 100000000]);
+      ''',
+        [
+          id,
+          category,
+          batchId,
+          provider,
+          model,
+          at,
+          inputTokens,
+          outputTokens,
+          reservedCost == null ? null : reservedCost / 100000000,
+        ],
+      );
       return id;
     });
   }
@@ -1152,8 +1435,10 @@ class CompanionMemoryStore {
     if (row['state'] == 'released') throw _conflict;
     if (row['sent_at_ms'] != null || row['uncertain_at_ms'] != null) return;
     if (row['state'] != 'reserved') throw _conflict;
-    _db.execute("UPDATE memory_requests SET uncertain_at_ms=?,state='interrupted',terminal='dispatch_unknown' WHERE id=?",
-      [_checkedNow(), id]);
+    _db.execute(
+      "UPDATE memory_requests SET uncertain_at_ms=?,state='interrupted',terminal='dispatch_unknown' WHERE id=?",
+      [_checkedNow(), id],
+    );
   });
 
   void recordUsage(String id, Map<String, Object?> usage) => _transaction(() {
@@ -1167,17 +1452,27 @@ class CompanionMemoryStore {
     int? count(String key) {
       return _usageCount(usage[key]);
     }
+
     final input = count('input_uncached');
     final read = count('input_cache_read');
     final write = count('input_cache_write');
     final output = count('output_tokens');
-    final cost = row['provider'] == 'deepseek' && row['model'] == 'deepseek-flash' &&
-        input != null && read != null && write == 0 && output != null ? _costUnits(input, read, output) : null;
-    _db.execute('''
+    final cost =
+        row['provider'] == 'deepseek' &&
+            row['model'] == 'deepseek-flash' &&
+            input != null &&
+            read != null &&
+            write == 0 &&
+            output != null
+        ? _costUnits(input, read, output)
+        : null;
+    _db.execute(
+      '''
       UPDATE memory_requests SET raw_usage=?,usage_semantics=?,input_uncached=?,input_cache_read=?,
         input_cache_write=?,output_tokens=?,estimated_cny=? WHERE id=?
-    ''', [raw, usage['usage_semantics'], input, read, write, output,
-      cost == null ? null : cost / 100000000, id]);
+    ''',
+      [raw, usage['usage_semantics'], input, read, write, output, cost == null ? null : cost / 100000000, id],
+    );
   });
 
   void finishRequest(String id, {required String terminal}) => _transaction(() {
@@ -1189,8 +1484,11 @@ class CompanionMemoryStore {
     }
     if (row['sent_at_ms'] == null && row['uncertain_at_ms'] != null) return;
     if (row['terminal'] != null) return;
-    _db.execute('UPDATE memory_requests SET state=?,terminal=? WHERE id=?',
-      [row['sent_at_ms'] == null ? 'released' : 'finished', terminal, id]);
+    _db.execute('UPDATE memory_requests SET state=?,terminal=? WHERE id=?', [
+      row['sent_at_ms'] == null ? 'released' : 'finished',
+      terminal,
+      id,
+    ]);
   });
 
   /// Persist the immutable owner binding before delivering a full-mode prompt.
@@ -1209,27 +1507,48 @@ class CompanionMemoryStore {
       validateMemoryCardText(value);
       if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)) throw ArgumentError('Invalid host chat identity');
     }
-    if (_usageCount(controlRevision) == null || _usageCount(historyAfterSeq) == null ||
-        observedAt < 0 || observedAt > 8640000000000000) throw ArgumentError('Invalid host chat binding');
+    if (_usageCount(controlRevision) == null ||
+        _usageCount(historyAfterSeq) == null ||
+        observedAt < 0 ||
+        observedAt > 8640000000000000)
+      throw ArgumentError('Invalid host chat binding');
     return _transaction(() {
       if (archive['id'] != archiveId) throw _conflict;
-      final previous = _db.select('''
+      final previous = _db.select(
+        '''
         SELECT * FROM memory_host_chat_deliveries
         WHERE host_key=? AND instance_id=? AND session_id=? AND request_id=?
-      ''', [hostKey, instanceId, sessionId, requestId]);
+      ''',
+        [hostKey, instanceId, sessionId, requestId],
+      );
       if (previous.isNotEmpty) {
         final row = previous.single;
-        if (row['archive_id'] != archiveId || row['control_revision'] != controlRevision ||
-            row['history_after_seq'] != historyAfterSeq) throw _conflict;
+        if (row['archive_id'] != archiveId ||
+            row['control_revision'] != controlRevision ||
+            row['history_after_seq'] != historyAfterSeq)
+          throw _conflict;
         return _hostDelivery(row);
       }
       final id = _createId();
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_host_chat_deliveries(id,host_key,instance_id,session_id,request_id,
           archive_id,control_revision,history_after_seq,observed_at_ms,updated_at_ms,state)
         VALUES(?,?,?,?,?,?,?,?,?,?,'pending')
-      ''', [id, hostKey, instanceId, sessionId, requestId, archiveId, controlRevision,
-        historyAfterSeq, observedAt, _checkedNow()]);
+      ''',
+        [
+          id,
+          hostKey,
+          instanceId,
+          sessionId,
+          requestId,
+          archiveId,
+          controlRevision,
+          historyAfterSeq,
+          observedAt,
+          _checkedNow(),
+        ],
+      );
       return _hostDelivery(_hostDeliveryRow(id));
     });
   }
@@ -1238,17 +1557,22 @@ class CompanionMemoryStore {
   /// prompt. Settled immutable receipts remain in requests(), including their
   /// unknown fees; pending/running/unknown coverage can be queried again.
   List<MemoryRow> pendingHostChatDeliveries(String hostKey) => [
-    for (final row in _db.select('''
+    for (final row in _db.select(
+      '''
       SELECT * FROM memory_host_chat_deliveries WHERE host_key=? AND state!='settled'
       ORDER BY observed_at_ms,id
-    ''', [hostKey])) _hostDelivery(row),
+    ''',
+      [hostKey],
+    ))
+      _hostDelivery(row),
   ];
 
   /// Coverage metadata is separate from physical receipts. In particular, a
   /// settled root with a gap and no retained receipts is not evidence of free
   /// usage and must remain visible even though it is no longer polled.
   List<MemoryRow> hostChatDeliveries() => [
-    for (final row in _db.select('SELECT * FROM memory_host_chat_deliveries ORDER BY observed_at_ms,id')) _hostDelivery(row),
+    for (final row in _db.select('SELECT * FROM memory_host_chat_deliveries ORDER BY observed_at_ms,id'))
+      _hostDelivery(row),
   ];
 
   /// Import one root snapshot atomically. Root coverage and receipt revisions
@@ -1257,29 +1581,51 @@ class CompanionMemoryStore {
     final incoming = CompanionChatUsageSnapshot.fromJson(snapshot);
     return _transaction(() {
       final delivery = _hostDeliveryRow(deliveryId);
-      if (incoming.sessionId != delivery['session_id'] || incoming.requestId != delivery['request_id'] ||
+      if (incoming.sessionId != delivery['session_id'] ||
+          incoming.requestId != delivery['request_id'] ||
           (incoming.instanceId != delivery['instance_id'] &&
-            (incoming.state != 'unknown' || !incoming.gaps.contains('instance-changed')))) throw _conflict;
+              (incoming.state != 'unknown' || !incoming.gaps.contains('instance-changed'))))
+        throw _conflict;
       if (incoming.state == 'unknown') {
         final gaps = _canonicalJson(incoming.gaps);
-        if (delivery['state'] == 'unknown' && delivery['unknown_gaps'] == gaps &&
-            delivery['unknown_instance_id'] == incoming.instanceId) return false;
-        _db.execute('''
+        if (delivery['state'] == 'unknown' &&
+            delivery['unknown_gaps'] == gaps &&
+            delivery['unknown_instance_id'] == incoming.instanceId)
+          return false;
+        _db.execute(
+          '''
           UPDATE memory_host_chat_deliveries SET state='unknown',unknown_gaps=?,unknown_instance_id=?,updated_at_ms=?
           WHERE id=?
-        ''', [gaps, incoming.instanceId, _checkedNow(), deliveryId]);
+        ''',
+          [gaps, incoming.instanceId, _checkedNow(), deliveryId],
+        );
         return true;
       }
       final binding = incoming.binding!;
-      if (binding.archiveId != delivery['archive_id'] || binding.controlRevision != delivery['control_revision'] ||
-          binding.historyAfterSeq != delivery['history_after_seq']) throw _conflict;
+      if (binding.archiveId != delivery['archive_id'] ||
+          binding.controlRevision != delivery['control_revision'] ||
+          binding.historyAfterSeq != delivery['history_after_seq'])
+        throw _conflict;
       final metadata = _canonicalJson({
-        'v': 1, 'instanceId': incoming.instanceId, 'sessionId': incoming.sessionId, 'requestId': incoming.requestId,
-        'binding': {'archiveId': binding.archiveId, 'controlRevision': binding.controlRevision,
-          'historyAfterSeq': binding.historyAfterSeq}, 'state': incoming.state, 'complete': incoming.complete,
-        'revision': incoming.revision, 'gaps': incoming.gaps, 'observedAdapterCalls': incoming.observedAdapterCalls,
-        'activeCalls': incoming.activeCalls, 'physicalRequests': incoming.physicalRequests,
-        'receipts': [for (final receipt in incoming.receipts) {'receiptId': receipt.receiptId, 'revision': receipt.revision}],
+        'v': 1,
+        'instanceId': incoming.instanceId,
+        'sessionId': incoming.sessionId,
+        'requestId': incoming.requestId,
+        'binding': {
+          'archiveId': binding.archiveId,
+          'controlRevision': binding.controlRevision,
+          'historyAfterSeq': binding.historyAfterSeq,
+        },
+        'state': incoming.state,
+        'complete': incoming.complete,
+        'revision': incoming.revision,
+        'gaps': incoming.gaps,
+        'observedAdapterCalls': incoming.observedAdapterCalls,
+        'activeCalls': incoming.activeCalls,
+        'physicalRequests': incoming.physicalRequests,
+        'receipts': [
+          for (final receipt in incoming.receipts) {'receiptId': receipt.receiptId, 'revision': receipt.revision},
+        ],
       });
       final oldRevision = delivery['snapshot_revision'] as int;
       if (incoming.revision == oldRevision && delivery['snapshot_metadata'] != metadata) throw _conflict;
@@ -1288,53 +1634,94 @@ class CompanionMemoryStore {
       for (final receipt in incoming.receipts) {
         final record = _hostReceiptData(receipt);
         final encoded = _canonicalJson(record);
-        final previous = _db.select('''
+        final previous = _db.select(
+          '''
           SELECT * FROM memory_host_chat_receipts WHERE host_key=? AND instance_id=? AND receipt_id=?
-        ''', [delivery['host_key'], delivery['instance_id'], receipt.receiptId]);
+        ''',
+          [delivery['host_key'], delivery['instance_id'], receipt.receiptId],
+        );
         final String localId;
         if (previous.isEmpty) {
           localId = _createId();
-          _db.execute('''
+          _db.execute(
+            '''
             INSERT INTO memory_host_chat_receipts(id,host_key,instance_id,receipt_id,revision,phase,
               receipt_json,first_observed_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?)
-          ''', [localId, delivery['host_key'], delivery['instance_id'], receipt.receiptId, receipt.revision,
-            receipt.phase, encoded, at, at]);
+          ''',
+            [
+              localId,
+              delivery['host_key'],
+              delivery['instance_id'],
+              receipt.receiptId,
+              receipt.revision,
+              receipt.phase,
+              encoded,
+              at,
+              at,
+            ],
+          );
           changed = true;
         } else {
           final old = previous.single;
           localId = old['id'] as String;
           final oldRecord = jsonDecode(old['receipt_json'] as String) as Map<String, Object?>;
-          for (final key in const ['receiptId', 'callId', 'requestIds', 'provider', 'model', 'observation',
-              'dispatched', 'dispatchAtMs', 'handoffAtMs', 'physicalRequests']) {
+          for (final key in const [
+            'receiptId',
+            'callId',
+            'requestIds',
+            'provider',
+            'model',
+            'observation',
+            'dispatched',
+            'dispatchAtMs',
+            'handoffAtMs',
+            'physicalRequests',
+          ]) {
             if (_canonicalJson(oldRecord[key]) != _canonicalJson(record[key])) throw _conflict;
           }
-          if (_db.select('''
+          if (_db
+              .select(
+                '''
             SELECT 1 FROM memory_host_chat_delivery_receipts link JOIN memory_host_chat_deliveries d ON d.id=link.delivery_id
             WHERE link.receipt_id=? AND d.session_id!=?
-          ''', [localId, delivery['session_id']]).isNotEmpty) throw _conflict;
+          ''',
+                [localId, delivery['session_id']],
+              )
+              .isNotEmpty)
+            throw _conflict;
           final previousRevision = old['revision'] as int;
           if (receipt.revision == previousRevision) {
             if (encoded != old['receipt_json']) throw _conflict;
           } else if (receipt.revision > previousRevision) {
             if (old['phase'] == 'finished') throw _conflict;
-            _db.execute('''
+            _db.execute(
+              '''
               UPDATE memory_host_chat_receipts SET revision=?,phase=?,receipt_json=?,updated_at_ms=? WHERE id=?
-            ''', [receipt.revision, receipt.phase, encoded, at, localId]);
+            ''',
+              [receipt.revision, receipt.phase, encoded, at, localId],
+            );
             changed = true;
           }
         }
-        if (_db.select('SELECT 1 FROM memory_host_chat_delivery_receipts WHERE delivery_id=? AND receipt_id=?',
-            [deliveryId, localId]).isEmpty) {
-          _db.execute('INSERT INTO memory_host_chat_delivery_receipts(delivery_id,receipt_id) VALUES(?,?)',
-            [deliveryId, localId]);
+        if (_db.select('SELECT 1 FROM memory_host_chat_delivery_receipts WHERE delivery_id=? AND receipt_id=?', [
+          deliveryId,
+          localId,
+        ]).isEmpty) {
+          _db.execute('INSERT INTO memory_host_chat_delivery_receipts(delivery_id,receipt_id) VALUES(?,?)', [
+            deliveryId,
+            localId,
+          ]);
           changed = true;
         }
       }
       if (incoming.revision > oldRevision) {
-        _db.execute('''
+        _db.execute(
+          '''
           UPDATE memory_host_chat_deliveries SET state=?,snapshot_revision=?,snapshot_metadata=?,
             unknown_gaps=NULL,unknown_instance_id=NULL,updated_at_ms=? WHERE id=?
-        ''', [incoming.state, incoming.revision, metadata, at, deliveryId]);
+        ''',
+          [incoming.state, incoming.revision, metadata, at, deliveryId],
+        );
         changed = true;
       }
       return changed;
@@ -1351,24 +1738,58 @@ class CompanionMemoryStore {
     ...row,
     'snapshot_metadata': row['snapshot_metadata'] == null ? null : jsonDecode(row['snapshot_metadata'] as String),
     'unknown_gaps': row['unknown_gaps'] == null ? null : jsonDecode(row['unknown_gaps'] as String),
-    'receipt_ids': [for (final link in _db.select('''
+    'receipt_ids': [
+      for (final link in _db.select(
+        '''
       SELECT r.receipt_id FROM memory_host_chat_delivery_receipts link
       JOIN memory_host_chat_receipts r ON r.id=link.receipt_id WHERE link.delivery_id=? ORDER BY r.receipt_id
-    ''', [row['id']])) link['receipt_id']],
+    ''',
+        [row['id']],
+      ))
+        link['receipt_id'],
+    ],
   };
 
   MemoryRow _hostReceiptData(CompanionChatUsageReceipt receipt) => {
-    'receiptId': receipt.receiptId, 'callId': receipt.callId, 'revision': receipt.revision,
-    'requestIds': receipt.requestIds, 'provider': receipt.provider, 'model': receipt.model,
-    'phase': receipt.phase, 'observation': receipt.observation, 'dispatched': receipt.dispatched,
-    'dispatchAtMs': receipt.dispatchAtMs, 'handoffAtMs': receipt.handoffAtMs,
-    'physicalRequests': receipt.physicalRequests, 'terminal': receipt.terminal, 'complete': receipt.complete,
-    'httpStatus': receipt.httpStatus, 'errorCode': receipt.errorCode,
+    'receiptId': receipt.receiptId,
+    'callId': receipt.callId,
+    'revision': receipt.revision,
+    'requestIds': receipt.requestIds,
+    'provider': receipt.provider,
+    'model': receipt.model,
+    'phase': receipt.phase,
+    'observation': receipt.observation,
+    'dispatched': receipt.dispatched,
+    'dispatchAtMs': receipt.dispatchAtMs,
+    'handoffAtMs': receipt.handoffAtMs,
+    'physicalRequests': receipt.physicalRequests,
+    'terminal': receipt.terminal,
+    'complete': receipt.complete,
+    'httpStatus': receipt.httpStatus,
+    'errorCode': receipt.errorCode,
     'usage': {
-      for (final key in const ['provider', 'model', 'start_usage', 'final_usage', 'start_event', 'final_event',
-        'usage_semantics', 'input_uncached', 'input_cache_read', 'input_cache_write', 'output_tokens',
-        'stop_reason', 'terminal', 'complete', 'http_status', 'runtime_normalized_usage',
-        'runtime_normalized_usage_semantics', 'host_adapter_handoff_at_ms', 'runtime_finish_kind', 'host_dispatch_at_ms'])
+      for (final key in const [
+        'provider',
+        'model',
+        'start_usage',
+        'final_usage',
+        'start_event',
+        'final_event',
+        'usage_semantics',
+        'input_uncached',
+        'input_cache_read',
+        'input_cache_write',
+        'output_tokens',
+        'stop_reason',
+        'terminal',
+        'complete',
+        'http_status',
+        'runtime_normalized_usage',
+        'runtime_normalized_usage_semantics',
+        'host_adapter_handoff_at_ms',
+        'runtime_finish_kind',
+        'host_dispatch_at_ms',
+      ])
         if (receipt.usage.containsKey(key)) key: receipt.usage[key],
     },
   };
@@ -1386,10 +1807,12 @@ class CompanionMemoryStore {
 
   List<MemoryRow> requests() {
     final rows = <MemoryRow>[
-      for (final row in _db.select('SELECT * FROM memory_requests')) {
-        ...row, 'origin': 'local',
-        'raw_usage': row['raw_usage'] == null ? null : jsonDecode(row['raw_usage'] as String),
-      },
+      for (final row in _db.select('SELECT * FROM memory_requests'))
+        {
+          ...row,
+          'origin': 'local',
+          'raw_usage': row['raw_usage'] == null ? null : jsonDecode(row['raw_usage'] as String),
+        },
       for (final row in _db.select('SELECT * FROM memory_host_chat_receipts')) _hostRequest(row),
     ];
     rows.sort((a, b) {
@@ -1405,24 +1828,62 @@ class CompanionMemoryStore {
     final usage = receipt['usage'] as Map<String, Object?>;
     final input = _usageCount(usage['input_uncached']), read = _usageCount(usage['input_cache_read']);
     final write = _usageCount(usage['input_cache_write']), output = _usageCount(usage['output_tokens']);
-    final cost = receipt['provider'] == 'deepseek' && receipt['model'] == 'deepseek-flash' &&
-        input != null && read != null && write == 0 && output != null ? _costUnits(input, read, output) : null;
+    final cost =
+        receipt['provider'] == 'deepseek' &&
+            receipt['model'] == 'deepseek-flash' &&
+            input != null &&
+            read != null &&
+            write == 0 &&
+            output != null
+        ? _costUnits(input, read, output)
+        : null;
     return {
-      'id': row['id'], 'origin': 'host-chat', 'category': 'chat', 'batch_id': null,
-      'provider': receipt['provider'], 'model': receipt['model'], 'host_key': row['host_key'],
-      'instance_id': row['instance_id'], 'receipt_id': row['receipt_id'], 'call_id': receipt['callId'],
-      'revision': row['revision'], 'phase': row['phase'], 'request_ids': receipt['requestIds'],
-      'delivery_ids': [for (final link in _db.select('SELECT delivery_id FROM memory_host_chat_delivery_receipts WHERE receipt_id=? ORDER BY delivery_id',
-        [row['id']])) link['delivery_id']],
-      'observed_at_ms': row['first_observed_at_ms'], 'updated_at_ms': row['updated_at_ms'],
-      'reserved_at_ms': null, 'reserved_input': null, 'reserved_output': null, 'reserved_cny': null,
-      'sent_at_ms': null, 'uncertain_at_ms': null, 'host_dispatch_at_ms': receipt['dispatchAtMs'],
-      'observation': receipt['observation'], 'dispatched': receipt['dispatched'],
-      'physical_requests': receipt['physicalRequests'], 'raw_usage': usage, 'usage_semantics': usage['usage_semantics'],
-      'input_uncached': input, 'input_cache_read': read, 'input_cache_write': write, 'output_tokens': output,
+      'id': row['id'],
+      'origin': 'host-chat',
+      'category': 'chat',
+      'batch_id': null,
+      'provider': receipt['provider'],
+      'model': receipt['model'],
+      'host_key': row['host_key'],
+      'instance_id': row['instance_id'],
+      'receipt_id': row['receipt_id'],
+      'call_id': receipt['callId'],
+      'revision': row['revision'],
+      'phase': row['phase'],
+      'request_ids': receipt['requestIds'],
+      'delivery_ids': [
+        for (final link in _db.select(
+          'SELECT delivery_id FROM memory_host_chat_delivery_receipts WHERE receipt_id=? ORDER BY delivery_id',
+          [row['id']],
+        ))
+          link['delivery_id'],
+      ],
+      'observed_at_ms': row['first_observed_at_ms'],
+      'updated_at_ms': row['updated_at_ms'],
+      'reserved_at_ms': null,
+      'reserved_input': null,
+      'reserved_output': null,
+      'reserved_cny': null,
+      'sent_at_ms': null,
+      'uncertain_at_ms': null,
+      'host_dispatch_at_ms': receipt['dispatchAtMs'],
+      'observation': receipt['observation'],
+      'dispatched': receipt['dispatched'],
+      'physical_requests': receipt['physicalRequests'],
+      'raw_usage': usage,
+      'usage_semantics': usage['usage_semantics'],
+      'input_uncached': input,
+      'input_cache_read': read,
+      'input_cache_write': write,
+      'output_tokens': output,
       'estimated_cny': cost == null ? null : cost / 100000000,
-      'state': row['phase'] == 'active' ? 'active' : receipt['dispatched'] == false ? 'not_sent' : 'finished',
-      'terminal': receipt['terminal'], 'complete': receipt['complete'],
+      'state': row['phase'] == 'active'
+          ? 'active'
+          : receipt['dispatched'] == false
+          ? 'not_sent'
+          : 'finished',
+      'terminal': receipt['terminal'],
+      'complete': receipt['complete'],
     };
   }
 
@@ -1432,8 +1893,12 @@ class CompanionMemoryStore {
     return rows.single;
   }
 
-  bool _allUsageKnown(Row row) => const ['input_uncached', 'input_cache_read', 'input_cache_write', 'output_tokens']
-      .every((key) => _usageCount(row[key]) != null);
+  bool _allUsageKnown(Row row) => const [
+    'input_uncached',
+    'input_cache_read',
+    'input_cache_write',
+    'output_tokens',
+  ].every((key) => _usageCount(row[key]) != null);
 
   int? _usageCount(Object? value) => value is int && value >= 0 && value <= 9007199254740991 ? value : null;
 
@@ -1456,19 +1921,27 @@ class CompanionMemoryStore {
     return bound;
   }
 
-  int _normalizedInput(Row row) => _normalizedBound(row,
-    const ['inputTokens', 'cacheReadTokens', 'cacheWriteTokens']) ?? 0;
+  int _normalizedInput(Row row) =>
+      _normalizedBound(row, const ['inputTokens', 'cacheReadTokens', 'cacheWriteTokens']) ?? 0;
 
   int _normalizedOutput(Row row) => _normalizedBound(row, const ['outputTokens']) ?? 0;
 
-  int _reportedInput(Row row) => (_usageCount(row['input_uncached']) ?? 0) +
-      (_usageCount(row['input_cache_read']) ?? 0) + (_usageCount(row['input_cache_write']) ?? 0);
+  int _reportedInput(Row row) =>
+      (_usageCount(row['input_uncached']) ?? 0) +
+      (_usageCount(row['input_cache_read']) ?? 0) +
+      (_usageCount(row['input_cache_write']) ?? 0);
 
-  int _heldInput(Row row) => math.max(_normalizedInput(row), _allUsageKnown(row) ? _reportedInput(row) :
-      math.max(row['reserved_input'] as int, _reportedInput(row)));
+  int _heldInput(Row row) => math.max(
+    _normalizedInput(row),
+    _allUsageKnown(row) ? _reportedInput(row) : math.max(row['reserved_input'] as int, _reportedInput(row)),
+  );
 
-  int _heldOutput(Row row) => math.max(_normalizedOutput(row), _allUsageKnown(row) ? row['output_tokens'] as int :
-      math.max(row['reserved_output'] as int, _usageCount(row['output_tokens']) ?? 0));
+  int _heldOutput(Row row) => math.max(
+    _normalizedOutput(row),
+    _allUsageKnown(row)
+        ? row['output_tokens'] as int
+        : math.max(row['reserved_output'] as int, _usageCount(row['output_tokens']) ?? 0),
+  );
 
   // Peak rates verified for this route: CNY 2 uncached input / .04 cache read /
   // 8 output per million. Integer 1e-8 CNY units avoid a floating boundary at 3.
@@ -1480,14 +1953,24 @@ class CompanionMemoryStore {
     // split; estimated_cny remains null when raw final fields are unknown.
     final normalized = _costUnits(_normalizedInput(row), 0, _normalizedOutput(row));
     if (_allUsageKnown(row) && row['input_cache_write'] == 0) {
-      return math.max(normalized,
-        _costUnits(row['input_uncached'] as int, row['input_cache_read'] as int, row['output_tokens'] as int));
+      return math.max(
+        normalized,
+        _costUnits(row['input_uncached'] as int, row['input_cache_read'] as int, row['output_tokens'] as int),
+      );
     }
     // A nonzero cache-write rate has not been verified. Keep the peak input
     // reservation and the known lower bound; estimated_cny remains unknown.
-    return math.max(normalized, math.max(_costUnits(row['reserved_input'] as int, 0, row['reserved_output'] as int),
-      _costUnits(_usageCount(row['input_uncached']) ?? 0, _usageCount(row['input_cache_read']) ?? 0,
-        _usageCount(row['output_tokens']) ?? 0)));
+    return math.max(
+      normalized,
+      math.max(
+        _costUnits(row['reserved_input'] as int, 0, row['reserved_output'] as int),
+        _costUnits(
+          _usageCount(row['input_uncached']) ?? 0,
+          _usageCount(row['input_cache_read']) ?? 0,
+          _usageCount(row['output_tokens']) ?? 0,
+        ),
+      ),
+    );
   }
 
   int _checkedNow() {
@@ -1510,8 +1993,7 @@ class CompanionMemoryStore {
       final id = memory.id.toLowerCase();
       final rows = _db.select('SELECT * FROM memory_cards WHERE id = ?', [id]);
       final previous = rows.isEmpty ? null : rows.single;
-      if ((previous == null && expectedRowRev != null) ||
-          (previous != null && previous['row_rev'] != expectedRowRev)) {
+      if ((previous == null && expectedRowRev != null) || (previous != null && previous['row_rev'] != expectedRowRev)) {
         throw _conflict;
       }
       final at = _now();
@@ -1520,18 +2002,23 @@ class CompanionMemoryStore {
       }
       final topic = previous?['topic_id'] ?? _createId();
       final changedText = previous == null || previous['text'] != memory.text;
-      final changedContext = previous == null || changedText || previous['kind'] != memory.kind ||
+      final changedContext =
+          previous == null ||
+          changedText ||
+          previous['kind'] != memory.kind ||
           previous['keywords'] != jsonEncode(memory.keywords) ||
           previous['expires_at_ms'] != memory.expiresAt?.millisecondsSinceEpoch;
       final basis = changedText && currentValueChange && realityKnown ? _sequence() : previous?['current_basis_seq'];
       final status = previous == null || (changedText && currentValueChange && realityKnown)
-          ? 'current' : previous['status'];
+          ? 'current'
+          : previous['status'];
       if (previous != null && changedText && currentValueChange && realityKnown) {
         _removeFactRelations({id}, retainTargetId: id);
       }
       if (previous == null) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
       final revision = previous == null ? 1 : (previous['row_rev'] as int) + 1;
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_cards(id, row_rev, kind, text, keywords, pinned, eligible, manual,
           topic_id, current_basis_seq, source_at_ms, created_at_ms, updated_at_ms, expires_at_ms, status)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1540,16 +2027,32 @@ class CompanionMemoryStore {
           eligible=excluded.eligible, manual=excluded.manual, current_basis_seq=excluded.current_basis_seq,
           source_at_ms=excluded.source_at_ms, updated_at_ms=excluded.updated_at_ms,
           expires_at_ms=excluded.expires_at_ms, status=excluded.status
-      ''', [id, revision, memory.kind, memory.text, jsonEncode(memory.keywords),
-        memory.pinned ? 1 : 0, changedText ? (realityKnown ? 1 : 0) : previous['eligible'],
-        changedText ? 1 : previous['manual'], topic, basis,
-        changedText ? at : previous['source_at_ms'], previous?['created_at_ms'] ?? at,
-        at, memory.expiresAt?.millisecondsSinceEpoch, status]);
+      ''',
+        [
+          id,
+          revision,
+          memory.kind,
+          memory.text,
+          jsonEncode(memory.keywords),
+          memory.pinned ? 1 : 0,
+          changedText ? (realityKnown ? 1 : 0) : previous['eligible'],
+          changedText ? 1 : previous['manual'],
+          topic,
+          basis,
+          changedText ? at : previous['source_at_ms'],
+          previous?['created_at_ms'] ?? at,
+          at,
+          memory.expiresAt?.millisecondsSinceEpoch,
+          status,
+        ],
+      );
       // An edit is its own manual basis; old quotes no longer prove the new wording.
       if (changedText) {
         _db.execute('DELETE FROM memory_card_sources WHERE card_id = ?', [id]);
-        _db.execute('UPDATE memory_cards SET event_time=NULL,followup=NULL,plan_state=CASE WHEN ? THEN NULL ELSE plan_state END WHERE id=?',
-          [currentValueChange && realityKnown ? 1 : 0, id]);
+        _db.execute(
+          'UPDATE memory_cards SET event_time=NULL,followup=NULL,plan_state=CASE WHEN ? THEN NULL ELSE plan_state END WHERE id=?',
+          [currentValueChange && realityKnown ? 1 : 0, id],
+        );
       }
       _bumpMemory();
       if (changedContext) _bumpControl();
@@ -1563,9 +2066,8 @@ class CompanionMemoryStore {
     return sequence;
   }
 
-  void _bumpMemory() => _db.execute(
-    'UPDATE memory_archive SET memory_revision = memory_revision + 1 WHERE singleton = 1',
-  );
+  void _bumpMemory() =>
+      _db.execute('UPDATE memory_archive SET memory_revision = memory_revision + 1 WHERE singleton = 1');
 
   T _transaction<T>(T Function() operation) {
     _db.execute('BEGIN IMMEDIATE');
@@ -1600,8 +2102,8 @@ final _wordCharacter = RegExp(r'[\p{L}\p{N}]', unicode: true);
 final _hanCharacter = RegExp(r'\p{Script=Han}', unicode: true);
 final _asciiWord = RegExp(r'[a-z0-9_]');
 
-bool _anchorWord(String word) => _wordCharacter.hasMatch(word) &&
-    (!_hanCharacter.hasMatch(word) || word.runes.length >= 2);
+bool _anchorWord(String word) =>
+    _wordCharacter.hasMatch(word) && (!_hanCharacter.hasMatch(word) || word.runes.length >= 2);
 
 bool _containsAnchor(String text, String word) {
   var start = 0;
@@ -1610,7 +2112,8 @@ bool _containsAnchor(String text, String word) {
     if (at < 0) return false;
     final end = at + word.length;
     if ((!_asciiWord.hasMatch(word[0]) || at == 0 || !_asciiWord.hasMatch(text[at - 1])) &&
-        (!_asciiWord.hasMatch(word[word.length - 1]) || end == text.length || !_asciiWord.hasMatch(text[end]))) return true;
+        (!_asciiWord.hasMatch(word[word.length - 1]) || end == text.length || !_asciiWord.hasMatch(text[end])))
+      return true;
     start = at + 1;
   }
   return false;
