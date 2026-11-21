@@ -279,6 +279,18 @@ test('the room tells the app the resolution that held: a step down at once, a st
   assert.deepEqual(reported(), [0.85], 'the step up has not held yet');
   frames(60000, 1000 / 30);
   assert.deepEqual(reported(), [0.85, 1]);
+  // That one held, so falling later costs no longer wait: back up after ten.
+  frames(4500, 60);
+  assert.deepEqual(reported(), [0.85, 1, 0.85]);
+  frames(11500, 1000 / 30);
+  assert.equal(s.canvas.width, 15);
+  // This one falls before it has held: the next try waits twenty.
+  frames(4500, 60);
+  assert.equal(s.canvas.width, 13);
+  frames(12000, 1000 / 30);
+  assert.equal(s.canvas.width, 13, 'twice as long this time');
+  frames(10000, 1000 / 30);
+  assert.equal(s.canvas.width, 15);
 });
 
 test('shaking the phone makes her dizzy once; a bump, a still hand and the float window do not', () => {

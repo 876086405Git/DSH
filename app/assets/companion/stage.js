@@ -1828,11 +1828,10 @@
   // slow but not that she keeps up: twelve frames are easy at any resolution.
   let easySecond = false;
   // Ten quiet seconds earn the next step up; a step up that turns slow again
-  // within a minute makes the next try wait twice as long (to five minutes), so
-  // a phone that only keeps up while she idles doesn't stutter every time she
+  // before it has held makes the next try wait twice as long (to five minutes),
+  // so a phone that only keeps up while she idles doesn't stutter every time she
   // moves just to find that out again.
   let upAfter = 10;
-  let steppedUpAt = -Infinity;
   // Flutter's full-screen blur over her (the log): she's barely seen, so drawn slowly.
   let covered = false;
   // Loading the model (texture upload, mipmaps) stalls a few frames; not the phone's pace.
@@ -1900,14 +1899,12 @@
             quality = Math.max(0.5, quality - 0.15);
             slowSeconds = 0;
             // Once per step up that didn't hold, however far it then falls.
-            if (ts - steppedUpAt < 60000) upAfter = Math.min(upAfter * 2, 300);
-            steppedUpAt = -Infinity;
+            if (holdSeconds > 0) upAfter = Math.min(upAfter * 2, 300);
             holdSeconds = 0;
             settled();
           } else if (quickSeconds >= upAfter && quality < 1) {
             quality = Math.min(1, quality + 0.15);
             quickSeconds = 0;
-            steppedUpAt = ts;
             holdSeconds = 60;
           } else if (holdSeconds > 0 && quickSeconds > 0 && --holdSeconds === 0) {
             settled();
