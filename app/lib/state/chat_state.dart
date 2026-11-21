@@ -463,6 +463,10 @@ class ChatController extends Notifier<ChatState> {
 
   final String sessionId;
   final ChatTranscript _transcript = ChatTranscript();
+  int? _usageTurn;
+  String? _usageAttempt;
+  void Function(UsageOutcome, {UsageOperation? actual})? _usageTurnEnd;
+  void Function(UsageOutcome, {UsageOperation? actual})? _usageFirstText;
   StreamSubscription<DshEvent>? _sub;
   StreamSubscription<DshConnectionState>? _states;
   Timer? _flush;
@@ -611,6 +615,7 @@ class ChatController extends Notifier<ChatState> {
       // Invalidation runs before a lazy rebuild replaces the still-mounted Ref.
       _modelChange = null;
       _listenOwner = Object();
+      _finishUsageTurn(UsageOutcome.unknown);
       _followEpoch?.retire();
       if (!_syncReady.isCompleted) _syncReady.complete(false);
       release?.cancel();
@@ -706,6 +711,7 @@ class ChatController extends Notifier<ChatState> {
   );
 
   void _markSyncing({SessionFollowEpoch? epoch, bool building = false}) {
+    _finishUsageTurn(UsageOutcome.unknown);
     _followEpoch?.retire();
     _followEpoch = epoch;
     _syncScope = Object();
@@ -843,6 +849,7 @@ class ChatController extends Notifier<ChatState> {
             pulse.observe(event, skew: _sameClock ? Duration.zero : _skew);
             _trackModel(event);
             _trackCommands(event);
+            _observeUsageTurn(event);
             _countTokens(event);
             final reconcile =
                 (event is InboxSplicedEvent && event.seq > _transcript.cursor) ||
@@ -1500,18 +1507,83 @@ class ChatController extends Notifier<ChatState> {
     if (ref.mounted) ref.read(usageStatsProvider.notifier).count(UsageCount.turns);
   }
 
+  void _finishUsageTurn(UsageOutcome outcome) {
+    _usageTurnEnd?.call(outcome);
+    _usageFirstText?.call(UsageOutcome.unknown);
+    _usageTurnEnd = null;
+    _usageFirstText = null;
+    _usageTurn = null;
+    _usageAttempt = null;
+  }
+
+  void _observeUsageTurn(DshEvent event) {
+    if (event is SessionLogEvent && event.seq <= _transcript.cursor) return;
+    switch (event) {
+      case TurnStartedEvent(:final turn):
+        if (_usageTurn == turn) return;
+        _finishUsageTurn(UsageOutcome.unknown);
+        final stats = ref.read(usageStatsProvider.notifier);
+        _usageTurnEnd = stats.beginOperation(_sameClock ? UsageOperation.chatTurnLocal : UsageOperation.chatTurnRemote);
+        if (_usageTurnEnd == null) return;
+        _usageTurn = turn;
+        _usageFirstText = stats.beginOperation(
+          _sameClock ? UsageOperation.chatFirstTextLocal : UsageOperation.chatFirstTextRemote,
+        );
+      case AssistantStreamStarted(:final turn, :final attemptId) when turn == _usageTurn:
+        _usageAttempt = attemptId;
+      case AssistantChunkEvent(attemptId: final id, chunk: TextDeltaChunk(:final text))
+          when id == _usageAttempt && text.trim().isNotEmpty:
+        _usageFirstText?.call(UsageOutcome.ready);
+        _usageFirstText = null;
+      case TurnEndedEvent(:final turn, :final reason) when turn == _usageTurn:
+        _finishUsageTurn(switch (reason.kind) {
+          'completed' => UsageOutcome.ready,
+          'aborted' => UsageOutcome.cancelled,
+          'error' || 'blocked' || 'max-tokens' => UsageOutcome.failed,
+          _ => UsageOutcome.unknown,
+        });
+      default:
+        break;
+    }
+  }
+
   /// A model call finished on the host: the tokens its provider reported go
   /// to the usage statistics. Only a new log record (after the cursor, before
   /// [Transcript.apply] moves it), never a snapshot's history, so a
   /// reconnect replays nothing twice. A call that reported no usage adds
   /// nothing.
   void _countTokens(DshEvent event) {
-    if (event is! AssistantMessageEvent || event.seq <= _transcript.cursor || !ref.mounted) return;
+    if (event is! SessionLogEvent || event.seq <= _transcript.cursor || !ref.mounted) return;
+    if (event is! AssistantMessageEvent && event is! AssistantAttemptEvent) return;
+    final stats = ref.read(usageStatsProvider.notifier);
+    if (stats.observesChatLogUsage) {
+      final partial = event is! AssistantMessageEvent || event.interrupted;
+      final raw = event.data['usage'];
+      final usage = raw is Map<String, Object?>
+          ? raw
+          : partial
+          ? _attemptUsage(event.data['stream'])
+          : null;
+      final reported = usage?['reported'];
+      stats.chatLogUsage(reported is Map<String, Object?> ? reported : usage, partial: partial, local: _sameClock);
+    }
+    if (event is! AssistantMessageEvent) return;
     final usage = event.usage;
     if (usage == null) return;
-    ref
-        .read(usageStatsProvider.notifier)
-        .tokens(usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0), usage.outputTokens);
+    stats.tokens(usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0), usage.outputTokens);
+  }
+
+  // Keep field presence: UsageChunk normalizes missing fields to zero for rendering.
+  Map<String, Object?>? _attemptUsage(Object? stream) {
+    if (stream is! List) return null;
+    for (final record in stream.reversed) {
+      if (record is! Map || record['type'] != 'chunk') continue;
+      final frame = record['chunk'];
+      if (frame is Map && frame['type'] == 'usage' && frame['usage'] is Map<String, Object?>) {
+        return frame['usage'] as Map<String, Object?>;
+      }
+    }
+    return null;
   }
 
   /// Retry the same text and attachment selections. Picking again is a new

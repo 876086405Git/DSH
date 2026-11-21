@@ -121,7 +121,16 @@ class TestWebPlatform extends FakeWebViewPlatform {
 class TestWebController extends FakeWebViewController {
   TestWebController(super.params);
   final requests = <LoadRequestParams>[];
+
+  /// Exchange pages, loaded as HTML at a base URL on the tunnel's origin.
+  final exchanges = <({String html, String? baseUrl})>[];
   TestWebDelegate get navigation => delegate! as TestWebDelegate;
+
+  @override
+  Future<void> loadHtmlString(String html, {String? baseUrl}) async {
+    exchanges.add((html: html, baseUrl: baseUrl));
+    await super.loadHtmlString(html, baseUrl: baseUrl);
+  }
 
   @override
   Future<void> loadRequest(LoadRequestParams params) async {

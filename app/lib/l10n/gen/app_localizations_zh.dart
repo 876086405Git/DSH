@@ -10248,6 +10248,25 @@ class L10nZh extends L10n {
   String get liveBlockedText => '在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）';
 
   @override
+  String get liveStop => '停止';
+
+  @override
+  String get liveStale => '暂停更新 · 打开 App 查看';
+
+  @override
+  String get liveIosSubtitle => '干活、等你处理时，在灵动岛和锁屏上显示宠物、进度和用时';
+
+  @override
+  String get liveIosFooter =>
+      '需要 iOS 16.2 及以上。有灵动岛的 iPhone 显示在岛上，其他机型只在锁屏上。锁屏上不显示对话标题。iOS 17 起可以在卡片上直接停止这一轮。App 被系统挂起后，卡片会标出「暂停更新」。';
+
+  @override
+  String get liveIosUnsupported => '需要 iOS 16.2 或更高版本';
+
+  @override
+  String get liveIosBlockedText => '在「设置」→「DSH Go」里打开「实时活动」';
+
+  @override
   String get localeTitle => '语言';
 
   @override
@@ -15493,7 +15512,7 @@ class L10nZh extends L10n {
   String get remoteDshAttached => '已连接既有 DSH';
 
   @override
-  String get remoteStartupSection => '启动';
+  String get remoteConnectionSettings => '连接设置';
 
   @override
   String get remoteAutoConnectOnStartup => '连接上次使用的主机';
@@ -16299,9 +16318,6 @@ class L10nZh extends L10n {
   String get remoteSshDirect => '不经过第三方服务器';
 
   @override
-  String get remoteOtherMethods => '其他方式';
-
-  @override
   String get remoteWebConsole => '网页版远程控制台';
 
   @override
@@ -16359,6 +16375,11 @@ class L10nZh extends L10n {
 
   @override
   String get remoteSwitchWarning => '一次只连一台主机，切换会断开上一台';
+
+  @override
+  String remoteHostOfflineHint(String name) {
+    return '「$name」现在不在线。在那台电脑上打开 DSH 后再试';
+  }
 
   @override
   String get remoteRefreshHosts => '刷新主机列表';
@@ -16967,9 +16988,6 @@ class L10nZh extends L10n {
   String get remoteNetworkIceProtocol => 'ICE 协议';
 
   @override
-  String get remoteTransferSettings => '远程传输';
-
-  @override
   String get remoteCompactHistory => '精简历史';
 
   @override
@@ -17172,13 +17190,13 @@ class L10nZh extends L10n {
   String get stateRemoteUploadTooLarge => '文件超过远程上传协议的大小上限';
 
   @override
-  String get remoteWebOpen => '打开 DSH Web';
-
-  @override
   String get remoteWebTitle => 'DSH Web';
 
   @override
   String get remoteWebOpening => '正在打开 DSH Web…';
+
+  @override
+  String get remoteWebFailed => '没能打开 DSH Web';
 
   @override
   String get remoteWebRefresh => '刷新首页';
@@ -17199,10 +17217,10 @@ class L10nZh extends L10n {
   String get remoteWebUnsafeUrl => '网页地址无法验证，已停止打开。请检查主机配置。';
 
   @override
-  String get remoteWebExchangeRejected => '访问验证失败，请返回后重新打开。';
+  String get remoteWebExchangeRejected => '访问验证没有通过，请重试。';
 
   @override
-  String get remoteWebSessionExpired => '网页连接已过期，请返回后重新打开。';
+  String get remoteWebSessionExpired => '网页连接已过期，请重试。';
 
   @override
   String get remoteWebPlatformUnavailable => '当前平台暂不支持此网页入口。请使用原生远程界面。';
@@ -19224,6 +19242,30 @@ class L10nZh extends L10n {
 
   @override
   String get starPromptPlea => '拜托你啦~ 这真的很重要！！';
+
+  @override
+  String get starPromptBody2 => '看来你挺喜欢这里嘛！点个 Star 只要几秒钟，却能让更多人发现 DSH Go，本鱼也会更有干劲！';
+
+  @override
+  String get starPromptPlea2 => '就差你这一颗星星啦~';
+
+  @override
+  String get starPromptBody3 => 'DSH Go 不收费、没有广告，全靠大家的 Star 让更多人看到。如果它帮到了你，就送本鱼一颗星星吧！';
+
+  @override
+  String get starPromptPlea3 => '本鱼眼巴巴地等着呢~';
+
+  @override
+  String get starPromptBody4 => '这么久了，本鱼一直都在。如果 DSH Go 已经成了你每天都会打开的 App，点个 Star 就是给作者最好的回礼。';
+
+  @override
+  String get starPromptPlea4 => '求求你啦，就点一下下~';
+
+  @override
+  String get starPromptBody5 => '这是本鱼最后一次问你啦。不管点不点，本鱼都会一直陪着你。要是愿意的话，点个 Star 让本鱼开心一下吧！';
+
+  @override
+  String get starPromptPlea5 => '最后一次，拜托啦！';
 
   @override
   String get starPromptStar => '去 GitHub 点 Star';
@@ -24837,10 +24879,20 @@ class L10nZh extends L10n {
   String get usageUpgradeNotice => '新增匿名使用统计，帮助改进 DSH Go。\n不含对话和个人信息';
 
   @override
+  String get usageV4Welcome => '按日汇总使用和模型用量，不含对话。可随时关闭。';
+
+  @override
+  String get usageV4Notice => '匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。';
+
+  @override
   String get usageUpgradeLearn => '了解';
 
   @override
   String get usageUpgradeOff => '关闭';
+
+  @override
+  String get usageStatsAndroidFooter =>
+      '这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。 Android 还按日汇总前台及首次参与统计、启动和远程连接结果与耗时区间，以及模型用量、插件执行、引导和系统确认的异常退出。关闭会清空未上报的数据。';
 
   @override
   String viewArtifactSaved(String value) {

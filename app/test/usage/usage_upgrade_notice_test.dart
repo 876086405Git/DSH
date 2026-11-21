@@ -1,9 +1,9 @@
 // Installs from before usage statistics: the first time they reach the home,
-// one toast says so (了解 → 设置 › 隐私与分享, 关闭 → off), and only from then
-// on is anything counted. Once only; never during first run; never over
-// another page; 关闭 means not one request. Goldens light and dark, and the
-// toast measured: as far from either screen edge, the text 16 in on the
-// left, the last key's label 16 in on the right.
+// one toast says so (了解 → 设置 › 隐私与分享, 关闭 → off). Counting is on by
+// default; the toast only tells. Once only; never during first run; never over
+// another page; 关闭 means not one request on this phone. Goldens light and
+// dark, and the toast measured: as far from either screen edge, the text 16 in
+// on the left, the last key's label 16 in on the right.
 //
 //   flutter test --update-goldens test/usage/usage_upgrade_notice_test.dart
 
@@ -167,15 +167,17 @@ void main() {
     expect(find.byKey(_notice), findsNothing);
   });
 
-  testWidgets('counting starts when it shows, not before', (tester) async {
+  testWidgets('counting is on from the start; the toast only tells', (tester) async {
     await _pumpHome(tester);
     final usage = _container(tester).read(usageStatsProvider.notifier);
     usage.count(UsageCount.turns);
     usage.count(UsageCount.turns);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     await tester.pump();
-    expect((await _stored(tester)).containsKey(UsageStatsController.daysKey), isFalse);
+    expect((await _stored(tester)).containsKey(UsageStatsController.daysKey), isTrue);
 
     await _wait(tester);
+    expect(find.text(appL10n.usageUpgradeNotice), findsOneWidget);
     usage.count(UsageCount.turns);
     await tester.pump();
     now = DateTime(2026, 10, 31, 9);
@@ -183,7 +185,11 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     await tester.pump();
     expect(http.days, ['2026-10-30']);
-    expect((http.requests.single['counts']! as Map)['turns'], 1, reason: 'only what came after the toast');
+    expect(
+      (http.requests.single['counts']! as Map)['turns'],
+      3,
+      reason: 'the toast does not decide when counting starts',
+    );
   });
 
   testWidgets('关闭: off at once, nothing kept, and not one request after', (tester) async {

@@ -96,15 +96,15 @@
  	const blocks = /* @__PURE__ */ new Map();
  	const usage = {
  		inputTokens: 0,
-@@ -1955,6 +1955,7 @@
+@@ -1974,6 +1974,7 @@
  		if (event.type === "message_start") {
  			if (started) return malformed("duplicate message_start");
  			companionAuxiliaryUsage(auxiliary, "message_start", object(event.message).usage);
 +			companionChatUsage(chat, "message_start", object(event.message).usage);
- 			updateUsage(usage, object(event.message).usage);
- 			started = true;
- 			continue;
-@@ -2009,15 +2010,19 @@
+ 			if (object(event.message).usage !== void 0) {
+ 				recordUsage(object(event.message).usage, false);
+ 				yield usageChunk(false);
+@@ -2031,9 +2032,11 @@
  			const delta = object(event.delta);
  			if (delta.stop_reason != null) {
  				auxiliary?.observer.observe({ type: "stop", stopReason: delta.stop_reason });
@@ -113,9 +113,10 @@
  			}
  			companionAuxiliaryUsage(auxiliary, "message_delta", event.usage);
 +			companionChatUsage(chat, "message_delta", event.usage);
- 			if (event.usage !== void 0) updateUsage(usage, event.usage);
- 		} else {
- 			if (reason === void 0 || [...blocks.values()].some((block) => !block.closed)) return malformed("message_stop without settled blocks and stop reason");
+ 			if (event.usage !== void 0) {
+ 				recordUsage(event.usage, true);
+ 				yield usageChunk(false);
+@@ -2043,6 +2046,8 @@
  			// A well-formed message_stop is a complete transport even when the
  			// proposal is empty and the normal chat adapter rejects that content.
  			auxiliary?.observer.observe({ type: "complete" });
@@ -124,7 +125,7 @@
  			if (blocks.size === 0 && reason.kind === "stop") throw new LlmError("DeepSeek Messages returned no content", "EMPTY_RESPONSE");
  			if (reason.kind !== "max-tokens") for (const { content } of blocks.values()) {
  				if (content.type !== "tool-call") continue;
-@@ -2126,10 +2131,22 @@
+@@ -2147,10 +2152,22 @@
  		type: "usage", event, semantics: "cumulative", raw: structuredClone(raw)
  	});
  }
@@ -147,7 +148,7 @@
  	dependencies;
  	files;
  	imageAccess = (ref) => {
-@@ -2227,6 +2244,7 @@
+@@ -2248,6 +2265,7 @@
  		}
  	}
  	async *request(options, connection, signal, activity, auxiliary) {
@@ -155,7 +156,7 @@
  		signal.throwIfAborted();
  		const { messages, versions } = await prepareImages(options.messages, connection, options.model, this.dependencies.resolveAttachments?.(), this.imageAccess, signal);
  		const auth = await this.dependencies.resolveAuth(connection);
-@@ -2279,42 +2297,55 @@
+@@ -2300,42 +2318,55 @@
  				await dshGoRecall.beforeFetch(options);
  				signal.throwIfAborted();
  				dshGoRecall.guardFetch(options);
@@ -174,6 +175,21 @@
 -						"x-deepseek-harness-user-id": this.dependencies.resolveUserId(),
 -						...options.sessionId === void 0 ? {} : { "x-deepseek-harness-session-id": String(options.sessionId) },
 -						...requestIdentity.purpose === "compaction" ? { "x-deepseek-harness-compact": "1" } : {}
+-					}
+-				});
+-				auxiliary?.observer.observe({ type: "http", status: response.status });
+-				if (!response.ok) {
+-					const text = await response.text();
+-					let raw;
+-					try {
+-						raw = JSON.parse(text);
+-					} catch (_nonJsonGatewayError) {}
+-					const detail = providerErrorDetail(raw);
+-					if (auxiliary === void 0 && await files.retry(detail)) continue;
+-					const failure = providerError(raw, response.status, response.headers);
+-					throw new LlmError(files.errorMessage(response.status, failure.message, detail), failure.code, {
+-						...failure.failure,
+-						cause: new Error(text)
 +				const physical = { observer: void 0 };
 +				let observationError;
 +				try {
@@ -193,7 +209,7 @@
 +							...options.sessionId === void 0 ? {} : { "x-deepseek-harness-session-id": String(options.sessionId) },
 +							...requestIdentity.purpose === "compaction" ? { "x-deepseek-harness-compact": "1" } : {}
 +						}
-+					});
+ 					});
 +					auxiliary?.observer.observe({ type: "http", status: response.status });
 +					dshGoRecall.chatObserve(physical.observer, "observe", { type: "http", status: response.status });
 +					if (!response.ok) {
@@ -209,22 +225,7 @@
 +							...failure.failure,
 +							cause: new Error(text)
 +						});
- 					}
--				});
--				auxiliary?.observer.observe({ type: "http", status: response.status });
--				if (!response.ok) {
--					const text = await response.text();
--					let raw;
--					try {
--						raw = JSON.parse(text);
--					} catch (_nonJsonGatewayError) {}
--					const detail = providerErrorDetail(raw);
--					if (auxiliary === void 0 && await files.retry(detail)) continue;
--					const failure = providerError(raw, response.status, response.headers);
--					throw new LlmError(files.errorMessage(response.status, failure.message, detail), failure.code, {
--						...failure.failure,
--						cause: new Error(text)
--					});
++					}
 +					await extensions.accept();
 +					if (response.body === null) throw new LlmError("DeepSeek Messages returned no response body", "EMPTY_RESPONSE");
 +					yield* translate(parseSse(response.body, activity), options.model, auxiliary, physical.observer);

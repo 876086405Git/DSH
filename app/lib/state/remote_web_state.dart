@@ -3,10 +3,29 @@ import 'dart:async';
 import 'package:dsh_remote/dsh_remote.dart' show DshConnectionState, RemoteHostSession, RemoteTunnelCarrier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'connection_state.dart' show HostConnection;
 import 'read_list_identity.dart';
 
-/// Each Noise session already holds its fresh harness.transport.describe.
-/// Observe session replacement, not the carrier's cached capabilities.
+/// [connection]'s live Noise session, when it can open the Host's DSH Web
+/// (`dsh.web.v1`, from that session's own fresh harness.transport.describe).
+/// Readable at once: a tap that nothing watched before must not wait for
+/// [remoteWebSessionProvider]'s first event.
+RemoteHostSession? liveDshWebSession(HostConnection? connection) {
+  if (!isLiveTunnel(connection)) return null;
+  final session = (connection!.client.carrier as RemoteTunnelCarrier).session;
+  return session != null && !session.isClosed && session.capabilities.contains('dsh.web.v1') ? session : null;
+}
+
+/// [connection] is a DSH Remote tunnel, connected right now.
+bool isLiveTunnel(HostConnection? connection) {
+  final carrier = connection?.client.carrier;
+  return carrier is RemoteTunnelCarrier &&
+      (carrier.state?.isConnected ?? connection!.client.mux.state == DshConnectionState.connected);
+}
+
+/// [liveDshWebSession] as it changes. Each Noise session already holds its
+/// fresh harness.transport.describe: observe session replacement, not the
+/// carrier's cached capabilities.
 final remoteWebSessionProvider = StreamProvider.autoDispose<RemoteHostSession?>((ref) {
   final connection = ref.watch(readListLiveConnectionProvider);
   final carrier = connection?.client.carrier;
@@ -27,12 +46,7 @@ final remoteWebSessionProvider = StreamProvider.autoDispose<RemoteHostSession?>(
           );
         }
       }
-      final connected = carrier.state?.isConnected ?? connection!.client.mux.state == DshConnectionState.connected;
-      output.addSync(
-        connected && session != null && !session.isClosed && session.capabilities.contains('dsh.web.v1')
-            ? session
-            : null,
-      );
+      output.addSync(liveDshWebSession(connection));
     }
 
     final sessions = carrier.sessions.listen((_) => sample());

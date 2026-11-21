@@ -274,6 +274,12 @@ Future<void> _withScreen(WidgetTester tester, Future<void> Function(_Fixture fix
       ),
     );
     await _frames(tester);
+    // The page re-reads the account's hosts when it opens: let that request
+    // finish before the test talks to the server (its reply lands on a pump).
+    for (var i = 0; i < 100 && (fixture.container.read(relayAccountProvider).value?.refreshing ?? false); i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
     await body(fixture);
   } finally {
     try {

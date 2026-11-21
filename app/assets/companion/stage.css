@@ -1,6 +1,8 @@
 /* 伙伴小屋's scene. Everything here is either static or a composited transform,
-   so the water costs almost nothing next to the model. Colours follow the hour
-   (`data-tod` on <html>, set by stage.js). */
+   so the water costs almost nothing next to the model. Nothing animates on a
+   clock of its own: stage.js moves the shafts and the whale on the frames it
+   draws anyway (`water`). Colours follow the hour (`data-tod` on <html>, set by
+   stage.js). */
 
 :root {
   --top: #8fd3e6;
@@ -170,18 +172,13 @@ body {
   background: linear-gradient(180deg, rgba(var(--shaft), var(--shaft-strength)) 0%, rgba(var(--shaft), 0) 92%);
   filter: blur(9px);
   will-change: transform, opacity;
-  animation: shaft 19s ease-in-out infinite alternate;
 }
 
-.shafts i:nth-child(1) { left: 24%; width: 9vw; --tilt: 13deg; animation-duration: 21s; }
-.shafts i:nth-child(2) { left: 39%; width: 15vw; --tilt: 6deg; animation-duration: 27s; animation-delay: -9s; }
-.shafts i:nth-child(3) { left: 55%; width: 7vw; --tilt: -3deg; animation-duration: 17s; animation-delay: -4s; }
-.shafts i:nth-child(4) { left: 68%; width: 12vw; --tilt: -11deg; animation-duration: 24s; animation-delay: -15s; }
-
-@keyframes shaft {
-  from { transform: rotate(calc(var(--tilt) - 1.6deg)); opacity: 0.55; }
-  to { transform: rotate(calc(var(--tilt) + 1.6deg)); opacity: 1; }
-}
+/* Their tilt and sway are stage.js's SHAFTS, in this order. */
+.shafts i:nth-child(1) { left: 24%; width: 9vw; }
+.shafts i:nth-child(2) { left: 39%; width: 15vw; }
+.shafts i:nth-child(3) { left: 55%; width: 7vw; }
+.shafts i:nth-child(4) { left: 68%; width: 12vw; }
 
 /* A whale far off, passing now and then. */
 .whale {
@@ -194,16 +191,6 @@ body {
   opacity: 0;
   filter: blur(1px);
   will-change: transform, opacity;
-  animation: whale 74s linear infinite;
-  animation-delay: -38s;
-}
-
-@keyframes whale {
-  0% { transform: translate3d(-24vw, 16px, 0); opacity: 0; }
-  4% { opacity: 0.5; }
-  46% { opacity: 0.5; }
-  50% { transform: translate3d(120vw, -22px, 0); opacity: 0; }
-  100% { transform: translate3d(120vw, -22px, 0); opacity: 0; }
 }
 
 .reef {
@@ -335,25 +322,26 @@ html[data-ready='1'] #stage {
     linear-gradient(0deg, rgba(var(--vignette), 0.58) 0, rgba(var(--vignette), 0) 34%);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .shafts i,
-  .whale {
-    animation: none;
-  }
-}
-
-html[data-motion='reduced'] .shafts i,
-html[data-motion='reduced'] .whale {
-  animation: none;
-}
-
 html[data-motion='reduced'] #stage {
   transition: none;
 }
 
-html[data-paused='1'] .shafts i,
-html[data-paused='1'] .whale {
-  animation-play-state: paused;
+/* A small GPU budget (iPhones with 3 GB or less, companion_stage.dart; set in
+   the HTML before the first paint): no blur or blend layers, which WebKit backs
+   with surfaces the size of the screen. The shafts keep soft edges from their
+   own gradient instead of a blur. */
+html[data-gpu-budget='low'] .shafts {
+  mix-blend-mode: normal;
+}
+
+html[data-gpu-budget='low'] .shafts i {
+  filter: none;
+  background: radial-gradient(50% 100% at 50% 0, rgba(var(--shaft), var(--shaft-strength)) 0%, rgba(var(--shaft), 0) 92%);
+}
+
+html[data-gpu-budget='low'] .whale,
+html[data-gpu-budget='low'] .reef {
+  filter: none;
 }
 
 /* A bare stage (bare.js): only the model, the page behind it showing through.

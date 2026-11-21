@@ -112,6 +112,10 @@
 			isa = PBXBuildFile;
 			fileRef = D55100000000000000000001;
 		};
+		D55300000000000000000011 /* LiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55300000000000000000001 /* LiveActivityShared.swift */; };
+		D55300000000000000000012 /* LiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55300000000000000000001 /* LiveActivityShared.swift */; };
+		D55300000000000000000013 /* LiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55300000000000000000002 /* LiveActivityWidget.swift */; };
+		D55300000000000000000014 /* IOSLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55300000000000000000003 /* IOSLiveActivity.swift */; };
 		D55100000000000000000015 /* PBXBuildFile */ = {
 			isa = PBXBuildFile;
 			fileRef = D55100000000000000000004;
@@ -310,6 +314,9 @@
 			lastKnownFileType = text.xcconfig;
 			sourceTree = "<group>";
 		};
+		D55300000000000000000001 /* LiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityShared.swift; sourceTree = "<group>"; };
+		D55300000000000000000002 /* LiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityWidget.swift; sourceTree = "<group>"; };
+		D55300000000000000000003 /* IOSLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSLiveActivity.swift; sourceTree = "<group>"; };
 		D55200000000000000000001 /* ShareExtension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ShareExtension.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -418,6 +425,7 @@
 			isa = PBXGroup;
 			children = (
 				D55100000000000000000003,
+				D55300000000000000000003 /* IOSLiveActivity.swift */,
 				A08400000000000000000001 /* UnicodeData-LICENSE.txt */,
 				D55000000000000000000300 /* IOSPhonePairingStore.swift */,
 				D55000000000000000000302 /* IOSPhoneDDI.swift */,
@@ -501,6 +509,8 @@
 				D55100000000000000000007,
 				D55100000000000000000001,
 				D55100000000000000000002,
+				D55300000000000000000001 /* LiveActivityShared.swift */,
+				D55300000000000000000002 /* LiveActivityWidget.swift */,
 				D55100000000000000000005,
 				D55100000000000000000006,
 			);
@@ -795,6 +805,8 @@
 			files = (
 				D55100000000000000000013,
 				D55100000000000000000011,
+				D55300000000000000000011 /* LiveActivityShared.swift in Sources */,
+				D55300000000000000000014 /* IOSLiveActivity.swift in Sources */,
 				D55000000000000000000301 /* IOSPhonePairingStore.swift in Sources */,
 				D55000000000000000000303 /* IOSPhoneDDI.swift in Sources */,
 				D55000000000000000000305 /* IOSPhoneCoreDevice.swift in Sources */,
@@ -863,6 +875,8 @@
 			files = (
 				D55100000000000000000012,
 				D55100000000000000000014,
+				D55300000000000000000012 /* LiveActivityShared.swift in Sources */,
+				D55300000000000000000013 /* LiveActivityWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

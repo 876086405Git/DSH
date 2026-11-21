@@ -227,7 +227,7 @@ void main() {
     final line = lineRect(tester);
     // Card → 8 → the line → the section margin (24) → the next section's title.
     expect(line.top - tester.getRect(card('登录 DSH Remote')).bottom, closeTo(8, 0.01));
-    expect(tester.getRect(find.text('远程传输')).top - line.bottom, closeTo(24, 0.01));
+    expect(tester.getRect(find.text('SSH 主机')).top - line.bottom, closeTo(24, 0.01));
   });
 
   testWidgets('signing in still opens the sign-in page, not the project', (tester) async {

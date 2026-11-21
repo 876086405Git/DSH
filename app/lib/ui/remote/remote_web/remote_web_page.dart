@@ -9,7 +9,8 @@ import 'package:dsh_remote/dsh_remote.dart'
         RemoteDshWebGrant,
         RemoteHostSession,
         RemoteRpcException,
-        RemoteTunnelCarrier;
+        RemoteTunnelCarrier,
+        defaultDshWebTunnelDomains;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -18,33 +19,63 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../../../l10n/l10n.dart';
 import '../../../state/android_features.dart';
 import '../../../state/read_list_identity.dart';
+import '../../common/empty_view.dart';
 import '../../plugins/islands/island_platform.dart';
 import '../../shell/page_frame.dart';
 import '../../theme/app_icons.dart';
 import '../../web/web_view_guard.dart';
 import 'remote_web_error.dart';
 
-/// One page, one original Noise session, one lease. No external browser or
-/// credential injection. Current plugin APIs lack isolated profiles/data stores;
-/// independent tunnel origins are NOT full storage isolation. Never clear the
-/// app-wide cookie or local-storage store, which also holds ordinary logins.
-class RemoteWebPage extends ConsumerStatefulWidget {
+/// A DSH Remote Host's DSH Web through the Remote tunnel: what 网页版 opens
+/// (dsh_web_launcher.dart) while the active host is a DSH Remote host.
+///
+/// One open, one original Noise session, one lease. No external browser,
+/// JavaScript bridge or credential injection: the tunnel's TLS ends at the
+/// Remote Server's Worker, so the page gets none of the app's native hooks.
+/// Current plugin APIs lack isolated profiles/data stores; independent tunnel
+/// origins are NOT full storage isolation. Never clear the app-wide cookie or
+/// local-storage store, which also holds ordinary logins.
+class RemoteWebPage extends StatefulWidget {
   const RemoteWebPage({
     super.key,
     required this.carrier,
     required this.session,
-    this.trustedTunnelDomains = const {'hostc.4ba.io'},
+    this.trustedTunnelDomains = defaultDshWebTunnelDomains,
+    this.leading,
   });
 
   final RemoteTunnelCarrier carrier;
   final RemoteHostSession session;
   final Set<String> trustedTunnelDomains;
 
+  /// 网页模式: the native handle, in the back button's seat (the page is the
+  /// app's home).
+  final Widget? leading;
+
   @override
-  ConsumerState<RemoteWebPage> createState() => _RemoteWebPageState();
+  State<RemoteWebPage> createState() => _RemoteWebPageState();
 }
 
-class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
+class _RemoteWebPageState extends State<RemoteWebPage> {
+  /// 重试 opens anew: a new view and lease, after the old lease's close.
+  int _attempt = 0;
+
+  @override
+  Widget build(BuildContext context) =>
+      _RemoteWebView(key: ValueKey(_attempt), page: widget, onRetry: () => setState(() => _attempt++));
+}
+
+class _RemoteWebView extends ConsumerStatefulWidget {
+  const _RemoteWebView({super.key, required this.page, required this.onRetry});
+
+  final RemoteWebPage page;
+  final VoidCallback onRetry;
+
+  @override
+  ConsumerState<_RemoteWebView> createState() => _RemoteWebViewState();
+}
+
+class _RemoteWebViewState extends ConsumerState<_RemoteWebView> {
   late final RemoteDshWeb _web;
   late final WebViewGuard _guard;
   StreamSubscription<RemoteConnectionState>? _states;
@@ -56,24 +87,30 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
   bool _ended = false;
   bool _ready = false;
   String? _errorCode;
+
+  /// The session was still live when the page failed: 重试 can open again.
+  bool _canRetry = false;
   Future<void>? _closing;
   Timer? _exchangeDeadline;
+
+  RemoteTunnelCarrier get _carrier => widget.page.carrier;
+  RemoteHostSession get _session => widget.page.session;
 
   @override
   void initState() {
     super.initState();
-    _web = RemoteDshWeb(widget.session, trustedTunnelDomains: widget.trustedTunnelDomains);
+    _web = RemoteDshWeb(_session, trustedTunnelDomains: widget.page.trustedTunnelDomains);
     _guard = WebViewGuard(onGone: (_) => _end('WEB_RENDERER_GONE'));
     ref.listenManual(readListLiveConnectionProvider, (_, next) {
-      if (!identical(next?.client.carrier, widget.carrier)) _end('CONNECTION_NOT_FOUND');
+      if (!identical(next?.client.carrier, _carrier)) _end('CONNECTION_NOT_FOUND');
     });
-    _states = widget.carrier.states.listen((state) {
+    _states = _carrier.states.listen((state) {
       if (!state.isConnected) _end('CONNECTION_NOT_FOUND');
     });
-    _sessions = widget.carrier.sessions.listen((session) {
-      if (!identical(session, widget.session)) _end('CONNECTION_NOT_FOUND');
+    _sessions = _carrier.sessions.listen((session) {
+      if (!identical(session, _session)) _end('CONNECTION_NOT_FOUND');
     });
-    unawaited(widget.session.rpc.done.then((_) => _end('CONNECTION_NOT_FOUND')));
+    unawaited(_session.rpc.done.then((_) => _end('CONNECTION_NOT_FOUND')));
   }
 
   @override
@@ -84,14 +121,16 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
     unawaited(_start(Theme.of(context).brightness == Brightness.dark));
   }
 
-  bool get _current {
+  /// The Noise session this page opened on is still the live one.
+  bool get _live {
     final connection = ref.read(readListLiveConnectionProvider);
-    return !_ended &&
-        identical(connection?.client.carrier, widget.carrier) &&
-        identical(widget.carrier.session, widget.session) &&
-        !widget.session.isClosed &&
-        (widget.carrier.state?.isConnected ?? connection?.client.mux.state == DshConnectionState.connected);
+    return identical(connection?.client.carrier, _carrier) &&
+        identical(_carrier.session, _session) &&
+        !_session.isClosed &&
+        (_carrier.state?.isConnected ?? connection?.client.mux.state == DshConnectionState.connected);
   }
+
+  bool get _current => !_ended && _live;
 
   Future<void> _start(bool dark) async {
     RemoteDshWebGrant? grant;
@@ -112,12 +151,13 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
       await controller.setNavigationDelegate(
         NavigationDelegate(
-          onNavigationRequest: (request) =>
-              _allows(request.url) ? NavigationDecision.navigate : NavigationDecision.prevent,
+          onNavigationRequest: (request) => _allows(request.url) || _isExchangePage(request.url)
+              ? NavigationDecision.navigate
+              : NavigationDecision.prevent,
           onPageStarted: (url) {
             // Android skips shouldOverrideUrlLoading for some POST navigation.
             // Stop unexpected documents too; never log their URL or body.
-            if (!_allows(url)) _end('UNSAFE_WEB_NAVIGATION');
+            if (!_allows(url) && !_isExchangePage(url)) _end('UNSAFE_WEB_NAVIGATION');
           },
           onPageFinished: (url) {
             if (!mounted || _ended) return;
@@ -165,20 +205,11 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
         return;
       }
       _root = grant.url;
-      final body = grant.takePostBody();
+      final page = grant.takeExchangePage();
       _exchangeDeadline = Timer(const Duration(seconds: 30), () => _end('WEB_LOAD_FAILED'));
-      try {
-        // Android: native postUrl, ignoring headers. iOS: WKWebView URLRequest
-        // with form Content-Type. Cookie reception and 303 stay in this view.
-        await controller.loadRequest(
-          grant.exchangeUrl,
-          method: LoadRequestMethod.post,
-          headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-          body: body,
-        );
-      } finally {
-        body.fillRange(0, body.length, 0);
-      }
+      // The form posts the grant from the tunnel's own origin; this WebView
+      // takes the session cookie and follows the 303 to `/`.
+      await controller.loadHtmlString(page, baseUrl: grant.exchangeBase.toString());
       if (!mounted || _ended) return;
       setState(() {});
     } on Object catch (error) {
@@ -218,6 +249,12 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
     return uri != null && uri.scheme == 'https' && uri.userInfo.isEmpty && !uri.hasPort && uri.origin == _root!.origin;
   }
 
+  /// The exchange page itself, until the tunnel answers: loaded with the
+  /// tunnel as its base URL, which Android reports as about:blank (or its
+  /// data: URL).
+  bool _isExchangePage(String url) =>
+      !_ended && !_ready && _root != null && (url == 'about:blank' || url.startsWith('data:'));
+
   Future<void> _closeLease() {
     if (!_openRequested) return Future.value();
     return _closing ??= () async {
@@ -242,7 +279,19 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
   }
 
   void _end(String code) {
-    if (!mounted || _ended) return;
+    if (!mounted) return;
+    if (_ended) {
+      // Failed while the session was live, which has since gone: 重试 would
+      // fail at once; say to reconnect instead.
+      if (_canRetry && !_live) {
+        setState(() {
+          _canRetry = false;
+          _errorCode = 'CONNECTION_NOT_FOUND';
+        });
+      }
+      return;
+    }
+    _canRetry = _live && code != 'WEB_PLATFORM_UNAVAILABLE';
     _ended = true;
     _exchangeDeadline?.cancel();
     _errorCode = code;
@@ -257,7 +306,7 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
     final root = _root;
     if (!_ready || controller == null || root == null || !_current) return;
     try {
-      // Never reload(): history may still contain the single-use form POST.
+      // Never reload(): history may still hold the exchange page.
       await controller.loadRequest(root);
     } on Object {
       _end('WEB_LOAD_FAILED');
@@ -290,6 +339,7 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
         title: l10n.remoteWebTitle,
         showLargeTitle: false,
         padBottom: false,
+        leading: widget.page.leading,
         actions: [
           GlassIconButton(
             icon: AppIcons.refresh,
@@ -299,13 +349,20 @@ class _RemoteWebPageState extends ConsumerState<RemoteWebPage> {
         ],
         slivers: [
           SliverFillRemaining(
+            hasScrollBody: _errorCode == null,
             child: SafeArea(
               top: false,
               child: _errorCode != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(remoteWebErrorText(l10n, _errorCode!), textAlign: TextAlign.center),
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      child: Center(
+                        child: EmptyView(
+                          icon: AppIcons.webApp,
+                          title: l10n.remoteWebFailed,
+                          message: remoteWebErrorText(l10n, _errorCode!),
+                          actionLabel: _canRetry ? l10n.commonRetry : null,
+                          onAction: _canRetry ? widget.onRetry : null,
+                        ),
                       ),
                     )
                   : Stack(

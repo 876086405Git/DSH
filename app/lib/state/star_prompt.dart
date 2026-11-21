@@ -1,7 +1,8 @@
 // The star prompt (docs/design/star-prompt.md): after half an hour with the
 // app in front, the whale girl asks for a star on GitHub, in a dialog, when
-// the person is idle in the chat; 「下次再说」 asks once more five hours of use
-// later, and that is all.
+// the person is idle in the chat; 「下次再说」 asks again at 2, 5, 10 and 20
+// hours of use, each time in other words (the last says it is the last), and
+// that is all.
 //
 // Off unless the build says `--dart-define=DSH_STAR_PROMPT=true`: off, nothing
 // here runs (no counting, no preferences). What is kept on the phone, in one
@@ -37,14 +38,22 @@ final starProjectPage = Uri.https('github.com', '/$updateRepo');
 
 /// The numbers behind the prompt, with their reasons in the design note.
 abstract final class StarPromptRules {
-  /// Time in front before the first ask.
-  static const firstAsk = Duration(minutes: 30);
+  /// The time in front at which each ask comes (after 「下次再说」 or back for
+  /// the ones before it); each has its own words, the last says it is the last.
+  static const asks = [
+    Duration(minutes: 30),
+    Duration(hours: 2),
+    Duration(hours: 5),
+    Duration(hours: 10),
+    Duration(hours: 20),
+  ];
 
-  /// After 「下次再说」 (or back): this much more time in front before the second.
-  static const again = Duration(hours: 5);
+  /// At least this much more time in front after an ask before the next: one
+  /// that came up late doesn't bring the next right after it.
+  static const gap = Duration(hours: 1);
 
   /// Asked this often at most, ever.
-  static const maxShows = 2;
+  static int get maxShows => asks.length;
 
   /// How often time in front is written down (and the prompt looks again).
   static const tick = Duration(minutes: 1);
@@ -76,8 +85,12 @@ class StarPromptRecord {
   /// The time in front at which it asks next; null: never again.
   Duration? get nextAt {
     if (finished || shows >= StarPromptRules.maxShows) return null;
-    if (shows == 0) return StarPromptRules.firstAsk;
-    return (askedAt ?? Duration.zero) + StarPromptRules.again;
+    final at = StarPromptRules.asks[shows];
+    final soonest = switch (askedAt) {
+      final asked? => asked + StarPromptRules.gap,
+      null => Duration.zero,
+    };
+    return at > soonest ? at : soonest;
   }
 
   bool get due => switch (nextAt) {

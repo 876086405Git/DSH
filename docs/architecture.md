@@ -328,7 +328,7 @@ DshConnection      单个 Host 的物理连接：launch-token → cookie、Host 
 Remote 一次只连一台主机，跨主机复制采用先备份、再切换恢复，不另建第二套设备身份。
 
 Remote WebUI 通过 `RemoteDshWeb` 在原 Noise 连接上串行调用 `dsh.web.open/close`，不经 Harness 业务白名单。
-`state/remote_web_state.dart` 观察当前会话能力，`ui/remote/remote_web/` 负责一次性表单 POST、同源导航与页面收尾；
+`state/remote_web_state.dart` 观察当前会话能力，`ui/web/dsh_web_launcher.dart` 把它并入各个「网页版」入口（`RelayDshWeb`），`ui/remote/remote_web/` 负责同源自提交表单换票、同源导航与页面收尾；
 访问票据不进入 URL、日志或持久化存储，普通刷新只 GET 干净根地址。原生 WebView 的隔离能力按平台实际 API 使用，
 不清空全局 Cookie；RPC／HTTP 的明确 429 使用友好繁忙提示，其余连接失败不猜测成限流。
 
@@ -438,6 +438,7 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用目标平台的补
 | 新建页面/设置项 | `docs/design/settings-ia.md`、§2.2 | `ui/features/feature_catalog.dart`、`settings/index/spots.dart` | 同上 + 截图 |
 | 文案/本地化 | §2.5 | `l10n/parts/*.arb`（中英） | `python3 app/tool/l10n_merge.py --check` |
 | 用户指南 | §8 | `docs/guide/**` | `python3 app/tool/guide_sync.py --check` |
+| 匿名使用统计 | [埋点与报表设计](design/usage-metrics.md) | `app/lib/usage/`、`services/share-worker/` | App 日账本、Worker 接收与报表测试；新来源另做端到端对账 |
 | 原生插件协议/座位 | `docs/design/native-plugins.md`、`plugin-seams.md` | `plugins/native/`、`plugins/seams/`、`sdk/plugin-kit` | `cd sdk/plugin-kit && npm test` |
 | 桥路由 | `docs/design/bridge-contract.md` | `runtime/bridge/**`、`dsh_client dsh_go_api.dart` | `node --test runtime/tests/*.test.mjs` |
 | 引擎补丁/升级 | §5.4/§5.5、`docs/maintenance/*-contract.md` | `runtime/patches/**`、`runtime/build-runtime.sh` | `python3 -I runtime/tests/test_patch_dsh.py`（构建需 x86_64 主机） |

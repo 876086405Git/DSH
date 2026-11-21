@@ -27,12 +27,24 @@
     "companion-auxiliary-single-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-          "after": "b9476975c7dc365cc065694d2658715eedaa2bfbfce4fce50b6d6a7d620aa809",
-          "before": "0ace65d8cf477ebaeaeaaf3af7080ea4695d46f5cc8a34c7f92d5107715e08a9"
+          "after": "a7b836abc5db0d50afaaedec95f21bd3d9dac79593592d3935a63fa7a38971d8",
+          "before": "2ef54c3220c6ff9ac3f7593efa7c3b3813f2d79bca43fefbc8dde7f9ddcfa457"
         },
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
           "after": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1",
           "before": "a800e1c863e7d64f2fee292676b6e96c2184b8d6c73ffbd56a5fc89101893aaa"
+        }
+      }
+    },
+    "companion-chat-usage-receipts.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "0ea74e5612136e2a909ceae9f73e2e65632679772e4add1f0d6d68bc3e84c7e0",
+          "before": "a7b836abc5db0d50afaaedec95f21bd3d9dac79593592d3935a63fa7a38971d8"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "after": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890",
+          "before": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1"
         }
       }
     },
@@ -180,6 +192,14 @@
         }
       }
     },
+    "messages-usage-evidence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "2ef54c3220c6ff9ac3f7593efa7c3b3813f2d79bca43fefbc8dde7f9ddcfa457",
+          "before": "0ace65d8cf477ebaeaeaaf3af7080ea4695d46f5cc8a34c7f92d5107715e08a9"
+        }
+      }
+    },
     "ohos-api-gateway-idle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
@@ -191,8 +211,8 @@
     "ohos-attachment-diagnostic.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a",
-          "before": "71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa"
+          "after": "5c48bc1d535e4865c7b7655130f46d51c14d100819bc0edb6b65f2f8b867f2c9",
+          "before": "1407705647d320ded0a41c2685813973d90f5bf4622fd0ffd0d5ae0afc7c62ce"
         }
       }
     },
@@ -331,16 +351,16 @@
     "ohos-piai-empty-models.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b",
-          "before": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a"
+          "after": "efcfd099174e32b8d0af241123577b73e257e5d28ffae4f76673c9582e0903ae",
+          "before": "5c48bc1d535e4865c7b7655130f46d51c14d100819bc0edb6b65f2f8b867f2c9"
         }
       }
     },
     "ohos-piai-text-preabort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "762e49300daac811c36184c9cb8ba44460de7fb5bacca06bc0c1b377cb192be1",
-          "before": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b"
+          "after": "0c0cd578d824738bfdc714a9da8376ecf05faa97c8b593a415f8e1d0dbe20dff",
+          "before": "efcfd099174e32b8d0af241123577b73e257e5d28ffae4f76673c9582e0903ae"
         }
       }
     },
@@ -505,6 +525,14 @@
         "node_modules/@earendil-works/pi-ai/dist/utils/overflow.js": {
           "after": "9607498e3da8815d4f52ae1193d4f1d70cb2708930233903f2b4db3c7088e0e4",
           "before": "bc0b743fdbf33fe3dd2bb69b1838166ac0b6957f74051213fcaf336c11d041a3"
+        }
+      }
+    },
+    "piai-usage-evidence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "1407705647d320ded0a41c2685813973d90f5bf4622fd0ffd0d5ae0afc7c62ce",
+          "before": "71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa"
         }
       }
     },
@@ -2377,18 +2405,6 @@
           "before": "a1ad048cbbb7caefe5471c583f076aa8e393f534efbc5b11b625308096efdace"
         }
       }
-    },
-    "companion-chat-usage-receipts.diff": {
-      "0.2.2-rc.1": {
-        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
-          "before": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1",
-          "after": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890"
-        },
-        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-          "before": "b9476975c7dc365cc065694d2658715eedaa2bfbfce4fce50b6d6a7d620aa809",
-          "after": "07f3c01e9341e10e39e0cd685ab61bc76de5086bd34611ca6166b98f771e72b0"
-        }
-      }
     }
   },
   "schema": 2,
@@ -2548,6 +2564,8 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
+      "messages-usage-evidence.diff",
+      "piai-usage-evidence.diff",
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff"
@@ -2707,6 +2725,8 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
+      "messages-usage-evidence.diff",
+      "piai-usage-evidence.diff",
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",

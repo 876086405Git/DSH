@@ -155,8 +155,15 @@ void _observeUsage(ModelCancellation cancellation, ModelUsageReport report) {
 /// An HTTP client is owned by each call so stopping one chat cannot abort a
 /// different chat. Supply [clientFactory] for deterministic transport tests.
 class TavernModelClient {
-  TavernModelClient({http.Client Function()? clientFactory, this.idleTimeout = const Duration(minutes: 5)})
-    : _clientFactory = clientFactory ?? http.Client.new;
+  TavernModelClient({
+    http.Client Function()? clientFactory,
+    this.idleTimeout = const Duration(minutes: 5),
+    this.onUsageSettled,
+  }) : _clientFactory = clientFactory ?? http.Client.new;
+
+  /// Once per actual HTTP attempt, including retries. A clean terminal response
+  /// determines whether the latest report can be treated as final.
+  final void Function(ModelUsageReport? report, {required bool partial})? onUsageSettled;
 
   final http.Client Function() _clientFactory;
   final Duration idleTimeout;
@@ -251,6 +258,9 @@ class TavernModelClient {
     void Function(int attempt)? onRequestStarted,
   }) async* {
     http.Client? client;
+    ModelUsageReport? usageReport;
+    var sentRequest = false;
+    var finished = false;
     try {
       cancellation.check();
       final request = http.AbortableRequest('POST', uri, abortTrigger: cancellation.whenCancelled)
@@ -267,6 +277,7 @@ class TavernModelClient {
       try {
         late final Future<http.StreamedResponse> sent;
         try {
+          sentRequest = true;
           sent = client.send(request);
         } finally {
           // The method was really invoked, even if it threw synchronously.
@@ -307,7 +318,6 @@ class TavernModelClient {
         final text = await cancellation.wait(response.stream.bytesToString().timeout(idleTimeout));
         cancellation.check();
         final result = _object(jsonDecode(text));
-        ModelUsageReport? usageReport;
         if (result.containsKey('usage')) {
           usageReport = _providerUsageReport(
             result['usage'],
@@ -349,6 +359,7 @@ class TavernModelClient {
         final reason = choice['finish_reason'] as String?;
         _checkFinish(reason);
         cancellation.check();
+        finished = true;
         yield ModelFinished(reason, assistantSnapshot: assistant.finish(), finalUsageReport: usageReport);
         return;
       }
@@ -357,7 +368,6 @@ class TavernModelClient {
       var sawFinish = false;
       var sawDone = false;
       final assistant = _AssistantCollector('streaming_aggregate');
-      ModelUsageReport? usageReport;
       var usageObservationIndex = 0;
       await for (final event in decodeServerSentEvents(response.stream.timeout(idleTimeout))) {
         cancellation.check();
@@ -428,9 +438,17 @@ class TavernModelClient {
       }
       _checkFinish(finishReason);
       cancellation.check();
+      finished = true;
       yield ModelFinished(finishReason, assistantSnapshot: assistant.finish(), finalUsageReport: usageReport);
     } finally {
       client?.close();
+      if (sentRequest) {
+        try {
+          onUsageSettled?.call(usageReport, partial: !finished);
+        } catch (_) {
+          // Analytics must not replace the transport result or block retry.
+        }
+      }
     }
   }
 

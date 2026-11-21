@@ -285,6 +285,7 @@ class PluginInstallsController extends Notifier<Map<String, PluginInstallJob>> {
           break;
       }
     });
+    final settleUsage = ref.read(usageStatsProvider.notifier).beginOperation(UsageOperation.pluginInstall);
     PluginInstallJob finish(PluginInstallJob Function(PluginInstallJob) change) {
       _update(name, requestId, change);
       final current = ref.mounted ? state[name] : null;
@@ -292,6 +293,12 @@ class PluginInstallsController extends Notifier<Map<String, PluginInstallJob>> {
       // never the result of this request, including duplicate callers.
       final finished = current?.requestId == requestId ? current! : change(job);
       _settle(finished);
+      settleUsage?.call(switch (finished.phase) {
+        PluginInstallPhase.succeeded => UsageOutcome.ready,
+        PluginInstallPhase.failed => UsageOutcome.failed,
+        PluginInstallPhase.cancelled => UsageOutcome.cancelled,
+        _ => UsageOutcome.unknown,
+      });
       return finished;
     }
 

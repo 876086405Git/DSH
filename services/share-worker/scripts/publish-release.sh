@@ -255,6 +255,8 @@ $HELPERS_ZH 供自动更新与校验使用，无需手动下载。GitHub 自动�
 
 $HELPERS_EN support automatic updates and verification. You do not need to download them manually. GitHub's Source code archives are not installers.
 
+⭐ 喜欢 DSH Go 的话，[给仓库点个 Star](https://github.com/$REPO) 支持一下 · Like DSH Go? [Star the repository](https://github.com/$REPO) — it really helps.
+
 NOTES
 cat "$TMP/notes.md" >>"$TMP/gh-notes.md"
 if [[ -n "$X64" ]]; then cat >>"$TMP/gh-notes.md" <<NOTES

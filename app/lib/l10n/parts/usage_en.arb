@@ -4,6 +4,9 @@
   "usageStatsFooter": "This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics.",
   "usageNoticeBody": "No chats or personal info.\nTurn off anytime.",
   "usageUpgradeNotice": "New: anonymous usage stats, to help improve DSH Go.\nNo chats or personal info.",
+  "usageV4Welcome": "Daily usage and token counts. No chats. Turn off anytime.",
+  "usageV4Notice": "Anonymous stats summarize feature results, model usage and abnormal exits. No chats.",
   "usageUpgradeLearn": "Learn more",
-  "usageUpgradeOff": "Turn off"
+  "usageUpgradeOff": "Turn off",
+  "usageStatsAndroidFooter": "This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics. Android also summarizes foreground days, the first day of collection, startup and remote connection results and timing bands, model usage, plugin actions, setup, and abnormal exits confirmed by the operating system. Turning it off clears unsent data."
 }

@@ -67,7 +67,8 @@
   "analytics_engine_datasets": [
     { "binding": "DOWNLOADS", "dataset": "dshgo_downloads" },
     { "binding": "CHECKS", "dataset": "dshgo_checks" },
-    { "binding": "USAGE", "dataset": "dshgo_usage" }
+    { "binding": "USAGE", "dataset": "dshgo_usage" },
+    { "binding": "USAGE_V4", "dataset": "dshgo_usage_v4" }
   ],
   "ratelimits": [
     { "name": "UPLOAD_BURST", "namespace_id": "42001", "simple": { "limit": 5, "period": 60 } },

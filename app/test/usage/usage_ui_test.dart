@@ -3,8 +3,9 @@
 // welcome row's text starts 16 in from the button's left edge and the switch
 // track ends 16 in from its right, both centred on the row, the row as far
 // from either screen edge; at 320 dp with large text in both languages
-// nothing overflows or is cut. Seeing either one is what starts the
-// counting; the switch turns it all off.
+// nothing overflows or is cut. Seeing either one only records that the person
+// was told — counting is on by default — and the switch turns the full
+// statistics off, leaving Android's daily activity.
 //
 //   flutter test --update-goldens test/usage/usage_ui_test.dart
 
@@ -108,7 +109,7 @@ void main() {
       });
     }
 
-    testWidgets('seeing it starts the counting; on by default', (tester) async {
+    testWidgets('on by default; seeing it marks the person as told', (tester) async {
       await _pumpWelcome(tester);
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
@@ -217,7 +218,7 @@ void main() {
 
     testWidgets('on Android: as ever', (tester) async {
       await pump(tester, section(), 'android');
-      expect(find.text(zh.usageStatsFooter), findsOneWidget);
+      expect(find.text(zh.usageStatsAndroidFooter), findsOneWidget);
       expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNotNull);
     });
 

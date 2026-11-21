@@ -153,6 +153,8 @@ deepseek-refusal.diff
 deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
+messages-usage-evidence.diff
+piai-usage-evidence.diff
 companion-phone-memory-request.diff
 companion-auxiliary-single-request.diff
 companion-chat-usage-receipts.diff

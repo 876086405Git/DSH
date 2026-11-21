@@ -24,7 +24,7 @@
     },
     {
       "path": "app/test/companion/companion_light_test.dart",
-      "sha256": "d2444da0bfe1b4fb81276026e9b87dd39b12059f430264df3239aa5c20e605ce"
+      "sha256": "271c7aced1bbcdcb0eafc9f17d81057fa3e57bfd65cdf92be8e900d49fe806a5"
     },
     {
       "path": "app/test/companion/companion_memory_control_replay_test.dart",

@@ -19058,6 +19058,42 @@ abstract class L10n {
   /// **'在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）'**
   String get liveBlockedText;
 
+  /// No description provided for @liveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止'**
+  String get liveStop;
+
+  /// No description provided for @liveStale.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停更新 · 打开 App 查看'**
+  String get liveStale;
+
+  /// No description provided for @liveIosSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'干活、等你处理时，在灵动岛和锁屏上显示宠物、进度和用时'**
+  String get liveIosSubtitle;
+
+  /// No description provided for @liveIosFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 iOS 16.2 及以上。有灵动岛的 iPhone 显示在岛上，其他机型只在锁屏上。锁屏上不显示对话标题。iOS 17 起可以在卡片上直接停止这一轮。App 被系统挂起后，卡片会标出「暂停更新」。'**
+  String get liveIosFooter;
+
+  /// No description provided for @liveIosUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 iOS 16.2 或更高版本'**
+  String get liveIosUnsupported;
+
+  /// No description provided for @liveIosBlockedText.
+  ///
+  /// In zh, this message translates to:
+  /// **'在「设置」→「DSH Go」里打开「实时活动」'**
+  String get liveIosBlockedText;
+
   /// No description provided for @localeTitle.
   ///
   /// In zh, this message translates to:
@@ -28532,11 +28568,11 @@ abstract class L10n {
   /// **'已连接既有 DSH'**
   String get remoteDshAttached;
 
-  /// No description provided for @remoteStartupSection.
+  /// No description provided for @remoteConnectionSettings.
   ///
   /// In zh, this message translates to:
-  /// **'启动'**
-  String get remoteStartupSection;
+  /// **'连接设置'**
+  String get remoteConnectionSettings;
 
   /// No description provided for @remoteAutoConnectOnStartup.
   ///
@@ -29960,12 +29996,6 @@ abstract class L10n {
   /// **'不经过第三方服务器'**
   String get remoteSshDirect;
 
-  /// No description provided for @remoteOtherMethods.
-  ///
-  /// In zh, this message translates to:
-  /// **'其他方式'**
-  String get remoteOtherMethods;
-
   /// No description provided for @remoteWebConsole.
   ///
   /// In zh, this message translates to:
@@ -30067,6 +30097,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'一次只连一台主机，切换会断开上一台'**
   String get remoteSwitchWarning;
+
+  /// No description provided for @remoteHostOfflineHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」现在不在线。在那台电脑上打开 DSH 后再试'**
+  String remoteHostOfflineHint(String name);
 
   /// No description provided for @remoteRefreshHosts.
   ///
@@ -31160,12 +31196,6 @@ abstract class L10n {
   /// **'ICE 协议'**
   String get remoteNetworkIceProtocol;
 
-  /// No description provided for @remoteTransferSettings.
-  ///
-  /// In zh, this message translates to:
-  /// **'远程传输'**
-  String get remoteTransferSettings;
-
   /// No description provided for @remoteCompactHistory.
   ///
   /// In zh, this message translates to:
@@ -31550,12 +31580,6 @@ abstract class L10n {
   /// **'文件超过远程上传协议的大小上限'**
   String get stateRemoteUploadTooLarge;
 
-  /// No description provided for @remoteWebOpen.
-  ///
-  /// In zh, this message translates to:
-  /// **'打开 DSH Web'**
-  String get remoteWebOpen;
-
   /// No description provided for @remoteWebTitle.
   ///
   /// In zh, this message translates to:
@@ -31567,6 +31591,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'正在打开 DSH Web…'**
   String get remoteWebOpening;
+
+  /// No description provided for @remoteWebFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开 DSH Web'**
+  String get remoteWebFailed;
 
   /// No description provided for @remoteWebRefresh.
   ///
@@ -31607,13 +31637,13 @@ abstract class L10n {
   /// No description provided for @remoteWebExchangeRejected.
   ///
   /// In zh, this message translates to:
-  /// **'访问验证失败，请返回后重新打开。'**
+  /// **'访问验证没有通过，请重试。'**
   String get remoteWebExchangeRejected;
 
   /// No description provided for @remoteWebSessionExpired.
   ///
   /// In zh, this message translates to:
-  /// **'网页连接已过期，请返回后重新打开。'**
+  /// **'网页连接已过期，请重试。'**
   String get remoteWebSessionExpired;
 
   /// No description provided for @remoteWebPlatformUnavailable.
@@ -35359,6 +35389,54 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'拜托你啦~ 这真的很重要！！'**
   String get starPromptPlea;
+
+  /// The star prompt's second ask (2 hours of use, after 下次再说), in place of starPromptBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'看来你挺喜欢这里嘛！点个 Star 只要几秒钟，却能让更多人发现 DSH Go，本鱼也会更有干劲！'**
+  String get starPromptBody2;
+
+  /// No description provided for @starPromptPlea2.
+  ///
+  /// In zh, this message translates to:
+  /// **'就差你这一颗星星啦~'**
+  String get starPromptPlea2;
+
+  /// The third ask (5 hours).
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH Go 不收费、没有广告，全靠大家的 Star 让更多人看到。如果它帮到了你，就送本鱼一颗星星吧！'**
+  String get starPromptBody3;
+
+  /// No description provided for @starPromptPlea3.
+  ///
+  /// In zh, this message translates to:
+  /// **'本鱼眼巴巴地等着呢~'**
+  String get starPromptPlea3;
+
+  /// The fourth ask (10 hours).
+  ///
+  /// In zh, this message translates to:
+  /// **'这么久了，本鱼一直都在。如果 DSH Go 已经成了你每天都会打开的 App，点个 Star 就是给作者最好的回礼。'**
+  String get starPromptBody4;
+
+  /// No description provided for @starPromptPlea4.
+  ///
+  /// In zh, this message translates to:
+  /// **'求求你啦，就点一下下~'**
+  String get starPromptPlea4;
+
+  /// The fifth and last ask (20 hours): it says so.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是本鱼最后一次问你啦。不管点不点，本鱼都会一直陪着你。要是愿意的话，点个 Star 让本鱼开心一下吧！'**
+  String get starPromptBody5;
+
+  /// No description provided for @starPromptPlea5.
+  ///
+  /// In zh, this message translates to:
+  /// **'最后一次，拜托啦！'**
+  String get starPromptPlea5;
 
   /// No description provided for @starPromptStar.
   ///
@@ -45584,6 +45662,18 @@ abstract class L10n {
   /// **'新增匿名使用统计，帮助改进 DSH Go。\n不含对话和个人信息'**
   String get usageUpgradeNotice;
 
+  /// No description provided for @usageV4Welcome.
+  ///
+  /// In zh, this message translates to:
+  /// **'按日汇总使用和模型用量，不含对话。可随时关闭。'**
+  String get usageV4Welcome;
+
+  /// No description provided for @usageV4Notice.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。'**
+  String get usageV4Notice;
+
   /// No description provided for @usageUpgradeLearn.
   ///
   /// In zh, this message translates to:
@@ -45595,6 +45685,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'关闭'**
   String get usageUpgradeOff;
+
+  /// No description provided for @usageStatsAndroidFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。 Android 还按日汇总前台及首次参与统计、启动和远程连接结果与耗时区间，以及模型用量、插件执行、引导和系统确认的异常退出。关闭会清空未上报的数据。'**
+  String get usageStatsAndroidFooter;
 
   /// No description provided for @viewArtifactSaved.
   ///

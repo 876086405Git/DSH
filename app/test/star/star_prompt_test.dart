@@ -1,7 +1,8 @@
 // The star prompt (docs/design/star-prompt.md): half an hour with the app in
 // front (29 minutes no, 30 yes), counted only while it is resumed and kept
-// across launches; 「下次再说」 (or back) asks once more five hours of use
-// later with the real hours, and never a third time; 「去 GitHub 点 Star」
+// across launches; 「下次再说」 (or back) asks again at 2, 5, 10 and 20 hours
+// of use (an hour after a late one at least), each time in other words with
+// the real hours, and never a sixth time; 「去 GitHub 点 Star」
 // opens the repository and 「已经点过啦」 ends it. It only comes up when the
 // person is idle in the chat (not during first run, not over another page,
 // not while the chat runs, not in a launch that already showed a notice),
@@ -289,14 +290,42 @@ void main() {
       expect(const StarPromptRecord(used: Duration(minutes: 30)).due, isTrue);
     });
 
-    test('after 下次再说: five more hours of use; twice at most; never once finished', () {
+    test('after 下次再说: at 2, 5, 10 and 20 hours, an hour after a late one at least; five at most', () {
+      expect(StarPromptRules.asks, const [
+        Duration(minutes: 30),
+        Duration(hours: 2),
+        Duration(hours: 5),
+        Duration(hours: 10),
+        Duration(hours: 20),
+      ]);
       const asked = StarPromptRecord(used: Duration(minutes: 40), shows: 1, askedAt: Duration(minutes: 31));
       expect(asked.due, isFalse);
-      expect(asked.copyWith(used: const Duration(hours: 5, minutes: 30)).due, isFalse);
-      expect(asked.copyWith(used: const Duration(hours: 5, minutes: 31)).due, isTrue);
-      expect(asked.copyWith(used: const Duration(hours: 99), shows: 2).due, isFalse);
-      expect(asked.copyWith(used: const Duration(hours: 99), shows: 2).over, isTrue);
+      expect(asked.copyWith(used: const Duration(hours: 1, minutes: 59)).due, isFalse);
+      expect(asked.copyWith(used: const Duration(hours: 2)).due, isTrue);
+      const third = StarPromptRecord(used: Duration(hours: 4, minutes: 59), shows: 2, askedAt: Duration(hours: 2));
+      expect(third.due, isFalse);
+      expect(third.copyWith(used: const Duration(hours: 5)).due, isTrue);
+      // The first came up late (idle only then): the second waits an hour more.
+      const late = StarPromptRecord(
+        used: Duration(hours: 4, minutes: 29),
+        shows: 1,
+        askedAt: Duration(hours: 3, minutes: 30),
+      );
+      expect(late.due, isFalse);
+      expect(late.copyWith(used: const Duration(hours: 4, minutes: 30)).due, isTrue);
+      expect(asked.copyWith(used: const Duration(hours: 99), shows: 5).due, isFalse);
+      expect(asked.copyWith(used: const Duration(hours: 99), shows: 5).over, isTrue);
       expect(_due.copyWith(finished: true).due, isFalse);
+    });
+
+    test('each ask in its own words; the last says it is the last', () {
+      for (final l10n in [lookupL10n(AppLocale.zhCN), lookupL10n(AppLocale.en)]) {
+        final words = [for (var i = 0; i < StarPromptRules.maxShows; i++) StarPromptDialog.words(l10n, i)];
+        expect(words.toSet(), hasLength(StarPromptRules.maxShows));
+        expect(StarPromptDialog.words(l10n, StarPromptRules.maxShows), words.last);
+      }
+      expect(StarPromptDialog.words(lookupL10n(AppLocale.zhCN), 4).$1, contains('最后一次'));
+      expect(StarPromptDialog.words(lookupL10n(AppLocale.en), 4).$1, contains('last time'));
     });
 
     test('the first line tells the real time: half an hour, then whole hours', () {
@@ -466,27 +495,38 @@ void main() {
       expect(await comesBack(bench, const Duration(hours: 6)), isFalse);
     });
 
-    testWidgets('下次再说: once more after five more hours, with the real hours; back is the same, and that is all', (
-      tester,
-    ) async {
-      final bench = await up(tester);
-      await bench.tap('star-later');
-      expect(bench.showing, isFalse);
-      expect(bench.opened, isEmpty);
-      expect(bench.store.record, const StarPromptRecord(used: _halfHour, shows: 1, askedAt: _halfHour));
-      expect(await comesBack(bench, const Duration(hours: 4, minutes: 59)), isFalse);
-      expect(await comesBack(bench, const Duration(minutes: 1)), isTrue);
-      expect(find.text(_title(5)), findsOneWidget);
-      expect(find.text('本鱼已经在 DSH Go 里陪你 5 个小时啦⁠~'), findsOneWidget);
-      // The back gesture: as 下次再说, the second time.
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(bench.showing, isFalse);
-      expect(bench.store.record!.shows, StarPromptRules.maxShows);
-      expect(bench.store.record!.finished, isFalse);
-      expect(await comesBack(bench, const Duration(hours: 24)), isFalse);
-      expect(bench.store.record!.used, const Duration(hours: 5, minutes: 30), reason: 'counting stopped');
-    });
+    testWidgets(
+      '下次再说: again at 2, 5, 10 and 20 hours in other words, with the real hours; back is the same; then no more',
+      (tester) async {
+        final bench = await up(tester);
+        await bench.tap('star-later');
+        expect(bench.showing, isFalse);
+        expect(bench.opened, isEmpty);
+        expect(bench.store.record, const StarPromptRecord(used: _halfHour, shows: 1, askedAt: _halfHour));
+        final zh = lookupL10n(AppLocale.zhCN);
+        for (final (ask, hours) in [(1, 2), (2, 5), (3, 10), (4, 20)]) {
+          final left = Duration(hours: hours) - bench.store.record!.used;
+          expect(await comesBack(bench, left - const Duration(minutes: 1)), isFalse, reason: 'ask $ask');
+          expect(await comesBack(bench, const Duration(minutes: 1)), isTrue, reason: 'ask $ask');
+          expect(find.text(_title(hours)), findsOneWidget);
+          expect(find.text(StarPromptDialog.words(zh, ask).$1), findsOneWidget);
+          expect(find.text(StarPromptDialog.words(zh, ask).$2), findsOneWidget);
+          if (ask < 4) {
+            await bench.tap('star-later');
+          } else {
+            // The back gesture: as 下次再说.
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+          }
+          expect(bench.showing, isFalse);
+        }
+        expect(find.text('本鱼已经在 DSH Go 里陪你 20 个小时啦⁠~'), findsNothing);
+        expect(bench.store.record!.shows, StarPromptRules.maxShows);
+        expect(bench.store.record!.finished, isFalse);
+        expect(await comesBack(bench, const Duration(hours: 24)), isFalse);
+        expect(bench.store.record!.used, const Duration(hours: 20), reason: 'counting stopped');
+      },
+    );
 
     testWidgets('a tap outside: as 下次再说', (tester) async {
       final bench = await up(tester);

@@ -100,6 +100,8 @@ final class DshPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate {
   private func open(_ url: URL) {
     if url == ShareInbox.wakeUp {
       shares.drain()
+    } else if let tap = IOSLiveActivity.tap(url) {
+      NotifyTaps.shared.deliver(tap)
     } else {
       links.open(url)
     }
@@ -739,7 +741,8 @@ private final class MediaChannel {
 /// turn ended then takes a push from the host.
 ///
 /// Approving from a notification isn't offered: the person opens the conversation and
-/// approves there, against what the host says now. Live activities come later.
+/// approves there, against what the host says now. The live activity (`live`) is
+/// IOSLiveActivity's.
 private final class NotifyChannel {
   private let channel: FlutterMethodChannel
   private let actions: SilentEvents
@@ -753,6 +756,7 @@ private final class NotifyChannel {
     channel.setMethodCallHandler { call, result in
       Self.handle(call, result: result)
     }
+    IOSLiveActivity.shared.channel = channel
   }
 
   private static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -781,9 +785,14 @@ private final class NotifyChannel {
       center.removeAllDeliveredNotifications()
       center.removeAllPendingNotificationRequests()
       result(nil)
-    case "openSettings", "openLiveSettings": openNotificationSettings(center, result: result)
-    case "live", "actionResult": result(nil)
-    case "liveStatus": result(["supported": false, "allowed": false])
+    case "openSettings": openNotificationSettings(center, result: result)
+    // The 实时活动 switch is on the app's own page in Settings, not under notifications.
+    case "openLiveSettings": openAppSettings(UIApplication.openSettingsURLString, result: result)
+    case "live":
+      IOSLiveActivity.shared.live(args)
+      result(nil)
+    case "actionResult": result(nil)
+    case "liveStatus": result(IOSLiveActivity.shared.status())
     default: result(FlutterMethodNotImplemented)
     }
   }
@@ -867,14 +876,18 @@ final class NotifyTaps: NSObject, UNUserNotificationCenterDelegate, FlutterStrea
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
-    let tap = response.notification.request.content.userInfo
+    deliver(response.notification.request.content.userInfo, then: completionHandler)
+  }
+
+  /// A tap to open a conversation: a notification's, or the live activity's.
+  func deliver(_ tap: [AnyHashable: Any], then done: (() -> Void)? = nil) {
     onMain {
       if let sink = self.sink {
         sink(tap)
       } else {
         self.held.append(tap)
       }
-      completionHandler()
+      done?()
     }
   }
 

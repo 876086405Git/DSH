@@ -144,6 +144,46 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('the signed-in account sits on top, on its own, above its hosts', (tester) async {
+    await pump(tester, const RemoteScreen());
+    await frames(tester, 3);
+    final account = find.byKey(const ValueKey('remote-account'));
+    expect(account, findsOneWidget);
+    expect(find.descendant(of: account, matching: find.text('退出')), findsOneWidget);
+    expect(find.descendant(of: account, matching: find.text('家里的 Mac')), findsNothing);
+    expect(tester.getRect(account).bottom, lessThan(tester.getTopLeft(find.text('家里的 Mac')).dy));
+    expect(find.byTooltip('刷新主机列表'), findsOneWidget, reason: 'refresh lives in the bar now');
+  });
+
+  testWidgets('an offline host is checked again when tapped, then used once it is online', (tester) async {
+    relay.hosts = [
+      const RelayHost(
+        id: 'nas',
+        name: '书房 NAS',
+        online: false,
+        fingerprint: 'A1B2 C3D4 E5F6',
+        trust: RelayTrust.unpinned,
+      ),
+    ];
+    await pump(tester, const RemoteScreen());
+    await frames(tester, 3);
+    await tester.tap(find.text('书房 NAS'));
+    await frames(tester);
+    expect(find.text(appL10n.remoteHostOfflineHint('书房 NAS')), findsOneWidget);
+    relay.hosts = [
+      const RelayHost(
+        id: 'nas',
+        name: '书房 NAS',
+        online: true,
+        fingerprint: 'A1B2 C3D4 E5F6',
+        trust: RelayTrust.unpinned,
+      ),
+    ];
+    await tester.tap(find.text('书房 NAS'));
+    await frames(tester);
+    expect(find.text('信任这台主机？'), findsOneWidget);
+  });
+
   testWidgets('host switcher exposes the active row as selected', (tester) async {
     final semantics = tester.ensureSemantics();
     await pump(tester, const _Launcher());
