@@ -27,7 +27,14 @@ import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart'
-    show CompanionMemory, CompanionMemoryStore, companionMemoryExtractionPrompt, companionMemoryConsolidationPrompt;
+    show
+        CompanionMemory,
+        CompanionMemoryStore,
+        MemoryBatch,
+        companionMemoryExtractionPrompt,
+        companionMemoryConsolidationPrompt,
+        isMemoryResponsePreference,
+        parseExtractionProposal;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -546,6 +553,125 @@ void main() {
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+      }
+
+      for (final changedPreference in [false, true]) {
+        testWidgets(changedPreference
+            ? 'fixture 4 a personal writing change reaches the next Page request with its own complete source'
+            : 'fixture 4 joining a writing group keeps the original preference in the next Page request', (tester) async {
+          final posts = <Map<String, Object?>>[];
+          await openLight(tester, apiKey: 'sk-test', client: MockClient((request) async {
+            posts.add(jsonDecode(request.body) as Map<String, Object?>);
+            return http.Response(_sse(['我们按你的习惯慢慢来。']), 200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          }));
+          final memory = await memoryOf(tester);
+          Map<String, Object?> source(String id, String text, {String role = 'user'}) =>
+              memory.store.submitMessage(id: id, sessionId: memory.store.lightSessionId, text: text,
+                role: role, saidAtUtc: DateTime.now().millisecondsSinceEpoch, offsetMinutes: 0);
+          void commit(MemoryBatch batch, List<Map<String, Object?>> operations) {
+            final proposal = parseExtractionProposal(jsonEncode({
+              'schema_version': 2, 'batch_id': batch.id,
+              'covered_message_ids': batch.sources.map((row) => row['id']).toList(),
+              'operations': operations, 'completion': 'complete',
+            }), batch);
+            expect(memory.store.commitExtraction(batch, proposal), isTrue);
+            memory.changed();
+          }
+          const originalText = '我练写作喜欢先看一个例子';
+          final originalSource = source('writing-original', originalText);
+          final first = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+          expect(first.sources.map((row) => row['id']), ['writing-original']);
+          commit(first, [{
+            'op': 'create', 'kind': 'preference', 'text': originalText, 'keywords': ['写作', '例子'],
+            'evidence': [{'message_id': 'writing-original', 'quote': originalText}],
+          }]);
+          final originalCard = memory.store.cards().single;
+          expect(isMemoryResponsePreference(originalCard), isTrue);
+          // The group-membership fact and an assistant's steps do not stand in
+          // for the person's own statement of a new response preference.
+          const groupText = '我最近加入了写作小组';
+          final groupSource = source('writing-group', groupText);
+          const assistantText = '练写作先列三个步骤，例子放最后。';
+          source('assistant-suggestion', assistantText, role: 'assistant');
+          final joining = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+          expect(joining.sources.map((row) => row['id']), ['writing-group']);
+          expect(() => parseExtractionProposal(jsonEncode({
+            'schema_version': 2, 'batch_id': joining.id, 'covered_message_ids': ['writing-group'],
+            'completion': 'complete', 'operations': [{
+              'op': 'replace', 'target_id': originalCard['id'], 'expected_row_rev': originalCard['row_rev'],
+              'kind': 'preference', 'text': assistantText, 'keywords': ['写作', '步骤'],
+              'evidence': [{'message_id': 'assistant-suggestion', 'quote': assistantText}],
+              'change_kind': 'new_current_value',
+            }],
+          }), joining), throwsFormatException);
+          commit(joining, [{
+            'op': 'create', 'kind': 'fact', 'text': groupText, 'keywords': ['写作', '小组'],
+            'evidence': [{'message_id': 'writing-group', 'quote': groupText}],
+          }]);
+          expect(memory.store.cards().singleWhere((row) => row['id'] == originalCard['id']), originalCard);
+          final groupCard = memory.store.cards().singleWhere((row) => row['text'] == groupText);
+          var expectedSource = originalSource;
+          var expectedText = originalText;
+          if (changedPreference) {
+            const newText = '我现在改习惯了，练写作时先给我三个步骤，例子放最后';
+            expectedSource = source('writing-new-preference', newText);
+            expectedText = newText;
+            final replacement = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+            expect(replacement.sources.map((row) => row['id']), ['writing-new-preference']);
+            expect(replacement.existing.singleWhere((row) => row['id'] == originalCard['id'])['row_rev'],
+              originalCard['row_rev']);
+            commit(replacement, [{
+              'op': 'replace', 'target_id': originalCard['id'], 'expected_row_rev': originalCard['row_rev'],
+              'kind': 'preference', 'text': newText, 'keywords': ['写作', '步骤', '例子'],
+              'evidence': [{'message_id': 'writing-new-preference', 'quote': newText}],
+              'change_kind': 'new_current_value',
+            }]);
+          }
+          final preference = memory.store.cards().singleWhere((row) => row['kind'] == 'preference');
+          expect(preference['id'], originalCard['id']);
+          expect(preference['text'], expectedText);
+          expect(preference['row_rev'], (originalCard['row_rev']! as int) + (changedPreference ? 1 : 0));
+          expect(preference['current_basis_seq'], expectedSource['first_seq']);
+          expect(isMemoryResponsePreference(preference), isTrue);
+          final proof = (preference['evidence']! as List).cast<Map>().single;
+          expect(proof['message_id'], expectedSource['id']);
+          expect(proof['source_rev'], expectedSource['source_rev']);
+          expect(proof['first_seq'], expectedSource['first_seq']);
+          expect(proof['said_at_utc'], expectedSource['said_at_utc']);
+          expect(proof['offset_minutes'], expectedSource['offset_minutes']);
+          expect(proof['role'], 'user');
+          expect(proof['scope'], 'real');
+          expect(proof['quote'], expectedText);
+          final groupProof = (groupCard['evidence']! as List).cast<Map>().single;
+          expect(groupProof['message_id'], groupSource['id']);
+          expect(groupProof['source_rev'], groupSource['source_rev']);
+          expect(groupProof['quote'], groupText);
+          for (final original in [originalSource, groupSource]) {
+            final saved = memory.store.messages().singleWhere((row) => row['id'] == original['id']);
+            expect({for (final key in original.keys) key: saved[key]}, original);
+          }
+          expect(memory.store.messages().singleWhere((row) => row['id'] == 'assistant-suggestion')['role'], 'assistant');
+          const query = '今天练写作，怎么起手？';
+          await say(tester, query);
+          expect(posts, hasLength(1));
+          final content = (((posts.single['messages']! as List).last as Map)['content']! as List).cast<Map>();
+          expect(content.first['text'], changedPreference ? '$expectedText\n$query' : query);
+          // Check the actual selected block, not matching words in old chat
+          // history (which legitimately still includes the assistant's idea).
+          final block = content.where((part) => part['type'] == 'text')
+              .map((part) => part['text'] as String)
+              .singleWhere((text) => text.startsWith('{"type":"companion_memory",'));
+          final items = ((jsonDecode(block) as Map)['items']! as List).cast<Map>();
+          expect(items.map((row) => row['id']), unorderedEquals([originalCard['id'], groupCard['id']]));
+          expect(items.singleWhere((row) => row['kind'] == 'preference')['text'], expectedText);
+          expect(items.singleWhere((row) => row['kind'] == 'fact')['text'], groupText);
+          if (!changedPreference) {
+            expect(items.any((row) => (row['text'] as String).contains('三个步骤')), isFalse);
+          }
+          await tester.pumpWidget(const SizedBox());
+          await tester.pump(const Duration(seconds: 10));
+        });
       }
 
       testWidgets('fixture 15 ordinary Page chat still sends after a real organize request reaches the daily limit', (tester) async {
