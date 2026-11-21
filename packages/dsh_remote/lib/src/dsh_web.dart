@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'carrier/tunnel_carrier.dart' show RemoteHostSession;
 
@@ -13,9 +11,18 @@ class RemoteDshWebException implements Exception {
   String toString() => 'RemoteDshWebException($code)';
 }
 
+/// The official Remote Server's tunnel parents: `tun.4ba.io` now, the
+/// compatible `hostc.4ba.io` still in use.
+const defaultDshWebTunnelDomains = {'tun.4ba.io', 'hostc.4ba.io'};
+
+/// How far this phone's clock may run ahead of the Server's: a grant still
+/// counts as fresh this long past `expiresAt` (the Worker enforces the real
+/// deadline; a wrong phone clock must not block every open).
+const dshWebClockSkew = Duration(seconds: 60);
+
 /// Trust comes from application configuration, never from a Host response.
 /// Each configured parent authorizes exactly one independent tunnel subdomain.
-bool isTrustedDshWebRoot(Uri uri, {Set<String> trustedTunnelDomains = const {'hostc.4ba.io'}}) {
+bool isTrustedDshWebRoot(Uri uri, {Set<String> trustedTunnelDomains = defaultDshWebTunnelDomains}) {
   if (uri.scheme != 'https' ||
       uri.host.isEmpty ||
       uri.hasPort ||
@@ -36,7 +43,8 @@ bool isTrustedDshWebRoot(Uri uri, {Set<String> trustedTunnelDomains = const {'ho
   return false;
 }
 
-/// Operation-local, single-use body for a native WebView top-level form POST.
+/// Operation-local, single-use grant, redeemed by a form the WebView submits
+/// from the tunnel's own origin.
 class RemoteDshWebGrant {
   RemoteDshWebGrant._(this.url, this.expiresAt, this._grant, this._now);
 
@@ -47,12 +55,30 @@ class RemoteDshWebGrant {
 
   Uri get exchangeUrl => url.resolve('/__remote/session');
 
-  Uint8List takePostBody() {
+  /// The base URL to load [takeExchangePage] at: same origin as the tunnel,
+  /// never fetched itself.
+  Uri get exchangeBase => url.resolve('/__remote/session-bootstrap');
+
+  /// A page that POSTs the grant to [exchangeUrl] as soon as it loads, from
+  /// the tunnel's origin. A native POST (Android `postUrl`, iOS URLRequest)
+  /// can carry an opaque `Origin: null`, which the Worker refuses; a form on
+  /// the tunnel's own origin sends that origin, and the same WebView then
+  /// takes the session cookie and follows the 303 to `/`. Consumes the grant.
+  String takeExchangePage() {
     final grant = _grant;
     _grant = null;
     if (grant == null) throw const RemoteDshWebException('GRANT_CONSUMED');
-    if (expiresAt <= _now().millisecondsSinceEpoch) throw const RemoteDshWebException('GRANT_EXPIRED');
-    return Uint8List.fromList(utf8.encode(Uri(queryParameters: {'browserGrant': grant}).query));
+    if (expiresAt + dshWebClockSkew.inMilliseconds <= _now().millisecondsSinceEpoch) {
+      throw const RemoteDshWebException('GRANT_EXPIRED');
+    }
+    // The grant is 43 base64url characters (checked in open): safe as an
+    // attribute value as is.
+    return '<!doctype html><meta name="referrer" content="same-origin">'
+        '<meta http-equiv="Content-Security-Policy" '
+        "content=\"default-src 'none'; script-src 'unsafe-inline'; form-action 'self'\">"
+        '<form method="post" action="/__remote/session">'
+        '<input type="hidden" name="browserGrant" value="$grant"></form>'
+        '<script>document.forms[0].submit()</script>';
   }
 
   void discard() => _grant = null;
@@ -76,7 +102,7 @@ final _operations = Expando<_SessionOperations>();
 /// Never reconnects or replays a request. Queues are shared by API instances
 /// for one original Noise session, so close must finish before the next open.
 class RemoteDshWeb {
-  RemoteDshWeb(this.session, {Set<String> trustedTunnelDomains = const {'hostc.4ba.io'}, DateTime Function()? now})
+  RemoteDshWeb(this.session, {Set<String> trustedTunnelDomains = defaultDshWebTunnelDomains, DateTime Function()? now})
     : trustedTunnelDomains = Set.unmodifiable(trustedTunnelDomains),
       _now = now ?? DateTime.now,
       _queue = _operations[session] ??= _SessionOperations();
@@ -107,7 +133,9 @@ class RemoteDshWeb {
     if (grant is! String || !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(grant) || expiresAt is! int) {
       throw const RemoteDshWebException('INVALID_WEB_RESPONSE');
     }
-    if (expiresAt <= _now().millisecondsSinceEpoch) throw const RemoteDshWebException('GRANT_EXPIRED');
+    if (expiresAt + dshWebClockSkew.inMilliseconds <= _now().millisecondsSinceEpoch) {
+      throw const RemoteDshWebException('GRANT_EXPIRED');
+    }
     return RemoteDshWebGrant._(url, expiresAt, grant, _now);
   });
 

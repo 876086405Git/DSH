@@ -1,15 +1,15 @@
 {
-  "remoteWebOpen": "Open DSH Web",
   "remoteWebTitle": "DSH Web",
   "remoteWebOpening": "Opening DSH Web…",
+  "remoteWebFailed": "Couldn’t open DSH Web",
   "remoteWebRefresh": "Refresh home page",
   "remoteWebBusy": "Too many people are using this right now. Please try again later.",
   "remoteWebPairingRequired": "Connection authorization expired. Reconnect or pair the Host again.",
   "remoteWebHostNotReady": "The Host web page is not ready. Start DSH Web and update the Remote plugin to 0.6.6 or later.",
   "remoteWebReconnect": "Disconnected. Reconnect to the Host before reopening.",
   "remoteWebUnsafeUrl": "The web address could not be verified. Opening was stopped. Check the Host configuration.",
-  "remoteWebExchangeRejected": "Access verification failed. Go back and reopen.",
-  "remoteWebSessionExpired": "The web connection expired. Go back and reopen.",
+  "remoteWebExchangeRejected": "Access verification failed. Try again.",
+  "remoteWebSessionExpired": "The web connection expired. Try again.",
   "remoteWebPlatformUnavailable": "This platform does not yet support this web entry. Use the native remote interface.",
   "remoteWebTryAgain": "Temporarily unable to open the page. Check the Host connection and try again.",
   "remoteWebUnavailable": "Temporarily unable to open. Please try again later."

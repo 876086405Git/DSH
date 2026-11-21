@@ -15359,7 +15359,7 @@ class L10nZh extends L10n {
   String get remoteDshAttached => '已连接既有 DSH';
 
   @override
-  String get remoteStartupSection => '启动';
+  String get remoteConnectionSettings => '连接设置';
 
   @override
   String get remoteAutoConnectOnStartup => '连接上次使用的主机';
@@ -16165,9 +16165,6 @@ class L10nZh extends L10n {
   String get remoteSshDirect => '不经过第三方服务器';
 
   @override
-  String get remoteOtherMethods => '其他方式';
-
-  @override
   String get remoteWebConsole => '网页版远程控制台';
 
   @override
@@ -16225,6 +16222,11 @@ class L10nZh extends L10n {
 
   @override
   String get remoteSwitchWarning => '一次只连一台主机，切换会断开上一台';
+
+  @override
+  String remoteHostOfflineHint(String name) {
+    return '「$name」现在不在线。在那台电脑上打开 DSH 后再试';
+  }
 
   @override
   String get remoteRefreshHosts => '刷新主机列表';
@@ -16833,9 +16835,6 @@ class L10nZh extends L10n {
   String get remoteNetworkIceProtocol => 'ICE 协议';
 
   @override
-  String get remoteTransferSettings => '远程传输';
-
-  @override
   String get remoteCompactHistory => '精简历史';
 
   @override
@@ -17038,13 +17037,13 @@ class L10nZh extends L10n {
   String get stateRemoteUploadTooLarge => '文件超过远程上传协议的大小上限';
 
   @override
-  String get remoteWebOpen => '打开 DSH Web';
-
-  @override
   String get remoteWebTitle => 'DSH Web';
 
   @override
   String get remoteWebOpening => '正在打开 DSH Web…';
+
+  @override
+  String get remoteWebFailed => '没能打开 DSH Web';
 
   @override
   String get remoteWebRefresh => '刷新首页';
@@ -17065,10 +17064,10 @@ class L10nZh extends L10n {
   String get remoteWebUnsafeUrl => '网页地址无法验证，已停止打开。请检查主机配置。';
 
   @override
-  String get remoteWebExchangeRejected => '访问验证失败，请返回后重新打开。';
+  String get remoteWebExchangeRejected => '访问验证没有通过，请重试。';
 
   @override
-  String get remoteWebSessionExpired => '网页连接已过期，请返回后重新打开。';
+  String get remoteWebSessionExpired => '网页连接已过期，请重试。';
 
   @override
   String get remoteWebPlatformUnavailable => '当前平台暂不支持此网页入口。请使用原生远程界面。';

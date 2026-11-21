@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dsh_remote/dsh_remote.dart'
     show RemoteHostSession, RemoteRpcClient, RemoteRpcException, SecureChannelClosed;
@@ -62,8 +61,21 @@ void main() {
     expect(rpc.calls.single.params, isEmpty);
     expect(rpc.calls.single.timeout, const Duration(seconds: 25));
     expect(grant.toString(), isNot(contains(_grant)));
-    expect(utf8.decode(grant.takePostBody()), 'browserGrant=$_grant');
-    expect(() => grant.takePostBody(), throwsA(_code('GRANT_CONSUMED')));
+    expect(grant.exchangeBase.toString(), '${_url}__remote/session-bootstrap');
+    final page = grant.takeExchangePage();
+    expect(page, contains('<form method="post" action="/__remote/session">'));
+    expect(page, contains('name="browserGrant" value="$_grant"'));
+    expect(page, contains("form-action 'self'"));
+    expect(page, contains('document.forms[0].submit()'));
+    expect(() => grant.takeExchangePage(), throwsA(_code('GRANT_CONSUMED')));
+  });
+
+  test('the current tun.4ba.io parent and the compatible hostc.4ba.io are both trusted', () async {
+    for (final url in ['https://tabcdefghijk.tun.4ba.io/', 'https://pabcdefghijk.hostc.4ba.io/']) {
+      rpc.handler = (_) => {..._response(), 'url': url};
+      expect((await web.open()).url.toString(), url);
+    }
+    expect(isTrustedDshWebRoot(Uri.parse('https://x.tun-test.4ba.io/')), isFalse);
   });
 
   test('close checks the authoritative closed flag', () async {
@@ -135,27 +147,33 @@ void main() {
     null,
     '1790000000000',
     1790000000000.0,
-    _now.millisecondsSinceEpoch,
-    _now.millisecondsSinceEpoch - 1,
+    _now.millisecondsSinceEpoch - dshWebClockSkew.inMilliseconds,
+    _now.millisecondsSinceEpoch - dshWebClockSkew.inMilliseconds - 1,
   ]) {
-    test('expiry must be a future Unix millisecond integer: $expires', () async {
+    test('expiry must be a Unix millisecond integer within the clock skew: $expires', () async {
       rpc.handler = (_) => {..._response(), 'expiresAt': expires};
       await expectLater(web.open(), throwsA(_code(expires is int ? 'GRANT_EXPIRED' : 'INVALID_WEB_RESPONSE')));
     });
   }
 
-  test('rechecks expiry when taking the body and retires expired grants', () async {
-    var now = _now;
-    final grant = await RemoteDshWeb(session, now: () => now).open();
-    now = now.add(const Duration(seconds: 30));
-    expect(() => grant.takePostBody(), throwsA(_code('GRANT_EXPIRED')));
-    expect(() => grant.takePostBody(), throwsA(_code('GRANT_CONSUMED')));
+  test('a phone clock running up to a minute ahead still opens', () async {
+    final ahead = RemoteDshWeb(session, now: () => _now.add(const Duration(seconds: 80)));
+    final grant = await ahead.open();
+    expect(grant.takeExchangePage(), contains(_grant));
   });
 
-  test('discard retires a grant without encoding a request', () async {
+  test('rechecks expiry when taking the page and retires expired grants', () async {
+    var now = _now;
+    final grant = await RemoteDshWeb(session, now: () => now).open();
+    now = now.add(const Duration(seconds: 30)).add(dshWebClockSkew);
+    expect(() => grant.takeExchangePage(), throwsA(_code('GRANT_EXPIRED')));
+    expect(() => grant.takeExchangePage(), throwsA(_code('GRANT_CONSUMED')));
+  });
+
+  test('discard retires a grant without building a page', () async {
     final grant = await web.open();
     grant.discard();
-    expect(() => grant.takePostBody(), throwsA(_code('GRANT_CONSUMED')));
+    expect(() => grant.takeExchangePage(), throwsA(_code('GRANT_CONSUMED')));
   });
 
   test('close and reopen serialize across API instances for one session', () async {

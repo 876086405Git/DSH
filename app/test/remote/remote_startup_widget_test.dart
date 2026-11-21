@@ -47,6 +47,7 @@ void main() {
     final c = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
     final tile = find.byKey(const ValueKey('remote-auto-connect'));
     await tester.scrollUntilVisible(tile, 300);
+    await tester.pump();
     final toggle = find.descendant(of: tile, matching: find.byType(Switch));
     expect(tester.widget<Switch>(toggle).value, isTrue);
     await tester.tap(toggle);

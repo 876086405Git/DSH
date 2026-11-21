@@ -1,13 +1,18 @@
+import 'package:dsh_remote/dsh_remote.dart' show RemoteHostSession, RemoteTunnelCarrier;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../remote/ssh/ssh_link.dart';
+import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/plugins_state.dart' show installedPluginsProvider;
+import '../../state/read_list_identity.dart';
+import '../../state/remote_web_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/ui_mode_state.dart';
+import '../remote/remote_web/remote_web_page.dart';
 import 'local_web_screen.dart';
 import 'web_target.dart';
 import 'web_view_page.dart';
@@ -33,6 +38,16 @@ final class SshDshWeb extends DshWebAccess {
   final String hostName;
 }
 
+/// A DSH Remote host: its DSH Web through the Remote tunnel, on the live
+/// Noise session ([RemoteWebPage]; Android and iPhone, the Host's Remote
+/// plugin 0.6.6 or later with DSH Web running). It lands on the home page:
+/// the page gets no JavaScript bridge, so no [DshWebTarget].
+final class RelayDshWeb extends DshWebAccess {
+  const RelayDshWeb(this.carrier, this.session);
+  final RemoteTunnelCarrier carrier;
+  final RemoteHostSession session;
+}
+
 /// No web page for this host right now; [reason] says why.
 final class NoDshWeb extends DshWebAccess {
   const NoDshWeb(this.reason);
@@ -46,7 +61,21 @@ final dshWebAccessProvider = Provider.autoDispose<DshWebAccess>((ref) {
     case HostKind.local:
       return const LocalDshWeb();
     case HostKind.relay:
-      return NoDshWeb(appL10n.webRelayUnavailable);
+      final os = ref.watch(operatingSystemProvider);
+      if (os != 'android' && os != 'ios') return NoDshWeb(appL10n.webRelayUnavailable);
+      // Rebuild on session replacement and link changes; the answer itself is
+      // read at once, for a tap nothing watched before (their first events
+      // arrive a moment later).
+      ref.watch(remoteWebSessionProvider);
+      ref.watch(hostLinkStatusProvider(host));
+      final connection = ref.watch(readListLiveConnectionProvider);
+      if (liveDshWebSession(connection) case final session?) {
+        return RelayDshWeb(connection!.client.carrier as RemoteTunnelCarrier, session);
+      }
+      // Connected without `dsh.web.v1`: an older Remote plugin, or DSH Web
+      // not running on the Host.
+      if (isLiveTunnel(connection)) return NoDshWeb(appL10n.remoteWebHostNotReady);
+      return NoDshWeb(appL10n.webConnectHostFirst(ref.watch(hostNameProvider(host)) ?? appL10n.commonRemoteHost));
     case HostKind.ssh:
       // Rebuild once the link connects (or reconnects to a new process).
       ref.watch(hostLinkStatusProvider(host));
@@ -106,9 +135,23 @@ void openDshWeb(BuildContext context, WidgetRef ref, {DshWebTarget target = cons
         phoneLayout: ref.read(settingsProvider).webPhoneLayout,
         openTarget: target,
       );
+    case RelayDshWeb(:final carrier, :final session):
+      // One page at a time: a second tap while it is up adds nothing (a
+      // second open would revoke the first page's lease).
+      if (_relayWebRoute?.isActive ?? false) return;
+      final route = MaterialPageRoute<void>(
+        builder: (_) => RemoteWebPage(carrier: carrier, session: session),
+      );
+      _relayWebRoute = route;
+      Navigator.of(context).push(route);
+      return;
     case NoDshWeb(:final reason):
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(reason)));
       return;
   }
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 }
+
+/// The last pushed [RemoteWebPage]'s route: no longer active once popped or
+/// its navigator is gone.
+Route<void>? _relayWebRoute;

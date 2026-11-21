@@ -15,7 +15,7 @@
   "remoteErrSharedInstance": "远端托管 DSH 仍在运行，但启动命令不同或缺少有效启动日志。为保护共享实例，未自动重启；请检查配置，改用“只连接”，或在编辑主机中明确选择“重启托管 DSH”。",
   "remoteErrAttachSettings": "请填写有效的远端 DSH 端口和登录令牌",
   "remoteDshAttached": "已连接既有 DSH",
-  "remoteStartupSection": "启动",
+  "remoteConnectionSettings": "连接设置",
   "remoteAutoConnectOnStartup": "连接上次使用的主机",
   "remoteAutoConnectOnStartupHint": "关闭后从本机开始",
   "remoteStepConnect": "连接服务器",
@@ -596,7 +596,6 @@
   "remoteSshRequirements": "需要那台主机开着 SSH，并装好 DSH",
   "remoteAddSshHost": "添加 SSH 主机",
   "remoteSshDirect": "不经过第三方服务器",
-  "remoteOtherMethods": "其他方式",
   "remoteWebConsole": "网页版远程控制台",
   "remoteWebConsoleProvider": "dsh.r2049.cn · 第三方页面",
   "remoteActiveHost": "正在使用「{name}」",
@@ -642,6 +641,14 @@
   },
   "remoteErrRefreshHosts": "没能刷新主机列表",
   "remoteSwitchWarning": "一次只连一台主机，切换会断开上一台",
+  "remoteHostOfflineHint": "「{name}」现在不在线。在那台电脑上打开 DSH 后再试",
+  "@remoteHostOfflineHint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "remoteRefreshHosts": "刷新主机列表",
   "remoteSignOut": "退出",
   "remoteErrHostsRetry": "没能获取主机列表 · 轻点重试",
@@ -1064,7 +1071,6 @@
   "remoteNetworkLocalIpVersion": "手机 ICE IP 版本",
   "remoteNetworkRemoteIpVersion": "主机 ICE IP 版本",
   "remoteNetworkIceProtocol": "ICE 协议",
-  "remoteTransferSettings": "远程传输",
   "remoteCompactHistory": "精简历史",
   "remoteErrHistoryModeChanged": "主机已不支持精简历史，请切换到其他主机后再连回来，或重启 App，重新加载历史",
   "remoteCompactHistoryHint": "支持的 DSH Remote 主机会精简历史工具详情，实时回复和审批不变。切换主机或重启 App 后生效；旧主机仍传输完整历史。",
