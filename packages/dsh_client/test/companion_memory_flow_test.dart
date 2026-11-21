@@ -38,6 +38,54 @@ MemoryRow usage({int? input, int? read, int? write, int? output, bool complete =
   'complete': complete, 'http_status': 200,
 };
 
+MemoryRow normalizedUsage(List<MemoryRow> events) => {
+  'provider': 'deepseek', 'model': 'deepseek-flash',
+  'start_usage': null, 'final_usage': null, 'start_event': null, 'final_event': null,
+  'usage_semantics': 'unknown', 'input_uncached': null, 'input_cache_read': null,
+  'input_cache_write': null, 'output_tokens': null, 'stop_reason': null,
+  'terminal': 'incomplete', 'complete': false, 'http_status': null,
+  'runtime_normalized_usage': events,
+  'runtime_normalized_usage_semantics': 'runtime-normalized-events',
+};
+
+MemoryRow hostReceipt({String id = 'physical-1', String call = 'call-1', int revision = 2,
+  List<String> requestIds = const ['rpc-1'], String phase = 'finished',
+  String observation = 'fetch-invoked', MemoryRow? raw}) {
+  final data = raw ?? usage(input: 100, read: 25, write: 0, output: 37);
+  return {
+    'receiptId': id, 'callId': call, 'revision': revision, 'requestIds': requestIds,
+    'provider': data['provider'], 'model': data['model'], 'phase': phase, 'observation': observation,
+    'dispatched': observation == 'adapter-invoked' ? null : observation == 'fetch-invoked',
+    'dispatchAtMs': observation == 'fetch-invoked' ? 900000 : null,
+    'handoffAtMs': 899000, 'physicalRequests': observation == 'adapter-invoked' ? null : observation == 'fetch-invoked' ? 1 : 0,
+    'terminal': data['terminal'], 'complete': data['complete'], 'httpStatus': data['http_status'],
+    'errorCode': null, 'usage': data,
+  };
+}
+
+MemoryRow hostSnapshot(MemoryRow delivery, List<MemoryRow> receipts, {int revision = 5, String state = 'settled',
+  List<String> gaps = const []}) {
+  final calls = receipts.map((row) => row['callId']).toSet();
+  final active = receipts.where((row) => row['phase'] == 'active').map((row) => row['callId']).toSet();
+  final physical = gaps.isNotEmpty || receipts.any((row) => row['physicalRequests'] == null) ? null :
+    receipts.fold<int>(0, (sum, row) => sum + (row['physicalRequests'] as int));
+  return {
+    'v': 1, 'instanceId': delivery['instance_id'], 'sessionId': delivery['session_id'], 'requestId': delivery['request_id'],
+    'binding': {'archiveId': delivery['archive_id'], 'controlRevision': delivery['control_revision'],
+      'historyAfterSeq': delivery['history_after_seq']},
+    'state': state, 'complete': state == 'settled' && calls.isNotEmpty && gaps.isEmpty && physical != null,
+    'revision': revision, 'gaps': gaps, 'observedAdapterCalls': calls.length, 'activeCalls': active.length,
+    'physicalRequests': physical, 'receipts': receipts,
+  };
+}
+
+MemoryRow unknownHostSnapshot(MemoryRow delivery, {String? instanceId, String gap = 'not-retained'}) => {
+  'v': 1, 'instanceId': instanceId ?? delivery['instance_id'],
+  'sessionId': delivery['session_id'], 'requestId': delivery['request_id'], 'binding': null,
+  'state': 'unknown', 'complete': false, 'revision': 0, 'gaps': [gap],
+  'observedAdapterCalls': 0, 'activeCalls': 0, 'physicalRequests': null, 'receipts': <MemoryRow>[],
+};
+
 void main() {
   late Directory directory;
   late Database database;
@@ -1274,11 +1322,14 @@ void main() {
     test('opening a v2 database adds deletion identities without replacing its original data', () {
       final card = remember('u1', '我学长笛', keywords: ['长笛']);
       final originalArchive = store.archive;
-      // Exact preceding schema: v3 only adds this table, no v2 fields changed.
+      // Remove only the v3/v4 additions to reconstruct the exact old schema.
+      database.execute('DROP TABLE memory_host_chat_delivery_receipts');
+      database.execute('DROP TABLE memory_host_chat_receipts');
+      database.execute('DROP TABLE memory_host_chat_deliveries');
       database.execute('DROP TABLE memory_deleted_messages');
       database.execute('PRAGMA user_version=2');
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 3);
+      expect(database.select('PRAGMA user_version').single['user_version'], 4);
       expect(store.archive, originalArchive);
       expect(store.cards().single, card);
       expect(store.messages().single['text'], '我学长笛');
@@ -1343,7 +1394,357 @@ void main() {
     });
   });
 
+  group('durable ordinary host chat receipts', () {
+    MemoryRow delivery({String host = 'host-a', String instance = 'instance-a', String session = 'session-a',
+      String request = 'rpc-1'}) => store.rememberHostChatDelivery(hostKey: host, instanceId: instance,
+        sessionId: session, requestId: request, archiveId: store.archive['id'] as String,
+        controlRevision: store.archive['control_revision'] as int, historyAfterSeq: store.archive['history_after_seq'] as int,
+        observedAt: now);
+
+    test('a body-free delivery survives restart without inventing one charged request', () {
+      final first = delivery();
+      expect(first['state'], 'pending');
+      expect(store.requests(), isEmpty);
+      now += 500;
+      expect(delivery(), first, reason: 'idempotent delivery keeps its original observation and binding');
+      reopen();
+      expect(store.pendingHostChatDeliveries('host-a'), [first]);
+      expect(store.pendingHostChatDeliveries('host-b'), isEmpty);
+      expect(() => store.rememberHostChatDelivery(hostKey: 'host-a', instanceId: 'instance-a', sessionId: 'session-a',
+        requestId: 'rpc-1', archiveId: store.archive['id'] as String, controlRevision: 1, historyAfterSeq: 0,
+        observedAt: now), throwsA(isA<DshRemoteException>()));
+      expect(store.requests(), isEmpty);
+      expect(database.select('PRAGMA user_version').single['user_version'], 4);
+    });
+
+    test('v3 upgrade preserves sources and existing once-only local receipts', () {
+      submit('u1', '原来的本地文字');
+      final request = reserve(category: 'chat')!;
+      store.markRequestSent(request);
+      store.recordUsage(request, usage(input: 2, read: 0, write: 0, output: 1));
+      store.finishRequest(request, terminal: 'complete');
+      final before = store.requests(), originalArchive = store.archive;
+      database.execute('DROP TABLE memory_host_chat_delivery_receipts');
+      database.execute('DROP TABLE memory_host_chat_receipts');
+      database.execute('DROP TABLE memory_host_chat_deliveries');
+      database.execute('PRAGMA user_version=3');
+      reopen();
+      expect(store.requests(), before);
+      expect(store.archive, originalArchive);
+      expect(store.messages().single['text'], '原来的本地文字');
+      expect(store.pendingHostChatDeliveries('host-a'), isEmpty);
+      expect(delivery()['state'], 'pending');
+    });
+
+    test('settled coverage with no retained receipt remains visibly unknown instead of becoming zero fees', () {
+      final owner = delivery();
+      store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [], gaps: const ['no-call-observed']));
+      expect(store.requests(), isEmpty);
+      expect(store.pendingHostChatDeliveries('host-a'), isEmpty);
+      final coverage = store.hostChatDeliveries().single;
+      expect(coverage['state'], 'settled');
+      expect(coverage['receipt_ids'], isEmpty);
+      expect(coverage['snapshot_metadata'], allOf(containsPair('complete', false),
+        containsPair('physicalRequests', null), containsPair('gaps', ['no-call-observed'])));
+      reopen();
+      expect(store.hostChatDeliveries(), [coverage]);
+    });
+
+    test('one prompt with two physical fetches keeps two exact raw receipts and no auxiliary reservation', () {
+      final owner = delivery();
+      final first = hostReceipt(id: 'physical-1', raw: usage(input: 100, read: 25, write: 0, output: 37, complete: false));
+      final second = hostReceipt(id: 'physical-2', call: 'call-2', revision: 3,
+        raw: usage(input: 7, read: 0, write: 0, output: 5));
+      final snapshot = {...hostSnapshot(owner, [first, second]), 'prompt': 'not retained',
+        'binding': {...(hostSnapshot(owner, [])['binding'] as Map), 'responseBody': 'not retained'}};
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: snapshot), isTrue);
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: snapshot), isFalse);
+      reopen();
+      final rows = store.requests();
+      expect(rows, hasLength(2));
+      expect(rows.map((row) => row['receipt_id']), ['physical-1', 'physical-2']);
+      expect(rows.map((row) => row['output_tokens']), [37, 5]);
+      expect(rows.first['raw_usage'], first['usage']);
+      expect(rows.first['complete'], isFalse, reason: 'final cumulative counters survive a missing message_stop');
+      expect(rows.first['input_uncached'], 100, reason: 'start input=999 is never added to final input');
+      expect(rows.first['estimated_cny'], closeTo((100 * 2 + 25 * .04 + 37 * 8) / 1000000, 1e-12));
+      for (final row in rows) {
+        expect(row['origin'], 'host-chat');
+        expect(row['category'], 'chat');
+        expect(row['physical_requests'], 1);
+        expect(row['reserved_input'], isNull);
+        expect(row['reserved_output'], isNull);
+        expect(row['sent_at_ms'], isNull);
+        expect(row['host_dispatch_at_ms'], 900000);
+      }
+      expect(store.pendingHostChatDeliveries('host-a'), isEmpty);
+      expect(database.select('SELECT snapshot_metadata FROM memory_host_chat_deliveries').single['snapshot_metadata'],
+        isNot(contains('not retained')));
+      expect(reserve(), isNotNull, reason: 'ordinary chat does not spend extraction budgets');
+    });
+
+    test('same-turn roots share one global physical receipt instead of charging it twice', () {
+      final first = delivery(), second = delivery(request: 'rpc-2');
+      final receipt = hostReceipt(requestIds: const ['rpc-1', 'rpc-2']);
+      expect(store.importHostChatUsage(deliveryId: first['id'] as String, snapshot: hostSnapshot(first, [receipt])), isTrue);
+      expect(store.importHostChatUsage(deliveryId: second['id'] as String, snapshot: hostSnapshot(second, [receipt])), isTrue);
+      expect(store.requests(), hasLength(1));
+      expect(store.requests().single['delivery_ids'], unorderedEquals([first['id'], second['id']]));
+      expect(store.importHostChatUsage(deliveryId: second['id'] as String, snapshot: hostSnapshot(second, [receipt])), isFalse);
+      final otherHost = delivery(host: 'host-b');
+      store.importHostChatUsage(deliveryId: otherHost['id'] as String, snapshot: hostSnapshot(otherHost, [receipt]));
+      expect(store.requests(), hasLength(2), reason: 'a distinct host is a distinct receipt identity');
+      final otherInstance = delivery(instance: 'instance-b');
+      store.importHostChatUsage(deliveryId: otherInstance['id'] as String, snapshot: hostSnapshot(otherInstance, [receipt]));
+      expect(store.requests(), hasLength(3), reason: 'a restarted bridge has a new receipt namespace');
+    });
+
+    test('a globally identified receipt cannot be relabelled onto a different session', () {
+      final first = delivery(), otherSession = delivery(session: 'session-b', request: 'rpc-2');
+      final receipt = hostReceipt(requestIds: const ['rpc-1', 'rpc-2']);
+      store.importHostChatUsage(deliveryId: first['id'] as String, snapshot: hostSnapshot(first, [receipt]));
+      expect(() => store.importHostChatUsage(deliveryId: otherSession['id'] as String,
+        snapshot: hostSnapshot(otherSession, [receipt])), throwsA(isA<DshRemoteException>()));
+      expect(store.requests().single['delivery_ids'], [first['id']]);
+      expect(store.pendingHostChatDeliveries('host-a'), [otherSession]);
+    });
+
+    test('active revisions replace one receipt, older snapshots do not overwrite and finished cannot change', () {
+      final owner = delivery();
+      final startOnly = {...usage(complete: false), 'final_usage': null, 'final_event': null, 'stop_reason': null};
+      final active = hostReceipt(revision: 2, phase: 'active', raw: startOnly);
+      final initial = hostSnapshot(owner, [active], revision: 2, state: 'running');
+      store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: initial);
+      expect(store.requests().single['output_tokens'], isNull);
+      expect(store.requests().single['raw_usage'], startOnly);
+      final finalReceipt = hostReceipt(revision: 4, raw: usage(input: 9, read: 3, write: 0, output: 8, complete: false));
+      final settled = hostSnapshot(owner, [finalReceipt], revision: 5);
+      store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: settled);
+      final finished = store.requests().single;
+      expect(finished['output_tokens'], 8);
+      expect(finished['complete'], isFalse);
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: initial), isFalse);
+      expect(store.requests().single, finished);
+      final changedSameRevision = hostReceipt(revision: 4, raw: usage(input: 9, read: 3, write: 0, output: 9));
+      expect(() => store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [changedSameRevision], revision: 6)), throwsA(isA<DshRemoteException>()));
+      expect(() => store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [hostReceipt(revision: 5)], revision: 6)), throwsA(isA<DshRemoteException>()));
+      expect(store.requests().single, finished);
+    });
+
+    test('an unknown revision-zero coverage gap preserves old receipt evidence and the original instance', () {
+      final owner = delivery();
+      final raw = usage(input: 9, read: 3, write: 0, output: 8, complete: false);
+      final active = hostReceipt(revision: 4, phase: 'active', raw: raw);
+      final known = hostSnapshot(owner, [active], revision: 5, state: 'running');
+      store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: known);
+      final rows = store.requests();
+      final unknown = unknownHostSnapshot(owner, instanceId: 'next-instance', gap: 'instance-changed');
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: unknown), isTrue);
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: unknown), isFalse);
+      reopen();
+      final pending = store.pendingHostChatDeliveries('host-a').single;
+      expect(pending['instance_id'], 'instance-a');
+      expect(pending['unknown_instance_id'], 'next-instance');
+      expect(pending['state'], 'unknown');
+      expect(pending['snapshot_revision'], 5);
+      expect(pending['unknown_gaps'], ['instance-changed']);
+      expect(store.requests(), rows);
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: known), isFalse);
+      expect(store.pendingHostChatDeliveries('host-a').single['state'], 'unknown',
+        reason: 'an equivalent old reply does not erase a later coverage gap');
+    });
+
+    test('generic normalized observations keep physical count and raw charge components unknown', () {
+      final owner = delivery();
+      final generic = hostReceipt(observation: 'adapter-invoked', raw: normalizedUsage([
+        {'inputTokens': 4, 'outputTokens': 99999, 'totalTokens': 100003},
+      ]));
+      store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [generic], gaps: const ['physical-count-unknown']));
+      final row = store.requests().single;
+      expect(row['dispatched'], isNull);
+      expect(row['physical_requests'], isNull);
+      expect(row['output_tokens'], isNull);
+      expect(row['estimated_cny'], isNull);
+      expect(row['raw_usage'], generic['usage']);
+      expect(reserve(), isNotNull, reason: 'ordinary generic chat never spends auxiliary output quota');
+    });
+
+    test('preflight and an observed HTTP failure are distinct while missing usage remains unknown', () {
+      final owner = delivery();
+      final base = {...usage(complete: false), 'final_usage': null, 'final_event': null,
+        'start_usage': null, 'start_event': null, 'stop_reason': null};
+      final preflight = hostReceipt(id: 'preflight', raw: {...base, 'terminal': 'preflight_error', 'http_status': null},
+        observation: 'preflight');
+      final sent = hostReceipt(id: 'http-401', call: 'call-2', raw: {...base, 'terminal': 'http_error', 'http_status': 401});
+      store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: hostSnapshot(owner, [preflight, sent]));
+      final rows = {for (final row in store.requests()) row['receipt_id']: row};
+      expect(rows['preflight']!['dispatched'], isFalse);
+      expect(rows['preflight']!['physical_requests'], 0);
+      expect(rows['http-401']!['dispatched'], isTrue);
+      expect(rows['http-401']!['physical_requests'], 1);
+      expect(rows.values.every((row) => row['output_tokens'] == null && row['estimated_cny'] == null), isTrue);
+    });
+
+    test('late usage retains its original control binding after current memory changes', () {
+      final owner = delivery();
+      store.saveManual(const CompanionMemory(id: manualCard, text: '我学长笛', keywords: ['长笛']),
+        expectedRowRev: null, currentValueChange: true, realityKnown: true);
+      final currentControl = store.archive['control_revision'];
+      expect(currentControl, isNot(owner['control_revision']));
+      store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: hostSnapshot(owner, [hostReceipt()]));
+      expect(store.archive['control_revision'], currentControl);
+      expect(store.cards().single['text'], '我学长笛');
+      expect(store.requests(), hasLength(1));
+      expect(database.select('SELECT control_revision FROM memory_host_chat_deliveries').single['control_revision'],
+        owner['control_revision']);
+    });
+
+    test('binding, ownership and receipt identity conflicts reject the complete snapshot atomically', () {
+      final owner = delivery();
+      final active = hostReceipt(phase: 'active', raw: usage(complete: false));
+      store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [active], state: 'running'));
+      final rows = store.requests(), pending = store.pendingHostChatDeliveries('host-a');
+      expect(() => store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [active], state: 'running', gaps: const ['capacity'])),
+        throwsA(isA<DshRemoteException>()), reason: 'the same root revision cannot change its coverage metadata');
+      final valid = hostSnapshot(owner, [hostReceipt(id: 'new-physical', call: 'new-call', revision: 3),
+        hostReceipt(revision: 3, call: 'different-call')], revision: 6);
+      expect(() => store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: valid),
+        throwsA(isA<DshRemoteException>()));
+      for (final changed in [
+        {...hostSnapshot(owner, [active], state: 'running'), 'sessionId': 'other-session'},
+        {...hostSnapshot(owner, [active], state: 'running'), 'instanceId': 'other-instance'},
+        {...hostSnapshot(owner, [active], state: 'running'), 'binding': {
+          'archiveId': owner['archive_id'], 'controlRevision': 99, 'historyAfterSeq': 0}},
+      ]) {
+        expect(() => store.importHostChatUsage(deliveryId: owner['id'] as String, snapshot: changed),
+          throwsA(isA<DshRemoteException>()));
+      }
+      expect(store.requests(), rows);
+      expect(store.pendingHostChatDeliveries('host-a'), pending);
+      expect(database.select('SELECT * FROM memory_host_chat_receipts'), hasLength(1));
+    });
+
+    test('a database failure cannot leave an imported receipt without its delivery linkage', () {
+      final owner = delivery();
+      database.execute("""
+        CREATE TRIGGER fail_usage_link BEFORE INSERT ON memory_host_chat_delivery_receipts
+        BEGIN SELECT RAISE(ABORT,'fixture'); END
+      """);
+      expect(() => store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [hostReceipt()])), throwsA(isA<SqliteException>()));
+      expect(store.requests(), isEmpty);
+      expect(store.pendingHostChatDeliveries('host-a'), [owner]);
+      database.execute('DROP TRIGGER fail_usage_link');
+      expect(store.importHostChatUsage(deliveryId: owner['id'] as String,
+        snapshot: hostSnapshot(owner, [hostReceipt()])), isTrue);
+    });
+  });
+
   group('request receipts and rolling reservations', () {
+    test('normalized output overrun closes the actual auxiliary budget without pretending raw usage is known', () {
+      final request = reserve()!;
+      store.markRequestUncertain(request);
+      final raw = normalizedUsage([{'inputTokens': 7, 'outputTokens': 99999}]);
+      store.recordUsage(request, raw);
+      store.finishRequest(request, terminal: 'incomplete');
+      reopen();
+      final row = store.requests().single;
+      expect(row['raw_usage'], raw);
+      for (final key in ['input_uncached', 'input_cache_read', 'input_cache_write', 'output_tokens', 'estimated_cny']) {
+        expect(row[key], isNull);
+      }
+      expect(reserve(input: 0, output: 0), isNull);
+      now += 86400000;
+      expect(reserve(), isNotNull);
+    });
+
+    test('normalized observations use per-field maxima rather than adding event totals', () {
+      final request = reserve()!;
+      store.markRequestSent(request);
+      store.recordUsage(request, normalizedUsage([
+        {'inputTokens': 1, 'outputTokens': 1200},
+        {'inputTokens': 2, 'outputTokens': 1400},
+        {'inputTokens': 1, 'outputTokens': 1300},
+      ]));
+      store.finishRequest(request, terminal: 'complete');
+      expect(reserve(input: 0, output: 1601), isNull);
+      expect(reserve(input: 0, output: 1600), isNotNull);
+    });
+
+    test('unverified normalized input partitions and reasoning are not added to one another', () {
+      final request = reserve()!;
+      store.markRequestSent(request);
+      store.recordUsage(request, normalizedUsage([
+        {'inputTokens': 10000, 'cacheReadTokens': 14000, 'cacheWriteTokens': 12000,
+          'outputTokens': 10, 'totalTokens': 99999, 'reasoningTokens': 99999},
+        {'inputTokens': 13000, 'outputTokens': 11},
+      ]));
+      store.finishRequest(request, terminal: 'complete');
+      expect(reserve(input: 10001, output: 0), isNull);
+      expect(reserve(input: 10000, output: 0), isNotNull,
+        reason: 'the maximum supported input component is 14000; no disjoint producer proof was assumed');
+    });
+
+    test('normalized default zero and malformed counters never release unknown reservations', () {
+      for (var index = 0; index < 3; index++) {
+        final request = reserve()!;
+        store.markRequestSent(request);
+        store.recordUsage(request, normalizedUsage([
+          {'inputTokens': 0, 'outputTokens': 0},
+          {'inputTokens': -1, 'outputTokens': '90000'},
+          {'inputTokens': 9007199254740992, 'outputTokens': 9007199254740992},
+          {'inputTokens': 3.5, 'outputTokens': 4.5},
+        ]));
+        store.finishRequest(request, terminal: 'complete');
+      }
+      expect(reserve(), isNull);
+      expect(store.requests().every((row) => row['output_tokens'] == null), isTrue);
+      expect(() => reserve(category: 'chat', input: 9007199254740992), throwsArgumentError);
+    });
+
+    test('known raw cumulative usage and normalized lower bounds both constrain the next request', () {
+      final request = reserve()!;
+      store.markRequestSent(request);
+      store.recordUsage(request, {
+        ...usage(input: 1, read: 0, write: 0, output: 1),
+        'runtime_normalized_usage': [{'outputTokens': 4000}],
+        'runtime_normalized_usage_semantics': 'runtime-normalized-events',
+      });
+      store.finishRequest(request, terminal: 'complete');
+      expect(store.requests().single['output_tokens'], 1);
+      expect(reserve(input: 0, output: 0), isNull);
+    });
+
+    test('normalized lower bounds reserve the verified peak estimate but never fabricate an actual price', () {
+      final request = reserve()!;
+      store.markRequestSent(request);
+      store.recordUsage(request, normalizedUsage([{'inputTokens': 2000000, 'outputTokens': 0}]));
+      store.finishRequest(request, terminal: 'complete');
+      expect(store.requests().single['estimated_cny'], isNull);
+      now += 86400000;
+      expect(reserve(), isNull);
+      final unknownPrice = reserve(provider: 'configured-provider', model: 'configured-model')!;
+      expect(store.requests().last['reserved_cny'], isNull);
+      store.finishRequest(unknownPrice, terminal: 'not_sent');
+      now += 29 * 86400000;
+      expect(reserve(), isNotNull);
+    });
+
+    test('a maximum safe normalized counter cannot overflow into an available monetary budget', () {
+      final request = reserve()!;
+      store.markRequestSent(request);
+      store.recordUsage(request, normalizedUsage([{'inputTokens': 9007199254740991, 'outputTokens': 9007199254740991}]));
+      store.finishRequest(request, terminal: 'complete');
+      now += 86400000;
+      expect(reserve(input: 0, output: 0), isNull);
+    });
+
     test('known-unsent release and observed HTTP failure have distinct costs and request times', () {
       final notSent = reserve()!;
       store.finishRequest(notSent, terminal: 'no_key');

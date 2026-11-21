@@ -8,10 +8,9 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_api.dart';
 import 'companion_memory_rules.dart';
+import 'companion_usage_api.dart';
 import 'errors.dart';
 import 'json.dart' show uuidV4;
-
-typedef _Row = Map<String, Object?>;
 
 const _conflict = DshRemoteException(
   'companion/conflict', 'Companion memory changed; read it again', {'status': 409},
@@ -27,7 +26,7 @@ class CompanionMemoryStore {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 3) {
+      if (version > 4) {
         throw const DshRemoteException(
           'companion/newer-store', 'This memory store needs a newer app', {'status': 409},
         );
@@ -66,6 +65,37 @@ class CompanionMemoryStore {
           _db.execute('PRAGMA user_version = 3');
         });
       }
+      if (version < 4) {
+        _transaction(() {
+          _db.execute('''
+            CREATE TABLE memory_host_chat_deliveries (
+              id TEXT PRIMARY KEY, host_key TEXT NOT NULL, instance_id TEXT NOT NULL,
+              session_id TEXT NOT NULL, request_id TEXT NOT NULL, archive_id TEXT NOT NULL,
+              control_revision INTEGER NOT NULL, history_after_seq INTEGER NOT NULL,
+              observed_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL,
+              state TEXT NOT NULL CHECK(state IN ('pending','running','settled','unknown')),
+              snapshot_revision INTEGER NOT NULL DEFAULT 0, snapshot_metadata TEXT,
+              unknown_gaps TEXT, unknown_instance_id TEXT,
+              UNIQUE(host_key,instance_id,session_id,request_id)
+            );
+            CREATE TABLE memory_host_chat_receipts (
+              id TEXT PRIMARY KEY, host_key TEXT NOT NULL, instance_id TEXT NOT NULL,
+              receipt_id TEXT NOT NULL, revision INTEGER NOT NULL,
+              phase TEXT NOT NULL CHECK(phase IN ('active','finished')), receipt_json TEXT NOT NULL,
+              first_observed_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL,
+              UNIQUE(host_key,instance_id,receipt_id)
+            );
+            CREATE TABLE memory_host_chat_delivery_receipts (
+              delivery_id TEXT NOT NULL REFERENCES memory_host_chat_deliveries(id),
+              receipt_id TEXT NOT NULL REFERENCES memory_host_chat_receipts(id),
+              PRIMARY KEY(delivery_id,receipt_id)
+            );
+            CREATE INDEX memory_host_chat_receipts_delivery
+              ON memory_host_chat_delivery_receipts(receipt_id,delivery_id);
+          ''');
+          _db.execute('PRAGMA user_version = 4');
+        });
+      }
       _transaction(() {
         _db.execute("UPDATE memory_requests SET state='released', terminal='not_sent' "
           "WHERE sent_at_ms IS NULL AND state='reserved'");
@@ -84,7 +114,7 @@ class CompanionMemoryStore {
 
   void close() => _db.close();
 
-  _Row get archive => Map<String, Object?>.from(_db.select('SELECT * FROM memory_archive').single);
+  MemoryRow get archive => Map<String, Object?>.from(_db.select('SELECT * FROM memory_archive').single);
 
   String get lightSessionId => archive['light_session_id'] as String;
 
@@ -95,7 +125,7 @@ class CompanionMemoryStore {
     return session;
   });
 
-  List<_Row> cards({bool includeInactive = false}) => [
+  List<MemoryRow> cards({bool includeInactive = false}) => [
     for (final row in _db.select('''
       SELECT c.*, t.mode AS topic_mode FROM memory_cards c
       JOIN memory_topics t ON t.id = c.topic_id
@@ -104,7 +134,7 @@ class CompanionMemoryStore {
     ''')) _card(row),
   ];
 
-  _Row _card(Row row) => {
+  MemoryRow _card(Row row) => {
     ...row,
     'keywords': (jsonDecode(row['keywords'] as String) as List).cast<String>(),
     'pinned': row['pinned'] == 1,
@@ -212,7 +242,7 @@ class CompanionMemoryStore {
     }
   });
 
-  List<_Row> migrationCleanup() => [
+  List<MemoryRow> migrationCleanup() => [
     for (final row in _db.select("SELECT * FROM memory_migrations WHERE cleanup_state = 'pending'"))
       Map<String, Object?>.from(row),
   ];
@@ -1001,7 +1031,9 @@ class CompanionMemoryStore {
     String? batchId,
   }) {
     if (!const ['chat', 'extract', 'organize'].contains(category) || provider.isEmpty || model.isEmpty ||
-        inputTokens < 0 || outputTokens < 0) throw ArgumentError('Invalid companion request reservation');
+        _usageCount(inputTokens) == null || _usageCount(outputTokens) == null) {
+      throw ArgumentError('Invalid companion request reservation');
+    }
     return _transaction(() {
       final at = _checkedNow();
       final knownPrice = provider == 'deepseek' && model == 'deepseek-flash';
@@ -1023,6 +1055,9 @@ class CompanionMemoryStore {
             final time = row['sent_at_ms'] ?? row['uncertain_at_ms'] ?? row['reserved_at_ms'];
             if ((time as int) <= at - 30 * 86400000 || row['provider'] != 'deepseek' || row['model'] != 'deepseek-flash') continue;
             monthly += _heldCost(row);
+            // Stop before another large but valid integer observation could
+            // overflow the running 64-bit sum.
+            if (monthly > 300000000) return null;
           }
           if (monthly > 300000000) return null;
         }
@@ -1064,8 +1099,7 @@ class CompanionMemoryStore {
       return;
     }
     int? count(String key) {
-      final value = usage[key];
-      return value is int && value >= 0 ? value : null;
+      return _usageCount(usage[key]);
     }
     final input = count('input_uncached');
     final read = count('input_cache_read');
@@ -1093,12 +1127,238 @@ class CompanionMemoryStore {
       [row['sent_at_ms'] == null ? 'released' : 'finished', terminal, id]);
   });
 
-  List<MemoryRow> requests() => [
-    for (final row in _db.select('SELECT * FROM memory_requests ORDER BY reserved_at_ms,id')) {
-      ...row,
-      'raw_usage': row['raw_usage'] == null ? null : jsonDecode(row['raw_usage'] as String),
-    },
+  /// Persist the immutable owner binding before delivering a full-mode prompt.
+  /// A delivery is not evidence of a physical request or of zero usage.
+  MemoryRow rememberHostChatDelivery({
+    required String hostKey,
+    required String instanceId,
+    required String sessionId,
+    required String requestId,
+    required String archiveId,
+    required int controlRevision,
+    required int historyAfterSeq,
+    required int observedAt,
+  }) {
+    for (final value in [hostKey, instanceId, sessionId, requestId, archiveId]) {
+      validateMemoryCardText(value);
+      if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)) throw ArgumentError('Invalid host chat identity');
+    }
+    if (_usageCount(controlRevision) == null || _usageCount(historyAfterSeq) == null ||
+        observedAt < 0 || observedAt > 8640000000000000) throw ArgumentError('Invalid host chat binding');
+    return _transaction(() {
+      if (archive['id'] != archiveId) throw _conflict;
+      final previous = _db.select('''
+        SELECT * FROM memory_host_chat_deliveries
+        WHERE host_key=? AND instance_id=? AND session_id=? AND request_id=?
+      ''', [hostKey, instanceId, sessionId, requestId]);
+      if (previous.isNotEmpty) {
+        final row = previous.single;
+        if (row['archive_id'] != archiveId || row['control_revision'] != controlRevision ||
+            row['history_after_seq'] != historyAfterSeq) throw _conflict;
+        return _hostDelivery(row);
+      }
+      final id = _createId();
+      _db.execute('''
+        INSERT INTO memory_host_chat_deliveries(id,host_key,instance_id,session_id,request_id,
+          archive_id,control_revision,history_after_seq,observed_at_ms,updated_at_ms,state)
+        VALUES(?,?,?,?,?,?,?,?,?,?,'pending')
+      ''', [id, hostKey, instanceId, sessionId, requestId, archiveId, controlRevision,
+        historyAfterSeq, observedAt, _checkedNow()]);
+      return _hostDelivery(_hostDeliveryRow(id));
+    });
+  }
+
+  /// Only read opportunities: neither this list nor an import resends a model
+  /// prompt. Settled immutable receipts remain in requests(), including their
+  /// unknown fees; pending/running/unknown coverage can be queried again.
+  List<MemoryRow> pendingHostChatDeliveries(String hostKey) => [
+    for (final row in _db.select('''
+      SELECT * FROM memory_host_chat_deliveries WHERE host_key=? AND state!='settled'
+      ORDER BY observed_at_ms,id
+    ''', [hostKey])) _hostDelivery(row),
   ];
+
+  /// Coverage metadata is separate from physical receipts. In particular, a
+  /// settled root with a gap and no retained receipts is not evidence of free
+  /// usage and must remain visible even though it is no longer polled.
+  List<MemoryRow> hostChatDeliveries() => [
+    for (final row in _db.select('SELECT * FROM memory_host_chat_deliveries ORDER BY observed_at_ms,id')) _hostDelivery(row),
+  ];
+
+  /// Import one root snapshot atomically. Root coverage and receipt revisions
+  /// have different lifetimes: unknown revision zero preserves old evidence.
+  bool importHostChatUsage({required String deliveryId, required Map<String, Object?> snapshot}) {
+    final incoming = CompanionChatUsageSnapshot.fromJson(snapshot);
+    return _transaction(() {
+      final delivery = _hostDeliveryRow(deliveryId);
+      if (incoming.sessionId != delivery['session_id'] || incoming.requestId != delivery['request_id'] ||
+          (incoming.instanceId != delivery['instance_id'] &&
+            (incoming.state != 'unknown' || !incoming.gaps.contains('instance-changed')))) throw _conflict;
+      if (incoming.state == 'unknown') {
+        final gaps = _canonicalJson(incoming.gaps);
+        if (delivery['state'] == 'unknown' && delivery['unknown_gaps'] == gaps &&
+            delivery['unknown_instance_id'] == incoming.instanceId) return false;
+        _db.execute('''
+          UPDATE memory_host_chat_deliveries SET state='unknown',unknown_gaps=?,unknown_instance_id=?,updated_at_ms=?
+          WHERE id=?
+        ''', [gaps, incoming.instanceId, _checkedNow(), deliveryId]);
+        return true;
+      }
+      final binding = incoming.binding!;
+      if (binding.archiveId != delivery['archive_id'] || binding.controlRevision != delivery['control_revision'] ||
+          binding.historyAfterSeq != delivery['history_after_seq']) throw _conflict;
+      final metadata = _canonicalJson({
+        'v': 1, 'instanceId': incoming.instanceId, 'sessionId': incoming.sessionId, 'requestId': incoming.requestId,
+        'binding': {'archiveId': binding.archiveId, 'controlRevision': binding.controlRevision,
+          'historyAfterSeq': binding.historyAfterSeq}, 'state': incoming.state, 'complete': incoming.complete,
+        'revision': incoming.revision, 'gaps': incoming.gaps, 'observedAdapterCalls': incoming.observedAdapterCalls,
+        'activeCalls': incoming.activeCalls, 'physicalRequests': incoming.physicalRequests,
+        'receipts': [for (final receipt in incoming.receipts) {'receiptId': receipt.receiptId, 'revision': receipt.revision}],
+      });
+      final oldRevision = delivery['snapshot_revision'] as int;
+      if (incoming.revision == oldRevision && delivery['snapshot_metadata'] != metadata) throw _conflict;
+      var changed = false;
+      final at = _checkedNow();
+      for (final receipt in incoming.receipts) {
+        final record = _hostReceiptData(receipt);
+        final encoded = _canonicalJson(record);
+        final previous = _db.select('''
+          SELECT * FROM memory_host_chat_receipts WHERE host_key=? AND instance_id=? AND receipt_id=?
+        ''', [delivery['host_key'], delivery['instance_id'], receipt.receiptId]);
+        final String localId;
+        if (previous.isEmpty) {
+          localId = _createId();
+          _db.execute('''
+            INSERT INTO memory_host_chat_receipts(id,host_key,instance_id,receipt_id,revision,phase,
+              receipt_json,first_observed_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?)
+          ''', [localId, delivery['host_key'], delivery['instance_id'], receipt.receiptId, receipt.revision,
+            receipt.phase, encoded, at, at]);
+          changed = true;
+        } else {
+          final old = previous.single;
+          localId = old['id'] as String;
+          final oldRecord = jsonDecode(old['receipt_json'] as String) as Map<String, Object?>;
+          for (final key in const ['receiptId', 'callId', 'requestIds', 'provider', 'model', 'observation',
+              'dispatched', 'dispatchAtMs', 'handoffAtMs', 'physicalRequests']) {
+            if (_canonicalJson(oldRecord[key]) != _canonicalJson(record[key])) throw _conflict;
+          }
+          if (_db.select('''
+            SELECT 1 FROM memory_host_chat_delivery_receipts link JOIN memory_host_chat_deliveries d ON d.id=link.delivery_id
+            WHERE link.receipt_id=? AND d.session_id!=?
+          ''', [localId, delivery['session_id']]).isNotEmpty) throw _conflict;
+          final previousRevision = old['revision'] as int;
+          if (receipt.revision == previousRevision) {
+            if (encoded != old['receipt_json']) throw _conflict;
+          } else if (receipt.revision > previousRevision) {
+            if (old['phase'] == 'finished') throw _conflict;
+            _db.execute('''
+              UPDATE memory_host_chat_receipts SET revision=?,phase=?,receipt_json=?,updated_at_ms=? WHERE id=?
+            ''', [receipt.revision, receipt.phase, encoded, at, localId]);
+            changed = true;
+          }
+        }
+        if (_db.select('SELECT 1 FROM memory_host_chat_delivery_receipts WHERE delivery_id=? AND receipt_id=?',
+            [deliveryId, localId]).isEmpty) {
+          _db.execute('INSERT INTO memory_host_chat_delivery_receipts(delivery_id,receipt_id) VALUES(?,?)',
+            [deliveryId, localId]);
+          changed = true;
+        }
+      }
+      if (incoming.revision > oldRevision) {
+        _db.execute('''
+          UPDATE memory_host_chat_deliveries SET state=?,snapshot_revision=?,snapshot_metadata=?,
+            unknown_gaps=NULL,unknown_instance_id=NULL,updated_at_ms=? WHERE id=?
+        ''', [incoming.state, incoming.revision, metadata, at, deliveryId]);
+        changed = true;
+      }
+      return changed;
+    });
+  }
+
+  Row _hostDeliveryRow(String id) {
+    final rows = _db.select('SELECT * FROM memory_host_chat_deliveries WHERE id=?', [id]);
+    if (rows.isEmpty) throw _conflict;
+    return rows.single;
+  }
+
+  MemoryRow _hostDelivery(Row row) => {
+    ...row,
+    'snapshot_metadata': row['snapshot_metadata'] == null ? null : jsonDecode(row['snapshot_metadata'] as String),
+    'unknown_gaps': row['unknown_gaps'] == null ? null : jsonDecode(row['unknown_gaps'] as String),
+    'receipt_ids': [for (final link in _db.select('''
+      SELECT r.receipt_id FROM memory_host_chat_delivery_receipts link
+      JOIN memory_host_chat_receipts r ON r.id=link.receipt_id WHERE link.delivery_id=? ORDER BY r.receipt_id
+    ''', [row['id']])) link['receipt_id']],
+  };
+
+  MemoryRow _hostReceiptData(CompanionChatUsageReceipt receipt) => {
+    'receiptId': receipt.receiptId, 'callId': receipt.callId, 'revision': receipt.revision,
+    'requestIds': receipt.requestIds, 'provider': receipt.provider, 'model': receipt.model,
+    'phase': receipt.phase, 'observation': receipt.observation, 'dispatched': receipt.dispatched,
+    'dispatchAtMs': receipt.dispatchAtMs, 'handoffAtMs': receipt.handoffAtMs,
+    'physicalRequests': receipt.physicalRequests, 'terminal': receipt.terminal, 'complete': receipt.complete,
+    'httpStatus': receipt.httpStatus, 'errorCode': receipt.errorCode,
+    'usage': {
+      for (final key in const ['provider', 'model', 'start_usage', 'final_usage', 'start_event', 'final_event',
+        'usage_semantics', 'input_uncached', 'input_cache_read', 'input_cache_write', 'output_tokens',
+        'stop_reason', 'terminal', 'complete', 'http_status', 'runtime_normalized_usage',
+        'runtime_normalized_usage_semantics', 'host_adapter_handoff_at_ms', 'runtime_finish_kind', 'host_dispatch_at_ms'])
+        if (receipt.usage.containsKey(key)) key: receipt.usage[key],
+    },
+  };
+
+  String _canonicalJson(Object? value) => jsonEncode(_orderedJson(value));
+
+  Object? _orderedJson(Object? value) {
+    if (value is Map<String, Object?>) {
+      final keys = value.keys.toList()..sort();
+      return {for (final key in keys) key: _orderedJson(value[key])};
+    }
+    if (value is List<Object?>) return [for (final item in value) _orderedJson(item)];
+    return value;
+  }
+
+  List<MemoryRow> requests() {
+    final rows = <MemoryRow>[
+      for (final row in _db.select('SELECT * FROM memory_requests')) {
+        ...row, 'origin': 'local',
+        'raw_usage': row['raw_usage'] == null ? null : jsonDecode(row['raw_usage'] as String),
+      },
+      for (final row in _db.select('SELECT * FROM memory_host_chat_receipts')) _hostRequest(row),
+    ];
+    rows.sort((a, b) {
+      final at = (a['observed_at_ms'] ?? a['reserved_at_ms']) as int;
+      final bt = (b['observed_at_ms'] ?? b['reserved_at_ms']) as int;
+      return at != bt ? at.compareTo(bt) : (a['id'] as String).compareTo(b['id'] as String);
+    });
+    return rows;
+  }
+
+  MemoryRow _hostRequest(Row row) {
+    final receipt = jsonDecode(row['receipt_json'] as String) as Map<String, Object?>;
+    final usage = receipt['usage'] as Map<String, Object?>;
+    final input = _usageCount(usage['input_uncached']), read = _usageCount(usage['input_cache_read']);
+    final write = _usageCount(usage['input_cache_write']), output = _usageCount(usage['output_tokens']);
+    final cost = receipt['provider'] == 'deepseek' && receipt['model'] == 'deepseek-flash' &&
+        input != null && read != null && write == 0 && output != null ? _costUnits(input, read, output) : null;
+    return {
+      'id': row['id'], 'origin': 'host-chat', 'category': 'chat', 'batch_id': null,
+      'provider': receipt['provider'], 'model': receipt['model'], 'host_key': row['host_key'],
+      'instance_id': row['instance_id'], 'receipt_id': row['receipt_id'], 'call_id': receipt['callId'],
+      'revision': row['revision'], 'phase': row['phase'], 'request_ids': receipt['requestIds'],
+      'delivery_ids': [for (final link in _db.select('SELECT delivery_id FROM memory_host_chat_delivery_receipts WHERE receipt_id=? ORDER BY delivery_id',
+        [row['id']])) link['delivery_id']],
+      'observed_at_ms': row['first_observed_at_ms'], 'updated_at_ms': row['updated_at_ms'],
+      'reserved_at_ms': null, 'reserved_input': null, 'reserved_output': null, 'reserved_cny': null,
+      'sent_at_ms': null, 'uncertain_at_ms': null, 'host_dispatch_at_ms': receipt['dispatchAtMs'],
+      'observation': receipt['observation'], 'dispatched': receipt['dispatched'],
+      'physical_requests': receipt['physicalRequests'], 'raw_usage': usage, 'usage_semantics': usage['usage_semantics'],
+      'input_uncached': input, 'input_cache_read': read, 'input_cache_write': write, 'output_tokens': output,
+      'estimated_cny': cost == null ? null : cost / 100000000,
+      'state': row['phase'] == 'active' ? 'active' : receipt['dispatched'] == false ? 'not_sent' : 'finished',
+      'terminal': receipt['terminal'], 'complete': receipt['complete'],
+    };
+  }
 
   Row _request(String id) {
     final rows = _db.select('SELECT * FROM memory_requests WHERE id=?', [id]);
@@ -1107,29 +1367,61 @@ class CompanionMemoryStore {
   }
 
   bool _allUsageKnown(Row row) => const ['input_uncached', 'input_cache_read', 'input_cache_write', 'output_tokens']
-      .every((key) => row[key] != null);
+      .every((key) => _usageCount(row[key]) != null);
 
-  int _reportedInput(Row row) => (row['input_uncached'] as int? ?? 0) +
-      (row['input_cache_read'] as int? ?? 0) + (row['input_cache_write'] as int? ?? 0);
+  int? _usageCount(Object? value) => value is int && value >= 0 && value <= 9007199254740991 ? value : null;
 
-  int _heldInput(Row row) => _allUsageKnown(row) ? _reportedInput(row) :
-      math.max(row['reserved_input'] as int, _reportedInput(row));
+  /// Runtime-normalized events are not provider raw usage. Each safe counter
+  /// is at most a lower bound here; absent/default zero never closes a raw
+  /// unknown, and event totals are never added together.
+  int? _normalizedBound(Row row, List<String> keys) {
+    if (row['raw_usage'] == null) return null;
+    final usage = jsonDecode(row['raw_usage'] as String) as Map<String, Object?>;
+    final events = usage['runtime_normalized_usage'];
+    if (events is! List<Object?>) return null;
+    int? bound;
+    for (final event in events) {
+      if (event is! Map<String, Object?>) continue;
+      for (final key in keys) {
+        final count = _usageCount(event[key]);
+        if (count != null) bound = bound == null ? count : math.max(bound, count);
+      }
+    }
+    return bound;
+  }
 
-  int _heldOutput(Row row) => _allUsageKnown(row) ? row['output_tokens'] as int :
-      math.max(row['reserved_output'] as int, row['output_tokens'] as int? ?? 0);
+  int _normalizedInput(Row row) => _normalizedBound(row,
+    const ['inputTokens', 'cacheReadTokens', 'cacheWriteTokens']) ?? 0;
+
+  int _normalizedOutput(Row row) => _normalizedBound(row, const ['outputTokens']) ?? 0;
+
+  int _reportedInput(Row row) => (_usageCount(row['input_uncached']) ?? 0) +
+      (_usageCount(row['input_cache_read']) ?? 0) + (_usageCount(row['input_cache_write']) ?? 0);
+
+  int _heldInput(Row row) => math.max(_normalizedInput(row), _allUsageKnown(row) ? _reportedInput(row) :
+      math.max(row['reserved_input'] as int, _reportedInput(row)));
+
+  int _heldOutput(Row row) => math.max(_normalizedOutput(row), _allUsageKnown(row) ? row['output_tokens'] as int :
+      math.max(row['reserved_output'] as int, _usageCount(row['output_tokens']) ?? 0));
 
   // Peak rates verified for this route: CNY 2 uncached input / .04 cache read /
   // 8 output per million. Integer 1e-8 CNY units avoid a floating boundary at 3.
   int _costUnits(int input, int read, int output) => input * 200 + read * 4 + output * 800;
 
   int _heldCost(Row row) {
+    // On the verified route only, reserve a peak-rate estimate for the seen
+    // normalized lower bound. It is not a provider charge or a known cache
+    // split; estimated_cny remains null when raw final fields are unknown.
+    final normalized = _costUnits(_normalizedInput(row), 0, _normalizedOutput(row));
     if (_allUsageKnown(row) && row['input_cache_write'] == 0) {
-      return _costUnits(row['input_uncached'] as int, row['input_cache_read'] as int, row['output_tokens'] as int);
+      return math.max(normalized,
+        _costUnits(row['input_uncached'] as int, row['input_cache_read'] as int, row['output_tokens'] as int));
     }
     // A nonzero cache-write rate has not been verified. Keep the peak input
     // reservation and the known lower bound; estimated_cny remains unknown.
-    return math.max(_costUnits(row['reserved_input'] as int, 0, row['reserved_output'] as int),
-      _costUnits(row['input_uncached'] as int? ?? 0, row['input_cache_read'] as int? ?? 0, row['output_tokens'] as int? ?? 0));
+    return math.max(normalized, math.max(_costUnits(row['reserved_input'] as int, 0, row['reserved_output'] as int),
+      _costUnits(_usageCount(row['input_uncached']) ?? 0, _usageCount(row['input_cache_read']) ?? 0,
+        _usageCount(row['output_tokens']) ?? 0)));
   }
 
   int _checkedNow() {
@@ -1181,9 +1473,9 @@ class CompanionMemoryStore {
           source_at_ms=excluded.source_at_ms, updated_at_ms=excluded.updated_at_ms,
           expires_at_ms=excluded.expires_at_ms, status=excluded.status
       ''', [id, revision, memory.kind, memory.text, jsonEncode(memory.keywords),
-        memory.pinned ? 1 : 0, changedText ? (realityKnown ? 1 : 0) : previous!['eligible'],
-        changedText ? 1 : previous!['manual'], topic, basis,
-        changedText ? at : previous!['source_at_ms'], previous?['created_at_ms'] ?? at,
+        memory.pinned ? 1 : 0, changedText ? (realityKnown ? 1 : 0) : previous['eligible'],
+        changedText ? 1 : previous['manual'], topic, basis,
+        changedText ? at : previous['source_at_ms'], previous?['created_at_ms'] ?? at,
         at, memory.expiresAt?.millisecondsSinceEpoch, status]);
       // An edit is its own manual basis; old quotes no longer prove the new wording.
       if (changedText) {
