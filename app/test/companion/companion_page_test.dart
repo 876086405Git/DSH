@@ -2085,6 +2085,386 @@ void main() {
         });
       }
 
+      for (final scenario in [
+        'accepted',
+        'accepted-typed-directory',
+        'route-return-before-capability',
+        'route-return-during-browser',
+        'route-return-during-typed-dialog',
+        'route-remove-same-frame-during-sheet',
+        'route-remove-same-frame-during-browser',
+        'route-return-before-acceptance',
+        'host-return-before-acceptance',
+        'background-return-before-acceptance',
+        'two-fresh-parts',
+        'two-parts-then-leave',
+        'two-parts-cancel-first',
+        'following-find-part',
+        'following-cancel-part',
+      ]) {
+        testWidgets('F fresh Page starts only this accepted foreground batch: $scenario', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          const now = 1795219200000;
+          final previousLifecycle = tester.binding.lifecycleState;
+          tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now),
+            CompanionLocal.at(root), nowMilliseconds: () => now,
+          );
+          final peer = (await tester.runAsync(NotesPeer.open))!;
+          peer.capability = {...findCapability, 'notesForeground': true};
+          final two = scenario.startsWith('two-');
+          final followingFind = scenario == 'following-find-part';
+          final followingCancel = scenario == 'following-cancel-part';
+          final holdAcceptance = scenario.endsWith('before-acceptance');
+          final lostDuringSelection = scenario == 'route-return-before-capability' ||
+            scenario == 'route-return-during-browser' || scenario == 'route-return-during-typed-dialog' ||
+            scenario.startsWith('route-remove-same-frame-');
+          final typedDirectory = scenario.contains('typed-');
+          final capabilitySeen = Completer<void>();
+          final releaseCapability = Completer<void>();
+          final cancelSeen = Completer<void>();
+          final releaseCancel = Completer<void>();
+          final cancelBodies = <MemoryRow>[];
+          var holdNextCapability = false;
+          peer.beforeCapability = () async {
+            if (holdNextCapability) {
+              holdNextCapability = false;
+              capabilitySeen.complete();
+              await releaseCapability.future;
+            }
+          };
+          final createSeen = Completer<void>();
+          final releaseCreate = Completer<void>();
+          final releases = [Completer<void>(), Completer<void>()];
+          final imported = [Completer<void>(), Completer<void>()];
+          final bindings = [Completer<void>(), Completer<void>()];
+          final creations = <MemoryRow>[];
+          final snapshots = <String, MemoryRow>{};
+          final foregroundPosts = <({String id, MemoryRow body, MemoryRow prepared})>[];
+          final taskCountsAtBind = <int>[];
+          final receiptFutures = <Future<void>>[];
+          var modelPosts = 0;
+          Future<void>? handling;
+          void changed() {
+            for (var index = 0; index < foregroundPosts.length; index++) {
+              final task = memory.store.hostTask(foregroundPosts[index].id)!;
+              if (task['state'] == 'waiting' && task['wait_reason'] == 'foreground_required' &&
+                  !imported[index].isCompleted) {
+                imported[index].complete();
+              }
+            }
+          }
+          memory.addListener(changed);
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'clock') {
+              return {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800};
+            }
+            if (call.method == 'capabilities') {
+              return {'executorId': 'phone-original', 'exact': true, 'notifications': true};
+            }
+            if (call.method == 'recover') {
+              return {'recoveryQueued': true};
+            }
+            throw StateError('Unexpected native task call ${call.method}');
+          });
+          peer.respond = (request, body) async {
+            if (request.uri.path == '/api/directoryPicker/list') {
+              await NotesPeer.json(request, {'type': 'server-response', 'rpcId': body!['rpcId'],
+                'result': {'ok': true, 'value': {'path': '/实际笔记', 'home': '/实际笔记',
+                  'crumbs': [{'name': '实际笔记', 'path': '/实际笔记'}], 'entries': <Object?>[]}}});
+            } else if (request.uri.path == '$notesPath/folders') {
+              final index = taskCountsAtBind.length;
+              taskCountsAtBind.add(memory.store.tasks().length);
+              await NotesPeer.json(request, {'v': 1, 'hostStoreId': 'original-store',
+                'folderRef': 'bound-source', 'displayPath': '/实际笔记'});
+              bindings[index].complete();
+            } else if (request.method == 'POST' && request.uri.path == notesPath) {
+              final create = body!;
+              creations.add(create);
+              final id = create['taskId']! as String;
+              final isNotes = create['kind'] == 'host.notes_to_todo';
+              snapshots[id] = {...notesSnapshot(create, state: isNotes ? 'waiting' : 'running'),
+                'hostExecutionId': 'execution-$id',
+                'waitReason': isNotes ? 'foreground_required' : null};
+              if (!createSeen.isCompleted) createSeen.complete();
+              if (holdAcceptance) await releaseCreate.future;
+              await NotesPeer.json(request, snapshots[id], status: 201);
+            } else if (request.method == 'POST' && request.uri.path.endsWith('/foreground')) {
+              final id = request.uri.pathSegments[request.uri.pathSegments.length - 2];
+              final index = foregroundPosts.length;
+              foregroundPosts.add((id: id, body: body!, prepared: memory.store.hostTask(id)!));
+              final response = request.response
+                ..bufferOutput = false
+                ..headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
+              response.write('${jsonEncode(snapshots[id])}\n');
+              await response.flush();
+              await releases[index].future;
+              try {
+                await response.close();
+              } on Object {
+                // The real Page may already have closed only this response.
+              }
+            } else if (request.method == 'POST' && request.uri.path.endsWith('/cancel')) {
+              final id = request.uri.pathSegments[request.uri.pathSegments.length - 2];
+              cancelBodies.add(body!);
+              final previous = snapshots[id]!;
+              snapshots[id] = {...previous, 'taskRev': 2, 'runnerReceiptSeq': 2, 'state': 'cancelled',
+                'waitReason': null, 'cancelRequested': true, 'updatedAtMs': now + 2,
+                'revisions': [
+                  ...(previous['revisions']! as List<Object?>),
+                  {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': now + 1, 'agreement': previous['agreement']},
+                ]};
+              cancelSeen.complete();
+              await releaseCancel.future;
+              await NotesPeer.json(request, snapshots[id]);
+            } else if (request.method == 'GET' && snapshots.containsKey(request.uri.pathSegments.last)) {
+              await NotesPeer.json(request, snapshots[request.uri.pathSegments.last]);
+            } else {
+              await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'missing'}}, status: 404);
+            }
+          };
+          try {
+            await openLight(tester, apiKey: '', client: MockClient((_) async {
+              modelPosts++;
+              throw StateError('A fixed Host task must not call the light model');
+            }), connection: HostConnection(client: peer.client, isLocal: false), extra: [
+              companionModeProvider.overrideWith(_NotesLightMode.new),
+              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+            ]);
+            expect(await memoryOf(tester), same(memory));
+            await settleMixed(tester, memory.migrateLocal());
+            final originalSession = memory.store.lightSessionId;
+            final element = tester.element(find.byType(CompanionPage));
+            final navigator = Navigator.of(element);
+            final container = ProviderScope.containerOf(element);
+            final originalHost = container.read(activeHostProvider);
+            final raw = '请电脑把今天的笔记另存成一页待办，原件别动，文件名为《甲待办.md》，我离开就停'
+              '${two ? '；请电脑把今天的笔记另存成一页待办，原件别动，文件名为《乙待办.md》，我离开就停' : ''}'
+              '${followingFind ? '；请电脑在“演讲稿”本层找昨天改的稿子，不用翻别处，离开后继续' : ''}'
+              '${followingCancel ? '；取消《甲待办.md》的笔记整理' : ''}';
+            Future<void> externalRouteAndBack() async {
+              unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('外来的页面')))));
+              await _notesVisible(tester, find.text('外来的页面'));
+              await tester.pump(const Duration(milliseconds: 400));
+              navigator.pop();
+              await tester.pump(const Duration(milliseconds: 400));
+            }
+            void externalRouteRemovedInSameFrame(Finder owner) {
+              final original = ModalRoute.of(tester.element(owner))!;
+              final covering = PageRouteBuilder<void>(
+                transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+                pageBuilder: (_, _, _) => const Scaffold(body: Text('同帧外来页面')),
+              );
+              unawaited(navigator.push(covering));
+              expect(covering.isCurrent, isTrue);
+              expect(original.isCurrent, isFalse);
+              // No pump or timer occurs between these actual Navigator calls.
+              // The owned route's didChangeNext must retain the lost chance.
+              navigator.removeRoute(covering);
+              expect(original.isCurrent, isTrue);
+              expect(find.text('同帧外来页面'), findsNothing);
+            }
+            holdNextCapability = scenario == 'route-return-before-capability';
+            await tester.enterText(find.byType(TextField), raw);
+            await tester.pump();
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            if (scenario == 'route-return-before-capability') {
+              await settleMixed(tester, capabilitySeen.future);
+              handling = memory.lastReceipt;
+              expect(find.byType(DirectoryLocationsSheet), findsNothing);
+              expect(memory.store.tasks(), isEmpty);
+              await externalRouteAndBack();
+              releaseCapability.complete();
+            }
+            for (var choice = 0; choice < (two || followingFind ? 2 : 1); choice++) {
+              await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+              handling ??= memory.lastReceipt;
+              expect(find.byType(CompanionTasksPage), findsNothing);
+              expect(foregroundPosts, isEmpty);
+              expect(creations, isEmpty, reason: 'Every picker finishes before the fresh pause batch is dispatched');
+              if (scenario == 'route-remove-same-frame-during-sheet') {
+                externalRouteRemovedInSameFrame(find.byType(DirectoryLocationsSheet));
+              }
+              if (typedDirectory) {
+                await tester.tap(find.text('输入路径').last);
+                await _notesVisible(tester, find.byType(AlertDialog));
+                if (scenario == 'route-return-during-typed-dialog') {
+                  await externalRouteAndBack();
+                }
+                await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+                  '/实际笔记');
+                await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.byType(FilledButton)));
+              } else {
+                await tester.tap(find.text('主目录').last);
+              }
+              final choose = find.descendant(of: find.byType(DirectoryBrowserPage),
+                matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null)).last;
+              await _notesVisible(tester, choose);
+              if (scenario == 'route-return-during-browser') {
+                await externalRouteAndBack();
+              } else if (scenario == 'route-remove-same-frame-during-browser') {
+                externalRouteRemovedInSameFrame(find.byType(DirectoryBrowserPage));
+              }
+              await tester.tap(choose);
+              await settleMixed(tester, bindings[choice].future);
+            }
+            if (holdAcceptance) {
+              await settleMixed(tester, createSeen.future);
+              expect(memory.store.hostTaskCommands(creations.single['taskId']! as String).single['possible_sent_at_ms'], now);
+              if (scenario.startsWith('route-')) {
+                unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另一个页面')))));
+                await _notesVisible(tester, find.text('另一个页面'));
+                await tester.pump(const Duration(milliseconds: 400));
+                navigator.pop();
+                await tester.pump(const Duration(milliseconds: 400));
+              } else if (scenario.startsWith('host-')) {
+                container.read(activeHostProvider.notifier).select(const HostRef.ssh('fresh-other-host'));
+                await tester.pump();
+                container.read(activeHostProvider.notifier).select(originalHost);
+                await tester.pump();
+              } else {
+                tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+                await tester.pump();
+                tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+                await tester.pump();
+              }
+              releaseCreate.complete();
+            }
+            await settleMixed(tester, handling!);
+            final source = memory.store.messages().singleWhere((row) => row['role'] == 'user');
+            expect(source['text'], raw);
+            expect(source['session_id'], originalSession);
+            expect(taskCountsAtBind, two || followingFind ? [0, 1] : [0]);
+            expect(modelPosts, 0);
+            if (followingCancel) {
+              expect(creations, isEmpty);
+              expect(foregroundPosts, isEmpty);
+              final task = memory.store.tasks().single;
+              expect(task['task_rev'], 2);
+              expect(task['cancel_requested'], 1);
+              expect(task['state'], 'cancelled');
+              expect(memory.store.hostTaskCommands(task['task_id']! as String).map((row) => row['operation']), ['create', 'cancel']);
+              expect(find.byType(CompanionTasksPage), findsNothing);
+              return;
+            }
+            if (lostDuringSelection) {
+              expect(creations, isEmpty);
+              expect(foregroundPosts, isEmpty);
+              final task = memory.store.tasks().single;
+              expect(task['state'], 'queued');
+              expect(memory.store.hostTaskCommands(task['task_id']! as String).single['possible_sent_at_ms'], isNull);
+              expect(find.byType(CompanionTasksPage), findsNothing);
+              await tester.tap(find.text('看看这件事'));
+              await _notesVisible(tester, find.byType(CompanionTasksPage));
+              await settleMixed(tester, memory.lastReceipt);
+              expect(creations, isEmpty);
+              expect(foregroundPosts, isEmpty, reason: 'Ordinary detail loading cannot restore the lost selection opportunity');
+              return;
+            }
+            expect(creations, hasLength(two || followingFind ? 2 : 1));
+            for (final create in creations) {
+              expect((create['origin']! as MemoryRow)['messageId'], source['id']);
+              expect((create['origin']! as MemoryRow)['sourceSessionId'], originalSession);
+              expect(create['hostSessionId'], isNull);
+            }
+            if (holdAcceptance) {
+              expect(foregroundPosts, isEmpty);
+              expect(find.byType(CompanionTasksPage), findsNothing);
+              expect(memory.store.hostTask(creations.single['taskId']! as String)!['state'], 'waiting');
+              await tester.tap(find.text('看看这件事'));
+              await _notesVisible(tester, find.byType(CompanionTasksPage));
+              await settleMixed(tester, memory.lastReceipt);
+              await _notesVisible(tester, find.text('在这里继续'));
+              expect(foregroundPosts, isEmpty, reason: 'A later ordinary read cannot restore the lost fresh opportunity');
+              return;
+            }
+            await settleMixed(tester, imported.first.future);
+            receiptFutures.add(memory.lastReceipt);
+            await _notesVisible(tester, find.byType(CompanionTasksPage));
+            expect(find.byType(CompanionTasksPage), findsOneWidget);
+            expect(foregroundPosts, hasLength(1), reason: 'The person never tapped the separate continue button');
+            final first = foregroundPosts.single;
+            expect(first.body, {'v': 1, 'hostStoreId': 'original-store',
+              'hostExecutionId': 'execution-${first.id}', 'taskRev': 1, 'sourceSessionId': originalSession});
+            expect(first.prepared['state'], 'unknown');
+            expect(first.prepared['wait_reason'], 'host_receipt_unknown');
+            expect(memory.store.hostTaskCommands(first.id), hasLength(1));
+            if (followingFind) {
+              expect(creations.map((create) => create['kind']), ['host.find_draft', 'host.notes_to_todo']);
+            }
+            if (scenario == 'two-parts-then-leave') {
+              unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('暂时离开')))));
+              await _notesVisible(tester, find.text('暂时离开'));
+              await settleMixed(tester, receiptFutures.single);
+              navigator.pop();
+              await tester.pump(const Duration(milliseconds: 400));
+              expect(foregroundPosts, hasLength(1));
+              final second = creations.singleWhere((create) => create['taskId'] != first.id);
+              expect(memory.store.hostTask(second['taskId']! as String)!['state'], 'waiting');
+              expect(memory.store.hostTaskCommands(second['taskId']! as String), hasLength(1));
+            } else if (scenario == 'two-parts-cancel-first') {
+              await tester.ensureVisible(find.text('不用整理了'));
+              await tester.tap(find.text('不用整理了'));
+              await settleMixed(tester, cancelSeen.future);
+              final cancellation = memory.lastReceipt;
+              expect(memory.store.hostTask(first.id)!['task_rev'], 2);
+              expect(memory.store.hostTask(first.id)!['cancel_requested'], 1);
+              // The first owned reader retires while the real cancel reply is
+              // still held. No refresh or second continue click drives this.
+              await settleMixed(tester, receiptFutures.single);
+              await tester.pump();
+              expect(foregroundPosts, hasLength(1));
+              releaseCancel.complete();
+              await settleMixed(tester, cancellation);
+              await settleMixed(tester, imported[1].future);
+              receiptFutures.add(memory.lastReceipt);
+              await tester.pump();
+              expect(cancelBodies, hasLength(1));
+              expect(cancelBodies.single['taskRev'], 2);
+              expect(cancelBodies.single['operationId'], memory.store.hostTaskCommands(first.id).last['operation_id']);
+              expect(memory.store.hostTask(first.id)!['state'], 'cancelled');
+              expect(foregroundPosts, hasLength(2));
+              expect(foregroundPosts.last.id, isNot(first.id));
+              expect(foregroundPosts.last.body['taskRev'], 1);
+              expect(find.textContaining('乙待办.md'), findsWidgets);
+            } else if (two) {
+              expect(foregroundPosts, hasLength(1));
+              releases.first.complete();
+              await settleMixed(tester, receiptFutures.single);
+              await settleMixed(tester, imported[1].future);
+              receiptFutures.add(memory.lastReceipt);
+              await tester.pump();
+              expect(foregroundPosts, hasLength(2));
+              expect(foregroundPosts.map((post) => post.id), creations.map((create) => create['taskId']));
+              expect(find.byType(CompanionTasksPage), findsOneWidget);
+              expect(find.textContaining('乙待办.md'), findsWidgets);
+              expect(creations.map((create) => (create['origin']! as MemoryRow)['itemNo']), [0, 1]);
+            }
+          } finally {
+            if (!releaseCapability.isCompleted) releaseCapability.complete();
+            if (!releaseCancel.isCompleted) releaseCancel.complete();
+            if (!releaseCreate.isCompleted) releaseCreate.complete();
+            for (final release in releases) {
+              if (!release.isCompleted) release.complete();
+            }
+            await tester.pumpWidget(const SizedBox());
+            if (handling != null) await settleMixed(tester, handling);
+            for (final receipt in receiptFutures) {
+              await settleMixed(tester, receipt);
+            }
+            memory.removeListener(changed);
+            memory.dispose();
+            await tester.runAsync(peer.close);
+            // The inherited real HttpClient owns a 15-second idle timer.
+            await tester.pump(const Duration(seconds: 16));
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+            if (previousLifecycle != null) tester.binding.handleAppLifecycleStateChanged(previousLifecycle);
+          }
+        });
+      }
+
       for (final (kind, scenario) in [
         for (final kind in ['F', 'H'])
           for (final scenario in [

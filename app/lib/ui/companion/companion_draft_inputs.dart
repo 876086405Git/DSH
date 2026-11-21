@@ -15,6 +15,7 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
   required DshClient? client,
   required CompanionTasksCapability? capability,
   required bool Function() isCurrent,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
   String? originalStoreId,
 }) async {
   final l10n = context.l10n;
@@ -46,6 +47,7 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
       }
       input = await showAppDialog<MemoryRow>(
         context: context,
+        onRouteChanged: onRouteChanged,
         builder: (dialog) => SimpleDialog(
           title: Text(l10n.companionCompareSaved(label)),
           children: [
@@ -65,7 +67,8 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
       if (capability == null || !capability.compareDrafts || (storeId != null && capability.hostStoreId != storeId)) {
         throw const DshRemoteException('companion/task-store-mismatch', 'The original input store is unavailable');
       }
-      final path = await showDirectoryPicker(context, title: l10n.companionCompareChooseDirectory(label));
+      final path = await showDirectoryPicker(context, title: l10n.companionCompareChooseDirectory(label),
+        onRouteChanged: onRouteChanged);
       if (!context.mounted || !isCurrent()) {
         throw const DshClosedException('task selection changed during directory selection');
       }
@@ -79,6 +82,7 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
       final name = await showTextPrompt(
         context,
         title: l10n.companionCompareFilename(label),
+        onRouteChanged: onRouteChanged,
         caption: l10n.companionCompareFileLimit,
         hint: side == 'a' ? 'A.md' : 'B.md',
         validate: (value) => value.isEmpty ? l10n.companionCompareFilenameMissing : null,

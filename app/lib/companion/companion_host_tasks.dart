@@ -4,6 +4,45 @@ import 'package:dsh_client/dsh_client.dart';
 
 import 'companion_reminder.dart';
 
+/// A single, just-accepted command's current-page opportunity. This value is
+/// never persisted or reconstructed by a read, reconnect or process restart.
+typedef CompanionNotesForegroundCapture = ({
+  MemoryRow task,
+  DshClient client,
+  CompanionTasksCapability capability,
+});
+
+/// One task detail owns this exchange. Closing it never closes the shared
+/// client, cancels the durable task, or grants a later foreground opportunity.
+class CompanionNotesForeground {
+  CompanionNotesForeground._(this.captured, this.client, this.hostKey);
+  final MemoryRow captured;
+  final DshClient client;
+  final String hostKey;
+  final abort = DshHttpAbort();
+  final _finished = Completer<void>();
+  bool _withdrawn = false;
+  void Function()? _onWithdraw;
+  ({Object error, StackTrace stack})? _failure;
+  Future<void> get finished => _finished.future;
+  bool get active => !_withdrawn && !abort.isAborted && !_finished.isCompleted;
+  void close() {
+    if (_withdrawn || _finished.isCompleted) {
+      return;
+    }
+    _withdrawn = true;
+    try {
+      _onWithdraw?.call();
+    } on Object catch (error, stack) {
+      // The owned response must still close if recording uncertainty fails.
+      // Its retained future reports the failure after the reader has drained.
+      _failure ??= (error: error, stack: stack);
+    } finally {
+      abort.abort();
+    }
+  }
+}
+
 /// Phone ownership ends at durable commands and complete Host snapshots. The
 /// original Host owns execution, approvals and files even after leaving the
 /// room. Refresh is read-only. Only an explicit retry may replay an immutable
@@ -14,6 +53,109 @@ class CompanionHostTasks {
   final void Function() changed;
   final void Function(Future<void>) retainReceipt;
   final Map<(String, int, String), Future<MemoryRow>> _pending = {};
+  final Map<String, CompanionNotesForeground> _foregrounds = {};
+
+  CompanionNotesForeground foreground(
+    MemoryRow captured, {
+    required DshClient client,
+    required String hostKey,
+    required CompanionTasksCapability capability,
+    required bool Function() isCurrent,
+    required void Function(MemoryRow task) observed,
+  }) {
+    final id = captured['task_id']! as String;
+    if (_foregrounds.containsKey(id)) {
+      throw const DshRemoteException('companion/task-conflict', 'The original foreground request is still closing');
+    }
+    final owned = CompanionNotesForeground._(captured, client, hostKey);
+    _foregrounds[id] = owned;
+    retainReceipt(owned.finished);
+    unawaited(() async {
+      try {
+        final snapshot = await client.readCompanionHostTask(
+          hostStoreId: captured['host_store_id']! as String, taskId: id,
+        );
+        if (snapshot == null) {
+          throw const DshRemoteException('companion/task-not-found', 'The original task was not found');
+        }
+        final checked = store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: snapshot);
+        if (!owned.active || !isCurrent()) {
+          return;
+        }
+        observed(checked);
+        final request = store.prepareHostTaskForeground(
+          taskId: id, taskRev: captured['task_rev']! as int, hostKey: hostKey,
+          hostStoreId: captured['host_store_id']! as String,
+          hostExecutionId: captured['host_execution_id']! as String,
+        );
+        var lastReceiptSeq = checked['applied_host_receipt_seq']! as int;
+        int? uncertainSeq;
+        bool mark(int seq) => store.markHostTaskForegroundUncertain(
+          taskId: id, taskRev: captured['task_rev']! as int, hostKey: hostKey,
+          hostStoreId: captured['host_store_id']! as String,
+          hostExecutionId: captured['host_execution_id']! as String,
+          expectedHostReceiptSeq: seq,
+        );
+        owned._onWithdraw = () {
+          if (mark(lastReceiptSeq)) {
+            uncertainSeq = lastReceiptSeq;
+          }
+        };
+        // No await separates the durable uncertainty, last page guard and POST.
+        if (!owned.active || !isCurrent()) {
+          owned.close();
+          return;
+        }
+        await client.runCompanionNotesForeground(capability, taskId: id, request: request, abort: owned.abort,
+          onAbnormal: (error, stack) {
+            if (!owned.abort.isAborted) {
+              owned._failure ??= (error: error, stack: stack);
+            }
+            owned.close();
+          },
+          onSnapshot: (value) {
+            final before = store.hostTask(id)!;
+            final keepUncertain = owned._withdrawn && uncertainSeq != null &&
+              before['applied_host_receipt_seq'] == uncertainSeq &&
+              before['state'] == 'unknown' && before['wait_reason'] == 'host_receipt_unknown';
+            final imported = store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: value);
+            lastReceiptSeq = value['runnerReceiptSeq']! as int;
+            if (keepUncertain) {
+              uncertainSeq = mark(lastReceiptSeq) ? lastReceiptSeq : null;
+            }
+            if (owned.active && isCurrent()) {
+              observed(imported);
+            }
+            changed();
+          });
+      } on Object catch (error, stack) {
+        if (!owned.abort.isAborted) {
+          owned._failure ??= (error: error, stack: stack);
+        }
+        owned.close();
+      } finally {
+        // Do not re-mark here: a later GET may already have settled the same
+        // sequence while this old reader was draining.
+        final failure = owned._failure;
+        if (failure == null) {
+          owned._finished.complete();
+        } else {
+          owned._finished.completeError(failure.error, failure.stack);
+        }
+        if (identical(_foregrounds[id], owned)) {
+          _foregrounds.remove(id);
+        }
+        changed();
+      }
+    }());
+    return owned;
+  }
+
+  void closeForegrounds() {
+    for (final owned in _foregrounds.values) {
+      owned.close();
+    }
+  }
 
   Future<MemoryRow> run(
     MemoryRow captured, {

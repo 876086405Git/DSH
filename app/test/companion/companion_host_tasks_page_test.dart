@@ -37,10 +37,16 @@ class _Host extends ActiveHostController {
 class _Memory extends CompanionMemoryOwner {
   _Memory(super.store, super.legacy, {super.nowMilliseconds});
   late Future<void> settled;
+  bool disposed = false;
   @override
   void retainReceipt(Future<void> work) {
     super.retainReceipt(work);
     settled = work;
+  }
+  @override
+  void dispose() {
+    disposed = true;
+    super.dispose();
   }
 }
 
@@ -52,6 +58,33 @@ class _PushedPage extends NavigatorObserver {
     if (previousRoute != null && pending != null && !pending.isCompleted) {
       pending.complete();
     }
+  }
+}
+
+/// Real HTTP remains open until the test releases it. This is a transport
+/// peer, not a substitute for the Host's execution/approval owner.
+class _ForegroundResponse {
+  final release = Completer<void>();
+  final ready = Completer<void>();
+  late HttpResponse response;
+
+  Future<void> serve(HttpRequest request, MemoryRow snapshot) async {
+    response = request.response
+      ..bufferOutput = false
+      ..headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
+    await add(snapshot);
+    ready.complete();
+    await release.future;
+    try {
+      await response.close();
+    } on Object {
+      // The actual client may already have aborted this response.
+    }
+  }
+
+  Future<void> add(MemoryRow snapshot) async {
+    response.write('${jsonEncode(snapshot)}\n');
+    await response.flush();
   }
 }
 
@@ -82,12 +115,12 @@ void main() {
   });
   tearDown(() async {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-    memory.dispose();
+    if (!memory.disposed) memory.dispose();
     await peer.close();
     root.deleteSync(recursive: true);
   });
 
-  MemoryRow command() {
+  MemoryRow command({String afterExit = 'continue'}) {
     memory.store.submitMessage(
       id: 'original-source',
       sessionId: 'light:original-room',
@@ -103,7 +136,7 @@ void main() {
       itemNo: 0,
       roomMode: 'light',
       hostKey: hostKey,
-      agreement: notesAgreement(),
+      agreement: notesAgreement(afterExit: afterExit),
       directoryLabels: {'source': '/本人选的笔记', 'output': '/本人选的输出'},
     );
     return memory.store.prepareHostTaskOperation(
@@ -147,13 +180,13 @@ void main() {
         as MemoryRow;
   }
 
-  Future<void> open(WidgetTester tester, String id, {bool connected = true, NavigatorObserver? observer}) async {
+  Future<void> open(WidgetTester tester, String id, {bool connected = true, NavigatorObserver? observer, DshClient? client}) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(
-            connected ? AsyncData(HostConnection(client: peer.client, isLocal: true)) : const AsyncData(null),
+            connected ? AsyncData(HostConnection(client: client ?? peer.client, isLocal: true)) : const AsyncData(null),
           ),
         ],
         child: MaterialApp(
@@ -217,6 +250,316 @@ void main() {
           initialOpportunity: true,
         )!['request']!
         as MemoryRow;
+  }
+
+  testWidgets('F foreground page preserves explicit first delivery of a saved pause agreement', (tester) async {
+    final previous = binding.lifecycleState;
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    peer.capability = {...notesCapability, 'notesForeground': true};
+    memory.store.submitMessage(id: 'saved-pause', sessionId: 'light:original-room',
+      text: '请电脑把今天的笔记整理成待办，我离开就先停', saidAtUtc: _now,
+      offsetMinutes: 480, offsetSeconds: 28800, zoneId: 'Asia/Shanghai');
+    final saved = memory.store.createNotesTaskFromMessage(messageId: 'saved-pause', expectedSourceRev: 1,
+      itemNo: 0, roomMode: 'light', hostKey: hostKey, agreement: notesAgreement(afterExit: 'pause'));
+    final id = saved['task_id']! as String;
+    MemoryRow? accepted;
+    peer.respond = (request, body) async {
+      if (request.method == 'POST' && request.uri.path == notesPath) {
+        accepted = body;
+        await NotesPeer.json(request, {...notesSnapshot(body!, state: 'waiting'),
+          'waitReason': 'foreground_required'}, status: 201);
+      } else {
+        await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'Not accepted'}}, status: 404);
+      }
+    };
+    try {
+      await open(tester, id);
+      expect(memory.store.hostTask(id)!['state'], 'queued');
+      expect(memory.store.hostTaskCommands(id).single['possible_sent_at_ms'], isNull);
+      expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
+      await tester.ensureVisible(find.text('现在交给电脑'));
+      await tester.tap(find.text('现在交给电脑'));
+      await settleMixed(tester, memory.settled);
+      await tester.pumpAndSettle();
+      expect(accepted?['taskId'], id);
+      expect(accepted?['afterExit'], 'pause');
+      expect(accepted?['origin'], {'sourceSessionId': 'light:original-room', 'messageId': 'saved-pause', 'itemNo': 0});
+      expect(memory.store.hostTask(id)!['state'], 'waiting');
+      expect(memory.store.hostTask(id)!['task_rev'], 1);
+      expect(peer.calls.where((call) => call.method == 'POST').map((call) => call.uri.path), [notesPath]);
+    } finally {
+      await close(tester);
+      if (previous != null) binding.handleAppLifecycleStateChanged(previous);
+    }
+  });
+
+  for (final exit in ['route', 'background', 'host']) {
+    testWidgets('F foreground page owns a real held response until $exit and never restarts on return', (tester) async {
+      final previous = binding.lifecycleState;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      peer.capability = {...notesCapability, 'notesForeground': true};
+      final create = command(afterExit: 'pause');
+      final id = create['taskId']! as String;
+      final snapshot = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+      final exchange = _ForegroundResponse();
+      final imported = Completer<void>();
+      final posted = <({MemoryRow body, MemoryRow prepared})>[];
+      void changed() {
+        if (posted.isNotEmpty && memory.store.hostTask(id)!['wait_reason'] == 'foreground_required' && !imported.isCompleted) {
+          imported.complete();
+        }
+      }
+      memory.addListener(changed);
+      peer.respond = (request, body) async {
+        if (request.method == 'GET') {
+          await NotesPeer.json(request, snapshot);
+        } else {
+          posted.add((body: body!, prepared: memory.store.hostTask(id)!));
+          await exchange.serve(request, snapshot);
+        }
+      };
+      try {
+        await open(tester, id);
+        await visible(tester, '在这里继续');
+        expect(posted, isEmpty);
+        expect(find.text('留在这里时，我请电脑继续做。离开后会请它先停，回来再核对进度。'), findsOneWidget);
+        await tester.ensureVisible(find.text('在这里继续'));
+        await tester.tap(find.text('在这里继续'));
+        final foreground = memory.settled;
+        var finished = false;
+        unawaited(foreground.then<void>((_) => finished = true));
+        await settleMixed(tester, imported.future);
+        await tester.pumpAndSettle();
+        expect(posted.single.body, {'v': 1, 'hostStoreId': 'original-store',
+          'hostExecutionId': 'actual-execution', 'taskRev': 1, 'sourceSessionId': 'light:original-room'});
+        expect(posted.single.prepared['state'], 'unknown');
+        expect(posted.single.prepared['wait_reason'], 'host_receipt_unknown');
+        expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 1);
+        expect(memory.store.hostTask(id)!['state'], 'waiting');
+        await tester.pump(const Duration(seconds: 30));
+        expect(finished, isFalse, reason: 'Approval waiting is not the default 20 second HTTP idle limit');
+        final element = tester.element(find.byType(CompanionTasksPage));
+        final container = ProviderScope.containerOf(element);
+        final navigator = Navigator.of(element);
+        if (exit == 'route') {
+          unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另一页')))));
+          await tester.pumpAndSettle();
+        } else if (exit == 'background') {
+          binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+          await tester.pump();
+        } else {
+          container.read(activeHostProvider.notifier).select(const HostRef.ssh('different-host'));
+          await tester.pump();
+        }
+        await settleMixed(tester, foreground);
+        expect(finished, isTrue);
+        expect(memory.store.hostTask(id)!['task_rev'], 1);
+        expect(memory.store.hostTaskCommands(id), hasLength(1));
+        expect(memory.store.hostTask(id)!['cancel_requested'], 0);
+        expect(memory.store.hostTask(id)!['state'], 'unknown');
+        expect(memory.store.hostTask(id)!['wait_reason'], 'host_receipt_unknown');
+        expect(memory.store.hostTask(id)!['snapshot'], snapshot);
+        expect(posted, hasLength(1));
+        // The same authenticated connection still works after its owned
+        // response has closed. There is no physical-stop claim in this read.
+        expect(await settleMixed(tester, peer.client.readCompanionHostTask(
+          hostStoreId: 'original-store', taskId: id)), snapshot);
+        if (exit == 'route') {
+          navigator.pop();
+        } else if (exit == 'background') {
+          binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        } else {
+          container.read(activeHostProvider.notifier).select(HostRef.local);
+        }
+        await tester.pumpAndSettle();
+        expect(posted, hasLength(1));
+        await tester.tap(find.byTooltip('刷新'));
+        await settleMixed(tester, memory.settled);
+        await visible(tester, '在这里继续');
+        expect(posted, hasLength(1));
+        expect(memory.store.hostTask(id)!['state'], 'waiting');
+      } finally {
+        if (!exchange.release.isCompleted) exchange.release.complete();
+        memory.removeListener(changed);
+        await close(tester);
+        if (previous != null) binding.handleAppLifecycleStateChanged(previous);
+      }
+    });
+  }
+
+  for (final disposeOwner in [false, true]) {
+    testWidgets('F foreground late original GET retains its receipt but sends nothing after exit, dispose=$disposeOwner', (tester) async {
+      final previous = binding.lifecycleState;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      peer.capability = {...notesCapability, 'notesForeground': true};
+      final create = command(afterExit: 'pause');
+      final id = create['taskId']! as String;
+      final initial = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+      final later = <String, Object?>{...notesSnapshot(create, state: 'waiting', seq: 2), 'waitReason': 'foreground_required'};
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      var reads = 0;
+      peer.respond = (request, _) async {
+        reads++;
+        if (reads == 1) {
+          await NotesPeer.json(request, initial);
+        } else {
+          readStarted.complete();
+          await releaseRead.future;
+          await NotesPeer.json(request, later);
+        }
+      };
+      try {
+        await open(tester, id);
+        await visible(tester, '在这里继续');
+        await tester.ensureVisible(find.text('在这里继续'));
+        await tester.tap(find.text('在这里继续'));
+        final foreground = memory.settled;
+        await settleMixed(tester, readStarted.future);
+        if (disposeOwner) {
+          await tester.pumpWidget(const SizedBox());
+          memory.dispose();
+        } else {
+          unawaited(Navigator.of(tester.element(find.byType(CompanionTasksPage))).push<void>(
+            MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另一页')))));
+          await tester.pumpAndSettle();
+        }
+        releaseRead.complete();
+        await settleMixed(tester, foreground);
+        await tester.pump();
+        final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+        try {
+          expect(reopened.hostTask(id)!['applied_host_receipt_seq'], 2);
+          expect(reopened.hostTask(id)!['snapshot'], later);
+          expect(reopened.hostTask(id)!['state'], 'waiting');
+          expect(reopened.hostTaskCommands(id), hasLength(1));
+        } finally {
+          reopened.close();
+        }
+        expect(reads, 2);
+        expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
+      } finally {
+        if (!releaseRead.isCompleted) releaseRead.complete();
+        await close(tester);
+        if (previous != null) binding.handleAppLifecycleStateChanged(previous);
+      }
+    });
+  }
+
+  testWidgets('F foreground final snapshot remains completed when its owned response closes', (tester) async {
+    final previous = binding.lifecycleState;
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    peer.capability = {...notesCapability, 'notesForeground': true};
+    final create = command(afterExit: 'pause');
+    final id = create['taskId']! as String;
+    final waiting = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+    final exchange = _ForegroundResponse();
+    peer.respond = (request, _) => request.method == 'GET'
+      ? NotesPeer.json(request, waiting) : exchange.serve(request, waiting);
+    try {
+      await open(tester, id);
+      await visible(tester, '在这里继续');
+      await tester.ensureVisible(find.text('在这里继续'));
+      await tester.tap(find.text('在这里继续'));
+      final foreground = memory.settled;
+      await settleMixed(tester, exchange.ready.future);
+      final done = notesSnapshot(create, seq: 2, state: 'done', artifacts: [notesArtifact()], steps: [{
+        'taskRev': 1, 'stepKey': 'writePage', 'attemptId': 'actual-write', 'state': 'done',
+        'startedAtMs': _now, 'finishedAtMs': _now + 1, 'reason': null, 'result': null,
+      }]);
+      await settleMixed(tester, exchange.add(done));
+      await settleMixed(tester, foreground);
+      await tester.pumpAndSettle();
+      expect(memory.store.hostTask(id)!['state'], 'done');
+      expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 2);
+      expect(find.text('还没确认电脑现在的进度，先刷新看看。'), findsNothing);
+      expect(find.text('在这里继续'), findsNothing);
+      expect(find.text('看看这页待办'), findsOneWidget);
+      expect(peer.calls.where((call) => call.method == 'POST'), hasLength(1));
+    } finally {
+      if (!exchange.release.isCompleted) exchange.release.complete();
+      await close(tester);
+      if (previous != null) binding.handleAppLifecycleStateChanged(previous);
+    }
+  });
+
+  for (final completeBadLine in [false, true]) {
+    final name = completeBadLine
+        ? 'F foreground a later GET remains visible after a complete bad line cancels its subscription'
+        : 'F foreground a later GET remains visible after an earlier decoder failure drains';
+    testWidgets(name, (tester) async {
+      final previous = binding.lifecycleState;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      peer.capability = {...notesCapability, 'notesForeground': true};
+      final create = command(afterExit: 'pause');
+      final id = create['taskId']! as String;
+      final waiting = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+      final exchange = _ForegroundResponse();
+      final delayed = DelayedNotesForegroundRetirement(peer.client.connection,
+        holdBodyCancellation: completeBadLine);
+      final client = DshClient(delayed);
+      final imported = Completer<void>();
+      var posts = 0;
+      void changed() {
+        if (posts == 1 && memory.store.hostTask(id)!['state'] == 'waiting' && !imported.isCompleted) {
+          imported.complete();
+        }
+      }
+      memory.addListener(changed);
+      peer.respond = (request, _) {
+        if (request.method == 'GET') return NotesPeer.json(request, waiting);
+        posts++;
+        return exchange.serve(request, waiting);
+      };
+      Future<void>? settled;
+      Object? failure;
+      try {
+        await open(tester, id, client: client);
+        await visible(tester, '在这里继续');
+        await tester.ensureVisible(find.text('在这里继续'));
+        await tester.tap(find.text('在这里继续'));
+        settled = memory.settled.then<void>((_) {}, onError: (Object error, StackTrace _) {
+          failure = error;
+        });
+        await settleMixed(tester, imported.future);
+        // No explicit close: both failures come from the actual decoder. A
+        // complete invalid line fails inside await-for while HTTP is still open;
+        // a truncated tail fails only after EOF. Hold each real reader's ACK.
+        if (completeBadLine) {
+          exchange.response.write('{"v":}\n');
+          await settleMixed(tester, exchange.response.flush());
+        } else {
+          exchange.response.write('{"v":1');
+          exchange.release.complete();
+        }
+        await settleMixed(tester, delayed.retired.future);
+        expect(memory.store.hostTask(id)!['state'], 'unknown');
+        expect(failure, isNull);
+        await tester.tap(find.byTooltip('刷新'));
+        await settleMixed(tester, memory.settled);
+        await visible(tester, '留在这里时，我请电脑继续做。离开后会请它先停，回来再核对进度。');
+        expect(memory.store.hostTask(id)!['state'], 'waiting');
+        expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 1);
+        expect(find.text('还没确认电脑现在的进度，先刷新看看。'), findsNothing);
+        delayed.release.complete();
+        await settleMixed(tester, settled);
+        await tester.pumpAndSettle();
+        expect(failure, isA<DshProtocolException>());
+        expect(memory.store.hostTask(id)!['state'], 'waiting');
+        expect(memory.store.hostTask(id)!['snapshot'], waiting);
+        expect(find.text('还没确认电脑现在的进度，先刷新看看。'), findsNothing);
+        expect(find.text('留在这里时，我请电脑继续做。离开后会请它先停，回来再核对进度。'), findsOneWidget);
+        expect(posts, 1);
+      } finally {
+        if (!exchange.release.isCompleted) exchange.release.complete();
+        if (!delayed.release.isCompleted) delayed.release.complete();
+        memory.removeListener(changed);
+        await close(tester);
+        if (settled != null) await settleMixed(tester, settled);
+        await settleMixed(tester, client.close());
+        if (previous != null) binding.handleAppLifecycleStateChanged(previous);
+      }
+    });
   }
 
   testWidgets('J task page amendment and cancellation persist their own source and preserve selected originals', (

@@ -267,6 +267,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _room = null;
+    hostTasks.closeForegrounds();
     final pending = <Future<void>>[
       ..._receipts,
       if (_localMigration != null) _localMigration!.then<void>((_) {}),

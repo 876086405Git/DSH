@@ -41,7 +41,7 @@ void main() {
       zoneId: 'Asia/Shanghai',
       offsetSeconds: 28800,
     );
-    MemoryRow create({bool queue = false}) {
+    MemoryRow create({bool queue = false, String afterExit = 'continue'}) {
       final message = source('create');
       return store.createNotesTaskFromMessage(
         messageId: message['id']! as String,
@@ -49,7 +49,7 @@ void main() {
         itemNo: 0,
         roomMode: 'light',
         hostKey: 'local:original',
-        agreement: notesAgreement(queue: queue),
+        agreement: notesAgreement(queue: queue, afterExit: afterExit),
         directoryLabels: {'source': '/实际/笔记', 'output': '/实际/笔记'},
       );
     }
@@ -84,6 +84,131 @@ void main() {
       store.close();
       await peer.close();
       await directory.delete(recursive: true);
+    });
+
+    for (final ending in ['truncated-frame', 'normal-eof']) {
+      test('F foreground actual HTTP $ending preserves its last snapshot across SQLite reopen', () async {
+        peer.capability = {...notesCapability, 'notesForeground': true};
+        final row = create(afterExit: 'pause');
+        final id = row['task_id']! as String;
+        final release = Completer<void>();
+        final firstFrame = Completer<void>();
+        late MemoryRow current;
+        peer.respond = (request, body) async {
+          if (request.method == 'GET') {
+            await NotesPeer.json(request, current);
+          } else if (request.uri.path == notesPath) {
+            current = {...notesSnapshot(body!, state: 'waiting'), 'waitReason': 'foreground_required'};
+            await NotesPeer.json(request, current, status: 201);
+          } else {
+            current = {...current, 'runnerReceiptSeq': 2, 'updatedAtMs': now + 2};
+            request.response
+              ..bufferOutput = false
+              ..headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8')
+              ..write('${jsonEncode(current)}\n');
+            await request.response.flush();
+            await release.future;
+            if (ending == 'truncated-frame') request.response.write('{"v":1');
+            await request.response.close();
+          }
+        };
+        final accepted = await run(row);
+        final capability = (await peer.client.readCompanionTasksCapability())!;
+        var observations = 0;
+        final owned = tasks.foreground(accepted, client: peer.client, hostKey: 'local:original', capability: capability,
+          isCurrent: () => true, observed: (_) {
+            observations++;
+            if (observations == 2) firstFrame.complete();
+          });
+        try {
+          await firstFrame.future;
+          expect(observations, 2);
+          expect(store.hostTask(id)!['state'], 'waiting');
+          final commands = jsonEncode(store.hostTaskCommands(id));
+          release.complete();
+          if (ending == 'truncated-frame') {
+            await expectLater(owned.finished, throwsA(isA<DshProtocolException>()));
+          } else {
+            await owned.finished;
+          }
+          store.close();
+          open();
+          expect(store.hostTask(id)!['state'], ending == 'truncated-frame' ? 'unknown' : 'waiting');
+          expect(store.hostTask(id)!['snapshot'], current);
+          expect(store.hostTask(id)!['applied_host_receipt_seq'], 2);
+          expect(jsonEncode(store.hostTaskCommands(id)), commands);
+          expect((await run(store.hostTask(id)!, initial: false, submit: false))['state'], 'waiting');
+          expect(peer.calls.where((call) => call.uri.path.endsWith('/foreground')), hasLength(1));
+          expect(store.hostTaskCommands(id), hasLength(1));
+        } finally {
+          if (!release.isCompleted) release.complete();
+          owned.close();
+          await owned.finished.catchError((Object _) {});
+        }
+      });
+    }
+
+    test('F foreground a later same-sequence GET survives old response retirement', () async {
+      peer.capability = {...notesCapability, 'notesForeground': true};
+      final row = create(afterExit: 'pause');
+      final id = row['task_id']! as String;
+      final releaseServer = Completer<void>();
+      final firstFrame = Completer<void>();
+      late MemoryRow current;
+      peer.respond = (request, body) async {
+        if (request.method == 'GET') {
+          await NotesPeer.json(request, current);
+        } else if (request.uri.path == notesPath) {
+          current = {...notesSnapshot(body!, state: 'waiting'), 'waitReason': 'foreground_required'};
+          await NotesPeer.json(request, current, status: 201);
+        } else {
+          request.response
+            ..bufferOutput = false
+            ..headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8')
+            ..write('${jsonEncode(current)}\n');
+          await request.response.flush();
+          await releaseServer.future;
+          try {
+            await request.response.close();
+          } on Object {
+            // The original reader has already retired through its real abort.
+          }
+        }
+      };
+      final accepted = await run(row);
+      final delayed = DelayedNotesForegroundRetirement(peer.client.connection);
+      final client = DshClient(delayed);
+      final capability = (await client.readCompanionTasksCapability())!;
+      var observations = 0;
+      final owned = tasks.foreground(accepted, client: client, hostKey: 'local:original', capability: capability,
+        isCurrent: () => true, observed: (_) {
+          observations++;
+          if (observations == 2) firstFrame.complete();
+        });
+      var finished = false;
+      unawaited(owned.finished.then<void>((_) => finished = true));
+      try {
+        await firstFrame.future;
+        owned.close();
+        expect(store.hostTask(id)!['state'], 'unknown');
+        await delayed.retired.future;
+        expect(finished, isFalse);
+        final read = await run(store.hostTask(id)!, initial: false, submit: false);
+        expect(read['state'], 'waiting');
+        expect(read['applied_host_receipt_seq'], 1);
+        delayed.release.complete();
+        await owned.finished;
+        expect(store.hostTask(id)!['state'], 'waiting');
+        expect(store.hostTask(id)!['wait_reason'], 'foreground_required');
+        expect(store.hostTask(id)!['snapshot'], current);
+        expect(peer.calls.where((call) => call.uri.path.endsWith('/foreground')), hasLength(1));
+      } finally {
+        if (!delayed.release.isCompleted) delayed.release.complete();
+        if (!releaseServer.isCompleted) releaseServer.complete();
+        owned.close();
+        await owned.finished.catchError((Object _) {});
+        await client.close();
+      }
     });
 
     test('first actual POST sees durable possible handoff and the original immutable command', () async {

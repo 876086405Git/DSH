@@ -28,10 +28,11 @@ typedef CompanionApprovalTarget = ({String eventId, String? callId, bool Functio
 /// before it can be allowed, up to [detailWait]; after that it shows what
 /// the request itself says, as the main chat does.
 class CompanionAsk extends ConsumerStatefulWidget {
-  const CompanionAsk({super.key, required this.sessionId, this.approvalTarget});
+  const CompanionAsk({super.key, required this.sessionId, this.approvalTarget, this.onApprovalRiskRouteChanged});
 
   final String sessionId;
   final CompanionApprovalTarget? approvalTarget;
+  final void Function(ApprovalRequest request, ModalRoute<Object?> route)? onApprovalRiskRouteChanged;
 
   /// How long an approval waits for its tool call to show up.
   static const detailWait = Duration(seconds: 3);
@@ -137,6 +138,8 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
         onRespond: _respond,
         // Already trusting the whole conversation: nothing wider to offer.
         onAllowAll: asking.autoApprove ? null : _allowAll,
+        onRiskRouteChanged: widget.onApprovalRiskRouteChanged == null ? null :
+          (route) => widget.onApprovalRiskRouteChanged!(approval, route),
       );
     } else if (approval == null && question != null) {
       card = QuestionCard(

@@ -15,6 +15,7 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
   required DshClient? client,
   required CompanionTasksCapability? capability,
   required bool Function() isCurrent,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
   String? originalStoreId,
   List<MemoryRow>? keptInputs,
   MemoryRow? keptOutput,
@@ -46,6 +47,7 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
       }
       input = await showAppDialog<MemoryRow>(
         context: context,
+        onRouteChanged: onRouteChanged,
         builder: (dialog) => SimpleDialog(
           title: Text(l10n.companionReceiptSavedInput('${index + 1}')),
           children: [
@@ -65,7 +67,11 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
       if (capability == null || !capability.receiptsToSheet || (storeId != null && capability.hostStoreId != storeId)) {
         throw const DshRemoteException('companion/task-store-mismatch', 'The original receipt store is unavailable');
       }
-      final path = await showDirectoryPicker(context, title: l10n.companionReceiptChooseDirectory('${index + 1}'));
+      final path = await showDirectoryPicker(
+        context,
+        title: l10n.companionReceiptChooseDirectory('${index + 1}'),
+        onRouteChanged: onRouteChanged,
+      );
       if (!context.mounted || !isCurrent()) {
         throw const DshClosedException('receipt selection changed before durable acceptance');
       }
@@ -79,6 +85,7 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
       final name = await showTextPrompt(
         context,
         title: l10n.companionReceiptFilename('${index + 1}'),
+        onRouteChanged: onRouteChanged,
         caption: l10n.companionReceiptFormats((capability.receiptInputs!['formats']! as List<Object?>).join('/')),
         validate: (value) => value.isEmpty ? l10n.companionCompareFilenameMissing : null,
       );
@@ -115,6 +122,7 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
     }
     final selected = await showAppDialog<MemoryRow>(
       context: context,
+      onRouteChanged: onRouteChanged,
       builder: (dialog) => SimpleDialog(
         title: Text(l10n.companionReceiptSavedOutput),
         children: [
@@ -139,7 +147,8 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('receipt selection changed before durable acceptance');
     }
-    final path = await showDirectoryPicker(context, title: l10n.companionNotesChooseOutput);
+    final path = await showDirectoryPicker(context, title: l10n.companionNotesChooseOutput,
+      onRouteChanged: onRouteChanged);
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('receipt selection changed before durable acceptance');
     }

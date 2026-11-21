@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dsh_client/dsh_client.dart';
 
@@ -37,6 +38,7 @@ class NotesPeer {
       final body = value is Map ? Map<String, Object?>.from(value) : null;
       calls.add((method: request.method, uri: request.uri, body: body));
       if (request.uri.path == '$notesPath/capabilities') {
+        await beforeCapability?.call();
         await json(request, capability);
       } else {
         await respond(request, body);
@@ -50,6 +52,7 @@ class NotesPeer {
   final HttpClient _http = CompanionOfflineHttpOverrides().createHttpClient(null);
   late final DshClient client;
   MemoryRow capability = notesCapability;
+  Future<void> Function()? beforeCapability;
   final calls = <({String method, Uri uri, MemoryRow? body})>[];
   late Future<void> Function(HttpRequest, MemoryRow?) respond = (request, _) => json(request, {
     'error': {'code': 'companion/task-not-found', 'message': 'No recorded task'},
@@ -66,6 +69,46 @@ class NotesPeer {
     await client.close();
     _http.close(force: true);
     await server.close(force: true);
+  }
+}
+
+/// Hold only the acknowledgement after the actual HTTP reader has retired.
+/// Tests can read a newer observation while the old decoder still unwinds.
+class DelayedNotesForegroundRetirement extends DshConnection {
+  DelayedNotesForegroundRetirement(this.physical, {this.holdBodyCancellation = false}) : super(physical.baseUri);
+  final DshConnection physical;
+  final bool holdBodyCancellation;
+  final retired = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<DshHttpResponse> get(String path, {Map<String, String>? query, Map<String, String>? headers,
+    Duration? timeout, bool followRedirects = true, int? maxResponseBytes}) =>
+    physical.get(path, query: query, headers: headers, timeout: timeout,
+      followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+
+  @override
+  Future<DshHttpStreamResponse> postJsonStream(String path, Object? body, {
+    required DshHttpAbort abort, Duration? headerTimeout, Duration? idleTimeout = const Duration(seconds: 20),
+  }) async {
+    final response = await physical.postJsonStream(path, body, abort: abort,
+      headerTimeout: headerTimeout, idleTimeout: idleTimeout);
+    Future<void> retire() async {
+      await response.cancel();
+      if (!retired.isCompleted) retired.complete();
+      await release.future;
+    }
+    Stream<Uint8List> observedBody() async* {
+      try {
+        yield* response.body;
+      } finally {
+        // Also expose the await-for subscription retirement boundary. Bytes
+        // and actual socket cancellation still come from the real response.
+        await retire();
+      }
+    }
+    return DshHttpStreamResponse(response.statusCode, response.contentType,
+      holdBodyCancellation ? observedBody() : response.body, retire);
   }
 }
 

@@ -327,6 +327,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   /// The invitation shown, until it is answered or the page moves on.
   String? _inviteOpen;
   bool _routeShown = true;
+  int _notesForegroundEpoch = 0;
+  final _notesSelectionRoutes = <ModalRoute<Object?>>{};
   bool _accessible = false;
   bool _entered = false;
   bool _leaving = false;
@@ -351,6 +353,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _lifecycle = AppLifecycleListener(
       onStateChange: (state) {
         if (state != AppLifecycleState.resumed) {
+          _notesForegroundEpoch++;
           _mapHandoff.close();
         }
         _observeInitiative();
@@ -1903,6 +1906,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final host = ref.read(activeHostProvider);
     final client = ref.read(activeConnectionProvider).value?.client;
     if (host == _bindingHost && identical(client, _bindingClient)) return;
+    _notesForegroundEpoch++;
     _bindingHost = host;
     _bindingClient = client;
     // Signals come from the active connection in either mode.
@@ -2326,6 +2330,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (_voice.active) unawaited(_voice.cancel());
     final current = _currentRoom();
     final submittedAt = DateTime.now();
+    final notesEpoch = _notesForegroundEpoch;
+    _notesSelectionRoutes.clear();
     _bubbleTimer?.cancel();
     _objectTimer?.cancel();
     setState(() {
@@ -2372,7 +2378,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
       if (reminder || lookup || notes || map) {
-        await _handleTasks(memory, source, reminderParts, lookupCommands, notesCommands, mapCommands, current);
+        await _handleTasks(memory, source, reminderParts, lookupCommands, notesCommands, mapCommands, current,
+          notesEpoch: notesEpoch);
         return;
       }
       if (await _handleMemoryControl(memory, source, raw)) return;
@@ -2454,19 +2461,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     Map<int, MemoryRow?> lookupCommands,
     Map<int, MemoryRow?> notesCommands,
     Map<int, MemoryRow?> mapCommands,
-    bool Function() current,
-  ) async {
+    bool Function() current, {
+    required int notesEpoch,
+  }) async {
     final reminders = ref.read(companionRemindersProvider);
     final l10n = context.l10n;
     final roomMode = _light ? 'light' : 'full';
     final hostKey = _light ? null : _recallHostKey;
     final hostSession = _light ? null : _sessionId;
     final mapGeneration = _mapHandoff.generation;
+    late final void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute) selectionRoute;
+    selectionRoute = (route, nextRoute) {
+      if (!current() || notesEpoch != _notesForegroundEpoch) {
+        return;
+      }
+      _notesSelectionRoutes.add(route);
+      if (nextRoute != null && !_notesSelectionRoutes.contains(nextRoute)) {
+        if (nextRoute is DialogRoute<Object?> && identical(nextRoute.settings.arguments, selectionRoute)) {
+          // showDialog preserves this exact caller identity in its settings.
+          // Register the real route before its first builder is scheduled.
+          _notesSelectionRoutes.add(nextRoute);
+        } else {
+          // Record the navigation event now. A push and remove in one frame
+          // must not restore this command's one-time execution opportunity.
+          _notesForegroundEpoch++;
+          return;
+        }
+      }
+      _checkNotesSelectionRoute();
+    };
     final operation = () async {
       final lines = <String>[];
       final lookups = <({String taskId, String placeName})>[];
       final notes = <String>[];
       final maps = <String>[];
+      final freshNotes = <({int lineIndex, CompanionNotesForegroundCapture capture})>[];
       var failed = false;
       for (final part in parts) {
         final command = part.command;
@@ -2485,7 +2514,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             }
           } else if (notesCommands[part.itemNo] case final notesCommand?) {
             try {
-              final result = await _handleNotes(memory, source, part.itemNo, notesCommand, current);
+              final result = await _handleNotes(memory, source, part.itemNo, notesCommand, current,
+                deferForeground: (capture) => freshNotes.add((lineIndex: lines.length, capture: capture)),
+                onSelectionRoute: selectionRoute);
               lines.add(result.line);
               if (result.task case final task?) {
                 notes.add(task['task_id']! as String);
@@ -2502,7 +2533,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             }
           } else if (mapCommands[part.itemNo] case final mapCommand?) {
             try {
-              final result = await _handleMap(memory, source, part.itemNo, mapCommand, current);
+              final result = await _handleMap(memory, source, part.itemNo, mapCommand, current,
+                onSelectionRoute: selectionRoute);
               lines.add(result.line);
               if (result.task case final task?) {
                 maps.add(task['task_id']! as String);
@@ -2551,8 +2583,50 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           lines.add(companionReminderFailure(l10n, error));
         }
       }
+      // Finish every authorised picker before dispatching these new pause
+      // commands. No first task may cover the Page while a later part is
+      // still choosing its own directory, files or other target.
+      final foregrounds = <CompanionNotesForegroundCapture>[];
+      if (freshNotes.isNotEmpty) {
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      bool opportunity() => current() && notesEpoch == _notesForegroundEpoch && _notesForegroundHere;
+      for (final pending in freshNotes) {
+        final captured = pending.capture;
+        final original = captured.task;
+        final id = original['task_id']! as String;
+        var task = memory.store.hostTask(id)!;
+        // A later part of this same source can cancel or amend the earlier
+        // task. It cannot grant the earlier capture its replacement revision.
+        if (task['task_rev'] == original['task_rev'] && task['cancel_requested'] == 0 && opportunity() &&
+            identical(captured.client, ref.read(activeConnectionProvider).value?.client) &&
+            task['host_key'] == companionHostKey(ref.read(activeHostProvider))) {
+          try {
+            task = await memory.hostTasks.run(original, client: captured.client,
+              hostKey: original['host_key']! as String, initialOpportunity: true,
+              submitPending: true, capability: captured.capability);
+            if (opportunity() && task['task_rev'] == original['task_rev'] &&
+                task['cancel_requested'] == 0 && task['host_execution_id'] is String &&
+                task['host_store_id'] == captured.capability.hostStoreId &&
+                identical(captured.client, ref.read(activeConnectionProvider).value?.client) &&
+                !const ['done', 'partial', 'failed', 'cancelled'].contains(task['state'])) {
+              final deadline = (original['agreement']! as MemoryRow)['deadlineAtMs'] as int?;
+              if (deadline == null || DateTime.now().millisecondsSinceEpoch < deadline) {
+                foregrounds.add((task: Map<String, Object?>.unmodifiable(task),
+                  client: captured.client, capability: captured.capability));
+              }
+            }
+          } on Object {
+            failed = true;
+            lines[pending.lineIndex] = l10n.companionNotesSaveFailed;
+            continue;
+          }
+        }
+        lines[pending.lineIndex] = companionNotesLine(l10n, task);
+      }
       memory.changed();
-      return (lines: lines, failed: failed, lookups: lookups, notes: notes, maps: maps);
+      return (lines: lines, failed: failed, lookups: lookups, notes: notes, maps: maps,
+        foregrounds: foregrounds, foregroundCurrent: opportunity);
     }();
     memory.retainReceipt(operation.then<void>((_) {}));
     final result = await operation;
@@ -2583,7 +2657,36 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _mapResults = result.maps;
     });
     _queueMemoryExtraction();
+    final foregrounds = <CompanionNotesForegroundCapture>[
+      for (final capture in result.foregrounds)
+        if (memory.store.hostTask(capture.task['task_id']! as String)?['task_rev'] == capture.task['task_rev'] &&
+            memory.store.hostTask(capture.task['task_id']! as String)?['cancel_requested'] == 0 &&
+            identical(capture.client, ref.read(activeConnectionProvider).value?.client) &&
+            capture.task['host_key'] == companionHostKey(ref.read(activeHostProvider))) capture,
+    ];
+    if (foregrounds.isNotEmpty && result.foregroundCurrent()) {
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
+        memory: memory, taskId: foregrounds.first.task['task_id']! as String,
+        freshNotes: List<CompanionNotesForegroundCapture>.unmodifiable(foregrounds),
+      ))));
+    }
   }
+
+  void _checkNotesSelectionRoute() {
+    // Ordinary route widgets also report their observed current/ticker state.
+    // Owned sheet/browser coverage is latched synchronously in selectionRoute;
+    // this fallback is not proof of transitions with no intervening build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && (!TickerMode.valuesOf(context).enabled || !(ModalRoute.of(context)?.isCurrent ?? false)) &&
+          !_notesSelectionRoutes.any((route) => route.isActive && route.isCurrent)) {
+        _notesForegroundEpoch++;
+      }
+    });
+  }
+
+  bool get _notesForegroundHere => mounted && !_leaving && !_logOpen &&
+    WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+    TickerMode.valuesOf(context).enabled && (ModalRoute.of(context)?.isCurrent ?? false);
 
   bool get _mapHere =>
       mounted &&
@@ -2598,8 +2701,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     MemoryRow source,
     int itemNo,
     MemoryRow command,
-    bool Function() current,
-  ) async {
+    bool Function() current, {
+    void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onSelectionRoute,
+  }) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
       return (line: l10n.companionMapSyntax, task: null);
@@ -2671,6 +2775,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         command['address']! as String,
         isCurrent: here,
         choosing: (value) => _mapChoosing = value,
+        onRouteChanged: onSelectionRoute,
       );
       if (selected == null) {
         return (line: l10n.companionMapNoTarget, task: null);
@@ -2727,14 +2832,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     MemoryRow source,
     int itemNo,
     MemoryRow command,
-    bool Function() current,
-  ) async {
+    bool Function() current, {
+    void Function(CompanionNotesForegroundCapture capture)? deferForeground,
+    void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onSelectionRoute,
+  }) async {
     final l10n = context.l10n;
     if (command['kind'] == 'host.receipts_to_sheet') {
-      return _handleReceipts(memory, source, itemNo, command, current);
+      return _handleReceipts(memory, source, itemNo, command, current, onSelectionRoute: onSelectionRoute);
     }
     if (command['kind'] == 'host.compare_drafts') {
-      return _handleCompare(memory, source, itemNo, command, current);
+      return _handleCompare(memory, source, itemNo, command, current, onSelectionRoute: onSelectionRoute);
     }
     final find = command['kind'] == 'host.find_draft';
     if (command['operation'] == 'clarify') {
@@ -2805,6 +2912,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (command['deadlineChoices'] case final List<String> choices) {
         final selected = await showAppDialog<String>(
           context: context,
+          onRouteChanged: onSelectionRoute,
           builder: (dialog) => SimpleDialog(
             title: Text(l10n.companionFindSeven),
             children: [
@@ -2843,6 +2951,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         }
         bound = await showAppDialog<MemoryRow>(
           context: context,
+          onRouteChanged: onSelectionRoute,
           builder: (dialog) => SimpleDialog(
             title: Text(l10n.companionFindSavedDirectory),
             children: [
@@ -2868,6 +2977,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         }
         final path = await showDirectoryPicker(
           context,
+          onRouteChanged: onSelectionRoute,
           title: find
               ? l10n.companionFindChooseDirectory(command['directory']! as String)
               : l10n.companionNotesChooseDirectory,
@@ -2952,6 +3062,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (client == null || hostKey != task['host_key']) {
       return (line: l10n.companionNotesOriginalHost, task: task);
     }
+    if (accepted == null && command['operation'] == 'create' && !find &&
+        task['kind'] == 'host.notes_to_todo' && (task['agreement']! as MemoryRow)['afterExit'] == 'pause' &&
+        capability != null && capability.notesForeground && deferForeground != null) {
+      deferForeground((task: task, client: client, capability: capability));
+      return (line: companionNotesLine(l10n, task), task: task);
+    }
     task = await memory.hostTasks.run(
       task,
       client: client,
@@ -2968,8 +3084,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     MemoryRow source,
     int itemNo,
     MemoryRow command,
-    bool Function() current,
-  ) async {
+    bool Function() current, {
+    void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onSelectionRoute,
+  }) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
       return (line: l10n.companionCompareSyntax, task: null);
@@ -3041,6 +3158,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         client: client,
         capability: capability,
         isCurrent: here,
+        onRouteChanged: onSelectionRoute,
       );
       if (!here()) {
         throw const DshClosedException('room changed before saving the complete comparison');
@@ -3091,8 +3209,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     MemoryRow source,
     int itemNo,
     MemoryRow command,
-    bool Function() current,
-  ) async {
+    bool Function() current, {
+    void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onSelectionRoute,
+  }) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
       return (line: l10n.companionReceiptSyntax, task: null);
@@ -3161,6 +3280,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         client: client,
         capability: capability,
         isCurrent: here,
+        onRouteChanged: onSelectionRoute,
       );
       if (!here()) {
         throw const DshClosedException('room changed before accepting the complete receipt task');
@@ -3714,6 +3834,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   /// The backlog over her: this room's whole conversation, in either mode.
   Future<void> _openLog() async {
+    _notesForegroundEpoch++;
     _mapHandoff.close();
     _acted();
     if (_light && _store != null) {
@@ -4481,6 +4602,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // What her invitation depends on that only a build can see: this page in
     // front (a sheet or another page over her isn't), a screen reader, the switch.
     final routeShown = TickerMode.valuesOf(context).enabled && (ModalRoute.isCurrentOf(context) ?? true);
+    if (_routeShown && !routeShown) {
+      _checkNotesSelectionRoute();
+    }
     if (_routeShown && !routeShown && !_mapChoosing) {
       _mapHandoff.close();
     }
