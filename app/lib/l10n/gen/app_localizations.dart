@@ -28262,11 +28262,11 @@ abstract class L10n {
   /// **'已连接既有 DSH'**
   String get remoteDshAttached;
 
-  /// No description provided for @remoteStartupSection.
+  /// No description provided for @remoteConnectionSettings.
   ///
   /// In zh, this message translates to:
-  /// **'启动'**
-  String get remoteStartupSection;
+  /// **'连接设置'**
+  String get remoteConnectionSettings;
 
   /// No description provided for @remoteAutoConnectOnStartup.
   ///
@@ -29690,12 +29690,6 @@ abstract class L10n {
   /// **'不经过第三方服务器'**
   String get remoteSshDirect;
 
-  /// No description provided for @remoteOtherMethods.
-  ///
-  /// In zh, this message translates to:
-  /// **'其他方式'**
-  String get remoteOtherMethods;
-
   /// No description provided for @remoteWebConsole.
   ///
   /// In zh, this message translates to:
@@ -29797,6 +29791,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'一次只连一台主机，切换会断开上一台'**
   String get remoteSwitchWarning;
+
+  /// No description provided for @remoteHostOfflineHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」现在不在线。在那台电脑上打开 DSH 后再试'**
+  String remoteHostOfflineHint(String name);
 
   /// No description provided for @remoteRefreshHosts.
   ///
@@ -30890,12 +30890,6 @@ abstract class L10n {
   /// **'ICE 协议'**
   String get remoteNetworkIceProtocol;
 
-  /// No description provided for @remoteTransferSettings.
-  ///
-  /// In zh, this message translates to:
-  /// **'远程传输'**
-  String get remoteTransferSettings;
-
   /// No description provided for @remoteCompactHistory.
   ///
   /// In zh, this message translates to:
@@ -31280,12 +31274,6 @@ abstract class L10n {
   /// **'文件超过远程上传协议的大小上限'**
   String get stateRemoteUploadTooLarge;
 
-  /// No description provided for @remoteWebOpen.
-  ///
-  /// In zh, this message translates to:
-  /// **'打开 DSH Web'**
-  String get remoteWebOpen;
-
   /// No description provided for @remoteWebTitle.
   ///
   /// In zh, this message translates to:
@@ -31297,6 +31285,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'正在打开 DSH Web…'**
   String get remoteWebOpening;
+
+  /// No description provided for @remoteWebFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开 DSH Web'**
+  String get remoteWebFailed;
 
   /// No description provided for @remoteWebRefresh.
   ///
@@ -31337,13 +31331,13 @@ abstract class L10n {
   /// No description provided for @remoteWebExchangeRejected.
   ///
   /// In zh, this message translates to:
-  /// **'访问验证失败，请返回后重新打开。'**
+  /// **'访问验证没有通过，请重试。'**
   String get remoteWebExchangeRejected;
 
   /// No description provided for @remoteWebSessionExpired.
   ///
   /// In zh, this message translates to:
-  /// **'网页连接已过期，请返回后重新打开。'**
+  /// **'网页连接已过期，请重试。'**
   String get remoteWebSessionExpired;
 
   /// No description provided for @remoteWebPlatformUnavailable.

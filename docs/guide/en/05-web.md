@@ -31,7 +31,7 @@ On by default: adapts DSH Web to phone screens, folding the sidebar into a menu 
 <!-- nav: commonSettings,hubSettingsInterface,hubInterfaceOpenWeb -->
 `Settings › Interface › Open the web app`
 
-In the native interface, opens this phone's DSH Web without changing your interface; **Web** in All features does the same. In Web mode, it takes you back to the current host's Web page.
+In the native interface, opens the current host's DSH Web without changing your interface; **Web** in All features does the same. In Web mode, it takes you back to the current host's Web page.
 
 ## Web display and sending
 
@@ -41,4 +41,4 @@ Further down **Interface** are DSH Web's own options, kept in the current host's
 
 - **This phone**: if the engine isn't running, tap **Start engine**; if DSH isn't installed on this phone, tap **Install runtime**.
 - **SSH hosts**: DSH Web appears once the host is connected.
-- DSH Remote hosts: DSH Web can't open in the app over DSH Remote. Open it on that computer, or switch back to native.
+- DSH Remote hosts: the host needs DS Harness Remote plugin 0.6.6 or later with DSH Web running; see [Open DSH Web on a Remote host](03-engine-hosts.md#open-dsh-web-on-a-remote-host).

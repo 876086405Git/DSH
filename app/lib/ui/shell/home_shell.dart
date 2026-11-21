@@ -46,7 +46,7 @@ import '../star/star_prompt_host.dart';
 import '../theme/theme.dart';
 import '../update/update_launch_check.dart';
 import '../wallpaper/wallpaper_backdrop.dart';
-import '../web/local_web_screen.dart';
+import '../web/dsh_web_launcher.dart';
 import 'adaptive/adaptive_layout.dart';
 import 'adaptive/adaptive_rail.dart';
 import 'adaptive/adaptive_scaffold.dart';
@@ -234,7 +234,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
 
   void _openDestination(DrawerDestination destination) {
     final page = switch (destination) {
-      DrawerDestination.web => const LocalWebScreen(),
+      // The active host's DSH Web, as every other 网页版 entry opens it.
+      DrawerDestination.web => null,
       DrawerDestination.remote => const RemoteScreen(),
       DrawerDestination.plugins => const PluginsScreen(),
       DrawerDestination.engine => const EngineScreen(),
@@ -242,7 +243,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
       DrawerDestination.settingsSearch => const SettingsSearchPage(),
       DrawerDestination.features => const AllFeaturesPage(),
     };
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+    if (page == null) {
+      openDshWeb(context, ref);
+    } else {
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+    }
     // Close once the new page covers us, so "back" lands on the chat.
     Future<void>.delayed(AppMotion.slow, () {
       if (!mounted) return;

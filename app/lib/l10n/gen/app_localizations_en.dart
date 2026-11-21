@@ -16156,7 +16156,7 @@ class L10nEn extends L10n {
   String get remoteDshAttached => 'Connected to existing DSH';
 
   @override
-  String get remoteStartupSection => 'On launch';
+  String get remoteConnectionSettings => 'Connection settings';
 
   @override
   String get remoteAutoConnectOnStartup => 'Connect to the last host';
@@ -16996,9 +16996,6 @@ class L10nEn extends L10n {
   String get remoteSshDirect => 'No third-party server';
 
   @override
-  String get remoteOtherMethods => 'Other methods';
-
-  @override
   String get remoteWebConsole => 'Web remote console';
 
   @override
@@ -17056,6 +17053,11 @@ class L10nEn extends L10n {
 
   @override
   String get remoteSwitchWarning => 'Connects to one host at a time. Switching disconnects the previous host.';
+
+  @override
+  String remoteHostOfflineHint(String name) {
+    return '“$name” is offline. Open DSH on that computer and try again.';
+  }
 
   @override
   String get remoteRefreshHosts => 'Refresh hosts';
@@ -17727,9 +17729,6 @@ class L10nEn extends L10n {
   String get remoteNetworkIceProtocol => 'ICE protocol';
 
   @override
-  String get remoteTransferSettings => 'Remote transfer';
-
-  @override
   String get remoteCompactHistory => 'Compact history';
 
   @override
@@ -17947,13 +17946,13 @@ class L10nEn extends L10n {
   String get stateRemoteUploadTooLarge => 'The file exceeds the remote upload protocol\'s size limit';
 
   @override
-  String get remoteWebOpen => 'Open DSH Web';
-
-  @override
   String get remoteWebTitle => 'DSH Web';
 
   @override
   String get remoteWebOpening => 'Opening DSH Web…';
+
+  @override
+  String get remoteWebFailed => 'Couldn’t open DSH Web';
 
   @override
   String get remoteWebRefresh => 'Refresh home page';
@@ -17976,10 +17975,10 @@ class L10nEn extends L10n {
       'The web address could not be verified. Opening was stopped. Check the Host configuration.';
 
   @override
-  String get remoteWebExchangeRejected => 'Access verification failed. Go back and reopen.';
+  String get remoteWebExchangeRejected => 'Access verification failed. Try again.';
 
   @override
-  String get remoteWebSessionExpired => 'The web connection expired. Go back and reopen.';
+  String get remoteWebSessionExpired => 'The web connection expired. Try again.';
 
   @override
   String get remoteWebPlatformUnavailable =>

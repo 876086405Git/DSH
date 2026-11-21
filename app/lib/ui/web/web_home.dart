@@ -42,6 +42,7 @@ import '../common/empty_view.dart';
 import '../forum/forum_link_host.dart';
 import '../notify/chat_alert_host.dart';
 import '../pets/pet_settings_page.dart';
+import '../remote/remote_web/remote_web_page.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import 'dsh_web_launcher.dart';
@@ -172,6 +173,13 @@ class _WebHomeState extends ConsumerState<WebHome> {
         link: _link,
         onSession: _onSession,
       ),
+      // A new Noise session (a reconnect): a new page and lease.
+      RelayDshWeb(:final carrier, :final session) => RemoteWebPage(
+        key: ObjectKey(session),
+        carrier: carrier,
+        session: session,
+        leading: _handle(44),
+      ),
       NoDshWeb(:final reason) => _NoWeb(reason: reason, handle: _handle),
     };
     return ChatAlertHost(
@@ -216,7 +224,8 @@ class _PetHostState extends ConsumerState<_PetHost> {
   }
 }
 
-/// The active host has no web page the app can reach (a DSH Remote host):
+/// The active host has no web page the app can reach right now (not yet
+/// connected, a DSH Remote host without DSH Web, HarmonyOS over DSH Remote):
 /// say so, with the handle's ways out at hand.
 class _NoWeb extends StatelessWidget {
   const _NoWeb({required this.reason, required this.handle});
