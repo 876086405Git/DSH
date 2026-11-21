@@ -317,6 +317,34 @@ void main() {
     });
   }
 
+  test('raw forget plans its root before an earlier sorted withdrawn derivative', () {
+    store.close();
+    database = sqlite3.open('${directory.path}/memory.sqlite');
+    var nextId = 0;
+    store = CompanionMemoryStore(
+      database,
+      nowMilliseconds: () => now,
+      createId: () => '00000000-0000-4000-8000-${(++nextId).toString().padLeft(12, '0')}',
+    );
+    final mixed = say('mixed', '我周五复诊，周六去公园。');
+    extract([
+      fixture.create(mixed, text: '你周五复诊。你周六去公园。', keywords: ['复诊', '公园']),
+      fixture.create(mixed, text: '你周五复诊。', quote: '我周五复诊', keywords: ['复诊']),
+    ]);
+    final derivative = store.cards().singleWhere((row) => row['text'] == '你周五复诊。你周六去公园。');
+    final root = store.cards().singleWhere((row) => row['text'] == '你周五复诊。');
+    expect((derivative['id'] as String).compareTo(root['id'] as String), lessThan(0));
+    store.editMessage(id: 'mixed', expectedSourceRev: 1, text: '我周五复诊，周日去公园。');
+    reopen();
+    expect(store.cards(), isEmpty);
+    expect(origins(root['id'] as String), ['mixed']);
+    expect(withdrawn(derivative['id'] as String, 'mixed'), 1);
+    forget('forget', '忘掉你周五复诊，连原话也删');
+    expect(store.cards(includeInactive: true), isEmpty);
+    expect(store.messages().any((row) => row['id'] == 'mixed'), isFalse);
+    expect(store.messages().singleWhere((row) => row['id'] == 'forget')['extraction_state'], 'done');
+  });
+
   test('an active and withdrawn fact with the same full sentence are two ambiguous forget targets', () {
     remember('a', '我周五复诊。', words: ['复诊']);
     remember('b', '我周五复诊。', words: ['复诊']);

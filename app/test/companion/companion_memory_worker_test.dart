@@ -335,15 +335,24 @@ void main() {
       phone.say('s3', '今天练了一会儿琴。');
       expect(await worker.extract(forceTail: true), CompanionMemoryWork.idle);
       expect(await worker.consolidate(), CompanionMemoryWork.idle);
+      expect(phone.db.select("SELECT state FROM memory_events WHERE message_id='s3'").single['state'], 'pending');
       final stop = worker.stop();
       phone.store.deleteMessage(id: 's1', expectedSourceRev: 1);
+      // Deleting a source advances the archive history boundary before the
+      // provider returns. The unrelated raw message remains, not its old job.
+      final skipped = phone.db.select("SELECT state,reason FROM memory_events WHERE message_id='s3'").single;
+      expect(skipped['state'], 'skipped');
+      expect(skipped['reason'], 'history_cutoff');
       response.complete(_reply(_merge(input)));
       expect(await running, CompanionMemoryWork.stale);
       await stop;
       expect(phone.store.cards(), hasLength(1));
       expect(phone.store.requests(), hasLength(1));
       expect(phone.store.requests().single['state'], 'finished');
-      expect(phone.db.select("SELECT state FROM memory_events WHERE message_id='s3'").single['state'], 'pending');
+      final after = phone.db.select("SELECT state,reason FROM memory_events WHERE message_id='s3'").single;
+      expect(after['state'], 'skipped');
+      expect(after['reason'], 'history_cutoff');
+      expect(phone.store.messages().singleWhere((row) => row['id'] == 's3')['text'], '今天练了一会儿琴。');
     },
   );
 

@@ -523,7 +523,7 @@ void main() {
             };
           } else {
             final finish = host.finish(dispatched: true);
-            (finish['usage'] as Map).addAll({
+            (finish['usage'] as Map<String, Object?>).addAll({
               'final_usage': {
                 'input_tokens': 120,
                 'cache_read_input_tokens': 0,

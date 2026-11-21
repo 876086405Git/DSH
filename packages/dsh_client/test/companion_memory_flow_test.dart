@@ -1601,8 +1601,20 @@ void main() {
       );
       final keep = store.cards().where((card) => card['id'] != a['id']).toList();
       expect(keep, hasLength(2));
-      store.applyControl(topicIds: [a['topic_id'] as String], kind: 'forget', deleteChat: true);
-      expect(store.cards(), keep);
+      final beforeCards = store.cards(includeInactive: true);
+      final beforeMessages = store.messages();
+      final beforeArchive = store.archive;
+      final beforeControls = store.topicControls();
+      // A new fact from the edited ID does not prove its withdrawn old role.
+      expect(
+        () => store.applyControl(topicIds: [a['topic_id'] as String], kind: 'forget', deleteChat: true),
+        throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/cleanup-source-unknown')),
+      );
+      expect(store.cards(includeInactive: true), beforeCards);
+      expect(store.messages(), beforeMessages);
+      expect(store.archive, beforeArchive);
+      expect(store.topicControls(), beforeControls);
+      expect(store.cards().where((card) => card['id'] != a['id']).toList(), keep);
       expect(store.messages().singleWhere((source) => source['id'] == 'mixed')['source_rev'], 2);
       expect(store.messages().singleWhere((source) => source['id'] == 'mixed')['text'], '我现在学长笛');
       expect(
@@ -1984,7 +1996,7 @@ void main() {
       reopen();
       expect(database.select('PRAGMA user_version').single['user_version'], 10);
       expect(store.archive, originalArchive);
-      expect(store.cards().single, card);
+      expect(store.cards().single, {...card, 'cleanup_history_complete': 0});
       expect(store.messages().single['text'], '我学长笛');
       store.deleteMessage(id: 'u1', expectedSourceRev: 1);
       expect(store.messages(), isEmpty);

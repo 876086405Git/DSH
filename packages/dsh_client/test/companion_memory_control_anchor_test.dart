@@ -207,7 +207,9 @@ void main() {
     );
     reopen();
     expect(database.select('PRAGMA user_version').single['user_version'], 10);
-    expect(store.cards(), before);
+    expect(store.cards(), [
+      for (final card in before) {...card, 'cleanup_history_complete': 0},
+    ]);
     expect(anchors(topic), ['复诊']);
     store.editMessage(id: 'old', expectedSourceRev: 1, text: '我周六复诊。');
     final fresh = remember('fresh', '我周日复诊。', ['复诊']);
