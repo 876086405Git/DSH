@@ -129,13 +129,15 @@ class CompanionLocalStore {
   /// A missing old store stays missing. Never initialize it merely to migrate.
   Future<CompanionMigrationSnapshot?> probeForMigration() => _enqueue(() async {
     final doc = await _readExisting();
-    return doc == null ? null : CompanionMigrationSnapshot.fromJson({
-      'v': doc['v'],
-      'storeId': doc['storeId'],
-      'revision': doc['revision'],
-      'memoryRevision': doc['memoryRevision'],
-      'memories': doc['memories'],
-    });
+    return doc == null
+        ? null
+        : CompanionMigrationSnapshot.fromJson({
+            'v': doc['v'],
+            'storeId': doc['storeId'],
+            'revision': doc['revision'],
+            'memoryRevision': doc['memoryRevision'],
+            'memories': doc['memories'],
+          });
   });
 
   /// Only a snapshot already committed and read back on the phone may call this.

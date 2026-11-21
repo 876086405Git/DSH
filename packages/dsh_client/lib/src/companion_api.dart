@@ -261,8 +261,11 @@ class CompanionMigrationSnapshot extends CompanionMemories {
   CompanionMigrationSnapshot afterDeletion(String id, Object? value) {
     final map = asMap(value);
     final deleted = map?['deleted'];
-    if (map == null || map['v'] != 1 || map['storeId'] is! String ||
-        (map['storeId']! as String).toLowerCase() != storeId || deleted is! bool ||
+    if (map == null ||
+        map['v'] != 1 ||
+        map['storeId'] is! String ||
+        (map['storeId']! as String).toLowerCase() != storeId ||
+        deleted is! bool ||
         map['revision'] != revision + (deleted ? 1 : 0) ||
         map['memoryRevision'] != memoryRevision + (deleted ? 1 : 0)) {
       throw const DshProtocolException('Unconfirmed companion migration deletion');
@@ -276,20 +279,27 @@ class CompanionMigrationSnapshot extends CompanionMemories {
   }
 }
 
-bool _migrationUuid(Object? value) => value is String && RegExp(
-  r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-  caseSensitive: false,
-).hasMatch(value);
+bool _migrationUuid(Object? value) =>
+    value is String &&
+    RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    ).hasMatch(value);
 
-bool _migrationInteger(Object? value) => value is num && value.isFinite &&
-    value >= 0 && value <= 9007199254740991 && value == value.truncateToDouble();
+bool _migrationInteger(Object? value) =>
+    value is num && value.isFinite && value >= 0 && value <= 9007199254740991 && value == value.truncateToDouble();
 
 bool _migrationTime(Object? value) => _migrationInteger(value) && (value! as num) <= 8640000000000000;
 
 bool _migrationText(Object? value, int limit, {bool multiline = false}) {
-  if (value is! String || value.runes.length > limit ||
-      RegExp(r'^[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*$').hasMatch(value) ||
-      RegExp(multiline ? r'[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]' : r'[\u0000-\u001f\u007f]').hasMatch(value)) {
+  if (value is! String ||
+      value.runes.length > limit ||
+      RegExp(
+        r'^[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*$',
+      ).hasMatch(value) ||
+      RegExp(
+        multiline ? r'[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]' : r'[\u0000-\u001f\u007f]',
+      ).hasMatch(value)) {
     return false;
   }
   for (var i = 0; i < value.length; i++) {
@@ -305,22 +315,43 @@ bool _migrationText(Object? value, int limit, {bool multiline = false}) {
 
 bool _migrationMemory(Object? value, {bool stored = true}) {
   final map = asMap(value);
-  final keys = {'id', 'kind', 'text', 'keywords', 'pinned', 'source', 'expiresAt',
-    if (stored) ...['createdAt', 'updatedAt']};
-  if (map == null || map.keys.toSet().difference(keys).isNotEmpty ||
-      !keys.every(map.containsKey) || !_migrationUuid(map['id']) ||
+  final keys = {
+    'id',
+    'kind',
+    'text',
+    'keywords',
+    'pinned',
+    'source',
+    'expiresAt',
+    if (stored) ...['createdAt', 'updatedAt'],
+  };
+  if (map == null ||
+      map.keys.toSet().difference(keys).isNotEmpty ||
+      !keys.every(map.containsKey) ||
+      !_migrationUuid(map['id']) ||
       !const ['fact', 'preference', 'episode'].contains(map['kind']) ||
-      !_migrationText(map['text'], 512, multiline: true) || map['pinned'] is! bool ||
+      !_migrationText(map['text'], 512, multiline: true) ||
+      map['pinned'] is! bool ||
       !(map['expiresAt'] == null || _migrationTime(map['expiresAt'])) ||
-      (stored && (!_migrationTime(map['createdAt']) || !_migrationTime(map['updatedAt']) ||
-        (map['createdAt']! as num) > (map['updatedAt']! as num)))) return false;
+      (stored &&
+          (!_migrationTime(map['createdAt']) ||
+              !_migrationTime(map['updatedAt']) ||
+              (map['createdAt']! as num) > (map['updatedAt']! as num)))) {
+    return false;
+  }
   final keywords = map['keywords'];
   final source = asMap(map['source']);
-  return keywords is List && keywords.length <= 8 && keywords.every((k) => _migrationText(k, 24)) &&
-      source != null && const ['manual', 'user-confirmed'].contains(source['kind']) &&
+  return keywords is List &&
+      keywords.length <= 8 &&
+      keywords.every((k) => _migrationText(k, 24)) &&
+      source != null &&
+      const ['manual', 'user-confirmed'].contains(source['kind']) &&
       source.keys.every(const {'kind', 'sessionId', 'messageId'}.contains) &&
-      ['sessionId', 'messageId'].every((key) => !source.containsKey(key) ||
-          (source[key] is String && (source[key]! as String).length <= 128 && _migrationText(source[key], 128)));
+      ['sessionId', 'messageId'].every(
+        (key) =>
+            !source.containsKey(key) ||
+            (source[key] is String && (source[key]! as String).length <= 128 && _migrationText(source[key], 128)),
+      );
 }
 
 DateTime? _time(Object? value) {
@@ -550,9 +581,7 @@ extension CompanionApi on DshClient {
     return CompanionMigrationSnapshot.fromJson(tryDecodeJson(response.text));
   }
 
-  Future<CompanionMigrationSnapshot> deleteMigratedCompanionMemory(
-    CompanionMigrationSnapshot read, String id,
-  ) async {
+  Future<CompanionMigrationSnapshot> deleteMigratedCompanionMemory(CompanionMigrationSnapshot read, String id) async {
     const path = '$dshGoCompanionPath/memories/delete';
     final response = await _bridge.postJson(path, {
       'storeId': read.storeId,

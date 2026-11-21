@@ -1445,7 +1445,9 @@ class CompanionMemoryStore {
       final rows = _db.select('SELECT * FROM memory_cards WHERE id = ?', [id]);
       final previous = rows.isEmpty ? null : rows.single;
       if ((previous == null && expectedRowRev != null) ||
-          (previous != null && previous['row_rev'] != expectedRowRev)) throw _conflict;
+          (previous != null && previous['row_rev'] != expectedRowRev)) {
+        throw _conflict;
+      }
       final at = _now();
       if (at < 0 || at > 8640000000000000) {
         throw const DshRemoteException('companion/unavailable', 'Companion clock is unavailable', {'status': 503});
