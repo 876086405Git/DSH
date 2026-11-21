@@ -56,11 +56,11 @@ String deriveProviderKeyRef(String route) => '${route.toUpperCase().replaceAll(R
 
 /// Context window the adapter assumes for a model nothing sizes
 /// (`DEFAULT_CONTEXT_WINDOW`); a route may change it (`defaultContextWindow`).
-const int piAiDefaultContextWindow = 262144;
+const int piAiDefaultContextWindow = 1000000;
 
 /// Output capability the adapter assumes for a model nothing sizes
 /// (`DEFAULT_MAX_TOKENS`); a route may change it (`defaultMaxTokens`).
-const int piAiDefaultMaxTokens = 32768;
+const int piAiDefaultMaxTokens = 128000;
 
 /// Every thinking level a model entry may offer, in escalation order
 /// (`THINKING_LEVELS` of `dsh-llm-pi-ai`). They are also the effort ids the
