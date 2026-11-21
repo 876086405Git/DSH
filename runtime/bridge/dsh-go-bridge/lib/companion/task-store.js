@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { isAbsolute } from 'node:path';
-import { TASK_KIND, FIND_KIND, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
-  folderRecordSchema, globalSchema, recordSchema, parseTask, taskError, fingerprint, taskAgreement, dayRange } from './task-schema.js';
+import { isAbsolute, join } from 'node:path';
+import { TASK_KIND, FIND_KIND, COMPARE_KIND, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
+  inputSchema, inputRecordSchema, folderRecordSchema, globalSchema, recordSchema, parseTask, taskError, fingerprint, taskAgreement, dayRange } from './task-schema.js';
 
 const clone = value => structuredClone(value);
 const terminal = new Set(['done', 'partial', 'failed', 'cancelled']);
@@ -10,19 +10,20 @@ const unresolvedEffect = record => record.steps.some(step => !settled(step) ||
   step.state === 'unknown' && step.stepKey === 'model' || step.stepKey === 'writePage' &&
   record.notes[String(step.taskRev)]?.publicationAttempted === true &&
   !record.artifacts.some(artifact => artifact.taskRev === step.taskRev && artifact.stepKey === 'writePage'));
-const stepKeys = new Set(['selectInputs', 'readInputs', 'model', 'writePage']);
+const stepKeys = new Set(['selectInputs', 'readInputs', 'model', 'writePage', 'report']);
 
 export async function openCompanionTaskStore({facility, fs, now = Date.now}) {
   if (typeof facility?.dshGoOpenCompanionTasks !== 'function') throw taskError(503, 'unavailable', 'Task storage is not mounted');
   const {defineDomain, domainTable} = await import('@deepseek-ai/dsh-storage-domain');
-  const domain = await facility.dshGoOpenCompanionTasks(defineDomain({name: 'companion_tasks', version: 1, layout: 'single',
+  const domain = await facility.dshGoOpenCompanionTasks(defineDomain({name: 'companion_tasks', version: 2, compatibleVersions: [1], layout: 'single',
     global: {schema: globalSchema, initial: {v: 1, hostStoreId: null, createdAtMs: 0}},
-    tables: {tasks: domainTable(recordSchema), folders: domainTable(folderRecordSchema)}}));
+    tables: {tasks: domainTable(recordSchema), folders: domainTable(folderRecordSchema), inputs: domainTable(inputRecordSchema)}}));
   const store = new CompanionTaskStore({domain, fs, now});
   domain.dshGoBindCompanionTaskOwner(() => store.stop());
   try {
     if (domain.global.get().hostStoreId === null) {
-      if (domain.table('tasks').size || domain.table('folders').size) throw taskError(503, 'unavailable', 'Task store identity is missing');
+      if (domain.table('tasks').size || domain.table('folders').size || domain.table('inputs').size)
+        throw taskError(503, 'unavailable', 'Task store identity is missing');
       await domain.global.set({v: 1, hostStoreId: randomUUID(), createdAtMs: now()});
     }
     return store;
@@ -33,7 +34,7 @@ export async function openCompanionTaskStore({facility, fs, now = Date.now}) {
 export class CompanionTaskStore {
   constructor({domain, fs, now = Date.now}) {
     this.domain = domain; this.fs = fs; this.now = now;
-    this.table = domain.table('tasks'); this.folders = domain.table('folders');
+    this.table = domain.table('tasks'); this.folders = domain.table('folders'); this.inputs = domain.table('inputs');
     this.chain = Promise.resolve(); this.stopping = false; this.runner = null; this.stopped = null;
   }
   get hostStoreId() { return this.domain.global.get().hostStoreId; }
@@ -113,7 +114,35 @@ export class CompanionTaskStore {
       return {v: 1, hostStoreId: this.hostStoreId, folderRef: record.folderRef, displayPath: directory.target.displayPath};
     });
   }
-  validateAgreement(agreement) {
+  input(reference) {
+    const record = this.inputs.get(reference.sourceRef);
+    if (!record || record.entry.version !== reference.version)
+      throw taskError(400, 'invalid-request', 'The original selected file version is not bound to this store');
+    return clone(record);
+  }
+  bindInput(input, signal) {
+    const body = parseTask(inputSchema, input); this.checkStore(body.hostStoreId);
+    return this.enqueue(async () => {
+      const directory = this.folder(body.folderRef);
+      const checkDirectory = async () => {
+        const current = await this.fs.dshGoBindNotesDirectory(directory.target, signal);
+        if (current.identity !== directory.identity || current.target.targetKey !== directory.target.targetKey)
+          throw taskError(409, 'input-changed', 'The selected directory was replaced');
+      };
+      await checkDirectory();
+      const info = await this.fs.lstat(join(directory.target.displayPath, body.name), undefined, signal);
+      if (!info || info.type !== 'file' || info.size > 65536)
+        throw taskError(400, 'input-unavailable', 'Choose one regular text or Markdown file of at most 64 KiB');
+      await checkDirectory();
+      const record = inputRecordSchema.parse({sourceRef: randomUUID(), directory,
+        entry: {name: body.name, version: info.version, size: info.size}, createdAtMs: this.now()});
+      await this.inputs.put(record.sourceRef, record);
+      return {v: 1, hostStoreId: this.hostStoreId, sourceRef: record.sourceRef, displayName: body.name,
+        version: info.version, size: info.size, mediaType: /\.md$/iu.test(body.name) ? 'text/markdown' : 'text/plain'};
+    });
+  }
+  validateAgreement(agreement, kind) {
+    if (kind === COMPARE_KIND) { this.input(agreement.args.a); this.input(agreement.args.b); return null; }
     this.folder(agreement.args.folderRef);
     if (agreement.args.outputDirRef !== undefined) this.folder(agreement.args.outputDirRef);
     return dayRange(agreement);
@@ -133,6 +162,11 @@ export class CompanionTaskStore {
     else if (record.kind === FIND_KIND && record.steps.some(step => step.taskRev === record.taskRev &&
       step.stepKey === 'readInputs' && settled(step) && step.result?.completion?.scope && ['done','partial'].includes(step.state))) {
       const step = record.steps.findLast(step => step.taskRev === record.taskRev && step.stepKey === 'readInputs');
+      record.state = step.state; record.waitReason = step.reason;
+    }
+    else if (record.kind === COMPARE_KIND && record.steps.some(step => step.taskRev === record.taskRev &&
+      step.stepKey === 'report' && settled(step) && step.result?.completion?.published === true)) {
+      const step = record.steps.findLast(step => step.taskRev === record.taskRev && step.stepKey === 'report');
       record.state = step.state; record.waitReason = step.reason;
     }
     else if (record.artifacts.length) {
@@ -164,12 +198,12 @@ export class CompanionTaskStore {
         return {created: false, snapshot: this.project(record)};
       }
       const agreement = taskAgreement(body);
-      const range = this.validateAgreement(agreement);
+      const range = this.validateAgreement(agreement, body.kind);
       record.originalCreate = body; record.originalFingerprint = hash;
       record.origin = body.origin; record.hostSessionId = body.hostSessionId;
       record.revisions.unshift({taskRev: 1, operation: 'create', acceptedAtMs: this.now(), agreement});
       if (record.taskRev === 1) record.agreement = agreement;
-      record.notes['1'] = {dayRange: range};
+      record.notes['1'] = body.kind === COMPARE_KIND ? {} : {dayRange: range};
       this.setPlanState(record);
       const snapshot = await this.commit(record);
       this.wake(record.taskId);
@@ -189,17 +223,17 @@ export class CompanionTaskStore {
         return this.project(record);
       }
       if (stored && record.cancelRequested && body.taskRev <= record.taskRev) return this.project(record);
-      if (!cancel && record.kind === FIND_KIND && record.cancelRequested)
-        throw taskError(409, 'conflict', 'A cancelled find task requires a new explicit task', this.project(record));
+      if (!cancel && [FIND_KIND, COMPARE_KIND].includes(record.kind) && record.cancelRequested)
+        throw taskError(409, 'conflict', 'A cancelled read task requires a new explicit task', this.project(record));
       if (stored && (record.originalCreate !== null ? body.expectedTaskRev !== record.taskRev : body.taskRev <= record.taskRev))
         throw taskError(409, 'conflict', 'Task agreement revision changed', this.project(record));
       if (!cancel && record.artifacts.length) throw taskError(409, 'conflict', 'This task already has a published result', this.project(record));
       const agreement = cancel ? record.agreement : body.changes;
-      const range = cancel ? null : this.validateAgreement(agreement);
+      const range = cancel ? null : this.validateAgreement(agreement, record.kind);
       record.taskRev = body.taskRev; record.agreement = agreement; record.cancelRequested = cancel;
       record.operations[body.operationId] = {fingerprint: hash, taskRev: body.taskRev};
       record.revisions.push({taskRev: body.taskRev, operation: cancel ? 'cancel' : 'amend', acceptedAtMs: this.now(), agreement});
-      if (!cancel) record.notes[String(body.taskRev)] = {dayRange: range};
+      if (!cancel) record.notes[String(body.taskRev)] = record.kind === COMPARE_KIND ? {} : {dayRange: range};
       this.setPlanState(record);
       const snapshot = await this.commit(record);
       this.wake(id);
@@ -235,6 +269,11 @@ export class CompanionTaskStore {
         throw taskError(400, 'invalid-request', 'Invalid fixed task step');
       if (record.kind === FIND_KIND && !['selectInputs','readInputs'].includes(stepKey))
         throw taskError(400, 'invalid-request', 'Find tasks have only fixed read steps');
+      if (record.kind === COMPARE_KIND && !['readInputs','model','report'].includes(stepKey) ||
+          record.kind === TASK_KIND && stepKey === 'report')
+        throw taskError(400, 'invalid-request', 'This task has no such fixed step');
+      if (record.kind === COMPARE_KIND && stepKey === 'model' && record.steps.some(step => step.stepKey === 'model'))
+        throw taskError(409, 'conflict', 'This comparison already owns its one model attempt', this.project(record));
       const previous = record.steps.findLast(step => step.taskRev === taskRev && step.stepKey === stepKey);
       if (record.steps.some(step => !settled(step)) || previous && (!retryKnownSafe || !this.retryable(record, previous)))
         throw taskError(409, 'conflict', 'An original step must be reconciled before another claim', this.project(record));
@@ -254,6 +293,10 @@ export class CompanionTaskStore {
     });
   }
   retryable(record, previous) {
+    if (record.kind === COMPARE_KIND && previous.stepKey === 'report')
+      return settled(previous) && (previous.state === 'unknown' && previous.reason === 'report_interrupted' &&
+        previous.result?.completion === undefined || previous.state === 'partial' &&
+        previous.reason === 'report_owner_stopped' && previous.result?.completion?.published === false);
     if (!settled(previous) || previous.state !== 'waiting') return false;
     const notes = record.notes[String(previous.taskRev)];
     if (previous.stepKey === 'selectInputs') return !notes?.selection;
@@ -327,6 +370,37 @@ export class CompanionTaskStore {
     }, true);
   }
   saveInputs(claim, input) { return this.savePrivate(claim, 'inputs', input); }
+  finishCompare(claim, {report, elapsedMs, interruption = null}) {
+    return this.enqueue(async () => {
+      const record = this.read(claim.taskId), step = this.findClaim(record, claim);
+      if (record.kind !== COMPARE_KIND || claim.stepKey !== 'report')
+        throw taskError(409, 'conflict', 'The original compare report claim is required');
+      const hash = fingerprint({report, elapsedMs, interruption});
+      if (step.finishFingerprint) {
+        if (step.finishFingerprint !== hash) throw taskError(409, 'conflict', 'The original compare report already completed');
+        return this.project(record);
+      }
+      const agreement = record.revisions.find(value => value.taskRev === claim.taskRev).agreement;
+      const currentAgreement = record.taskRev === claim.taskRev && !record.cancelRequested && agreement.afterExit === 'continue' &&
+        (agreement.deadlineAtMs === null || this.now() < agreement.deadlineAtMs);
+      const ownerStopped = currentAgreement && elapsedMs <= claim.reserveMs &&
+        (interruption === 'task_owner_stopping' || this.stopping && interruption === null);
+      const published = !this.stopping && interruption === null && elapsedMs <= claim.reserveMs && currentAgreement;
+      const complete = report.coverage.comparisonComplete && report.sources.every(value => value.verifiedAtPublish) &&
+        (report.identical || report.suggestions.status === 'available');
+      const state = complete && published ? 'done' : 'partial';
+      this.settle(record, step, {state, reason: published ? (complete ? null : 'compare_incomplete') :
+        ownerStopped ? 'report_owner_stopped' : 'report_not_published',
+        result: {...clone(report), published}, elapsedMs});
+      step.finishFingerprint = hash;
+      if (record.taskRev === claim.taskRev && !record.cancelRequested) {
+        record.state = published ? state : ownerStopped ? 'unknown' : 'failed';
+        record.waitReason = published || ownerStopped ? step.reason : 'deadline_or_agreement_changed';
+        record.approval = null;
+      } else this.setPlanState(record);
+      return this.commit(record);
+    }, true);
+  }
   saveCandidate(claim, candidate) { return this.savePrivate(claim, 'candidate', candidate); }
   savePublishIntent(claim, reference) { return this.savePrivate(claim, 'publishIntent', reference); }
   observeStep(claim, observation) {
@@ -358,7 +432,9 @@ export class CompanionTaskStore {
       }
       this.settle(record, step, completion); step.finishFingerprint = hash;
       if (record.taskRev === claim.taskRev && !record.cancelRequested) {
-        if (completion.state === 'unknown' || completion.state === 'failed') {
+        // A failed optional comparison model still has verified source facts to report.
+        if (completion.state === 'unknown' || completion.state === 'failed' &&
+            !(record.kind === COMPARE_KIND && claim.stepKey === 'model')) {
           record.state = completion.state; record.waitReason = completion.reason ?? null;
         }
       } else this.setPlanState(record);

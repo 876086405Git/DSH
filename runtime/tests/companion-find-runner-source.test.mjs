@@ -202,7 +202,7 @@ test('SOURCE_HTTP actual mtime offsets use each instant across the original 25-h
 });
 test('SOURCE_MOUNT production task service dispatches find through real runner without touching Agent or model; Cordis lifecycle is supplied',async t=>{
  const f=await findFixture(t,{mountService:true});await putDraft(f.root,'A.md');const {snapshot}=await completeFind(f);
- const capabilities=(await f.request('/capabilities')).body;assert.deepEqual(capabilities.kinds,['host.notes_to_todo','host.find_draft']);
+ const capabilities=(await f.request('/capabilities')).body;assert.deepEqual(capabilities.kinds,['host.notes_to_todo','host.find_draft','host.compare_drafts']);
  assert.equal(capabilities.sourceRead,true);assert.equal(snapshot.state,'done');assert.equal(f.counters.otherServices,0);
  const notes={...f.body,taskId:'notes-pause',kind:'host.notes_to_todo',afterExit:'pause',args:{folderRef:f.folder.folderRef,outputDirRef:f.folder.folderRef,
   localDate:'2026-11-20',timeZone:'UTC',dateBy:'modified',outputName:'todo.md',writeMode:'createNew'}};

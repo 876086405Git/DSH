@@ -5,7 +5,8 @@ import { CompanionError } from './schema.js';
 
 export const TASK_KIND = 'host.notes_to_todo';
 export const FIND_KIND = 'host.find_draft';
-const kinds = z.enum([TASK_KIND, FIND_KIND]);
+export const COMPARE_KIND = 'host.compare_drafts';
+const kinds = z.enum([TASK_KIND, FIND_KIND, COMPARE_KIND]);
 export const TASK_LIMIT_MS = 300_000;
 export const taskId = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
 const integer = z.number().int().nonnegative().safe();
@@ -25,29 +26,40 @@ const findArgs = z.object({folderRef: taskId, scope: z.literal('currentLevel'),
   extensions: z.array(z.enum(['md','txt'])).min(1).max(2).refine(value => new Set(value).size === value.length),
 }).strict();
 const findAgreementSchema = notesAgreementSchema.extend({args: findArgs}).strict();
-export const agreementSchema = z.union([notesAgreementSchema, findAgreementSchema]);
+const sourceVersion = z.object({sourceRef: taskId, version: text}).strict();
+const compareAgreementSchema = notesAgreementSchema.extend({args: z.object({
+  a: sourceVersion, b: sourceVersion, maxHighlights: z.literal(3),
+}).strict()}).strict();
+const agreementFor = kind => kind === COMPARE_KIND ? compareAgreementSchema
+  : kind === FIND_KIND ? findAgreementSchema : notesAgreementSchema;
+export const agreementSchema = z.union([notesAgreementSchema, findAgreementSchema, compareAgreementSchema]);
 const origin = z.object({sourceSessionId: text.max(256), messageId: taskId, itemNo: integer}).strict();
 const base = {v: z.literal(1), hostStoreId: taskId};
 const creation = {...base, taskId, taskRev: z.literal(1), origin, hostSessionId: taskId.nullable()};
 export const createSchema = z.discriminatedUnion('kind', [
   notesAgreementSchema.extend({...creation, kind: z.literal(TASK_KIND)}).strict(),
   findAgreementSchema.extend({...creation, kind: z.literal(FIND_KIND)}).strict(),
+  compareAgreementSchema.extend({...creation, kind: z.literal(COMPARE_KIND)}).strict(),
 ]);
 export const amendSchema = z.object({...base, operationId: taskId, expectedTaskRev: revision,
   kind: kinds.optional(), taskRev: revision, changes: agreementSchema}).strict()
   .refine(value => value.taskRev === value.expectedTaskRev + 1 &&
-    ((value.kind ?? TASK_KIND) === FIND_KIND ? findAgreementSchema : notesAgreementSchema).safeParse(value.changes).success);
+    agreementFor(value.kind ?? TASK_KIND).safeParse(value.changes).success);
 export const cancelSchema = z.object({...base, operationId: taskId, expectedTaskRev: revision,
   kind: kinds.optional(), taskRev: revision}).strict().refine(value => value.taskRev === value.expectedTaskRev + 1);
 export const folderSchema = z.object({...base, path: text.max(4096)}).strict();
+const inputName = text.max(255).refine(value => !/[\\/\0]/u.test(value) && /\.(md|txt)$/iu.test(value));
+export const inputSchema = z.object({...base, folderRef: taskId, name: inputName}).strict();
 const states = z.enum(['queued', 'waiting', 'running', 'unknown', 'done', 'partial', 'failed', 'cancelled']);
-const stepKeys = z.enum(['selectInputs', 'readInputs', 'model', 'writePage']);
+const stepKeys = z.enum(['selectInputs', 'readInputs', 'model', 'writePage', 'report']);
 const object = z.record(z.string(), z.json());
 const approval = z.object({taskRev: revision, stepKey: stepKeys, agentId: taskId,
   approvalId: taskId, eventId: taskId, callId: taskId.nullable()}).strict();
 const directory = z.object({target: z.object({targetKey: text, displayPath: text}).strict(),
   identity: text}).strict();
 export const folderRecordSchema = z.object({folderRef: taskId, directory, createdAtMs: integer}).strict();
+export const inputRecordSchema = z.object({sourceRef: taskId, directory,
+  entry: z.object({name: inputName, version: text, size: integer.max(65536)}).strict(), createdAtMs: integer}).strict();
 export const globalSchema = z.object({v: z.literal(1), hostStoreId: taskId.nullable(), createdAtMs: integer}).strict();
 export const recordSchema = z.object({
   v: z.literal(1), taskId, hostExecutionId: taskId, kind: kinds,
@@ -68,7 +80,7 @@ export const recordSchema = z.object({
   approval: approval.nullable(), budget: z.object({limitMs: z.literal(TASK_LIMIT_MS), spentMs: integer, heldMs: integer}).strict(),
   execution: object.nullable(), notes: z.record(z.string(), object),
 }).strict().superRefine((record, context) => {
-  const schema = record.kind === FIND_KIND ? findAgreementSchema : notesAgreementSchema;
+  const schema = agreementFor(record.kind);
   if (record.originalCreate && record.originalCreate.kind !== record.kind ||
       record.agreement && !schema.safeParse(record.agreement).success ||
       record.revisions.some(value => value.agreement && !schema.safeParse(value.agreement).success))

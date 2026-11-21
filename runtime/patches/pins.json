@@ -2473,6 +2473,14 @@
           "after": "24d7ab45cea046840da34475447cacc7f71053c3a2bf52925a6872b54dca3eaa"
         }
       }
+    },
+    "companion-compare-output-window.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "before": "4f659541a67d7b089cfd9980cbae25777c8419d7504f3bd8da947182f0c2726b",
+          "after": "1531441767d72f938a63be7358efdb54f65e617c5a4b6ab514ff0fa74a14abd4"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2642,7 +2650,8 @@
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff",
-      "companion-find-drafts-files.diff"
+      "companion-find-drafts-files.diff",
+      "companion-compare-output-window.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2810,6 +2819,7 @@
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff",
       "companion-find-drafts-files.diff",
+      "companion-compare-output-window.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",

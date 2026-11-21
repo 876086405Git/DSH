@@ -1,5 +1,6 @@
-import { taskId, taskError, FIND_KIND } from './task-schema.js';
+import { taskId, taskError, FIND_KIND, COMPARE_KIND } from './task-schema.js';
 import { findDraftSupported } from './find-draft.js';
+import { compareDraftSupported } from './compare-drafts.js';
 
 const ROOT = '/dsh-go/v1/companion/tasks';
 const jsonType = req => String(req.headers['content-type'] ?? '').split(';', 1)[0].trim().toLowerCase() === 'application/json';
@@ -20,8 +21,10 @@ export function createCompanionTaskRoutes({ctx, send, readJson}) {
         if (path === `${ROOT}/capabilities` && req.method === 'GET') {
           const ready = !!store?.runner && !store.stopping;
           const findReady = ready && store.runner.kinds?.includes(FIND_KIND) && findDraftSupported(store.fs);
+          const compareReady = ready && store.runner.kinds?.includes(COMPARE_KIND) && compareDraftSupported(store.fs);
           send(res, 200, {v: 1, hostStoreId: store?.hostStoreId ?? null, durableAcceptance: ready,
-            kinds: ready ? (store.runner.kinds ?? ['host.notes_to_todo']).filter(kind=>kind!==FIND_KIND||findReady) : [],
+            kinds: ready ? (store.runner.kinds ?? ['host.notes_to_todo'])
+              .filter(kind=>(kind!==FIND_KIND||findReady)&&(kind!==COMPARE_KIND||compareReady)) : [],
             sourceRead:!!findReady, artifactRead: typeof store?.fs?.dshGoReadNotesArtifact === 'function',
             afterExit: ['continue'], pauseBehavior: 'waiting', reason: ready ? null : 'task_service_unavailable'});
           return true;
@@ -51,10 +54,16 @@ export function createCompanionTaskRoutes({ctx, send, readJson}) {
           const body = await readJson(req, 32768, true);
           if (part.length === 0) {
             if (!store.runner || body?.kind === FIND_KIND &&
-              (!store.runner.kinds?.includes(FIND_KIND) || !findDraftSupported(store.fs)))
+              (!store.runner.kinds?.includes(FIND_KIND) || !findDraftSupported(store.fs)) || body?.kind === COMPARE_KIND &&
+              (!store.runner.kinds?.includes(COMPARE_KIND) || !compareDraftSupported(store.fs)))
               throw taskError(503, 'unavailable', 'The fixed task runner is unavailable');
             const result = await store.create(body); send(res, result.created ? 201 : 200, result.snapshot);
           } else if (part.length === 1 && part[0] === 'folders') send(res, 201, await store.bindFolder(body));
+          else if (part.length === 1 && part[0] === 'inputs') {
+            if (!store.runner?.kinds?.includes(COMPARE_KIND) || !compareDraftSupported(store.fs))
+              throw taskError(503,'unavailable','The original draft binding service is unavailable');
+            send(res,201,await store.bindInput(body));
+          }
           else if (part.length === 2 && part[1] === 'amend') send(res, 200, await store.amend(part[0], body));
           else if (part.length === 2 && part[1] === 'cancel') send(res, 200, await store.cancel(part[0], body));
           else throw taskError(404, 'not-found', 'Task route does not exist');

@@ -154,7 +154,7 @@ export function createNotesExecutionOwner(ctx, store) {
     return {agent,scope,llm:model.llm,selected:model.selected,fs:model.fs,guard,standingPolicy:copy(model.policy),
       runTurn,approve,flush};
   }
-  return {openExecution,async close(){
+  return {openExecution,openModel:source,async close(){
     closing=true;
     const results=await Promise.allSettled([...handles.values()].map(async opening=>(await opening).dispose()));
     const failure=results.find(result=>result.status==='rejected');

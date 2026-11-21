@@ -166,6 +166,7 @@ companion-task-storage.diff
 companion-public-lookup-observer.diff
 companion-lookup-answer-window.diff
 companion-find-drafts-files.diff
+companion-compare-output-window.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
