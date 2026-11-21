@@ -16,10 +16,16 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     String? hostSessionId,
     required MemoryRow agreement,
     MemoryRow directoryLabels = const {},
-  }) => _createHostTaskFromMessage(kind: 'host.notes_to_todo',
-    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
-    agreement: agreement, directoryLabels: directoryLabels,
+  }) => _createHostTaskFromMessage(
+    kind: 'host.notes_to_todo',
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    roomMode: roomMode,
+    hostKey: hostKey,
+    hostSessionId: hostSessionId,
+    agreement: agreement,
+    directoryLabels: directoryLabels,
   );
 
   MemoryRow createFindDraftTaskFromMessage({
@@ -32,10 +38,16 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     String? hostSessionId,
     required MemoryRow agreement,
     MemoryRow directoryLabels = const {},
-  }) => _createHostTaskFromMessage(kind: 'host.find_draft',
-    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
-    agreement: agreement, directoryLabels: directoryLabels,
+  }) => _createHostTaskFromMessage(
+    kind: 'host.find_draft',
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    roomMode: roomMode,
+    hostKey: hostKey,
+    hostSessionId: hostSessionId,
+    agreement: agreement,
+    directoryLabels: directoryLabels,
     directoryHostStoreId: directoryHostStoreId,
   );
 
@@ -50,10 +62,16 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     String? hostSessionId,
     required MemoryRow agreement,
     required MemoryRow inputs,
-  }) => _createHostTaskFromMessage(kind: 'host.compare_drafts',
-    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
-    agreement: agreement, directoryLabels: {'inputs': inputs},
+  }) => _createHostTaskFromMessage(
+    kind: 'host.compare_drafts',
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    roomMode: roomMode,
+    hostKey: hostKey,
+    hostSessionId: hostSessionId,
+    agreement: agreement,
+    directoryLabels: {'inputs': inputs},
   );
 
   MemoryRow _createHostTaskFromMessage({
@@ -81,7 +99,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         ? _compareInputStore(directoryLabels['inputs'], normalized['args']! as MemoryRow)
         : directoryHostStoreId;
     final fingerprint = _taskFingerprint([
-      kind == 'host.notes_to_todo' ? 'notes.create' : kind == 'host.find_draft' ? 'find.create' : 'compare.create',
+      kind == 'host.notes_to_todo'
+          ? 'notes.create'
+          : kind == 'host.find_draft'
+          ? 'find.create'
+          : 'compare.create',
       messageId,
       expectedSourceRev,
       itemNo,
@@ -140,10 +162,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int itemNo,
     required MemoryRow agreement,
     MemoryRow? directoryLabels,
-  }) => _amendHostTask(kind: 'host.notes_to_todo',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    agreement: agreement, directoryLabels: directoryLabels,
+  }) => _amendHostTask(
+    kind: 'host.notes_to_todo',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    agreement: agreement,
+    directoryLabels: directoryLabels,
   );
 
   MemoryRow amendFindDraftTask({
@@ -154,10 +181,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int itemNo,
     required MemoryRow agreement,
     MemoryRow? directoryLabels,
-  }) => _amendHostTask(kind: 'host.find_draft',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    agreement: agreement, directoryLabels: directoryLabels,
+  }) => _amendHostTask(
+    kind: 'host.find_draft',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    agreement: agreement,
+    directoryLabels: directoryLabels,
   );
 
   MemoryRow amendCompareDraftTask({
@@ -168,10 +200,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int itemNo,
     required MemoryRow agreement,
     required MemoryRow inputs,
-  }) => _amendHostTask(kind: 'host.compare_drafts',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    agreement: agreement, directoryLabels: {'inputs': inputs},
+  }) => _amendHostTask(
+    kind: 'host.compare_drafts',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    agreement: agreement,
+    directoryLabels: {'inputs': inputs},
   );
 
   MemoryRow _amendHostTask({
@@ -189,7 +226,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         ? _compareInputStore(directoryLabels?['inputs'], normalized['args']! as MemoryRow)
         : null;
     final fingerprint = _taskFingerprint([
-      kind == 'host.notes_to_todo' ? 'notes.amend' : kind == 'host.find_draft' ? 'find.amend' : 'compare.amend',
+      kind == 'host.notes_to_todo'
+          ? 'notes.amend'
+          : kind == 'host.find_draft'
+          ? 'find.amend'
+          : 'compare.amend',
       taskId,
       expectedTaskRev,
       messageId,
@@ -204,7 +245,8 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         return hostTask(repeated['task_id']! as String)!;
       }
       final current = _hostCurrent(taskId, expectedTaskRev, kind);
-      if (current['cancel_requested'] == 1 || current['state'] == 'cancelled' ||
+      if (current['cancel_requested'] == 1 ||
+          current['state'] == 'cancelled' ||
           (kind == 'host.notes_to_todo' && const ['done', 'partial'].contains(current['state']))) {
         throw _conflict;
       }
@@ -218,8 +260,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           throw _hostTaskInvalid;
         }
       }
-      if (kind == 'host.compare_drafts' &&
-          inputStoreId != current['host_store_id']) {
+      if (kind == 'host.compare_drafts' && inputStoreId != current['host_store_id']) {
         throw _conflict;
       }
       final revision = expectedTaskRev + 1;
@@ -266,9 +307,13 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required String messageId,
     required int expectedSourceRev,
     required int itemNo,
-  }) => _cancelHostTask(kind: 'host.notes_to_todo',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  }) => _cancelHostTask(
+    kind: 'host.notes_to_todo',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
   );
 
   MemoryRow cancelFindDraftTask({
@@ -277,9 +322,13 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required String messageId,
     required int expectedSourceRev,
     required int itemNo,
-  }) => _cancelHostTask(kind: 'host.find_draft',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  }) => _cancelHostTask(
+    kind: 'host.find_draft',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
   );
 
   MemoryRow cancelCompareDraftTask({
@@ -288,9 +337,13 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required String messageId,
     required int expectedSourceRev,
     required int itemNo,
-  }) => _cancelHostTask(kind: 'host.compare_drafts',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  }) => _cancelHostTask(
+    kind: 'host.compare_drafts',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
   );
 
   MemoryRow _cancelHostTask({
@@ -302,7 +355,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int itemNo,
   }) {
     final fingerprint = _taskFingerprint([
-      kind == 'host.notes_to_todo' ? 'notes.cancel' : kind == 'host.find_draft' ? 'find.cancel' : 'compare.cancel',
+      kind == 'host.notes_to_todo'
+          ? 'notes.cancel'
+          : kind == 'host.find_draft'
+          ? 'find.cancel'
+          : 'compare.cancel',
       taskId,
       expectedTaskRev,
       messageId,
@@ -403,31 +460,38 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   /// Unfinished find tasks for this actual Host, including an earlier light
   /// room and a pending remote cancellation. This query grants no dispatch.
   List<MemoryRow> pendingFindDraftTasks({required String hostKey}) => [
-    for (final row in _db.select('''
+    for (final row in _db.select(
+      '''
       SELECT t.task_id FROM companion_tasks t
       JOIN companion_task_revisions r ON r.task_id=t.task_id AND r.task_rev=t.current_rev
       WHERE t.kind='host.find_draft' AND t.host_key=?
         AND r.state IN ('queued','waiting','running','unknown')
       ORDER BY t.created_at_ms,t.task_id
-    ''', [hostKey]))
+    ''',
+      [hostKey],
+    ))
       hostTask(row['task_id']! as String)!,
   ];
 
   List<MemoryRow> pendingCompareDraftTasks({required String hostKey}) => [
-    for (final row in _db.select('''
+    for (final row in _db.select(
+      '''
       SELECT t.task_id FROM companion_tasks t
       JOIN companion_task_revisions r ON r.task_id=t.task_id AND r.task_rev=t.current_rev
       WHERE t.kind='host.compare_drafts' AND t.host_key=?
         AND r.state IN ('queued','waiting','running','unknown')
       ORDER BY t.created_at_ms,t.task_id
-    ''', [hostKey]))
+    ''',
+      [hostKey],
+    ))
       hostTask(row['task_id']! as String)!,
   ];
 
   /// Read retained, originally selected file bindings across all revisions.
   /// Choosing one again still requires a new explicit source and current Host checks.
   List<MemoryRow> hostTaskInputs({required String hostKey}) {
-    final rows = _db.select('''
+    final rows = _db.select(
+      '''
       SELECT h.host_store_id,c.display_json FROM companion_tasks t
       JOIN companion_host_tasks h ON h.task_id=t.task_id
       JOIN companion_host_commands c ON c.task_id=t.task_id
@@ -435,7 +499,9 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       WHERE t.host_key=? AND t.kind='host.compare_drafts'
         AND h.host_store_id IS NOT NULL AND r.operation IN ('create','amend')
       ORDER BY t.updated_at_ms DESC,c.task_rev DESC,t.task_id
-    ''', [hostKey]);
+    ''',
+      [hostKey],
+    );
     final seen = <(String, String, String)>{};
     final result = <MemoryRow>[];
     for (final row in rows) {
@@ -443,8 +509,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       final inputs = display['inputs']! as MemoryRow;
       for (final side in const ['a', 'b']) {
         final binding = inputs[side]! as MemoryRow;
-        if (seen.add((row['host_store_id']! as String,
-            binding['sourceRef']! as String, binding['version']! as String))) {
+        if (seen.add((
+          row['host_store_id']! as String,
+          binding['sourceRef']! as String,
+          binding['version']! as String,
+        ))) {
           result.add(binding);
         }
       }
@@ -455,7 +524,8 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   /// Previously selected source directories on this original Host. These
   /// saved labels are choices for a new explicit task, not an access grant.
   List<MemoryRow> hostTaskDirectories({required String hostKey}) {
-    final rows = _db.select('''
+    final rows = _db.select(
+      '''
       SELECT h.host_store_id,c.request_json,c.display_json,r.operation
       FROM companion_tasks t JOIN companion_host_tasks h ON h.task_id=t.task_id
       JOIN companion_host_commands c ON c.task_id=t.task_id
@@ -463,7 +533,9 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       WHERE t.host_key=? AND t.kind IN ('host.notes_to_todo','host.find_draft')
         AND h.host_store_id IS NOT NULL AND r.operation IN ('create','amend')
       ORDER BY t.updated_at_ms DESC,c.task_rev DESC,t.task_id
-    ''', [hostKey]);
+    ''',
+      [hostKey],
+    );
     final seen = <(String, String)>{};
     final result = <MemoryRow>[];
     for (final row in rows) {
@@ -473,8 +545,8 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       if (path is! String || path.isEmpty) {
         continue;
       }
-      final args = (row['operation'] == 'create' ? request['args'] :
-        (request['changes']! as MemoryRow)['args'])! as MemoryRow;
+      final args =
+          (row['operation'] == 'create' ? request['args'] : (request['changes']! as MemoryRow)['args'])! as MemoryRow;
       final hostStoreId = row['host_store_id']! as String;
       final folderRef = args['folderRef']! as String;
       if (seen.add((hostStoreId, folderRef))) {
@@ -696,11 +768,14 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
             throw _conflict;
           }
           final completion = (step['result'] as Map<String, Object?>?)?['completion'];
-          if (current['kind'] == 'host.compare_drafts' && step['stepKey'] == 'report' &&
-              completion != null && _canonicalJson(matching.single) != _canonicalJson(step)) {
+          if (current['kind'] == 'host.compare_drafts' &&
+              step['stepKey'] == 'report' &&
+              completion != null &&
+              _canonicalJson(matching.single) != _canonicalJson(step)) {
             throw _conflict;
           }
-          if (current['kind'] == 'host.find_draft' && step['stepKey'] == 'readInputs' &&
+          if (current['kind'] == 'host.find_draft' &&
+              step['stepKey'] == 'readInputs' &&
               completion != null &&
               _canonicalJson((matching.single['result'] as Map<String, Object?>?)?['completion']) !=
                   _canonicalJson(completion)) {
@@ -819,14 +894,16 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
   }
   final args = Map<String, Object?>.from(rawArgs);
   if (kind == 'host.compare_drafts') {
-    if (args.length != 3 || args['maxHighlights'] != 3 ||
-        !const ['a', 'b', 'maxHighlights'].every(args.containsKey)) {
+    if (args.length != 3 || args['maxHighlights'] != 3 || !const ['a', 'b', 'maxHighlights'].every(args.containsKey)) {
       throw _hostTaskInvalid;
     }
     for (final side in const ['a', 'b']) {
       final source = args[side];
-      if (source is! MemoryRow || source.length != 2 || !_hostId(source['sourceRef']) ||
-          source['version'] is! String || (source['version']! as String).isEmpty) {
+      if (source is! MemoryRow ||
+          source.length != 2 ||
+          !_hostId(source['sourceRef']) ||
+          source['version'] is! String ||
+          (source['version']! as String).isEmpty) {
         throw _hostTaskInvalid;
       }
     }
@@ -837,9 +914,9 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
       : const ['folderRef', 'localDate', 'timeZone', 'dateBy', 'outputDirRef', 'outputName', 'writeMode'];
   if (args.length != fields.length ||
       !fields.every(args.containsKey) ||
-      fields.where((key) => key != 'extensions').any(
-        (key) => args[key] is! String || (args[key]! as String).trim().isEmpty,
-      ) ||
+      fields
+          .where((key) => key != 'extensions')
+          .any((key) => args[key] is! String || (args[key]! as String).trim().isEmpty) ||
       args['dateBy'] != 'modified') {
     throw _hostTaskInvalid;
   }
@@ -848,24 +925,33 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
   }
   final date = args['localDate']! as String;
   final day = DateTime.tryParse('${date}T00:00:00Z');
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
-      day == null ||
-      day.toIso8601String().substring(0, 10) != date) {
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) || day == null || day.toIso8601String().substring(0, 10) != date) {
     throw _hostTaskInvalid;
   }
   if (kind == 'host.find_draft') {
     final extensions = args['extensions'];
-    if (!_hostId(args['folderRef']) || args['scope'] != 'currentLevel' ||
-        (args['timeZone']! as String).length > 128 || RegExp(r'^[+-]').hasMatch(args['timeZone']! as String) ||
-        extensions is! List<Object?> || extensions.isEmpty || extensions.toSet().length != extensions.length ||
+    if (!_hostId(args['folderRef']) ||
+        args['scope'] != 'currentLevel' ||
+        (args['timeZone']! as String).length > 128 ||
+        RegExp(r'^[+-]').hasMatch(args['timeZone']! as String) ||
+        extensions is! List<Object?> ||
+        extensions.isEmpty ||
+        extensions.toSet().length != extensions.length ||
         extensions.any((value) => !const ['md', 'txt'].contains(value))) {
       throw _hostTaskInvalid;
     }
-    args['extensions'] = [for (final value in const ['md', 'txt']) if (extensions.contains(value)) value];
+    args['extensions'] = [
+      for (final value in const ['md', 'txt'])
+        if (extensions.contains(value)) value,
+    ];
   } else {
     final name = args['outputName']! as String;
-    if (args['writeMode'] != 'createNew' || name == '.' || name == '..' ||
-        name.contains('/') || name.contains('\\') || !RegExp(r'\.(md|txt)$').hasMatch(name)) {
+    if (args['writeMode'] != 'createNew' ||
+        name == '.' ||
+        name == '..' ||
+        name.contains('/') ||
+        name.contains('\\') ||
+        !RegExp(r'\.(md|txt)$').hasMatch(name)) {
       throw _hostTaskInvalid;
     }
   }
@@ -880,10 +966,15 @@ String _compareInputStore(Object? value, MemoryRow args) {
   for (final side in const ['a', 'b']) {
     final input = value[side];
     final selected = args[side]! as MemoryRow;
-    if (input is! MemoryRow || input.length != 7 || input['v'] != 1 ||
-        !_hostId(input['hostStoreId']) || input['sourceRef'] != selected['sourceRef'] ||
-        input['version'] != selected['version'] || input['displayName'] is! String ||
-        (input['displayName']! as String).isEmpty || !_hostCount(input['size']) ||
+    if (input is! MemoryRow ||
+        input.length != 7 ||
+        input['v'] != 1 ||
+        !_hostId(input['hostStoreId']) ||
+        input['sourceRef'] != selected['sourceRef'] ||
+        input['version'] != selected['version'] ||
+        input['displayName'] is! String ||
+        (input['displayName']! as String).isEmpty ||
+        !_hostCount(input['size']) ||
         (input['size']! as int) > 65536 ||
         !const ['text/plain', 'text/markdown'].contains(input['mediaType']) ||
         (hostStoreId != null && input['hostStoreId'] != hostStoreId)) {
@@ -984,7 +1075,10 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       throw _hostTaskInvalid;
     }
     if (value['agreement'] != null) {
-      agreements[value['taskRev']! as int] = _hostAgreement(Map<String, Object?>.from(value['agreement']! as Map), kind);
+      agreements[value['taskRev']! as int] = _hostAgreement(
+        Map<String, Object?>.from(value['agreement']! as Map),
+        kind,
+      );
     }
   }
   if (!revisions.contains(revision)) {
@@ -1015,12 +1109,17 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       final completion = (value['result'] as Map<String, Object?>?)?['completion'];
       if (completion != null) {
         final stepRevision = value['taskRev']! as int;
-        if (value['finishedAtMs'] == null || !const ['done', 'partial'].contains(value['state']) ||
-            findReports.containsKey(stepRevision) || agreements[stepRevision] == null) {
+        if (value['finishedAtMs'] == null ||
+            !const ['done', 'partial'].contains(value['state']) ||
+            findReports.containsKey(stepRevision) ||
+            agreements[stepRevision] == null) {
           throw _hostTaskInvalid;
         }
-        findReports[stepRevision] = _validateFindReport(completion,
-          agreements[stepRevision]!['args']! as MemoryRow, sourceRefs);
+        findReports[stepRevision] = _validateFindReport(
+          completion,
+          agreements[stepRevision]!['args']! as MemoryRow,
+          sourceRefs,
+        );
       }
     }
     if (kind == 'host.compare_drafts') {
@@ -1037,21 +1136,25 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         }
         final completion = (value['result'] as Map<String, Object?>?)?['completion'];
         if (completion != null) {
-          if (value['finishedAtMs'] == null || !const ['done', 'partial'].contains(value['state']) ||
+          if (value['finishedAtMs'] == null ||
+              !const ['done', 'partial'].contains(value['state']) ||
               agreements[stepRevision] == null) {
             throw _hostTaskInvalid;
           }
-          final complete = _validateCompareReport(completion,
-            agreements[stepRevision]!['args']! as MemoryRow);
+          final complete = _validateCompareReport(completion, agreements[stepRevision]!['args']! as MemoryRow);
           if (complete != (value['state'] == 'done')) {
             throw _hostTaskInvalid;
           }
           // Only an owner-stopped, unpublished attempt can precede a recovered
           // report. Published or ordinary stopped reports never permit a second
           // publication; each old completion remains immutable during import.
-          compareReports[stepRevision] = (complete: complete,
-            retryable: value['state'] == 'partial' && value['reason'] == 'report_owner_stopped' &&
-              (completion as MemoryRow)['published'] == false);
+          compareReports[stepRevision] = (
+            complete: complete,
+            retryable:
+                value['state'] == 'partial' &&
+                value['reason'] == 'report_owner_stopped' &&
+                (completion as MemoryRow)['published'] == false,
+          );
         }
       }
     }
@@ -1075,13 +1178,16 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     }
   }
   if (kind == 'host.find_draft') {
-    if (artifacts.isNotEmpty || (const ['done', 'partial'].contains(snapshot['state']) &&
-        (findReports[revision] == null || findReports[revision] != (snapshot['state'] == 'done')))) {
+    if (artifacts.isNotEmpty ||
+        (const ['done', 'partial'].contains(snapshot['state']) &&
+            (findReports[revision] == null || findReports[revision] != (snapshot['state'] == 'done')))) {
       throw _hostTaskInvalid;
     }
   } else if (kind == 'host.compare_drafts') {
-    if (artifacts.isNotEmpty || (const ['done', 'partial'].contains(snapshot['state']) &&
-        (compareReports[revision] == null || compareReports[revision]!.complete != (snapshot['state'] == 'done')))) {
+    if (artifacts.isNotEmpty ||
+        (const ['done', 'partial'].contains(snapshot['state']) &&
+            (compareReports[revision] == null ||
+                compareReports[revision]!.complete != (snapshot['state'] == 'done')))) {
       throw _hostTaskInvalid;
     }
   } else if (const ['done', 'partial'].contains(snapshot['state']) && artifacts.isEmpty) {
@@ -1106,7 +1212,9 @@ void _validateHostSnapshot(MemoryRow snapshot) {
 }
 
 bool _validateFindReport(Object? value, MemoryRow args, Set<String> sourceRefs) {
-  if (value is! MemoryRow || value['scope'] is! MemoryRow || value['coverage'] is! MemoryRow ||
+  if (value is! MemoryRow ||
+      value['scope'] is! MemoryRow ||
+      value['coverage'] is! MemoryRow ||
       value['matches'] is! List<Object?>) {
     throw _hostTaskInvalid;
   }
@@ -1114,56 +1222,80 @@ bool _validateFindReport(Object? value, MemoryRow args, Set<String> sourceRefs) 
   final coverage = value['coverage']! as MemoryRow;
   final matches = value['matches']! as List<Object?>;
   if (_findArgsKeys.any((key) => _canonicalJson(scope[key]) != _canonicalJson(args[key])) ||
-      scope['displayPath'] is! String || (scope['displayPath']! as String).isEmpty ||
-      !_findEpoch(scope['startAtMs']) || !_findEpoch(scope['endAtMs']) ||
+      scope['displayPath'] is! String ||
+      (scope['displayPath']! as String).isEmpty ||
+      !_findEpoch(scope['startAtMs']) ||
+      !_findEpoch(scope['endAtMs']) ||
       (scope['endAtMs']! as int) <= (scope['startAtMs']! as int) ||
-      !const ['entriesChecked', 'supportedFilesChecked', 'matchingCandidates'].every((key) => _hostCount(coverage[key])) ||
+      !const [
+        'entriesChecked',
+        'supportedFilesChecked',
+        'matchingCandidates',
+      ].every((key) => _hostCount(coverage[key])) ||
       (coverage['entriesChecked']! as int) > 200 ||
       (coverage['supportedFilesChecked']! as int) > (coverage['entriesChecked']! as int) ||
       (coverage['matchingCandidates']! as int) > 21 ||
       (coverage['matchingCandidates']! as int) > (coverage['supportedFilesChecked']! as int) ||
-      !const ['enumerationComplete', 'entryLimitReached', 'candidateLimitReached'].every((key) => coverage[key] is bool) ||
-      coverage['gaps'] is! List<Object?> || matches.length > 20 ||
+      !const [
+        'enumerationComplete',
+        'entryLimitReached',
+        'candidateLimitReached',
+      ].every((key) => coverage[key] is bool) ||
+      coverage['gaps'] is! List<Object?> ||
+      matches.length > 20 ||
       matches.length != ((coverage['matchingCandidates']! as int) > 20 ? 20 : coverage['matchingCandidates']) ||
       (coverage['entryLimitReached'] == true && coverage['entriesChecked'] != 200) ||
       (coverage['candidateLimitReached'] == true) != (coverage['matchingCandidates'] == 21) ||
       (coverage['enumerationComplete'] == true &&
-        (coverage['entryLimitReached'] == true || coverage['candidateLimitReached'] == true))) {
+          (coverage['entryLimitReached'] == true || coverage['candidateLimitReached'] == true))) {
     throw _hostTaskInvalid;
   }
   for (final gap in coverage['gaps']! as List<Object?>) {
-    if (gap is! MemoryRow || !gap.containsKey('relativePath') || !_hostNullableText(gap['relativePath']) ||
-        gap['reason'] is! String || (gap['reason']! as String).isEmpty) {
+    if (gap is! MemoryRow ||
+        !gap.containsKey('relativePath') ||
+        !_hostNullableText(gap['relativePath']) ||
+        gap['reason'] is! String ||
+        (gap['reason']! as String).isEmpty) {
       throw _hostTaskInvalid;
     }
   }
   var allOpenable = true;
   for (final match in matches) {
-    if (match is! MemoryRow || !_hostId(match['sourceRef']) || !sourceRefs.add(match['sourceRef']! as String) ||
-        match['relativePath'] is! String || (match['relativePath']! as String).isEmpty ||
+    if (match is! MemoryRow ||
+        !_hostId(match['sourceRef']) ||
+        !sourceRefs.add(match['sourceRef']! as String) ||
+        match['relativePath'] is! String ||
+        (match['relativePath']! as String).isEmpty ||
         RegExp(r'[/\x00]').hasMatch(match['relativePath']! as String) ||
-        !_hostCount(match['size']) || !_findEpoch(match['modifiedAtMs']) ||
+        !_hostCount(match['size']) ||
+        !_findEpoch(match['modifiedAtMs']) ||
         (match['modifiedAtMs']! as int) < (scope['startAtMs']! as int) ||
         (match['modifiedAtMs']! as int) >= (scope['endAtMs']! as int) ||
-        match['modifiedOffsetSeconds'] is! int || (match['modifiedOffsetSeconds']! as int).abs() > 86400 ||
-        match['version'] is! String || (match['version']! as String).isEmpty ||
-        match['openable'] is! bool || !match.containsKey('reason') ||
-        (match['openable'] == true ? match['reason'] != null || (match['size']! as int) > 65536 :
-          match['reason'] is! String || (match['reason']! as String).isEmpty)) {
+        match['modifiedOffsetSeconds'] is! int ||
+        (match['modifiedOffsetSeconds']! as int).abs() > 86400 ||
+        match['version'] is! String ||
+        (match['version']! as String).isEmpty ||
+        match['openable'] is! bool ||
+        !match.containsKey('reason') ||
+        (match['openable'] == true
+            ? match['reason'] != null || (match['size']! as int) > 65536
+            : match['reason'] is! String || (match['reason']! as String).isEmpty)) {
       throw _hostTaskInvalid;
     }
     allOpenable = allOpenable && match['openable'] == true;
   }
-  return coverage['enumerationComplete'] == true &&
-    (coverage['gaps']! as List<Object?>).isEmpty && allOpenable;
+  return coverage['enumerationComplete'] == true && (coverage['gaps']! as List<Object?>).isEmpty && allOpenable;
 }
 
 bool _findEpoch(Object? value) => value is int && value.abs() <= 8640000000000000;
 
 bool _validateCompareReport(Object? value, MemoryRow args) {
-  if (value is! MemoryRow || value['sources'] is! List<Object?> ||
-      value['coverage'] is! MemoryRow || value['differences'] is! List<Object?> ||
-      value['suggestions'] is! MemoryRow || value['published'] is! bool) {
+  if (value is! MemoryRow ||
+      value['sources'] is! List<Object?> ||
+      value['coverage'] is! MemoryRow ||
+      value['differences'] is! List<Object?> ||
+      value['suggestions'] is! MemoryRow ||
+      value['published'] is! bool) {
     throw _hostTaskInvalid;
   }
   final sources = value['sources']! as List<Object?>;
@@ -1176,15 +1308,22 @@ bool _validateCompareReport(Object? value, MemoryRow args) {
     final side = index == 0 ? 'a' : 'b';
     final source = sources[index];
     final selected = args[side]! as MemoryRow;
-    if (source is! MemoryRow || source['side'] != side ||
-        source['sourceRef'] != selected['sourceRef'] || source['version'] != selected['version'] ||
-        source['displayName'] is! String || (source['displayName']! as String).isEmpty ||
+    if (source is! MemoryRow ||
+        source['side'] != side ||
+        source['sourceRef'] != selected['sourceRef'] ||
+        source['version'] != selected['version'] ||
+        source['displayName'] is! String ||
+        (source['displayName']! as String).isEmpty ||
         !const ['text/plain', 'text/markdown'].contains(source['mediaType']) ||
-        !_hostCount(source['size']) || (source['size']! as int) > 65536 ||
-        source['readComplete'] is! bool || source['verifiedAtPublish'] is! bool ||
-        coverage['${side}Complete'] != source['readComplete'] || !source.containsKey('reason') ||
-        (source['verifiedAtPublish'] == true ? source['readComplete'] != true || source['reason'] != null :
-          source['reason'] is! String || (source['reason']! as String).isEmpty)) {
+        !_hostCount(source['size']) ||
+        (source['size']! as int) > 65536 ||
+        source['readComplete'] is! bool ||
+        source['verifiedAtPublish'] is! bool ||
+        coverage['${side}Complete'] != source['readComplete'] ||
+        !source.containsKey('reason') ||
+        (source['verifiedAtPublish'] == true
+            ? source['readComplete'] != true || source['reason'] != null
+            : source['reason'] is! String || (source['reason']! as String).isEmpty)) {
       throw _hostTaskInvalid;
     }
     verified = verified && source['verifiedAtPublish'] == true;
@@ -1193,26 +1332,36 @@ bool _validateCompareReport(Object? value, MemoryRow args) {
   final total = coverage['totalChangeGroups'];
   final differences = value['differences']! as List<Object?>;
   final gaps = coverage['gaps'];
-  if (complete is! bool || gaps is! List<Object?> || differences.length > 3 ||
+  if (complete is! bool ||
+      gaps is! List<Object?> ||
+      differences.length > 3 ||
       coverage['displayedChangeGroups'] != differences.length ||
       !const ['model', 'source_order', 'none'].contains(value['selection']) ||
-      (complete ? coverage['aComplete'] != true || coverage['bComplete'] != true ||
-        !_hostCount(total) || differences.length > (total! as int) ||
-        coverage['algorithm'] is! String || (coverage['algorithm']! as String).isEmpty ||
-        value['identical'] != (total == 0) :
-        total != null || coverage['algorithm'] != null || value['identical'] != null || differences.isNotEmpty)) {
+      (complete
+          ? coverage['aComplete'] != true ||
+                coverage['bComplete'] != true ||
+                !_hostCount(total) ||
+                differences.length > (total! as int) ||
+                coverage['algorithm'] is! String ||
+                (coverage['algorithm']! as String).isEmpty ||
+                value['identical'] != (total == 0)
+          : total != null || coverage['algorithm'] != null || value['identical'] != null || differences.isNotEmpty)) {
     throw _hostTaskInvalid;
   }
   for (final gap in gaps) {
-    if (gap is! MemoryRow || !gap.containsKey('side') ||
+    if (gap is! MemoryRow ||
+        !gap.containsKey('side') ||
         !const [null, 'a', 'b'].contains(gap['side']) ||
-        gap['reason'] is! String || (gap['reason']! as String).isEmpty) {
+        gap['reason'] is! String ||
+        (gap['reason']! as String).isEmpty) {
       throw _hostTaskInvalid;
     }
   }
   final ids = <String>{};
   for (final difference in differences) {
-    if (difference is! MemoryRow || !_hostId(difference['id']) || !ids.add(difference['id']! as String) ||
+    if (difference is! MemoryRow ||
+        !_hostId(difference['id']) ||
+        !ids.add(difference['id']! as String) ||
         !const ['insert', 'delete', 'replace'].contains(difference['kind'])) {
       throw _hostTaskInvalid;
     }
@@ -1228,11 +1377,14 @@ bool _validateCompareReport(Object? value, MemoryRow args) {
   final suggestions = value['suggestions']! as MemoryRow;
   final items = suggestions['items'];
   if (!const ['available', 'not_needed', 'unavailable', 'unknown'].contains(suggestions['status']) ||
-      !suggestions.containsKey('reason') || items is! List<Object?> || items.length > 3 ||
-      (suggestions['status'] == 'available' ? items.isEmpty || value['selection'] != 'model' ||
-        suggestions['reason'] != null : items.isNotEmpty) ||
+      !suggestions.containsKey('reason') ||
+      items is! List<Object?> ||
+      items.length > 3 ||
+      (suggestions['status'] == 'available'
+          ? items.isEmpty || value['selection'] != 'model' || suggestions['reason'] != null
+          : items.isNotEmpty) ||
       (const ['unavailable', 'unknown'].contains(suggestions['status']) &&
-        (suggestions['reason'] is! String || (suggestions['reason']! as String).isEmpty)) ||
+          (suggestions['reason'] is! String || (suggestions['reason']! as String).isEmpty)) ||
       (suggestions['status'] == 'not_needed' && (value['identical'] != true || suggestions['reason'] != null)) ||
       (value['selection'] == 'model' && suggestions['status'] != 'available') ||
       (differences.isEmpty ? value['selection'] != 'none' : value['selection'] == 'none')) {
@@ -1240,35 +1392,51 @@ bool _validateCompareReport(Object? value, MemoryRow args) {
   }
   final suggested = <String>{};
   for (final item in items) {
-    if (item is! MemoryRow || !ids.contains(item['differenceId']) ||
-        !suggested.add(item['differenceId']! as String) || item['practice'] is! String ||
+    if (item is! MemoryRow ||
+        !ids.contains(item['differenceId']) ||
+        !suggested.add(item['differenceId']! as String) ||
+        item['practice'] is! String ||
         (item['practice']! as String).trim().isEmpty) {
       throw _hostTaskInvalid;
     }
   }
-  return value['published'] == true && complete && verified && gaps.isEmpty &&
+  return value['published'] == true &&
+      complete &&
+      verified &&
+      gaps.isEmpty &&
       (value['identical'] == true || suggestions['status'] == 'available');
 }
 
 void _validateCompareRange(Object? value) {
-  if (value is! MemoryRow || !const ['from', 'to', 'lineStart', 'lineEnd'].every((key) => _hostCount(value[key])) ||
-      (value['to']! as int) < (value['from']! as int) || (value['to']! as int) > 65536 ||
-      (value['lineStart']! as int) < 1 || (value['lineEnd']! as int) < (value['lineStart']! as int) ||
+  if (value is! MemoryRow ||
+      !const ['from', 'to', 'lineStart', 'lineEnd'].every((key) => _hostCount(value[key])) ||
+      (value['to']! as int) < (value['from']! as int) ||
+      (value['to']! as int) > 65536 ||
+      (value['lineStart']! as int) < 1 ||
+      (value['lineEnd']! as int) < (value['lineStart']! as int) ||
       ((value['from'] == value['to']) != (value['lineStart'] == value['lineEnd'])) ||
-      (value['lineEnd']! as int) > 65537 || !value.containsKey('paragraphs') || !value.containsKey('boundary')) {
+      (value['lineEnd']! as int) > 65537 ||
+      !value.containsKey('paragraphs') ||
+      !value.containsKey('boundary')) {
     throw _hostTaskInvalid;
   }
   final paragraphs = value['paragraphs'], boundary = value['boundary'];
   if (paragraphs != null) {
-    if (paragraphs is! MemoryRow || boundary != null ||
-        !_hostCount(paragraphs['from']) || !_hostCount(paragraphs['to']) ||
-        (paragraphs['from']! as int) < 1 || (paragraphs['to']! as int) < (paragraphs['from']! as int) ||
+    if (paragraphs is! MemoryRow ||
+        boundary != null ||
+        !_hostCount(paragraphs['from']) ||
+        !_hostCount(paragraphs['to']) ||
+        (paragraphs['from']! as int) < 1 ||
+        (paragraphs['to']! as int) < (paragraphs['from']! as int) ||
         value['from'] == value['to']) {
       throw _hostTaskInvalid;
     }
-  } else if (boundary is! MemoryRow || !const ['beforeParagraph', 'afterParagraph'].every(boundary.containsKey) ||
-      const ['beforeParagraph', 'afterParagraph'].any((key) =>
-        boundary[key] != null && (!_hostCount(boundary[key]) || (boundary[key]! as int) < 1))) {
+  } else if (boundary is! MemoryRow ||
+      !const ['beforeParagraph', 'afterParagraph'].every(boundary.containsKey) ||
+      const [
+        'beforeParagraph',
+        'afterParagraph',
+      ].any((key) => boundary[key] != null && (!_hostCount(boundary[key]) || (boundary[key]! as int) < 1))) {
     throw _hostTaskInvalid;
   }
 }
@@ -1279,18 +1447,23 @@ void _validateCompareSide(Object? value, int sourceBytes) {
   final excerpts = side['excerpts'];
   // UTF-8 bytes are only an upper bound for UTF-16/line positions. The Host,
   // which has the complete source, remains responsible for literal excerpts.
-  if ((side['to']! as int) > sourceBytes || (side['lineEnd']! as int) > sourceBytes + 1 ||
-      excerpts is! List<Object?> || excerpts.length > 2 ||
+  if ((side['to']! as int) > sourceBytes ||
+      (side['lineEnd']! as int) > sourceBytes + 1 ||
+      excerpts is! List<Object?> ||
+      excerpts.length > 2 ||
       (side['from'] == side['to']) != excerpts.isEmpty) {
     throw _hostTaskInvalid;
   }
   for (final excerpt in excerpts) {
     _validateCompareRange(excerpt);
     final quote = excerpt! as MemoryRow;
-    if (quote['text'] is! String || (quote['text']! as String).isEmpty ||
-        (quote['text']! as String).length > 512 || (quote['text']! as String).runes.length > 160 ||
+    if (quote['text'] is! String ||
+        (quote['text']! as String).isEmpty ||
+        (quote['text']! as String).length > 512 ||
+        (quote['text']! as String).runes.length > 160 ||
         (quote['to']! as int) - (quote['from']! as int) != (quote['text']! as String).length ||
-        (quote['from']! as int) < (side['from']! as int) || (quote['to']! as int) > (side['to']! as int)) {
+        (quote['from']! as int) < (side['from']! as int) ||
+        (quote['to']! as int) > (side['to']! as int)) {
       throw _hostTaskInvalid;
     }
   }

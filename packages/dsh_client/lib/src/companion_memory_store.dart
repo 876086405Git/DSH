@@ -2410,17 +2410,6 @@ class CompanionMemoryStore {
     },
   };
 
-  String _canonicalJson(Object? value) => jsonEncode(_orderedJson(value));
-
-  Object? _orderedJson(Object? value) {
-    if (value is Map<String, Object?>) {
-      final keys = value.keys.toList()..sort();
-      return {for (final key in keys) key: _orderedJson(value[key])};
-    }
-    if (value is List<Object?>) return [for (final item in value) _orderedJson(item)];
-    return value;
-  }
-
   List<MemoryRow> requests() {
     final rows = <MemoryRow>[
       for (final row in _db.select('SELECT * FROM memory_requests'))
@@ -3150,3 +3139,14 @@ CREATE TABLE memory_requests (
   estimated_cny REAL, state TEXT NOT NULL, terminal TEXT
 );
 ''';
+
+String _canonicalJson(Object? value) => jsonEncode(_orderedJson(value));
+
+Object? _orderedJson(Object? value) {
+  if (value is Map<String, Object?>) {
+    final keys = value.keys.toList()..sort();
+    return {for (final key in keys) key: _orderedJson(value[key])};
+  }
+  if (value is List<Object?>) return [for (final item in value) _orderedJson(item)];
+  return value;
+}

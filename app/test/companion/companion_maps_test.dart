@@ -41,13 +41,15 @@ void main() {
     expect(command, {'operation': 'create', 'address': _address, 'target': null});
     expect(parts.first.itemNo, 0);
     expect(parseCompanionMap(parts.last.raw), isNull);
-    expect(parseCompanionMap('把“$_address”的地图地址改成“文华路 19 号南门”'),
-      {'operation': 'amend', 'address': '文华路 19 号南门', 'target': _address});
+    expect(parseCompanionMap('把“$_address”的地图地址改成“文华路 19 号南门”'), {
+      'operation': 'amend',
+      'address': '文华路 19 号南门',
+      'target': _address,
+    });
     expect(parseCompanionMap('重新打开地图'), {'operation': 'reopen', 'target': null});
   });
 
-  for (final raw in ['“在地图打开“文华路 18 号””', '不要在地图打开“文华路 18 号”',
-    '故事里，在地图打开“文华路 18 号”', '他说在地图打开“文华路 18 号”']) {
+  for (final raw in ['“在地图打开“文华路 18 号””', '不要在地图打开“文华路 18 号”', '故事里，在地图打开“文华路 18 号”', '他说在地图打开“文华路 18 号”']) {
     test('G finite map grammar does not execute quoted denied or story wording: $raw', () {
       expect(parseCompanionMap(raw), isNull);
     });
@@ -90,16 +92,36 @@ void main() {
       binding.defaultBinaryMessenger.setMockMethodCallHandler(reminders, null);
       binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null);
       root.deleteSync(recursive: true);
-      expect(reminderCalls, everyElement('clock'), reason: 'Map identity must not create reminder notification channels');
+      expect(
+        reminderCalls,
+        everyElement('clock'),
+        reason: 'Map identity must not create reminder notification channels',
+      );
     });
 
     MemoryRow original() {
-      memory.store.submitMessage(id: 'original', sessionId: 'light:original-room', text: '在地图打开“$_address”',
-        saidAtUtc: _now, offsetMinutes: 480);
-      return memory.store.createMapOpenFromMessage(messageId: 'original', expectedSourceRev: 1, itemNo: 0,
-        roomMode: 'light', executorId: 'installation-A', map: const CompanionMapSpec(address: _address,
-          targetKind: 'selected', packageName: 'test.maps', componentName: 'test.maps.View', packageUid: 12001,
-          targetLabel: '实际候选地图'));
+      memory.store.submitMessage(
+        id: 'original',
+        sessionId: 'light:original-room',
+        text: '在地图打开“$_address”',
+        saidAtUtc: _now,
+        offsetMinutes: 480,
+      );
+      return memory.store.createMapOpenFromMessage(
+        messageId: 'original',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        roomMode: 'light',
+        executorId: 'installation-A',
+        map: const CompanionMapSpec(
+          address: _address,
+          targetKind: 'selected',
+          packageName: 'test.maps',
+          componentName: 'test.maps.View',
+          packageUid: 12001,
+          targetLabel: '实际候选地图',
+        ),
+      );
     }
 
     Future<void> open(WidgetTester tester, String id) async {
@@ -112,9 +134,17 @@ void main() {
           binding.resetInternalState();
         }
       });
-      await tester.pumpWidget(ProviderScope(child: MaterialApp(theme: buildDarkTheme(),
-        localizationsDelegates: L10n.localizationsDelegates, supportedLocales: L10n.supportedLocales,
-        locale: const Locale('zh'), home: CompanionTasksPage(memory: memory, taskId: id))));
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: buildDarkTheme(),
+            localizationsDelegates: L10n.localizationsDelegates,
+            supportedLocales: L10n.supportedLocales,
+            locale: const Locale('zh'),
+            home: CompanionTasksPage(memory: memory, taskId: id),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
@@ -147,7 +177,11 @@ void main() {
         final source = memory.store.messages().singleWhere((row) => row['id'] != 'original');
         expect(source['session_id'], 'light:original-room');
         expect(source['said_at_utc'], _now + 60000);
-        expect(source['text'], isNot(contains(_address)), reason: 'The new UI command is not a fabricated address quote');
+        expect(
+          source['text'],
+          isNot(contains(_address)),
+          reason: 'The new UI command is not a fabricated address quote',
+        );
         if (action == 'reopen') {
           expect(rows, hasLength(2));
           final created = memory.store.mapTask(rows.singleWhere((row) => row['task_id'] != id)['task_id']! as String)!;
@@ -216,7 +250,9 @@ void main() {
       final owner = CompanionMapHandoff(const CompanionMaps());
       final operation = owner.execute(memory.store, task, isCurrent: () => true);
       await settleMixed(tester, entered.future);
-      db.execute("CREATE TRIGGER reject_scope_close BEFORE UPDATE OF closed ON companion_map_scopes BEGIN SELECT RAISE(ABORT,'fixture'); END");
+      db.execute(
+        "CREATE TRIGGER reject_scope_close BEFORE UPDATE OF closed ON companion_map_scopes BEGIN SELECT RAISE(ABORT,'fixture'); END",
+      );
       final errors = <FlutterErrorDetails>[];
       final priorError = FlutterError.onError;
       FlutterError.onError = errors.add;

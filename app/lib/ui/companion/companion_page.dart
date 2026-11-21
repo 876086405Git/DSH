@@ -471,10 +471,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       try {
         final current = memory.store.hostTask(task['task_id']! as String)!;
         final agreement = current['agreement']! as MemoryRow;
-        final firstDelivery = const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) && current['state'] == 'queued' &&
-          current['host_store_id'] != null && current['cancel_requested'] == 0 &&
-          agreement['allowQueue'] == true && agreement['afterExit'] == 'continue' &&
-          memory.store.hostTaskCommands(current['task_id']! as String).every((row) => row['possible_sent_at_ms'] == null);
+        final firstDelivery =
+            const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) &&
+            current['state'] == 'queued' &&
+            current['host_store_id'] != null &&
+            current['cancel_requested'] == 0 &&
+            agreement['allowQueue'] == true &&
+            agreement['afterExit'] == 'continue' &&
+            memory.store
+                .hostTaskCommands(current['task_id']! as String)
+                .every((row) => row['possible_sent_at_ms'] == null);
         // Only an explicitly queued, never attempted H/I command may make its
         // first delivery here. The store checks its original deadline at send.
         await memory.hostTasks.run(current, client: client, hostKey: hostKey, submitPending: firstDelivery);
@@ -2280,8 +2286,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       final compare = parseCompanionCompare(part.raw);
       // A complete known command wins over the other command's request to
       // clarify, including a find folder whose label contains “笔记待办”.
-      notesCommands[part.itemNo] = notes != null && notes['operation'] != 'clarify' ? notes
-        : draft != null && draft['operation'] != 'clarify' ? draft : compare ?? draft ?? notes;
+      notesCommands[part.itemNo] = notes != null && notes['operation'] != 'clarify'
+          ? notes
+          : draft != null && draft['operation'] != 'clarify'
+          ? draft
+          : compare ?? draft ?? notes;
     }
     final notes = notesCommands.values.any((command) => command != null);
     final compare = notesCommands.values.any((command) => command?['kind'] == 'host.compare_drafts');
@@ -2474,7 +2483,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
               }
             } on Object {
               failed = true;
-              lines.add(notesCommand['kind'] == 'host.compare_drafts' ? l10n.companionCompareSaveFailed : l10n.companionNotesSaveFailed);
+              lines.add(
+                notesCommand['kind'] == 'host.compare_drafts'
+                    ? l10n.companionCompareSaveFailed
+                    : l10n.companionNotesSaveFailed,
+              );
             }
           } else if (mapCommands[part.itemNo] case final mapCommand?) {
             try {
@@ -2538,7 +2551,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             (!_mapHere || mapGeneration != _mapHandoff.generation))) {
       return;
     }
-    if (notesCommands.values.any((command) => const ['host.find_draft', 'host.compare_drafts'].contains(command?['kind'])) &&
+    if (notesCommands.values.any(
+          (command) => const ['host.find_draft', 'host.compare_drafts'].contains(command?['kind']),
+        ) &&
         (_logOpen || !(ModalRoute.of(context)?.isCurrent ?? true))) {
       return;
     }
@@ -2558,12 +2573,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _queueMemoryExtraction();
   }
 
-  bool get _mapHere => mounted && !_leaving && _routeShown && !_logOpen &&
-    WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
-    (ModalRoute.of(context)?.isCurrent ?? true);
+  bool get _mapHere =>
+      mounted &&
+      !_leaving &&
+      _routeShown &&
+      !_logOpen &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
 
-  Future<({String line, MemoryRow? task})> _handleMap(CompanionMemoryOwner memory, MemoryRow source, int itemNo,
-    MemoryRow command, bool Function() current) async {
+  Future<({String line, MemoryRow? task})> _handleMap(
+    CompanionMemoryOwner memory,
+    MemoryRow source,
+    int itemNo,
+    MemoryRow command,
+    bool Function() current,
+  ) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
       return (line: l10n.companionMapSyntax, task: null);
@@ -2598,10 +2622,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         return (line: l10n.companionMapWhich, task: null);
       }
       final targets = candidates
-        .where((row) => row['kind'] == 'phone.map_open' &&
-          (operation == 'reopen' || row['cancel_requested'] == 0))
-        .map((row) => memory.store.mapTask(row['task_id']! as String)!)
-        .where((row) => command['target'] == null || row['address'] == command['target']).toList();
+          .where((row) => row['kind'] == 'phone.map_open' && (operation == 'reopen' || row['cancel_requested'] == 0))
+          .map((row) => memory.store.mapTask(row['task_id']! as String)!)
+          .where((row) => command['target'] == null || row['address'] == command['target'])
+          .toList();
       if (targets.length != 1) {
         return (line: l10n.companionMapWhich, task: null);
       }
@@ -2609,19 +2633,33 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
     MemoryRow task;
     if (operation == 'cancel') {
-      task = memory.store.cancelMapOpen(taskId: previous!['task_id']! as String,
-        expectedTaskRev: previous['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+      task = memory.store.cancelMapOpen(
+        taskId: previous!['task_id']! as String,
+        expectedTaskRev: previous['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+      );
     } else if (operation == 'reopen') {
-      task = memory.store.reopenMapOpenFromMessage(oldTaskId: previous!['task_id']! as String,
-        expectedTaskRev: previous['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo, executorId: executor);
+      task = memory.store.reopenMapOpenFromMessage(
+        oldTaskId: previous!['task_id']! as String,
+        expectedTaskRev: previous['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+        executorId: executor,
+      );
     } else {
       if (previous != null && previous['executor_id'] != executor) {
         return (line: l10n.companionMapNotHere, task: previous);
       }
-      final selected = await chooseCompanionMapTarget(context, maps, command['address']! as String,
-        isCurrent: here, choosing: (value) => _mapChoosing = value);
+      final selected = await chooseCompanionMapTarget(
+        context,
+        maps,
+        command['address']! as String,
+        isCurrent: here,
+        choosing: (value) => _mapChoosing = value,
+      );
       if (selected == null) {
         return (line: l10n.companionMapNoTarget, task: null);
       }
@@ -2629,14 +2667,25 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         throw const DshClosedException('map page changed during target selection');
       }
       if (previous != null) {
-        task = memory.store.amendMapOpen(taskId: previous['task_id']! as String,
-          expectedTaskRev: previous['task_rev']! as int, messageId: source['id']! as String,
-          expectedSourceRev: source['source_rev']! as int, itemNo: itemNo, map: selected);
+        task = memory.store.amendMapOpen(
+          taskId: previous['task_id']! as String,
+          expectedTaskRev: previous['task_rev']! as int,
+          messageId: source['id']! as String,
+          expectedSourceRev: source['source_rev']! as int,
+          itemNo: itemNo,
+          map: selected,
+        );
       } else {
-        task = memory.store.createMapOpenFromMessage(messageId: source['id']! as String,
-          expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
-          roomMode: _light ? 'light' : 'full', hostKey: _light ? null : _recallHostKey,
-          hostSessionId: _light ? null : _sessionId, executorId: executor, map: selected);
+        task = memory.store.createMapOpenFromMessage(
+          messageId: source['id']! as String,
+          expectedSourceRev: source['source_rev']! as int,
+          itemNo: itemNo,
+          roomMode: _light ? 'light' : 'full',
+          hostKey: _light ? null : _recallHostKey,
+          hostSessionId: _light ? null : _sessionId,
+          executorId: executor,
+          map: selected,
+        );
       }
     }
     memory.changed();
@@ -2644,7 +2693,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       final id = task['task_id']! as String;
       final revision = task['task_rev']! as int;
       try {
-        await _mapHandoff.execute(memory.store, task, isCurrent: () => here() && memory.store.mapTask(id)?['task_rev'] == revision);
+        await _mapHandoff.execute(
+          memory.store,
+          task,
+          isCurrent: () => here() && memory.store.mapTask(id)?['task_rev'] == revision,
+        );
       } on PlatformException {
         // Native may have claimed or dispatched before a reply was lost.
         // Read its original ledger; never turn the channel exception into false.
@@ -2690,7 +2743,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       task = memory.store.hostTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
       final rows = find
-          ? memory.store.pendingFindDraftTasks(hostKey: hostKey).where((row) => row['source_session_id'] == source['session_id'])
+          ? memory.store
+                .pendingFindDraftTasks(hostKey: hostKey)
+                .where((row) => row['source_session_id'] == source['session_id'])
           : memory.store.tasks(sourceSessionId: source['session_id']! as String);
       final targets = rows
           .where(
@@ -2733,14 +2788,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       }
       var concrete = command;
       if (command['deadlineChoices'] case final List<String> choices) {
-        final selected = await showAppDialog<String>(context: context, builder: (dialog) => SimpleDialog(
-          title: Text(l10n.companionFindSeven), children: [
-            for (final time in choices)
-              SimpleDialogOption(onPressed: () => Navigator.pop(dialog, time),
-                child: Text(time == '07:00' ? l10n.companionFindMorningSeven : l10n.companionFindEveningSeven)),
-            SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
-          ],
-        ));
+        final selected = await showAppDialog<String>(
+          context: context,
+          builder: (dialog) => SimpleDialog(
+            title: Text(l10n.companionFindSeven),
+            children: [
+              for (final time in choices)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(dialog, time),
+                  child: Text(time == '07:00' ? l10n.companionFindMorningSeven : l10n.companionFindEveningSeven),
+                ),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+            ],
+          ),
+        );
         if (!sameRoomAndHost()) {
           throw const DshClosedException('room changed during deadline clarification');
         }
@@ -2765,14 +2826,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         if (!mounted) {
           throw const DshClosedException('room changed before task selection');
         }
-        bound = await showAppDialog<MemoryRow>(context: context, builder: (dialog) => SimpleDialog(
-          title: Text(l10n.companionFindSavedDirectory),
-          children: [
-            for (final value in saved)
-              SimpleDialogOption(onPressed: () => Navigator.pop(dialog, value), child: Text(value['displayPath']! as String)),
-            SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
-          ],
-        ));
+        bound = await showAppDialog<MemoryRow>(
+          context: context,
+          builder: (dialog) => SimpleDialog(
+            title: Text(l10n.companionFindSavedDirectory),
+            children: [
+              for (final value in saved)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(dialog, value),
+                  child: Text(value['displayPath']! as String),
+                ),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+            ],
+          ),
+        );
       } else {
         capability = await client.readCompanionTasksCapability();
         if (!sameRoomAndHost()) {
@@ -2784,8 +2851,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         if (!mounted) {
           throw const DshClosedException('room changed before task selection');
         }
-        final path = await showDirectoryPicker(context, title: find
-          ? l10n.companionFindChooseDirectory(command['directory']! as String) : l10n.companionNotesChooseDirectory);
+        final path = await showDirectoryPicker(
+          context,
+          title: find
+              ? l10n.companionFindChooseDirectory(command['directory']! as String)
+              : l10n.companionNotesChooseDirectory,
+        );
         if (!sameRoomAndHost()) {
           throw const DshClosedException('room changed during directory selection');
         }
@@ -2824,10 +2895,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         'localDate': agreement['localDate'],
         'timeZone': agreement['timeZone'],
         'dateBy': 'modified',
-        if (find)
-          ...{'scope': 'currentLevel', 'extensions': command['extensions']}
-        else
-          ...{'outputDirRef': bound['folderRef'], 'outputName': agreement['outputName'], 'writeMode': 'createNew'},
+        if (find) ...{
+          'scope': 'currentLevel',
+          'extensions': command['extensions'],
+        } else ...{
+          'outputDirRef': bound['folderRef'],
+          'outputName': agreement['outputName'],
+          'writeMode': 'createNew',
+        },
       };
       final complete = <String, Object?>{
         'args': args,
@@ -2874,7 +2949,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   }
 
   Future<({String line, MemoryRow? task})> _handleCompare(
-    CompanionMemoryOwner memory, MemoryRow source, int itemNo, MemoryRow command, bool Function() current,
+    CompanionMemoryOwner memory,
+    MemoryRow source,
+    int itemNo,
+    MemoryRow command,
+    bool Function() current,
   ) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
@@ -2884,26 +2963,36 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final hostKey = companionHostKey(host);
     final client = ref.read(activeConnectionProvider).value?.client;
     final light = _light;
-    bool here() => mounted && current() && host == ref.read(activeHostProvider) &&
-      identical(client, ref.read(activeConnectionProvider).value?.client) &&
-      !_logOpen && (ModalRoute.of(context)?.isCurrent ?? true);
+    bool here() =>
+        mounted &&
+        current() &&
+        host == ref.read(activeHostProvider) &&
+        identical(client, ref.read(activeConnectionProvider).value?.client) &&
+        !_logOpen &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
     final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
     CompanionTasksCapability? capability;
     MemoryRow task;
     if (accepted != null) {
       task = memory.store.hostTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
-      final targets = memory.store.pendingCompareDraftTasks(hostKey: hostKey)
-        .where((row) => row['source_session_id'] == source['session_id'] && row['cancel_requested'] == 0).toList();
+      final targets = memory.store
+          .pendingCompareDraftTasks(hostKey: hostKey)
+          .where((row) => row['source_session_id'] == source['session_id'] && row['cancel_requested'] == 0)
+          .toList();
       if (targets.length != 1) {
         return (line: l10n.companionCompareWhich, task: null);
       }
       if (!here()) {
         throw const DshClosedException('room changed before accepting compare cancellation');
       }
-      task = memory.store.cancelCompareDraftTask(taskId: targets.single['task_id']! as String,
-        expectedTaskRev: targets.single['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+      task = memory.store.cancelCompareDraftTask(
+        taskId: targets.single['task_id']! as String,
+        expectedTaskRev: targets.single['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+      );
     } else {
       final agreement = await companionCompareAgreement(source, command, ref.read(companionRemindersProvider));
       if (!here()) {
@@ -2926,23 +3015,40 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (!mounted) {
         throw const DshClosedException('room closed before selecting the drafts');
       }
-      final inputs = await chooseCompanionDraftInputs(context, store: memory.store, hostKey: hostKey,
-        client: client, capability: capability, isCurrent: here);
+      final inputs = await chooseCompanionDraftInputs(
+        context,
+        store: memory.store,
+        hostKey: hostKey,
+        client: client,
+        capability: capability,
+        isCurrent: here,
+      );
       if (!here()) {
         throw const DshClosedException('room changed before saving the complete comparison');
       }
       if (inputs == null) {
         return (line: l10n.companionCompareNoInputs, task: null);
       }
-      task = memory.store.createCompareDraftTaskFromMessage(messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
-        roomMode: light ? 'light' : 'full', hostKey: hostKey, hostSessionId: light ? null : _sessionId,
-        inputs: inputs, agreement: {...agreement, 'args': {
-          for (final side in ['a', 'b']) side: {
-            'sourceRef': (inputs[side]! as MemoryRow)['sourceRef'], 'version': (inputs[side]! as MemoryRow)['version'],
+      task = memory.store.createCompareDraftTaskFromMessage(
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+        roomMode: light ? 'light' : 'full',
+        hostKey: hostKey,
+        hostSessionId: light ? null : _sessionId,
+        inputs: inputs,
+        agreement: {
+          ...agreement,
+          'args': {
+            for (final side in ['a', 'b'])
+              side: {
+                'sourceRef': (inputs[side]! as MemoryRow)['sourceRef'],
+                'version': (inputs[side]! as MemoryRow)['version'],
+              },
+            'maxHighlights': 3,
           },
-          'maxHighlights': 3,
-        }});
+        },
+      );
     }
     memory.changed();
     if (client == null || hostKey != task['host_key']) {
@@ -2950,8 +3056,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
     // Acceptance owns the task beyond this visit. Leaving now changes only
     // presentation; execution follows the person's original afterExit terms.
-    task = await memory.hostTasks.run(task, client: client, hostKey: hostKey,
-      initialOpportunity: accepted == null, submitPending: true, capability: capability);
+    task = await memory.hostTasks.run(
+      task,
+      client: client,
+      hostKey: hostKey,
+      initialOpportunity: accepted == null,
+      submitPending: true,
+      capability: capability,
+    );
     return (line: companionNotesLine(l10n, task), task: task);
   }
 
@@ -4475,15 +4587,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                       ),
                   if (_bubble != null)
                     for (final id in _mapResults)
-                      CompanionPill(icon: AppIcons.plan, label: l10n.companionMapView,
+                      CompanionPill(
+                        icon: AppIcons.plan,
+                        label: l10n.companionMapView,
                         onTap: () {
                           if (_bubble == null || !_mapResults.contains(id)) {
                             return;
                           }
                           _acted();
-                          unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
-                            memory: _memoryOwner!, taskId: id,
-                          ))));
+                          unawaited(
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: id),
+                              ),
+                            ),
+                          );
                         },
                       ),
                   CompanionInvite(

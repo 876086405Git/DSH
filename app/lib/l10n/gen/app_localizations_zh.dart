@@ -6435,6 +6435,422 @@ class L10nZh extends L10n {
   String get companionNotesResendAmend => '再把改动发给电脑';
 
   @override
+  String get companionMapChoose => '用哪个地图打开？';
+
+  @override
+  String get companionMapSystemChoice => '让我在系统里选择';
+
+  @override
+  String get companionMapDone => '地址已交给地图打开。';
+
+  @override
+  String get companionMapUnknown => '还不能确定地图有没有打开，不会自动再打开。';
+
+  @override
+  String get companionMapCancelled => '已取消这次打开。如果地图已经打开，不会替你关闭。';
+
+  @override
+  String get companionMapUnavailable => '现在用不了地图，地址还在，可以复制。';
+
+  @override
+  String get companionMapNotHere => '这是之前留下的记录。需要的话，可以复制地址或再打开一次。';
+
+  @override
+  String get companionMapFailed => '地图没打开，地址在这里，可以复制。';
+
+  @override
+  String get companionMapChoiceWaiting => '刚才打开的是选择页面，还不能确定地址交给了哪个地图。';
+
+  @override
+  String get companionMapWaiting => '这次还没打开地图，地址已保留。';
+
+  @override
+  String get companionMapQueued => '地址记下了，还没打开地图。';
+
+  @override
+  String get companionMapSyntax => '请给一个明确的完整地址，例如：在地图打开“文华路 18 号东门”。有多个地址时，请先选一个。';
+
+  @override
+  String get companionMapWhich => '想改哪个地址，或重新打开哪一个？可以在交代的事里选。';
+
+  @override
+  String get companionMapNoTarget => '这次没选地图，还没有打开。';
+
+  @override
+  String get companionMapSaveFailed => '这次没能确认地图是否打开；不会自动再试。';
+
+  @override
+  String companionMapTarget(String label) {
+    return '所选地图：$label';
+  }
+
+  @override
+  String get companionMapCopy => '复制原地址';
+
+  @override
+  String get companionMapView => '查看地址';
+
+  @override
+  String get companionMapReopen => '再打开一次';
+
+  @override
+  String get companionMapCancel => '取消这次打开';
+
+  @override
+  String get companionMapReopenSource => '用地图再次打开这个地址';
+
+  @override
+  String get companionMapCancelSource => '取消这个地址的地图打开';
+
+  @override
+  String get companionFindTitle => '找稿件';
+
+  @override
+  String get companionFindSyntax => '请说明在哪个文件夹这一层找、找哪天改过的稿件，以及你离开后还要不要继续。有截止时间的话，也一起告诉我。';
+
+  @override
+  String get companionFindWhich => '要停下哪次找稿？可以在交代的事里选。';
+
+  @override
+  String get companionFindConnect => '还没选过这台电脑上的文件夹。请先连上电脑选一下。';
+
+  @override
+  String get companionFindSavedDirectory => '选一个之前用过的文件夹';
+
+  @override
+  String get companionFindSeven => '你说的七点是上午还是晚上？';
+
+  @override
+  String get companionFindMorningSeven => '上午 07:00';
+
+  @override
+  String get companionFindEveningSeven => '晚上 19:00';
+
+  @override
+  String get companionFindDeadlineMissing => '还没定好截止时间，这次先不开始。';
+
+  @override
+  String companionFindChooseDirectory(String name) {
+    return '选择“$name”文件夹';
+  }
+
+  @override
+  String get companionFindChooseAgain => '重新选择文件夹';
+
+  @override
+  String get companionFindKeepDirectory => '还找原来的文件夹';
+
+  @override
+  String get companionFindUnavailable => '这台电脑现在还不能帮你找稿并打开原稿。';
+
+  @override
+  String get companionFindNoDirectory => '还没选文件夹，这次先不开始。';
+
+  @override
+  String get companionFindDone => '找完了，结果在下面。';
+
+  @override
+  String get companionFindPartial => '这次没能全找完，已找到的稿件和没查完的地方在下面。';
+
+  @override
+  String get companionFindFailed => '这次没能找完，原来的记录还在。';
+
+  @override
+  String get companionFindWaiting => '暂时还没能继续找，稍后可以再查看。';
+
+  @override
+  String get companionFindCancelled => '已停止继续找，之前找到的清单还在。';
+
+  @override
+  String get companionFindCancelUnknown => '已记下不再找，但还没确认电脑是否停下。已有清单还在。';
+
+  @override
+  String get companionFindCancel => '停止找稿';
+
+  @override
+  String get companionFindCancelSource => '取消这次找稿';
+
+  @override
+  String companionFindAmendSource(
+    String date,
+    String formats,
+    String deadline,
+    String afterExit,
+    String queue,
+    String source,
+  ) {
+    return '修改找稿：只找这一层在 $date 改过的 $formats 文件。截止：$deadline；$afterExit；$queue；$source。';
+  }
+
+  @override
+  String get companionFindDate => '稿件修改日期';
+
+  @override
+  String companionFindScope(String formats) {
+    return '只找这一层在这一天修改的 $formats 文件，不改原稿。';
+  }
+
+  @override
+  String companionFindSourceDirectory(String path) {
+    return '查找目录：$path';
+  }
+
+  @override
+  String get companionFindReport => '这次找到的稿件';
+
+  @override
+  String get companionFindPreviousReport => '之前找到的稿件';
+
+  @override
+  String companionFindCoverage(String entries, String supported, String matches) {
+    return '查看了 $entries 项，其中 $supported 份是所选格式，找到 $matches 份符合日期的稿件。';
+  }
+
+  @override
+  String get companionFindEnumerationComplete => '这一层的文件名已检查完，能否打开见下面的结果。查找时后来加入的文件可能不在结果里。';
+
+  @override
+  String get companionFindEnumerationPartial => '还有一些地方没查完。';
+
+  @override
+  String get companionFindEntryLimit => '这次最多检查 200 项，剩下的还没查。';
+
+  @override
+  String get companionFindCandidateLimit => '符合日期的稿件超过 20 份，这次先列出其中 20 份。';
+
+  @override
+  String get companionFindEmpty => '查过的范围里，没有这一天改过的所选格式稿件。';
+
+  @override
+  String companionFindGap(String name) {
+    return '这项还没查清楚：$name';
+  }
+
+  @override
+  String companionFindModified(String time) {
+    return '修改时间：$time';
+  }
+
+  @override
+  String get companionFindWasOpenable => '当时能打开；现在点开时会确认它有没有变化。';
+
+  @override
+  String get companionFindWasUnreadable => '当时没能读到这份稿件。';
+
+  @override
+  String get companionFindOpenSource => '打开这份原稿';
+
+  @override
+  String get companionFindSourceOffline => '清单还在。连上原来的电脑后才能打开稿件。';
+
+  @override
+  String get companionFindSourceMissing => '这份稿件现在找不到了，当时的清单还在。';
+
+  @override
+  String get companionFindSourceChanged => '这份稿件已被替换或修改，不能确认还是当时那一份。';
+
+  @override
+  String get companionFindSourceUnreadable => '这份稿件现在没能完整打开；没有换成别的文件。';
+
+  @override
+  String get companionFindSourceUnknown => '现在还打不开这份稿件，请连上原来的电脑再试。';
+
+  @override
+  String get companionFindDeadline => '已经过了约好的时间，不会再开始新的查找。已有结果会留在这里。';
+
+  @override
+  String get companionFindOriginalPending => '电脑已收到修改，还需要确认原先那次找稿。';
+
+  @override
+  String get companionFindUnknown => '还没确认电脑有没有收到，或找到了哪一步。';
+
+  @override
+  String get companionCompareTitle => '对比两版稿件';
+
+  @override
+  String get companionCompareA => 'A · 旧稿';
+
+  @override
+  String get companionCompareB => 'B · 新稿';
+
+  @override
+  String get companionCompareSyntax => '请按 A 旧稿、B 新稿选这两份，说明是否等电脑上线、离开后是否继续；如果有截止时间，也请说清楚。';
+
+  @override
+  String get companionCompareWhich => '要停止哪次对稿？请打开那件事再点停止。';
+
+  @override
+  String get companionCompareDeadlineMissing => '这次还没确定截止时刻，请把日期、时间和时区说清楚。';
+
+  @override
+  String get companionCompareUnavailable => '这台电脑目前还不能对比两份稿件。';
+
+  @override
+  String get companionCompareConnect => '先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。';
+
+  @override
+  String get companionCompareAmbiguousFile => '这个名字对应不止一份已选稿件。请连上原来的电脑重新选。';
+
+  @override
+  String get companionCompareNoInputs => '还没选齐两份原稿，这次没有开始对比。';
+
+  @override
+  String get companionCompareOriginalHost => '约定和已有结果会保留。连上原来的电脑后再查看。';
+
+  @override
+  String get companionCompareSaveFailed => '这次对稿还没核清，请稍后再查看这件事。';
+
+  @override
+  String companionCompareSaved(String side) {
+    return '选择之前选过的 $side';
+  }
+
+  @override
+  String companionCompareChooseDirectory(String side) {
+    return '选择 $side 所在的文件夹';
+  }
+
+  @override
+  String companionCompareFilename(String side) {
+    return '输入 $side 的文件名';
+  }
+
+  @override
+  String get companionCompareFileLimit => '输入所选文件夹内的确切文件名。只支持 Markdown 或 txt，每份最多 64 KiB；不会改动原文件。';
+
+  @override
+  String get companionCompareFilenameMissing => '请填写文件名。';
+
+  @override
+  String get companionCompareQueued => '两份稿件记下了，等电脑接手。';
+
+  @override
+  String get companionCompareRunning => '电脑正在对比这两份稿件。';
+
+  @override
+  String get companionCompareDone => '两份稿件的对照已经准备好。';
+
+  @override
+  String get companionComparePartial => '这次只完成了一部分，已核的变化和还没核清的地方在下面。';
+
+  @override
+  String get companionCompareCancelled => '已停止继续对稿，之前留下的对照还在。';
+
+  @override
+  String get companionCompareCancelUnknown => '已记下停止对稿，还没确认电脑是否停下。已有结果会保留。';
+
+  @override
+  String get companionCompareWaiting => '这次还不能继续对稿，原来的两份选择和约定会保留。';
+
+  @override
+  String get companionCompareUnknown => '还没核清电脑做到哪里，不会自动重新比较。';
+
+  @override
+  String get companionCompareFailed => '这次没能完成两稿对比，原文件没有因此被改写。';
+
+  @override
+  String get companionCompareDeadline => '原定时间已经到了，不会把这次对稿顺延到别的时间。';
+
+  @override
+  String get companionCompareOriginalPending => '修改已经记下，原来的两稿约定还没补齐。';
+
+  @override
+  String get companionCompareReport => '这次的文字对照';
+
+  @override
+  String get companionCompareUnfinishedReport => '未完成的对照';
+
+  @override
+  String get companionComparePreviousReport => '之前留下的文字对照';
+
+  @override
+  String get companionCompareUnread => '这份稿件还没有完整读到。';
+
+  @override
+  String get companionCompareChanged => '读到过这份稿件，但交还结果时没能确认还是原来那一份。';
+
+  @override
+  String get companionCompareIncomplete => '这次还有没完成的部分，已确认的文字变化会保留。';
+
+  @override
+  String get companionCompareIdentical => '这次读到的两份稿件没有文字改动。';
+
+  @override
+  String companionCompareCoverage(String total, String shown) {
+    return '这次核到 $total 组文字变化，列出其中 $shown 组。';
+  }
+
+  @override
+  String get companionCompareSourceOrder => '下面按原文顺序列出已核的改动，还没排出重练重点。';
+
+  @override
+  String companionCompareDifference(String number) {
+    return '文字变化 $number';
+  }
+
+  @override
+  String get companionCompareNoExcerpt => '这一侧没有可展示的原文短句。';
+
+  @override
+  String get companionCompareSuggestions => '排练建议';
+
+  @override
+  String companionComparePractice(String number, String practice) {
+    return '变化 $number：$practice';
+  }
+
+  @override
+  String get companionCompareSuggestionsUnknown => '排练建议还没核清，已核的文字变化会保留。';
+
+  @override
+  String get companionCompareSuggestionsMissing => '还没准备好排练建议，下面保留已核的文字变化。';
+
+  @override
+  String companionCompareParagraph(String range) {
+    return '第 $range 段';
+  }
+
+  @override
+  String companionCompareBetween(String before, String after) {
+    return '第 $before 段与第 $after 段之间';
+  }
+
+  @override
+  String companionCompareAfter(String number) {
+    return '第 $number 段后';
+  }
+
+  @override
+  String companionCompareBefore(String number) {
+    return '第 $number 段前';
+  }
+
+  @override
+  String companionCompareLines(String range) {
+    return '第 $range 行附近';
+  }
+
+  @override
+  String get companionCompareCancel => '停止对稿';
+
+  @override
+  String get companionCompareCancelSource => '取消这次对稿，保留已经交还的对照。';
+
+  @override
+  String companionCompareAmendSource(String deadline, String exit, String queue, String inputs) {
+    return '修改这次对稿：$deadline；$exit；$queue；$inputs。两个原文件都别动。';
+  }
+
+  @override
+  String get companionCompareChooseAgain => '重新选择 A 旧稿和 B 新稿';
+
+  @override
+  String get companionCompareKeepInputs => '保留原来选定的 A 旧稿和 B 新稿';
+
+  @override
+  String get companionCompareNewDeadline => '填写时按这次修改所用的当地时区解释；留空则保留原定截止。';
+
+  @override
   String get automaticDiagnosticsRecover => '恢复本地记录';
 
   @override

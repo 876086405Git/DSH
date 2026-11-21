@@ -10,9 +10,13 @@ import 'support/old_memory_schema.dart';
 
 const _address = '上海市 科创路 18 号 & 展厅（东门）';
 const _selected = CompanionMapSpec(
-  address: _address, placeName: '东门', targetKind: 'selected',
-  packageName: 'example.maps', componentName: 'example.maps.GeoActivity',
-  packageUid: 10234, targetLabel: '测试地图',
+  address: _address,
+  placeName: '东门',
+  targetKind: 'selected',
+  packageName: 'example.maps',
+  componentName: 'example.maps.GeoActivity',
+  packageUid: 10234,
+  targetLabel: '测试地图',
 );
 const _choice = CompanionMapSpec(address: _address, placeName: '东门');
 
@@ -32,45 +36,102 @@ void main() {
     open();
   }
 
-  MemoryRow say(String id, {String text = '把 $_address 在地图打开。',
-    String session = 'light:map-room', String role = 'user', String scope = 'real'}) =>
-    store.submitMessage(id: id, sessionId: session, text: text, role: role, scope: scope,
-      saidAtUtc: now, offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+  MemoryRow say(
+    String id, {
+    String text = '把 $_address 在地图打开。',
+    String session = 'light:map-room',
+    String role = 'user',
+    String scope = 'real',
+  }) => store.submitMessage(
+    id: id,
+    sessionId: session,
+    text: text,
+    role: role,
+    scope: scope,
+    saidAtUtc: now,
+    offsetMinutes: 480,
+    zoneId: 'Asia/Shanghai',
+    offsetSeconds: 28800,
+  );
 
-  MemoryRow create(String source, {int itemNo = 0, int sourceRev = 1,
-    CompanionMapSpec map = _selected, String roomMode = 'light', String? hostKey, String? hostSessionId}) =>
-    store.createMapOpenFromMessage(messageId: source, expectedSourceRev: sourceRev, itemNo: itemNo,
-      roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId, executorId: 'this-installation', map: map);
+  MemoryRow create(
+    String source, {
+    int itemNo = 0,
+    int sourceRev = 1,
+    CompanionMapSpec map = _selected,
+    String roomMode = 'light',
+    String? hostKey,
+    String? hostSessionId,
+  }) => store.createMapOpenFromMessage(
+    messageId: source,
+    expectedSourceRev: sourceRev,
+    itemNo: itemNo,
+    roomMode: roomMode,
+    hostKey: hostKey,
+    hostSessionId: hostSessionId,
+    executorId: 'this-installation',
+    map: map,
+  );
 
   MemoryRow amend(String id, String command, {int revision = 1, CompanionMapSpec map = _selected}) =>
-    store.amendMapOpen(taskId: id, expectedTaskRev: revision, messageId: command,
-      expectedSourceRev: 1, itemNo: 0, map: map);
+      store.amendMapOpen(
+        taskId: id,
+        expectedTaskRev: revision,
+        messageId: command,
+        expectedSourceRev: 1,
+        itemNo: 0,
+        map: map,
+      );
 
   MemoryRow cancel(String id, String command, {int revision = 1}) =>
-    store.cancelMapOpen(taskId: id, expectedTaskRev: revision, messageId: command,
-      expectedSourceRev: 1, itemNo: 0);
+      store.cancelMapOpen(taskId: id, expectedTaskRev: revision, messageId: command, expectedSourceRev: 1, itemNo: 0);
 
-  MemoryRow reopen(String id, String command, {int revision = 1}) =>
-    store.reopenMapOpenFromMessage(oldTaskId: id, expectedTaskRev: revision, messageId: command,
-      expectedSourceRev: 1, itemNo: 0, executorId: 'this-installation');
+  MemoryRow reopen(String id, String command, {int revision = 1}) => store.reopenMapOpenFromMessage(
+    oldTaskId: id,
+    expectedTaskRev: revision,
+    messageId: command,
+    expectedSourceRev: 1,
+    itemNo: 0,
+    executorId: 'this-installation',
+  );
 
   Matcher error(String code) => throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', code));
 
   // These exact public-table fixtures test only Dart readback and CAS. They do
   // not call the Android adapter or prove a map/chooser was physically opened.
-  void receipt(String id, {int revision = 1, String attempt = 'native-attempt',
-    String event = 'claimed', String? outcome, String? result}) {
-    database.execute('''
+  void receipt(
+    String id, {
+    int revision = 1,
+    String attempt = 'native-attempt',
+    String event = 'claimed',
+    String? outcome,
+    String? result,
+  }) {
+    database.execute(
+      '''
       INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
         executor_id,occurred_at_ms,outcome,detail_json)
       VALUES(?,?,'map.handoff',?,?,'this-installation',?,?,?)
-    ''', [id, revision, attempt, event, now, outcome,
-      jsonEncode({'fixture': 'native-shaped receipt; no Android call', if (result != null) 'result': result})]);
+    ''',
+      [
+        id,
+        revision,
+        attempt,
+        event,
+        now,
+        outcome,
+        jsonEncode({'fixture': 'native-shaped receipt; no Android call', 'result': ?result}),
+      ],
+    );
   }
 
   void nativeState(String id, String state, {int revision = 1, String? reason}) {
-    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?',
-      [state, reason, id, revision]);
+    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?', [
+      state,
+      reason,
+      id,
+      revision,
+    ]);
   }
 
   setUp(() async {
@@ -90,11 +151,21 @@ void main() {
     database.execute("INSERT INTO companion_map_scopes VALUES('scope-original','light:map-room',0)");
     final native = sqlite3.open('${directory.path}/memory.sqlite');
     try {
-      expect(native.select("SELECT scope_id FROM companion_map_scopes WHERE scope_id='scope-original' "
-        "AND source_session_id='light:map-room' AND closed=0"), hasLength(1));
+      expect(
+        native.select(
+          "SELECT scope_id FROM companion_map_scopes WHERE scope_id='scope-original' "
+          "AND source_session_id='light:map-room' AND closed=0",
+        ),
+        hasLength(1),
+      );
       store.closeMapHandoffScope(scopeId: 'scope-original', sourceSessionId: 'light:map-room');
-      expect(native.select("SELECT scope_id FROM companion_map_scopes WHERE scope_id='scope-original' "
-        "AND source_session_id='light:map-room' AND closed=0"), isEmpty);
+      expect(
+        native.select(
+          "SELECT scope_id FROM companion_map_scopes WHERE scope_id='scope-original' "
+          "AND source_session_id='light:map-room' AND closed=0",
+        ),
+        isEmpty,
+      );
       expect(store.mapTask(task['task_id']! as String), task);
       expect(store.taskReceipts(task['task_id']! as String), isEmpty);
     } finally {
@@ -129,8 +200,10 @@ void main() {
         SELECT RAISE(ABORT,'fixture scope write refusal');
       END
     ''');
-    expect(() => store.closeMapHandoffScope(scopeId: 'original', sourceSessionId: 'light:map-room'),
-      throwsA(isA<SqliteException>()));
+    expect(
+      () => store.closeMapHandoffScope(scopeId: 'original', sourceSessionId: 'light:map-room'),
+      throwsA(isA<SqliteException>()),
+    );
     expect(database.select('SELECT closed FROM companion_map_scopes').single['closed'], 0);
     expect(database.select('SELECT * FROM companion_task_receipts'), isEmpty);
   });
@@ -194,22 +267,35 @@ void main() {
     expect(() => create('original'), error('companion/conflict'));
     expect(() => create('original', sourceRev: 2), error('companion/task-invalid-request'));
     say('other');
-    expect(() => create('other', map: const CompanionMapSpec(address: _address, placeName: '西门')),
-      error('companion/task-invalid-request'));
+    expect(
+      () => create(
+        'other',
+        map: const CompanionMapSpec(address: _address, placeName: '西门'),
+      ),
+      error('companion/task-invalid-request'),
+    );
     expect(store.tasks(), isEmpty);
   });
 
   for (final invalid in [
     const CompanionMapSpec(address: _address, targetKind: 'selected'),
     const CompanionMapSpec(address: _address, packageName: 'example.maps'),
-    const CompanionMapSpec(address: _address, targetKind: 'default', packageName: 'example.maps',
-      componentName: 'example.maps.GeoActivity', packageUid: -1),
+    const CompanionMapSpec(
+      address: _address,
+      targetKind: 'default',
+      packageName: 'example.maps',
+      componentName: 'example.maps.GeoActivity',
+      packageUid: -1,
+    ),
   ]) {
-    test('target ${invalid.targetKind}/${invalid.packageName}/${invalid.packageUid} needs an actual complete identity', () {
-      say('original');
-      expect(() => create('original', map: invalid), error('companion/task-invalid-request'));
-      expect(store.tasks(), isEmpty);
-    });
+    test(
+      'target ${invalid.targetKind}/${invalid.packageName}/${invalid.packageUid} needs an actual complete identity',
+      () {
+        say('original');
+        expect(() => create('original', map: invalid), error('companion/task-invalid-request'));
+        expect(store.tasks(), isEmpty);
+      },
+    );
   }
 
   test('full room attribution stays separate from the local map executor', () {
@@ -272,8 +358,18 @@ void main() {
     receipt(id, event: 'blocked', outcome: 'not_performed', result: 'locked');
     nativeState(id, 'waiting', reason: 'locked');
     say('change', text: '现在用系统默认地图。');
-    final changed = amend(id, 'change', map: const CompanionMapSpec(address: _address, placeName: '东门',
-      targetKind: 'default', packageName: 'another.maps', componentName: 'another.maps.Geo', packageUid: 10345));
+    final changed = amend(
+      id,
+      'change',
+      map: const CompanionMapSpec(
+        address: _address,
+        placeName: '东门',
+        targetKind: 'default',
+        packageName: 'another.maps',
+        componentName: 'another.maps.Geo',
+        packageUid: 10345,
+      ),
+    );
     expect(changed['task_rev'], 2);
     expect(changed['target_kind'], 'default');
     expect(store.taskReceipts(id), hasLength(2));
@@ -358,14 +454,28 @@ void main() {
     final id = create('mixed')['task_id']! as String;
     receipt(id);
     final batch = store.nextBatch(forceTail: true, estimateTokens: fixture.estimate)!;
-    expect(store.commitExtraction(batch, fixture.parsed(batch, [
-      fixture.create(source, text: '我咖啡只喝无糖。', quote: '我咖啡只喝无糖。', keywords: ['咖啡']),
-    ])), isTrue);
+    expect(
+      store.commitExtraction(
+        batch,
+        fixture.parsed(batch, [
+          fixture.create(source, text: '我咖啡只喝无糖。', quote: '我咖啡只喝无糖。', keywords: ['咖啡']),
+        ]),
+      ),
+      isTrue,
+    );
     const words = '忘掉我咖啡只喝无糖，连原话也删';
     say('forget', text: words);
-    final control = parseMemoryControl(words, store.cards(includeInactive: true), topicControls: store.topicControls())!;
-    store.applyControl(topicIds: (control['topic_ids']! as List).cast<String>(), kind: 'forget',
-      controlMessageId: 'forget', deleteChat: control['delete_chat'] == true);
+    final control = parseMemoryControl(
+      words,
+      store.cards(includeInactive: true),
+      topicControls: store.topicControls(),
+    )!;
+    store.applyControl(
+      topicIds: (control['topic_ids']! as List).cast<String>(),
+      kind: 'forget',
+      controlMessageId: 'forget',
+      deleteChat: control['delete_chat'] == true,
+    );
     restart();
     expect(store.messages().any((row) => row['id'] == 'mixed'), isFalse);
     expect(store.cards(), isEmpty);
@@ -390,19 +500,37 @@ void main() {
 
   test('a genuine v13 database gains only the two map tables and retains earlier task rows and schemas', () {
     say('reminder', text: '提醒我带证件。');
-    final prior = store.createReminderFromMessage(messageId: 'reminder', expectedSourceRev: 1, itemNo: 0,
-      roomMode: 'light', executorId: 'this-installation',
-      reminder: const CompanionReminderSpec(text: '带证件', waitReason: 'date_missing'));
+    final prior = store.createReminderFromMessage(
+      messageId: 'reminder',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      roomMode: 'light',
+      executorId: 'this-installation',
+      reminder: const CompanionReminderSpec(text: '带证件', waitReason: 'date_missing'),
+    );
     restoreOldMemorySchema(database, 13);
-    final schema = database.select("SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name")
-      .map((row) => Map<String, Object?>.from(row)).toList();
-    expect(database.select("SELECT name FROM sqlite_master WHERE name IN ('companion_map_revisions','companion_map_scopes')"), isEmpty);
+    final schema = database
+        .select("SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name")
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    expect(
+      database.select(
+        "SELECT name FROM sqlite_master WHERE name IN ('companion_map_revisions','companion_map_scopes')",
+      ),
+      isEmpty,
+    );
     restart();
     expect(database.select('PRAGMA user_version').single['user_version'], 14);
     expect(store.task(prior['task_id']! as String), prior);
-    expect(database.select("SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' "
-      "AND name NOT IN ('companion_map_revisions','companion_map_scopes') ORDER BY name")
-      .map((row) => Map<String, Object?>.from(row)), schema);
+    expect(
+      database
+          .select(
+            "SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' "
+            "AND name NOT IN ('companion_map_revisions','companion_map_scopes') ORDER BY name",
+          )
+          .map((row) => Map<String, Object?>.from(row)),
+      schema,
+    );
     expect(database.select('SELECT * FROM companion_map_scopes'), isEmpty);
     expect(database.select('PRAGMA foreign_key_check'), isEmpty);
   });

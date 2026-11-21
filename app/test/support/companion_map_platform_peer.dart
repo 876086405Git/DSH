@@ -12,12 +12,19 @@ class MapPlatformPeer {
   MapPlatformPeer(this.database, this.store);
   static const channel = MethodChannel('dsh/companion_maps');
   static const target = <String, Object?>{
-    'packageName': 'test.maps', 'componentName': 'test.maps.View', 'uid': 12001, 'label': '实际候选地图',
+    'packageName': 'test.maps',
+    'componentName': 'test.maps.View',
+    'uid': 12001,
+    'label': '实际候选地图',
   };
   final Database database;
   final CompanionMemoryStore store;
   final calls = <MethodCall>[];
-  MemoryRow targets = {'kind': 'known', 'targets': [target], 'defaultTarget': target};
+  MemoryRow targets = {
+    'kind': 'known',
+    'targets': [target],
+    'defaultTarget': target,
+  };
   Future<void> Function(MethodCall)? before;
   Future<void> Function(MemoryRow)? onHandoff;
   String executorId = 'installation-A';
@@ -38,8 +45,10 @@ class MapPlatformPeer {
         final scope = 'scope-${++_scopes}';
         final sourceSessionId = args!['sourceSessionId']! as String;
         _openScopes[scope] = sourceSessionId;
-        database.execute('INSERT INTO companion_map_scopes(scope_id,source_session_id,closed) VALUES(?,?,0)',
-          [scope, sourceSessionId]);
+        database.execute('INSERT INTO companion_map_scopes(scope_id,source_session_id,closed) VALUES(?,?,0)', [
+          scope,
+          sourceSessionId,
+        ]);
         return {'scopeId': scope};
       case 'closeScope':
         _openScopes.remove(args!['scopeId']);
@@ -62,29 +71,57 @@ class MapPlatformPeer {
   String claim(MemoryRow task) {
     final attempt = 'native-observation-${++_attempts}';
     _receipt(task, attempt, 'claimed');
-    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?',
-      ['unknown', 'map_handoff_pending', task['task_id'], task['task_rev']]);
+    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?', [
+      'unknown',
+      'map_handoff_pending',
+      task['task_id'],
+      task['task_rev'],
+    ]);
     return attempt;
   }
 
   void returned(MemoryRow task, String attempt, {bool chooser = false}) {
-    _receipt(task, attempt, 'returned', outcome: chooser ? 'unknown' : 'succeeded',
-      result: chooser ? 'chooser_shown' : 'handoff_dispatched');
+    _receipt(
+      task,
+      attempt,
+      'returned',
+      outcome: chooser ? 'unknown' : 'succeeded',
+      result: chooser ? 'chooser_shown' : 'handoff_dispatched',
+    );
     // Updating the original revision does not change companion_tasks.current_rev.
-    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?',
-      [chooser ? 'waiting' : 'done', chooser ? 'map_target_choice' : null, task['task_id'], task['task_rev']]);
+    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?', [
+      chooser ? 'waiting' : 'done',
+      chooser ? 'map_target_choice' : null,
+      task['task_id'],
+      task['task_rev'],
+    ]);
   }
 
   void blocked(MemoryRow task, String attempt) {
     _receipt(task, attempt, 'blocked', outcome: 'not_performed', result: 'not_dispatched');
-    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?',
-      ['waiting', 'map_scope_closed', task['task_id'], task['task_rev']]);
+    database.execute('UPDATE companion_task_revisions SET state=?,wait_reason=? WHERE task_id=? AND task_rev=?', [
+      'waiting',
+      'map_scope_closed',
+      task['task_id'],
+      task['task_rev'],
+    ]);
   }
 
   void _receipt(MemoryRow task, String attempt, String event, {String? outcome, String? result}) {
-    database.execute('''INSERT INTO companion_task_receipts(
+    database.execute(
+      '''INSERT INTO companion_task_receipts(
       task_id,task_rev,step_key,attempt_id,event_kind,executor_id,occurred_at_ms,outcome,detail_json)
-      VALUES(?,?,'map.handoff',?,?,?,?,?,?)''', [task['task_id'], task['task_rev'], attempt, event,
-      task['executor_id'], 1795219200000, outcome, jsonEncode({if (result != null) 'result': result})]);
+      VALUES(?,?,'map.handoff',?,?,?,?,?,?)''',
+      [
+        task['task_id'],
+        task['task_rev'],
+        attempt,
+        event,
+        task['executor_id'],
+        1795219200000,
+        outcome,
+        jsonEncode({'result': ?result}),
+      ],
+    );
   }
 }

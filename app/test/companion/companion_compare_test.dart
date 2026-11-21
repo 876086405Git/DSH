@@ -57,53 +57,49 @@ void main() {
   }
 
   test('I explicit cancellation stays finite and does not match a quoted cancellation', () {
-    expect(parseCompanionCompare('取消对稿。'), {
-      'kind': 'host.compare_drafts',
-      'operation': 'cancel',
-    });
+    expect(parseCompanionCompare('取消对稿。'), {'kind': 'host.compare_drafts', 'operation': 'cancel'});
     expect(parseCompanionCompare('“取消对稿”'), isNull);
     expect(parseCompanionCompare('不是要取消对稿'), isNull);
   });
 
-  test('I deadline uses the original source day even after midnight and does not roll an elapsed evening forward', () async {
-    final observed = DateTime.parse('2026-11-21T15:30:00Z').millisecondsSinceEpoch;
-    var now = observed;
-    final store = CompanionMemoryStore(sqlite3.openInMemory(), nowMilliseconds: () => now);
-    final calls = <MethodCall>[];
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-      calls.add(call);
-      return {
-        'kind': 'unique',
-        'moments': [
-          {'epochMs': DateTime.parse('2026-11-21T12:00:00Z').millisecondsSinceEpoch, 'offsetSeconds': 28800},
-        ],
-      };
-    });
-    addTearDown(() {
-      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-      store.close();
-    });
-    final source = store.submitMessage(
-      id: 'original-evening',
-      sessionId: 'light:original-room',
-      text: compareSpokenExample,
-      saidAtUtc: observed,
-      offsetMinutes: 480,
-      offsetSeconds: 28800,
-      zoneId: 'Asia/Shanghai',
-    );
-    now += const Duration(days: 1).inMilliseconds;
-    final plan = await companionCompareAgreement(source, parseCompanionCompare(compareSpokenExample)!, clock);
-    expect(calls.single.method, 'resolve');
-    expect(calls.single.arguments, {
-      'localDate': '2026-11-21',
-      'localTime': '20:00',
-      'zoneId': 'Asia/Shanghai',
-    });
-    expect(plan!['deadlineAtMs'], lessThan(observed));
-    expect(plan.containsKey('args'), isFalse);
-    expect(store.messages().single['said_at_utc'], observed);
-  });
+  test(
+    'I deadline uses the original source day even after midnight and does not roll an elapsed evening forward',
+    () async {
+      final observed = DateTime.parse('2026-11-21T15:30:00Z').millisecondsSinceEpoch;
+      var now = observed;
+      final store = CompanionMemoryStore(sqlite3.openInMemory(), nowMilliseconds: () => now);
+      final calls = <MethodCall>[];
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return {
+          'kind': 'unique',
+          'moments': [
+            {'epochMs': DateTime.parse('2026-11-21T12:00:00Z').millisecondsSinceEpoch, 'offsetSeconds': 28800},
+          ],
+        };
+      });
+      addTearDown(() {
+        binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+        store.close();
+      });
+      final source = store.submitMessage(
+        id: 'original-evening',
+        sessionId: 'light:original-room',
+        text: compareSpokenExample,
+        saidAtUtc: observed,
+        offsetMinutes: 480,
+        offsetSeconds: 28800,
+        zoneId: 'Asia/Shanghai',
+      );
+      now += const Duration(days: 1).inMilliseconds;
+      final plan = await companionCompareAgreement(source, parseCompanionCompare(compareSpokenExample)!, clock);
+      expect(calls.single.method, 'resolve');
+      expect(calls.single.arguments, {'localDate': '2026-11-21', 'localTime': '20:00', 'zoneId': 'Asia/Shanghai'});
+      expect(plan!['deadlineAtMs'], lessThan(observed));
+      expect(plan.containsKey('args'), isFalse);
+      expect(store.messages().single['said_at_utc'], observed);
+    },
+  );
 
   test('I absent deadline needs no invented time zone while a nonunique spoken deadline stays unresolved', () async {
     final calls = <MethodCall>[];

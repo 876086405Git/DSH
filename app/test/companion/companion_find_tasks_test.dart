@@ -15,22 +15,41 @@ void main() {
   const raw = '等家里电脑开了，在“演讲稿”这一层找昨天改的稿子，不用翻别处，我先去布场，19:00以前把能打开的入口留在小屋';
 
   test('H finite command preserves explicit directory scope formats queue exit and deadline', () {
-    expect(parseCompanionFind(raw), {'kind': 'host.find_draft', 'operation': 'create',
-      'directory': '演讲稿', 'day': '昨天', 'afterExit': 'continue', 'allowQueue': true,
-      'deadlineTime': '19:00', 'extensions': ['md', 'txt']});
-    expect(parseCompanionFind('请电脑在「演讲稿」本层找2026-11-20修改过的文件，只查txt，我离开就停'),
-      {'kind': 'host.find_draft', 'operation': 'create', 'directory': '演讲稿',
-        'day': '2026-11-20', 'afterExit': 'pause', 'allowQueue': false,
-        'deadlineTime': null, 'extensions': ['txt']});
-    expect(parseCompanionFind(findSpokenExample), {'kind': 'host.find_draft', 'operation': 'create',
-      'directory': '演讲稿', 'day': '昨天', 'afterExit': 'continue', 'allowQueue': true,
-      'deadlineTime': null, 'deadlineChoices': ['07:00', '19:00'], 'extensions': ['md', 'txt']});
+    expect(parseCompanionFind(raw), {
+      'kind': 'host.find_draft',
+      'operation': 'create',
+      'directory': '演讲稿',
+      'day': '昨天',
+      'afterExit': 'continue',
+      'allowQueue': true,
+      'deadlineTime': '19:00',
+      'extensions': ['md', 'txt'],
+    });
+    expect(parseCompanionFind('请电脑在「演讲稿」本层找2026-11-20修改过的文件，只查txt，我离开就停'), {
+      'kind': 'host.find_draft',
+      'operation': 'create',
+      'directory': '演讲稿',
+      'day': '2026-11-20',
+      'afterExit': 'pause',
+      'allowQueue': false,
+      'deadlineTime': null,
+      'extensions': ['txt'],
+    });
+    expect(parseCompanionFind(findSpokenExample), {
+      'kind': 'host.find_draft',
+      'operation': 'create',
+      'directory': '演讲稿',
+      'day': '昨天',
+      'afterExit': 'continue',
+      'allowQueue': true,
+      'deadlineTime': null,
+      'deadlineChoices': ['07:00', '19:00'],
+      'extensions': ['md', 'txt'],
+    });
     expect(parseCompanionFind('别找了'), {'kind': 'host.find_draft', 'operation': 'cancel'});
   });
 
-  for (final value in [
-    '“$raw”', '不要$raw', '故事台词：$raw',
-  ]) {
+  for (final value in ['“$raw”', '不要$raw', '故事台词：$raw']) {
     test('H quoted or negated command is not accepted: $value', () {
       expect(parseCompanionFind(value), isNull);
     });
@@ -51,21 +70,33 @@ void main() {
     final calls = <MethodCall>[];
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
-      return {'kind': 'unique', 'moments': [
-        {'epochMs': DateTime.utc(2026, 3, 9, 23).millisecondsSinceEpoch, 'offsetSeconds': -14400},
-      ]};
+      return {
+        'kind': 'unique',
+        'moments': [
+          {'epochMs': DateTime.utc(2026, 3, 9, 23).millisecondsSinceEpoch, 'offsetSeconds': -14400},
+        ],
+      };
     });
     addTearDown(() => binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
-    final source = <String, Object?>{'said_at_utc': DateTime.utc(2026, 3, 9, 4, 30).millisecondsSinceEpoch,
-      'offset_seconds': -14400, 'zone_id': 'America/New_York'};
+    final source = <String, Object?>{
+      'said_at_utc': DateTime.utc(2026, 3, 9, 4, 30).millisecondsSinceEpoch,
+      'offset_seconds': -14400,
+      'zone_id': 'America/New_York',
+    };
     final agreement = await companionHostAgreement(source, parseCompanionFind(raw)!, const CompanionReminders());
-    expect(agreement, {'localDate': '2026-03-08', 'timeZone': 'America/New_York',
+    expect(agreement, {
+      'localDate': '2026-03-08',
+      'timeZone': 'America/New_York',
       'deadlineAtMs': DateTime.utc(2026, 3, 9, 23).millisecondsSinceEpoch,
-      'afterExit': 'continue', 'allowQueue': true});
+      'afterExit': 'continue',
+      'allowQueue': true,
+    });
     expect(calls.single.method, 'resolve');
     expect(calls.single.arguments, {'localDate': '2026-03-09', 'localTime': '19:00', 'zoneId': 'America/New_York'});
-    expect(await companionHostAgreement({...source, 'zone_id': null}, parseCompanionFind(raw)!,
-      const CompanionReminders()), isNull);
+    expect(
+      await companionHostAgreement({...source, 'zone_id': null}, parseCompanionFind(raw)!, const CompanionReminders()),
+      isNull,
+    );
     expect(calls, hasLength(1));
   });
 
@@ -79,21 +110,40 @@ void main() {
 
     void open() {
       store = CompanionMemoryStore(sqlite3.open('${directory.path}/memory.sqlite'), nowMilliseconds: () => now);
-      coordinator = CompanionHostTasks(store: store, changed: () {}, retainReceipt: (future) {
-        retained.add(future);
-        unawaited(future.catchError((Object _) {}));
-      });
+      coordinator = CompanionHostTasks(
+        store: store,
+        changed: () {},
+        retainReceipt: (future) {
+          retained.add(future);
+          unawaited(future.catchError((Object _) {}));
+        },
+      );
     }
+
     MemoryRow create({int? deadline}) {
-      store.submitMessage(id: 'original-source', sessionId: 'light:original-room', text: raw,
-        saidAtUtc: now, offsetMinutes: 480, offsetSeconds: 28800, zoneId: 'Asia/Shanghai');
-      return store.createFindDraftTaskFromMessage(messageId: 'original-source', expectedSourceRev: 1,
-        itemNo: 0, roomMode: 'light', hostKey: 'original-host', directoryHostStoreId: 'original-store',
+      store.submitMessage(
+        id: 'original-source',
+        sessionId: 'light:original-room',
+        text: raw,
+        saidAtUtc: now,
+        offsetMinutes: 480,
+        offsetSeconds: 28800,
+        zoneId: 'Asia/Shanghai',
+      );
+      return store.createFindDraftTaskFromMessage(
+        messageId: 'original-source',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        roomMode: 'light',
+        hostKey: 'original-host',
+        directoryHostStoreId: 'original-store',
         agreement: {...findAgreement(queue: true), 'deadlineAtMs': deadline},
-        directoryLabels: {'source': '/本人选的稿件'});
+        directoryLabels: {'source': '/本人选的稿件'},
+      );
     }
-    Future<MemoryRow> run(MemoryRow row, {bool submit = true}) => coordinator.run(row, client: peer.client,
-      hostKey: 'original-host', submitPending: submit);
+
+    Future<MemoryRow> run(MemoryRow row, {bool submit = true}) =>
+        coordinator.run(row, client: peer.client, hostKey: 'original-host', submitPending: submit);
 
     setUp(() async {
       now = 1795219200000;
@@ -120,11 +170,17 @@ void main() {
       peer.respond = (request, body) {
         if (request.method == 'GET') {
           expect(request.uri.queryParameters, {'hostStoreId': 'original-store'});
-          return NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'missing'}}, status: 404);
+          return NotesPeer.json(request, {
+            'error': {'code': 'companion/task-not-found', 'message': 'missing'},
+          }, status: 404);
         }
         expect(request.uri.path, notesPath);
         expect(store.hostTaskCommands(id).single['possible_sent_at_ms'], now);
-        expect(body!['origin'], {'sourceSessionId': 'light:original-room', 'messageId': 'original-source', 'itemNo': 0});
+        expect(body!['origin'], {
+          'sourceSessionId': 'light:original-room',
+          'messageId': 'original-source',
+          'itemNo': 0,
+        });
         expect(body['hostSessionId'], isNull);
         expect(body['args'], findAgreement()['args']);
         return NotesPeer.json(request, notesSnapshot(body), status: 201);
@@ -163,12 +219,19 @@ void main() {
     test('possible first delivery reopens with an original execution GET and no automatic replay', () async {
       final row = create();
       final id = row['task_id']! as String;
-      final request = store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: 'original-host',
-        hostStoreId: 'original-store', initialOpportunity: true)!['request']! as MemoryRow;
+      final request =
+          store.prepareHostTaskOperation(
+                taskId: id,
+                taskRev: 1,
+                hostKey: 'original-host',
+                hostStoreId: 'original-store',
+                initialOpportunity: true,
+              )!['request']!
+              as MemoryRow;
       store.close();
       open();
-      peer.respond = (http, _) => NotesPeer.json(http,
-        {...notesSnapshot(request, state: 'unknown'), 'waitReason': 'scan_interrupted'});
+      peer.respond = (http, _) =>
+          NotesPeer.json(http, {...notesSnapshot(request, state: 'unknown'), 'waitReason': 'scan_interrupted'});
       final result = await run(store.hostTask(id)!, submit: false);
       expect(result['state'], 'unknown');
       expect(peer.calls.map((call) => call.method), ['GET']);
@@ -185,18 +248,38 @@ void main() {
         peer.respond = (request, _) async {
           reached.complete();
           await release.future;
-          await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'missing'}}, status: 404);
+          await NotesPeer.json(request, {
+            'error': {'code': 'companion/task-not-found', 'message': 'missing'},
+          }, status: 404);
         };
         final pending = run(row);
         await reached.future;
-        store.submitMessage(id: 'new-source', sessionId: 'light:original-room',
+        store.submitMessage(
+          id: 'new-source',
+          sessionId: 'light:original-room',
           text: operation == 'cancel' ? '取消这次找稿' : '改查今天的 txt，离开后继续',
-          saidAtUtc: now + 1, offsetMinutes: 480, offsetSeconds: 28800, zoneId: 'Asia/Shanghai');
+          saidAtUtc: now + 1,
+          offsetMinutes: 480,
+          offsetSeconds: 28800,
+          zoneId: 'Asia/Shanghai',
+        );
         if (operation == 'cancel') {
-          store.cancelFindDraftTask(taskId: id, expectedTaskRev: 1, messageId: 'new-source', expectedSourceRev: 1, itemNo: 0);
+          store.cancelFindDraftTask(
+            taskId: id,
+            expectedTaskRev: 1,
+            messageId: 'new-source',
+            expectedSourceRev: 1,
+            itemNo: 0,
+          );
         } else {
-          store.amendFindDraftTask(taskId: id, expectedTaskRev: 1, messageId: 'new-source', expectedSourceRev: 1, itemNo: 0,
-            agreement: findAgreement(queue: true, day: '2026-11-21', extensions: ['txt']));
+          store.amendFindDraftTask(
+            taskId: id,
+            expectedTaskRev: 1,
+            messageId: 'new-source',
+            expectedSourceRev: 1,
+            itemNo: 0,
+            agreement: findAgreement(queue: true, day: '2026-11-21', extensions: ['txt']),
+          );
         }
         release.complete();
         expect((await pending)['task_rev'], 2);

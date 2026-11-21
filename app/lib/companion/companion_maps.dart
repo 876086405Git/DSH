@@ -14,19 +14,19 @@ class CompanionMaps {
   final MethodChannel channel;
 
   Future<String> executorId() async =>
-    (await channel.invokeMapMethod<String, Object?>('capabilities'))!['executorId']! as String;
+      (await channel.invokeMapMethod<String, Object?>('capabilities'))!['executorId']! as String;
 
   Future<MemoryRow> targets(String address) async =>
-    (await channel.invokeMapMethod<String, Object?>('targets', {'address': address}))!;
+      (await channel.invokeMapMethod<String, Object?>('targets', {'address': address}))!;
 
   Future<String> openScope(String sourceSessionId) async =>
-    (await channel.invokeMapMethod<String, Object?>('openScope', {'sourceSessionId': sourceSessionId}))!['scopeId']! as String;
+      (await channel.invokeMapMethod<String, Object?>('openScope', {'sourceSessionId': sourceSessionId}))!['scopeId']!
+          as String;
 
   Future<void> closeScope(String scopeId) => channel.invokeMethod<void>('closeScope', {'scopeId': scopeId});
 
-  Future<void> handoff(String taskId, int taskRev, String scopeId) => channel.invokeMethod<void>('handoff', {
-    'taskId': taskId, 'taskRev': taskRev, 'scopeId': scopeId,
-  });
+  Future<void> handoff(String taskId, int taskRev, String scopeId) =>
+      channel.invokeMethod<void>('handoff', {'taskId': taskId, 'taskRev': taskRev, 'scopeId': scopeId});
 }
 
 /// One actual page owns its short-lived native scope. Invalidation is
@@ -52,8 +52,14 @@ class CompanionMapHandoff {
       } on Object catch (error, stack) {
         // Keep lifecycle cleanup running, but report the failed barrier. There
         // is no successful effect/stop receipt to infer from this failure.
-        FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack,
-          library: 'companion maps', context: ErrorDescription('closing the original map scope')));
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            library: 'companion maps',
+            context: ErrorDescription('closing the original map scope'),
+          ),
+        );
       } finally {
         unawaited(_release(scope.id));
       }
@@ -129,12 +135,14 @@ MemoryRow? parseCompanionMap(String raw) {
   final explicit = RegExp(r'^(?:请|帮我)?把(?:地址)?“([^”]+)”在地图(?:里)?打开(?:[，,]我自己看路线)?$').firstMatch(command);
   final address = amend?.group(2) ?? direct?.group(1) ?? explicit?.group(1);
   if (address != null) {
-    if (address.trim().isEmpty || RegExp(r'或者|还是|两个|两处|两个同名').hasMatch(address) ||
+    if (address.trim().isEmpty ||
+        RegExp(r'或者|还是|两个|两处|两个同名').hasMatch(address) ||
         const ['东门', '西门', '南门', '北门', '这里', '那里', '这个地址', '那个地址'].contains(address.trim())) {
       return {'operation': 'clarify'};
     }
     return {'operation': amend == null ? 'create' : 'amend', 'address': address, 'target': amend?.group(1)};
   }
   return RegExp(r'^(?:请|帮我)?(?:把|在地图|用地图|打开地图|地图地址|重新打开|取消)').hasMatch(command) && command.contains('地图')
-    ? {'operation': 'clarify'} : null;
+      ? {'operation': 'clarify'}
+      : null;
 }

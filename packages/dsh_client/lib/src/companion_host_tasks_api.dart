@@ -13,8 +13,16 @@ const _path = '/dsh-go/v1/companion/tasks';
 typedef _Row = Map<String, Object?>;
 
 class CompanionTasksCapability {
-  const CompanionTasksCapability._(this._owner, this.hostStoreId, this.notes, this.findDraft, this.compareDrafts,
-    this.artifactRead, this.sourceRead, this.reason);
+  const CompanionTasksCapability._(
+    this._owner,
+    this.hostStoreId,
+    this.notes,
+    this.findDraft,
+    this.compareDrafts,
+    this.artifactRead,
+    this.sourceRead,
+    this.reason,
+  );
   final DshClient _owner;
   final String? hostStoreId;
   final bool notes;
@@ -80,7 +88,9 @@ extension CompanionHostTasksApi on DshClient {
     String path, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    if (!identical(host._owner, this) || (!host.notes && !host.findDraft && !host.compareDrafts) || host.hostStoreId == null) {
+    if (!identical(host._owner, this) ||
+        (!host.notes && !host.findDraft && !host.compareDrafts) ||
+        host.hostStoreId == null) {
       throw const DshRemoteException('companion/task-unavailable', 'Directory tasks are unavailable');
     }
     final response = await _connection(this).postBytes(
@@ -114,21 +124,33 @@ extension CompanionHostTasksApi on DshClient {
     if (!identical(host._owner, this) || !host.compareDrafts || host.hostStoreId == null) {
       throw const DshRemoteException('companion/task-unavailable', 'Draft comparison is unavailable');
     }
-    if (!_id(folderRef) || name.isEmpty || name.length > 255 ||
-        RegExp(r'[/\\\x00]').hasMatch(name) || !RegExp(r'\.(md|txt)$', caseSensitive: false).hasMatch(name)) {
+    if (!_id(folderRef) ||
+        name.isEmpty ||
+        name.length > 255 ||
+        RegExp(r'[/\\\x00]').hasMatch(name) ||
+        !RegExp(r'\.(md|txt)$', caseSensitive: false).hasMatch(name)) {
       throw const DshProtocolException('Choose one supported file name inside the selected directory');
     }
     final response = await _connection(this).postBytes(
       '$_path/inputs',
       utf8.encode(jsonEncode({'v': 1, 'hostStoreId': host.hostStoreId, 'folderRef': folderRef, 'name': name})),
-      contentType: 'application/json', followRedirects: false, timeout: timeout, maxResponseBytes: 16384,
+      contentType: 'application/json',
+      followRedirects: false,
+      timeout: timeout,
+      maxResponseBytes: 16384,
     );
     final map = _decode(response);
     _success(response, map);
-    if (map.length != 7 || map['v'] != 1 || map['hostStoreId'] != host.hostStoreId ||
-        !_id(map['sourceRef']) || map['displayName'] != name ||
-        map['version'] is! String || (map['version']! as String).isEmpty ||
-        map['size'] is! int || (map['size']! as int) < 0 || (map['size']! as int) > 65536 ||
+    if (map.length != 7 ||
+        map['v'] != 1 ||
+        map['hostStoreId'] != host.hostStoreId ||
+        !_id(map['sourceRef']) ||
+        map['displayName'] != name ||
+        map['version'] is! String ||
+        (map['version']! as String).isEmpty ||
+        map['size'] is! int ||
+        (map['size']! as int) < 0 ||
+        (map['size']! as int) > 65536 ||
         !const ['text/plain', 'text/markdown'].contains(map['mediaType'])) {
       _invalid();
     }
@@ -217,24 +239,39 @@ extension CompanionHostTasksApi on DshClient {
 
   /// Read only an original source registered in this task's saved report.
   /// This is not a path API, a task wake, or a replacement-version fallback.
-  Future<Map<String, Object?>> readCompanionHostSource({required String hostStoreId, required String taskId,
-    required String hostExecutionId, required String sourceRef,
-    Duration timeout = const Duration(seconds: 15)}) async {
-    final response = await _connection(this).get('$_path/${Uri.encodeComponent(taskId)}/sources/${Uri.encodeComponent(sourceRef)}',
+  Future<Map<String, Object?>> readCompanionHostSource({
+    required String hostStoreId,
+    required String taskId,
+    required String hostExecutionId,
+    required String sourceRef,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final response = await _connection(this).get(
+      '$_path/${Uri.encodeComponent(taskId)}/sources/${Uri.encodeComponent(sourceRef)}',
       query: {'hostStoreId': hostStoreId, 'hostExecutionId': hostExecutionId},
-      timeout: timeout, followRedirects: false, maxResponseBytes: 1024 * 1024);
+      timeout: timeout,
+      followRedirects: false,
+      maxResponseBytes: 1024 * 1024,
+    );
     final map = _decode(response);
     _success(response, map);
     _identity(map, hostStoreId, taskId);
-    if (map['hostExecutionId'] != hostExecutionId || map['sourceRef'] != sourceRef ||
-        map['taskRev'] is! int || (map['taskRev']! as int) < 1 || map['stepKey'] != 'readInputs' ||
-        map['relativePath'] is! String || (map['relativePath']! as String).isEmpty ||
-        map['version'] is! String || (map['version']! as String).isEmpty ||
+    if (map['hostExecutionId'] != hostExecutionId ||
+        map['sourceRef'] != sourceRef ||
+        map['taskRev'] is! int ||
+        (map['taskRev']! as int) < 1 ||
+        map['stepKey'] != 'readInputs' ||
+        map['relativePath'] is! String ||
+        (map['relativePath']! as String).isEmpty ||
+        map['version'] is! String ||
+        (map['version']! as String).isEmpty ||
         !const ['available', 'missing', 'changed', 'not_readable', 'unknown'].contains(map['status']) ||
         !const ['text/markdown', 'text/plain'].contains(map['mediaType']) ||
         (map['status'] == 'available' ? map['content'] is! String : map['content'] != null) ||
-        !map.containsKey('reason') || (map['status'] == 'available' ? map['reason'] != null :
-          map['reason'] is! String || (map['reason']! as String).isEmpty)) {
+        !map.containsKey('reason') ||
+        (map['status'] == 'available'
+            ? map['reason'] != null
+            : map['reason'] is! String || (map['reason']! as String).isEmpty)) {
       _invalid();
     }
     if (map['status'] == 'available' && utf8.encode(map['content']! as String).length > 65536) {

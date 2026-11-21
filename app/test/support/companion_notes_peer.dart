@@ -140,38 +140,78 @@ MemoryRow notesArtifact() => {
   'sourceCount': 2,
 };
 
-const findCapability = <String, Object?>{...notesCapability,
-  'kinds': ['host.notes_to_todo', 'host.find_draft'], 'sourceRead': true};
-const findSpokenExample = '等家里电脑开了，帮我在‘演讲稿’这个文件夹的这一层找昨天改的稿子。'
-  '七点以前把能打开的入口留在小屋，我先去布场。不用翻别处。';
+final findCapability = <String, Object?>{
+  ...notesCapability,
+  'kinds': ['host.notes_to_todo', 'host.find_draft'],
+  'sourceRead': true,
+};
+const findSpokenExample =
+    '等家里电脑开了，帮我在‘演讲稿’这个文件夹的这一层找昨天改的稿子。'
+    '七点以前把能打开的入口留在小屋，我先去布场。不用翻别处。';
 
-MemoryRow findAgreement({bool queue = false, String afterExit = 'continue',
-  String day = '2026-11-20', List<String> extensions = const ['md', 'txt']}) => {
-  'args': {'folderRef': 'bound-source', 'scope': 'currentLevel', 'localDate': day,
-    'timeZone': 'Asia/Shanghai', 'dateBy': 'modified', 'extensions': extensions},
-  'deadlineAtMs': null, 'afterExit': afterExit, 'allowQueue': queue,
+MemoryRow findAgreement({
+  bool queue = false,
+  String afterExit = 'continue',
+  String day = '2026-11-20',
+  List<String> extensions = const ['md', 'txt'],
+}) => {
+  'args': {
+    'folderRef': 'bound-source',
+    'scope': 'currentLevel',
+    'localDate': day,
+    'timeZone': 'Asia/Shanghai',
+    'dateBy': 'modified',
+    'extensions': extensions,
+  },
+  'deadlineAtMs': null,
+  'afterExit': afterExit,
+  'allowQueue': queue,
 };
 
-MemoryRow findMatch({String id = 'draft-original', String name = '开场 A.md',
-  bool openable = true}) => {'sourceRef': id, 'relativePath': name, 'size': 120,
-  'modifiedAtMs': 1795147200000, 'modifiedOffsetSeconds': 28800, 'version': 'version-$id',
-  'openable': openable, 'reason': openable ? null : 'read_not_allowed'};
+MemoryRow findMatch({String id = 'draft-original', String name = '开场 A.md', bool openable = true}) => {
+  'sourceRef': id,
+  'relativePath': name,
+  'size': 120,
+  'modifiedAtMs': 1795147200000,
+  'modifiedOffsetSeconds': 28800,
+  'version': 'version-$id',
+  'openable': openable,
+  'reason': openable ? null : 'read_not_allowed',
+};
 
 /// Fixed HTTP observations for the App boundary. They do not run the Host FS.
-MemoryRow findReportStep({int revision = 1, MemoryRow? agreement,
-  List<MemoryRow> matches = const [], bool complete = true,
-  List<MemoryRow> gaps = const []}) {
+MemoryRow findReportStep({
+  int revision = 1,
+  MemoryRow? agreement,
+  List<MemoryRow> matches = const [],
+  bool complete = true,
+  List<MemoryRow> gaps = const [],
+}) {
   final args = (agreement ?? findAgreement())['args']! as Map<String, Object?>;
   final day = DateTime.parse('${args['localDate']}T00:00:00Z');
   final start = day.millisecondsSinceEpoch - 28800000;
-  return {'taskRev': revision, 'stepKey': 'readInputs', 'attemptId': 'find-read-$revision',
-    'state': complete ? 'done' : 'partial', 'startedAtMs': 1795219200000,
-    'finishedAtMs': 1795219200010, 'reason': complete ? null : 'coverage_partial',
-    'result': {'completion': {
-      'scope': {...args, 'displayPath': '/本人选的稿件', 'startAtMs': start, 'endAtMs': start + 86400000},
-      'coverage': {'entriesChecked': 4, 'supportedFilesChecked': matches.length,
-        'matchingCandidates': matches.length, 'enumerationComplete': true,
-        'entryLimitReached': false, 'candidateLimitReached': false, 'gaps': gaps},
-      'matches': matches,
-    }}};
+  return {
+    'taskRev': revision,
+    'stepKey': 'readInputs',
+    'attemptId': 'find-read-$revision',
+    'state': complete ? 'done' : 'partial',
+    'startedAtMs': 1795219200000,
+    'finishedAtMs': 1795219200010,
+    'reason': complete ? null : 'coverage_partial',
+    'result': {
+      'completion': {
+        'scope': {...args, 'displayPath': '/本人选的稿件', 'startAtMs': start, 'endAtMs': start + 86400000},
+        'coverage': {
+          'entriesChecked': 4,
+          'supportedFilesChecked': matches.length,
+          'matchingCandidates': matches.length,
+          'enumerationComplete': true,
+          'entryLimitReached': false,
+          'candidateLimitReached': false,
+          'gaps': gaps,
+        },
+        'matches': matches,
+      },
+    },
+  };
 }

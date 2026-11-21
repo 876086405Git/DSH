@@ -5,9 +5,10 @@ import 'package:dsh_client/dsh_client.dart';
 
 import 'companion_notes_peer.dart';
 
-const compareSpokenExample = '这两份是我明天上台的 A 稿和 B 稿。电脑上线就帮我对一遍，'
+const compareSpokenExample =
+    '这两份是我明天上台的 A 稿和 B 稿。电脑上线就帮我对一遍，'
     '晚上八点前列至多三处最值得重新练的改动。我先去排练，两个原文件都别动。';
-const compareCapability = <String, Object?>{
+final compareCapability = <String, Object?>{
   ...findCapability,
   'kinds': ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'],
 };
@@ -16,8 +17,7 @@ const compareCapability = <String, Object?>{
 // Host envelopes below are controlled HTTP observations, not a real Host FS or
 // model result. The SDK slice owns this one fixture; the App does not copy it.
 final _fixture = jsonDecode(
-  File('../packages/dsh_client/test/fixtures/companion_compare_draft/comparator-output.json')
-      .readAsStringSync(),
+  File('../packages/dsh_client/test/fixtures/companion_compare_draft/comparator-output.json').readAsStringSync(),
 ) as MemoryRow;
 
 MemoryRow compareInputs({String hostStoreId = 'original-store'}) => {
@@ -35,8 +35,7 @@ MemoryRow compareInputs({String hostStoreId = 'original-store'}) => {
 
 MemoryRow compareAgreement({bool queue = true, int? deadline, String afterExit = 'continue'}) => {
   'args': {
-    for (final side in ['a', 'b'])
-      side: {'sourceRef': 'input-$side', 'version': 'bound-version-$side'},
+    for (final side in ['a', 'b']) side: {'sourceRef': 'input-$side', 'version': 'bound-version-$side'},
     'maxHighlights': 3,
   },
   'deadlineAtMs': deadline,
@@ -53,9 +52,7 @@ MemoryRow compareReportStep({
 }) {
   final comparison = _fixture['comparison']! as MemoryRow;
   final inputs = compareInputs();
-  final differences = identical
-      ? <Object?>[]
-      : jsonDecode(jsonEncode(comparison['changes'])) as List<Object?>;
+  final differences = identical ? <Object?>[] : jsonDecode(jsonEncode(comparison['changes'])) as List<Object?>;
   final complete = published && !changed && (identical || advice);
   return {
     'taskRev': revision,
@@ -64,8 +61,13 @@ MemoryRow compareReportStep({
     'state': complete ? 'done' : 'partial',
     'startedAtMs': 1795219200000,
     'finishedAtMs': 1795219200010,
-    'reason': complete ? null : !published ? 'report_not_published'
-        : changed ? 'original_changed' : 'model_unavailable',
+    'reason': complete
+        ? null
+        : !published
+        ? 'report_not_published'
+        : changed
+        ? 'original_changed'
+        : 'model_unavailable',
     'result': {
       'completion': {
         'sources': [
@@ -93,17 +95,22 @@ MemoryRow compareReportStep({
         },
         'identical': identical,
         'differences': differences,
-        'selection': identical ? 'none' : advice ? 'model' : 'source_order',
+        'selection': identical
+            ? 'none'
+            : advice
+            ? 'model'
+            : 'source_order',
         'suggestions': {
-          'status': identical ? 'not_needed' : advice ? 'available' : 'unavailable',
+          'status': identical
+              ? 'not_needed'
+              : advice
+              ? 'available'
+              : 'unavailable',
           'reason': identical || advice ? null : 'model_unavailable',
           'items': [
             if (advice && !identical)
               for (final difference in differences)
-                {
-                  'differenceId': (difference! as MemoryRow)['id'],
-                  'practice': '可以重练这一处的停顿。',
-                },
+                {'differenceId': (difference! as MemoryRow)['id'], 'practice': '可以重练这一处的停顿。'},
           ],
         },
         'published': published,

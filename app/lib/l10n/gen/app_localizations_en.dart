@@ -6815,6 +6815,459 @@ class L10nEn extends L10n {
   String get companionNotesResendAmend => 'Send the change to the computer again';
 
   @override
+  String get companionMapChoose => 'Which map app would you like to use?';
+
+  @override
+  String get companionMapSystemChoice => 'Let me choose in the system';
+
+  @override
+  String get companionMapDone => 'The address was handed to the map app.';
+
+  @override
+  String get companionMapUnknown => 'I cannot yet tell whether the map opened. I will not open it again automatically.';
+
+  @override
+  String get companionMapCancelled => 'This opening has been cancelled. If the map is already open, it will stay open.';
+
+  @override
+  String get companionMapUnavailable => 'Maps are unavailable right now. You can still copy the address.';
+
+  @override
+  String get companionMapNotHere =>
+      'This record is from earlier. You can copy the address or open it again if you need it now.';
+
+  @override
+  String get companionMapFailed => 'The map did not open. The address is here to copy.';
+
+  @override
+  String get companionMapChoiceWaiting =>
+      'The app selection screen opened. I cannot yet tell which map received the address.';
+
+  @override
+  String get companionMapWaiting => 'The map has not opened this time. The address is saved.';
+
+  @override
+  String get companionMapQueued => 'The address is saved. The map has not opened yet.';
+
+  @override
+  String get companionMapSyntax =>
+      'Give one complete address, for example: 在地图打开“文华路 18 号东门”. Choose one if there are several.';
+
+  @override
+  String get companionMapWhich =>
+      'Which address would you like to change or open again? You can select it in your tasks.';
+
+  @override
+  String get companionMapNoTarget => 'No map was selected, so nothing has opened.';
+
+  @override
+  String get companionMapSaveFailed => 'I could not confirm whether the map opened. I will not retry automatically.';
+
+  @override
+  String companionMapTarget(String label) {
+    return 'Selected map: $label';
+  }
+
+  @override
+  String get companionMapCopy => 'Copy original address';
+
+  @override
+  String get companionMapView => 'View address';
+
+  @override
+  String get companionMapReopen => 'Open again';
+
+  @override
+  String get companionMapCancel => 'Cancel this opening';
+
+  @override
+  String get companionMapReopenSource => 'Open this address in a map again';
+
+  @override
+  String get companionMapCancelSource => 'Cancel opening this address in a map';
+
+  @override
+  String get companionFindTitle => 'Find drafts';
+
+  @override
+  String get companionFindSyntax =>
+      'Tell me which folder to search at this level, when the drafts were modified, and whether to continue after you leave. Include a deadline if you have one.';
+
+  @override
+  String get companionFindWhich => 'Which search would you like to stop? You can select it in your tasks.';
+
+  @override
+  String get companionFindConnect =>
+      'No folder has been selected on this computer yet. Connect to it and choose one first.';
+
+  @override
+  String get companionFindSavedDirectory => 'Choose a folder you used before';
+
+  @override
+  String get companionFindSeven => 'Did you mean seven in the morning or evening?';
+
+  @override
+  String get companionFindMorningSeven => '07:00 in the morning';
+
+  @override
+  String get companionFindEveningSeven => '19:00 in the evening';
+
+  @override
+  String get companionFindDeadlineMissing => 'The deadline is not settled yet, so this search has not started.';
+
+  @override
+  String companionFindChooseDirectory(String name) {
+    return 'Choose the “$name” folder';
+  }
+
+  @override
+  String get companionFindChooseAgain => 'Choose another folder';
+
+  @override
+  String get companionFindKeepDirectory => 'Keep the same folder';
+
+  @override
+  String get companionFindUnavailable => 'This computer cannot find and open your drafts yet.';
+
+  @override
+  String get companionFindNoDirectory => 'No folder has been selected, so this search has not started.';
+
+  @override
+  String get companionFindDone => 'The search is finished. The results are below.';
+
+  @override
+  String get companionFindPartial =>
+      'I could not finish the whole search. Found drafts and unfinished areas are listed below.';
+
+  @override
+  String get companionFindFailed => 'This search could not finish. The earlier record is still here.';
+
+  @override
+  String get companionFindWaiting => 'The search cannot continue yet. You can check again later.';
+
+  @override
+  String get companionFindCancelled => 'The search has stopped. The earlier results are still here.';
+
+  @override
+  String get companionFindCancelUnknown =>
+      'Your request to stop is saved, but I have not confirmed that the computer stopped. Earlier results remain.';
+
+  @override
+  String get companionFindCancel => 'Stop searching';
+
+  @override
+  String get companionFindCancelSource => 'Cancel this draft search';
+
+  @override
+  String companionFindAmendSource(
+    String date,
+    String formats,
+    String deadline,
+    String afterExit,
+    String queue,
+    String source,
+  ) {
+    return 'Change this search: only $formats files modified on $date at this level. Deadline: $deadline; $afterExit; $queue; $source.';
+  }
+
+  @override
+  String get companionFindDate => 'Draft modification date';
+
+  @override
+  String companionFindScope(String formats) {
+    return 'Only $formats files modified on this day at this level. Originals stay unchanged.';
+  }
+
+  @override
+  String companionFindSourceDirectory(String path) {
+    return 'Search folder: $path';
+  }
+
+  @override
+  String get companionFindReport => 'Drafts found this time';
+
+  @override
+  String get companionFindPreviousReport => 'Earlier search results';
+
+  @override
+  String companionFindCoverage(String entries, String supported, String matches) {
+    return 'Checked $entries entries, including $supported in the selected formats, and found $matches drafts matching the date.';
+  }
+
+  @override
+  String get companionFindEnumerationComplete =>
+      'The file names in this level have been checked. See below for which files could be opened. Files added during the search may not be included.';
+
+  @override
+  String get companionFindEnumerationPartial => 'Some areas have not been searched completely.';
+
+  @override
+  String get companionFindEntryLimit =>
+      'This search checks up to 200 entries. The remaining entries have not been checked.';
+
+  @override
+  String get companionFindCandidateLimit => 'More than 20 drafts match the date. The first 20 are listed here.';
+
+  @override
+  String get companionFindEmpty => 'No draft in the selected formats and date was found in the area searched.';
+
+  @override
+  String companionFindGap(String name) {
+    return 'This item still needs checking: $name';
+  }
+
+  @override
+  String companionFindModified(String time) {
+    return 'Modified: $time';
+  }
+
+  @override
+  String get companionFindWasOpenable =>
+      'This draft opened at the time. Opening it now will check whether it has changed.';
+
+  @override
+  String get companionFindWasUnreadable => 'This draft could not be read at the time.';
+
+  @override
+  String get companionFindOpenSource => 'Open this original';
+
+  @override
+  String get companionFindSourceOffline => 'The list is still here. Connect to the original computer to open a draft.';
+
+  @override
+  String get companionFindSourceMissing => 'This draft can no longer be found. The earlier search list is still here.';
+
+  @override
+  String get companionFindSourceChanged =>
+      'This draft has been replaced or modified. I cannot confirm it is still the same draft.';
+
+  @override
+  String get companionFindSourceUnreadable =>
+      'This draft could not be opened in full. It has not been replaced with a different file.';
+
+  @override
+  String get companionFindSourceUnknown =>
+      'This draft cannot be opened right now. Connect to the original computer and try again.';
+
+  @override
+  String get companionFindDeadline =>
+      'The agreed deadline has passed. No new search will start. Existing results will stay here.';
+
+  @override
+  String get companionFindOriginalPending =>
+      'The computer received the changes and still needs to confirm the original search.';
+
+  @override
+  String get companionFindUnknown =>
+      'I have not confirmed whether the computer received this search or how far it got.';
+
+  @override
+  String get companionCompareTitle => 'Compare two drafts';
+
+  @override
+  String get companionCompareA => 'A · earlier draft';
+
+  @override
+  String get companionCompareB => 'B · later draft';
+
+  @override
+  String get companionCompareSyntax =>
+      'Please choose A as the earlier draft and B as the later draft, and say whether to wait for the computer and continue after you leave. Include a deadline if you have one.';
+
+  @override
+  String get companionCompareWhich => 'Which comparison should stop? Open that task and choose Stop.';
+
+  @override
+  String get companionCompareDeadlineMissing =>
+      'The deadline is not clear yet. Please specify the date, time, and time zone.';
+
+  @override
+  String get companionCompareUnavailable => 'This computer cannot compare two drafts yet.';
+
+  @override
+  String get companionCompareConnect =>
+      'Connect the original computer to select A and B first. No previously selected drafts are available offline yet.';
+
+  @override
+  String get companionCompareAmbiguousFile =>
+      'More than one selected draft has this name. Connect to the original computer to choose it again.';
+
+  @override
+  String get companionCompareNoInputs =>
+      'Both original drafts have not been selected, so this comparison has not started.';
+
+  @override
+  String get companionCompareOriginalHost =>
+      'The agreement and any existing result are kept. Connect the original computer to check again.';
+
+  @override
+  String get companionCompareSaveFailed =>
+      'The comparison could not be confirmed yet. Please check this task again later.';
+
+  @override
+  String companionCompareSaved(String side) {
+    return 'Choose a previously selected $side';
+  }
+
+  @override
+  String companionCompareChooseDirectory(String side) {
+    return 'Choose the folder containing $side';
+  }
+
+  @override
+  String companionCompareFilename(String side) {
+    return 'Enter the file name for $side';
+  }
+
+  @override
+  String get companionCompareFileLimit =>
+      'Enter the exact name inside the selected folder. Markdown and txt files up to 64 KiB each are supported. The originals will not be changed.';
+
+  @override
+  String get companionCompareFilenameMissing => 'Enter a file name.';
+
+  @override
+  String get companionCompareQueued => 'Both drafts are saved, waiting for the computer.';
+
+  @override
+  String get companionCompareRunning => 'The computer is comparing these two drafts.';
+
+  @override
+  String get companionCompareDone => 'The comparison of the two drafts is ready.';
+
+  @override
+  String get companionComparePartial =>
+      'This comparison is only partly complete. Verified changes and remaining gaps are shown below.';
+
+  @override
+  String get companionCompareCancelled => 'Further comparison has stopped. Any previous comparison is kept.';
+
+  @override
+  String get companionCompareCancelUnknown =>
+      'The stop request is saved, but the computer has not confirmed it yet. Existing results are kept.';
+
+  @override
+  String get companionCompareWaiting =>
+      'This comparison cannot continue yet. The original selections and agreement are kept.';
+
+  @override
+  String get companionCompareUnknown =>
+      'The computer’s progress is not clear yet. The comparison will not automatically restart.';
+
+  @override
+  String get companionCompareFailed =>
+      'The comparison could not be completed. This task did not edit the original files.';
+
+  @override
+  String get companionCompareDeadline =>
+      'The original deadline has passed. This comparison will not be moved to a later time.';
+
+  @override
+  String get companionCompareOriginalPending =>
+      'The change is saved, but the original comparison agreement still needs to be delivered.';
+
+  @override
+  String get companionCompareReport => 'This comparison';
+
+  @override
+  String get companionCompareUnfinishedReport => 'An unfinished comparison';
+
+  @override
+  String get companionComparePreviousReport => 'Previous comparison';
+
+  @override
+  String get companionCompareUnread => 'This draft has not been read completely.';
+
+  @override
+  String get companionCompareChanged =>
+      'This draft was read, but its original version could not be confirmed when the result was prepared.';
+
+  @override
+  String get companionCompareIncomplete => 'Some parts are still unfinished. The verified text changes are kept.';
+
+  @override
+  String get companionCompareIdentical => 'The two drafts read for this comparison contain no text changes.';
+
+  @override
+  String companionCompareCoverage(String total, String shown) {
+    return 'This comparison found $total groups of text changes and shows $shown of them.';
+  }
+
+  @override
+  String get companionCompareSourceOrder =>
+      'The verified changes below follow their order in the text. Rehearsal priorities have not been ranked.';
+
+  @override
+  String companionCompareDifference(String number) {
+    return 'Text change $number';
+  }
+
+  @override
+  String get companionCompareNoExcerpt => 'There is no short source excerpt to show on this side.';
+
+  @override
+  String get companionCompareSuggestions => 'Rehearsal suggestions';
+
+  @override
+  String companionComparePractice(String number, String practice) {
+    return 'Change $number: $practice';
+  }
+
+  @override
+  String get companionCompareSuggestionsUnknown =>
+      'Rehearsal suggestions are still unconfirmed. Verified text changes are kept.';
+
+  @override
+  String get companionCompareSuggestionsMissing =>
+      'Rehearsal suggestions are not ready. Verified text changes are kept.';
+
+  @override
+  String companionCompareParagraph(String range) {
+    return 'Paragraph $range';
+  }
+
+  @override
+  String companionCompareBetween(String before, String after) {
+    return 'Between paragraphs $before and $after';
+  }
+
+  @override
+  String companionCompareAfter(String number) {
+    return 'After paragraph $number';
+  }
+
+  @override
+  String companionCompareBefore(String number) {
+    return 'Before paragraph $number';
+  }
+
+  @override
+  String companionCompareLines(String range) {
+    return 'Near line $range';
+  }
+
+  @override
+  String get companionCompareCancel => 'Stop comparing';
+
+  @override
+  String get companionCompareCancelSource => 'Cancel this comparison and keep any result already returned.';
+
+  @override
+  String companionCompareAmendSource(String deadline, String exit, String queue, String inputs) {
+    return 'Change this comparison: $deadline; $exit; $queue; $inputs. Leave both original files unchanged.';
+  }
+
+  @override
+  String get companionCompareChooseAgain => 'Choose A and B again';
+
+  @override
+  String get companionCompareKeepInputs => 'Keep the originally selected A and B';
+
+  @override
+  String get companionCompareNewDeadline =>
+      'A new deadline uses the local time zone of this change. Leave blank to keep the original deadline.';
+
+  @override
   String get automaticDiagnosticsRecover => 'Recover local records';
 
   @override

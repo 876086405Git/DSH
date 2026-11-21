@@ -20,21 +20,15 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
   final l10n = context.l10n;
   final inputs = <String, Object?>{};
   var storeId = originalStoreId;
-  final saved = client == null
-      ? store.hostTaskInputs(hostKey: hostKey)
-      : const <MemoryRow>[];
+  final saved = client == null ? store.hostTaskInputs(hostKey: hostKey) : const <MemoryRow>[];
   for (final side in ['a', 'b']) {
     if (!context.mounted || !isCurrent()) {
-      throw const DshClosedException(
-        'task selection changed before choosing the original draft',
-      );
+      throw const DshClosedException('task selection changed before choosing the original draft');
     }
     final label = side == 'a' ? l10n.companionCompareA : l10n.companionCompareB;
     MemoryRow? input;
     if (client == null) {
-      final candidates = saved
-          .where((row) => storeId == null || row['hostStoreId'] == storeId)
-          .toList();
+      final candidates = saved.where((row) => storeId == null || row['hostStoreId'] == storeId).toList();
       if (candidates.isEmpty) {
         return null;
       }
@@ -49,38 +43,21 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
           children: [
             for (final entry in byName.entries)
               SimpleDialogOption(
-                onPressed: entry.value.length == 1
-                    ? () => Navigator.pop(dialog, entry.value.single)
-                    : null,
+                onPressed: entry.value.length == 1 ? () => Navigator.pop(dialog, entry.value.single) : null,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(entry.key),
-                    if (entry.value.length != 1)
-                      Text(l10n.companionCompareAmbiguousFile),
-                  ],
+                  children: [Text(entry.key), if (entry.value.length != 1) Text(l10n.companionCompareAmbiguousFile)],
                 ),
               ),
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(dialog),
-              child: Text(l10n.commonCancel),
-            ),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
           ],
         ),
       );
     } else {
-      if (capability == null ||
-          !capability.compareDrafts ||
-          (storeId != null && capability.hostStoreId != storeId)) {
-        throw const DshRemoteException(
-          'companion/task-store-mismatch',
-          'The original input store is unavailable',
-        );
+      if (capability == null || !capability.compareDrafts || (storeId != null && capability.hostStoreId != storeId)) {
+        throw const DshRemoteException('companion/task-store-mismatch', 'The original input store is unavailable');
       }
-      final path = await showDirectoryPicker(
-        context,
-        title: l10n.companionCompareChooseDirectory(label),
-      );
+      final path = await showDirectoryPicker(context, title: l10n.companionCompareChooseDirectory(label));
       if (!context.mounted || !isCurrent()) {
         throw const DshClosedException('task selection changed during directory selection');
       }
@@ -104,11 +81,7 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
       if (name == null) {
         return null;
       }
-      input = await client.bindCompanionDraftInput(
-        capability,
-        folderRef: folder['folderRef']! as String,
-        name: name,
-      );
+      input = await client.bindCompanionDraftInput(capability, folderRef: folder['folderRef']! as String, name: name);
     }
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('task selection changed before saving both original drafts');

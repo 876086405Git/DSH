@@ -97,15 +97,21 @@ class CompanionHostTasks {
     var hostStore = current['host_store_id'] as String?;
     var readOriginal = false;
     var missingOriginal = false;
-    if (submitPending && const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) &&
+    if (submitPending &&
+        const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) &&
         commands.every((row) => row['possible_sent_at_ms'] == null)) {
       final available = capability ?? await client.readCompanionTasksCapability();
-      if (available == null || (current['kind'] == 'host.find_draft'
-          ? !available.findDraft || !available.sourceRead : !available.compareDrafts)) {
+      if (available == null ||
+          (current['kind'] == 'host.find_draft'
+              ? !available.findDraft || !available.sourceRead
+              : !available.compareDrafts)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot accept this find task');
       }
       if (available.hostStoreId != hostStore) {
-        throw const DshRemoteException('companion/task-store-mismatch', 'The selected directory belongs to the original task store');
+        throw const DshRemoteException(
+          'companion/task-store-mismatch',
+          'The selected directory belongs to the original task store',
+        );
       }
     }
     if (hostStore != null) {
@@ -121,9 +127,13 @@ class CompanionHostTasks {
         return current;
       }
       final available = capability ?? await client.readCompanionTasksCapability();
-      if (available == null || available.hostStoreId == null ||
-          (current['kind'] == 'host.find_draft' ? !available.findDraft
-              : current['kind'] == 'host.compare_drafts' ? !available.compareDrafts : !available.notes)) {
+      if (available == null ||
+          available.hostStoreId == null ||
+          (current['kind'] == 'host.find_draft'
+              ? !available.findDraft
+              : current['kind'] == 'host.compare_drafts'
+              ? !available.compareDrafts
+              : !available.notes)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot durably accept this task');
       }
       hostStore = available.hostStoreId!;
@@ -315,13 +325,18 @@ MemoryRow? parseCompanionFind(String raw) {
     return null;
   }
   const folder = r'(?:“([^”]+)”|‘([^’]+)’|「([^」]+)」|"([^"]+)")';
-  final main = RegExp(r'^(等(?:家里|这台)?电脑(?:开了|上线)[，,]\s*)?'
-    r'(?:请帮我|请|帮我)?(?:当前|这台|家里)?(?:电脑)?在' + folder +
-    r'(?:这个文件夹)?的?(?:这一层|本层)找(昨天|今天|\d{4}-\d{2}-\d{2})'
-    r'(?:改|修改)(?:过)?的(?:稿子|稿件|稿|文件)(?=$|[，,。])').firstMatch(text);
+  final main = RegExp(
+    // ignore: prefer_interpolation_to_compose_strings
+    r'^(等(?:家里|这台)?电脑(?:开了|上线)[，,]\s*)?'
+            r'(?:请帮我|请|帮我)?(?:当前|这台|家里)?(?:电脑)?在' +
+        folder +
+        r'(?:这个文件夹)?的?(?:这一层|本层)找(昨天|今天|\d{4}-\d{2}-\d{2})'
+            r'(?:改|修改)(?:过)?的(?:稿子|稿件|稿|文件)(?=$|[，,。])',
+  ).firstMatch(text);
   if (main == null) {
     return text.contains('电脑') && text.contains('找') && (text.contains('稿') || text.contains('文件夹'))
-      ? {'kind': kind, 'operation': 'clarify'} : null;
+        ? {'kind': kind, 'operation': 'clarify'}
+        : null;
   }
   final label = [for (var group = 2; group <= 5; group++) main.group(group)].whereType<String>().single;
   if (label.trim().isEmpty) {
@@ -332,7 +347,11 @@ MemoryRow? parseCompanionFind(String raw) {
   String? deadlineTime;
   List<String>? extensions;
   List<String>? deadlineChoices;
-  final clauses = text.substring(main.end).split(RegExp(r'[，,。]')).map((part) => part.trim()).where((part) => part.isNotEmpty);
+  final clauses = text
+      .substring(main.end)
+      .split(RegExp(r'[，,。]'))
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty);
   for (final clause in clauses) {
     if (const ['不用翻别处', '不要翻别处', '只查这一层', '原件别动', '不要改原件'].contains(clause)) {
       continue;
@@ -359,8 +378,10 @@ MemoryRow? parseCompanionFind(String raw) {
       extensions = format;
       continue;
     }
-    final deadline = RegExp(r'^(?:在|今天)?((?:[01]\d|2[0-3]):[0-5]\d|今晚七点|晚上七点|七点)(?:以)?前'
-      r'(?:完成|给我|把能打开的入口留在小屋|留在小屋)?$').firstMatch(clause);
+    final deadline = RegExp(
+      r'^(?:在|今天)?((?:[01]\d|2[0-3]):[0-5]\d|今晚七点|晚上七点|七点)(?:以)?前'
+      r'(?:完成|给我|把能打开的入口留在小屋|留在小屋)?$',
+    ).firstMatch(clause);
     if (deadline != null && deadlineTime == null && deadlineChoices == null) {
       final wording = deadline.group(1)!;
       if (wording == '七点') {
@@ -377,10 +398,17 @@ MemoryRow? parseCompanionFind(String raw) {
   if (afterExit == null) {
     return {'kind': kind, 'operation': 'clarify'};
   }
-  return {'kind': kind, 'operation': 'create', 'directory': label, 'day': main.group(6),
-    'afterExit': afterExit, 'allowQueue': allowQueue, 'deadlineTime': deadlineTime,
-    if (deadlineChoices != null) 'deadlineChoices': deadlineChoices,
-    'extensions': extensions ?? ['md', 'txt']};
+  return {
+    'kind': kind,
+    'operation': 'create',
+    'directory': label,
+    'day': main.group(6),
+    'afterExit': afterExit,
+    'allowQueue': allowQueue,
+    'deadlineTime': deadlineTime,
+    'deadlineChoices': ?deadlineChoices,
+    'extensions': extensions ?? ['md', 'txt'],
+  };
 }
 
 /// Freeze the original source day and deadline once, before opening a picker.
@@ -436,7 +464,8 @@ MemoryRow? parseCompanionCompare(String raw) {
   final clauses = text.split(RegExp(r'[，,。]')).map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
   if (clauses.isEmpty || !RegExp(r'^这两份是我(?:明天上台的)?\s*A\s*稿和\s*B\s*稿$').hasMatch(clauses.first)) {
     return text.contains('电脑') && RegExp(r'对稿|对比|比较|对一遍').hasMatch(text)
-        ? {'kind': kind, 'operation': 'clarify'} : null;
+        ? {'kind': kind, 'operation': 'clarify'}
+        : null;
   }
   bool? allowQueue;
   String? afterExit;
@@ -450,12 +479,18 @@ MemoryRow? parseCompanionCompare(String raw) {
       allowQueue = clause.startsWith('电脑上线') || clause.startsWith('电脑开了');
       continue;
     }
-    final highlights = RegExp(r'^(?:((?:[01]\d|2[0-3]):[0-5]\d|晚上八点|今晚八点)前)?'
-      r'列至多三处最值得重新练的改动$').firstMatch(clause);
+    final highlights = RegExp(
+      r'^(?:((?:[01]\d|2[0-3]):[0-5]\d|晚上八点|今晚八点)前)?'
+      r'列至多三处最值得重新练的改动$',
+    ).firstMatch(clause);
     if (highlights != null && !requested) {
       requested = true;
       final deadline = highlights.group(1);
-      deadlineTime = deadline == null ? null : deadline.endsWith('八点') ? '20:00' : deadline;
+      deadlineTime = deadline == null
+          ? null
+          : deadline.endsWith('八点')
+          ? '20:00'
+          : deadline;
       continue;
     }
     if (const ['我先去排练', '离开后继续', '我先走了也继续', '我离开就停', '我走就停'].contains(clause)) {
@@ -474,8 +509,13 @@ MemoryRow? parseCompanionCompare(String raw) {
   if (allowQueue == null || afterExit == null || !requested) {
     return {'kind': kind, 'operation': 'clarify'};
   }
-  return {'kind': kind, 'operation': 'create', 'allowQueue': allowQueue,
-    'afterExit': afterExit, 'deadlineTime': deadlineTime};
+  return {
+    'kind': kind,
+    'operation': 'create',
+    'allowQueue': allowQueue,
+    'afterExit': afterExit,
+    'deadlineTime': deadlineTime,
+  };
 }
 
 /// I has a deadline, not a file-modification date window. Resolve the spoken
