@@ -40,6 +40,23 @@ void main() {
     container.dispose();
   });
 
+  test('a picture pasted as its bytes is not put back (#1684)', () async {
+    final bytes = 'MM\u0000*\u0000\u0000\u0000\u0008Exif\u0000' * 1000;
+    SharedPreferences.setMockInitialValues({
+      DraftStore.preferenceKey: jsonEncode({
+        'pasted': {'t': bytes, 'at': 2},
+        'typed': {'t': '明天再问', 'at': 1},
+      }),
+    });
+    final container = ProviderContainer();
+    final store = container.read(draftStoreProvider.notifier);
+    await store.flush();
+    final drafts = container.read(draftStoreProvider).drafts;
+    expect(drafts.keys, ['typed']);
+    expect(drafts['typed']!.text, '明天再问');
+    container.dispose();
+  });
+
   test('what was typed before the saved drafts load wins', () async {
     SharedPreferences.setMockInitialValues({
       DraftStore.preferenceKey: jsonEncode({
