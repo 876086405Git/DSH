@@ -1210,6 +1210,55 @@ void main() {
         await tester.pump(const Duration(seconds: 20));
       });
 
+      testWidgets('explicit story and generic unconfirmed cards survive reentry but stay out of the real request', (tester) async {
+        final asked = <Map<String, Object?>>[];
+        final client = MockClient((request) async {
+          asked.add(jsonDecode(request.body) as Map<String, Object?>);
+          return http.Response(_sse(['阿橙。']), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+        });
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        final memory = await memoryOf(tester);
+        memory.store.submitMessage(id: 'original-story', sessionId: memory.store.lightSessionId,
+          text: '故事里叫我校长。', scope: 'story', saidAtUtc: 1793899800000, offsetMinutes: 480);
+        // Explicit SDK eligibility fixtures; the App legacy importer still
+        // treats the owner's old handwritten cards as real.
+        memory.store.saveManual(const CompanionMemory(id: '11111111-1111-4111-8111-111111111111',
+          text: '这是剧本，我是海盗。', keywords: ['称呼'], pinned: true), expectedRowRev: null,
+          currentValueChange: false, realityKnown: false);
+        memory.store.saveManual(const CompanionMemory(id: '22222222-2222-4222-8222-222222222222',
+          text: '归属未知的称呼是店长。', keywords: ['称呼'], pinned: true), expectedRowRev: null,
+          currentValueChange: false, realityKnown: false);
+        memory.store.saveManual(const CompanionMemory(id: '33333333-3333-4333-8333-333333333333',
+          text: '本人现实称呼是阿橙。', keywords: ['称呼']), expectedRowRev: null,
+          currentValueChange: true, realityKnown: true);
+        memory.changed();
+        await _settle(tester);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        final reopened = await memoryOf(tester);
+        expect(reopened.store.messages().single['id'], 'original-story');
+        expect(reopened.store.messages().single['scope'], 'story');
+        expect(reopened.store.cards(), hasLength(3));
+        expect(reopened.store.cards().where((row) => row['eligible'] == true), hasLength(1));
+        await tester.tap(find.byIcon(AppIcons.history));
+        await settleMixed(tester, CompanionLightHistory.at(root).load());
+        await tester.pumpAndSettle();
+        expect(find.text('故事里叫我校长。'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await say(tester, '现实里我的称呼是什么？');
+        final sent = jsonEncode(asked.single['messages']);
+        expect(sent, contains('本人现实称呼是阿橙。'));
+        for (final absent in ['校长', '海盗', '店长']) {
+          expect(sent, isNot(contains(absent)), reason: absent);
+        }
+        expect(reopened.store.messages().singleWhere((row) => row['id'] == 'original-story')['text'], '故事里叫我校长。');
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+      });
+
       Future<void> settleIo(WidgetTester tester) async {
         for (var i = 0; i < 4; i++) {
           await _settle(tester);
