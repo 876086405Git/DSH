@@ -1,13 +1,15 @@
 // 轻量模式 (docs/design/companion.md §7): she talks to DeepSeek straight from
 // the phone, with no engine and no host. The same Messages API the engine's
 // DeepSeek adapter uses (@deepseek-ai/dsh-llm-deepseek), with the API key
-// saved in the app; her conversation is a small file next to the pack.
+// saved in the app. The room writes new source lines to its shared SQLite
+// owner; CompanionLightHistory below remains the reader for old visible logs.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:dsh_client/companion.dart' show MemorySelection;
 import 'package:http/http.dart' as http;
 
 import 'companion_context.dart';
@@ -47,6 +49,26 @@ class CompanionLine {
   String get role => fromHer ? 'assistant' : 'user';
 
   Map<String, Object?> toJson() => {'role': role, 'text': text, if (legacyText != null) 'legacyText': legacyText};
+}
+
+/// The API's alternating request view. Joining here does not change the raw
+/// SQLite message IDs, versions, or stored text used by extraction.
+List<CompanionLine> companionLightContext(Iterable<CompanionLine> lines, {int window = 24}) {
+  final all = lines.toList();
+  var start = max(0, all.length - window);
+  while (start < all.length && all[start].fromHer) {
+    start++;
+  }
+  final out = <CompanionLine>[];
+  for (final line in all.skip(start)) {
+    if (out.isNotEmpty && out.last.fromHer == line.fromHer) {
+      final joined = '${out.last.text}\n${line.text}';
+      out[out.length - 1] = line.fromHer ? CompanionLine.her(joined) : CompanionLine.user(joined);
+    } else {
+      out.add(line);
+    }
+  }
+  return out;
 }
 
 enum CompanionLightFailure { noKey, badKey, busy, network, server }
@@ -142,6 +164,7 @@ Stream<String> streamCompanionReply({
   required String system,
   required List<CompanionLine> lines,
   CompanionTurnContext? context,
+  MemorySelection? memory,
   int maxTokens = 800,
   void Function()? onSent,
   void Function(CompanionUsage usage)? onUsage,
@@ -162,7 +185,7 @@ Stream<String> streamCompanionReply({
       'system': system,
       'messages': companionRequestMessages([
         for (final line in lines) (role: line.role, text: line.text),
-      ], context: context),
+      ], context: context, memory: memory),
     });
   Map<String, Object?>? startUsage;
   Map<String, Object?>? finalUsage;
@@ -372,20 +395,7 @@ class CompanionLightHistory {
   /// What the model gets: the last [window] lines, starting with the person,
   /// with lines from the same side joined (the API wants them alternating).
   List<CompanionLine> context() {
-    var start = max(0, _lines.length - window);
-    while (start < _lines.length && _lines[start].fromHer) {
-      start++;
-    }
-    final out = <CompanionLine>[];
-    for (final line in _lines.skip(start)) {
-      if (out.isNotEmpty && out.last.fromHer == line.fromHer) {
-        final joined = '${out.last.text}\n${line.text}';
-        out[out.length - 1] = line.fromHer ? CompanionLine.her(joined) : CompanionLine.user(joined);
-      } else {
-        out.add(line);
-      }
-    }
-    return out;
+    return companionLightContext(_lines, window: window);
   }
 
   /// Writes the conversation as it is now (taken at the call, not when the

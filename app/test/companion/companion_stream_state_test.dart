@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/chat_state.dart';
@@ -23,12 +24,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 const _session = 'c438-synthetic-session';
 const _now = 1793937600000;
 
 class _Bridge extends DshConnection {
   _Bridge() : super(Uri.parse('http://127.0.0.1:9'));
+  DshHttpResponse json(Object body, [int status = 200]) =>
+      DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(body))));
   int revision = 0;
   DshHttpResponse snapshot() => DshHttpResponse(
     200,
@@ -53,7 +57,19 @@ class _Bridge extends DshConnection {
     Duration? timeout,
     bool followRedirects = true,
     int? maxResponseBytes,
-  }) async => snapshot();
+  }) async {
+    if (path == '$dshGoCompanionPath/memories') return json({
+      'v': 1, 'storeId': '33333333-3333-4333-8333-333333333333', 'revision': 0, 'memoryRevision': 0, 'memories': [],
+    });
+    if (path != dshGoCompanionPath) return json({'error': {'code': 'companion/not-found'}}, 404);
+    return snapshot();
+  }
+  @override
+  Future<DshHttpResponse> getBounded(String path, {
+    Map<String, String>? query, required int maxBytes, bool autoUncompress = false,
+    Duration timeout = const Duration(seconds: 30),
+  }) async => json({'error': {'code': 'companion/not-found'}}, 404);
+
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
     revision++;
@@ -136,6 +152,7 @@ class _Room {
     // Load the real persisted binding before stage ready, as the global filter
     // can do in the application. Do not replace CompanionSessions or chatProvider.
     container.read(companionSessionsProvider);
+    await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     await flush(tester);
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
@@ -370,12 +387,15 @@ void _commitToolPrefix(_Wire wire) {
 void main() {
   late Directory temporary;
   setUp(() {
+    temporary = Directory.systemTemp.createTempSync('c438-stream-');
+    final memory = CompanionMemoryStore(sqlite3.open('${temporary.path}/memory.sqlite'), nowMilliseconds: () => _now);
     SharedPreferences.setMockInitialValues({
       'companion_sessions': jsonEncode({
-        '${HostRef.local.kind.name}:${HostRef.local.id}': {'id': _session, 'full': true},
+        '${HostRef.local.kind.name}:${HostRef.local.id}': {'id': _session, 'full': true,
+          'memoryArchiveId': memory.archive['id'], 'memoryControlRevision': memory.archive['control_revision']},
       }),
     });
-    temporary = Directory.systemTemp.createTempSync('c438-stream-');
+    memory.close();
   });
   tearDown(() => temporary.deleteSync(recursive: true));
 

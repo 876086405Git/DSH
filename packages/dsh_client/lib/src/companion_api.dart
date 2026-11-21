@@ -383,6 +383,8 @@ class CompanionPromptCapability {
     this.profileAccepted,
     this.memoryMode = 'query',
     this.memoryEpoch,
+    this.phoneMemory = false,
+    this.chatUsage = false,
   });
   final String instanceId;
   final String sessionId;
@@ -397,6 +399,14 @@ class CompanionPromptCapability {
   /// Host-owned memory generation, when advertised. Clients may suppress an
   /// unnecessary query but cannot grant or restore memory using this value.
   final int? memoryEpoch;
+
+  /// The runtime can attach the phone's already selected block to this
+  /// request without writing it into the Session or system projections.
+  final bool phoneMemory;
+
+  /// Owner-only observations for marked ordinary chat calls. This is not
+  /// complete billing coverage for background, compaction, or other agents.
+  final bool chatUsage;
 
   static CompanionPromptCapability? fromJson(Object? value) {
     final map = asMap(value);
@@ -414,7 +424,10 @@ class CompanionPromptCapability {
         revision == null ||
         revision < 0 ||
         revision > 9007199254740991 ||
-        (memoryMode != 'query' && memoryMode != 'automatic') ||
+        (memoryMode != 'query' && memoryMode != 'automatic' && memoryMode != 'phone') ||
+        (map.containsKey('phoneMemory') && map['phoneMemory'] is! bool) ||
+        (map.containsKey('chatUsage') && map['chatUsage'] is! bool) ||
+        (memoryMode == 'phone' && map['phoneMemory'] != true) ||
         (map.containsKey('memoryEpoch') &&
             (memoryEpoch == null || memoryEpoch < 0 || memoryEpoch > 9007199254740991)) ||
         (map.containsKey('profileAccepted') && map['profileAccepted'] is! bool)) {
@@ -427,6 +440,8 @@ class CompanionPromptCapability {
       profileAccepted: map['profileAccepted'] as bool?,
       memoryMode: memoryMode!,
       memoryEpoch: memoryEpoch,
+      phoneMemory: map['phoneMemory'] == true,
+      chatUsage: map['chatUsage'] == true,
     );
   }
 }
