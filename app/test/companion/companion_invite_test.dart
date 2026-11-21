@@ -132,6 +132,7 @@ void _seedFollowup(CompanionMemoryOwner memory, {bool invited = true}) {
 class _FollowupPreparation extends CompanionInitiative {
   _FollowupPreparation(super.clock);
   Future<bool>? work;
+  final outcomes = <String>[];
 
   @override
   bool requestSignal(
@@ -153,12 +154,29 @@ class _FollowupPreparation extends CompanionInitiative {
     hide: hide,
     nightCareEnabled: nightCareEnabled,
     followupId: followupId,
-    prepare: prepare == null ? null : () => work = prepare(),
+    prepare: prepare == null
+        ? null
+        : () {
+            final result = work = prepare();
+            final index = outcomes.length;
+            outcomes.add('pending');
+            unawaited(
+              result.then<void>(
+                (ready) {
+                  outcomes[index] = '$ready';
+                },
+                onError: (Object error) {
+                  outcomes[index] = 'error: $error';
+                },
+              ),
+            );
+            return result;
+          },
   );
 }
 
 class _Room {
-  _Room(this.tester, this.root, {this.capturePreparation = false});
+  _Room(this.tester, this.root, {this.capturePreparation = true});
 
   final WidgetTester tester;
   final Directory root;
@@ -173,9 +191,37 @@ class _Room {
   int wallStart = 1793899800000;
   String apiKey = 'fixture-key';
   final requests = <Map<String, Object?>>[];
+  final defaultRequests = <Map<String, Object?>>[];
   Future<http.Response> Function(Map<String, Object?>)? answer;
 
   Iterable<String> get names => commands.map((c) => c.$1);
+
+  String get followupObservation => jsonEncode({
+    'preparation': capturePreparation ? preparation.outcomes : null,
+    'ownerFault': container.read(companionInitiativeProvider).fault,
+    'opportunities': [
+      for (final row in memory.store.followups())
+        {
+          for (final key in ['state', 'row_rev', 'card_rev', 'control_revision', 'reason']) key: row[key],
+        },
+    ],
+    'requests': [
+      for (final body in requests)
+        body['system'] == companionMemoryFollowupPrompt
+            ? 'followup'
+            : body['system'] == companionMemoryExtractionPrompt
+            ? 'extract'
+            : 'chat',
+    ],
+    'receipts': [
+      for (final row in memory.store.requests().where((row) => row['category'] == 'followup'))
+        {
+          for (final key in ['state', 'terminal', 'sent_at_ms']) key: row[key],
+          'complete': (row['raw_usage'] as Map<String, Object?>?)?['complete'],
+        },
+    ],
+    'signalAtMs': memory.store.initiativeRecord()?['signalAtMs'],
+  });
 
   Future<void> open({void Function(CompanionMemoryOwner)? seed}) async {
     events = null;
@@ -215,7 +261,7 @@ class _Room {
               if (answer != null) {
                 return answer!(body);
               }
-              expect(body['system'], companionMemoryFollowupPrompt);
+              defaultRequests.add(body);
               return _generated(jsonEncode({'action': 'line', 'text': _followup}));
             }),
           ),
@@ -268,13 +314,16 @@ class _Room {
   Future<void> close() async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
+    // The timer callback records its observation; a guarded test assertion
+    // belongs after pump, outside the production transport's error handler.
+    expect(defaultRequests.map((body) => body['system']), everyElement(companionMemoryFollowupPrompt));
   }
 
   Future<void> waitForFollowup() async {
     for (var second = 0; second < 70 && find.text(_followup).evaluate().isEmpty; second++) {
       await wait(const Duration(seconds: 1));
     }
-    expect(find.text(_followup), findsOneWidget);
+    expect(find.text(_followup), findsOneWidget, reason: followupObservation);
   }
 
   Future<void> waitForRequest() async {
@@ -370,7 +419,7 @@ void main() {
           previouslyVisible = visible;
         }
         final expected = invited && pace != 'off' ? 1 : 0;
-        expect(appearances, expected);
+        expect(appearances, expected, reason: room.followupObservation);
         final ledger = room.memory.store.initiativeRecord()!;
         expect(ledger['signalAtMs'], hasLength(expected));
         if (invited) {
@@ -461,7 +510,7 @@ void main() {
           }
           visible = next;
         }
-        expect(appearances, farewell ? 0 : 1);
+        expect(appearances, farewell ? 0 : 1, reason: room.followupObservation);
         expect(room.memory.store.followups().single['state'], farewell ? 'pending' : 'asked');
         expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(farewell ? 0 : 1));
         final generated = room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt);
@@ -682,7 +731,6 @@ void main() {
   ) async {
     final room = _Room(tester, root)
       ..answer = (body) async {
-        expect(body['system'], companionMemoryExtractionPrompt);
         final messages = body['messages']! as List;
         final input = jsonDecode((messages.single as Map)['content'] as String) as Map;
         return _generated(
@@ -708,6 +756,7 @@ void main() {
       await settleMixed(tester, room.memory.extract(tester.state(find.byType(CompanionPage)), forceTail: true));
     }
     expect(room.requests, hasLength(4));
+    expect(room.requests.map((body) => body['system']), everyElement(companionMemoryExtractionPrompt));
     expect(room.memory.store.requests().map((row) => row['category']), everyElement('extract'));
     expect(room.memory.store.requests().map((row) => (row['raw_usage']! as Map)['output_tokens']), everyElement(720));
     await room.wait(const Duration(minutes: 2));

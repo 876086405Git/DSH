@@ -1002,7 +1002,7 @@
         {
           "id": "old-host-clean-chat",
           "suite": "app",
-          "name": "test/companion/companion_recall_room_test.dart a valid old host warns that phone memories are unavailable and still sends the ordinary chat",
+          "name": "test/companion/companion_recall_room_test.dart a valid old host sends ordinary chat without a background memory warning or legacy recall",
           "file": "app/test/companion/companion_recall_room_test.dart"
         },
         {

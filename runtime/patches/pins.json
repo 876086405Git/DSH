@@ -2778,6 +2778,8 @@
       "companion-task-approval-turn.diff",
       "companion-notes-files.diff",
       "companion-task-storage.diff",
+      "companion-public-lookup-observer.diff",
+      "companion-lookup-answer-window.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
@@ -2819,9 +2821,7 @@
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
-      "ohos-piai-text-preabort.diff",
-      "companion-public-lookup-observer.diff",
-      "companion-lookup-answer-window.diff"
+      "ohos-piai-text-preabort.diff"
     ]
   }
 }

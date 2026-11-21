@@ -483,6 +483,9 @@ void main() {
         final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
         expect(body['kind'], 'search');
         final identity = {'requestId': body['requestId'], 'taskId': row['task_id'], 'taskRev': 1};
+        // flush() drains the IOSink into HTTP's consumer; this response stays
+        // open, so send its small frames without the HTTP output buffer.
+        request.response.bufferOutput = false;
         request.response.headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
         request.response.write(
           '${jsonEncode({...identity, 'type': 'accepted', 'instanceId': 'original-instance', 'provider': 'deepseek', 'model': 'deepseek-flash'})}\n',

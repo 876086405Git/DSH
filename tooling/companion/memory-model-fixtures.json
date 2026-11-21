@@ -20,7 +20,7 @@
     },
     {
       "path": "app/test/companion/companion_invite_test.dart",
-      "sha256": "ef4425d6f199ec62dc1075e8bbe66e191d43dcd966474e27a6025b6991ea4c75"
+      "sha256": "80253787e9ae0376e7f4d8d27a8bcc7a15020eb09bc7d28eaada5585d8c93571"
     },
     {
       "path": "app/test/companion/companion_light_test.dart",
@@ -56,11 +56,11 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "028b4d512e939097a7b90f81f52fdb72a937b05555de25ebe70cea5a24ec5973"
+      "sha256": "cbe04cf723faf90851b16fabfb5e5e82ce233b0f27dae5fc2a730567295048d6"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
-      "sha256": "006216bc6cb7e90d7e2a5830093ad1c8b8113d3c8d07bb00267605dd0b9302b8"
+      "sha256": "2c1149f5756bce68029909109fbf322588cc71c026ae3d81fb5903c1d4490940"
     },
     {
       "path": "app/test/companion/companion_signal_initiative_test.dart",
@@ -68,7 +68,7 @@
     },
     {
       "path": "app/test/companion/companion_signal_owner_test.dart",
-      "sha256": "93070e105755f093cd232ef0cc73ce3895ac54887619b0d134ecc504a3add77e"
+      "sha256": "a037b17b7dfb26676a03da9e221bd7d35e993a94d88d618638c3c5810f63be33"
     },
     {
       "path": "app/test/companion/companion_stream_state_test.dart",
@@ -208,7 +208,7 @@
     },
     {
       "path": "tooling/companion/offline_http.dart",
-      "sha256": "bba7769269b37a0dd3120610dff9291bdb4a40ee68b7f8490805636476e4605c"
+      "sha256": "b4b78e51ab9f88a083be5bd409ab5d1787f18faf65a9de48e910790113745f0e"
     }
   ]
 }

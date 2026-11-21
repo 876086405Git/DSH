@@ -1726,6 +1726,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       isCurrent: current,
       prepare: () async {
         _memoryFollowupAttempt = attempt;
+        await ref.read(companionPersonaProvider.notifier).ready;
+        if (!current() || !_presentable(_initiativeView())) {
+          return false;
+        }
         final persona = ref.read(companionPersonaProvider);
         line = await memory.followup(
           this,

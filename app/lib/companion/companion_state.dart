@@ -343,9 +343,12 @@ const _personaKey = 'companion_persona_v1';
 const _personaSentKey = 'companion_persona_sent';
 
 class CompanionPersonaController extends Notifier<CompanionPersonaSettings> {
+  late Future<void> _ready;
+  Future<void> get ready => _ready;
+
   @override
   CompanionPersonaSettings build() {
-    unawaited(_load());
+    _ready = _load();
     return const CompanionPersonaSettings();
   }
 

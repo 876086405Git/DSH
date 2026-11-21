@@ -221,7 +221,7 @@ void main() {
           source('change');
           final changedAgreement = {
             ...notesAgreement(),
-            'args': {...(notesAgreement()['args']! as Map), 'outputName': '新约定.md'},
+            'args': {...(notesAgreement()['args']! as Map<String, Object?>), 'outputName': '新约定.md'},
           };
           final changed = operation == 'cancel'
               ? store.cancelNotesTask(

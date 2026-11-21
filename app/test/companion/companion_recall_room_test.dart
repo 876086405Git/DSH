@@ -463,7 +463,7 @@ void main() {
     }
   });
 
-  testWidgets('a valid old host warns that phone memories are unavailable and still sends the ordinary chat', (
+  testWidgets('a valid old host sends ordinary chat without a background memory warning or legacy recall', (
     tester,
   ) async {
     final room = _Room(root)..bridge.phoneMemory = false;
@@ -484,7 +484,7 @@ void main() {
       expect(room.client.prompts.single.text, '想喝什么');
       expect(room.bridge.prepared.single.containsKey('phoneMemory'), isFalse);
       expect(room.bridge.prepared.single.containsKey('query'), isFalse);
-      expect(find.textContaining('这次聊天用不上她已经记住的事'), findsOneWidget);
+      expect(find.textContaining('这次聊天用不上她已经记住的事'), findsNothing);
       expect(room.memory.store.cards().single['text'], '喜欢淡茶');
       expect(room.memory.store.messages().single['text'], '想喝什么');
       expect(room.bridge.binds, isEmpty, reason: 'unsupported phone context must not silently enable legacy recall');

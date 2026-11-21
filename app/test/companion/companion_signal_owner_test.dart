@@ -87,6 +87,7 @@ void main() {
     final ready = Completer<bool>();
     var preparations = 0;
     var renders = 0;
+    Object? stateBeforeRender;
     owner.enter(room, view());
     owner.requestSignal(
       room,
@@ -98,7 +99,7 @@ void main() {
         return ready.future;
       },
       present: (_) {
-        expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
+        stateBeforeRender = _database!.select('SELECT state FROM memory_initiative_spends').single['state'];
         renders++;
         return true;
       },
@@ -115,6 +116,7 @@ void main() {
     ready.complete(true);
     await tester.pump();
     expect(renders, 1);
+    expect(stateBeforeRender, 'reserved');
     expect(saved()['signalAtMs'], hasLength(1));
     owner.dispose();
   });
@@ -194,6 +196,7 @@ void main() {
     final room = Room();
     final shown = <CompanionInitiativeDisplay>[];
     final hidden = <String>[];
+    MemoryRow? beforeRender;
     owner.enter(room, view());
     owner.requestSignal(
       room,
@@ -201,10 +204,8 @@ void main() {
       candidate(clock),
       isCurrent: () => true,
       present: (d) {
-        expect(
-          _database!.select("SELECT kind,state FROM memory_initiative_spends").single,
-          containsPair('state', 'reserved'),
-          reason: 'the actual render happens after the durable reservation',
+        beforeRender = Map<String, Object?>.from(
+          _database!.select('SELECT kind,state FROM memory_initiative_spends').single,
         );
         shown.add(d);
         return true;
@@ -212,6 +213,11 @@ void main() {
       hide: hidden.add,
     );
     await pass(tester, clock, 46000);
+    expect(
+      beforeRender,
+      containsPair('state', 'reserved'),
+      reason: 'the actual render happens after the durable reservation',
+    );
     final id = shown.single.ticket.id;
     expect(owner.accept(room, id, view()), isFalse);
     expect(hidden, isEmpty);

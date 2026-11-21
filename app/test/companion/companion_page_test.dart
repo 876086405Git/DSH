@@ -1136,7 +1136,7 @@ void main() {
             await settleMixed(tester, memory.lastReceipt);
             expect(memory.store.lookupTask(initial['task_id']! as String)!['cancel_requested'], 1);
           } else {
-            await tester.pumpWidget(_app(const SizedBox()));
+            await tester.pumpWidget(const SizedBox());
             await tester.pump();
           }
           release.complete();
@@ -1251,6 +1251,7 @@ void main() {
               await settleMixed(tester, cancellation);
               expect(memory.store.messages().where((row) => row['text'] == '不用提醒了'), hasLength(1));
             } else {
+              await tester.pumpWidget(const SizedBox());
               await tester.pumpWidget(_app(const Scaffold(body: Text('新的页面'))));
             }
             release.complete();
@@ -1504,6 +1505,10 @@ void main() {
               ],
             );
             storyScope = scope;
+            // Riverpod 3 pauses an unobserved StreamProvider. Keep these real
+            // streams observed before mounting, just as the home page does.
+            scope.listen(tavernCharactersProvider, (_, _) {});
+            scope.listen(tavernChatsProvider(null), (_, _) {});
             await scope.read(tavernCharactersProvider.future);
             await scope.read(tavernChatsProvider(null).future);
             scope.listen(tavernCharacterDetailProvider(characterId), (_, _) {});
@@ -2010,12 +2015,13 @@ void main() {
         memory = await memoryOf(tester);
         await settleMixed(tester, memory.migrateLocal());
         final page = tester.state(find.byType(CompanionPage));
-        // Use the Page's already attached real owner/transport. No second
-        // worker, prefilled usage row or replacement budget implementation.
+        // Use earlier real messages from another room with the Page's already
+        // attached owner/transport. They remain memory sources without becoming
+        // unanswered user turns in this room's ordinary chat history.
         for (final (id, text) in [('yogurt-a', '酸奶我只买原味。'), ('yogurt-b', '我买酸奶一直只选原味。')]) {
           memory.store.submitMessage(
             id: id,
-            sessionId: memory.store.lightSessionId,
+            sessionId: 'light:prior-organize-room',
             text: text,
             saidAtUtc: DateTime.now().millisecondsSinceEpoch,
             offsetMinutes: 0,
@@ -2035,6 +2041,7 @@ void main() {
         expect(await tester.runAsync(() => memory.consolidate(page)), CompanionMemoryWork.waiting);
         expect(categories, ['extract', 'organize']);
         expect(memory.store.requests(), auxiliary);
+        expect(memory.store.messages(sessionId: memory.store.lightSessionId), isEmpty);
         // Within the same rolling window, an explicit ordinary composer send
         // still makes its own actual HTTP request and settles its own receipt.
         const query = '我想换个话题，今天过得怎么样？';

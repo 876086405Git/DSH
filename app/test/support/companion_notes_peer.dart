@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:dsh_client/dsh_client.dart';
 
+import '../../../tooling/companion/offline_http.dart';
+
 const notesPath = '/dsh-go/v1/companion/tasks';
 const notesCapability = <String, Object?>{
   'v': 1,
@@ -24,6 +26,7 @@ class NotesPeer {
     client = DshClient(
       DshConnection(
         uri,
+        httpClient: _http,
         hostHeader: uri.authority,
         cookie: DshCookie(name: 'dsh-auth-test', value: 'fixture-cookie', authority: uri.authority),
       ),
@@ -42,6 +45,9 @@ class NotesPeer {
   }
   static Future<NotesPeer> open() async => NotesPeer._(await HttpServer.bind(InternetAddress.loopbackIPv4, 0));
   final HttpServer server;
+  // The widget binding's ambient client returns 400 without reaching the
+  // server. Only this peer gets a real, numeric-loopback-only client.
+  final HttpClient _http = CompanionOfflineHttpOverrides().createHttpClient(null);
   late final DshClient client;
   final calls = <({String method, Uri uri, MemoryRow? body})>[];
   late Future<void> Function(HttpRequest, MemoryRow?) respond = (request, _) => json(request, {
@@ -57,6 +63,7 @@ class NotesPeer {
 
   Future<void> close() async {
     await client.close();
+    _http.close(force: true);
     await server.close(force: true);
   }
 }

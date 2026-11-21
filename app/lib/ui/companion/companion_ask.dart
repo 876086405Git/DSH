@@ -68,6 +68,9 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
   }
 
   bool _pending(ApprovalRequest request) {
+    if (!mounted) {
+      return false;
+    }
     final current = _approval(ref.read(chatProvider(widget.sessionId)));
     return current != null && current.eventId == request.eventId && current.callId == request.callId;
   }

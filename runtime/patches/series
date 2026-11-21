@@ -160,6 +160,9 @@ companion-chat-usage-receipts.diff
 companion-task-approval-turn.diff
 companion-notes-files.diff
 companion-task-storage.diff
+# Public lookup: direct observation and complete-input answer estimate.
+companion-public-lookup-observer.diff
+companion-lookup-answer-window.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
@@ -203,7 +206,3 @@ ohos-piai-empty-models.diff
 ohos-mcp-start-close.diff
 ohos-jobs-active.diff
 ohos-piai-text-preabort.diff
-companion-public-lookup-observer.diff
-
-# Public lookup answer: same-preparation context and complete-input estimate.
-companion-lookup-answer-window.diff
