@@ -25,7 +25,7 @@ import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
-import 'package:dsh_client/dsh_client.dart' show CompanionMemory, CompanionMemoryStore;
+import 'package:dsh_client/dsh_client.dart' show CompanionMemory, CompanionMemoryStore, companionMemoryExtractionPrompt;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -1087,20 +1087,125 @@ void main() {
       });
 
       testWidgets('a refused key keeps the original source and brings the draft back', (tester) async {
-        final client = MockClient((_) async => http.Response('{"error":"bad key"}', 401));
-        await openLight(tester, apiKey: 'sk-wrong', client: client);
+        final chats = <Map<String, Object?>>[];
+        final extracts = <Map<String, Object?>>[];
+        final client = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          if (body['system'] == companionMemoryExtractionPrompt) {
+            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            extracts.add(input);
+            return http.Response(_sse([jsonEncode({
+              'schema_version': 2, 'batch_id': input['batch_id'],
+              'covered_message_ids': (input['source']! as List).cast<Map>().map((row) => row['id']).toList(),
+              'operations': [], 'completion': 'complete',
+            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          }
+          chats.add(body);
+          return chats.length == 1
+              ? http.Response('{"error":"bad key"}', 401)
+              : http.Response(_sse(['这次听到了。']), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+        });
+        await openLight(tester, apiKey: 'sk-test', client: client);
         await say(tester, '你好');
         expect(find.textContaining('API Key 好像不对'), findsOneWidget);
         expect(find.text('你好'), findsOneWidget);
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
         final memory = await memoryOf(tester);
-        expect(memory.store.messages().single['text'], '你好');
-        expect(memory.store.messages().single['role'], 'user');
-        final sourceId = memory.store.messages().single['id'];
+        final original = Map<String, Object?>.from(memory.store.messages().single);
+        expect(original['text'], '你好');
+        expect(original['role'], 'user');
+        expect(chats, hasLength(1));
         await say(tester, '你好');
-        expect(memory.store.messages(), hasLength(1));
-        expect(memory.store.messages().single['id'], sourceId);
+        expect(chats, hasLength(2));
+        final users = memory.store.messages().where((row) => row['role'] == 'user').toList();
+        expect(users, hasLength(1));
+        for (final field in ['id', 'session_id', 'first_seq', 'source_rev', 'said_at_utc', 'offset_minutes', 'text']) {
+          expect(users.single[field], original[field], reason: field);
+        }
+        final receipts = memory.store.requests().where((row) => row['category'] == 'chat').toList();
+        expect(receipts, hasLength(2), reason: 'the retry is a new physical attempt, not a new statement');
+        expect(receipts.map((row) => row['id']).toSet(), hasLength(2));
+        expect(receipts.every((row) => row['sent_at_ms'] != null), isTrue);
+        expect(receipts.map((row) => row['terminal']), containsAll(['http_error', 'complete']));
+        expect(find.text('这次听到了。'), findsOneWidget);
+        expect(extracts, isEmpty);
+        expect(users.single['extraction_state'], 'pending');
 
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        final reopened = await memoryOf(tester);
+        final extracted = Completer<void>();
+        void observeExtraction() {
+          final row = reopened.store.messages().singleWhere((row) => row['role'] == 'user');
+          if (row['extraction_state'] == 'done' && !extracted.isCompleted) {
+            extracted.complete();
+          }
+        }
+        reopened.addListener(observeExtraction);
+        observeExtraction();
+        try {
+          await settleMixed(tester, extracted.future);
+        } finally {
+          reopened.removeListener(observeExtraction);
+        }
+        final restored = reopened.store.messages().singleWhere((row) => row['role'] == 'user');
+        for (final field in ['id', 'session_id', 'first_seq', 'source_rev', 'said_at_utc', 'offset_minutes', 'text']) {
+          expect(restored[field], original[field], reason: field);
+        }
+        // The real reopening path force-extracts the pending original. Its
+        // complete empty proposal is not another ordinary chat or a free retry.
+        expect(restored['extraction_state'], 'done');
+        expect(restored['format_failures'], 0);
+        expect(reopened.store.cards(), isEmpty);
+        expect(extracts, hasLength(1));
+        final sentSource = (extracts.single['source']! as List).cast<Map>().single;
+        for (final field in ['id', 'first_seq', 'source_rev', 'offset_minutes', 'text']) {
+          expect(sentSource[field], original[field], reason: field);
+        }
+        expect(sentSource['said_at_utc'],
+          DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String());
+        final after = reopened.store.requests();
+        expect(after.where((row) => row['category'] == 'chat').toList(), receipts);
+        final extract = after.singleWhere((row) => row['category'] == 'extract');
+        expect(extract['batch_id'], extracts.single['batch_id']);
+        expect(extract['state'], 'finished');
+        expect(extract['terminal'], 'complete');
+        expect(extract['sent_at_ms'], isNotNull);
+        expect(chats, hasLength(2), reason: 'reopening extracts the queued source without resending ordinary chat');
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+      });
+
+      testWidgets('a source transaction failure keeps the draft and sends no model request', (tester) async {
+        final asked = <Map<String, Object?>>[];
+        final client = MockClient((request) async {
+          asked.add(jsonDecode(request.body) as Map<String, Object?>);
+          return http.Response(_sse(['听到了。']), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+        });
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        final memory = await memoryOf(tester);
+        final before = memory.store.archive['next_seq'];
+        final db = sqlite3.open('${root.path}/memory.sqlite');
+        db.execute("CREATE TRIGGER reject_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+        db.close();
+
+        await say(tester, '我改学长笛了');
+        expect(asked, isEmpty);
+        expect(memory.store.messages(), isEmpty);
+        expect(memory.store.requests(), isEmpty);
+        expect(memory.store.archive['next_seq'], before);
+        expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '我改学长笛了');
+        expect(find.text('这句话没送出去，要不要再说一次？'), findsOneWidget);
+
+        final recovered = sqlite3.open('${root.path}/memory.sqlite');
+        recovered.execute('DROP TRIGGER reject_source');
+        recovered.close();
+        await say(tester, '我改学长笛了');
+        expect(asked, hasLength(1));
+        final source = memory.store.messages().singleWhere((row) => row['role'] == 'user');
+        expect(source['text'], '我改学长笛了');
+        expect(source['first_seq'], before, reason: 'the failed transaction never allocated a statement');
+        expect(memory.store.requests().where((row) => row['category'] == 'chat'), hasLength(1));
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 20));
       });
