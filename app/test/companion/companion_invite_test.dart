@@ -64,8 +64,8 @@ http.Response _generated(String text, {int outputTokens = 12, String stop = 'end
   headers: {'content-type': 'text/event-stream; charset=utf-8'},
 );
 
-void _seedFollowup(CompanionMemoryOwner memory) {
-  const raw = '我今天去修琴，今天可以问我琴修好没';
+void _seedFollowup(CompanionMemoryOwner memory, {bool invited = true}) {
+  final raw = invited ? '我今天去修琴，今天可以问我琴修好没' : '我今天去修琴';
   memory.store.submitMessage(
     id: 'room-invitation',
     sessionId: memory.store.lightSessionId,
@@ -94,7 +94,7 @@ void _seedFollowup(CompanionMemoryOwner memory) {
           'followup': {
             'local_date': '2026-11-05',
             'precision': 'day',
-            'wording': '今天可以问我琴修好没',
+            'wording': invited ? '今天可以问我琴修好没' : raw,
             'basis': 'explicit_invitation',
           },
         },
@@ -247,6 +247,69 @@ void main() {
       // Windows can hold a file a moment longer; the system clears temp.
     }
   });
+
+  for (final pace in ['off', 'rare', 'often', 'chatty']) {
+    for (final invited in [true, false]) {
+      testWidgets('fixture 9 $pace ${invited ? 'invitation' : 'date-only plan'} uses the actual room gate', (tester) async {
+        SharedPreferences.setMockInitialValues({
+          'companion_touch_hint_done': true,
+          'companion_home_hint_done': true,
+          'companion_initiative_enabled': pace != 'off',
+          'companion_initiative_pace': pace == 'off' ? 'rare' : pace,
+        });
+        final room = _Room(tester, root);
+        await room.open(seed: (memory) {
+          _seedFollowup(memory, invited: invited);
+          // Even the date-only proposal falsely labels itself an invitation.
+          // The real store must qualify the original words before Page sees it.
+          final candidate = memory.store.nextFollowup(nowMs: 1793899800000);
+          expect(candidate != null, invited);
+        });
+        expect(room.memory.store.cards().single['text'], '我今天去修琴');
+        var appearances = 0;
+        var previouslyVisible = false;
+        // Known virtual room opportunities exceed every existing pace's quiet
+        // gate. Observe the actual bubble rather than inferring display from a row.
+        for (var second = 0; second < 90; second++) {
+          await room.wait(const Duration(seconds: 1));
+          final visible = find.text(_followup).evaluate().isNotEmpty;
+          if (visible && !previouslyVisible) {
+            appearances++;
+          }
+          previouslyVisible = visible;
+        }
+        final expected = invited && pace != 'off' ? 1 : 0;
+        expect(appearances, expected);
+        final ledger = room.memory.store.initiativeRecord()!;
+        expect(ledger['signalAtMs'], hasLength(expected));
+        if (invited) {
+          expect(room.memory.store.followups().single['state'], expected == 1 ? 'asked' : 'pending');
+        } else {
+          expect(room.memory.store.followups(), isEmpty);
+        }
+        if (pace == 'off') {
+          expect(ledger['inviteAtMs'], isEmpty);
+        }
+        // An ordinary cushion invitation in a plan-only branch remains a
+        // separate existing feature; only memory questions are counted here.
+        expect(room.requests, hasLength(expected));
+        final requests = room.memory.store.requests();
+        expect(requests, hasLength(expected));
+        if (expected == 1) {
+          final request = room.requests.single;
+          expect(request['system'], companionMemoryFollowupPrompt);
+          expect(request['max_tokens'], 128);
+          final input = jsonDecode(((request['messages']! as List).single as Map)['content']! as String) as Map;
+          expect(input['card'], {'text': '我今天去修琴'});
+          expect((input['invitation'] as Map)['quote'], '我今天去修琴，今天可以问我琴修好没');
+          expect(requests.single['category'], 'followup');
+          expect(requests.single['state'], 'finished');
+          expect(((requests.single['raw_usage']! as Map)['final_usage'] as Map)['output_tokens'], 12);
+        }
+        await room.close();
+      });
+    }
+  }
 
   testWidgets('an invited memory question stays visible and is not repeated after a silent restart', (tester) async {
     final room = _Room(tester, root);
