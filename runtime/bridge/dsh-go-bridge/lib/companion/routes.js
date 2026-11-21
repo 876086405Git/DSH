@@ -75,6 +75,26 @@ function readJson(req, maxBytes = MAX_BODY_BYTES, strictKeys = false) {
 export function createCompanionRoutes({ send, store = createCompanionStore(), signals, ctx, promptContext,
   recall = createRecallCoordinator({ store, promptContext }) }) {
   const auxiliary = createCompanionAuxiliaryRoutes({ ctx, send, readJson });
+  function usageRoute(req) {
+    const connection = ctx?.get('connection');
+    if (typeof connection?.admit !== 'function' || typeof promptContext?.usageSnapshot !== 'function') {
+      throw new CompanionError(503, 'usage-unavailable', 'Companion usage observations are unavailable');
+    }
+    const admission = connection.admit(req);
+    if (admission?.peer?.principal?.kind !== 'owner') {
+      throw new CompanionError(admission?.rejection ?? 403, 'usage-forbidden', 'Companion usage observations require the host owner');
+    }
+    if (req.method !== 'GET') throw new CompanionError(405, 'usage-invalid-request', 'Use GET');
+    const params = new URL(req.url, 'http://dsh-go.invalid').searchParams;
+    const names = ['instanceId', 'sessionId', 'requestId'];
+    if ([...params.keys()].some(name => !names.includes(name)) ||
+        names.some(name => params.getAll(name).length !== 1 || !contextId(params.get(name)))) {
+      throw new CompanionError(400, 'usage-invalid-request', 'A bridge instance, session and original request are required');
+    }
+    // Historical accounting remains readable after Agent retirement. Do not
+    // resolve a new Agent with the same id to authenticate an old receipt.
+    return promptContext.usageSnapshot(Object.fromEntries(names.map(name => [name, params.get(name)])));
+  }
   async function promptRoute(req) {
     const connection = ctx?.get('connection');
     if (!promptContext || typeof connection?.admit !== 'function') {
@@ -146,6 +166,12 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       if (signals && await signals.handle(req, res, path, send)) return true;
       const isRecall = path === `${ROOT}/recall` || path.startsWith(`${ROOT}/recall/`);
       try {
+        if (path === `${ROOT}/usage`) {
+          const result = usageRoute(req);
+          req.resume();
+          if (!res.destroyed) send(res, 200, result);
+          return true;
+        }
         if (path === `${ROOT}/prompt-context`) {
           const result = await promptRoute(req);
           req.resume();

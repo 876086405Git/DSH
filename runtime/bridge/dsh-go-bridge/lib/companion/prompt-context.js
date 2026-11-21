@@ -3,6 +3,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { CompanionError, invalid } from './schema.js';
 import { validRecallSessionId } from './recall-schema.js';
+import { createCompanionUsage } from './usage.js';
 
 export const FULL_PRESET = 'dsh-go-companion-full';
 const MAX_SESSIONS = 128, MAX_PENDING = 32, RECENT_MS = 30 * 60 * 1000;
@@ -90,9 +91,10 @@ export function validatePromptContext(value) {
 // Internal callers pass the actual Agent/Session objects, never just a reused
 // sessionId. A ticket fences a query that was already awaiting storage at bind.
 export function createCompanionPromptContext({ now = Date.now, instanceId = randomUUID(),
-  isCurrent = () => true, allowMemory = () => true } = {}) {
+  isCurrent = () => true, allowMemory = () => true, usageLimits } = {}) {
   const sessions = new Map(), tickets = new WeakMap(), disabledSessions = new WeakSet();
   const phoneArchives = new Map(), phoneRequests = new WeakMap(), retiredPhoneAgents = new WeakSet();
+  const usage = createCompanionUsage({ now, instanceId, limits: usageLimits });
   let closed = false, highWater = 0;
   const available = () => {
     if (closed) throw new CompanionError(503, 'unavailable', 'Companion context instance was disposed');
@@ -107,6 +109,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   const changed = () => new CompanionError(409, 'session-unavailable', 'Companion session changed; synchronize again');
   const stalePhone = () => new CompanionError(409, 'memory-context-stale', 'Use a new clean companion session after memory control changes');
   const phoneSupported = agent => agent.ctx?.get('llm')?.dshGoPhoneMemory === true;
+  const usageSupported = agent => agent.ctx?.get('llm')?.dshGoCompanionChatUsage === true;
   const live = agent => validRecallSessionId(agent?.id) && agent.session?.id === agent.id && isCurrent(agent) === true;
   const lookup = agent => {
     if (closed || !live(agent)) return undefined;
@@ -138,6 +141,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         throw new CompanionError(409, 'limit-reached', 'Companion context session limit reached');
       }
       const replaced = sessions.get(agent.id);
+      if (replaced) usage.retire(replaced.session);
       if (replaced?.phone) {
         retiredPhoneAgents.add(replaced.agent); replaced.phoneAbort.abort(stalePhone());
       }
@@ -147,7 +151,8 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         pending: new Map(), parked: new Map(), receipts: new Map(), seen: new Set(),
         turn: undefined, events: [], memories: [], memoryEpoch: 0, memoryDisabled: false,
         currentMemoryEpoch: 0, lastHumanAt: undefined, idleMinutes: undefined,
-        phone: undefined, phoneStale: false, phoneAbort: undefined, activePhone: undefined };
+        phone: undefined, phoneStale: false, phoneAbort: undefined, activePhone: undefined,
+        usageRequests: new Set() };
       for (let seq = (agent.session.seq ?? 0) - 1; seq >= 0; seq--) {
         const event = agent.session.eventAt(seq);
         if (event?.type === 'user/message' && owner(event.data) && time(event.time)) {
@@ -178,7 +183,8 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
     maxEvents: 8, maxPersonaCodePoints: 4000,
     memoryMode: value.phone ? 'phone' : value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch,
-    ...(phoneSupported(value.agent) ? { phoneMemory: true } : {}) });
+    ...(phoneSupported(value.agent) ? { phoneMemory: true } : {}),
+    ...(usageSupported(value.agent) ? { chatUsage: true } : {}) });
   function capture(agent) {
     const value = open(agent);
     const token = Object.freeze({ allowed: !value.memoryDisabled && !value.phone });
@@ -295,18 +301,31 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         current.lastHumanAt = lastHumanAt;
       }
       prune(current);
+      if (value.phoneMemory && usageSupported(agent)) usage.prepare(current.session, {
+        sessionId: value.sessionId, requestId: value.requestId, archiveId: value.phoneMemory.archiveId,
+        controlRevision: value.phoneMemory.controlRevision, historyAfterSeq: value.phoneMemory.historyAfterSeq,
+      });
       return { ...describe(current), ...(value.profile ? {
         profileAccepted: JSON.stringify(current.profile) === JSON.stringify(value.profile) } : {}) };
     },
     claim(agent, message, turn) {
-      if (!owner(message)) return;
+      if (!owner(message)) {
+        if (message?.source?.kind === 'user') lookup(agent)?.usageRequests.clear();
+        return;
+      }
       const current = lookup(agent);
       if (!current) return;
       const clock = at();
       refreshMemory(current); prune(current);
       if (current.turn !== turn) {
         current.turn = turn; current.events = []; current.memories = [];
+        current.usageRequests.clear();
       }
+      // Billing ownership survives the memory-selection TTL once claimed.
+      // A human without a prepared phone sidecar cannot borrow an old owner.
+      if (contextId(message.source.rpcId) && usage.claim(current.session, agent.id, message.source.rpcId, turn)) {
+        current.usageRequests.add(message.source.rpcId);
+      } else current.usageRequests.clear();
       // Recompute for EVERY owner human claim, including a same-turn steer
       // with no sidecar. A short or negative gap explicitly clears old idle.
       const gap = current.lastHumanAt === undefined ? undefined : clock - current.lastHumanAt;
@@ -358,13 +377,16 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (closed) return;
       const current = sessions.get(session?.id);
       if (current?.session === session) {
+        usage.end(session, current.turn);
         current.turn = undefined; current.events = []; current.memories = []; current.idleMinutes = undefined;
         current.activePhone = undefined;
+        current.usageRequests.clear();
       }
     },
     retire(agent) {
       const current = sessions.get(agent?.id);
       if (current?.agent === agent) {
+        usage.retire(current.session);
         if (current.phone) {
           retiredPhoneAgents.add(agent); current.phoneAbort.abort(stalePhone());
         }
@@ -397,9 +419,25 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         result.messages = Object.freeze(messages);
       }
       result = Object.freeze(result);
-      phoneRequests.set(result, { current, active });
+      phoneRequests.set(result, { current, active, usageRequestIds: [...current.usageRequests],
+        humanRequestId: message?.source.rpcId, turn: current.turn });
       return result;
     },
+    // Called only at the marked runtime adapter boundary, with the exact
+    // Agent and request copy already verified above. No wire-supplied owner.
+    observeUsageRequest(agent, options, observed) {
+      const request = phoneRequests.get(options);
+      if (!request || request.current !== lookup(agent) || !usageSupported(agent) ||
+          !request.usageRequestIds.includes(request.humanRequestId)) return undefined;
+      try {
+        return usage.open(request.current.session, agent.id, request.usageRequestIds, request.turn,
+          { provider: options.provider, model: options.model }, observed);
+      } catch {
+        usage.failed(request.current.session, agent.id, request.usageRequestIds);
+        return undefined;
+      }
+    },
+    usageSnapshot(query) { return usage.snapshot(query); },
     // The default direct adapter invokes this synchronously at its physical
     // fetch boundary, after asynchronous credentials/attachment preparation.
     guardRequest(agent, options) {
@@ -425,6 +463,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         ...(current.idleMinutes === undefined ? {} : { idleSinceHumanMinutes: current.idleMinutes }) })}</companion_context>`;
     },
     clear() {
+      usage.dispose();
       for (const current of sessions.values()) if (current.phone) {
         retiredPhoneAgents.add(current.agent); current.phoneAbort.abort(stalePhone());
       }

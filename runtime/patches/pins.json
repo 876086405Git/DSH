@@ -2377,6 +2377,18 @@
           "before": "a1ad048cbbb7caefe5471c583f076aa8e393f534efbc5b11b625308096efdace"
         }
       }
+    },
+    "companion-chat-usage-receipts.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "before": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1",
+          "after": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890"
+        },
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "before": "b9476975c7dc365cc065694d2658715eedaa2bfbfce4fce50b6d6a7d620aa809",
+          "after": "07f3c01e9341e10e39e0cd685ab61bc76de5086bd34611ca6166b98f771e72b0"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2537,7 +2549,8 @@
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
       "companion-phone-memory-request.diff",
-      "companion-auxiliary-single-request.diff"
+      "companion-auxiliary-single-request.diff",
+      "companion-chat-usage-receipts.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2696,6 +2709,7 @@
       "profile-root-installation-precedence.diff",
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
+      "companion-chat-usage-receipts.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",

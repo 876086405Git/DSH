@@ -3,6 +3,7 @@ library;
 
 export 'src/companion_api.dart';
 export 'src/companion_auxiliary_api.dart';
+export 'src/companion_usage_api.dart';
 export 'src/companion_recall_api.dart';
 export 'src/companion_signals.dart';
 export 'src/companion_signals_api.dart';

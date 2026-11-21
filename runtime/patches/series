@@ -155,6 +155,7 @@ web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
 companion-phone-memory-request.diff
 companion-auxiliary-single-request.diff
+companion-chat-usage-receipts.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
