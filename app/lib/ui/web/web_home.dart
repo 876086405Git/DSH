@@ -110,9 +110,10 @@ class _WebHomeState extends ConsumerState<WebHome> {
   }
 
   Future<void> _open(WebOpenRequest request) async {
-    // A DSH Remote host's page takes no scripts (remote_web_page.dart): it
-    // stays where it is, and a share falls back at once, not in 30 seconds.
-    final scripted = ref.read(dshWebAccessProvider) is! RelayDshWeb;
+    // A DSH Remote host's page takes no scripts (remote_web_page.dart), nor
+    // does the empty page while it is away: it stays where it is, and a share
+    // falls back at once, not in 30 seconds or on some later host's page.
+    final scripted = ref.read(activeHostProvider).kind != HostKind.relay;
     if (scripted) await _link.open(request.target);
     final compose = request.compose;
     if (compose == null) return;
