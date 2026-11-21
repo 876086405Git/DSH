@@ -26027,8 +26027,7 @@ class L10nEn extends L10n {
   String get usageV4Welcome => 'Daily usage and token counts. No chats. Turn off anytime.';
 
   @override
-  String get usageV4Notice =>
-      'Anonymous stats summarize feature results, model usage and abnormal exits. No chats. Off keeps only a daily activity count with no content.';
+  String get usageV4Notice => 'Anonymous stats summarize feature results, model usage and abnormal exits. No chats.';
 
   @override
   String get usageUpgradeLearn => 'Learn more';

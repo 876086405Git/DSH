@@ -45323,7 +45323,7 @@ abstract class L10n {
   /// No description provided for @usageV4Notice.
   ///
   /// In zh, this message translates to:
-  /// **'匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。关闭后仍会发送不含内容的日活计数。'**
+  /// **'匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。'**
   String get usageV4Notice;
 
   /// No description provided for @usageUpgradeLearn.

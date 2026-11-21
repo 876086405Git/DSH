@@ -24706,7 +24706,7 @@ class L10nZh extends L10n {
   String get usageV4Welcome => '按日汇总使用和模型用量，不含对话。可随时关闭。';
 
   @override
-  String get usageV4Notice => '匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。关闭后仍会发送不含内容的日活计数。';
+  String get usageV4Notice => '匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。';
 
   @override
   String get usageUpgradeLearn => '了解';
