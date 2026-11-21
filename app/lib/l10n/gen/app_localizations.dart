@@ -18752,6 +18752,42 @@ abstract class L10n {
   /// **'在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）'**
   String get liveBlockedText;
 
+  /// No description provided for @liveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止'**
+  String get liveStop;
+
+  /// No description provided for @liveStale.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停更新 · 打开 App 查看'**
+  String get liveStale;
+
+  /// No description provided for @liveIosSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'干活、等你处理时，在灵动岛和锁屏上显示宠物、进度和用时'**
+  String get liveIosSubtitle;
+
+  /// No description provided for @liveIosFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 iOS 16.2 及以上。有灵动岛的 iPhone 显示在岛上，其他机型只在锁屏上。锁屏上不显示对话标题。iOS 17 起可以在卡片上直接停止这一轮。App 被系统挂起后，卡片会标出「暂停更新」。'**
+  String get liveIosFooter;
+
+  /// No description provided for @liveIosUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 iOS 16.2 或更高版本'**
+  String get liveIosUnsupported;
+
+  /// No description provided for @liveIosBlockedText.
+  ///
+  /// In zh, this message translates to:
+  /// **'在「设置」→「DSH Go」里打开「实时活动」'**
+  String get liveIosBlockedText;
+
   /// No description provided for @localeTitle.
   ///
   /// In zh, this message translates to:

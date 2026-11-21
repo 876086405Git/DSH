@@ -86,13 +86,7 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
 
    脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`（`app/lib/state/app_info.dart`），作为诊断信息和更新状态的编译期默认版本。设置和关于页读取更新状态中的版本；原生版本读取成功且版本名可解析时，更新状态改用系统提供的 `versionName` / `versionCode`，读取失败或版本名无法解析时保留默认值。
 
-   **公测起**（GitHub Release 和公开渠道的包）打开求 star 提示，内测包不加：
-
-   ```sh
-   tooling/build-apk.sh -- --dart-define=DSH_STAR_PROMPT=true
-   ```
-
-   提示的触发条件见 `docs/design/star-prompt.md`；使用时长从装上这个包算起。
+   脚本给正式包自动打开求 star 提示（开头一行带 `· star prompt`）：`DSH_STAR_PROMPT=true` 写在 `tooling/star-prompt-on.json` 里，排在 `--` 后面的额外参数前面传给 flutter，所以额外参数里再写 `DSH_STAR_PROMPT`（行内或文件）以额外参数为准。`--beta`、`--side`、`--debug`/`--profile` 的包不加，`--no-star` 可以手动关掉。以前要手动加这个参数，最近的正式包漏了（1.3.0 确认没加，1.1.0、1.2.0 的打包记录里也没有），装这些版本的人一次都没被问过。提示的触发条件见 `docs/design/star-prompt.md`；使用时长从装上这个包算起。
 3. **确认签名**：对要发布的 arm64 APK 执行 `apksigner verify -v --min-sdk-version 21 --print-certs`。v1、v2、v3 三种签名都要是 `true`（v1 给仍读 JAR 签名的安装器和安全扫描；不加 `--min-sdk-version` 时 apksigner 按 minSdk 26 不查 v1），证书主题不得含 `CN=Android Debug`，证书 SHA-256 必须与上一版一致。验证失败时不要生成或上传 `dist/`、`update.json`。
 4. **生成资产**（改名、算校验和、写 `update.json`）。默认只收录 arm64；版本名取 pubspec，构建号用 `aapt2` 从 APK 里读。版本名不匹配或构建号还是占位的 `1` 时脚本直接报错：
 

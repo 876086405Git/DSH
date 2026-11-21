@@ -22,5 +22,11 @@
   "liveSettingsFooter": "Android 16 Live Updates. Shown on Xiaomi HyperOS 3.1+, OPPO / OnePlus ColorOS 16, Honor MagicOS 10 and Pixel; vivo's Atomic Island and Samsung's Now Bar are open only to apps the maker partners with.",
   "liveUnsupported": "This phone's system doesn't support live activities yet",
   "liveBlockedTitle": "Live activities are off for DSH Go",
-  "liveBlockedText": "Turn on live activities for DSH Go in system settings (some phones call it “Show on Live Alerts”)"
+  "liveBlockedText": "Turn on live activities for DSH Go in system settings (some phones call it “Show on Live Alerts”)",
+  "liveStop": "Stop",
+  "liveStale": "Not updating · open the app",
+  "liveIosSubtitle": "While DSH works or waits on you: your pet, progress and time in the Dynamic Island and on the lock screen",
+  "liveIosFooter": "Needs iOS 16.2 or later. iPhones with a Dynamic Island show it there; other devices only on the lock screen. The lock screen never shows the conversation's title. From iOS 17 you can stop the turn right from the card. Once iOS suspends the app, the card says it has stopped updating.",
+  "liveIosUnsupported": "Needs iOS 16.2 or later",
+  "liveIosBlockedText": "Turn on Live Activities in Settings → DSH Go"
 }

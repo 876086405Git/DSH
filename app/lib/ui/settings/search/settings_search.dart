@@ -124,7 +124,7 @@ List<SearchHit> searchSettings(
   for (final spot in spots) {
     if (!androidFeatures && SettingsIndex.androidOnly(spot) && !(ios && spot.iosToo)) continue;
     if ((androidFeatures || ios) && spot.ohosOnly) continue;
-    if (ios && (spot.iosLacks || identical(spot, Spots.notifyLive))) continue;
+    if (ios && spot.iosLacks) continue;
     final harmony = !androidFeatures && !ios;
     final langs = [
       for (final l in [zh, en])

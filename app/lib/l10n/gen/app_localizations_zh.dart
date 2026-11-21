@@ -10095,6 +10095,25 @@ class L10nZh extends L10n {
   String get liveBlockedText => '在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）';
 
   @override
+  String get liveStop => '停止';
+
+  @override
+  String get liveStale => '暂停更新 · 打开 App 查看';
+
+  @override
+  String get liveIosSubtitle => '干活、等你处理时，在灵动岛和锁屏上显示宠物、进度和用时';
+
+  @override
+  String get liveIosFooter =>
+      '需要 iOS 16.2 及以上。有灵动岛的 iPhone 显示在岛上，其他机型只在锁屏上。锁屏上不显示对话标题。iOS 17 起可以在卡片上直接停止这一轮。App 被系统挂起后，卡片会标出「暂停更新」。';
+
+  @override
+  String get liveIosUnsupported => '需要 iOS 16.2 或更高版本';
+
+  @override
+  String get liveIosBlockedText => '在「设置」→「DSH Go」里打开「实时活动」';
+
+  @override
   String get localeTitle => '语言';
 
   @override

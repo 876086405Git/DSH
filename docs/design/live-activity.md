@@ -67,10 +67,44 @@ AOSP 16.0 / QPR1 / QPR2 / 17 的 `Notification.hasPromotableCharacteristics()` �
 
 渠道 `dsh-live` 用默认重要度但不响铃、不振动：HyperOS 焦点路径上没有提升时，仍保留状态栏图标。
 
+## 3A. iOS：灵动岛和锁屏（ActivityKit，iOS 16.2+）
+
+同一个 `LivePush`，iOS 自己画。参考过 issue #1500 的做法（独立扩展 + App Group + 内联小图），这里改成：
+
+- **不加扩展。** 活动放进现有的 `CompanionWidget` 扩展：按系统版本分两个 WidgetBundle（扩展最低 iOS 15，bundle 里写不了 `if #available`）。不用新的 Bundle ID 和描述文件，重签工具处理一个扩展就够。
+- **不另起一套 Dart。** 归约、开关、文案都是安卓那套；iOS 只多带几样（`liveWith`）：主题色（浅 / 深）、按钮文字、能不能停、宠物静帧。
+- **宠物图走共享 Keychain。** 扩展读不到 Flutter 资源和 App 沙盒（导入的宠物在 Documents 里），App 用 `PetSheets` 把这个状态的第一帧画成 PNG（最长边 180 px，像素画整数倍），存进伙伴小组件已在用的 Keychain 组（`LiveArtStore`）。不用 App Group：那要每份描述文件都带上组，侧载最容易丢。同一张图只过一次通道。
+- **只在有事时出现。** 没有在跑的对话就没有卡片，不常驻一只空闲宠物。
+
+| 位置 | 显示 |
+|---|---|
+| 收起的岛 | 左：宠物；右：计时，等你时换成琥珀色「待确认 / 待回答」，做完 ✓，出错 ! |
+| 最小态 | 只有宠物，等你或出错时右上一个小点 |
+| 展开的岛 | 宠物、对话标题（脱敏）、这一步在干什么、计时；能停时下面一个「停止」 |
+| 锁屏 | 宠物、「正在思考 · 2 个对话在跑」这类不含内容的话、计时；**不显示对话标题** |
+
+- 颜色只有主题强调色一种，琥珀只给「等你处理」，红只给出错。深色（岛）用 `seedDark`。
+- 点卡片打开那个对话：`dshgo://live?…` 转成通知点击（`NotifyTaps`），和安卓一样走 `kind: live`。
+- 「停止」（iOS 17+，`LiveActivityIntent`）在 App 进程里交给 Dart，就是悬浮宠物的停止，同样的检查（宠物的对话、App 当前连着的主机）；不要求解锁。
+- iOS 只允许 App 在前台时开新活动：开不了就等回到前台再开。换对话时更新同一个活动，所以后台换对话也跟得上。
+- 用户划掉后，这一段不再出现，直到没有在跑的或换了对话。
+- App 活着时每分钟续一次过期时间；被系统挂起约 2.5 分钟后卡片变成「暂停更新」，计时变成暂停符号，不让一个可能已经停了的时钟继续走。
+- 后台跑完时，运行先从列表里消失，「做完了 / 出错了」稍后才到；而后台开不了新卡，所以这张卡最多再留 20 秒等结果，等不到才收。
+- 做完 / 出错：在锁屏留 15 分钟（显示用时），打开 App 就收掉。
+- iOS 26 上后台继续跑的一轮还会有系统自己的进度卡（`ContinuedRun`），两张卡并存。
+
+| 文件 | 作用 |
+|---|---|
+| `app/ios/CompanionWidget/LiveActivityShared.swift` | 两个 target 共用：内容状态、`LiveArtStore`、停止意图 |
+| `app/ios/CompanionWidget/LiveActivityWidget.swift` | 岛和锁屏的样子 |
+| `app/ios/Runner/IOSLiveActivity.swift` | 起、更新、结束，前台补开，续期，划掉，停止转给 Dart |
+| `app/lib/notify/live_art.dart` | 宠物静帧 |
+
 ## 4. 验证
 
-- 单测：`LiveContentTest`（JVM）、`test/notify/live_activity_test.dart`。
+- 单测：`LiveContentTest`（JVM）、`test/notify/live_activity_test.dart`、`test/notify/live_ios_test.dart`。
 - 真机：需要 Pixel（Android 16 QPR1+）、ColorOS 16、MagicOS 10 或 HyperOS 3.1+ 的设备，或 Android 16 QPR2 模拟器。检查胶囊计时、等你确认时的胶囊文字、锁屏脱敏、点击跳转、手机操控时的「停止操作」。国行 OriginOS 6 上应当什么都不发。
+- iOS 真机：带灵动岛的 iPhone（iOS 16.2+；「停止」要 17+）。检查收起 / 展开 / 最小态、锁屏不出标题、点击进对话、等你确认时变琥珀、停止能停、切走 3 分钟后的「暂停更新」、做完后锁屏留卡和打开 App 收卡、导入宠物和像素宠物的图、自签包上宠物图是否还在（Keychain 组）。
 
 ## 5. 以后可以做
 
@@ -78,4 +112,5 @@ AOSP 16.0 / QPR1 / QPR2 / 17 的 `Notification.hasPromotableCharacteristics()` �
 - **引擎解包 / 语音模型下载**：`DshService` 的进度通知改成 `ProgressStyle` Live Update，宠物沿进度条跑。
 - **手机操控等你确认**：操控中的确认弹窗也让胶囊变成「待确认」。
 - **岛上直接批准**：沿用悬浮宠物的规则，只在完整显示命令时给「允许本次 / 拒绝」，并要求解锁。
+- **iOS 后台更新**：App 被挂起后卡片只能标「暂停更新」。要在后台也跟上远程主机的进度，得由主机发 ActivityKit 推送（APNs），需要推送证书和服务端配合。
 - **厂商白名单**：vivo、小米都要求先上架各自的应用商店，OPPO 要企业认证。这是商务决定，不是技术问题。

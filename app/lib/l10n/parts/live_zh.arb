@@ -29,5 +29,11 @@
   "liveSettingsFooter": "Android 16 的实时活动（Live Updates）：小米 HyperOS 3.1+、OPPO / 一加 ColorOS 16、荣耀 MagicOS 10 和 Pixel 会显示；vivo 原子岛和三星 Now Bar 目前只对厂商合作的应用开放。",
   "liveUnsupported": "这台手机的系统还不支持实时活动",
   "liveBlockedTitle": "系统没有允许实时活动",
-  "liveBlockedText": "在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）"
+  "liveBlockedText": "在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）",
+  "liveStop": "停止",
+  "liveStale": "暂停更新 · 打开 App 查看",
+  "liveIosSubtitle": "干活、等你处理时，在灵动岛和锁屏上显示宠物、进度和用时",
+  "liveIosFooter": "需要 iOS 16.2 及以上。有灵动岛的 iPhone 显示在岛上，其他机型只在锁屏上。锁屏上不显示对话标题。iOS 17 起可以在卡片上直接停止这一轮。App 被系统挂起后，卡片会标出「暂停更新」。",
+  "liveIosUnsupported": "需要 iOS 16.2 或更高版本",
+  "liveIosBlockedText": "在「设置」→「DSH Go」里打开「实时活动」"
 }
