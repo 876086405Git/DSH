@@ -45263,7 +45263,7 @@ abstract class L10n {
   /// No description provided for @usageStatsFooter.
   ///
   /// In zh, this message translates to:
-  /// **'这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。'**
+  /// **'这只控制 dsh-go 自身的统计：功能次数、模型报告的 token、版本与设备型号。Android 还按日汇总前台使用、首次统计日期和聊天用量字段是否齐全。不含对话、角色卡、文件和账号；不控制 Google ML Kit SDK 的统计。关闭会清空未上报的数据，服务器已接收的数据无法撤回。'**
   String get usageStatsFooter;
 
   /// No description provided for @usageNoticeBody.
@@ -45277,6 +45277,18 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'新增匿名使用统计，帮助改进 DSH Go。\n不含对话和个人信息'**
   String get usageUpgradeNotice;
+
+  /// No description provided for @usageV4Welcome.
+  ///
+  /// In zh, this message translates to:
+  /// **'按日汇总使用和模型用量，不含对话。可随时关闭。'**
+  String get usageV4Welcome;
+
+  /// No description provided for @usageV4Notice.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名统计增加前台使用天数和用量字段检查，不含对话。'**
+  String get usageV4Notice;
 
   /// No description provided for @usageUpgradeLearn.
   ///

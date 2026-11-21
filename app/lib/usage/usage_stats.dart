@@ -15,14 +15,16 @@ import '../l10n/l10n.dart';
 import '../phone/phone_channel.dart';
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
+import '../state/android_features.dart';
 import '../state/phone_state.dart' show phoneChannelProvider;
 import 'usage_ledger.dart';
 import 'usage_net.dart';
+import 'usage_v4_ledger.dart';
 
 export 'usage_ledger.dart' show UsageCount;
 
 class UsageStatsState {
-  const UsageStatsState({this.loaded = false, this.enabled = true, this.noticed = false});
+  const UsageStatsState({this.loaded = false, this.enabled = true, this.noticed = false, this.v4Noticed = false});
 
   final bool loaded;
 
@@ -31,14 +33,16 @@ class UsageStatsState {
 
   /// The person has seen the switch and what it says.
   final bool noticed;
+  final bool v4Noticed;
 
   /// Counting and sending: switched on, and told about it.
   bool get collecting => loaded && enabled && noticed;
 
-  UsageStatsState copyWith({bool? loaded, bool? enabled, bool? noticed}) => UsageStatsState(
+  UsageStatsState copyWith({bool? loaded, bool? enabled, bool? noticed, bool? v4Noticed}) => UsageStatsState(
     loaded: loaded ?? this.loaded,
     enabled: enabled ?? this.enabled,
     noticed: noticed ?? this.noticed,
+    v4Noticed: v4Noticed ?? this.v4Noticed,
   );
 }
 
@@ -46,6 +50,7 @@ class UsageStatsState {
 final usageClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 final usageHttpProvider = Provider<UsageHttp>((ref) => const IoUsageHttp());
 final usageEndpointProvider = Provider<Uri>((ref) => usageEndpoint);
+final usageV4EndpointProvider = Provider<Uri?>((ref) => usageV4Endpoint);
 final usageDeviceProvider = Provider<Future<UsageDevice> Function()>((ref) => const UsageDeviceChannel().read);
 final usageLanguageProvider = Provider<String Function()>(
   (ref) =>
@@ -75,12 +80,19 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   static const iidSinceKey = 'usage_stats_iid_since';
   static const failedAtKey = 'usage_stats_failed_at';
   static const closedDayKey = 'usage_stats_closed_day';
+  static const v4NoticeKey = 'usage_stats_v4_noticed';
+  static const v4LedgerKey = 'usage_stats_v4_ledger';
 
   /// After a send failed, the next one waits at least this long.
   static const retryGap = Duration(minutes: 10);
   static const timeout = Duration(seconds: 10);
 
   var _ledger = UsageLedger();
+  var _v4 = UsageV4Ledger();
+  String? _v4Saved;
+  Future<void>? _v4Sending;
+  DateTime? _v4Failed;
+  String? _v4ClosedDay;
   String? _iid;
   DateTime? _iidSince;
   DateTime? _failedAt;
@@ -100,6 +112,8 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   (String, String?, DateTime?, DateTime?, String?)? _saved;
 
   DateTime _now() => ref.read(usageClockProvider)();
+  bool get _v4Platform => ref.read(operatingSystemProvider) == 'android';
+  bool get observesChatLogUsage => UsageBuild.active && _v4Platform && state.collecting && state.v4Noticed;
 
   @override
   UsageStatsState build() {
@@ -123,9 +137,16 @@ class UsageStatsController extends Notifier<UsageStatsState> {
         _iidSince = time(iidSinceKey);
         _failedAt = time(failedAtKey);
         _closedDay = prefs.getString(closedDayKey);
+        _v4 = UsageV4Ledger.decode(prefs.getString(v4LedgerKey));
+        _v4Saved = _v4.encode();
         _saved = (_ledger.encode(), _iid, _iidSince, _failedAt, _closedDay);
       }
-      state = UsageStatsState(loaded: true, enabled: enabled, noticed: prefs.getBool(noticedKey) ?? false);
+      state = UsageStatsState(
+        loaded: true,
+        enabled: enabled,
+        noticed: prefs.getBool(noticedKey) ?? false,
+        v4Noticed: prefs.getBool(v4NoticeKey) ?? false,
+      );
     } catch (_) {
       // No preferences backend: nothing kept, so nothing collected.
       if (ref.mounted) state = state.copyWith(loaded: true);
@@ -170,6 +191,14 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   /// [output]. Only what the provider said; nothing is estimated.
   void tokens(int input, int output) => _record((ledger, now) => ledger.tokens(input, output, now));
 
+  void chatLogUsage(Map<String, Object?>? rawUsage, {bool partial = false}) {
+    if (!observesChatLogUsage) return;
+    final now = _now();
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) _v4.foreground(now);
+    _v4.chatLog(now, rawUsage, partial: partial);
+    unawaited(_saveV4());
+  }
+
   /// The host's plugin list was read: [installed] plugins on it.
   void plugins(int installed) => _record((ledger, now) => ledger.plugins(installed, now));
 
@@ -190,9 +219,14 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   /// page): from now on the app counts, unless it is off.
   Future<void> markNoticed() async {
     await _loaded;
-    if (!ref.mounted || state.noticed) return;
-    state = state.copyWith(noticed: true);
-    await _write((prefs) => prefs.setBool(noticedKey, true));
+    if (!ref.mounted) return;
+    final v4 = _v4Platform && !state.v4Noticed;
+    if (state.noticed && !v4) return;
+    state = state.copyWith(noticed: true, v4Noticed: v4 ? true : null);
+    await _write((prefs) async {
+      await prefs.setBool(noticedKey, true);
+      if (v4) await prefs.setBool(v4NoticeKey, true);
+    });
     unawaited(foreground());
   }
 
@@ -209,12 +243,16 @@ class UsageStatsController extends Notifier<UsageStatsState> {
       _closedDay = null;
       _device = null;
       _saved = null;
+      _v4 = UsageV4Ledger();
+      _v4Saved = null;
+      _v4Failed = null;
+      _v4ClosedDay = null;
     }
     await _write((prefs) async {
       await prefs.setBool(enabledKey, enabled);
       await prefs.setBool(noticedKey, true);
       if (!enabled) {
-        for (final key in [daysKey, iidKey, iidSinceKey, failedAtKey, closedDayKey]) {
+        for (final key in [daysKey, iidKey, iidSinceKey, failedAtKey, closedDayKey, v4LedgerKey]) {
           await prefs.remove(key);
         }
       }
@@ -230,7 +268,67 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     if (!ref.mounted || !state.collecting) return;
     _ledger.touch(_now());
     _save();
-    await send();
+    if (observesChatLogUsage) {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (lifecycle == null || lifecycle == AppLifecycleState.resumed) _v4.foreground(_now());
+      unawaited(_saveV4());
+      await Future.wait([send(), _v4Sending ??= _sendV4().whenComplete(() => _v4Sending = null)]);
+    } else {
+      await send();
+    }
+  }
+
+  Future<void> _saveV4() {
+    final snapshot = _v4.encode();
+    if (snapshot == _v4Saved) return _writes;
+    _v4Saved = snapshot;
+    return _write((prefs) => prefs.setString(v4LedgerKey, snapshot));
+  }
+
+  Future<void> _sendV4() async {
+    final ledger = _v4;
+    bool live() => ref.mounted && identical(ledger, _v4) && observesChatLogUsage;
+    final now = _now();
+    final today = usageV4Day(now);
+    final endpoint = ref.read(usageV4EndpointProvider);
+    final due = ledger.due(now);
+    await _saveV4();
+    if (!live() || endpoint == null || due.isEmpty || _v4ClosedDay == today) return;
+    if (_v4Failed case final failed? when !now.isBefore(failed) && now.difference(failed) < retryGap) return;
+    final cached = _device;
+    final device = cached != null && cached.app.isNotEmpty ? cached : await ref.read(usageDeviceProvider)();
+    if (!live() || device.app.isEmpty) return;
+    final http = ref.read(usageHttpProvider);
+    for (final day in due) {
+      final body = ledger.days[day]!.seal(day, device);
+      await _saveV4();
+      if (!live()) return;
+      int? status;
+      try {
+        status = await http.post(endpoint, body, timeout: timeout);
+      } on Exception {
+        // Retry the same sealed body after the usual foreground backoff.
+      }
+      if (!live()) return;
+      switch (status) {
+        case 204:
+          ledger.days.remove(day);
+          _v4Failed = null;
+          await _saveV4();
+          if (!live()) return;
+        case 404:
+          _v4ClosedDay = today;
+          return;
+        case 400 || 413:
+          debugPrint('Usage v4 report refused ($status)');
+          ledger.days.remove(day);
+          await _saveV4();
+          if (!live()) return;
+        default:
+          _v4Failed = now;
+          return;
+      }
+    }
   }
 
   /// Sends the days that are due, oldest first, one request each; stops at

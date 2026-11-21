@@ -1506,12 +1506,38 @@ class ChatController extends Notifier<ChatState> {
   /// reconnect replays nothing twice. A call that reported no usage adds
   /// nothing.
   void _countTokens(DshEvent event) {
-    if (event is! AssistantMessageEvent || event.seq <= _transcript.cursor || !ref.mounted) return;
+    if (event is! SessionLogEvent || event.seq <= _transcript.cursor || !ref.mounted) return;
+    if (event is! AssistantMessageEvent && event is! AssistantAttemptEvent) return;
+    final stats = ref.read(usageStatsProvider.notifier);
+    if (stats.observesChatLogUsage) {
+      final partial = event is! AssistantMessageEvent || event.interrupted;
+      final raw = event.data['usage'];
+      stats.chatLogUsage(
+        raw is Map<String, Object?>
+            ? raw
+            : partial
+            ? _attemptUsage(event.data['stream'])
+            : null,
+        partial: partial,
+      );
+    }
+    if (event is! AssistantMessageEvent) return;
     final usage = event.usage;
     if (usage == null) return;
-    ref
-        .read(usageStatsProvider.notifier)
-        .tokens(usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0), usage.outputTokens);
+    stats.tokens(usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0), usage.outputTokens);
+  }
+
+  // Keep field presence: UsageChunk normalizes missing fields to zero for rendering.
+  Map<String, Object?>? _attemptUsage(Object? stream) {
+    if (stream is! List) return null;
+    for (final record in stream.reversed) {
+      if (record is! Map || record['type'] != 'chunk') continue;
+      final frame = record['chunk'];
+      if (frame is Map && frame['type'] == 'usage' && frame['usage'] is Map<String, Object?>) {
+        return frame['usage'] as Map<String, Object?>;
+      }
+    }
+    return null;
   }
 
   /// Retry the same text and attachment selections. Picking again is a new

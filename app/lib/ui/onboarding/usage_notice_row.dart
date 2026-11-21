@@ -65,7 +65,7 @@ class _UsageNoticeRowState extends ConsumerState<UsageNoticeRow> {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      l10n.usageNoticeBody,
+                      ref.watch(operatingSystemProvider) == 'android' ? l10n.usageV4Welcome : l10n.usageNoticeBody,
                       style: theme.textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
                     ),
                   ],

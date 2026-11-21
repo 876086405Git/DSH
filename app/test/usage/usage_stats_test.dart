@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/phone/phone_channel.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/usage/usage_ledger.dart';
 import 'package:dsh_app/usage/usage_net.dart';
 import 'package:dsh_app/usage/usage_stats.dart';
@@ -35,17 +36,21 @@ Future<ProviderContainer> start({
   String? engine,
   PhoneChannel? phone,
   UsageDevice phoneFacts = testDevice,
+  String? platform,
 }) async {
   SharedPreferences.setMockInitialValues(prefs);
   final container = ProviderContainer(
-    overrides: usageOverrides(
-      clock: () => now,
-      http: http,
-      onResumes: (onResume) => resume = onResume,
-      engine: engine,
-      phone: phone,
-      device: phoneFacts,
-    ),
+    overrides: [
+      ...usageOverrides(
+        clock: () => now,
+        http: http,
+        onResumes: (onResume) => resume = onResume,
+        engine: engine,
+        phone: phone,
+        device: phoneFacts,
+      ),
+      if (platform != null) operatingSystemProvider.overrideWithValue(platform),
+    ],
   );
   addTearDown(container.dispose);
   container.read(usageStatsProvider);
@@ -92,12 +97,21 @@ class _FirstHeld extends FakeUsageHttp {
   }
 }
 
+class _V4Unavailable extends FakeUsageHttp {
+  @override
+  Future<int> post(Uri url, String json, {Duration timeout = const Duration(seconds: 10)}) async {
+    final status = await super.post(url, json, timeout: timeout);
+    return url.path.endsWith('/v4') ? 404 : status;
+  }
+}
+
 Future<Map<String, Object?>> stored() async {
   final prefs = await SharedPreferences.getInstance();
   return {for (final k in prefs.getKeys()) k: prefs.get(k)};
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final wasActive = UsageBuild.active;
   setUp(() {
     UsageBuild.active = true;
@@ -106,6 +120,30 @@ void main() {
     resume = null;
   });
   tearDown(() => UsageBuild.active = wasActive);
+
+  test('Android v4 has its own notice, old endpoint remains live, and opting out drops both ledgers', () async {
+    now = DateTime.utc(2026, 10, 28, 9);
+    http = _V4Unavailable();
+    final c = await start(prefs: noticed, platform: 'android');
+    c.usage.chatLogUsage({'inputTokens': 123});
+    expect((await stored()).containsKey(UsageStatsController.v4LedgerKey), isFalse);
+    await c.usage.markNoticed();
+    await settle();
+    c.usage.chatLogUsage({'inputTokens': 76, 'outputTokens': 0});
+    now = now.add(const Duration(days: 1));
+    await c.comeBack();
+    final v4 = http.urls.indexWhere((url) => url.path.endsWith('/v4'));
+    expect(v4, isNonNegative);
+    expect(http.urls.any((url) => url.path.endsWith('/v1')), isTrue);
+    expect((http.requests[v4]['chat_log'] as Map)['counts'], [1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    expect((await stored()).containsKey(UsageStatsController.v4LedgerKey), isTrue);
+    final sent = http.requests.length;
+    await c.usage.setEnabled(false);
+    now = now.add(const Duration(days: 1));
+    await c.comeBack();
+    expect(http.requests, hasLength(sent));
+    expect((await stored()).containsKey(UsageStatsController.v4LedgerKey), isFalse);
+  });
 
   test('nothing is counted or sent before the person has seen the switch', () async {
     final c = await start();

@@ -30,7 +30,12 @@ const _keyPad = 8.0;
 ///   │                     了解    关闭  │
 ///   ╰──────────────────────────────────╯
 /// ```
-SnackBar usageNoticeBar(BuildContext context, {required VoidCallback onLearn, required VoidCallback onOff}) {
+SnackBar usageNoticeBar(
+  BuildContext context, {
+  required VoidCallback onLearn,
+  required VoidCallback onOff,
+  bool v4 = false,
+}) {
   final l10n = context.l10n;
   final scheme = Theme.of(context).colorScheme;
   final style = TextButton.styleFrom(
@@ -51,7 +56,7 @@ SnackBar usageNoticeBar(BuildContext context, {required VoidCallback onLearn, re
       children: [
         Padding(
           padding: const EdgeInsetsDirectional.only(end: _keyPad),
-          child: Text(l10n.usageUpgradeNotice, key: const ValueKey('usage-upgrade-text')),
+          child: Text(v4 ? l10n.usageV4Notice : l10n.usageUpgradeNotice, key: const ValueKey('usage-upgrade-text')),
         ),
         const SizedBox(height: 2),
         Row(
@@ -107,7 +112,8 @@ class _UsageUpgradeNoticeState extends ConsumerState<UsageUpgradeNotice> {
     super.dispose();
   }
 
-  bool _owed(UsageStatsState s) => s.loaded && s.enabled && !s.noticed;
+  bool _owed(UsageStatsState s) =>
+      s.loaded && s.enabled && (!s.noticed || (ref.read(operatingSystemProvider) == 'android' && !s.v4Noticed));
 
   void _schedule(UsageStatsState s) {
     if (_shown || _timer != null || !_owed(s)) return;
@@ -129,10 +135,10 @@ class _UsageUpgradeNoticeState extends ConsumerState<UsageUpgradeNotice> {
     _shown = true;
     ref.read(launchNoticeShownProvider.notifier).set(true);
     final usage = ref.read(usageStatsProvider.notifier);
-    unawaited(usage.markNoticed());
     messenger.showSnackBar(
       usageNoticeBar(
         context,
+        v4: ref.read(operatingSystemProvider) == 'android',
         onLearn: () {
           messenger.hideCurrentSnackBar();
           if (mounted) unawaited(openSpot(context, Spots.usageStats));
@@ -143,6 +149,7 @@ class _UsageUpgradeNoticeState extends ConsumerState<UsageUpgradeNotice> {
         },
       ),
     );
+    unawaited(usage.markNoticed());
   }
 
   @override

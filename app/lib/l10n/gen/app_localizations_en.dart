@@ -25995,13 +25995,19 @@ class L10nEn extends L10n {
 
   @override
   String get usageStatsFooter =>
-      'This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics.';
+      'This controls dsh-go’s own stats: feature counts, reported tokens, versions and device model. Android also summarizes days in the foreground, the first day of collection and whether reply token fields were reported. No chats, character cards, files or accounts are included. This does not control Google ML Kit SDK stats. Turning it off clears unsent data; reports already received cannot be withdrawn.';
 
   @override
   String get usageNoticeBody => 'No chats or personal info.\nTurn off anytime.';
 
   @override
   String get usageUpgradeNotice => 'New: anonymous usage stats, to help improve DSH Go.\nNo chats or personal info.';
+
+  @override
+  String get usageV4Welcome => 'Daily usage and token counts. No chats. Turn off anytime.';
+
+  @override
+  String get usageV4Notice => 'Anonymous stats now include days in use and checks for missing token counts. No chats.';
 
   @override
   String get usageUpgradeLearn => 'Learn more';
