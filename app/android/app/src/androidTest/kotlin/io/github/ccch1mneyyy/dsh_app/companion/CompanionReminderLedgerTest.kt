@@ -224,10 +224,42 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         }
     }
 
+    fun testMapUpgradeKeepsReminderRecoveryAndNeverDispatchesThePendingMap() {
+        f.revision(1)
+        f.installLookupSchema(); f.installHostSchema(); f.installMapSchema()
+        f.sql.execSQL("""INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,
+            item_no,kind,room_mode,current_rev,created_at_ms,updated_at_ms)
+            VALUES('m','archive','map-source','light:s',3,'phone.map_open','light',1,0,0)""")
+        f.sql.execSQL("""INSERT INTO companion_task_revisions(task_id,task_rev,operation,command_message_id,
+            command_source_rev,command_item_no,request_fingerprint,source_said_at_utc,source_offset_minutes,
+            executor_id,state,wait_reason,created_at_ms,updated_at_ms)
+            VALUES('m',1,'create','map-source',1,3,'map-fingerprint',?,480,?,
+            'unknown','map_handoff_pending',0,0)""", arrayOf(f.now, EXECUTOR))
+        f.sql.execSQL("""INSERT INTO companion_map_revisions(task_id,task_rev,address,target_kind)
+            VALUES('m',1,'科创路 18 号 & 东门','choice')""")
+        f.sql.execSQL("""INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,
+            event_kind,executor_id,occurred_at_ms) VALUES('m',1,'map.handoff','original-map',
+            'claimed',?,?)""", arrayOf(EXECUTOR, f.now))
+        f.reopen()
+        assertEquals(14, f.sql.version)
+        assertEquals(listOf("t"), f.ledger.recoveryBatch(EXECUTOR, f.now, "", 50))
+        assertNull(f.ledger.current("m")); assertNull(f.ledger.revision(ReminderKey("m", 1)))
+        assertTrue(f.runner().resume("m")); assertEquals(0, f.effects.registered.size)
+        assertTrue(f.runner().resume("t")); assertEquals(listOf(ReminderKey("t", 1)), f.effects.registered)
+        f.sql.rawQuery("SELECT state,wait_reason FROM companion_task_revisions WHERE task_id='m'", null).use {
+            assertTrue(it.moveToFirst()); assertEquals("unknown", it.getString(0))
+            assertEquals("map_handoff_pending", it.getString(1))
+        }
+        f.sql.rawQuery("SELECT address FROM companion_map_revisions WHERE task_id='m'", null).use {
+            assertTrue(it.moveToFirst()); assertEquals("科创路 18 号 & 东门", it.getString(0))
+        }
+        assertEquals(1L, f.count("task_id='m'"))
+    }
+
     fun testSchemaGateStillRejectsUnmigratedAndUnknownFutureStores() {
         f.revision(1)
         try {
-            for (version in listOf(10, 14)) {
+            for (version in listOf(10, 15)) {
                 f.sql.version = version
                 try { f.probe(); fail("Unsupported version $version was opened") }
                 catch (_: IllegalStateException) { }
@@ -315,6 +347,14 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
             } finally { sql.endTransaction() }
         }
         fun reopen() { ledger.close(); ledger = CompanionReminderLedger.open(isolated) }
+        fun installMapSchema() {
+            sql.beginTransaction()
+            try {
+                MAP_SCHEMA.split(';').filter { it.isNotBlank() }.forEach { sql.execSQL(it) }
+                sql.version = 14
+                sql.setTransactionSuccessful()
+            } finally { sql.endTransaction() }
+        }
         override fun close() { ledger.close(); sql.close(); check(directory.deleteRecursively()) }
     }
 
@@ -390,6 +430,36 @@ CREATE TABLE companion_task_receipts (
   UNIQUE(task_id,task_rev,step_key,attempt_id,event_kind)
 );
 CREATE INDEX companion_task_receipts_task ON companion_task_receipts(task_id,runner_receipt_seq);
+        """.trimIndent()
+        // Literal v14 extension from G SDK; native never migrates a database.
+        private val MAP_SCHEMA = """
+CREATE TABLE companion_map_revisions (
+  task_id TEXT NOT NULL,
+  task_rev INTEGER NOT NULL,
+  address TEXT NOT NULL CHECK(length(address)>0),
+  place_name TEXT,
+  target_kind TEXT NOT NULL CHECK(target_kind IN ('selected','default','choice')),
+  package_name TEXT,
+  component_name TEXT,
+  package_uid INTEGER,
+  target_label TEXT,
+  reopens_task_id TEXT,
+  PRIMARY KEY(task_id,task_rev),
+  FOREIGN KEY(task_id,task_rev)
+    REFERENCES companion_task_revisions(task_id,task_rev) ON DELETE CASCADE,
+  CHECK(
+    (target_kind='choice' AND package_name IS NULL AND component_name IS NULL
+      AND package_uid IS NULL AND target_label IS NULL)
+    OR
+    (target_kind IN ('selected','default') AND package_name IS NOT NULL
+      AND component_name IS NOT NULL AND package_uid IS NOT NULL AND package_uid>=0)
+  )
+);
+CREATE TABLE companion_map_scopes (
+  scope_id TEXT PRIMARY KEY,
+  source_session_id TEXT NOT NULL,
+  closed INTEGER NOT NULL CHECK(closed IN(0,1))
+);
         """.trimIndent()
         // Literal v13 extension from the F SDK, not a native migrator.
         private val HOST_SCHEMA = """
