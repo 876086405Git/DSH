@@ -1,0 +1,290 @@
+{
+  "scope": "ACTUAL_SOURCE_LOOPBACK_SYNTHETIC_IO",
+  "capabilities": {
+    "v": 1,
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "durableAcceptance": true,
+    "kinds": [
+      "host.find_draft"
+    ],
+    "sourceRead": true,
+    "artifactRead": true,
+    "afterExit": [
+      "continue"
+    ],
+    "pauseBehavior": "waiting",
+    "reason": null
+  },
+  "folder": {
+    "v": 1,
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+    "displayPath": "/workspace/scratch/777dbfd32332/companion-impl1/find-source-Zrtty5/notes"
+  },
+  "create": {
+    "v": 1,
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "taskId": "find-one",
+    "taskRev": 1,
+    "kind": "host.find_draft",
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "args": {
+      "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+      "scope": "currentLevel",
+      "localDate": "2026-11-20",
+      "timeZone": "UTC",
+      "dateBy": "modified",
+      "extensions": [
+        "md",
+        "txt"
+      ]
+    },
+    "deadlineAtMs": null,
+    "afterExit": "continue",
+    "allowQueue": true
+  },
+  "createReply": {
+    "v": 1,
+    "taskId": "find-one",
+    "hostExecutionId": "0c71beec-9a3b-4773-b6d6-cf35258ac9ef",
+    "kind": "host.find_draft",
+    "taskRev": 1,
+    "runnerReceiptSeq": 1,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "running",
+    "waitReason": null,
+    "cancelRequested": false,
+    "createdAtMs": 1795277837372,
+    "updatedAtMs": 1795277837379,
+    "agreement": {
+      "args": {
+        "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+        "scope": "currentLevel",
+        "localDate": "2026-11-20",
+        "timeZone": "UTC",
+        "dateBy": "modified",
+        "extensions": [
+          "md",
+          "txt"
+        ]
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795277837379,
+        "agreement": {
+          "args": {
+            "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+            "scope": "currentLevel",
+            "localDate": "2026-11-20",
+            "timeZone": "UTC",
+            "dateBy": "modified",
+            "extensions": [
+              "md",
+              "txt"
+            ]
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [],
+    "artifacts": [],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 0,
+      "heldMs": 0
+    },
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "originalCreatePresent": true
+  },
+  "complete": {
+    "v": 1,
+    "taskId": "find-one",
+    "hostExecutionId": "0c71beec-9a3b-4773-b6d6-cf35258ac9ef",
+    "kind": "host.find_draft",
+    "taskRev": 1,
+    "runnerReceiptSeq": 4,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "partial",
+    "waitReason": "find_incomplete",
+    "cancelRequested": false,
+    "createdAtMs": 1795277837372,
+    "updatedAtMs": 1795277837408,
+    "agreement": {
+      "args": {
+        "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+        "scope": "currentLevel",
+        "localDate": "2026-11-20",
+        "timeZone": "UTC",
+        "dateBy": "modified",
+        "extensions": [
+          "md",
+          "txt"
+        ]
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795277837379,
+        "agreement": {
+          "args": {
+            "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+            "scope": "currentLevel",
+            "localDate": "2026-11-20",
+            "timeZone": "UTC",
+            "dateBy": "modified",
+            "extensions": [
+              "md",
+              "txt"
+            ]
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [
+      {
+        "taskRev": 1,
+        "stepKey": "selectInputs",
+        "attemptId": "be315d30-6004-4a7d-beff-06c869db5a07",
+        "state": "done",
+        "startedAtMs": 1795277837388,
+        "finishedAtMs": 1795277837399,
+        "reason": null,
+        "result": {
+          "completion": {
+            "selectedCount": 2
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "readInputs",
+        "attemptId": "83f8d03e-638b-4391-8e78-4fd2c8e8a2dd",
+        "state": "partial",
+        "startedAtMs": 1795277837399,
+        "finishedAtMs": 1795277837408,
+        "reason": "find_incomplete",
+        "result": {
+          "completion": {
+            "scope": {
+              "folderRef": "2fa6b431-87de-45e6-816a-6d83e981174a",
+              "scope": "currentLevel",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "extensions": [
+                "md",
+                "txt"
+              ],
+              "displayPath": "/workspace/scratch/777dbfd32332/companion-impl1/find-source-Zrtty5/notes",
+              "startAtMs": 1795132800000,
+              "endAtMs": 1795219200000
+            },
+            "coverage": {
+              "entriesChecked": 2,
+              "supportedFilesChecked": 2,
+              "matchingCandidates": 2,
+              "enumerationComplete": true,
+              "entryLimitReached": false,
+              "candidateLimitReached": false,
+              "gaps": []
+            },
+            "matches": [
+              {
+                "sourceRef": "45fe0c4e-0798-4908-8e0e-a1c5beeb9eee",
+                "relativePath": "unsafe\\name.md",
+                "size": 10,
+                "modifiedAtMs": 1795176000000,
+                "modifiedOffsetSeconds": 0,
+                "version": "27:788743:10:1795176000000000000:1795277837361921549",
+                "openable": false,
+                "reason": "original_unavailable"
+              },
+              {
+                "sourceRef": "65e7fdf7-763c-4edf-8e8a-2a04664fab33",
+                "relativePath": "ordinary.md",
+                "size": 11,
+                "modifiedAtMs": 1795176000000,
+                "modifiedOffsetSeconds": 0,
+                "version": "27:788745:11:1795176000000000000:1795277837361921549",
+                "openable": true,
+                "reason": null
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "artifacts": [],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 17,
+      "heldMs": 0
+    },
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "originalCreatePresent": true
+  },
+  "sourceAvailable": {
+    "v": 1,
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "taskId": "find-one",
+    "hostExecutionId": "0c71beec-9a3b-4773-b6d6-cf35258ac9ef",
+    "sourceRef": "65e7fdf7-763c-4edf-8e8a-2a04664fab33",
+    "taskRev": 1,
+    "stepKey": "readInputs",
+    "relativePath": "ordinary.md",
+    "version": "27:788745:11:1795176000000000000:1795277837361921549",
+    "mediaType": "text/markdown",
+    "content": "good draft\n",
+    "reason": null,
+    "status": "available"
+  },
+  "sourceUnavailable": {
+    "v": 1,
+    "hostStoreId": "93ae745b-4254-405e-a0de-47960eacc036",
+    "taskId": "find-one",
+    "hostExecutionId": "0c71beec-9a3b-4773-b6d6-cf35258ac9ef",
+    "sourceRef": "45fe0c4e-0798-4908-8e0e-a1c5beeb9eee",
+    "taskRev": 1,
+    "stepKey": "readInputs",
+    "relativePath": "unsafe\\name.md",
+    "version": "27:788743:10:1795176000000000000:1795277837361921549",
+    "mediaType": "text/markdown",
+    "content": null,
+    "reason": "original_unavailable",
+    "status": "unknown"
+  }
+}

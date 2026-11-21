@@ -1,4 +1,4 @@
-/// Durable, explicit notes tasks on the originally selected Host. These
+/// Durable, explicit tasks on the originally selected Host. These
 /// methods never run a Session prompt or retry a mutation automatically.
 library;
 
@@ -13,11 +13,14 @@ const _path = '/dsh-go/v1/companion/tasks';
 typedef _Row = Map<String, Object?>;
 
 class CompanionTasksCapability {
-  const CompanionTasksCapability._(this._owner, this.hostStoreId, this.notes, this.artifactRead, this.reason);
+  const CompanionTasksCapability._(this._owner, this.hostStoreId, this.notes, this.findDraft,
+    this.artifactRead, this.sourceRead, this.reason);
   final DshClient _owner;
   final String? hostStoreId;
   final bool notes;
+  final bool findDraft;
   final bool artifactRead;
+  final bool sourceRead;
   final String? reason;
 }
 
@@ -47,8 +50,10 @@ extension CompanionHostTasksApi on DshClient {
         map['artifactRead'] is! bool ||
         (map['hostStoreId'] != null && !_id(map['hostStoreId'])) ||
         kinds is! List ||
-        kinds.any((kind) => kind != 'host.notes_to_todo') ||
+        kinds.any((kind) => !const ['host.notes_to_todo', 'host.find_draft'].contains(kind)) ||
         (kinds.isNotEmpty && (map['durableAcceptance'] != true || !_id(map['hostStoreId']))) ||
+        (map.containsKey('sourceRead') && map['sourceRead'] is! bool) ||
+        (kinds.contains('host.find_draft') && map['sourceRead'] != true) ||
         map['afterExit'] is! List ||
         jsonEncode(map['afterExit']) != '["continue"]' ||
         map['pauseBehavior'] != 'waiting' ||
@@ -59,7 +64,9 @@ extension CompanionHostTasksApi on DshClient {
       this,
       map['hostStoreId'] as String?,
       kinds.contains('host.notes_to_todo'),
+      kinds.contains('host.find_draft'),
       map['artifactRead']! as bool,
+      map['sourceRead'] == true,
       map['reason'] as String?,
     );
   }
@@ -71,8 +78,8 @@ extension CompanionHostTasksApi on DshClient {
     String path, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    if (!identical(host._owner, this) || !host.notes || host.hostStoreId == null) {
-      throw const DshRemoteException('companion/task-unavailable', 'Notes tasks are unavailable');
+    if (!identical(host._owner, this) || (!host.notes && !host.findDraft) || host.hostStoreId == null) {
+      throw const DshRemoteException('companion/task-unavailable', 'Directory tasks are unavailable');
     }
     final response = await _connection(this).postBytes(
       '$_path/folders',
@@ -169,6 +176,34 @@ extension CompanionHostTasksApi on DshClient {
         !const ['text/markdown', 'text/plain'].contains(map['mediaType']) ||
         (map['status'] == 'available' ? map['content'] is! String : map['content'] != null) ||
         (map['reason'] != null && map['reason'] is! String)) {
+      _invalid();
+    }
+    return map;
+  }
+
+  /// Read only an original source registered in this task's saved report.
+  /// This is not a path API, a task wake, or a replacement-version fallback.
+  Future<Map<String, Object?>> readCompanionHostSource({required String hostStoreId, required String taskId,
+    required String hostExecutionId, required String sourceRef,
+    Duration timeout = const Duration(seconds: 15)}) async {
+    final response = await _connection(this).get('$_path/${Uri.encodeComponent(taskId)}/sources/${Uri.encodeComponent(sourceRef)}',
+      query: {'hostStoreId': hostStoreId, 'hostExecutionId': hostExecutionId},
+      timeout: timeout, followRedirects: false, maxResponseBytes: 1024 * 1024);
+    final map = _decode(response);
+    _success(response, map);
+    _identity(map, hostStoreId, taskId);
+    if (map['hostExecutionId'] != hostExecutionId || map['sourceRef'] != sourceRef ||
+        map['taskRev'] is! int || (map['taskRev']! as int) < 1 || map['stepKey'] != 'readInputs' ||
+        map['relativePath'] is! String || (map['relativePath']! as String).isEmpty ||
+        map['version'] is! String || (map['version']! as String).isEmpty ||
+        !const ['available', 'missing', 'changed', 'not_readable', 'unknown'].contains(map['status']) ||
+        !const ['text/markdown', 'text/plain'].contains(map['mediaType']) ||
+        (map['status'] == 'available' ? map['content'] is! String : map['content'] != null) ||
+        !map.containsKey('reason') || (map['status'] == 'available' ? map['reason'] != null :
+          map['reason'] is! String || (map['reason']! as String).isEmpty)) {
+      _invalid();
+    }
+    if (map['status'] == 'available' && utf8.encode(map['content']! as String).length > 65536) {
       _invalid();
     }
     return map;

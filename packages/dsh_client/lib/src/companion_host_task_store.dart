@@ -1,10 +1,10 @@
 part of 'companion_memory_store.dart';
 
-const _hostTaskInvalid = DshRemoteException('companion/task-invalid-request', 'Invalid notes task agreement', {
+const _hostTaskInvalid = DshRemoteException('companion/task-invalid-request', 'Invalid Host task agreement', {
   'status': 400,
 });
 
-/// One explicit notes task. Remote effects remain in the original Host's
+/// Explicit notes and draft-finding tasks. Remote effects remain in the original Host's
 /// complete snapshot; these commands never run a generic tool or chat loop.
 extension CompanionHostTaskStore on CompanionMemoryStore {
   MemoryRow createNotesTaskFromMessage({
@@ -16,17 +16,52 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     String? hostSessionId,
     required MemoryRow agreement,
     MemoryRow directoryLabels = const {},
+  }) => _createHostTaskFromMessage(kind: 'host.notes_to_todo',
+    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
+    agreement: agreement, directoryLabels: directoryLabels,
+  );
+
+  MemoryRow createFindDraftTaskFromMessage({
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required String roomMode,
+    required String hostKey,
+    required String directoryHostStoreId,
+    String? hostSessionId,
+    required MemoryRow agreement,
+    MemoryRow directoryLabels = const {},
+  }) => _createHostTaskFromMessage(kind: 'host.find_draft',
+    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
+    agreement: agreement, directoryLabels: directoryLabels,
+    directoryHostStoreId: directoryHostStoreId,
+  );
+
+  MemoryRow _createHostTaskFromMessage({
+    required String kind,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required String roomMode,
+    required String hostKey,
+    String? hostSessionId,
+    required MemoryRow agreement,
+    MemoryRow directoryLabels = const {},
+    String? directoryHostStoreId,
   }) {
     if (itemNo < 0 ||
         expectedSourceRev < 1 ||
         hostKey.trim().isEmpty ||
         !const ['light', 'full'].contains(roomMode) ||
-        (hostSessionId != null && hostSessionId.trim().isEmpty)) {
+        (hostSessionId != null && hostSessionId.trim().isEmpty) ||
+        (kind == 'host.find_draft' && !_hostId(directoryHostStoreId))) {
       throw _hostTaskInvalid;
     }
-    final normalized = _notesAgreement(agreement);
+    final normalized = _hostAgreement(agreement, kind);
     final fingerprint = _taskFingerprint([
-      'notes.create',
+      kind == 'host.notes_to_todo' ? 'notes.create' : 'find.create',
       messageId,
       expectedSourceRev,
       itemNo,
@@ -34,6 +69,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       hostKey,
       hostSessionId,
       _canonicalJson(normalized),
+      if (kind == 'host.find_draft') directoryHostStoreId,
     ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
@@ -41,23 +77,27 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         return hostTask(repeated['task_id']! as String)!;
       }
       final source = _taskSource(messageId, expectedSourceRev);
+      if (kind == 'host.find_draft' &&
+          (source['zone_id'] != (normalized['args']! as MemoryRow)['timeZone'] || source['offset_seconds'] is! int)) {
+        throw _hostTaskInvalid;
+      }
       final id = _createId();
       final at = _checkedNow();
       _db.execute(
         '''
         INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,item_no,
           kind,room_mode,host_key,host_session_id,current_rev,created_at_ms,updated_at_ms)
-        VALUES(?,?,?,?,?,'host.notes_to_todo',?,?,?,1,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,1,?,?)
       ''',
-        [id, archive['id'], messageId, source['session_id'], itemNo, roomMode, hostKey, hostSessionId, at, at],
+        [id, archive['id'], messageId, source['session_id'], itemNo, kind, roomMode, hostKey, hostSessionId, at, at],
       );
-      _insertNotesRevision(id, 1, 'create', source, itemNo, fingerprint, hostKey, normalized, at: at);
-      _db.execute('INSERT INTO companion_host_tasks(task_id) VALUES(?)', [id]);
+      _insertHostRevision(id, 1, 'create', source, itemNo, fingerprint, hostKey, normalized, at: at);
+      _db.execute('INSERT INTO companion_host_tasks(task_id,host_store_id) VALUES(?,?)', [id, directoryHostStoreId]);
       final request = <String, Object?>{
         'v': 1,
         'taskId': id,
         'taskRev': 1,
-        'kind': 'host.notes_to_todo',
+        'kind': kind,
         'origin': {'sourceSessionId': source['session_id'], 'messageId': messageId, 'itemNo': itemNo},
         'hostSessionId': hostSessionId,
         ...normalized,
@@ -80,10 +120,39 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int itemNo,
     required MemoryRow agreement,
     MemoryRow? directoryLabels,
+  }) => _amendHostTask(kind: 'host.notes_to_todo',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    agreement: agreement, directoryLabels: directoryLabels,
+  );
+
+  MemoryRow amendFindDraftTask({
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required MemoryRow agreement,
+    MemoryRow? directoryLabels,
+  }) => _amendHostTask(kind: 'host.find_draft',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    agreement: agreement, directoryLabels: directoryLabels,
+  );
+
+  MemoryRow _amendHostTask({
+    required String kind,
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required MemoryRow agreement,
+    MemoryRow? directoryLabels,
   }) {
-    final normalized = _notesAgreement(agreement);
+    final normalized = _hostAgreement(agreement, kind);
     final fingerprint = _taskFingerprint([
-      'notes.amend',
+      kind == 'host.notes_to_todo' ? 'notes.amend' : 'find.amend',
       taskId,
       expectedTaskRev,
       messageId,
@@ -96,18 +165,25 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       if (repeated != null) {
         return hostTask(repeated['task_id']! as String)!;
       }
-      final current = _notesCurrent(taskId, expectedTaskRev);
-      if (current['cancel_requested'] == 1 || const ['done', 'partial', 'cancelled'].contains(current['state'])) {
+      final current = _hostCurrent(taskId, expectedTaskRev, kind);
+      if (current['cancel_requested'] == 1 || current['state'] == 'cancelled' ||
+          (kind == 'host.notes_to_todo' && const ['done', 'partial'].contains(current['state']))) {
         throw _conflict;
       }
       final source = _taskSource(messageId, expectedSourceRev);
       if (source['session_id'] != current['source_session_id'] || itemNo < 0) {
         throw _hostTaskInvalid;
       }
+      if (kind == 'host.find_draft') {
+        final originalArgs = (current['agreement']! as MemoryRow)['args']! as MemoryRow;
+        if ((normalized['args']! as MemoryRow)['timeZone'] != originalArgs['timeZone']) {
+          throw _hostTaskInvalid;
+        }
+      }
       final revision = expectedTaskRev + 1;
       final operation = _createId();
       final at = _checkedNow();
-      _insertNotesRevision(
+      _insertHostRevision(
         taskId,
         revision,
         'amend',
@@ -129,6 +205,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           _canonicalJson({
             'v': 1,
             'operationId': operation,
+            if (kind == 'host.find_draft') 'kind': kind,
             'expectedTaskRev': expectedTaskRev,
             'taskRev': revision,
             'changes': normalized,
@@ -147,9 +224,32 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required String messageId,
     required int expectedSourceRev,
     required int itemNo,
+  }) => _cancelHostTask(kind: 'host.notes_to_todo',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  );
+
+  MemoryRow cancelFindDraftTask({
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+  }) => _cancelHostTask(kind: 'host.find_draft',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  );
+
+  MemoryRow _cancelHostTask({
+    required String kind,
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
   }) {
     final fingerprint = _taskFingerprint([
-      'notes.cancel',
+      kind == 'host.notes_to_todo' ? 'notes.cancel' : 'find.cancel',
       taskId,
       expectedTaskRev,
       messageId,
@@ -161,7 +261,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       if (repeated != null) {
         return hostTask(repeated['task_id']! as String)!;
       }
-      final current = _notesCurrent(taskId, expectedTaskRev);
+      final current = _hostCurrent(taskId, expectedTaskRev, kind);
       if (current['cancel_requested'] == 1) {
         throw _conflict;
       }
@@ -181,7 +281,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       final revision = expectedTaskRev + 1;
       final operation = _createId();
       final at = _checkedNow();
-      _insertNotesRevision(
+      _insertHostRevision(
         taskId,
         revision,
         'cancel',
@@ -203,7 +303,13 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           taskId,
           revision,
           operation,
-          _canonicalJson({'v': 1, 'operationId': operation, 'expectedTaskRev': expectedTaskRev, 'taskRev': revision}),
+          _canonicalJson({
+            'v': 1,
+            'operationId': operation,
+            if (kind == 'host.find_draft') 'kind': kind,
+            'expectedTaskRev': expectedTaskRev,
+            'taskRev': revision,
+          }),
         ],
       );
       _db.execute('UPDATE companion_tasks SET current_rev=?,updated_at_ms=? WHERE task_id=?', [revision, at, taskId]);
@@ -213,7 +319,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
 
   MemoryRow? hostTask(String taskId) {
     final current = task(taskId);
-    if (current == null || current['kind'] != 'host.notes_to_todo') {
+    if (current == null || !_hostTaskKinds.contains(current['kind'])) {
       return null;
     }
     final binding = _db.select('SELECT * FROM companion_host_tasks WHERE task_id=?', [taskId]).single;
@@ -229,7 +335,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         .single;
     final request = Map<String, Object?>.from(jsonDecode(command['request_json']! as String) as Map);
     final agreement = command['operation'] == 'create'
-        ? <String, Object?>{for (final key in _notesAgreementKeys) key: request[key]}
+        ? <String, Object?>{for (final key in _hostAgreementKeys) key: request[key]}
         : Map<String, Object?>.from(request['changes']! as Map);
     return {
       ...current,
@@ -239,6 +345,51 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       'directory_labels': jsonDecode(command['display_json']! as String),
       'snapshot': binding['snapshot_json'] == null ? null : jsonDecode(binding['snapshot_json']! as String),
     };
+  }
+
+  /// Unfinished find tasks for this actual Host, including an earlier light
+  /// room and a pending remote cancellation. This query grants no dispatch.
+  List<MemoryRow> pendingFindDraftTasks({required String hostKey}) => [
+    for (final row in _db.select('''
+      SELECT t.task_id FROM companion_tasks t
+      JOIN companion_task_revisions r ON r.task_id=t.task_id AND r.task_rev=t.current_rev
+      WHERE t.kind='host.find_draft' AND t.host_key=?
+        AND r.state IN ('queued','waiting','running','unknown')
+      ORDER BY t.created_at_ms,t.task_id
+    ''', [hostKey]))
+      hostTask(row['task_id']! as String)!,
+  ];
+
+  /// Previously selected source directories on this original Host. These
+  /// saved labels are choices for a new explicit task, not an access grant.
+  List<MemoryRow> hostTaskDirectories({required String hostKey}) {
+    final rows = _db.select('''
+      SELECT h.host_store_id,c.request_json,c.display_json,r.operation
+      FROM companion_tasks t JOIN companion_host_tasks h ON h.task_id=t.task_id
+      JOIN companion_host_commands c ON c.task_id=t.task_id
+      JOIN companion_task_revisions r ON r.task_id=c.task_id AND r.task_rev=c.task_rev
+      WHERE t.host_key=? AND t.kind IN ('host.notes_to_todo','host.find_draft')
+        AND h.host_store_id IS NOT NULL AND r.operation IN ('create','amend')
+      ORDER BY t.updated_at_ms DESC,c.task_rev DESC,t.task_id
+    ''', [hostKey]);
+    final seen = <(String, String)>{};
+    final result = <MemoryRow>[];
+    for (final row in rows) {
+      final request = jsonDecode(row['request_json']! as String) as MemoryRow;
+      final display = jsonDecode(row['display_json']! as String) as MemoryRow;
+      final path = display['source'];
+      if (path is! String || path.isEmpty) {
+        continue;
+      }
+      final args = (row['operation'] == 'create' ? request['args'] :
+        (request['changes']! as MemoryRow)['args'])! as MemoryRow;
+      final hostStoreId = row['host_store_id']! as String;
+      final folderRef = args['folderRef']! as String;
+      if (seen.add((hostStoreId, folderRef))) {
+        result.add({'hostStoreId': hostStoreId, 'folderRef': folderRef, 'displayPath': path});
+      }
+    }
+    return result;
   }
 
   List<MemoryRow> hostTaskCommands(String taskId) => [
@@ -383,6 +534,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       if (current == null ||
           current['host_key'] != hostKey ||
           snapshot['taskId'] != taskId ||
+          snapshot['kind'] != current['kind'] ||
           current['host_store_id'] == null ||
           snapshot['hostStoreId'] != current['host_store_id'] ||
           (current['host_execution_id'] != null && snapshot['hostExecutionId'] != current['host_execution_id'])) {
@@ -442,12 +594,21 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         }
         for (final old in previous['steps']! as List) {
           final step = old as Map;
-          if (!(snapshot['steps']! as List).cast<Map<String, Object?>>().any(
+          final matching = (snapshot['steps']! as List).cast<Map<String, Object?>>().where(
             (item) =>
                 item['taskRev'] == step['taskRev'] &&
                 item['stepKey'] == step['stepKey'] &&
                 item['attemptId'] == step['attemptId'],
-          )) {
+          );
+          if (matching.length != 1) {
+            throw _conflict;
+          }
+          final completion = (step['result'] as Map<String, Object?>?)?['completion'];
+          if (current['kind'] == 'host.find_draft' &&
+              step['stepKey'] == 'readInputs' &&
+              completion != null &&
+              _canonicalJson((matching.single['result'] as Map<String, Object?>?)?['completion']) !=
+                  _canonicalJson(completion)) {
             throw _conflict;
           }
         }
@@ -489,15 +650,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     });
   }
 
-  MemoryRow _notesCurrent(String taskId, int revision) {
+  MemoryRow _hostCurrent(String taskId, int revision, String kind) {
     final row = hostTask(taskId);
-    if (row == null || row['task_rev'] != revision) {
+    if (row == null || row['kind'] != kind || row['task_rev'] != revision) {
       throw _conflict;
     }
     return row;
   }
 
-  void _insertNotesRevision(
+  void _insertHostRevision(
     String taskId,
     int revision,
     String operation,
@@ -544,12 +705,14 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   }
 }
 
-const _notesAgreementKeys = ['args', 'deadlineAtMs', 'afterExit', 'allowQueue'];
+const _hostTaskKinds = ['host.notes_to_todo', 'host.find_draft'];
+const _hostAgreementKeys = ['args', 'deadlineAtMs', 'afterExit', 'allowQueue'];
+const _findArgsKeys = ['folderRef', 'scope', 'localDate', 'timeZone', 'dateBy', 'extensions'];
 
-MemoryRow _notesAgreement(MemoryRow input) {
+MemoryRow _hostAgreement(MemoryRow input, String kind) {
   final rawArgs = input['args'];
-  if (input.length != _notesAgreementKeys.length ||
-      !_notesAgreementKeys.every(input.containsKey) ||
+  if (input.length != _hostAgreementKeys.length ||
+      !_hostAgreementKeys.every(input.containsKey) ||
       rawArgs is! Map<String, Object?> ||
       (input['deadlineAtMs'] != null &&
           (input['deadlineAtMs'] is! int ||
@@ -560,31 +723,44 @@ MemoryRow _notesAgreement(MemoryRow input) {
     throw _hostTaskInvalid;
   }
   final args = Map<String, Object?>.from(rawArgs);
-  const fields = ['folderRef', 'localDate', 'timeZone', 'dateBy', 'outputDirRef', 'outputName', 'writeMode'];
+  final fields = kind == 'host.find_draft'
+      ? _findArgsKeys
+      : const ['folderRef', 'localDate', 'timeZone', 'dateBy', 'outputDirRef', 'outputName', 'writeMode'];
   if (args.length != fields.length ||
       !fields.every(args.containsKey) ||
-      fields.any((key) => args[key] is! String || (args[key]! as String).trim().isEmpty) ||
-      args['dateBy'] != 'modified' ||
-      args['writeMode'] != 'createNew') {
+      fields.where((key) => key != 'extensions').any(
+        (key) => args[key] is! String || (args[key]! as String).trim().isEmpty,
+      ) ||
+      args['dateBy'] != 'modified') {
     throw _hostTaskInvalid;
   }
-  for (final key in fields) {
+  for (final key in fields.where((key) => key != 'extensions')) {
     _messageText(args[key]! as String);
   }
   final date = args['localDate']! as String;
   final day = DateTime.tryParse('${date}T00:00:00Z');
-  final name = args['outputName']! as String;
   if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
       day == null ||
-      day.toIso8601String().substring(0, 10) != date ||
-      name == '.' ||
-      name == '..' ||
-      name.contains('/') ||
-      name.contains('\\') ||
-      !RegExp(r'\.(md|txt)$').hasMatch(name)) {
+      day.toIso8601String().substring(0, 10) != date) {
     throw _hostTaskInvalid;
   }
-  return {for (final key in _notesAgreementKeys) key: key == 'args' ? args : input[key]};
+  if (kind == 'host.find_draft') {
+    final extensions = args['extensions'];
+    if (!_hostId(args['folderRef']) || args['scope'] != 'currentLevel' ||
+        (args['timeZone']! as String).length > 128 || RegExp(r'^[+-]').hasMatch(args['timeZone']! as String) ||
+        extensions is! List<Object?> || extensions.isEmpty || extensions.toSet().length != extensions.length ||
+        extensions.any((value) => !const ['md', 'txt'].contains(value))) {
+      throw _hostTaskInvalid;
+    }
+    args['extensions'] = [for (final value in const ['md', 'txt']) if (extensions.contains(value)) value];
+  } else {
+    final name = args['outputName']! as String;
+    if (args['writeMode'] != 'createNew' || name == '.' || name == '..' ||
+        name.contains('/') || name.contains('\\') || !RegExp(r'\.(md|txt)$').hasMatch(name)) {
+      throw _hostTaskInvalid;
+    }
+  }
+  return {for (final key in _hostAgreementKeys) key: key == 'args' ? args : input[key]};
 }
 
 bool _hostId(Object? value) => value is String && value.isNotEmpty && value.length <= 128 && !value.contains('\u0000');
@@ -620,7 +796,7 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   if (!requiredKeys.every(snapshot.containsKey) ||
       snapshot['v'] != 1 ||
       !['hostStoreId', 'taskId', 'hostExecutionId'].every((key) => _hostId(snapshot[key])) ||
-      snapshot['kind'] != 'host.notes_to_todo' ||
+      !_hostTaskKinds.contains(snapshot['kind']) ||
       !_hostCount(snapshot['taskRev']) ||
       snapshot['taskRev'] == 0 ||
       !_hostCount(snapshot['runnerReceiptSeq']) ||
@@ -639,6 +815,7 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       (snapshot['agreement'] != null && snapshot['agreement'] is! Map)) {
     throw _hostTaskInvalid;
   }
+  final kind = snapshot['kind']! as String;
   final origin = snapshot['origin'];
   if (snapshot['originalCreatePresent'] == true) {
     if (origin is! Map ||
@@ -658,10 +835,11 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     throw _hostTaskInvalid;
   }
   if (snapshot['agreement'] != null) {
-    _notesAgreement(Map<String, Object?>.from(snapshot['agreement']! as Map));
+    _hostAgreement(Map<String, Object?>.from(snapshot['agreement']! as Map), kind);
   }
   final revision = snapshot['taskRev']! as int;
   final revisions = <int>{};
+  final agreements = <int, MemoryRow>{};
   for (final value in snapshot['revisions']! as List) {
     if (value is! Map ||
         !_hostCount(value['taskRev']) ||
@@ -675,13 +853,15 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       throw _hostTaskInvalid;
     }
     if (value['agreement'] != null) {
-      _notesAgreement(Map<String, Object?>.from(value['agreement']! as Map));
+      agreements[value['taskRev']! as int] = _hostAgreement(Map<String, Object?>.from(value['agreement']! as Map), kind);
     }
   }
   if (!revisions.contains(revision)) {
     throw _hostTaskInvalid;
   }
   final steps = <String>{};
+  final findReports = <int, bool>{};
+  final sourceRefs = <String>{};
   for (final value in snapshot['steps']! as List) {
     if (value is! Map ||
         !revisions.contains(value['taskRev']) ||
@@ -697,6 +877,18 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         !value.containsKey('result') ||
         (value['result'] != null && value['result'] is! Map)) {
       throw _hostTaskInvalid;
+    }
+    if (kind == 'host.find_draft' && value['stepKey'] == 'readInputs') {
+      final completion = (value['result'] as Map<String, Object?>?)?['completion'];
+      if (completion != null) {
+        final stepRevision = value['taskRev']! as int;
+        if (value['finishedAtMs'] == null || !const ['done', 'partial'].contains(value['state']) ||
+            findReports.containsKey(stepRevision) || agreements[stepRevision] == null) {
+          throw _hostTaskInvalid;
+        }
+        findReports[stepRevision] = _validateFindReport(completion,
+          agreements[stepRevision]!['args']! as MemoryRow, sourceRefs);
+      }
     }
   }
   final artifacts = <String>{};
@@ -717,7 +909,12 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       throw _hostTaskInvalid;
     }
   }
-  if (const ['done', 'partial'].contains(snapshot['state']) && artifacts.isEmpty) {
+  if (kind == 'host.find_draft') {
+    if (artifacts.isNotEmpty || (const ['done', 'partial'].contains(snapshot['state']) &&
+        (findReports[revision] == null || findReports[revision] != (snapshot['state'] == 'done')))) {
+      throw _hostTaskInvalid;
+    }
+  } else if (const ['done', 'partial'].contains(snapshot['state']) && artifacts.isEmpty) {
     throw _hostTaskInvalid;
   }
   final approval = snapshot['approval'];
@@ -737,6 +934,61 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     throw _hostTaskInvalid;
   }
 }
+
+bool _validateFindReport(Object? value, MemoryRow args, Set<String> sourceRefs) {
+  if (value is! MemoryRow || value['scope'] is! MemoryRow || value['coverage'] is! MemoryRow ||
+      value['matches'] is! List<Object?>) {
+    throw _hostTaskInvalid;
+  }
+  final scope = value['scope']! as MemoryRow;
+  final coverage = value['coverage']! as MemoryRow;
+  final matches = value['matches']! as List<Object?>;
+  if (_findArgsKeys.any((key) => _canonicalJson(scope[key]) != _canonicalJson(args[key])) ||
+      scope['displayPath'] is! String || (scope['displayPath']! as String).isEmpty ||
+      !_findEpoch(scope['startAtMs']) || !_findEpoch(scope['endAtMs']) ||
+      (scope['endAtMs']! as int) <= (scope['startAtMs']! as int) ||
+      !const ['entriesChecked', 'supportedFilesChecked', 'matchingCandidates'].every((key) => _hostCount(coverage[key])) ||
+      (coverage['entriesChecked']! as int) > 200 ||
+      (coverage['supportedFilesChecked']! as int) > (coverage['entriesChecked']! as int) ||
+      (coverage['matchingCandidates']! as int) > 21 ||
+      (coverage['matchingCandidates']! as int) > (coverage['supportedFilesChecked']! as int) ||
+      !const ['enumerationComplete', 'entryLimitReached', 'candidateLimitReached'].every((key) => coverage[key] is bool) ||
+      coverage['gaps'] is! List<Object?> || matches.length > 20 ||
+      matches.length != ((coverage['matchingCandidates']! as int) > 20 ? 20 : coverage['matchingCandidates']) ||
+      (coverage['entryLimitReached'] == true && coverage['entriesChecked'] != 200) ||
+      (coverage['candidateLimitReached'] == true) != (coverage['matchingCandidates'] == 21) ||
+      (coverage['enumerationComplete'] == true &&
+        (coverage['entryLimitReached'] == true || coverage['candidateLimitReached'] == true))) {
+    throw _hostTaskInvalid;
+  }
+  for (final gap in coverage['gaps']! as List<Object?>) {
+    if (gap is! MemoryRow || !gap.containsKey('relativePath') || !_hostNullableText(gap['relativePath']) ||
+        gap['reason'] is! String || (gap['reason']! as String).isEmpty) {
+      throw _hostTaskInvalid;
+    }
+  }
+  var allOpenable = true;
+  for (final match in matches) {
+    if (match is! MemoryRow || !_hostId(match['sourceRef']) || !sourceRefs.add(match['sourceRef']! as String) ||
+        match['relativePath'] is! String || (match['relativePath']! as String).isEmpty ||
+        RegExp(r'[/\x00]').hasMatch(match['relativePath']! as String) ||
+        !_hostCount(match['size']) || !_findEpoch(match['modifiedAtMs']) ||
+        (match['modifiedAtMs']! as int) < (scope['startAtMs']! as int) ||
+        (match['modifiedAtMs']! as int) >= (scope['endAtMs']! as int) ||
+        match['modifiedOffsetSeconds'] is! int || (match['modifiedOffsetSeconds']! as int).abs() > 86400 ||
+        match['version'] is! String || (match['version']! as String).isEmpty ||
+        match['openable'] is! bool || !match.containsKey('reason') ||
+        (match['openable'] == true ? match['reason'] != null || (match['size']! as int) > 65536 :
+          match['reason'] is! String || (match['reason']! as String).isEmpty)) {
+      throw _hostTaskInvalid;
+    }
+    allOpenable = allOpenable && match['openable'] == true;
+  }
+  return coverage['enumerationComplete'] == true &&
+    (coverage['gaps']! as List<Object?>).isEmpty && allOpenable;
+}
+
+bool _findEpoch(Object? value) => value is int && value.abs() <= 8640000000000000;
 
 // The Host's complete snapshot is authoritative for remote effects. Its
 // watermark is independent of the phone-wide task receipt AUTOINCREMENT.
