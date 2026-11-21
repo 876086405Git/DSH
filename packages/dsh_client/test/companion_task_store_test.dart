@@ -484,7 +484,7 @@ void main() {
     restoreOldMemorySchema(database, 10);
     expect(database.select('PRAGMA table_info(memory_messages)').map((row) => row['name']), isNot(contains('zone_id')));
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 11);
+    expect(database.select('PRAGMA user_version').single['user_version'], 12);
     expect(store.messages().single['zone_id'], isNull);
     expect(store.messages().single['offset_seconds'], isNull);
     expect(store.messages().single['said_at_utc'], source['said_at_utc']);

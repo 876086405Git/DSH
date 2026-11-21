@@ -3,6 +3,13 @@ import 'package:sqlite3/sqlite3.dart';
 /// Reconstruct a real previous schema before exercising the production upgrade.
 /// Changing only user_version would leave new columns and hide migration bugs.
 void restoreOldMemorySchema(Database database, int version) {
+  if (version < 12) {
+    database.execute('DROP TABLE companion_lookup_attempts');
+    for (final column in ['lookup_place_name', 'lookup_city', 'lookup_question', 'lookup_deadline_ms',
+      'lookup_result_json', 'lookup_result_fingerprint']) {
+      database.execute('ALTER TABLE companion_task_revisions DROP COLUMN $column');
+    }
+  }
   if (version < 11) {
     database.execute('DROP TABLE companion_task_receipts');
     database.execute('DROP TABLE companion_task_revisions');

@@ -287,7 +287,7 @@ void main() {
     restoreOldMemorySchema(database, 9);
     expect(database.select("SELECT name FROM sqlite_master WHERE name='memory_card_cleanup_sources'"), isEmpty);
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 11);
+    expect(database.select('PRAGMA user_version').single['user_version'], 12);
     expect(origins(old['id'] as String), ['old']);
     store.editMessage(id: 'old', expectedSourceRev: 1, text: '我今天不喝咖啡。');
     store.deleteMessage(id: 'old', expectedSourceRev: 2);
