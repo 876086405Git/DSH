@@ -126,7 +126,8 @@ void main() {
 
   Future<void> close(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
-    await tester.pump();
+    // dart:io keeps an idle loopback connection for 15 s on the fake clock.
+    await tester.pump(const Duration(seconds: 16));
   }
 
   for (final status in ['available', 'missing', 'changed', 'unknown']) {
