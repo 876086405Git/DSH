@@ -13,6 +13,8 @@ import 'companion_usage_api.dart';
 import 'errors.dart';
 import 'json.dart' show uuidV4;
 
+part 'companion_task_store.dart';
+
 const _conflict = DshRemoteException('companion/conflict', 'Companion memory changed; read it again', {'status': 409});
 const _cleanupUnknown = DshRemoteException(
   'companion/cleanup-source-unknown',
@@ -28,8 +30,9 @@ class CompanionMemoryStore {
       _createId = createId ?? uuidV4 {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
+      _db.execute('PRAGMA busy_timeout = 1000');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 10) {
+      if (version > 11) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -209,6 +212,14 @@ class CompanionMemoryStore {
               AND NOT EXISTS(SELECT 1 FROM memory_card_sources s WHERE s.card_id=memory_cards.id)
           ''');
           _db.execute('PRAGMA user_version = 10');
+        });
+      }
+      if (version < 11) {
+        _transaction(() {
+          _db.execute('ALTER TABLE memory_messages ADD COLUMN zone_id TEXT');
+          _db.execute('ALTER TABLE memory_messages ADD COLUMN offset_seconds INTEGER');
+          _db.execute(_taskSchema);
+          _db.execute('PRAGMA user_version = 11');
         });
       }
       _transaction(() {
@@ -494,12 +505,17 @@ class CompanionMemoryStore {
     String scope = 'real',
     required int saidAtUtc,
     required int offsetMinutes,
+    String? zoneId,
+    int? offsetSeconds,
   }) {
     _messageText(text);
     if (id.trim().isEmpty ||
         sessionId.trim().isEmpty ||
         !const ['user', 'assistant'].contains(role) ||
         !const ['real', 'story'].contains(scope) ||
+        (zoneId != null && (zoneId.isEmpty || zoneId.trim() != zoneId)) ||
+        (offsetSeconds != null &&
+            (offsetSeconds < -64800 || offsetSeconds > 64800 || offsetSeconds ~/ 60 != offsetMinutes)) ||
         saidAtUtc < 0 ||
         saidAtUtc > 8640000000000000) {
       throw const DshRemoteException('companion/invalid-request', 'Invalid companion source', {'status': 400});
@@ -518,7 +534,9 @@ class CompanionMemoryStore {
             row['role'] != role ||
             row['scope'] != scope ||
             row['said_at_utc'] != saidAtUtc ||
-            row['offset_minutes'] != offsetMinutes) {
+            row['offset_minutes'] != offsetMinutes ||
+            row['zone_id'] != zoneId ||
+            row['offset_seconds'] != offsetSeconds) {
           throw _conflict;
         }
         return Map<String, Object?>.from(row);
@@ -528,9 +546,9 @@ class CompanionMemoryStore {
       _db.execute(
         '''
         INSERT INTO memory_messages(id,session_id,first_seq,source_rev,event_seq,role,scope,text,
-          said_at_utc,offset_minutes) VALUES(?,?,?,1,?,?,?,?,?,?)
+          said_at_utc,offset_minutes,zone_id,offset_seconds) VALUES(?,?,?,1,?,?,?,?,?,?,?,?)
       ''',
-        [id, sessionId, sequence, sequence, role, scope, text, saidAtUtc, offsetMinutes],
+        [id, sessionId, sequence, sequence, role, scope, text, saidAtUtc, offsetMinutes, zoneId, offsetSeconds],
       );
       _queueMessage(id, sequence, 1, role: role, scope: scope, firstSeq: sequence, at: at);
       _advanceCursor();

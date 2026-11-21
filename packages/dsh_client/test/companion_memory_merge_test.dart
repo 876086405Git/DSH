@@ -106,7 +106,7 @@ void main() {
       final receipts = store.requests();
       restoreOldMemorySchema(database, version);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 10);
+      expect(database.select('PRAGMA user_version').single['user_version'], 11);
       expect(store.cards(), before);
       expect(store.archive, meta);
       expect(store.initiativeRecord(), initiative);

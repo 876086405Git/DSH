@@ -1982,7 +1982,7 @@ void main() {
       final originalArchive = store.archive;
       restoreOldMemorySchema(database, 2);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 10);
+      expect(database.select('PRAGMA user_version').single['user_version'], 11);
       expect(store.archive, originalArchive);
       expect(store.cards().single, card);
       expect(store.messages().single['text'], '我学长笛');
@@ -2099,7 +2099,7 @@ void main() {
         throwsA(isA<DshRemoteException>()),
       );
       expect(store.requests(), isEmpty);
-      expect(database.select('PRAGMA user_version').single['user_version'], 10);
+      expect(database.select('PRAGMA user_version').single['user_version'], 11);
     });
 
     test('v3 upgrade preserves sources and existing once-only local receipts', () {
