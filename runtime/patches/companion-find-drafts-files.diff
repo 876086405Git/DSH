@@ -1,0 +1,75 @@
+--- a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+@@ -1,6 +1,6 @@
+ import { createHash } from "node:crypto";
+ import { constants as fsConstants } from "node:fs";
+-import { rmdir, statfs, unlink } from "node:fs/promises";
++import { opendir, rmdir, statfs, unlink } from "node:fs/promises";
+ import { applyHunks } from "@deepseek-ai/dsh-fs-patch";
+ import { constants } from "node:buffer";
+ import { once } from "node:events";
+@@ -912,6 +912,64 @@
+ 			}
+ 			return { directory: current.directory, entries };
+ 		});
++	}
++	/** Bound find-draft enumeration: at most 200 inspected entries and 20 matching candidates. */
++	async dshGoListDrafts(directory, { startAtMs, endAtMs, extensions }, signal) {
++		if (typeof directory?.identity !== "string" || !directory.identity)
++			throw new FsError("draft list requires the bound directory identity", "FS_NOT_OBSERVED");
++		let observed;
++		try {
++			return await companionWithDirectory(this, directory, signal, async current => {
++				const entries = [], coverage = { entriesChecked: 0, supportedFilesChecked: 0,
++					matchingCandidates: 0, enumerationComplete: false,
++					entryLimitReached: false, candidateLimitReached: false, gaps: [] };
++				const stream = await opendir(current.path, { bufferSize: 1 });
++				try {
++					while (true) {
++						throwIfAborted(signal, "draft list");
++						let entry;
++						try { entry = await stream.read(); }
++						catch (error) {
++							throwIfAborted(signal, "draft list");
++							coverage.gaps.push({ relativePath: null, reason: "enumeration_unavailable" });
++							break;
++						}
++						if (entry === null) { coverage.enumerationComplete = true; break; }
++						// The 201st entry is an existence sentinel; do not stat or open it.
++						if (coverage.entriesChecked === 200) { coverage.entryLimitReached = true; break; }
++						coverage.entriesChecked++;
++						const extension = /\.([^.]+)$/u.exec(entry.name)?.[1].toLowerCase();
++						if (!extensions.includes(extension)) continue;
++						let info;
++						try { info = companionFileInfo(await lstat(join(current.path, entry.name), { bigint: true })); }
++						catch (error) {
++							throwIfAborted(signal, "draft list");
++							coverage.gaps.push({ relativePath: entry.name, reason: "metadata_unavailable" });
++							continue;
++						}
++						if (info.type !== "file") continue;
++						coverage.supportedFilesChecked++;
++						if (info.modifiedAtMs < startAtMs || info.modifiedAtMs >= endAtMs) continue;
++						coverage.matchingCandidates++;
++						// Candidate 21 proves truncation only. It never becomes a readable source.
++						if (coverage.matchingCandidates === 21) { coverage.candidateLimitReached = true; break; }
++						entries.push({ name: entry.name, ...info });
++					}
++				} finally { await stream.close(); }
++				observed = { directory: current.directory, entries, coverage };
++				return observed;
++			});
++		} catch (error) {
++			// A path replaced after this anchored scan does not erase observed coverage.
++			// Later candidate reads still use the old directory identity and will refuse the new object.
++			if (!observed) throw error;
++			throwIfAborted(signal, "draft list");
++			const changed = ["FS_STALE_VERSION", "FS_NOT_DIRECTORY", "FS_NOT_FOUND", "ENOENT", "ENOTDIR", "ELOOP"].includes(error?.code);
++			const unavailable = ["FS_PERMISSION_DENIED", "FS_IO_ERROR", "EACCES", "EPERM", "EIO"].includes(error?.code);
++			if (!changed && !unavailable) throw error;
++			observed.coverage.gaps.push({ relativePath: null, reason: changed ? "directory_changed" : "directory_unavailable" });
++			return observed;
++		}
+ 	}
+ 	/** Read the selected whole version through one no-follow descriptor, under the task's byte cap. */
+ 	async dshGoReadNote(directory, entry, maxBytes, signal) {

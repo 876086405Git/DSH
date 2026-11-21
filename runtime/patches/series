@@ -165,6 +165,7 @@ companion-task-storage.diff
 # Public lookup: direct observation and complete-input answer estimate.
 companion-public-lookup-observer.diff
 companion-lookup-answer-window.diff
+companion-find-drafts-files.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff

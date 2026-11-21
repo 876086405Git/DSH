@@ -531,8 +531,8 @@
     "ohos-workspace-edit.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "c5b65fe177a245f667e77e87ed1e39ee674e56f30fa0b0f0e3d9b5cf983618b7",
-          "before": "880a87ea690d1f7f5f195a3048c545e9cdbff72c4dd7e21508249069e97acac9"
+          "before": "cb2b3d740f935ac0e20600df841a3ebf1e0bc95c783c687f537c447766bafa0c",
+          "after": "90165c2103eaa152883e77b42a277021a2b8ee7b3a13e85dc6b3478c1ae3924f"
         },
         "node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js": {
           "after": "be457e123f63d9b44c1bb310ebb064d69d9c994310b36f4edb737323457d2482",
@@ -543,8 +543,8 @@
     "ohos-workspace-grant-paths.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "880a87ea690d1f7f5f195a3048c545e9cdbff72c4dd7e21508249069e97acac9",
-          "before": "3d8a31573f7b4a411110a181441624c6f173157cd2f9c112505849a878e8e4e2"
+          "before": "24d7ab45cea046840da34475447cacc7f71053c3a2bf52925a6872b54dca3eaa",
+          "after": "cb2b3d740f935ac0e20600df841a3ebf1e0bc95c783c687f537c447766bafa0c"
         },
         "node_modules/@deepseek-ai/dsh-working-directory/lib/index.js": {
           "after": "167c67034bde5de5862e99ddd27a42d6d690fc42d2cc8748ed58cedf06c01b50",
@@ -2465,6 +2465,14 @@
           "before": "a1ad048cbbb7caefe5471c583f076aa8e393f534efbc5b11b625308096efdace"
         }
       }
+    },
+    "companion-find-drafts-files.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "before": "3d8a31573f7b4a411110a181441624c6f173157cd2f9c112505849a878e8e4e2",
+          "after": "24d7ab45cea046840da34475447cacc7f71053c3a2bf52925a6872b54dca3eaa"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2633,7 +2641,8 @@
       "companion-notes-files.diff",
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
-      "companion-lookup-answer-window.diff"
+      "companion-lookup-answer-window.diff",
+      "companion-find-drafts-files.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2800,6 +2809,7 @@
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff",
+      "companion-find-drafts-files.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
