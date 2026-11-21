@@ -2059,6 +2059,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   bool _isMemoryControl(String input) =>
       _memoryOwner != null && parseMemoryControl(input, _memoryOwner!.store.cards()) != null;
 
+  bool _isReminderControl(Iterable<CompanionReminderPart> parts) =>
+      parts.any((part) => part.command != null && part.command!.operation != 'create');
+
   Future<bool> _handleMemoryControl(CompanionMemoryOwner memory, MemoryRow source, String raw) async {
     final cards = memory.store.cards(includeInactive: true);
     final control = parseMemoryControl(raw, cards, topicControls: memory.store.topicControls());
@@ -2130,8 +2133,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final reminderParts = parseCompanionReminders(raw);
     final reminder = reminderParts.any((part) => part.command != null);
     final reminderClock = reminderParts.any((part) => part.command != null && part.command!.operation != 'clarify');
-    final control = _isMemoryControl(raw) || reminderParts.any((part) =>
-      part.command != null && part.command!.operation != 'create');
+    final control = _isMemoryControl(raw) || _isReminderControl(reminderParts);
     if (text.isEmpty || ((_sending || _lightReply != null) && !control)) return;
     if (control) {
       _retireLight(discard: true);
@@ -3682,7 +3684,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                     focus: _focus,
                     hint: l10n.companionInputHint(name),
                     running: _running,
-                    busy: _sending && !_isMemoryControl(_input.text),
+                    busy: _sending && !_isMemoryControl(_input.text) &&
+                        !_isReminderControl(parseCompanionReminders(_input.text)),
                     listening: _voice.active,
                     voiceAvailable: _voice.available,
                     onSend: _send,

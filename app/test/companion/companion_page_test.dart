@@ -640,10 +640,23 @@ void main() {
           final accepted = memory.store.tasks();
           expect(accepted, hasLength(after == 'accepted then leave' ? 1 : 0));
           if (after == 'cancel') {
+            final cancelledSource = Completer<void>();
+            void changed() {
+              if (!cancelledSource.isCompleted &&
+                  memory.store.messages().any((row) => row['text'] == '不用提醒了')) {
+                cancelledSource.complete();
+              }
+            }
+            memory.addListener(changed);
+            await tester.enterText(find.byType(TextField), '我午后练长笛');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
             await tester.enterText(find.byType(TextField), '不用提醒了');
             await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             await tester.tap(find.byIcon(AppIcons.send).last);
-            await tester.pump();
+            await settleMixed(tester, cancelledSource.future);
+            memory.removeListener(changed);
             final cancellation = memory.lastReceipt;
             expect(identical(cancellation, operation), isFalse);
             await settleMixed(tester, cancellation);
