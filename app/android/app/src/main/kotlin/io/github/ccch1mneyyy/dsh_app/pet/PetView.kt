@@ -58,6 +58,9 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
 
         /** A visibility notification actually delivered by the window system; not an occlusion guarantee. */
         fun onShownChanged(shown: Boolean)
+
+        /** The outgoing picture is gone; its part of the window can be released. */
+        fun onBlendEnd()
     }
 
     private val paint = Paint().apply { isFilterBitmap = false; isAntiAlias = false; isDither = false }
@@ -73,6 +76,7 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
             field = value
             if (!value && fromAnim != null) {
                 fromAnim = null
+                post { listener.onBlendEnd() }
                 invalidate()
             }
         }
@@ -122,6 +126,9 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
 
     /** The animation on screen (null before the first sheet arrives). */
     val shown: PetAnimation? get() = if (companionGeometry == null) anim else null
+
+    /** The previous animation still drawn during a crossfade. */
+    val fadingFrom: PetAnimation? get() = fromAnim
 
     fun setSprites(loaded: PetSprites.Loaded?) {
         sprites = loaded
@@ -213,7 +220,11 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
             canvas.restoreToCount(layer)
             postInvalidateOnAnimation()
         } else {
-            fromAnim = null
+            if (from != null) {
+                fromAnim = null
+                // Resize after drawing, even when the player next wakes seconds from now.
+                post { listener.onBlendEnd() }
+            }
             drawCell(canvas, s, a, cell, paint)
         }
     }
