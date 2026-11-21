@@ -19,6 +19,21 @@ BUILD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILD)
 
 
+# Original production function from the pinned tawc path.c. The fake archive
+# must expose the real patch site, even when the compiler itself is mocked.
+PATH_C = """static long prod_readlink(void *ctx, const char *suffix,
+\t\t\t  char *out, size_t out_cap)
+{
+\t(void)ctx;
+\tif (!suffix || suffix[0] == 0) return TAWC_EINVAL;
+\tif (tawcroot_rootfs_fd < 0)    return TAWC_EBADF;
+\tlong n = TAWC_RAW(TAWC_SYS_readlinkat, tawcroot_rootfs_fd,
+\t\t\t  (long)suffix, (long)out, (long)out_cap, 0, 0);
+\treturn n;
+}
+"""
+
+
 def synthetic_elf(abi, *, machine=None, alignment=16384, needed=None, entry_delta=512):
     """ELF headers only; nothing executable."""
     _, expected_machine, base = BUILD.ABIS[abi]
@@ -47,12 +62,15 @@ class TawcrootBuildTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.runtime = self.root / "runtime"
         (self.runtime / "tawcroot").mkdir(parents=True)
+        self.patch = (RUNTIME / "tawcroot/bind-aware-oracle.diff").read_bytes()
+        (self.runtime / "tawcroot/bind-aware-oracle.diff").write_bytes(self.patch)
         self.source = json.loads((RUNTIME / "tawcroot/source.json").read_text())
         self.archive = self.root / "fixture.zip"
         prefix = self.source["archiveRoot"] + "/"
         with zipfile.ZipFile(self.archive, "w") as zipped:
             for name in self.source["cSources"] + ["include/example.h"]:
-                zipped.writestr(prefix + "tawcroot/" + name, "/* fixture */\n")
+                zipped.writestr(prefix + "tawcroot/" + name,
+                                PATH_C if name == "src/path.c" else "/* fixture */\n")
             zipped.writestr(prefix + "LICENSE.MIT", "MIT fixture\n")
             zipped.writestr(prefix + "tawcroot/tests/example.c", "not production\n")
             zipped.writestr(prefix + "app/example.kt", "not part of this build\n")
@@ -69,6 +87,9 @@ class TawcrootBuildTests(unittest.TestCase):
 
     def fake_tools(self, elf=synthetic_elf):
         def run(argv, **kwargs):
+            if "-c" in argv and argv[argv.index("-c") + 1] == "src/path.c":
+                compiled = (Path(kwargs["cwd"]) / "src/path.c").read_text()
+                self.assertIn("return TAWC_ENOENT;", compiled)
             out = Path(argv[argv.index("-o") + 1]) if "-o" in argv else None
             if out is not None and out.name == "libtawcroot.so":
                 abi = out.parent.name
@@ -111,6 +132,17 @@ class TawcrootBuildTests(unittest.TestCase):
         self.assertFalse((src / "tests").exists())
         self.assertFalse((self.root / "x/app").exists())
 
+    def test_source_patch_requires_one_unchanged_old_block(self):
+        src = BUILD.extract_source(self.archive, self.source, self.root / "x")
+        path = src / "src/path.c"
+        anchor = "\tif (tawcroot_rootfs_fd < 0)    return TAWC_EBADF;\n"
+        for text in (PATH_C.replace(anchor, ""), PATH_C + PATH_C):
+            with self.subTest(matches=text.count(anchor)):
+                path.write_text(text)
+                with self.assertRaises(SystemExit):
+                    BUILD.apply_source_patch(self.runtime, src)
+                self.assertEqual(path.read_text(), text)
+
     def test_toolchain_needs_the_pinned_ndk(self):
         self.assertIn("clang", BUILD.toolchain(self.ndk, self.source))
         (self.ndk / "source.properties").write_text("Pkg.Revision = 27.0.1\n")
@@ -144,6 +176,12 @@ class TawcrootBuildTests(unittest.TestCase):
             self.assertTrue((out / "jniLibs" / abi / "libtawcroot.so").is_file())
         manifest = json.loads((out / "manifest.json").read_text())
         self.assertEqual([a["abi"] for a in manifest["artifacts"]], list(BUILD.ABIS))
+        self.assertEqual(manifest["source"],
+                         {key: self.source[key] for key in ("repo", "commit", "archiveSha256")})
+        self.assertEqual(manifest["sourcePatch"], {
+            "path": "tawcroot/bind-aware-oracle.diff",
+            "sha256": hashlib.sha256(self.patch).hexdigest(),
+        })
         before = (out / "manifest.json").read_bytes()
 
         def x64_wrong(abi):
