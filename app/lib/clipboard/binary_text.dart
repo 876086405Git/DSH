@@ -4,10 +4,13 @@
 /// text, and some providers return the image whatever type is asked).
 bool looksLikeBytes(String text) => text.contains('\u0000');
 
-/// What was typed in front of such bytes: the text up to them, without the
-/// undecodable characters a picture's header starts with.
+/// What was typed in front of such bytes. A picture starts with a byte UTF-8
+/// cannot decode (JPEG 0xFF, PNG 0x89), read as U+FFFD: the text ends there,
+/// less the control characters before it.
 String typedBeforeBytes(String text) {
-  final at = text.indexOf('\u0000');
-  final head = at < 0 ? text : text.substring(0, at);
-  return head.replaceFirst(RegExp(r'[\ufffd\x01-\x1f\x7f-\xff]+$'), '').trimRight();
+  final nul = text.indexOf('\u0000');
+  var head = nul < 0 ? text : text.substring(0, nul);
+  final undecodable = head.indexOf('\ufffd');
+  if (undecodable >= 0) head = head.substring(0, undecodable);
+  return head.replaceFirst(RegExp(r'[\x00-\x1f]+$'), '').trimRight();
 }
