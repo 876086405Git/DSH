@@ -24,7 +24,8 @@ function vector(value: unknown, lengths: readonly number[]): number[] | undefine
 
 const operations = ['runtime_direct', 'runtime_proot', 'runtime_other',
   'ssh_initial', 'ssh_reconnect', 'relay_initial', 'relay_reconnect',
-  'chat_turn_local', 'chat_turn_remote', 'chat_first_text_local', 'chat_first_text_remote', 'phone_task', 'update_download', 'update_install', 'call_connect', 'call_session', 'plugin_install'] as const;
+  'chat_turn_local', 'chat_turn_remote', 'chat_first_text_local', 'chat_first_text_remote', 'phone_task', 'update_download', 'update_install', 'call_connect', 'call_session', 'plugin_install',
+  'plugin_execute', 'onboarding_local', 'onboarding_remote', 'onboarding_tavern', 'crash', 'anr'] as const;
 
 function tokenRows(value: unknown, source: string): Row[] | undefined {
   const token = object(value);
@@ -67,13 +68,19 @@ function parse(value: unknown, now: number): Report | undefined {
   if (Object.hasOwn(obj, 'extra')) {
     const extra = object(obj.extra);
     if (!extra || Object.keys(extra).some((key) =>
-      key !== 'tavern' && key !== 'companion' && !operations.some((kind) => key === kind))) return undefined;
+      key !== 'tavern' && key !== 'companion' && key !== 'engine' && !operations.some((kind) => key === kind))) return undefined;
     for (const source of ['tavern', 'companion']) {
       const pair = tokenRows(extra[source], source);
       if (!pair) return undefined;
       rows.push(...pair);
     }
     mask = 63;
+    if (Object.hasOwn(extra, 'engine')) {
+      const pair = tokenRows(extra.engine, 'engine');
+      if (!pair) return undefined;
+      rows.push(...pair);
+      mask |= (1 << 27) | (1 << 28);
+    }
     for (const [index, kind] of operations.entries()) {
       if (!Object.hasOwn(extra, kind)) continue;
       const bins = vector(extra[kind], [...Array<number>(15).fill(MAX_CALLS), 1]);

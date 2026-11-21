@@ -7,7 +7,7 @@ String usageV4Day(DateTime at) => usageDay(at.toUtc().add(const Duration(hours: 
 
 int? _token(Object? v) => v is int && v >= 0 && v <= 9007199254740991 ? v : null;
 
-enum UsageTokenSource { chatLog, tavern, companion }
+enum UsageTokenSource { chatLog, tavern, companion, engine }
 
 enum UsageOperation {
   runtimeDirect('runtime_direct'),
@@ -26,7 +26,13 @@ enum UsageOperation {
   updateInstall('update_install'),
   callConnect('call_connect'),
   callSession('call_session'),
-  pluginInstall('plugin_install');
+  pluginInstall('plugin_install'),
+  pluginExecute('plugin_execute'),
+  onboardingLocal('onboarding_local'),
+  onboardingRemote('onboarding_remote'),
+  onboardingTavern('onboarding_tavern'),
+  crash('crash'),
+  anr('anr');
 
   const UsageOperation(this.wire);
   final String wire;
@@ -39,6 +45,21 @@ class UsageV4Tokens {
   final values = List<int>.filled(10, 0);
 
   Map<String, Object?> get json => {'counts': counts, 'values': values};
+
+  void merge(List<int> countDelta, List<int> valueDelta) {
+    if (counts[0] + countDelta[0] > 100000) {
+      counts[12] = 1;
+      return;
+    }
+    for (var i = 0; i < 12; i++) {
+      counts[i] += countDelta[i];
+    }
+    if (countDelta[12] != 0) counts[12] = 1;
+    for (var i = 0; i < values.length; i++) {
+      if (i != 7 && values[i] + valueDelta[i] > 1000000000000) counts[12] = 1;
+      values[i] = min(i == 7 ? 100000 : 1000000000000, values[i] + valueDelta[i]);
+    }
+  }
 
   void restore(Map<String, dynamic> json) {
     counts.setAll(0, (json['counts'] as List).cast<int>());
@@ -165,6 +186,9 @@ class UsageV4Ledger {
   DateTime? _since;
   bool _hadForeground = false;
   String? _latestDay;
+  int exitCursor = 0;
+  Map<String, dynamic> engineWatermark = {};
+  String? sealedThrough;
 
   UsageV4Day? _record(DateTime now) {
     final day = usageV4Day(now);
@@ -199,6 +223,61 @@ class UsageV4Ledger {
     if (day != null && day.snapshot == null) day.operation(operation, outcome, elapsed);
   }
 
+  void engineSnapshot(DateTime now, String epoch, Map<String, dynamic> rows) {
+    final today = usageV4Day(now);
+    final oldest = usageV4Day(now.subtract(const Duration(days: usageBackfillDays)));
+    final previous = engineWatermark['epoch'] == epoch ? engineWatermark['rows'] as Map<String, dynamic> : {};
+    for (final entry in rows.entries) {
+      if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(entry.key) ||
+          entry.key.compareTo(oldest) < 0 ||
+          entry.key.compareTo(today) > 0) {
+        continue;
+      }
+      if (entry.value case final Map<String, dynamic> row) {
+        final before = previous[entry.key];
+        List<int>? delta(String key, int length, int limit) {
+          final values = row[key];
+          final old = before is Map ? before[key] : null;
+          if (values is! List || values.length != length) return null;
+          final result = <int>[];
+          for (var i = 0; i < length; i++) {
+            final v = values[i];
+            final n = old is List && old.length == length ? old[i] as int : 0;
+            if (v is! int || v < n || v > limit) return null;
+            result.add(v - n);
+          }
+          return result;
+        }
+
+        final counts = delta('counts', 13, 100000);
+        final values = delta('values', 10, 1000000000000);
+        final plugins = delta('plugins', 16, 100000);
+        if (counts == null || values == null || plugins == null) continue;
+        if (sealedThrough case final sealed? when entry.key.compareTo(sealed) <= 0) continue;
+        if (counts[0] == 0 && plugins[0] == 0 && counts[12] == 0 && plugins[15] == 0) continue;
+        final current = _record(now);
+        final day = entry.key == today
+            ? current
+            : current == null
+            ? null
+            : days.putIfAbsent(entry.key, () => UsageV4Day(current.iid));
+        if (day == null || day.snapshot != null) continue;
+        day.tokens[UsageTokenSource.engine]!.merge(counts, values);
+        if (plugins[0] == 0 && plugins[15] == 0) continue;
+        final bins = day.operations.putIfAbsent(UsageOperation.pluginExecute, () => List<int>.filled(16, 0));
+        if (bins[0] + plugins[0] > 100000) {
+          bins[15] = 1;
+        } else {
+          for (var i = 0; i < 15; i++) {
+            bins[i] += plugins[i];
+          }
+          if (plugins[15] > 0) bins[15] = 1;
+        }
+      }
+    }
+    engineWatermark = {'epoch': epoch, 'rows': rows};
+  }
+
   List<String> due(DateTime now) {
     final today = usageV4Day(now);
     if (_latestDay == null || today.compareTo(_latestDay!) > 0) _latestDay = today;
@@ -212,6 +291,9 @@ class UsageV4Ledger {
     'since': _since?.millisecondsSinceEpoch,
     'hadForeground': _hadForeground,
     'latestDay': _latestDay,
+    'exitCursor': exitCursor,
+    'sealedThrough': sealedThrough,
+    'engineWatermark': engineWatermark,
     'days': days.map((key, value) => MapEntry(key, value.json)),
   });
 
@@ -224,6 +306,9 @@ class UsageV4Ledger {
       if (data['since'] case final int since) ledger._since = DateTime.fromMillisecondsSinceEpoch(since);
       ledger._hadForeground = data['hadForeground'] as bool;
       ledger._latestDay = data['latestDay'] as String?;
+      ledger.exitCursor = data['exitCursor'] as int? ?? 0;
+      ledger.sealedThrough = data['sealedThrough'] as String?;
+      ledger.engineWatermark = data['engineWatermark'] as Map<String, dynamic>? ?? {};
       final days = data['days'] as Map<String, dynamic>;
       for (final entry in days.entries) {
         final item = entry.value as Map<String, dynamic>;
@@ -235,7 +320,7 @@ class UsageV4Ledger {
         day.tokens[UsageTokenSource.chatLog]!.restore(item);
         if (item['extra'] case final Map<String, dynamic> extra) {
           for (final source in UsageTokenSource.values.skip(1)) {
-            day.tokens[source]!.restore(extra[source.name] as Map<String, dynamic>);
+            if (extra[source.name] case final Map<String, dynamic> row) day.tokens[source]!.restore(row);
           }
           for (final kind in UsageOperation.values) {
             if (extra[kind.wire] case final List values) day.operations[kind] = values.cast<int>();

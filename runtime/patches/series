@@ -154,6 +154,8 @@ deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
+messages-usage-evidence.diff
+piai-usage-evidence.diff
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
 ohos-hap-native-libraries.diff
@@ -196,4 +198,3 @@ ohos-piai-empty-models.diff
 ohos-mcp-start-close.diff
 ohos-jobs-active.diff
 ohos-piai-text-preabort.diff
-messages-usage-evidence.diff

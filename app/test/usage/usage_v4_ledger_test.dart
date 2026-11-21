@@ -5,6 +5,24 @@ import 'package:dsh_app/usage/usage_v4_ledger.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('engine snapshots merge only new counts, including after app restart', () {
+    final now = DateTime.utc(2026, 11, 20, 8);
+    final ledger = UsageV4Ledger();
+    Map<String, dynamic> snapshot(int count) => {
+      '2026-11-20': {
+        'counts': [count, count, 0, 0, 0, 0, count, 0, 0, 0, 0, count, 0],
+        'values': [3 * count, 5 * count, 3 * count, 5 * count, 3 * count, 0, 0, 0, 0, 0],
+        'plugins': List<int>.filled(16, 0),
+      },
+    };
+    ledger.engineSnapshot(now, 'one', snapshot(2));
+    final restored = UsageV4Ledger.decode(ledger.encode());
+    restored.engineSnapshot(now, 'one', snapshot(3));
+    restored.engineSnapshot(now, 'one', snapshot(3));
+    restored.engineSnapshot(now, 'two', snapshot(1));
+    expect(restored.days.values.single.tokens[UsageTokenSource.engine]!.values[1], 20);
+  });
+
   test('source totals stay separate and only ready episodes populate the latency bins', () {
     final now = DateTime.utc(2026, 11, 20, 18);
     final ledger = UsageV4Ledger();

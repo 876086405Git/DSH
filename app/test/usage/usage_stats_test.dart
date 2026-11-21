@@ -125,11 +125,11 @@ void main() {
     now = DateTime.utc(2026, 10, 28, 9);
     http = _V4Unavailable();
     final c = await start(prefs: noticed, platform: 'android');
-    c.usage.chatLogUsage({'inputTokens': 123});
+    c.usage.chatLogUsage({'inputTokens': 123}, local: false);
     expect((await stored()).containsKey(UsageStatsController.v4LedgerKey), isFalse);
     await c.usage.markNoticed();
     await settle();
-    c.usage.chatLogUsage({'inputTokens': 76, 'outputTokens': 0});
+    c.usage.chatLogUsage({'inputTokens': 76, 'outputTokens': 0}, local: false);
     now = now.add(const Duration(days: 1));
     await c.comeBack();
     final v4 = http.urls.indexWhere((url) => url.path.endsWith('/v4'));

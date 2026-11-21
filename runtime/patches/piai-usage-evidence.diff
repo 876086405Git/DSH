@@ -1,0 +1,124 @@
+--- a/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
+@@ -1461,16 +1461,53 @@
+ /**
+ * Map pi-ai usage (reasoning folded into output by pi-ai).
+ * @param usage - cumulative usage from the terminal pi-ai event.
+ * @returns harness counts with pi-ai's exact total; cache fields appear only
+ *   when non-zero (pi-ai reports zeros, not absence).
+ */
+-function mapUsage(usage) {
++function observedPiUsage(event, evidence) {
++	const raw = event?.response?.usage ?? event?.usage ?? event?.choices?.[0]?.usage ??
++		(event?.type === "message_start" ? event.message?.usage : undefined);
++	function field(key, value) {
++		if (value !== undefined) evidence[key] = Number.isSafeInteger(value) && value >= 0 ? value : -1;
++	}
++	if (raw != null && typeof raw === "object") {
++		if (Object.hasOwn(raw, "prompt_tokens")) evidence.hasNormalizedInput = true;
++		if (Object.hasOwn(raw, "input_tokens")) {
++			if (event?.type === "message_start" || event?.type === "message_delta") {
++				field("inputTokens", raw.input_tokens);
++				field("cacheReadTokens", raw.cache_read_input_tokens);
++				field("cacheWriteTokens", raw.cache_creation_input_tokens);
++			} else evidence.hasNormalizedInput = true;
++		}
++		field("outputTokens", raw.completion_tokens);
++		if (event?.type !== "message_start") field("outputTokens", raw.output_tokens);
++	}
++	if (event?.usageMetadata != null) {
++		const metadata = event.usageMetadata;
++		if (metadata.promptTokenCount !== undefined) evidence.hasNormalizedInput = true;
++		if (metadata.candidatesTokenCount !== undefined || metadata.thoughtsTokenCount !== undefined) {
++			const parts = [metadata.candidatesTokenCount, metadata.thoughtsTokenCount].filter(n => n !== undefined);
++			field("outputTokens", parts.every(n => Number.isSafeInteger(n) && n >= 0) ? parts.reduce((a, b) => a + b, 0) : -1);
++		}
++	}
++}
++function mapUsage(usage, evidence) {
++	const { hasNormalizedInput, ...reported } = evidence;
++	if (hasNormalizedInput) {
++		reported.inputTokens = usage.input;
++		reported.cacheReadTokens = usage.cacheRead;
++		reported.cacheWriteTokens = usage.cacheWrite;
++	}
++	// Adapters without a raw-frame hook can still prove a non-zero count.
++	if (reported.outputTokens === undefined && usage.output > 0) reported.outputTokens = usage.output;
++	if (reported.inputTokens === undefined && usage.input > 0) reported.inputTokens = usage.input;
+ 	return {
+ 		inputTokens: usage.input,
+ 		outputTokens: usage.output,
++		reported,
+ 		totalTokens: usage.totalTokens,
+ 		...usage.cacheRead > 0 ? { cacheReadTokens: usage.cacheRead } : {},
+ 		...usage.cacheWrite > 0 ? { cacheWriteTokens: usage.cacheWrite } : {}
+ 	};
+ }
+ function classifyPiAiError(message) {
+@@ -1561,13 +1598,13 @@
+ * @param requestedModel - request model identity recorded for durable replay.
+ * @returns the harness chunks, ending with `usage` then `finish`; throws
+ *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event, or
+ *   `MALFORMED_RESPONSE` when completed tool arguments are invalid. Length-limited
+ *   output retains its terminal reason so the assembler can discard incomplete calls.
+ */
+-async function* toStreamChunks(events, contextWindow, callerSignal, requestedModel) {
++async function* toStreamChunks(events, contextWindow, callerSignal, requestedModel, usageEvidence) {
+ 	const toolIds = /* @__PURE__ */ new Map();
+ 	let argumentsError;
+ 	for await (const event of events) switch (event.type) {
+ 		case "start": break;
+ 		case "text_start":
+ 			yield {
+@@ -1659,25 +1696,25 @@
+ 				}
+ 			};
+ 			break;
+ 		case "done":
+ 			yield {
+ 				type: "usage",
+-				usage: mapUsage(event.message.usage)
++				usage: mapUsage(event.message.usage, usageEvidence)
+ 			};
+ 			if (argumentsError !== void 0 && event.message.stopReason !== "length") throw new LlmError(argumentsError, "MALFORMED_RESPONSE");
+ 			yield {
+ 				type: "finish",
+ 				reason: mapStopReason(event.message, contextWindow),
+ 				replayState: toPiReplayState(event.message, requestedModel)
+ 			};
+ 			return;
+ 		case "error":
+ 			yield {
+ 				type: "usage",
+-				usage: mapUsage(event.error.usage)
++				usage: mapUsage(event.error.usage, usageEvidence)
+ 			};
+ 			yield {
+ 				type: "finish",
+ 				reason: mapStopReason(callerSignal?.aborted ? {
+ 					...event.error,
+ 					stopReason: "aborted"
+@@ -2030,20 +2067,22 @@
+ 					imageOffloadCountQuantum: profile.imageOffloadCountQuantum,
+ 					requestImagePolicy: {
+ 						maxPixels: profile.requestImagePixelBudget,
+ 						maxBytes: profile.requestImageMaxBytes
+ 					}
+ 				}, onReplayDegrade, updates.systemPromptUpdate === "in-history");
++				const usageEvidence = {};
+ 				const iterator = toStreamChunks(snapshot.models.streamSimple(model, context, {
++					onProviderStreamEvent: event => observedPiUsage(event, usageEvidence),
+ 					...profileOptions(profile, reasoning, apiKey),
+ 					...options.temperature === void 0 ? {} : { temperature: options.temperature },
+ 					...options.maxTokens === void 0 ? {} : { maxTokens: options.maxTokens },
+ 					...options.sessionId === void 0 ? {} : { sessionId: String(options.sessionId) },
+ 					signal: watchdog.signal,
+ 					headers: requestHeaders(profile.headers, options, model.baseUrl, this.config.prepareHeaders)
+-				}), model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]();
++				}), model.contextWindow, options.signal, model.id, usageEvidence)[Symbol.asyncIterator]();
+ 				let exhausted = false;
+ 				try {
+ 					while (true) {
+ 						const result = await watchdog.next(iterator);
+ 						if (result.done) {
+ 							exhausted = true;

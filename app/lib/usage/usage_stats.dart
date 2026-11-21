@@ -2,11 +2,13 @@
 // each, the day after (contracts v1–v3, usage_ledger.dart). On by default, but
 // nothing is counted until the person has seen the switch (first run's
 // 「想让 DSH Go 帮你做哪些事」, or 设置 › 隐私与分享). Off means nothing is
-// counted, nothing is kept and no request is made.
+// counted or uploaded; the local engine lease is revoked and its aggregate discarded.
 
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +18,7 @@ import '../phone/phone_channel.dart';
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
 import '../state/android_features.dart';
+import '../state/connection_state.dart';
 import '../state/phone_state.dart' show phoneChannelProvider;
 import '../state/update_state.dart';
 import 'usage_ledger.dart';
@@ -95,6 +98,8 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   Future<void>? _v4Sending;
   DateTime? _v4Failed;
   String? _v4ClosedDay;
+  Future<void> _engineUsageQueue = Future.value();
+  Timer? _usageTimer;
   String? _iid;
   DateTime? _iidSince;
   DateTime? _failedAt;
@@ -188,6 +193,16 @@ class UsageStatsController extends Notifier<UsageStatsState> {
       if (mode != null) _record((ledger, now) => ledger.engine(mode, now));
     }, fireImmediately: true);
     if (_v4Platform) {
+      ref.listen(localConnectionProvider.select((s) => s.value?.client), (_, client) {
+        if (client != null && observesChatLogUsage) unawaited(_syncEngineUsage(client, true));
+      });
+      _usageTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+        if (observesChatLogUsage) {
+          final client = ref.read(localConnectionProvider).value?.client;
+          if (client != null) unawaited(_syncEngineUsage(client, true));
+        }
+      });
+      ref.onDispose(() => _usageTimer?.cancel());
       void Function(UsageOutcome, {UsageOperation? actual})? download;
       void Function(UsageOutcome, {UsageOperation? actual})? install;
       ref.listen(appUpdateProvider, (previous, next) {
@@ -266,8 +281,43 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   /// [output]. Only what the provider said; nothing is estimated.
   void tokens(int input, int output) => _record((ledger, now) => ledger.tokens(input, output, now));
 
-  void chatLogUsage(Map<String, Object?>? rawUsage, {bool partial = false}) {
+  void chatLogUsage(Map<String, Object?>? rawUsage, {bool partial = false, required bool local}) {
+    if (local) return; // Local settlements are owned by the bridge.
     tokenUsage(UsageTokenSource.chatLog, rawUsage, partial: partial);
+  }
+
+  // Use the authenticated local carrier. Stock hosts just have no route.
+  Future<void> _syncEngineUsage(DshClient client, bool enabled) {
+    final ledger = _v4;
+    return _engineUsageQueue = _engineUsageQueue.then((_) async {
+      if (enabled && (!ref.mounted || !identical(ledger, _v4) || !observesChatLogUsage)) return;
+      final carrier = client.carrier;
+      if (carrier is! DshHttpCarrier) return;
+      try {
+        final response = await carrier.connection.postBytes(
+          '/dsh-go/v1/usage/collect',
+          utf8.encode(enabled ? 'on' : 'off'),
+          followRedirects: false,
+          timeout: const Duration(seconds: 3),
+          maxResponseBytes: 8192,
+        );
+        if (!enabled ||
+            !ref.mounted ||
+            !identical(ledger, _v4) ||
+            !observesChatLogUsage ||
+            ref.read(localConnectionProvider).value?.client != client) {
+          return;
+        }
+        if (response.statusCode != 200) return;
+        final reply = jsonDecode(response.text);
+        if (reply case {'v': 1, 'epoch': final String epoch, 'days': final Map<String, dynamic> days}) {
+          ledger.engineSnapshot(_now(), epoch, days);
+          await _saveV4();
+        }
+      } on Exception {
+        // A disconnected/restarted host can be read on the next foreground or poll.
+      }
+    });
   }
 
   void tokenUsage(UsageTokenSource source, Map<String, Object?>? rawUsage, {bool partial = false}) {
@@ -326,6 +376,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   Future<void> setEnabled(bool enabled) async {
     await _loaded;
     if (!ref.mounted) return;
+    final local = !enabled && _v4Platform && UsageBuild.active ? ref.read(localConnectionProvider).value?.client : null;
     state = state.copyWith(enabled: enabled, noticed: true);
     if (!enabled) {
       _ledger = UsageLedger();
@@ -339,6 +390,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
       _v4Saved = null;
       _v4Failed = null;
       _v4ClosedDay = null;
+      if (local != null) unawaited(_syncEngineUsage(local, false));
     }
     await _write((prefs) async {
       await prefs.setBool(enabledKey, enabled);
@@ -363,10 +415,50 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     if (observesChatLogUsage) {
       final lifecycle = WidgetsBinding.instance.lifecycleState;
       if (lifecycle == null || lifecycle == AppLifecycleState.resumed) _v4.foreground(_now());
+      final client = ref.read(localConnectionProvider).value?.client;
+      if (client != null) await _syncEngineUsage(client, true);
+      if (!ref.mounted || !observesChatLogUsage) return;
+      unawaited(_readExits());
       unawaited(_saveV4());
       await Future.wait([send(), _v4Sending ??= _sendV4().whenComplete(() => _v4Sending = null)]);
     } else {
       await send();
+    }
+  }
+
+  Future<void> _readExits() async {
+    final ledger = _v4;
+    final at = _now().millisecondsSinceEpoch;
+    final old = ledger.exitCursor;
+    // Start the observation window at opt-in; no historical pre-consent exits.
+    if (old == 0) {
+      ledger.exitCursor = at;
+      await _saveV4();
+      return;
+    }
+    try {
+      final result = await const MethodChannel('dsh/usage').invokeListMethod<Object?>('abnormalExits', old);
+      if (result == null ||
+          !ref.mounted ||
+          !identical(ledger, _v4) ||
+          !observesChatLogUsage ||
+          ledger.exitCursor != old) {
+        return;
+      }
+      ledger.exitCursor = at;
+      for (final item in result) {
+        if (item case [final int timestamp, final String kind] when timestamp > old && timestamp <= at) {
+          ledger.operation(
+            _now(),
+            kind == 'anr' ? UsageOperation.anr : UsageOperation.crash,
+            UsageOutcome.failed,
+            Duration.zero,
+          );
+        }
+      }
+      await _saveV4();
+    } on Exception {
+      // Older Android and stale channels provide no authoritative evidence.
     }
   }
 
@@ -393,6 +485,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     final http = ref.read(usageHttpProvider);
     for (final day in due) {
       final body = ledger.days[day]!.seal(day, device);
+      ledger.sealedThrough = day;
       await _saveV4();
       if (!live()) return;
       int? status;

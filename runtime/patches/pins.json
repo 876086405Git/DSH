@@ -179,8 +179,8 @@
     "ohos-attachment-diagnostic.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a",
-          "before": "71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa"
+          "after": "5c48bc1d535e4865c7b7655130f46d51c14d100819bc0edb6b65f2f8b867f2c9",
+          "before": "1407705647d320ded0a41c2685813973d90f5bf4622fd0ffd0d5ae0afc7c62ce"
         }
       }
     },
@@ -319,16 +319,16 @@
     "ohos-piai-empty-models.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b",
-          "before": "083ff174256a8166633c1f655720aaab897368ea5e1a553cdcec7b0fa329202a"
+          "after": "efcfd099174e32b8d0af241123577b73e257e5d28ffae4f76673c9582e0903ae",
+          "before": "5c48bc1d535e4865c7b7655130f46d51c14d100819bc0edb6b65f2f8b867f2c9"
         }
       }
     },
     "ohos-piai-text-preabort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "762e49300daac811c36184c9cb8ba44460de7fb5bacca06bc0c1b377cb192be1",
-          "before": "25f7f6eb315754950170bd26ef0710fce3cf48d3046647c8eed9f64e7a72ab0b"
+          "after": "0c0cd578d824738bfdc714a9da8376ecf05faa97c8b593a415f8e1d0dbe20dff",
+          "before": "efcfd099174e32b8d0af241123577b73e257e5d28ffae4f76673c9582e0903ae"
         }
       }
     },
@@ -493,6 +493,14 @@
         "node_modules/@earendil-works/pi-ai/dist/utils/overflow.js": {
           "after": "9607498e3da8815d4f52ae1193d4f1d70cb2708930233903f2b4db3c7088e0e4",
           "before": "bc0b743fdbf33fe3dd2bb69b1838166ac0b6957f74051213fcaf336c11d041a3"
+        }
+      }
+    },
+    "piai-usage-evidence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "1407705647d320ded0a41c2685813973d90f5bf4622fd0ffd0d5ae0afc7c62ce",
+          "before": "71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa"
         }
       }
     },
@@ -2524,7 +2532,8 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
-      "messages-usage-evidence.diff"
+      "messages-usage-evidence.diff",
+      "piai-usage-evidence.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2681,6 +2690,8 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
+      "messages-usage-evidence.diff",
+      "piai-usage-evidence.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
@@ -2722,8 +2733,7 @@
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
-      "ohos-piai-text-preabort.diff",
-      "messages-usage-evidence.diff"
+      "ohos-piai-text-preabort.diff"
     ]
   }
 }

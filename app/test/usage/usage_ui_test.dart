@@ -217,7 +217,7 @@ void main() {
 
     testWidgets('on Android: as ever', (tester) async {
       await pump(tester, section(), 'android');
-      expect(find.text(zh.usageStatsFooter), findsOneWidget);
+      expect(find.text(zh.usageStatsAndroidFooter), findsOneWidget);
       expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNotNull);
     });
 

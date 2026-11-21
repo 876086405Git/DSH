@@ -20,7 +20,8 @@ VALUES = ("tokens_in", "tokens_out", "paired_in", "paired_out", "uncached_in",
           "cache_read", "cache_write", "cache_known", "partial_in", "partial_out")
 OPERATIONS = ("runtime_direct", "runtime_proot", "runtime_other",
               "ssh_initial", "ssh_reconnect", "relay_initial", "relay_reconnect",
-              "chat_turn_local", "chat_turn_remote", "chat_first_text_local", "chat_first_text_remote", "phone_task", "update_download", "update_install", "call_connect", "call_session", "plugin_install")
+              "chat_turn_local", "chat_turn_remote", "chat_first_text_local", "chat_first_text_remote", "phone_task", "update_download", "update_install", "call_connect", "call_session", "plugin_install",
+              "plugin_execute", "onboarding_local", "onboarding_remote", "onboarding_tavern", "crash", "anr")
 OP_COLS = ("episodes", "ready", "failed", "cancelled", "unknown",
            "le250ms", "le500ms", "le1s", "le2s", "le5s", "le10s", "le30s",
            "le60s", "le180s", "gt180s", "clipped")
@@ -138,7 +139,7 @@ def main():
     if not 1 <= args.days <= 60 or any(not 1 <= (today - day).days <= 60 for day in args.cohort):
         opts.error("choose 1–60 ended days and cohorts within the last 60 days")
     first, last = today - timedelta(days=args.days), today - timedelta(days=1)
-    sources = ("chat_log", "tavern", "companion")
+    sources = ("chat_log", "tavern", "companion", "engine")
     daily = {source: daily_query(first, last, args.days + 2, source) for source in sources}
     ops = operations_query(first, last, args.days + 2)
     cohorts = [(day, retention_query(day, (today - day).days + 2)) for day in sorted(set(args.cohort))]

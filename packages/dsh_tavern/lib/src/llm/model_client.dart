@@ -387,7 +387,7 @@ class TavernModelClient {
         final data = _object(jsonDecode(event));
         // Top-level presence is independent of choice/delta shape. Deliver it
         // before this payload can yield text or fail on another response field.
-        if (data.containsKey('usage') && (data['usage'] != null || usageReport == null)) {
+        if (data.containsKey('usage')) {
           usageReport = _providerUsageReport(
             data['usage'],
             present: true,
