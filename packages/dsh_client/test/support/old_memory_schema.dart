@@ -3,10 +3,27 @@ import 'package:sqlite3/sqlite3.dart';
 /// Reconstruct a real previous schema before exercising the production upgrade.
 /// Changing only user_version would leave new columns and hide migration bugs.
 void restoreOldMemorySchema(Database database, int version) {
-  for (final table in ['memory_initiative_spends', 'memory_followups', 'memory_initiative_state']) {
-    database.execute('DROP TABLE $table');
+  if (version < 7) {
+    database.execute('''
+      CREATE TABLE memory_requests_v6 (
+        id TEXT PRIMARY KEY, category TEXT NOT NULL CHECK(category IN ('chat','extract','organize')),
+        batch_id TEXT, provider TEXT NOT NULL, model TEXT NOT NULL, reserved_at_ms INTEGER NOT NULL,
+        sent_at_ms INTEGER, reserved_input INTEGER NOT NULL, reserved_output INTEGER NOT NULL,
+        reserved_cny REAL, raw_usage TEXT, usage_semantics TEXT, input_uncached INTEGER,
+        input_cache_read INTEGER, input_cache_write INTEGER, output_tokens INTEGER,
+        estimated_cny REAL, state TEXT NOT NULL, terminal TEXT, uncertain_at_ms INTEGER
+      );
+      INSERT INTO memory_requests_v6 SELECT * FROM memory_requests;
+      DROP TABLE memory_requests;
+      ALTER TABLE memory_requests_v6 RENAME TO memory_requests;
+    ''');
   }
-  database.execute('ALTER TABLE memory_archive DROP COLUMN followup_after_seq');
+  if (version < 6) {
+    for (final table in ['memory_initiative_spends', 'memory_followups', 'memory_initiative_state']) {
+      database.execute('DROP TABLE $table');
+    }
+    database.execute('ALTER TABLE memory_archive DROP COLUMN followup_after_seq');
+  }
   if (version < 5) {
     database.execute('ALTER TABLE memory_migrations DROP COLUMN source_fingerprint');
     database.execute('ALTER TABLE memory_migrations DROP COLUMN cleanup_read_revision');

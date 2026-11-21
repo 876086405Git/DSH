@@ -24,7 +24,7 @@ class CompanionMemoryStore {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 6) {
+      if (version > 7) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -131,6 +131,25 @@ class CompanionMemoryStore {
             CREATE INDEX memory_initiative_time ON memory_initiative_spends(reserved_at_ms,state);
           ''');
           _db.execute('PRAGMA user_version = 6');
+        });
+      }
+      if (version < 7) {
+        _transaction(() {
+          _db.execute('''
+            CREATE TABLE memory_requests_v7 (
+              id TEXT PRIMARY KEY, category TEXT NOT NULL CHECK(category IN ('chat','extract','organize','followup')),
+              batch_id TEXT, provider TEXT NOT NULL, model TEXT NOT NULL, reserved_at_ms INTEGER NOT NULL,
+              sent_at_ms INTEGER, reserved_input INTEGER NOT NULL, reserved_output INTEGER NOT NULL,
+              reserved_cny REAL, raw_usage TEXT, usage_semantics TEXT, input_uncached INTEGER,
+              input_cache_read INTEGER, input_cache_write INTEGER, output_tokens INTEGER,
+              estimated_cny REAL, state TEXT NOT NULL, terminal TEXT, uncertain_at_ms INTEGER
+            );
+            INSERT INTO memory_requests_v7 SELECT * FROM memory_requests;
+            DROP TABLE memory_requests;
+            ALTER TABLE memory_requests_v7 RENAME TO memory_requests;
+            UPDATE memory_followups SET local_line=NULL;
+          ''');
+          _db.execute('PRAGMA user_version = 7');
         });
       }
       _transaction(() {
@@ -1425,7 +1444,7 @@ class CompanionMemoryStore {
     required int outputTokens,
     String? batchId,
   }) {
-    if (!const ['chat', 'extract', 'organize'].contains(category) ||
+    if (!const ['chat', 'extract', 'organize', 'followup'].contains(category) ||
         provider.isEmpty ||
         model.isEmpty ||
         _usageCount(inputTokens) == null ||
@@ -1443,7 +1462,9 @@ class CompanionMemoryStore {
           return attemptedAt == null ? row['state'] == 'reserved' : (attemptedAt as int) > at - 86400000;
         }).toList();
         final sameKind = daily.where((row) => row['category'] == category).length;
-        if (sameKind >= (category == 'extract' ? 10 : 1)) return null;
+        if ((category == 'extract' && sameKind >= 10) || (category == 'organize' && sameKind >= 1)) {
+          return null;
+        }
         final input = daily.fold<int>(inputTokens, (sum, row) => sum + _heldInput(row));
         final output = daily.fold<int>(outputTokens, (sum, row) => sum + _heldOutput(row));
         if (input > 24000 || output > 3000) return null;
@@ -2224,7 +2245,7 @@ class CompanionMemoryStore {
     JOIN memory_archive a ON a.singleton=1 LEFT JOIN memory_messages support ON support.id=f.support_message_id
     WHERE f.id=? AND f.row_rev=? AND f.card_id=? AND f.card_rev=? AND f.control_revision=?
       AND f.message_id=? AND f.source_rev=? AND f.support_message_id IS ? AND f.support_source_rev IS ?
-      AND f.state IN ('pending','reserved','asked') AND f.local_line IS NOT NULL AND f.invitation!=''
+      AND f.state IN ('pending','reserved','asked') AND f.invitation!=''
       AND f.opens_at_ms<=? AND f.expires_at_ms>? AND f.control_revision=a.control_revision
       AND c.row_rev=f.card_rev AND c.scope='real' AND c.eligible=1 AND c.status='current'
       AND (c.plan_state IS NULL OR c.plan_state NOT IN ('cancelled','postponed'))
@@ -2323,7 +2344,6 @@ class CompanionMemoryStore {
       if (spent.any((row) => row['state'] == 'reserved')) continue;
       final subject = candidate['wait_subject'] as String?;
       if (subject != null &&
-          candidate['local_line'] != null &&
           choices.where((other) => other['wait_subject'] == subject).map((other) => other['card_id']).toSet().length ==
               1) {
         for (final support in sources.values) {
@@ -2355,7 +2375,7 @@ class CompanionMemoryStore {
       final expires = candidate['expires_at_ms'] as int?;
       candidate['state'] = alreadyAsked || expires != null && expires <= at
           ? 'closed'
-          : candidate['opens_at_ms'] == null || candidate['local_line'] == null
+          : candidate['opens_at_ms'] == null
           ? 'waiting'
           : 'pending';
       if (alreadyAsked) {

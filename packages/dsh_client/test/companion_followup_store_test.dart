@@ -109,6 +109,14 @@ void main() {
   List<MemoryRow> spends() => [
     for (final row in database.select('SELECT * FROM memory_initiative_spends ORDER BY reserved_at_ms,id')) {...row},
   ];
+  String? request(String category, {int input = 10, int output = 20}) => store.reserveRequest(
+    category: category,
+    provider: 'deepseek',
+    model: 'deepseek-flash',
+    inputTokens: input,
+    outputTokens: output,
+    batchId: category == 'followup' ? 'followup:fixture:1' : null,
+  );
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('companion-followup-');
@@ -119,6 +127,117 @@ void main() {
   tearDown(() async {
     store.close();
     await directory.delete(recursive: true);
+  });
+
+  group('B03 followup generation shares the auxiliary ledger', () {
+    test('followup attempts do not consume extract or organize count slots', () {
+      for (var index = 0; index < 2; index++) {
+        final id = request('followup')!;
+        store.markRequestSent(id);
+        store.finishRequest(id, terminal: 'network');
+      }
+      for (var index = 0; index < 10; index++) {
+        expect(request('extract'), isNotNull);
+      }
+      expect(request('extract'), isNull);
+      expect(request('organize'), isNotNull);
+      expect(request('organize'), isNull);
+      expect(request('followup'), isNotNull);
+      expect(store.requests().where((row) => row['category'] == 'followup'), hasLength(3));
+      expect(store.requests().where((row) => row['category'] == 'followup').first['batch_id'], 'followup:fixture:1');
+      expect(spends(), isEmpty, reason: 'generating a line is not presenting an initiative');
+    });
+
+    test('uncertain followup holds shared tokens through restart; only proved unsent can release', () {
+      final id = request('followup', input: 24000, output: 3000)!;
+      store.markRequestUncertain(id);
+      store.finishRequest(id, terminal: 'network');
+      reopen();
+      expect(store.requests().single['terminal'], 'dispatch_unknown');
+      for (final category in ['followup', 'extract', 'organize']) {
+        expect(request(category), isNull, reason: category);
+      }
+      expect(request('chat'), isNotNull, reason: 'the auxiliary cap does not block a real chat');
+      store.finishRequest(id, terminal: 'not_sent');
+      expect(request('followup'), isNotNull);
+    });
+
+    test('followup raw usage remains charged to the default route for thirty rolling days', () {
+      final id = request('followup')!;
+      store.markRequestSent(id);
+      store.recordUsage(id, {
+        'usage_semantics': 'cumulative',
+        'input_uncached': 0,
+        'input_cache_read': 0,
+        'input_cache_write': 0,
+        'output_tokens': 400000,
+      });
+      store.finishRequest(id, terminal: 'complete');
+      expect(store.requests().single['estimated_cny'], 3.2);
+      now += 86400000;
+      expect(request('extract'), isNull, reason: 'daily tokens expired, but the real observed cost did not');
+      expect(request('followup'), isNull);
+      now += 29 * 86400000;
+      expect(request('followup'), isNotNull);
+    });
+
+    test('v6 migration preserves receipts and shown opportunities while removing the fixed line', () {
+      store.initializeInitiative(emptyInitiative());
+      invite();
+      now = utc('2026-11-20T01:00:00Z');
+      final opportunity = store.nextFollowup(nowMs: now)!;
+      store.settleInitiative(reserve(opportunity: opportunity)!, outcome: 'shown');
+      final sent = request('extract')!;
+      store.markRequestSent(sent);
+      store.recordUsage(sent, {'usage_semantics': 'unknown', 'output_tokens': 8});
+      store.finishRequest(sent, terminal: 'incomplete');
+      final uncertain = request('organize')!;
+      store.markRequestUncertain(uncertain);
+      database.execute("UPDATE memory_followups SET local_line='上次提到的这件事，现在想聊聊吗？'");
+      final beforeRequests = store.requests();
+      final beforeSpends = spends();
+      final beforeCards = store.cards();
+      final beforeArchive = store.archive;
+      restoreOldMemorySchema(database, 6);
+      reopen();
+      expect(database.select('PRAGMA user_version').single['user_version'], 7);
+      expect(store.requests(), beforeRequests);
+      expect(spends(), beforeSpends);
+      expect(store.cards(), beforeCards);
+      expect(store.archive, beforeArchive);
+      expect(store.followups().single['local_line'], isNull);
+      expect(store.followups().single['state'], 'asked');
+      expect(store.followups().single['row_rev'], opportunity['row_rev']);
+      expect(store.nextFollowup(nowMs: now), isNull);
+      expect(request('followup'), isNotNull);
+      expect(database.select('PRAGMA foreign_key_check'), isEmpty);
+    });
+
+    test('failed v7 migration rolls the request CHECK and fixed-line cleanup back together', () {
+      invite();
+      now = utc('2026-11-20T01:00:00Z');
+      store.nextFollowup(nowMs: now);
+      database.execute("UPDATE memory_followups SET local_line='old fixed line'");
+      restoreOldMemorySchema(database, 6);
+      database.execute(
+        "CREATE TRIGGER fail_line_cleanup BEFORE UPDATE ON memory_followups "
+        "BEGIN SELECT RAISE(ABORT,'fixture'); END",
+      );
+      store.close();
+      expect(open, throwsA(isA<SqliteException>()));
+      database = sqlite3.open('${directory.path}/memory.sqlite');
+      expect(database.select('PRAGMA user_version').single['user_version'], 6);
+      expect(database.select('SELECT local_line FROM memory_followups').single['local_line'], 'old fixed line');
+      expect(database.select("SELECT name FROM sqlite_master WHERE name='memory_requests_v7'"), isEmpty);
+      expect(
+        database.select("SELECT sql FROM sqlite_master WHERE name='memory_requests'").single['sql'],
+        isNot(contains("'followup'")),
+      );
+      database.execute('DROP TRIGGER fail_line_cleanup');
+      database.close();
+      open();
+      expect(database.select('PRAGMA user_version').single['user_version'], 7);
+    });
   });
 
   group('one durable initiative ledger', () {
@@ -138,7 +257,7 @@ void main() {
       final requests = store.requests();
       restoreOldMemorySchema(database, 5);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 6);
+      expect(database.select('PRAGMA user_version').single['user_version'], 7);
       expect(store.archive, before);
       expect(store.cards(), cards);
       expect(store.requests(), requests);
@@ -291,7 +410,7 @@ void main() {
       expect(store.followups(), hasLength(1));
     });
 
-    test('unparsed wording limits before, after or inside the invitation never become the generic local question', () {
+    test('wording limits stay in the complete invitation for generation; no local question is substituted', () {
       const question = '周五可以问我琴修好没';
       final examples = ['$question，只问修好没，不问想不想聊。', '只问修好没，不问想不想聊。$question。', '$question但不问想不想聊'];
       for (var index = 0; index < examples.length; index++) {
@@ -312,11 +431,13 @@ void main() {
         wording: '周五可以问问我',
       );
       now = utc('2026-11-20T01:00:00Z');
-      expect(store.nextFollowup(nowMs: now), isNull);
+      expect(store.nextFollowup(nowMs: now), isNotNull);
       expect(store.followups(), hasLength(4));
       for (final opportunity in store.followups()) {
-        expect(opportunity['reason'], 'local_wording_unavailable');
+        expect(opportunity['state'], 'pending');
+        expect(opportunity['reason'], isNull);
         expect(opportunity['local_line'], isNull);
+        expect(opportunity['invitation'], contains('不问想不想聊'));
       }
       expect(store.requests(), isEmpty);
       expect(spends(), isEmpty);
@@ -572,7 +693,7 @@ void main() {
       expect(store.followups().single['support_quote'], isNull);
     });
 
-    test('D5 remains a local no-call branch when the required nickname was never given', () {
+    test('D5 retains the missing-name restriction for generation without inventing a local line', () {
       invite(
         raw: '周六可以问问陶杯烧得怎样。开口第一句必须先叫它我给它取的小名，别另起名字。',
         text: '我等陶杯烧好',
@@ -581,10 +702,11 @@ void main() {
         date: '2026-11-21',
       );
       now = utc('2026-11-21T03:00:00Z');
-      expect(store.nextFollowup(nowMs: now), isNull);
-      expect(store.followups().single['state'], 'waiting');
-      expect(store.followups().single['reason'], 'local_wording_unavailable');
+      expect(store.nextFollowup(nowMs: now), isNotNull);
+      expect(store.followups().single['state'], 'pending');
+      expect(store.followups().single['reason'], isNull);
       expect(store.followups().single['local_line'], isNull);
+      expect(store.followups().single['invitation'], contains('必须先叫它我给它取的小名，别另起名字'));
       expect(store.requests(), isEmpty);
       expect(spends(), isEmpty);
     });

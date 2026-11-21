@@ -19,7 +19,7 @@ const inputKeys = ['v', 'instanceId', 'requestId', 'sessionId', 'provider', 'mod
 function validate(value) {
   if (!fields(value, inputKeys) || value.v !== 1 ||
       !['instanceId', 'requestId', 'sessionId', 'provider', 'model'].every(key => contextId(value[key])) ||
-      !['extract', 'consolidate'].includes(value.kind) || !text(value.system) || !text(value.input) ||
+      !['extract', 'consolidate', 'followup'].includes(value.kind) || !text(value.system) || !text(value.input) ||
       !Number.isSafeInteger(value.maxTokens) || value.maxTokens < 1 || value.maxTokens > 3000) {
     throw failure(400, 'invalid-request', 'Invalid companion auxiliary request');
   }

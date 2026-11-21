@@ -1,16 +1,19 @@
 // Her invitation to rest, on the page: shown after a quiet stretch, silently,
 // above the input; a yes goes through the cushion's own entry, once.
 
-import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
+import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
@@ -20,13 +23,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'phone_keeper_fake.dart';
 import 'initiative_memory.dart';
+import 'companion_test_settle.dart';
 
 const _invite = '要不要陪我在软垫上歇一会儿？';
-const _followup = '上次提到的这件事，现在想聊聊吗？';
+const _followup = '对了，今天那把琴修好了吗？';
+const _genericFollowup = '上次提到的这件事，现在想聊聊吗？';
+
+class _Settings extends SettingsController {
+  _Settings(this.apiKey);
+  final String apiKey;
+  @override
+  AppSettings build() => AppSettings(loaded: true, apiKey: apiKey);
+}
+
+http.Response _generated(String text, {int outputTokens = 12, String stop = 'end_turn'}) => http.Response(
+  [
+    {
+      'type': 'content_block_delta',
+      'delta': {'type': 'text_delta', 'text': text},
+    },
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': stop},
+      'usage': {
+        'input_tokens': 120,
+        'cache_read_input_tokens': 0,
+        'cache_creation_input_tokens': 0,
+        'output_tokens': outputTokens,
+      },
+    },
+    {'type': 'message_stop'},
+  ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+  200,
+  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+);
 
 void _seedFollowup(CompanionMemoryOwner memory) {
   const raw = '我今天去修琴，今天可以问我琴修好没';
@@ -79,12 +115,18 @@ class _Room {
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
   late CompanionMemoryOwner memory;
+  late ProviderContainer container;
   DateTime? _clockStarted;
+  int wallStart = 1793899800000;
+  String apiKey = 'fixture-key';
+  final requests = <Map<String, Object?>>[];
+  Future<http.Response> Function(Map<String, Object?>)? answer;
 
   Iterable<String> get names => commands.map((c) => c.$1);
 
   Future<void> open({void Function(CompanionMemoryOwner)? seed}) async {
     events = null;
+    final stageBuilt = Completer<void>();
     // A phone reports this long before the room opens; tests start with none,
     // and an unknown state never permits an invitation.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -97,7 +139,7 @@ class _Room {
     final start = _clockStarted ??= tester.binding.clock.now();
     CompanionInitiativeClock clock() {
       final ms = tester.binding.clock.now().difference(start).inMilliseconds;
-      return CompanionInitiativeClock(wallMs: 1793899800000 + ms, monoMs: ms);
+      return CompanionInitiativeClock(wallMs: wallStart + ms, monoMs: ms);
     }
 
     await tester.pumpWidget(
@@ -106,6 +148,18 @@ class _Room {
           activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
           companionPhoneKeeperProvider.overrideWithValue((_) => phone as CompanionKeeper),
           companionInitiativeClockProvider.overrideWithValue(clock),
+          settingsProvider.overrideWith(() => _Settings(apiKey)),
+          companionLightClientProvider.overrideWithValue(
+            () => MockClient((request) async {
+              final body = jsonDecode(request.body) as Map<String, Object?>;
+              requests.add(body);
+              if (answer != null) {
+                return answer!(body);
+              }
+              expect(body['system'], companionMemoryFollowupPrompt);
+              return _generated(jsonEncode({'action': 'line', 'text': _followup}));
+            }),
+          ),
           initiativeMemory(clock),
         ],
         child: MaterialApp(
@@ -117,6 +171,9 @@ class _Room {
             storeOverride: CompanionPackStore(root),
             stageBuilder: (controller, stage) {
               events = stage;
+              if (!stageBuilt.isCompleted) {
+                stageBuilt.complete();
+              }
               return const SizedBox.expand();
             },
             stageController: CompanionStageController(sink: (type, args) => commands.add((type, args))),
@@ -124,12 +181,12 @@ class _Room {
         ),
       ),
     );
-    for (var i = 0; i < 100 && events == null; i++) {
-      await settle();
-    }
+    await settleMixed(tester, stageBuilt.future);
     expect(events, isNotNull, reason: 'the stage was never built');
-    final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
-    memory = (await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future)))!;
+    container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+    memory = await settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    await settleMixed(tester, container.read(companionInitiativeProvider).ready);
+    await settleMixed(tester, memory.migrateLocal());
     seed?.call(memory);
     events!.onReady();
     await settle();
@@ -160,6 +217,20 @@ class _Room {
     }
     expect(find.text(_followup), findsOneWidget);
   }
+
+  Future<void> waitForRequest() async {
+    for (var second = 0; second < 70 && requests.isEmpty; second++) {
+      await wait(const Duration(seconds: 1));
+    }
+    expect(requests, isNotEmpty);
+  }
+
+  Future<void> sendControl(String text) async {
+    await tester.enterText(find.byType(TextField), text);
+    await tester.pump();
+    await tester.tap(find.byIcon(AppIcons.send).last);
+    await settle();
+  }
 }
 
 void main() {
@@ -185,13 +256,180 @@ void main() {
     expect(find.text(_followup), findsOneWidget, reason: 'its own bubble is not an external busy prompt');
     expect(room.memory.store.followups().single['state'], 'asked');
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-    expect(room.memory.store.requests(), isEmpty, reason: 'the local question makes no model request');
+    expect(room.requests, hasLength(1));
+    final request = room.requests.single;
+    expect(request['system'], companionMemoryFollowupPrompt);
+    expect(request['max_tokens'], 128);
+    expect(request.containsKey('tools'), isFalse);
+    final messages = request['messages']! as List;
+    expect(messages, hasLength(1));
+    final input = jsonDecode((messages.single as Map)['content'] as String) as Map;
+    expect(input['card'], {'text': '我今天去修琴'});
+    expect(input['persona'], contains('鲸鱼娘'));
+    expect(input['invitation'], {
+      'message_id': 'room-invitation',
+      'source_rev': 1,
+      'said_at_utc': DateTime.fromMillisecondsSinceEpoch(1793899800000, isUtc: true).toIso8601String(),
+      'offset_minutes': 0,
+      'quote': '我今天去修琴，今天可以问我琴修好没',
+    });
+    expect(input['support'], isEmpty);
+    expect(input.containsKey('history'), isFalse);
+    final receipt = room.memory.store.requests().single;
+    expect(receipt['category'], 'followup');
+    expect(receipt['state'], 'finished');
+    expect((receipt['raw_usage']! as Map)['final_usage'], containsPair('output_tokens', 12));
+    expect(find.text(_genericFollowup), findsNothing);
     await room.close();
     await room.open();
     await room.wait(const Duration(minutes: 2));
     expect(find.text(_followup), findsNothing);
     expect(room.memory.store.followups().single['state'], 'asked');
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
+    expect(room.requests, hasLength(1), reason: 'asked remains consumed after reopening');
+    await room.close();
+  });
+
+  for (final failure in ['offline', 'silent', 'invalid', 'max_tokens']) {
+    testWidgets('B03 $failure wording stays silent without a display debit or idle request loop', (tester) async {
+      final room = _Room(tester, root)
+        ..answer = (_) async {
+          if (failure == 'offline') {
+            throw http.ClientException('fixture offline');
+          }
+          if (failure == 'silent') {
+            return _generated('{"action":"silent","text":""}');
+          }
+          if (failure == 'invalid') {
+            return _generated('not JSON');
+          }
+          return _generated('{"action":"line","text":"$_followup"}', stop: 'max_tokens');
+        };
+      await room.open(seed: _seedFollowup);
+      await room.waitForRequest();
+      await room.wait(const Duration(minutes: 3));
+      expect(room.requests, hasLength(1));
+      expect(find.text(_followup), findsNothing);
+      expect(find.text(_genericFollowup), findsNothing);
+      expect(room.memory.store.followups().single['state'], 'pending');
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(room.memory.store.requests().single['category'], 'followup');
+      expect(room.memory.store.requests().single['sent_at_ms'], isNotNull);
+      await room.close();
+    });
+  }
+
+  testWidgets('B03 a later room visit can retry failed wording and show the new actual line', (tester) async {
+    final room = _Room(tester, root)..answer = (_) async => _generated('{"action":"silent","text":""}');
+    await room.open(seed: _seedFollowup);
+    await room.waitForRequest();
+    await tester.pump();
+    expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+    await room.close();
+    room.answer = null;
+    await room.open();
+    await room.waitForFollowup();
+    expect(room.requests, hasLength(2));
+    expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), hasLength(2));
+    expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
+    await room.close();
+  });
+
+  testWidgets('B03 absent credentials keep the current invitation pending without any HTTP', (tester) async {
+    final room = _Room(tester, root)..apiKey = '';
+    await room.open(seed: _seedFollowup);
+    await room.wait(const Duration(minutes: 2));
+    expect(room.requests, isEmpty);
+    expect(room.memory.store.requests(), isEmpty);
+    expect(room.memory.store.followups().single['state'], 'pending');
+    expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+    expect(find.text(_followup), findsNothing);
+    expect(find.text(_genericFollowup), findsNothing);
+    await room.close();
+  });
+
+  testWidgets('B03 actual auxiliary usage exhausting the shared output budget suppresses the Page wording POST', (tester) async {
+    final room = _Room(tester, root)
+      ..answer = (body) async {
+        expect(body['system'], companionMemoryExtractionPrompt);
+        final messages = body['messages']! as List;
+        final input = jsonDecode((messages.single as Map)['content'] as String) as Map;
+        return _generated(
+          jsonEncode({
+            'schema_version': 2,
+            'batch_id': input['batch_id'],
+            'covered_message_ids': [for (final source in input['source'] as List) (source as Map)['id']],
+            'operations': [],
+            'completion': 'complete',
+          }),
+          outputTokens: 720,
+        );
+      };
+    await room.open(seed: _seedFollowup);
+    for (var i = 0; i < 4; i++) {
+      room.memory.store.submitMessage(
+        id: 'budget-source-$i',
+        sessionId: room.memory.store.lightSessionId,
+        text: '今天随便聊聊$i。',
+        saidAtUtc: room.wallStart,
+        offsetMinutes: 0,
+      );
+      await settleMixed(tester, room.memory.extract(tester.state(find.byType(CompanionPage)), forceTail: true));
+    }
+    expect(room.requests, hasLength(4));
+    expect(room.memory.store.requests().map((row) => row['category']), everyElement('extract'));
+    expect(room.memory.store.requests().map((row) => (row['raw_usage']! as Map)['output_tokens']), everyElement(720));
+    await room.wait(const Duration(minutes: 2));
+    expect(room.requests, hasLength(4), reason: 'four 720-token receipts leave 120, less than the 128-token followup reservation');
+    expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), isEmpty);
+    expect(room.memory.store.followups().single['state'], 'pending');
+    expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+    expect(find.text(_followup), findsNothing);
+    expect(find.text(_genericFollowup), findsNothing);
+    await room.close();
+  });
+
+  for (final control in ['修琴取消了', '以后别提修琴']) {
+    testWidgets('B03 $control arriving during generation fences the late wording but retains usage', (tester) async {
+      final answer = Completer<http.Response>();
+      final room = _Room(tester, root)..answer = (_) => answer.future;
+      await room.open(seed: _seedFollowup);
+      await room.waitForRequest();
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty, reason: 'no display reserve during HTTP');
+      expect(room.memory.store.followups().single['state'], 'pending');
+      await room.sendControl(control);
+      answer.complete(_generated('{"action":"line","text":"$_followup"}'));
+      await room.settle();
+      expect(find.text(_followup), findsNothing);
+      expect(find.text(_genericFollowup), findsNothing);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), hasLength(1));
+      final receipt = room.memory.store.requests().singleWhere((row) => row['category'] == 'followup');
+      expect(receipt['sent_at_ms'], isNotNull);
+      expect(receipt['state'], 'finished');
+      await room.close();
+    });
+  }
+
+  testWidgets('B03 wording completed after 23:00 is not presented or spent', (tester) async {
+    final answer = Completer<http.Response>();
+    final room = _Room(tester, root)
+      ..wallStart = DateTime.utc(2026, 11, 5, 22, 59).millisecondsSinceEpoch
+      ..answer = (_) => answer.future;
+    await room.open(seed: _seedFollowup);
+    await room.waitForRequest();
+    expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+    // Cross the exact local boundary, keeping both clocks moving together.
+    final stamp = room.container.read(companionInitiativeClockProvider)();
+    final remaining = DateTime.utc(2026, 11, 5, 23).millisecondsSinceEpoch - stamp.wallMs;
+    expect(remaining, inExclusiveRange(0, 30000));
+    await tester.pump(Duration(milliseconds: remaining + 1));
+    answer.complete(_generated('{"action":"line","text":"$_followup"}'));
+    await room.settle();
+    expect(find.text(_followup), findsNothing);
+    expect(find.text(_genericFollowup), findsNothing);
+    expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+    expect(room.memory.store.requests().single['category'], 'followup');
     await room.close();
   });
 

@@ -8,6 +8,8 @@ import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
+import 'package:dsh_app/companion/companion_initiative.dart';
+import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/chat_state.dart';
@@ -25,6 +27,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
+
+import 'companion_test_settle.dart';
+import 'initiative_memory.dart';
 
 const _session = 'c438-synthetic-session';
 const _now = 1793937600000;
@@ -101,7 +106,7 @@ class _Mux extends DshMux {
 }
 
 class _Client extends DshClient {
-  _Client() : super(_Bridge());
+  _Client([_Bridge? bridge]) : super(bridge ?? _Bridge());
   final events = StreamController<DshEvent>();
   late final _fakeMux = _Mux(carrier);
   @override
@@ -118,10 +123,90 @@ class _Host extends ActiveHostController {
   HostRef build() => HostRef.local;
 }
 
+const _followupLine = '对了，周四的面试后来怎么样啦？';
+const _followupSource = '我周四打算去面试。周五你可以问我面试的进展。';
+
+// Only the final HTTP boundary is fixed here. Page, session binding, worker,
+// SDK decoder, usage journal, initiative reservation and stage all remain real.
+class _FollowupBridge extends _Bridge {
+  final posts = <Map<String, Object?>>[];
+  final release = Completer<void>();
+  final responseClosed = Completer<void>();
+  int discovery = 0;
+
+  @override
+  Future<DshHttpResponse> get(String path, {
+    Map<String, String>? query, Map<String, String>? headers, Duration? timeout,
+    bool followRedirects = true, int? maxResponseBytes,
+  }) async {
+    if (path == '/dsh-go/v1/companion/auxiliary') {
+      discovery++;
+      expect(query, {'sessionId': _session});
+      return json({
+        'v': 1, 'instanceId': 'full-followup-host', 'provider': 'selected-followup-provider',
+        'model': 'selected-followup-model', 'supported': true,
+        'capability': {'noTools': true, 'physicalDispatch': 'unknown',
+          'rawUsage': 'unavailable', 'maxPhysicalRequests': null},
+      });
+    }
+    return super.get(path, query: query, headers: headers, timeout: timeout,
+      followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+  }
+
+  @override
+  Future<DshHttpStreamResponse> postJsonStream(String path, Object? body, {
+    required DshHttpAbort abort, Duration? headerTimeout,
+    Duration idleTimeout = const Duration(seconds: 20),
+  }) async {
+    expect(path, '/dsh-go/v1/companion/auxiliary');
+    final sent = Map<String, Object?>.from(body! as Map<String, Object?>);
+    posts.add(sent);
+    await release.future; // Deliberately late even if the Page cancels meanwhile.
+    final frames = [
+      {'type': 'accepted', 'requestId': sent['requestId'], 'instanceId': 'full-followup-host',
+        'provider': 'selected-followup-provider', 'model': 'selected-followup-model'},
+      {'type': 'text', 'requestId': sent['requestId'],
+        'text': jsonEncode({'action': 'line', 'text': _followupLine})},
+      {'type': 'finish', 'requestId': sent['requestId'], 'dispatched': null, 'dispatchAtMs': null,
+        'terminal': 'complete', 'complete': true, 'httpStatus': 200, 'stopReason': null,
+        'usage': {'provider': 'selected-followup-provider', 'model': 'selected-followup-model',
+          'start_usage': null, 'final_usage': null, 'start_event': null, 'final_event': null,
+          'usage_semantics': 'unknown', 'input_uncached': null, 'input_cache_read': null,
+          'input_cache_write': null, 'output_tokens': null, 'terminal': 'complete',
+          'complete': true, 'http_status': 200, 'stop_reason': null,
+          'runtime_normalized_usage': [{'inputTokens': 40, 'outputTokens': 15}],
+          'runtime_normalized_usage_semantics': 'runtime-normalized-events'}},
+    ];
+    return DshHttpStreamResponse(200, 'application/x-ndjson', Stream.value(
+      Uint8List.fromList(utf8.encode('${frames.map(jsonEncode).join('\n')}\n'))), () async {
+        if (!responseClosed.isCompleted) responseClosed.complete();
+      });
+  }
+}
+
+void _seedFullFollowup(CompanionMemoryOwner memory) {
+  memory.store.submitMessage(id: 'full-followup-source', sessionId: _session, text: _followupSource,
+    role: 'user', scope: 'real', saidAtUtc: DateTime.utc(2026, 11, 5, 12).millisecondsSinceEpoch, offsetMinutes: 0);
+  final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+  final proposal = parseExtractionProposal(jsonEncode({
+    'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': ['full-followup-source'],
+    'completion': 'complete', 'operations': [{
+      'op': 'create', 'kind': 'episode', 'text': '我周四打算去面试', 'keywords': ['面试'],
+      'evidence': [{'message_id': 'full-followup-source', 'quote': _followupSource}],
+      'followup': {'local_date': '2026-11-06', 'precision': 'day',
+        'wording': '周五你可以问我面试的进展', 'basis': 'explicit_invitation'},
+    }],
+  }), batch);
+  expect(memory.store.commitExtraction(batch, proposal), isTrue);
+  memory.changed();
+}
+
 class _Room {
-  _Room(this.root);
+  _Room(this.root, {_Client? client, this.clock}) : client = client ?? _Client();
   final Directory root;
-  final client = _Client();
+  final _Client client;
+  final CompanionInitiativeClock Function()? clock;
+  late CompanionMemoryOwner memory;
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
   late ProviderContainer container;
@@ -132,7 +217,8 @@ class _Room {
       if (c.$1 == 'emotion') c.$2['name']! as String,
   ];
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed}) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     Directory('${root.path}/pack/runtime').createSync(recursive: true);
     Directory('${root.path}/pack/character').createSync(recursive: true);
     File('${root.path}/pack/runtime/live2dcubismcore.min.js').writeAsStringSync('core');
@@ -140,6 +226,10 @@ class _Room {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          if (clock != null) ...[
+            companionInitiativeClockProvider.overrideWithValue(clock!),
+            initiativeMemory(clock!),
+          ],
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
         ],
@@ -168,8 +258,13 @@ class _Room {
     // Load the real persisted binding before stage ready, as the global filter
     // can do in the application. Do not replace CompanionSessions or chatProvider.
     container.read(companionSessionsProvider);
-    await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    memory = await settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     await flush(tester);
+    if (seed != null) {
+      await settleMixed(tester, memory.migrateLocal());
+      await settleMixed(tester, container.read(companionInitiativeProvider).ready);
+      seed(memory);
+    }
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
     await flush(tester);
@@ -418,6 +513,94 @@ void main() {
     memory.close();
   });
   tearDown(() => temporary.deleteSync(recursive: true));
+
+  for (final approvalDuringRequest in [false, true]) {
+    testWidgets('full Page drafts its actual followup through the selected auxiliary route, approval=$approvalDuringRequest', (tester) async {
+      await tester.runAsync(() async {
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setBool('companion_initiative_enabled', true);
+        await preferences.setString('companion_initiative_pace', 'often');
+        await preferences.setString('companion_persona_v1', jsonEncode({
+          'custom': '说话简短温和。', 'callMe': '阿禾',
+        }));
+      });
+      final start = tester.binding.clock.now();
+      CompanionInitiativeClock clock() => CompanionInitiativeClock(
+        wallMs: DateTime.utc(2026, 11, 6, 12).millisecondsSinceEpoch +
+          tester.binding.clock.now().difference(start).inMilliseconds,
+        monoMs: tester.binding.clock.now().difference(start).inMilliseconds,
+      );
+      final bridge = _FollowupBridge();
+      final room = _Room(temporary, client: _Client(bridge), clock: clock);
+      await room.open(tester, seed: _seedFullFollowup);
+      try {
+        for (var i = 0; i < 120 && bridge.posts.isEmpty; i++) {
+          await tester.pump(const Duration(seconds: 1));
+        }
+        expect(bridge.discovery, greaterThan(0));
+        expect(bridge.posts, hasLength(1));
+        final sent = bridge.posts.single;
+        expect(sent['kind'], 'followup');
+        expect(sent['sessionId'], _session);
+        expect(sent['instanceId'], 'full-followup-host');
+        expect(sent['provider'], 'selected-followup-provider');
+        expect(sent['model'], 'selected-followup-model');
+        expect(sent['system'], companionMemoryFollowupPrompt);
+        expect(sent['maxTokens'], 128);
+        final input = jsonDecode(sent['input']! as String) as Map<String, Object?>;
+        expect(input['card'], {'text': '我周四打算去面试'});
+        expect(input['invitation'], {
+          'message_id': 'full-followup-source', 'source_rev': 1,
+          'said_at_utc': '2026-11-05T12:00:00.000Z', 'offset_minutes': 0,
+          'quote': _followupSource,
+        });
+        expect(input['persona'], allOf(contains('说话简短温和。'), contains('阿禾')));
+        expect(input['support'], isEmpty);
+        expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+        final held = room.memory.store.requests().where((row) => row['category'] == 'followup').single;
+        expect(held['state'], 'interrupted');
+        expect(held['sent_at_ms'], isNull);
+        expect(held['uncertain_at_ms'], isNotNull);
+        expect(room.speech(tester), isNot(_followupLine));
+
+        if (approvalDuringRequest) {
+          room.client.events.add(HostEvent.fromFrame({
+            'type': 'waterfall', 'event': 'approval/request', 'eventId': 'followup-approval',
+            'agentId': _session, 'request': {'toolName': 'bash', 'callId': 'followup-command'},
+          }));
+          await flush(tester);
+          expect(room.state.openApproval?.eventId, 'followup-approval');
+        }
+        bridge.release.complete();
+        await settleMixed(tester, bridge.responseClosed.future);
+        await flush(tester);
+        for (var i = 0; i < 20 && room.speech(tester) != _followupLine; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        final receipt = room.memory.store.requests().where((row) => row['category'] == 'followup').single;
+        expect(receipt['provider'], 'selected-followup-provider');
+        expect(receipt['state'], 'interrupted', reason: 'a generic adapter does not prove physical dispatch');
+        expect(receipt['sent_at_ms'], isNull);
+        expect(receipt['uncertain_at_ms'], isNotNull);
+        expect(receipt['estimated_cny'], isNull);
+        expect(receipt['raw_usage'], isNotNull);
+        if (approvalDuringRequest) {
+          expect(room.speech(tester), isNot(_followupLine));
+          expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+        } else {
+          expect(room.speech(tester), _followupLine);
+          expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
+          expect(room.memory.store.nextFollowup(nowMs: clock().wallMs), isNull);
+        }
+        expect(bridge.posts, hasLength(1));
+        expect(room.state.items.whereType<AssistantChatItem>(), isEmpty,
+          reason: 'auxiliary wording is not a committed ordinary chat turn');
+      } finally {
+        if (!bridge.release.isCompleted) bridge.release.complete();
+        await room.close(tester);
+      }
+    });
+  }
 
   testWidgets('positive control: empty start, monotonic chunks and repeated status preserve one reply', (tester) async {
     final room = _Room(temporary);

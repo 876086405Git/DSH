@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/companion/companion_initiative.dart';
@@ -76,6 +77,114 @@ void main() {
     _memory = null;
   });
   tearDown(() => _memory?.close());
+
+  testWidgets('B03 preparation waits for the real quiet offer and reserves only after a fresh observation', (tester) async {
+    final clock = Clock();
+    final owner = await make(tester, clock);
+    final room = Room();
+    final ready = Completer<bool>();
+    var preparations = 0;
+    var renders = 0;
+    owner.enter(room, view());
+    owner.requestSignal(
+      room,
+      view(),
+      candidate(clock),
+      isCurrent: () => true,
+      prepare: () {
+        preparations++;
+        return ready.future;
+      },
+      present: (_) {
+        expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
+        renders++;
+        return true;
+      },
+      hide: (_) {},
+    );
+    await pass(tester, clock, 44000);
+    expect(preparations, 0);
+    await pass(tester, clock, 2000);
+    expect(preparations, 1);
+    expect(_database!.select('SELECT * FROM memory_initiative_spends'), isEmpty);
+    owner.observe(room, view());
+    owner.observe(room, view());
+    expect(preparations, 1);
+    ready.complete(true);
+    await tester.pump();
+    expect(renders, 1);
+    expect(saved()['signalAtMs'], hasLength(1));
+    owner.dispose();
+  });
+
+  testWidgets('B03 failed preparation retires its offer so another real signal can present', (tester) async {
+    final clock = Clock();
+    final owner = await make(tester, clock);
+    final room = Room();
+    final ready = Completer<bool>();
+    var renders = 0;
+    owner.enter(room, view());
+    owner.requestSignal(
+      room,
+      view(),
+      candidate(clock),
+      isCurrent: () => true,
+      prepare: () => ready.future,
+      present: (_) {
+        renders++;
+        return true;
+      },
+      hide: (_) {},
+    );
+    await pass(tester, clock, 46000);
+    ready.complete(false);
+    await tester.pump();
+    expect(renders, 0);
+    expect(saved()['signalAtMs'], isEmpty);
+    owner.requestSignal(
+      room,
+      view(),
+      candidate(clock, id: 'other'),
+      isCurrent: () => true,
+      present: (_) {
+        renders++;
+        return true;
+      },
+      hide: (_) {},
+    );
+    await tester.pump();
+    expect(renders, 1);
+    expect(saved()['signalAtMs'], hasLength(1));
+    owner.dispose();
+  });
+
+  testWidgets('B03 leaving during preparation discards the completed wording without a reservation', (tester) async {
+    final clock = Clock();
+    final owner = await make(tester, clock);
+    final room = Room();
+    final ready = Completer<bool>();
+    var renders = 0;
+    owner.enter(room, view());
+    owner.requestSignal(
+      room,
+      view(),
+      candidate(clock),
+      isCurrent: () => true,
+      prepare: () => ready.future,
+      present: (_) {
+        renders++;
+        return true;
+      },
+      hide: (_) {},
+    );
+    await pass(tester, clock, 46000);
+    owner.leave(room);
+    ready.complete(true);
+    await tester.pump();
+    expect(renders, 0);
+    expect(_database!.select('SELECT * FROM memory_initiative_spends'), isEmpty);
+    owner.dispose();
+  });
 
   testWidgets('signal cannot accept an invitation but can decline into the shared refusal', (tester) async {
     final clock = Clock();

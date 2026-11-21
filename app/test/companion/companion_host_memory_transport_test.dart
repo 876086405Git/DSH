@@ -434,6 +434,118 @@ class _Probe {
 }
 
 void main() {
+  for (final rejected in [false, true]) {
+    test('B03 full followup ${rejected ? "old-host rejection is silent" : "uses the real auxiliary HTTP and ledger"}', () async {
+      final host = await _Host.start();
+      addTearDown(host.close);
+      final store = CompanionMemoryStore(sqlite3.openInMemory(), nowMilliseconds: () => _time);
+      final route = await host.transport();
+      final worker = CompanionMemoryWorker(
+        store: store,
+        transport: () => route,
+        nowMilliseconds: () => _time,
+        estimateTokens: (text) => text.runes.length,
+      );
+      addTearDown(() async {
+        await worker.stop();
+        store.close();
+      });
+      const raw = '今天去修琴，今天可以问我琴修好没。';
+      store.submitMessage(id: 'full-invite', sessionId: 'full-session', text: raw, saidAtUtc: _time, offsetMinutes: 0);
+      final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+      final proposal = parseExtractionProposal(
+        jsonEncode({
+          'schema_version': 2,
+          'batch_id': batch.id,
+          'covered_message_ids': ['full-invite'],
+          'completion': 'complete',
+          'operations': [
+            {
+              'op': 'create',
+              'kind': 'episode',
+              'text': '今天去修琴',
+              'keywords': ['修琴'],
+              'evidence': [
+                {'message_id': 'full-invite', 'quote': raw},
+              ],
+              'followup': {
+                'local_date': DateTime.fromMillisecondsSinceEpoch(_time, isUtc: true).toIso8601String().substring(0, 10),
+                'precision': 'day',
+                'wording': '今天可以问我琴修好没',
+                'basis': 'explicit_invitation',
+              },
+            },
+          ],
+        }),
+        batch,
+      );
+      expect(store.commitExtraction(batch, proposal), isTrue);
+      final captured = store.nextFollowup(nowMs: _time)!;
+      host.onPost = () {
+        final sent = host.posts.last;
+        final id = sent['requestId'];
+        expect(store.requests().single['state'], 'interrupted', reason: 'persist uncertainty before actual HTTP');
+        expect(sent['kind'], 'followup');
+        expect(sent['maxTokens'], 128);
+        expect(sent['system'], companionMemoryFollowupPrompt);
+        expect(sent.containsKey('messages'), isFalse);
+        expect(sent.containsKey('tools'), isFalse);
+        final input = jsonDecode(sent['input'] as String) as Map;
+        expect(input['persona'], '鲸鱼娘，说话自然简短。');
+        expect(input['card'], {'text': '今天去修琴'});
+        expect(input['invitation'], {
+          'message_id': 'full-invite',
+          'source_rev': 1,
+          'said_at_utc': DateTime.fromMillisecondsSinceEpoch(_time, isUtc: true).toIso8601String(),
+          'offset_minutes': 0,
+          'quote': raw,
+        });
+        expect(input['support'], isEmpty);
+        if (rejected) {
+          host.wireReply = {
+            'status': 400,
+            'body': {
+              'error': {'code': 'companion/auxiliary-invalid-request'},
+              'dispatched': false,
+            },
+          };
+        } else {
+          final finish = host.finish(dispatched: true);
+          (finish['usage'] as Map).addAll({
+            'final_usage': {
+              'input_tokens': 120,
+              'cache_read_input_tokens': 0,
+              'cache_creation_input_tokens': 0,
+              'output_tokens': 12,
+            },
+            'input_uncached': 120,
+            'input_cache_read': 0,
+            'input_cache_write': 0,
+            'output_tokens': 12,
+            'final_event': 'message_delta',
+            'usage_semantics': 'cumulative',
+          });
+          host.frames = [
+            {...host.accepted, 'requestId': id},
+            {'type': 'dispatch', 'requestId': id, 'boundary': 'fetch-invoked', 'atMs': _time},
+            {'type': 'text', 'requestId': id, 'text': '{"action":"line","text":"那把琴修好了吗？"}'},
+            {...finish, 'requestId': id},
+          ];
+        }
+      };
+      final line = await worker.followup(captured, persona: '鲸鱼娘，说话自然简短。', offsetMinutes: 0, isCurrent: () => true);
+      expect(line, rejected ? isNull : '那把琴修好了吗？');
+      expect(host.posts, hasLength(1), reason: 'no chat fallback or retry');
+      final receipt = store.requests().single;
+      expect(receipt['category'], 'followup');
+      expect(receipt['state'], rejected ? 'released' : 'finished');
+      if (!rejected) {
+        expect((receipt['raw_usage']! as Map)['final_usage'], containsPair('output_tokens', 12));
+      }
+      expect(store.followups().single['state'], 'pending', reason: 'HTTP completion is not a shown question');
+    });
+  }
+
   test('selected generic provider can complete with unknown dispatch and raw usage', () async {
     final host = await _Host.start(generic: true);
     addTearDown(host.close);

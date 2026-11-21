@@ -322,6 +322,5 @@
   "companionMemoryUsageNotSent": "Not sent locally",
   "companionMemoryUsageEmpty": "No usage recorded yet",
   "companionMemoryHostUnsupported": "This host is a bit out of date, so here she can't recall what you've talked about. Updating the host fixes it.",
-  "companionMemoryFollowup": "Would you like to talk about that thing you mentioned?",
   "companionMemoryPostponedDone": "Okay, let's pick it up once you have a new time."
 }

@@ -182,7 +182,7 @@ extension CompanionAuxiliaryApi on DshClient {
       throw const CompanionAuxiliaryFailure(code: 'route-unavailable', terminal: 'preflight_error', notSent: true);
     }
     if (!_id(requestId) ||
-        !const {'extract', 'consolidate'}.contains(kind) ||
+        !const {'extract', 'consolidate', 'followup'}.contains(kind) ||
         !_text(system) ||
         !_text(input) ||
         maxTokens < 1 ||

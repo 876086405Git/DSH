@@ -37,6 +37,7 @@ http.Response _reply(String text, {String stop = 'end_turn', bool complete = tru
     if (complete) {'type': 'message_stop'},
   ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
   200,
+  headers: {'content-type': 'text/event-stream; charset=utf-8'},
 );
 
 Map<String, Object?> _input(http.Request request) {
@@ -74,6 +75,44 @@ class _Phone {
   void say(String id, String text) =>
       store.submitMessage(id: id, sessionId: 'light', text: text, saidAtUtc: now, offsetMinutes: 480);
 
+  MemoryRow invite({bool waitForCompletion = false}) {
+    final raw = waitForCompletion ? '册子校对的事，等我说结束再问我想不想聊。' : '今天去修琴，今天可以问我琴修好没。';
+    say('invitation', raw);
+    final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+    final proposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'covered_message_ids': ['invitation'],
+        'completion': 'complete',
+        'operations': [
+          {
+            'op': 'create',
+            'kind': 'episode',
+            'text': waitForCompletion ? '我在校对册子' : '今天去修琴',
+            'keywords': waitForCompletion ? ['册子'] : ['修琴'],
+            'evidence': [
+              {'message_id': 'invitation', 'quote': raw},
+            ],
+            'followup': {
+              'local_date': waitForCompletion ? null : '2026-11-21',
+              'precision': waitForCompletion ? 'unspecified' : 'day',
+              'wording': waitForCompletion ? raw : '今天可以问我琴修好没',
+              'basis': 'explicit_invitation',
+            },
+          },
+        ],
+      }),
+      batch,
+    );
+    expect(store.commitExtraction(batch, proposal), isTrue);
+    if (waitForCompletion) {
+      now += const Duration(hours: 1).inMilliseconds;
+      say('completion', '那本册子的校对结束了。');
+    }
+    return store.nextFollowup(nowMs: now)!;
+  }
+
   CompanionMemoryWorker withHttp(Future<http.Response> Function(http.Request) answer, {String key = 'test'}) {
     final route = CompanionLightMemoryTransport(apiKey: () => key, client: () => MockClient(answer));
     return worker = CompanionMemoryWorker(
@@ -86,6 +125,88 @@ class _Phone {
 }
 
 void main() {
+  test('B03 actual followup POST carries original invitation support and persona with a separate usage receipt', () async {
+    final phone = _Phone();
+    final capture = phone.invite(waitForCompletion: true);
+    const persona = '你叫鲸鱼娘，说话自然简短。';
+    final worker = phone.withHttp((request) async {
+      final body = jsonDecode(request.body) as Map;
+      expect(body['system'], companionMemoryFollowupPrompt);
+      expect(body['max_tokens'], 128);
+      expect(body.containsKey('tools'), isFalse);
+      final messages = body['messages'] as List;
+      expect(messages, hasLength(1));
+      final input = jsonDecode((messages.single as Map)['content'] as String) as Map;
+      expect(input['card'], {'text': '我在校对册子'});
+      expect(input['persona'], persona);
+      expect(input['invitation'], {
+        'message_id': 'invitation',
+        'source_rev': 1,
+        'said_at_utc': DateTime.fromMillisecondsSinceEpoch(phone.now - 3600000, isUtc: true).toIso8601String(),
+        'offset_minutes': 480,
+        'quote': '册子校对的事，等我说结束再问我想不想聊。',
+      });
+      expect(input['support'], [
+        {
+          'message_id': 'completion',
+          'source_rev': 1,
+          'said_at_utc': DateTime.fromMillisecondsSinceEpoch(phone.now, isUtc: true).toIso8601String(),
+          'offset_minutes': 480,
+          'quote': '那本册子的校对结束了。',
+        },
+      ]);
+      expect(input['offset_minutes'], -240, reason: 'the current offset does not reinterpret the original source');
+      expect(phone.store.requests().single['category'], 'followup');
+      expect(phone.store.requests().single['batch_id'], 'followup:${capture['id']}:${capture['row_rev']}');
+      return _reply('{"action":"line","text":"那本册子校对完了，想聊聊吗？"}');
+    });
+    expect(
+      await worker.followup(capture, persona: persona, offsetMinutes: -240, isCurrent: () => true),
+      '那本册子校对完了，想聊聊吗？',
+    );
+    expect(phone.store.followups().single['state'], 'pending', reason: 'generation is not presentation');
+    final receipt = phone.store.requests().single;
+    expect(receipt['state'], 'finished');
+    expect((receipt['raw_usage']! as Map)['final_usage'], _usage);
+  });
+
+  test('B03 extraction and wording share one actual request lane while a late cancelled answer is still charged', () async {
+    final phone = _Phone();
+    final capture = phone.invite();
+    phone.say('next-message', '我还学了长笛。');
+    final started = Completer<void>();
+    final reply = Completer<http.Response>();
+    var calls = 0;
+    final worker = phone.withHttp((_) {
+      calls++;
+      started.complete();
+      return reply.future;
+    });
+    final wording = worker.followup(capture, persona: '温柔简短', offsetMinutes: 480, isCurrent: () => true);
+    await started.future;
+    expect(await worker.extract(forceTail: true), CompanionMemoryWork.idle);
+    expect(await worker.followup(capture, persona: '温柔简短', offsetMinutes: 480, isCurrent: () => true), isNull);
+    expect(calls, 1);
+    worker.cancel();
+    reply.complete(_reply('{"action":"line","text":"那把琴修好了吗？"}'));
+    expect(await wording, isNull);
+    expect(phone.store.requests().single['sent_at_ms'], isNotNull);
+    expect((phone.store.requests().single['raw_usage']! as Map)['final_usage'], _usage);
+    expect(phone.store.followups().single['state'], 'pending');
+    expect(phone.db.select("SELECT state FROM memory_events WHERE message_id='next-message'").single['state'], 'pending');
+  });
+
+  test('B03 oversize whole input and an absent key never create a request or truncate evidence', () async {
+    final phone = _Phone();
+    final capture = phone.invite();
+    final worker = phone.withHttp((_) async => throw StateError('no request expected'));
+    expect(await worker.followup(capture, persona: '长人设' * 2000, offsetMinutes: 480, isCurrent: () => true), isNull);
+    final noKey = phone.withHttp((_) async => throw StateError('no request expected'), key: '');
+    expect(await noKey.followup(capture, persona: '简短', offsetMinutes: 480, isCurrent: () => true), isNull);
+    expect(phone.store.requests(), isEmpty);
+    expect(phone.store.followups().single['state'], 'pending');
+  });
+
   test('complete empty result commits the exact saved source and raw final receipt', () async {
     final phone = _Phone();
     phone.say('u1', '  今天就随便聊聊。\n');

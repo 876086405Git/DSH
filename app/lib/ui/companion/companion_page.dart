@@ -206,6 +206,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   Timer? _memoryQuiet;
   Timer? _hostUsageTimer;
   int _memoryControlRevision = 0;
+  String? _memoryFollowupAttempt;
   int? _fullControlRevision;
   int? _lightControlRevision;
   String? _lightSourceId;
@@ -1072,7 +1073,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     ], now: now);
   }
 
-  /// A short line without the model. [aloud]: with her voice, when it is on.
+  /// Present one short line. [aloud]: with her voice, when it is on.
   void _say(String line, {bool aloud = true, bool widgetLine = true}) {
     _objectTimer?.cancel();
     if (!aloud || !_speakAloud(line, flush: true)) _stage.command('say', {'chars': line.length});
@@ -1578,6 +1579,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
     if (opportunity == null) return;
     final captured = opportunity;
+    final attempt = '$_initiativeContext:${captured['id']}:${captured['row_rev']}:${captured['control_revision']}';
+    if (_memoryFollowupAttempt == attempt) {
+      return;
+    }
     final candidate = CompanionInitiativeSignal(
       id: 'followup:${captured['id']}:${captured['row_rev']}:${captured['control_revision']}',
       contextKey: _initiativeContext,
@@ -1588,15 +1593,40 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         !_leaving &&
         candidate.contextKey == _initiativeContext &&
         memory.store.isFollowupCurrent(captured, nowMs: _clock().wallMs);
+    String? line;
     _initiative.requestSignal(
       this,
       view,
       candidate,
       followupId: captured['id']! as String,
       isCurrent: current,
+      prepare: () async {
+        _memoryFollowupAttempt = attempt;
+        final persona = ref.read(companionPersonaProvider);
+        line = await memory.followup(
+          this,
+          captured,
+          persona: companionPersonaPart(
+            custom: persona.custom,
+            name: ref.read(companionNameProvider) ?? _character.name,
+            callMe: persona.callMe,
+          ),
+          offsetMinutes: _clock().offsetMinutes,
+          isCurrent: () {
+            final now = _clock();
+            return current() &&
+                _presentable(_initiativeView()) &&
+                now.monoMs < candidate.expiresAtMonoMs &&
+                companionNightKey(now.wallMs, now.offsetMinutes) == null;
+          },
+        );
+        return line != null;
+      },
       present: (display) {
-        if (!current()) return false;
-        _say(context.l10n.companionMemoryFollowup, widgetLine: false);
+        if (!current() || line == null) {
+          return false;
+        }
+        _say(line!, widgetLine: false);
         _memoryFollowupTicket = display.ticket.id;
         return true;
       },
@@ -1615,6 +1645,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   /// Something the person really did here: no invitation this visit.
   void _acted() {
+    // A failed preparation may try again after a real new interaction, never
+    // once per idle tick while the same room opportunity stays unchanged.
+    _memoryFollowupAttempt = null;
     _initiative.activate(this);
     _observeLateUse(interaction: true);
   }

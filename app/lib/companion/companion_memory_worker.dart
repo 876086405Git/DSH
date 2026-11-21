@@ -148,6 +148,125 @@ class CompanionMemoryWorker {
     return _finished?.future ?? Future<void>.value();
   }
 
+  /// One selected opportunity, with the same lane and usage journal as
+  /// extraction. Wording exists only for this caller's captured room ticket.
+  Future<String?> followup(
+    MemoryRow captured, {
+    required String persona,
+    required int offsetMinutes,
+    required bool Function() isCurrent,
+  }) async {
+    if (busy) {
+      return null;
+    }
+    bool current() => isCurrent() && store.isFollowupCurrent(captured, nowMs: nowMilliseconds());
+    if (!current()) {
+      return null;
+    }
+    final route = transport();
+    if (!route.configured) {
+      return null;
+    }
+    final card = store.cards().singleWhere((row) => row['id'] == captured['card_id']);
+    final sources = store.messages();
+    Map<String, Object?> evidence(String id, String quote) {
+      final source = sources.singleWhere((row) => row['id'] == id);
+      return {
+        'message_id': source['id'],
+        'source_rev': source['source_rev'],
+        'said_at_utc': DateTime.fromMillisecondsSinceEpoch(source['said_at_utc']! as int, isUtc: true).toIso8601String(),
+        'offset_minutes': source['offset_minutes'],
+        'quote': quote,
+      };
+    }
+
+    final input = jsonEncode({
+      'card': {'text': card['text']},
+      'persona': persona,
+      'invitation': evidence(captured['message_id']! as String, captured['invitation']! as String),
+      'support': [
+        if (captured['support_message_id'] != null)
+          evidence(captured['support_message_id']! as String, captured['support_quote']! as String),
+      ],
+      'now_utc': DateTime.fromMillisecondsSinceEpoch(nowMilliseconds(), isUtc: true).toIso8601String(),
+      'offset_minutes': offsetMinutes,
+    });
+    // A small complete input or silence; do not cut an original qualification
+    // or persona to make it fit. These are implementation caps, not billing.
+    const inputLimit = 2000;
+    const outputLimit = 128;
+    if (estimateTokens('$companionMemoryFollowupPrompt\n$input') > inputLimit) {
+      return null;
+    }
+    final requestId = store.reserveRequest(
+      category: 'followup',
+      provider: route.provider,
+      model: route.model,
+      inputTokens: inputLimit,
+      outputTokens: outputLimit,
+      batchId: 'followup:${captured['id']}:${captured['row_rev']}',
+    );
+    if (requestId == null) {
+      return null;
+    }
+    final cancelled = _cancelled = Completer<void>();
+    final finished = _finished = Completer<void>();
+    var terminal = 'local_error';
+    var dispatched = false;
+    var uncertain = false;
+    try {
+      final reply = await route.call(
+        requestId: requestId,
+        category: 'followup',
+        system: companionMemoryFollowupPrompt,
+        input: input,
+        maxTokens: outputLimit,
+        cancelled: cancelled.future,
+        onDispatchUncertain: () {
+          if (cancelled.isCompleted || !current()) {
+            throw const _MemoryRequestStale();
+          }
+          store.markRequestUncertain(requestId);
+          uncertain = true;
+        },
+        onSent: () {
+          if (cancelled.isCompleted || !current()) {
+            throw const _MemoryRequestStale();
+          }
+          store.markRequestSent(requestId);
+          dispatched = true;
+        },
+        onUsage: (usage) => store.recordUsage(requestId, usage),
+      );
+      terminal = reply.terminal;
+      if (cancelled.isCompleted || !current() || !reply.complete || reply.terminal != 'complete') {
+        return null;
+      }
+      return parseFollowupProposal(reply.text);
+    } on _MemoryRequestStale {
+      terminal = dispatched || uncertain ? 'cancelled' : 'not_sent';
+      return null;
+    } on CompanionAuxiliaryError catch (error) {
+      terminal = error.notSent ? 'not_sent' : error.terminal;
+      return null;
+    } on Object {
+      // Invalid wording, a broken connection or a local failure is not a
+      // displayed question. The sent/uncertain reservation is still settled.
+      return null;
+    } finally {
+      try {
+        store.finishRequest(requestId, terminal: terminal);
+      } finally {
+        if (!cancelled.isCompleted) {
+          cancelled.complete();
+        }
+        _cancelled = null;
+        _finished = null;
+        finished.complete();
+      }
+    }
+  }
+
   Future<CompanionMemoryWork> extract({bool forceTail = false}) async {
     if (busy) return CompanionMemoryWork.idle;
     final route = transport();

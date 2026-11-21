@@ -37,7 +37,7 @@ async function fixture(t, configure = {}) {
         if (!state.generic) observer.observe({ type: 'usage', event: 'message_start', raw: { input_tokens: 51, output_tokens: 0, cache_read_input_tokens: 99, custom_field: { retained: true } } });
         await state.outputGate?.promise;
         signal.throwIfAborted();
-        yield { type: 'text-delta', text: '{"items":[]}' };
+        yield { type: 'text-delta', text: state.output ?? '{"items":[]}' };
         if (state.tool) { yield { type: 'block-start', blockType: 'tool-call' }; return; }
         if (!state.generic) {
           observer.observe({ type: 'usage', event: 'message_delta', raw: state.finalUsage ?? { output_tokens: 7 } });
@@ -88,7 +88,7 @@ test('owner authentication and exact input validation run before model preparati
     assert.equal((await f.http({ method: 'POST', auth, body: f.body() })).status, status);
   }
   for (const [body, type, status] of [[f.body(), 'text/plain', 415], ['{', 'application/json', 400],
-    [f.body({ tools: [] }), 'application/json', 400], [f.body({ maxTokens: 3001 }), 'application/json', 400],
+    [f.body({ tools: [] }), 'application/json', 400], [f.body({ kind: 'chat' }), 'application/json', 400], [f.body({ maxTokens: 3001 }), 'application/json', 400],
     [f.body({ input: '\ud800' }), 'application/json', 400], ['x'.repeat(65537), 'application/json', 413],
     [JSON.stringify(f.body()).replace('"v":1', '"v":1,"v":1'), 'application/json', 400]]) {
     const r = await f.http({ method: 'POST', body, type }); assert.equal(r.status, status); assert.equal(r.body.dispatched, false);
@@ -208,4 +208,35 @@ test('tool output is never executed and length termination remains distinguishab
   f.state.tool = false; f.state.stopReason = 'max_tokens'; f.state.finishKind = 'max-tokens';
   const length = await f.post({ requestId: 'length' });
   assert.equal(length.body.at(-1).complete, true); assert.equal(length.body.at(-1).terminal, 'max_tokens');
+});
+
+// The adapter above is explicit: this proves route behavior and exact payload,
+// not the pinned engine's provider hook or generated language quality.
+test('followup uses one selected auxiliary call with exact supplied material and bounded output', async t => {
+  const output = JSON.stringify({ action: 'line', text: '周四的面试，今天想聊聊吗？' });
+  const f = await fixture(t, { output });
+  const system = 'Synthetic one-line followup instruction. The phone owns eligibility.';
+  const input = JSON.stringify({
+    persona: { name: '小棠', style: '简短温和' },
+    card: { text: '你打算周四去面试。' },
+    invitation: { message_id: 'source', source_rev: 1, said_at_utc: '2026-11-18T02:00:00Z',
+      offset_minutes: 480, quote: '周四打算去面试。周五你可以问问我。' },
+    support: [], now_utc: '2026-11-20T02:00:00Z', offset_minutes: 480,
+  });
+  const response = await f.post({ kind: 'followup', system, input, maxTokens: 128 });
+  assert.equal(response.status, 200);
+  assert.deepEqual(f.state.payload, { system, input });
+  assert.deepEqual(f.state.config, { provider: 'selected-provider', model: 'selected-model',
+    reasoningEffort: 'off', maxTokens: 128 });
+  assert.equal(response.body.filter(event => event.type === 'text').map(event => event.text).join(''), output);
+  assert.equal(response.body.at(-1).complete, true);
+  assert.equal(response.body.at(-1).dispatched, true);
+  assert.equal(response.body.at(-1).usage.output_tokens, 7);
+  assert.equal(f.state.invocations, 1);
+  const repeat = await f.post({ kind: 'followup', system, input, maxTokens: 128 });
+  assert.equal(repeat.status, 409);
+  assert.equal(f.state.invocations, 1);
+  const receipt = await f.http({ path: `${PATH}/requests/request?instanceId=${f.info.body.instanceId}` });
+  assert.equal(receipt.body.finish.complete, true);
+  assert(!JSON.stringify(receipt.body).includes('周四'));
 });

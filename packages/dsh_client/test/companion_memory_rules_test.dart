@@ -91,6 +91,40 @@ MemorySelection select(List<MemoryRow> cards, String input, {Set<String> explici
     selectMemoryContext(cards, input: input, nowMs: 1000, controlRevision: 4, explicitTopicIds: explicit, limit: limit);
 
 void main() {
+  group('09s D followup response envelope', () {
+    test('a single line is returned verbatim and silent is distinct from an empty line', () {
+      const line = '你说过的那间朝南的房，今天想聊聊吗？';
+      expect(parseFollowupProposal(jsonEncode({'action': 'line', 'text': line})), line);
+      expect(parseFollowupProposal('{"action":"silent","text":""}'), isNull);
+    });
+
+    for (final entry in <String, Object?>{
+      'missing text': {'action': 'line'},
+      'extra topic authority': {'action': 'line', 'text': '想聊聊吗？', 'topic': 'other'},
+      'empty line': {'action': 'line', 'text': ''},
+      'blank line': {'action': 'line', 'text': '  '},
+      'silent with words': {'action': 'silent', 'text': '也许下次'},
+      'unknown action': {'action': 'ask', 'text': '想聊聊吗？'},
+      'multiline': {'action': 'line', 'text': '那件事\n想聊聊吗？'},
+      'next line': {'action': 'line', 'text': '那件事\u0085想聊聊吗？'},
+      'unicode line break': {'action': 'line', 'text': '那件事\u2028想聊聊吗？'},
+      'two questions': {'action': 'line', 'text': '怎样了？顺利吗?'},
+      'control character': {'action': 'line', 'text': '那件事\u0000怎样了？'},
+      'wrong text type': {'action': 'line', 'text': 123},
+      'array envelope': <Object?>[],
+    }.entries) {
+      test('rejects ${entry.key}', () {
+        expect(() => parseFollowupProposal(jsonEncode(entry.value)), throwsFormatException);
+      });
+    }
+
+    test('prose or fenced JSON is not repaired into permission to speak', () {
+      for (final raw in ['今天想聊聊吗？', '```json\n{"action":"line","text":"想聊聊吗？"}\n```']) {
+        expect(() => parseFollowupProposal(raw), throwsFormatException);
+      }
+    });
+  });
+
   group('B literal invitation and original local date', () {
     MemoryRow? plan(
       String text,
@@ -135,7 +169,7 @@ void main() {
       expect(d3['opens_at_ms'], utc('2026-11-19T16:00:00Z'));
       for (final value in [d1, d2, d3]) {
         expect(value['expires_at_ms'], (value['opens_at_ms'] as int) + memoryFollowupWindowMs);
-        expect(value['local_line'], '上次提到的这件事，现在想聊聊吗？');
+        expect(value['local_line'], isNull);
       }
     });
 
@@ -167,7 +201,7 @@ void main() {
       expect(past['reason'], 'date_before_invitation');
     });
 
-    test('D4 waits for its direct firsthand noun phrase; D5 cannot invent a required name', () {
+    test('D4 waits for direct completion; D5 is eligible to draft but has no fabricated local wording', () {
       final d4 = plan('册子校对的事，等我说结束再问我想不想聊。', '等我说结束再问我想不想聊', precision: 'unspecified')!;
       expect(d4['wait_subject'], '册子校对');
       expect(d4['opens_at_ms'], isNull);
@@ -183,7 +217,8 @@ void main() {
         saidAt: '2026-11-17T02:00:00Z',
       )!;
       expect(d5['local_line'], isNull);
-      expect(d5['reason'], 'local_wording_unavailable');
+      expect(d5['opens_at_ms'], utc('2026-11-20T16:00:00Z'));
+      expect(d5['reason'], isNull);
     });
 
     test('a model invitation label cannot authorize quotations, reminders, another person or multiple invitations', () {

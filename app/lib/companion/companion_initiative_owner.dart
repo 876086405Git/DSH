@@ -110,13 +110,16 @@ abstract interface class CompanionInitiativeRoom {
 }
 
 class _SignalRequest {
-  const _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide, this.followupId);
+  _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide, this.followupId, this.prepare);
   final CompanionInitiativeRoom room;
   final CompanionInitiativeSignal candidate;
   final bool Function() isCurrent;
   final bool Function(CompanionInitiativeDisplay) present;
   final void Function(String) hide;
   final String? followupId;
+  final Future<bool> Function()? prepare;
+  bool preparing = false;
+  bool prepared = false;
 }
 
 class _QueuedInitiative {
@@ -313,6 +316,7 @@ class CompanionInitiative {
     required void Function(String) hide,
     bool nightCareEnabled = false,
     String? followupId,
+    Future<bool> Function()? prepare,
   }) {
     if (_disposed ||
         _controller == null ||
@@ -326,7 +330,7 @@ class CompanionInitiative {
     _retireRequest();
     _view = view;
     _revision++;
-    final request = _SignalRequest(room, candidate, isCurrent, present, hide, followupId);
+    final request = _SignalRequest(room, candidate, isCurrent, present, hide, followupId, prepare);
     _signal = request;
     if (previous != null) _enqueue(CompanionInitiativeEvent.cancelSignal(previous.candidate.id), room);
     _enqueue(CompanionInitiativeEvent.signal(candidate, nightCareEnabled: nightCareEnabled, view: view), room);
@@ -414,6 +418,17 @@ class CompanionInitiative {
         }
         _apply(controller, controller.handle(op.event, _now()), op);
         _track(op.event);
+        final ticket = controller.offer;
+        final prepared = _signal;
+        if (_queue.isEmpty &&
+            ticket != null &&
+            prepared != null &&
+            prepared.prepared &&
+            ticket.signalId == prepared.candidate.id) {
+          // Preparation may span observations. Resume the still-pending offer
+          // under the current view, while reentrant render events stay queued.
+          _offer(controller, ticket, _QueuedInitiative(const CompanionInitiativeEvent.check(), _room, _revision));
+        }
       }
       final pending = _signal;
       if (pending != null && controller.pendingSignal?.id != pending.candidate.id) _retireRequest();
@@ -444,6 +459,12 @@ class CompanionInitiative {
       if (allowed) allowed = _same(op, room!, request);
     } on Object {
       allowed = false;
+    }
+    if (allowed && request != null && request.prepare != null && !request.prepared) {
+      if (!request.preparing) {
+        _prepare(controller, ticket, request);
+      }
+      return;
     }
     try {
       String? reservation;
@@ -529,6 +550,31 @@ class CompanionInitiative {
       _hide(ticket.id);
       _apply(controller, controller.handle(const CompanionInitiativeEvent.storageFault(), _now()), op);
     }
+  }
+
+  void _prepare(
+    CompanionInitiativeController controller,
+    CompanionInitiativeTicket ticket,
+    _SignalRequest request,
+  ) {
+    request.preparing = true;
+    unawaited(() async {
+      var ready = false;
+      try {
+        ready = await request.prepare!();
+      } on Object {
+        // Optional wording failures spend no presentation quota.
+      }
+      if (!identical(_signal, request)) {
+        return;
+      }
+      if (!ready || !_requestCurrent(request) || controller.offer?.id != ticket.id) {
+        cancelSignal(request.candidate.id);
+        return;
+      }
+      request.prepared = true;
+      _run(const CompanionInitiativeEvent.check());
+    }());
   }
 
   void _hide(String id) {

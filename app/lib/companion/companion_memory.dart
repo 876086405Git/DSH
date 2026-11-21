@@ -71,6 +71,16 @@ class CompanionMemoryOwner extends ChangeNotifier {
     return result;
   }
 
+  Future<String?> followup(
+    Object room,
+    MemoryRow captured, {
+    required String persona,
+    required int offsetMinutes,
+    required bool Function() isCurrent,
+  }) => identical(_room, room)
+      ? _worker!.followup(captured, persona: persona, offsetMinutes: offsetMinutes, isCurrent: isCurrent)
+      : Future.value(null);
+
   void leave(Object room) {
     if (!identical(_room, room)) return;
     _worker?.cancel();

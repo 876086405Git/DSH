@@ -416,11 +416,13 @@ Future<CompanionAuxiliaryResult> _call(
   DshHttpAbort? abort,
   String input = 'synthetic conversation batch',
   String requestId = _request,
+  String kind = 'extract',
+  String system = 'Extract a JSON proposal from the given batch.',
 }) => client.callCompanionAuxiliary(
   cap,
   requestId: requestId,
-  kind: 'extract',
-  system: 'Extract a JSON proposal from the given batch.',
+  kind: kind,
+  system: system,
   input: input,
   maxTokens: 1400,
   abort: abort ?? DshHttpAbort(),
@@ -529,6 +531,78 @@ void main() {
     ]);
     expect(host.bodies.last?['provider'], 'selected-provider');
     expect(host.bodies.last?['model'], 'selected-model');
+  });
+
+  test('followup uses the same frozen selected provider and returns its exact NDJSON receipt', () async {
+    host.capability = _capability(generic: true);
+    final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
+    final probe = _Probe();
+    const proposal = '{"action":"line","text":"周四的修琴，今天想聊聊吗？"}';
+    final input = jsonEncode({
+      'card': {'text': '我周四去修琴'},
+      'persona': '说话自然、简短。',
+      'invitation': {
+        'message_id': 'invite-1',
+        'source_rev': 1,
+        'said_at_utc': '2026-11-16T04:00:00Z',
+        'offset_minutes': 480,
+        'quote': '我周四去修琴，周五可以问我修琴的进展',
+      },
+      'support': <Object?>[],
+      'now_utc': '2026-11-20T01:00:00Z',
+      'offset_minutes': 480,
+    });
+    host.answer = (request) => _frames(request, [
+      _accepted(host.capability),
+      {'type': 'text', 'requestId': _request, 'text': proposal},
+      _finish(host.capability, generic: true, dispatched: null),
+    ]);
+    final result = await _call(
+      client,
+      cap,
+      probe,
+      kind: 'followup',
+      system: companionMemoryFollowupPrompt,
+      input: input,
+    );
+    expect(result.text, proposal);
+    expect(result.complete, isTrue);
+    expect(result.dispatched, isNull, reason: 'generic adapter dispatch is still unobserved');
+    expect(probe.events, ['uncertain', 'usage']);
+    expect(probe.usage.single, {..._usage(host.capability, generic: true), 'host_dispatch_at_ms': null});
+    expect(host.bodies.last!['kind'], 'followup');
+    expect(host.bodies.last!['provider'], cap.provider);
+    expect(host.bodies.last!['model'], cap.model);
+    expect(host.bodies.last!['system'], companionMemoryFollowupPrompt);
+    expect(host.bodies.last!['input'], input);
+    expect(host.bodies.last!.keys, isNot(contains('tools')));
+    expect(host.paths.map((uri) => uri.path), [_path, _path]);
+  });
+
+  test('an older host rejecting followup proves unsent without a fallback POST', () async {
+    final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
+    final probe = _Probe();
+    // Literal validation error from the owner B bridge, whose kind allowlist
+    // has only extract/consolidate. This is an explicit current preflight.
+    host.answer = (request) => _json(request, {
+      'error': {
+        'code': 'companion/auxiliary-invalid-request',
+        'message': 'Invalid companion auxiliary request',
+      },
+      'dispatched': false,
+    }, status: 400);
+    await expectLater(
+      _call(client, cap, probe, kind: 'followup', system: companionMemoryFollowupPrompt),
+      throwsA(
+        isA<CompanionAuxiliaryFailure>()
+            .having((error) => error.code, 'code', 'companion/auxiliary-invalid-request')
+            .having((error) => error.notSent, 'notSent', true)
+            .having((error) => error.terminal, 'terminal', 'preflight_error'),
+      ),
+    );
+    expect(probe.events, ['uncertain', 'usage']);
+    expect(host.paths, hasLength(2));
+    expect(host.bodies.last!['kind'], 'followup');
   });
 
   test('partial final usage survives a missing finish without adding the start', () async {
