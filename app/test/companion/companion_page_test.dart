@@ -90,7 +90,7 @@ class _Clock {
 /// whether anything touched her (a tap or a typed word would hide an
 /// invitation without the gate ever seeing the room become busy).
 class _RecordingInitiative extends CompanionInitiative {
-  _RecordingInitiative(CompanionInitiativeClock Function() clock) : super(clock);
+  _RecordingInitiative(super.clock);
 
   final observed = <CompanionInitiativeView>[];
   int activations = 0;
