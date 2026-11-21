@@ -6,6 +6,8 @@ import 'package:dsh_client/dsh_client.dart' show DshClient, DshConnection, DshCo
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
+import 'support/old_memory_schema.dart';
+
 const _oldStore = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const _oldCard = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const _otherCard = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -67,24 +69,8 @@ void main() {
     ]).single,
   );
 
-  // This fixture removes only A06's two columns. The v4 ledger tables and the
-  // phone archive stay intact; reopening executes the real v4 -> v5 migration.
   void reopenFromV4() {
-    database.execute('''
-      CREATE TABLE memory_migrations_v4 (
-        legacy_store_id TEXT NOT NULL, legacy_card_id TEXT NOT NULL,
-        read_revision INTEGER NOT NULL, local_card_id TEXT NOT NULL,
-        result TEXT NOT NULL CHECK(result IN ('imported','display_only','forgotten')),
-        cleanup_state TEXT NOT NULL DEFAULT 'pending' CHECK(cleanup_state IN ('pending','done')),
-        PRIMARY KEY(legacy_store_id,legacy_card_id)
-      );
-      INSERT INTO memory_migrations_v4
-        SELECT legacy_store_id,legacy_card_id,read_revision,local_card_id,result,cleanup_state
-        FROM memory_migrations;
-      DROP TABLE memory_migrations;
-      ALTER TABLE memory_migrations_v4 RENAME TO memory_migrations;
-      PRAGMA user_version = 4;
-    ''');
+    restoreOldMemorySchema(database, 4);
     reopen();
   }
 
@@ -346,7 +332,7 @@ void main() {
     final archive = store.archive;
     final card = store.cards().single;
     reopenFromV4();
-    expect(database.select('PRAGMA user_version').single['user_version'], 5);
+    expect(database.select('PRAGMA user_version').single['user_version'], 6);
     expect(store.archive, archive);
     expect(mapping()['source_fingerprint'], isNull);
     expect(mapping()['cleanup_read_revision'], 2);

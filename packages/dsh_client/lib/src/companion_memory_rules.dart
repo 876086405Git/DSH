@@ -304,7 +304,7 @@ MemorySelection selectMemoryContext(
     if (card['scope'] != 'real' ||
         card['eligible'] != true ||
         card['status'] == 'withdrawn' ||
-        card['plan_state'] == 'cancelled') {
+        const ['cancelled', 'postponed'].contains(card['plan_state'])) {
       return false;
     }
     // Older stored automatic rows can predate the proposal text boundary.
@@ -453,6 +453,7 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
   String? kind;
   String? target;
   for (final entry in <String, RegExp>{
+    'postpone': RegExp(r'^(.+?)(?:改期了?|延期了?)[，, ]*(?:时间还没定|时间未定|日期未定|还没定)[。.!！]*$'),
     'forget': RegExp(r'^(?:忘掉|忘记|忘了)(.+?)[。.!！]*$'),
     'never': RegExp(r'^(?:别再提|别主动提|不要再提|不要主动提)(.+?)[。.!！]*$'),
     'less': RegExp(r'^(?:少提(?:一点)?)(.+?)[。.!！]*$'),
@@ -485,7 +486,7 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
   // A shared expression topic does not prove that its independent facts or
   // plans are the same target. Fact controls need one resolved card; the
   // store follows its proved dependencies separately.
-  final factControl = kind == 'forget' || kind == 'cancel';
+  final factControl = kind == 'forget' || kind == 'cancel' || kind == 'postpone';
   final resolved = topicIds.length == 1 && (!factControl || targetCardIds.length == 1);
   return {
     'kind': kind,
@@ -495,6 +496,121 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
     'delete_chat': deleteChat,
     'ambiguous': !resolved,
   };
+}
+
+const memoryFollowupWindowMs = 72 * 60 * 60 * 1000;
+const _followupDateWord = r'(?:\d{4}-\d{2}-\d{2}|今天|明天|后天|(?:本周|下周|周|星期)[一二三四五六日天])';
+final _followupAsk = RegExp('^(?:($_followupDateWord' r'(?:上午|下午|晚上)?)|(到时|到时候|过后|事后|结束后))?'
+  r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(?:我)?');
+final _followupBackground = RegExp('^(?:我)?$_followupDateWord'
+  r'(?:上午|下午|晚上)?(?:我)?(?:打算|准备)?(?:去(?:看|听|参加)?|看|听|参加)(.+)$');
+
+/// A small literal invitation grammar. Unsupported language remains waiting
+/// or has no opportunity; a model's explicit_invitation label is not authority.
+/// Source and card storage eligibility are checked by the caller separately.
+MemoryRow? qualifyMemoryFollowup(MemoryRow card, MemoryRow source) {
+  final followup = card['followup'] as MemoryRow?;
+  if (followup == null) return null;
+  final text = normalizeMemoryText(source['text'] as String);
+  final wording = normalizeMemoryText(followup['wording'] as String);
+  if (!text.contains(wording) || _storyWording.hasMatch(text) || _nonLiteralControl(text) ||
+      RegExp(r'["“”「」『』]|(?:朋友|有人|他|她)说|不可以问|别问我|不要问我|不用问我|不必问我|提醒|闹钟|通知|取消|改期|延期').hasMatch(text)) {
+    return null;
+  }
+  final wait = RegExp(r'^(.+?)(?:的事)?[，, ]*等我说结束再问(?:问)?我(?:想不想聊|要不要聊)?[。.!！]*$').firstMatch(text);
+  final clauses = text.split(RegExp(r'[，,。；;\n]')).map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
+  final asks = <String>[];
+  for (final clause in clauses) {
+    final match = _followupAsk.firstMatch(clause);
+    if (match != null && !RegExp(r'^[你他她]|[?？]|吗$').hasMatch(clause.substring(match.end))) asks.add(clause);
+  }
+  if (wait == null && (asks.length != 1 || !(asks.single.contains(wording) || wording.contains(asks.single)))) {
+    return null;
+  }
+  final subject = wait?.group(1)?.trim();
+  final ask = subject == null ? _followupAsk.firstMatch(asks.single)! : null;
+  final cardText = normalizeMemoryText(card['text'] as String).replaceFirst(RegExp(r'[。.!！]+$'), '');
+  final anchors = (card['keywords'] as List<Object?>).cast<String>().map(normalizeMemoryText)
+    .where((word) => cardText.contains(word) && text.contains(word));
+  final question = ask == null ? '' : asks.single.substring(ask.end).replaceFirst(RegExp(r'[!！]+$'), '').trim();
+  // This is a closed local wording grammar, not a list of supposedly complete
+  // restriction keywords. Unparsed clauses, including restrictions before the
+  // invitation, cannot be silently dropped. Paraphrased context may wait.
+  final localWording = subject != null ? !RegExp(r'[，,。；;]').hasMatch(subject) :
+    (question.isEmpty || const ['想不想聊', '要不要聊'].contains(question) ||
+      anchors.any((word) => question == '想不想聊$word' || question == '要不要聊$word' ||
+        question == '$word的进展' || question == '$word修好没')) &&
+    clauses.every((clause) => clause == asks.single || clause == '别问原因' ||
+      anchors.contains(_followupBackground.firstMatch(clause)?.group(1)));
+  final at = source['said_at_utc'] as int;
+  final offset = source['offset_minutes'] as int;
+  final event = card['event_time'] as MemoryRow?;
+  DateTime? date;
+  var afterDay = false;
+  var reason = subject == null ? 'date_unresolved' : 'waiting_for_completion';
+  if (ask != null) {
+    date = _followupDay(ask.group(1) ?? '', source);
+    if (date == null && event != null && ask.group(2) != null) {
+      date = _followupDay(event['wording'] as String, source);
+      afterDay = true;
+      if (date != null && event['local_date'] != null && event['local_date'] != _dateLabel(date)) date = null;
+    } else if (date != null && followup['local_date'] != null && followup['local_date'] != _dateLabel(date)) {
+      date = null;
+      reason = 'date_mismatch';
+    }
+    if (date != null && !afterDay) {
+      final local = DateTime.fromMillisecondsSinceEpoch(at + offset * 60000, isUtc: true);
+      if (date.isBefore(DateTime.utc(local.year, local.month, local.day))) {
+        date = null;
+        reason = 'date_before_invitation';
+      }
+    }
+    // The input has no machine-readable hour. Waiting through the known
+    // local date is conservative; it does not invent 15:00 for "afternoon".
+    afterDay = afterDay || RegExp(r'(?:上午|下午|晚上)$').hasMatch(ask.group(1) ?? '') ||
+      followup['precision'] == 'part_of_day' || followup['precision'] == 'clock';
+  }
+  final openingDay = afterDay ? date?.add(const Duration(days: 1)) : date;
+  final boundary = openingDay == null ? null : openingDay.millisecondsSinceEpoch - offset * 60000;
+  final opens = boundary == null ? null : (boundary < at ? at : boundary);
+  return {
+    'time_key': subject != null ? 'completion' : openingDay == null ? 'undated' : 'day:${_dateLabel(openingDay)}',
+    'wait_subject': subject, 'opens_at_ms': opens, 'expires_at_ms': opens == null ? null : opens + memoryFollowupWindowMs,
+    'local_line': localWording ? '上次提到的这件事，现在想聊聊吗？' : null,
+    'reason': !localWording ? 'local_wording_unavailable' : opens == null ? reason : null,
+  };
+}
+
+DateTime? _followupDay(String words, MemoryRow source) {
+  final match = RegExp('^($_followupDateWord)(?:上午|下午|晚上)?\$').firstMatch(words.trim());
+  if (match == null) return null;
+  final word = match.group(1)!;
+  if (word.contains('-')) {
+    final parsed = DateTime.tryParse('${word}T00:00:00Z');
+    return parsed != null && _dateLabel(parsed) == word ? parsed : null;
+  }
+  final local = DateTime.fromMillisecondsSinceEpoch((source['said_at_utc'] as int) +
+    (source['offset_minutes'] as int) * 60000, isUtc: true);
+  final day = DateTime.utc(local.year, local.month, local.day);
+  final relative = const {'今天': 0, '明天': 1, '后天': 2}[word];
+  if (relative != null) return day.add(Duration(days: relative));
+  final weekday = const {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7, '天': 7}[word.substring(word.length - 1)]!;
+  final days = word.startsWith('本周') ? weekday - day.weekday : word.startsWith('下周') ?
+    7 + weekday - day.weekday : (weekday - day.weekday + 7) % 7;
+  return day.add(Duration(days: days));
+}
+
+String _dateLabel(DateTime date) => '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+/// Accept only a direct completion of the invited noun phrase. Optional
+/// demonstratives and a single 的 between its existing words cover the narrow
+/// D4 form; no keywords are combined across unrelated completion messages.
+bool isMemoryFollowupCompletion(String subject, String text) {
+  final statement = normalizeMemoryText(text);
+  if (_storyWording.hasMatch(statement) || _nonLiteralControl(statement)) return false;
+  final body = RegExp(r'^(?:那本|这本|那件|这件|那场|这场)?(.+?)(?:已经)?结束了[。.!！]*$').firstMatch(statement)?.group(1);
+  if (body == null) return false;
+  return body == subject || (body.split('的').length == 2 && body.replaceFirst('的', '') == subject);
 }
 
 const companionMemoryExtractionPrompt = r'''

@@ -5,6 +5,8 @@ import 'package:dsh_client/companion.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
+import 'support/old_memory_schema.dart';
+
 const manualCard = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 int estimate(String text) => (text.runes.length / 4).ceil();
@@ -1978,16 +1980,9 @@ void main() {
     test('opening a v2 database adds deletion identities without replacing its original data', () {
       final card = remember('u1', '我学长笛', keywords: ['长笛']);
       final originalArchive = store.archive;
-      // Remove the later tables and columns to reconstruct the exact v2 schema.
-      database.execute('DROP TABLE memory_host_chat_delivery_receipts');
-      database.execute('DROP TABLE memory_host_chat_receipts');
-      database.execute('DROP TABLE memory_host_chat_deliveries');
-      database.execute('DROP TABLE memory_deleted_messages');
-      database.execute('ALTER TABLE memory_migrations DROP COLUMN source_fingerprint');
-      database.execute('ALTER TABLE memory_migrations DROP COLUMN cleanup_read_revision');
-      database.execute('PRAGMA user_version=2');
+      restoreOldMemorySchema(database, 2);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 5);
+      expect(database.select('PRAGMA user_version').single['user_version'], 6);
       expect(store.archive, originalArchive);
       expect(store.cards().single, card);
       expect(store.messages().single['text'], '我学长笛');
@@ -2104,7 +2099,7 @@ void main() {
         throwsA(isA<DshRemoteException>()),
       );
       expect(store.requests(), isEmpty);
-      expect(database.select('PRAGMA user_version').single['user_version'], 5);
+      expect(database.select('PRAGMA user_version').single['user_version'], 6);
     });
 
     test('v3 upgrade preserves sources and existing once-only local receipts', () {
@@ -2114,12 +2109,7 @@ void main() {
       store.recordUsage(request, usage(input: 2, read: 0, write: 0, output: 1));
       store.finishRequest(request, terminal: 'complete');
       final before = store.requests(), originalArchive = store.archive;
-      database.execute('DROP TABLE memory_host_chat_delivery_receipts');
-      database.execute('DROP TABLE memory_host_chat_receipts');
-      database.execute('DROP TABLE memory_host_chat_deliveries');
-      database.execute('ALTER TABLE memory_migrations DROP COLUMN source_fingerprint');
-      database.execute('ALTER TABLE memory_migrations DROP COLUMN cleanup_read_revision');
-      database.execute('PRAGMA user_version=3');
+      restoreOldMemorySchema(database, 3);
       reopen();
       expect(store.requests(), before);
       expect(store.archive, originalArchive);

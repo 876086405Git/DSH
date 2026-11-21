@@ -24,7 +24,7 @@ class CompanionMemoryStore {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 5) {
+      if (version > 6) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -100,6 +100,39 @@ class CompanionMemoryStore {
           _db.execute('PRAGMA user_version = 5');
         });
       }
+      if (version < 6) {
+        _transaction(() {
+          _db.execute('ALTER TABLE memory_archive ADD COLUMN followup_after_seq INTEGER NOT NULL DEFAULT 0');
+          _db.execute('''
+            CREATE TABLE memory_initiative_state (
+              singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+              last_greeting_at_ms INTEGER, declined_until_ms INTEGER NOT NULL, night_json TEXT
+            );
+            CREATE TABLE memory_followups (
+              id TEXT PRIMARY KEY, row_rev INTEGER NOT NULL, time_key TEXT NOT NULL,
+              card_id TEXT NOT NULL REFERENCES memory_cards(id) ON DELETE CASCADE,
+              card_rev INTEGER NOT NULL, control_revision INTEGER NOT NULL,
+              message_id TEXT NOT NULL REFERENCES memory_messages(id) ON DELETE CASCADE,
+              source_rev INTEGER NOT NULL, invitation TEXT NOT NULL,
+              source_first_seq INTEGER NOT NULL, said_at_utc INTEGER NOT NULL, offset_minutes INTEGER NOT NULL,
+              wait_subject TEXT, opens_at_ms INTEGER, expires_at_ms INTEGER, local_line TEXT,
+              support_message_id TEXT REFERENCES memory_messages(id) ON DELETE CASCADE,
+              support_source_rev INTEGER, support_quote TEXT,
+              state TEXT NOT NULL CHECK(state IN ('waiting','pending','reserved','asked','closed','maybe_shown')),
+              reason TEXT, presented_at_ms INTEGER
+            );
+            CREATE TABLE memory_initiative_spends (
+              id TEXT PRIMARY KEY, opportunity_id TEXT,
+              kind TEXT NOT NULL CHECK(kind IN ('invite','signal','followup')),
+              reserved_at_ms INTEGER NOT NULL, presented_at_ms INTEGER,
+              state TEXT NOT NULL CHECK(state IN ('reserved','shown','released','unknown')),
+              CHECK((kind='followup')=(opportunity_id IS NOT NULL))
+            );
+            CREATE INDEX memory_initiative_time ON memory_initiative_spends(reserved_at_ms,state);
+          ''');
+          _db.execute('PRAGMA user_version = 6');
+        });
+      }
       _transaction(() {
         _db.execute(
           "UPDATE memory_requests SET state='released', terminal='not_sent' "
@@ -109,6 +142,11 @@ class CompanionMemoryStore {
           "UPDATE memory_requests SET state='interrupted', terminal='interrupted' "
           "WHERE sent_at_ms IS NOT NULL AND terminal IS NULL",
         );
+        _db.execute(
+          "UPDATE memory_followups SET state='maybe_shown',reason='presentation_unknown',row_rev=row_rev+1 "
+          "WHERE state='reserved' AND id IN (SELECT opportunity_id FROM memory_initiative_spends WHERE state='reserved')",
+        );
+        _db.execute("UPDATE memory_initiative_spends SET state='unknown' WHERE state='reserved'");
       });
     } catch (_) {
       _db.close();
@@ -540,7 +578,7 @@ class CompanionMemoryStore {
           : sources.map((source) => source['at'] as int).reduce(math.max);
       // Cancellation is an explicit later user control, not an inferred tense
       // or the timestamp of a remaining older proof.
-      final basis = manual || card['plan_state'] == 'cancelled'
+      final basis = manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
           ? card['current_basis_seq']
           : supported
           ? sources.map((source) => source['first_seq'] as int).reduce(math.max)
@@ -583,12 +621,12 @@ class CompanionMemoryStore {
     List<String>? targetCardIds,
     bool deleteChat = false,
   }) {
-    if (!const ['forget', 'never', 'less', 'normal', 'cancel'].contains(kind) ||
+    if (!const ['forget', 'never', 'less', 'normal', 'cancel', 'postpone'].contains(kind) ||
         topicIds.isEmpty ||
         topicIds.any((id) => id.isEmpty) ||
         (deleteChat && kind != 'forget') ||
         (targetCardIds != null &&
-            (!const ['forget', 'cancel'].contains(kind) ||
+            (!const ['forget', 'cancel', 'postpone'].contains(kind) ||
                 targetCardIds.isEmpty ||
                 targetCardIds.any((id) => id.isEmpty)))) {
       throw ArgumentError('Invalid companion control');
@@ -616,7 +654,7 @@ class CompanionMemoryStore {
             'status': 400,
           });
         }
-        if (kind == 'forget' || kind == 'cancel') {
+        if (kind == 'forget' || kind == 'cancel' || kind == 'postpone') {
           final actual = (control['target_card_ids'] as List<Object?>).cast<String>()..sort();
           if (requestedTargets != null && jsonEncode(actual) != jsonEncode(requestedTargets)) throw _conflict;
           targets = actual;
@@ -635,7 +673,7 @@ class CompanionMemoryStore {
         } else {
           _removeFactRelations(targets.toSet(), deleteChat: deleteChat);
         }
-      } else if (kind == 'cancel') {
+      } else if (kind == 'cancel' || kind == 'postpone') {
         final selected =
             targets ??
             [
@@ -645,11 +683,11 @@ class CompanionMemoryStore {
         for (final target in selected) {
           _db.execute(
             '''
-            UPDATE memory_cards SET plan_state='cancelled',followup=NULL,current_basis_seq=?,
+            UPDATE memory_cards SET plan_state=?,followup=NULL,event_time=CASE WHEN ? THEN NULL ELSE event_time END,current_basis_seq=?,
               row_rev=row_rev+1,updated_at_ms=? WHERE id=?
               AND (current_basis_seq IS NULL OR current_basis_seq<=?)
           ''',
-            [sequence, at, target, sequence],
+            [kind == 'cancel' ? 'cancelled' : 'postponed', kind == 'postpone' ? 1 : 0, sequence, at, target, sequence],
           );
         }
       } else {
@@ -751,7 +789,7 @@ class CompanionMemoryStore {
     }
     _checkedNow();
     _finishControlMessage(message, 'ambiguous_control');
-    _bumpControl();
+    _bumpControl(followupAfterSeq: message['first_seq'] as int, followupCloseReason: 'unresolved_control');
   });
 
   void correctFromMessage({
@@ -975,13 +1013,13 @@ class CompanionMemoryStore {
     }
   }
 
-  void _bumpControl({int? historyAfterSeq}) {
+  void _bumpControl({int? historyAfterSeq, int? followupAfterSeq, String followupCloseReason = 'control_changed'}) {
     _db.execute(
       '''
       UPDATE memory_archive SET control_revision=control_revision+1,widget_clear_pending=1,
-        history_after_seq=MAX(history_after_seq,?) WHERE singleton=1
+        history_after_seq=MAX(history_after_seq,?),followup_after_seq=MAX(followup_after_seq,?) WHERE singleton=1
     ''',
-      [historyAfterSeq ?? 0],
+      [historyAfterSeq ?? 0, followupAfterSeq ?? 0],
     );
     for (final claim in _db.select('SELECT id FROM memory_batches')) {
       _dropBatch(claim['id'] as String);
@@ -996,6 +1034,14 @@ class CompanionMemoryStore {
       );
     }
     _advanceCursor();
+    // Every old presentation cache is fenced immediately. Independent pending
+    // invitations may later be rebuilt from current sources under the new
+    // control, but an unresolved command and consumed opportunities stay shut.
+    _db.execute('''
+      UPDATE memory_followups SET row_rev=row_rev+1,invitation='',support_quote=NULL,wait_subject=NULL,local_line=NULL,
+        state=CASE WHEN state IN ('waiting','pending','reserved') THEN 'closed' ELSE state END,
+        reason=CASE WHEN reason IN ('unresolved_control','expired','already_presented') THEN reason ELSE ? END
+    ''', [followupCloseReason]);
   }
 
   MemoryBatch? nextBatch({bool forceTail = false, required int Function(String) estimateTokens}) => _transaction(() {
@@ -1112,7 +1158,7 @@ class CompanionMemoryStore {
 
   // A cancelled plan is retained only as a local ordering anchor. Its old
   // future wording is not a current item in 09s existing or model selection.
-  bool _currentCard(MemoryRow card, int at) => _currentAnchor(card, at) && card['plan_state'] != 'cancelled';
+  bool _currentCard(MemoryRow card, int at) => _currentAnchor(card, at) && !const ['cancelled', 'postponed'].contains(card['plan_state']);
 
   bool _currentAnchor(MemoryRow card, int at) =>
       card['scope'] == 'real' &&
@@ -2000,6 +2046,242 @@ class CompanionMemoryStore {
       throw const DshRemoteException('companion/unavailable', 'Companion clock is unavailable', {'status': 503});
     }
     return at;
+  }
+
+  /// The App's existing strict v1/v2 reader owns legacy validation. A missing
+  /// SQLite singleton is uninitialized, not permission to discard a bad key.
+  MemoryRow? initiativeRecord() {
+    final rows = _db.select('SELECT * FROM memory_initiative_state WHERE singleton=1');
+    if (rows.isEmpty) return null;
+    final state = rows.single;
+    final at = _checkedNow();
+    final spends = _db.select('''
+      SELECT kind,COALESCE(presented_at_ms,reserved_at_ms) AS at FROM memory_initiative_spends
+      WHERE state!='released' AND COALESCE(presented_at_ms,reserved_at_ms)>? ORDER BY at,id
+    ''', [at - 86400000]);
+    return {
+      'v': 2, 'lastGreetingAtMs': state['last_greeting_at_ms'],
+      'inviteAtMs': [for (final spend in spends) if (spend['kind'] == 'invite') spend['at']],
+      'signalAtMs': [for (final spend in spends) if (spend['kind'] != 'invite') spend['at']],
+      'declinedUntilMs': state['declined_until_ms'],
+      'night': state['night_json'] == null ? null : jsonDecode(state['night_json'] as String),
+    };
+  }
+
+  MemoryRow initializeInitiative(MemoryRow validatedV2) => _transaction(() {
+    final existing = initiativeRecord();
+    if (existing != null) return existing;
+    _db.execute('''
+      INSERT INTO memory_initiative_state(singleton,last_greeting_at_ms,declined_until_ms,night_json) VALUES(1,?,?,?)
+    ''', [validatedV2['lastGreetingAtMs'], validatedV2['declinedUntilMs'],
+      validatedV2['night'] == null ? null : jsonEncode(validatedV2['night'])]);
+    for (final entry in const {'invite': 'inviteAtMs', 'signal': 'signalAtMs'}.entries) {
+      for (final at in (validatedV2[entry.value] as List<Object?>).cast<int>()) {
+        _db.execute('''
+          INSERT INTO memory_initiative_spends(id,kind,reserved_at_ms,presented_at_ms,state) VALUES(?,?,?,?,'shown')
+        ''', ['legacy:${entry.key}:$at', entry.key, at, at]);
+      }
+    }
+    return initiativeRecord()!;
+  });
+
+  /// Never overwrite the shared spend history with a possibly older RAM
+  /// controller snapshot. Only its greeting/decline/timezone metadata is saved.
+  void writeInitiativeMetadata(MemoryRow validatedV2) {
+    _db.execute('''
+      UPDATE memory_initiative_state SET last_greeting_at_ms=?,declined_until_ms=?,night_json=? WHERE singleton=1
+    ''', [validatedV2['lastGreetingAtMs'], validatedV2['declinedUntilMs'],
+      validatedV2['night'] == null ? null : jsonEncode(validatedV2['night'])]);
+    if (_db.select('SELECT changes() AS n').single['n'] != 1) throw _conflict;
+  }
+
+  String? reserveInitiative({
+    required String kind,
+    required int nowMs,
+    required int maxPerDay,
+    required int gapMs,
+    String? followupId,
+  }) {
+    if (nowMs < 0 || nowMs > 8640000000000000) throw ArgumentError('Invalid initiative clock');
+    return _transaction(() {
+      final states = _db.select('SELECT * FROM memory_initiative_state WHERE singleton=1');
+      if (states.isEmpty) throw _conflict;
+      final metadata = states.single;
+      if (nowMs < (metadata['declined_until_ms'] as int) ||
+          (metadata['last_greeting_at_ms'] != null && (metadata['last_greeting_at_ms'] as int) > nowMs)) {
+        return null;
+      }
+      final spent = _db.select('''
+        SELECT *,COALESCE(presented_at_ms,reserved_at_ms) AS at FROM memory_initiative_spends
+        WHERE state!='released' AND COALESCE(presented_at_ms,reserved_at_ms)>? ORDER BY at,id
+      ''', [nowMs - 86400000]);
+      if (spent.length >= maxPerDay || (spent.isNotEmpty && nowMs - (spent.last['at'] as int) < gapMs)) return null;
+      if (kind == 'followup') {
+        if (spent.any((row) => row['kind'] == 'followup')) return null;
+        final rows = _db.select('SELECT * FROM memory_followups WHERE id=?', [followupId]);
+        if (rows.isEmpty || rows.single['state'] != 'pending' || !isFollowupCurrent(rows.single, nowMs: nowMs)) {
+          return null;
+        }
+        _db.execute("UPDATE memory_followups SET state='reserved' WHERE id=?", [followupId]);
+      }
+      final id = _createId();
+      _db.execute('''
+        INSERT INTO memory_initiative_spends(id,opportunity_id,kind,reserved_at_ms,state) VALUES(?,?,?,?,'reserved')
+      ''', [id, followupId, kind, nowMs]);
+      return id;
+    });
+  }
+
+  /// Rendering is outside the transaction. Only a real successful callback
+  /// supplies shown; a throwing/unknown callback keeps its conservative debit.
+  void settleInitiative(String id, {required String outcome}) => _transaction(() {
+    if (!const ['shown', 'released', 'unknown'].contains(outcome)) throw ArgumentError('Invalid initiative outcome');
+    final rows = _db.select('SELECT * FROM memory_initiative_spends WHERE id=?', [id]);
+    if (rows.isEmpty) throw _conflict;
+    final spend = rows.single;
+    if (spend['state'] == outcome) return;
+    if (spend['state'] != 'reserved') throw _conflict;
+    final at = outcome == 'shown' ? _checkedNow() : null;
+    _db.execute('UPDATE memory_initiative_spends SET state=?,presented_at_ms=? WHERE id=?', [outcome, at, id]);
+    if (spend['opportunity_id'] != null) {
+      final state = outcome == 'shown' ? 'asked' : outcome == 'unknown' ? 'maybe_shown' : 'pending';
+      _db.execute('''
+        UPDATE memory_followups SET state=?,presented_at_ms=?,reason=?,row_rev=row_rev+?
+        WHERE id=? AND (state='reserved' OR ?)
+      ''', [state, at, outcome == 'unknown' ? 'presentation_unknown' : null,
+        outcome == 'shown' ? 0 : 1, spend['opportunity_id'], outcome == 'released' ? 0 : 1]);
+    }
+  });
+
+  List<MemoryRow> followups() => [
+    for (final row in _db.select('SELECT * FROM memory_followups ORDER BY opens_at_ms,id')) {...row},
+  ];
+
+  MemoryRow? nextFollowup({required int nowMs}) => _transaction(() {
+    _refreshFollowups(nowMs);
+    for (final row in _db.select("SELECT * FROM memory_followups WHERE state='pending' ORDER BY opens_at_ms,id")) {
+      if (isFollowupCurrent(row, nowMs: nowMs)) return Map<String, Object?>.from(row);
+    }
+    return null;
+  });
+
+  /// Currentness protects an existing display as well as a pending ticket.
+  /// Asked may remain visible for its original eight seconds; only pending
+  /// can reserve, so this is never permission to show the question twice.
+  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) => _db.select('''
+    SELECT 1 FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
+    JOIN memory_topics t ON t.id=c.topic_id JOIN memory_messages m ON m.id=f.message_id
+    JOIN memory_archive a ON a.singleton=1 LEFT JOIN memory_messages support ON support.id=f.support_message_id
+    WHERE f.id=? AND f.row_rev=? AND f.card_id=? AND f.card_rev=? AND f.control_revision=?
+      AND f.message_id=? AND f.source_rev=? AND f.support_message_id IS ? AND f.support_source_rev IS ?
+      AND f.state IN ('pending','reserved','asked') AND f.local_line IS NOT NULL AND f.invitation!=''
+      AND f.opens_at_ms<=? AND f.expires_at_ms>? AND f.control_revision=a.control_revision
+      AND c.row_rev=f.card_rev AND c.scope='real' AND c.eligible=1 AND c.status='current'
+      AND (c.plan_state IS NULL OR c.plan_state NOT IN ('cancelled','postponed'))
+      AND (c.expires_at_ms IS NULL OR c.expires_at_ms>?) AND t.mode='normal'
+      AND m.source_rev=f.source_rev AND m.role='user' AND m.scope='real'
+      AND m.first_seq>MAX(a.history_after_seq,a.followup_after_seq)
+      AND (f.wait_subject IS NULL OR (support.source_rev=f.support_source_rev AND support.role='user'
+        AND support.scope='real' AND support.first_seq>m.first_seq))
+  ''', [captured['id'], captured['row_rev'], captured['card_id'], captured['card_rev'], captured['control_revision'],
+    captured['message_id'], captured['source_rev'], captured['support_message_id'], captured['support_source_rev'],
+    nowMs, nowMs, nowMs]).isNotEmpty;
+
+  void _refreshFollowups(int at) {
+    final meta = archive;
+    final sources = <String, MemoryRow>{
+      for (final row in _db.select("SELECT * FROM memory_messages WHERE role='user' AND scope='real' AND first_seq>? ORDER BY first_seq",
+        [math.max(meta['history_after_seq'] as int, meta['followup_after_seq'] as int)])) row['id'] as String: Map<String, Object?>.from(row),
+    };
+    final candidates = <String, List<MemoryRow>>{};
+    for (final card in cards()) {
+      if (!_currentCard(card, at) || card['topic_mode'] != 'normal' || card['followup'] == null) continue;
+      final wording = (card['followup'] as MemoryRow)['wording'] as String;
+      final origins = <String>{
+        for (final proof in (card['evidence'] as List<Object?>).cast<MemoryRow>())
+          if ((proof['quote'] as String).contains(wording)) proof['message_id'] as String,
+      };
+      for (final origin in origins) {
+        final source = sources[origin];
+        if (source == null) continue;
+        final plan = qualifyMemoryFollowup(card, source);
+        if (plan == null) continue;
+        // One logical invitation at this window keeps its identity through
+        // source edits, pin changes, card revalidation and process restarts.
+        final id = sha256.convert(utf8.encode(jsonEncode([origin, plan['time_key']]))).toString();
+        (candidates[id] ??= []).add({
+          'id': id, ...plan, 'card_id': card['id'], 'card_rev': card['row_rev'],
+          'control_revision': meta['control_revision'], 'message_id': origin, 'source_rev': source['source_rev'],
+          'invitation': source['text'], 'source_first_seq': source['first_seq'],
+          'said_at_utc': source['said_at_utc'], 'offset_minutes': source['offset_minutes'],
+          'support_message_id': null, 'support_source_rev': null, 'support_quote': null,
+        });
+      }
+    }
+    final choices = [for (final group in candidates.values) if (group.length == 1) group.single];
+    final chosenIds = choices.map((row) => row['id']).toSet();
+    final existing = {for (final row in _db.select('SELECT * FROM memory_followups')) row['id'] as String: row};
+    for (final old in existing.values) {
+      if (const ['waiting', 'pending'].contains(old['state']) && !chosenIds.contains(old['id'])) {
+        _db.execute("UPDATE memory_followups SET state='closed',reason='no_current_invitation',invitation='',local_line=NULL,"
+          "support_quote=NULL,row_rev=row_rev+1 WHERE id=?", [old['id']]);
+      }
+    }
+    for (final candidate in choices) {
+      final old = existing[candidate['id']];
+      if (old != null && (const ['asked', 'maybe_shown'].contains(old['state']) ||
+          const ['unresolved_control', 'expired', 'already_presented'].contains(old['reason']))) {
+        continue;
+      }
+      final spent = _db.select("SELECT state FROM memory_initiative_spends WHERE opportunity_id=? AND state!='released'",
+        [candidate['id']]);
+      if (spent.any((row) => row['state'] == 'reserved')) continue;
+      final subject = candidate['wait_subject'] as String?;
+      if (subject != null && candidate['local_line'] != null &&
+          choices.where((other) => other['wait_subject'] == subject).map((other) => other['card_id']).toSet().length == 1) {
+        for (final support in sources.values) {
+          if ((support['first_seq'] as int) <= (candidate['source_first_seq'] as int) ||
+              (support['said_at_utc'] as int) < (candidate['said_at_utc'] as int) ||
+              !isMemoryFollowupCompletion(subject, support['text'] as String)) {
+            continue;
+          }
+          candidate.addAll({
+            'support_message_id': support['id'], 'support_source_rev': support['source_rev'], 'support_quote': support['text'],
+            'opens_at_ms': support['said_at_utc'], 'expires_at_ms': (support['said_at_utc'] as int) + memoryFollowupWindowMs,
+            'time_key': 'completed:${support['said_at_utc']}', 'reason': null,
+          });
+          break;
+        }
+      }
+      final alreadyAsked = spent.isNotEmpty || existing.values.any((row) =>
+        row['card_id'] == candidate['card_id'] && row['time_key'] == candidate['time_key'] &&
+        const ['asked', 'maybe_shown'].contains(row['state']));
+      final expires = candidate['expires_at_ms'] as int?;
+      candidate['state'] = alreadyAsked || expires != null && expires <= at ? 'closed' :
+        candidate['opens_at_ms'] == null || candidate['local_line'] == null ? 'waiting' : 'pending';
+      if (alreadyAsked) {
+        candidate['reason'] = 'already_presented';
+      } else if (expires != null && expires <= at) {
+        candidate['reason'] = 'expired';
+      }
+      // Polling an unchanged opportunity must not invalidate its captured ticket.
+      if (old != null && candidate.entries.every((entry) => old[entry.key] == entry.value)) continue;
+      _db.execute('''
+        INSERT INTO memory_followups(id,row_rev,time_key,card_id,card_rev,control_revision,message_id,source_rev,
+          invitation,source_first_seq,said_at_utc,offset_minutes,wait_subject,opens_at_ms,expires_at_ms,local_line,
+          support_message_id,support_source_rev,support_quote,state,reason)
+        VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET row_rev=row_rev+1,time_key=excluded.time_key,card_id=excluded.card_id,
+          card_rev=excluded.card_rev,control_revision=excluded.control_revision,message_id=excluded.message_id,
+          source_rev=excluded.source_rev,invitation=excluded.invitation,source_first_seq=excluded.source_first_seq,
+          said_at_utc=excluded.said_at_utc,offset_minutes=excluded.offset_minutes,wait_subject=excluded.wait_subject,
+          opens_at_ms=excluded.opens_at_ms,expires_at_ms=excluded.expires_at_ms,local_line=excluded.local_line,
+          support_message_id=excluded.support_message_id,support_source_rev=excluded.support_source_rev,
+          support_quote=excluded.support_quote,state=excluded.state,reason=excluded.reason
+      ''', [for (final key in const ['id', 'time_key', 'card_id', 'card_rev', 'control_revision', 'message_id', 'source_rev',
+        'invitation', 'source_first_seq', 'said_at_utc', 'offset_minutes', 'wait_subject', 'opens_at_ms', 'expires_at_ms',
+        'local_line', 'support_message_id', 'support_source_rev', 'support_quote', 'state', 'reason']) candidate[key]]);
+    }
   }
 
   /// No network is allowed between the version read and this synchronous write.
