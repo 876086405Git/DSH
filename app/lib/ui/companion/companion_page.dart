@@ -2563,7 +2563,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       return;
     }
     if (notesCommands.values.any(
-          (command) => const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(command?['kind']),
+          (command) =>
+              const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(command?['kind']),
         ) &&
         (_logOpen || !(ModalRoute.of(context)?.isCurrent ?? true))) {
       return;
@@ -3023,8 +3024,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         if (capability == null || !capability.compareDrafts) {
           return (line: l10n.companionCompareUnavailable, task: null);
         }
-      } else if (!memory.store.hostTaskInputs(hostKey: hostKey).any((row) =>
-          const ['text/plain', 'text/markdown'].contains(row['mediaType']) && (row['size']! as int) <= 65536)) {
+      } else if (!memory.store
+          .hostTaskInputs(hostKey: hostKey)
+          .any(
+            (row) => const ['text/plain', 'text/markdown'].contains(row['mediaType']) && (row['size']! as int) <= 65536,
+          )) {
         return (line: l10n.companionCompareConnect, task: null);
       }
       if (!mounted) {
@@ -3083,7 +3087,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   }
 
   Future<({String line, MemoryRow? task})> _handleReceipts(
-    CompanionMemoryOwner memory, MemoryRow source, int itemNo, MemoryRow command, bool Function() current,
+    CompanionMemoryOwner memory,
+    MemoryRow source,
+    int itemNo,
+    MemoryRow command,
+    bool Function() current,
   ) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
@@ -3093,26 +3101,36 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final hostKey = companionHostKey(host);
     final client = ref.read(activeConnectionProvider).value?.client;
     final light = _light;
-    bool here() => mounted && current() && host == ref.read(activeHostProvider) &&
-      identical(client, ref.read(activeConnectionProvider).value?.client) &&
-      !_logOpen && (ModalRoute.of(context)?.isCurrent ?? true);
+    bool here() =>
+        mounted &&
+        current() &&
+        host == ref.read(activeHostProvider) &&
+        identical(client, ref.read(activeConnectionProvider).value?.client) &&
+        !_logOpen &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
     final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
     CompanionTasksCapability? capability;
     MemoryRow task;
     if (accepted != null) {
       task = memory.store.hostTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
-      final targets = memory.store.pendingReceiptsTasks(hostKey: hostKey)
-        .where((row) => row['source_session_id'] == source['session_id'] && row['cancel_requested'] == 0).toList();
+      final targets = memory.store
+          .pendingReceiptsTasks(hostKey: hostKey)
+          .where((row) => row['source_session_id'] == source['session_id'] && row['cancel_requested'] == 0)
+          .toList();
       if (targets.length != 1) {
         return (line: l10n.companionReceiptWhich, task: null);
       }
       if (!here()) {
         throw const DshClosedException('room changed before accepting receipt cancellation');
       }
-      task = memory.store.cancelReceiptsTask(taskId: targets.single['task_id']! as String,
-        expectedTaskRev: targets.single['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+      task = memory.store.cancelReceiptsTask(
+        taskId: targets.single['task_id']! as String,
+        expectedTaskRev: targets.single['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+      );
     } else {
       final agreement = await companionCompareAgreement(source, command, ref.read(companionRemindersProvider));
       if (!here()) {
@@ -3136,31 +3154,55 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (!mounted) {
         throw const DshClosedException('room closed before choosing receipts');
       }
-      final selected = await chooseCompanionReceiptInputs(context, store: memory.store, hostKey: hostKey,
-        client: client, capability: capability, isCurrent: here);
+      final selected = await chooseCompanionReceiptInputs(
+        context,
+        store: memory.store,
+        hostKey: hostKey,
+        client: client,
+        capability: capability,
+        isCurrent: here,
+      );
       if (!here()) {
         throw const DshClosedException('room changed before accepting the complete receipt task');
       }
       if (selected == null) {
         return (line: l10n.companionReceiptNoInputs, task: null);
       }
-      task = memory.store.createReceiptsTaskFromMessage(messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
-        roomMode: light ? 'light' : 'full', hostKey: hostKey, hostSessionId: light ? null : _sessionId,
-        inputs: selected.inputs, outputDirectory: selected.outputDirectory,
-        agreement: {...agreement, 'args': {
-          'inputs': [for (final input in selected.inputs) {'sourceRef': input['sourceRef'], 'version': input['version']}],
-          'outputDirRef': selected.outputDirectory['folderRef'], 'outputName': command['outputName'],
-          'writeMode': 'createNew',
-        }});
+      task = memory.store.createReceiptsTaskFromMessage(
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+        roomMode: light ? 'light' : 'full',
+        hostKey: hostKey,
+        hostSessionId: light ? null : _sessionId,
+        inputs: selected.inputs,
+        outputDirectory: selected.outputDirectory,
+        agreement: {
+          ...agreement,
+          'args': {
+            'inputs': [
+              for (final input in selected.inputs) {'sourceRef': input['sourceRef'], 'version': input['version']},
+            ],
+            'outputDirRef': selected.outputDirectory['folderRef'],
+            'outputName': command['outputName'],
+            'writeMode': 'createNew',
+          },
+        },
+      );
     }
     memory.changed();
     if (client == null || hostKey != task['host_key']) {
       return (line: l10n.companionReceiptOriginalHost, task: task);
     }
     // Once accepted locally, leaving the room does not erase the agreed work.
-    task = await memory.hostTasks.run(task, client: client, hostKey: hostKey,
-      initialOpportunity: accepted == null, submitPending: true, capability: capability);
+    task = await memory.hostTasks.run(
+      task,
+      client: client,
+      hostKey: hostKey,
+      initialOpportunity: accepted == null,
+      submitPending: true,
+      capability: capability,
+    );
     return (line: companionNotesLine(l10n, task), task: task);
   }
 

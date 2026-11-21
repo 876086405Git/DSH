@@ -557,7 +557,8 @@ MemoryRow? parseCompanionReceipts(String raw) {
   final clauses = text.split(RegExp(r'[，,。]')).map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
   if (clauses.isEmpty || !const ['等电脑开了', '等电脑上线', '请电脑现在处理'].contains(clauses.first)) {
     return RegExp(r'四张票|整理票据').hasMatch(text) && RegExp(r'新建|表|电脑').hasMatch(text)
-        ? {'kind': kind, 'operation': 'clarify'} : null;
+        ? {'kind': kind, 'operation': 'clarify'}
+        : null;
   }
   var originals = false;
   String? outputName;
@@ -595,6 +596,12 @@ MemoryRow? parseCompanionReceipts(String raw) {
   if (!originals || outputName == null || afterExit == null) {
     return {'kind': kind, 'operation': 'clarify'};
   }
-  return {'kind': kind, 'operation': 'create', 'allowQueue': clauses.first.startsWith('等'),
-    'afterExit': afterExit, 'deadlineTime': deadlineTime, 'outputName': outputName};
+  return {
+    'kind': kind,
+    'operation': 'create',
+    'allowQueue': clauses.first.startsWith('等'),
+    'afterExit': afterExit,
+    'deadlineTime': deadlineTime,
+    'outputName': outputName,
+  };
 }

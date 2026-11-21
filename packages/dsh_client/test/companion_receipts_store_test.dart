@@ -15,23 +15,62 @@ void main() {
     database = sqlite3.open('${directory.path}/memory.sqlite');
     store = CompanionMemoryStore(database, nowMilliseconds: () => now);
   }
-  void reopen() { store.close(); open(); }
-  void say(String id, {String session = 'light:original-room', String role = 'user', String scope = 'real'}) {
-    store.submitMessage(id: id, sessionId: session, role: role, scope: scope,
-      text: '这四张票帮我做成差旅小表，新建一个文件，电脑上线后继续，离开也继续。',
-      saidAtUtc: now, offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+
+  void reopen() {
+    store.close();
+    open();
   }
-  MemoryRow create(String message, {List<MemoryRow>? inputs, MemoryRow? output, MemoryRow? agreement,
-    int itemNo = 0, String host = 'original-host'}) => store.createReceiptsTaskFromMessage(
-      messageId: message, expectedSourceRev: 1, itemNo: itemNo, roomMode: 'light', hostKey: host,
-      inputs: inputs ?? receiptBindings(), outputDirectory: output ?? receiptOutput(),
-      agreement: agreement ?? receiptAgreement(inputs: inputs, output: output));
-  MemoryRow? prepare(String id, int revision, {bool initial = true, bool replay = false,
-    String hostStore = 'original-store'}) => store.prepareHostTaskOperation(taskId: id, taskRev: revision,
-      hostKey: 'original-host', hostStoreId: hostStore, initialOpportunity: initial, replayAfterRead: replay);
-  MemoryRow accept(String id, MemoryRow snapshot) => store.importHostTaskSnapshot(
-    taskId: id, hostKey: 'original-host', snapshot: snapshot);
-  final invalid = throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/task-invalid-request'));
+
+  void say(String id, {String session = 'light:original-room', String role = 'user', String scope = 'real'}) {
+    store.submitMessage(
+      id: id,
+      sessionId: session,
+      role: role,
+      scope: scope,
+      text: '这四张票帮我做成差旅小表，新建一个文件，电脑上线后继续，离开也继续。',
+      saidAtUtc: now,
+      offsetMinutes: 480,
+      zoneId: 'Asia/Shanghai',
+      offsetSeconds: 28800,
+    );
+  }
+
+  MemoryRow create(
+    String message, {
+    List<MemoryRow>? inputs,
+    MemoryRow? output,
+    MemoryRow? agreement,
+    int itemNo = 0,
+    String host = 'original-host',
+  }) => store.createReceiptsTaskFromMessage(
+    messageId: message,
+    expectedSourceRev: 1,
+    itemNo: itemNo,
+    roomMode: 'light',
+    hostKey: host,
+    inputs: inputs ?? receiptBindings(),
+    outputDirectory: output ?? receiptOutput(),
+    agreement: agreement ?? receiptAgreement(inputs: inputs, output: output),
+  );
+  MemoryRow? prepare(
+    String id,
+    int revision, {
+    bool initial = true,
+    bool replay = false,
+    String hostStore = 'original-store',
+  }) => store.prepareHostTaskOperation(
+    taskId: id,
+    taskRev: revision,
+    hostKey: 'original-host',
+    hostStoreId: hostStore,
+    initialOpportunity: initial,
+    replayAfterRead: replay,
+  );
+  MemoryRow accept(String id, MemoryRow snapshot) =>
+      store.importHostTaskSnapshot(taskId: id, hostKey: 'original-host', snapshot: snapshot);
+  final invalid = throwsA(
+    isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/task-invalid-request'),
+  );
   final conflict = throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/conflict'));
 
   setUp(() async {
@@ -39,7 +78,10 @@ void main() {
     now = receiptTime;
     open();
   });
-  tearDown(() async { store.close(); await directory.delete(recursive: true); });
+  tearDown(() async {
+    store.close();
+    await directory.delete(recursive: true);
+  });
 
   test('J saves four original inputs and output on v14 before any possible handoff', () {
     say('source');
@@ -63,7 +105,8 @@ void main() {
   });
 
   test('J source item retry is one task and a new source or item stays independent', () {
-    say('one'); say('two');
+    say('one');
+    say('two');
     final one = create('one');
     expect(create('one')['task_id'], one['task_id']);
     expect(create('two')['task_id'], isNot(one['task_id']));
@@ -84,11 +127,14 @@ void main() {
     say('source');
     expect(() => create('source', inputs: receiptBindings().take(3).toList()), invalid);
     expect(() => create('source', inputs: [...receiptBindings(), receiptBindings().first]), invalid);
-    final duplicate = receiptBindings(); duplicate[3] = duplicate[0];
+    final duplicate = receiptBindings();
+    duplicate[3] = duplicate[0];
     expect(() => create('source', inputs: duplicate), invalid);
-    final changed = receiptBindings(); changed[0]['version'] = 'replaced';
+    final changed = receiptBindings();
+    changed[0]['version'] = 'replaced';
     expect(() => create('source', inputs: changed, agreement: receiptAgreement()), invalid);
-    final mixed = receiptBindings(); mixed[3]['hostStoreId'] = 'new-store';
+    final mixed = receiptBindings();
+    mixed[3]['hostStoreId'] = 'new-store';
     expect(() => create('source', inputs: mixed), invalid);
     expect(() => create('source', output: receiptOutput(store: 'new-store')), invalid);
     expect(store.tasks(), isEmpty);
@@ -96,13 +142,24 @@ void main() {
 
   test('J never broadens its selected formats, byte cap, basename or create-new mode', () {
     say('source');
-    for (final change in <MemoryRow>[{'size': 4194305}, {'mediaType': 'image/png'}, {'content': 'whole source'}]) {
-      final inputs = receiptBindings(); inputs[0].addAll(change);
+    for (final change in <MemoryRow>[
+      {'size': 4194305},
+      {'mediaType': 'image/png'},
+      {'content': 'whole source'},
+    ]) {
+      final inputs = receiptBindings();
+      inputs[0].addAll(change);
       expect(() => create('source', inputs: inputs), invalid);
     }
-    for (final change in <MemoryRow>[{'outputName': '../escape.xlsx'}, {'outputName': 'notes.txt'},
-      {'outputName': 'bad\u0000.xlsx'}, {'writeMode': 'replace'}, {'path': '/unbound/output'}]) {
-      final agreement = receiptAgreement(); (agreement['args']! as MemoryRow).addAll(change);
+    for (final change in <MemoryRow>[
+      {'outputName': '../escape.xlsx'},
+      {'outputName': 'notes.txt'},
+      {'outputName': 'bad\u0000.xlsx'},
+      {'writeMode': 'replace'},
+      {'path': '/unbound/output'},
+    ]) {
+      final agreement = receiptAgreement();
+      (agreement['args']! as MemoryRow).addAll(change);
       expect(() => create('source', agreement: agreement), invalid);
     }
     expect(store.tasks(), isEmpty);
@@ -115,12 +172,15 @@ void main() {
       final agreement = receiptAgreement();
       (agreement['args']! as MemoryRow)['outputName'] = 'receipt${control}table.xlsx';
       expect(() => create('source', agreement: agreement), invalid);
-      final inputs = receiptBindings(); inputs.first['displayName'] = 'receipt${control}input.txt';
+      final inputs = receiptBindings();
+      inputs.first['displayName'] = 'receipt${control}input.txt';
       expect(() => create('source', inputs: inputs), invalid);
     }
-    final tooLong = receiptBindings(); tooLong.first['displayName'] = '${List<String>.filled(252, 'x').join()}.txt';
+    final tooLong = receiptBindings();
+    tooLong.first['displayName'] = '${List<String>.filled(252, 'x').join()}.txt';
     expect(() => create('source', inputs: tooLong), invalid);
-    final unsupported = receiptBindings(); unsupported.first['displayName'] = 'receipt.png';
+    final unsupported = receiptBindings();
+    unsupported.first['displayName'] = 'receipt.png';
     expect(() => create('source', inputs: unsupported), invalid);
     expect(store.tasks(), isEmpty);
     expect(database.select('SELECT * FROM companion_host_commands'), isEmpty);
@@ -145,8 +205,10 @@ void main() {
     expect(command['possible_sent_at_ms'], now);
     expect((command['request']! as MemoryRow)['hostStoreId'], 'original-store');
     reopen();
-    expect(() => prepare(id, 1), throwsA(isA<DshRemoteException>()
-      .having((error) => error.code, 'code', 'companion/task-read-required')));
+    expect(
+      () => prepare(id, 1),
+      throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/task-read-required')),
+    );
     expect(prepare(id, 1, replay: true)!['request'], command['request']);
   });
 
@@ -169,18 +231,42 @@ void main() {
     final id = create('source')['task_id']! as String;
     final original = store.hostTaskCommands(id).single;
     say('wrong-room', session: 'full:other');
-    expect(() => store.amendReceiptsTask(taskId: id, expectedTaskRev: 1, messageId: 'wrong-room', expectedSourceRev: 1,
-      itemNo: 0, agreement: receiptAgreement(), inputs: receiptBindings(), outputDirectory: receiptOutput()), invalid);
+    expect(
+      () => store.amendReceiptsTask(
+        taskId: id,
+        expectedTaskRev: 1,
+        messageId: 'wrong-room',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        agreement: receiptAgreement(),
+        inputs: receiptBindings(),
+        outputDirectory: receiptOutput(),
+      ),
+      invalid,
+    );
     say('change');
     final inputs = receiptBindings(suffix: '-new');
-    final changed = store.amendReceiptsTask(taskId: id, expectedTaskRev: 1, messageId: 'change', expectedSourceRev: 1,
-      itemNo: 0, agreement: receiptAgreement(inputs: inputs), inputs: inputs, outputDirectory: receiptOutput());
+    final changed = store.amendReceiptsTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'change',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      agreement: receiptAgreement(inputs: inputs),
+      inputs: inputs,
+      outputDirectory: receiptOutput(),
+    );
     expect(changed['task_rev'], 2);
     expect(store.hostTaskCommands(id).first, original);
     expect(() => prepare(id, 1), conflict);
     say('cancel');
-    final cancelled = store.cancelReceiptsTask(taskId: id, expectedTaskRev: 2,
-      messageId: 'cancel', expectedSourceRev: 1, itemNo: 0);
+    final cancelled = store.cancelReceiptsTask(
+      taskId: id,
+      expectedTaskRev: 2,
+      messageId: 'cancel',
+      expectedSourceRev: 1,
+      itemNo: 0,
+    );
     expect(cancelled['state'], 'cancelled');
     expect(cancelled['task_rev'], 3);
     expect(() => prepare(id, 2), conflict);
@@ -193,9 +279,16 @@ void main() {
       accept(id, receiptSnapshot(store, id, state: state));
       say('amend-$state');
       final inputs = receiptBindings(suffix: '-$state');
-      final amended = store.amendReceiptsTask(taskId: id, expectedTaskRev: 1, messageId: 'amend-$state',
-        expectedSourceRev: 1, itemNo: 0, inputs: inputs, outputDirectory: receiptOutput(),
-        agreement: receiptAgreement(inputs: inputs));
+      final amended = store.amendReceiptsTask(
+        taskId: id,
+        expectedTaskRev: 1,
+        messageId: 'amend-$state',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        inputs: inputs,
+        outputDirectory: receiptOutput(),
+        agreement: receiptAgreement(inputs: inputs),
+      );
       expect(amended['task_rev'], 2);
       expect(store.hostTaskCommands(id), hasLength(2));
     }
@@ -207,8 +300,16 @@ void main() {
     final original = store.hostTaskCommands(id).first['request'];
     say('change');
     final inputs = receiptBindings(suffix: '-new');
-    store.amendReceiptsTask(taskId: id, expectedTaskRev: 1, messageId: 'change', expectedSourceRev: 1,
-      itemNo: 0, agreement: receiptAgreement(inputs: inputs), inputs: inputs, outputDirectory: receiptOutput());
+    store.amendReceiptsTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'change',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      agreement: receiptAgreement(inputs: inputs),
+      inputs: inputs,
+      outputDirectory: receiptOutput(),
+    );
     prepare(id, 2);
     final barrier = receiptSnapshot(store, id, revision: 2, state: 'waiting', original: false);
     expect(accept(id, barrier)['task_rev'], 2);
@@ -225,12 +326,27 @@ void main() {
     for (var index = 0; index < 101; index++) {
       now++;
       say('later-$index');
-      store.createFindDraftTaskFromMessage(messageId: 'later-$index', expectedSourceRev: 1, itemNo: 0,
-        roomMode: 'light', hostKey: 'other-host', directoryHostStoreId: 'other-store', agreement: {
-          'args': {'folderRef': 'other-directory', 'scope': 'currentLevel', 'localDate': '2026-11-20',
-            'timeZone': 'Asia/Shanghai', 'dateBy': 'modified', 'extensions': ['md', 'txt']},
-          'deadlineAtMs': null, 'afterExit': 'continue', 'allowQueue': true,
-        });
+      store.createFindDraftTaskFromMessage(
+        messageId: 'later-$index',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        roomMode: 'light',
+        hostKey: 'other-host',
+        directoryHostStoreId: 'other-store',
+        agreement: {
+          'args': {
+            'folderRef': 'other-directory',
+            'scope': 'currentLevel',
+            'localDate': '2026-11-20',
+            'timeZone': 'Asia/Shanghai',
+            'dateBy': 'modified',
+            'extensions': ['md', 'txt'],
+          },
+          'deadlineAtMs': null,
+          'afterExit': 'continue',
+          'allowQueue': true,
+        },
+      );
     }
     expect(store.tasks().any((row) => row['task_id'] == id), isFalse);
     reopen();
@@ -248,8 +364,14 @@ void main() {
     prepare(id, 1);
     final read = receiptReport(unread: {3}, verifiedAtPublish: false);
     final done = receiptReport(unread: {3});
-    final snapshot = receiptSnapshot(store, id, state: 'partial', readReports: {1: read},
-      writeReports: {1: done}, artifacts: [receiptArtifact()]);
+    final snapshot = receiptSnapshot(
+      store,
+      id,
+      state: 'partial',
+      readReports: {1: read},
+      writeReports: {1: done},
+      artifacts: [receiptArtifact()],
+    );
     final result = accept(id, snapshot);
     expect(result['state'], 'partial');
     expect(result['snapshot'], snapshot);
@@ -265,13 +387,25 @@ void main() {
     final id = create('source')['task_id']! as String;
     prepare(id, 1);
     final report = receiptReport(unread: {0, 1, 2, 3}, verifiedAtPublish: false);
-    final snapshot = receiptSnapshot(store, id, state: 'failed', reason: 'receipt_fields_unavailable',
-      readReports: {1: report});
+    final snapshot = receiptSnapshot(
+      store,
+      id,
+      state: 'failed',
+      reason: 'receipt_fields_unavailable',
+      readReports: {1: report},
+    );
     expect(accept(id, snapshot)['state'], 'failed');
     expect(snapshot['artifacts'], isEmpty);
     expect((snapshot['steps']! as List<Object?>), hasLength(1));
-    final falseSuccess = receiptSnapshot(store, id, seq: 2, state: 'partial',
-      readReports: {1: report}, writeReports: {1: report}, artifacts: [receiptArtifact()]);
+    final falseSuccess = receiptSnapshot(
+      store,
+      id,
+      seq: 2,
+      state: 'partial',
+      readReports: {1: report},
+      writeReports: {1: report},
+      artifacts: [receiptArtifact()],
+    );
     expect(() => accept(id, falseSuccess), invalid);
     expect(store.hostTask(id)!['snapshot'], snapshot);
   });
@@ -282,7 +416,9 @@ void main() {
     final read = receiptReport(verifiedAtPublish: false);
     final running = receiptSnapshot(store, id, readReports: {1: read});
     expect(accept(id, running)['state'], 'running');
-    final falseDone = receiptCopy(running)..['state'] = 'done'..['runnerReceiptSeq'] = 2;
+    final falseDone = receiptCopy(running)
+      ..['state'] = 'done'
+      ..['runnerReceiptSeq'] = 2;
     expect(() => accept(id, falseDone), invalid);
     expect(store.hostTask(id)!['applied_host_receipt_seq'], 1);
   });
@@ -293,8 +429,15 @@ void main() {
     final observed = receiptReport(verifiedAtPublish: false);
     final before = receiptSnapshot(store, id, readReports: {1: observed});
     accept(id, before);
-    final invalidWrite = receiptSnapshot(store, id, seq: 2, state: 'partial',
-      readReports: {1: observed}, writeReports: {1: observed}, artifacts: [receiptArtifact()]);
+    final invalidWrite = receiptSnapshot(
+      store,
+      id,
+      seq: 2,
+      state: 'partial',
+      readReports: {1: observed},
+      writeReports: {1: observed},
+      artifacts: [receiptArtifact()],
+    );
     expect(() => accept(id, invalidWrite), invalid);
     expect(store.hostTask(id)!['snapshot'], before);
     expect(store.hostTask(id)!['applied_host_receipt_seq'], 1);
@@ -304,17 +447,40 @@ void main() {
     say('source');
     final id = create('source')['task_id']! as String;
     final observed = receiptReport(verifiedAtPublish: false);
-    final failed = receiptSnapshot(store, id, state: 'failed', readReports: {1: observed}, extraSteps: [{
-      'taskRev': 1, 'stepKey': 'writeSheet', 'attemptId': 'failed-write', 'state': 'failed',
-      'startedAtMs': receiptTime, 'finishedAtMs': receiptTime, 'reason': 'original_changed',
-      'result': {'completion': {'report': observed}},
-    }]);
+    final failed = receiptSnapshot(
+      store,
+      id,
+      state: 'failed',
+      readReports: {1: observed},
+      extraSteps: [
+        {
+          'taskRev': 1,
+          'stepKey': 'writeSheet',
+          'attemptId': 'failed-write',
+          'state': 'failed',
+          'startedAtMs': receiptTime,
+          'finishedAtMs': receiptTime,
+          'reason': 'original_changed',
+          'result': {
+            'completion': {'report': observed},
+          },
+        },
+      ],
+    );
     expect(accept(id, failed)['state'], 'failed');
     expect(failed['artifacts'], isEmpty);
-    final retry = receiptCopy(failed)..['runnerReceiptSeq'] = 2..['state'] = 'running';
+    final retry = receiptCopy(failed)
+      ..['runnerReceiptSeq'] = 2
+      ..['state'] = 'running';
     (retry['steps']! as List<Object?>).add({
-      'taskRev': 1, 'stepKey': 'writeSheet', 'attemptId': 'unproved-retry', 'state': 'running',
-      'startedAtMs': receiptTime, 'finishedAtMs': null, 'reason': null, 'result': null,
+      'taskRev': 1,
+      'stepKey': 'writeSheet',
+      'attemptId': 'unproved-retry',
+      'state': 'running',
+      'startedAtMs': receiptTime,
+      'finishedAtMs': null,
+      'reason': null,
+      'result': null,
     });
     expect(() => accept(id, retry), invalid);
     expect(store.hostTask(id)!['snapshot'], failed);
@@ -326,13 +492,23 @@ void main() {
     final report = receiptReport(unread: {2, 3}, verifiedAtPublish: false);
     final before = receiptSnapshot(store, id, state: 'waiting', readReports: {1: report});
     final first = (before['steps']! as List<Object?>).single! as MemoryRow;
-    first['state'] = 'waiting'; first['reason'] = 'receipt_read_interrupted';
+    first['state'] = 'waiting';
+    first['reason'] = 'receipt_read_interrupted';
     accept(id, before);
-    final after = receiptCopy(before)..['runnerReceiptSeq'] = 2..['state'] = 'running';
+    final after = receiptCopy(before)
+      ..['runnerReceiptSeq'] = 2
+      ..['state'] = 'running';
     (after['steps']! as List<Object?>).add({
-      'taskRev': 1, 'stepKey': 'readInputs', 'attemptId': 'recovered-read', 'state': 'done',
-      'startedAtMs': receiptTime, 'finishedAtMs': receiptTime, 'reason': null,
-      'result': {'completion': {'report': receiptReport(verifiedAtPublish: false)}},
+      'taskRev': 1,
+      'stepKey': 'readInputs',
+      'attemptId': 'recovered-read',
+      'state': 'done',
+      'startedAtMs': receiptTime,
+      'finishedAtMs': receiptTime,
+      'reason': null,
+      'result': {
+        'completion': {'report': receiptReport(verifiedAtPublish: false)},
+      },
     });
     final wrongReason = receiptCopy(after);
     ((wrongReason['steps']! as List<Object?>).first! as MemoryRow)['reason'] = 'ordinary_read_failure';
@@ -345,8 +521,14 @@ void main() {
     expect(accept(id, before)['snapshot'], after);
     final third = receiptCopy(after)..['runnerReceiptSeq'] = 3;
     (third['steps']! as List<Object?>).add({
-      'taskRev': 1, 'stepKey': 'readInputs', 'attemptId': 'after-completed-read', 'state': 'running',
-      'startedAtMs': receiptTime, 'finishedAtMs': null, 'reason': null, 'result': null,
+      'taskRev': 1,
+      'stepKey': 'readInputs',
+      'attemptId': 'after-completed-read',
+      'state': 'running',
+      'startedAtMs': receiptTime,
+      'finishedAtMs': null,
+      'reason': null,
+      'result': null,
     });
     expect(() => accept(id, third), invalid);
     expect(store.hostTask(id)!['snapshot'], after);
@@ -355,22 +537,50 @@ void main() {
   test('J a saved publication-not-attempted proof without a report permits only its next write attempt', () {
     say('source');
     final id = create('source')['task_id']! as String;
-    final before = receiptSnapshot(store, id, state: 'waiting', readReports: {1: receiptReport(verifiedAtPublish: false)},
-      extraSteps: [{
-        'taskRev': 1, 'stepKey': 'writeSheet', 'attemptId': 'unstarted-write', 'state': 'waiting',
-        'startedAtMs': receiptTime, 'finishedAtMs': receiptTime, 'reason': 'publication_not_started',
-        'result': {'completion': {'publicationNotAttempted': true}},
-      }]);
+    final before = receiptSnapshot(
+      store,
+      id,
+      state: 'waiting',
+      readReports: {1: receiptReport(verifiedAtPublish: false)},
+      extraSteps: [
+        {
+          'taskRev': 1,
+          'stepKey': 'writeSheet',
+          'attemptId': 'unstarted-write',
+          'state': 'waiting',
+          'startedAtMs': receiptTime,
+          'finishedAtMs': receiptTime,
+          'reason': 'publication_not_started',
+          'result': {
+            'completion': {'publicationNotAttempted': true},
+          },
+        },
+      ],
+    );
     before['budget'] = {'limitMs': 300000, 'spentMs': 120, 'heldMs': 60000};
     accept(id, before);
-    final active = receiptCopy(before)..['runnerReceiptSeq'] = 2..['state'] = 'running';
+    final active = receiptCopy(before)
+      ..['runnerReceiptSeq'] = 2
+      ..['state'] = 'running';
     (active['steps']! as List<Object?>).add({
-      'taskRev': 1, 'stepKey': 'writeSheet', 'attemptId': 'first-publication', 'state': 'running',
-      'startedAtMs': receiptTime, 'finishedAtMs': null, 'reason': null, 'result': null,
+      'taskRev': 1,
+      'stepKey': 'writeSheet',
+      'attemptId': 'first-publication',
+      'state': 'running',
+      'startedAtMs': receiptTime,
+      'finishedAtMs': null,
+      'reason': null,
+      'result': null,
     });
     for (final change in <MemoryRow>[
-      {'state': 'unknown'}, {'reason': 'publication_unconfirmed'}, {'finishedAtMs': null},
-      {'result': {'completion': {'publicationNotAttempted': false}}},
+      {'state': 'unknown'},
+      {'reason': 'publication_unconfirmed'},
+      {'finishedAtMs': null},
+      {
+        'result': {
+          'completion': {'publicationNotAttempted': false},
+        },
+      },
     ]) {
       final bad = receiptCopy(active);
       ((bad['steps']! as List<Object?>)[1]! as MemoryRow).addAll(change);
@@ -380,26 +590,41 @@ void main() {
     expect((store.hostTask(id)!['snapshot']! as MemoryRow)['budget'], before['budget']);
     final another = receiptCopy(active)..['runnerReceiptSeq'] = 3;
     (another['steps']! as List<Object?>).add({
-      'taskRev': 1, 'stepKey': 'writeSheet', 'attemptId': 'second-unproved-publication', 'state': 'running',
-      'startedAtMs': receiptTime, 'finishedAtMs': null, 'reason': null, 'result': null,
+      'taskRev': 1,
+      'stepKey': 'writeSheet',
+      'attemptId': 'second-unproved-publication',
+      'state': 'running',
+      'startedAtMs': receiptTime,
+      'finishedAtMs': null,
+      'reason': null,
+      'result': null,
     });
     expect(() => accept(id, another), invalid);
   });
 
   final corruptReports = <String, void Function(MemoryRow)>{
     'fifth source': (report) => (report['sources']! as List<Object?>).add((report['sources']! as List<Object?>).first),
-    'swapped original': (report) => ((report['sources']! as List<Object?>).first as MemoryRow)['sourceRef'] = 'unselected',
+    'swapped original': (report) =>
+        ((report['sources']! as List<Object?>).first as MemoryRow)['sourceRef'] = 'unselected',
     'other version': (report) => ((report['rows']! as List<Object?>).first as MemoryRow)['version'] = 'new-version',
     'false read count': (report) => (report['coverage']! as MemoryRow)['readCompleteCount'] = 4,
     'missing unread gap': (report) => ((report['coverage']! as MemoryRow)['gaps']! as List<Object?>).removeLast(),
     'duplicate gap': (report) {
-      final gaps = (report['coverage']! as MemoryRow)['gaps']! as List<Object?>; gaps.add(gaps.first);
+      final gaps = (report['coverage']! as MemoryRow)['gaps']! as List<Object?>;
+      gaps.add(gaps.first);
     },
-    'not-present inference': (report) => (((report['rows']! as List<Object?>).last as MemoryRow)['date']! as MemoryRow)['state'] = 'not_present',
-    'unverified value': (report) => (((report['rows']! as List<Object?>).last as MemoryRow)['date']! as MemoryRow)['value'] = '2026-11-21',
-    'verified without evidence': (report) => (((report['rows']! as List<Object?>).first as MemoryRow)['amount']! as MemoryRow)['evidence'] = null,
-    'PDF false page': (report) => ((((report['rows']! as List<Object?>)[2] as MemoryRow)['date']! as MemoryRow)['evidence']! as MemoryRow)['page'] = 2,
-    'image contents claimed': (report) => ((report['sources']! as List<Object?>)[2] as MemoryRow)['textLayerOnly'] = false,
+    'not-present inference': (report) =>
+        (((report['rows']! as List<Object?>).last as MemoryRow)['date']! as MemoryRow)['state'] = 'not_present',
+    'unverified value': (report) =>
+        (((report['rows']! as List<Object?>).last as MemoryRow)['date']! as MemoryRow)['value'] = '2026-11-21',
+    'verified without evidence': (report) =>
+        (((report['rows']! as List<Object?>).first as MemoryRow)['amount']! as MemoryRow)['evidence'] = null,
+    'PDF false page': (report) =>
+        ((((report['rows']! as List<Object?>)[2] as MemoryRow)['date']! as MemoryRow)['evidence']!
+                as MemoryRow)['page'] =
+            2,
+    'image contents claimed': (report) =>
+        ((report['sources']! as List<Object?>)[2] as MemoryRow)['textLayerOnly'] = false,
   };
   for (final entry in corruptReports.entries) {
     test('J rejects ${entry.key} without advancing its complete snapshot watermark', () {
@@ -407,9 +632,16 @@ void main() {
       final id = create('source')['task_id']! as String;
       final before = receiptSnapshot(store, id);
       accept(id, before);
-      final report = receiptReport(unread: {3}); entry.value(report);
-      final invalidSnapshot = receiptSnapshot(store, id, seq: 2, state: 'partial',
-        writeReports: {1: report}, artifacts: [receiptArtifact()]);
+      final report = receiptReport(unread: {3});
+      entry.value(report);
+      final invalidSnapshot = receiptSnapshot(
+        store,
+        id,
+        seq: 2,
+        state: 'partial',
+        writeReports: {1: report},
+        artifacts: [receiptArtifact()],
+      );
       expect(() => accept(id, invalidSnapshot), invalid);
       expect(store.hostTask(id)!['snapshot'], before);
       expect(store.hostTask(id)!['applied_host_receipt_seq'], 1);
@@ -420,7 +652,13 @@ void main() {
     say('source');
     final id = create('source')['task_id']! as String;
     final report = receiptReport();
-    final completed = receiptSnapshot(store, id, state: 'done', writeReports: {1: report}, artifacts: [receiptArtifact()]);
+    final completed = receiptSnapshot(
+      store,
+      id,
+      state: 'done',
+      writeReports: {1: report},
+      artifacts: [receiptArtifact()],
+    );
     final model = receiptCopy(completed);
     ((model['steps']! as List<Object?>).first as MemoryRow)['stepKey'] = 'model';
     expect(() => accept(id, model), invalid);
@@ -439,31 +677,75 @@ void main() {
     final id = create('source')['task_id']! as String;
     prepare(id, 1);
     final read = receiptReport(verifiedAtPublish: false), report = receiptReport(), artifact = receiptArtifact();
-    final original = receiptSnapshot(store, id, state: 'done', readReports: {1: read},
-      writeReports: {1: report}, artifacts: [artifact]);
+    final original = receiptSnapshot(
+      store,
+      id,
+      state: 'done',
+      readReports: {1: read},
+      writeReports: {1: report},
+      artifacts: [artifact],
+    );
     // The real amendment is accepted before the old possible write is observed.
     say('amend');
     final inputs = receiptBindings(suffix: '-new');
-    store.amendReceiptsTask(taskId: id, expectedTaskRev: 1, messageId: 'amend', expectedSourceRev: 1, itemNo: 0,
-      agreement: receiptAgreement(inputs: inputs), inputs: inputs, outputDirectory: receiptOutput());
-    final waiting = receiptSnapshot(store, id, revision: 2, seq: 2, state: 'partial', reason: 'prior_revision_effect', readReports: {1: read},
-      writeReports: {1: report}, artifacts: [artifact]);
+    store.amendReceiptsTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'amend',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      agreement: receiptAgreement(inputs: inputs),
+      inputs: inputs,
+      outputDirectory: receiptOutput(),
+    );
+    final waiting = receiptSnapshot(
+      store,
+      id,
+      revision: 2,
+      seq: 2,
+      state: 'partial',
+      reason: 'prior_revision_effect',
+      readReports: {1: read},
+      writeReports: {1: report},
+      artifacts: [artifact],
+    );
     waiting['budget'] = {'limitMs': 300000, 'spentMs': 120, 'heldMs': 60000};
     expect(accept(id, waiting)['state'], 'partial');
     expect(accept(id, original)['state'], 'partial');
     say('amend-again');
     final commands = store.hostTaskCommands(id);
-    expect(() => store.amendReceiptsTask(taskId: id, expectedTaskRev: 2, messageId: 'amend-again',
-      expectedSourceRev: 1, itemNo: 0, agreement: receiptAgreement(inputs: inputs), inputs: inputs,
-      outputDirectory: receiptOutput()), conflict);
+    expect(
+      () => store.amendReceiptsTask(
+        taskId: id,
+        expectedTaskRev: 2,
+        messageId: 'amend-again',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        agreement: receiptAgreement(inputs: inputs),
+        inputs: inputs,
+        outputDirectory: receiptOutput(),
+      ),
+      conflict,
+    );
     expect(store.hostTaskCommands(id), commands);
     expect(store.hostTask(id)!['task_rev'], 2);
-    final noEffect = receiptCopy(waiting)..['runnerReceiptSeq'] = 3..['steps'] = <Object?>[]..['artifacts'] = <Object?>[];
+    final noEffect = receiptCopy(waiting)
+      ..['runnerReceiptSeq'] = 3
+      ..['steps'] = <Object?>[]
+      ..['artifacts'] = <Object?>[];
     expect(() => accept(id, noEffect), invalid);
     say('cancel');
     store.cancelReceiptsTask(taskId: id, expectedTaskRev: 2, messageId: 'cancel', expectedSourceRev: 1, itemNo: 0);
-    final cancelled = receiptSnapshot(store, id, revision: 3, seq: 3, state: 'cancelled', readReports: {1: read},
-      writeReports: {1: report}, artifacts: [artifact]);
+    final cancelled = receiptSnapshot(
+      store,
+      id,
+      revision: 3,
+      seq: 3,
+      state: 'cancelled',
+      readReports: {1: read},
+      writeReports: {1: report},
+      artifacts: [artifact],
+    );
     cancelled['budget'] = waiting['budget'];
     expect(accept(id, cancelled)['state'], 'cancelled');
     reopen();
@@ -476,15 +758,25 @@ void main() {
     say('source');
     final id = create('source')['task_id']! as String;
     final read = receiptReport(verifiedAtPublish: false), report = receiptReport();
-    final original = receiptSnapshot(store, id, state: 'done', readReports: {1: read},
-      writeReports: {1: report}, artifacts: [receiptArtifact()]);
+    final original = receiptSnapshot(
+      store,
+      id,
+      state: 'done',
+      readReports: {1: read},
+      writeReports: {1: report},
+      artifacts: [receiptArtifact()],
+    );
     accept(id, original);
     final changed = receiptCopy(original)..['runnerReceiptSeq'] = 2;
-    final savedRead = (((changed['steps']! as List<Object?>).first as MemoryRow)['result']! as MemoryRow)['completion']! as MemoryRow;
-    final field = ((((savedRead['report']! as MemoryRow)['rows']! as List<Object?>).first as MemoryRow)['item']! as MemoryRow);
+    final savedRead =
+        (((changed['steps']! as List<Object?>).first as MemoryRow)['result']! as MemoryRow)['completion']! as MemoryRow;
+    final field =
+        ((((savedRead['report']! as MemoryRow)['rows']! as List<Object?>).first as MemoryRow)['item']! as MemoryRow);
     field['value'] = 'later altered fact';
     expect(() => accept(id, changed), conflict);
-    final lost = receiptCopy(original)..['runnerReceiptSeq'] = 2..['artifacts'] = <Object?>[];
+    final lost = receiptCopy(original)
+      ..['runnerReceiptSeq'] = 2
+      ..['artifacts'] = <Object?>[];
     expect(() => accept(id, lost), throwsA(isA<DshRemoteException>()));
     expect(store.hostTask(id)!['snapshot'], original);
   });

@@ -32,30 +32,37 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
       final byName = <String, List<MemoryRow>>{};
       for (final candidate in saved) {
         if ((storeId == null || candidate['hostStoreId'] == storeId) &&
-            !inputs.any((chosen) => chosen['sourceRef'] == candidate['sourceRef'] &&
-              chosen['version'] == candidate['version'] && chosen['hostStoreId'] == candidate['hostStoreId'])) {
+            !inputs.any(
+              (chosen) =>
+                  chosen['sourceRef'] == candidate['sourceRef'] &&
+                  chosen['version'] == candidate['version'] &&
+                  chosen['hostStoreId'] == candidate['hostStoreId'],
+            )) {
           byName.putIfAbsent(candidate['displayName']! as String, () => []).add(candidate);
         }
       }
       if (byName.isEmpty) {
         return null;
       }
-      input = await showAppDialog<MemoryRow>(context: context, builder: (dialog) => SimpleDialog(
-        title: Text(l10n.companionReceiptSavedInput('${index + 1}')),
-        children: [
-          for (final entry in byName.entries)
-            SimpleDialogOption(onPressed: entry.value.length == 1
-                ? () => Navigator.pop(dialog, entry.value.single) : null,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(entry.key),
-                if (entry.value.length != 1) Text(l10n.companionCompareAmbiguousFile),
-              ])),
-          SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
-        ],
-      ));
+      input = await showAppDialog<MemoryRow>(
+        context: context,
+        builder: (dialog) => SimpleDialog(
+          title: Text(l10n.companionReceiptSavedInput('${index + 1}')),
+          children: [
+            for (final entry in byName.entries)
+              SimpleDialogOption(
+                onPressed: entry.value.length == 1 ? () => Navigator.pop(dialog, entry.value.single) : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [Text(entry.key), if (entry.value.length != 1) Text(l10n.companionCompareAmbiguousFile)],
+                ),
+              ),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+          ],
+        ),
+      );
     } else {
-      if (capability == null || !capability.receiptsToSheet ||
-          (storeId != null && capability.hostStoreId != storeId)) {
+      if (capability == null || !capability.receiptsToSheet || (storeId != null && capability.hostStoreId != storeId)) {
         throw const DshRemoteException('companion/task-store-mismatch', 'The original receipt store is unavailable');
       }
       final path = await showDirectoryPicker(context, title: l10n.companionReceiptChooseDirectory('${index + 1}'));
@@ -69,9 +76,12 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
       if (!context.mounted || !isCurrent()) {
         throw const DshClosedException('receipt selection changed before durable acceptance');
       }
-      final name = await showTextPrompt(context, title: l10n.companionReceiptFilename('${index + 1}'),
+      final name = await showTextPrompt(
+        context,
+        title: l10n.companionReceiptFilename('${index + 1}'),
         caption: l10n.companionReceiptFormats((capability.receiptInputs!['formats']! as List<Object?>).join('/')),
-        validate: (value) => value.isEmpty ? l10n.companionCompareFilenameMissing : null);
+        validate: (value) => value.isEmpty ? l10n.companionCompareFilenameMissing : null,
+      );
       if (!context.mounted || !isCurrent()) {
         throw const DshClosedException('receipt selection changed before durable acceptance');
       }
@@ -103,19 +113,23 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('receipt selection changed before durable acceptance');
     }
-    final selected = await showAppDialog<MemoryRow>(context: context, builder: (dialog) => SimpleDialog(
-      title: Text(l10n.companionReceiptSavedOutput),
-      children: [
-        for (final entry in byName.entries)
-          SimpleDialogOption(onPressed: entry.value.length == 1
-              ? () => Navigator.pop(dialog, entry.value.single) : null,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(entry.key),
-              if (entry.value.length != 1) Text(l10n.companionCompareAmbiguousFile),
-            ])),
-        SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
-      ],
-    ));
+    final selected = await showAppDialog<MemoryRow>(
+      context: context,
+      builder: (dialog) => SimpleDialog(
+        title: Text(l10n.companionReceiptSavedOutput),
+        children: [
+          for (final entry in byName.entries)
+            SimpleDialogOption(
+              onPressed: entry.value.length == 1 ? () => Navigator.pop(dialog, entry.value.single) : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [Text(entry.key), if (entry.value.length != 1) Text(l10n.companionCompareAmbiguousFile)],
+              ),
+            ),
+          SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+        ],
+      ),
+    );
     // Only the fixed v1 envelope is reconstructed; identity/path remain the
     // actual persisted selection, not a fresh claim about the current folder.
     if (selected != null) {

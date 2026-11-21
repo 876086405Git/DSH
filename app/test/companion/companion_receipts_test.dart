@@ -14,18 +14,34 @@ void main() {
 
   test('J exact spoken example keeps four inputs new filename deadline and permission to continue', () {
     expect(parseCompanionReceipts(receiptSpokenExample), {
-      'kind': 'host.receipts_to_sheet', 'operation': 'create', 'allowQueue': true,
-      'afterExit': 'continue', 'deadlineTime': '20:00', 'outputName': '差旅小表.xlsx',
+      'kind': 'host.receipts_to_sheet',
+      'operation': 'create',
+      'allowQueue': true,
+      'afterExit': 'continue',
+      'deadlineTime': '20:00',
+      'outputName': '差旅小表.xlsx',
     });
-    expect(parseCompanionReceipts(receiptSpokenExample.replaceFirst('等电脑开了', '请电脑现在处理')
-      .replaceFirst('今晚八点前，', '').replaceFirst('我先去吃饭', '我离开就停')), {
-      'kind': 'host.receipts_to_sheet', 'operation': 'create', 'allowQueue': false,
-      'afterExit': 'pause', 'deadlineTime': null, 'outputName': '差旅小表.xlsx',
-    });
+    expect(
+      parseCompanionReceipts(
+        receiptSpokenExample.replaceFirst('等电脑开了', '请电脑现在处理').replaceFirst('今晚八点前，', '').replaceFirst('我先去吃饭', '我离开就停'),
+      ),
+      {
+        'kind': 'host.receipts_to_sheet',
+        'operation': 'create',
+        'allowQueue': false,
+        'afterExit': 'pause',
+        'deadlineTime': null,
+        'outputName': '差旅小表.xlsx',
+      },
+    );
   });
 
-  for (final text in ['“$receiptSpokenExample”', '故事里他说：$receiptSpokenExample',
-      '不要$receiptSpokenExample', '假设$receiptSpokenExample']) {
+  for (final text in [
+    '“$receiptSpokenExample”',
+    '故事里他说：$receiptSpokenExample',
+    '不要$receiptSpokenExample',
+    '假设$receiptSpokenExample',
+  ]) {
     test('J quotation and hypothetical words do not accept a receipt task: $text', () {
       expect(parseCompanionReceipts(text), isNull);
     });
@@ -45,9 +61,7 @@ void main() {
   }
 
   test('J explicit cancellation has a finite whole-sentence boundary', () {
-    expect(parseCompanionReceipts('取消整理票据。'), {
-      'kind': 'host.receipts_to_sheet', 'operation': 'cancel',
-    });
+    expect(parseCompanionReceipts('取消整理票据。'), {'kind': 'host.receipts_to_sheet', 'operation': 'cancel'});
     expect(parseCompanionReceipts('“取消整理票据”'), isNull);
     expect(parseCompanionReceipts('不是要取消整理票据'), isNull);
   });
@@ -59,17 +73,26 @@ void main() {
     final calls = <MethodCall>[];
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
-      return {'kind': 'unique', 'moments': [
-        {'epochMs': DateTime.parse('2026-11-21T12:00:00Z').millisecondsSinceEpoch, 'offsetSeconds': 28800},
-      ]};
+      return {
+        'kind': 'unique',
+        'moments': [
+          {'epochMs': DateTime.parse('2026-11-21T12:00:00Z').millisecondsSinceEpoch, 'offsetSeconds': 28800},
+        ],
+      };
     });
     addTearDown(() {
       binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
       store.close();
     });
-    final source = store.submitMessage(id: 'receipt-clock', sessionId: 'light:original-room',
-      text: receiptSpokenExample, saidAtUtc: at, offsetMinutes: 480,
-      zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+    final source = store.submitMessage(
+      id: 'receipt-clock',
+      sessionId: 'light:original-room',
+      text: receiptSpokenExample,
+      saidAtUtc: at,
+      offsetMinutes: 480,
+      zoneId: 'Asia/Shanghai',
+      offsetSeconds: 28800,
+    );
     now += const Duration(days: 1).inMilliseconds;
     final agreement = await companionCompareAgreement(source, parseCompanionReceipts(receiptSpokenExample)!, clock);
     expect(calls.single.method, 'resolve');

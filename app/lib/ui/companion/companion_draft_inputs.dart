@@ -21,9 +21,13 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
   final inputs = <String, Object?>{};
   var storeId = originalStoreId;
   final saved = client == null
-      ? store.hostTaskInputs(hostKey: hostKey).where((row) =>
-          const ['text/plain', 'text/markdown'].contains(row['mediaType']) &&
-          (row['size']! as int) <= 65536).toList()
+      ? store
+            .hostTaskInputs(hostKey: hostKey)
+            .where(
+              (row) =>
+                  const ['text/plain', 'text/markdown'].contains(row['mediaType']) && (row['size']! as int) <= 65536,
+            )
+            .toList()
       : const <MemoryRow>[];
   for (final side in ['a', 'b']) {
     if (!context.mounted || !isCurrent()) {

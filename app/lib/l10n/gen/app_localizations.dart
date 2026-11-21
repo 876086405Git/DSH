@@ -12731,6 +12731,355 @@ abstract class L10n {
   /// **'填写时按这次修改所用的当地时区解释；留空则保留原定截止。'**
   String get companionCompareNewDeadline;
 
+  /// No description provided for @companionReceiptTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'票据整理'**
+  String get companionReceiptTitle;
+
+  /// No description provided for @companionReceiptSyntax.
+  ///
+  /// In zh, this message translates to:
+  /// **'请说清是哪四张票、新表的名字，以及离开后是否继续。我只会新建，不覆盖旧表。'**
+  String get companionReceiptSyntax;
+
+  /// No description provided for @companionReceiptUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑目前不能整理这些票据。'**
+  String get companionReceiptUnavailable;
+
+  /// No description provided for @companionReceiptConnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'先连回原电脑，选好四张票和放新表的文件夹；没有选过的原件，我不能替你猜。'**
+  String get companionReceiptConnect;
+
+  /// No description provided for @companionReceiptWhich.
+  ///
+  /// In zh, this message translates to:
+  /// **'想停哪一张表？请到那件事里点取消。'**
+  String get companionReceiptWhich;
+
+  /// No description provided for @companionReceiptSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次还没交妥，原话留着。稍后可再试。'**
+  String get companionReceiptSaveFailed;
+
+  /// No description provided for @companionReceiptOriginalHost.
+  ///
+  /// In zh, this message translates to:
+  /// **'要连回原来的电脑才能继续交代或查看结果。'**
+  String get companionReceiptOriginalHost;
+
+  /// No description provided for @companionReceiptNoInputs.
+  ///
+  /// In zh, this message translates to:
+  /// **'四张票和放表的文件夹还没选齐，这次先不交给电脑。'**
+  String get companionReceiptNoInputs;
+
+  /// No description provided for @companionReceiptInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {index} 份'**
+  String companionReceiptInput(String index);
+
+  /// No description provided for @companionReceiptSavedInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'选之前选过的第 {index} 份票据'**
+  String companionReceiptSavedInput(String index);
+
+  /// No description provided for @companionReceiptChooseDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {index} 份票据在哪个文件夹？'**
+  String companionReceiptChooseDirectory(String index);
+
+  /// No description provided for @companionReceiptFilename.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {index} 份票据的文件名'**
+  String companionReceiptFilename(String index);
+
+  /// No description provided for @companionReceiptFormats.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑可读 {formats}，每份最多 4 MiB。请填所选文件夹中的文件名。'**
+  String companionReceiptFormats(String formats);
+
+  /// No description provided for @companionReceiptSavedOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'把新表放到之前选过的哪个文件夹？'**
+  String get companionReceiptSavedOutput;
+
+  /// No description provided for @companionReceiptQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机记下了，还没交给电脑。'**
+  String get companionReceiptQueued;
+
+  /// No description provided for @companionReceiptRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑已经接了，还没有可交的表。'**
+  String get companionReceiptRunning;
+
+  /// No description provided for @companionReceiptDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'新表已经写好，约定的字段都核实了。'**
+  String get companionReceiptDone;
+
+  /// No description provided for @companionReceiptPartial.
+  ///
+  /// In zh, this message translates to:
+  /// **'新表已经写好，还有几项没核实，表里已说明。'**
+  String get companionReceiptPartial;
+
+  /// No description provided for @companionReceiptCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'后面不再做了。此前已写好的表仍留着。'**
+  String get companionReceiptCancelled;
+
+  /// No description provided for @companionReceiptFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次没做成可交的新表，下面保留已查到的情况。'**
+  String get companionReceiptFailed;
+
+  /// No description provided for @companionReceiptWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'这件事还在等条件，尚未写好表。'**
+  String get companionReceiptWaiting;
+
+  /// No description provided for @companionReceiptUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没核清表有没有写好，先查原来那件事，不另做一张。'**
+  String get companionReceiptUnknown;
+
+  /// No description provided for @companionReceiptCancelUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'已记下先停后面的事；刚才的表有没有写好，还要向原电脑核实。'**
+  String get companionReceiptCancelUnknown;
+
+  /// No description provided for @companionReceiptNoFields.
+  ///
+  /// In zh, this message translates to:
+  /// **'这四张目前没有可用于成表的已核实字段，没有创建空表。'**
+  String get companionReceiptNoFields;
+
+  /// No description provided for @companionReceiptOutputExists.
+  ///
+  /// In zh, this message translates to:
+  /// **'那里已有同名文件，我没有覆盖。可以改一个新文件名再交代。'**
+  String get companionReceiptOutputExists;
+
+  /// No description provided for @companionReceiptDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经过了约定时间，不再开始新的整理；此前的结果仍可核对。'**
+  String get companionReceiptDeadline;
+
+  /// No description provided for @companionReceiptOriginalPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑还没收齐原来的交代，暂时不会开始做表。'**
+  String get companionReceiptOriginalPending;
+
+  /// No description provided for @companionReceiptReport.
+  ///
+  /// In zh, this message translates to:
+  /// **'已查到的票据字段'**
+  String get companionReceiptReport;
+
+  /// No description provided for @companionReceiptPreviousReport.
+  ///
+  /// In zh, this message translates to:
+  /// **'此前查到的票据字段'**
+  String get companionReceiptPreviousReport;
+
+  /// No description provided for @companionReceiptCoverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'四份里，{count} 份有已核实的字段。'**
+  String companionReceiptCoverage(String count);
+
+  /// No description provided for @companionReceiptImageScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'这里只读取了 PDF 的文字层，图片里的日期或其他字段没有核实。'**
+  String get companionReceiptImageScope;
+
+  /// No description provided for @companionReceiptUnread.
+  ///
+  /// In zh, this message translates to:
+  /// **'这份原件还没完整读到。'**
+  String get companionReceiptUnread;
+
+  /// No description provided for @companionReceiptParseFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这份原件的文字还没完整提取出来。'**
+  String get companionReceiptParseFailed;
+
+  /// No description provided for @companionReceiptChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布前没能核准还是原来的那份，这行不能当作已核实。'**
+  String get companionReceiptChanged;
+
+  /// No description provided for @companionReceiptDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'日期'**
+  String get companionReceiptDate;
+
+  /// No description provided for @companionReceiptItem.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目'**
+  String get companionReceiptItem;
+
+  /// No description provided for @companionReceiptAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额'**
+  String get companionReceiptAmount;
+
+  /// No description provided for @companionReceiptUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'未核：{reason}'**
+  String companionReceiptUnverified(String reason);
+
+  /// No description provided for @companionReceiptFieldUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'原文还不足以确认'**
+  String get companionReceiptFieldUnknown;
+
+  /// No description provided for @companionReceiptSourcePosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {from}–{to} 行'**
+  String companionReceiptSourcePosition(String from, String to);
+
+  /// No description provided for @companionReceiptPdfPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {page} 页，文字提取第 {from}–{to} 行'**
+  String companionReceiptPdfPosition(String page, String from, String to);
+
+  /// No description provided for @companionReceiptOpenWorkbook.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 {name}'**
+  String companionReceiptOpenWorkbook(String name);
+
+  /// No description provided for @companionReceiptOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'现在没能打开当时那份表。原来的完成记录仍保留，不会自动重做。'**
+  String get companionReceiptOpenFailed;
+
+  /// No description provided for @companionReceiptChooseAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新选择四张票'**
+  String get companionReceiptChooseAgain;
+
+  /// No description provided for @companionReceiptKeepInputs.
+  ///
+  /// In zh, this message translates to:
+  /// **'四张票仍用原来的'**
+  String get companionReceiptKeepInputs;
+
+  /// No description provided for @companionReceiptOutputName.
+  ///
+  /// In zh, this message translates to:
+  /// **'新表文件名（.xlsx）'**
+  String get companionReceiptOutputName;
+
+  /// No description provided for @companionReceiptCancelSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消这次整理票据，后面没做的先停，已写好的表保留。'**
+  String get companionReceiptCancelSource;
+
+  /// No description provided for @companionReceiptAmendSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'把这次票据整理改为新建《{name}》；截止：{deadline}；离开以后：{afterExit}；等待电脑：{queue}；原件：{inputs}；目标文件夹：{output}。'**
+  String companionReceiptAmendSource(
+    String name,
+    String deadline,
+    String afterExit,
+    String queue,
+    String inputs,
+    String output,
+  );
+
+  /// No description provided for @companionReceiptNoText.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有读到可用文字层，图片里的字段还没核实。'**
+  String get companionReceiptNoText;
+
+  /// No description provided for @companionReceiptPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'原件需要密码，这次未能读取。'**
+  String get companionReceiptPassword;
+
+  /// No description provided for @companionReceiptPdfUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑还不能提取 PDF 文字。'**
+  String get companionReceiptPdfUnavailable;
+
+  /// No description provided for @companionReceiptLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'超过这次可读取的大小、页数或文字范围。'**
+  String get companionReceiptLimit;
+
+  /// No description provided for @companionReceiptDateUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可核实的完整日期，或日期有歧义。'**
+  String get companionReceiptDateUnknown;
+
+  /// No description provided for @companionReceiptItemUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可核实的明确项目。'**
+  String get companionReceiptItemUnknown;
+
+  /// No description provided for @companionReceiptAmountUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额或币种还不能确认。'**
+  String get companionReceiptAmountUnknown;
+
+  /// No description provided for @companionReceiptKeepOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍放原来的文件夹'**
+  String get companionReceiptKeepOutput;
+
+  /// No description provided for @companionReceiptPriorResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'此前约定写出的表已找到；新的约定尚未完成。'**
+  String get companionReceiptPriorResult;
+
   /// No description provided for @automaticDiagnosticsRecover.
   ///
   /// In zh, this message translates to:

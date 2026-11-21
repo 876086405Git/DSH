@@ -142,8 +142,7 @@ Uint8List buildXlsx(List<TestSheet> sheets, {bool date1904 = false, bool stored 
   files['xl/sharedStrings.xml'] =
       '<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${shared.length + 1}">'
       '${[for (final s in shared) '<si><t xml:space="preserve">${_esc(s)}</t></si>'].join()}'
-      '${richText == null ? '<si><r><rPr><b/></rPr><t>富</t></r><r><t>文本</t></r><rPh sb="0" eb="1"><t>ふ</t></rPh></si>'
-        : '<si>${[for (final run in richText) '<r><t>${_esc(run)}</t></r>'].join()}</si>'}'
+      '${richText == null ? '<si><r><rPr><b/></rPr><t>富</t></r><r><t>文本</t></r><rPh sb="0" eb="1"><t>ふ</t></rPh></si>' : '<si>${[for (final run in richText) '<r><t>${_esc(run)}</t></r>'].join()}</si>'}'
       '</sst>';
   files['xl/styles.xml'] =
       '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'

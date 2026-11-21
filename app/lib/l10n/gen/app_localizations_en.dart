@@ -7268,6 +7268,222 @@ class L10nEn extends L10n {
       'A new deadline uses the local time zone of this change. Leave blank to keep the original deadline.';
 
   @override
+  String get companionReceiptTitle => 'Receipt table';
+
+  @override
+  String get companionReceiptSyntax =>
+      'Please specify four receipts, a new workbook name, and whether to continue after you leave. I can create a new file, not overwrite one.';
+
+  @override
+  String get companionReceiptUnavailable => 'This computer cannot prepare this receipt table yet.';
+
+  @override
+  String get companionReceiptConnect =>
+      'Connect the original computer to choose all four receipts and an output folder. I cannot guess originals that have never been selected.';
+
+  @override
+  String get companionReceiptWhich => 'Which table should stop? Open that task and cancel it there.';
+
+  @override
+  String get companionReceiptSaveFailed =>
+      'This request has not been handed over successfully. Your words are kept for another try.';
+
+  @override
+  String get companionReceiptOriginalHost => 'Reconnect the original computer to continue or check the result.';
+
+  @override
+  String get companionReceiptNoInputs =>
+      'The four receipts and output folder have not all been chosen. Nothing will be handed over yet.';
+
+  @override
+  String companionReceiptInput(String index) {
+    return 'Receipt $index';
+  }
+
+  @override
+  String companionReceiptSavedInput(String index) {
+    return 'Choose a previously selected receipt for position $index';
+  }
+
+  @override
+  String companionReceiptChooseDirectory(String index) {
+    return 'Which folder contains receipt $index?';
+  }
+
+  @override
+  String companionReceiptFilename(String index) {
+    return 'Filename of receipt $index';
+  }
+
+  @override
+  String companionReceiptFormats(String formats) {
+    return 'This computer can read $formats, up to 4 MiB each. Enter a filename within the selected folder.';
+  }
+
+  @override
+  String get companionReceiptSavedOutput => 'Which previously selected folder should hold the new workbook?';
+
+  @override
+  String get companionReceiptQueued => 'Saved on the phone; not yet handed to the computer.';
+
+  @override
+  String get companionReceiptRunning => 'The computer accepted the request; no workbook is ready yet.';
+
+  @override
+  String get companionReceiptDone => 'The new workbook is ready and the requested fields are verified.';
+
+  @override
+  String get companionReceiptPartial => 'The new workbook is ready, with the unverified fields noted in it.';
+
+  @override
+  String get companionReceiptCancelled => 'No further work will be done. Any workbook already written remains.';
+
+  @override
+  String get companionReceiptFailed =>
+      'No new workbook could be delivered. The observations already made are kept below.';
+
+  @override
+  String get companionReceiptWaiting => 'This task is waiting for what it needs; the workbook is not ready.';
+
+  @override
+  String get companionReceiptUnknown =>
+      'It is not yet clear whether the workbook was written. Check the original task before making another.';
+
+  @override
+  String get companionReceiptCancelUnknown =>
+      'The stop request is saved. The original computer still needs to confirm whether a workbook was already written.';
+
+  @override
+  String get companionReceiptNoFields =>
+      'These four receipts currently have no verified fields available for the workbook, so no empty workbook was created.';
+
+  @override
+  String get companionReceiptOutputExists =>
+      'A file with that name already exists. It was not overwritten; you can choose a new name.';
+
+  @override
+  String get companionReceiptDeadline =>
+      'The agreed deadline has passed. No new work will start, and earlier results can still be checked.';
+
+  @override
+  String get companionReceiptOriginalPending =>
+      'The computer has not received the complete original request and will not start the workbook yet.';
+
+  @override
+  String get companionReceiptReport => 'Receipt fields observed';
+
+  @override
+  String get companionReceiptPreviousReport => 'Earlier receipt observations';
+
+  @override
+  String companionReceiptCoverage(String count) {
+    return 'In this result, $count of the four receipts have verified fields.';
+  }
+
+  @override
+  String get companionReceiptImageScope =>
+      'Only the PDF text layer was read. Dates or other fields in images remain unverified.';
+
+  @override
+  String get companionReceiptUnread => 'This original has not been read completely.';
+
+  @override
+  String get companionReceiptParseFailed => 'Text could not be fully extracted from this original.';
+
+  @override
+  String get companionReceiptChanged =>
+      'The original version could not be confirmed before publication. This row cannot be treated as verified.';
+
+  @override
+  String get companionReceiptDate => 'Date';
+
+  @override
+  String get companionReceiptItem => 'Item';
+
+  @override
+  String get companionReceiptAmount => 'Amount';
+
+  @override
+  String companionReceiptUnverified(String reason) {
+    return 'Unverified: $reason';
+  }
+
+  @override
+  String get companionReceiptFieldUnknown => 'the original text does not establish this field';
+
+  @override
+  String companionReceiptSourcePosition(String from, String to) {
+    return 'Lines $from–$to';
+  }
+
+  @override
+  String companionReceiptPdfPosition(String page, String from, String to) {
+    return 'Page $page, extracted text lines $from–$to';
+  }
+
+  @override
+  String companionReceiptOpenWorkbook(String name) {
+    return 'Open $name';
+  }
+
+  @override
+  String get companionReceiptOpenFailed =>
+      'The original workbook cannot be opened now. Its earlier completion record is kept; it will not be recreated automatically.';
+
+  @override
+  String get companionReceiptChooseAgain => 'Choose the four receipts again';
+
+  @override
+  String get companionReceiptKeepInputs => 'Keep the same four receipts';
+
+  @override
+  String get companionReceiptOutputName => 'New workbook filename (.xlsx)';
+
+  @override
+  String get companionReceiptCancelSource =>
+      'Cancel this receipt task; stop unfinished work and keep any workbook already written.';
+
+  @override
+  String companionReceiptAmendSource(
+    String name,
+    String deadline,
+    String afterExit,
+    String queue,
+    String inputs,
+    String output,
+  ) {
+    return 'Amend this receipt task to create $name; deadline: $deadline; after leaving: $afterExit; wait for computer: $queue; originals: $inputs; output folder: $output.';
+  }
+
+  @override
+  String get companionReceiptNoText => 'No usable text layer was read. Fields in images remain unverified.';
+
+  @override
+  String get companionReceiptPassword => 'The original requires a password and could not be read.';
+
+  @override
+  String get companionReceiptPdfUnavailable => 'This computer cannot extract PDF text yet.';
+
+  @override
+  String get companionReceiptLimit => 'The file exceeds this task’s size, page, or text limit.';
+
+  @override
+  String get companionReceiptDateUnknown => 'A complete date could not be verified, or the date is ambiguous.';
+
+  @override
+  String get companionReceiptItemUnknown => 'A clear item description could not be verified.';
+
+  @override
+  String get companionReceiptAmountUnknown => 'The amount or currency could not be confirmed.';
+
+  @override
+  String get companionReceiptKeepOutput => 'Keep the original output folder';
+
+  @override
+  String get companionReceiptPriorResult =>
+      'The workbook from the earlier agreement was found; the new agreement has not been completed.';
+
+  @override
   String get automaticDiagnosticsRecover => 'Recover local records';
 
   @override

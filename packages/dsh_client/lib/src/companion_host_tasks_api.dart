@@ -67,8 +67,14 @@ extension CompanionHostTasksApi on DshClient {
         map['artifactRead'] is! bool ||
         (map['hostStoreId'] != null && !_id(map['hostStoreId'])) ||
         kinds is! List ||
-        kinds.any((kind) => !const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts',
-          'host.receipts_to_sheet'].contains(kind)) ||
+        kinds.any(
+          (kind) => !const [
+            'host.notes_to_todo',
+            'host.find_draft',
+            'host.compare_drafts',
+            'host.receipts_to_sheet',
+          ].contains(kind),
+        ) ||
         (kinds.isNotEmpty && (map['durableAcceptance'] != true || !_id(map['hostStoreId']))) ||
         (map.containsKey('sourceRead') && map['sourceRead'] is! bool) ||
         (kinds.contains('host.find_draft') && map['sourceRead'] != true) ||
@@ -83,12 +89,17 @@ extension CompanionHostTasksApi on DshClient {
     if (receiptInputs == null) {
       receiptLimits = null;
     } else {
-      if (receiptInputs is! _Row || receiptInputs.length != 5 || receiptInputs['formats'] is! List<Object?> ||
+      if (receiptInputs is! _Row ||
+          receiptInputs.length != 5 ||
+          receiptInputs['formats'] is! List<Object?> ||
           (receiptInputs['formats']! as List<Object?>).isEmpty ||
-          (receiptInputs['formats']! as List<Object?>).toSet().length != (receiptInputs['formats']! as List<Object?>).length ||
+          (receiptInputs['formats']! as List<Object?>).toSet().length !=
+              (receiptInputs['formats']! as List<Object?>).length ||
           (receiptInputs['formats']! as List<Object?>).any((format) => !const ['md', 'txt', 'pdf'].contains(format)) ||
-          receiptInputs['maxFiles'] != 4 || receiptInputs['maxBytes'] != 4194304 ||
-          receiptInputs['maxPdfPages'] != 5 || receiptInputs['workbookBytes'] != 262144) {
+          receiptInputs['maxFiles'] != 4 ||
+          receiptInputs['maxBytes'] != 4194304 ||
+          receiptInputs['maxPdfPages'] != 5 ||
+          receiptInputs['workbookBytes'] != 262144) {
         _invalid();
       }
       receiptLimits = Map<String, Object?>.unmodifiable({
@@ -201,15 +212,28 @@ extension CompanionHostTasksApi on DshClient {
       throw const DshRemoteException('companion/task-unavailable', 'Receipt tasks are unavailable');
     }
     final extension = RegExp(r'\.([^.]+)$').firstMatch(name)?.group(1)?.toLowerCase();
-    if (!_id(folderRef) || name.isEmpty || name.length > 255 || RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(name) ||
+    if (!_id(folderRef) ||
+        name.isEmpty ||
+        name.length > 255 ||
+        RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(name) ||
         !(host.receiptInputs!['formats']! as List<Object?>).contains(extension)) {
       throw const DshProtocolException('Choose one supported receipt file inside the selected directory');
     }
     final response = await _connection(this).postBytes(
       '$_path/inputs',
-      utf8.encode(jsonEncode({'v': 1, 'hostStoreId': host.hostStoreId, 'folderRef': folderRef, 'name': name,
-        'kind': 'host.receipts_to_sheet'})),
-      contentType: 'application/json', followRedirects: false, timeout: timeout, maxResponseBytes: 16384,
+      utf8.encode(
+        jsonEncode({
+          'v': 1,
+          'hostStoreId': host.hostStoreId,
+          'folderRef': folderRef,
+          'name': name,
+          'kind': 'host.receipts_to_sheet',
+        }),
+      ),
+      contentType: 'application/json',
+      followRedirects: false,
+      timeout: timeout,
+      maxResponseBytes: 16384,
     );
     final map = _decode(response);
     _success(response, map);
@@ -219,10 +243,16 @@ extension CompanionHostTasksApi on DshClient {
       'pdf' => 'application/pdf',
       _ => null,
     };
-    if (map.length != 7 || map['v'] != 1 || map['hostStoreId'] != host.hostStoreId ||
-        !_id(map['sourceRef']) || map['displayName'] != name ||
-        map['version'] is! String || (map['version']! as String).isEmpty ||
-        map['size'] is! int || (map['size']! as int) < 0 || (map['size']! as int) > 4194304 ||
+    if (map.length != 7 ||
+        map['v'] != 1 ||
+        map['hostStoreId'] != host.hostStoreId ||
+        !_id(map['sourceRef']) ||
+        map['displayName'] != name ||
+        map['version'] is! String ||
+        (map['version']! as String).isEmpty ||
+        map['size'] is! int ||
+        (map['size']! as int) < 0 ||
+        (map['size']! as int) > 4194304 ||
         map['mediaType'] != mediaType) {
       _invalid();
     }
@@ -320,21 +350,31 @@ extension CompanionHostTasksApi on DshClient {
   }) async {
     final size = artifact['size'];
     final hash = artifact['sha256'];
-    if (!_id(hostStoreId) || !_id(taskId) || !_id(hostExecutionId) || !_id(artifact['artifactId']) ||
-        artifact['mediaType'] != _workbookMediaType || size is! int || size < 0 || size > 262144 ||
-        hash is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
+    if (!_id(hostStoreId) ||
+        !_id(taskId) ||
+        !_id(hostExecutionId) ||
+        !_id(artifact['artifactId']) ||
+        artifact['mediaType'] != _workbookMediaType ||
+        size is! int ||
+        size < 0 ||
+        size > 262144 ||
+        hash is! String ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
       throw const DshProtocolException('Invalid original workbook artifact');
     }
     final response = await _connection(this).get(
       '$_path/${Uri.encodeComponent(taskId)}/artifacts/${Uri.encodeComponent(artifact['artifactId']! as String)}/content',
       query: {'hostStoreId': hostStoreId, 'hostExecutionId': hostExecutionId},
-      timeout: timeout, followRedirects: false, maxResponseBytes: 262144,
+      timeout: timeout,
+      followRedirects: false,
+      maxResponseBytes: 262144,
     );
     if (response.statusCode != 200) {
       _success(response, _decode(response));
       _invalid();
     }
-    if (response.contentType != _workbookMediaType || response.body.length != size ||
+    if (response.contentType != _workbookMediaType ||
+        response.body.length != size ||
         sha256.convert(response.body).toString() != hash) {
       _invalid();
     }

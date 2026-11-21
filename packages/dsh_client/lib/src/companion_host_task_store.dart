@@ -86,10 +86,16 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required MemoryRow agreement,
     required List<MemoryRow> inputs,
     required MemoryRow outputDirectory,
-  }) => _createHostTaskFromMessage(kind: 'host.receipts_to_sheet',
-    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
-    agreement: agreement, directoryLabels: {'inputs': inputs, 'outputDirectory': outputDirectory},
+  }) => _createHostTaskFromMessage(
+    kind: 'host.receipts_to_sheet',
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    roomMode: roomMode,
+    hostKey: hostKey,
+    hostSessionId: hostSessionId,
+    agreement: agreement,
+    directoryLabels: {'inputs': inputs, 'outputDirectory': outputDirectory},
   );
 
   MemoryRow _createHostTaskFromMessage({
@@ -115,8 +121,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     final normalized = _hostAgreement(agreement, kind);
     final boundStoreId = switch (kind) {
       'host.compare_drafts' => _compareInputStore(directoryLabels['inputs'], normalized['args']! as MemoryRow),
-      'host.receipts_to_sheet' => _receiptInputStore(directoryLabels['inputs'],
-        directoryLabels['outputDirectory'], normalized['args']! as MemoryRow),
+      'host.receipts_to_sheet' => _receiptInputStore(
+        directoryLabels['inputs'],
+        directoryLabels['outputDirectory'],
+        normalized['args']! as MemoryRow,
+      ),
       _ => directoryHostStoreId,
     };
     final fingerprint = _taskFingerprint([
@@ -243,10 +252,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required MemoryRow agreement,
     required List<MemoryRow> inputs,
     required MemoryRow outputDirectory,
-  }) => _amendHostTask(kind: 'host.receipts_to_sheet',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
-    agreement: agreement, directoryLabels: {'inputs': inputs, 'outputDirectory': outputDirectory},
+  }) => _amendHostTask(
+    kind: 'host.receipts_to_sheet',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
+    agreement: agreement,
+    directoryLabels: {'inputs': inputs, 'outputDirectory': outputDirectory},
   );
 
   MemoryRow _amendHostTask({
@@ -262,8 +276,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     final normalized = _hostAgreement(agreement, kind);
     final inputStoreId = switch (kind) {
       'host.compare_drafts' => _compareInputStore(directoryLabels?['inputs'], normalized['args']! as MemoryRow),
-      'host.receipts_to_sheet' => _receiptInputStore(directoryLabels?['inputs'],
-        directoryLabels?['outputDirectory'], normalized['args']! as MemoryRow),
+      'host.receipts_to_sheet' => _receiptInputStore(
+        directoryLabels?['inputs'],
+        directoryLabels?['outputDirectory'],
+        normalized['args']! as MemoryRow,
+      ),
       _ => null,
     };
     final fingerprint = _taskFingerprint([
@@ -398,9 +415,13 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required String messageId,
     required int expectedSourceRev,
     required int itemNo,
-  }) => _cancelHostTask(kind: 'host.receipts_to_sheet',
-    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
-    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  }) => _cancelHostTask(
+    kind: 'host.receipts_to_sheet',
+    taskId: taskId,
+    expectedTaskRev: expectedTaskRev,
+    messageId: messageId,
+    expectedSourceRev: expectedSourceRev,
+    itemNo: itemNo,
   );
 
   MemoryRow _cancelHostTask({
@@ -547,13 +568,16 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   ];
 
   List<MemoryRow> pendingReceiptsTasks({required String hostKey}) => [
-    for (final row in _db.select('''
+    for (final row in _db.select(
+      '''
       SELECT t.task_id FROM companion_tasks t
       JOIN companion_task_revisions r ON r.task_id=t.task_id AND r.task_rev=t.current_rev
       WHERE t.kind='host.receipts_to_sheet' AND t.host_key=?
         AND r.state IN ('queued','waiting','running','unknown')
       ORDER BY t.created_at_ms,t.task_id
-    ''', [hostKey]))
+    ''',
+      [hostKey],
+    ))
       hostTask(row['task_id']! as String)!,
   ];
 
@@ -577,7 +601,9 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     for (final row in rows) {
       final display = jsonDecode(row['display_json']! as String) as MemoryRow;
       final inputs = row['kind'] == 'host.compare_drafts'
-          ? [for (final side in const ['a', 'b']) (display['inputs']! as MemoryRow)[side]! as MemoryRow]
+          ? [
+              for (final side in const ['a', 'b']) (display['inputs']! as MemoryRow)[side]! as MemoryRow,
+            ]
           : (display['inputs']! as List<Object?>).cast<MemoryRow>();
       for (final binding in inputs) {
         if (seen.add((
@@ -853,7 +879,8 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
                   _canonicalJson(completion)) {
             throw _conflict;
           }
-          if (current['kind'] == 'host.receipts_to_sheet' && completion is MemoryRow &&
+          if (current['kind'] == 'host.receipts_to_sheet' &&
+              completion is MemoryRow &&
               (completion['report'] != null || completion['publicationNotAttempted'] == true) &&
               _canonicalJson(matching.single) != _canonicalJson(step)) {
             throw _conflict;
@@ -973,16 +1000,26 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
   if (kind == 'host.receipts_to_sheet') {
     final inputs = args['inputs'];
     final name = args['outputName'];
-    if (args.length != 4 || !const ['inputs', 'outputDirRef', 'outputName', 'writeMode'].every(args.containsKey) ||
-        inputs is! List<Object?> || inputs.length != 4 || !_hostId(args['outputDirRef']) ||
-        name is! String || name.isEmpty || name.length > 255 || RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(name) ||
-        !RegExp(r'\.xlsx$', caseSensitive: false).hasMatch(name) || args['writeMode'] != 'createNew') {
+    if (args.length != 4 ||
+        !const ['inputs', 'outputDirRef', 'outputName', 'writeMode'].every(args.containsKey) ||
+        inputs is! List<Object?> ||
+        inputs.length != 4 ||
+        !_hostId(args['outputDirRef']) ||
+        name is! String ||
+        name.isEmpty ||
+        name.length > 255 ||
+        RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(name) ||
+        !RegExp(r'\.xlsx$', caseSensitive: false).hasMatch(name) ||
+        args['writeMode'] != 'createNew') {
       throw _hostTaskInvalid;
     }
     final sources = <String>{};
     for (final input in inputs) {
-      if (input is! MemoryRow || input.length != 2 || !_hostId(input['sourceRef']) ||
-          !sources.add(input['sourceRef']! as String) || input['version'] is! String ||
+      if (input is! MemoryRow ||
+          input.length != 2 ||
+          !_hostId(input['sourceRef']) ||
+          !sources.add(input['sourceRef']! as String) ||
+          input['version'] is! String ||
           (input['version']! as String).isEmpty) {
         throw _hostTaskInvalid;
       }
@@ -1082,19 +1119,30 @@ String _compareInputStore(Object? value, MemoryRow args) {
 }
 
 String _receiptInputStore(Object? value, Object? output, MemoryRow args) {
-  if (value is! List<Object?> || value.length != 4 || output is! MemoryRow || output.length != 4 ||
-      output['v'] != 1 || !_hostId(output['hostStoreId']) || output['folderRef'] != args['outputDirRef'] ||
-      output['displayPath'] is! String || (output['displayPath']! as String).isEmpty) {
+  if (value is! List<Object?> ||
+      value.length != 4 ||
+      output is! MemoryRow ||
+      output.length != 4 ||
+      output['v'] != 1 ||
+      !_hostId(output['hostStoreId']) ||
+      output['folderRef'] != args['outputDirRef'] ||
+      output['displayPath'] is! String ||
+      (output['displayPath']! as String).isEmpty) {
     throw _hostTaskInvalid;
   }
   final selected = args['inputs']! as List<Object?>;
   for (var index = 0; index < 4; index++) {
     final binding = value[index];
     final source = selected[index]! as MemoryRow;
-    if (binding is! MemoryRow || binding.length != 7 || binding['v'] != 1 ||
-        binding['hostStoreId'] != output['hostStoreId'] || binding['sourceRef'] != source['sourceRef'] ||
-        binding['version'] != source['version'] || binding['displayName'] is! String ||
-        (binding['displayName']! as String).isEmpty || (binding['displayName']! as String).length > 255 ||
+    if (binding is! MemoryRow ||
+        binding.length != 7 ||
+        binding['v'] != 1 ||
+        binding['hostStoreId'] != output['hostStoreId'] ||
+        binding['sourceRef'] != source['sourceRef'] ||
+        binding['version'] != source['version'] ||
+        binding['displayName'] is! String ||
+        (binding['displayName']! as String).isEmpty ||
+        (binding['displayName']! as String).length > 255 ||
         RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(binding['displayName']! as String) ||
         !RegExp(r'\.(md|txt|pdf)$', caseSensitive: false).hasMatch(binding['displayName']! as String) ||
         !_hostCount(binding['size']) ||
@@ -1306,14 +1354,18 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         }
         final report = _validateReceiptReport(completion['report'], agreements[stepRevision]!['args']! as MemoryRow);
         if (read) {
-          if (completion.length != 1 || !const ['done', 'waiting', 'failed', 'unknown', 'cancelled'].contains(value['state'])) {
+          if (completion.length != 1 ||
+              !const ['done', 'waiting', 'failed', 'unknown', 'cancelled'].contains(value['state'])) {
             throw _hostTaskInvalid;
           }
           receiptReads[stepRevision] = report.rowsWithVerifiedFields;
           retryable[stepRevision] = value['state'] == 'waiting' && value['reason'] == 'receipt_read_interrupted';
         } else if (const ['done', 'partial'].contains(value['state'])) {
-          if (completion.length != 2 || !_hostId(completion['artifactId']) || report.rowsWithVerifiedFields == 0 ||
-              !report.publishable || report.complete != (value['state'] == 'done')) {
+          if (completion.length != 2 ||
+              !_hostId(completion['artifactId']) ||
+              report.rowsWithVerifiedFields == 0 ||
+              !report.publishable ||
+              report.complete != (value['state'] == 'done')) {
             throw _hostTaskInvalid;
           }
           receiptWrites[stepRevision] = (artifactId: completion['artifactId']! as String, complete: report.complete);
@@ -1321,7 +1373,9 @@ void _validateHostSnapshot(MemoryRow snapshot) {
             (completion['publicationNotAttempted'] == true ? completion.length != 2 : completion.length != 1)) {
           throw _hostTaskInvalid;
         }
-        if (!read && value['state'] == 'failed' && value['reason'] == 'receipt_fields_unavailable' &&
+        if (!read &&
+            value['state'] == 'failed' &&
+            value['reason'] == 'receipt_fields_unavailable' &&
             report.rowsWithVerifiedFields == 0) {
           receiptEmptyWriteFailures.add(stepRevision);
         }
@@ -1329,8 +1383,11 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         throw _hostTaskInvalid;
       }
       if (completion is MemoryRow && completion.containsKey('publicationNotAttempted')) {
-        if (read || completion['publicationNotAttempted'] != true || value['finishedAtMs'] == null ||
-            value['state'] != 'waiting' || value['reason'] != 'publication_not_started' ||
+        if (read ||
+            completion['publicationNotAttempted'] != true ||
+            value['finishedAtMs'] == null ||
+            value['state'] != 'waiting' ||
+            value['reason'] != 'publication_not_started' ||
             completion.length != (completion.containsKey('report') ? 2 : 1)) {
           throw _hostTaskInvalid;
         }
@@ -1348,8 +1405,8 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         value['relativePath'] is! String ||
         (value['relativePath']! as String).isEmpty ||
         !(kind == 'host.receipts_to_sheet'
-          ? value['mediaType'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : const ['text/markdown', 'text/plain'].contains(value['mediaType'])) ||
+            ? value['mediaType'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : const ['text/markdown', 'text/plain'].contains(value['mediaType'])) ||
         !_hostCount(value['size']) ||
         value['sha256'] is! String ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(value['sha256']! as String) ||
@@ -1360,7 +1417,9 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     if (kind == 'host.receipts_to_sheet') {
       final stepRevision = value['taskRev']! as int;
       final args = agreements[stepRevision]?['args'] as MemoryRow?;
-      if (value['stepKey'] != 'writeSheet' || (value['size']! as int) > 262144 || value['sourceCount'] != 4 ||
+      if (value['stepKey'] != 'writeSheet' ||
+          (value['size']! as int) > 262144 ||
+          value['sourceCount'] != 4 ||
           value['relativePath'] != args?['outputName'] ||
           receiptWrites[stepRevision]?.artifactId != value['artifactId']) {
         throw _hostTaskInvalid;
@@ -1381,15 +1440,23 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       throw _hostTaskInvalid;
     }
   } else if (kind == 'host.receipts_to_sheet') {
-    final priorEffect = snapshot['state'] == 'partial' && snapshot['waitReason'] == 'prior_revision_effect' &&
-      receiptWrites[revision] == null && (snapshot['artifacts']! as List<Object?>).cast<MemoryRow>()
-        .any((artifact) => (artifact['taskRev']! as int) < revision);
+    final priorEffect =
+        snapshot['state'] == 'partial' &&
+        snapshot['waitReason'] == 'prior_revision_effect' &&
+        receiptWrites[revision] == null &&
+        (snapshot['artifacts']! as List<Object?>).cast<MemoryRow>().any(
+          (artifact) => (artifact['taskRev']! as int) < revision,
+        );
     if (receiptWrites.values.any((result) => !artifacts.contains(result.artifactId)) ||
         (const ['done', 'partial'].contains(snapshot['state']) &&
-          !priorEffect && (receiptWrites[revision] == null || receiptWrites[revision]!.complete != (snapshot['state'] == 'done'))) ||
+            !priorEffect &&
+            (receiptWrites[revision] == null || receiptWrites[revision]!.complete != (snapshot['state'] == 'done'))) ||
         (snapshot['waitReason'] == 'receipt_fields_unavailable' &&
-          (snapshot['state'] != 'failed' || artifacts.isNotEmpty || (receiptWriteRevisions.contains(revision)
-            ? !receiptEmptyWriteFailures.contains(revision) : receiptReads[revision] != 0)))) {
+            (snapshot['state'] != 'failed' ||
+                artifacts.isNotEmpty ||
+                (receiptWriteRevisions.contains(revision)
+                    ? !receiptEmptyWriteFailures.contains(revision)
+                    : receiptReads[revision] != 0)))) {
       throw _hostTaskInvalid;
     }
   } else if (const ['done', 'partial'].contains(snapshot['state']) && artifacts.isEmpty) {
@@ -1414,15 +1481,21 @@ void _validateHostSnapshot(MemoryRow snapshot) {
 }
 
 ({bool complete, bool publishable, int rowsWithVerifiedFields}) _validateReceiptReport(Object? value, MemoryRow args) {
-  if (value is! MemoryRow || value.length != 3 || value['sources'] is! List<Object?> ||
-      value['rows'] is! List<Object?> || value['coverage'] is! MemoryRow) {
+  if (value is! MemoryRow ||
+      value.length != 3 ||
+      value['sources'] is! List<Object?> ||
+      value['rows'] is! List<Object?> ||
+      value['coverage'] is! MemoryRow) {
     throw _hostTaskInvalid;
   }
   final sources = value['sources']! as List<Object?>;
   final rows = value['rows']! as List<Object?>;
   final selected = args['inputs']! as List<Object?>;
   final coverage = value['coverage']! as MemoryRow;
-  if (sources.length != 4 || rows.length != 4 || coverage.length != 6 || coverage['inputCount'] != 4 ||
+  if (sources.length != 4 ||
+      rows.length != 4 ||
+      coverage.length != 6 ||
+      coverage['inputCount'] != 4 ||
       coverage['gaps'] is! List<Object?>) {
     throw _hostTaskInvalid;
   }
@@ -1434,15 +1507,26 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     final source = sources[index];
     final row = rows[index];
     final chosen = selected[index]! as MemoryRow;
-    if (source is! MemoryRow || source.length != 11 ||
-        source['sourceRef'] != chosen['sourceRef'] || source['version'] != chosen['version'] ||
-        source['displayName'] is! String || (source['displayName']! as String).isEmpty ||
+    if (source is! MemoryRow ||
+        source.length != 11 ||
+        source['sourceRef'] != chosen['sourceRef'] ||
+        source['version'] != chosen['version'] ||
+        source['displayName'] is! String ||
+        (source['displayName']! as String).isEmpty ||
         !const ['text/plain', 'text/markdown', 'application/pdf'].contains(source['mediaType']) ||
-        !_hostCount(source['size']) || (source['size']! as int) > 4194304 ||
-        source['readComplete'] is! bool || source['parseComplete'] is! bool ||
-        source['textLayerOnly'] is! bool || source['verifiedAtPublish'] is! bool ||
-        !source.containsKey('pageCount') || !_hostNullableText(source['reason']) || !source.containsKey('reason') ||
-        row is! MemoryRow || row.length != 5 || row['sourceRef'] != chosen['sourceRef'] || row['version'] != chosen['version']) {
+        !_hostCount(source['size']) ||
+        (source['size']! as int) > 4194304 ||
+        source['readComplete'] is! bool ||
+        source['parseComplete'] is! bool ||
+        source['textLayerOnly'] is! bool ||
+        source['verifiedAtPublish'] is! bool ||
+        !source.containsKey('pageCount') ||
+        !_hostNullableText(source['reason']) ||
+        !source.containsKey('reason') ||
+        row is! MemoryRow ||
+        row.length != 5 ||
+        row['sourceRef'] != chosen['sourceRef'] ||
+        row['version'] != chosen['version']) {
       throw _hostTaskInvalid;
     }
     final ref = source['sourceRef']! as String;
@@ -1452,7 +1536,8 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     if ((pages != null && (!_hostCount(pages) || pages == 0)) ||
         (!pdf && (pages != null || source['textLayerOnly'] != false)) ||
         (source['parseComplete'] == true &&
-          (source['readComplete'] != true || pdf && (source['textLayerOnly'] != true || pages == null || (pages as int) > 5)))) {
+            (source['readComplete'] != true ||
+                pdf && (source['textLayerOnly'] != true || pages == null || (pages as int) > 5)))) {
       throw _hostTaskInvalid;
     }
     if (source['readComplete'] == true) {
@@ -1471,14 +1556,18 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     var fields = 0;
     for (final name in const ['date', 'item', 'amount']) {
       final field = row[name];
-      if (field is! MemoryRow || field.length != 4 ||
+      if (field is! MemoryRow ||
+          field.length != 4 ||
           !const ['state', 'value', 'evidence', 'reason'].every(field.containsKey) ||
           !const ['verified', 'unverified'].contains(field['state'])) {
         throw _hostTaskInvalid;
       }
       if (field['state'] == 'verified') {
-        if (source['parseComplete'] != true || field['value'] is! String ||
-            (field['value']! as String).isEmpty || field['reason'] != null || field['evidence'] == null) {
+        if (source['parseComplete'] != true ||
+            field['value'] is! String ||
+            (field['value']! as String).isEmpty ||
+            field['reason'] != null ||
+            field['evidence'] == null) {
           throw _hostTaskInvalid;
         }
         fields++;
@@ -1489,12 +1578,21 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         requiredGaps[(ref, name)] = field['reason']! as String;
       }
       final evidence = field['evidence'];
-      if (evidence != null && (evidence is! MemoryRow || evidence.length != 4 ||
-          !evidence.containsKey('page') || !_hostCount(evidence['lineStart']) || evidence['lineStart'] == 0 ||
-          !_hostCount(evidence['lineEnd']) || (evidence['lineEnd']! as int) < (evidence['lineStart']! as int) ||
-          evidence['quote'] is! String || (evidence['quote']! as String).isEmpty ||
-          (pdf ? !_hostCount(evidence['page']) || evidence['page'] == 0 ||
-            pages != null && (evidence['page']! as int) > (pages as int) : evidence['page'] != null))) {
+      if (evidence != null &&
+          (evidence is! MemoryRow ||
+              evidence.length != 4 ||
+              !evidence.containsKey('page') ||
+              !_hostCount(evidence['lineStart']) ||
+              evidence['lineStart'] == 0 ||
+              !_hostCount(evidence['lineEnd']) ||
+              (evidence['lineEnd']! as int) < (evidence['lineStart']! as int) ||
+              evidence['quote'] is! String ||
+              (evidence['quote']! as String).isEmpty ||
+              (pdf
+                  ? !_hostCount(evidence['page']) ||
+                        evidence['page'] == 0 ||
+                        pages != null && (evidence['page']! as int) > (pages as int)
+                  : evidence['page'] != null))) {
         throw _hostTaskInvalid;
       }
     }
@@ -1510,27 +1608,39 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   }
   final actualGaps = <(String, String)>{};
   for (final value in coverage['gaps']! as List<Object?>) {
-    if (value is! MemoryRow || value.length != 4 || value['sourceRef'] is! String || value['field'] is! String ||
+    if (value is! MemoryRow ||
+        value.length != 4 ||
+        value['sourceRef'] is! String ||
+        value['field'] is! String ||
         !const ['read', 'parse', 'date', 'item', 'amount', 'verification'].contains(value['field']) ||
-        value['reason'] is! String || (value['reason']! as String).isEmpty) {
+        value['reason'] is! String ||
+        (value['reason']! as String).isEmpty) {
       throw _hostTaskInvalid;
     }
     final ref = value['sourceRef']! as String, field = value['field']! as String;
     final source = originals[ref];
     final key = (ref, field);
-    if (source == null || value['version'] != source['version'] || !actualGaps.add(key) ||
-        (field == 'verification' ? source['verifiedAtPublish'] != false :
-          !requiredGaps.containsKey(key) || requiredGaps[key] != null && requiredGaps[key] != value['reason'])) {
+    if (source == null ||
+        value['version'] != source['version'] ||
+        !actualGaps.add(key) ||
+        (field == 'verification'
+            ? source['verifiedAtPublish'] != false
+            : !requiredGaps.containsKey(key) || requiredGaps[key] != null && requiredGaps[key] != value['reason'])) {
       throw _hostTaskInvalid;
     }
   }
-  if (!actualGaps.containsAll(requiredGaps.keys) || coverage['readCompleteCount'] != readCount ||
-      coverage['parseCompleteCount'] != parseCount || coverage['rowsWithVerifiedFields'] != evidencedRows ||
+  if (!actualGaps.containsAll(requiredGaps.keys) ||
+      coverage['readCompleteCount'] != readCount ||
+      coverage['parseCompleteCount'] != parseCount ||
+      coverage['rowsWithVerifiedFields'] != evidencedRows ||
       coverage['fullyVerifiedRows'] != fullRows) {
     throw _hostTaskInvalid;
   }
-  return (complete: fullRows == 4 && verifiedAtPublish == 4 && actualGaps.isEmpty,
-    publishable: publishable, rowsWithVerifiedFields: evidencedRows);
+  return (
+    complete: fullRows == 4 && verifiedAtPublish == 4 && actualGaps.isEmpty,
+    publishable: publishable,
+    rowsWithVerifiedFields: evidencedRows,
+  );
 }
 
 bool _validateFindReport(Object? value, MemoryRow args, Set<String> sourceRefs) {
