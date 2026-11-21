@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_local.dart';
+import 'companion_host_tasks.dart';
 import 'companion_memory_worker.dart';
 import 'companion_public_lookup.dart';
 import 'companion_widget.dart';
@@ -41,6 +42,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
   final int Function() _now;
   late final lookups = CompanionLookups(store: store, nowMilliseconds: _now,
     changed: changed, retainReceipt: retainReceipt);
+  late final hostTasks = CompanionHostTasks(store: store, changed: changed, retainReceipt: retainReceipt);
   Future<bool>? _localMigration;
   Future<bool>? _widgetClear;
   final Map<DshClient, Future<bool>> _hostMigrations = {};

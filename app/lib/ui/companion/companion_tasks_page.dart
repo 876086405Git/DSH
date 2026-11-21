@@ -23,6 +23,8 @@ import '../common/empty_view.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
+import '../workspace/directory_picker.dart';
+import 'companion_ask.dart';
 import 'companion_memory_page.dart' show companionMemoryId;
 
 String companionReminderFailure(L10n l10n, Object error) {
@@ -96,6 +98,34 @@ String companionLookupLine(L10n l10n, MemoryRow task, {required String? executor
   };
 }
 
+String companionNotesLine(L10n l10n, MemoryRow task) {
+  if (task['cancel_requested'] == 1 && task['state'] != 'cancelled') {
+    return l10n.companionNotesCancelUnknown;
+  }
+  return switch (task['wait_reason']) {
+    'foreground_control_unavailable' => l10n.companionNotesPauseUnavailable,
+    'host_initial_opportunity_lost' => l10n.companionNotesOpportunityLost,
+    'host_deadline' => l10n.companionNotesDeadline,
+    'original_create_missing' => l10n.companionNotesOriginalPending,
+    'no_matching_inputs' => l10n.companionNotesNoInputs,
+    'output_exists' => l10n.companionNotesOutputExists,
+    'input_file_count_limit' => l10n.companionNotesFileCountLimit,
+    'input_file_size_limit' => l10n.companionNotesFileSizeLimit,
+    'input_total_size_limit' => l10n.companionNotesTotalSizeLimit,
+    'model_input_limit' => l10n.companionNotesModelLimit,
+    _ => switch (task['state']) {
+      'queued' => l10n.companionNotesQueued,
+      'running' => l10n.companionNotesRunning,
+      'done' => l10n.companionNotesDone,
+      'partial' => l10n.companionNotesPartial,
+      'cancelled' => l10n.companionNotesCancelled,
+      'failed' => l10n.companionNotesFailed,
+      'waiting' => l10n.companionNotesWaiting,
+      _ => l10n.companionNotesUnknown,
+    },
+  };
+}
+
 /// The room passes its shared owner and original source session. A trusted
 /// notification opens only its stored task; it never selects another host or
 /// sends a model request. Native records the actual notification-open event.
@@ -116,6 +146,8 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   String? _executorId;
   bool _busy = false;
   bool _loadFailed = false;
+  DshClient? _notesVerifiedClient;
+  String? _notesVerifiedStore;
   late final AppLifecycleListener _lifecycle;
   ({String taskId, String raw, MemoryRow source})? _retry;
 
@@ -137,7 +169,9 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       _memory = memory;
       memory.addListener(_changed);
       try {
-        _executorId = await ref.read(companionRemindersProvider).executorId();
+        if (widget.taskId == null || memory.store.hostTask(widget.taskId!) == null) {
+          _executorId = await ref.read(companionRemindersProvider).executorId();
+        }
       } on PlatformException {
         // Keep the saved agreement readable without claiming it is scheduled here.
       } on MissingPluginException {
@@ -145,6 +179,11 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       }
       if (mounted) {
         setState(() {});
+        final hostTask = widget.taskId == null ? null : memory.store.hostTask(widget.taskId!);
+        if (hostTask != null) {
+          unawaited(_refresh());
+          return;
+        }
         final row = widget.taskId == null ? null : memory.store.lookupTask(widget.taskId!);
         if (row != null && _owns(row)) {
           _resumeLookup(row);
@@ -178,6 +217,27 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final reminders = ref.read(companionRemindersProvider);
     setState(() => _busy = true);
     try {
+      final selected = widget.taskId == null ? null : memory.store.hostTask(widget.taskId!);
+      if (selected != null) {
+        _notesVerifiedClient = null;
+        _notesVerifiedStore = null;
+        final client = ref.read(activeConnectionProvider).value?.client;
+        final hostKey = companionHostKey(ref.read(activeHostProvider));
+        if (client != null && selected['host_key'] == hostKey) {
+          try {
+            final checked = await memory.hostTasks.run(selected, client: client, hostKey: hostKey);
+            if (checked['observed_host_snapshot'] == true) {
+              _notesVerifiedClient = client;
+              _notesVerifiedStore = checked['host_store_id']! as String;
+            }
+          } on Object {
+            if (mounted) {
+              showBriefNotice(context, context.l10n.companionNotesSaveFailed);
+            }
+          }
+        }
+        return;
+      }
       _executorId = await reminders.executorId();
       if (!mounted) {
         return;
@@ -393,6 +453,9 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   }
 
   Widget _detail(MemoryRow task) {
+    if (task['kind'] == 'host.notes_to_todo') {
+      return _notesDetail(_memory!.store.hostTask(task['task_id']! as String)!);
+    }
     if (task['kind'] == 'public.lookup') {
       return _lookupDetail(_memory!.store.lookupTask(task['task_id']! as String)!);
     }
@@ -448,6 +511,363 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
               child: Text(l10n.companionReminderSettings)),
       ]),
     ]));
+  }
+
+  bool _notesHostHere(MemoryRow task) => ref.read(activeConnectionProvider).value?.client != null &&
+    task['host_key'] == companionHostKey(ref.read(activeHostProvider));
+
+  Future<bool> _applyNotes(MemoryRow task, {bool cancel = false, String? date, String? name,
+    String deadlineText = '', bool clearDeadline = false, String? afterExit, bool? allowQueue,
+    bool chooseSource = false, bool chooseOutput = false}) async {
+    if (_busy) {
+      return false;
+    }
+    final memory = _memory!;
+    final clock = ref.read(companionRemindersProvider);
+    final client = ref.read(activeConnectionProvider).value?.client;
+    final hostKey = companionHostKey(ref.read(activeHostProvider));
+    final l10n = context.l10n;
+    final agreement = task['agreement']! as Map;
+    final args = Map<String, Object?>.from(agreement['args']! as Map);
+    final id = task['task_id']! as String;
+    final revision = task['task_rev']! as int;
+    final raw = cancel ? l10n.companionNotesCancelSource(args['outputName']! as String) :
+      l10n.companionNotesAmendSource(date!, name!, clearDeadline ? l10n.companionNotesClearDeadline :
+        deadlineText.isEmpty ? l10n.companionNotesKeepDeadline : deadlineText,
+        afterExit == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue,
+        allowQueue == true ? l10n.companionNotesAllowQueue : l10n.companionNotesNoQueue,
+        chooseSource ? l10n.companionNotesChooseDirectory : l10n.companionNotesKeepDirectory,
+        chooseOutput ? l10n.companionNotesChooseOutput : l10n.companionNotesKeepOutput);
+    bool current() => mounted && memory.store.hostTask(id)?['task_rev'] == revision;
+    bool selectedHost() => current() && task['host_key'] == hostKey &&
+      hostKey == companionHostKey(ref.read(activeHostProvider)) && identical(client, ref.read(activeConnectionProvider).value?.client);
+    setState(() => _busy = true);
+    try {
+      final retry = _retry;
+      MemoryRow source;
+      if (retry != null && retry.taskId == id && retry.raw == raw) {
+        source = retry.source;
+      } else {
+        final observed = await clock.clock();
+        if (!current()) {
+          return false;
+        }
+        source = memory.store.submitMessage(id: companionMemoryId(), sessionId: task['source_session_id']! as String,
+          text: raw, saidAtUtc: observed.utcMs, offsetMinutes: observed.offsetSeconds ~/ 60,
+          zoneId: observed.zoneId, offsetSeconds: observed.offsetSeconds);
+        _retry = (taskId: id, raw: raw, source: source);
+      }
+      final accepted = memory.store.taskForCommand(source['id']! as String, 0);
+      MemoryRow updated;
+      if (accepted != null) {
+        updated = memory.store.hostTask(accepted['task_id']! as String)!;
+      } else if (cancel) {
+        updated = memory.store.cancelNotesTask(taskId: id, expectedTaskRev: revision,
+          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0);
+      } else {
+        int? deadline = clearDeadline ? null : agreement['deadlineAtMs'] as int?;
+        if (!clearDeadline && deadlineText.isNotEmpty) {
+          final match = RegExp(r'^(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d)$').firstMatch(deadlineText);
+          if (match == null) {
+            throw const FormatException('A complete local deadline is required');
+          }
+          final resolved = await clock.resolve(match.group(1)!, match.group(2)!, args['timeZone']! as String);
+          if (resolved['kind'] != 'unique') {
+            throw const FormatException('The local deadline is not unique');
+          }
+          deadline = ((resolved['moments']! as List).single as Map)['epochMs']! as int;
+        }
+        if (!current()) {
+          return false;
+        }
+        final labels = Map<String, Object?>.from(task['directory_labels']! as Map);
+        if (chooseSource || chooseOutput) {
+          if (client == null || !selectedHost()) {
+            throw const DshRemoteException('companion/task-original-host', 'Connect the original task Host');
+          }
+          final capability = await client.readCompanionTasksCapability();
+          if (!selectedHost() || capability == null || !capability.notes ||
+              (task['host_store_id'] != null && capability.hostStoreId != task['host_store_id'])) {
+            throw const DshRemoteException('companion/task-store-mismatch', 'The original task store is unavailable');
+          }
+          for (final output in [false, true]) {
+            if (!(output ? chooseOutput : chooseSource)) {
+              continue;
+            }
+            final path = await showDirectoryPicker(context,
+              title: output ? l10n.companionNotesChooseOutput : l10n.companionNotesChooseDirectory);
+            if (!selectedHost() || path == null) {
+              return false;
+            }
+            final bound = await client.bindCompanionNotesDirectory(capability, path);
+            if (!selectedHost()) {
+              return false;
+            }
+            args[output ? 'outputDirRef' : 'folderRef'] = bound['folderRef'];
+            labels[output ? 'output' : 'source'] = bound['displayPath'];
+          }
+        }
+        if (!current()) {
+          return false;
+        }
+        args['localDate'] = date;
+        args['outputName'] = name;
+        updated = memory.store.amendNotesTask(taskId: id, expectedTaskRev: revision,
+          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0,
+          agreement: {'args': args, 'deadlineAtMs': deadline, 'afterExit': afterExit, 'allowQueue': allowQueue},
+          directoryLabels: labels);
+      }
+      memory.changed();
+      if (client != null && updated['host_key'] == hostKey) {
+        await memory.hostTasks.run(updated, client: client, hostKey: hostKey, initialOpportunity: true, submitPending: true);
+      }
+      _retry = null;
+      return true;
+    } on Object {
+      if (mounted) {
+        showBriefNotice(context, l10n.companionNotesSaveFailed);
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _editNotes(MemoryRow task) async {
+    final agreement = task['agreement']! as Map;
+    final args = agreement['args']! as Map;
+    var date = args['localDate']! as String;
+    var name = args['outputName']! as String;
+    var afterExit = agreement['afterExit']! as String;
+    var allowQueue = agreement['allowQueue']! as bool;
+    var deadline = '';
+    var clearDeadline = false;
+    var chooseSource = false;
+    var chooseOutput = false;
+    var saving = false;
+    await showAppDialog<void>(context: context, builder: (dialog) => StatefulBuilder(builder: (dialog, update) => AlertDialog(
+      title: Text(dialog.l10n.companionNotesEdit),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextFormField(initialValue: date, onChanged: (value) => date = value,
+          decoration: InputDecoration(labelText: dialog.l10n.companionNotesDate, hintText: 'YYYY-MM-DD')),
+        TextFormField(initialValue: name, onChanged: (value) => name = value,
+          decoration: InputDecoration(labelText: dialog.l10n.companionNotesFilename)),
+        TextFormField(onChanged: (value) => deadline = value,
+          decoration: InputDecoration(labelText: dialog.l10n.companionNotesDeadlineField,
+            hintText: 'YYYY-MM-DD HH:mm (${args['timeZone']})')),
+        CheckboxListTile(value: clearDeadline, onChanged: (value) => update(() => clearDeadline = value!),
+          title: Text(dialog.l10n.companionNotesClearDeadline)),
+        DropdownButton<String>(value: afterExit, isExpanded: true,
+          items: [DropdownMenuItem(value: 'continue', child: Text(dialog.l10n.companionNotesContinue)),
+            DropdownMenuItem(value: 'pause', child: Text(dialog.l10n.companionNotesPause))],
+          onChanged: (value) => update(() => afterExit = value!)),
+        CheckboxListTile(value: allowQueue, onChanged: (value) => update(() => allowQueue = value!),
+          title: Text(dialog.l10n.companionNotesAllowQueue)),
+        CheckboxListTile(value: chooseSource, onChanged: (value) => update(() => chooseSource = value!),
+          title: Text(dialog.l10n.companionNotesChooseDirectory)),
+        CheckboxListTile(value: chooseOutput, onChanged: (value) => update(() => chooseOutput = value!),
+          title: Text(dialog.l10n.companionNotesChooseOutput)),
+      ])),
+      actions: [
+        TextButton(onPressed: saving ? null : () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+        FilledButton(onPressed: saving ? null : () async {
+          update(() => saving = true);
+          final ok = await _applyNotes(task, date: date.trim(), name: name.trim(), afterExit: afterExit,
+            allowQueue: allowQueue, deadlineText: deadline.trim(), clearDeadline: clearDeadline,
+            chooseSource: chooseSource, chooseOutput: chooseOutput);
+          if (!dialog.mounted) {
+            return;
+          }
+          if (ok) {
+            Navigator.pop(dialog);
+          } else {
+            update(() => saving = false);
+          }
+        }, child: Text(dialog.l10n.commonSave)),
+      ],
+    )));
+  }
+
+  bool _notesApprovalCurrent(MemoryRow task, Map captured) {
+    if (!mounted || !_notesHostHere(task) || !identical(_notesVerifiedClient, ref.read(activeConnectionProvider).value?.client) ||
+        task['host_store_id'] != _notesVerifiedStore) {
+      return false;
+    }
+    final current = _memory!.store.hostTask(task['task_id']! as String);
+    final snapshot = current?['snapshot'] as Map?;
+    final approval = snapshot?['approval'];
+    return current?['task_rev'] == task['task_rev'] && current?['cancel_requested'] == 0 &&
+      current?['state'] == 'waiting' && approval is Map &&
+      const ['taskRev', 'stepKey', 'agentId', 'approvalId', 'eventId', 'callId']
+        .every((key) => approval[key] == captured[key]) && approval['taskRev'] == current?['task_rev'];
+  }
+
+  Future<void> _openNotesArtifact(MemoryRow task, Map artifact) async {
+    if (_busy || !_notesHostHere(task)) {
+      return;
+    }
+    final client = ref.read(activeConnectionProvider).value!.client;
+    setState(() => _busy = true);
+    try {
+      final result = await client.readCompanionHostArtifact(hostStoreId: task['host_store_id']! as String,
+        taskId: task['task_id']! as String, hostExecutionId: task['host_execution_id']! as String,
+        artifactId: artifact['artifactId']! as String);
+      if (!mounted) {
+        return;
+      }
+      await showAppDialog<void>(context: context, builder: (dialog) => AlertDialog(
+        title: Text(artifact['relativePath']! as String),
+        content: SingleChildScrollView(child: SelectableText(result['status'] == 'available'
+          ? result['content']! as String : switch (result['status']) {
+            'missing' => dialog.l10n.companionNotesFileMissing,
+            'changed' => dialog.l10n.companionNotesFileChanged,
+            _ => dialog.l10n.companionNotesFileUnknown,
+          })),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonClose))],
+      ));
+    } on Object {
+      if (mounted) {
+        showBriefNotice(context, context.l10n.companionNotesFileUnknown);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Widget _notesDetail(MemoryRow task) {
+    final l10n = context.l10n;
+    final agreement = task['agreement']! as Map;
+    final args = agreement['args']! as Map;
+    final labels = task['directory_labels']! as Map;
+    final snapshot = task['snapshot'] as Map?;
+    final approval = snapshot?['approval'];
+    final artifacts = (snapshot?['artifacts'] as List?) ?? const [];
+    final steps = (snapshot?['steps'] as List?) ?? const [];
+    final budget = snapshot?['budget'] as Map?;
+    final pendingCommand = task['host_store_id'] != null &&
+      const ['amend', 'cancel'].contains(task['operation']) &&
+      (snapshot == null || (snapshot['taskRev']! as int) < (task['task_rev']! as int));
+    return Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(args['outputName']! as String, style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
+      Text('${args['localDate']} ${args['timeZone']}'),
+      Text(l10n.companionNotesModifiedDay),
+      if (labels['source'] case final String path) Text(l10n.companionNotesSourceDirectory(path)),
+      if (labels['output'] case final String path) Text(l10n.companionNotesOutputDirectory(path)),
+      Text(agreement['afterExit'] == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue),
+      if (agreement['allowQueue'] == true) Text(l10n.companionNotesAllowQueue),
+      if (agreement['deadlineAtMs'] case final int at)
+        Text(l10n.companionNotesDue(DateTime.fromMillisecondsSinceEpoch(at, isUtc: true).toIso8601String())),
+      const SizedBox(height: 8),
+      Text(companionNotesLine(l10n, task)),
+      if (!_notesHostHere(task)) Text(l10n.companionNotesOriginalHost),
+      if (budget != null) Text(l10n.companionNotesBudget(
+        ((budget['spentMs']! as int) / 1000).toStringAsFixed(1), ((budget['heldMs']! as int) / 1000).toStringAsFixed(1))),
+      if (approval is Map && _notesApprovalCurrent(task, approval)) ...[
+        Text(l10n.companionNotesApproval),
+        CompanionAsk(key: ValueKey('notes-${task['task_id']}-${approval['eventId']}'),
+          sessionId: approval['agentId']! as String,
+          approvalTarget: (eventId: approval['eventId']! as String, callId: approval['callId'] as String?,
+            isCurrent: () => _notesApprovalCurrent(task, approval))),
+      ],
+      for (final value in artifacts) ...[
+        const SizedBox(height: 16),
+        Text(l10n.companionNotesArtifactRevision('${(value as Map)['taskRev']}')),
+        Text(value['relativePath']! as String),
+        Text(l10n.companionNotesArtifactDetails('${value['sourceCount']}',
+          DateTime.fromMillisecondsSinceEpoch(value['verifiedAtMs']! as int, isUtc: true).toIso8601String())),
+        OutlinedButton(onPressed: _busy || !_notesHostHere(task) ? null : () => _openNotesArtifact(task, value),
+          child: Text(l10n.companionNotesOpenFile)),
+      ],
+      if (steps.isNotEmpty) ExpansionTile(title: Text(l10n.companionNotesSteps), children: [
+        for (final value in steps) _notesStep(Map<String, Object?>.from(value as Map)),
+      ]),
+      if (_notesHostHere(task) && pendingCommand)
+        OutlinedButton(onPressed: _busy ? null : () => _retryNotes(task, pendingCommand: true),
+          child: Text(task['operation'] == 'cancel' ? l10n.companionNotesResendCancel : l10n.companionNotesResendAmend))
+      else if (_notesHostHere(task) && task['snapshot'] == null && task['host_store_id'] != null && task['state'] == 'unknown')
+        OutlinedButton(onPressed: _busy ? null : () => _retryNotes(task, missing: true),
+          child: Text(l10n.companionNotesResendOriginal)),
+      if (task['cancel_requested'] == 0 && !const ['done', 'partial', 'cancelled'].contains(task['state']))
+        Wrap(spacing: 8, children: [
+          if (!pendingCommand && _notesHostHere(task) && approval == null && task['wait_reason'] != 'foreground_control_unavailable' &&
+              (task['state'] == 'waiting' || task['state'] == 'queued'))
+            FilledButton(onPressed: _busy ? null : () => _retryNotes(task),
+              child: Text(task['state'] == 'queued' ? l10n.companionNotesSubmitSaved : l10n.companionNotesRetry)),
+          OutlinedButton(onPressed: _busy ? null : () => _editNotes(task), child: Text(l10n.companionNotesEdit)),
+          OutlinedButton(onPressed: _busy ? null : () => _applyNotes(task, cancel: true), child: Text(l10n.companionNotesCancel)),
+        ]),
+    ]));
+  }
+
+  Future<void> _retryNotes(MemoryRow task, {bool missing = false, bool pendingCommand = false}) async {
+    if (_busy || !_notesHostHere(task)) {
+      return;
+    }
+    final client = ref.read(activeConnectionProvider).value!.client;
+    final hostKey = companionHostKey(ref.read(activeHostProvider));
+    final unsent = _memory!.store.hostTaskCommands(task['task_id']! as String).last['possible_sent_at_ms'] == null;
+    setState(() => _busy = true);
+    try {
+      await _memory!.hostTasks.run(task, client: client, hostKey: hostKey,
+        submitPending: !missing && !pendingCommand && unsent, initialOpportunity: !missing && !pendingCommand && unsent,
+        retryWaiting: !missing && !pendingCommand && !unsent, replayMissing: missing, resendPendingCommand: pendingCommand);
+    } on Object {
+      if (mounted) {
+        showBriefNotice(context, context.l10n.companionNotesSaveFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Widget _notesStep(MemoryRow step) {
+    final l10n = context.l10n;
+    final title = switch (step['stepKey']) {
+      'selectInputs' => l10n.companionNotesSelectStep,
+      'readInputs' => l10n.companionNotesReadStep,
+      'model' => l10n.companionNotesModelStep,
+      'writePage' => l10n.companionNotesWriteStep,
+      _ => l10n.companionNotesTitle,
+    };
+    final result = step['result'];
+    final completion = result is Map ? result['completion'] : null;
+    Map? usage;
+    if (result is Map) {
+      if (completion is Map && completion['usage'] is Map) {
+        usage = completion['usage'] as Map;
+      } else if (result['observations'] is List) {
+        for (final observation in (result['observations']! as List).reversed) {
+          if (observation is Map && observation['type'] == 'model-finish' && observation['usage'] is Map) {
+            usage = observation['usage'] as Map;
+            break;
+          }
+        }
+      }
+    }
+    return ListTile(title: Text('$title · ${l10n.companionNotesArtifactRevision('${step['taskRev']}')}'),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(switch (step['state']) {
+          'done' => l10n.companionNotesStepDone,
+          'partial' => l10n.companionNotesStepPartial,
+          'running' => l10n.companionNotesStepRunning,
+          'waiting' || 'queued' => l10n.companionNotesStepWaiting,
+          'failed' => l10n.companionNotesStepFailed,
+          'cancelled' => l10n.companionNotesStepCancelled,
+          _ => l10n.companionNotesStepUnknown,
+        }),
+        if (step['stepKey'] == 'model' && completion is Map && completion['itemCount'] is int)
+          Text(l10n.companionNotesItemCount('${completion['itemCount']}')),
+        if (step['stepKey'] == 'model') Text(usage == null ? l10n.companionLookupUsageUnknown :
+          l10n.companionLookupModelUsage('${usage['input_uncached'] ?? '?'}', '${usage['input_cache_read'] ?? '?'}',
+            '${usage['input_cache_write'] ?? '?'}', '${usage['output_tokens'] ?? '?'}')),
+      ]));
   }
 
   Widget _lookupDetail(MemoryRow task) {
@@ -526,10 +946,13 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         else _detail(task)
       else if (rows.isEmpty) EmptyView(icon: AppIcons.reminder, title: l10n.companionTasksEmpty)
       else SheetGroup(children: [for (final row in rows)
-        SettingsTile(icon: row['kind'] == 'public.lookup' ? AppIcons.search : AppIcons.reminder,
+        SettingsTile(icon: row['kind'] == 'host.notes_to_todo' ? AppIcons.document :
+            row['kind'] == 'public.lookup' ? AppIcons.search : AppIcons.reminder,
           title: row['kind'] == 'public.lookup' ? row['lookup_question']! as String :
+            row['kind'] == 'host.notes_to_todo' ? l10n.companionNotesTitle :
             row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
           subtitle: row['kind'] == 'public.lookup' ? companionLookupLine(l10n, row, executorId: _executorId) :
+            row['kind'] == 'host.notes_to_todo' ? companionNotesLine(l10n, row) :
             companionReminderLine(l10n, row, executorId: _executorId), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => CompanionTasksPage(memory: memory, taskId: row['task_id']! as String),
           )),

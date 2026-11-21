@@ -33,12 +33,14 @@ import 'package:dsh_app/ui/tavern/tavern_chat_page.dart';
 import 'package:dsh_app/ui/tavern/tavern_home_page.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
+import 'package:dsh_app/ui/workspace/directory_picker.dart';
 import 'package:dsh_client/dsh_client.dart'
     show
         CompanionMemory,
         CompanionMemoryStore,
         CompanionTaskStore,
         CompanionPublicLookupStore,
+        CompanionHostTaskStore,
         MemoryBatch,
         companionMemoryExtractionPrompt,
         companionMemoryConsolidationPrompt,
@@ -55,11 +57,12 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
+import '../support/companion_notes_peer.dart';
 
-Widget _app(Widget child, {List<Override> extra = const [], CompanionKeeper? phone}) => ProviderScope(
-  // No host here: the page must stand on its own without one.
+Widget _app(Widget child, {List<Override> extra = const [], CompanionKeeper? phone, HostConnection? connection}) => ProviderScope(
+  // By default there is no host: the page must stand on its own without one.
   overrides: [
-    activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+    activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(connection)),
     companionPhoneKeeperProvider.overrideWithValue((_) => phone ?? FakePhoneKeeper()),
     ...extra,
   ],
@@ -98,6 +101,19 @@ class _Settings extends SettingsController {
 
   @override
   AppSettings build() => AppSettings(loaded: true, apiKey: apiKey);
+}
+
+class _NotesLightMode extends CompanionModeSetting {
+  @override
+  CompanionMode? build() => CompanionMode.light;
+}
+
+Future<void> _notesVisible(WidgetTester tester, Finder finder, {bool absent = false}) async {
+  for (var i = 0; i < 200 && (finder.evaluate().isEmpty != absent); i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  expect(finder, absent ? findsNothing : findsWidgets);
 }
 
 /// Observes the Page's real completion future; all receipt handling stays
@@ -534,6 +550,7 @@ void main() {
         CompanionModelInfo? model,
         ValueChanged<CompanionStageEvents>? events,
         List<Override> extra = const [],
+        HostConnection? connection,
       }) async {
         SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
         final commands = <(String, Map<String, Object?>)>[];
@@ -554,6 +571,7 @@ void main() {
               ...extra,
             ],
             phone: phone,
+            connection: connection,
           ),
         );
         final up = await _stageUp(tester, () => stageEvents);
@@ -578,6 +596,207 @@ void main() {
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+      }
+
+      for (final scenario in ['accepted', 'source-failure', 'leave-during-bind', 'cancel-during-bind', 'leave-after-acceptance']) {
+        testWidgets('F actual Page directory binding and stable source: $scenario', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          const now = 1795219200000;
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root), nowMilliseconds: () => now);
+          final peer = (await tester.runAsync(NotesPeer.open))!;
+          final clockRead = Completer<void>();
+          final browserRead = Completer<void>();
+          final bindRead = Completer<void>();
+          final releaseBind = Completer<void>();
+          final postReceived = Completer<void>();
+          final releasePost = Completer<void>();
+          final posted = Completer<void>();
+          Map<String, Object?>? snapshot;
+          var closed = false;
+          addTearDown(() async {
+            if (!releaseBind.isCompleted) {
+              releaseBind.complete();
+            }
+            if (!releasePost.isCompleted) {
+              releasePost.complete();
+            }
+            await tester.pumpWidget(const SizedBox());
+            if (!closed) {
+              memory.dispose();
+            }
+            await tester.pump();
+            await tester.runAsync(peer.close);
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'clock') {
+              if (!clockRead.isCompleted) {
+                clockRead.complete();
+              }
+              return {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800};
+            }
+            if (call.method == 'capabilities') {
+              return {'executorId': 'phone-original', 'exact': true, 'notifications': true};
+            }
+            if (call.method == 'recover') {
+              return {'recoveryQueued': true};
+            }
+            throw StateError('Unexpected native task call ${call.method}');
+          });
+          peer.respond = (request, body) async {
+            if (request.uri.path == '/api/directoryPicker/list') {
+              expect(memory.store.messages().where((row) => row['role'] == 'user'), hasLength(1));
+              await NotesPeer.json(request, {'type': 'server-response', 'rpcId': body!['rpcId'],
+                'result': {'ok': true, 'value': {'path': '/实际笔记', 'home': '/实际笔记',
+                  'crumbs': [{'name': '实际笔记', 'path': '/实际笔记'}], 'entries': []}}});
+              browserRead.complete();
+            } else if (request.uri.path == '$notesPath/folders') {
+              expect(body, {'v': 1, 'hostStoreId': 'original-store', 'path': '/实际笔记'});
+              expect(memory.store.tasks(), isEmpty);
+              bindRead.complete();
+              if (scenario.endsWith('during-bind')) {
+                await releaseBind.future;
+              }
+              await NotesPeer.json(request, {'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'bound-source',
+                'displayPath': '/实际笔记'});
+            } else if (request.method == 'POST' && request.uri.path == notesPath) {
+              final row = memory.store.tasks().single;
+              final command = memory.store.hostTaskCommands(row['task_id']! as String).single;
+              expect(command['possible_sent_at_ms'], now);
+              expect(body!['deadlineAtMs'], isNull);
+              expect(body['afterExit'], scenario == 'leave-after-acceptance' ? 'continue' : 'pause');
+              expect(body['hostSessionId'], isNull);
+              expect((body['args']! as Map)['localDate'], '2026-11-21');
+              expect((body['args']! as Map)['folderRef'], 'bound-source');
+              expect(jsonEncode(body), isNot(contains('练长笛')));
+              snapshot = notesSnapshot(body, state: scenario == 'leave-after-acceptance' ? 'running' : 'waiting');
+              postReceived.complete();
+              if (scenario == 'leave-after-acceptance') {
+                await releasePost.future;
+              }
+              await NotesPeer.json(request, snapshot!, status: 201);
+              posted.complete();
+            } else if (request.method == 'GET' && snapshot != null && request.uri.path == '$notesPath/${snapshot!['taskId']}') {
+              await NotesPeer.json(request, snapshot!);
+            } else {
+              await NotesPeer.json(request, {'error': {'code': 'companion/not-found', 'message': 'No route'}}, status: 404);
+            }
+          };
+          await openLight(tester, apiKey: '', client: MockClient((_) async => throw StateError('F must not call the light model')),
+            connection: HostConnection(client: peer.client, isLocal: false),
+            extra: [companionModeProvider.overrideWith(_NotesLightMode.new),
+              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          final sourceRoom = memory.store.lightSessionId;
+          if (scenario == 'source-failure') {
+            db.execute("CREATE TRIGGER reject_notes_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+          }
+          final afterExit = scenario == 'leave-after-acceptance' ? '我先走了也继续' : '我离开就停';
+          final raw = '请电脑把今天的笔记另存成一页待办，原件别动，$afterExit；我午后练长笛';
+          await tester.enterText(find.byType(TextField), raw);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, clockRead.future);
+          if (scenario == 'source-failure') {
+            await tester.pumpAndSettle();
+            expect(find.text('这次处理没能核清，请查看这件事的原记录；不会另建一项重做。'), findsOneWidget);
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            expect(memory.store.messages(), isEmpty);
+            expect(memory.store.tasks(), isEmpty);
+            expect(peer.calls.where((call) => call.uri.path.startsWith(notesPath) || call.uri.path.contains('directoryPicker')), isEmpty);
+            expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
+            return;
+          }
+          await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+          expect(find.byType(DirectoryLocationsSheet), findsOneWidget);
+          final handling = memory.lastReceipt;
+          await tester.tap(find.text('主目录').last);
+          await settleMixed(tester, browserRead.future);
+          final choose = find.descendant(of: find.byType(DirectoryBrowserPage),
+            matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null)).last;
+          await _notesVisible(tester, choose);
+          expect(tester.widget<FilledButton>(choose).onPressed, isNotNull);
+          await tester.tap(choose);
+          await settleMixed(tester, bindRead.future);
+          if (scenario == 'leave-during-bind') {
+            await tester.pumpWidget(const SizedBox());
+          } else if (scenario == 'cancel-during-bind') {
+            await _notesVisible(tester, find.byType(DirectoryLocationsSheet), absent: true);
+            await tester.enterText(find.byType(TextField), '取消这次笔记整理');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await tester.pumpAndSettle();
+            expect(find.text('想取消哪一项笔记整理？请到事情列表里选它。'), findsOneWidget);
+          }
+          releaseBind.complete();
+          if (scenario == 'leave-after-acceptance') {
+            await settleMixed(tester, postReceived.future);
+            final accepted = memory.store.tasks().single;
+            expect(memory.store.hostTaskCommands(accepted['task_id']! as String).single['possible_sent_at_ms'], now);
+            await tester.pumpWidget(const SizedBox());
+            // The production room-identity operation opens a different Page
+            // while the original accepted task is still awaiting its receipt.
+            // This does not claim to exercise the restart-menu gesture.
+            memory.store.startLightConversation();
+            expect(memory.store.lightSessionId, isNot(sourceRoom));
+            await openLight(tester, apiKey: '', client: MockClient((_) async => throw StateError('F must not call the light model')),
+              connection: HostConnection(client: peer.client, isLocal: false),
+              extra: [companionModeProvider.overrideWith(_NotesLightMode.new),
+                companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+            expect(await memoryOf(tester), same(memory));
+            releasePost.complete();
+          }
+          if (scenario == 'accepted' || scenario == 'leave-after-acceptance') {
+            await settleMixed(tester, posted.future);
+          }
+          await settleMixed(tester, handling);
+          await tester.pump();
+          final sources = memory.store.messages().where((row) => row['role'] == 'user').toList();
+          expect(sources.first['text'], raw);
+          if (scenario != 'accepted' && scenario != 'leave-after-acceptance') {
+            expect(memory.store.tasks(), isEmpty);
+            expect(peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath), isEmpty);
+          } else {
+            final row = memory.store.tasks().single;
+            expect(row['source_message_id'], sources.single['id']);
+            expect(row['source_session_id'], sourceRoom);
+            expect(row['item_no'], 0);
+            final task = memory.store.hostTask(row['task_id']! as String)!;
+            expect(task['state'], scenario == 'leave-after-acceptance' ? 'running' : 'waiting');
+            expect(task['task_rev'], 1);
+            expect(task['cancel_requested'], 0);
+            expect(task['directory_labels'], {'source': '/实际笔记', 'output': '/实际笔记'});
+            if (scenario == 'accepted') {
+              expect(find.text('查看这件事'), findsOneWidget);
+              await tester.tap(find.text('查看这件事'));
+              await _notesVisible(tester, find.byType(CompanionTasksPage));
+              await settleMixed(tester, memory.lastReceipt);
+              await tester.pump();
+              expect(find.byType(CompanionTasksPage), findsOneWidget);
+              expect(find.text('笔记目录：/实际笔记'), findsOneWidget);
+              expect(find.textContaining('目前无法可靠执行这一条件'), findsOneWidget);
+              expect(find.text('继续尝试原任务'), findsNothing);
+            } else {
+              expect(find.text('查看这件事'), findsNothing);
+              expect(find.text('电脑已接下，等待后续结果。'), findsNothing);
+              expect(find.textContaining('2026-11-21-待办.md'), findsNothing);
+              expect(memory.store.tasks(sourceSessionId: memory.store.lightSessionId), isEmpty);
+            }
+            expect(peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath), hasLength(1));
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            closed = true;
+            await tester.pump();
+            final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+            expect(reopened.hostTask(row['task_id']! as String)!['agreement'], task['agreement']);
+            expect(reopened.messages().singleWhere((item) => item['id'] == sources.single['id'])['said_at_utc'], now);
+            reopened.close();
+          }
+        });
       }
 
       for (final rejectSource in [false, true]) {

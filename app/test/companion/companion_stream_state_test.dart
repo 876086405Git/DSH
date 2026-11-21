@@ -21,6 +21,7 @@ import 'package:dsh_app/ui/companion/companion_ask.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
+import 'package:dsh_app/ui/companion/companion_tasks_page.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -33,6 +34,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_test_settle.dart';
 import 'initiative_memory.dart';
+import '../support/companion_notes_peer.dart' show notesPath, notesAgreement, notesSnapshot;
 
 const _session = 'c438-synthetic-session';
 const _now = 1793937600000;
@@ -180,6 +182,46 @@ class _Client extends DshClient {
   Stream<DshEvent> watch(String sessionId, {WatchOptions options = const WatchOptions()}) {
     expect(sessionId, _session);
     return events.stream;
+  }
+}
+
+const _notesAgent = 'notes-task-agent';
+
+class _NotesApprovalBridge extends _ApprovalBridge {
+  MemoryRow? taskSnapshot;
+  var taskReads = 0;
+  var taskMissing = false;
+  @override
+  Future<DshHttpResponse> get(String path, {
+    Map<String, String>? query, Map<String, String>? headers, Duration? timeout,
+    bool followRedirects = true, int? maxResponseBytes,
+  }) async {
+    if (taskSnapshot != null && path == '$notesPath/${taskSnapshot!['taskId']}') {
+      taskReads++;
+      expect(query, {'hostStoreId': 'original-store'});
+      if (taskMissing) {
+        return json({'error': {'code': 'companion/task-not-found', 'message': 'No snapshot returned'}}, 404);
+      }
+      return json(taskSnapshot!);
+    }
+    return super.get(path, query: query, headers: headers, timeout: timeout,
+      followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+  }
+}
+
+class _NotesApprovalClient extends _Client {
+  _NotesApprovalClient(super.bridge);
+  final notesEvents = StreamController<DshEvent>.broadcast();
+  final notesWatched = Completer<void>();
+  @override
+  Stream<DshEvent> watch(String sessionId, {WatchOptions options = const WatchOptions()}) {
+    if (sessionId != _notesAgent) {
+      return super.watch(sessionId, options: options);
+    }
+    if (!notesWatched.isCompleted) {
+      notesWatched.complete();
+    }
+    return notesEvents.stream;
   }
 }
 
@@ -960,6 +1002,140 @@ void main() {
       await room.close(tester);
     }
   });
+
+  for (final outcome in ['allow', 'cancel', 'missing']) {
+    testWidgets('F task page binds the original Agent approval and rejects stale evidence: $outcome', (tester) async {
+      final bridge = _NotesApprovalBridge();
+      final client = _NotesApprovalClient(bridge);
+      final room = _Room(temporary, client: client);
+      final hostKey = '${HostRef.local.kind.name}:${HostRef.local.id}';
+      late String id;
+      late MemoryRow create;
+      MemoryRow approval(String event) => {'taskRev': 1, 'stepKey': 'model', 'agentId': _notesAgent,
+        'approvalId': 'engine-approval-$event', 'eventId': 'gateway-$event', 'callId': 'call-$event'};
+      void hostSnapshot(String event, int seq) {
+        bridge.taskSnapshot = {...notesSnapshot(create, state: 'waiting', seq: seq, approval: approval(event), steps: [
+          {'taskRev': 1, 'stepKey': 'model', 'attemptId': 'model-wait', 'state': 'waiting',
+            'startedAtMs': _now, 'finishedAtMs': null, 'reason': 'approval_required', 'result': null},
+        ]), 'waitReason': 'approval_required'};
+      }
+      void engineApproval(String event) => client.notesEvents.add(HostEvent.fromFrame({
+        'type': 'waterfall', 'event': 'approval/request', 'eventId': 'gateway-$event', 'agentId': _notesAgent,
+        'request': {'toolName': 'web_fetch', 'callId': 'call-$event'},
+      }));
+      await room.open(tester, seed: (memory) {
+        memory.store.submitMessage(id: 'notes-source', sessionId: 'full:$hostKey',
+          text: '请电脑把2026-11-21的笔记整理成一页待办，原件别动', saidAtUtc: _now, offsetMinutes: 480,
+          zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+        final task = memory.store.createNotesTaskFromMessage(messageId: 'notes-source', expectedSourceRev: 1,
+          itemNo: 0, roomMode: 'full', hostKey: hostKey, hostSessionId: _session, agreement: notesAgreement());
+        id = task['task_id']! as String;
+        create = memory.store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: hostKey,
+          hostStoreId: 'original-store', initialOpportunity: true)!['request']! as MemoryRow;
+        hostSnapshot('E1', 1);
+      });
+      try {
+        unawaited(Navigator.of(tester.element(find.byType(CompanionPage))).push(MaterialPageRoute<void>(
+          builder: (_) => CompanionTasksPage(memory: room.memory, taskId: id))));
+        await tester.pump();
+        await settleMixed(tester, room.memory.hostTasks.run(room.memory.store.hostTask(id)!,
+          client: client, hostKey: hostKey));
+        await flush(tester);
+        await settleMixed(tester, client.notesWatched.future);
+        client.notesEvents.add(parseFollowFrame(_notesAgent, {'type': 'snapshot', 'cursor': -1,
+          'records': [], 'assistantStream': {'revision': 0}}));
+        engineApproval('E1');
+        await flush(tester);
+        await tester.pump(CompanionAsk.detailWait);
+        await tester.pumpAndSettle();
+        final target = tester.widget<CompanionAsk>(find.byType(CompanionAsk)).approvalTarget!;
+        final old = tester.widget<ApprovalCard>(find.byType(ApprovalCard));
+        expect(old.request.sessionId, _notesAgent);
+        expect(old.request.eventId, 'gateway-E1');
+        expect(find.text('继续尝试原任务'), findsNothing);
+        expect(target.callId, 'call-E1');
+        expect(room.memory.store.hostTask(id)!['source_session_id'], 'full:$hostKey');
+        expect(room.memory.store.hostTask(id)!['host_session_id'], _session);
+        expect((room.memory.store.hostTask(id)!['snapshot']! as Map)['approval'], approval('E1'));
+
+        client.notesEvents.add(HostEvent.fromFrame({'type': 'cancel', 'eventId': 'gateway-E1'}));
+        engineApproval('E2');
+        await flush(tester);
+        expect(room.container.read(chatProvider(_notesAgent)).openApproval?.eventId, 'gateway-E2');
+        await settleMixed(tester, old.onRespond(old.request, ApprovalDecision.allowOnce));
+        await settleMixed(tester, old.onAllowAll!(old.request));
+        expect(bridge.results, isEmpty);
+        // The task still points to E1; an E2 in the Agent does not substitute
+        // for that binding until an actual complete Host snapshot says so.
+        await tester.pumpAndSettle();
+        expect(find.byType(ApprovalCard), findsNothing);
+
+        hostSnapshot('E2', 2);
+        await tester.tap(find.byTooltip('重新核对'));
+        await settleMixed(tester, room.memory.hostTasks.run(room.memory.store.hostTask(id)!,
+          client: client, hostKey: hostKey));
+        await flush(tester);
+        // A fresh watch of the task Agent may begin while the original card
+        // is revalidated. Deliver its real current event, not a Page override.
+        client.notesEvents.add(parseFollowFrame(_notesAgent, {'type': 'snapshot', 'cursor': -1,
+          'records': [], 'assistantStream': {'revision': 0}}));
+        engineApproval('E2');
+        await flush(tester);
+        await tester.pump(CompanionAsk.detailWait);
+        await tester.pumpAndSettle();
+        final current = tester.widget<ApprovalCard>(find.byType(ApprovalCard));
+        expect(current.request.eventId, 'gateway-E2');
+        if (outcome == 'cancel') {
+          room.memory.store.submitMessage(id: 'cancel-notes', sessionId: 'full:$hostKey',
+            text: '取消这次笔记整理', saidAtUtc: _now + 1, offsetMinutes: 480);
+          room.memory.store.cancelNotesTask(taskId: id, expectedTaskRev: 1,
+            messageId: 'cancel-notes', expectedSourceRev: 1, itemNo: 0);
+          room.memory.changed();
+          // Invoke the already captured callback before the next frame; the
+          // production revision closure must gate it even while E2 is pending.
+          await settleMixed(tester, current.onRespond(current.request, ApprovalDecision.allowOnce));
+          await settleMixed(tester, current.onAllowAll!(current.request));
+          expect(bridge.results, isEmpty);
+          expect(room.memory.store.hostTask(id)!['task_rev'], 2);
+        } else if (outcome == 'missing') {
+          // A legal 404 response is an HTTP/UI evidence boundary. The frozen
+          // Host has no task deletion route; this is not a claim that it lost
+          // a durable task or that deletion was exercised here.
+          final target = tester.widget<CompanionAsk>(find.byType(CompanionAsk)).approvalTarget!;
+          bridge.taskMissing = true;
+          await tester.tap(find.byTooltip('重新核对'));
+          await settleMixed(tester, room.memory.hostTasks.run(room.memory.store.hostTask(id)!,
+            client: client, hostKey: hostKey));
+          await tester.pumpAndSettle();
+          expect(target.isCurrent(), isFalse);
+          expect(find.byType(ApprovalCard), findsNothing);
+          expect(bridge.results, isEmpty);
+          expect(room.memory.store.hostTask(id)!['state'], 'waiting');
+          expect(room.memory.store.hostTask(id)!['applied_host_receipt_seq'], 2);
+          expect((room.memory.store.hostTask(id)!['snapshot']! as Map)['approval'], approval('E2'));
+        } else {
+          await tester.ensureVisible(find.descendant(of: find.byType(ApprovalCard), matching: find.byType(FilledButton)));
+          await tester.tap(find.descendant(of: find.byType(ApprovalCard), matching: find.byType(FilledButton)));
+          await settleMixed(tester, bridge.responded.future);
+          await flush(tester);
+          expect((bridge.results.single['payload']! as Map)['args'], {
+            'clientId': 'approval-peer', 'eventId': 'gateway-E2',
+            'outcome': {'kind': 'result', 'value': ApprovalDecision.allowOnce.wire},
+          });
+          expect(room.memory.store.hostTask(id)!['state'], 'waiting');
+          expect(room.memory.store.hostTask(id)!['applied_host_receipt_seq'], 2);
+          expect(room.memory.store.taskReceipts(id), isEmpty);
+        }
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        await settleMixed(tester, client.notesEvents.close());
+        await settleMixed(tester, client.events.close());
+        await settleMixed(tester, client.mux.connection.close());
+        await settleMixed(tester, client.close());
+      }
+    });
+  }
 
   for (final allowAll in [false, true]) {
     testWidgets('D actual Page keeps E1 callbacks from answering E2 and preserves allowAll=$allowAll', (tester) async {
