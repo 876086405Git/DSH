@@ -157,6 +157,7 @@ profile-root-installation-precedence.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 messages-usage-evidence.diff
 piai-usage-evidence.diff
+piai-tool-call-id.diff
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
 ohos-hap-native-libraries.diff
