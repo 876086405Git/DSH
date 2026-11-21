@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Prepare the finite F source test peers from an already patched runtime.
 
-No downloads, dependency installation, engine boot, or silent skips. The eight
-bundle sources and three copied dependencies must match the supplied pins.
+No downloads, dependency installation, engine boot, or silent skips. The task
+and model source files and copied dependencies must match the supplied pins.
 """
 import argparse
 import hashlib
@@ -48,6 +48,12 @@ def main():
         if json.loads((package / 'package.json').read_text())['version'] != expected['version'] \
                 or tree_sha(package) != expected['tree_sha256']:
             raise SystemExit('Dependency pin mismatch: ' + name)
+    model_sources = {}
+    for name, binding in pins['model_sources'][args.target].items():
+        data = (modules / name).read_bytes()
+        if sha(data) != binding['sha256']:
+            raise SystemExit('Model source pin mismatch: ' + name)
+        model_sources[binding['destination']] = data
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
     for name in pins['dependencies']:
@@ -97,8 +103,14 @@ const assertNever=value=>{throw new Error(String(value));};
     bridge = here.parents[2] / 'runtime/bridge/dsh-go-bridge/lib/companion'
     shutil.copytree(bridge, out / 'companion')
     (out / 'package.json').write_text('{"type":"module"}\n')
+    for name, data in model_sources.items():
+        destination = out / 'model-source' / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+    (out / 'model-source/package.json').write_text('{"type":"module"}\n')
     evidence = {'scope': pins['scope'], 'target': args.target,
         'sources': pins['targets'][args.target], 'dependencies': pins['dependencies'],
+        'model_sources': pins['model_sources'][args.target],
         'bridge': {p.relative_to(bridge).as_posix(): sha(p.read_bytes())
                    for p in sorted(bridge.rglob('*.js'))}}
     (out / 'source-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
