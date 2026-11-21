@@ -106,7 +106,7 @@ dsh-go’s own anonymous usage statistics are on by default; the switch is on th
 
 On Android, daily totals also include foreground activity, the first day of collection, reported model usage, feature outcomes, and crashes or hangs confirmed by Android. Collection is on by default; showing the notice only informs you and does not change when it starts. These reports cannot measure who is online now.
 
-These statistics never include accounts, API keys, chats, character cards, files, prompts, host addresses or which model you use, or device identifiers such as phone number or IMEI. Turning this switch off stops the feature and model collection and deletes that unsent data. On Android, one anonymous daily-activity report still goes out a day: the day, a random ID (rotated every 90 days, for de-duplication), the app version and whether the app was in the foreground — no model, feature, content or account data. Reports already received by the server cannot be withdrawn.
+These statistics never include accounts, API keys, chats, character cards, files, prompts, host addresses or which model you use, or device identifiers such as phone number or IMEI. Turning this switch off stops the feature and model collection and deletes that unsent data; on Android, one anonymous daily-activity count with no content is still reported. Reports already received by the server cannot be withdrawn.
 
 ## Local text recognition and Google ML Kit
 
