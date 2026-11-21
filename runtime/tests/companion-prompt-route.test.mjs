@@ -10,8 +10,10 @@ async function fixture(t) {
   const clock = Date.UTC(2026, 10, 8, 5);
   const human = { type: 'user/message', time: clock - 24 * 3600000, data: { source: { kind: 'user' } } };
   const synthetic = { type: 'user/message', time: clock - 1000, data: { source: { kind: 'time-context' } } };
-  const state = { resolves: 0, recalls: 0, preset: FULL_PRESET, found: true, retired: false };
-  const agent = { id: 's', session: { id: 's', seq: 2, eventAt: seq => [human, synthetic][seq] } };
+  const state = { resolves: 0, recalls: 0, preset: FULL_PRESET, found: true, retired: false, phoneHook: false };
+  const agent = { id: 's', ctx: { get: name => name === 'llm' ? { dshGoPhoneMemory: state.phoneHook } : undefined },
+    session: { id: 's', header: { isSeeded: false }, inheritedEventCount: 0,
+      seq: 2, eventAt: seq => [human, synthetic][seq] } };
   const service = createCompanionPromptContext({ now: () => clock, instanceId: 'boot' });
   const ctx = { get(name) {
     return {
@@ -108,4 +110,37 @@ test('an unloaded bridge cannot acknowledge a delayed recall write', async t => 
   f.service.clear(); release();
   assert.equal((await pending).status, 503);
   assert.equal(f.service.profile(f.agent), undefined);
+});
+
+const phoneBlock = JSON.stringify({ type: 'companion_memory', version: 2, scope: 'real',
+  items: [{ id: 'phone-card', kind: 'fact', text: 'PHONE_ONLY' }] });
+const phoneMemory = block => ({ archiveId: 'archive', controlRevision: 0, historyAfterSeq: 0, block });
+
+test('real HTTP phone prepare, explicit empty and retries never consult the old host query store', async t => {
+  const f = await fixture(t);
+  f.state.phoneHook = true; f.agent.session.seq = 0;
+  const cap = await f.request();
+  assert.equal(cap.body.phoneMemory, true); assert.equal(cap.body.v, 1);
+  const first = f.body({ phoneMemory: phoneMemory(phoneBlock) });
+  assert.equal((await f.request({ method: 'POST', body: first })).body.memoryMode, 'phone');
+  assert.equal((await f.request({ method: 'POST', body: first })).status, 200);
+  const changed = f.body({ phoneMemory: phoneMemory(phoneBlock.replace('PHONE_ONLY', 'OTHER')) });
+  assert.equal((await f.request({ method: 'POST', body: changed })).body.error.code, 'companion/request-conflict');
+  const empty = JSON.stringify({ type: 'companion_memory', version: 2, scope: 'real', items: [] });
+  assert.equal((await f.request({ method: 'POST', body: f.body({ requestId: 'empty', phoneMemory: phoneMemory(empty) }) })).status, 200);
+  const query = await f.request({ method: 'POST', body: f.body({ requestId: 'legacy-query', query: '茶' }) });
+  assert.equal(query.status, 409); assert.equal(query.body.error.code, 'companion/memory-mode-conflict');
+  assert.equal(f.state.recalls, 0);
+});
+
+test('real HTTP phone boundary rejects incompatible input before model or host memory work', async t => {
+  const f = await fixture(t), extra = { phoneMemory: phoneMemory(phoneBlock) };
+  assert.equal((await f.request({ method: 'POST', auth: 'reader', body: f.body(extra) })).status, 403);
+  assert.equal((await f.request({ method: 'POST', body: f.body({ ...extra, query: '茶' }) })).status, 400);
+  const unsupported = await f.request({ method: 'POST', body: f.body(extra) });
+  assert.equal(unsupported.body.error.code, 'companion/phone-memory-unsupported');
+  f.state.phoneHook = true;
+  const dirty = await f.request({ method: 'POST', body: f.body(extra) });
+  assert.equal(dirty.body.error.code, 'companion/memory-context-stale');
+  assert.equal(f.state.recalls, 0);
 });

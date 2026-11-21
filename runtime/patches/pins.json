@@ -24,6 +24,14 @@
         }
       }
     },
+    "companion-phone-memory-request.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "after": "a800e1c863e7d64f2fee292676b6e96c2184b8d6c73ffbd56a5fc89101893aaa",
+          "before": "e498311537374b963f955f57c9628961d55fdb518e9de77e86cc56f33f3562b3"
+        }
+      }
+    },
     "config-editor-lock-order.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-config-editor/lib/index.js": {
@@ -2515,7 +2523,8 @@
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
-      "profile-root-installation-precedence.diff"
+      "profile-root-installation-precedence.diff",
+      "companion-phone-memory-request.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2672,6 +2681,7 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
+      "companion-phone-memory-request.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
