@@ -24,6 +24,10 @@ import '../theme/surfaces.dart';
 const companionEdge = 12.0;
 const _barHeight = 44.0;
 
+// Over her stage (companion_page.dart): every glass here but the log's close
+// button sits in one BackdropGroup and shares one backdrop read between them
+// (`grouped: true`). They never overlap one another, so it looks the same.
+
 /// Deep water behind her words and the input: reply text has to stay readable
 /// over a white apron and a bright midday sky alike.
 GlassStyle companionDeepGlass(BuildContext context) =>
@@ -35,11 +39,20 @@ GlassStyle companionDeepGlass(BuildContext context) =>
 enum CompanionActivity { idle, listening, thinking, speaking, sleeping, away, snacking, playing, resting }
 
 class CompanionRoundButton extends StatelessWidget {
-  const CompanionRoundButton({super.key, required this.icon, required this.label, required this.onTap});
+  const CompanionRoundButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.grouped = false,
+  });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
+  /// In the room's top bar; not over the log, which has to blur the log.
+  final bool grouped;
 
   @override
   Widget build(BuildContext context) => Pressable(
@@ -47,6 +60,7 @@ class CompanionRoundButton extends StatelessWidget {
     semanticLabel: label,
     child: GlassSurface(
       tier: GlassTier.chrome,
+      grouped: grouped,
       circle: true,
       child: SizedBox.square(
         dimension: _barHeight,
@@ -93,6 +107,7 @@ class CompanionNamePlate extends StatelessWidget {
       child: ExcludeSemantics(
         child: GlassSurface(
           tier: GlassTier.chrome,
+          grouped: true,
           stadium: true,
           child: SizedBox(
             height: _barHeight,
@@ -192,6 +207,7 @@ class CompanionSpeech extends StatelessWidget {
         child: GlassSurface(
           tier: GlassTier.card,
           style: companionDeepGlass(context),
+          grouped: true,
           borderRadius: BorderRadius.circular(20),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
           child: TypingIndicator(color: theme.colorScheme.onSurfaceVariant),
@@ -207,6 +223,7 @@ class CompanionSpeech extends StatelessWidget {
           child: GlassSurface(
             tier: GlassTier.card,
             style: companionDeepGlass(context),
+            grouped: true,
             borderRadius: BorderRadius.circular(22),
             padding: const EdgeInsets.fromLTRB(18, 13, 18, 14),
             child: ConstrainedBox(
@@ -353,6 +370,7 @@ class CompanionPill extends StatelessWidget {
     final pill = GlassSurface(
       tier: GlassTier.pill,
       style: companionDeepGlass(context),
+      grouped: true,
       stadium: true,
       padding: const EdgeInsets.fromLTRB(12, 8, 14, 8),
       child: Row(
@@ -464,6 +482,7 @@ class CompanionInvite extends StatelessWidget {
               child: GlassSurface(
                 tier: GlassTier.card,
                 style: companionDeepGlass(context),
+                grouped: true,
                 borderRadius: BorderRadius.circular(22),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -673,6 +692,7 @@ class CompanionComposer extends StatelessWidget {
     return GlassSurface(
       tier: GlassTier.chrome,
       style: companionDeepGlass(context),
+      grouped: true,
       borderRadius: BorderRadius.circular(_keySize / 2 + _keyInset),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, _keyInset, _keyInset, _keyInset),

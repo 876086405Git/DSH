@@ -59,6 +59,7 @@ import '../common/app_sheet.dart';
 import '../common/sheet_title_bar.dart';
 import '../modes/mode_switch.dart';
 import '../settings/settings_widgets.dart';
+import '../theme/accent.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/surfaces.dart';
@@ -426,6 +427,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // A new view of her: nothing shown on the last one carries over.
       _stageEpoch++;
     });
+    // A stage started again under the open log is under its blur too.
+    if (_logOpen) _stage.command('covered', {'on': true});
     unawaited(_arrive());
     unawaited(_loadHint());
     if (!_light) {
@@ -2253,10 +2256,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (!mounted) return;
     _focus.unfocus();
     setState(() => _logOpen = true);
+    // Under the log's blur she's barely seen: her stage draws slowly meanwhile.
+    _stage.command('covered', {'on': true});
   }
 
   void _closeLog() {
-    if (mounted && _logOpen) setState(() => _logOpen = false);
+    if (!mounted || !_logOpen) return;
+    setState(() => _logOpen = false);
+    _stage.command('covered', {'on': false});
   }
 
   Widget _log(String name) {
@@ -3040,13 +3047,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       ),
       // The water is dark at every hour, whatever the app's own theme.
       child: Theme(
-        data: buildDarkTheme(accent: surfaces.accent, glassBlur: surfaces.blurEnabled),
+        data: _darkTheme(surfaces.accent, surfaces.blurEnabled),
         child: PopScope(
           canPop: !_logOpen,
           onPopInvokedWithResult: (didPop, _) {
             if (!didPop) _closeLog();
           },
-          child: Builder(builder: _buildPage),
+          // Her top bar, words and input blur what's behind them once between
+          // them (they never overlap), not once each, each time her stage draws.
+          child: BackdropGroup(child: Builder(builder: _buildPage)),
         ),
       ),
     );
@@ -3142,6 +3151,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                 CompanionRoundButton(
                   icon: AppIcons.back,
                   label: MaterialLocalizations.of(context).backButtonTooltip,
+                  grouped: true,
                   onTap: () {
                     _acted();
                     unawaited(Navigator.of(context).maybePop());
@@ -3154,9 +3164,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                   ),
                 ),
                 if (_stageReady) ...[
-                  CompanionRoundButton(icon: AppIcons.history, label: l10n.companionLogTitle, onTap: _openLog),
+                  CompanionRoundButton(
+                    icon: AppIcons.history,
+                    label: l10n.companionLogTitle,
+                    grouped: true,
+                    onTap: _openLog,
+                  ),
                   const SizedBox(width: 8),
-                  CompanionRoundButton(icon: AppIcons.more, label: l10n.companionMenu, onTap: _openMenu),
+                  CompanionRoundButton(icon: AppIcons.more, label: l10n.companionMenu, grouped: true, onTap: _openMenu),
                 ] else
                   const SizedBox(width: 96),
               ],
@@ -3245,6 +3260,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       ),
     );
   }
+}
+
+/// Her room's dark theme, one per palette and blur setting: a new one each build
+/// would tell every widget under it the theme changed whenever the page rebuilds
+/// (a streaming reply rebuilds it about thirty times a second).
+final _darkThemes = <(AppAccent, bool), ThemeData>{};
+
+ThemeData _darkTheme(AppAccent accent, bool blur) {
+  if (_darkThemes.length > 4) _darkThemes.clear();
+  return _darkThemes.putIfAbsent((accent, blur), () => buildDarkTheme(accent: accent, glassBlur: blur));
 }
 
 /// A new name for one of her moves: the dialog owns its field.

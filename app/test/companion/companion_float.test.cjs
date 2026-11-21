@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assets = path.resolve(__dirname, '../../assets/companion');
-const { FrameGate, opaqueBounds, stateEffect } = require(path.join(assets, 'float.js'));
+const { FrameGate, opaqueBounds, BoundsFollower, stateEffect } = require(path.join(assets, 'float.js'));
 const copy = value => JSON.parse(JSON.stringify(value));
 
 for (const hz of [60, 90, 120]) test(`30 fps ceiling at ${hz} Hz, including long stalls`, () => {
@@ -90,7 +90,7 @@ function stage(float = true, fetcher, devices = {}) {
   const Fw = { CubismUserModel: devices.UserModel ?? class {}, CubismModelSettingJson: devices.Setting,
     CubismMatrix44: class { setMatrix() {} },
     CubismFramework: { startUp() { initialized++; }, initialize() {} }, Option: class {} };
-  const window = { CubismFw: Fw, CompanionFloat: { FrameGate, opaqueBounds, stateEffect },
+  const window = { CubismFw: Fw, CompanionFloat: { FrameGate, opaqueBounds, BoundsFollower, stateEffect },
     companionScene: float ? null : scene, devicePixelRatio: 3,
     DshCompanion: { postMessage: value => posts.push(JSON.parse(value)) },
     addEventListener: (name, fn) => windowEvents.set(name, fn) };
@@ -122,7 +122,7 @@ function stage(float = true, fetcher, devices = {}) {
     state() { return { mood: life.mood, emotion: life.emotion, actions: [...life.actions.keys()], disposed: floatDisposed }; }
   };
 })();`), context, { timeout: 1000 });
-  return { api: context.harness, command: value => window.stage.command(value),
+  return { api: context.harness, command: value => window.stage.command(value), canvas,
     install: () => context.harness.install(model, gl), document, documentEvents, canvasEvents, windowEvents, posts, frames,
     at(time) { now = time; },
     render(time) { now = time; context.harness.render(time); },
@@ -138,8 +138,10 @@ test('real float render path has a hard ceiling, reports buffer bounds and no ro
   assert.equal(s.counts().reads, s.counts().draws);
   assert.equal(s.posts.length, 1, 'unchanged bounds need no new native geometry');
   // The 5×4 CSS canvas on a 3× screen: the buffer is drawn at device density.
+  // The one drawn pixel (1, 10)–(2, 11), with the window's room to spare (two
+  // pixels at the least, see float.js BoundsFollower) inside the buffer.
   assert.deepEqual(s.posts[0], { type: 'floatBounds', width: 15, height: 12,
-    bounds: { left: 1, top: 10, right: 2, bottom: 11 } });
+    bounds: { left: 0, top: 8, right: 4, bottom: 12 } });
   assert.equal(s.canvasEvents.has('pointerdown'), false);
   s.command({ type: 'pause' });
   assert.equal(s.frames.size, 0);
@@ -255,6 +257,40 @@ test('room mode keeps its pointer handlers, pause/resume and context restore beh
   assert.equal(s.counts().releases, 0);
   s.command({ type: 'resume' }); assert.equal(s.frames.size, 1);
   s.canvasEvents.get('webglcontextrestored')(); assert.equal(s.counts().reloads, 1);
+});
+
+test('the room tells the app the resolution that held: a step down at once, a step up after a minute', () => {
+  const s = stage(false); s.install();
+  const reported = () => s.posts.filter(p => p.type === 'quality').map(p => p.value);
+  let t = 0;
+  const frames = (ms, every) => { for (const end = t + ms; t < end;) { t += every; s.render(t); } };
+  // Every frame 60 ms apart while 30 were asked: late, three seconds running.
+  frames(4500, 60);
+  assert.deepEqual(reported(), [0.85]);
+  // Under the log she's asked for twelve, which any resolution keeps: that earns nothing.
+  s.command({ type: 'covered', on: true });
+  frames(90000, 1000 / 12);
+  assert.deepEqual(reported(), [0.85]);
+  assert.equal(s.canvas.width, 13, 'still at 0.85 of 5 CSS px on a 3x screen');
+  s.command({ type: 'covered', on: false });
+  // On time at thirty: ten quiet seconds step up, told only once it has held a minute.
+  frames(15000, 1000 / 30);
+  assert.equal(s.canvas.width, 15);
+  assert.deepEqual(reported(), [0.85], 'the step up has not held yet');
+  frames(60000, 1000 / 30);
+  assert.deepEqual(reported(), [0.85, 1]);
+  // That one held, so falling later costs no longer wait: back up after ten.
+  frames(4500, 60);
+  assert.deepEqual(reported(), [0.85, 1, 0.85]);
+  frames(11500, 1000 / 30);
+  assert.equal(s.canvas.width, 15);
+  // This one falls before it has held: the next try waits twenty.
+  frames(4500, 60);
+  assert.equal(s.canvas.width, 13);
+  frames(12000, 1000 / 30);
+  assert.equal(s.canvas.width, 13, 'twice as long this time');
+  frames(10000, 1000 / 30);
+  assert.equal(s.canvas.width, 15);
 });
 
 test('shaking the phone makes her dizzy once; a bump, a still hand and the float window do not', () => {

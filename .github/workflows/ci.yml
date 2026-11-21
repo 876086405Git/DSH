@@ -44,7 +44,7 @@ jobs:
           # The paths outside each area's own are files its tests read.
           filters: |
             ci: &ci .github/workflows/ci.yml
-            app: [*ci, 'app/**', 'packages/**', 'sdk/plugin-kit/**', 'runtime/tests/direct/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
+            app: [*ci, 'app/**', 'tooling/companion/**', 'packages/**', 'sdk/plugin-kit/**', 'runtime/tests/direct/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
             packages: [*ci, 'packages/**']
             runtime: [*ci, 'runtime/**', 'app/assets/islands/island.js', 'app/test/plugins/islands/support/island_page_harness.mjs', 'app/assets/engine/auth/**', 'packages/dsh_client/test/fixtures/companion_signal_results.json', 'app/ohos/entry/src/main/ets/runtime/**', 'app/ohos/entry/src/main/ets/entryability/EntryAbility.ets', 'app/ohos/entry/src/main/ets/phone/PhoneBridge.ets', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/phone/PhoneGuest.kt']
             ios_runtime:
@@ -121,6 +121,7 @@ jobs:
         working-directory: app
     steps:
       - *checkout
+      - *node
       - &flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -133,6 +134,11 @@ jobs:
           flutter analyze --no-pub
           python3 tool/l10n_merge.py
           git diff --exit-code -- lib/l10n
+      # Her stage's own contracts: render budget, the float window (stage.js run against
+      # fake device boundaries), and the model replay, whose adapt checker runs on this job's Dart.
+      - name: Companion stage contracts
+        working-directory: .
+        run: node --test tooling/companion/*.test.mjs app/test/companion/*.test.cjs
 
   flutter:
     name: Flutter ${{ matrix.shard }}
