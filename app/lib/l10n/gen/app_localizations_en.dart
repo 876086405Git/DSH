@@ -5623,7 +5623,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionMemoryEmptyHint =>
-      'You can write down real details you want her to remember. Both modes share these memories, and you can edit them offline.';
+      'She picks up what you talk about on her own. If there is something you want her to keep in mind, you can write it here.';
 
   @override
   String get companionMemoryUnsupported => 'This host can\'t keep her memories yet';
@@ -6232,8 +6232,7 @@ class L10nEn extends L10n {
   String get companionMemoryWaiting => 'Memory extraction is waiting. Your original words are saved on this phone.';
 
   @override
-  String get companionMemoryWidgetPending =>
-      'Your memories are updated. The widget’s previous line has not cleared yet; it will be retried.';
+  String get companionMemoryWidgetPending => 'The old line on the widget will clear shortly.';
 
   @override
   String get companionMemoryConfiguration =>
@@ -6301,25 +6300,25 @@ class L10nEn extends L10n {
   String get companionMemoryActions => 'Options for this memory';
 
   @override
-  String get companionMemoryWhich => 'Which matter do you mean? You can choose it in What she remembers.';
+  String get companionMemoryWhich => 'Which one do you mean?';
 
   @override
-  String get companionMemoryForgotten => 'Okay, I have removed this from my memories.';
+  String get companionMemoryForgotten => 'Okay, it\'s forgotten.';
 
   @override
-  String get companionMemoryNeverDone => 'Okay, I will not bring this up on my own.';
+  String get companionMemoryNeverDone => 'Okay, I won\'t bring it up.';
 
   @override
-  String get companionMemoryLessDone => 'Okay, I will bring this up less.';
+  String get companionMemoryLessDone => 'Okay, I\'ll mention it less.';
 
   @override
-  String get companionMemoryNormalDone => 'Okay, we can talk about it when it comes up again.';
+  String get companionMemoryNormalDone => 'Sure, we can talk about it whenever you like.';
 
   @override
-  String get companionMemoryCancelledDone => 'Got it. I will not follow up on the old plan.';
+  String get companionMemoryCancelledDone => 'Okay, I won\'t wait to ask you about it.';
 
   @override
-  String get companionMemoryCorrected => 'I have corrected that memory.';
+  String get companionMemoryCorrected => 'Oh, I had that mixed up.';
 
   @override
   String get companionMemoryHostSourceRemaining =>

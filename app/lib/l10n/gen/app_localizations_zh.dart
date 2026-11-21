@@ -5287,7 +5287,7 @@ class L10nZh extends L10n {
   String get companionMemoryEmpty => '还没有记下什么';
 
   @override
-  String get companionMemoryEmptyHint => '想让她记住的现实情况，可以在这里写下来。两种模式用同一份手记，断网也能改。';
+  String get companionMemoryEmptyHint => '你们聊过的事，她会自己慢慢记住。想让她特别记着什么，也可以写在这里。';
 
   @override
   String get companionMemoryUnsupported => '这台主机还不能保存她的记忆';
@@ -5876,7 +5876,7 @@ class L10nZh extends L10n {
   String get companionMemoryWaiting => '这次还没整理好，原话已保存在手机上。';
 
   @override
-  String get companionMemoryWidgetPending => '手机记忆已更新，小组件的旧一句还没清掉，稍后会再试。';
+  String get companionMemoryWidgetPending => '小组件上那句旧话稍后会清掉。';
 
   @override
   String get companionMemoryConfiguration => '当前通道还不能自动记下新内容。原话已留好，也可以直接改手记。';
@@ -5942,25 +5942,25 @@ class L10nZh extends L10n {
   String get companionMemoryActions => '这件事的选项';
 
   @override
-  String get companionMemoryWhich => '你指哪件事？可以在「她记得的事」里选一下。';
+  String get companionMemoryWhich => '你说的是哪件事呀？';
 
   @override
-  String get companionMemoryForgotten => '好，这件事从手记里删掉了。';
+  String get companionMemoryForgotten => '好，忘掉了。';
 
   @override
-  String get companionMemoryNeverDone => '好，我不主动提这件事了。';
+  String get companionMemoryNeverDone => '嗯，不提了。';
 
   @override
-  String get companionMemoryLessDone => '好，这件事我少提一点。';
+  String get companionMemoryLessDone => '好，我少说一点。';
 
   @override
-  String get companionMemoryNormalDone => '好，以后聊到时可以接着说。';
+  String get companionMemoryNormalDone => '好呀，想聊的时候随时聊。';
 
   @override
-  String get companionMemoryCancelledDone => '知道了，不再按原计划等着问你。';
+  String get companionMemoryCancelledDone => '好，那就不等着问你了。';
 
   @override
-  String get companionMemoryCorrected => '记错的那条已经改过来了。';
+  String get companionMemoryCorrected => '啊，是我记岔了。';
 
   @override
   String get companionMemoryHostSourceRemaining => '手机原话已删除。主机的旧对话仍保留；需要时可在对话列表删除那段对话。';

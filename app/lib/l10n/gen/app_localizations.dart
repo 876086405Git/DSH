@@ -9779,7 +9779,7 @@ abstract class L10n {
   /// No description provided for @companionMemoryEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'想让她记住的现实情况，可以在这里写下来。两种模式用同一份手记，断网也能改。'**
+  /// **'你们聊过的事，她会自己慢慢记住。想让她特别记着什么，也可以写在这里。'**
   String get companionMemoryEmptyHint;
 
   /// No description provided for @companionMemoryUnsupported.
@@ -10919,7 +10919,7 @@ abstract class L10n {
   /// No description provided for @companionMemoryWidgetPending.
   ///
   /// In zh, this message translates to:
-  /// **'手机记忆已更新，小组件的旧一句还没清掉，稍后会再试。'**
+  /// **'小组件上那句旧话稍后会清掉。'**
   String get companionMemoryWidgetPending;
 
   /// No description provided for @companionMemoryConfiguration.
@@ -11051,43 +11051,43 @@ abstract class L10n {
   /// No description provided for @companionMemoryWhich.
   ///
   /// In zh, this message translates to:
-  /// **'你指哪件事？可以在「她记得的事」里选一下。'**
+  /// **'你说的是哪件事呀？'**
   String get companionMemoryWhich;
 
   /// No description provided for @companionMemoryForgotten.
   ///
   /// In zh, this message translates to:
-  /// **'好，这件事从手记里删掉了。'**
+  /// **'好，忘掉了。'**
   String get companionMemoryForgotten;
 
   /// No description provided for @companionMemoryNeverDone.
   ///
   /// In zh, this message translates to:
-  /// **'好，我不主动提这件事了。'**
+  /// **'嗯，不提了。'**
   String get companionMemoryNeverDone;
 
   /// No description provided for @companionMemoryLessDone.
   ///
   /// In zh, this message translates to:
-  /// **'好，这件事我少提一点。'**
+  /// **'好，我少说一点。'**
   String get companionMemoryLessDone;
 
   /// No description provided for @companionMemoryNormalDone.
   ///
   /// In zh, this message translates to:
-  /// **'好，以后聊到时可以接着说。'**
+  /// **'好呀，想聊的时候随时聊。'**
   String get companionMemoryNormalDone;
 
   /// No description provided for @companionMemoryCancelledDone.
   ///
   /// In zh, this message translates to:
-  /// **'知道了，不再按原计划等着问你。'**
+  /// **'好，那就不等着问你了。'**
   String get companionMemoryCancelledDone;
 
   /// No description provided for @companionMemoryCorrected.
   ///
   /// In zh, this message translates to:
-  /// **'记错的那条已经改过来了。'**
+  /// **'啊，是我记岔了。'**
   String get companionMemoryCorrected;
 
   /// No description provided for @companionMemoryHostSourceRemaining.

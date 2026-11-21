@@ -151,7 +151,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
   Future<bool> _migrateLocal() async {
     final source = await legacy.probeForMigration();
     if (source == null) return true;
-    final ids = store.importLegacy(source);
+    final ids = store.importLegacy(source, realityKnownIds: {for (final memory in source.memories) memory.id});
     store.finishMissingLegacyCleanup(source);
     changed();
     if (ids.isEmpty) return !_cleanupPending(source.storeId);
@@ -172,7 +172,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   Future<bool> _migrateHost(DshClient client) async {
     final source = await client.companionMemoriesForMigration();
-    final ids = store.importLegacy(source);
+    final ids = store.importLegacy(source, realityKnownIds: {for (final memory in source.memories) memory.id});
     store.finishMissingLegacyCleanup(source);
     changed();
     if (ids.isEmpty) return !_cleanupPending(source.storeId);

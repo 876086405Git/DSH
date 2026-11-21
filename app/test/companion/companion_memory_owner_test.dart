@@ -8,7 +8,6 @@ import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/ui/companion/companion_memory_page.dart';
-import 'package:dsh_app/ui/settings/settings_widgets.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
@@ -159,17 +158,12 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('current details and wording use different explicit edit actions, without inventing history', (
-    tester,
-  ) async {
+  testWidgets('editing what she remembers is a new current value, without inventing history', (tester) async {
     final phone = _Phone();
     final initial = phone.manual('我的咖啡甜度是低糖');
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
-    await _menu(tester, '只改文字');
-    await _edit(tester, '我的咖啡甜度：低糖');
-    expect(phone.store.cards().single['current_basis_seq'], initial['current_basis_seq']);
-    await tester.tap(find.text('我的咖啡甜度：低糖'));
+    await tester.tap(find.text('我的咖啡甜度是低糖'));
     await tester.pumpAndSettle();
     await _edit(tester, '我的咖啡甜度是半糖');
     expect(phone.store.cards().single['current_basis_seq'], greaterThan(initial['current_basis_seq']! as int));
@@ -178,24 +172,19 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a legal long automatic card can be pinned without turning into manual evidence', (tester) async {
+  testWidgets('the page offers only edit and forget, no mechanism controls', (tester) async {
     final phone = _Phone();
-    final card = phone.automatic('咖啡${'好' * 600}');
+    phone.automatic('我的咖啡甜度是无糖');
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
-    final beforeControl = phone.store.archive['control_revision'];
-    await _menu(tester, '置顶');
-    final pinned = phone.store.cards().single;
-    expect(pinned['pinned'], isTrue);
-    for (final key in ['manual', 'eligible', 'current_basis_seq', 'source_at_ms', 'updated_at_ms']) {
-      expect(pinned[key], card[key], reason: key);
-    }
-    expect(phone.store.archive['control_revision'], beforeControl);
-    expect(pinned['evidence'], card['evidence']);
+    await tester.tap(find.byTooltip('这件事的选项').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(PopupMenuItem<String>), findsNWidgets(2));
+    expect(find.byTooltip('模型用量'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('legacy reality confirmation is reachable and pin does not grant it', (tester) async {
+  testWidgets('hand-written memories carried over from before count as real', (tester) async {
     final phone = _Phone();
     phone.store.importLegacy(
       CompanionMigrationSnapshot.fromJson({
@@ -217,49 +206,32 @@ void main() {
           },
         ],
       }),
+      realityKnownIds: {_id},
     );
-    await tester.pumpWidget(phone.app());
-    await tester.pumpAndSettle();
-    expect(phone.owner.select('咖啡甜度').ids, isEmpty);
-    await _menu(tester, '置顶');
-    expect(phone.store.cards().single['eligible'], isFalse);
-    await _menu(tester, '这是我的现实情况');
-    final row = phone.store.cards().single;
-    expect(row['eligible'], isTrue);
-    expect(row['current_basis_seq'], isNull);
-    expect(row['source_at_ms'], 2000);
-    expect(row['event_time'], isNull);
+    expect(phone.store.cards().single['eligible'], isTrue);
     expect(phone.owner.select('咖啡甜度').ids, hasLength(1));
-    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('never keeps the card and forget removes it; both clear line and saidAt with native acknowledgement', (
-    tester,
-  ) async {
+  testWidgets('forget removes the card and clears line and saidAt with native acknowledgement', (tester) async {
     final phone = _Phone();
     phone.automatic('我的咖啡甜度是无糖');
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
     native.clear();
-    await _menu(tester, '别主动提');
-    expect(phone.store.cards().single['topic_mode'], 'never');
-    expect(phone.owner.select('咖啡甜度').ids, isEmpty);
-    expect(native.last['line'], isNull);
-    expect(native.last.containsKey('line'), isTrue);
-    expect(native.last['saidAt'], isNull);
-    expect(native.last.containsKey('saidAt'), isTrue);
-    expect(phone.store.archive['widget_clear_pending'], 0);
     await _menu(tester, '忘掉');
     await tester.tap(find.widgetWithText(FilledButton, '忘掉'));
     await tester.pumpAndSettle();
     expect(phone.store.cards(), isEmpty);
     expect(phone.store.messages().single['text'], '我的咖啡甜度是无糖');
     expect(native.last['line'], isNull);
+    expect(native.last.containsKey('line'), isTrue);
     expect(native.last['saidAt'], isNull);
+    expect(native.last.containsKey('saidAt'), isTrue);
+    expect(phone.store.archive['widget_clear_pending'], 0);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('native failure leaves clear pending after a successful local control', (tester) async {
+  testWidgets('native failure leaves clear pending after a successful forget', (tester) async {
     final phone = _Phone();
     phone.manual('我的咖啡甜度是无糖');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -268,82 +240,12 @@ void main() {
     );
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
-    await _menu(tester, '别主动提');
-    expect(phone.store.cards().single['topic_mode'], 'never');
+    await _menu(tester, '忘掉');
+    await tester.tap(find.widgetWithText(FilledButton, '忘掉'));
+    await tester.pumpAndSettle();
+    expect(phone.store.cards(), isEmpty);
     expect(phone.store.archive['widget_clear_pending'], 1);
-    expect(find.textContaining('小组件的旧一句还没清掉'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('cancel this plan preserves a separate plan sharing its expression topic', (tester) async {
-    final phone = _Phone();
-    const firstText = '我周四去甲公司面试';
-    final first = phone.automatic(firstText, source: 'plan-a', kind: 'episode', keywords: ['面试']);
-    phone.store.applyControl(topicIds: [first['topic_id']! as String], kind: 'less');
-    final second = phone.automatic('我周五去乙公司面试', source: 'plan-b', kind: 'episode', keywords: ['面试']);
-    expect(second['topic_id'], first['topic_id'], reason: 'Expression control shares a topic, not a plan');
-    await tester.pumpWidget(phone.app());
-    await tester.pumpAndSettle();
-    final tile = find.ancestor(of: find.text(firstText), matching: find.byType(SettingsTile));
-    await tester.tap(find.descendant(of: tile, matching: find.byTooltip('这件事的选项')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('取消这项计划'));
-    await tester.pumpAndSettle();
-    final cards = {for (final card in phone.store.cards()) card['id']: card};
-    expect(cards[first['id']]!['plan_state'], 'cancelled');
-    expect(cards[second['id']]!['plan_state'], second['plan_state']);
-    expect(cards[second['id']]!['row_rev'], second['row_rev']);
-    expect(cards[second['id']]!['topic_mode'], 'less');
-    expect(phone.store.messages().map((row) => row['id']), containsAll(['plan-a', 'plan-b']));
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('usage view keeps four components separate and pending coverage is never shown as free', (tester) async {
-    final phone = _Phone();
-    final id = phone.store.reserveRequest(
-      category: 'chat',
-      provider: 'deepseek',
-      model: 'deepseek-flash',
-      inputTokens: 100,
-      outputTokens: 800,
-    )!;
-    phone.store.markRequestSent(id);
-    phone.store.recordUsage(id, {
-      'provider': 'deepseek',
-      'model': 'deepseek-flash',
-      'start_usage': {'input_tokens': 90},
-      'final_usage': {'input_tokens': 9, 'output_tokens': 3},
-      'usage_semantics': 'cumulative',
-      'input_uncached': 9,
-      'input_cache_read': null,
-      'input_cache_write': null,
-      'output_tokens': 3,
-      'terminal': 'incomplete',
-      'complete': false,
-    });
-    phone.store.finishRequest(id, terminal: 'incomplete');
-    phone.store.rememberHostChatDelivery(
-      hostKey: 'host',
-      instanceId: 'old-instance',
-      sessionId: 'old-session',
-      requestId: 'unsettled',
-      archiveId: phone.store.archive['id']! as String,
-      controlRevision: 0,
-      historyAfterSeq: 0,
-      observedAt: phone.now,
-    );
-    await tester.pumpWidget(phone.app());
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('模型用量'));
-    await tester.pumpAndSettle();
-    expect(find.text('等待本次的用量记录'), findsOneWidget);
-    expect(find.textContaining('未缓存输入: 9'), findsOneWidget);
-    expect(find.textContaining('缓存读取: 未知'), findsOneWidget);
-    expect(find.textContaining('缓存写入: 未知'), findsOneWidget);
-    expect(find.textContaining('输出: 3'), findsOneWidget);
-    expect(find.textContaining('估算费用: 未知'), findsOneWidget);
-    expect(find.text('还没有记录到用量'), findsNothing);
-    expect(phone.store.requests().single['output_tokens'], 3);
+    expect(find.text('小组件上那句旧话稍后会清掉。'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }
