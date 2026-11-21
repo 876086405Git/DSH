@@ -70,7 +70,7 @@ MemoryRow proposal({List<MemoryRow>? operations, List<String> covered = const ['
   'covered_message_ids': covered,
   'operations':
       operations ??
-      [
+      <MemoryRow>[
         {
           'op': 'create',
           'kind': 'preference',

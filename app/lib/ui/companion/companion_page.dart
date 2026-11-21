@@ -2045,11 +2045,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // Do not clear the composer's only copy before SQLite commits. If the
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
-      if (await _handleMemoryControl(memory, source!, raw)) return;
+      if (await _handleMemoryControl(memory, source, raw)) return;
       if (!current()) return;
       _queueMemoryExtraction();
       if (_light) {
-        await _sendLight(raw, source!, current);
+        await _sendLight(raw, source, current);
         return;
       }
       final sessions = ref.read(companionSessionsProvider.notifier);

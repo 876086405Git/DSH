@@ -113,6 +113,7 @@ class _Client extends DshClient {
   _Client(super.connection);
   final events = StreamController<DshEvent>();
   Completer<SessionProjections?>? projectionRead;
+  final projectionStarted = Completer<void>();
   int projectionCalls = 0;
   late final _fakeMux = _Mux(carrier);
   @override
@@ -125,6 +126,7 @@ class _Client extends DshClient {
   @override
   Future<SessionProjections?> projections(String sessionId) async {
     projectionCalls++;
+    if (!projectionStarted.isCompleted) projectionStarted.complete();
     return projectionRead?.future ?? SessionProjections.empty;
   }
 }
@@ -193,7 +195,9 @@ class _Room {
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
     container.read(companionSessionsProvider);
-    await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    await tester.pump();
+    await tester.runAsync(memory!.migrateLocal);
     await flush(tester);
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
@@ -447,7 +451,10 @@ void main() {
     try {
       await tester.enterText(find.byType(TextField), '稍等这一句');
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('send')));
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('send')));
+        await room.client.projectionStarted.future;
+      });
       await flush(tester);
       expect(room.client.projectionCalls, 1);
       expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);

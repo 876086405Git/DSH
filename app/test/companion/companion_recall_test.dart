@@ -82,7 +82,7 @@ void main() {
         'block': selected.block,
       },
     );
-    expect((full.update!['phoneMemory']! as Map)['block'], selected.block);
+    expect((full.update!['phoneMemory']! as Map<String, Object?>)['block'], selected.block);
     expect(full.update!.containsKey('query'), isFalse);
   });
 
@@ -109,7 +109,7 @@ void main() {
         'block': selected.block,
       },
     );
-    expect((full.update!['phoneMemory']! as Map)['block'], selected.block);
+    expect((full.update!['phoneMemory']! as Map<String, Object?>)['block'], selected.block);
     expect(jsonDecode(selected.block)['items'], isEmpty);
   });
 

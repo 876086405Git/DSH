@@ -1382,7 +1382,10 @@ void main() {
         expect(reserve(), isNull);
         submit('waiting', '以前那条尚未抽完', session: 'room-b');
         final late = batch();
-        final command = submit('forget', '忘掉那次复诊，聊天留着', session: 'room-a');
+        // The short keyword also names the composite card. Select the exact
+        // clinic fact; cleanup must discover its dependent working copies.
+        final command = submit('forget', '忘掉我周五复诊，聊天留着', session: 'room-a');
+        expect(parseMemoryControl(command['text'] as String, store.cards())!['target_card_ids'], [clinic['id']]);
         submit('after', '这是控制之后独立新说的长笛', session: 'room-b');
         store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'forget', controlMessageId: 'forget');
         expect(store.cards().map((card) => card['text']), unorderedEquals(['周六去公园', '我喝无糖咖啡。']));
@@ -1539,6 +1542,9 @@ void main() {
       store.commitExtraction(
         claimed,
         parsed(claimed, [
+          // Establish the older X-only fact before the newer X+Y composite,
+          // so the current-value collision guard does not skip this fixture.
+          create(x, text: '我有外出计划', keywords: []),
           {
             'op': 'create',
             'kind': 'fact',
@@ -1549,7 +1555,6 @@ void main() {
               {'message_id': 'y', 'quote': y['text']},
             ],
           },
-          create(x, text: '我有外出计划', keywords: []),
         ]),
       );
       final composite = store.cards().singleWhere((card) => card['text'] == '我周五复诊，也去公园');

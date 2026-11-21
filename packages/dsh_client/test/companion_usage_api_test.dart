@@ -607,11 +607,15 @@ void main() {
       expect(unknown.binding, isNull);
       expect(unknown.receipts, isEmpty);
       expect(unknown.complete, isFalse);
-      expect(host.paths.last.queryParameters['instanceId'], 'previous-instance', 'SDK must not rediscover and rebind');
+      expect(
+        host.paths.last.queryParameters['instanceId'],
+        'previous-instance',
+        reason: 'SDK must not rediscover and rebind',
+      );
       expect(
         prior.receipts.single.usage['output_tokens'],
         7,
-        'a separate unknown snapshot does not mutate prior evidence',
+        reason: 'a separate unknown snapshot does not mutate prior evidence',
       );
     },
   );
@@ -761,7 +765,7 @@ void main() {
     expect(
       a.receipts.single.toJson(),
       b.receipts.single.toJson(),
-      'SDK does not mint per-root duplicate billing identities',
+      reason: 'SDK does not mint per-root duplicate billing identities',
     );
   });
 }

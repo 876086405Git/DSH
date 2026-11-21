@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_keeper.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
@@ -106,6 +107,7 @@ class _Host extends ActiveHostController {
 
 class _Sessions extends CompanionSessions {
   Future<CompanionBinding>? pending;
+  final ensureStarted = Completer<void>();
   final bindings = <HostRef, CompanionBinding>{};
 
   @override
@@ -115,6 +117,7 @@ class _Sessions extends CompanionSessions {
   @override
   Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
     final host = ref.read(activeHostProvider);
+    if (!ensureStarted.isCompleted) ensureStarted.complete();
     final result = await (pending ?? Future.value(CompanionBinding('companion-${host.id}')));
     final binding = CompanionBinding(
       result.sessionId,
@@ -251,6 +254,10 @@ class _Room {
     }
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+    final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    await tester.pump();
+    await tester.runAsync(memory!.migrateLocal);
+    await tester.pump();
     events!.onReady();
     await flush(tester);
   }
@@ -352,7 +359,11 @@ void main() {
     room.connect(nextHost);
     await room.open(tester);
     await tester.enterText(find.byType(TextField), '属于 A 的句子');
-    tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
+    await tester.runAsync(() async {
+      tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
+      // The source must be durable before this session-read race starts.
+      await room.sessions.ensureStarted.future;
+    });
     await flush(tester);
     room.host.change(nextHost);
     await flush(tester);

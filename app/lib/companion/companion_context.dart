@@ -328,7 +328,7 @@ CompanionFullContextPlan companionFullContextPlan({
             if (changed) 'expectedProfileRevision': profileRevision,
             'events': List.unmodifiable([for (final event in selected) Map.unmodifiable(event.toJson())]),
             if (query) 'query': String.fromCharCodes(text.replaceAll(_controls, ' ').runes.take(256)),
-            if (phoneMemory != null) 'phoneMemory': Map.unmodifiable(phoneMemory),
+            if (phoneMemory != null) 'phoneMemory': Map<String, Object?>.unmodifiable(phoneMemory),
           }),
   );
 }

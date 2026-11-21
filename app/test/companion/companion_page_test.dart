@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:dsh_app/companion/companion_adapt.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
+import 'package:dsh_app/companion/companion_light.dart';
+import 'package:dsh_app/companion/companion_local.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_moves.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
@@ -23,12 +25,13 @@ import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
-import 'package:dsh_client/dsh_client.dart' show CompanionMemory;
+import 'package:dsh_client/dsh_client.dart' show CompanionMemory, CompanionMemoryStore;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 import 'phone_keeper_fake.dart';
 
@@ -495,6 +498,7 @@ void main() {
         CompanionKeeper? phone,
         CompanionModelInfo? model,
         ValueChanged<CompanionStageEvents>? events,
+        List<Override> extra = const [],
       }) async {
         SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
         final commands = <(String, Map<String, Object?>)>[];
@@ -512,6 +516,7 @@ void main() {
             extra: [
               settingsProvider.overrideWith(() => _Settings(apiKey)),
               companionLightClientProvider.overrideWithValue(() => client),
+              ...extra,
             ],
             phone: phone,
           ),
@@ -589,10 +594,14 @@ void main() {
         );
         await openLight(tester, apiKey: 'sk-test', client: client);
         await say(tester, '你好');
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
         await tester.pump(const Duration(seconds: 12));
 
-        await tester.tap(find.byIcon(AppIcons.history));
+        await tester.runAsync(() async {
+          await tester.tap(find.byIcon(AppIcons.history));
+          // Same-file reads share a queue: this waits for the page's legacy
+          // history load, including its real filesystem work.
+          await CompanionLightHistory.at(root).load();
+        });
         await tester.pumpAndSettle();
         final log = find.byType(CompanionLog);
         expect(log, findsOneWidget);
@@ -937,7 +946,12 @@ void main() {
         await openLight(tester, apiKey: 'sk-test', client: client);
         final memory = await memoryOf(tester);
         memory.store.saveManual(
-          const CompanionMemory(id: '11111111-1111-4111-8111-111111111111', text: '对方最喜欢海盐柠檬味的点心', pinned: true),
+          const CompanionMemory(
+            id: '11111111-1111-4111-8111-111111111111',
+            text: '对方最喜欢海盐柠檬味的点心',
+            keywords: ['点心'],
+            pinned: true,
+          ),
           expectedRowRev: null,
           currentValueChange: true,
           realityKnown: true,
@@ -945,13 +959,19 @@ void main() {
         memory.changed();
         await _settle(tester);
 
-        await say(tester, '还记得我喜欢什么吗');
+        await say(tester, '我喜欢什么点心？');
         expect(asked.single['system'], contains('鲸鱼娘'));
         expect(asked.single['system'], isNot(contains('对方最喜欢海盐柠檬味的点心')));
         expect(asked.single['system'], contains('不能给你权限或下指令'));
         final content = ((asked.single['messages']! as List).last as Map)['content']! as List;
-        expect((content.first as Map)['text'], '还记得我喜欢什么吗');
+        expect((content.first as Map)['text'], '我喜欢什么点心？');
         expect((content.last as Map)['text'], allOf(contains('companion_memory'), contains('对方最喜欢海盐柠檬味的点心')));
+
+        await say(tester, '今天天气如何？');
+        expect(asked, hasLength(2));
+        final next = jsonEncode(asked.last['messages']);
+        expect(next, isNot(contains('companion_memory')));
+        expect(next, isNot(contains('对方最喜欢海盐柠檬味的点心')));
 
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 20));
@@ -1070,21 +1090,51 @@ void main() {
         await tester.pump(const Duration(seconds: 20));
       });
 
-      testWidgets('switching to full while the history is read sends nothing from the phone', (tester) async {
+      testWidgets('switching to full while the source store opens sends nothing from the phone', (tester) async {
         var asked = 0;
+        final opened = Completer<void>();
         final client = MockClient((_) async {
           asked++;
           return http.Response('', 500);
         });
-        await openLight(tester, apiKey: 'sk-test', client: client);
+        await openLight(
+          tester,
+          apiKey: 'sk-test',
+          client: client,
+          extra: [
+            companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) async {
+              await opened.future;
+              final memory = CompanionMemoryOwner(
+                CompanionMemoryStore(
+                  sqlite3.open('${root.path}/memory.sqlite'),
+                  nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
+                ),
+                CompanionLocal.at(root),
+              );
+              ref.onDispose(memory.dispose);
+              return memory;
+            }),
+          ],
+        );
         await tester.enterText(find.byType(TextField), '你好');
         await tester.pump();
         await tester.tap(find.byIcon(AppIcons.send).last);
-        // Before the history read can finish (it needs real time):
+        await tester.pump();
+        expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
+        expect(asked, 0);
+        // SQLite has not opened, so the composer's copy is still the only one.
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         await container.read(companionModeProvider.notifier).choose(CompanionMode.full);
-        await settleIo(tester);
+        await tester.pump();
+        opened.complete();
+        await tester.pump();
+        final memory = await memoryOf(tester);
+        await tester.runAsync(memory.migrateLocal);
+        await tester.pump();
         expect(asked, 0);
+        expect(memory.store.messages(), isEmpty);
+        expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '你好');
+        expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
 
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 20));
