@@ -104,10 +104,15 @@ async function fixture(t, events) {
 
 function finalChunk(chunks) {
   const usage = chunks.filter(chunk => chunk.type === 'usage');
-  assert.deepEqual(usage, [{ type: 'usage', usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 } }]);
+  assert.deepEqual(usage.map(chunk => chunk.usage.reported), [
+    { inputTokens: 5 }, { inputTokens: 5, outputTokens: 3 }, { inputTokens: 5, outputTokens: 3 },
+  ]);
+  assert.deepEqual(usage.at(-1).usage, {
+    inputTokens: 5, outputTokens: 3, totalTokens: 8, reported: { inputTokens: 5, outputTokens: 3 },
+  });
   const finishes = chunks.filter(chunk => chunk.type === 'finish');
   assert.equal(finishes.length, 1);
-  assert.equal(chunks.at(-2), usage[0]);
+  assert.equal(chunks.at(-2), usage.at(-1));
   assert.equal(chunks.at(-1), finishes[0]);
   return finishes[0];
 }
@@ -146,5 +151,21 @@ test('an unknown stop reason still rejects as MALFORMED_RESPONSE', { timeout: 10
   const f = await fixture(t, responseEvents('Synthetic unknown-reason reply', 'future-fixture-stop'));
   await assert.rejects(() => f.consume(), error => error instanceof LlmError && error.code === 'MALFORMED_RESPONSE');
   f.assertRequest();
+  assert.equal(f.chunks.some(chunk => chunk.type === 'finish'), false);
+});
+
+test('missing terminal output differs from explicit zero, and truncated streams preserve observations', async t => {
+  for (const output of [undefined, 0]) {
+    const events = responseEvents('Synthetic reply', 'end_turn');
+    events.at(-2).usage = output === undefined ? {} : { output_tokens: output };
+    const f = await fixture(t, events);
+    await f.consume();
+    assert.equal(f.chunks.at(-2).usage.outputTokens, 0);
+    assert.deepEqual(f.chunks.at(-2).usage.reported,
+      output === undefined ? { inputTokens: 5 } : { inputTokens: 5, outputTokens: 0 });
+  }
+  const f = await fixture(t, responseEvents('Synthetic truncated reply', 'end_turn').slice(0, -1));
+  await assert.rejects(() => f.consume(), error => error instanceof LlmError && error.code === 'STREAM_CLOSED');
+  assert.deepEqual(f.chunks.at(-1).usage.reported, { inputTokens: 5, outputTokens: 3 });
   assert.equal(f.chunks.some(chunk => chunk.type === 'finish'), false);
 });

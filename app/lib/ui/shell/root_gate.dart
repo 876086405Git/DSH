@@ -23,6 +23,7 @@ import '../../state/ohos_linux_state.dart';
 import '../../state/onboarding_state.dart';
 import '../../state/settings_state.dart';
 import '../../ui_config/ui_skill.dart';
+import '../../usage/usage_stats.dart';
 import '../onboarding/onboarding_flow.dart';
 import '../onboarding/setup_progress.dart';
 import '../remote/remote_screen.dart';
@@ -110,6 +111,12 @@ class _RootGateState extends ConsumerState<RootGate> {
   bool _launchReady = false;
   OnboardingStep? _step;
   bool _autoStartDone = false;
+  void Function(UsageOutcome, {UsageOperation? actual})? _setupUsage;
+
+  void _observeSetup(UsageOperation kind) {
+    _setupUsage?.call(UsageOutcome.unknown);
+    _setupUsage = ref.read(usageStatsProvider.notifier).beginOperation(kind);
+  }
 
   /// The setup step asks 本机 or 远程主机 first ([runtimeStepAsks]).
   bool _chooseRuntime = false;
@@ -128,6 +135,10 @@ class _RootGateState extends ConsumerState<RootGate> {
 
   void _goTo(OnboardingStep? step) {
     if (!mounted) return;
+    if (step == null) {
+      _setupUsage?.call(UsageOutcome.ready);
+      _setupUsage = null;
+    }
     setState(() => _step = step);
   }
 
@@ -172,6 +183,7 @@ class _RootGateState extends ConsumerState<RootGate> {
 
   /// 「本机」: unpack in the background, set up meanwhile.
   void _chooseLocal() {
+    _observeSetup(UsageOperation.onboardingLocal);
     _beside = true;
     unawaited(_prefs.setSetupStep(SetupStep.appearance));
     _startUnpack();
@@ -222,12 +234,17 @@ class _RootGateState extends ConsumerState<RootGate> {
   Future<void> _useRemote() async {
     if (_pickingRemote) return;
     _pickingRemote = true;
+    _observeSetup(UsageOperation.onboardingRemote);
     try {
       await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RemoteScreen()));
     } finally {
       _pickingRemote = false;
     }
-    if (!mounted || ref.read(activeHostProvider).isLocal) return;
+    if (!mounted || ref.read(activeHostProvider).isLocal) {
+      _setupUsage?.call(UsageOutcome.cancelled);
+      _setupUsage = null;
+      return;
+    }
     if (_beside) _leaveBeside();
     await ref.read(onboardingPrefsProvider.notifier).setLocalDeclined(true);
     // What installing does on the other path: Android 13 asks about
@@ -242,6 +259,7 @@ class _RootGateState extends ConsumerState<RootGate> {
   /// without the runtime, as on a remote host, until 工作 installs it; every
   /// launch opens in 酒馆 until the person picks another mode.
   void _chooseTavern() {
+    _observeSetup(UsageOperation.onboardingTavern);
     if (_beside) _leaveBeside();
     unawaited(ref.read(appModeProvider.notifier).setStartup(AppMode.tavern));
     unawaited(_prefs.setLocalDeclined(true));

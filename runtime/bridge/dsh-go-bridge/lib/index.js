@@ -26,6 +26,7 @@ import { createPluginConfig, pluginConfigUnavailable } from "./plugin-config.js"
 import { injectPromiseWithResolvers } from "./web-promise.js";
 import { createSessionDeletion, sessionDeletionUnavailable } from "./session-deletion.js";
 import { createSpeechRoutes } from "./speech.js";
+import { createUsage } from "./usage.js";
 import { createCompanionRoutes } from "./companion/routes.js";
 import { createCompanionPromptContext, FULL_PRESET } from './companion/prompt-context.js';
 import { createCompanionStore } from "./companion/store.js";
@@ -294,7 +295,9 @@ export function apply(ctx, config) {
     if (isCompanion(agent)) companionPrompt.claim(agent, message, turn);
   });
   ctx.on('agent/inbox/discarded', ({ agent, message }) => companionPrompt.discard(agent, message));
+  const usage = createUsage();
   ctx.on('session/event', (session, event) => {
+    usage.observe(event);
     if (event.type === 'user/message') companionPrompt.commit(session, event.data, event.time);
     if (event.type === 'turn/end') companionPrompt.end(session);
   });
@@ -394,7 +397,7 @@ export function apply(ctx, config) {
       };
     };
 
-    const nativeRoutes = createNativeRoutes(native);
+    const nativeRoutes = createNativeRoutes(native, { beginUsage: usage.beginPlugin });
     pluginConfig = createPluginConfig(webCtx, { readBody, send });
     const sessionDeletion = createSessionDeletion(webCtx, { readBody, send });
     const speechRoutes = createSpeechRoutes(webCtx, { send, fetch: options.speech?.fetch, apiKeyEnv: options.speech?.apiKeyEnv });
@@ -418,6 +421,13 @@ export function apply(ctx, config) {
       if (rejection !== undefined) return send(res, rejection, rejection === 503 && (sessionDeletionUnavailable(req) || pluginConfigUnavailable(req)) || STATUS_CODES[rejection]);
       const url = new URL(req.url ?? "/", "http://dsh-go.invalid");
       const path = url.pathname;
+      if (path === `${PREFIX}/v1/usage/collect`) {
+        if (req.method !== "POST") return send(res, 405);
+        if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress)) return send(res, 403);
+        const body = await readBody(req, 16).catch(() => null);
+        if (body?.toString() !== "on" && body?.toString() !== "off") return send(res, 400);
+        return send(res, 200, usage.pull(body.toString() === "on"));
+      }
       if (await sessionDeletion.handle(req, res, path)) return;
       if (await pluginConfig.handle(req, res, path)) return;
       if (await speechRoutes.handle(req, res, path)) return;

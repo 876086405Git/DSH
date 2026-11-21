@@ -1,7 +1,7 @@
 // First run's welcome page, over 「开始」: the switch for anonymous usage
 // statistics (lib/usage/usage_stats.dart), on, and what it leaves out. Every
-// fresh install sees it, on this phone or a remote host; seeing it is what
-// lets the app start counting.
+// fresh install sees it, on this phone or a remote host; seeing it records
+// that the person was told — counting is on from the start.
 
 import 'dart:async';
 
@@ -65,7 +65,7 @@ class _UsageNoticeRowState extends ConsumerState<UsageNoticeRow> {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      l10n.usageNoticeBody,
+                      ref.watch(operatingSystemProvider) == 'android' ? l10n.usageV4Welcome : l10n.usageNoticeBody,
                       style: theme.textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
                     ),
                   ],

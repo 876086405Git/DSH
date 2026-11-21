@@ -1,0 +1,63 @@
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -1949,12 +1949,34 @@
+ 		inputTokens: 0,
+ 		outputTokens: 0
+ 	};
++	const evidence = {};
++	function recordUsage(raw, delta) {
++		updateUsage(usage, raw);
++		const fields = object(raw);
++		for (const [wire, local] of Object.entries({
++			input_tokens: "inputTokens",
++			output_tokens: "outputTokens",
++			cache_read_input_tokens: "cacheReadTokens",
++			cache_creation_input_tokens: "cacheWriteTokens"
++		})) {
++			// message_start.output_tokens is a running count, not the final one.
++			if (fields[wire] !== void 0 && (delta || wire !== "output_tokens")) evidence[local] = fields[wire];
++		}
++	}
++	function usageChunk(final) {
++		const snapshot = { ...usage };
++		if (final) snapshot.totalTokens = usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
++		return { type: "usage", usage: { ...snapshot, reported: { ...evidence } } };
++	}
+ 	let started = false;
+ 	let reason;
+ 	for await (const event of events) {
+ 		if (event.type === "message_start") {
+ 			if (started) return malformed("duplicate message_start");
+-			updateUsage(usage, object(event.message).usage);
++			if (object(event.message).usage !== void 0) {
++				recordUsage(object(event.message).usage, false);
++				yield usageChunk(false);
++			}
+ 			started = true;
+ 			continue;
+ 		}
+@@ -2007,7 +2029,10 @@
+ 		} else if (event.type === "message_delta") {
+ 			const delta = object(event.delta);
+ 			if (delta.stop_reason != null) reason = stopReason(delta.stop_reason);
+-			if (event.usage !== void 0) updateUsage(usage, event.usage);
++			if (event.usage !== void 0) {
++				recordUsage(event.usage, true);
++				yield usageChunk(false);
++			}
+ 		} else {
+ 			if (reason === void 0 || [...blocks.values()].some((block) => !block.closed)) return malformed("message_stop without settled blocks and stop reason");
+ 			if (blocks.size === 0 && reason.kind === "stop") throw new LlmError("DeepSeek Messages returned no content", "EMPTY_RESPONSE");
+@@ -2021,11 +2046,7 @@
+ 				}
+ 				object(parsed);
+ 			}
+-			usage.totalTokens = usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+-			yield {
+-				type: "usage",
+-				usage
+-			};
++			yield usageChunk(true);
+ 			yield {
+ 				type: "finish",
+ 				reason,

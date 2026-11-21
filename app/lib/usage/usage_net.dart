@@ -23,6 +23,13 @@ final defaultUsageEndpoint = Uri.parse('https://go.dshtui.com/api/usage/v1');
 /// [defaultUsageEndpoint], or the build's override when it is usable.
 Uri get usageEndpoint => usageEndpointFrom(_endpointOverride) ?? defaultUsageEndpoint;
 
+Uri? get usageV4Endpoint {
+  final endpoint = usageEndpoint;
+  return endpoint.path.endsWith('/v1')
+      ? endpoint.replace(path: '${endpoint.path.substring(0, endpoint.path.length - 1)}4')
+      : null;
+}
+
 /// [text] as an endpoint: HTTPS, or HTTP to loopback. Null otherwise.
 Uri? usageEndpointFrom(String text) {
   final uri = Uri.tryParse(text.trim());
