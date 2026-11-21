@@ -11,6 +11,7 @@ import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_widget.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
@@ -21,8 +22,10 @@ import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
+import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -93,6 +96,7 @@ class _Bridge extends DshConnection {
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
+    if (path == '/api/session/cancel') return json({'ok': true, 'value': {'accepted': true}});
     revision++;
     return snapshot();
   }
@@ -650,6 +654,130 @@ void main() {
       }
     });
   }
+
+  testWidgets('fixture 4 a composer correction retires a late full reply before speech and last-line writes', (tester) async {
+    await tester.runAsync(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('companion_voice_enabled', true);
+      await prefs.setString('companion_voice_v1', '{"source":"system"}');
+    });
+    const voiceChannel = MethodChannel('dsh/companion_voice');
+    const widgetChannel = MethodChannel('dsh/companion_widget');
+    final voiceCalls = <MethodCall>[];
+    final updates = <Map<String, Object?>>[];
+    final native = <String, Object?>{};
+    final voiceReady = Completer<void>();
+    final cleared = Completer<void>();
+    int? controlBefore;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voiceChannel, (call) async {
+      voiceCalls.add(call);
+      if (call.method == 'ready' && !voiceReady.isCompleted) voiceReady.complete();
+      return switch (call.method) {'ready' || 'speak' => true, _ => null};
+    });
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, (call) async {
+      final values = Map<String, Object?>.from(call.arguments as Map);
+      updates.add(values);
+      for (final entry in values.entries) {
+        if (entry.value == null) { native.remove(entry.key); } else { native[entry.key] = entry.value; }
+      }
+      final before = controlBefore;
+      if (before != null && (values['memoryControlRevision'] as int? ?? -1) > before &&
+          values.containsKey('line') && values['line'] == null &&
+          values.containsKey('saidAt') && values['saidAt'] == null && !cleared.isCompleted) {
+        cleared.complete();
+      }
+      return true;
+    });
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voiceChannel, null);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, null);
+    });
+    final room = _Room(temporary);
+    await room.open(tester, seed: (memory) {
+      const original = '我琴课一直在周四。';
+      memory.store.submitMessage(id: 'lesson-original', sessionId: 'full:local:$_session',
+        text: original, saidAtUtc: _now, offsetMinutes: 0);
+      final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+      final proposal = parseExtractionProposal(jsonEncode({
+        'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': ['lesson-original'],
+        'completion': 'complete', 'operations': [{
+          'op': 'create', 'kind': 'fact', 'text': original, 'keywords': ['琴课'],
+          'evidence': [{'message_id': 'lesson-original', 'quote': original}],
+        }],
+      }), batch);
+      expect(memory.store.commitExtraction(batch, proposal), isTrue);
+      memory.changed();
+    });
+    // Keep the old real ChatController alive after Page unbinds so the late
+    // frame demonstrably arrives there, rather than falling into a closed stream.
+    final held = room.container.listen(chatProvider(_session), (_, _) {});
+    try {
+      await settleMixed(tester, voiceReady.future);
+      await flush(tester);
+      final wire = _Wire(room)..beginTurn()..start('reply-before-correction');
+      const prefix = '我记得琴课在周四。';
+      wire.text(prefix);
+      await flush(tester);
+      expect(room.state.running, isTrue);
+      expect(room.speech(tester), prefix);
+      final oldSpeech = voiceCalls.where((call) => call.method == 'speak' &&
+        (call.arguments as Map)['text'] == prefix).single.arguments as Map;
+      final stops = voiceCalls.where((call) => call.method == 'stop').length;
+      final before = room.memory.store.archive['control_revision']! as int;
+      controlBefore = before;
+      const correction = '琴课改成我琴课一直在周五。';
+      await tester.enterText(find.byType(TextField), correction);
+      await tester.pump();
+      await tester.tap(find.byIcon(AppIcons.send).last);
+      await settleMixed(tester, cleared.future);
+      await flush(tester);
+      expect(room.memory.store.archive['control_revision'], before + 1);
+      expect(room.memory.store.archive['widget_clear_pending'], 0);
+      expect(room.memory.store.cards().single['text'], '我琴课一直在周五。');
+      final source = room.memory.store.messages().singleWhere((row) => row['text'] == correction);
+      final evidence = (room.memory.store.cards().single['evidence'] as List).cast<Map>();
+      expect(evidence.single['message_id'], source['id']);
+      expect(evidence.single['source_rev'], source['source_rev']);
+      expect(evidence.single['quote'], correction);
+      expect(voiceCalls.where((call) => call.method == 'stop').length, greaterThan(stops));
+      expect(room.speech(tester), '啊，是我记岔了。');
+      expect(native.containsKey('line'), isFalse);
+      expect(native.containsKey('saidAt'), isFalse);
+      final speaks = voiceCalls.where((call) => call.method == 'speak').length;
+      final mouth = room.commands.where((command) => command.$1 == 'say').length;
+      final writes = updates.length;
+      // Even a native callback for the already stopped prefix must stay old.
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(voiceChannel.name,
+        const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': oldSpeech['id']})), (_) {});
+      const late = '旧回复晚到，还是周四。';
+      wire.text(late);
+      wire.finish('stop');
+      wire.settle('assistant/message', text: '$prefix$late');
+      wire.endTurn();
+      await flush(tester);
+      expect(held.read().items.whereType<AssistantChatItem>().single.text, '$prefix$late');
+      expect(room.speech(tester), '啊，是我记岔了。');
+      expect(voiceCalls.where((call) => call.method == 'speak').length, speaks);
+      expect(room.commands.where((command) => command.$1 == 'say').length, mouth);
+      expect(updates.skip(writes).where((value) => value['line'] != null), isEmpty);
+      expect(native.containsKey('line'), isFalse);
+      expect(native.containsKey('saidAt'), isFalse);
+      expect(room.memory.store.messages().any((row) => (row['text']! as String).contains(late)), isFalse);
+      expect(room.memory.select('琴课在什么时候').block, allOf(contains('周五'), isNot(contains('周四'))));
+      // A metadata-only write waits behind the real widget queue without
+      // clearing a late line and thereby hiding a broken Page gate.
+      expect(await settleMixed(tester, room.container.read(companionWidgetProvider).update({
+        'memoryArchiveId': room.memory.store.archive['id'],
+        'memoryControlRevision': room.memory.store.archive['control_revision'],
+      })), isTrue);
+      expect(updates.skip(writes).where((value) => value['line'] != null), isEmpty);
+      expect(native.containsKey('line'), isFalse);
+      expect(native.containsKey('saidAt'), isFalse);
+    } finally {
+      held.close();
+      await room.close(tester);
+    }
+  });
 
   testWidgets('fixture 10 a captured followup waits while a real approval card is open', (tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
