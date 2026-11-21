@@ -11,6 +11,7 @@ import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_app/companion/companion_moves.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/pets/pet_mood.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
@@ -27,6 +28,7 @@ import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_log.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
+import 'package:dsh_app/ui/companion/companion_tasks_page.dart';
 import 'package:dsh_app/ui/tavern/tavern_chat_page.dart';
 import 'package:dsh_app/ui/tavern/tavern_home_page.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
@@ -36,6 +38,7 @@ import 'package:dsh_client/dsh_client.dart'
         CompanionMemory,
         CompanionMemoryStore,
         CompanionTaskStore,
+        CompanionPublicLookupStore,
         MemoryBatch,
         companionMemoryExtractionPrompt,
         companionMemoryConsolidationPrompt,
@@ -100,7 +103,7 @@ class _Settings extends SettingsController {
 /// Observes the Page's real completion future; all receipt handling stays
 /// with the production owner. The story replay waits for it before leaving.
 class _ReceiptMemory extends CompanionMemoryOwner {
-  _ReceiptMemory(super.store, super.legacy);
+  _ReceiptMemory(super.store, super.legacy, {super.nowMilliseconds});
 
   late Future<void> lastReceipt;
 
@@ -575,6 +578,234 @@ void main() {
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+      }
+
+      for (final rejectSource in [false, true]) {
+        testWidgets('E actual Page keeps reminder lookup and factual clause identities, sourceFailure=$rejectSource', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          final now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root), nowMilliseconds: () => now);
+          final clockRead = Completer<void>();
+          final answerSent = Completer<void>();
+          final calls = <String>[];
+          final posts = <http.Request>[];
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            calls.add(call.method);
+            if (call.method == 'clock') {
+              if (!clockRead.isCompleted) {
+                clockRead.complete();
+              }
+              return {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800};
+            }
+            if (call.method == 'capabilities') {
+              return {'executorId': 'installation-A', 'exact': true, 'notifications': true};
+            }
+            if (call.method == 'resolve') {
+              return {'kind': 'unique', 'moments': [{'epochMs': now + 72000000, 'offsetSeconds': 28800}]};
+            }
+            if (call.method == 'recover') {
+              return {'recoveryQueued': true};
+            }
+            if (call.method == 'wake') {
+              final taskId = (call.arguments as Map)['taskId'];
+              // The existing D native boundary is controlled here. E still
+              // executes all of its real HTTP, claim and answer parsing code.
+              db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=1", [taskId]);
+              return {'wakeCompleted': true};
+            }
+            throw StateError('Unexpected platform method ${call.method}');
+          });
+          final client = MockClient((request) async {
+            posts.add(request);
+            Object body;
+            if (request.url.toString() == companionLookupSearchEndpoint) {
+              expect(jsonDecode(request.body), {'query': '青桥美术馆 2026-11-21 开放 公告', 'count': 5, 'need_content': false});
+              body = {'results': [{'url': 'https://museum.example/notice', 'title': '青桥美术馆公告', 'snippet': '临时安排'}]};
+            } else if (request.url.toString() == companionLookupFetchEndpoint) {
+              body = {'title': '青桥美术馆公告', 'content': '2026-11-21临时闭馆一天。'};
+            } else {
+              final sent = jsonDecode(request.body) as Map;
+              if (sent['system'] == companionMemoryExtractionPrompt) {
+                return http.Response.bytes(utf8.encode(_sse(['{"ops":[]}'])), 200,
+                  headers: {'content-type': 'text/event-stream; charset=utf-8'});
+              }
+              expect(sent['system'], companionLookupAnswerPrompt);
+              final input = jsonDecode(sent['messages'][0]['content']) as Map;
+              expect(input.keys.toSet(), {'task', 'sources'});
+              expect(jsonEncode(input), isNot(contains('带证件')));
+              expect(jsonEncode(input), isNot(contains('练长笛')));
+              final source = (input['sources'] as List).single as Map;
+              final answer = {'status': 'done', 'conclusion': '馆方公告说明今天临时闭馆。',
+                'applicable_date': '2026-11-21', 'evidence': [
+                  {'fetchRequestId': source['fetchRequestId'], 'quote': '2026-11-21临时闭馆一天。'},
+                ]};
+              answerSent.complete();
+              return http.Response.bytes(utf8.encode(_sse([jsonEncode(answer)])), 200,
+                headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            }
+            return http.Response.bytes(utf8.encode(jsonEncode(body)), 200,
+              headers: {'content-type': 'application/json; charset=utf-8'});
+          });
+          await openLight(tester, apiKey: 'dedicated-test-key', client: client,
+            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          if (rejectSource) {
+            db.execute("CREATE TRIGGER reject_lookup_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+          }
+          const raw = '明天十四点提醒我带证件；帮我查今天青桥美术馆开不开，给我馆方公告；我午后练长笛';
+          await tester.enterText(find.byType(TextField), raw);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, clockRead.future);
+          if (rejectSource) {
+            await tester.pumpAndSettle();
+            expect(find.text('这次约定没保存好，原输入还在。'), findsOneWidget);
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            expect(memory.store.messages(), isEmpty);
+            expect(memory.store.tasks(), isEmpty);
+            expect(posts, isEmpty);
+            expect(calls.where((method) => method == 'resolve' || method == 'wake'), isEmpty);
+            expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
+          } else {
+            await settleMixed(tester, answerSent.future);
+            await settleMixed(tester, memory.lastReceipt);
+            await tester.pump();
+            final original = memory.store.messages().singleWhere((message) => message['role'] == 'user');
+            expect(original['text'], raw);
+            final tasks = memory.store.tasks();
+            expect(tasks, hasLength(2));
+            expect(tasks.map((task) => task['source_message_id']), everyElement(original['id']));
+            expect(tasks.map((task) => task['item_no']).toSet(), {0, 1});
+            final query = tasks.singleWhere((task) => task['kind'] == 'public.lookup');
+            final result = memory.store.lookupTask(query['task_id']! as String)!;
+            expect(result['state'], 'done');
+            expect(result['source_session_id'], memory.store.lightSessionId);
+            expect(memory.store.lookupAttempts(query['task_id']! as String), hasLength(3));
+            expect(find.textContaining('馆方公告说明今天临时闭馆。'), findsWidgets);
+            expect(posts.where((request) => request.url.toString() == companionLookupSearchEndpoint), hasLength(1));
+            expect(posts.where((request) => request.url.toString() == companionLookupFetchEndpoint), hasLength(1));
+            final postsBeforeOpening = posts.length;
+            await tester.tap(find.text('查看来源 · 青桥美术馆'));
+            await tester.pumpAndSettle();
+            expect(find.byType(CompanionTasksPage), findsOneWidget);
+            expect(find.text('2026-11-21 Asia/Shanghai'), findsOneWidget);
+            expect(find.text('2026-11-21临时闭馆一天。'), findsOneWidget);
+            final link = find.widgetWithText(TextButton, 'https://museum.example/notice');
+            expect(link, findsOneWidget);
+            expect(tester.widget<TextButton>(link).onPressed, isNotNull);
+            await tester.ensureVisible(find.text('费用与用量'));
+            await tester.tap(find.text('费用与用量'));
+            await tester.pumpAndSettle();
+            expect(find.textContaining('¥0.010'), findsOneWidget);
+            expect(find.textContaining('问号表示未报告'), findsOneWidget);
+            expect(posts, hasLength(postsBeforeOpening), reason: 'The source action opens the original result without querying again');
+          }
+        });
+      }
+
+      for (final after in ['cancel', 'leave']) {
+        testWidgets('E actual Page $after after search dispatch preserves the original task and late receipt', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          final now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
+          final memory = _ReceiptMemory(CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
+            nowMilliseconds: () => now), CompanionLocal.at(root), nowMilliseconds: () => now);
+          final sent = Completer<void>();
+          final release = Completer<void>();
+          var searches = 0;
+          var fetches = 0;
+          var answers = 0;
+          addTearDown(() async {
+            if (!release.isCompleted) {
+              release.complete();
+            }
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => switch (call.method) {
+            'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+            'capabilities' => {'executorId': 'installation-A', 'exact': true, 'notifications': true},
+            'recover' => {'recoveryQueued': true},
+            _ => throw StateError('Unexpected reminder call ${call.method}'),
+          });
+          final commands = await openLight(tester, apiKey: 'dedicated-test-key', client: MockClient((request) async {
+            if (request.url.toString() == companionLookupSearchEndpoint) {
+              searches++;
+              sent.complete();
+              await release.future;
+              return http.Response.bytes(utf8.encode(jsonEncode({'results': [
+                {'url': 'https://museum.example/notice', 'title': '青桥美术馆公告', 'snippet': '临时安排'},
+              ]})), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+            }
+            if (request.url.toString() == companionLookupFetchEndpoint) {
+              fetches++;
+              return http.Response.bytes(utf8.encode(jsonEncode({'content': '2026-11-21临时闭馆一天。'})), 200,
+                headers: {'content-type': 'application/json; charset=utf-8'});
+            }
+            final body = jsonDecode(request.body) as Map;
+            if (body['system'] == companionMemoryExtractionPrompt) {
+              return http.Response.bytes(utf8.encode(_sse(['{"ops":[]}'])), 200,
+                headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            }
+            expect(body['system'], companionLookupAnswerPrompt);
+            answers++;
+            final input = jsonDecode(body['messages'][0]['content']) as Map;
+            final answer = {'status': 'done', 'conclusion': '馆方公告说明今天临时闭馆。', 'applicable_date': '2026-11-21',
+              'evidence': [{'fetchRequestId': input['sources'][0]['fetchRequestId'], 'quote': '2026-11-21临时闭馆一天。'}]};
+            return http.Response.bytes(utf8.encode(_sse([jsonEncode(answer)])), 200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          await settleMixed(tester, memory.migrateLocal());
+          await tester.enterText(find.byType(TextField), '帮我查今天青桥美术馆开不开，给我馆方公告');
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, sent.future);
+          final initial = memory.store.tasks().single;
+          final originalDrain = memory.lastReceipt;
+          expect(memory.store.lookupAttempts(initial['task_id']! as String).single['dispatched'], 1);
+          commands.clear();
+          if (after == 'cancel') {
+            final cancelledTask = Completer<void>();
+            void changed() {
+              if (!cancelledTask.isCompleted &&
+                  memory.store.lookupTask(initial['task_id']! as String)!['cancel_requested'] == 1) {
+                cancelledTask.complete();
+              }
+            }
+            memory.addListener(changed);
+            await tester.enterText(find.byType(TextField), '取消青桥美术馆的查询');
+            await tester.pump();
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await settleMixed(tester, cancelledTask.future);
+            memory.removeListener(changed);
+            await settleMixed(tester, memory.lastReceipt);
+            expect(memory.store.lookupTask(initial['task_id']! as String)!['cancel_requested'], 1);
+          } else {
+            await tester.pumpWidget(_app(const SizedBox()));
+            await tester.pump();
+          }
+          release.complete();
+          await settleMixed(tester, originalDrain);
+          await tester.pump();
+          final finalTask = memory.store.lookupTask(initial['task_id']! as String)!;
+          expect(finalTask['task_id'], initial['task_id']);
+          expect(finalTask['source_session_id'], initial['source_session_id']);
+          expect(searches, 1);
+          expect([fetches, answers], after == 'cancel' ? [0, 0] : [1, 1]);
+          expect(finalTask['state'], after == 'cancel' ? 'cancelled' : 'done');
+          expect(commands.where((command) => command.$1 == 'say' &&
+            jsonEncode(command.$2).contains('馆方公告说明今天临时闭馆')), isEmpty);
+        });
       }
 
       for (final after in ['cancel', 'leave', 'accepted then leave']) {

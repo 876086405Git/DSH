@@ -475,5 +475,80 @@
   },
   "companionReminderNotHere": "这条旧安排没有在当前安装中接管，不能在这里修改或撤销。",
   "companionReminderPlatformUnavailable": "现在还无法核对这台手机的提醒安排。",
-  "companionReminderPastRegistration": "原记录显示，这条提醒曾经登记成功。"
+  "companionReminderPastRegistration": "原记录显示，这条提醒曾经登记成功。",
+  "companionLookupAccepted": "我来查一下，结果会留在这件事里。",
+  "companionLookupSyntax": "想查哪家馆、哪一天？请告诉我完整馆名和当地日期。",
+  "companionLookupDateMissing": "想查当地哪一天的安排？请给我具体日期。",
+  "companionLookupZoneMissing": "这个地点用哪个时区？请把当地日期和时区一起告诉我。",
+  "companionLookupWhich": "你想取消哪一项查询？可以到这间屋子的事情列表里选它。",
+  "companionLookupQueued": "正在查证公开资料。",
+  "companionLookupDone": "本次查证已完成，依据留在下面。",
+  "companionLookupPartial": "查到了一部分，还不能确认所问日期的安排。",
+  "companionLookupFailed": "这次没有取得足够材料，没法确认。",
+  "companionLookupUnknown": "这次请求的回执还没核清。我会保留原记录，不重新发同一步。",
+  "companionLookupCancelled": "这项查询已取消；已经发生的请求仍保留在记录里。",
+  "companionLookupCancelUnknown": "已经要求停止，主机是否收到还没核清。",
+  "companionLookupUnavailable": "暂时连不上查证通道，结果还没有确认。",
+  "companionLookupDeadline": "原定查询时间已过，保留已取得的材料，不再继续请求。",
+  "companionLookupInputLimit": "完整资料超过这次可读范围，已保留来源供继续核对。",
+  "companionLookupQueryLong": "馆名和日期合起来太长，先确认更简短且明确的名称。",
+  "companionLookupAnswerIncomplete": "材料已取得，但这次答案没有完整核好，先把来源留给你。",
+  "companionLookupNotHere": "这项查询由原安装环境受理，当前只查看记录，不在这里自动重做。",
+  "companionLookupSources": "本次实际来源",
+  "companionLookupSearchOnly": "搜索摘要，尚未作为正文依据",
+  "companionLookupNoTitle": "未提供标题",
+  "companionLookupCancel": "取消查询",
+  "companionLookupSaveFailed": "这次处理没完成，请先查看事情列表里的原记录。",
+  "companionLookupUsageUnknown": "答案模型用量未完整报告，不能当作免费。",
+  "companionLookupCostUnknown": "另有请求费用尚未核清。",
+  "companionLookupCancelSource": "取消{name}的查询",
+  "@companionLookupCancelSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupObservedAt": "取得于 {time}",
+  "@companionLookupObservedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupToolCost": "工具按已核成功请求和公开费率估算：¥{amount}。答案模型用量另列。",
+  "@companionLookupToolCost": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupModelUsage": "答案用量：未缓存输入 {input}，缓存读取 {read}，缓存写入 {write}，输出 {output}；问号表示未报告。",
+  "@companionLookupModelUsage": {
+    "placeholders": {
+      "input": {
+        "type": "String"
+      },
+      "read": {
+        "type": "String"
+      },
+      "write": {
+        "type": "String"
+      },
+      "output": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupCostDetails": "费用与用量",
+  "companionLookupViewSources": "查看来源 · {name}",
+  "@companionLookupViewSources": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -5,10 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../companion/companion_context.dart';
 import '../../companion/companion_memory.dart';
+import '../../companion/companion_public_lookup.dart';
 import '../../companion/companion_reminder.dart';
+import '../../companion/companion_state.dart';
 import '../../l10n/l10n.dart';
+import '../../notify/chat_alerts.dart' show companionHostKey;
+import '../../state/connection_state.dart';
+import '../../state/hosts_state.dart';
+import '../../state/settings_state.dart';
 import '../common/app_dialog.dart';
 import '../common/brief_notice.dart';
 import '../common/empty_view.dart';
@@ -57,6 +65,33 @@ String companionReminderLine(L10n l10n, MemoryRow task, {required String? execut
       'cancelled' => l10n.companionReminderCancelled,
       'queued' || 'running' => l10n.companionReminderQueued,
       _ => l10n.companionReminderFailed,
+    },
+  };
+}
+
+String companionLookupLine(L10n l10n, MemoryRow task, {required String? executorId}) {
+  if (executorId == null || task['executor_id'] != executorId) {
+    return l10n.companionLookupNotHere;
+  }
+  if (task['cancel_requested'] == 1) {
+    return task['state'] == 'cancelled' ? l10n.companionLookupCancelled : l10n.companionLookupCancelUnknown;
+  }
+  final result = task['result'];
+  if (result is Map && result['conclusion'] is String) {
+    return result['conclusion']! as String;
+  }
+  return switch (task['wait_reason']) {
+    'lookup_deadline' => l10n.companionLookupDeadline,
+    'lookup_unavailable' => l10n.companionLookupUnavailable,
+    'lookup_input_limit' => l10n.companionLookupInputLimit,
+    'lookup_query_long' => l10n.companionLookupQueryLong,
+    'lookup_answer_incomplete' => l10n.companionLookupAnswerIncomplete,
+    _ => switch (task['state']) {
+      'done' => l10n.companionLookupDone,
+      'partial' => l10n.companionLookupPartial,
+      'unknown' => l10n.companionLookupUnknown,
+      'queued' || 'running' => l10n.companionLookupQueued,
+      _ => l10n.companionLookupFailed,
     },
   };
 }
@@ -110,6 +145,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       }
       if (mounted) {
         setState(() {});
+        final row = widget.taskId == null ? null : memory.store.lookupTask(widget.taskId!);
+        if (row != null && _owns(row)) {
+          _resumeLookup(row);
+        }
       }
     } on Object {
       if (mounted) {
@@ -145,7 +184,14 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       }
       final row = widget.taskId == null ? null : memory.store.task(widget.taskId!);
       final pending = row != null && (row['state'] == 'waiting' || row['state'] == 'unknown');
-      if (row != null && _owns(row) && (!resume || pending)) {
+      if (!resume && row != null && row['kind'] == 'public.lookup' && row['state'] == 'cancelled') {
+        final read = memory.lookups.readReceipts(row, host: ref.read(activeConnectionProvider).value?.client,
+          hostKey: companionHostKey(ref.read(activeHostProvider)));
+        memory.retainReceipt(read);
+        await read;
+      } else if (row != null && row['kind'] == 'public.lookup' && _owns(row)) {
+        _resumeLookup(memory.store.lookupTask(row['task_id']! as String)!);
+      } else if (row != null && _owns(row) && (!resume || pending)) {
         await reminders.wake(row['task_id']! as String);
       }
     } on PlatformException {
@@ -160,6 +206,62 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   }
 
   bool _owns(MemoryRow task) => _executorId != null && task['executor_id'] == _executorId;
+
+  void _resumeLookup(MemoryRow task) {
+    final memory = _memory!;
+    final host = ref.read(activeConnectionProvider).value?.client;
+    final hostKey = companionHostKey(ref.read(activeHostProvider));
+    final key = ref.read(settingsProvider).apiKey;
+    final factory = ref.read(companionLightClientProvider);
+    final operation = task['cancel_requested'] == 1
+        ? memory.lookups.stop(task, executorId: _executorId!, host: host, hostKey: hostKey)
+        : memory.lookups.run(task, executorId: _executorId!, requestId: companionMemoryId,
+            estimateTokens: estimateCompanionMemoryTokens, host: host, hostKey: hostKey,
+            direct: CompanionLookupDirect(client: factory, apiKey: () => key,
+              nowMilliseconds: memory.lookups.nowMilliseconds, estimateTokens: estimateCompanionMemoryTokens));
+    final drained = operation.then<void>((_) {});
+    memory.retainReceipt(drained);
+    unawaited(drained.catchError((Object _) {
+      if (mounted) {
+        showBriefNotice(context, context.l10n.companionLookupSaveFailed);
+      }
+    }));
+  }
+
+  Future<void> _cancelLookup(MemoryRow task) async {
+    if (_busy || !_owns(task)) {
+      return;
+    }
+    final memory = _memory!;
+    final host = ref.read(activeConnectionProvider).value?.client;
+    final hostKey = companionHostKey(ref.read(activeHostProvider));
+    final raw = context.l10n.companionLookupCancelSource(task['lookup_place_name']! as String);
+    setState(() => _busy = true);
+    try {
+      final clock = await ref.read(companionRemindersProvider).clock();
+      if (!mounted) {
+        return;
+      }
+      final source = memory.store.submitMessage(id: companionMemoryId(), sessionId: task['source_session_id']! as String,
+        text: raw, saidAtUtc: clock.utcMs, offsetMinutes: clock.offsetSeconds ~/ 60,
+        zoneId: clock.zoneId, offsetSeconds: clock.offsetSeconds);
+      final cancelled = memory.store.cancelLookup(taskId: task['task_id']! as String,
+        expectedTaskRev: task['task_rev']! as int, messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: 0);
+      memory.changed();
+      final operation = memory.lookups.stop(cancelled, executorId: _executorId!, host: host, hostKey: hostKey);
+      memory.retainReceipt(operation);
+      await operation;
+    } on Object {
+      if (mounted) {
+        showBriefNotice(context, context.l10n.companionLookupSaveFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
 
   Future<bool> _apply(
     MemoryRow task,
@@ -291,6 +393,9 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   }
 
   Widget _detail(MemoryRow task) {
+    if (task['kind'] == 'public.lookup') {
+      return _lookupDetail(_memory!.store.lookupTask(task['task_id']! as String)!);
+    }
     final l10n = context.l10n;
     final receipts = _memory!.store.taskReceipts(task['task_id']! as String);
     final notification = receipts.where((receipt) => receipt['step_key'] == 'notification').toList();
@@ -345,6 +450,64 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     ]));
   }
 
+  Widget _lookupDetail(MemoryRow task) {
+    final l10n = context.l10n;
+    final attempts = _memory!.store.lookupAttempts(task['task_id']! as String);
+    final sources = <String, MemoryRow>{};
+    for (final attempt in attempts) {
+      for (final value in attempt['sourceMetadata']! as List) {
+        final source = Map<String, Object?>.from(value as Map);
+        final url = source['url']! as String;
+        if (companionLookupUrl(url) && (source['kind'] == 'fetch' || !sources.containsKey(url))) {
+          sources[url] = source;
+        }
+      }
+    }
+    final result = task['result'];
+    final evidence = result is Map && result['evidence'] is List ? result['evidence'] as List : const [];
+    final toolCalls = attempts.where((row) => row['kind'] != 'answer').toList();
+    final knownCosts = toolCalls.map((row) => row['estimated_tool_micro_cny']).whereType<int>().toList();
+    final cost = knownCosts.fold<int>(0, (a, b) => a + b) / 1000000;
+    final answers = attempts.where((row) => row['kind'] == 'answer').toList();
+    return Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(task['lookup_question']! as String, style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
+      Text('${task['local_date']} ${task['zone_id']}'),
+      const SizedBox(height: 8),
+      Text(companionLookupLine(l10n, task, executorId: _executorId)),
+      if (!_owns(task) && result is Map && result['conclusion'] is String)
+        Text(result['conclusion']! as String),
+      if (sources.isNotEmpty) ...[
+        const SizedBox(height: 20),
+        Text(l10n.companionLookupSources, style: Theme.of(context).textTheme.titleMedium),
+        for (final source in sources.values) ...[
+          const SizedBox(height: 12),
+          Text(source['title'] as String? ?? l10n.companionLookupNoTitle),
+          TextButton(onPressed: () => unawaited(launchUrl(Uri.parse(source['url']! as String),
+            mode: LaunchMode.externalApplication).catchError((_) => false)), child: Text(source['url']! as String)),
+          Text(l10n.companionLookupObservedAt(DateTime.fromMillisecondsSinceEpoch(source['observedAtMs']! as int)
+            .toLocal().toIso8601String())),
+          if (source['kind'] == 'search') Text(l10n.companionLookupSearchOnly),
+          for (final proof in evidence)
+            if ((proof as Map)['url'] == source['url']) Text(proof['quote']! as String),
+        ],
+      ],
+      if (attempts.isNotEmpty)
+        ExpansionTile(title: Text(l10n.companionLookupCostDetails), children: [
+          if (knownCosts.isNotEmpty) Text(l10n.companionLookupToolCost(cost.toStringAsFixed(3))),
+          if (toolCalls.any((row) => row['estimated_tool_micro_cny'] == null)) Text(l10n.companionLookupCostUnknown),
+          for (final answer in answers)
+            if (answer['rawUsage'] case final Map usage)
+              Text(l10n.companionLookupModelUsage('${usage['input_uncached'] ?? '?'}', '${usage['input_cache_read'] ?? '?'}',
+                '${usage['input_cache_write'] ?? '?'}', '${usage['output_tokens'] ?? '?'}'))
+            else Text(l10n.companionLookupUsageUnknown),
+        ]),
+      const SizedBox(height: 16),
+      if (_owns(task) && task['cancel_requested'] == 0 && const ['queued', 'running', 'unknown'].contains(task['state']))
+        OutlinedButton(onPressed: _busy ? null : () => _cancelLookup(task), child: Text(l10n.companionLookupCancel)),
+    ]));
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -363,8 +526,11 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         else _detail(task)
       else if (rows.isEmpty) EmptyView(icon: AppIcons.reminder, title: l10n.companionTasksEmpty)
       else SheetGroup(children: [for (final row in rows)
-        SettingsTile(icon: AppIcons.reminder, title: row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
-          subtitle: companionReminderLine(l10n, row, executorId: _executorId), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+        SettingsTile(icon: row['kind'] == 'public.lookup' ? AppIcons.search : AppIcons.reminder,
+          title: row['kind'] == 'public.lookup' ? row['lookup_question']! as String :
+            row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
+          subtitle: row['kind'] == 'public.lookup' ? companionLookupLine(l10n, row, executorId: _executorId) :
+            companionReminderLine(l10n, row, executorId: _executorId), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => CompanionTasksPage(memory: memory, taskId: row['task_id']! as String),
           )),
         ),

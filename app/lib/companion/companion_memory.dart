@@ -11,6 +11,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_local.dart';
 import 'companion_memory_worker.dart';
+import 'companion_public_lookup.dart';
 import 'companion_widget.dart';
 
 /// Key by the absolute folder path, not Directory object identity. This
@@ -38,6 +39,8 @@ class CompanionMemoryOwner extends ChangeNotifier {
   final CompanionMemoryStore store;
   final CompanionLocal legacy;
   final int Function() _now;
+  late final lookups = CompanionLookups(store: store, nowMilliseconds: _now,
+    changed: changed, retainReceipt: retainReceipt);
   Future<bool>? _localMigration;
   Future<bool>? _widgetClear;
   final Map<DshClient, Future<bool>> _hostMigrations = {};
@@ -101,7 +104,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   void cancelWork() => _worker?.cancel();
 
-  /// Chat usage and explicit reminder commands can finish after leaving the
+  /// Chat usage and explicit task commands can finish after leaving the
   /// room. Register their drain before dispatch so disposal cannot close
   /// SQLite before the final receipt is read or recorded.
   void retainReceipt(Future<void> settled) {

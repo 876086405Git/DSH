@@ -18,6 +18,7 @@ export 'src/carrier.dart';
 export 'src/client_inventory_api.dart';
 export 'src/companion_api.dart';
 export 'src/companion_auxiliary_api.dart';
+export 'src/companion_public_lookup_api.dart';
 export 'src/companion_usage_api.dart';
 export 'src/companion_memory_store.dart';
 export 'src/companion_memory_rules.dart';

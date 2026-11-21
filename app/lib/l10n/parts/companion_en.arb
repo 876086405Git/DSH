@@ -381,5 +381,80 @@
   },
   "companionReminderNotHere": "This saved arrangement has not been adopted by this installation and cannot be changed or cancelled here.",
   "companionReminderPlatformUnavailable": "The reminder setup on this phone cannot be checked right now.",
-  "companionReminderPastRegistration": "The saved record shows that this reminder was registered previously."
+  "companionReminderPastRegistration": "The saved record shows that this reminder was registered previously.",
+  "companionLookupAccepted": "I’ll check this and keep the result with the task.",
+  "companionLookupSyntax": "Which museum or library, and which local date? Please give its full name and date.",
+  "companionLookupDateMissing": "Which local date should I check? Please give a specific date.",
+  "companionLookupZoneMissing": "Which time zone applies there? Please give the local date and time zone together.",
+  "companionLookupWhich": "Which lookup should I cancel? You can select it in this room’s task list.",
+  "companionLookupQueued": "Checking public sources.",
+  "companionLookupDone": "This lookup is complete. Its evidence is below.",
+  "companionLookupPartial": "Some material was found, but it does not establish the arrangement for the requested date.",
+  "companionLookupFailed": "This attempt did not obtain enough material to confirm an answer.",
+  "companionLookupUnknown": "The request receipt is unresolved. The original record is kept without resending that step.",
+  "companionLookupCancelled": "This lookup is cancelled. Requests that already happened remain in its record.",
+  "companionLookupCancelUnknown": "Stop was requested, but delivery to the original host is not yet confirmed.",
+  "companionLookupUnavailable": "The lookup channel is unavailable, so the result is not confirmed.",
+  "companionLookupDeadline": "The original lookup deadline has passed. Obtained material is kept without further requests.",
+  "companionLookupInputLimit": "The complete material exceeds this request’s capacity. Its sources are kept for further review.",
+  "companionLookupQueryLong": "The name and date make the query too long. Please confirm a shorter, unambiguous name.",
+  "companionLookupAnswerIncomplete": "Material was obtained, but the answer did not finish reliably. Its sources are kept for you.",
+  "companionLookupNotHere": "This lookup belongs to its original installation. Its record is shown without automatically running it here.",
+  "companionLookupSources": "Sources observed in this lookup",
+  "companionLookupSearchOnly": "Search metadata; not body evidence",
+  "companionLookupNoTitle": "No title supplied",
+  "companionLookupCancel": "Cancel lookup",
+  "companionLookupSaveFailed": "This operation did not finish. Check its original record in the task list.",
+  "companionLookupUsageUnknown": "Answer-model usage was not fully reported; it is not treated as free.",
+  "companionLookupCostUnknown": "Some request costs remain unknown.",
+  "companionLookupCancelSource": "Cancel the lookup for {name}",
+  "@companionLookupCancelSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupObservedAt": "Observed at {time}",
+  "@companionLookupObservedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupToolCost": "Tools estimated from confirmed successful requests and the published rate: CNY {amount}. Answer-model usage is separate.",
+  "@companionLookupToolCost": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupModelUsage": "Answer usage: uncached input {input}, cache read {read}, cache write {write}, output {output}. A question mark means unreported.",
+  "@companionLookupModelUsage": {
+    "placeholders": {
+      "input": {
+        "type": "String"
+      },
+      "read": {
+        "type": "String"
+      },
+      "write": {
+        "type": "String"
+      },
+      "output": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupCostDetails": "Cost and usage",
+  "companionLookupViewSources": "View sources · {name}",
+  "@companionLookupViewSources": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }
