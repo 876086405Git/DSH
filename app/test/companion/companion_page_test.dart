@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_adapt.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
@@ -16,6 +17,8 @@ import 'package:dsh_app/pets/pet_signals.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/tavern/tavern_card_scripts.dart';
+import 'package:dsh_app/tavern/tavern_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
@@ -24,6 +27,8 @@ import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_log.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
+import 'package:dsh_app/ui/tavern/tavern_chat_page.dart';
+import 'package:dsh_app/ui/tavern/tavern_home_page.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart'
@@ -35,6 +40,7 @@ import 'package:dsh_client/dsh_client.dart'
         companionMemoryConsolidationPrompt,
         isMemoryResponsePreference,
         parseExtractionProposal;
+import 'package:dsh_tavern/dsh_tavern.dart' as story;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -87,6 +93,20 @@ class _Settings extends SettingsController {
 
   @override
   AppSettings build() => AppSettings(loaded: true, apiKey: apiKey);
+}
+
+/// Observes the Page's real completion future; all receipt handling stays
+/// with the production owner. The story replay waits for it before leaving.
+class _ReceiptMemory extends CompanionMemoryOwner {
+  _ReceiptMemory(super.store, super.legacy);
+
+  late Future<void> lastReceipt;
+
+  @override
+  void retainReceipt(Future<void> settled) {
+    super.retainReceipt(settled);
+    lastReceipt = settled;
+  }
 }
 
 String _sse(List<String> words, {bool end = true}) => [
@@ -554,6 +574,259 @@ void main() {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
       }
+
+      testWidgets('fixture 6 original Tavern chat reopens with its story name while the real Page keeps its own name', (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final storyRoot = Directory('${root.path}/tavern');
+        final storyPosts = <Map<String, Object?>>[];
+        final engines = <story.TavernEngine>[];
+        ProviderContainer? storyScope;
+        _ReceiptMemory? phoneMemory;
+        late story.TavernEngine engine;
+        late String characterId;
+        late String chatId;
+        late Completer<void> storyEntered;
+        Completer<http.Response>? storyResponse;
+        addTearDown(() async {
+          final pendingResponse = storyResponse;
+          if (pendingResponse != null && !pendingResponse.isCompleted) {
+            pendingResponse.complete(http.Response('', 499));
+          }
+          await tester.pumpWidget(const SizedBox());
+          await tester.pumpAndSettle();
+          storyScope?.dispose();
+          phoneMemory?.dispose();
+          await tester.pump();
+          for (final opened in engines) {
+            await settleMixed(tester, opened.close());
+          }
+        });
+
+        // Read the same metadata and display providers the pages use. Before
+        // mounting they start in the real zone; later reads may join Page work.
+        Future<void> readStoryRows() async {
+          final scope = storyScope!;
+          for (final row in await engine.path(chatId)) {
+            final shown = tavernShownTextProvider((chatId, row.nodeId, row.text));
+            scope.listen(shown, (_, _) {});
+            await scope.read(shown.future);
+          }
+        }
+
+        Future<void> openStory({bool first = false}) async {
+          await tester.runAsync(() async {
+            engine = await story.TavernEngine.openDirectory(
+              storyRoot,
+              config: story.TavernModelConfig(
+                apiKey: () async => 'sk-story-test',
+                baseUrl: 'https://example.invalid',
+              ),
+              modelClient: story.TavernModelClient(clientFactory: () => MockClient((request) async {
+                expect(request.method, 'POST');
+                expect(request.url.path, endsWith('/chat/completions'));
+                storyPosts.add(jsonDecode(request.body) as Map<String, Object?>);
+                storyEntered.complete();
+                return storyResponse!.future;
+              })),
+            );
+            engines.add(engine);
+            if (first) {
+              final character = await engine.importCard(Uint8List.fromList(utf8.encode(jsonEncode({
+                'spec': 'chara_card_v3', 'spec_version': '3.0',
+                'data': {
+                  'name': '故事同行者', 'nickname': '', 'description': '',
+                  'personality': '', 'scenario': '', 'first_mes': '故事从这里开始。',
+                  'alternate_greetings': [], 'mes_example': '', 'system_prompt': '',
+                  'post_history_instructions': '', 'creator_notes': '', 'tags': [], 'extensions': {},
+                },
+              }))));
+              characterId = character.id;
+              chatId = await engine.createChat(characterId);
+            }
+            final scope = ProviderContainer(overrides: [
+              tavernProvider.overrideWithValue(engine),
+              settingsProvider.overrideWith(() => _Settings('sk-story-test')),
+            ]);
+            storyScope = scope;
+            await scope.read(tavernCharactersProvider.future);
+            await scope.read(tavernChatsProvider(null).future);
+            scope.listen(tavernCharacterDetailProvider(characterId), (_, _) {});
+            scope.listen(tavernCardDataProvider(characterId), (_, _) {});
+            await scope.read(tavernCharacterDetailProvider(characterId).future);
+            await scope.read(tavernCardDataProvider(characterId).future);
+            final scripts = tavernChatScriptsProvider((chatId, characterId));
+            scope.listen(scripts, (_, _) {});
+            await scope.read(scripts.future);
+            await readStoryRows();
+          });
+          await tester.pumpWidget(UncontrolledProviderScope(
+            container: storyScope!,
+            child: _app(const TavernHomePage()),
+          ));
+          await tester.pumpAndSettle();
+          final resume = find.byKey(ValueKey('tavern-continue-$chatId'));
+          expect(resume, findsOneWidget);
+          await tester.ensureVisible(resume);
+          await tester.tap(resume);
+          await tester.pumpAndSettle();
+          expect(tester.widget<TavernChatPage>(find.byType(TavernChatPage)).chatId, chatId);
+        }
+
+        Future<void> storySay(String text) async {
+          await tester.enterText(find.byType(TextField), text);
+          await tester.pump();
+          storyEntered = Completer<void>();
+          final response = Completer<http.Response>();
+          storyResponse = response;
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, storyEntered.future);
+          // Subscribe to the actual Page-started turn while HTTP is held.
+          final done = engine.resumeTurn(chatId).toList();
+          response.complete(http.Response([
+            'data: ${jsonEncode({'choices': [{'index': 0, 'delta': {'content': '故事继续了。'}}]})}\n\n',
+            'data: ${jsonEncode({'choices': [{'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'}]})}\n\n',
+            'data: [DONE]\n\n',
+          ].join(), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'}));
+          final events = await settleMixed(tester, done);
+          expect(events.whereType<story.TavernTurnFailed>(), isEmpty);
+          expect(events.whereType<story.TavernTurnDone>(), hasLength(1));
+          // These display providers may already have been started by the Page.
+          await settleMixed(tester, readStoryRows());
+          await tester.pumpAndSettle();
+        }
+
+        Future<void> leaveStory() async {
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.byType(TavernChatPage), findsNothing);
+          expect(find.byType(TavernHomePage), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+          await tester.pumpAndSettle();
+          storyScope!.dispose();
+          storyScope = null;
+          await settleMixed(tester, engine.close());
+        }
+
+        const storyName = '故事里叫我校长。';
+        await openStory(first: true);
+        expect(storyPosts, isEmpty);
+        await storySay(storyName);
+        expect(storyPosts, hasLength(1));
+        expect((storyPosts.single['messages']! as List).cast<Map>()
+          .where((row) => row['role'] == 'user').map((row) => row['content']).join('\n'), contains(storyName));
+        final before = (await tester.runAsync(() => engine.path(chatId)))!;
+        expect(before.where((row) => row.role == story.TavernRole.user).single.text, storyName);
+        final oldPath = [for (final row in before) (row.nodeId, row.parentId, row.role, row.text, row.at)];
+        await leaveStory();
+
+        // The phone owner lives across room visits, as in the app. The test
+        // adds only a receipt observer; the Page still submits and extracts.
+        final memory = _ReceiptMemory(
+          CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
+            nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch),
+          CompanionLocal.at(root),
+        );
+        phoneMemory = memory;
+        final chats = <Map<String, Object?>>[];
+        final extracts = <Map<String, Object?>>[];
+        late Completer<void> phoneEntered;
+        const realName = '现实里，我的称呼是阿橙。';
+        final phoneClient = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          if (body['system'] == companionMemoryExtractionPrompt) {
+            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            extracts.add(input);
+            final source = (input['source']! as List).cast<Map>().single;
+            expect(source['text'], realName);
+            return http.Response(_sse([jsonEncode({
+              'schema_version': 2, 'batch_id': input['batch_id'],
+              'covered_message_ids': [source['id']], 'completion': 'complete',
+              'operations': [{
+                'op': 'create', 'kind': 'fact', 'text': realName, 'keywords': ['称呼', '阿橙'],
+                'evidence': [{'message_id': source['id'], 'quote': source['text']}],
+              }],
+            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          }
+          chats.add(body);
+          phoneEntered.complete();
+          return http.Response(_sse(['我听到了。']), 200,
+            headers: {'content-type': 'text/event-stream; charset=utf-8'});
+        });
+        await openLight(tester, apiKey: 'sk-test', client: phoneClient, extra: [
+          companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+        ]);
+        expect(await memoryOf(tester), same(memory));
+        await settleMixed(tester, memory.migrateLocal());
+        await tester.pumpAndSettle();
+        expect(memory.store.messages(), isEmpty);
+        expect(memory.store.cards(), isEmpty);
+
+        Future<void> realSay(String text) async {
+          await tester.enterText(find.byType(TextField), text);
+          await tester.pump();
+          phoneEntered = Completer<void>();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, phoneEntered.future);
+          await settleMixed(tester, memory.lastReceipt);
+          await tester.pumpAndSettle();
+          expect(memory.store.requests().where((row) => row['category'] == 'chat').last['terminal'], 'complete');
+        }
+
+        await realSay(realName);
+        final source = memory.store.messages().singleWhere((row) => row['role'] == 'user');
+        expect(source['text'], realName);
+        expect(source['scope'], 'real');
+        final page = tester.state(find.byType(CompanionPage));
+        expect(await tester.runAsync(() => memory.extract(page, forceTail: true)), CompanionMemoryWork.committed);
+        expect(extracts, hasLength(1));
+        final card = memory.store.cards().single;
+        expect(card['text'], realName);
+        final proof = (card['evidence']! as List).cast<Map>().single;
+        expect(proof['message_id'], source['id']);
+        expect(proof['source_rev'], source['source_rev']);
+        expect(proof['quote'], realName);
+        await realSay('我怎么称呼？');
+        expect(chats, hasLength(2));
+        expect(jsonEncode(chats), isNot(contains('校长')));
+        final lastContent = (((chats.last['messages']! as List).last as Map)['content']! as List).cast<Map>();
+        final block = lastContent.map((part) => part['text'] as String).singleWhere((text) => text.contains('companion_memory'));
+        expect((jsonDecode(block) as Map)['items'], [
+          {'id': card['id'], 'kind': 'fact', 'text': realName},
+        ]);
+        final phoneMessages = memory.store.messages();
+        final phoneCards = memory.store.cards();
+        final phoneReceipts = memory.store.requests();
+        expect(jsonEncode(phoneMessages), isNot(contains('校长')));
+        expect(phoneReceipts.where((row) => row['category'] == 'chat'), hasLength(2));
+        expect(phoneReceipts.where((row) => row['category'] == 'extract'), hasLength(1));
+        expect(phoneReceipts.every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'), isTrue);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+
+        // The home opens the saved chat, not a replacement chat or a new
+        // story card. No test writes the old name back into either archive.
+        await openStory();
+        final reopened = (await tester.runAsync(() => engine.path(chatId)))!;
+        expect([for (final row in reopened) (row.nodeId, row.parentId, row.role, row.text, row.at)], oldPath);
+        const continuation = '我们接着刚才的故事说。';
+        await storySay(continuation);
+        expect(storyPosts, hasLength(2));
+        final storyMessages = (storyPosts.last['messages']! as List).cast<Map>();
+        final userText = storyMessages.where((row) => row['role'] == 'user').map((row) => row['content']).join('\n');
+        expect(userText, contains(storyName));
+        expect(userText, contains(continuation));
+        final outgoing = jsonEncode(storyPosts.last);
+        expect(outgoing, isNot(contains('阿橙')));
+        expect(outgoing, isNot(contains('companion_memory')));
+        expect(outgoing, isNot(contains('phoneMemory')));
+        final after = (await tester.runAsync(() => engine.path(chatId)))!;
+        expect([for (final row in after.take(before.length)) (row.nodeId, row.parentId, row.role, row.text, row.at)], oldPath);
+        expect(memory.store.messages(), phoneMessages);
+        expect(memory.store.cards(), phoneCards);
+        expect(memory.store.requests(), phoneReceipts);
+        await leaveStory();
+      });
 
       for (final changedPreference in [false, true]) {
         testWidgets(changedPreference
