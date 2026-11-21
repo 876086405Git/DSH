@@ -75,6 +75,7 @@ import '../workshop/workshop_screen.dart';
 import '../workspace/directory_picker.dart';
 import 'companion_ask.dart';
 import 'companion_chrome.dart';
+import 'companion_draft_inputs.dart';
 import 'companion_log.dart';
 import 'companion_memory_page.dart';
 import 'companion_persona_page.dart';
@@ -464,18 +465,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // A queued light-room task keeps that source identity even when a
       // connection makes the currently displayed room use full mode.
       ...memory.store.pendingFindDraftTasks(hostKey: hostKey),
+      ...memory.store.pendingCompareDraftTasks(hostKey: hostKey),
     ];
     for (final task in tasks) {
       try {
         final current = memory.store.hostTask(task['task_id']! as String)!;
         final agreement = current['agreement']! as MemoryRow;
-        final firstFind = current['kind'] == 'host.find_draft' && current['state'] == 'queued' &&
+        final firstDelivery = const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) && current['state'] == 'queued' &&
           current['host_store_id'] != null && current['cancel_requested'] == 0 &&
           agreement['allowQueue'] == true && agreement['afterExit'] == 'continue' &&
           memory.store.hostTaskCommands(current['task_id']! as String).every((row) => row['possible_sent_at_ms'] == null);
-        // Only an explicitly queued, never attempted H command may make its
+        // Only an explicitly queued, never attempted H/I command may make its
         // first delivery here. The store checks its original deadline at send.
-        await memory.hostTasks.run(current, client: client, hostKey: hostKey, submitPending: firstFind);
+        await memory.hostTasks.run(current, client: client, hostKey: hostKey, submitPending: firstDelivery);
       } on Object {
         // Keep the original command and any possible dispatch. A later visit
         // can query the original store; this does not create a replacement.
@@ -2194,6 +2196,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
               parseCompanionLookup(part.raw)?['operation'] == 'cancel' ||
               parseCompanionNotes(part.raw)?['operation'] == 'cancel' ||
               parseCompanionFind(part.raw)?['operation'] == 'cancel' ||
+              parseCompanionCompare(part.raw)?['operation'] == 'cancel' ||
               const ['cancel', 'amend', 'reopen'].contains(parseCompanionMap(part.raw)?['operation']),
         );
   }
@@ -2274,11 +2277,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     for (final part in reminderParts) {
       final notes = parseCompanionNotes(part.raw);
       final draft = parseCompanionFind(part.raw);
+      final compare = parseCompanionCompare(part.raw);
       // A complete known command wins over the other command's request to
       // clarify, including a find folder whose label contains “笔记待办”.
-      notesCommands[part.itemNo] = notes != null && notes['operation'] != 'clarify' ? notes : draft ?? notes;
+      notesCommands[part.itemNo] = notes != null && notes['operation'] != 'clarify' ? notes
+        : draft != null && draft['operation'] != 'clarify' ? draft : compare ?? draft ?? notes;
     }
     final notes = notesCommands.values.any((command) => command != null);
+    final compare = notesCommands.values.any((command) => command?['kind'] == 'host.compare_drafts');
     final mapCommands = {for (final part in reminderParts) part.itemNo: parseCompanionMap(part.raw)};
     final map = mapCommands.values.any((command) => command != null);
     final reminderClock =
@@ -2405,6 +2411,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             ? companionReminderFailure(context.l10n, error)
             : lookup
             ? context.l10n.companionLookupSaveFailed
+            : compare
+            ? context.l10n.companionCompareSaveFailed
             : notes
             ? context.l10n.companionNotesSaveFailed
             : map
@@ -2466,7 +2474,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
               }
             } on Object {
               failed = true;
-              lines.add(l10n.companionNotesSaveFailed);
+              lines.add(notesCommand['kind'] == 'host.compare_drafts' ? l10n.companionCompareSaveFailed : l10n.companionNotesSaveFailed);
             }
           } else if (mapCommands[part.itemNo] case final mapCommand?) {
             try {
@@ -2530,7 +2538,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             (!_mapHere || mapGeneration != _mapHandoff.generation))) {
       return;
     }
-    if (notesCommands.values.any((command) => command?['kind'] == 'host.find_draft') &&
+    if (notesCommands.values.any((command) => const ['host.find_draft', 'host.compare_drafts'].contains(command?['kind'])) &&
         (_logOpen || !(ModalRoute.of(context)?.isCurrent ?? true))) {
       return;
     }
@@ -2657,6 +2665,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     bool Function() current,
   ) async {
     final l10n = context.l10n;
+    if (command['kind'] == 'host.compare_drafts') {
+      return _handleCompare(memory, source, itemNo, command, current);
+    }
     final find = command['kind'] == 'host.find_draft';
     if (command['operation'] == 'clarify') {
       return (line: find ? l10n.companionFindSyntax : l10n.companionNotesSyntax, task: null);
@@ -2859,6 +2870,88 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       submitPending: true,
       capability: capability,
     );
+    return (line: companionNotesLine(l10n, task), task: task);
+  }
+
+  Future<({String line, MemoryRow? task})> _handleCompare(
+    CompanionMemoryOwner memory, MemoryRow source, int itemNo, MemoryRow command, bool Function() current,
+  ) async {
+    final l10n = context.l10n;
+    if (command['operation'] == 'clarify') {
+      return (line: l10n.companionCompareSyntax, task: null);
+    }
+    final host = ref.read(activeHostProvider);
+    final hostKey = companionHostKey(host);
+    final client = ref.read(activeConnectionProvider).value?.client;
+    final light = _light;
+    bool here() => mounted && current() && host == ref.read(activeHostProvider) &&
+      identical(client, ref.read(activeConnectionProvider).value?.client) &&
+      !_logOpen && (ModalRoute.of(context)?.isCurrent ?? true);
+    final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
+    CompanionTasksCapability? capability;
+    MemoryRow task;
+    if (accepted != null) {
+      task = memory.store.hostTask(accepted['task_id']! as String)!;
+    } else if (command['operation'] == 'cancel') {
+      final targets = memory.store.pendingCompareDraftTasks(hostKey: hostKey)
+        .where((row) => row['source_session_id'] == source['session_id'] && row['cancel_requested'] == 0).toList();
+      if (targets.length != 1) {
+        return (line: l10n.companionCompareWhich, task: null);
+      }
+      if (!here()) {
+        throw const DshClosedException('room changed before accepting compare cancellation');
+      }
+      task = memory.store.cancelCompareDraftTask(taskId: targets.single['task_id']! as String,
+        expectedTaskRev: targets.single['task_rev']! as int, messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+    } else {
+      final agreement = await companionCompareAgreement(source, command, ref.read(companionRemindersProvider));
+      if (!here()) {
+        throw const DshClosedException('room changed before choosing the drafts');
+      }
+      if (agreement == null) {
+        return (line: l10n.companionCompareDeadlineMissing, task: null);
+      }
+      if (client != null) {
+        capability = await client.readCompanionTasksCapability();
+        if (!here()) {
+          throw const DshClosedException('room changed while checking the original Host');
+        }
+        if (capability == null || !capability.compareDrafts) {
+          return (line: l10n.companionCompareUnavailable, task: null);
+        }
+      } else if (memory.store.hostTaskInputs(hostKey: hostKey).isEmpty) {
+        return (line: l10n.companionCompareConnect, task: null);
+      }
+      if (!mounted) {
+        throw const DshClosedException('room closed before selecting the drafts');
+      }
+      final inputs = await chooseCompanionDraftInputs(context, store: memory.store, hostKey: hostKey,
+        client: client, capability: capability, isCurrent: here);
+      if (!here()) {
+        throw const DshClosedException('room changed before saving the complete comparison');
+      }
+      if (inputs == null) {
+        return (line: l10n.companionCompareNoInputs, task: null);
+      }
+      task = memory.store.createCompareDraftTaskFromMessage(messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
+        roomMode: light ? 'light' : 'full', hostKey: hostKey, hostSessionId: light ? null : _sessionId,
+        inputs: inputs, agreement: {...agreement, 'args': {
+          for (final side in ['a', 'b']) side: {
+            'sourceRef': (inputs[side]! as MemoryRow)['sourceRef'], 'version': (inputs[side]! as MemoryRow)['version'],
+          },
+          'maxHighlights': 3,
+        }});
+    }
+    memory.changed();
+    if (client == null || hostKey != task['host_key']) {
+      return (line: l10n.companionCompareOriginalHost, task: task);
+    }
+    // Acceptance owns the task beyond this visit. Leaving now changes only
+    // presentation; execution follows the person's original afterExit terms.
+    task = await memory.hostTasks.run(task, client: client, hostKey: hostKey,
+      initialOpportunity: accepted == null, submitPending: true, capability: capability);
     return (line: companionNotesLine(l10n, task), task: task);
   }
 

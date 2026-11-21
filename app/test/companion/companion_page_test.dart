@@ -64,6 +64,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
 import '../support/companion_notes_peer.dart';
+import '../support/companion_compare_peer.dart';
 import '../support/companion_map_platform_peer.dart';
 
 Widget _app(
@@ -927,6 +928,438 @@ void main() {
               expect(peer.calls.where((call) => call.method == 'handoff'), hasLength(1));
             }
           }
+          expect(modelPosts, 0);
+        });
+      }
+
+      for (final scenario in [
+        'accepted',
+        'source-failure',
+        'leave-during-second-input',
+        'cancel-during-second-input',
+        'leave-after-acceptance',
+      ]) {
+        testWidgets('I actual Page selects A then B before one durable comparison: $scenario', (tester) async {
+          const now = 1795219200000;
+          const channel = MethodChannel('dsh/companion_reminders');
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root),
+            nowMilliseconds: () => now,
+          );
+          final peer = (await tester.runAsync(NotesPeer.open))!;
+          peer.capability = compareCapability;
+          final browsers = [Completer<void>(), Completer<void>()];
+          final inputsRead = [Completer<void>(), Completer<void>()];
+          final releaseSecond = Completer<void>();
+          final postRead = Completer<void>();
+          final releasePost = Completer<void>();
+          final nativeCalls = <MethodCall>[];
+          final sourceAtRead = <List<MemoryRow>>[];
+          final taskCountAtBind = <int>[];
+          final possibleAtPost = <int?>[];
+          MemoryRow? snapshot;
+          Future<void>? handling;
+          var directoryReads = 0;
+          var inputReads = 0;
+          var modelPosts = 0;
+          var disposed = false;
+          addTearDown(() async {
+            if (!releaseSecond.isCompleted) {
+              releaseSecond.complete();
+            }
+            if (!releasePost.isCompleted) {
+              releasePost.complete();
+            }
+            await tester.pumpWidget(const SizedBox());
+            if (handling != null) {
+              await settleMixed(tester, handling!);
+            }
+            if (!disposed) {
+              memory.dispose();
+            }
+            await tester.pump();
+            await tester.runAsync(peer.close);
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            nativeCalls.add(call);
+            return switch (call.method) {
+              'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+              'resolve' => {
+                'kind': 'unique',
+                'moments': [
+                  {'epochMs': DateTime.utc(2026, 11, 21, 12).millisecondsSinceEpoch, 'offsetSeconds': 28800},
+                ],
+              },
+              'capabilities' => {'executorId': 'phone-original', 'exact': true, 'notifications': true},
+              'recover' => {'recoveryQueued': true},
+              _ => throw StateError('Unexpected native comparison call ${call.method}'),
+            };
+          });
+          peer.respond = (request, body) async {
+            if (request.uri.path == '/api/directoryPicker/list') {
+              final side = directoryReads++;
+              sourceAtRead.add(memory.store.messages().where((row) => row['role'] == 'user').toList());
+              await NotesPeer.json(request, {
+                'type': 'server-response',
+                'rpcId': body!['rpcId'],
+                'result': {
+                  'ok': true,
+                  'value': {
+                    'path': '/本人选的稿件',
+                    'home': '/本人选的稿件',
+                    'crumbs': [
+                      {'name': '本人选的稿件', 'path': '/本人选的稿件'},
+                    ],
+                    'entries': <Object?>[],
+                  },
+                },
+              });
+              browsers[side].complete();
+            } else if (request.uri.path == '$notesPath/folders') {
+              await NotesPeer.json(request, {
+                'v': 1,
+                'hostStoreId': 'original-store',
+                'folderRef': 'bound-drafts',
+                'displayPath': '/本人选的稿件',
+              });
+            } else if (request.uri.path == '$notesPath/inputs') {
+              final side = inputReads++;
+              taskCountAtBind.add(memory.store.tasks().length);
+              inputsRead[side].complete();
+              if (side == 1) {
+                await releaseSecond.future;
+              }
+              await NotesPeer.json(request, compareInputs()[side == 0 ? 'a' : 'b']);
+            } else if (request.method == 'POST' && request.uri.path == notesPath) {
+              final command = memory.store.hostTaskCommands(body!['taskId']! as String).single;
+              possibleAtPost.add(command['possible_sent_at_ms'] as int?);
+              snapshot = notesSnapshot(body);
+              postRead.complete();
+              if (scenario == 'leave-after-acceptance') {
+                await releasePost.future;
+              }
+              await NotesPeer.json(request, snapshot!, status: 201);
+            } else if (request.method == 'GET' && request.uri.path == '$notesPath/${snapshot?['taskId']}') {
+              await NotesPeer.json(request, snapshot!);
+            } else {
+              await NotesPeer.json(request, {
+                'error': {'code': 'companion/task-not-found', 'message': 'No saved comparison'},
+              }, status: 404);
+            }
+          };
+          await openLight(
+            tester,
+            apiKey: '',
+            client: MockClient((_) async {
+              modelPosts++;
+              throw StateError('The comparison entry must not use a phone model');
+            }),
+            connection: HostConnection(client: peer.client, isLocal: false),
+            extra: [
+              companionModeProvider.overrideWith(_NotesLightMode.new),
+              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+            ],
+          );
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          final sourceRoom = memory.store.lightSessionId;
+          if (scenario == 'source-failure') {
+            db.execute("CREATE TRIGGER reject_compare BEFORE INSERT ON memory_events "
+                "BEGIN SELECT RAISE(ABORT,'fixture disk error'); END");
+          }
+          await tester.enterText(find.byType(TextField), compareSpokenExample);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          if (scenario == 'source-failure') {
+            await _notesVisible(tester, find.text('这次对稿还没核清，请稍后再查看这件事。'));
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, compareSpokenExample);
+            expect(memory.store.messages(), isEmpty);
+            expect(memory.store.tasks(), isEmpty);
+            expect(peer.calls, isEmpty);
+            expect(modelPosts, 0);
+            return;
+          }
+          for (var side = 0; side < 2; side++) {
+            await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            handling ??= memory.lastReceipt;
+            await tester.tap(find.text('主目录').last);
+            await settleMixed(tester, browsers[side].future);
+            final choose = find.descendant(
+              of: find.byType(DirectoryBrowserPage),
+              matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+            ).last;
+            await _notesVisible(tester, choose);
+            await tester.tap(choose);
+            final title = side == 0 ? '输入 A · 旧稿 的文件名' : '输入 B · 新稿 的文件名';
+            await _notesVisible(tester, find.text(title));
+            final dialog = find.byType(AlertDialog);
+            await tester.enterText(find.descendant(of: dialog, matching: find.byType(TextField)), side == 0 ? 'A.md' : 'B.txt');
+            await tester.tap(find.descendant(of: dialog, matching: find.text('保存')));
+            await settleMixed(tester, inputsRead[side].future);
+          }
+          // Both selections are actual user actions and HTTP bindings. The B
+          // response is still held; no incomplete task may have been accepted.
+          expect(taskCountAtBind, [0, 0]);
+          expect(memory.store.tasks(), isEmpty);
+          expect(peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath), isEmpty);
+          expect(sourceAtRead, hasLength(2));
+          expect(sourceAtRead.every((rows) => rows.length == 1 && rows.single['text'] == compareSpokenExample), isTrue);
+          expect(sourceAtRead.first.single['id'], sourceAtRead.last.single['id']);
+          expect(sourceAtRead.first.single['first_seq'], sourceAtRead.last.single['first_seq']);
+          expect(peer.calls.where((call) => call.uri.path == '$notesPath/inputs').map((call) => call.body), [
+            {'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'bound-drafts', 'name': 'A.md'},
+            {'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'bound-drafts', 'name': 'B.txt'},
+          ]);
+          expect(nativeCalls.where((call) => call.method == 'resolve').single.arguments, {
+            'localDate': '2026-11-21', 'localTime': '20:00', 'zoneId': 'Asia/Shanghai',
+          });
+          if (scenario == 'leave-during-second-input') {
+            await tester.pumpWidget(const SizedBox());
+          } else if (scenario == 'cancel-during-second-input') {
+            await _notesVisible(tester, find.byType(AlertDialog), absent: true);
+            await tester.enterText(find.byType(TextField), '取消对稿');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await _notesVisible(tester, find.text('要停止哪次对稿？请打开那件事再点停止。'));
+          }
+          releaseSecond.complete();
+          if (scenario == 'leave-after-acceptance') {
+            await settleMixed(tester, postRead.future);
+            expect(memory.store.tasks(), hasLength(1));
+            await tester.pumpWidget(const SizedBox());
+            releasePost.complete();
+          }
+          await settleMixed(tester, handling!);
+          await tester.pump();
+          final accepted = scenario == 'accepted' || scenario == 'leave-after-acceptance';
+          final posts = peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath).toList();
+          if (!accepted) {
+            expect(memory.store.tasks(), isEmpty);
+            expect(posts, isEmpty);
+          } else {
+            expect(posts, hasLength(1));
+            expect(possibleAtPost, [now]);
+            final request = posts.single.body!;
+            final task = memory.store.hostTask(request['taskId']! as String)!;
+            expect(request['kind'], 'host.compare_drafts');
+            expect(request['args'], compareAgreement()['args']);
+            expect(request['hostSessionId'], isNull);
+            expect(request['deadlineAtMs'], DateTime.utc(2026, 11, 21, 12).millisecondsSinceEpoch);
+            expect(request['allowQueue'], isTrue);
+            expect(request['afterExit'], 'continue');
+            expect(task['source_session_id'], sourceRoom);
+            expect(task['directory_labels'], {'inputs': compareInputs()});
+            expect(task['state'], 'running');
+            if (scenario == 'accepted') {
+              await _notesVisible(tester, find.text('看看这件事'));
+              await tester.tap(find.text('看看这件事'));
+              await _notesVisible(tester, find.byType(CompanionTasksPage));
+              await settleMixed(tester, memory.lastReceipt);
+              expect(find.text('A · 旧稿：A.md'), findsOneWidget);
+              expect(find.text('B · 新稿：B.txt'), findsOneWidget);
+              expect(peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath), hasLength(1));
+            }
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            disposed = true;
+            final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+            expect(reopened.hostTask(request['taskId']! as String)!['directory_labels'], {'inputs': compareInputs()});
+            expect(reopened.messages().single['said_at_utc'], now);
+            expect(reopened.messages().single['session_id'], sourceRoom);
+            reopened.close();
+          }
+          expect(peer.calls.where((call) => call.uri.path.contains('/sources/') || call.uri.path.contains('/artifacts/')), isEmpty);
+          expect(peer.calls.where((call) => call.uri.path.contains('/session/') || call.uri.path.contains('/agent/')), isEmpty);
+          expect(modelPosts, 0);
+        });
+      }
+
+      for (final scenario in ['no-saved-inputs', 'queued-behind-two-hundred-tasks', 'already-possible']) {
+        testWidgets('I actual Page offline input selection and original Host recovery: $scenario', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          var now = 1795219200000;
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now),
+            CompanionLocal.at(root),
+            nowMilliseconds: () => now,
+          );
+          final peer = (await tester.runAsync(NotesPeer.open))!;
+          peer.capability = compareCapability;
+          var seeding = true;
+          var modelPosts = 0;
+          MemoryRow? snapshot;
+          final recovered = Completer<void>();
+          final posted = Completer<void>();
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            await tester.runAsync(peer.close);
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => switch (call.method) {
+            'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+            'resolve' => {
+              'kind': 'unique',
+              'moments': [
+                {'epochMs': DateTime.utc(2026, 11, 21, 12).millisecondsSinceEpoch, 'offsetSeconds': 28800},
+              ],
+            },
+            'recover' => {'recoveryQueued': true},
+            'capabilities' => {'executorId': 'phone-original', 'exact': true, 'notifications': true},
+            _ => throw StateError('Unexpected comparison time call ${call.method}'),
+          });
+          peer.respond = (request, body) async {
+            if (request.uri.path == '$notesPath/folders') {
+              await NotesPeer.json(request, {
+                'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'bound-drafts', 'displayPath': '/本人选的稿件',
+              });
+            } else if (request.uri.path == '$notesPath/inputs') {
+              await NotesPeer.json(request, compareInputs()[body!['name'] == 'A.md' ? 'a' : 'b']);
+            } else if (request.method == 'POST' && request.uri.path == notesPath) {
+              snapshot = {
+                ...notesSnapshot(body!, state: seeding ? 'done' : 'running', steps: seeding ? [compareReportStep()] : []),
+                'hostExecutionId': seeding ? 'previous-comparison' : 'new-comparison',
+              };
+              await NotesPeer.json(request, snapshot!, status: 201);
+              if (!seeding) {
+                posted.complete();
+              }
+            } else if (request.method == 'GET' && request.uri.path.startsWith('$notesPath/')) {
+              if (snapshot != null && request.uri.path == '$notesPath/${snapshot!['taskId']}') {
+                await NotesPeer.json(request, snapshot!);
+              } else {
+                await NotesPeer.json(request, {
+                  'error': {'code': 'companion/task-not-found', 'message': 'No saved comparison'},
+                }, status: 404);
+              }
+              if (!seeding && !recovered.isCompleted) {
+                recovered.complete();
+              }
+            } else {
+              await NotesPeer.json(request, {
+                'error': {'code': 'companion/not-found', 'message': 'No ordinary session route'},
+              }, status: 404);
+            }
+          };
+          await openLight(
+            tester,
+            apiKey: '',
+            client: MockClient((_) async {
+              modelPosts++;
+              throw StateError('The comparison entry must not call a phone model');
+            }),
+            connectionOverride: activeConnectionProvider.overrideWith((ref) => AsyncData(ref.watch(_findConnectionProvider))),
+            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+          );
+          final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          final hostKey = companionHostKey(container.read(activeHostProvider));
+          final sourceRoom = memory.store.lightSessionId;
+          void addOtherTasks(int start) {
+            for (var index = start; index < start + 100; index++) {
+              now++;
+              final id = 'unrelated-$index';
+              memory.store.submitMessage(id: id, sessionId: 'light:other-room', text: '提醒我处理第$index条',
+                saidAtUtc: now, offsetMinutes: 480);
+              memory.store.createReminderFromMessage(messageId: id, expectedSourceRev: 1, itemNo: 0,
+                roomMode: 'light', executorId: 'phone-original',
+                reminder: CompanionReminderSpec(text: '处理第$index条', waitReason: 'date_missing'));
+            }
+          }
+          if (scenario != 'no-saved-inputs') {
+            // Bind each explicit original through the real client HTTP first.
+            // Only those saved responses can later appear in the offline picker.
+            await tester.runAsync(() async {
+              final capability = (await peer.client.readCompanionTasksCapability())!;
+              final folder = await peer.client.bindCompanionNotesDirectory(capability, '/本人选的稿件');
+              final inputs = <String, Object?>{};
+              for (final side in ['a', 'b']) {
+                inputs[side] = await peer.client.bindCompanionDraftInput(capability,
+                  folderRef: folder['folderRef']! as String, name: side == 'a' ? 'A.md' : 'B.txt');
+              }
+              memory.store.submitMessage(id: 'old-compare', sessionId: 'light:previous-room', text: compareSpokenExample,
+                saidAtUtc: now, offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+              final old = memory.store.createCompareDraftTaskFromMessage(messageId: 'old-compare', expectedSourceRev: 1,
+                itemNo: 0, roomMode: 'light', hostKey: hostKey, inputs: inputs, agreement: compareAgreement());
+              final operation = memory.store.prepareHostTaskOperation(taskId: old['task_id']! as String, taskRev: 1,
+                hostKey: hostKey, hostStoreId: 'original-store', initialOpportunity: true)!;
+              final reply = await peer.client.writeCompanionHostTask(taskId: old['task_id']! as String, operation: 'create',
+                request: operation['request']! as MemoryRow);
+              memory.store.importHostTaskSnapshot(taskId: old['task_id']! as String, hostKey: hostKey, snapshot: reply);
+            });
+          }
+          seeding = false;
+          snapshot = null;
+          peer.calls.clear();
+          if (scenario == 'queued-behind-two-hundred-tasks') {
+            addOtherTasks(0);
+            expect(memory.store.tasks().any((row) => row['kind'] == 'host.compare_drafts'), isFalse);
+          }
+          final saidAt = now;
+          await tester.enterText(find.byType(TextField), compareSpokenExample);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          if (scenario == 'no-saved-inputs') {
+            await _notesVisible(tester, find.text('先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。'));
+            await settleMixed(tester, memory.lastReceipt);
+            expect(memory.store.tasks(), isEmpty);
+            expect(memory.store.messages().single['text'], compareSpokenExample);
+            expect(peer.calls, isEmpty);
+            expect(modelPosts, 0);
+            return;
+          }
+          await _notesVisible(tester, find.text('选择之前选过的 A · 旧稿'));
+          final handled = memory.lastReceipt;
+          await tester.tap(find.text('A.md'));
+          await _notesVisible(tester, find.text('选择之前选过的 B · 新稿'));
+          await tester.tap(find.text('B.txt'));
+          await settleMixed(tester, handled);
+          await tester.pump();
+          final task = memory.store.tasks(sourceSessionId: sourceRoom).single;
+          final id = task['task_id']! as String;
+          expect(task['state'], 'queued');
+          expect(memory.store.hostTask(id)!['directory_labels'], {'inputs': compareInputs()});
+          expect(memory.store.hostTaskCommands(id).single['possible_sent_at_ms'], isNull);
+          expect(peer.calls, isEmpty);
+          if (scenario == 'queued-behind-two-hundred-tasks') {
+            addOtherTasks(100);
+            expect(memory.store.tasks().any((row) => row['task_id'] == id), isFalse);
+          } else {
+            final original = memory.store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: hostKey,
+              hostStoreId: 'original-store', initialOpportunity: true)!['request']! as MemoryRow;
+            snapshot = {
+              ...notesSnapshot(original, state: 'unknown'),
+              'waitReason': 'read_interrupted',
+            };
+          }
+          container.read(_findConnectionProvider.notifier).connect(HostConnection(client: peer.client, isLocal: false));
+          await tester.pump();
+          await settleMixed(tester, scenario == 'already-possible' ? recovered.future : posted.future);
+          await settleMixed(tester, memory.lastReceipt);
+          await tester.pump();
+          final current = memory.store.hostTask(id)!;
+          expect(container.read(companionModeProvider), isNull);
+          expect(container.read(activeConnectionProvider).value!.client, same(peer.client));
+          expect(current['source_session_id'], sourceRoom);
+          expect(current['room_mode'], 'light');
+          expect(current['host_session_id'], isNull);
+          expect(current['task_rev'], 1);
+          expect(current['state'], scenario == 'already-possible' ? 'unknown' : 'running');
+          expect((current['agreement']! as MemoryRow)['args'], compareAgreement()['args']);
+          expect(memory.store.messages().singleWhere((row) => row['id'] == task['source_message_id'])['said_at_utc'], saidAt);
+          final creates = peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath).toList();
+          expect(creates, hasLength(scenario == 'already-possible' ? 0 : 1));
+          expect(peer.calls.where((call) => call.uri.path.endsWith('/inputs') || call.uri.path.endsWith('/folders')), isEmpty);
+          expect(peer.calls.where((call) => call.method == 'POST' &&
+            (call.uri.path.contains('/session') || call.uri.path.contains('/prompt') || call.uri.path.contains('/auxiliary'))), isEmpty);
+          expect(memory.store.hostTaskCommands(id), hasLength(1));
           expect(modelPosts, 0);
         });
       }

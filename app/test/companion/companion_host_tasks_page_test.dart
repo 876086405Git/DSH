@@ -9,6 +9,8 @@ import 'package:dsh_app/notify/chat_alerts.dart' show companionHostKey;
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/ui/companion/companion_tasks_page.dart';
+import 'package:dsh_app/ui/companion/companion_draft_inputs.dart';
+import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../support/companion_notes_peer.dart';
+import '../support/companion_compare_peer.dart';
 import 'companion_test_settle.dart';
 
 const _now = 1795219200000;
@@ -150,6 +153,509 @@ void main() {
     }
     expect(find.text(text), findsOneWidget);
   }
+
+  MemoryRow compareCommand({int? deadline}) {
+    peer.capability = compareCapability;
+    memory.store.submitMessage(
+      id: 'compare-source',
+      sessionId: 'light:original-room',
+      text: compareSpokenExample,
+      saidAtUtc: _now,
+      offsetMinutes: 480,
+      offsetSeconds: 28800,
+      zoneId: 'Asia/Shanghai',
+    );
+    final task = memory.store.createCompareDraftTaskFromMessage(
+      messageId: 'compare-source',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      roomMode: 'light',
+      hostKey: hostKey,
+      agreement: compareAgreement(deadline: deadline),
+      inputs: compareInputs(),
+    );
+    return memory.store.prepareHostTaskOperation(
+      taskId: task['task_id']! as String,
+      taskRev: 1,
+      hostKey: hostKey,
+      hostStoreId: 'original-store',
+      initialOpportunity: true,
+    )!['request']! as MemoryRow;
+  }
+
+  for (final ambiguity in ['new-version-same-name', 'other-directory-same-name']) {
+    testWidgets('I offline picker does not guess among persisted original inputs: $ambiguity', (tester) async {
+      peer.capability = compareCapability;
+      var aBindings = 0;
+      peer.respond = (request, body) async {
+        if (request.uri.path == '$notesPath/folders') {
+          await NotesPeer.json(request, {
+            'v': 1,
+            'hostStoreId': 'original-store',
+            'folderRef': body!['path'] == '/原稿目录' ? 'original-folder' : 'another-folder',
+            'displayPath': body['path'],
+          });
+        } else if (request.uri.path == '$notesPath/inputs') {
+          final side = body!['name'] == 'A.md' ? 'a' : 'b';
+          final input = compareInputs()[side]! as MemoryRow;
+          await NotesPeer.json(request, side == 'a' ? {
+            ...input,
+            'sourceRef': 'chosen-A-${aBindings++}',
+            'version': '${body['folderRef']}-version-$aBindings',
+          } : input);
+        } else {
+          await NotesPeer.json(request, {'error': {'code': 'companion/not-found', 'message': 'No comparison route'}}, status: 404);
+        }
+      };
+      await tester.runAsync(() async {
+        final capability = (await peer.client.readCompanionTasksCapability())!;
+        MemoryRow? retainedB;
+        for (var selection = 0; selection < 2; selection++) {
+          final folder = await peer.client.bindCompanionNotesDirectory(capability,
+            selection == 1 && ambiguity == 'other-directory-same-name' ? '/另一处稿件' : '/原稿目录');
+          final inputs = <String, Object?>{};
+          for (final side in ['a', 'b']) {
+            if (side == 'b' && retainedB != null) {
+              // The person retains the exact previously selected B; this is
+              // not a second bind falsely returning the same random input ID.
+              inputs[side] = retainedB;
+            } else {
+              final bound = await peer.client.bindCompanionDraftInput(capability,
+                folderRef: folder['folderRef']! as String, name: side == 'a' ? 'A.md' : 'B.txt');
+              inputs[side] = bound;
+              if (side == 'b') {
+                retainedB = bound;
+              }
+            }
+          }
+          memory.store.submitMessage(id: 'selection-$selection', sessionId: 'light:previous-room',
+            text: '选择这两份稿件，电脑上线后继续对照，原文件别动。', saidAtUtc: now,
+            offsetMinutes: 480, offsetSeconds: 28800, zoneId: 'Asia/Shanghai');
+          memory.store.createCompareDraftTaskFromMessage(messageId: 'selection-$selection', expectedSourceRev: 1,
+            itemNo: 0, roomMode: 'light', hostKey: hostKey, inputs: inputs, agreement: {
+              ...compareAgreement(),
+              'args': {
+                for (final side in ['a', 'b']) side: {
+                  'sourceRef': (inputs[side]! as MemoryRow)['sourceRef'],
+                  'version': (inputs[side]! as MemoryRow)['version'],
+                },
+                'maxHighlights': 3,
+              },
+            });
+        }
+      });
+      final before = memory.store.hostTaskInputs(hostKey: hostKey);
+      expect(before, hasLength(3));
+      expect(before.where((row) => row['displayName'] == 'A.md'), hasLength(2));
+      final folderRequests = peer.calls.where((call) => call.uri.path == '$notesPath/folders').toList();
+      expect(folderRequests.map((call) => call.body!['path']), [
+        '/原稿目录', ambiguity == 'other-directory-same-name' ? '/另一处稿件' : '/原稿目录',
+      ]);
+      memory.dispose();
+      memory = _Memory(
+        CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now),
+        CompanionLocal.at(root),
+        nowMilliseconds: () => now,
+      );
+      expect(memory.store.hostTaskInputs(hostKey: hostKey), before);
+      final callsBeforePicker = peer.calls.length;
+      Future<MemoryRow?>? selection;
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: L10n.localizationsDelegates,
+        supportedLocales: L10n.supportedLocales,
+        locale: const Locale('zh'),
+        home: Builder(builder: (context) => Scaffold(body: FilledButton(
+          onPressed: () {
+            selection = chooseCompanionDraftInputs(context, store: memory.store, hostKey: hostKey,
+              client: null, capability: null, isCurrent: () => context.mounted);
+          },
+          child: const Text('选择原稿'),
+        ))),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择原稿'));
+      await tester.pumpAndSettle();
+      expect(find.text('这个名字对应不止一份已选稿件。请连上原来的电脑重新选。'), findsOneWidget);
+      expect(find.text('A.md'), findsOneWidget);
+      final ambiguous = find.ancestor(of: find.text('A.md'), matching: find.byType(SimpleDialogOption));
+      expect(tester.widget<SimpleDialogOption>(ambiguous).onPressed, isNull);
+      final unambiguous = find.ancestor(of: find.text('B.txt'), matching: find.byType(SimpleDialogOption));
+      expect(tester.widget<SimpleDialogOption>(unambiguous).onPressed, isNotNull);
+      await tester.tap(find.text('A.md'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择之前选过的 A · 旧稿'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      expect(await settleMixed(tester, selection!), isNull);
+      expect(memory.store.hostTaskInputs(hostKey: hostKey), before);
+      expect(memory.store.tasks(), hasLength(2));
+      expect(peer.calls, hasLength(callsBeforePicker));
+      await close(tester);
+    });
+  }
+
+  for (final result in ['completed', 'cancelled', 'recovered']) {
+    testWidgets('I task page imports the unchanged actual Host report without reopening originals: $result', (tester) async {
+      final cancelled = result == 'cancelled';
+      final recovered = result == 'recovered';
+      final filename = switch (result) {
+        'cancelled' => 'companion_compare_cancelled_host_wire.json',
+        'recovered' => 'companion_compare_owner_stopped_host_wire.json',
+        _ => 'companion_compare_host_wire.json',
+      };
+      final wire = jsonDecode(File('../packages/dsh_client/test/fixtures/$filename').readAsStringSync()) as MemoryRow;
+      final request = wire['create']! as MemoryRow;
+      final origin = request['origin']! as MemoryRow;
+      final id = request['taskId']! as String;
+      final snapshot = wire['complete']! as MemoryRow;
+      final selected = wire['inputs']! as MemoryRow;
+      now = snapshot['createdAtMs']! as int;
+      memory.dispose();
+      memory = _Memory(
+        CompanionMemoryStore(
+          sqlite3.open('${root.path}/memory.sqlite'),
+          nowMilliseconds: () => now,
+          createId: () => id,
+        ),
+        CompanionLocal.at(root),
+        nowMilliseconds: () => now,
+      );
+      memory.store.submitMessage(
+        id: origin['messageId']! as String,
+        sessionId: origin['sourceSessionId']! as String,
+        text: '比较本人已选的 A 旧稿与 B 新稿，列至多三处改动，电脑上线后继续，两个原件不改。',
+        saidAtUtc: now,
+        offsetMinutes: 480,
+        offsetSeconds: 28800,
+        zoneId: 'Asia/Shanghai',
+      );
+      memory.store.createCompareDraftTaskFromMessage(
+        messageId: origin['messageId']! as String,
+        expectedSourceRev: 1,
+        itemNo: origin['itemNo']! as int,
+        roomMode: 'light',
+        hostKey: hostKey,
+        inputs: selected,
+        agreement: {for (final key in ['args', 'deadlineAtMs', 'afterExit', 'allowQueue']) key: request[key]},
+      );
+      final prepared = memory.store.prepareHostTaskOperation(
+        taskId: id,
+        taskRev: 1,
+        hostKey: hostKey,
+        hostStoreId: request['hostStoreId']! as String,
+        initialOpportunity: true,
+      )!;
+      expect(prepared['request'], request);
+      if (cancelled) {
+        memory.store.submitMessage(
+          id: 'explicit-cancel-source',
+          sessionId: origin['sourceSessionId']! as String,
+          text: '取消这次对稿。',
+          saidAtUtc: now,
+          offsetMinutes: 480,
+        );
+        memory.store.cancelCompareDraftTask(
+          taskId: id,
+          expectedTaskRev: 1,
+          messageId: 'explicit-cancel-source',
+          expectedSourceRev: 1,
+          itemNo: 0,
+        );
+        memory.store.prepareHostTaskOperation(
+          taskId: id,
+          taskRev: 2,
+          hostKey: hostKey,
+          hostStoreId: request['hostStoreId']! as String,
+          initialOpportunity: false,
+        );
+      } else if (!recovered) {
+        memory.store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: wire['createReply']! as MemoryRow);
+      }
+      var response = recovered ? wire['before']! as MemoryRow : snapshot;
+      peer.respond = (request, _) => NotesPeer.json(request, response);
+      await open(tester, id);
+      try {
+        if (recovered) {
+          expect(memory.store.hostTask(id)!['snapshot'], wire['before']);
+          expect(memory.store.hostTask(id)!['state'], 'unknown');
+          expect(find.text('未完成的对照'), findsOneWidget);
+          expect(find.text('这次的文字对照'), findsNothing);
+          expect(find.text('两份稿件的对照已经准备好。'), findsNothing);
+          response = snapshot;
+          await tester.tap(find.byIcon(AppIcons.refresh));
+          await settleMixed(tester, memory.settled);
+          await tester.pumpAndSettle();
+          final oldReports = ((wire['before']! as MemoryRow)['steps']! as List<Object?>)
+              .cast<MemoryRow>().where((step) => step['stepKey'] == 'report').toList();
+          final reports = (snapshot['steps']! as List<Object?>)
+              .cast<MemoryRow>().where((step) => step['stepKey'] == 'report').toList();
+          expect(reports, hasLength(2));
+          expect(reports.first, oldReports.single);
+          expect(find.text('未完成的对照'), findsNothing);
+          expect(find.text('读到过这份稿件，但交还结果时没能确认还是原来那一份。'), findsNothing);
+        }
+        expect(memory.store.hostTask(id)!['snapshot'], snapshot);
+        expect(memory.store.hostTask(id)!['task_rev'], cancelled ? 2 : 1);
+        expect(memory.store.hostTask(id)!['state'], cancelled ? 'cancelled' : 'done');
+        expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], snapshot['runnerReceiptSeq']);
+        expect(find.text(cancelled ? '未完成的对照' : '这次的文字对照'), findsOneWidget);
+        if (cancelled) {
+          expect(find.text('已停止继续对稿，之前留下的对照还在。'), findsOneWidget);
+          expect(find.text('两份稿件的对照已经准备好。'), findsNothing);
+          expect(find.text('读到过这份稿件，但交还结果时没能确认还是原来那一份。'), findsOneWidget);
+        }
+        expect(find.text('A · 旧稿：${(selected['a']! as MemoryRow)['displayName']}'), findsNWidgets(2));
+        expect(find.text('B · 新稿：${(selected['b']! as MemoryRow)['displayName']}'), findsNWidgets(2));
+        expect(find.text('文字变化 1'), findsOneWidget);
+        expect(find.text('文字变化 2'), findsOneWidget);
+        expect(find.text('文字变化 3'), findsNothing);
+        expect(find.text('A · 旧稿 · 第 3 段'), findsOneWidget);
+        expect(find.text('结尾原句。\n'), findsOneWidget);
+        expect(find.text('结尾新句。\n'), findsOneWidget);
+        expect(find.text('开场原句。\n'), findsOneWidget);
+        expect(find.text('开场新句。\n'), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.text('结尾原句。\n')).dy,
+          lessThan(tester.getTopLeft(find.text('开场原句。\n')).dy),
+        );
+        expect(find.text('排练建议'), findsOneWidget);
+        expect(find.text('变化 1：建议按这一处的实际新句重新排练。'), findsOneWidget);
+        for (final side in ['a', 'b']) {
+          expect(find.textContaining((selected[side]! as MemoryRow)['version']! as String), findsNothing);
+          expect(find.textContaining((selected[side]! as MemoryRow)['sourceRef']! as String), findsNothing);
+        }
+        expect(find.byType(ExpansionTile), findsNothing);
+        expect(peer.calls, hasLength(recovered ? 2 : 1));
+        for (final call in peer.calls) {
+          expect(call.method, 'GET');
+          expect(call.uri.path, '$notesPath/$id');
+          expect(call.uri.queryParameters, {'hostStoreId': request['hostStoreId']});
+        }
+      } finally {
+        await close(tester);
+      }
+      memory.dispose();
+      memory = _Memory(
+        CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now),
+        CompanionLocal.at(root),
+        nowMilliseconds: () => now,
+      );
+      expect(memory.store.hostTask(id)!['snapshot'], snapshot);
+      expect(memory.store.hostTask(id)!['state'], cancelled ? 'cancelled' : 'done');
+      expect(memory.store.hostTaskInputs(hostKey: hostKey), [selected['a'], selected['b']]);
+      if (recovered) {
+        await open(tester, id, connected: false);
+        try {
+          expect(find.text('这次的文字对照'), findsOneWidget);
+          expect(find.text('未完成的对照'), findsNothing);
+          expect(find.text('文字变化 1'), findsOneWidget);
+          expect(memory.store.hostTask(id)!['snapshot'], snapshot);
+          expect(peer.calls, hasLength(2));
+        } finally {
+          await close(tester);
+        }
+      }
+    });
+  }
+
+  for (final result in ['identical', 'no-model', 'original-changed', 'cancelled-old-report', 'unpublished-after-deadline']) {
+    testWidgets('I actual task page renders preserved facts and separate suggestions: $result', (tester) async {
+      final deadline = result == 'unpublished-after-deadline' ? _now + 10 : null;
+      final create = compareCommand(deadline: deadline);
+      final id = create['taskId']! as String;
+      final report = compareReportStep(
+        advice: result != 'no-model',
+        identical: result == 'identical',
+        changed: result == 'original-changed',
+        published: result != 'unpublished-after-deadline',
+      );
+      final cancelled = result == 'cancelled-old-report';
+      if (cancelled) {
+        memory.store.submitMessage(
+          id: 'compare-cancel',
+          sessionId: 'light:original-room',
+          text: '取消对稿，保留已经交还的对照。',
+          saidAtUtc: _now + 1,
+          offsetMinutes: 480,
+        );
+        memory.store.cancelCompareDraftTask(
+          taskId: id,
+          expectedTaskRev: 1,
+          messageId: 'compare-cancel',
+          expectedSourceRev: 1,
+          itemNo: 0,
+        );
+      }
+      final state = cancelled ? 'cancelled' : result == 'unpublished-after-deadline' ? 'failed' : report['state']! as String;
+      final snapshot = notesSnapshot(
+        create,
+        seq: 7,
+        rev: cancelled ? 2 : 1,
+        state: state,
+        steps: [report],
+        revisions: [
+          {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': _now, 'agreement': compareAgreement(deadline: deadline)},
+          if (cancelled)
+            {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': _now + 1, 'agreement': null},
+        ],
+      );
+      if (result == 'unpublished-after-deadline') {
+        now = _now + 11;
+        snapshot['updatedAtMs'] = now;
+        snapshot['waitReason'] = 'deadline_or_agreement_changed';
+      }
+      peer.respond = (request, _) => NotesPeer.json(request, snapshot);
+      await open(tester, id);
+      try {
+        expect(memory.store.hostTask(id)!['state'], state);
+        expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 7);
+        expect(find.text('A · 旧稿：A.md'), findsNWidgets(2));
+        expect(find.text('B · 新稿：B.txt'), findsNWidgets(2));
+        expect(find.text(result == 'unpublished-after-deadline' ? '未完成的对照'
+          : cancelled ? '之前留下的文字对照' : '这次的文字对照'), findsOneWidget);
+        if (result == 'unpublished-after-deadline') {
+          expect(find.text('这次的文字对照'), findsNothing);
+          expect(find.text('两份稿件的对照已经准备好。'), findsNothing);
+        }
+        if (result == 'identical') {
+          expect(find.text('这次读到的两份稿件没有文字改动。'), findsOneWidget);
+          expect(find.text('文字变化 1'), findsNothing);
+          expect(find.text('排练建议'), findsNothing);
+        } else {
+          expect(find.text('文字变化 1'), findsOneWidget);
+          expect(find.text('文字变化 2'), findsOneWidget);
+          expect(find.text('文字变化 3'), findsNothing);
+          expect(find.text('A · 旧稿 · 第 1 段'), findsOneWidget);
+          expect(find.text('B · 新稿 · 第 3 段'), findsOneWidget);
+          expect(find.text('周五开放。\n'), findsOneWidget);
+          expect(find.text('周六开放。\n'), findsOneWidget);
+          expect(find.text('最后我们再想一想？\n'), findsOneWidget);
+          expect(find.text('最后我们再想一想。\n'), findsOneWidget);
+          expect(find.text('这次核到 2 组文字变化，列出其中 2 组。'), findsOneWidget);
+          if (result == 'no-model') {
+            expect(find.text('下面按原文顺序列出已核的改动，还没排出重练重点。'), findsOneWidget);
+            expect(find.text('排练建议'), findsNothing);
+            expect(find.text('还没准备好排练建议，下面保留已核的文字变化。'), findsOneWidget);
+          } else {
+            expect(find.text('排练建议'), findsOneWidget);
+            expect(find.text('变化 1：可以重练这一处的停顿。'), findsOneWidget);
+          }
+        }
+        if (result == 'original-changed') {
+          expect(find.text('读到过这份稿件，但交还结果时没能确认还是原来那一份。'), findsOneWidget);
+          expect(find.text('这次还有没完成的部分，已确认的文字变化会保留。'), findsOneWidget);
+          expect(find.text('两份稿件的对照已经准备好。'), findsNothing);
+        }
+        expect(find.textContaining('bound-version-'), findsNothing);
+        expect(find.textContaining('actual-execution'), findsNothing);
+        expect(find.textContaining('input-a'), findsNothing);
+        expect(find.text('执行记录'), findsNothing);
+        expect(find.text('费用与用量'), findsNothing);
+        expect(find.byType(ExpansionTile), findsNothing);
+        expect(peer.calls.every((call) => call.method == 'GET' && call.uri.path == '$notesPath/$id'), isTrue);
+        expect(peer.calls, hasLength(1));
+      } finally {
+        await close(tester);
+      }
+    });
+  }
+
+  testWidgets('I task page amendment and cancellation keep the original two bindings and earlier report', (tester) async {
+    final create = compareCommand();
+    final id = create['taskId']! as String;
+    final oldReport = compareReportStep(advice: false);
+    var snapshot = notesSnapshot(create, state: 'partial', steps: [oldReport]);
+    final amendment = Completer<void>();
+    final cancellation = Completer<void>();
+    final clockCalls = <MethodCall>[];
+    final sourceAtSend = <MemoryRow>[];
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      clockCalls.add(call);
+      now = _now + 60000;
+      return switch (call.method) {
+        'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+        'resolve' => {
+          'kind': 'unique',
+          'moments': [
+            {'epochMs': DateTime.utc(2026, 11, 22, 12).millisecondsSinceEpoch, 'offsetSeconds': 28800},
+          ],
+        },
+        _ => throw StateError('Unexpected comparison time call ${call.method}'),
+      };
+    });
+    peer.respond = (request, body) async {
+      if (request.method == 'GET') {
+        await NotesPeer.json(request, snapshot);
+      } else if (request.uri.path == '$notesPath/$id/amend') {
+        sourceAtSend.add(memory.store.messages().last);
+        final plan = body!['changes']! as MemoryRow;
+        snapshot = notesSnapshot(create, rev: 2, seq: 2, agreement: plan, steps: [oldReport], revisions: [
+          {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': _now, 'agreement': compareAgreement()},
+          {'taskRev': 2, 'operation': 'amend', 'acceptedAtMs': now, 'agreement': plan},
+        ]);
+        await NotesPeer.json(request, snapshot);
+        amendment.complete();
+      } else if (request.uri.path == '$notesPath/$id/cancel') {
+        sourceAtSend.add(memory.store.messages().last);
+        snapshot = {
+          ...snapshot,
+          'taskRev': 3,
+          'runnerReceiptSeq': 3,
+          'state': 'cancelled',
+          'cancelRequested': true,
+          'revisions': [
+            ...(snapshot['revisions']! as List<Object?>),
+            {'taskRev': 3, 'operation': 'cancel', 'acceptedAtMs': now, 'agreement': null},
+          ],
+        };
+        await NotesPeer.json(request, snapshot);
+        cancellation.complete();
+      } else {
+        await NotesPeer.json(request, {'error': {'code': 'companion/not-found', 'message': 'Unexpected route'}}, status: 404);
+      }
+    };
+    await open(tester, id);
+    try {
+      await tester.ensureVisible(find.text('改一下'));
+      await tester.tap(find.text('改一下'));
+      await tester.pumpAndSettle();
+      final dialog = find.byType(AlertDialog);
+      await tester.enterText(find.descendant(of: dialog, matching: find.byType(TextFormField)), '2026-11-22 20:00');
+      await tester.tap(find.descendant(of: dialog, matching: find.text('保存')));
+      await settleMixed(tester, amendment.future);
+      await settleMixed(tester, memory.settled);
+      await tester.pumpAndSettle();
+      final updated = memory.store.hostTask(id)!;
+      expect(updated['task_rev'], 2);
+      expect(updated['directory_labels'], {'inputs': compareInputs()});
+      expect((updated['agreement']! as MemoryRow)['args'], compareAgreement()['args']);
+      expect((updated['agreement']! as MemoryRow)['deadlineAtMs'], DateTime.utc(2026, 11, 22, 12).millisecondsSinceEpoch);
+      expect(find.text('之前留下的文字对照'), findsOneWidget);
+      expect(find.text('周五开放。\n'), findsOneWidget);
+      expect(clockCalls.where((call) => call.method == 'resolve').single.arguments, {
+        'localDate': '2026-11-22', 'localTime': '20:00', 'zoneId': 'Asia/Shanghai',
+      });
+      await tester.ensureVisible(find.text('停止对稿'));
+      await tester.tap(find.text('停止对稿'));
+      await settleMixed(tester, cancellation.future);
+      await settleMixed(tester, memory.settled);
+      await tester.pumpAndSettle();
+      expect(memory.store.hostTask(id)!['state'], 'cancelled');
+      expect(memory.store.hostTask(id)!['task_rev'], 3);
+      expect(sourceAtSend, hasLength(2));
+      expect(sourceAtSend.every((row) => row['session_id'] == 'light:original-room'), isTrue);
+      expect(sourceAtSend.first['text'], contains('2026-11-22 20:00'));
+      expect(sourceAtSend.last['text'], '取消这次对稿，保留已经交还的对照。');
+      expect(memory.store.messages().first['said_at_utc'], _now);
+      expect(memory.store.hostTaskCommands(id), hasLength(3));
+      expect(find.text('之前留下的文字对照'), findsOneWidget);
+      expect(find.text('最后我们再想一想？\n'), findsOneWidget);
+      expect(peer.calls.where((call) => call.method == 'POST').map((call) => call.uri.path), [
+        '$notesPath/$id/amend', '$notesPath/$id/cancel',
+      ]);
+    } finally {
+      await close(tester);
+    }
+  });
 
   for (final status in ['available', 'missing', 'changed', 'unknown']) {
     testWidgets(

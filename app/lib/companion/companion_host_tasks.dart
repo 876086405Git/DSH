@@ -97,10 +97,11 @@ class CompanionHostTasks {
     var hostStore = current['host_store_id'] as String?;
     var readOriginal = false;
     var missingOriginal = false;
-    if (submitPending && current['kind'] == 'host.find_draft' &&
+    if (submitPending && const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) &&
         commands.every((row) => row['possible_sent_at_ms'] == null)) {
       final available = capability ?? await client.readCompanionTasksCapability();
-      if (available == null || !available.findDraft || !available.sourceRead) {
+      if (available == null || (current['kind'] == 'host.find_draft'
+          ? !available.findDraft || !available.sourceRead : !available.compareDrafts)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot accept this find task');
       }
       if (available.hostStoreId != hostStore) {
@@ -121,7 +122,8 @@ class CompanionHostTasks {
       }
       final available = capability ?? await client.readCompanionTasksCapability();
       if (available == null || available.hostStoreId == null ||
-          (current['kind'] == 'host.find_draft' ? !available.findDraft : !available.notes)) {
+          (current['kind'] == 'host.find_draft' ? !available.findDraft
+              : current['kind'] == 'host.compare_drafts' ? !available.compareDrafts : !available.notes)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot durably accept this task');
       }
       hostStore = available.hostStoreId!;
@@ -418,4 +420,81 @@ Future<MemoryRow?> companionHostAgreement(MemoryRow source, MemoryRow command, C
     'allowQueue': command['allowQueue'],
     if (command.containsKey('outputName')) 'outputName': command['outputName'] ?? '$date-待办.md',
   };
+}
+
+/// The first release accepts these complete clauses, not a bag of keywords.
+/// A and B are selected in that order by the person before a task is stored.
+MemoryRow? parseCompanionCompare(String raw) {
+  final text = raw.trim().replaceFirst(RegExp(r'[。.!！]+$'), '');
+  const kind = 'host.compare_drafts';
+  if (const ['取消这次对稿', '取消对稿', '不用对稿了', '别对了', '别比较了'].contains(text)) {
+    return {'kind': kind, 'operation': 'cancel'};
+  }
+  if (RegExp(r'^(?:[“‘「『"\x27]|不要|不用|别|假设|故事|台词|他说|她说)').hasMatch(text)) {
+    return null;
+  }
+  final clauses = text.split(RegExp(r'[，,。]')).map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
+  if (clauses.isEmpty || !RegExp(r'^这两份是我(?:明天上台的)?\s*A\s*稿和\s*B\s*稿$').hasMatch(clauses.first)) {
+    return text.contains('电脑') && RegExp(r'对稿|对比|比较|对一遍').hasMatch(text)
+        ? {'kind': kind, 'operation': 'clarify'} : null;
+  }
+  bool? allowQueue;
+  String? afterExit;
+  String? deadlineTime;
+  var requested = false;
+  for (final clause in clauses.skip(1)) {
+    if (const ['电脑上线就帮我对一遍', '电脑开了就帮我对一遍', '请电脑帮我对一遍', '电脑帮我对一遍'].contains(clause)) {
+      if (allowQueue != null) {
+        return {'kind': kind, 'operation': 'clarify'};
+      }
+      allowQueue = clause.startsWith('电脑上线') || clause.startsWith('电脑开了');
+      continue;
+    }
+    final highlights = RegExp(r'^(?:((?:[01]\d|2[0-3]):[0-5]\d|晚上八点|今晚八点)前)?'
+      r'列至多三处最值得重新练的改动$').firstMatch(clause);
+    if (highlights != null && !requested) {
+      requested = true;
+      final deadline = highlights.group(1);
+      deadlineTime = deadline == null ? null : deadline.endsWith('八点') ? '20:00' : deadline;
+      continue;
+    }
+    if (const ['我先去排练', '离开后继续', '我先走了也继续', '我离开就停', '我走就停'].contains(clause)) {
+      final value = clause.endsWith('停') ? 'pause' : 'continue';
+      if (afterExit != null && afterExit != value) {
+        return {'kind': kind, 'operation': 'clarify'};
+      }
+      afterExit = value;
+      continue;
+    }
+    if (const ['两个原文件都别动', '原文件别动', '原件别动', '不要改原件'].contains(clause)) {
+      continue;
+    }
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  if (allowQueue == null || afterExit == null || !requested) {
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  return {'kind': kind, 'operation': 'create', 'allowQueue': allowQueue,
+    'afterExit': afterExit, 'deadlineTime': deadlineTime};
+}
+
+/// I has a deadline, not a file-modification date window. Resolve the spoken
+/// time against the original source day; a later retry uses the saved terms.
+Future<MemoryRow?> companionCompareAgreement(MemoryRow source, MemoryRow command, CompanionReminders clock) async {
+  int? deadlineAt;
+  if (command['deadlineTime'] case final String time) {
+    final zone = source['zone_id'];
+    final offset = source['offset_seconds'];
+    if (zone is! String || zone.isEmpty || offset is! int) {
+      return null;
+    }
+    final local = DateTime.fromMillisecondsSinceEpoch((source['said_at_utc']! as int) + offset * 1000, isUtc: true);
+    final day = DateTime.utc(local.year, local.month, local.day).toIso8601String().substring(0, 10);
+    final resolved = await clock.resolve(day, time, zone);
+    if (resolved['kind'] != 'unique') {
+      return null;
+    }
+    deadlineAt = ((resolved['moments']! as List<Object?>).single! as Map<Object?, Object?>)['epochMs']! as int;
+  }
+  return {'deadlineAtMs': deadlineAt, 'afterExit': command['afterExit'], 'allowQueue': command['allowQueue']};
 }

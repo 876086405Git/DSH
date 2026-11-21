@@ -679,5 +679,161 @@
   "companionFindSourceUnknown": "This draft cannot be opened right now. Connect to the original computer and try again.",
   "companionFindDeadline": "The agreed deadline has passed. No new search will start. Existing results will stay here.",
   "companionFindOriginalPending": "The computer received the changes and still needs to confirm the original search.",
-  "companionFindUnknown": "I have not confirmed whether the computer received this search or how far it got."
+  "companionFindUnknown": "I have not confirmed whether the computer received this search or how far it got.",
+  "companionCompareTitle": "Compare two drafts",
+  "companionCompareA": "A · earlier draft",
+  "companionCompareB": "B · later draft",
+  "companionCompareSyntax": "Please choose A as the earlier draft and B as the later draft, and say whether to wait for the computer and continue after you leave. Include a deadline if you have one.",
+  "companionCompareWhich": "Which comparison should stop? Open that task and choose Stop.",
+  "companionCompareDeadlineMissing": "The deadline is not clear yet. Please specify the date, time, and time zone.",
+  "companionCompareUnavailable": "This computer cannot compare two drafts yet.",
+  "companionCompareConnect": "Connect the original computer to select A and B first. No previously selected drafts are available offline yet.",
+  "companionCompareAmbiguousFile": "More than one selected draft has this name. Connect to the original computer to choose it again.",
+  "companionCompareNoInputs": "Both original drafts have not been selected, so this comparison has not started.",
+  "companionCompareOriginalHost": "The agreement and any existing result are kept. Connect the original computer to check again.",
+  "companionCompareSaveFailed": "The comparison could not be confirmed yet. Please check this task again later.",
+  "companionCompareSaved": "Choose a previously selected {side}",
+  "@companionCompareSaved": {
+    "placeholders": {
+      "side": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareChooseDirectory": "Choose the folder containing {side}",
+  "@companionCompareChooseDirectory": {
+    "placeholders": {
+      "side": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareFilename": "Enter the file name for {side}",
+  "@companionCompareFilename": {
+    "placeholders": {
+      "side": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareFileLimit": "Enter the exact name inside the selected folder. Markdown and txt files up to 64 KiB each are supported. The originals will not be changed.",
+  "companionCompareFilenameMissing": "Enter a file name.",
+  "companionCompareQueued": "Both drafts are saved, waiting for the computer.",
+  "companionCompareRunning": "The computer is comparing these two drafts.",
+  "companionCompareDone": "The comparison of the two drafts is ready.",
+  "companionComparePartial": "This comparison is only partly complete. Verified changes and remaining gaps are shown below.",
+  "companionCompareCancelled": "Further comparison has stopped. Any previous comparison is kept.",
+  "companionCompareCancelUnknown": "The stop request is saved, but the computer has not confirmed it yet. Existing results are kept.",
+  "companionCompareWaiting": "This comparison cannot continue yet. The original selections and agreement are kept.",
+  "companionCompareUnknown": "The computer’s progress is not clear yet. The comparison will not automatically restart.",
+  "companionCompareFailed": "The comparison could not be completed. This task did not edit the original files.",
+  "companionCompareDeadline": "The original deadline has passed. This comparison will not be moved to a later time.",
+  "companionCompareOriginalPending": "The change is saved, but the original comparison agreement still needs to be delivered.",
+  "companionCompareReport": "This comparison",
+  "companionCompareUnfinishedReport": "An unfinished comparison",
+  "companionComparePreviousReport": "Previous comparison",
+  "companionCompareUnread": "This draft has not been read completely.",
+  "companionCompareChanged": "This draft was read, but its original version could not be confirmed when the result was prepared.",
+  "companionCompareIncomplete": "Some parts are still unfinished. The verified text changes are kept.",
+  "companionCompareIdentical": "The two drafts read for this comparison contain no text changes.",
+  "companionCompareCoverage": "This comparison found {total} groups of text changes and shows {shown} of them.",
+  "@companionCompareCoverage": {
+    "placeholders": {
+      "total": {
+        "type": "String"
+      },
+      "shown": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareSourceOrder": "The verified changes below follow their order in the text. Rehearsal priorities have not been ranked.",
+  "companionCompareDifference": "Text change {number}",
+  "@companionCompareDifference": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareNoExcerpt": "There is no short source excerpt to show on this side.",
+  "companionCompareSuggestions": "Rehearsal suggestions",
+  "companionComparePractice": "Change {number}: {practice}",
+  "@companionComparePractice": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "practice": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareSuggestionsUnknown": "Rehearsal suggestions are still unconfirmed. Verified text changes are kept.",
+  "companionCompareSuggestionsMissing": "Rehearsal suggestions are not ready. Verified text changes are kept.",
+  "companionCompareParagraph": "Paragraph {range}",
+  "@companionCompareParagraph": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareBetween": "Between paragraphs {before} and {after}",
+  "@companionCompareBetween": {
+    "placeholders": {
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareAfter": "After paragraph {number}",
+  "@companionCompareAfter": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareBefore": "Before paragraph {number}",
+  "@companionCompareBefore": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareLines": "Near line {range}",
+  "@companionCompareLines": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareCancel": "Stop comparing",
+  "companionCompareCancelSource": "Cancel this comparison and keep any result already returned.",
+  "companionCompareAmendSource": "Change this comparison: {deadline}; {exit}; {queue}; {inputs}. Leave both original files unchanged.",
+  "@companionCompareAmendSource": {
+    "placeholders": {
+      "deadline": {
+        "type": "String"
+      },
+      "exit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "inputs": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareChooseAgain": "Choose A and B again",
+  "companionCompareKeepInputs": "Keep the originally selected A and B",
+  "companionCompareNewDeadline": "A new deadline uses the local time zone of this change. Leave blank to keep the original deadline."
 }
