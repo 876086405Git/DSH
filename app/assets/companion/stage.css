@@ -326,6 +326,24 @@ html[data-motion='reduced'] #stage {
   transition: none;
 }
 
+/* A small GPU budget (iPhones with 3 GB or less, companion_stage.dart; set in
+   the HTML before the first paint): no blur or blend layers, which WebKit backs
+   with surfaces the size of the screen. The shafts keep soft edges from their
+   own gradient instead of a blur. */
+html[data-gpu-budget='low'] .shafts {
+  mix-blend-mode: normal;
+}
+
+html[data-gpu-budget='low'] .shafts i {
+  filter: none;
+  background: radial-gradient(50% 100% at 50% 0, rgba(var(--shaft), var(--shaft-strength)) 0%, rgba(var(--shaft), 0) 92%);
+}
+
+html[data-gpu-budget='low'] .whale,
+html[data-gpu-budget='low'] .reef {
+  filter: none;
+}
+
 /* A bare stage (bare.js): only the model, the page behind it showing through.
    Her room stays laid out, unseen, so nothing that measures it moves. */
 html[data-bare='1'],

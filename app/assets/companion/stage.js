@@ -1813,7 +1813,14 @@
   // (an old phone, a heavy model), never below half, and back up once they
   // keep time again. A frame is late against the rate asked when it was drawn,
   // so a second that is part busy (60) and part idle (30) isn't counted slow.
-  let quality = 1;
+  // It starts where it last settled on this phone (`quality`, kept by the app),
+  // so a phone that can't hold full resolution doesn't stutter down to it on
+  // every visit, and one that can is never held back by a guess.
+  let quality = clamp(Number(query.get('quality')) || 1, 0.5, 1);
+  // The app keeps the level that held: a step down at once, a step up once a
+  // minute has gone by without one.
+  let heldAt = 0;
+  const settled = () => post({ type: 'quality', value: Math.round(quality * 100) / 100 });
   let slowSeconds = 0;
   let quickSeconds = 0;
   let late = 0;
@@ -1891,10 +1898,17 @@
             // Once per step up that didn't hold, however far it then falls.
             if (ts - steppedUpAt < 60000) upAfter = Math.min(upAfter * 2, 300);
             steppedUpAt = -Infinity;
+            heldAt = 0;
+            settled();
           } else if (quickSeconds >= upAfter && quality < 1) {
             quality = Math.min(1, quality + 0.15);
             quickSeconds = 0;
             steppedUpAt = ts;
+            heldAt = ts + 60000;
+          }
+          if (heldAt && ts >= heldAt) {
+            heldAt = 0;
+            settled();
           }
         }
       }

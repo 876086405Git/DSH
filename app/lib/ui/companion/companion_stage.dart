@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../companion/companion_adapt.dart';
@@ -23,6 +24,40 @@ import '../web/web_view_guard.dart';
 // Physical memory reported by iOS is slightly below the marketed RAM size;
 // this separates the 4 GB and 6 GB device classes without a model-name list.
 const _bigTextureFromBytes = 5 * 1024 * 1024 * 1024;
+
+/// At or below this, the smallest budget: a 3 GB iPhone reports a little less.
+const _lowMemoryBytes = 3 * 1024 * 1024 * 1024;
+
+/// Where her stage's resolution last settled on this phone (stage.js `quality`).
+const _qualityKey = 'companion_stage_quality';
+
+/// The page's start-up options for this phone (stage.js and scene.js read them).
+///
+/// Memory sets what the page can't take back once WebKit or the GPU has run out
+/// (the page is killed, a white screen): how big her textures are and, on the
+/// smallest iPhones, how dense the canvases are and whether blur layers exist.
+/// How fast the phone draws isn't guessed from it: the stage measures that and
+/// sheds resolution itself, starting where it settled last time ([quality]).
+@visibleForTesting
+Map<String, String> companionStageQuery({
+  required bool ios,
+  required int totalMem,
+  double? quality,
+  bool reduceMotion = false,
+  bool bare = false,
+}) {
+  // WebKit's GPU-process budget is separate from the phone's RAM.
+  final small = totalMem > 0 ? totalMem < _bigTextureFromBytes : ios;
+  final lowMemory = totalMem <= 0 || totalMem <= _lowMemoryBytes;
+  return {
+    if (small) 'maxTexture': ios && lowMemory ? '1024' : '2048',
+    if (ios) 'antialias': '0',
+    if (ios && lowMemory) ...{'dpr': '1.5', 'gpuBudget': 'low'},
+    if (quality != null && quality >= 0.5 && quality < 1) 'quality': quality.toStringAsFixed(2),
+    if (reduceMotion) 'reduceMotion': '1',
+    if (bare) 'bare': '1',
+  };
+}
 
 /// Why a stage left for good on its own account ([CompanionStageEvents.onFailed]):
 /// her renderer died, or the pack under her was about to change. Not for the
@@ -169,11 +204,8 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       }
       _server = server;
       final device = await IslandPlatform.instance.device();
+      final quality = await _rememberedQuality();
       if (stale()) return;
-      // WebKit's GPU-process budget is separate from the phone's RAM.
-      final ios = defaultTargetPlatform == TargetPlatform.iOS;
-      final small = device.totalMem > 0 ? device.totalMem < _bigTextureFromBytes : ios;
-      final lowMemory = device.totalMem <= 0 || device.totalMem <= 3 * 1024 * 1024 * 1024;
       final web = WebViewController(onPermissionRequest: (request) => unawaited(request.deny()));
       await web.setJavaScriptMode(JavaScriptMode.unrestricted);
       await web.setBackgroundColor(widget.bare ? const Color(0x00000000) : const Color(0xFF0D2F55));
@@ -214,20 +246,13 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       _timeout = Timer(_readyTimeout, () => _fail('timeout'));
       await web.loadRequest(
         server.pageUrl(
-          query: {
-            if (small) 'maxTexture': ios && lowMemory ? '1024' : '2048',
-            if (ios) ...{
-              'dpr': lowMemory
-                  ? '1'
-                  : small
-                  ? '1.5'
-                  : '2',
-              'antialias': '0',
-              'gpuBudget': 'low',
-            },
-            if (reduceMotion) 'reduceMotion': '1',
-            if (widget.bare) 'bare': '1',
-          },
+          query: companionStageQuery(
+            ios: defaultTargetPlatform == TargetPlatform.iOS,
+            totalMem: device.totalMem,
+            quality: quality,
+            reduceMotion: reduceMotion,
+            bare: widget.bare,
+          ),
         ),
       );
     } on Object catch (error) {
@@ -299,6 +324,25 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       case 'activity':
         final name = message['name'];
         if (name is String) events.onActivity(name);
+      case 'quality':
+        final value = message['value'];
+        if (value is num && value >= 0.5 && value <= 1) unawaited(_rememberQuality(value.toDouble()));
+    }
+  }
+
+  static Future<double?> _rememberedQuality() async {
+    try {
+      return (await SharedPreferences.getInstance()).getDouble(_qualityKey);
+    } on Object {
+      return null; // A first visit's full resolution.
+    }
+  }
+
+  static Future<void> _rememberQuality(double value) async {
+    try {
+      await (await SharedPreferences.getInstance()).setDouble(_qualityKey, value);
+    } on Object {
+      // Kept for next time when it can be; this visit already has it.
     }
   }
 

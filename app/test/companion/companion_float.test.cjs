@@ -259,6 +259,21 @@ test('room mode keeps its pointer handlers, pause/resume and context restore beh
   s.canvasEvents.get('webglcontextrestored')(); assert.equal(s.counts().reloads, 1);
 });
 
+test('the room tells the app the resolution that held: a step down at once, a step up after a minute', () => {
+  const s = stage(false); s.install();
+  const reported = () => s.posts.filter(p => p.type === 'quality').map(p => p.value);
+  let t = 0;
+  const frames = (ms, every) => { for (const end = t + ms; t < end;) { t += every; s.render(t); } };
+  // Every frame 60 ms apart while 30 were asked: late, three seconds running.
+  frames(4500, 60);
+  assert.deepEqual(reported(), [0.85]);
+  // On time again: ten quiet seconds step up, told only once it has held a minute.
+  frames(15000, 1000 / 30);
+  assert.deepEqual(reported(), [0.85], 'the step up has not held yet');
+  frames(60000, 1000 / 30);
+  assert.deepEqual(reported(), [0.85, 1]);
+});
+
 test('shaking the phone makes her dizzy once; a bump, a still hand and the float window do not', () => {
   const s = stage(false); s.install(); s.render(100);
   s.api.mappings({ calm: {}, dizzy: {} }, { shake: { ms: 100, tracks: {} } });
