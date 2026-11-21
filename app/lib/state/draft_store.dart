@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../clipboard/binary_text.dart';
 import 'attachments.dart';
 
 /// What is in the composer of one conversation and not sent yet.
@@ -50,8 +51,13 @@ class DraftStore extends Notifier<DraftState> {
       final raw = prefs.getString(preferenceKey);
       if (raw != null) {
         for (final MapEntry(:key, :value) in (jsonDecode(raw) as Map).entries) {
+          // A picture pasted as its bytes (#1684) is no one's draft, and put
+          // back in the composer it costs the launch: keep what was typed.
+          var text = value['t'] as String;
+          if (looksLikeBytes(text)) text = typedBeforeBytes(text);
+          if (text.isEmpty) continue;
           restored[key as String] = ChatDraft(
-            text: value['t'] as String,
+            text: text,
             updatedAt: DateTime.fromMillisecondsSinceEpoch(value['at'] as int),
           );
         }

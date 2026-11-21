@@ -8,11 +8,54 @@
 
 import 'package:flutter/services.dart';
 
+import 'binary_text.dart';
 import 'paste_reader.dart';
 
-/// [inner] on any OS but HarmonyOS.
-BinaryMessenger clipboardMessengerFor(String os, BinaryMessenger inner) =>
-    os == 'ohos' ? PasteButtonMessenger(inner) : inner;
+/// HarmonyOS reads through its paste button, Android drops a picture's bytes
+/// read as text ([ClipboardTextMessenger]); [inner] elsewhere.
+BinaryMessenger clipboardMessengerFor(String os, BinaryMessenger inner) => switch (os) {
+  'ohos' => PasteButtonMessenger(inner),
+  'android' => ClipboardTextMessenger(inner),
+  _ => inner,
+};
+
+/// Android: a copied picture can come back from Clipboard.getData as its
+/// bytes read as text ([looksLikeBytes]), megabytes of it. That is nothing to
+/// paste: the answer becomes Flutter's null, which leaves the field alone.
+class ClipboardTextMessenger implements BinaryMessenger {
+  ClipboardTextMessenger(this._inner);
+
+  final BinaryMessenger _inner;
+
+  static const _codec = JSONMethodCodec();
+
+  @override
+  Future<ByteData?>? send(String channel, ByteData? message) {
+    final reply = _inner.send(channel, message);
+    if (reply == null || channel != SystemChannels.platform.name || message == null) return reply;
+    if (_codec.decodeMethodCall(message).method != 'Clipboard.getData') return reply;
+    return reply.then((data) {
+      if (data == null) return data;
+      try {
+        final value = _codec.decodeEnvelope(data);
+        if (value is Map && value['text'] is String && looksLikeBytes(value['text'] as String)) {
+          return _codec.encodeSuccessEnvelope(null);
+        }
+      } on PlatformException {
+        // An error answer stays the embedding's.
+      }
+      return data;
+    });
+  }
+
+  @override
+  Future<void> handlePlatformMessage(String channel, ByteData? data, PlatformMessageResponseCallback? callback) =>
+      // ignore: deprecated_member_use
+      _inner.handlePlatformMessage(channel, data, callback);
+
+  @override
+  void setMessageHandler(String channel, MessageHandler? handler) => _inner.setMessageHandler(channel, handler);
+}
 
 class PasteButtonMessenger implements BinaryMessenger {
   PasteButtonMessenger(this._inner, {Future<PasteResult> Function()? read}) : _read = read ?? _readOnce;
