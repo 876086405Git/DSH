@@ -13,16 +13,27 @@
 从仓库根运行：
 
 ```sh
+python3 -I runtime/tests/test_bridge_dependencies.py
 npm ci --prefix runtime/bridge/dsh-go-bridge --ignore-scripts --omit=optional --no-audit --no-fund
 node --test runtime/tests/companion-receipt-pdf.test.mjs
-python3 -I runtime/tests/test_bridge_dependencies.py
 ```
+
+Python tooling 测试各自创建临时的假安装目录，只验证真实 staging、OH composer 的文件选择/复制、
+许可证路径保留和 Android recipe 输入边界；这些字节不是可执行 PDF.js，不运行或冒充 PDF 解析。
+因此 Generated files 任务的 Python discovery 无需事先安装 bridge 依赖，也不改工作区的安装目录。
+真实已安装依赖的版本、许可证及 **stage 后实际 PDF 文字提取**在上面的 Node suite 中硬性验证；
+缺少真包会失败，不自动跳过。现 Runtime CI 先执行同一 `npm ci`，再以 `runtime/tests/*.test.mjs`
+运行该 suite；这与不需要 npm 安装的 Python 工具测试是两项不同证据。
 
 `runtime/build-runtime.sh` 采用独立 bridge npm prefix，按同一 lock 运行 `npm ci --omit=optional`，再通过
 `runtime/lib/bridge_dependencies.py` 复制解析用的 190 个官方文件到临时 bridge，交给现有 `rtbuild --bridge`。
 OHOS 的现有 `prepare-inputs.py` 同样准备第三个 bridge prefix；`compose-runtime.py` 核对其安装收据和
 精确 lock，然后取同一子集。没有改变原生目录、模块补丁、Android/OHOS 补丁前缀或全局 provider。
 CI 也先按 lock 安装，然后运行原 source harness 和测试。
+
+APK 使用已准备的 `runtime/out/<ABI>/assets`：Gradle 的两个 ABI sourceSets 会把对应 runtime 归档带入包。
+`tooling/build-apk.sh` 的 release 入口先核该归档与 manifest，打 APK 本身不会代替上述 runtime/npm 准备；
+需要从当前源码先生成所选 ABI 的 runtime，再构建 APK。归档内的 bridge 保留所选 PDF 文件及以下许可证。
 
 保留的子集是原始 package/README/许可证、`legacy/build/pdf.mjs`、`pdf.worker.mjs`、`cmaps/` 和
 `standard_fonts/`。不装 optional canvas，不装载 native addon，也不把 viewer、Wasm、源码映射和声明文件放进

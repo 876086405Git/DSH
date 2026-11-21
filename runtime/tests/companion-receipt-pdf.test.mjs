@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFile, writeFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, mkdtemp, readdir, stat, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 import { canReadReceiptPdf, readReceiptPdf } from '../bridge/dsh-go-bridge/lib/companion/receipt-pdf.js';
 import { ordinary, textLines, paintImage, imageDate, chinese, chinesePdf, encryptedPdf } from './fixtures/companion-receipt-pdf.mjs';
 
@@ -162,4 +163,36 @@ test('PDF extraction resolves the exact installed dependency and keeps its licen
     assert.ok((await readFile(new URL(name, root))).byteLength > 0, name);
   }
   await assert.rejects(readFile(new URL('lib/companion/pdfjs-6.5.438/manifest.json', bridge)), { code: 'ENOENT' });
+});
+
+test('PDF staged bridge extracts real text with the exact installed subset and no native canvas', async t => {
+  // The runtime CI job installs the real locked package before this suite.
+  // Missing dependencies must fail here, not turn into a tooling-fixture pass.
+  const directory = await mkdtemp(join(tmpdir(), 'companion-pdf-stage-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const bridge = fileURLToPath(new URL('../bridge/dsh-go-bridge/', import.meta.url));
+  const staged = join(directory, 'bridge');
+  await promisify(execFile)('python3', ['-I',
+    fileURLToPath(new URL('../lib/bridge_dependencies.py', import.meta.url)),
+    '--prefix', bridge, '--out', staged], { timeout: 15000 });
+  await assert.rejects(stat(join(staged, 'lib/companion/pdfjs-6.5.438')), { code: 'ENOENT' });
+  await assert.rejects(stat(join(staged, 'node_modules/@napi-rs')), { code: 'ENOENT' });
+  const subset = join(staged, 'node_modules/pdfjs-dist');
+  const files = [];
+  for (const name of await readdir(subset, { recursive: true })) {
+    if (!(await stat(join(subset, name))).isFile()) continue;
+    files.push(name);
+    assert.deepEqual(await readFile(join(subset, name)),
+      await readFile(join(bridge, 'node_modules/pdfjs-dist', name)), name);
+  }
+  assert.equal(files.length, 190);
+  const entry = join(directory, 'extract.mjs');
+  await writeFile(entry, `
+    import assert from 'node:assert/strict';
+    import {readReceiptPdf} from ${JSON.stringify(pathToFileURL(join(staged, 'lib/companion/receipt-pdf.js')).href)};
+    import {ordinary,textLines} from ${JSON.stringify(new URL('./fixtures/companion-receipt-pdf.mjs', import.meta.url).href)};
+    const result=await readReceiptPdf(ordinary([textLines(['DATE 2026-11-20'])]));
+    assert.deepEqual(result.pages[0].lines,[{line:1,text:'DATE 2026-11-20'}]);
+  `);
+  await childOutput(['--jitless', '--no-addons', entry]);
 });

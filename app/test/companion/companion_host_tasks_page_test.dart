@@ -590,6 +590,9 @@ void main() {
         if (bytes != null && artifact != null) {
           final button = find.text('打开 ${artifact['relativePath']}');
           await tester.ensureVisible(button);
+          // The zero-duration scroll needs a layout frame before a real hit test.
+          await tester.pumpAndSettle();
+          expect(button.hitTestable(), findsOneWidget);
           pushed.next = Completer<void>();
           await tester.tap(button);
           if (result == 'changed-artifact') {
@@ -819,6 +822,9 @@ void main() {
           expect(find.byType(ExpansionTile), findsNothing);
           final button = find.text('打开 ${artifact['relativePath']}');
           await tester.ensureVisible(button);
+          // The zero-duration scroll needs a layout frame before a real hit test.
+          await tester.pumpAndSettle();
+          expect(button.hitTestable(), findsOneWidget);
           pushed.next = Completer<void>();
           await tester.tap(button);
           await settleMixed(tester, pushed.next!.future);

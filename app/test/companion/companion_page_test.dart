@@ -353,7 +353,6 @@ void main() {
       final clock = _Clock();
       final initiative = _RecordingInitiative(clock.call);
       addTearDown(initiative.dispose);
-      await tester.runAsync(() => initiative.ready);
 
       CompanionStageEvents? stageEvents;
       var stageBuilds = 0;
@@ -370,6 +369,8 @@ void main() {
           extra: [companionInitiativeProvider.overrideWithValue(initiative)],
         ),
       );
+      // Page 挂载后才会连接记忆并开始恢复 owner。
+      await settleMixed(tester, initiative.ready);
       final up = await _stageUp(tester, () => stageEvents);
       up.onReady();
       await _settle(tester);
@@ -4992,7 +4993,6 @@ void main() {
 
       final owner = _RecordingInitiative(clock);
       addTearDown(owner.dispose);
-      await tester.runAsync(() => owner.ready);
 
       final commands = <(String, Map<String, Object?>)>[];
       CompanionStageEvents? stageEvents;
@@ -5012,6 +5012,8 @@ void main() {
           ],
         ),
       );
+      // Page 挂载后才会连接记忆并开始恢复 owner。
+      await settleMixed(tester, owner.ready);
       final up = await _stageUp(tester, () => stageEvents);
       up.onReady();
       await _settle(tester);
