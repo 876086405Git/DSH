@@ -61,12 +61,81 @@ class CompanionLightError implements Exception {
   String toString() => 'CompanionLightError(${failure.name}${detail == null ? '' : ': $detail'})';
 }
 
+/// One sent request's usage receipt. The raw objects retain the provider's
+/// fields; missing final components stay unknown, including after a start-only
+/// disconnect. [complete] means message_stop arrived, not that the answer was
+/// usable: max_tokens and refusal still have their own [terminal].
+class CompanionUsage {
+  const CompanionUsage({
+    required this.provider,
+    required this.model,
+    required this.startUsage,
+    required this.finalUsage,
+    required this.startEvent,
+    required this.finalEvent,
+    required this.semantics,
+    required this.inputUncached,
+    required this.inputCacheRead,
+    required this.inputCacheWrite,
+    required this.outputTokens,
+    required this.stopReason,
+    required this.terminal,
+    required this.complete,
+    required this.httpStatus,
+  });
+
+  final String provider;
+  final String model;
+  final Map<String, Object?>? startUsage;
+  final Map<String, Object?>? finalUsage;
+  final String? startEvent;
+  final String? finalEvent;
+  final String semantics;
+  final int? inputUncached;
+  final int? inputCacheRead;
+  final int? inputCacheWrite;
+  final int? outputTokens;
+  final String? stopReason;
+
+  /// complete, max_tokens, refusal, incomplete, http_error, provider_error,
+  /// network_error, or cancelled.
+  final String terminal;
+  final bool complete;
+  final int? httpStatus;
+
+  /// An additive telemetry count of reported input components, not a complete
+  /// billable input total. Unknown components remain null in the receipt.
+  int? get reportedInputTokens {
+    final parts = [inputUncached, inputCacheRead, inputCacheWrite].whereType<int>();
+    return parts.isEmpty ? null : parts.fold<int>(0, (sum, part) => sum + part);
+  }
+
+  /// Usage metadata only: no request body, credential, or generated text.
+  Map<String, Object?> toJson() => {
+    'provider': provider,
+    'model': model,
+    'start_usage': startUsage,
+    'final_usage': finalUsage,
+    'start_event': startEvent,
+    'final_event': finalEvent,
+    'usage_semantics': semantics,
+    'input_uncached': inputUncached,
+    'input_cache_read': inputCacheRead,
+    'input_cache_write': inputCacheWrite,
+    'output_tokens': outputTokens,
+    'stop_reason': stopReason,
+    'terminal': terminal,
+    'complete': complete,
+    'http_status': httpStatus,
+  };
+}
+
 /// Her reply to [lines], as text deltas. Cancelling the subscription drops the
 /// request; [client] is the caller's to close.
 ///
-/// [onUsage] hears the tokens the API reported for a reply that finished
-/// (input with its cached part, and output), once; a reply that reported none,
-/// or didn't finish, says nothing.
+/// [onSent] runs immediately before client.send, after local validation.
+/// [onUsage] runs once in finally for that sent request, even after an error or
+/// cancellation. The caller retains a reservation for unknown final usage.
 Stream<String> streamCompanionReply({
   required http.Client client,
   required String apiKey,
@@ -74,8 +143,10 @@ Stream<String> streamCompanionReply({
   required List<CompanionLine> lines,
   CompanionTurnContext? context,
   int maxTokens = 800,
-  void Function(int input, int output)? onUsage,
+  void Function()? onSent,
+  void Function(CompanionUsage usage)? onUsage,
 }) async* {
+  if (apiKey.trim().isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
   final request = http.Request('POST', Uri.parse(companionLightEndpoint))
     ..headers.addAll({
       'content-type': 'application/json',
@@ -93,42 +164,33 @@ Stream<String> streamCompanionReply({
         for (final line in lines) (role: line.role, text: line.text),
       ], context: context),
     });
-  final http.StreamedResponse response;
+  Map<String, Object?>? startUsage;
+  Map<String, Object?>? finalUsage;
+  String? stopReason;
+  int? httpStatus;
+  var terminal = 'cancelled';
+  var complete = false;
+  // A failed local receipt reservation must prevent the request from leaving.
+  onSent?.call();
   try {
-    response = await client.send(request).timeout(const Duration(seconds: 30));
-  } on Object catch (error) {
-    throw CompanionLightError(CompanionLightFailure.network, '$error');
-  }
-  if (response.statusCode != 200) {
-    // The status already says what went wrong; the body is only a note, read
-    // for a moment and a few hundred bytes at most.
-    final failure = switch (response.statusCode) {
-      401 || 403 => CompanionLightFailure.badKey,
-      429 => CompanionLightFailure.busy,
-      _ => CompanionLightFailure.server,
-    };
-    throw CompanionLightError(failure, '${response.statusCode} ${await _note(response.stream)}');
-  }
-  final events = response.stream
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())
-      // A reply that stops arriving is a failed one, not a slow one.
-      .timeout(const Duration(seconds: 45));
-  // message_start carries the input, message_delta the output so far; each
-  // is a running total, not an increment, so the largest one seen stands.
-  int? input;
-  int? output;
-  void usageFrom(Object? usage) {
-    if (usage is! Map) return;
-    int? n(Object? v) => v is int && v >= 0 ? v : null;
-    if (n(usage['input_tokens']) case final fresh?) {
-      final all = fresh + (n(usage['cache_read_input_tokens']) ?? 0) + (n(usage['cache_creation_input_tokens']) ?? 0);
-      input = max(input ?? 0, all);
+    final response = await client.send(request).timeout(const Duration(seconds: 30));
+    httpStatus = response.statusCode;
+    if (response.statusCode != 200) {
+      terminal = 'http_error';
+      // The status already says what went wrong; the body is only a note, read
+      // for a moment and a few hundred bytes at most.
+      final failure = switch (response.statusCode) {
+        401 || 403 => CompanionLightFailure.badKey,
+        429 => CompanionLightFailure.busy,
+        _ => CompanionLightFailure.server,
+      };
+      throw CompanionLightError(failure, '${response.statusCode} ${await _note(response.stream)}');
     }
-    if (n(usage['output_tokens']) case final out?) output = max(output ?? 0, out);
-  }
-
-  try {
+    final events = response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        // A reply that stops arriving is a failed one, not a slow one.
+        .timeout(const Duration(seconds: 45));
     await for (final line in events) {
       if (!line.startsWith('data:')) continue;
       final data = line.substring(5).trim();
@@ -142,6 +204,7 @@ Stream<String> streamCompanionReply({
       if (event is! Map) continue;
       // An error event, or a bare {"error": …} (the API's own timeout answer has no type).
       if (event['type'] == 'error' || (event['type'] == null && event['error'] != null)) {
+        terminal = 'provider_error';
         final error = event['error'];
         final kind = error is Map ? error['type'] : null;
         throw CompanionLightError(
@@ -159,21 +222,61 @@ Stream<String> streamCompanionReply({
           }
         case 'message_start':
           final message = event['message'];
-          if (message is Map) usageFrom(message['usage']);
+          if (message is Map && message['usage'] is Map) {
+            startUsage ??= Map<String, Object?>.unmodifiable(message['usage'] as Map);
+          }
         case 'message_delta':
-          usageFrom(event['usage']);
+          if (event['usage'] is Map) {
+            finalUsage = Map<String, Object?>.unmodifiable(event['usage'] as Map);
+          }
+          final messageDelta = event['delta'];
+          if (messageDelta is Map && messageDelta['stop_reason'] is String) {
+            stopReason = messageDelta['stop_reason'] as String;
+          }
         case 'message_stop':
-          if (input != null || output != null) onUsage?.call(input ?? 0, output ?? 0);
+          complete = true;
+          terminal = switch (stopReason) {
+            'max_tokens' => 'max_tokens',
+            'refusal' => 'refusal',
+            _ => 'complete',
+          };
           return;
       }
     }
+    // The connection ended before message_stop: the reply is incomplete, not done.
+    terminal = 'incomplete';
+    throw const CompanionLightError(CompanionLightFailure.network, 'ended before message_stop');
   } on CompanionLightError {
     rethrow;
   } on Object catch (error) {
+    terminal = 'network_error';
     throw CompanionLightError(CompanionLightFailure.network, '$error');
+  } finally {
+    int? tokens(String key) {
+      final value = finalUsage?[key];
+      return value is int && value >= 0 ? value : null;
+    }
+
+    // DeepSeek's final message_delta.usage is cumulative. Do not add the
+    // initial values, take maxima, or fill absent final fields from the start.
+    onUsage?.call(CompanionUsage(
+      provider: 'deepseek',
+      model: companionLightModel,
+      startUsage: startUsage,
+      finalUsage: finalUsage,
+      startEvent: startUsage == null ? null : 'message_start',
+      finalEvent: finalUsage == null ? null : 'message_delta',
+      semantics: 'cumulative',
+      inputUncached: tokens('input_tokens'),
+      inputCacheRead: tokens('cache_read_input_tokens'),
+      inputCacheWrite: tokens('cache_creation_input_tokens'),
+      outputTokens: tokens('output_tokens'),
+      stopReason: stopReason,
+      terminal: terminal,
+      complete: complete,
+      httpStatus: httpStatus,
+    ));
   }
-  // The connection ended before message_stop: the reply is incomplete, not done.
-  throw const CompanionLightError(CompanionLightFailure.network, 'ended before message_stop');
 }
 
 /// Up to [limit] bytes of an error body, within [wait]; never more, never longer.

@@ -41,7 +41,8 @@ Future<Map<String, Object?>> companionAdaptAsk({
   String? note,
   Map<String, Object?>? current,
   CompanionAdaptEvidence evidence = const CompanionAdaptEvidence(),
-  void Function(int input, int output)? onUsage,
+  void Function()? onSent,
+  void Function(CompanionUsage usage)? onUsage,
 }) async {
   final text = StringBuffer();
   await for (final delta in streamCompanionReply(
@@ -50,6 +51,7 @@ Future<Map<String, Object?>> companionAdaptAsk({
     system: companionAdaptSystem,
     lines: [CompanionLine.user(companionAdaptRequest(probe, note: note, current: current, evidence: evidence))],
     maxTokens: 3000,
+    onSent: onSent,
     onUsage: onUsage,
   )) {
     text.write(delta);

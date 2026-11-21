@@ -1022,8 +1022,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         probe: probe,
         note: note,
         current: probe.adapted ? await companionAdapterRead(store.pack) : null,
-        onUsage: (input, output) {
-          if (mounted) ref.read(usageStatsProvider.notifier).tokens(input, output);
+        onUsage: (usage) {
+          final input = usage.reportedInputTokens;
+          if (mounted && (input != null || usage.outputTokens != null)) {
+            // Add only reported components; zero here means no telemetry
+            // increment. The usage receipt retains unknown fields as null.
+            ref.read(usageStatsProvider.notifier).tokens(input ?? 0, usage.outputTokens ?? 0);
+          }
         },
       );
       await companionAdapterWrite(store.pack, probe, adapter);
@@ -2158,8 +2163,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           system: companionLightSystem(memories, persona: _persona()),
           lines: history.context(),
           context: turnContext,
-          onUsage: (input, output) {
-            if (mounted) ref.read(usageStatsProvider.notifier).tokens(input, output);
+          onUsage: (usage) {
+            final input = usage.reportedInputTokens;
+            if (mounted && (input != null || usage.outputTokens != null)) {
+              ref.read(usageStatsProvider.notifier).tokens(input ?? 0, usage.outputTokens ?? 0);
+            }
           },
         ).listen(
           (delta) {
