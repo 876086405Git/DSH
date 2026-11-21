@@ -192,8 +192,8 @@ flutter build apk --release \
 
 | 项 | 值 |
 |---|---|
-| 官方基线 | `v1.3.0`（`da7980270`）；本分支基于它 rebase，HEAD `1e0263836` |
-| 本分支 HEAD | 见 `git log` |
+| 官方基线 | `v1.3.0`（`da7980270`）；本分支基于它 rebase，当前 HEAD 见下表 |
+| 本分支 HEAD | `b6ba21eda`（文档提交在 rebase 之后；`git log` 为准） |
 | versionName / versionCode | `1.3.0` / `11211206` |
 | APK 体积 / SHA-256 | 688.1 MB（721,562,247 字节）/ `26e79eb0d4b2bc26106bac951a32f41688b831bfa752dacca4e23783baf33591` |
 | 备份分支 | `coexist-v2-pre120`（1.2.0 之前的状态，回滚用） |
