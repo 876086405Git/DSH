@@ -750,7 +750,7 @@ Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref,
     if (guestFs != null) {
       final file = guestFs.file('${GuestFs.dshHome}/storages/session_projcache/sessions/${s.sessionId}.json');
       try {
-        final stat = file.statSync();
+        final stat = await file.stat();
         if (stat.type == FileSystemEntityType.file) {
           final key = file.path;
           final cached = _localCheckpointCache[key];
@@ -758,7 +758,7 @@ Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref,
           if (cached != null && cached.length == stat.size && cached.modified == stat.modified) {
             diskEntry = cached.entry;
           } else {
-            diskEntry = extractCheckpointJsonSearchCorpus(file.readAsStringSync());
+            diskEntry = extractCheckpointJsonSearchCorpus(await file.readAsString());
             if (_localCheckpointCache.length >= 512) {
               _localCheckpointCache.remove(_localCheckpointCache.keys.first);
             }

@@ -92,6 +92,68 @@ class SourceInventoryContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'symlink'):
             gates.flutter_inputs(self.root)
 
+    def test_flutter_inputs_reads_the_pubspec_record_the_walk_would_give(self):
+        (self.root / 'app').mkdir()
+        pubspec = self.root / 'app/pubspec.yaml'
+        pubspec.write_text('name: fixture\n')
+        pubspec.chmod(0o640)
+        before = gates.flutter_inputs(self.root)
+        self.assertEqual(before['app/pubspec.yaml'], gates.source_files(self.root)['app/pubspec.yaml'])
+        self.assertEqual(before['app/pubspec.yaml']['mode'], 0o640)
+        pubspec.write_text('name: fixturE\n')  # Same length: SHA, not size, must detect it.
+        self.assertNotEqual(gates.flutter_inputs(self.root)['app/pubspec.yaml']['sha256'],
+                            before['app/pubspec.yaml']['sha256'])
+        pubspec.chmod(0o755)
+        after = gates.flutter_inputs(self.root)['app/pubspec.yaml']
+        self.assertEqual(after['mode'], 0o755)
+        self.assertNotEqual(after, before['app/pubspec.yaml'])
+
+    def test_flutter_inputs_hashes_no_unprotected_file(self):
+        (self.root / 'app').mkdir()
+        pubspec = self.root / 'app/pubspec.yaml'
+        pubspec.write_text('name: fixture\n')
+        unrelated = self.root / 'docs/notes.md'
+        unrelated.parent.mkdir()
+        unrelated.write_text('not a protected input')
+        real = gates.sha
+        seen = []
+
+        def recording(path):
+            seen.append(Path(path))
+            if Path(path) == unrelated:
+                raise AssertionError('flutter_inputs read an unprotected file')
+            return real(path)
+
+        with patch.object(gates, 'sha', recording):
+            gates.flutter_inputs(self.root)
+        self.assertEqual(seen, [pubspec])
+
+    def test_flutter_inputs_pubspec_links_missing_directory_and_symlinked_app(self):
+        app = self.root / 'app'
+        app.mkdir()
+        pubspec = app / 'pubspec.yaml'
+        target = self.base / 'external-pubspec.yaml'
+        target.write_text('external')
+        for link in (target, self.base / 'dangling.yaml', self.base):
+            with self.subTest(link=str(link)):
+                pubspec.symlink_to(link, target_is_directory=link.is_dir())
+                with self.assertRaisesRegex(ValueError, 'symlink'):
+                    gates.flutter_inputs(self.root)
+                pubspec.unlink()
+        self.assertNotIn('app/pubspec.yaml', gates.flutter_inputs(self.root))  # missing
+        pubspec.mkdir()
+        self.assertNotIn('app/pubspec.yaml', gates.flutter_inputs(self.root))  # a real directory
+        pubspec.rmdir()
+        outside = self.base / 'outside'
+        outside.mkdir()
+        (outside / 'pubspec.yaml').write_text('name: behind-the-link\n')
+        shutil.rmtree(app)
+        app.symlink_to(outside, target_is_directory=True)
+        # Neither the walk nor the direct read descends a symlinked app/: a pubspec
+        # behind the link must not be found (and so not refused either).
+        self.assertNotIn('app/pubspec.yaml', gates.flutter_inputs(self.root))
+        self.assertNotIn('app/pubspec.yaml', gates.source_files(self.root))
+
 
 class RunnerContract(unittest.TestCase):
     def setUp(self):
