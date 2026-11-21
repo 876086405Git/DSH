@@ -200,7 +200,7 @@ void main() {
       final beforeArchive = store.archive;
       restoreOldMemorySchema(database, 6);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 8);
+      expect(database.select('PRAGMA user_version').single['user_version'], 9);
       expect(store.requests(), beforeRequests);
       expect(spends(), beforeSpends);
       expect(store.cards(), beforeCards);
@@ -236,7 +236,7 @@ void main() {
       database.execute('DROP TRIGGER fail_line_cleanup');
       database.close();
       open();
-      expect(database.select('PRAGMA user_version').single['user_version'], 8);
+      expect(database.select('PRAGMA user_version').single['user_version'], 9);
     });
   });
 
@@ -257,7 +257,7 @@ void main() {
       final requests = store.requests();
       restoreOldMemorySchema(database, 5);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 8);
+      expect(database.select('PRAGMA user_version').single['user_version'], 9);
       expect(store.archive, before);
       expect(store.cards(), cards);
       expect(store.requests(), requests);

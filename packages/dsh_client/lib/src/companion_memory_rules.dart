@@ -488,9 +488,13 @@ bool canApplyMemoryCurrentValue({required int proposedBasisSeq, required int? cu
 
 bool _matchesControlTarget(MemoryRow card, String target) {
   if (normalizeMemoryText(card['text']! as String) == target) return true;
+  return _matchesControlAnchors(_keywords(card), target);
+}
+
+bool _matchesControlAnchors(List<String> words, String target) {
   var remainder = target.replaceFirst(RegExp(r'^(?:(?:这次|那次|上次|我的|那场|这场))+'), '');
   if (remainder.isEmpty) return false;
-  final keywords = _keywords(card)..sort((a, b) => b.length.compareTo(a.length));
+  final keywords = [...words]..sort((a, b) => b.length.compareTo(a.length));
   for (final keyword in keywords) {
     if (_containsTerm(remainder, keyword)) remainder = remainder.replaceAll(keyword, ' ').trim();
   }
@@ -568,7 +572,7 @@ Set<String> explicitMemoryTopics(String input, List<MemoryRow> cards) {
 
 /// A direct command with an unresolved target is returned as ambiguous. Its
 /// caller can ask which matter, rather than silently changing an arbitrary card.
-MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
+MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards, {List<MemoryRow> topicControls = const []}) {
   final raw = _controlInput(input);
   var text = normalizeMemoryText(raw);
   if (_nonLiteralControl(text)) return null;
@@ -610,6 +614,15 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
       if (_matchesControlTarget(card, target)) {
         topicIds.add(card['topic_id']! as String);
         targetCardIds.add(card['id']! as String);
+      }
+    }
+    // Continuing controls can outlive their former fact. These rows are only
+    // topic metadata; they cannot provide a fact target for forget/cancel.
+    if (const ['normal', 'less', 'never'].contains(kind)) {
+      for (final topic in topicControls) {
+        if (_matchesControlAnchors((topic['anchors'] as List<Object?>).cast<String>(), target)) {
+          topicIds.add(topic['topic_id'] as String);
+        }
       }
     }
   }

@@ -24,7 +24,7 @@ class CompanionMemoryStore {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 8) {
+      if (version > 9) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -163,6 +163,18 @@ class CompanionMemoryStore {
             )
           ''');
           _db.execute('PRAGMA user_version = 8');
+        });
+      }
+      if (version < 9) {
+        _transaction(() {
+          _db.execute("ALTER TABLE memory_topics ADD COLUMN control_anchors TEXT NOT NULL DEFAULT '[]'");
+          // Old stores can only recover anchors still backed by valid facts.
+          // An already-cleared keyword is not reconstructed from withdrawn text.
+          for (final topic in _db.select("SELECT id FROM memory_topics WHERE mode IN ('less','never')")) {
+            final id = topic['id'] as String;
+            _db.execute('UPDATE memory_topics SET control_anchors=? WHERE id=?', [jsonEncode(_controlAnchors(id)), id]);
+          }
+          _db.execute('PRAGMA user_version = 9');
         });
       }
       _transaction(() {
@@ -677,7 +689,7 @@ class CompanionMemoryStore {
       }
       List<String>? targets = requestedTargets;
       if (message != null) {
-        final control = parseMemoryControl(message['text'] as String, cards());
+        final control = parseMemoryControl(message['text'] as String, cards(), topicControls: topicControls());
         final resolved = control == null ? <String>[] : (control['topic_ids'] as List<Object?>).cast<String>();
         resolved.sort();
         if (control == null ||
@@ -732,7 +744,11 @@ class CompanionMemoryStore {
               UPDATE memory_cards SET maintenance_row_rev=0 WHERE topic_id=?
                 AND EXISTS(SELECT 1 FROM memory_topics WHERE id=? AND mode!=?)
             ''', [topic, topic, kind]);
-            _db.execute('UPDATE memory_topics SET mode=? WHERE id=?', [kind, topic]);
+            // A source edit can withdraw the fact without retracting this
+            // separate explicit control. Reaffirming/toggling less and never
+            // retains its already-proved vocabulary; normal releases it.
+            final anchors = kind == 'normal' ? <String>[] : _controlAnchors(topic);
+            _db.execute('UPDATE memory_topics SET mode=?,control_anchors=? WHERE id=?', [kind, jsonEncode(anchors), topic]);
           }
           if (kind == 'never' || kind == 'less') {
             _db.execute(
@@ -820,7 +836,7 @@ class CompanionMemoryStore {
     final message = _controlMessage(messageId)!;
     if (message['source_rev'] != expectedSourceRev) throw _conflict;
     if (_alreadyControlled(message, 'ambiguous_control')) return;
-    final control = parseMemoryControl(message['text'] as String, cards());
+    final control = parseMemoryControl(message['text'] as String, cards(), topicControls: topicControls());
     if (control == null || control['ambiguous'] != true) {
       throw const DshRemoteException('companion/invalid-request', 'This source is not an unresolved control', {
         'status': 400,
@@ -1398,18 +1414,33 @@ class CompanionMemoryStore {
         .toList();
   }
 
+  List<String> _controlAnchors(String topic) {
+    final saved = _db.select('SELECT control_anchors FROM memory_topics WHERE id=?', [topic]).single;
+    return {
+      ...(jsonDecode(saved['control_anchors'] as String) as List<Object?>).cast<String>(),
+      for (final card in cards())
+        if (card['topic_id'] == topic && card['scope'] == 'real' && card['eligible'] == true) ..._supportedWords(card),
+    }.toList()..sort();
+  }
+
+  /// Only for explicit topic controls; these rows are not memory facts.
+  List<MemoryRow> topicControls() => [
+    for (final row in _db.select("SELECT id,mode,control_anchors FROM memory_topics WHERE mode IN ('less','never') ORDER BY id")) {
+      'topic_id': row['id'],
+      'mode': row['mode'],
+      'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
+    },
+  ];
+
   /// A new card cannot turn one uniquely matched controlled topic back to
-  /// normal. This uses this operation's literal evidence only; it is not a
-  /// general subject/topic classifier or an entire-message ID prohibition.
+  /// normal. These are the literal anchors of an explicit control, not proof
+  /// that a withdrawn fact is still true. Only this operation's own evidence
+  /// is searched; this is not a general subject/topic classifier.
   List<String> _controlledTopics(MemoryRow operation) {
     final text = _operationText(operation);
     return {
-      for (final card in cards())
-        if (card['scope'] == 'real' &&
-            card['eligible'] == true &&
-            const ['less', 'never'].contains(card['topic_mode']) &&
-            _supportedWords(card).any((word) => _containsAnchor(text, word)))
-          card['topic_id'] as String,
+      for (final topic in topicControls())
+        if ((topic['anchors'] as List<String>).any((word) => _containsAnchor(text, word))) topic['topic_id'] as String,
     }.toList()..sort();
   }
 
@@ -1632,6 +1663,14 @@ class CompanionMemoryStore {
     // original clocks, completion support and shared spends are unchanged.
     _db.execute('UPDATE memory_followups SET card_id=?,card_rev=?,row_rev=row_rev+1 WHERE card_id IN (?,?)',
       [targetId, revision, targetId, fromId]);
+    if (target['topic_mode'] == 'less') {
+      final anchors = {
+        for (final topic in _db.select('SELECT control_anchors FROM memory_topics WHERE id IN (?,?)',
+          [target['topic_id'], from['topic_id']]))
+            ...(jsonDecode(topic['control_anchors'] as String) as List<Object?>).cast<String>(),
+      }.toList()..sort();
+      _db.execute('UPDATE memory_topics SET control_anchors=? WHERE id=?', [jsonEncode(anchors), target['topic_id']]);
+    }
     _db.execute('DELETE FROM memory_cards WHERE id=?', [fromId]);
     _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)',
       [from['topic_id'], from['topic_id']]);
