@@ -317,7 +317,8 @@ void main() {
       expect(find.byKey(const ValueKey('send')), findsNothing);
       expect(initiative.observed.last.blocked, isFalse, reason: 'the gate hears the input let go');
 
-      await tester.pumpWidget(_app(const SizedBox()));
+      // Unmount the scope rather than updating it with fewer overrides.
+      await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
     });
 
@@ -1241,7 +1242,7 @@ void main() {
       expect(find.text(_inviteText), findsNothing);
       expect(commands.where((c) => c.$1 == 'beckon').last.$2, {'prop': null});
 
-      await tester.pumpWidget(_app(const SizedBox()));
+      await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
     });
   });
