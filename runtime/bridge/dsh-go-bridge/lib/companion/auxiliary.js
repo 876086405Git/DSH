@@ -26,12 +26,12 @@ function validate(value) {
   return Object.fromEntries(inputKeys.map(key => [key, value[key]]));
 }
 
-function errorCode(error) {
+export function errorCode(error) {
   const code = error?.code ?? error?.failure?.code;
   return typeof code === 'string' && /^[a-zA-Z0-9_/-]{1,96}$/u.test(code) ? code : 'AUXILIARY_FAILED';
 }
 
-function usageReceipt(record) {
+export function usageReceipt(record) {
   const count = key => Number.isSafeInteger(record.finalUsage?.[key]) && record.finalUsage[key] >= 0
     ? record.finalUsage[key] : null;
   return {
@@ -68,19 +68,19 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
     if (admission?.peer?.principal?.kind !== 'owner') throw failure(admission?.rejection ?? 403, 'forbidden', 'Companion auxiliary transport requires the host owner');
   }
 
-  async function resolve(sessionId, requested) {
-    if (!contextId(sessionId)) throw failure(400, 'invalid-request', 'A companion session is required');
+  async function resolve(sessionId, requested, fail = failure) {
+    if (!contextId(sessionId)) throw fail(400, 'invalid-request', 'A companion session is required');
     const controller = ctx.get('sessionController'), presets = ctx.get('agentPresets');
     if (typeof controller?.resolveAgent !== 'function' || typeof presets?.presetForSession !== 'function') {
-      throw failure(503, 'unavailable', 'Companion session services are unavailable');
+      throw fail(503, 'unavailable', 'Companion session services are unavailable');
     }
     const found = await controller.resolveAgent(sessionId);
     const agent = found?.agent;
-    if (!agent || presets.presetForSession(agent.session) !== FULL_PRESET) throw failure(409, 'session-unavailable', 'Open the full companion session before extracting memory');
+    if (!agent || presets.presetForSession(agent.session) !== FULL_PRESET) throw fail(409, 'session-unavailable', 'Open the full companion session before using its model channel');
     const session = agent.session, scope = agent.loopCtx ?? agent.ctx ?? ctx;
     const llm = scope.get('llm');
     const selected = agent.model?.current();
-    if (!contextId(selected?.provider) || !contextId(selected?.model)) throw failure(409, 'model-unavailable', 'Select a model in the companion session');
+    if (!contextId(selected?.provider) || !contextId(selected?.model)) throw fail(409, 'model-unavailable', 'Select a model in the companion session');
     const guard = () => {
       const current = agent.model?.current();
       if (closed || ctx.get('agents')?.get(sessionId) !== agent || agent.session !== session || agent.dshGoDeleting ||
@@ -88,13 +88,13 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
           presets.presetForSession(session) !== FULL_PRESET || current?.provider !== selected.provider ||
           current?.model !== selected.model || current?.reasoningEffort !== selected.reasoningEffort ||
           requested && (requested.provider !== current.provider || requested.model !== current.model)) {
-        throw failure(409, 'selection-changed', 'The companion session or selected model changed');
+        throw fail(409, 'selection-changed', 'The companion session or selected model changed');
       }
     };
     guard();
     const capability = typeof llm?.companionAuxiliaryCapability === 'function'
       ? llm.companionAuxiliaryCapability(selected.provider) : undefined;
-    return { agent, session, llm, selected, guard, capability };
+    return { agent, session, scope, llm, selected, guard, capability };
   }
 
   function snapshot(record) {
@@ -237,6 +237,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
   });
 
   return {
+    resolve,
     async handle(req, res, path) {
       if (path !== ROOT && !path.startsWith(`${ROOT}/`)) return false;
       try {

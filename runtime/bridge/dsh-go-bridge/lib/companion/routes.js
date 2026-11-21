@@ -4,6 +4,7 @@ import { contextId, FULL_PRESET, validatePromptContext } from './prompt-context.
 import { createRecallCoordinator } from "./recall.js";
 import { recallError } from "./recall-schema.js";
 import { createCompanionAuxiliaryRoutes } from './auxiliary.js';
+import { createCompanionLookupRoutes } from './lookup.js';
 
 const ROOT = "/dsh-go/v1/companion";
 
@@ -75,6 +76,7 @@ function readJson(req, maxBytes = MAX_BODY_BYTES, strictKeys = false) {
 export function createCompanionRoutes({ send, store = createCompanionStore(), signals, ctx, promptContext,
   recall = createRecallCoordinator({ store, promptContext }) }) {
   const auxiliary = createCompanionAuxiliaryRoutes({ ctx, send, readJson });
+  const lookup = createCompanionLookupRoutes({ ctx, send, readJson, resolve: auxiliary.resolve });
   function usageRoute(req) {
     const connection = ctx?.get('connection');
     if (typeof connection?.admit !== 'function' || typeof promptContext?.usageSnapshot !== 'function') {
@@ -163,6 +165,7 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
     async handle(req, res, path) {
       if (path !== ROOT && !path.startsWith(`${ROOT}/`)) return false;
       if (await auxiliary.handle(req, res, path)) return true;
+      if (await lookup.handle(req, res, path)) return true;
       if (signals && await signals.handle(req, res, path, send)) return true;
       const isRecall = path === `${ROOT}/recall` || path.startsWith(`${ROOT}/recall/`);
       try {
@@ -214,6 +217,6 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       }
       return true;
     },
-    dispose() { auxiliary.dispose(); },
+    dispose() { lookup.dispose(); auxiliary.dispose(); },
   };
 }
