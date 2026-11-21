@@ -543,7 +543,7 @@ void main() {
 
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
-        return (await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future)))!;
+        return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
       }
 
       testWidgets('with no host she answers straight from the model and keeps the chat here', (tester) async {
@@ -973,6 +973,62 @@ void main() {
         final next = jsonEncode(asked.last['messages']);
         expect(next, isNot(contains('companion_memory')));
         expect(next, isNot(contains('对方最喜欢海盐柠檬味的点心')));
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+      });
+
+      testWidgets('shared phone golden matches the final light HTTP request bytes and ordered IDs', (tester) async {
+        final fixture = jsonDecode(
+          File('../tooling/companion/fixtures/phone-context.json').readAsStringSync(),
+        ) as Map<String, Object?>;
+        final cards = (fixture['cards']! as List).cast<Map<String, Object?>>();
+        final query = fixture['query']! as String;
+        final asked = <Map<String, Object?>>[];
+        final sent = Completer<void>();
+        final client = MockClient.streaming((request, body) async {
+          asked.add(jsonDecode(await body.bytesToString()) as Map<String, Object?>);
+          sent.complete();
+          return http.StreamedResponse(Stream.value(utf8.encode(_sse(['我在听。']))), 200);
+        });
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        final memory = await memoryOf(tester);
+        for (final card in cards) {
+          memory.store.saveManual(
+            CompanionMemory(
+              id: card['id']! as String,
+              kind: card['kind']! as String,
+              text: card['text']! as String,
+              keywords: (card['keywords']! as List).cast<String>(),
+              pinned: card['pinned']! as bool,
+            ),
+            expectedRowRev: null,
+            currentValueChange: true,
+            realityKnown: true,
+          );
+        }
+        memory.changed();
+        await _settle(tester);
+        await tester.enterText(find.byType(TextField), query);
+        await tester.pump();
+        await tester.tap(find.byIcon(AppIcons.send).last);
+        await settleMixed(tester, sent.future);
+        await _settle(tester);
+
+        expect(asked, hasLength(1));
+        final content = ((asked.single['messages']! as List).last as Map)['content']! as List;
+        expect((content.first as Map)['text'], query);
+        final block = content
+            .map((part) => (part as Map)['text']! as String)
+            .where((text) => text.startsWith('{"type":"companion_memory",'))
+            .single;
+        expect(utf8.encode(block), utf8.encode(fixture['block']! as String));
+        final items = (jsonDecode(block) as Map)['items']! as List;
+        expect(items.map((item) => (item as Map)['id']).toList(), fixture['selected_ids']);
+        for (final card in cards) {
+          expect(asked.single['system'], isNot(contains(card['text'])));
+        }
+        expect(memory.store.messages().where((row) => row['role'] == 'user').single['text'], query);
 
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 20));
