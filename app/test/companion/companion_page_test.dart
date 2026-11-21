@@ -35,6 +35,7 @@ import 'package:dsh_client/dsh_client.dart'
     show
         CompanionMemory,
         CompanionMemoryStore,
+        CompanionTaskStore,
         MemoryBatch,
         companionMemoryExtractionPrompt,
         companionMemoryConsolidationPrompt,
@@ -42,6 +43,7 @@ import 'package:dsh_client/dsh_client.dart'
         parseExtractionProposal;
 import 'package:dsh_tavern/dsh_tavern.dart' as story;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -573,6 +575,205 @@ void main() {
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+      }
+
+      for (final after in ['cancel', 'leave', 'accepted then leave']) {
+        testWidgets('D actual Page $after while the reminder platform call is pending preserves the acceptance boundary', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          final started = Completer<void>();
+          final release = Completer<void>();
+          final calls = <MethodCall>[];
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => 1772877000000),
+            CompanionLocal.at(root),
+          );
+          Future<void>? operation;
+          var posts = 0;
+          addTearDown(() async {
+            if (!release.isCompleted) {
+              release.complete();
+            }
+            final pending = operation;
+            if (pending != null) {
+              await settleMixed(tester, pending);
+            }
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            if ((after == 'accepted then leave' && call.method == 'wake') ||
+                (after != 'accepted then leave' && call.method == 'resolve')) {
+              started.complete();
+              await release.future;
+            }
+            return switch (call.method) {
+              'clock' => {'utcMs': 1772877000000, 'zoneId': 'America/Los_Angeles', 'offsetSeconds': -28800},
+              'capabilities' => {'executorId': 'installation-A', 'exact': true, 'notifications': true},
+              'resolve' => {'kind': 'unique', 'moments': [{'epochMs': 1772964600000, 'offsetSeconds': -25200}]},
+              'wake' => {'wakeCompleted': true},
+              'recover' => {'recoveryQueued': true},
+              _ => throw StateError('Unexpected reminder method ${call.method}'),
+            };
+          });
+          await openLight(tester, apiKey: 'sk-test', client: MockClient((_) async {
+            posts++;
+            return http.Response('', 401);
+          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          const first = '2026-03-08 03:10 America/Los_Angeles提醒我带钥匙';
+          final raw = after == 'accepted then leave'
+              ? '$first；2026-03-08 03:10 America/Los_Angeles提醒我带证件' : first;
+          await tester.enterText(find.byType(TextField), raw);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, started.future);
+          operation = memory.lastReceipt;
+          final original = memory.store.messages().single;
+          expect(original['text'], raw);
+          expect(original['said_at_utc'], 1772877000000);
+          expect(original['zone_id'], 'America/Los_Angeles');
+          expect(original['offset_seconds'], -28800);
+          final accepted = memory.store.tasks();
+          expect(accepted, hasLength(after == 'accepted then leave' ? 1 : 0));
+          if (after == 'cancel') {
+            await tester.enterText(find.byType(TextField), '不用提醒了');
+            await tester.pump();
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await tester.pump();
+            final cancellation = memory.lastReceipt;
+            expect(identical(cancellation, operation), isFalse);
+            await settleMixed(tester, cancellation);
+            expect(memory.store.messages().where((row) => row['text'] == '不用提醒了'), hasLength(1));
+          } else {
+            await tester.pumpWidget(_app(const Scaffold(body: Text('新的页面'))));
+          }
+          release.complete();
+          await settleMixed(tester, operation!);
+          await tester.pump();
+          expect(memory.store.tasks(), hasLength(accepted.length));
+          expect(calls.where((call) => call.method == 'wake'), hasLength(accepted.length));
+          expect(posts, 0);
+          if (accepted.isNotEmpty) {
+            final task = memory.store.tasks().single;
+            expect(task['task_id'], accepted.single['task_id']);
+            expect(task['task_rev'], 1);
+            expect(task['source_message_id'], original['id']);
+            expect(task['source_session_id'], original['session_id']);
+            expect(task['state'], 'queued', reason: 'wake completion alone is not a registration receipt');
+            expect(memory.store.taskReceipts(task['task_id']! as String), isEmpty);
+            expect(find.text('新的页面'), findsOneWidget);
+            expect(find.textContaining('这条提醒'), findsNothing);
+          }
+        });
+      }
+
+      for (final rejectSource in [false, true]) {
+        testWidgets('D actual Page separates reminder receipts from acceptance, sourceFailure=$rejectSource', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          final clockRead = Completer<void>();
+          final twoWakes = Completer<void>();
+          final calls = <MethodCall>[];
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => 1772877000000), CompanionLocal.at(root));
+          var wakes = 0;
+          var posts = 0;
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            switch (call.method) {
+              case 'clock':
+                clockRead.complete();
+                return {'utcMs': 1772877000000, 'zoneId': 'America/Los_Angeles', 'offsetSeconds': -28800};
+              case 'capabilities':
+                return {'executorId': 'installation-A', 'exact': true, 'notifications': true};
+              case 'resolve':
+                return {'kind': 'unique', 'moments': [{'epochMs': 1772964600000, 'offsetSeconds': -25200}]};
+              case 'recover':
+                return {'recoveryQueued': true};
+              case 'wake':
+                final task = memory.store.task((call.arguments as Map)['taskId']! as String)!;
+                wakes++;
+                // Controlled native receipt input, not an Android execution.
+                // The Page must read the same database after wake completes.
+                if (wakes == 1) {
+                  for (final event in ['claimed', 'returned']) {
+                    db.execute('''
+                      INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
+                        executor_id,occurred_at_ms,outcome)
+                      VALUES(?,?,'alarm.register','page-native-peer',?,'installation-A',1772877000000,?)
+                    ''', [task['task_id'], task['task_rev'], event, event == 'returned' ? 'succeeded' : null]);
+                  }
+                  db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=?",
+                    [task['task_id'], task['task_rev']]);
+                } else {
+                  db.execute('''
+                    INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
+                      executor_id,occurred_at_ms,outcome,detail_json)
+                    VALUES(?,?,'executor','page-native-peer','blocked','installation-A',1772877000000,
+                      'not_performed',?)
+                  ''', [task['task_id'], task['task_rev'], jsonEncode({'reason': 'notifications_disabled'})]);
+                  db.execute('''
+                    UPDATE companion_task_revisions SET state='waiting',wait_reason='notifications_disabled'
+                    WHERE task_id=? AND task_rev=?
+                  ''', [task['task_id'], task['task_rev']]);
+                  twoWakes.complete();
+                }
+                return {'wakeCompleted': true};
+              default:
+                throw StateError('Unexpected reminder method ${call.method}');
+            }
+          });
+          await openLight(tester, apiKey: 'sk-test', client: MockClient((_) async {
+            posts++;
+            return http.Response('', 401);
+          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          if (rejectSource) {
+            db.execute("CREATE TRIGGER reject_reminder BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+          }
+          const raw = '2026-03-08 03:10 America/Los_Angeles提醒我带钥匙；2026-03-08 03:10 America/Los_Angeles提醒我带证件';
+          await tester.enterText(find.byType(TextField), raw);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, clockRead.future);
+          if (rejectSource) {
+            await tester.pump();
+            expect(memory.store.messages(), isEmpty);
+            expect(memory.store.tasks(), isEmpty);
+            expect(calls.where((call) => call.method == 'resolve' || call.method == 'wake'), isEmpty);
+            expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
+            expect(find.text('这次约定没保存好，原输入还在。'), findsOneWidget);
+          } else {
+            await settleMixed(tester, twoWakes.future);
+            await settleMixed(tester, memory.lastReceipt);
+            await tester.pump();
+            final source = memory.store.messages().single;
+            final tasks = memory.store.tasks();
+            expect(source['text'], raw);
+            expect(tasks, hasLength(2));
+            expect(tasks.map((task) => task['source_message_id']), everyElement(source['id']));
+            expect(tasks.map((task) => task['command_item_no']).toSet(), {0, 1});
+            final done = tasks.singleWhere((task) => task['reminder_text'] == '带钥匙');
+            final waiting = tasks.singleWhere((task) => task['reminder_text'] == '带证件');
+            expect(done['state'], 'done');
+            expect(memory.store.taskReceipts(done['task_id']! as String).last['outcome'], 'succeeded');
+            expect(waiting['state'], 'waiting');
+            expect(waiting['wait_reason'], 'notifications_disabled');
+            expect(memory.store.taskReceipts(waiting['task_id']! as String).single['outcome'], 'not_performed');
+            expect(find.text('带钥匙：这条提醒设好了。\n带证件：通知没有打开，这条提醒还没设好。'), findsOneWidget);
+          }
+          expect(posts, 0);
+        });
       }
 
       testWidgets('fixture 6 original Tavern chat reopens with its story name while the real Page keeps its own name', (tester) async {

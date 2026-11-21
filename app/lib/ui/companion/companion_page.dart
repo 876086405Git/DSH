@@ -32,6 +32,7 @@ import '../../companion/companion_light.dart';
 import '../../companion/companion_pack.dart';
 import '../../companion/companion_recall_prefs.dart';
 import '../../companion/companion_reply.dart';
+import '../../companion/companion_reminder.dart';
 import '../../companion/companion_signal_consent.dart';
 import '../../companion/companion_signals.dart';
 import '../../companion/companion_state.dart';
@@ -74,6 +75,7 @@ import 'companion_memory_page.dart';
 import 'companion_persona_page.dart';
 import 'companion_voice_page.dart';
 import 'companion_stage.dart';
+import 'companion_tasks_page.dart';
 
 /// The person removed her pack: the one inside the app waits to be asked for.
 const _packRemovedKey = 'companion_pack_removed';
@@ -456,6 +458,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
   }
 
+  Future<void> _openTasks() async {
+    try {
+      final memory = await _openMemory();
+      if (!mounted) return;
+      final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
+        memory: memory, sourceSessionId: sourceSession,
+      )));
+    } on Object {
+      if (mounted) _notice(context.l10n.companionMemoryLoadFailed);
+    }
+  }
+
   Future<void> _prepareMemory() async {
     try {
       await _openMemory();
@@ -483,6 +498,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
     if (mounted) {
       _attachMemoryWorker();
+      unawaited(ref.read(companionRemindersProvider).recover());
       unawaited(_clearMemoryWidget());
       if (_light) unawaited(_extractMemory(forceTail: true));
       if (!_light) {
@@ -2111,7 +2127,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // What the person typed, exactly; trimmed only to see it isn't empty.
     final raw = _input.text;
     final text = raw.trim();
-    final control = _isMemoryControl(raw);
+    final reminderParts = parseCompanionReminders(raw);
+    final reminder = reminderParts.any((part) => part.command != null);
+    final reminderClock = reminderParts.any((part) => part.command != null && part.command!.operation != 'clarify');
+    final control = _isMemoryControl(raw) || reminderParts.any((part) =>
+      part.command != null && part.command!.operation != 'create');
     if (text.isEmpty || ((_sending || _lightReply != null) && !control)) return;
     if (control) {
       _retireLight(discard: true);
@@ -2134,6 +2154,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     });
     _stage.command('mood', {'mood': 'thinking'});
     try {
+      CompanionReminderClock? clock;
+      if (reminderClock && _retryMemorySource?['text'] != raw) {
+        clock = await ref.read(companionRemindersProvider).clock();
+      }
       final memory = await _openMemory();
       if (!current()) return;
       final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
@@ -2143,14 +2167,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           retry['text'] == raw &&
           retry['session_id'] == sourceSession &&
           (retry['first_seq']! as int) > (memory.store.archive['history_after_seq']! as int);
+      if (reminderClock && !reuse && clock == null) {
+        clock = await ref.read(companionRemindersProvider).clock();
+        if (!current()) return;
+      }
       final source = _retryMemorySource = reuse
           ? retry
           : memory.store.submitMessage(
               id: companionMemoryId(),
               sessionId: sourceSession,
               text: raw,
-              saidAtUtc: submittedAt.toUtc().millisecondsSinceEpoch,
-              offsetMinutes: submittedAt.timeZoneOffset.inMinutes,
+              saidAtUtc: clock?.utcMs ?? submittedAt.toUtc().millisecondsSinceEpoch,
+              offsetMinutes: clock == null ? submittedAt.timeZoneOffset.inMinutes : clock.offsetSeconds ~/ 60,
+              zoneId: clock?.zoneId,
+              offsetSeconds: clock?.offsetSeconds,
             );
       // Only the person's complete submitted statement can retire this visit;
       // a failed source transaction must not retire its pending question.
@@ -2160,6 +2190,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // Do not clear the composer's only copy before SQLite commits. If the
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
+      if (reminder) {
+        await _handleReminders(memory, source, reminderParts, current);
+        return;
+      }
       if (await _handleMemoryControl(memory, source, raw)) return;
       if (!current()) return;
       _queueMemoryExtraction();
@@ -2207,13 +2241,80 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (_input.text.isEmpty) _input.text = raw;
       _stage.command('emotion', {'name': 'worried', 'hold': 3000});
       setState(() => _myLine = null);
-      _showBubble(_failureText(error), hold: const Duration(seconds: 6), error: true);
+      _showBubble(reminder ? companionReminderFailure(context.l10n, error) : _failureText(error),
+          hold: const Duration(seconds: 6), error: true);
     } finally {
       if (current()) {
         setState(() => _sending = false);
         _refreshMood();
       }
     }
+  }
+
+  Future<void> _handleReminders(
+    CompanionMemoryOwner memory,
+    MemoryRow source,
+    List<CompanionReminderPart> parts,
+    bool Function() current,
+  ) async {
+    final reminders = ref.read(companionRemindersProvider);
+    final l10n = context.l10n;
+    final roomMode = _light ? 'light' : 'full';
+    final hostKey = _light ? null : _recallHostKey;
+    final hostSession = _light ? null : _sessionId;
+    final operation = () async {
+      final lines = <String>[];
+      var failed = false;
+      for (final part in parts) {
+        final command = part.command;
+        if (command == null) {
+          if (part.raw.isNotEmpty) lines.add(l10n.companionReminderUnhandled(part.raw));
+          continue;
+        }
+        if (command.operation == 'clarify') {
+          lines.add(l10n.companionReminderSyntax);
+          continue;
+        }
+        final accepted = memory.store.taskForCommand(source['id']! as String, part.itemNo);
+        final previous = command.operation == 'create' || accepted != null
+            ? null : reminders.target(memory.store, source['session_id']! as String, command);
+        if (command.operation != 'create' && accepted == null && previous == null) {
+          lines.add(l10n.companionReminderWhich);
+          continue;
+        }
+        try {
+          final result = await reminders.submit(
+            store: memory.store, source: source, part: part, roomMode: roomMode,
+            hostKey: hostKey, hostSessionId: hostSession, previous: previous,
+            isCurrent: current,
+          );
+          if (result.task['task_rev'] != result.acceptedRev) {
+            lines.add(l10n.companionTaskChanged);
+          } else {
+            final title = result.task['reminder_text'] as String?;
+            final status = companionReminderLine(l10n, result.task, executorId: result.executorId);
+            lines.add('${title == null || title.isEmpty ? '' : '$title：'}$status');
+          }
+        } on Object catch (error) {
+          failed = true;
+          lines.add(companionReminderFailure(l10n, error));
+        }
+      }
+      memory.changed();
+      return (lines: lines, failed: failed);
+    }();
+    memory.retainReceipt(operation.then<void>((_) {}));
+    final result = await operation;
+    if (!current()) return;
+    if (result.failed) {
+      if (_input.text.isEmpty) {
+        _input.text = source['text']! as String;
+      }
+    } else {
+      _retryMemorySource = null;
+    }
+    _say(result.lines.join('\n'));
+    _queueMemoryExtraction();
   }
 
   /// Who she is to this host: persona, name, what she calls the person, her
@@ -3112,6 +3213,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                         unawaited(_openMemories());
                       },
                     ),
+                    SettingsTile(
+                      icon: AppIcons.reminder,
+                      tinted: false,
+                      title: l10n.companionTasksTitle,
+                      onTap: () {
+                        Navigator.of(sheet).pop();
+                        unawaited(_openTasks());
+                      },
+                    ),
                     Consumer(
                       // The page's own context pushes the voice page, not the sheet's.
                       builder: (_, ref, _) {
@@ -3524,7 +3634,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                         _openAgent(pill.sessionId);
                       },
                     ),
-                  if (!_light && _sessionId != null) CompanionAsk(sessionId: _sessionId!),
+                  if (!_light && _sessionId != null) Consumer(builder: (_, ref, _) {
+                    final session = _sessionId!;
+                    final approval = ref.watch(chatProvider(session).select((state) => state.openApproval));
+                    final current = _currentRoom();
+                    return CompanionAsk(
+                      sessionId: session,
+                      approvalTarget: approval == null ? null : (
+                        eventId: approval.eventId, callId: approval.callId,
+                        isCurrent: () => current() && _sessionId == session,
+                      ),
+                    );
+                  }),
                   CompanionMyLine(text: _myLine),
                   CompanionSpeech(
                     text: _bubble,

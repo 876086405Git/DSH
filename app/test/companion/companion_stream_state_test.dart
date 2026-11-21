@@ -109,6 +109,67 @@ class _Mux extends DshMux {
   Stream<DshConnectionState> get states => connection.stream;
 }
 
+// Only the physical peer is controlled. The ready handshake, RPC envelope,
+// event identity, ChatController and actual Page approval callbacks are real.
+class _ApprovalSocket extends StreamView<dynamic> implements WebSocket {
+  _ApprovalSocket() : this._(StreamController<dynamic>());
+  _ApprovalSocket._(this.incoming) : super(incoming.stream);
+  final StreamController<dynamic> incoming;
+  @override
+  Duration? pingInterval;
+  @override
+  int? closeCode;
+  @override
+  String? closeReason;
+
+  @override
+  void add(dynamic data) {
+    final frame = jsonDecode(data as String) as Map;
+    if (frame['type'] == 'open') {
+      expect(frame['endpoint'], r'$events');
+      incoming.add(jsonEncode({
+        'type': 'item', 'streamId': frame['streamId'],
+        'value': {'type': 'ready', 'clientId': 'approval-peer', 'host': {'home': '/fixture'}},
+      }));
+    }
+  }
+
+  @override
+  Future<void> close([int? code, String? reason]) {
+    closeCode = code;
+    closeReason = reason;
+    return incoming.close();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ApprovalBridge extends _Bridge {
+  final socket = _ApprovalSocket();
+  final results = <Map<String, Object?>>[];
+  final responded = Completer<void>();
+
+  @override
+  Future<WebSocket> connectWebSocket(String path, {Duration? timeout}) async {
+    expect(path, remoteMuxPath);
+    return socket;
+  }
+
+  @override
+  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
+    if (path != r'/api/$events/result') {
+      return super.postJson(path, body, timeout: timeout);
+    }
+    final envelope = Map<String, Object?>.from(body! as Map);
+    results.add(envelope);
+    if (!responded.isCompleted) {
+      responded.complete();
+    }
+    return json({'type': 'server-response', 'rpcId': envelope['rpcId'], 'result': {'ok': true}});
+  }
+}
+
 class _Client extends DshClient {
   _Client([_Bridge? bridge]) : super(bridge ?? _Bridge());
   final events = StreamController<DshEvent>();
@@ -899,6 +960,72 @@ void main() {
       await room.close(tester);
     }
   });
+
+  for (final allowAll in [false, true]) {
+    testWidgets('D actual Page keeps E1 callbacks from answering E2 and preserves allowAll=$allowAll', (tester) async {
+      final bridge = _ApprovalBridge();
+      final room = _Room(temporary, client: _Client(bridge));
+      await room.open(tester);
+      try {
+        void approval(String id) => room.client.events.add(HostEvent.fromFrame({
+          'type': 'waterfall', 'event': 'approval/request',
+          'eventId': id, 'agentId': _session,
+          'request': {'toolName': 'web_fetch', 'callId': 'call-$id'},
+        }));
+        approval('E1');
+        await flush(tester);
+        await tester.pump(CompanionAsk.detailWait);
+        await tester.pump(const Duration(milliseconds: 600));
+        final oldCard = tester.widget<ApprovalCard>(find.byType(ApprovalCard));
+        final oldTarget = tester.widget<CompanionAsk>(find.byType(CompanionAsk)).approvalTarget!;
+        expect(oldTarget.eventId, 'E1');
+        expect(oldTarget.callId, 'call-E1');
+        expect(oldTarget.isCurrent(), isTrue);
+
+        room.client.events.add(HostEvent.fromFrame({'type': 'cancel', 'eventId': 'E1'}));
+        approval('E2');
+        await flush(tester);
+        expect(room.state.openApproval?.eventId, 'E2');
+        // An outgoing AnimatedSwitcher card can still own a captured button.
+        // Recheck the real pending event before calling either original action.
+        await settleMixed(tester, oldCard.onRespond(oldCard.request, ApprovalDecision.allowOnce));
+        await settleMixed(tester, oldCard.onAllowAll!(oldCard.request));
+        expect(bridge.results, isEmpty);
+        expect(room.state.autoApprove, isFalse);
+
+        await tester.pump(CompanionAsk.detailWait);
+        await tester.pump(const Duration(milliseconds: 600));
+        final currentCard = tester.widget<ApprovalCard>(find.byType(ApprovalCard));
+        expect(currentCard.request.eventId, 'E2');
+        expect(currentCard.request.callId, 'call-E2');
+        if (allowAll) {
+          await tester.tap(find.widgetWithText(TextButton, '本对话都允许'));
+          await flush(tester);
+          await tester.pump(const Duration(milliseconds: 600));
+          expect(find.text('本对话都允许？'), findsOneWidget);
+          await tester.tap(find.widgetWithText(FilledButton, '全部允许'));
+        } else {
+          await tester.tap(find.descendant(of: find.byType(ApprovalCard), matching: find.byType(FilledButton)));
+        }
+        await settleMixed(tester, bridge.responded.future);
+        await flush(tester);
+        final envelope = bridge.results.single;
+        expect(envelope['method'], r'$events/result');
+        expect((envelope['payload']! as Map)['args'], {
+          'clientId': 'approval-peer', 'eventId': 'E2',
+          'outcome': {'kind': 'result', 'value': ApprovalDecision.allowOnce.wire},
+        });
+        expect(room.state.autoApprove, allowAll);
+        expect(room.state.error, isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        await settleMixed(tester, room.client.events.close());
+        await settleMixed(tester, room.client.mux.connection.close());
+        await settleMixed(tester, room.client.close());
+      }
+    });
+  }
 
   testWidgets('an approval waits for the command it is about before it can be allowed', (tester) async {
     final room = _Room(temporary);

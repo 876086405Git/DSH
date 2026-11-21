@@ -19,15 +19,19 @@ import '../theme/motion.dart';
 import '../theme/surfaces.dart';
 import 'companion_chrome.dart';
 
+/// The room captures the original pending approval, never its successor card.
+typedef CompanionApprovalTarget = ({String eventId, String? callId, bool Function() isCurrent});
+
 /// The approval or question her session [sessionId] is waiting on, or nothing.
 /// An approval comes first: the turn can't go on without it. An approval
 /// about a tool call waits for that call's details (its command or path)
 /// before it can be allowed, up to [detailWait]; after that it shows what
 /// the request itself says, as the main chat does.
 class CompanionAsk extends ConsumerStatefulWidget {
-  const CompanionAsk({super.key, required this.sessionId});
+  const CompanionAsk({super.key, required this.sessionId, this.approvalTarget});
 
   final String sessionId;
+  final CompanionApprovalTarget? approvalTarget;
 
   /// How long an approval waits for its tool call to show up.
   static const detailWait = Duration(seconds: 3);
@@ -44,6 +48,41 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
   /// The approval [_wait] is counting for.
   String? _waitingFor;
 
+  ApprovalRequest? _approval(ChatState state) {
+    final target = widget.approvalTarget;
+    if (target == null) {
+      return state.openApproval;
+    }
+    if (!target.isCurrent()) {
+      return null;
+    }
+    return state.approvals
+        .where((request) =>
+            request.sessionId == widget.sessionId &&
+            request.eventId == target.eventId &&
+            (target.callId == null || request.callId == target.callId) &&
+            !state.autoAnswered.contains(request.eventId))
+        .firstOrNull;
+  }
+
+  bool _pending(ApprovalRequest request) {
+    final current = _approval(ref.read(chatProvider(widget.sessionId)));
+    return current != null && current.eventId == request.eventId && current.callId == request.callId;
+  }
+
+  Future<void> _respond(ApprovalRequest request, ApprovalDecision decision) async {
+    // A desktop decision or room change may arrive after the card was drawn.
+    if (_pending(request)) {
+      await ref.read(chatProvider(widget.sessionId).notifier).respond(request, decision);
+    }
+  }
+
+  Future<void> _allowAll(ApprovalRequest request) async {
+    if (_pending(request)) {
+      await ref.read(chatProvider(widget.sessionId).notifier).allowAll(request);
+    }
+  }
+
   @override
   void dispose() {
     _wait?.cancel();
@@ -54,11 +93,11 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
   Widget build(BuildContext context) {
     final asking = ref.watch(
       chatProvider(widget.sessionId).select((s) {
-        final approval = s.openApproval;
+        final approval = _approval(s);
         return (
           approval: approval,
           tool: approval == null ? null : _toolFor(s.items, approval),
-          question: s.questions.firstOrNull,
+          question: widget.approvalTarget == null ? s.questions.firstOrNull : null,
           autoApprove: s.autoApprove,
         );
       }),
@@ -90,9 +129,9 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
         key: ValueKey('approval-${approval.eventId}'),
         request: approval,
         view: tool == null ? null : ToolView.of(tool),
-        onRespond: chat.respond,
+        onRespond: _respond,
         // Already trusting the whole conversation: nothing wider to offer.
-        onAllowAll: asking.autoApprove ? null : chat.allowAll,
+        onAllowAll: asking.autoApprove ? null : _allowAll,
       );
     } else if (approval == null && question != null) {
       card = QuestionCard(

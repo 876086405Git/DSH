@@ -14,7 +14,8 @@ import 'companion_memory_worker.dart';
 import 'companion_widget.dart';
 
 /// Key by the absolute folder path, not Directory object identity. This
-/// provider stays alive across room visits; it owns the only write connection.
+/// provider stays alive across room visits; it owns the Dart connection. The
+/// reminder executor uses the same database from its private native process.
 final companionMemoryOwnerProvider = FutureProvider.family<CompanionMemoryOwner, String>((ref, rootPath) async {
   final root = Directory(rootPath);
   await root.create(recursive: true);
@@ -100,8 +101,9 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   void cancelWork() => _worker?.cancel();
 
-  /// Ordinary chat also settles usage after stream cancellation. Its owner
-  /// registers the drain before sending, so disposal cannot close SQLite first.
+  /// Chat usage and explicit reminder commands can finish after leaving the
+  /// room. Register their drain before dispatch so disposal cannot close
+  /// SQLite before the final receipt is read or recorded.
   void retainReceipt(Future<void> settled) {
     _receipts.add(settled);
     unawaited(

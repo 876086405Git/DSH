@@ -323,5 +323,63 @@
   "companionMemoryUsageNotSent": "Not sent locally",
   "companionMemoryUsageEmpty": "No usage recorded yet",
   "companionMemoryHostUnsupported": "This host is a bit out of date, so here she can't recall what you've talked about. Updating the host fixes it.",
-  "companionMemoryPostponedDone": "Okay, let's pick it up once you have a new time."
+  "companionMemoryPostponedDone": "Okay, let's pick it up once you have a new time.",
+  "companionTasksTitle": "Tasks",
+  "companionTasksEmpty": "No reminders have been requested here.",
+  "companionTaskMissing": "This task is no longer available here.",
+  "companionTaskChanged": "The task has changed. The current agreement is shown below.",
+  "companionReminderEdit": "Edit reminder",
+  "companionReminderCancel": "Cancel reminder",
+  "companionReminderText": "What to remind you about",
+  "companionReminderWhen": "Local date and time",
+  "companionReminderWhenHint": "For example, 2026-11-21 08:00",
+  "companionReminderZone": "Time zone",
+  "companionReminderZoneHint": "For example, Asia/Shanghai or +08:00",
+  "companionReminderQueued": "This reminder is saved. Registration has not yet been confirmed.",
+  "companionReminderDone": "This reminder is registered.",
+  "companionReminderUnknown": "This reminder may have been scheduled; I have not confirmed it yet.",
+  "companionReminderFailed": "This reminder has not been set.",
+  "companionReminderCancelled": "Further scheduling for this reminder has been cancelled.",
+  "companionReminderTextMissing": "What should the reminder say?",
+  "companionReminderDateMissing": "Which date should I use?",
+  "companionReminderTimeMissing": "What time on that date?",
+  "companionReminderZoneMissing": "Which time zone should this use?",
+  "companionReminderGap": "That local time does not exist. Please choose another time.",
+  "companionReminderOverlap": "That local time occurs twice. Which occurrence do you mean?",
+  "companionReminderFirst": "First occurrence",
+  "companionReminderSecond": "Second occurrence",
+  "companionReminderExactMissing": "This phone cannot currently schedule exact reminders. It has not been set.",
+  "companionReminderNotificationsMissing": "Notifications are disabled. This reminder has not been set.",
+  "companionReminderChannelMissing": "The reminder notification channel is disabled. It has not been set.",
+  "companionReminderGroupMissing": "The reminder notification group is disabled. It has not been set.",
+  "companionReminderTimePassed": "The agreed time has passed. No late notification has been sent.",
+  "companionReminderInvalidTime": "The time could not be resolved. Please specify the date, time and zone again.",
+  "companionReminderCancelUnknown": "Cancellation was requested, but it has not been fully confirmed.",
+  "companionReminderWhich": "Which reminder do you mean? Please choose it in Tasks.",
+  "companionReminderSyntax": "Please give a complete date and time, for example “Remind me at tomorrow 08:00 to bring my ID”.",
+  "companionReminderSaveFailed": "The agreement was not saved. Your input is still here.",
+  "companionReminderSettings": "Open system settings",
+  "companionReminderCheck": "Check again",
+  "companionReminderSubmittedNotification": "A notification was submitted for this reminder. This does not confirm that you saw it.",
+  "companionReminderUnknownNotification": "A notification for this reminder may have been sent; it has not been confirmed.",
+  "companionReminderOpened": "A notification for this reminder was opened.",
+  "companionReminderUnhandled": "This part has not been handled: {text}",
+  "companionReminderCancelSource": "Cancel reminder: {text}",
+  "@companionReminderUnhandled": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "@companionReminderCancelSource": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReminderNotHere": "This saved arrangement has not been adopted by this installation and cannot be changed or cancelled here.",
+  "companionReminderPlatformUnavailable": "The reminder setup on this phone cannot be checked right now.",
+  "companionReminderPastRegistration": "The saved record shows that this reminder was registered previously."
 }

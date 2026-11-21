@@ -417,5 +417,63 @@
   "companionMemoryUsageNotSent": "本地未发出",
   "companionMemoryUsageEmpty": "还没有记录到用量",
   "companionMemoryHostUnsupported": "这台主机的版本有点旧，在这里她暂时想不起你们聊过的事。升级主机就好。",
-  "companionMemoryPostponedDone": "好，那等你定了新时间再说。"
+  "companionMemoryPostponedDone": "好，那等你定了新时间再说。",
+  "companionTasksTitle": "交代的事",
+  "companionTasksEmpty": "这里还没有交代过提醒。",
+  "companionTaskMissing": "这条约定现在找不到了。",
+  "companionTaskChanged": "约定已经改过，下面是现在这一条。",
+  "companionReminderEdit": "改提醒",
+  "companionReminderCancel": "取消提醒",
+  "companionReminderText": "提醒什么",
+  "companionReminderWhen": "日期和当地时间",
+  "companionReminderWhenHint": "例如 2026-11-21 08:00",
+  "companionReminderZone": "时区",
+  "companionReminderZoneHint": "例如 Asia/Shanghai 或 +08:00",
+  "companionReminderQueued": "这条提醒已收下，还没确认设好。",
+  "companionReminderDone": "这条提醒设好了。",
+  "companionReminderUnknown": "这条提醒可能已经安排，我还没核清。",
+  "companionReminderFailed": "这条提醒还没设好。",
+  "companionReminderCancelled": "这条提醒后续的安排已停。",
+  "companionReminderTextMissing": "要提醒你什么？",
+  "companionReminderDateMissing": "要在哪一天提醒？",
+  "companionReminderTimeMissing": "那天具体几点提醒？",
+  "companionReminderZoneMissing": "这次用哪个时区？",
+  "companionReminderGap": "这个当地时间不存在，请改一个时间。",
+  "companionReminderOverlap": "这个当地时间有两次，要第一次还是第二次？",
+  "companionReminderFirst": "第一次",
+  "companionReminderSecond": "第二次",
+  "companionReminderExactMissing": "这台手机现在不能安排准点提醒，还没设好。",
+  "companionReminderNotificationsMissing": "通知没有打开，这条提醒还没设好。",
+  "companionReminderChannelMissing": "提醒通知的渠道没有打开，还没设好。",
+  "companionReminderGroupMissing": "提醒所属的通知组没有打开，还没设好。",
+  "companionReminderTimePassed": "约定的时间已经过去，没有补响。",
+  "companionReminderInvalidTime": "这次时间还不能确定，请重新指定日期、时间和时区。",
+  "companionReminderCancelUnknown": "已经请求停下，但还没确认全部停成。",
+  "companionReminderWhich": "你指哪一条提醒？请在「交代的事」里选一下。",
+  "companionReminderSyntax": "请写完整日期和时间，例如“明早八点提醒我带证件”。",
+  "companionReminderSaveFailed": "这次约定没保存好，原输入还在。",
+  "companionReminderSettings": "打开系统设置",
+  "companionReminderCheck": "重新核对",
+  "companionReminderSubmittedNotification": "这条提醒有过通知提交记录；这不表示你已经看到。",
+  "companionReminderUnknownNotification": "这条提醒的通知可能已经发出，还没核清。",
+  "companionReminderOpened": "这条提醒的通知已打开。",
+  "companionReminderUnhandled": "这部分还没办理：{text}",
+  "companionReminderCancelSource": "取消提醒：{text}",
+  "@companionReminderUnhandled": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "@companionReminderCancelSource": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReminderNotHere": "这条旧安排没有在当前安装中接管，不能在这里修改或撤销。",
+  "companionReminderPlatformUnavailable": "现在还无法核对这台手机的提醒安排。",
+  "companionReminderPastRegistration": "原记录显示，这条提醒曾经登记成功。"
 }
