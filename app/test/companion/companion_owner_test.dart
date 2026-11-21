@@ -27,6 +27,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'phone_keeper_fake.dart';
+import 'companion_test_settle.dart';
 
 DshHttpResponse _json(Object value, [int status = 200]) =>
     DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(value))));
@@ -256,7 +257,7 @@ class _Room {
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
     final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     await tester.pump();
-    await tester.runAsync(memory!.migrateLocal);
+    await settleMixed(tester, memory!.migrateLocal());
     await tester.pump();
     events!.onReady();
     await flush(tester);

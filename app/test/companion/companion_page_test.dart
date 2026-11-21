@@ -34,6 +34,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'phone_keeper_fake.dart';
+import 'companion_test_settle.dart';
 
 Widget _app(Widget child, {List<Override> extra = const [], CompanionKeeper? phone}) => ProviderScope(
   // No host here: the page must stand on its own without one.
@@ -1129,7 +1130,7 @@ void main() {
         opened.complete();
         await tester.pump();
         final memory = await memoryOf(tester);
-        await tester.runAsync(memory.migrateLocal);
+        await settleMixed(tester, memory.migrateLocal());
         await tester.pump();
         expect(asked, 0);
         expect(memory.store.messages(), isEmpty);

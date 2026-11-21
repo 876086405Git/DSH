@@ -24,6 +24,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import 'companion_test_settle.dart';
+
 const _session = 'synthetic-greeting-session';
 const _now = 1793937600000;
 
@@ -199,7 +201,7 @@ class _Room {
     container.read(companionSessionsProvider);
     final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     await tester.pump();
-    await tester.runAsync(memory!.migrateLocal);
+    await settleMixed(tester, memory!.migrateLocal());
     await flush(tester);
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
@@ -453,10 +455,8 @@ void main() {
     try {
       await tester.enterText(find.byType(TextField), '稍等这一句');
       await tester.pump();
-      await tester.runAsync(() async {
-        await tester.tap(find.byKey(const ValueKey('send')));
-        await room.client.projectionStarted.future;
-      });
+      await tester.tap(find.byKey(const ValueKey('send')));
+      await settleMixed(tester, room.client.projectionStarted.future);
       await flush(tester);
       expect(room.client.projectionCalls, 1);
       expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
