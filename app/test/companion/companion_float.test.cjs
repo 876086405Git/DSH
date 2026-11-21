@@ -122,7 +122,7 @@ function stage(float = true, fetcher, devices = {}) {
     state() { return { mood: life.mood, emotion: life.emotion, actions: [...life.actions.keys()], disposed: floatDisposed }; }
   };
 })();`), context, { timeout: 1000 });
-  return { api: context.harness, command: value => window.stage.command(value),
+  return { api: context.harness, command: value => window.stage.command(value), canvas,
     install: () => context.harness.install(model, gl), document, documentEvents, canvasEvents, windowEvents, posts, frames,
     at(time) { now = time; },
     render(time) { now = time; context.harness.render(time); },
@@ -267,8 +267,15 @@ test('the room tells the app the resolution that held: a step down at once, a st
   // Every frame 60 ms apart while 30 were asked: late, three seconds running.
   frames(4500, 60);
   assert.deepEqual(reported(), [0.85]);
-  // On time again: ten quiet seconds step up, told only once it has held a minute.
+  // Under the log she's asked for twelve, which any resolution keeps: that earns nothing.
+  s.command({ type: 'covered', on: true });
+  frames(90000, 1000 / 12);
+  assert.deepEqual(reported(), [0.85]);
+  assert.equal(s.canvas.width, 13, 'still at 0.85 of 5 CSS px on a 3x screen');
+  s.command({ type: 'covered', on: false });
+  // On time at thirty: ten quiet seconds step up, told only once it has held a minute.
   frames(15000, 1000 / 30);
+  assert.equal(s.canvas.width, 15);
   assert.deepEqual(reported(), [0.85], 'the step up has not held yet');
   frames(60000, 1000 / 30);
   assert.deepEqual(reported(), [0.85, 1]);

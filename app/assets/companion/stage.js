@@ -1817,13 +1817,16 @@
   // so a phone that can't hold full resolution doesn't stutter down to it on
   // every visit, and one that can is never held back by a guess.
   let quality = clamp(Number(query.get('quality')) || 1, 0.5, 1);
-  // The app keeps the level that held: a step down at once, a step up once a
-  // minute has gone by without one.
-  let heldAt = 0;
+  // The app keeps the level that held: a step down at once, a step up once it
+  // has kept time for a minute's worth of seconds at the full rate.
+  let holdSeconds = 0;
   const settled = () => post({ type: 'quality', value: Math.round(quality * 100) / 100 });
   let slowSeconds = 0;
   let quickSeconds = 0;
   let late = 0;
+  // A second with frames asked at twelve (asleep, under the log) can say she's
+  // slow but not that she keeps up: twelve frames are easy at any resolution.
+  let easySecond = false;
   // Ten quiet seconds earn the next step up; a step up that turns slow again
   // within a minute makes the next try wait twice as long (to five minutes), so
   // a phone that only keeps up while she idles doesn't stutter every time she
@@ -1866,6 +1869,7 @@
     // Over half a second is a gap (paused, hidden, waking), not a late frame.
     const gap = ts - last;
     if (gap > 1500 / target && gap < 500) late++;
+    if (target < 30) easySecond = true;
     const dt = clamp((ts - last) / 1000, 0.001, 0.05);
     last = ts;
     life.hop.step(0, dt);
@@ -1891,29 +1895,28 @@
           slowSeconds = share > 0.3 ? slowSeconds + 1 : 0;
           // A handful of frames can say she's slow (a very slow phone draws only
           // a few a second) but not that she keeps time.
-          quickSeconds = drawn >= 5 && share < 0.1 ? quickSeconds + 1 : 0;
+          quickSeconds = drawn >= 5 && share < 0.1 && !easySecond ? quickSeconds + 1 : 0;
           if (slowSeconds >= 3 && quality > 0.5) {
             quality = Math.max(0.5, quality - 0.15);
             slowSeconds = 0;
             // Once per step up that didn't hold, however far it then falls.
             if (ts - steppedUpAt < 60000) upAfter = Math.min(upAfter * 2, 300);
             steppedUpAt = -Infinity;
-            heldAt = 0;
+            holdSeconds = 0;
             settled();
           } else if (quickSeconds >= upAfter && quality < 1) {
             quality = Math.min(1, quality + 0.15);
             quickSeconds = 0;
             steppedUpAt = ts;
-            heldAt = ts + 60000;
-          }
-          if (heldAt && ts >= heldAt) {
-            heldAt = 0;
+            holdSeconds = 60;
+          } else if (holdSeconds > 0 && quickSeconds > 0 && --holdSeconds === 0) {
             settled();
           }
         }
       }
       drawn = 0;
       late = 0;
+      easySecond = false;
       fpsAt = ts;
     }
   }
