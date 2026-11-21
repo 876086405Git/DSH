@@ -41,15 +41,16 @@ enum StarPromptChoice {
   later,
 }
 
-/// Shows the dialog, telling [hours] whole hours of use (0: half an hour),
-/// and acts on the answer: the star opens GitHub, it and 「已经点过啦」 end the
-/// prompt for good; anything else waits (the record already says it came up).
-Future<StarPromptChoice?> showStarPrompt(BuildContext context, {required int hours}) async {
+/// Shows the dialog, telling [hours] whole hours of use (0: half an hour) in
+/// the words of the [ask]th ask (0: the first), and acts on the answer: the
+/// star opens GitHub, it and 「已经点过啦」 end the prompt for good; anything
+/// else waits (the record already says it came up).
+Future<StarPromptChoice?> showStarPrompt(BuildContext context, {required int hours, int ask = 0}) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final messenger = ScaffoldMessenger.maybeOf(context);
   final choice = await showAppDialog<StarPromptChoice>(
     context: context,
-    builder: (_) => StarPromptDialog(hours: hours),
+    builder: (_) => StarPromptDialog(hours: hours, ask: ask),
   );
   switch (choice) {
     case StarPromptChoice.star:
@@ -78,10 +79,23 @@ Future<void> openStarProject(ProviderContainer container, ScaffoldMessengerState
 
 /// The dialog; pops a [StarPromptChoice].
 class StarPromptDialog extends StatelessWidget {
-  const StarPromptDialog({super.key, required this.hours});
+  const StarPromptDialog({super.key, required this.hours, this.ask = 0});
 
   /// Whole hours of use (0: half an hour).
   final int hours;
+
+  /// Which ask this is (0: the first; [StarPromptRules.asks]): its words.
+  final int ask;
+
+  /// The ask's two lines under the title: why, and the plea. Past the last,
+  /// the last's.
+  static (String body, String plea) words(L10n l10n, int ask) => switch (ask) {
+    <= 0 => (l10n.starPromptBody, l10n.starPromptPlea),
+    1 => (l10n.starPromptBody2, l10n.starPromptPlea2),
+    2 => (l10n.starPromptBody3, l10n.starPromptPlea3),
+    3 => (l10n.starPromptBody4, l10n.starPromptPlea4),
+    _ => (l10n.starPromptBody5, l10n.starPromptPlea5),
+  };
 
   /// The picture: 576 px, the 192 dp it is drawn at most, at 3×.
   static const asset = 'assets/star/star_whale.webp';
@@ -103,6 +117,7 @@ class StarPromptDialog extends StatelessWidget {
     final colors = DshColors.of(context);
     final l10n = context.l10n;
     final scale = MediaQuery.textScalerOf(context);
+    final (body, plea) = words(l10n, ask);
     const quietSize = Size.fromHeight(44);
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -129,14 +144,14 @@ class StarPromptDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  l10n.starPromptBody,
+                  body,
                   key: const ValueKey('star-body'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  l10n.starPromptPlea,
+                  plea,
                   key: const ValueKey('star-plea'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600),

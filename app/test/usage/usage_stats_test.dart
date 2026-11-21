@@ -1,13 +1,15 @@
 // Anonymous usage statistics end to end on the phone's side, the network
-// faked: nothing before the person was told; each past day once, the day
-// after; back 7 days at most; off means no request and nothing kept; a new
-// install id every 90 days; 3 quiet tries a day; a body with exactly the
-// contract's fields; and the counts coming from where they happen.
+// faked: on by default; each past day once, the day after; back 7 days at
+// most; off leaves only Android's daily-activity base row, with its other
+// counts and their local data gone; a new install id every 90 days; 3 quiet
+// tries a day; a body with exactly the contract's fields; and the counts
+// coming from where they happen.
 
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/phone/phone_channel.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/usage/usage_ledger.dart';
 import 'package:dsh_app/usage/usage_net.dart';
 import 'package:dsh_app/usage/usage_stats.dart';
@@ -35,17 +37,21 @@ Future<ProviderContainer> start({
   String? engine,
   PhoneChannel? phone,
   UsageDevice phoneFacts = testDevice,
+  String? platform,
 }) async {
   SharedPreferences.setMockInitialValues(prefs);
   final container = ProviderContainer(
-    overrides: usageOverrides(
-      clock: () => now,
-      http: http,
-      onResumes: (onResume) => resume = onResume,
-      engine: engine,
-      phone: phone,
-      device: phoneFacts,
-    ),
+    overrides: [
+      ...usageOverrides(
+        clock: () => now,
+        http: http,
+        onResumes: (onResume) => resume = onResume,
+        engine: engine,
+        phone: phone,
+        device: phoneFacts,
+      ),
+      if (platform != null) operatingSystemProvider.overrideWithValue(platform),
+    ],
   );
   addTearDown(container.dispose);
   container.read(usageStatsProvider);
@@ -98,6 +104,7 @@ Future<Map<String, Object?>> stored() async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final wasActive = UsageBuild.active;
   setUp(() {
     UsageBuild.active = true;
@@ -107,22 +114,49 @@ void main() {
   });
   tearDown(() => UsageBuild.active = wasActive);
 
-  test('nothing is counted or sent before the person has seen the switch', () async {
+  test('Android daily activity is on by default; off leaves only that, on the same install id', () async {
+    now = DateTime.utc(2026, 10, 28, 9);
+    final c = await start(platform: 'android');
+    await c.count(UsageCount.turns, 2);
+    c.usage.chatLogUsage({'inputTokens': 123}, local: false);
+    now = now.add(const Duration(days: 1));
+    await c.comeBack();
+    // The full statistics, without the switch ever having been shown.
+    expect(http.urls.any((url) => url.path.endsWith('/v1')), isTrue);
+    final v4 = http.requests.indexWhere((body) => body['v'] == 4);
+    expect(v4, isNonNegative);
+    expect(http.requests[v4]['base'], [1, 1]);
+    expect(http.requests[v4]['chat_log'], isNotNull);
+    final iid =
+        (jsonDecode((await stored())[UsageStatsController.v4LedgerKey] as String) as Map<String, dynamic>)['iid'];
+
+    await c.usage.setEnabled(false);
+    await settle();
+    final sent = http.requests.length;
+    now = now.add(const Duration(days: 1));
+    await c.comeBack();
+    // The daily-activity package alone: no v1, no tokens, no device model.
+    expect(http.requests, hasLength(sent + 1));
+    final daily = http.requests.last;
+    expect(daily['v'], 4);
+    expect(daily['base'], [1, 0]);
+    expect(daily.keys, isNot(contains('chat_log')));
+    expect(daily.keys, isNot(contains('extra')));
+    expect([daily['maker'], daily['model'], daily['rom']], ['', '', '']);
+    expect(
+      (jsonDecode((await stored())[UsageStatsController.v4LedgerKey] as String) as Map<String, dynamic>)['iid'],
+      iid,
+    );
+  });
+
+  test('on by default: counted and sent even before the switch was ever shown', () async {
     final c = await start();
     expect(c.read(usageStatsProvider).enabled, isTrue, reason: 'on by default');
     await c.count(UsageCount.turns, 3);
     now = DateTime(2026, 10, 29, 9);
     await c.comeBack();
-    expect(http.requests, isEmpty);
-    expect((await stored()).keys.where((k) => k.startsWith('usage_stats_days')), isEmpty);
-
-    // Shown at first run (or in settings): from then on, it counts.
-    await c.usage.markNoticed();
-    await c.count(UsageCount.turns);
-    now = DateTime(2026, 10, 30, 9);
-    await c.comeBack();
-    expect(http.days, ['2026-10-29']);
-    expect((http.requests.single['counts']! as Map)['turns'], 1);
+    expect(http.days, ['2026-10-28']);
+    expect((http.requests.single['counts']! as Map)['turns'], 3);
   });
 
   test('a past day goes out once, the day after; today waits for tomorrow', () async {

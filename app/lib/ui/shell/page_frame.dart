@@ -36,6 +36,7 @@ class AppPage extends StatefulWidget {
     this.showLargeTitle = true,
     this.padBottom = true,
     this.solidBar = true,
+    this.leading,
   });
 
   final String title;
@@ -61,6 +62,10 @@ class AppPage extends StatefulWidget {
   /// behind it ([BackdropVeil.top], feathered below) so nothing reads through
   /// the bar title. False uses the shared [TopFade] instead.
   final bool solidBar;
+
+  /// Takes the back button's seat (a page that is the app's home, with
+  /// nothing to go back to: 网页模式's native handle).
+  final Widget? leading;
 
   /// The widest the page's column gets: the chat's reading width.
   static const contentWidth = AppSpace.readingWidth;
@@ -238,11 +243,13 @@ class _AppPageState extends State<AppPage> {
                       middleSpacing: 8,
                       leading: Center(
                         widthFactor: 1,
-                        child: GlassIconButton(
-                          icon: AppIcons.back,
-                          tooltip: l10n.commonBack,
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        ),
+                        child:
+                            widget.leading ??
+                            GlassIconButton(
+                              icon: AppIcons.back,
+                              tooltip: l10n.commonBack,
+                              onPressed: () => Navigator.of(context).maybePop(),
+                            ),
                       ),
                       middle: ValueListenableBuilder<double>(
                         valueListenable: _offset,

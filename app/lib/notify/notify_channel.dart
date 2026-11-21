@@ -396,6 +396,21 @@ class NotifyChannel {
   /// Tells the live activity what to show (see [LivePush]).
   Future<void> live(LivePush push) => _call('live', push.toMap());
 
+  /// [live] on iOS, with what only iOS draws itself (live_activity_state.dart):
+  /// the pet's still, the theme's colours, the words on the card.
+  Future<void> liveWith(LivePush push, Map<String, Object?> extras) => _call('live', {...push.toMap(), ...extras});
+
+  /// 停止 on the iOS live activity: [stop] the conversation, answering whether it did.
+  void onLiveStop(Future<bool> Function(String host, String sessionId) stop) {
+    _methods.setMethodCallHandler((call) async {
+      final args = call.arguments;
+      if (call.method != 'liveStop' || args is! Map) return null;
+      final host = args['host'], session = args['sessionId'];
+      if (host is! String || session is! String || session.isEmpty) return false;
+      return stop(host, session);
+    });
+  }
+
   Future<LiveSystemStatus> liveStatus() async {
     try {
       final raw = await _methods.invokeMethod<Object?>('liveStatus');

@@ -51,15 +51,41 @@ test('iPhone budget reaches both canvases before model allocation and disables M
   assert.equal(options[0].preserveDrawingBuffer, false);
 });
 
-test("other platforms retain main's two-times canvas and automatic antialiasing", async () => {
+test('without a budget the model draws at the screen density up to 3x, its marks at 2x', async () => {
   const { canvases, options } = await canvasAllocation('');
-  for (const canvas of Object.values(canvases)) {
-    assert.equal(canvas.width, 780);
-    assert.equal(canvas.height, 1688);
-  }
+  assert.equal(canvases.stage.width, 1170);
+  assert.equal(canvases.stage.height, 2532);
+  assert.equal(canvases.fx.width, 780);
+  assert.equal(canvases.fx.height, 1688);
   assert.equal(options[0].antialias, false);
+  const dense = await canvasAllocation('', 4);
+  assert.equal(dense.canvases.stage.width, 1170);
   const lowDensity = await canvasAllocation('', 1);
   assert.equal(lowDensity.options[0].antialias, true);
+});
+
+test('she starts at the resolution her last visit settled on, never below half', async () => {
+  for (const [given, width] of [['0.7', 819], ['0.1', 585], ['2', 1170], ['nope', 1170]]) {
+    const { canvases } = await canvasAllocation(`?quality=${given}`);
+    assert.equal(canvases.stage.width, width, `quality=${given}`);
+    // Her marks keep their own density.
+    assert.equal(canvases.fx.width, 780);
+  }
+});
+
+test('a low GPU budget takes the blur and blend layers away before the first paint', () => {
+  const css = readFileSync(new URL('../../app/assets/companion/stage.css', import.meta.url), 'utf8');
+  const low = [...css.matchAll(/html\[data-gpu-budget='low'\][^{]*\{[^}]*\}/g)].map((m) => m[0]).join('\n');
+  assert.match(low, /\.shafts\s*\{\s*mix-blend-mode:\s*normal;/);
+  for (const part of ['.shafts i', '.whale', '.reef']) assert.ok(low.includes(part), part);
+  assert.equal((low.match(/filter:\s*none/g) ?? []).length, 2);
+});
+
+test('nothing in the room animates on a clock of its own', () => {
+  // A CSS animation keeps the page compositing at the screen's full rate, and
+  // Flutter re-blurring its glass over it, while she idles at 30 (stage.js `water`).
+  const css = readFileSync(new URL('../../app/assets/companion/stage.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /@keyframes|\banimation\s*:/);
 });
 
 

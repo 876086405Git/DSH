@@ -122,6 +122,8 @@ No network setup, end-to-end encrypted. Good for computers on another network.
 2. On the remote hosts page, choose the same sign-in provider you used on that host, for example “Continue with GitHub”, and sign in with the same account. If the page lists no providers and shows only **Sign in in browser**, tap that button.
 3. Select an online host. On first connection, check that the identity fingerprint matches the one the host's remote plugin shows, then tap **Trust and connect**.
 
+Once signed in, the account sits at the top of the remote hosts page, with **Sign out** beside it; its hosts are listed below. The host list refreshes each time you open the page, or tap the refresh button at the top right. Tapping an offline host checks again and tells you if it's still offline.
+
 When the server supports it, you can also choose **Pair a computer by scanning**: sign in to DeepSeek in the app, scan the code shown by the computer’s Remote plugin, check the computer fingerprint, then enter the verification code as prompted. Camera permission is only for capturing the QR code; reading an image from photos or pasting the pairing link still works without it. Opening the scanner initializes the shared ML Kit SDK on demand, without requiring or enabling phone control’s text recognition. See the [FAQ](11-faq.md#local-text-recognition-and-google-ml-kit) for SDK statistics disclosures.
 
 Connections automatically try LAN / P2P, then TURN, and finally Relay without a direct-connection switch. Each path requires compatible server and Host support. Tap the route label on the connection card or beside a Host to see the actual route, connection time, available round-trip latency and fallback reason. WebRTC routes also show the selected ICE candidates' phone/Host IPv4 or IPv6 and UDP or TCP, never raw IP addresses. Unmeasured or unconfirmed values are not presented as known results.
@@ -148,11 +150,13 @@ Remote currently connects to one host at a time, so copying uses backup-to-phone
 
 ## Open DSH Web on a Remote host
 
-<!-- nav: commonSettings,commonRemoteHost -->
-`Settings › Remote host`
+<!-- nav: commonSettings,hubSettingsInterface,hubInterfaceOpenWeb -->
+`Settings › Interface › Open the web app`
 
-Once connected, **Open DSH Web** appears at the bottom of the page when supported. The host needs DS Harness Remote plugin 0.6.6 or later with DSH Web running; update its plugin and reconnect if the entry is missing. Android and iPhone use an embedded page without another sign-in.
+Once a DSH Remote host is connected, DSH Web opens the same way as on any host: the button beside **New chat** at the top of the chat list switches to the web interface, or open it once from here or **Web** in All features (see [Web mode](05-web.md)). The host needs DS Harness Remote plugin 0.6.6 or later with DSH Web running; otherwise the entry tells you what's missing. Android and iPhone use an embedded page without another sign-in, landing on DSH Web's home page.
 
-The first load obtains a one-use access grant over the current paired connection; ordinary refresh does not reuse it. Closing the page, disconnecting or switching hosts requests an end to this access. If that request cannot be delivered, access expires according to the server's validity period. Return to the host page and reopen if it expires. Self-hosted tunnel domains must be included in trusted app configuration beforehand.
+DSH Web travels through the Remote server's web tunnel: the phone reaches the tunnel over HTTPS, but the tunnel decrypts the traffic before passing it to the host, so this part isn't end-to-end encrypted. Native conversations still use the end-to-end encrypted connection; if that matters, use the native interface or connect to that computer over SSH.
 
-If the page says the service is busy, wait a little before opening it again. Reconnect the host for connection errors; the app does not repeatedly retry automatically.
+The first load obtains a one-use access grant over the current paired connection; ordinary refresh does not reuse it. Closing the page, disconnecting or switching hosts requests an end to this access. If that request cannot be delivered, access expires according to the server's validity period. If the page fails or expires, tap **Retry** on it. If the connection dropped there is no Retry: reconnect the host, close the page and open DSH Web again; in Web mode it reopens by itself once the host reconnects. Self-hosted tunnel domains must be included in trusted app configuration beforehand.
+
+If the page says the service is busy, wait a little before tapping **Retry**. Reconnect the host if the connection dropped; the app does not retry automatically.

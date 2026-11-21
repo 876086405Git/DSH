@@ -31,10 +31,15 @@ class _UsageStatsSectionState extends ConsumerState<UsageStatsSection> {
     final l10n = context.l10n;
     final enabled = ref.watch(usageStatsProvider.select((s) => s.enabled));
     // Its report isn't in a shape the server takes yet: every day would be dropped.
-    final ohos = ref.watch(operatingSystemProvider) == 'ohos';
+    final os = ref.watch(operatingSystemProvider);
+    final ohos = os == 'ohos';
     return SettingsSection(
       title: l10n.usageStatsSection,
-      footer: Text(ohos ? l10n.harmonyUsageNotSent : l10n.usageStatsFooter),
+      footer: Text(switch (os) {
+        'ohos' => l10n.harmonyUsageNotSent,
+        'android' => l10n.usageStatsAndroidFooter,
+        _ => l10n.usageStatsFooter,
+      }),
       children: [
         SettingsSwitchTile(
           spot: Spots.usageStats,

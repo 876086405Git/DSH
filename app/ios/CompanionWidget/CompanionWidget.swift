@@ -69,7 +69,34 @@ private struct CompanionView: View {
   }
 }
 
+/// The extension's widgets. It runs on iOS 15, and a bundle can't name the live
+/// activity behind `if #available` there, so each OS gets a bundle of its own.
 @main
+enum DSHWidgets {
+  @MainActor
+  static func main() {
+    if #available(iOS 16.2, *) {
+      DSHWidgetsWithLiveActivity.main()
+    } else {
+      DSHHomeWidgets.main()
+    }
+  }
+}
+
+struct DSHHomeWidgets: WidgetBundle {
+  var body: some Widget {
+    DSHCompanionWidget()
+  }
+}
+
+@available(iOS 16.2, *)
+struct DSHWidgetsWithLiveActivity: WidgetBundle {
+  var body: some Widget {
+    DSHCompanionWidget()
+    DSHLiveActivityWidget()
+  }
+}
+
 struct DSHCompanionWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: CompanionSnapshotStore.kind, provider: CompanionProvider()) { entry in

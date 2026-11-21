@@ -13,6 +13,8 @@ import UserNotifications
   ) -> Bool {
     // Before launch finishes, or the tap that launched the app is lost.
     UNUserNotificationCenter.current().delegate = NotifyTaps.shared
+    // 停止 on the live activity can launch the app in the background.
+    IOSLiveActivity.shared.prepare()
     forgetPreviousInstall()
     #if DSH_PHONE_SELF_RUNNER_DIAGNOSTICS
     let preflight = ProcessInfo.processInfo.arguments.contains("--dsh-phone-preflight")

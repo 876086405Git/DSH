@@ -98,9 +98,13 @@ void main() {
         {'role': 'assistant', 'content': '她说：', 'prefix': true},
       ],
     };
+    final settlements = <(ModelUsageReport?, bool)>[];
     final events = await TavernModelClient(
       clientFactory: () => client,
+      onUsageSettled: (report, {required partial}) => settlements.add((report, partial)),
     ).generate(config: config(), body: body, cancellation: ModelCancellation()).toList();
+    expect(settlements.single.$2, isFalse);
+    expect(settlements.single.$1!.fields['completion_tokens'], containsPair('value', 9));
     expect(captured.url.path, '/beta/chat/completions');
     expect(captured.headers['Authorization'], 'Bearer test-key');
     final sent = jsonDecode(utf8.decode(await captured.finalize().toBytes())) as Map<String, dynamic>;

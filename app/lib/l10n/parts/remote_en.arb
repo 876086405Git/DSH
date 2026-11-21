@@ -15,7 +15,7 @@
   "remoteErrSharedInstance": "Remote managed DSH is still running, but its start command differs or its launch log is missing. To protect shared use, it was not restarted. Check the settings, use Attach only, or explicitly choose Restart managed DSH in Edit host.",
   "remoteErrAttachSettings": "Enter a valid remote DSH port and launch token",
   "remoteDshAttached": "Connected to existing DSH",
-  "remoteStartupSection": "On launch",
+  "remoteConnectionSettings": "Connection settings",
   "remoteAutoConnectOnStartup": "Connect to the last host",
   "remoteAutoConnectOnStartupHint": "When off, start on this phone",
   "remoteStepConnect": "Connect to server",
@@ -253,7 +253,6 @@
   "remoteSshRequirements": "Host needs SSH enabled and DSH installed",
   "remoteAddSshHost": "Add SSH host",
   "remoteSshDirect": "No third-party server",
-  "remoteOtherMethods": "Other methods",
   "remoteWebConsole": "Web remote console",
   "remoteWebConsoleProvider": "dsh.r2049.cn · Third-party page",
   "remoteActiveHost": "Using “{name}”",
@@ -278,6 +277,14 @@
   "remoteConnectedSsh": "Connected · SSH {address}",
   "remoteErrRefreshHosts": "Couldn’t refresh host list",
   "remoteSwitchWarning": "Connects to one host at a time. Switching disconnects the previous host.",
+  "remoteHostOfflineHint": "“{name}” is offline. Open DSH on that computer and try again.",
+  "@remoteHostOfflineHint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "remoteRefreshHosts": "Refresh hosts",
   "remoteSignOut": "Sign out",
   "remoteErrHostsRetry": "Couldn’t load hosts · Tap to retry",
@@ -467,7 +474,6 @@
   "remoteNetworkLocalIpVersion": "Phone ICE IP version",
   "remoteNetworkRemoteIpVersion": "Host ICE IP version",
   "remoteNetworkIceProtocol": "ICE protocol",
-  "remoteTransferSettings": "Remote transfer",
   "remoteCompactHistory": "Compact history",
   "remoteErrHistoryModeChanged": "The Host no longer supports compact history. Switch to another host and back, or restart the app, to reload history.",
   "remoteCompactHistoryHint": "Reduces historical tool details on supporting DSH Remote Hosts; live replies and approvals stay unchanged. Switch hosts or restart the app to apply. Older Hosts keep full history.",

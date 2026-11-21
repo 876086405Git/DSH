@@ -6233,6 +6233,12 @@
   "liveUnsupported": "这台手机的系统还不支持实时活动",
   "liveBlockedTitle": "系统没有允许实时活动",
   "liveBlockedText": "在系统设置里为 DSH Go 打开「实时活动」（有的手机叫「在流体云中显示」）",
+  "liveStop": "停止",
+  "liveStale": "暂停更新 · 打开 App 查看",
+  "liveIosSubtitle": "干活、等你处理时，在灵动岛和锁屏上显示宠物、进度和用时",
+  "liveIosFooter": "需要 iOS 16.2 及以上。有灵动岛的 iPhone 显示在岛上，其他机型只在锁屏上。锁屏上不显示对话标题。iOS 17 起可以在卡片上直接停止这一轮。App 被系统挂起后，卡片会标出「暂停更新」。",
+  "liveIosUnsupported": "需要 iOS 16.2 或更高版本",
+  "liveIosBlockedText": "在「设置」→「DSH Go」里打开「实时活动」",
   "localeTitle": "语言",
   "localeSystem": "跟随系统",
   "localeZh": "简体中文",
@@ -9308,7 +9314,7 @@
   "remoteErrSharedInstance": "远端托管 DSH 仍在运行，但启动命令不同或缺少有效启动日志。为保护共享实例，未自动重启；请检查配置，改用“只连接”，或在编辑主机中明确选择“重启托管 DSH”。",
   "remoteErrAttachSettings": "请填写有效的远端 DSH 端口和登录令牌",
   "remoteDshAttached": "已连接既有 DSH",
-  "remoteStartupSection": "启动",
+  "remoteConnectionSettings": "连接设置",
   "remoteAutoConnectOnStartup": "连接上次使用的主机",
   "remoteAutoConnectOnStartupHint": "关闭后从本机开始",
   "remoteStepConnect": "连接服务器",
@@ -9889,7 +9895,6 @@
   "remoteSshRequirements": "需要那台主机开着 SSH，并装好 DSH",
   "remoteAddSshHost": "添加 SSH 主机",
   "remoteSshDirect": "不经过第三方服务器",
-  "remoteOtherMethods": "其他方式",
   "remoteWebConsole": "网页版远程控制台",
   "remoteWebConsoleProvider": "dsh.r2049.cn · 第三方页面",
   "remoteActiveHost": "正在使用「{name}」",
@@ -9935,6 +9940,14 @@
   },
   "remoteErrRefreshHosts": "没能刷新主机列表",
   "remoteSwitchWarning": "一次只连一台主机，切换会断开上一台",
+  "remoteHostOfflineHint": "「{name}」现在不在线。在那台电脑上打开 DSH 后再试",
+  "@remoteHostOfflineHint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "remoteRefreshHosts": "刷新主机列表",
   "remoteSignOut": "退出",
   "remoteErrHostsRetry": "没能获取主机列表 · 轻点重试",
@@ -10357,7 +10370,6 @@
   "remoteNetworkLocalIpVersion": "手机 ICE IP 版本",
   "remoteNetworkRemoteIpVersion": "主机 ICE IP 版本",
   "remoteNetworkIceProtocol": "ICE 协议",
-  "remoteTransferSettings": "远程传输",
   "remoteCompactHistory": "精简历史",
   "remoteErrHistoryModeChanged": "主机已不支持精简历史，请切换到其他主机后再连回来，或重启 App，重新加载历史",
   "remoteCompactHistoryHint": "支持的 DSH Remote 主机会精简历史工具详情，实时回复和审批不变。切换主机或重启 App 后生效；旧主机仍传输完整历史。",
@@ -10457,17 +10469,17 @@
   "stateRemoteUploadLimit": "主机拒绝了上传，请检查文件大小或稍后重试",
   "stateRemoteUploadUnsupported": "这台主机不支持文件上传，请更新主机上的 Remote 插件后重连",
   "stateRemoteUploadTooLarge": "文件超过远程上传协议的大小上限",
-  "remoteWebOpen": "打开 DSH Web",
   "remoteWebTitle": "DSH Web",
   "remoteWebOpening": "正在打开 DSH Web…",
+  "remoteWebFailed": "没能打开 DSH Web",
   "remoteWebRefresh": "刷新首页",
   "remoteWebBusy": "人太多了，请稍后重试",
   "remoteWebPairingRequired": "连接授权失效，请重新连接或配对主机。",
   "remoteWebHostNotReady": "主机网页版尚未就绪。请启动 DSH Web，并将 Remote 插件更新到 0.6.6 或更新版本。",
   "remoteWebReconnect": "连接已断开，请重新连接主机后再打开。",
   "remoteWebUnsafeUrl": "网页地址无法验证，已停止打开。请检查主机配置。",
-  "remoteWebExchangeRejected": "访问验证失败，请返回后重新打开。",
-  "remoteWebSessionExpired": "网页连接已过期，请返回后重新打开。",
+  "remoteWebExchangeRejected": "访问验证没有通过，请重试。",
+  "remoteWebSessionExpired": "网页连接已过期，请重试。",
   "remoteWebPlatformUnavailable": "当前平台暂不支持此网页入口。请使用原生远程界面。",
   "remoteWebTryAgain": "暂时无法打开网页，请检查主机连接后重试。",
   "remoteWebUnavailable": "暂时无法打开，请稍后重试",
@@ -11612,6 +11624,26 @@
   },
   "starPromptBody": "这是一个免费开源的项目，如果它让你的移动端体验更好了一点，拜托点个 Star 支持一下，这对本鱼是很大的鼓励！",
   "starPromptPlea": "拜托你啦~ 这真的很重要！！",
+  "starPromptBody2": "看来你挺喜欢这里嘛！点个 Star 只要几秒钟，却能让更多人发现 DSH Go，本鱼也会更有干劲！",
+  "@starPromptBody2": {
+    "description": "The star prompt's second ask (2 hours of use, after 下次再说), in place of starPromptBody."
+  },
+  "starPromptPlea2": "就差你这一颗星星啦~",
+  "starPromptBody3": "DSH Go 不收费、没有广告，全靠大家的 Star 让更多人看到。如果它帮到了你，就送本鱼一颗星星吧！",
+  "@starPromptBody3": {
+    "description": "The third ask (5 hours)."
+  },
+  "starPromptPlea3": "本鱼眼巴巴地等着呢~",
+  "starPromptBody4": "这么久了，本鱼一直都在。如果 DSH Go 已经成了你每天都会打开的 App，点个 Star 就是给作者最好的回礼。",
+  "@starPromptBody4": {
+    "description": "The fourth ask (10 hours)."
+  },
+  "starPromptPlea4": "求求你啦，就点一下下~",
+  "starPromptBody5": "这是本鱼最后一次问你啦。不管点不点，本鱼都会一直陪着你。要是愿意的话，点个 Star 让本鱼开心一下吧！",
+  "@starPromptBody5": {
+    "description": "The fifth and last ask (20 hours): it says so."
+  },
+  "starPromptPlea5": "最后一次，拜托啦！",
   "starPromptStar": "去 GitHub 点 Star",
   "starPromptDone": "已经点过啦",
   "starPromptLater": "下次再说",
@@ -15127,8 +15159,11 @@
   "usageStatsFooter": "这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。",
   "usageNoticeBody": "不含对话和个人信息，可随时关闭",
   "usageUpgradeNotice": "新增匿名使用统计，帮助改进 DSH Go。\n不含对话和个人信息",
+  "usageV4Welcome": "按日汇总使用和模型用量，不含对话。可随时关闭。",
+  "usageV4Notice": "匿名统计按日汇总功能结果、模型用量和异常退出，不含对话。",
   "usageUpgradeLearn": "了解",
   "usageUpgradeOff": "关闭",
+  "usageStatsAndroidFooter": "这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。 Android 还按日汇总前台及首次参与统计、启动和远程连接结果与耗时区间，以及模型用量、插件执行、引导和系统确认的异常退出。关闭会清空未上报的数据。",
   "viewArtifactSaved": "已存到 {value}",
   "@viewArtifactSaved": {
     "placeholders": {

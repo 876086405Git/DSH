@@ -32,6 +32,7 @@ export { BetaGuard } from './beta-guard';
 import { accessMode, download, isDownloadPath } from './download';
 export { StatsSalt } from './stats';
 import { usage } from './usage';
+import { usageV4 } from './usage-v4';
 import { githubStars } from './github';
 import { isMarketPath, market, publishMarket } from './market';
 import { isPetMarketPath, petMarket, publishPetMarket } from './pet-market';
@@ -53,6 +54,7 @@ async function route(request: Request, env: Env, ctx: Ctx): Promise<Response> {
   if (isWorkshopPath(path)) return workshop(request, env, ctx);
   if (path.startsWith('/api/')) {
     if (path === '/api/usage/v1') return usage(request, env);
+    if (path === '/api/usage/v4') return usageV4(request, env);
     if (path === '/api/github/stars') return githubStars(request, env, ctx);
     if (path === '/api/v1/c') {
       return method === 'POST' ? upload(request, env) : json(405, { error: 'method_not_allowed' }, { Allow: 'POST' });

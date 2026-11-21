@@ -16,6 +16,7 @@
     "lib/web-promise.js",
     "lib/session-deletion.js",
     "lib/speech.js",
+    "lib/usage.js",
     "lib/config-source.js",
     "lib/client.js",
     "lib/companion/*.js",

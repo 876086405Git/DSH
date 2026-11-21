@@ -140,4 +140,4 @@ Remote currently connects to one host at a time, so copying uses backup-to-phone
 
 ## DSH Web on a Remote host
 
-HarmonyOS does not yet provide the **Open DSH Web** entry. Native conversations, workspaces and conversation backups are unaffected.
+On HarmonyOS, DSH Web can't open over DSH Remote yet; the web entries say so. Native conversations, workspaces and conversation backups are unaffected.

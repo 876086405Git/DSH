@@ -132,6 +132,25 @@ class CompanionUsage {
     return parts.isEmpty ? null : parts.fold<int>(0, (sum, part) => sum + part);
   }
 
+  /// The usage-v4 ledger's token report: the start frame's input components,
+  /// overlaid by the final frame's (output only ever from the final one); a
+  /// field sent as null is -1.
+  Map<String, Object?> get telemetry {
+    const names = {
+      'input_tokens': 'inputTokens',
+      'cache_read_input_tokens': 'cacheReadTokens',
+      'cache_creation_input_tokens': 'cacheWriteTokens',
+      'output_tokens': 'outputTokens',
+    };
+    return {
+      for (final MapEntry(:key, :value) in names.entries)
+        if (finalUsage?.containsKey(key) ?? false)
+          value: finalUsage![key] ?? -1
+        else if (key != 'output_tokens' && (startUsage?.containsKey(key) ?? false))
+          value: startUsage![key] ?? -1,
+    };
+  }
+
   /// Usage metadata only: no request body, credential, or generated text.
   Map<String, Object?> toJson() => {
     'provider': provider,
@@ -158,6 +177,8 @@ class CompanionUsage {
 /// [onSent] runs immediately before client.send, after local validation.
 /// [onUsage] runs once in finally for that sent request, even after an error or
 /// cancellation. The caller retains a reservation for unknown final usage.
+/// [onUsageSettled] hears the same receipt as [CompanionUsage.telemetry] right
+/// after, partial unless message_stop arrived.
 Stream<String> streamCompanionReply({
   required http.Client client,
   required String apiKey,
@@ -168,6 +189,7 @@ Stream<String> streamCompanionReply({
   int maxTokens = 800,
   void Function()? onSent,
   void Function(CompanionUsage usage)? onUsage,
+  void Function(Map<String, Object?> usage, {required bool partial})? onUsageSettled,
 }) async* {
   if (apiKey.trim().isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
   final request = http.Request('POST', Uri.parse(companionLightEndpoint))
@@ -284,25 +306,25 @@ Stream<String> streamCompanionReply({
 
     // DeepSeek's final message_delta.usage is cumulative. Do not add the
     // initial values, take maxima, or fill absent final fields from the start.
-    onUsage?.call(
-      CompanionUsage(
-        provider: 'deepseek',
-        model: companionLightModel,
-        startUsage: startUsage,
-        finalUsage: finalUsage,
-        startEvent: startUsage == null ? null : 'message_start',
-        finalEvent: finalUsage == null ? null : 'message_delta',
-        semantics: 'cumulative',
-        inputUncached: tokens('input_tokens'),
-        inputCacheRead: tokens('cache_read_input_tokens'),
-        inputCacheWrite: tokens('cache_creation_input_tokens'),
-        outputTokens: tokens('output_tokens'),
-        stopReason: stopReason,
-        terminal: terminal,
-        complete: complete,
-        httpStatus: httpStatus,
-      ),
+    final usage = CompanionUsage(
+      provider: 'deepseek',
+      model: companionLightModel,
+      startUsage: startUsage,
+      finalUsage: finalUsage,
+      startEvent: startUsage == null ? null : 'message_start',
+      finalEvent: finalUsage == null ? null : 'message_delta',
+      semantics: 'cumulative',
+      inputUncached: tokens('input_tokens'),
+      inputCacheRead: tokens('cache_read_input_tokens'),
+      inputCacheWrite: tokens('cache_creation_input_tokens'),
+      outputTokens: tokens('output_tokens'),
+      stopReason: stopReason,
+      terminal: terminal,
+      complete: complete,
+      httpStatus: httpStatus,
     );
+    onUsage?.call(usage);
+    onUsageSettled?.call(usage.telemetry, partial: !complete);
   }
 }
 

@@ -116,7 +116,7 @@ function readJsonBody(req, limit) {
   });
 }
 
-export function createNativeRoutes(core) {
+export function createNativeRoutes(core, { beginUsage = () => () => {} } = {}) {
   const L = core.limits;
   const conns = new Set();
   const connById = new Map();
@@ -334,6 +334,7 @@ export function createNativeRoutes(core) {
     const event = { surface: body.surface, id: body.id, locale, signal: controller.signal };
     if (body.action !== undefined) event.action = body.action;
     if (body.value !== undefined) event.value = body.value;
+    const settleUsage = beginUsage();
     let result, deferred;
     try {
       ({ result, deferred } = await withTimeout(call(fn, arg, event).then(result => {
@@ -350,6 +351,7 @@ export function createNativeRoutes(core) {
         return { result, deferred };
       }), L.handlerTimeoutMs));
     } catch (error) {
+      settleUsage(current() ? 2 : 4);
       controller.abort();
       if (!current()) return rejectStale();
       core.violation(body.pkg, error?.timeout ? "timeout" : "plugin-error", `on(${body.id}): ${errorText(error)}`);
@@ -359,15 +361,16 @@ export function createNativeRoutes(core) {
       release();
     }
     const panels = new Set(rec.parsed.items.panels.map((p) => p.id));
-    if (!current()) return rejectStale();
+    if (!current()) { settleUsage(4); return rejectStale(); }
     if (deferred !== undefined) {
-      return startPending(res, { pkg: body.pkg, id: body.id, streamId: body.stream, scope, panels, source: isPanel ? body.id : undefined, controller, deferred, current, filterPatches });
+      return startPending(res, { settleUsage, pkg: body.pkg, id: body.id, streamId: body.stream, scope, panels, source: isPanel ? body.id : undefined, controller, deferred, current, filterPatches });
     }
     const norm = normalizeEffects(result, { panels, source: isPanel ? body.id : undefined, capabilities: capabilities.options(rec, capabilityConn), userGesture: body.userGesture === true });
     if (!current()) return rejectStale();
     filterPatches(norm);
     norm.effects = capabilities.bind(norm.effects, rec, capabilityConn, scope, locale, norm.issues);
     norm.effects = files.bind(norm.effects, rec, capabilityConn, scope, locale, body, norm.issues, fileInvocation);
+    settleUsage(norm.violation ? 2 : 1);
     if (norm.violation) core.violation(body.pkg, "bad-effect", `on(${body.id}) returned invalid effects: ${norm.issues.map((i) => i.message).join("; ").slice(0, 200)}`);
     else core.success(body.pkg);
     for (const e of norm.effects) if (e.type === "patch") core.patchFeed(body.pkg, e.id, scope, e.data);
@@ -376,10 +379,11 @@ export function createNativeRoutes(core) {
 
   // -------------------------------------------------------------- deferred results (§4.7)
 
-  function startPending(res, { pkg, id, streamId, scope, panels, source, controller, deferred, current, filterPatches }) {
+  function startPending(res, { settleUsage, pkg, id, streamId, scope, panels, source, controller, deferred, current, filterPatches }) {
     // A refused deferred result must not leave an eager rejected Promise unhandled.
     const swallow = () => { if (typeof deferred.work?.then === "function") deferred.work.then(undefined, () => {}); };
     if (!deferred.ok) {
+      settleUsage(2);
       swallow();
       controller.abort();
       core.violation(pkg, "bad-effect", `on(${id}): ${deferred.issues[0].message}`);
@@ -387,6 +391,7 @@ export function createNativeRoutes(core) {
     }
     const conn = typeof streamId === "string" ? connById.get(streamId) : undefined;
     if (conn === undefined || conn.ws.closed) {
+      settleUsage(4);
       swallow();
       controller.abort();
       fail(409, "no-stream", "a deferred result needs an open stream: pass welcome.conn as `stream`");
@@ -394,12 +399,13 @@ export function createNativeRoutes(core) {
     let active = 0;
     for (const p of pendings.values()) if (p.pkg === pkg) active++;
     if (active >= L.pendingPerPlugin) {
+      settleUsage(4);
       swallow();
       controller.abort();
       fail(429, "too-many-pending", `at most ${L.pendingPerPlugin} pending results per plugin`, { "retry-after": "1" });
     }
     core.success(pkg);
-    const entry = { id: `p${randomBytes(8).toString("hex")}`, pkg, conn, controller, current, settled: false, timer: undefined };
+    const entry = { id: `p${randomBytes(8).toString("hex")}`, pkg, conn, controller, current, settleUsage, settled: false, timer: undefined };
     pendings.set(entry.id, entry);
     conn.pendings.add(entry.id);
     entry.timer = setTimeout(() => settle(entry, { t: "void", reason: "timeout" }), deferred.timeoutMs);
@@ -417,7 +423,7 @@ export function createNativeRoutes(core) {
       if (norm.violation) core.violation(pkg, "bad-effect", `deferred on(${id}) returned invalid effects: ${norm.issues.map((i) => i.message).join("; ").slice(0, 200)}`);
       else core.success(pkg);
       for (const e of norm.effects) if (e.type === "patch") core.patchFeed(pkg, e.id, scope, e.data);
-      settle(entry, { t: "done", effects: norm.effects, ...(norm.issues.length > 0 ? { issues: norm.issues } : {}) }, false);
+      settle(entry, { t: "done", effects: norm.effects, ...(norm.issues.length > 0 ? { issues: norm.issues } : {}) }, false, norm.violation ? 2 : 1);
     }, async (error) => {
       await gate;
       if (entry.settled) return;
@@ -432,9 +438,10 @@ export function createNativeRoutes(core) {
   }
 
   /** Each pending id settles exactly once; only its own connection hears about it. */
-  function settle(entry, msg, abort = true) {
+  function settle(entry, msg, abort = true, outcome = msg.reason === "cancelled" ? 3 : 2) {
     if (entry.settled) return;
     entry.settled = true;
+    entry.settleUsage(outcome);
     clearTimeout(entry.timer);
     pendings.delete(entry.id);
     entry.conn.pendings.delete(entry.id);
@@ -447,6 +454,7 @@ export function createNativeRoutes(core) {
       const e = pendings.get(pid);
       if (e === undefined) continue;
       e.settled = true;
+      e.settleUsage(4);
       clearTimeout(e.timer);
       pendings.delete(pid);
       e.controller.abort();

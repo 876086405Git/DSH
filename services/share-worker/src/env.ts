@@ -51,6 +51,7 @@ export interface Env {
   DOWNLOADS?: AnalyticsEngineDataset;
   CHECKS?: AnalyticsEngineDataset;
   USAGE?: AnalyticsEngineDataset;
+  USAGE_V4?: AnalyticsEngineDataset;
   /** Today's random salt for daily device codes (src/stats.ts). */
   STATS_SALT?: DurableObjectNamespace;
   /** Secret: keys the hash of the app's install id (src/usage.ts). Without
