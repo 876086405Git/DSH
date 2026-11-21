@@ -1525,14 +1525,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     inputBusy: _focus.hasFocus || _input.text.trim().isNotEmpty,
     generating: _sending || _running || _lightReply != null,
     // Her mouth still settling counts: the words may still be on their way out.
-    audioBusy: _voice.active || (_settleTimer?.isActive ?? false) ||
-        (_ttsPending.isNotEmpty && _memoryFollowupTicket == null),
+    audioBusy:
+        _voice.active || (_settleTimer?.isActive ?? false) || (_ttsPending.isNotEmpty && _memoryFollowupTicket == null),
     activityBusy: _home != 'idle' || _asleep || (_objectTimer?.isActive ?? false),
     approvalPending: _needsAttention,
     // The "take a look" pill is not here: it comes with the very signal she may
     // mention, and would drop it. It still keeps invitations away (canPresent).
-    externalPromptBusy: (_bubble != null && _memoryFollowupTicket == null) ||
-        _myLine != null || _logOpen || _adaptOffer != null,
+    externalPromptBusy:
+        (_bubble != null && _memoryFollowupTicket == null) || _myLine != null || _logOpen || _adaptOffer != null,
     quietHoursBlocked: false,
     enabled: ref.read(companionInitiativeEnabledProvider) ?? false,
     accessible: _accessible,
@@ -1583,9 +1583,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       contextKey: _initiativeContext,
       expiresAtMonoMs: now.monoMs + min(120000, (captured['expires_at_ms']! as int) - now.wallMs),
     );
-    bool current() => mounted && !_leaving && candidate.contextKey == _initiativeContext &&
+    bool current() =>
+        mounted &&
+        !_leaving &&
+        candidate.contextKey == _initiativeContext &&
         memory.store.isFollowupCurrent(captured, nowMs: _clock().wallMs);
-    _initiative.requestSignal(this, view, candidate,
+    _initiative.requestSignal(
+      this,
+      view,
+      candidate,
       followupId: captured['id']! as String,
       isCurrent: current,
       present: (display) {

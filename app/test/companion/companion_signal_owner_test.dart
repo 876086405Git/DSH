@@ -70,7 +70,11 @@ Future<void> pass(WidgetTester tester, Clock clock, int ms) async {
 Map<String, Object?> saved() => _memory!.initiativeRecord()!;
 
 void main() {
-  setUp(() { SharedPreferences.setMockInitialValues({}); _database = null; _memory = null; });
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    _database = null;
+    _memory = null;
+  });
   tearDown(() => _memory?.close());
 
   testWidgets('signal cannot accept an invitation but can decline into the shared refusal', (tester) async {
@@ -86,8 +90,11 @@ void main() {
       candidate(clock),
       isCurrent: () => true,
       present: (d) {
-        expect(_database!.select("SELECT kind,state FROM memory_initiative_spends").single,
-          containsPair('state', 'reserved'), reason: 'the actual render happens after the durable reservation');
+        expect(
+          _database!.select("SELECT kind,state FROM memory_initiative_spends").single,
+          containsPair('state', 'reserved'),
+          reason: 'the actual render happens after the durable reservation',
+        );
         shown.add(d);
         return true;
       },
@@ -175,7 +182,9 @@ void main() {
       await pass(tester, clock, 46000);
       expect(room.shown, hasLength(1));
       expect(owner.fault, 'storage-failed');
-    } finally { owner.dispose(); }
+    } finally {
+      owner.dispose();
+    }
   });
 
   testWidgets('unbounded observer reentrancy closes after a bounded queue drain', (tester) async {
@@ -229,7 +238,9 @@ void main() {
   });
 
   for (final throws in [false, true]) {
-    testWidgets('actual presentation ${throws ? 'throw retains an unknown spend' : 'false releases its reservation'}', (tester) async {
+    testWidgets('actual presentation ${throws ? 'throw retains an unknown spend' : 'false releases its reservation'}', (
+      tester,
+    ) async {
       final clock = Clock();
       final owner = await make(tester, clock);
       final room = Room();
@@ -254,8 +265,10 @@ void main() {
       final ledger = saved();
       expect(ledger['signalAtMs'], throws ? hasLength(1) : isEmpty);
       expect(ledger['inviteAtMs'], isEmpty);
-      expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'],
-        throws ? 'unknown' : 'released');
+      expect(
+        _database!.select('SELECT state FROM memory_initiative_spends').single['state'],
+        throws ? 'unknown' : 'released',
+      );
       expect(owner.fault, isNull);
       owner.dispose();
     });
@@ -461,8 +474,17 @@ void main() {
       BEGIN SELECT RAISE(ABORT,'fixture'); END
     """);
     owner.enter(room, view());
-    owner.requestSignal(room, view(), candidate(clock), isCurrent: () => true,
-      present: (display) { shown.add(display); return true; }, hide: hidden.add);
+    owner.requestSignal(
+      room,
+      view(),
+      candidate(clock),
+      isCurrent: () => true,
+      present: (display) {
+        shown.add(display);
+        return true;
+      },
+      hide: hidden.add,
+    );
     await pass(tester, clock, 46000);
     expect(shown, hasLength(1));
     expect(hidden, [shown.single.ticket.id]);

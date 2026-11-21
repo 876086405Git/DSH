@@ -11195,8 +11195,20 @@ abstract class L10n {
   /// No description provided for @companionMemoryHostUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'这台主机还接不了手机里的记忆，这次聊天用不上她已经记住的事。升级主机或换成轻量模式就好。'**
+  /// **'这台主机的版本有点旧，在这里她暂时想不起你们聊过的事。升级主机就好。'**
   String get companionMemoryHostUnsupported;
+
+  /// No description provided for @companionMemoryFollowup.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次提到的这件事，现在想聊聊吗？'**
+  String get companionMemoryFollowup;
+
+  /// No description provided for @companionMemoryPostponedDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，那等你定了新时间再说。'**
+  String get companionMemoryPostponedDone;
 
   /// No description provided for @automaticDiagnosticsRecover.
   ///

@@ -6014,7 +6014,13 @@ class L10nZh extends L10n {
   String get companionMemoryUsageEmpty => '还没有记录到用量';
 
   @override
-  String get companionMemoryHostUnsupported => '这台主机还接不了手机里的记忆，这次聊天用不上她已经记住的事。升级主机或换成轻量模式就好。';
+  String get companionMemoryHostUnsupported => '这台主机的版本有点旧，在这里她暂时想不起你们聊过的事。升级主机就好。';
+
+  @override
+  String get companionMemoryFollowup => '上次提到的这件事，现在想聊聊吗？';
+
+  @override
+  String get companionMemoryPostponedDone => '好，那等你定了新时间再说。';
 
   @override
   String get automaticDiagnosticsRecover => '恢复本地记录';

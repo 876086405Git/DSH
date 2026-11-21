@@ -220,7 +220,10 @@ class CompanionInitiative {
       if (!_disposed) {
         final now = _now();
         if (!_disposed) {
-          _controller = CompanionInitiativeController(now: now, restored: const CompanionInitiativeRestore.unavailable());
+          _controller = CompanionInitiativeController(
+            now: now,
+            restored: const CompanionInitiativeRestore.unavailable(),
+          );
         }
       }
     } finally {
@@ -494,7 +497,14 @@ class CompanionInitiative {
         _shownId = ticket.id;
       }
       if (reservation != null) {
-        _store!.settleInitiative(reservation, outcome: shown ? 'shown' : unknown ? 'unknown' : 'released');
+        _store!.settleInitiative(
+          reservation,
+          outcome: shown
+              ? 'shown'
+              : unknown
+              ? 'unknown'
+              : 'released',
+        );
       }
       if (!shown && !unknown) {
         _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);

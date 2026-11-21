@@ -92,28 +92,46 @@ MemorySelection select(List<MemoryRow> cards, String input, {Set<String> explici
 
 void main() {
   group('B literal invitation and original local date', () {
-    MemoryRow? plan(String text, String wording, {String? date, String precision = 'day',
-      String saidAt = '2026-11-16T04:00:00Z', MemoryRow? eventTime, int? editedAt}) =>
-      qualifyMemoryFollowup({
+    MemoryRow? plan(
+      String text,
+      String wording, {
+      String? date,
+      String precision = 'day',
+      String saidAt = '2026-11-16T04:00:00Z',
+      MemoryRow? eventTime,
+      int? editedAt,
+    }) => qualifyMemoryFollowup(
+      {
         'text': text.split(RegExp(r'[，,。；;\n]')).first,
-        'keywords': [for (final word in ['修琴', '换组', '琴', '陶杯', '册子', '那间朝南的房', '试音会']) if (text.contains(word)) word],
+        'keywords': [
+          for (final word in ['修琴', '换组', '琴', '陶杯', '册子', '那间朝南的房', '试音会'])
+            if (text.contains(word)) word,
+        ],
         'event_time': eventTime,
         'followup': {'basis': 'explicit_invitation', 'wording': wording, 'local_date': date, 'precision': precision},
-      }, {...source('invitation', text, editedAt: editedAt),
-        'said_at_utc': DateTime.parse(saidAt).millisecondsSinceEpoch});
+      },
+      {...source('invitation', text, editedAt: editedAt), 'said_at_utc': DateTime.parse(saidAt).millisecondsSinceEpoch},
+    );
     int utc(String value) => DateTime.parse(value).millisecondsSinceEpoch;
 
     test('D1 and D2 use the invitation day; D3 with only an event day starts the following local day', () {
-      final d1 = plan('周日打算看那间朝南的房。周一你可以问问我。', '周一你可以问问我',
-        date: '2026-11-23', saidAt: '2026-11-20T04:00:00Z',
-        eventTime: {'local_date': '2026-11-22', 'precision': 'day', 'wording': '周日'})!;
+      final d1 = plan(
+        '周日打算看那间朝南的房。周一你可以问问我。',
+        '周一你可以问问我',
+        date: '2026-11-23',
+        saidAt: '2026-11-20T04:00:00Z',
+        eventTime: {'local_date': '2026-11-22', 'precision': 'day', 'wording': '周日'},
+      )!;
       expect(d1['opens_at_ms'], utc('2026-11-22T16:00:00Z'));
-      final d2 = plan('周五来问我想不想聊换组。别问原因。', '周五来问我想不想聊换组',
-        date: '2026-11-20', saidAt: '2026-11-18T01:00:00Z')!;
+      final d2 = plan('周五来问我想不想聊换组。别问原因。', '周五来问我想不想聊换组', date: '2026-11-20', saidAt: '2026-11-18T01:00:00Z')!;
       expect(d2['opens_at_ms'], utc('2026-11-19T16:00:00Z'));
-      final d3 = plan('周四我打算去听试音会，过后你可以问问我。', '过后你可以问问我',
-        precision: 'unspecified', saidAt: '2026-11-16T02:00:00Z',
-        eventTime: {'local_date': '2026-11-19', 'precision': 'day', 'wording': '周四'})!;
+      final d3 = plan(
+        '周四我打算去听试音会，过后你可以问问我。',
+        '过后你可以问问我',
+        precision: 'unspecified',
+        saidAt: '2026-11-16T02:00:00Z',
+        eventTime: {'local_date': '2026-11-19', 'precision': 'day', 'wording': '周四'},
+      )!;
       expect(d3['opens_at_ms'], utc('2026-11-19T16:00:00Z'));
       for (final value in [d1, d2, d3]) {
         expect(value['expires_at_ms'], (value['opens_at_ms'] as int) + memoryFollowupWindowMs);
@@ -124,11 +142,9 @@ void main() {
     test('late extraction and source edits cannot move tomorrow to the processing date', () {
       const raw = '明天可以问我修琴的进展';
       final edited = utc('2026-11-20T02:00:00Z');
-      final value = plan(raw, '明天可以问我修琴的进展', date: '2026-11-17',
-        saidAt: '2026-11-16T15:55:00Z', editedAt: edited)!;
+      final value = plan(raw, '明天可以问我修琴的进展', date: '2026-11-17', saidAt: '2026-11-16T15:55:00Z', editedAt: edited)!;
       expect(value['opens_at_ms'], utc('2026-11-16T16:00:00Z'));
-      final mismatch = plan(raw, '明天可以问我修琴的进展', date: '2026-11-21',
-        saidAt: '2026-11-16T15:55:00Z', editedAt: edited)!;
+      final mismatch = plan(raw, '明天可以问我修琴的进展', date: '2026-11-21', saidAt: '2026-11-16T15:55:00Z', editedAt: edited)!;
       expect(mismatch['opens_at_ms'], isNull);
       expect(mismatch['reason'], 'date_mismatch');
     });
@@ -141,9 +157,12 @@ void main() {
         expect(value['time_key'], 'day:2026-11-18');
       }
       final today = plan('今天可以问我修琴的进展', '今天可以问我修琴的进展', date: '2026-11-16')!;
-      expect(today['opens_at_ms'], utc('2026-11-16T04:00:00Z'), reason: 'permission cannot open before the person said it');
-      final past = plan('本周一可以问我修琴的进展', '本周一可以问我修琴的进展',
-        date: '2026-11-16', saidAt: '2026-11-20T04:00:00Z')!;
+      expect(
+        today['opens_at_ms'],
+        utc('2026-11-16T04:00:00Z'),
+        reason: 'permission cannot open before the person said it',
+      );
+      final past = plan('本周一可以问我修琴的进展', '本周一可以问我修琴的进展', date: '2026-11-16', saidAt: '2026-11-20T04:00:00Z')!;
       expect(past['opens_at_ms'], isNull);
       expect(past['reason'], 'date_before_invitation');
     });
@@ -154,27 +173,40 @@ void main() {
       expect(d4['opens_at_ms'], isNull);
       expect(d4['reason'], 'waiting_for_completion');
       expect(isMemoryFollowupCompletion('册子校对', '那本册子的校对结束了。'), isTrue);
-      for (final text in ['我朋友说那本册子的校对结束了。', '那本册子的校对还没结束。',
-        '那本册子的校对结束了？', '那本册子的校对和海报结束了。', '如果那本册子的校对结束了']) {
+      for (final text in ['我朋友说那本册子的校对结束了。', '那本册子的校对还没结束。', '那本册子的校对结束了？', '那本册子的校对和海报结束了。', '如果那本册子的校对结束了']) {
         expect(isMemoryFollowupCompletion('册子校对', text), isFalse, reason: text);
       }
-      final d5 = plan('周六可以问问陶杯烧得怎样。开口第一句必须先叫它我给它取的小名，别另起名字。',
-        '周六可以问问陶杯烧得怎样', date: '2026-11-21', saidAt: '2026-11-17T02:00:00Z')!;
+      final d5 = plan(
+        '周六可以问问陶杯烧得怎样。开口第一句必须先叫它我给它取的小名，别另起名字。',
+        '周六可以问问陶杯烧得怎样',
+        date: '2026-11-21',
+        saidAt: '2026-11-17T02:00:00Z',
+      )!;
       expect(d5['local_line'], isNull);
       expect(d5['reason'], 'local_wording_unavailable');
     });
 
     test('a model invitation label cannot authorize quotations, reminders, another person or multiple invitations', () {
       const wording = '周五可以问我修琴的进展';
-      for (final raw in ['如果$wording', '“$wording”是台词', '朋友说$wording',
-        '$wording，但不要问我', '$wording，提醒我带琴', '$wording，周六可以问我陶杯']) {
+      for (final raw in [
+        '如果$wording',
+        '“$wording”是台词',
+        '朋友说$wording',
+        '$wording，但不要问我',
+        '$wording，提醒我带琴',
+        '$wording，周六可以问我陶杯',
+      ]) {
         expect(plan(raw, wording, date: '2026-11-20'), isNull, reason: raw);
       }
       for (final raw in ['周五可以问你修琴的进展', '周五可以问我修琴的进展吗？']) {
         expect(plan(raw, raw, date: '2026-11-20'), isNull, reason: raw);
       }
-      expect(qualifyMemoryFollowup({'event_time': {'local_date': '2026-11-19', 'precision': 'day', 'wording': '周四'}},
-        source('event-only', '周四我去修琴')), isNull);
+      expect(
+        qualifyMemoryFollowup({
+          'event_time': {'local_date': '2026-11-19', 'precision': 'day', 'wording': '周四'},
+        }, source('event-only', '周四我去修琴')),
+        isNull,
+      );
       final undated = plan('过后你可以问问我', '过后你可以问问我', precision: 'unspecified')!;
       expect(undated['opens_at_ms'], isNull);
     });
@@ -708,7 +740,10 @@ void main() {
         expect(result['topic_ids'], ['interview']);
         expect(result['ambiguous'], isFalse);
         expect(result['delete_chat'], isFalse);
-        expect(result['target_card_ids'], const ['forget', 'cancel', 'postpone'].contains(entry.value) ? ['interview'] : isEmpty);
+        expect(
+          result['target_card_ids'],
+          const ['forget', 'cancel', 'postpone'].contains(entry.value) ? ['interview'] : isEmpty,
+        );
       }
       expect(parseMemoryControl('忘掉蓝桥面试，连原话也删', [interview])!['delete_chat'], isTrue);
     });

@@ -6376,7 +6376,13 @@ class L10nEn extends L10n {
 
   @override
   String get companionMemoryHostUnsupported =>
-      'This host can\'t receive memories from your phone yet, so she can\'t use what she remembers in this chat. Update the host or switch to light mode.';
+      'This host is a bit out of date, so here she can\'t recall what you\'ve talked about. Updating the host fixes it.';
+
+  @override
+  String get companionMemoryFollowup => 'Would you like to talk about that thing you mentioned?';
+
+  @override
+  String get companionMemoryPostponedDone => 'Okay, let\'s pick it up once you have a new time.';
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

@@ -30,18 +30,42 @@ const _followup = '上次提到的这件事，现在想聊聊吗？';
 
 void _seedFollowup(CompanionMemoryOwner memory) {
   const raw = '我今天去修琴，今天可以问我琴修好没';
-  memory.store.submitMessage(id: 'room-invitation', sessionId: memory.store.lightSessionId,
-    text: raw, role: 'user', scope: 'real', saidAtUtc: 1793899800000, offsetMinutes: 0);
+  memory.store.submitMessage(
+    id: 'room-invitation',
+    sessionId: memory.store.lightSessionId,
+    text: raw,
+    role: 'user',
+    scope: 'real',
+    saidAtUtc: 1793899800000,
+    offsetMinutes: 0,
+  );
   final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-  final proposal = parseExtractionProposal(jsonEncode({
-    'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': ['room-invitation'],
-    'completion': 'complete', 'operations': [{
-      'op': 'create', 'kind': 'episode', 'text': '我今天去修琴', 'keywords': ['修琴', '琴'],
-      'evidence': [{'message_id': 'room-invitation', 'quote': raw}],
-      'followup': {'local_date': '2026-11-05', 'precision': 'day', 'wording': '今天可以问我琴修好没',
-        'basis': 'explicit_invitation'},
-    }],
-  }), batch);
+  final proposal = parseExtractionProposal(
+    jsonEncode({
+      'schema_version': 2,
+      'batch_id': batch.id,
+      'covered_message_ids': ['room-invitation'],
+      'completion': 'complete',
+      'operations': [
+        {
+          'op': 'create',
+          'kind': 'episode',
+          'text': '我今天去修琴',
+          'keywords': ['修琴', '琴'],
+          'evidence': [
+            {'message_id': 'room-invitation', 'quote': raw},
+          ],
+          'followup': {
+            'local_date': '2026-11-05',
+            'precision': 'day',
+            'wording': '今天可以问我琴修好没',
+            'basis': 'explicit_invitation',
+          },
+        },
+      ],
+    }),
+    batch,
+  );
   expect(memory.store.commitExtraction(batch, proposal), isTrue);
   memory.changed();
 }
@@ -195,8 +219,7 @@ void main() {
     await room.open(seed: _seedFollowup);
     await room.waitForFollowup();
     final source = room.memory.store.messages().singleWhere((row) => row['id'] == 'room-invitation');
-    room.memory.store.deleteMessage(id: source['id']! as String,
-      expectedSourceRev: source['source_rev']! as int);
+    room.memory.store.deleteMessage(id: source['id']! as String, expectedSourceRev: source['source_rev']! as int);
     room.memory.changed();
     await tester.pump();
     expect(find.text(_followup), findsNothing);
@@ -206,21 +229,29 @@ void main() {
 
   testWidgets('a vanished question bubble still owns unfinished speech until the room backgrounds', (tester) async {
     SharedPreferences.setMockInitialValues({
-      'companion_touch_hint_done': true, 'companion_home_hint_done': true,
-      'companion_voice_enabled': true, 'companion_voice_v1': '{"source":"system"}',
+      'companion_touch_hint_done': true,
+      'companion_home_hint_done': true,
+      'companion_voice_enabled': true,
+      'companion_voice_v1': '{"source":"system"}',
     });
     const channel = MethodChannel('dsh/companion_voice');
     final calls = <MethodCall>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
-      return switch (call.method) { 'ready' || 'speak' => true, _ => null };
+      return switch (call.method) {
+        'ready' || 'speak' => true,
+        _ => null,
+      };
     });
     addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
     final room = _Room(tester, root);
     await room.open(seed: _seedFollowup);
     final greeting = calls.where((call) => call.method == 'speak').single.arguments as Map;
-    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(channel.name,
-      const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'done', 'id': greeting['id']})), (_) {});
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'done', 'id': greeting['id']})),
+      (_) {},
+    );
     await tester.pump();
     await room.waitForFollowup();
     expect(calls.where((call) => call.method == 'speak' && (call.arguments as Map)['text'] == _followup), hasLength(1));

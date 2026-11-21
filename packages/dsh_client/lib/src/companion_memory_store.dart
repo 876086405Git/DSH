@@ -1037,11 +1037,14 @@ class CompanionMemoryStore {
     // Every old presentation cache is fenced immediately. Independent pending
     // invitations may later be rebuilt from current sources under the new
     // control, but an unresolved command and consumed opportunities stay shut.
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE memory_followups SET row_rev=row_rev+1,invitation='',support_quote=NULL,wait_subject=NULL,local_line=NULL,
         state=CASE WHEN state IN ('waiting','pending','reserved') THEN 'closed' ELSE state END,
         reason=CASE WHEN reason IN ('unresolved_control','expired','already_presented') THEN reason ELSE ? END
-    ''', [followupCloseReason]);
+    ''',
+      [followupCloseReason],
+    );
   }
 
   MemoryBatch? nextBatch({bool forceTail = false, required int Function(String) estimateTokens}) => _transaction(() {
@@ -1158,7 +1161,8 @@ class CompanionMemoryStore {
 
   // A cancelled plan is retained only as a local ordering anchor. Its old
   // future wording is not a current item in 09s existing or model selection.
-  bool _currentCard(MemoryRow card, int at) => _currentAnchor(card, at) && !const ['cancelled', 'postponed'].contains(card['plan_state']);
+  bool _currentCard(MemoryRow card, int at) =>
+      _currentAnchor(card, at) && !const ['cancelled', 'postponed'].contains(card['plan_state']);
 
   bool _currentAnchor(MemoryRow card, int at) =>
       card['scope'] == 'real' &&
@@ -2055,14 +2059,24 @@ class CompanionMemoryStore {
     if (rows.isEmpty) return null;
     final state = rows.single;
     final at = _checkedNow();
-    final spends = _db.select('''
+    final spends = _db.select(
+      '''
       SELECT kind,COALESCE(presented_at_ms,reserved_at_ms) AS at FROM memory_initiative_spends
       WHERE state!='released' AND COALESCE(presented_at_ms,reserved_at_ms)>? ORDER BY at,id
-    ''', [at - 86400000]);
+    ''',
+      [at - 86400000],
+    );
     return {
-      'v': 2, 'lastGreetingAtMs': state['last_greeting_at_ms'],
-      'inviteAtMs': [for (final spend in spends) if (spend['kind'] == 'invite') spend['at']],
-      'signalAtMs': [for (final spend in spends) if (spend['kind'] != 'invite') spend['at']],
+      'v': 2,
+      'lastGreetingAtMs': state['last_greeting_at_ms'],
+      'inviteAtMs': [
+        for (final spend in spends)
+          if (spend['kind'] == 'invite') spend['at'],
+      ],
+      'signalAtMs': [
+        for (final spend in spends)
+          if (spend['kind'] != 'invite') spend['at'],
+      ],
       'declinedUntilMs': state['declined_until_ms'],
       'night': state['night_json'] == null ? null : jsonDecode(state['night_json'] as String),
     };
@@ -2071,15 +2085,24 @@ class CompanionMemoryStore {
   MemoryRow initializeInitiative(MemoryRow validatedV2) => _transaction(() {
     final existing = initiativeRecord();
     if (existing != null) return existing;
-    _db.execute('''
+    _db.execute(
+      '''
       INSERT INTO memory_initiative_state(singleton,last_greeting_at_ms,declined_until_ms,night_json) VALUES(1,?,?,?)
-    ''', [validatedV2['lastGreetingAtMs'], validatedV2['declinedUntilMs'],
-      validatedV2['night'] == null ? null : jsonEncode(validatedV2['night'])]);
+    ''',
+      [
+        validatedV2['lastGreetingAtMs'],
+        validatedV2['declinedUntilMs'],
+        validatedV2['night'] == null ? null : jsonEncode(validatedV2['night']),
+      ],
+    );
     for (final entry in const {'invite': 'inviteAtMs', 'signal': 'signalAtMs'}.entries) {
       for (final at in (validatedV2[entry.value] as List<Object?>).cast<int>()) {
-        _db.execute('''
+        _db.execute(
+          '''
           INSERT INTO memory_initiative_spends(id,kind,reserved_at_ms,presented_at_ms,state) VALUES(?,?,?,?,'shown')
-        ''', ['legacy:${entry.key}:$at', entry.key, at, at]);
+        ''',
+          ['legacy:${entry.key}:$at', entry.key, at, at],
+        );
       }
     }
     return initiativeRecord()!;
@@ -2088,10 +2111,16 @@ class CompanionMemoryStore {
   /// Never overwrite the shared spend history with a possibly older RAM
   /// controller snapshot. Only its greeting/decline/timezone metadata is saved.
   void writeInitiativeMetadata(MemoryRow validatedV2) {
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE memory_initiative_state SET last_greeting_at_ms=?,declined_until_ms=?,night_json=? WHERE singleton=1
-    ''', [validatedV2['lastGreetingAtMs'], validatedV2['declinedUntilMs'],
-      validatedV2['night'] == null ? null : jsonEncode(validatedV2['night'])]);
+    ''',
+      [
+        validatedV2['lastGreetingAtMs'],
+        validatedV2['declinedUntilMs'],
+        validatedV2['night'] == null ? null : jsonEncode(validatedV2['night']),
+      ],
+    );
     if (_db.select('SELECT changes() AS n').single['n'] != 1) throw _conflict;
   }
 
@@ -2111,10 +2140,13 @@ class CompanionMemoryStore {
           (metadata['last_greeting_at_ms'] != null && (metadata['last_greeting_at_ms'] as int) > nowMs)) {
         return null;
       }
-      final spent = _db.select('''
+      final spent = _db.select(
+        '''
         SELECT *,COALESCE(presented_at_ms,reserved_at_ms) AS at FROM memory_initiative_spends
         WHERE state!='released' AND COALESCE(presented_at_ms,reserved_at_ms)>? ORDER BY at,id
-      ''', [nowMs - 86400000]);
+      ''',
+        [nowMs - 86400000],
+      );
       if (spent.length >= maxPerDay || (spent.isNotEmpty && nowMs - (spent.last['at'] as int) < gapMs)) return null;
       if (kind == 'followup') {
         if (spent.any((row) => row['kind'] == 'followup')) return null;
@@ -2125,9 +2157,12 @@ class CompanionMemoryStore {
         _db.execute("UPDATE memory_followups SET state='reserved' WHERE id=?", [followupId]);
       }
       final id = _createId();
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_initiative_spends(id,opportunity_id,kind,reserved_at_ms,state) VALUES(?,?,?,?,'reserved')
-      ''', [id, followupId, kind, nowMs]);
+      ''',
+        [id, followupId, kind, nowMs],
+      );
       return id;
     });
   }
@@ -2144,12 +2179,25 @@ class CompanionMemoryStore {
     final at = outcome == 'shown' ? _checkedNow() : null;
     _db.execute('UPDATE memory_initiative_spends SET state=?,presented_at_ms=? WHERE id=?', [outcome, at, id]);
     if (spend['opportunity_id'] != null) {
-      final state = outcome == 'shown' ? 'asked' : outcome == 'unknown' ? 'maybe_shown' : 'pending';
-      _db.execute('''
+      final state = outcome == 'shown'
+          ? 'asked'
+          : outcome == 'unknown'
+          ? 'maybe_shown'
+          : 'pending';
+      _db.execute(
+        '''
         UPDATE memory_followups SET state=?,presented_at_ms=?,reason=?,row_rev=row_rev+?
         WHERE id=? AND (state='reserved' OR ?)
-      ''', [state, at, outcome == 'unknown' ? 'presentation_unknown' : null,
-        outcome == 'shown' ? 0 : 1, spend['opportunity_id'], outcome == 'released' ? 0 : 1]);
+      ''',
+        [
+          state,
+          at,
+          outcome == 'unknown' ? 'presentation_unknown' : null,
+          outcome == 'shown' ? 0 : 1,
+          spend['opportunity_id'],
+          outcome == 'released' ? 0 : 1,
+        ],
+      );
     }
   });
 
@@ -2168,7 +2216,9 @@ class CompanionMemoryStore {
   /// Currentness protects an existing display as well as a pending ticket.
   /// Asked may remain visible for its original eight seconds; only pending
   /// can reserve, so this is never permission to show the question twice.
-  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) => _db.select('''
+  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) => _db
+      .select(
+        '''
     SELECT 1 FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
     JOIN memory_topics t ON t.id=c.topic_id JOIN memory_messages m ON m.id=f.message_id
     JOIN memory_archive a ON a.singleton=1 LEFT JOIN memory_messages support ON support.id=f.support_message_id
@@ -2183,15 +2233,32 @@ class CompanionMemoryStore {
       AND m.first_seq>MAX(a.history_after_seq,a.followup_after_seq)
       AND (f.wait_subject IS NULL OR (support.source_rev=f.support_source_rev AND support.role='user'
         AND support.scope='real' AND support.first_seq>m.first_seq))
-  ''', [captured['id'], captured['row_rev'], captured['card_id'], captured['card_rev'], captured['control_revision'],
-    captured['message_id'], captured['source_rev'], captured['support_message_id'], captured['support_source_rev'],
-    nowMs, nowMs, nowMs]).isNotEmpty;
+  ''',
+        [
+          captured['id'],
+          captured['row_rev'],
+          captured['card_id'],
+          captured['card_rev'],
+          captured['control_revision'],
+          captured['message_id'],
+          captured['source_rev'],
+          captured['support_message_id'],
+          captured['support_source_rev'],
+          nowMs,
+          nowMs,
+          nowMs,
+        ],
+      )
+      .isNotEmpty;
 
   void _refreshFollowups(int at) {
     final meta = archive;
     final sources = <String, MemoryRow>{
-      for (final row in _db.select("SELECT * FROM memory_messages WHERE role='user' AND scope='real' AND first_seq>? ORDER BY first_seq",
-        [math.max(meta['history_after_seq'] as int, meta['followup_after_seq'] as int)])) row['id'] as String: Map<String, Object?>.from(row),
+      for (final row in _db.select(
+        "SELECT * FROM memory_messages WHERE role='user' AND scope='real' AND first_seq>? ORDER BY first_seq",
+        [math.max(meta['history_after_seq'] as int, meta['followup_after_seq'] as int)],
+      ))
+        row['id'] as String: Map<String, Object?>.from(row),
     };
     final candidates = <String, List<MemoryRow>>{};
     for (final card in cards()) {
@@ -2210,35 +2277,55 @@ class CompanionMemoryStore {
         // source edits, pin changes, card revalidation and process restarts.
         final id = sha256.convert(utf8.encode(jsonEncode([origin, plan['time_key']]))).toString();
         (candidates[id] ??= []).add({
-          'id': id, ...plan, 'card_id': card['id'], 'card_rev': card['row_rev'],
-          'control_revision': meta['control_revision'], 'message_id': origin, 'source_rev': source['source_rev'],
-          'invitation': source['text'], 'source_first_seq': source['first_seq'],
-          'said_at_utc': source['said_at_utc'], 'offset_minutes': source['offset_minutes'],
-          'support_message_id': null, 'support_source_rev': null, 'support_quote': null,
+          'id': id,
+          ...plan,
+          'card_id': card['id'],
+          'card_rev': card['row_rev'],
+          'control_revision': meta['control_revision'],
+          'message_id': origin,
+          'source_rev': source['source_rev'],
+          'invitation': source['text'],
+          'source_first_seq': source['first_seq'],
+          'said_at_utc': source['said_at_utc'],
+          'offset_minutes': source['offset_minutes'],
+          'support_message_id': null,
+          'support_source_rev': null,
+          'support_quote': null,
         });
       }
     }
-    final choices = [for (final group in candidates.values) if (group.length == 1) group.single];
+    final choices = [
+      for (final group in candidates.values)
+        if (group.length == 1) group.single,
+    ];
     final chosenIds = choices.map((row) => row['id']).toSet();
     final existing = {for (final row in _db.select('SELECT * FROM memory_followups')) row['id'] as String: row};
     for (final old in existing.values) {
       if (const ['waiting', 'pending'].contains(old['state']) && !chosenIds.contains(old['id'])) {
-        _db.execute("UPDATE memory_followups SET state='closed',reason='no_current_invitation',invitation='',local_line=NULL,"
-          "support_quote=NULL,row_rev=row_rev+1 WHERE id=?", [old['id']]);
+        _db.execute(
+          "UPDATE memory_followups SET state='closed',reason='no_current_invitation',invitation='',local_line=NULL,"
+          "support_quote=NULL,row_rev=row_rev+1 WHERE id=?",
+          [old['id']],
+        );
       }
     }
     for (final candidate in choices) {
       final old = existing[candidate['id']];
-      if (old != null && (const ['asked', 'maybe_shown'].contains(old['state']) ||
-          const ['unresolved_control', 'expired', 'already_presented'].contains(old['reason']))) {
+      if (old != null &&
+          (const ['asked', 'maybe_shown'].contains(old['state']) ||
+              const ['unresolved_control', 'expired', 'already_presented'].contains(old['reason']))) {
         continue;
       }
-      final spent = _db.select("SELECT state FROM memory_initiative_spends WHERE opportunity_id=? AND state!='released'",
-        [candidate['id']]);
+      final spent = _db.select(
+        "SELECT state FROM memory_initiative_spends WHERE opportunity_id=? AND state!='released'",
+        [candidate['id']],
+      );
       if (spent.any((row) => row['state'] == 'reserved')) continue;
       final subject = candidate['wait_subject'] as String?;
-      if (subject != null && candidate['local_line'] != null &&
-          choices.where((other) => other['wait_subject'] == subject).map((other) => other['card_id']).toSet().length == 1) {
+      if (subject != null &&
+          candidate['local_line'] != null &&
+          choices.where((other) => other['wait_subject'] == subject).map((other) => other['card_id']).toSet().length ==
+              1) {
         for (final support in sources.values) {
           if ((support['first_seq'] as int) <= (candidate['source_first_seq'] as int) ||
               (support['said_at_utc'] as int) < (candidate['said_at_utc'] as int) ||
@@ -2246,19 +2333,31 @@ class CompanionMemoryStore {
             continue;
           }
           candidate.addAll({
-            'support_message_id': support['id'], 'support_source_rev': support['source_rev'], 'support_quote': support['text'],
-            'opens_at_ms': support['said_at_utc'], 'expires_at_ms': (support['said_at_utc'] as int) + memoryFollowupWindowMs,
-            'time_key': 'completed:${support['said_at_utc']}', 'reason': null,
+            'support_message_id': support['id'],
+            'support_source_rev': support['source_rev'],
+            'support_quote': support['text'],
+            'opens_at_ms': support['said_at_utc'],
+            'expires_at_ms': (support['said_at_utc'] as int) + memoryFollowupWindowMs,
+            'time_key': 'completed:${support['said_at_utc']}',
+            'reason': null,
           });
           break;
         }
       }
-      final alreadyAsked = spent.isNotEmpty || existing.values.any((row) =>
-        row['card_id'] == candidate['card_id'] && row['time_key'] == candidate['time_key'] &&
-        const ['asked', 'maybe_shown'].contains(row['state']));
+      final alreadyAsked =
+          spent.isNotEmpty ||
+          existing.values.any(
+            (row) =>
+                row['card_id'] == candidate['card_id'] &&
+                row['time_key'] == candidate['time_key'] &&
+                const ['asked', 'maybe_shown'].contains(row['state']),
+          );
       final expires = candidate['expires_at_ms'] as int?;
-      candidate['state'] = alreadyAsked || expires != null && expires <= at ? 'closed' :
-        candidate['opens_at_ms'] == null || candidate['local_line'] == null ? 'waiting' : 'pending';
+      candidate['state'] = alreadyAsked || expires != null && expires <= at
+          ? 'closed'
+          : candidate['opens_at_ms'] == null || candidate['local_line'] == null
+          ? 'waiting'
+          : 'pending';
       if (alreadyAsked) {
         candidate['reason'] = 'already_presented';
       } else if (expires != null && expires <= at) {
@@ -2266,7 +2365,8 @@ class CompanionMemoryStore {
       }
       // Polling an unchanged opportunity must not invalidate its captured ticket.
       if (old != null && candidate.entries.every((entry) => old[entry.key] == entry.value)) continue;
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO memory_followups(id,row_rev,time_key,card_id,card_rev,control_revision,message_id,source_rev,
           invitation,source_first_seq,said_at_utc,offset_minutes,wait_subject,opens_at_ms,expires_at_ms,local_line,
           support_message_id,support_source_rev,support_quote,state,reason)
@@ -2278,9 +2378,33 @@ class CompanionMemoryStore {
           opens_at_ms=excluded.opens_at_ms,expires_at_ms=excluded.expires_at_ms,local_line=excluded.local_line,
           support_message_id=excluded.support_message_id,support_source_rev=excluded.support_source_rev,
           support_quote=excluded.support_quote,state=excluded.state,reason=excluded.reason
-      ''', [for (final key in const ['id', 'time_key', 'card_id', 'card_rev', 'control_revision', 'message_id', 'source_rev',
-        'invitation', 'source_first_seq', 'said_at_utc', 'offset_minutes', 'wait_subject', 'opens_at_ms', 'expires_at_ms',
-        'local_line', 'support_message_id', 'support_source_rev', 'support_quote', 'state', 'reason']) candidate[key]]);
+      ''',
+        [
+          for (final key in const [
+            'id',
+            'time_key',
+            'card_id',
+            'card_rev',
+            'control_revision',
+            'message_id',
+            'source_rev',
+            'invitation',
+            'source_first_seq',
+            'said_at_utc',
+            'offset_minutes',
+            'wait_subject',
+            'opens_at_ms',
+            'expires_at_ms',
+            'local_line',
+            'support_message_id',
+            'support_source_rev',
+            'support_quote',
+            'state',
+            'reason',
+          ])
+            candidate[key],
+        ],
+      );
     }
   }
 

@@ -321,7 +321,7 @@
   "companionMemoryUsageCost": "Estimated cost",
   "companionMemoryUsageNotSent": "Not sent locally",
   "companionMemoryUsageEmpty": "No usage recorded yet",
-  "companionMemoryHostUnsupported": "This host can't receive memories from your phone yet, so she can't use what she remembers in this chat. Update the host or switch to light mode.",
+  "companionMemoryHostUnsupported": "This host is a bit out of date, so here she can't recall what you've talked about. Updating the host fixes it.",
   "companionMemoryFollowup": "Would you like to talk about that thing you mentioned?",
-  "companionMemoryPostponedDone": "Got it. I’ll leave the old date aside until you have a new plan."
+  "companionMemoryPostponedDone": "Okay, let's pick it up once you have a new time."
 }
