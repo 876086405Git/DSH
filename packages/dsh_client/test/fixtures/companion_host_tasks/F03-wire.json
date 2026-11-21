@@ -1,0 +1,430 @@
+{
+  "schema": 1,
+  "producer": {
+    "script": "checks/export_F03_wire_fixtures.mjs",
+    "scriptSha256": "c85c127a25f1aa266da0f0f3019408fdfd3d1792184cd29c1284f57a1de4894c",
+    "patchSha256": "aa85a3344627b1d0badc2c2b5b94908e680457a0ec9bc04925a99014878d841d",
+    "manifestSha256": "034d6d1860939b64eeb3a7cc7f755e718943de7b43bc9ea0c41bdac912e9d388",
+    "testSourceSha256": {
+      "runtime/tests/companion-task-http.test.mjs": "66e15a228510bc56acc6a5a4519055b435167a6c8c31f8afcefe054890c2d956",
+      "runtime/tests/companion-task-execution-source.test.mjs": "a394a2fe1e0db556fa300e687ff026ee623a454260e3d27fc4d9312da94fd50b"
+    },
+    "harnessEvidenceSha256": "9ecc4fc13e72d21fc91e690fd7fb488c988dfe52bedf45bb8c8deda33d584b20",
+    "scope": "SOURCE_CONTROLLED_HTTP; no real provider, filesystem publication or gateway delivery asserted",
+    "rawResponsesUnmodified": true
+  },
+  "cases": [
+    {
+      "name": "accepted_create_long_source_room",
+      "request": {
+        "method": "POST",
+        "path": "/dsh-go/v1/companion/tasks",
+        "body": {
+          "v": 1,
+          "hostStoreId": "983a33de-5cec-4d89-82dc-7ef2cd33e120",
+          "taskId": "task-1",
+          "taskRev": 1,
+          "kind": "host.notes_to_todo",
+          "origin": {
+            "sourceSessionId": "full:original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-",
+            "messageId": "message-1",
+            "itemNo": 0
+          },
+          "hostSessionId": "real-session",
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": false,
+          "args": {
+            "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+            "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+            "localDate": "2026-11-20",
+            "timeZone": "Asia/Shanghai",
+            "dateBy": "modified",
+            "outputName": "今日待办.md",
+            "writeMode": "createNew"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "v": 1,
+          "taskId": "task-1",
+          "hostExecutionId": "6941ed68-beb0-4b5e-a6fe-eb5e19566a7a",
+          "kind": "host.notes_to_todo",
+          "taskRev": 1,
+          "runnerReceiptSeq": 1,
+          "origin": {
+            "sourceSessionId": "full:original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-",
+            "messageId": "message-1",
+            "itemNo": 0
+          },
+          "hostSessionId": "real-session",
+          "state": "running",
+          "waitReason": null,
+          "cancelRequested": false,
+          "createdAtMs": 1795271505289,
+          "updatedAtMs": 1795271505300,
+          "agreement": {
+            "args": {
+              "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "localDate": "2026-11-20",
+              "timeZone": "Asia/Shanghai",
+              "dateBy": "modified",
+              "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "continue",
+            "allowQueue": false
+          },
+          "revisions": [
+            {
+              "taskRev": 1,
+              "operation": "create",
+              "acceptedAtMs": 1795271505300,
+              "agreement": {
+                "args": {
+                  "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "localDate": "2026-11-20",
+                  "timeZone": "Asia/Shanghai",
+                  "dateBy": "modified",
+                  "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "outputName": "今日待办.md",
+                  "writeMode": "createNew"
+                },
+                "deadlineAtMs": null,
+                "afterExit": "continue",
+                "allowQueue": false
+              }
+            }
+          ],
+          "steps": [],
+          "artifacts": [],
+          "approval": null,
+          "budget": {
+            "limitMs": 300000,
+            "spentMs": 0,
+            "heldMs": 0
+          },
+          "hostStoreId": "983a33de-5cec-4d89-82dc-7ef2cd33e120",
+          "originalCreatePresent": true
+        }
+      },
+      "scope": "actual loopback + production route + Domain; owner/FS/runner peers"
+    },
+    {
+      "name": "amend_before_create_barrier",
+      "request": {
+        "method": "POST",
+        "path": "/dsh-go/v1/companion/tasks/amend-before-create/amend",
+        "body": {
+          "v": 1,
+          "hostStoreId": "983a33de-5cec-4d89-82dc-7ef2cd33e120",
+          "operationId": "before-create-op",
+          "expectedTaskRev": 1,
+          "taskRev": 2,
+          "changes": {
+            "args": {
+              "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "localDate": "2026-11-20",
+              "timeZone": "Asia/Shanghai",
+              "dateBy": "modified",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "continue",
+            "allowQueue": false
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "v": 1,
+          "taskId": "amend-before-create",
+          "hostExecutionId": "91f39729-9851-4fa6-9f03-14bc3c5353c7",
+          "kind": "host.notes_to_todo",
+          "taskRev": 2,
+          "runnerReceiptSeq": 1,
+          "origin": null,
+          "hostSessionId": null,
+          "state": "waiting",
+          "waitReason": "original_create_missing",
+          "cancelRequested": false,
+          "createdAtMs": 1795271505307,
+          "updatedAtMs": 1795271505308,
+          "agreement": {
+            "args": {
+              "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "localDate": "2026-11-20",
+              "timeZone": "Asia/Shanghai",
+              "dateBy": "modified",
+              "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "continue",
+            "allowQueue": false
+          },
+          "revisions": [
+            {
+              "taskRev": 2,
+              "operation": "amend",
+              "acceptedAtMs": 1795271505308,
+              "agreement": {
+                "args": {
+                  "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "localDate": "2026-11-20",
+                  "timeZone": "Asia/Shanghai",
+                  "dateBy": "modified",
+                  "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "outputName": "今日待办.md",
+                  "writeMode": "createNew"
+                },
+                "deadlineAtMs": null,
+                "afterExit": "continue",
+                "allowQueue": false
+              }
+            }
+          ],
+          "steps": [],
+          "artifacts": [],
+          "approval": null,
+          "budget": {
+            "limitMs": 300000,
+            "spentMs": 0,
+            "heldMs": 0
+          },
+          "hostStoreId": "983a33de-5cec-4d89-82dc-7ef2cd33e120",
+          "originalCreatePresent": false
+        }
+      },
+      "scope": "actual loopback + production route + Domain; original create absent"
+    },
+    {
+      "name": "cancel_preserves_prior_artifact",
+      "request": {
+        "method": "POST",
+        "path": "/dsh-go/v1/companion/tasks/task-1/cancel",
+        "body": {
+          "v": 1,
+          "hostStoreId": "983a33de-5cec-4d89-82dc-7ef2cd33e120",
+          "operationId": "cancel-with-artifact",
+          "expectedTaskRev": 1,
+          "taskRev": 2
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "v": 1,
+          "taskId": "task-1",
+          "hostExecutionId": "6941ed68-beb0-4b5e-a6fe-eb5e19566a7a",
+          "kind": "host.notes_to_todo",
+          "taskRev": 2,
+          "runnerReceiptSeq": 9,
+          "origin": {
+            "sourceSessionId": "full:original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-original-room-",
+            "messageId": "message-1",
+            "itemNo": 0
+          },
+          "hostSessionId": "real-session",
+          "state": "cancelled",
+          "waitReason": null,
+          "cancelRequested": true,
+          "createdAtMs": 1795271505289,
+          "updatedAtMs": 1795271505334,
+          "agreement": {
+            "args": {
+              "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "localDate": "2026-11-20",
+              "timeZone": "Asia/Shanghai",
+              "dateBy": "modified",
+              "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "continue",
+            "allowQueue": false
+          },
+          "revisions": [
+            {
+              "taskRev": 1,
+              "operation": "create",
+              "acceptedAtMs": 1795271505300,
+              "agreement": {
+                "args": {
+                  "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "localDate": "2026-11-20",
+                  "timeZone": "Asia/Shanghai",
+                  "dateBy": "modified",
+                  "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "outputName": "今日待办.md",
+                  "writeMode": "createNew"
+                },
+                "deadlineAtMs": null,
+                "afterExit": "continue",
+                "allowQueue": false
+              }
+            },
+            {
+              "taskRev": 2,
+              "operation": "cancel",
+              "acceptedAtMs": 1795271505334,
+              "agreement": {
+                "args": {
+                  "folderRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "localDate": "2026-11-20",
+                  "timeZone": "Asia/Shanghai",
+                  "dateBy": "modified",
+                  "outputDirRef": "ffdcbeab-51dd-440b-87d8-498931d1d5a9",
+                  "outputName": "今日待办.md",
+                  "writeMode": "createNew"
+                },
+                "deadlineAtMs": null,
+                "afterExit": "continue",
+                "allowQueue": false
+              }
+            }
+          ],
+          "steps": [
+            {
+              "taskRev": 1,
+              "stepKey": "model",
+              "attemptId": "a1eb8912-ebcb-44a4-b2ae-a4a7cac9b00d",
+              "state": "done",
+              "startedAtMs": 1795271505311,
+              "finishedAtMs": 1795271505321,
+              "reason": null,
+              "result": null
+            },
+            {
+              "taskRev": 1,
+              "stepKey": "writePage",
+              "attemptId": "b73b39c2-f5a6-4c63-abc6-68612311844d",
+              "state": "done",
+              "startedAtMs": 1795271505323,
+              "finishedAtMs": 1795271505329,
+              "reason": null,
+              "result": {
+                "completion": {
+                  "artifactId": "4b7e003a-d744-47e9-8b69-95989ac9f2e0"
+                }
+              }
+            }
+          ],
+          "artifacts": [
+            {
+              "artifactId": "4b7e003a-d744-47e9-8b69-95989ac9f2e0",
+              "taskRev": 1,
+              "stepKey": "writePage",
+              "relativePath": "今日待办.md",
+              "mediaType": "text/markdown",
+              "size": 12,
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "verifiedAtMs": 1,
+              "sourceCount": 1
+            }
+          ],
+          "approval": null,
+          "budget": {
+            "limitMs": 300000,
+            "spentMs": 2,
+            "heldMs": 0
+          },
+          "hostStoreId": "983a33de-5cec-4d89-82dc-7ef2cd33e120",
+          "originalCreatePresent": true
+        }
+      },
+      "scope": "actual Domain publication marker/receipt and HTTP; artifact metadata is an injected observer peer, NOT actual filesystem publication"
+    },
+    {
+      "name": "pending_original_approval_distinct_ids",
+      "request": {
+        "method": "GET",
+        "path": "/dsh-go/v1/companion/tasks/task-1?hostStoreId=afc06c82-95a6-4879-9695-8c5a6508b277"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "v": 1,
+          "taskId": "task-1",
+          "hostExecutionId": "7a3d3f18-4db9-4505-853b-7350dcf07d05",
+          "kind": "host.notes_to_todo",
+          "taskRev": 1,
+          "runnerReceiptSeq": 5,
+          "origin": {
+            "sourceSessionId": "light:phone-room",
+            "messageId": "message-1",
+            "itemNo": 0
+          },
+          "hostSessionId": null,
+          "state": "waiting",
+          "waitReason": "approval",
+          "cancelRequested": false,
+          "createdAtMs": 1795271505342,
+          "updatedAtMs": 1795271505355,
+          "agreement": {
+            "args": {
+              "folderRef": "folder",
+              "localDate": "2026-11-20",
+              "timeZone": "Asia/Shanghai",
+              "dateBy": "modified",
+              "outputDirRef": "folder",
+              "outputName": "todo.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "continue",
+            "allowQueue": true
+          },
+          "revisions": [
+            {
+              "taskRev": 1,
+              "operation": "create",
+              "acceptedAtMs": 1795271505343,
+              "agreement": {
+                "args": {
+                  "folderRef": "folder",
+                  "localDate": "2026-11-20",
+                  "timeZone": "Asia/Shanghai",
+                  "dateBy": "modified",
+                  "outputDirRef": "folder",
+                  "outputName": "todo.md",
+                  "writeMode": "createNew"
+                },
+                "deadlineAtMs": null,
+                "afterExit": "continue",
+                "allowQueue": true
+              }
+            }
+          ],
+          "steps": [],
+          "artifacts": [],
+          "approval": {
+            "taskRev": 1,
+            "stepKey": "writePage",
+            "agentId": "companion-task-22245ce1-45c0-4c26-a1c9-59454c22da75",
+            "approvalId": "53d86a7c-9cf1-4a8b-96fe-074a0e458f4e",
+            "eventId": "ed970ccd-f33b-4239-8438-4547926b2297",
+            "callId": null
+          },
+          "budget": {
+            "limitMs": 300000,
+            "spentMs": 0,
+            "heldMs": 0
+          },
+          "hostStoreId": "afc06c82-95a6-4879-9695-8c5a6508b277",
+          "originalCreatePresent": true
+        }
+      },
+      "scope": "actual F01 task turn/ApprovalService + production execution/store/HTTP; factory, Session persistence and wire event delivery are the frozen execution-test peers (not full gateway/engine)"
+    }
+  ]
+}

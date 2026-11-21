@@ -188,7 +188,7 @@ void main() {
     restoreOldMemorySchema(database, 8);
     expect(database.select('PRAGMA table_info(memory_topics)').map((row) => row['name']), isNot(contains('control_anchors')));
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 12);
+    expect(database.select('PRAGMA user_version').single['user_version'], 13);
     expect(store.cards(), before);
     expect(anchors(topic), ['复诊']);
     store.editMessage(id: 'old', expectedSourceRev: 1, text: '我周六复诊。');
@@ -204,7 +204,7 @@ void main() {
     store.editMessage(id: 'old', expectedSourceRev: 1, text: '我周六复诊。');
     restoreOldMemorySchema(database, 8); // Real old schema has already lost the sole keyword.
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 12);
+    expect(database.select('PRAGMA user_version').single['user_version'], 13);
     expect(database.select('SELECT mode FROM memory_topics WHERE id=?', [topic]).single['mode'], 'never');
     expect(anchors(topic), isEmpty);
     expect(store.cards(), isEmpty);
