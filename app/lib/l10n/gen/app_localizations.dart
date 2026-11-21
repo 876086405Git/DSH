@@ -35090,6 +35090,54 @@ abstract class L10n {
   /// **'拜托你啦~ 这真的很重要！！'**
   String get starPromptPlea;
 
+  /// The star prompt's second ask (2 hours of use, after 下次再说), in place of starPromptBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'看来你挺喜欢这里嘛！点个 Star 只要几秒钟，却能让更多人发现 DSH Go，本鱼也会更有干劲！'**
+  String get starPromptBody2;
+
+  /// No description provided for @starPromptPlea2.
+  ///
+  /// In zh, this message translates to:
+  /// **'就差你这一颗星星啦~'**
+  String get starPromptPlea2;
+
+  /// The third ask (5 hours).
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH Go 不收费、没有广告，全靠大家的 Star 让更多人看到。如果它帮到了你，就送本鱼一颗星星吧！'**
+  String get starPromptBody3;
+
+  /// No description provided for @starPromptPlea3.
+  ///
+  /// In zh, this message translates to:
+  /// **'本鱼眼巴巴地等着呢~'**
+  String get starPromptPlea3;
+
+  /// The fourth ask (10 hours).
+  ///
+  /// In zh, this message translates to:
+  /// **'这么久了，本鱼一直都在。如果 DSH Go 已经成了你每天都会打开的 App，点个 Star 就是给作者最好的回礼。'**
+  String get starPromptBody4;
+
+  /// No description provided for @starPromptPlea4.
+  ///
+  /// In zh, this message translates to:
+  /// **'求求你啦，就点一下下~'**
+  String get starPromptPlea4;
+
+  /// The fifth and last ask (20 hours): it says so.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是本鱼最后一次问你啦。不管点不点，本鱼都会一直陪着你。要是愿意的话，点个 Star 让本鱼开心一下吧！'**
+  String get starPromptBody5;
+
+  /// No description provided for @starPromptPlea5.
+  ///
+  /// In zh, this message translates to:
+  /// **'最后一次，拜托啦！'**
+  String get starPromptPlea5;
+
   /// No description provided for @starPromptStar.
   ///
   /// In zh, this message translates to:

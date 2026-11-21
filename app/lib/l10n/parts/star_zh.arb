@@ -10,6 +10,26 @@
   },
   "starPromptBody": "这是一个免费开源的项目，如果它让你的移动端体验更好了一点，拜托点个 Star 支持一下，这对本鱼是很大的鼓励！",
   "starPromptPlea": "拜托你啦~ 这真的很重要！！",
+  "starPromptBody2": "看来你挺喜欢这里嘛！点个 Star 只要几秒钟，却能让更多人发现 DSH Go，本鱼也会更有干劲！",
+  "@starPromptBody2": {
+    "description": "The star prompt's second ask (2 hours of use, after 下次再说), in place of starPromptBody."
+  },
+  "starPromptPlea2": "就差你这一颗星星啦~",
+  "starPromptBody3": "DSH Go 不收费、没有广告，全靠大家的 Star 让更多人看到。如果它帮到了你，就送本鱼一颗星星吧！",
+  "@starPromptBody3": {
+    "description": "The third ask (5 hours)."
+  },
+  "starPromptPlea3": "本鱼眼巴巴地等着呢~",
+  "starPromptBody4": "这么久了，本鱼一直都在。如果 DSH Go 已经成了你每天都会打开的 App，点个 Star 就是给作者最好的回礼。",
+  "@starPromptBody4": {
+    "description": "The fourth ask (10 hours)."
+  },
+  "starPromptPlea4": "求求你啦，就点一下下~",
+  "starPromptBody5": "这是本鱼最后一次问你啦。不管点不点，本鱼都会一直陪着你。要是愿意的话，点个 Star 让本鱼开心一下吧！",
+  "@starPromptBody5": {
+    "description": "The fifth and last ask (20 hours): it says so."
+  },
+  "starPromptPlea5": "最后一次，拜托啦！",
   "starPromptStar": "去 GitHub 点 Star",
   "starPromptDone": "已经点过啦",
   "starPromptLater": "下次再说",

@@ -20161,6 +20161,34 @@ class L10nEn extends L10n {
   String get starPromptPlea => 'Pretty please~ It really matters!!';
 
   @override
+  String get starPromptBody2 =>
+      'Looks like you like it here! A Star takes a few seconds, helps more people find DSH Go, and keeps this little whale going!';
+
+  @override
+  String get starPromptPlea2 => 'Just one star from you~';
+
+  @override
+  String get starPromptBody3 =>
+      'DSH Go is free, with no ads — Stars are how more people get to see it. If it’s helped you, would you give this little whale a star?';
+
+  @override
+  String get starPromptPlea3 => 'Waiting here with hopeful eyes~';
+
+  @override
+  String get starPromptBody4 =>
+      'I’ve been here all along. If DSH Go is something you open every day now, a Star is the best thank-you its author could get.';
+
+  @override
+  String get starPromptPlea4 => 'Pretty please, just one tap~';
+
+  @override
+  String get starPromptBody5 =>
+      'This is the last time I’ll ask. Star or not, I’ll keep you company all the same. But if you’d like, a Star would make this little whale very happy!';
+
+  @override
+  String get starPromptPlea5 => 'Last time, pretty please!';
+
+  @override
   String get starPromptStar => 'Star it on GitHub';
 
   @override
