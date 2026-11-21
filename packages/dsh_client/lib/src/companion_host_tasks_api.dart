@@ -27,6 +27,7 @@ class CompanionTasksCapability {
     this.receiptInputs,
     this.artifactRead,
     this.sourceRead,
+    this.notesForeground,
     this.reason,
   );
   final DshClient _owner;
@@ -38,6 +39,7 @@ class CompanionTasksCapability {
   final Map<String, Object?>? receiptInputs;
   final bool artifactRead;
   final bool sourceRead;
+  final bool notesForeground;
   final String? reason;
 }
 
@@ -77,6 +79,7 @@ extension CompanionHostTasksApi on DshClient {
         ) ||
         (kinds.isNotEmpty && (map['durableAcceptance'] != true || !_id(map['hostStoreId']))) ||
         (map.containsKey('sourceRead') && map['sourceRead'] is! bool) ||
+        (map.containsKey('notesForeground') && map['notesForeground'] is! bool) ||
         (kinds.contains('host.find_draft') && map['sourceRead'] != true) ||
         map['afterExit'] is! List ||
         jsonEncode(map['afterExit']) != '["continue"]' ||
@@ -120,6 +123,7 @@ extension CompanionHostTasksApi on DshClient {
       receiptLimits,
       map['artifactRead']! as bool,
       map['sourceRead'] == true,
+      kinds.contains('host.notes_to_todo') && map['notesForeground'] == true,
       map['reason'] as String?,
     );
   }
@@ -309,6 +313,117 @@ extension CompanionHostTasksApi on DshClient {
     _success(response, map);
     _identity(map, hostStoreId, taskId);
     return map;
+  }
+
+  /// One explicitly requested foreground opportunity for an existing F task.
+  /// Persist prepareHostTaskForeground before calling. Every line is a complete
+  /// original snapshot, not a grant or a fabricated execution receipt.
+  Future<void> runCompanionNotesForeground(
+    CompanionTasksCapability host, {
+    required String taskId,
+    required Map<String, Object?> request,
+    required DshHttpAbort abort,
+    required void Function(Map<String, Object?> snapshot) onSnapshot,
+    void Function(Object error, StackTrace stack)? onAbnormal,
+  }) async {
+    final session = request['sourceSessionId'];
+    if (!identical(host._owner, this) || !host.notesForeground || host.hostStoreId != request['hostStoreId']) {
+      throw const DshRemoteException('companion/task-unavailable', 'Foreground notes tasks are unavailable');
+    }
+    if (!_id(taskId) || request.length != 5 || request['v'] != 1 || !_id(request['hostStoreId']) ||
+        !_id(request['hostExecutionId']) || request['taskRev'] is! int || (request['taskRev']! as int) < 1 ||
+        session is! String || session.isEmpty || session.length > 256 || session.contains('\u0000')) {
+      throw const DshProtocolException('Invalid persisted foreground task');
+    }
+    final response = await _connection(this).postJsonStream(
+      '$_path/${Uri.encodeComponent(taskId)}/foreground', request,
+      abort: abort, headerTimeout: const Duration(seconds: 15), idleTimeout: null,
+    );
+    var reportedAbnormal = false;
+    void abnormal(Object error, StackTrace stack) {
+      if (!reportedAbnormal) {
+        reportedAbnormal = true;
+        onAbnormal?.call(error, stack);
+      }
+    }
+    try {
+      if (response.statusCode != 200) {
+        final bytes = BytesBuilder(copy: false);
+        await for (final chunk in response.body) {
+          try {
+            if (bytes.length + chunk.length > 16384) {
+              _invalid();
+            }
+            bytes.add(chunk);
+          } on Object catch (error, stack) {
+            abnormal(error, stack);
+            rethrow;
+          }
+        }
+        final error = DshHttpResponse(response.statusCode, response.contentType, bytes.takeBytes());
+        _success(error, _decode(error));
+      }
+      if (response.contentType != 'application/x-ndjson') {
+        _invalid();
+      }
+      final line = BytesBuilder(copy: false);
+      var received = false;
+      void emit() {
+        if (line.isEmpty) {
+          return;
+        }
+        final Object? value;
+        try {
+          value = jsonDecode(utf8.decode(line.takeBytes()));
+        } on FormatException {
+          _invalid();
+        }
+        if (value is! Map<String, Object?>) {
+          _invalid();
+        }
+        _identity(value, host.hostStoreId!, taskId);
+        if (value['hostExecutionId'] != request['hostExecutionId'] || value['kind'] != 'host.notes_to_todo' ||
+            value['taskRev'] is! int || (value['taskRev']! as int) < (request['taskRev']! as int)) {
+          _invalid();
+        }
+        onSnapshot(value);
+        received = true;
+      }
+      await for (final chunk in response.body) {
+        try {
+          var start = 0;
+          for (var index = 0; index <= chunk.length; index++) {
+            if (index != chunk.length && chunk[index] != 10) {
+              continue;
+            }
+            if (line.length + index - start > 1024 * 1024) {
+              _invalid();
+            }
+            line.add(Uint8List.sublistView(chunk, start, index));
+            if (index != chunk.length) {
+              emit();
+            }
+            start = index + 1;
+          }
+        } on Object catch (error, stack) {
+          // await-for cancels its subscription before an exception leaves
+          // the loop. Record uncertainty before that cancellation can wait.
+          abnormal(error, stack);
+          rethrow;
+        }
+      }
+      emit();
+      if (!received && !abort.isAborted) {
+        _invalid();
+      }
+    } on Object catch (error, stack) {
+      // Notify the owner before cancellation can await reader retirement.
+      // A later GET must not be overwritten by a delayed outer catch.
+      abnormal(error, stack);
+      rethrow;
+    } finally {
+      await response.cancel();
+    }
   }
 
   Future<Map<String, Object?>> readCompanionHostArtifact({

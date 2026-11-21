@@ -786,6 +786,72 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     };
   });
 
+  /// A foreground opportunity is not another immutable create/amend command.
+  /// Preserve the original snapshot while recording possible execution before
+  /// the owned HTTP exchange. A real same-sequence reply can settle this local
+  /// uncertainty, without inventing a Host watermark or receipt.
+  MemoryRow prepareHostTaskForeground({
+    required String taskId,
+    required int taskRev,
+    required String hostKey,
+    required String hostStoreId,
+    required String hostExecutionId,
+  }) => _transaction(() {
+    final current = _hostCurrent(taskId, taskRev, 'host.notes_to_todo');
+    final agreement = current['agreement']! as MemoryRow;
+    final snapshot = current['snapshot'] as MemoryRow?;
+    final origin = snapshot?['origin'] as MemoryRow?;
+    final at = _checkedNow();
+    final deadline = agreement['deadlineAtMs'] as int?;
+    if (current['host_key'] != hostKey || current['host_store_id'] != hostStoreId ||
+        current['host_execution_id'] != hostExecutionId || agreement['afterExit'] != 'pause' ||
+        current['cancel_requested'] != 0 || const ['done', 'partial', 'failed', 'cancelled'].contains(current['state']) ||
+        snapshot == null || snapshot['taskRev'] != taskRev || snapshot['originalCreatePresent'] != true ||
+        snapshot['hostExecutionId'] != hostExecutionId || snapshot['hostStoreId'] != hostStoreId ||
+        _canonicalJson(snapshot['agreement']) != _canonicalJson(agreement) ||
+        origin?['sourceSessionId'] != current['source_session_id'] ||
+        (deadline != null && at >= deadline)) {
+      throw _conflict;
+    }
+    _db.execute(
+      "UPDATE companion_task_revisions SET state='unknown',wait_reason='host_receipt_unknown',updated_at_ms=? "
+      'WHERE task_id=? AND task_rev=?', [at, taskId, taskRev],
+    );
+    return <String, Object?>{
+      'v': 1, 'hostStoreId': hostStoreId, 'hostExecutionId': hostExecutionId,
+      'taskRev': taskRev, 'sourceSessionId': current['source_session_id'],
+    };
+  });
+
+  /// A lost or withdrawn foreground exchange cannot certify the current
+  /// projection. Preserve every Host fact, and do not let an older exchange
+  /// overwrite a newer receipt, revision or terminal result.
+  bool markHostTaskForegroundUncertain({
+    required String taskId,
+    required int taskRev,
+    required String hostKey,
+    required String hostStoreId,
+    required String hostExecutionId,
+    required int expectedHostReceiptSeq,
+  }) => _transaction(() {
+    final current = hostTask(taskId);
+    if (current == null || current['kind'] != 'host.notes_to_todo' || current['task_rev'] != taskRev ||
+        current['host_key'] != hostKey || current['host_store_id'] != hostStoreId ||
+        current['host_execution_id'] != hostExecutionId || current['cancel_requested'] != 0 ||
+        (current['agreement']! as MemoryRow)['afterExit'] != 'pause' ||
+        current['applied_host_receipt_seq'] != expectedHostReceiptSeq ||
+        const ['done', 'partial', 'failed', 'cancelled'].contains(current['state'])) {
+      return false;
+    }
+    if (current['state'] != 'unknown' || current['wait_reason'] != 'host_receipt_unknown') {
+      _db.execute(
+        "UPDATE companion_task_revisions SET state='unknown',wait_reason='host_receipt_unknown',updated_at_ms=? "
+        'WHERE task_id=? AND task_rev=?', [_checkedNow(), taskId, taskRev],
+      );
+    }
+    return true;
+  });
+
   /// Save every old-revision effect and the head projection before advancing
   /// the Host watermark. HTTP errors or wake notifications never call this.
   MemoryRow importHostTaskSnapshot({required String taskId, required String hostKey, required MemoryRow snapshot}) {

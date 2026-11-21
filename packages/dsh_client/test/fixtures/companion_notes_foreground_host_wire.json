@@ -1,0 +1,3172 @@
+{
+  "scope": "ACTUAL_HOST_FOREGROUND_HTTP_WITH_CONTROLLED_MODEL_AND_FIXED_AGENT",
+  "capability": {
+    "v": 1,
+    "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+    "durableAcceptance": true,
+    "kinds": [
+      "host.notes_to_todo"
+    ],
+    "sourceRead": false,
+    "artifactRead": true,
+    "notesForeground": true,
+    "afterExit": [
+      "continue"
+    ],
+    "pauseBehavior": "waiting",
+    "reason": null
+  },
+  "create": {
+    "v": 1,
+    "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+    "taskId": "task-one",
+    "taskRev": 1,
+    "kind": "host.notes_to_todo",
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "deadlineAtMs": null,
+    "afterExit": "pause",
+    "allowQueue": true,
+    "args": {
+      "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+      "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+      "localDate": "2026-11-20",
+      "timeZone": "UTC",
+      "dateBy": "modified",
+      "outputName": "今日待办.md",
+      "writeMode": "createNew"
+    }
+  },
+  "foreground": {
+    "v": 1,
+    "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+    "taskRev": 1,
+    "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+    "sourceSessionId": "light:original-room"
+  },
+  "snapshots": [
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 3,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "waiting",
+      "waitReason": "foreground_required",
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149394,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 0,
+        "heldMs": 0
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 4,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149621,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "running",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 0,
+        "heldMs": 25000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 5,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149653,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "running",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 0,
+        "heldMs": 25000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 6,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149665,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 25,
+        "heldMs": 0
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 7,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149674,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "running",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 25,
+        "heldMs": 60000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 8,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149703,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "running",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 25,
+        "heldMs": 60000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 9,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149716,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 0
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 10,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149728,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 11,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149738,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 12,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149749,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 13,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149776,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 14,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149790,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 15,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149812,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 16,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149826,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 17,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149846,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 18,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149865,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "running",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ]
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 49,
+        "heldMs": 180000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 19,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149884,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "done",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": 1795299149884,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ],
+            "completion": {
+              "sourceCount": 1,
+              "itemCount": 1,
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 499,
+                "contextWindow": 64000,
+                "outputReservedTokens": 3000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-model",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              }
+            }
+          }
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 196,
+        "heldMs": 0
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 20,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299149913,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "done",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": 1795299149884,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ],
+            "completion": {
+              "sourceCount": 1,
+              "itemCount": 1,
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 499,
+                "contextWindow": 64000,
+                "outputReservedTokens": 3000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-model",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              }
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "attemptId": "b58c1a22-5d99-4f0e-8aa7-24ca4f9ccb90",
+          "state": "running",
+          "startedAtMs": 1795299149913,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 196,
+        "heldMs": 60000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 21,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299150068,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "done",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": 1795299149884,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ],
+            "completion": {
+              "sourceCount": 1,
+              "itemCount": 1,
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 499,
+                "contextWindow": 64000,
+                "outputReservedTokens": 3000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-model",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              }
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "attemptId": "b58c1a22-5d99-4f0e-8aa7-24ca4f9ccb90",
+          "state": "running",
+          "startedAtMs": 1795299149913,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 196,
+        "heldMs": 60000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 22,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "running",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299150156,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "done",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": 1795299149884,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ],
+            "completion": {
+              "sourceCount": 1,
+              "itemCount": 1,
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 499,
+                "contextWindow": 64000,
+                "outputReservedTokens": 3000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-model",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              }
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "attemptId": "b58c1a22-5d99-4f0e-8aa7-24ca4f9ccb90",
+          "state": "running",
+          "startedAtMs": 1795299149913,
+          "finishedAtMs": null,
+          "reason": null,
+          "result": null
+        }
+      ],
+      "artifacts": [],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 196,
+        "heldMs": 60000
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 23,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "done",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299150201,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "done",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": 1795299149884,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ],
+            "completion": {
+              "sourceCount": 1,
+              "itemCount": 1,
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 499,
+                "contextWindow": 64000,
+                "outputReservedTokens": 3000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-model",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              }
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "attemptId": "b58c1a22-5d99-4f0e-8aa7-24ca4f9ccb90",
+          "state": "done",
+          "startedAtMs": 1795299149913,
+          "finishedAtMs": 1795299150201,
+          "reason": null,
+          "result": {
+            "completion": {
+              "artifactId": "42d2a70b-dd01-4b00-a53e-ceffae4e9d43"
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "artifactId": "42d2a70b-dd01-4b00-a53e-ceffae4e9d43",
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "relativePath": "今日待办.md",
+          "mediaType": "text/markdown",
+          "size": 361,
+          "sha256": "828aa74b69b7bb8bc0574390725581937bd52f0446f015fbdd6fb79e28643c6f",
+          "verifiedAtMs": 1795299150201,
+          "sourceCount": 1
+        }
+      ],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 452,
+        "heldMs": 0
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    },
+    {
+      "v": 1,
+      "taskId": "task-one",
+      "hostExecutionId": "b2df369c-8142-4af0-9044-92c23277a33c",
+      "kind": "host.notes_to_todo",
+      "taskRev": 1,
+      "runnerReceiptSeq": 23,
+      "origin": {
+        "sourceSessionId": "light:original-room",
+        "messageId": "original-message",
+        "itemNo": 0
+      },
+      "hostSessionId": null,
+      "state": "done",
+      "waitReason": null,
+      "cancelRequested": false,
+      "createdAtMs": 1795299149367,
+      "updatedAtMs": 1795299150201,
+      "agreement": {
+        "args": {
+          "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "localDate": "2026-11-20",
+          "timeZone": "UTC",
+          "dateBy": "modified",
+          "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+          "outputName": "今日待办.md",
+          "writeMode": "createNew"
+        },
+        "deadlineAtMs": null,
+        "afterExit": "pause",
+        "allowQueue": true
+      },
+      "revisions": [
+        {
+          "taskRev": 1,
+          "operation": "create",
+          "acceptedAtMs": 1795299149368,
+          "agreement": {
+            "args": {
+              "folderRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "localDate": "2026-11-20",
+              "timeZone": "UTC",
+              "dateBy": "modified",
+              "outputDirRef": "fecd7822-9aec-4442-92fd-dae15011b241",
+              "outputName": "今日待办.md",
+              "writeMode": "createNew"
+            },
+            "deadlineAtMs": null,
+            "afterExit": "pause",
+            "allowQueue": true
+          }
+        }
+      ],
+      "steps": [
+        {
+          "taskRev": 1,
+          "stepKey": "selectInputs",
+          "attemptId": "d54aed9b-85a0-4cdf-aebb-0628be13cc9b",
+          "state": "done",
+          "startedAtMs": 1795299149621,
+          "finishedAtMs": 1795299149665,
+          "reason": null,
+          "result": {
+            "completion": {
+              "selectedCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "readInputs",
+          "attemptId": "da9ed6b4-e461-4da3-b8c4-47c9f892d6da",
+          "state": "done",
+          "startedAtMs": 1795299149674,
+          "finishedAtMs": 1795299149716,
+          "reason": null,
+          "result": {
+            "completion": {
+              "sourceCount": 1,
+              "gapCount": 0
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "model",
+          "attemptId": "6c2fc7f1-fa7d-466d-9040-11b9e89e1ecb",
+          "state": "done",
+          "startedAtMs": 1795299149728,
+          "finishedAtMs": 1795299149884,
+          "reason": null,
+          "result": {
+            "observations": [
+              {
+                "type": "dispatch",
+                "atMs": 1795299149738,
+                "boundary": "fetch-invoked"
+              },
+              {
+                "type": "http",
+                "status": 200
+              },
+              {
+                "type": "usage",
+                "event": "message_start",
+                "semantics": "cumulative",
+                "raw": {
+                  "input_tokens": 17
+                }
+              },
+              {
+                "type": "usage",
+                "event": "message_delta",
+                "semantics": "cumulative",
+                "raw": {
+                  "output_tokens": 13
+                }
+              },
+              {
+                "type": "stop",
+                "stopReason": "end_turn"
+              },
+              {
+                "type": "complete"
+              },
+              {
+                "type": "model-finish",
+                "dispatched": true,
+                "httpStatus": 200,
+                "usage": {
+                  "provider": "fixture",
+                  "model": "fixture-model",
+                  "start_usage": {
+                    "input_tokens": 17
+                  },
+                  "final_usage": {
+                    "output_tokens": 13
+                  },
+                  "start_event": "message_start",
+                  "final_event": "message_delta",
+                  "usage_semantics": "cumulative",
+                  "input_uncached": null,
+                  "input_cache_read": null,
+                  "input_cache_write": null,
+                  "output_tokens": 13,
+                  "stop_reason": "end_turn",
+                  "terminal": "complete",
+                  "complete": true,
+                  "http_status": 200
+                },
+                "inputBudget": {
+                  "accepted": true,
+                  "estimatedTokens": 499,
+                  "contextWindow": 64000,
+                  "outputReservedTokens": 3000,
+                  "semantics": "heuristic-not-tokenizer-or-usage",
+                  "boundary": "provider-request"
+                },
+                "reason": null
+              }
+            ],
+            "completion": {
+              "sourceCount": 1,
+              "itemCount": 1,
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 499,
+                "contextWindow": 64000,
+                "outputReservedTokens": 3000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-model",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              }
+            }
+          }
+        },
+        {
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "attemptId": "b58c1a22-5d99-4f0e-8aa7-24ca4f9ccb90",
+          "state": "done",
+          "startedAtMs": 1795299149913,
+          "finishedAtMs": 1795299150201,
+          "reason": null,
+          "result": {
+            "completion": {
+              "artifactId": "42d2a70b-dd01-4b00-a53e-ceffae4e9d43"
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "artifactId": "42d2a70b-dd01-4b00-a53e-ceffae4e9d43",
+          "taskRev": 1,
+          "stepKey": "writePage",
+          "relativePath": "今日待办.md",
+          "mediaType": "text/markdown",
+          "size": 361,
+          "sha256": "828aa74b69b7bb8bc0574390725581937bd52f0446f015fbdd6fb79e28643c6f",
+          "verifiedAtMs": 1795299150201,
+          "sourceCount": 1
+        }
+      ],
+      "approval": null,
+      "budget": {
+        "limitMs": 300000,
+        "spentMs": 452,
+        "heldMs": 0
+      },
+      "hostStoreId": "28495bd7-8545-4245-b85e-44dfbd156410",
+      "originalCreatePresent": true
+    }
+  ]
+}

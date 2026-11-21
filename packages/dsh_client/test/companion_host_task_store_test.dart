@@ -165,6 +165,101 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('F foreground prepare persists uncertainty and the same real snapshot settles it after reopen', () {
+    say('foreground-source');
+    final task = create('foreground-source', selected: agreement(afterExit: 'pause'));
+    final id = task['task_id']! as String;
+    prepare(id, 1);
+    final received = snapshot(id, state: 'waiting')..['waitReason'] = 'foreground_control_unavailable';
+    acceptSnapshot(id, received);
+    final commands = jsonEncode(store.hostTaskCommands(id));
+    final before = store.hostTask(id)!;
+    final request = store.prepareHostTaskForeground(taskId: id, taskRev: 1,
+      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original');
+    expect(request, {'v': 1, 'hostStoreId': 'store-original', 'hostExecutionId': 'execution-original',
+      'taskRev': 1, 'sourceSessionId': 'light:original-room'});
+    expect(store.hostTask(id)!['state'], 'unknown');
+    expect(store.hostTask(id)!['wait_reason'], 'host_receipt_unknown');
+    expect(store.hostTask(id)!['applied_host_receipt_seq'], before['applied_host_receipt_seq']);
+    expect(jsonEncode(store.hostTaskCommands(id)), commands);
+    reopen();
+    expect(store.hostTask(id)!['state'], 'unknown');
+    final imported = acceptSnapshot(id, received);
+    expect(imported['state'], 'waiting');
+    expect(imported['wait_reason'], 'foreground_control_unavailable');
+    expect(imported['snapshot'], received);
+    expect(imported['applied_host_receipt_seq'], 1);
+    expect(jsonEncode(store.hostTaskCommands(id)), commands);
+    expect(prepare(id, 1, replay: true), isNull); // A read is not a new foreground request.
+  });
+
+  test('F foreground prepare rejects stale identities continue agreements cancellation and elapsed deadlines', () {
+    say('foreground-source');
+    final task = create('foreground-source', selected: agreement(afterExit: 'pause'));
+    final id = task['task_id']! as String;
+    prepare(id, 1);
+    acceptSnapshot(id, snapshot(id, state: 'waiting'));
+    final before = jsonEncode(store.hostTask(id));
+    for (final wrong in ['host', 'store', 'execution', 'revision']) {
+      expect(() => store.prepareHostTaskForeground(taskId: id, taskRev: wrong == 'revision' ? 2 : 1,
+        hostKey: wrong == 'host' ? 'ssh:other-host' : 'ssh:original-host',
+        hostStoreId: wrong == 'store' ? 'other-store' : 'store-original',
+        hostExecutionId: wrong == 'execution' ? 'other-execution' : 'execution-original'), conflict);
+      expect(jsonEncode(store.hostTask(id)), before);
+    }
+    now = 1795219500000;
+    expect(() => store.prepareHostTaskForeground(taskId: id, taskRev: 1,
+      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original'), conflict);
+    now = 1795219200000;
+    say('continue-source');
+    final continuing = create('continue-source');
+    final continuingId = continuing['task_id']! as String;
+    prepare(continuingId, 1);
+    acceptSnapshot(continuingId, snapshot(continuingId, state: 'waiting'));
+    expect(() => store.prepareHostTaskForeground(taskId: continuingId, taskRev: 1,
+      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original'), conflict);
+    say('cancel-foreground');
+    store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'cancel-foreground', expectedSourceRev: 1, itemNo: 0);
+    expect(() => store.prepareHostTaskForeground(taskId: id, taskRev: 1,
+      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original'), conflict);
+    expect(store.hostTask(id)!['task_rev'], 2);
+    expect(store.hostTask(id)!['cancel_requested'], 1);
+  });
+
+  test('F foreground uncertainty preserves receipts and cannot overwrite a newer receipt revision or result', () {
+    say('foreground-source');
+    final task = create('foreground-source', selected: agreement(afterExit: 'pause'));
+    final id = task['task_id']! as String;
+    prepare(id, 1);
+    final first = snapshot(id, state: 'waiting');
+    acceptSnapshot(id, first);
+    bool mark(int seq) => store.markHostTaskForegroundUncertain(taskId: id, taskRev: 1,
+      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original',
+      expectedHostReceiptSeq: seq);
+    final commands = jsonEncode(store.hostTaskCommands(id));
+    expect(mark(1), isTrue);
+    reopen();
+    expect(store.hostTask(id)!['state'], 'unknown');
+    expect(store.hostTask(id)!['snapshot'], first);
+    expect(store.hostTask(id)!['applied_host_receipt_seq'], 1);
+    expect(jsonEncode(store.hostTaskCommands(id)), commands);
+    expect(acceptSnapshot(id, first)['state'], 'waiting');
+    final newer = snapshot(id, seq: 2, state: 'running');
+    acceptSnapshot(id, newer);
+    expect(mark(1), isFalse);
+    expect(store.hostTask(id)!['state'], 'running');
+    expect(store.hostTask(id)!['snapshot'], newer);
+    final complete = snapshot(id, seq: 3, state: 'done', artifacts: [artifact()]);
+    acceptSnapshot(id, complete);
+    expect(mark(3), isFalse);
+    expect(store.hostTask(id)!['state'], 'done');
+    say('cancel-foreground');
+    store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'cancel-foreground', expectedSourceRev: 1, itemNo: 0);
+    final cancelled = jsonEncode(store.hostTask(id));
+    expect(mark(3), isFalse);
+    expect(jsonEncode(store.hostTask(id)), cancelled);
+  });
+
   test('F local notes command keeps original room day and args after source deletion and restart', () {
     say('source');
     final accepted = create('source');
