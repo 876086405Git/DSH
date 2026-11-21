@@ -14,6 +14,7 @@ executables:
   dsh_probe: probe
 
 dependencies:
+  crypto: ^3.0.7
   sqlite3: ^3.9.1
 
 dev_dependencies:

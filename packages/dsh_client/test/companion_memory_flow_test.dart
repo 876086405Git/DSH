@@ -1322,14 +1322,16 @@ void main() {
     test('opening a v2 database adds deletion identities without replacing its original data', () {
       final card = remember('u1', '我学长笛', keywords: ['长笛']);
       final originalArchive = store.archive;
-      // Remove only the v3/v4 additions to reconstruct the exact old schema.
+      // Remove the later tables and columns to reconstruct the exact v2 schema.
       database.execute('DROP TABLE memory_host_chat_delivery_receipts');
       database.execute('DROP TABLE memory_host_chat_receipts');
       database.execute('DROP TABLE memory_host_chat_deliveries');
       database.execute('DROP TABLE memory_deleted_messages');
+      database.execute('ALTER TABLE memory_migrations DROP COLUMN source_fingerprint');
+      database.execute('ALTER TABLE memory_migrations DROP COLUMN cleanup_read_revision');
       database.execute('PRAGMA user_version=2');
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 4);
+      expect(database.select('PRAGMA user_version').single['user_version'], 5);
       expect(store.archive, originalArchive);
       expect(store.cards().single, card);
       expect(store.messages().single['text'], '我学长笛');
@@ -1414,7 +1416,7 @@ void main() {
         requestId: 'rpc-1', archiveId: store.archive['id'] as String, controlRevision: 1, historyAfterSeq: 0,
         observedAt: now), throwsA(isA<DshRemoteException>()));
       expect(store.requests(), isEmpty);
-      expect(database.select('PRAGMA user_version').single['user_version'], 4);
+      expect(database.select('PRAGMA user_version').single['user_version'], 5);
     });
 
     test('v3 upgrade preserves sources and existing once-only local receipts', () {
@@ -1427,6 +1429,8 @@ void main() {
       database.execute('DROP TABLE memory_host_chat_delivery_receipts');
       database.execute('DROP TABLE memory_host_chat_receipts');
       database.execute('DROP TABLE memory_host_chat_deliveries');
+      database.execute('ALTER TABLE memory_migrations DROP COLUMN source_fingerprint');
+      database.execute('ALTER TABLE memory_migrations DROP COLUMN cleanup_read_revision');
       database.execute('PRAGMA user_version=3');
       reopen();
       expect(store.requests(), before);

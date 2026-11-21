@@ -148,7 +148,7 @@ void main() {
     store.importLegacy(read);
     expect(store.verifyLegacyImport(read, [oldCard]), isTrue);
     await local.removeMigratedMemories(read.storeId, read.revision, {oldCard});
-    store.finishLegacyCleanup(read.storeId, [oldCard]);
+    store.finishLegacyCleanup(read.storeId, [oldCard], expectedReadRevision: read.revision);
     final after = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
     expect(after['state'], before['state']);
     expect(after['storeId'], before['storeId']);

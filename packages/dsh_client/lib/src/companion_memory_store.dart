@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_api.dart';
@@ -26,7 +27,7 @@ class CompanionMemoryStore {
     try {
       _db.execute('PRAGMA foreign_keys = ON');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 4) {
+      if (version > 5) {
         throw const DshRemoteException(
           'companion/newer-store', 'This memory store needs a newer app', {'status': 409},
         );
@@ -94,6 +95,14 @@ class CompanionMemoryStore {
               ON memory_host_chat_delivery_receipts(receipt_id,delivery_id);
           ''');
           _db.execute('PRAGMA user_version = 4');
+        });
+      }
+      if (version < 5) {
+        _transaction(() {
+          _db.execute('ALTER TABLE memory_migrations ADD COLUMN source_fingerprint TEXT');
+          _db.execute('ALTER TABLE memory_migrations ADD COLUMN cleanup_read_revision INTEGER NOT NULL DEFAULT 0');
+          _db.execute('UPDATE memory_migrations SET cleanup_read_revision=read_revision');
+          _db.execute('PRAGMA user_version = 5');
         });
       }
       _transaction(() {
@@ -176,7 +185,8 @@ class CompanionMemoryStore {
     );
   }
 
-  /// Returns only IDs proved imported from this exact snapshot revision.
+  /// Returns IDs whose original source fingerprint matches this complete read.
+  /// A newer source revision can re-prove unchanged cards after partial cleanup.
   /// Reality needs separate evidence; a legacy manual/pinned label is not it.
   List<String> importLegacy(
     CompanionMigrationSnapshot snapshot, {
@@ -187,12 +197,24 @@ class CompanionMemoryStore {
     var changed = false;
     for (final memory in snapshot.memories) {
       final oldId = memory.id.toLowerCase();
+      final fingerprint = _legacyFingerprint(snapshot.storeId, memory);
       final mapping = _db.select('''
         SELECT * FROM memory_migrations WHERE legacy_store_id = ? AND legacy_card_id = ?
       ''', [snapshot.storeId, oldId]);
       if (mapping.isNotEmpty) {
         final read = mapping.single;
-        if (read['read_revision'] == snapshot.revision && read['cleanup_state'] == 'pending') {
+        if (snapshot.revision < (read['cleanup_read_revision'] as int)) continue;
+        var original = read['source_fingerprint'] as String?;
+        // Pre-v5 mappings did not retain the original source bytes. Only the
+        // exact original source revision can supply that missing fingerprint.
+        if (original == null && read['read_revision'] == snapshot.revision) original = fingerprint;
+        // Even a mismatch is a newer observation: an old cleanup ACK must not
+        // complete this pending identity after a different source was seen.
+        _db.execute('''
+          UPDATE memory_migrations SET source_fingerprint=?, cleanup_read_revision=?, cleanup_state='pending'
+          WHERE legacy_store_id=? AND legacy_card_id=?
+        ''', [original, snapshot.revision, snapshot.storeId, oldId]);
+        if (original == fingerprint) {
           cleanup.add(oldId);
         }
         continue;
@@ -211,8 +233,9 @@ class CompanionMemoryStore {
         memory.expiresAt?.millisecondsSinceEpoch]);
       _db.execute('''
         INSERT INTO memory_migrations(legacy_store_id, legacy_card_id, read_revision,
-          local_card_id, result) VALUES(?, ?, ?, ?, ?)
-      ''', [snapshot.storeId, oldId, snapshot.revision, id, real ? 'imported' : 'display_only']);
+          local_card_id, result, source_fingerprint, cleanup_read_revision) VALUES(?, ?, ?, ?, ?, ?, ?)
+      ''', [snapshot.storeId, oldId, snapshot.revision, id, real ? 'imported' : 'display_only',
+        fingerprint, snapshot.revision]);
       cleanup.add(oldId);
       changed = true;
     }
@@ -222,25 +245,68 @@ class CompanionMemoryStore {
 
   /// Must be called after the import transaction committed and before source deletion.
   bool verifyLegacyImport(CompanionMigrationSnapshot snapshot, Iterable<String> ids) {
+    final source = {for (final memory in snapshot.memories) memory.id.toLowerCase(): memory};
     for (final id in ids) {
+      final memory = source[id.toLowerCase()];
+      if (memory == null) return false;
       final rows = _db.select('''
         SELECT m.result, c.id AS card_id FROM memory_migrations m
         LEFT JOIN memory_cards c ON c.id = m.local_card_id
-        WHERE m.legacy_store_id = ? AND m.legacy_card_id = ? AND m.read_revision = ?
-      ''', [snapshot.storeId, id.toLowerCase(), snapshot.revision]);
+        WHERE m.legacy_store_id = ? AND m.legacy_card_id = ? AND m.cleanup_read_revision = ?
+          AND m.cleanup_state = 'pending' AND m.source_fingerprint = ?
+      ''', [snapshot.storeId, id.toLowerCase(), snapshot.revision, _legacyFingerprint(snapshot.storeId, memory)]);
       if (rows.isEmpty || (rows.single['result'] != 'forgotten' && rows.single['card_id'] == null)) return false;
     }
     return true;
   }
 
-  void finishLegacyCleanup(String legacyStoreId, Iterable<String> ids) => _transaction(() {
+  /// [expectedReadRevision] is the original full read for this proof batch. It
+  /// stays fixed while this batch's own delete receipts advance the remote CAS.
+  /// A later full read fences late acknowledgements from an older proof batch.
+  void finishLegacyCleanup(
+    String legacyStoreId,
+    Iterable<String> ids, {
+    required int expectedReadRevision,
+  }) => _transaction(() {
+    if (expectedReadRevision < 0 || expectedReadRevision > 9007199254740991) {
+      throw ArgumentError.value(expectedReadRevision, 'expectedReadRevision');
+    }
     for (final id in ids) {
       _db.execute('''
         UPDATE memory_migrations SET cleanup_state = 'done'
-        WHERE legacy_store_id = ? AND legacy_card_id = ?
-      ''', [legacyStoreId, id.toLowerCase()]);
+        WHERE legacy_store_id = ? AND legacy_card_id = ? AND cleanup_read_revision = ?
+          AND cleanup_state = 'pending' AND source_fingerprint IS NOT NULL
+      ''', [legacyStoreId.toLowerCase(), id.toLowerCase(), expectedReadRevision]);
     }
   });
+
+  /// A complete source read can prove absence even for a pre-v5 mapping without
+  /// a fingerprint. An older read cannot erase a more recent pending observation.
+  void finishMissingLegacyCleanup(CompanionMigrationSnapshot snapshot) => _transaction(() {
+    final present = snapshot.memories.map((memory) => memory.id.toLowerCase()).toSet();
+    final rows = _db.select('''
+      SELECT legacy_card_id FROM memory_migrations
+      WHERE legacy_store_id=? AND cleanup_state='pending' AND cleanup_read_revision<=?
+    ''', [snapshot.storeId, snapshot.revision]);
+    for (final row in rows) {
+      if (present.contains(row['legacy_card_id'])) continue;
+      _db.execute('''
+        UPDATE memory_migrations SET cleanup_state='done', cleanup_read_revision=?
+        WHERE legacy_store_id=? AND legacy_card_id=? AND cleanup_state='pending' AND cleanup_read_revision<=?
+      ''', [snapshot.revision, snapshot.storeId, row['legacy_card_id'], snapshot.revision]);
+    }
+  });
+
+  static String _legacyFingerprint(String storeId, CompanionMemory memory) {
+    final encoded = jsonEncode([
+      'companion-legacy-card-v1', storeId.toLowerCase(), memory.id.toLowerCase(),
+      memory.kind, memory.text, memory.keywords, memory.pinned,
+      [memory.source.kind, memory.source.sessionId, memory.source.messageId],
+      memory.expiresAt?.millisecondsSinceEpoch,
+      memory.createdAt!.millisecondsSinceEpoch, memory.updatedAt!.millisecondsSinceEpoch,
+    ]);
+    return 'sha256-v1:${sha256.convert(utf8.encode(encoded))}';
+  }
 
   List<MemoryRow> migrationCleanup() => [
     for (final row in _db.select("SELECT * FROM memory_migrations WHERE cleanup_state = 'pending'"))
