@@ -15,7 +15,7 @@ import '../../theme/theme.dart';
 
 export 'auto_approve_pill.dart' show AutoApprovePill;
 
-/// The pills' shared geometry; `test/chat/permission_pill_test.dart` measures it.
+/// The pills' shared geometry; `test/chat/plus_panel_test.dart` measures it.
 abstract final class PermissionPillMetrics {
   /// As high as the plugin capsules they lead (`CapsuleMetrics.height`).
   static const height = 34.0;

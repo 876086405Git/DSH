@@ -141,7 +141,7 @@ for f in "${flavors[@]}"; do
   commands+=("$(printf '%q ' "${cmd[@]}")")
 done
 
-# Side builds: own package (app/build.gradle.kts). Their in-app updater still
+# Side builds: own package (app/android/app/build.gradle.kts). Their in-app updater still
 # fetches the released APK, which installs as the released app, not over this one.
 if ((side)); then
   [[ $mode == release ]] || die "--side is for release builds"

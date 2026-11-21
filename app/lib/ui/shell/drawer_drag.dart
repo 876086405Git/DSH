@@ -13,19 +13,20 @@ import 'package:flutter/widgets.dart';
 ///
 /// 为什么要自己写而不用 `Scaffold.drawer` 那套:
 ///
-/// 手势竞技场(gesture arena)的胜负在手势**开始阶段**就决出了。监听 `PageView`
+/// 手势竞技场(gesture arena)的胜负在手势**开始阶段**就决出了。抓住某个滚动内容
 /// 的前缘过卷再调 `openDrawer()` 不够:那只是播一段 fling 动画,这根手指早已被
-/// `PageView` 的横向 drag 识别器赢走,不松手继续滑,位移全部喂给 `PageView`。
+/// 那一层的横向 drag 识别器赢走,不松手继续滑,位移全部喂给它。
 ///
-/// 中途补救也不成立:切 `PageView.physics`、动态放宽 `drawerEdgeDragWidth`、
+/// 中途补救也不成立:切滚动内容的 `physics`、动态放宽 `drawerEdgeDragWidth`、
 /// 或事后 `openDrawer()`,都无法把**已在飞的** pointer 转交给另一个识别器 ——
 /// 放宽拖动区只影响之后新建的识别器。
 ///
-/// 所以正确做法是从一开始就参与竞争:本识别器挂在 `PageView` **页面内部**
-/// (作为其后代),按方向自己决定去留 ——
+/// 所以正确做法是从一开始就参与竞争:识别器所在的 `RawGestureDetector` 包住
+/// 聊天列,与内部横向 `Scrollable` 同处竞技场,按方向自己决定去留 ——
 /// - 抽屉关着:横向位移超过 slop 后看方向。**向左立刻 reject**,把手势让给
-///   `PageView` 翻页;**向右才 accept**,开始拉开抽屉。
-/// - 抽屉已开、或本次手势已被 accept:左右两个方向都由它持有,`PageView`
+///   横向滚动内容(代码块、表格)或右侧的快捷入口面板;**向右才 accept**,开始
+///   拉开抽屉。
+/// - 抽屉已开、或本次手势已被 accept:左右两个方向都由它持有,其他识别器
 ///   拿不到这根手指。于是同一根手指反向左滑时,进度连续从 1 降到 0。
 /// - 竖向为主的位移一律 reject,交给聊天列表或抽屉内部的会话列表滚动。
 ///
@@ -47,8 +48,8 @@ class DrawerDragRecognizer extends OneSequenceGestureRecognizer {
 
   /// 抽屉当前是否已经打开(哪怕只开了一部分)。
   ///
-  /// 已开时不再做方向筛选:两个方向都归抽屉,否则左滑关到一半又往右推
-  /// 就会被 `PageView` 夺走手势。
+  /// 已开时不再做方向筛选:两个方向都归抽屉——同一根手指可以把抽屉推到一半
+  /// 再拉回来,只认一侧会让识别器在手势中途退场,另一侧就没人跟手了。
   final ValueGetter<bool> isOpen;
 
   final VoidCallback onStart;
@@ -61,16 +62,15 @@ class DrawerDragRecognizer extends OneSequenceGestureRecognizer {
 
   /// 判定横向意图前要累计的位移。
   ///
-  /// **必须小于 `kTouchSlop`(18px)**。`PageView` 的横向 drag 识别器到 18px
-  /// 就向竞技场宣布胜利,谁先表态谁拿走这根 pointer。用 `kPanSlop`(36px)的话,
-  /// 真机上手指每帧只挪 5~20px,走到 18px 时手势已经归 `PageView`,永远等不到
-  /// 36px。测试要按真机节奏分小步走:一步 50px 会首个 move 就越线,掩盖问题。
+  /// 固定 8 个逻辑像素:不能换成 `kPanSlop`(36px)这类更大的阈值再等。内部
+  /// 横向 `Scrollable` 还可能按设备的 `gestureSettings` 选不同的 touch slop,
+  /// 所以 `kTouchSlop`(18px)不是所有设备的实际阈值,也不能仅凭 8px 就保证
+  /// 抽屉总会先赢。关着时只接受向右的意图:这是拉开抽屉的方向,没有别的页面要翻。
   ///
-  /// 取 8px:既赶在 `PageView` 之前表态,又足以过滤指尖落下时的抖动。
-  /// 提前宣布是安全的 —— 对话页右侧没有页面,向右滑本来也只会回弹。
+  /// 回归要按真机节奏分小步移动:一个 move 跨 50px 会直接越线,掩盖竞争。
   static const double _slop = 8.0;
 
-  /// 竖向让位的阈值。列表滚动用的是系统 touch slop,比横向判定宽松一点,
+  /// 竖向让位的阈值:本实现固定取 `kTouchSlop`(18px),比横向判定宽松,
   /// 确保「想滚列表」不会被误判成开抽屉。
   static const double _verticalSlop = kTouchSlop;
 
@@ -122,7 +122,7 @@ class DrawerDragRecognizer extends OneSequenceGestureRecognizer {
       }
       if (_accum.dx.abs() < _slop) return;
       // 横向意图成立。抽屉已开时左右都归抽屉(右继续拉开、左推回),
-      // 关着时只认向右 —— 向左那是翻页,让给 PageView。
+      // 关着时只认向右 —— 向左是横向滚动或快捷入口面板的方向,让给它们。
       final open = isOpen();
       final towards = _accum.dx * openingSign;
       if (open || towards > 0) {
@@ -151,7 +151,7 @@ class DrawerDragRecognizer extends OneSequenceGestureRecognizer {
   /// 竞技场判我们赢(可能是别人退出后默认胜出)。
   ///
   /// **不能在这里兼职「开始跟手」**。微小位移或单纯点击时,横向意图还没
-  /// 判定出来,PageView 那边也因为不够 slop 而放弃 —— 竞技场于是把胜利
+  /// 判定出来,别的识别器也因为不够 slop 而放弃 —— 竞技场于是把胜利
   /// 默认判给唯一剩下的我们;在这里开始跟手的话,轻轻一点屏幕、松手后抽屉
   /// 就会自己弹开。
   ///

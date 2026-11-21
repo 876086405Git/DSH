@@ -1,9 +1,9 @@
 // 消息里的组件 (docs/design/roleplay-ui.md §5, roleplay-agent.md §6.2): the
 // model writes <dsh-letter from="林" date="三月初七">见字如面……</dsh-letter>,
 // <dsh-item name="铜钥匙" take>…</dsh-item> and the like. Outside an HTML block
-// they are drawn natively, in the story's colours, until the whole-page
-// canvas (level 2) draws them as Web Components. A dsh- tag of a kind not
-// drawn here reads as its text, as SillyTavern shows an unknown tag.
+// they are drawn natively, in the story's colours; the whole-page canvas
+// draws them as Web Components. A dsh- tag of a kind not drawn here reads as
+// its text, as SillyTavern shows an unknown tag.
 
 /// The components drawn here.
 enum TavernComponentKind { letter, item, clue, phone, roll, notice, game }

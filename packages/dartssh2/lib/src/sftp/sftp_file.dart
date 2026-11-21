@@ -430,7 +430,6 @@ class SftpFile {
   }
 
   Future<void> _writeChunk(Uint8List data, {int offset = 0}) async {
-    // print('_writeChunk: offset=$offset');
     _mustNotBeClosed();
     final reply = await _client._sendWrite(_handle, offset, data);
     if (reply is! SftpStatusPacket) throw SftpError('Unexpected reply');

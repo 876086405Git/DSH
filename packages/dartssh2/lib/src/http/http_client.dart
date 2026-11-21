@@ -631,25 +631,6 @@ class SSHHttpClientResponse {
       socket.close();
     }
 
-    // try {
-    //   while (!inHeader ||
-    //       !inBody ||
-    //       ((contentRead + lineDecoder.bufferedBytes) < contentLength)) {
-    //     final bytes = socket.readSync(1024);
-
-    //     if (bytes == null || bytes.isEmpty) {
-    //       break;
-    //     }
-    //     lineDecoder.add(bytes);
-    //   }
-    // } finally {
-    //   try {
-    //     lineDecoder.close();
-    //   } finally {
-    //     socket.closeSync();
-    //   }
-    // }
-
     return SSHHttpClientResponse._(
       headers,
       reasonPhrase: reasonPhrase,

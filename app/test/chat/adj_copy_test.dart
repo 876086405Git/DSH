@@ -1,8 +1,8 @@
 // ADJ-COPY: two adjacent windows of the activity pill never show the same
 // line, judged by the text actually shown (not by the hash index), and the
-// same input always gives the same line. Started from the 023 counterexample
-// (adj_copy_counterexample_test); nothing here depends on the time zone the
-// test runs in, so run it under several TZ values.
+// same input always gives the same line. Started from the 023 counterexample;
+// nothing here depends on the time zone the test runs in, so run it under
+// several TZ values.
 
 import 'package:dsh_app/ui/chat/activity_copy.dart';
 import 'package:dsh_app/ui/chat/run_info.dart';

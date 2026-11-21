@@ -12,6 +12,7 @@
 - `lib/src/ssh_transport.dart`：独立协商两个方向的 `zlib@openssh.com` / `none`；`USERAUTH_SUCCESS` 本身不压缩，之后在应用回调前启用；发送/收到各方向的 `NEWKEYS` 后分别重置该方向的流，含认证后的 rekey。压缩发生在封包加密前，解压发生在完整验签解密后。
 - 同一 transport 的已编码 socket 写入与 `flush()` 按调用顺序串行，避免 native `IOSink.flush()` 尚未完成时内部异步写入触发 bound-sink 异常；通常写入仍同步。`test/src/ssh_transport_flush_order_test.dart` 覆盖顺序与错误关闭，OpenSSH 互通回归包含数据写入期间的 flush。此补丁不修 channel/session/forward 异步输入管线尚未排空就调用 transport flush 的既有问题。
 - `lib/src/compression/ssh_zlib*.dart`：条件导出 dart:io 的持续 `RawZLibFilter` 流，逐包 `Z_SYNC_FLUSH` 并保留字典，不按包 finish；解压累计上限 35000 字节（兼容 32768 字节 channel data 加消息头），超限或畸形数据以 `SSHPacketError` 终止连接。RawZLibFilter 没有 abort/dispose，关闭或 rekey 时丢弃引用交原生 finalizer；不继续 drain 不可信输入。
+- `lib/src/{hostkey/hostkey_ed25519.dart,http/http_client.dart,message/msg_request.dart,sftp/sftp_file.dart,ssh_client.dart,ssh_kex_utils.dart,ssh_message.dart,utils/bcrypt.dart}`：清理上游遗留的注释掉的实现与调试输出；仅移除注释，不改变执行代码、协议或密码学实现。
 - `pubspec.yaml`：禁止发布本地补丁包。
 - 新增 `test/src/ssh_compression_test.dart`、`test/src/ssh_compression_web_test.dart` 和 `test/src/integration/openssh_compression_test.dart`。
 

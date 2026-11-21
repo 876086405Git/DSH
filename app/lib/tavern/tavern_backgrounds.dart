@@ -2,8 +2,9 @@
 // (docs/design/roleplay-ui.md §2, layer 1). Picked and kept the way the app's
 // own wallpaper is (lib/wallpaper/wallpaper_import.dart), in a folder of the
 // tavern's own, and drawn the same way: softened, with the page's colour laid
-// over it wherever text would lose contrast (WallpaperBackdrop.scene). The
-// card's own background (§10) comes later, with the canvas.
+// over it wherever text would lose contrast (WallpaperBackdrop.scene). A card
+// that names a background of its own (§10) gives the chat one when the chat
+// has not picked a picture (tavern_card_theme.dart).
 
 import 'dart:async';
 import 'dart:convert';

@@ -1159,8 +1159,6 @@ class Blowfish {
   }
 
   void decipher(Uint32List x) {
-    // var x8 = x.buffer.asUint8List();
-    // if (x.offsetInBytes != 0) x8 = x8.sublist(x.offsetInBytes);
     final x8 = Uint8List.sublistView(x);
     x[0] ^= P[17];
     for (var i = 16; i > 0; i -= 2) {
@@ -1315,9 +1313,6 @@ int bcrypt_pbkdf(
   var stride = ((keylen + out.lengthInBytes - 1) / out.lengthInBytes).floor();
   var amt = ((keylen + stride - 1) / stride).floor();
 
-  // console.log('stride', stride);
-  // console.log('amt', amt);
-
   for (var i = 0; i < saltlen; i++) {
     countsalt[i] = salt[i];
   }
@@ -1360,10 +1355,3 @@ int bcrypt_pbkdf(
 
   return 0;
 }
-
-// module.exports = {
-//       BLOCKS: BCRYPT_BLOCKS,
-//       HASHSIZE: BCRYPT_HASHSIZE,
-//       hash: bcrypt_hash,
-//       pbkdf: bcrypt_pbkdf
-// };

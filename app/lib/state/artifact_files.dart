@@ -1,5 +1,5 @@
-// Getting a chat artifact onto the phone and handing it to Android (open,
-// share, save to Downloads).
+// Getting a chat artifact onto the phone and handing it to the platform
+// (open, share, save to Downloads).
 
 import 'dart:async';
 import 'dart:convert';
