@@ -58,6 +58,20 @@ String _empty(Map<String, Object?> input) => jsonEncode({
   'completion': 'complete',
 });
 
+String _merge(Map<String, Object?> input, {bool empty = false}) {
+  final rows = (input['rows']! as List).cast<Map>();
+  return jsonEncode({
+    'schema_version': 2, 'batch_id': input['batch_id'], 'completion': 'complete',
+    'operations': empty ? [] : [{
+      'op': 'merge', 'target_id': rows.first['id'], 'expected_row_rev': rows.first['row_rev'],
+      'from': [{'id': rows.last['id'], 'expected_row_rev': rows.last['row_rev']}],
+      'text': rows.first['text'],
+      'evidence': [for (final row in rows) for (final proof in (row['evidence'] as List).cast<Map>())
+        {'message_id': proof['message_id'], 'quote': proof['quote']}],
+    }],
+  });
+}
+
 class _Phone {
   _Phone() {
     store = CompanionMemoryStore(db, nowMilliseconds: () => now);
@@ -111,6 +125,24 @@ class _Phone {
       say('completion', '那本册子的校对结束了。');
     }
     return store.nextFollowup(nowMs: now)!;
+  }
+
+  void pair({bool exact = false}) {
+    say('s1', '酸奶我只买原味。');
+    if (!exact) say('s2', '我买酸奶一直只选原味。');
+    final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+    final proposal = parseExtractionProposal(jsonEncode({
+      'schema_version': 2, 'batch_id': batch.id,
+      'covered_message_ids': [for (final source in batch.sources) source['id']],
+      'completion': 'complete', 'operations': [for (var i = 0; i < 2; i++) {
+        'op': 'create', 'kind': 'preference', 'text': exact || i == 0 ? '你买酸奶只选原味。' : '酸奶你只买原味的。',
+        'keywords': ['酸奶'],
+        'evidence': [{'message_id': batch.sources[exact ? 0 : i]['id'],
+          'quote': batch.sources[exact ? 0 : i]['text']}],
+      }],
+    }), batch);
+    expect(store.commitExtraction(batch, proposal), isTrue);
+    expect(store.cards(), hasLength(2));
   }
 
   CompanionMemoryWorker withHttp(Future<http.Response> Function(http.Request) answer, {String key = 'test'}) {
@@ -205,6 +237,97 @@ void main() {
     expect(await noKey.followup(capture, persona: '简短', offsetMinutes: 480, isCurrent: () => true), isNull);
     expect(phone.store.requests(), isEmpty);
     expect(phone.store.followups().single['state'], 'pending');
+  });
+
+  test('followup stays pending when the full room has no model route', () async {
+    final phone = _Phone();
+    final capture = phone.invite();
+    final worker = phone.worker = CompanionMemoryWorker(
+      store: phone.store,
+      transport: () => null,
+      nowMilliseconds: () => phone.now,
+      estimateTokens: (text) => text.runes.length,
+    );
+    expect(await worker.followup(capture, persona: '简短', offsetMinutes: 480, isCurrent: () => true), isNull);
+    expect(phone.store.requests(), isEmpty);
+    expect(phone.store.followups().single['state'], 'pending');
+    expect(phone.store.isFollowupCurrent(capture, nowMs: phone.now), isTrue);
+  });
+
+  test('exact local consolidation works without credentials and sends no request', () async {
+    final phone = _Phone()..pair(exact: true);
+    var calls = 0;
+    final worker = phone.withHttp((_) async { calls++; throw StateError('no cloud request expected'); }, key: '');
+    await worker.consolidate();
+    expect(phone.store.cards(), hasLength(1));
+    expect(phone.store.requests(), isEmpty);
+    expect(calls, 0);
+  });
+
+  test('consolidation sends the exact prompt and retains raw usage without triggering itself again', () async {
+    final phone = _Phone()..pair();
+    var calls = 0;
+    final worker = phone.withHttp((request) async {
+      calls++;
+      expect((jsonDecode(request.body) as Map)['system'], companionMemoryConsolidationPrompt);
+      expect(phone.store.requests().single['category'], 'organize');
+      expect(phone.store.requests().single['state'], 'sent');
+      return _reply(_merge(_input(request)));
+    });
+    expect(await worker.consolidate(), CompanionMemoryWork.committed);
+    expect(phone.store.cards(), hasLength(1));
+    final receipt = phone.store.requests().single;
+    final raw = receipt['raw_usage'] is String ? jsonDecode(receipt['raw_usage'] as String) : receipt['raw_usage'];
+    expect((raw as Map)['final_usage'], _usage);
+    phone.now += 86400001;
+    expect(await worker.consolidate(), CompanionMemoryWork.idle);
+    expect(calls, 1);
+  });
+
+  test('extract and consolidate share the active request and a cancelled late merge only settles its receipt', () async {
+    final phone = _Phone()..pair();
+    final started = Completer<Map<String, Object?>>();
+    final response = Completer<http.Response>();
+    final worker = phone.withHttp((request) { started.complete(_input(request)); return response.future; });
+    final running = worker.consolidate();
+    final input = await started.future;
+    phone.say('s3', '今天练了一会儿琴。');
+    expect(await worker.extract(forceTail: true), CompanionMemoryWork.idle);
+    expect(await worker.consolidate(), CompanionMemoryWork.idle);
+    final stop = worker.stop();
+    phone.store.deleteMessage(id: 's1', expectedSourceRev: 1);
+    response.complete(_reply(_merge(input)));
+    expect(await running, CompanionMemoryWork.stale);
+    await stop;
+    expect(phone.store.cards(), hasLength(1));
+    expect(phone.store.requests(), hasLength(1));
+    expect(phone.store.requests().single['state'], 'finished');
+    expect(phone.db.select("SELECT state FROM memory_events WHERE message_id='s3'").single['state'], 'pending');
+  });
+
+  test('a new change waits for the same rolling organize allowance rather than opening another model request', () async {
+    final phone = _Phone()..pair();
+    var calls = 0;
+    final worker = phone.withHttp((request) async { calls++; return _reply(_merge(_input(request), empty: true)); });
+    expect(await worker.consolidate(), CompanionMemoryWork.committed);
+    final row = phone.store.cards().first;
+    phone.store.setPinned(id: row['id'] as String, expectedRowRev: row['row_rev'] as int, pinned: true);
+    expect(await worker.consolidate(), CompanionMemoryWork.waiting);
+    expect(calls, 1);
+    phone.now += 86400001;
+    expect(await worker.consolidate(), CompanionMemoryWork.committed);
+    expect(calls, 2);
+  });
+
+  test('a complete invalid consolidation is examined once and does not become an automatic format retry', () async {
+    final phone = _Phone()..pair();
+    var calls = 0;
+    final worker = phone.withHttp((request) async { calls++; _input(request); return _reply('{broken'); });
+    expect(await worker.consolidate(), CompanionMemoryWork.invalid);
+    phone.now += 86400001;
+    expect(await worker.consolidate(), CompanionMemoryWork.idle);
+    expect(phone.store.cards(), hasLength(2));
+    expect(calls, 1);
   });
 
   test('complete empty result commits the exact saved source and raw final receipt', () async {

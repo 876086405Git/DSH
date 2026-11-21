@@ -128,7 +128,7 @@ class CompanionMemoryWorker {
   });
 
   final CompanionMemoryStore store;
-  final CompanionMemoryTransport Function() transport;
+  final CompanionMemoryTransport? Function() transport;
   final int Function() nowMilliseconds;
   final int Function(String) estimateTokens;
   Completer<void>? _cancelled;
@@ -164,7 +164,7 @@ class CompanionMemoryWorker {
       return null;
     }
     final route = transport();
-    if (!route.configured) {
+    if (route == null || !route.configured) {
       return null;
     }
     final card = store.cards().singleWhere((row) => row['id'] == captured['card_id']);
@@ -270,19 +270,59 @@ class CompanionMemoryWorker {
   Future<CompanionMemoryWork> extract({bool forceTail = false}) async {
     if (busy) return CompanionMemoryWork.idle;
     final route = transport();
-    if (!route.configured) return CompanionMemoryWork.configuration;
+    if (route == null || !route.configured) return CompanionMemoryWork.configuration;
     final batch = store.nextBatch(forceTail: forceTail, estimateTokens: estimateTokens);
     if (batch == null) return CompanionMemoryWork.idle;
+    return _runBatch(route, category: 'extract', batchId: batch.id,
+      system: companionMemoryExtractionPrompt,
+      input: jsonEncode(extractionInput(batch, processedAtUtc: nowMilliseconds())),
+      isCurrent: () => store.isBatchCurrent(batch),
+      parse: (text) => parseExtractionProposal(text, batch),
+      commit: (proposal) => store.commitExtraction(batch, proposal),
+      invalid: () => store.recordInvalidProposal(batch),
+      release: (reason) => store.releaseBatch(batch, reason: reason),
+    );
+  }
+
+  Future<CompanionMemoryWork> consolidate() async {
+    if (busy) return CompanionMemoryWork.idle;
+    // This performs exact local merges even without a usable model route.
+    final batch = store.nextMergeBatch(estimateTokens: estimateTokens);
+    if (batch == null) return CompanionMemoryWork.idle;
+    final route = transport();
+    if (route == null || !route.configured) {
+      store.releaseMergeBatch(batch);
+      return CompanionMemoryWork.configuration;
+    }
+    return _runBatch(route, category: 'organize', batchId: batch.id,
+      system: companionMemoryConsolidationPrompt, input: jsonEncode(consolidationInput(batch)),
+      isCurrent: () => store.isMergeBatchCurrent(batch),
+      parse: (text) => parseMergeProposal(text, batch),
+      commit: (proposal) => store.commitMerge(batch, proposal),
+      invalid: () => store.releaseMergeBatch(batch, examined: true),
+      release: (_) => store.releaseMergeBatch(batch),
+    );
+  }
+
+  /// Extraction and consolidation share the same physical request lifetime.
+  Future<CompanionMemoryWork> _runBatch(CompanionMemoryTransport route, {
+    required String category, required String batchId, required String system, required String input,
+    required bool Function() isCurrent,
+    required MemoryRow Function(String) parse,
+    required bool Function(MemoryRow) commit,
+    required void Function() invalid,
+    required void Function(String) release,
+  }) async {
     final requestId = store.reserveRequest(
-      category: 'extract',
+      category: category,
       provider: route.provider,
       model: route.model,
       inputTokens: memoryBatchInputTokens,
       outputTokens: memoryBatchOutputTokens,
-      batchId: batch.id,
+      batchId: batchId,
     );
     if (requestId == null) {
-      store.releaseBatch(batch, reason: 'budget');
+      release('budget');
       return CompanionMemoryWork.waiting;
     }
     final cancelled = Completer<void>();
@@ -294,57 +334,57 @@ class CompanionMemoryWorker {
     try {
       final reply = await route.call(
         requestId: requestId,
-        category: 'extract',
-        system: companionMemoryExtractionPrompt,
-        input: jsonEncode(extractionInput(batch, processedAtUtc: nowMilliseconds())),
+        category: category,
+        system: system,
+        input: input,
         maxTokens: memoryBatchOutputTokens,
         cancelled: cancelled.future,
         onDispatchUncertain: () {
-          if (cancelled.isCompleted || !store.isBatchCurrent(batch)) throw const _MemoryRequestStale();
+          if (cancelled.isCompleted || !isCurrent()) throw const _MemoryRequestStale();
           store.markRequestUncertain(requestId);
           uncertain = true;
         },
         onSent: () {
-          if (cancelled.isCompleted || !store.isBatchCurrent(batch)) throw const _MemoryRequestStale();
+          if (cancelled.isCompleted || !isCurrent()) throw const _MemoryRequestStale();
           store.markRequestSent(requestId);
           dispatched = true;
         },
         onUsage: (usage) => store.recordUsage(requestId, usage),
       );
       terminal = reply.terminal;
-      if (cancelled.isCompleted || !store.isBatchCurrent(batch)) {
-        store.releaseBatch(batch, reason: 'stale');
+      if (cancelled.isCompleted || !isCurrent()) {
+        release('stale');
         return CompanionMemoryWork.stale;
       }
       // Network/configuration failures throw at the route. A complete provider
       // answer that was cut off by max_tokens is an invalid proposal, not an
       // empty successful extraction.
       if (!reply.complete) {
-        store.releaseBatch(batch, reason: 'network');
+        release('network');
         return CompanionMemoryWork.waiting;
       }
       if (reply.terminal != 'complete') {
-        store.recordInvalidProposal(batch);
+        invalid();
         return CompanionMemoryWork.invalid;
       }
       final Map<String, Object?> proposal;
       try {
-        proposal = parseExtractionProposal(reply.text, batch);
+        proposal = parse(reply.text);
       } on FormatException {
-        store.recordInvalidProposal(batch);
+        invalid();
         return CompanionMemoryWork.invalid;
       }
-      return store.commitExtraction(batch, proposal) ? CompanionMemoryWork.committed : CompanionMemoryWork.stale;
+      return commit(proposal) ? CompanionMemoryWork.committed : CompanionMemoryWork.stale;
     } on _MemoryRequestStale {
       terminal = dispatched || uncertain ? 'cancelled' : 'not_sent';
-      store.releaseBatch(batch, reason: 'stale');
+      release('stale');
       return CompanionMemoryWork.stale;
     } on CompanionAuxiliaryError catch (error) {
       terminal = error.notSent ? 'not_sent' : error.terminal;
-      store.releaseBatch(batch, reason: error.configuration ? 'configuration' : 'network');
+      release(error.configuration ? 'configuration' : 'network');
       return error.configuration ? CompanionMemoryWork.configuration : CompanionMemoryWork.waiting;
     } on Object {
-      store.releaseBatch(batch, reason: 'local_error');
+      release('local_error');
       rethrow;
     } finally {
       try {

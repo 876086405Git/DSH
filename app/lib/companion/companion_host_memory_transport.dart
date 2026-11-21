@@ -40,7 +40,7 @@ class CompanionHostMemoryTransport implements CompanionMemoryTransport {
       final result = await client.callCompanionAuxiliary(
         capability,
         requestId: requestId,
-        kind: category,
+        kind: category == 'organize' ? 'consolidate' : category,
         system: system,
         input: input,
         maxTokens: maxTokens,

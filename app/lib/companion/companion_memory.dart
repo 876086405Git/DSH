@@ -44,13 +44,13 @@ class CompanionMemoryOwner extends ChangeNotifier {
   final Map<String, Future<void>> _usageReads = {};
   final Map<String, ({int at, int delay})> _usageAttempts = {};
   CompanionMemoryWorker? _worker;
-  CompanionMemoryTransport Function()? _route;
+  CompanionMemoryTransport? Function()? _route;
   Object? _room;
   bool _disposed = false;
 
   void enter(
     Object room, {
-    required CompanionMemoryTransport Function() transport,
+    required CompanionMemoryTransport? Function() transport,
     required int Function(String) estimateTokens,
   }) {
     if (!identical(_room, room)) _worker?.cancel();
@@ -80,6 +80,17 @@ class CompanionMemoryOwner extends ChangeNotifier {
   }) => identical(_room, room)
       ? _worker!.followup(captured, persona: persona, offsetMinutes: offsetMinutes, isCurrent: isCurrent)
       : Future.value(null);
+
+  Future<CompanionMemoryWork> consolidate(Object room) async {
+    if (!identical(_room, room)) return CompanionMemoryWork.idle;
+    final before = store.archive['memory_revision'];
+    try {
+      return await _worker!.consolidate();
+    } finally {
+      // Local exact merges can commit even when a later cloud step cannot run.
+      if (!_disposed && store.archive['memory_revision'] != before) changed();
+    }
+  }
 
   void leave(Object room) {
     if (!identical(_room, room)) return;

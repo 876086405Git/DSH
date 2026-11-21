@@ -335,6 +335,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _lateUseTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _observeLateUse();
       _observeInitiative();
+      unawaited(_consolidateMemory());
     });
     _hostUsageTimer = Timer.periodic(const Duration(seconds: 15), (_) => _refreshHostChatUsage());
     ref.listenManual(companionSignalConsentProvider, (_, _) => _syncSignals());
@@ -526,15 +527,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     } else {
       final route = _memoryRoute;
       final client = _memoryRouteClient;
-      if (route == null ||
-          client == null ||
-          route.sessionId != _sessionId ||
-          !identical(client, ref.read(activeConnectionProvider).value?.client)) {
-        return;
-      }
       memory.enter(
         this,
-        transport: () => CompanionHostMemoryTransport(client: client, capability: route),
+        transport: () =>
+            route == null ||
+                client == null ||
+                route.sessionId != _sessionId ||
+                !identical(client, ref.read(activeConnectionProvider).value?.client)
+            ? null
+            : CompanionHostMemoryTransport(client: client, capability: route),
         estimateTokens: estimateCompanionMemoryTokens,
       );
     }
@@ -570,6 +571,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _memoryQuiet?.cancel();
     unawaited(_extractMemory());
     _memoryQuiet = Timer(const Duration(minutes: 2), () => unawaited(_extractMemory(forceTail: true)));
+  }
+
+  Future<void> _consolidateMemory() async {
+    final memory = _memoryOwner;
+    if (!mounted || _leaving || memory == null || _invite != null || _memoryFollowupTicket != null) return;
+    final view = _initiativeView();
+    if (!view.visible || !view.resumed || view.blocked) return;
+    try {
+      await memory.consolidate(this);
+    } on Object {
+      // The original cards remain readable; a later idle opportunity can retry.
+    }
   }
 
   void _memoryChanged() {
@@ -1802,7 +1815,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _ackProfile = null;
     _memoryRoute = null;
     _memoryRouteClient = null;
-    if (!_light) _memoryOwner?.leave(this);
+    // The cleared host route cannot send; this room can still merge locally.
+    if (!_light) _attachMemoryWorker();
     _bubble = null;
     _memoryFollowupTicket = null;
     _myLine = null;

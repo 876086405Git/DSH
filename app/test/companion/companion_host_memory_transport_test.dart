@@ -413,10 +413,10 @@ class _Probe {
   final receipts = <Map<String, Object?>>[];
   final cancelled = Completer<void>();
 
-  Future<CompanionAuxiliaryReply> call(CompanionMemoryTransport transport) => transport.call(
+  Future<CompanionAuxiliaryReply> call(CompanionMemoryTransport transport, {String category = 'extract'}) => transport.call(
     requestId: 'request-1',
-    category: 'extract',
-    system: 'Extract JSON.',
+    category: category,
+    system: 'Synthetic instruction.',
     input: 'Synthetic batch.',
     maxTokens: 1400,
     cancelled: cancelled.future,
@@ -545,6 +545,18 @@ void main() {
       expect(store.followups().single['state'], 'pending', reason: 'HTTP completion is not a shown question');
     });
   }
+
+  test('the organize ledger category uses the actual consolidate host wire kind', () async {
+    final host = await _Host.start(generic: true);
+    addTearDown(host.close);
+    final probe = _Probe();
+    addTearDown(probe.close);
+    final transport = await host.transport();
+    host.frames = [host.accepted, host.finish()];
+    expect((await probe.call(transport, category: 'organize')).complete, isTrue);
+    expect(host.posts.single['kind'], 'consolidate');
+    expect(probe.events, ['uncertain', 'usage']);
+  });
 
   test('selected generic provider can complete with unknown dispatch and raw usage', () async {
     final host = await _Host.start(generic: true);
