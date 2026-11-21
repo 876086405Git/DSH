@@ -10664,6 +10664,26 @@ class L10nEn extends L10n {
       'Turn on live activities for DSH Go in system settings (some phones call it “Show on Live Alerts”)';
 
   @override
+  String get liveStop => 'Stop';
+
+  @override
+  String get liveStale => 'Not updating · open the app';
+
+  @override
+  String get liveIosSubtitle =>
+      'While DSH works or waits on you: your pet, progress and time in the Dynamic Island and on the lock screen';
+
+  @override
+  String get liveIosFooter =>
+      'Needs iOS 16.2 or later. iPhones with a Dynamic Island show it there; other devices only on the lock screen. The lock screen never shows the conversation\'s title. From iOS 17 you can stop the turn right from the card. Once iOS suspends the app, the card says it has stopped updating.';
+
+  @override
+  String get liveIosUnsupported => 'Needs iOS 16.2 or later';
+
+  @override
+  String get liveIosBlockedText => 'Turn on Live Activities in Settings → DSH Go';
+
+  @override
   String get localeTitle => 'Language';
 
   @override
