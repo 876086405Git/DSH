@@ -28,8 +28,10 @@
   let REDUCED = query.get('reduceMotion') === '1';
   // Both draw at the screen's own density (phones are about 3x): a 2x buffer
   // stretched over a 3x screen reads as out of focus. The room sheds resolution
-  // itself when frames can't keep up (`quality` below).
-  const DPR_CAP = FLOAT ? 4 : 3;
+  // itself when frames can't keep up (`quality` below). A device budget from the
+  // app (`dpr`, iOS) caps both canvases, this one and scene.js's.
+  const BUDGET_DPR = Number(query.get('dpr'));
+  const DPR_CAP = Math.min(FLOAT ? 4 : 3, BUDGET_DPR > 0 ? Math.max(0.5, BUDGET_DPR) : Infinity);
   // Clip masks: the renderer packs them into textures of four channels, at
   // most 36 different masks in one texture, 32 each when there are several.
   // A model that needs more (a detailed one: 49 for 大肥鱼 4096) gets more
@@ -49,6 +51,8 @@
   const reefFar = document.querySelector('.reef.far');
   const reefNear = document.querySelector('.reef.near');
   const sun = document.querySelector('.sun');
+  const shafts = [...(document.querySelectorAll?.('.shafts i') ?? [])];
+  const whale = document.querySelector('.whale');
   const props = {
     snack: document.getElementById('prop-snack'),
     play: document.getElementById('prop-play'),
@@ -1780,6 +1784,9 @@
       home.beckon = prop && props[prop] ? { prop, next: 0 } : null;
     },
     prop: ({ name }) => showProp(name),
+    covered: ({ on }) => {
+      covered = on === true;
+    },
     pause: () => {
       nativePaused = true;
       pause();
@@ -1810,6 +1817,14 @@
   let slowSeconds = 0;
   let quickSeconds = 0;
   let late = 0;
+  // Ten quiet seconds earn the next step up; a step up that turns slow again
+  // within a minute makes the next try wait twice as long (to five minutes), so
+  // a phone that only keeps up while she idles doesn't stutter every time she
+  // moves just to find that out again.
+  let upAfter = 10;
+  let steppedUpAt = -Infinity;
+  // Flutter's full-screen blur over her (the log): she's barely seen, so drawn slowly.
+  let covered = false;
   // Loading the model (texture upload, mipmaps) stalls a few frames; not the phone's pace.
   let settleUntil = 0;
 
@@ -1839,7 +1854,7 @@
       life.patting ||
       home.show !== null ||
       scene.busy();
-    const target = life.sleep > 0.9 ? 12 : busy ? 60 : 30;
+    const target = life.sleep > 0.9 || covered ? 12 : busy ? 60 : 30;
     if (ts - last < 1000 / target - 2) return;
     // Over half a second is a gap (paused, hidden, waking), not a late frame.
     const gap = ts - last;
@@ -1858,6 +1873,7 @@
     moodMarks(ts);
     scene.step(dt, life.body.x.x + tilt.sx * 0.8);
     parallax(dt);
+    water(ts);
     drawn++;
     if (ts - fpsAt > 1000) {
       // A gap (paused, hidden) says nothing about how fast she draws.
@@ -1872,9 +1888,11 @@
           if (slowSeconds >= 3 && quality > 0.5) {
             quality = Math.max(0.5, quality - 0.15);
             slowSeconds = 0;
-          } else if (quickSeconds >= 10 && quality < 1) {
+            if (ts - steppedUpAt < 60000) upAfter = Math.min(upAfter * 2, 300);
+          } else if (quickSeconds >= upAfter && quality < 1) {
             quality = Math.min(1, quality + 0.15);
             quickSeconds = 0;
+            steppedUpAt = ts;
           }
         }
       }
@@ -1885,8 +1903,8 @@
   }
 
   const floatGate = FLOAT ? new window.CompanionFloat.FrameGate() : null;
+  const floatBounds = FLOAT ? new window.CompanionFloat.BoundsFollower() : null;
   let floatPixels = null;
-  let floatBoundsKey = '';
   let floatState = null;
   let floatEmotion = 'calm';
   let floatGazeUntil = 0;
@@ -1913,7 +1931,8 @@
   function renderFloat(ts) {
     if (paused || floatDisposed || document.hidden || !model) return;
     frame = requestAnimationFrame(render);
-    if (!floatGate.take(ts)) return;
+    // Asleep on the desktop she breathes slowly: twelve frames, as in the room.
+    if (!floatGate.take(ts, life.sleep > 0.9 ? 12 : 30)) return;
     try {
       const dt = clamp((ts - last) / 1000, 0.001, 0.05);
       last = ts;
@@ -1933,9 +1952,8 @@
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, floatPixels);
       const bounds = window.CompanionFloat.opaqueBounds(floatPixels, canvas.width, canvas.height);
-      const message = { type: 'floatBounds', width: canvas.width, height: canvas.height, bounds };
-      const key = JSON.stringify(message);
-      if (key !== floatBoundsKey) { floatBoundsKey = key; post(message); }
+      const box = floatBounds.next(bounds, canvas.width, canvas.height);
+      if (box !== undefined) post({ type: 'floatBounds', width: canvas.width, height: canvas.height, bounds: box });
       drawn++;
       if (ts - fpsAt >= 1000) { fps = drawn * 1000 / (ts - fpsAt); drawn = 0; fpsAt = ts; }
     } catch (_) { floatFailed('companion_render_failed'); }
@@ -2072,6 +2090,60 @@
     sun.style.transform = `translate3d(${x * 0.4}px, ${y * 0.3}px, 0)`;
   }
 
+  // The light shafts and the whale move on the frames she's drawn anyway. As CSS
+  // animations they kept their own clock, and with it the whole page, and the
+  // frosted glass Flutter lays over it, redrawing at the screen's full rate
+  // (up to 120) while she idles at thirty. A shaft sways three degrees in about
+  // twenty seconds and the whale crosses in thirty-seven: thirty steps a second,
+  // or twelve while she sleeps, look the same.
+  const SHAFTS = [
+    // tilt (deg), period (s), how far into its sway it starts (s)
+    [13, 21, 0],
+    [6, 27, 9],
+    [-3, 17, 4],
+    [-11, 24, 15],
+  ];
+  const WHALE_S = 74;
+  const looks = new Map();
+  // Decided once: the room's reduced motion and bare page are fixed at load.
+  let stillWater = null;
+
+  function look(el, transform, opacity) {
+    if (!el?.style) return;
+    const was = looks.get(el);
+    if (was?.[0] === transform && was[1] === opacity) return;
+    looks.set(el, [transform, opacity]);
+    el.style.transform = transform;
+    el.style.opacity = opacity;
+  }
+
+  function water(ts) {
+    // Spelled out: WebView 83 (Android 10) cannot parse logical assignment (#1165).
+    stillWater ??
+      (stillWater =
+        FLOAT ||
+        REDUCED ||
+        document.documentElement.dataset.bare === '1' ||
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true);
+    if (stillWater) return;
+    const s = ts / 1000;
+    shafts.forEach((el, i) => {
+      const [tilt, period, start] = SHAFTS[i % SHAFTS.length];
+      // An ease in and out each way, back and forth.
+      const k = 0.5 - 0.5 * Math.cos((Math.PI * (s + start)) / period);
+      look(el, `rotate(${Math.round((tilt - 1.6 + 3.2 * k) * 20) / 20}deg)`, `${Math.round((0.55 + 0.45 * k) * 100) / 100}`);
+    });
+    // Out across the water in the first half of its round, then gone for the second.
+    const p = (((s + 38) % WHALE_S) + WHALE_S) % WHALE_S / WHALE_S;
+    const k = Math.min(1, p / 0.5);
+    const shown = p < 0.04 ? p / 0.04 : p < 0.46 ? 1 : p < 0.5 ? (0.5 - p) / 0.04 : 0;
+    look(
+      whale,
+      `translate3d(${Math.round((-24 + 144 * k) * 10) / 10}vw, ${Math.round((16 - 38 * k) * 4) / 4}px, 0)`,
+      `${Math.round(shown * 50) / 100}`,
+    );
+  }
+
   function discardTransient() {
     transientEpoch++;
     pointers.clear();
@@ -2164,6 +2236,8 @@
     if (!FLOAT) {
       scene.resize();
       window.addEventListener('resize', () => scene.resize());
+      // The water already where it will be on her first frame.
+      water(performance.now());
     }
     try {
       const response = await fetch(`${CHARACTER}character.json`, { signal: floatAbort?.signal });
