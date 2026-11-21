@@ -189,7 +189,19 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     }, fireImmediately: true);
     if (_v4Platform) {
       void Function(UsageOutcome, {UsageOperation? actual})? download;
-      ref.listen(appUpdateProvider.select((s) => s.task), (_, task) {
+      void Function(UsageOutcome, {UsageOperation? actual})? install;
+      ref.listen(appUpdateProvider, (previous, next) {
+        if (next.task == UpdateTaskPhase.installing) {
+          install ??= beginOperation(UsageOperation.updateInstall);
+        } else if (previous?.task == UpdateTaskPhase.installing) {
+          install?.call(switch (next.task) {
+            UpdateTaskPhase.idle when next.current != previous?.current => UsageOutcome.ready,
+            UpdateTaskPhase.failed => UsageOutcome.failed,
+            _ => UsageOutcome.unknown,
+          });
+          install = null;
+        }
+        final task = next.task;
         switch (task) {
           case UpdateTaskPhase.downloading:
             download ??= beginOperation(UsageOperation.updateDownload);

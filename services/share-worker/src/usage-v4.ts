@@ -24,7 +24,7 @@ function vector(value: unknown, lengths: readonly number[]): number[] | undefine
 
 const operations = ['runtime_direct', 'runtime_proot', 'runtime_other',
   'ssh_initial', 'ssh_reconnect', 'relay_initial', 'relay_reconnect',
-  'chat_turn_local', 'chat_turn_remote', 'chat_first_text_local', 'chat_first_text_remote', 'phone_task', 'update_download'] as const;
+  'chat_turn_local', 'chat_turn_remote', 'chat_first_text_local', 'chat_first_text_remote', 'phone_task', 'update_download', 'update_install', 'call_connect', 'call_session', 'plugin_install'] as const;
 
 function tokenRows(value: unknown, source: string): Row[] | undefined {
   const token = object(value);

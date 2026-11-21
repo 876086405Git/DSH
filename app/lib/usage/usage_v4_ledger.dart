@@ -22,7 +22,11 @@ enum UsageOperation {
   chatFirstTextLocal('chat_first_text_local'),
   chatFirstTextRemote('chat_first_text_remote'),
   phoneTask('phone_task'),
-  updateDownload('update_download');
+  updateDownload('update_download'),
+  updateInstall('update_install'),
+  callConnect('call_connect'),
+  callSession('call_session'),
+  pluginInstall('plugin_install');
 
   const UsageOperation(this.wire);
   final String wire;

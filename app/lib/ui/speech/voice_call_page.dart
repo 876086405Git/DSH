@@ -103,6 +103,8 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   Timer? _leave;
   DateTime? _since;
   CallPhase _shown = CallPhase.starting;
+  void Function(UsageOutcome, {UsageOperation? actual})? _callConnect;
+  void Function(UsageOutcome, {UsageOperation? actual})? _callSession;
 
   // Her, when she is the backdrop.
   final _stage = CompanionStageController();
@@ -213,6 +215,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final pcm = ref.read(streamingPcmCaptureProvider);
     final asr = ref.read(streamingAsrProvider);
     final found = liveWordsModel(ref);
+    _callConnect = ref.read(usageStatsProvider.notifier).beginOperation(UsageOperation.callConnect);
     await _call.start();
     try {
       final chosen = await found;
@@ -237,6 +240,23 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   void _changed() {
     if (!mounted) return;
     final phase = _call.phase;
+    // Listening only proves the microphone opened. A received assistant
+    // reply proves the call's conversation path actually worked.
+    if (_callConnect != null && phase == CallPhase.speaking) {
+      _callConnect?.call(UsageOutcome.ready);
+      _callConnect = null;
+      _callSession = ref.read(usageStatsProvider.notifier).beginOperation(UsageOperation.callSession);
+    }
+    if (phase == CallPhase.ended) {
+      final why = _call.ended;
+      _callConnect?.call(switch (why) {
+        CallEnd.permission || CallEnd.microphone || CallEnd.noRecognizer || CallEnd.failed => UsageOutcome.failed,
+        _ => UsageOutcome.unknown,
+      });
+      _callConnect = null;
+      _callSession?.call(why == CallEnd.failed ? UsageOutcome.failed : UsageOutcome.ready);
+      _callSession = null;
+    }
     if (phase != _shown) {
       _arrived(phase);
       _shown = phase;
@@ -322,6 +342,8 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     unawaited(_live?.stop());
     _leave?.cancel();
     _enter.dispose();
+    _callConnect?.call(UsageOutcome.unknown);
+    _callSession?.call(UsageOutcome.unknown);
     _call
       ..removeListener(_changed)
       ..dispose();
