@@ -96,19 +96,28 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
   }
 
   /// An offline host may have come online since the list was read: look
-  /// again, then connect, or say it is still offline.
+  /// again, then connect, or say it is still offline — or that the look
+  /// failed (the list then still holds the old entry).
   Future<void> _useOffline(RelayHost host) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     await ref.read(relayAccountProvider.notifier).refresh();
     if (!mounted) return;
-    final now = ref.read(relayAccountProvider).value?.hostById(host.id);
-    if (now?.online ?? false) {
-      await _use(HostRef.relay(now!.id, name: now.name));
+    final account = ref.read(relayAccountProvider).value;
+    // Signed out meanwhile, or the host left the account: the page shows it.
+    final now = account?.hostById(host.id);
+    if (account == null || !account.signedIn || now == null) return;
+    if (!account.hostsFailed && now.online) {
+      await _use(HostRef.relay(now.id, name: now.name));
       return;
     }
+    final l10n = context.l10n;
     messenger
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(context.l10n.remoteHostOfflineHint(host.name))));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(account.hostsFailed ? l10n.remoteErrRefreshHosts : l10n.remoteHostOfflineHint(host.name)),
+        ),
+      );
   }
 
   /// A host added while this phone has nothing to run on (no runtime, first

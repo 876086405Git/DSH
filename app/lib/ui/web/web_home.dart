@@ -110,7 +110,10 @@ class _WebHomeState extends ConsumerState<WebHome> {
   }
 
   Future<void> _open(WebOpenRequest request) async {
-    await _link.open(request.target);
+    // A DSH Remote host's page takes no scripts (remote_web_page.dart): it
+    // stays where it is, and a share falls back at once, not in 30 seconds.
+    final scripted = ref.read(dshWebAccessProvider) is! RelayDshWeb;
+    if (scripted) await _link.open(request.target);
     final compose = request.compose;
     if (compose == null) return;
     final problems = [...compose.problems];
@@ -126,7 +129,7 @@ class _WebHomeState extends ConsumerState<WebHome> {
     }
     final text = compose.text.trim();
     if (text.isEmpty && files.isEmpty) return _tell(problems);
-    final result = await _link.compose(text, files: files);
+    final result = scripted ? await _link.compose(text, files: files) : const WebComposeResult();
     if (text.isNotEmpty && !result.text) {
       await Clipboard.setData(ClipboardData(text: text));
       problems.insert(0, appL10n.webTextCopied);

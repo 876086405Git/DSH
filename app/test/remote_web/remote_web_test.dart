@@ -39,20 +39,16 @@ class _RelayActive extends ActiveHostController {
   HostRef build() => const HostRef.relay('host');
 }
 
-/// 网页版 as every entry opens it ([openDshWeb]); its label says whether the
-/// active host's DSH Web is reachable.
+/// 网页版 as every native entry opens it ([openDshWeb]): nothing watches the
+/// active host's DSH Web before the tap.
 class _Opener extends ConsumerWidget {
   const _Opener();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final access = ref.watch(dshWebAccessProvider);
     return Scaffold(
       body: Center(
-        child: TextButton(
-          onPressed: () => openDshWeb(context, ref),
-          child: Text(access is RelayDshWeb ? 'open' : 'unavailable'),
-        ),
+        child: TextButton(onPressed: () => openDshWeb(context, ref), child: const Text('open')),
       ),
     );
   }
@@ -123,22 +119,24 @@ void main() {
   testWidgets('网页版 follows the fresh session capability and its replacement', (tester) async {
     carrier.current = RemoteHostSession(rpc: rpc, capabilities: const []);
     final container = await pump(tester);
-    expect(find.text('open'), findsNothing);
+    final sub = container.listen(remoteWebSessionProvider, (_, _) {});
+    expect(container.read(dshWebAccessProvider), isA<NoDshWeb>());
     carrier.replace(session);
     await _frames(tester);
     expect(container.read(remoteWebSessionProvider).value, same(session));
-    expect(find.text('open'), findsOneWidget);
+    expect(container.read(dshWebAccessProvider), isA<RelayDshWeb>());
     carrier.replace(RemoteHostSession(rpc: rpc, capabilities: const []));
     await _frames(tester);
-    expect(find.text('open'), findsNothing);
+    expect(container.read(dshWebAccessProvider), isA<NoDshWeb>());
     expect(rpc.calls, isEmpty);
+    sub.close();
     await remove(tester);
   });
 
   testWidgets('connected without dsh.web.v1: 网页版 says what the Host needs', (tester) async {
     carrier.current = RemoteHostSession(rpc: rpc, capabilities: const []);
     await pump(tester);
-    await tester.tap(find.text('unavailable'));
+    await tester.tap(find.text('open'));
     await tester.pump();
     expect(find.text(appL10n.remoteWebHostNotReady), findsOneWidget);
     expect(find.byType(RemoteWebPage), findsNothing);
@@ -150,7 +148,7 @@ void main() {
     _initial = null;
     linkStatus = HostLinkStatus.idle;
     await pump(tester);
-    await tester.tap(find.text('unavailable'));
+    await tester.tap(find.text('open'));
     await tester.pump();
     expect(find.text(appL10n.webConnectHostFirst('studio')), findsOneWidget);
     expect(rpc.calls, isEmpty);
@@ -159,35 +157,54 @@ void main() {
 
   testWidgets('OHOS keeps 网页版 unavailable over DSH Remote without sending open', (tester) async {
     await pump(tester, os: 'ohos');
-    expect(find.text('open'), findsNothing);
-    await tester.tap(find.text('unavailable'));
+    await tester.tap(find.text('open'));
     await tester.pump();
     expect(find.text(appL10n.webRelayUnavailable), findsOneWidget);
+    expect(find.byType(RemoteWebPage), findsNothing);
     expect(rpc.calls, isEmpty);
     await remove(tester);
   });
 
   testWidgets('disconnected or closed Noise session cannot expose 网页版', (tester) async {
-    await pump(tester);
+    final container = await pump(tester);
     carrier.disconnect();
     await _frames(tester);
-    expect(find.text('open'), findsNothing);
+    expect(container.read(dshWebAccessProvider), isA<NoDshWeb>());
     await remove(tester);
   });
 
   testWidgets('Noise done retires 网页版 before the mux reconnect event', (tester) async {
     final container = await pump(tester);
+    final sub = container.listen(remoteWebSessionProvider, (_, _) {});
+    await _frames(tester);
     expect(container.read(remoteWebSessionProvider).value, same(session));
     await rpc.close();
     expect(session.isClosed, isTrue);
+    expect(container.read(dshWebAccessProvider), isA<NoDshWeb>(), reason: 'read at once, not after an event');
     await _frames(tester);
     expect(container.read(remoteWebSessionProvider).value, isNull);
-    expect(find.text('open'), findsNothing);
+    sub.close();
+    await remove(tester);
+  });
+
+  testWidgets('a failed page drops 重试 once its session goes away', (tester) async {
+    rpc.handler = (method) {
+      if (method == 'dsh.web.open') throw RemoteRpcException('RATE_LIMITED', 'busy');
+      return {'closed': true};
+    };
+    await pump(tester);
+    await open(tester);
+    expect(find.text(appL10n.commonRetry), findsOneWidget);
+    carrier.disconnect();
+    await _frames(tester);
+    expect(find.text(appL10n.commonRetry), findsNothing);
+    expect(find.text(appL10n.remoteWebReconnect), findsOneWidget);
     await remove(tester);
   });
 
   testWidgets('taps merge into one open; the grant is posted by a form on the tunnel origin', (tester) async {
     await pump(tester);
+    // The first tap opens: nothing watched the session before it.
     final tap = tester.widget<TextButton>(find.byType(TextButton)).onPressed!;
     tap();
     tap();

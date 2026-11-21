@@ -279,7 +279,18 @@ class _RemoteWebViewState extends ConsumerState<_RemoteWebView> {
   }
 
   void _end(String code) {
-    if (!mounted || _ended) return;
+    if (!mounted) return;
+    if (_ended) {
+      // Failed while the session was live, which has since gone: 重试 would
+      // fail at once; say to reconnect instead.
+      if (_canRetry && !_live) {
+        setState(() {
+          _canRetry = false;
+          _errorCode = 'CONNECTION_NOT_FOUND';
+        });
+      }
+      return;
+    }
     _canRetry = _live && code != 'WEB_PLATFORM_UNAVAILABLE';
     _ended = true;
     _exchangeDeadline?.cancel();

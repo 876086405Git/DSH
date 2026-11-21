@@ -1504,12 +1504,12 @@ class DshWebLink {
       await _send(script);
       return await done.future.timeout(timeout, onTimeout: () => const WebComposeResult());
     } finally {
-      if (requestId != null) {
-        _composeReplies.remove(requestId);
-        // A failed paste must not be sent later, after its caller has fallen back.
-        _queued.remove(script);
-        _page?._pendingScripts.remove(script);
-      }
+      if (requestId != null) _composeReplies.remove(requestId);
+      // A failed paste must not be sent later, after its caller has fallen
+      // back (any platform: a page that never attaches, like a DSH Remote
+      // host's, keeps the queue until the next one does).
+      _queued.remove(script);
+      _page?._pendingScripts.remove(script);
     }
   }
 

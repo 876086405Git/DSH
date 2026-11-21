@@ -9,7 +9,7 @@ Use the full DSH Web interface inside the app, and switch back to the native int
 
 Under **Home**, choose **Native** or **Web** to switch right away. You can also tap the button next to New chat at the top of the chat list to go straight to Web.
 
-Going to Web brings the current chat along, or starts a new one in Web if none is open. Coming back brings the chat you were viewing in Web.
+Going to Web brings the current chat along, or starts a new one in Web if none is open. Coming back brings the chat you were viewing in Web. DSH Web on a DSH Remote host is the exception: it opens on its home page without the chat.
 
 ## App features in Web mode
 

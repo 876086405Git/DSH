@@ -63,16 +63,18 @@ final dshWebAccessProvider = Provider.autoDispose<DshWebAccess>((ref) {
     case HostKind.relay:
       final os = ref.watch(operatingSystemProvider);
       if (os != 'android' && os != 'ios') return NoDshWeb(appL10n.webRelayUnavailable);
-      final session = ref.watch(remoteWebSessionProvider).value;
-      final carrier = ref.watch(readListLiveConnectionProvider)?.client.carrier;
-      if (session != null && carrier is RemoteTunnelCarrier && identical(carrier.session, session)) {
-        return RelayDshWeb(carrier, session);
+      // Rebuild on session replacement and link changes; the answer itself is
+      // read at once, for a tap nothing watched before (their first events
+      // arrive a moment later).
+      ref.watch(remoteWebSessionProvider);
+      ref.watch(hostLinkStatusProvider(host));
+      final connection = ref.watch(readListLiveConnectionProvider);
+      if (liveDshWebSession(connection) case final session?) {
+        return RelayDshWeb(connection!.client.carrier as RemoteTunnelCarrier, session);
       }
       // Connected without `dsh.web.v1`: an older Remote plugin, or DSH Web
       // not running on the Host.
-      if (ref.watch(hostLinkStatusProvider(host)).value?.isConnected ?? false) {
-        return NoDshWeb(appL10n.remoteWebHostNotReady);
-      }
+      if (isLiveTunnel(connection)) return NoDshWeb(appL10n.remoteWebHostNotReady);
       return NoDshWeb(appL10n.webConnectHostFirst(ref.watch(hostNameProvider(host)) ?? appL10n.commonRemoteHost));
     case HostKind.ssh:
       // Rebuild once the link connects (or reconnects to a new process).
