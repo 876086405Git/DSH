@@ -211,6 +211,7 @@ SheetGrid _sheet(
   int? style;
   String? value;
   StringBuffer? inline;
+  StringBuffer? inlineText;
   var inValue = false;
   var inInline = false;
   var inPhonetic = false;
@@ -271,6 +272,13 @@ SheetGrid _sheet(
         inline = StringBuffer();
       case _Tag(name: 'is', closing: true):
         inInline = false;
+      case _Tag(name: 't', closing: false, :final selfClosing) when inInline:
+        inlineText = selfClosing || inPhonetic ? null : StringBuffer();
+      case _Tag(name: 't', closing: true) when inInline:
+        if (inlineText != null) {
+          inline?.write(_xstring(inlineText.toString()));
+          inlineText = null;
+        }
       case _Tag(name: 'rPh', closing: false, :final selfClosing):
         inPhonetic = !selfClosing;
       case _Tag(name: 'rPh', closing: true):
@@ -279,7 +287,7 @@ SheetGrid _sheet(
         if (inValue) {
           value = (value ?? '') + text;
         } else if (inInline && !inPhonetic) {
-          inline?.write(text);
+          inlineText?.write(text);
         }
       default:
         break;
@@ -323,14 +331,16 @@ String _cellText(
       final i = int.tryParse(value ?? '');
       return i != null && i >= 0 && i < shared.length ? shared[i] : '';
     case 'inlineStr':
-      return inline ?? value ?? '';
+      return inline ?? _xstring(value ?? '');
     case 'b':
       return value == '1'
           ? 'TRUE'
           : value == '0'
           ? 'FALSE'
           : value ?? '';
-    case 'str' || 'e':
+    case 'str':
+      return _xstring(value ?? '');
+    case 'e':
       return value ?? '';
   }
   final raw = value;
@@ -339,6 +349,14 @@ String _cellText(
   if (number == null) return raw;
   return formatSheetNumber(number, styles.formatOf(style), date1904: date1904);
 }
+
+// ST_Xstring belongs to each text element. Decode once before joining rich
+// runs: _x005F_x0041_ is literal _x0041_, not A; separate runs must not create
+// a new escape by concatenation. XML attributes/entities are unchanged.
+String _xstring(String value) => value.replaceAllMapped(
+  RegExp(r'_x([0-9a-fA-F]{4})_'),
+  (match) => String.fromCharCode(int.parse(match.group(1)!, radix: 16)),
+);
 
 /// A saved number as its cell's number format shows it (the common cases:
 /// dates and times, percentages, fixed decimals, thousands separators).
@@ -450,7 +468,7 @@ List<String> _sharedStrings(String? xml) {
   if (xml == null) return const [];
   final out = <String>[];
   StringBuffer? current;
-  var inText = false;
+  StringBuffer? textRun;
   var phonetic = false;
   for (final token in _Xml(xml).tokens()) {
     switch (token) {
@@ -468,11 +486,14 @@ List<String> _sharedStrings(String? xml) {
       case _Tag(name: 'rPh', closing: true):
         phonetic = false;
       case _Tag(name: 't', closing: false, :final selfClosing):
-        inText = !selfClosing;
+        textRun = selfClosing || phonetic ? null : StringBuffer();
       case _Tag(name: 't', closing: true):
-        inText = false;
+        if (textRun != null) {
+          current?.write(_xstring(textRun.toString()));
+          textRun = null;
+        }
       case _Text(:final text):
-        if (inText && !phonetic) current?.write(text);
+        textRun?.write(text);
       default:
         break;
     }

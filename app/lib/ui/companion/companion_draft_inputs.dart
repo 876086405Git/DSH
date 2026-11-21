@@ -20,7 +20,11 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
   final l10n = context.l10n;
   final inputs = <String, Object?>{};
   var storeId = originalStoreId;
-  final saved = client == null ? store.hostTaskInputs(hostKey: hostKey) : const <MemoryRow>[];
+  final saved = client == null
+      ? store.hostTaskInputs(hostKey: hostKey).where((row) =>
+          const ['text/plain', 'text/markdown'].contains(row['mediaType']) &&
+          (row['size']! as int) <= 65536).toList()
+      : const <MemoryRow>[];
   for (final side in ['a', 'b']) {
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('task selection changed before choosing the original draft');

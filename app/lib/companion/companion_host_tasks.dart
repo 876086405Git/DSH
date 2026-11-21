@@ -98,13 +98,15 @@ class CompanionHostTasks {
     var readOriginal = false;
     var missingOriginal = false;
     if (submitPending &&
-        const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) &&
+        const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(current['kind']) &&
         commands.every((row) => row['possible_sent_at_ms'] == null)) {
       final available = capability ?? await client.readCompanionTasksCapability();
       if (available == null ||
           (current['kind'] == 'host.find_draft'
               ? !available.findDraft || !available.sourceRead
-              : !available.compareDrafts)) {
+              : current['kind'] == 'host.compare_drafts'
+              ? !available.compareDrafts
+              : !available.receiptsToSheet || !available.artifactRead)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot accept this find task');
       }
       if (available.hostStoreId != hostStore) {
@@ -133,6 +135,8 @@ class CompanionHostTasks {
               ? !available.findDraft
               : current['kind'] == 'host.compare_drafts'
               ? !available.compareDrafts
+              : current['kind'] == 'host.receipts_to_sheet'
+              ? !available.receiptsToSheet
               : !available.notes)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot durably accept this task');
       }
@@ -518,7 +522,7 @@ MemoryRow? parseCompanionCompare(String raw) {
   };
 }
 
-/// I has a deadline, not a file-modification date window. Resolve the spoken
+/// I/J have a deadline, not a file-modification date window. Resolve the spoken
 /// time against the original source day; a later retry uses the saved terms.
 Future<MemoryRow?> companionCompareAgreement(MemoryRow source, MemoryRow command, CompanionReminders clock) async {
   int? deadlineAt;
@@ -537,4 +541,60 @@ Future<MemoryRow?> companionCompareAgreement(MemoryRow source, MemoryRow command
     deadlineAt = ((resolved['moments']! as List<Object?>).single! as Map<Object?, Object?>)['epochMs']! as int;
   }
   return {'deadlineAtMs': deadlineAt, 'afterExit': command['afterExit'], 'allowQueue': command['allowQueue']};
+}
+
+/// Only complete supported clauses accept a receipt task. Selecting all four
+/// originals and the output folder remains an explicit phone action.
+MemoryRow? parseCompanionReceipts(String raw) {
+  final text = raw.trim().replaceFirst(RegExp(r'[。.!！]+$'), '');
+  const kind = 'host.receipts_to_sheet';
+  if (const ['取消整理票据', '取消这次整理票据', '别整理票据了', '这张表先别做了'].contains(text)) {
+    return {'kind': kind, 'operation': 'cancel'};
+  }
+  if (RegExp(r'^(?:[“‘「『"\x27]|不要|不用|别|假设|故事|台词|他说|她说)').hasMatch(text)) {
+    return null;
+  }
+  final clauses = text.split(RegExp(r'[，,。]')).map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
+  if (clauses.isEmpty || !const ['等电脑开了', '等电脑上线', '请电脑现在处理'].contains(clauses.first)) {
+    return RegExp(r'四张票|整理票据').hasMatch(text) && RegExp(r'新建|表|电脑').hasMatch(text)
+        ? {'kind': kind, 'operation': 'clarify'} : null;
+  }
+  var originals = false;
+  String? outputName;
+  String? deadlineTime;
+  String? afterExit;
+  for (final clause in clauses.skip(1)) {
+    if (!originals && RegExp(r'''^把我选的(?:[‘“「'].*[’”」'])?这四张票整理成日期、项目、金额$''').hasMatch(clause)) {
+      originals = true;
+      continue;
+    }
+    final deadline = RegExp(r'^((?:[01]\d|2[0-3]):[0-5]\d|今晚八点|晚上八点)前$').firstMatch(clause);
+    if (deadline != null && deadlineTime == null) {
+      final value = deadline.group(1)!;
+      deadlineTime = value.endsWith('八点') ? '20:00' : value;
+      continue;
+    }
+    final output = RegExp(r'^在这个文件夹新建《([^/\\\x00]+\.xlsx)》$').firstMatch(clause);
+    if (output != null && outputName == null) {
+      outputName = output.group(1)!;
+      continue;
+    }
+    if (const ['我先去吃饭', '离开后继续', '我先走了也继续', '我离开就停', '我走就停'].contains(clause)) {
+      final value = clause.endsWith('停') ? 'pause' : 'continue';
+      if (afterExit != null && afterExit != value) {
+        return {'kind': kind, 'operation': 'clarify'};
+      }
+      afterExit = value;
+      continue;
+    }
+    if (const ['原件别动', '不要改原件', '四份原件都别动'].contains(clause)) {
+      continue;
+    }
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  if (!originals || outputName == null || afterExit == null) {
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  return {'kind': kind, 'operation': 'create', 'allowQueue': clauses.first.startsWith('等'),
+    'afterExit': afterExit, 'deadlineTime': deadlineTime, 'outputName': outputName};
 }

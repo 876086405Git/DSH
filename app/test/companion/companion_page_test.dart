@@ -65,6 +65,7 @@ import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
 import '../support/companion_notes_peer.dart';
 import '../support/companion_compare_peer.dart';
+import '../support/companion_receipts_peer.dart';
 import '../support/companion_map_platform_peer.dart';
 
 Widget _app(
@@ -989,6 +990,394 @@ void main() {
               expect(peer.calls.where((call) => call.method == 'handoff'), hasLength(1));
             }
           }
+          expect(modelPosts, 0);
+        });
+      }
+
+      for (final scenario in ['accepted', 'source-failure', 'leave-during-fourth-input',
+          'cancel-during-fourth-input', 'leave-after-acceptance']) {
+        testWidgets('J actual Page binds four ordered receipts and output before durable acceptance: $scenario', (tester) async {
+          const now = 1795219200000;
+          const channel = MethodChannel('dsh/companion_reminders');
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root), nowMilliseconds: () => now);
+          final peer = (await tester.runAsync(NotesPeer.open))!;
+          peer.capability = receiptsCapability;
+          final browsers = List.generate(5, (_) => Completer<void>());
+          final bindings = List.generate(4, (_) => Completer<void>());
+          final releaseFourth = Completer<void>();
+          final postRead = Completer<void>();
+          final releasePost = Completer<void>();
+          final sourceAtBrowse = <List<MemoryRow>>[];
+          final taskCountAtBind = <int>[];
+          final possibleAtPost = <int?>[];
+          final nativeCalls = <MethodCall>[];
+          final inputs = receiptInputs();
+          MemoryRow? snapshot;
+          Future<void>? handling;
+          var browserCount = 0;
+          var inputCount = 0;
+          var modelPosts = 0;
+          var disposed = false;
+          addTearDown(() async {
+            if (!releaseFourth.isCompleted) {
+              releaseFourth.complete();
+            }
+            if (!releasePost.isCompleted) {
+              releasePost.complete();
+            }
+            await tester.pumpWidget(const SizedBox());
+            if (handling != null) {
+              await settleMixed(tester, handling!);
+            }
+            if (!disposed) {
+              memory.dispose();
+            }
+            await tester.pump();
+            await tester.runAsync(peer.close);
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+            nativeCalls.add(call);
+            return switch (call.method) {
+              'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+              'resolve' => {'kind': 'unique', 'moments': [
+                {'epochMs': DateTime.utc(2026, 11, 21, 12).millisecondsSinceEpoch, 'offsetSeconds': 28800},
+              ]},
+              'capabilities' => {'executorId': 'phone-original', 'exact': true, 'notifications': true},
+              'recover' => {'recoveryQueued': true},
+              _ => throw StateError('Unexpected receipt platform call ${call.method}'),
+            };
+          });
+          peer.respond = (incoming, body) async {
+            if (incoming.uri.path == '/api/directoryPicker/list') {
+              final index = browserCount++;
+              final path = index == 4 ? '/本人选的输出' : '/本人选的票据';
+              sourceAtBrowse.add(memory.store.messages().where((row) => row['role'] == 'user').toList());
+              await NotesPeer.json(incoming, {'type': 'server-response', 'rpcId': body!['rpcId'], 'result': {
+                'ok': true, 'value': {'path': path, 'home': path, 'crumbs': [
+                  {'name': index == 4 ? '本人选的输出' : '本人选的票据', 'path': path},
+                ], 'entries': <Object?>[]},
+              }});
+              browsers[index].complete();
+            } else if (incoming.uri.path == '$notesPath/folders') {
+              await NotesPeer.json(incoming, body!['path'] == '/本人选的输出' ? receiptOutput : {
+                'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'selected-inputs', 'displayPath': body['path'],
+              });
+            } else if (incoming.uri.path == '$notesPath/inputs') {
+              final index = inputCount++;
+              taskCountAtBind.add(memory.store.tasks().length);
+              bindings[index].complete();
+              if (index == 3) {
+                await releaseFourth.future;
+              }
+              await NotesPeer.json(incoming, inputs[index]);
+            } else if (incoming.method == 'POST' && incoming.uri.path == notesPath) {
+              possibleAtPost.add(memory.store.hostTaskCommands(body!['taskId']! as String).single['possible_sent_at_ms'] as int?);
+              snapshot = notesSnapshot(body);
+              postRead.complete();
+              if (scenario == 'leave-after-acceptance') {
+                await releasePost.future;
+              }
+              await NotesPeer.json(incoming, snapshot!, status: 201);
+            } else if (incoming.method == 'GET' && incoming.uri.path == '$notesPath/${snapshot?['taskId']}') {
+              await NotesPeer.json(incoming, snapshot!);
+            } else {
+              await NotesPeer.json(incoming, {'error': {'code': 'companion/task-not-found', 'message': 'No recorded receipt task'}}, status: 404);
+            }
+          };
+          await openLight(tester, apiKey: '', client: MockClient((_) async {
+            modelPosts++;
+            throw StateError('The receipt task must not use a phone model');
+          }), connection: HostConnection(client: peer.client, isLocal: false), extra: [
+            companionModeProvider.overrideWith(_NotesLightMode.new),
+            companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+          ]);
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          final sourceRoom = memory.store.lightSessionId;
+          if (scenario == 'source-failure') {
+            db.execute("CREATE TRIGGER reject_receipts BEFORE INSERT ON memory_events "
+              "BEGIN SELECT RAISE(ABORT,'fixture disk error'); END");
+          }
+          await tester.enterText(find.byType(TextField), receiptSpokenExample);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          if (scenario == 'source-failure') {
+            await _notesVisible(tester, find.text('这次还没交妥，原话留着。稍后可再试。'));
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, receiptSpokenExample);
+            expect(memory.store.messages(), isEmpty);
+            expect(memory.store.tasks(), isEmpty);
+            expect(peer.calls, isEmpty);
+            expect(modelPosts, 0);
+            return;
+          }
+          for (var index = 0; index < 4; index++) {
+            await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            handling ??= memory.lastReceipt;
+            await tester.tap(find.text('主目录').last);
+            await settleMixed(tester, browsers[index].future);
+            final choose = find.descendant(of: find.byType(DirectoryBrowserPage),
+              matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null)).last;
+            await _notesVisible(tester, choose);
+            await tester.tap(choose);
+            await _notesVisible(tester, find.text('第 ${index + 1} 份票据的文件名'));
+            final dialog = find.byType(AlertDialog);
+            await tester.enterText(find.descendant(of: dialog, matching: find.byType(TextField)), inputs[index]['displayName']! as String);
+            await tester.tap(find.descendant(of: dialog, matching: find.text('保存')));
+            await settleMixed(tester, bindings[index].future);
+          }
+          expect(taskCountAtBind, [0, 0, 0, 0]);
+          expect(memory.store.tasks(), isEmpty);
+          expect(peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath), isEmpty);
+          expect(sourceAtBrowse, hasLength(4));
+          expect(sourceAtBrowse.every((rows) => rows.length == 1 && rows.single['text'] == receiptSpokenExample), isTrue);
+          expect(sourceAtBrowse.map((rows) => rows.single['id']).toSet(), hasLength(1));
+          expect(sourceAtBrowse.map((rows) => rows.single['first_seq']).toSet(), hasLength(1));
+          expect(peer.calls.where((call) => call.uri.path == '$notesPath/inputs').map((call) => call.body), [
+            for (final input in inputs) {'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'selected-inputs',
+              'name': input['displayName'], 'kind': 'host.receipts_to_sheet'},
+          ]);
+          if (scenario == 'leave-during-fourth-input') {
+            await tester.pumpWidget(const SizedBox());
+          } else if (scenario == 'cancel-during-fourth-input') {
+            await _notesVisible(tester, find.byType(AlertDialog), absent: true);
+            await tester.enterText(find.byType(TextField), '取消整理票据');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await _notesVisible(tester, find.text('想停哪一张表？请到那件事里点取消。'));
+          }
+          releaseFourth.complete();
+          final accepted = scenario == 'accepted' || scenario == 'leave-after-acceptance';
+          if (accepted) {
+            await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            await tester.tap(find.text('主目录').last);
+            await settleMixed(tester, browsers[4].future);
+            final choose = find.descendant(of: find.byType(DirectoryBrowserPage),
+              matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null)).last;
+            await _notesVisible(tester, choose);
+            await tester.tap(choose);
+            await settleMixed(tester, postRead.future);
+            expect(memory.store.tasks(), hasLength(1));
+            if (scenario == 'leave-after-acceptance') {
+              await tester.pumpWidget(const SizedBox());
+              releasePost.complete();
+            }
+          }
+          await settleMixed(tester, handling!);
+          await tester.pump();
+          final posts = peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath).toList();
+          if (!accepted) {
+            expect(memory.store.tasks(), isEmpty);
+            expect(posts, isEmpty);
+          } else {
+            expect(posts, hasLength(1));
+            expect(possibleAtPost, [now]);
+            final request = posts.single.body!;
+            final task = memory.store.hostTask(request['taskId']! as String)!;
+            expect(request['kind'], 'host.receipts_to_sheet');
+            expect(request['args'], receiptAgreement()['args']);
+            expect(request['hostSessionId'], isNull);
+            expect(request['deadlineAtMs'], DateTime.utc(2026, 11, 21, 12).millisecondsSinceEpoch);
+            expect(request['allowQueue'], isTrue);
+            expect(request['afterExit'], 'continue');
+            expect(task['source_session_id'], sourceRoom);
+            expect(task['directory_labels'], {'inputs': inputs, 'outputDirectory': receiptOutput});
+            expect(task['state'], 'running');
+            if (scenario == 'accepted') {
+              await _notesVisible(tester, find.text('看看这件事'));
+              await tester.tap(find.text('看看这件事'));
+              await _notesVisible(tester, find.byType(CompanionTasksPage));
+              await settleMixed(tester, memory.lastReceipt);
+              expect(find.text('第 1 份：交通.txt'), findsOneWidget);
+              expect(find.text('第 4 份：扫描件.pdf'), findsOneWidget);
+            }
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            disposed = true;
+            final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+            expect(reopened.hostTask(request['taskId']! as String)!['directory_labels'], {'inputs': inputs, 'outputDirectory': receiptOutput});
+            expect(reopened.messages().single['said_at_utc'], now);
+            expect(reopened.messages().single['session_id'], sourceRoom);
+            reopened.close();
+          }
+          expect(nativeCalls.where((call) => call.method == 'resolve').single.arguments,
+            {'localDate': '2026-11-21', 'localTime': '20:00', 'zoneId': 'Asia/Shanghai'});
+          expect(peer.calls.where((call) => call.uri.path.contains('/sources/') || call.uri.path.contains('/artifacts/') ||
+            call.uri.path.contains('/session/') || call.uri.path.contains('/agent/')), isEmpty);
+          expect(modelPosts, 0);
+        });
+      }
+
+      for (final scenario in ['no-saved-inputs', 'queued-after-two-hundred-tasks', 'already-possible', 'compare-only-large-and-pdf']) {
+        testWidgets('J actual Page keeps original offline selections and only first-delivers never-sent tasks: $scenario', (tester) async {
+          const channel = MethodChannel('dsh/companion_reminders');
+          var now = 1795219200000;
+          final memory = _ReceiptMemory(CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
+            nowMilliseconds: () => now), CompanionLocal.at(root), nowMilliseconds: () => now);
+          final peer = (await tester.runAsync(NotesPeer.open))!;
+          peer.capability = receiptsCapability;
+          final checked = Completer<void>();
+          final posted = Completer<void>();
+          var modelPosts = 0;
+          MemoryRow? snapshot;
+          final selectedInputs = [for (final input in receiptInputs()) {
+            ...input,
+            if (scenario == 'compare-only-large-and-pdf' && input['mediaType'] != 'application/pdf') 'size': 65537,
+          }];
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            await tester.runAsync(peer.close);
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => switch (call.method) {
+            'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+            'resolve' => {'kind': 'unique', 'moments': [
+              {'epochMs': DateTime.utc(2026, 11, 21, 12).millisecondsSinceEpoch, 'offsetSeconds': 28800},
+            ]},
+            'capabilities' => {'executorId': 'phone-original', 'exact': true, 'notifications': true},
+            'recover' => {'recoveryQueued': true},
+            _ => throw StateError('Unexpected offline receipt call ${call.method}'),
+          });
+          peer.respond = (incoming, body) async {
+            if (incoming.uri.path == '$notesPath/folders') {
+              await NotesPeer.json(incoming, receiptOutput);
+            } else if (incoming.uri.path == '$notesPath/inputs') {
+              await NotesPeer.json(incoming, selectedInputs.singleWhere((input) => input['displayName'] == body!['name']));
+            } else if (incoming.method == 'POST' && incoming.uri.path == notesPath) {
+              snapshot = notesSnapshot(body!);
+              await NotesPeer.json(incoming, snapshot!, status: 201);
+              posted.complete();
+            } else if (incoming.method == 'GET' && incoming.uri.path.startsWith('$notesPath/')) {
+              if (snapshot != null && incoming.uri.path == '$notesPath/${snapshot!['taskId']}') {
+                await NotesPeer.json(incoming, snapshot!);
+              } else {
+                await NotesPeer.json(incoming, {'error': {'code': 'companion/task-not-found', 'message': 'No saved receipt task'}}, status: 404);
+              }
+              if (!checked.isCompleted) {
+                checked.complete();
+              }
+            } else {
+              await NotesPeer.json(incoming, {'error': {'code': 'companion/not-found', 'message': 'No ordinary file route'}}, status: 404);
+            }
+          };
+          await openLight(tester, apiKey: '', client: MockClient((_) async {
+            modelPosts++;
+            throw StateError('Receipt tasks do not use a phone model');
+          }), connectionOverride: activeConnectionProvider.overrideWith((ref) => AsyncData(ref.watch(_findConnectionProvider))),
+            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          final hostKey = companionHostKey(container.read(activeHostProvider));
+          final sourceRoom = memory.store.lightSessionId;
+          if (scenario != 'no-saved-inputs') {
+            await tester.runAsync(() async {
+              final cap = (await peer.client.readCompanionTasksCapability())!;
+              final directory = await peer.client.bindCompanionNotesDirectory(cap, '/本人选的输出');
+              final inputs = <MemoryRow>[];
+              for (final input in selectedInputs) {
+                inputs.add(await peer.client.bindCompanionReceiptInput(cap,
+                  folderRef: directory['folderRef']! as String, name: input['displayName']! as String));
+              }
+              memory.store.submitMessage(id: 'previous-receipts', sessionId: 'light:previous-room',
+                text: receiptSpokenExample, saidAtUtc: now, offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+              final old = memory.store.createReceiptsTaskFromMessage(messageId: 'previous-receipts', expectedSourceRev: 1,
+                itemNo: 0, roomMode: 'light', hostKey: hostKey, agreement: receiptAgreement(),
+                inputs: inputs, outputDirectory: directory);
+              memory.store.submitMessage(id: 'cancel-previous-receipts', sessionId: 'light:previous-room',
+                text: '取消整理票据。', saidAtUtc: now, offsetMinutes: 480);
+              memory.store.cancelReceiptsTask(taskId: old['task_id']! as String, expectedTaskRev: 1,
+                messageId: 'cancel-previous-receipts', expectedSourceRev: 1, itemNo: 0);
+            });
+          }
+          peer.calls.clear();
+          void laterTasks(int start) {
+            for (var i = start; i < start + 100; i++) {
+              now++;
+              memory.store.submitMessage(id: 'other-$i', sessionId: 'light:other-room', text: '提醒我处理第$i条',
+                saidAtUtc: now, offsetMinutes: 480);
+              memory.store.createReminderFromMessage(messageId: 'other-$i', expectedSourceRev: 1, itemNo: 0,
+                roomMode: 'light', executorId: 'phone-original',
+                reminder: CompanionReminderSpec(text: '处理第$i条', waitReason: 'date_missing'));
+            }
+          }
+          if (scenario == 'queued-after-two-hundred-tasks') {
+            laterTasks(0);
+            expect(memory.store.tasks().any((row) => row['kind'] == 'host.receipts_to_sheet'), isFalse);
+          }
+          final saidAt = now;
+          await tester.enterText(find.byType(TextField), scenario == 'compare-only-large-and-pdf' ? compareSpokenExample : receiptSpokenExample);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          if (scenario == 'compare-only-large-and-pdf') {
+            await _notesVisible(tester, find.text('先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。'));
+            await settleMixed(tester, memory.lastReceipt);
+            expect(memory.store.hostTaskInputs(hostKey: hostKey), hasLength(4));
+            expect(memory.store.tasks(sourceSessionId: sourceRoom), isEmpty);
+            expect(find.byType(SimpleDialog), findsNothing);
+            expect(peer.calls, isEmpty);
+            expect(modelPosts, 0);
+            return;
+          }
+          if (scenario == 'no-saved-inputs') {
+            await _notesVisible(tester, find.text('先连回原电脑，选好四张票和放新表的文件夹；没有选过的原件，我不能替你猜。'));
+            await settleMixed(tester, memory.lastReceipt);
+            expect(memory.store.tasks(), isEmpty);
+            expect(memory.store.messages().single['text'], receiptSpokenExample);
+            expect(peer.calls, isEmpty);
+            expect(modelPosts, 0);
+            return;
+          }
+          await _notesVisible(tester, find.text('选之前选过的第 1 份票据'));
+          final handled = memory.lastReceipt;
+          for (var i = 0; i < 4; i++) {
+            await _notesVisible(tester, find.text('选之前选过的第 ${i + 1} 份票据'));
+            await tester.tap(find.text(receiptInputs()[i]['displayName']! as String));
+          }
+          await _notesVisible(tester, find.text('把新表放到之前选过的哪个文件夹？'));
+          await tester.tap(find.text('/本人选的输出'));
+          await settleMixed(tester, handled);
+          await tester.pump();
+          final task = memory.store.tasks(sourceSessionId: sourceRoom).single;
+          final id = task['task_id']! as String;
+          expect(task['state'], 'queued');
+          expect(memory.store.hostTask(id)!['directory_labels'], {'inputs': receiptInputs(), 'outputDirectory': receiptOutput});
+          expect(memory.store.hostTaskCommands(id).single['possible_sent_at_ms'], isNull);
+          expect(peer.calls, isEmpty);
+          if (scenario == 'queued-after-two-hundred-tasks') {
+            laterTasks(100);
+            expect(memory.store.tasks().any((row) => row['task_id'] == id), isFalse);
+          } else {
+            final original = memory.store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: hostKey,
+              hostStoreId: 'original-store', initialOpportunity: true)!['request']! as MemoryRow;
+            snapshot = {...notesSnapshot(original, state: 'unknown'), 'waitReason': 'receipt_read_interrupted'};
+          }
+          container.read(_findConnectionProvider.notifier).connect(HostConnection(client: peer.client, isLocal: false));
+          await tester.pump();
+          await settleMixed(tester, scenario == 'already-possible' ? checked.future : posted.future);
+          await settleMixed(tester, memory.lastReceipt);
+          await tester.pump();
+          final current = memory.store.hostTask(id)!;
+          expect(container.read(companionModeProvider), isNull);
+          expect(current['room_mode'], 'light');
+          expect(current['source_session_id'], sourceRoom);
+          expect(current['host_session_id'], isNull);
+          expect(current['task_rev'], 1);
+          expect(current['state'], scenario == 'already-possible' ? 'unknown' : 'running');
+          expect((current['agreement']! as MemoryRow)['args'], receiptAgreement()['args']);
+          expect(memory.store.messages().singleWhere((row) => row['id'] == task['source_message_id'])['said_at_utc'], saidAt);
+          expect(peer.calls.where((call) => call.method == 'POST' && call.uri.path == notesPath),
+            hasLength(scenario == 'already-possible' ? 0 : 1));
+          expect(peer.calls.where((call) => call.uri.path.endsWith('/inputs') || call.uri.path.endsWith('/folders')), isEmpty);
+          expect(peer.calls.where((call) => call.method == 'POST' &&
+            (call.uri.path.contains('/session') || call.uri.path.contains('/prompt') || call.uri.path.contains('/auxiliary'))), isEmpty);
+          expect(memory.store.hostTaskCommands(id), hasLength(1));
           expect(modelPosts, 0);
         });
       }

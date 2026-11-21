@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,16 +19,19 @@ import '../../notify/chat_alerts.dart' show companionHostKey;
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/settings_state.dart';
+import '../../state/sheet_files.dart';
 import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
 import '../common/brief_notice.dart';
 import '../common/empty_view.dart';
 import '../settings/settings_widgets.dart';
+import '../files/table_view.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import '../workspace/directory_picker.dart';
 import 'companion_ask.dart';
 import 'companion_draft_inputs.dart';
+import 'companion_receipt_inputs.dart';
 import 'companion_memory_page.dart' show companionMemoryId;
 
 /// 「11月21日 08:00」 in this phone's local time; the year only when it is not this one.
@@ -200,6 +204,30 @@ String companionLookupLine(L10n l10n, MemoryRow task, {required String? executor
 }
 
 String companionNotesLine(L10n l10n, MemoryRow task) {
+  if (task['kind'] == 'host.receipts_to_sheet') {
+    if (task['cancel_requested'] == 1 && task['state'] != 'cancelled') {
+      return l10n.companionReceiptCancelUnknown;
+    }
+    return switch (task['wait_reason']) {
+      'foreground_control_unavailable' => l10n.companionNotesPauseUnavailable,
+      'host_initial_opportunity_lost' => l10n.companionNotesOpportunityLost,
+      'host_deadline' || 'deadline_expired' => l10n.companionReceiptDeadline,
+      'original_create_missing' => l10n.companionReceiptOriginalPending,
+      'receipt_fields_unavailable' => l10n.companionReceiptNoFields,
+      'prior_revision_effect' => l10n.companionReceiptPriorResult,
+      'output_exists' => l10n.companionReceiptOutputExists,
+      _ => switch (task['state']) {
+        'queued' => l10n.companionReceiptQueued,
+        'running' => l10n.companionReceiptRunning,
+        'done' => l10n.companionReceiptDone,
+        'partial' => l10n.companionReceiptPartial,
+        'cancelled' => l10n.companionReceiptCancelled,
+        'failed' => l10n.companionReceiptFailed,
+        'waiting' => l10n.companionReceiptWaiting,
+        _ => l10n.companionReceiptUnknown,
+      },
+    };
+  }
   if (task['kind'] == 'host.compare_drafts') {
     if (task['cancel_requested'] == 1 && task['state'] != 'cancelled') {
       return l10n.companionCompareCancelUnknown;
@@ -333,7 +361,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         final hostsOnly =
             rows.isNotEmpty &&
             rows.every(
-              (row) => const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'].contains(row['kind']),
+              (row) => const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(row['kind']),
             );
         if (task?['kind'] == 'phone.map_open' || mapsOnly) {
           _executorId = await ref.read(companionMapsProvider).executorId();
@@ -413,7 +441,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
           : const <MemoryRow>[];
       if (rows.isNotEmpty &&
           rows.every(
-            (row) => const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'].contains(row['kind']),
+            (row) => const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(row['kind']),
           )) {
         return;
       }
@@ -717,7 +745,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     if (task['kind'] == 'phone.map_open') {
       return _mapDetail(_memory!.store.mapTask(task['task_id']! as String)!);
     }
-    if (const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'].contains(task['kind'])) {
+    if (const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(task['kind'])) {
       return _notesDetail(_memory!.store.hostTask(task['task_id']! as String)!);
     }
     if (task['kind'] == 'public.lookup') {
@@ -1328,6 +1356,178 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     }
   }
 
+  Future<bool> _applyReceipts(MemoryRow task, {bool cancel = false, String? name, String deadlineText = '',
+    bool clearDeadline = false, String? afterExit, bool? allowQueue, bool chooseInputs = false,
+    bool chooseOutput = false, BuildContext? actionContext}) async {
+    if (_busy) {
+      return false;
+    }
+    final memory = _memory!;
+    final clock = ref.read(companionRemindersProvider);
+    final client = ref.read(activeConnectionProvider).value?.client;
+    final hostKey = companionHostKey(ref.read(activeHostProvider));
+    final l10n = context.l10n;
+    final agreement = task['agreement']! as MemoryRow;
+    final id = task['task_id']! as String;
+    final revision = task['task_rev']! as int;
+    final action = actionContext ?? context;
+    final deadlineWords = clearDeadline ? l10n.companionNotesClearDeadline
+      : deadlineText.isEmpty ? l10n.companionNotesKeepDeadline : deadlineText;
+    final raw = cancel ? l10n.companionReceiptCancelSource : l10n.companionReceiptAmendSource(
+      name!, deadlineWords, afterExit == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue,
+      allowQueue == true ? l10n.companionNotesAllowQueue : l10n.companionNotesNoQueue,
+      chooseInputs ? l10n.companionReceiptChooseAgain : l10n.companionReceiptKeepInputs,
+      chooseOutput ? l10n.companionNotesChooseOutput : l10n.companionReceiptKeepOutput);
+    bool current() => mounted && action.mounted && (ModalRoute.of(action)?.isCurrent ?? true) &&
+      memory.store.hostTask(id)?['task_rev'] == revision;
+    bool selectedHost() => current() && task['host_key'] == hostKey &&
+      hostKey == companionHostKey(ref.read(activeHostProvider)) &&
+      identical(client, ref.read(activeConnectionProvider).value?.client);
+    setState(() => _busy = true);
+    try {
+      final retry = _retry;
+      MemoryRow source;
+      if (retry != null && retry.taskId == id && retry.raw == raw) {
+        source = retry.source;
+      } else {
+        final observed = await clock.clock();
+        if (!current()) {
+          return false;
+        }
+        source = memory.store.submitMessage(id: companionMemoryId(), sessionId: task['source_session_id']! as String,
+          text: raw, saidAtUtc: observed.utcMs, offsetMinutes: observed.offsetSeconds ~/ 60,
+          zoneId: observed.zoneId, offsetSeconds: observed.offsetSeconds);
+        _retry = (taskId: id, raw: raw, source: source);
+      }
+      final accepted = memory.store.taskForCommand(source['id']! as String, 0);
+      MemoryRow updated;
+      if (accepted != null) {
+        updated = memory.store.hostTask(accepted['task_id']! as String)!;
+      } else if (cancel) {
+        updated = memory.store.cancelReceiptsTask(taskId: id, expectedTaskRev: revision,
+          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0);
+      } else {
+        int? deadline = clearDeadline ? null : agreement['deadlineAtMs'] as int?;
+        if (!clearDeadline && deadlineText.isNotEmpty) {
+          final match = RegExp(r'^(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d)$').firstMatch(deadlineText);
+          final zone = source['zone_id'];
+          if (match == null || zone is! String) {
+            throw const FormatException('A complete local deadline is required');
+          }
+          final resolved = await clock.resolve(match.group(1)!, match.group(2)!, zone);
+          if (resolved['kind'] != 'unique') {
+            throw const FormatException('The local deadline is not unique');
+          }
+          deadline = ((resolved['moments']! as List<Object?>).single! as Map<Object?, Object?>)['epochMs']! as int;
+        }
+        if (!current()) {
+          return false;
+        }
+        final labels = task['directory_labels']! as MemoryRow;
+        var inputs = (labels['inputs']! as List<Object?>).cast<MemoryRow>();
+        var output = labels['outputDirectory']! as MemoryRow;
+        if (chooseInputs || chooseOutput) {
+          if (!selectedHost()) {
+            throw const DshRemoteException('companion/task-original-host', 'Select the original task Host');
+          }
+          final capability = client == null ? null : await client.readCompanionTasksCapability();
+          if (!selectedHost() || (client != null &&
+              (capability == null || !capability.receiptsToSheet || capability.hostStoreId != task['host_store_id']))) {
+            throw const DshRemoteException('companion/task-store-mismatch', 'The original task store is unavailable');
+          }
+          if (!action.mounted) {
+            return false;
+          }
+          final selected = await chooseCompanionReceiptInputs(action, store: memory.store, hostKey: hostKey,
+            client: client, capability: capability, originalStoreId: task['host_store_id']! as String,
+            keptInputs: chooseInputs ? null : inputs, keptOutput: chooseOutput ? null : output,
+            isCurrent: selectedHost);
+          if (!selectedHost() || selected == null) {
+            return false;
+          }
+          inputs = selected.inputs;
+          output = selected.outputDirectory;
+        }
+        if (!current()) {
+          return false;
+        }
+        updated = memory.store.amendReceiptsTask(taskId: id, expectedTaskRev: revision,
+          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0,
+          inputs: inputs, outputDirectory: output, agreement: {'args': {
+            'inputs': [for (final input in inputs) {'sourceRef': input['sourceRef'], 'version': input['version']}],
+            'outputDirRef': output['folderRef'], 'outputName': name, 'writeMode': 'createNew',
+          }, 'deadlineAtMs': deadline, 'afterExit': afterExit, 'allowQueue': allowQueue});
+      }
+      memory.changed();
+      if (client != null && updated['host_key'] == hostKey) {
+        await memory.hostTasks.run(updated, client: client, hostKey: hostKey, initialOpportunity: true, submitPending: true);
+      }
+      _retry = null;
+      return true;
+    } on Object {
+      if (mounted) {
+        showBriefNotice(context, l10n.companionReceiptSaveFailed);
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _editReceipts(MemoryRow task) async {
+    final agreement = task['agreement']! as MemoryRow;
+    var name = (agreement['args']! as MemoryRow)['outputName']! as String;
+    var afterExit = agreement['afterExit']! as String;
+    var allowQueue = agreement['allowQueue']! as bool;
+    var deadline = '';
+    var clearDeadline = false;
+    var chooseInputs = false;
+    var chooseOutput = false;
+    var saving = false;
+    await showAppDialog<void>(context: context, builder: (dialog) => StatefulBuilder(
+      builder: (dialog, update) => AlertDialog(title: Text(dialog.l10n.companionNotesEdit),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextFormField(initialValue: name, onChanged: (value) => name = value,
+            decoration: InputDecoration(labelText: dialog.l10n.companionReceiptOutputName)),
+          TextFormField(onChanged: (value) => deadline = value,
+            decoration: InputDecoration(labelText: dialog.l10n.companionNotesDeadlineField,
+              hintText: 'YYYY-MM-DD HH:mm', helperText: dialog.l10n.companionCompareNewDeadline)),
+          CheckboxListTile(value: clearDeadline, onChanged: (value) => update(() => clearDeadline = value!),
+            title: Text(dialog.l10n.companionNotesClearDeadline)),
+          DropdownButton<String>(value: afterExit, isExpanded: true, items: [
+            DropdownMenuItem(value: 'continue', child: Text(dialog.l10n.companionNotesContinue)),
+            DropdownMenuItem(value: 'pause', child: Text(dialog.l10n.companionNotesPause)),
+          ], onChanged: (value) => update(() => afterExit = value!)),
+          CheckboxListTile(value: allowQueue, onChanged: (value) => update(() => allowQueue = value!),
+            title: Text(dialog.l10n.companionNotesAllowQueue)),
+          CheckboxListTile(value: chooseInputs, onChanged: (value) => update(() => chooseInputs = value!),
+            title: Text(dialog.l10n.companionReceiptChooseAgain)),
+          CheckboxListTile(value: chooseOutput, onChanged: (value) => update(() => chooseOutput = value!),
+            title: Text(dialog.l10n.companionNotesChooseOutput)),
+        ])),
+        actions: [
+          TextButton(onPressed: saving ? null : () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+          FilledButton(onPressed: saving ? null : () async {
+            update(() => saving = true);
+            final ok = await _applyReceipts(task, name: name, deadlineText: deadline.trim(), clearDeadline: clearDeadline,
+              afterExit: afterExit, allowQueue: allowQueue, chooseInputs: chooseInputs, chooseOutput: chooseOutput,
+              actionContext: dialog);
+            if (!dialog.mounted) {
+              return;
+            }
+            if (ok) {
+              Navigator.pop(dialog);
+            } else {
+              update(() => saving = false);
+            }
+          }, child: Text(dialog.l10n.commonSave)),
+        ],
+      ),
+    ));
+  }
+
   Future<void> _editCompare(MemoryRow task) async {
     final agreement = task['agreement']! as MemoryRow;
     var afterExit = agreement['afterExit']! as String;
@@ -1631,6 +1831,9 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   }
 
   Widget _notesDetail(MemoryRow task) {
+    if (task['kind'] == 'host.receipts_to_sheet') {
+      return _receiptsDetail(task);
+    }
     if (task['kind'] == 'host.compare_drafts') {
       return _compareDetail(task);
     }
@@ -1739,6 +1942,177 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       ),
     );
   }
+
+  Future<void> _openReceiptWorkbook(MemoryRow task, MemoryRow artifact) async {
+    if (_busy || !_notesHostHere(task)) {
+      return;
+    }
+    final client = ref.read(activeConnectionProvider).value!.client;
+    final id = task['task_id']! as String;
+    bool current() {
+      if (!(ModalRoute.of(context)?.isCurrent ?? true) || !_notesHostHere(task) ||
+          !identical(client, ref.read(activeConnectionProvider).value?.client)) {
+        return false;
+      }
+      final latest = _memory!.store.hostTask(id);
+      final saved = (latest?['snapshot'] as MemoryRow?)?['artifacts'] as List<Object?>?;
+      return latest?['host_store_id'] == task['host_store_id'] &&
+        latest?['host_execution_id'] == task['host_execution_id'] &&
+        saved != null && saved.cast<MemoryRow>().any((row) =>
+          row['artifactId'] == artifact['artifactId'] && row['sha256'] == artifact['sha256'] && row['size'] == artifact['size']);
+    }
+    setState(() => _busy = true);
+    try {
+      final bytes = await client.readCompanionHostArtifactBytes(hostStoreId: task['host_store_id']! as String,
+        taskId: id, hostExecutionId: task['host_execution_id']! as String, artifact: artifact);
+      if (!mounted || !current()) {
+        return;
+      }
+      final grids = await compute(parseXlsx, bytes);
+      if (!mounted || !current()) {
+        return;
+      }
+      if (grids.length != 1 || grids.single.truncated) {
+        throw const SheetFormatException('The original receipt workbook could not be displayed completely');
+      }
+      await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => AppPage(
+        title: artifact['relativePath']! as String,
+        slivers: [SliverFillRemaining(hasScrollBody: true, child: SheetTable(grid: grids.single))],
+      )));
+    } on Object {
+      if (mounted && current()) {
+        showBriefNotice(context, context.l10n.companionReceiptOpenFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Widget _receiptsDetail(MemoryRow task) {
+    final l10n = context.l10n;
+    final agreement = task['agreement']! as MemoryRow;
+    final args = agreement['args']! as MemoryRow;
+    final labels = task['directory_labels']! as MemoryRow;
+    final inputs = (labels['inputs']! as List<Object?>).cast<MemoryRow>();
+    final snapshot = task['snapshot'] as MemoryRow?;
+    final approval = snapshot?['approval'];
+    final artifacts = ((snapshot?['artifacts'] as List<Object?>?) ?? const <Object?>[]).cast<MemoryRow>();
+    final reports = <int, MemoryRow>{};
+    for (final step in ((snapshot?['steps'] as List<Object?>?) ?? const <Object?>[]).cast<MemoryRow>()) {
+      final result = step['result'] as MemoryRow?;
+      final completion = result?['completion'] as MemoryRow?;
+      final report = completion?['report'];
+      if (completion != null && report is MemoryRow) {
+        final revision = step['taskRev']! as int;
+        // Prefer the report attached to a published workbook. Otherwise show
+        // the last actual observation, retaining old attempts in storage.
+        if (reports[revision]?['artifactId'] == null || completion['artifactId'] is String) {
+          reports[revision] = {'report': report, 'artifactId': completion['artifactId']};
+        }
+      }
+    }
+    final pendingCommand = const ['amend', 'cancel'].contains(task['operation']) &&
+      (snapshot == null || (snapshot['taskRev']! as int) < (task['task_rev']! as int));
+    return Padding(padding: const EdgeInsets.all(24), child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(args['outputName']! as String, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        for (final (index, input) in inputs.indexed)
+          Text('${l10n.companionReceiptInput('${index + 1}')}：${input['displayName']}'),
+        Text(l10n.companionNotesOutputDirectory((labels['outputDirectory']! as MemoryRow)['displayPath']! as String)),
+        Text(agreement['afterExit'] == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue),
+        if (agreement['allowQueue'] == true) Text(l10n.companionNotesAllowQueue),
+        if (agreement['deadlineAtMs'] case final int at)
+          Text(l10n.companionNotesDue(_moment(l10n, at))),
+        const SizedBox(height: 8),
+        Text(companionNotesLine(l10n, task)),
+        if (!_notesHostHere(task)) Text(l10n.companionReceiptOriginalHost),
+        if (approval is MemoryRow && _notesApprovalCurrent(task, approval)) ...[
+          Text(l10n.companionNotesApproval),
+          CompanionAsk(key: ValueKey('receipt-${task['task_id']}-${approval['eventId']}'),
+            sessionId: approval['agentId']! as String,
+            approvalTarget: (eventId: approval['eventId']! as String, callId: approval['callId'] as String?,
+              isCurrent: () => _notesApprovalCurrent(task, approval))),
+        ],
+        for (final entry in reports.entries) ...[
+          const SizedBox(height: 16),
+          Text(entry.key == task['task_rev'] ? l10n.companionReceiptReport : l10n.companionReceiptPreviousReport,
+            style: Theme.of(context).textTheme.titleMedium),
+          _receiptReport(entry.value['report']! as MemoryRow),
+        ],
+        for (final artifact in artifacts)
+          OutlinedButton(onPressed: _busy || !_notesHostHere(task) ? null : () => _openReceiptWorkbook(task, artifact),
+            child: Text(l10n.companionReceiptOpenWorkbook(artifact['relativePath']! as String))),
+        if (_notesHostHere(task) && pendingCommand)
+          OutlinedButton(onPressed: _busy ? null : () => _retryNotes(task, pendingCommand: true),
+            child: Text(task['operation'] == 'cancel' ? l10n.companionNotesResendCancel : l10n.companionNotesResendAmend))
+        else if (_notesHostHere(task) && snapshot == null && task['state'] == 'unknown')
+          OutlinedButton(onPressed: _busy ? null : () => _retryNotes(task, missing: true),
+            child: Text(l10n.companionNotesResendOriginal)),
+        if (task['cancel_requested'] == 0 && task['state'] != 'cancelled')
+          Wrap(spacing: 8, children: [
+            if (!pendingCommand && _notesHostHere(task) && approval == null &&
+                task['wait_reason'] != 'foreground_control_unavailable' &&
+                const ['queued', 'waiting'].contains(task['state']))
+              FilledButton(onPressed: _busy ? null : () => _retryNotes(task),
+                child: Text(task['state'] == 'queued' ? l10n.companionNotesSubmitSaved : l10n.companionNotesRetry)),
+            if (artifacts.isEmpty)
+              OutlinedButton(onPressed: _busy ? null : () => _editReceipts(task), child: Text(l10n.companionNotesEdit)),
+            OutlinedButton(onPressed: _busy ? null : () => _applyReceipts(task, cancel: true),
+              child: Text(l10n.commonCancel)),
+          ]),
+      ],
+    ));
+  }
+
+  Widget _receiptReport(MemoryRow report) {
+    final l10n = context.l10n;
+    final sources = (report['sources']! as List<Object?>).cast<MemoryRow>();
+    final rows = (report['rows']! as List<Object?>).cast<MemoryRow>();
+    final coverage = report['coverage']! as MemoryRow;
+    final gaps = (coverage['gaps']! as List<Object?>).cast<MemoryRow>();
+    final labels = {'date': l10n.companionReceiptDate, 'item': l10n.companionReceiptItem, 'amount': l10n.companionReceiptAmount};
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(l10n.companionReceiptCoverage('${coverage['rowsWithVerifiedFields']}')),
+      for (final (index, source) in sources.indexed) ...[
+        const SizedBox(height: 12),
+        Text(source['displayName']! as String, style: Theme.of(context).textTheme.titleSmall),
+        if (source['readComplete'] != true) Text(l10n.companionReceiptUnread),
+        if (source['parseComplete'] != true) Text(l10n.companionReceiptParseFailed),
+        if (source['textLayerOnly'] == true) Text(l10n.companionReceiptImageScope),
+        if (source['reason'] == 'pdf_empty_text') Text(l10n.companionReceiptNoText),
+        if (gaps.any((gap) => gap['sourceRef'] == source['sourceRef'] && gap['field'] == 'verification'))
+          Text(l10n.companionReceiptChanged),
+        for (final key in labels.keys) ...[
+          SelectableText('${labels[key]}：${(rows[index][key]! as MemoryRow)['state'] == 'verified'
+            ? (rows[index][key]! as MemoryRow)['value']
+            : l10n.companionReceiptUnverified(_receiptReason((rows[index][key]! as MemoryRow)['reason']! as String))}'),
+          if ((rows[index][key]! as MemoryRow)['evidence'] case final MemoryRow evidence) ...[
+            Text(evidence['page'] == null
+              ? l10n.companionReceiptSourcePosition('${evidence['lineStart']}', '${evidence['lineEnd']}')
+              : l10n.companionReceiptPdfPosition('${evidence['page']}', '${evidence['lineStart']}', '${evidence['lineEnd']}')),
+            SelectableText(evidence['quote']! as String),
+          ],
+        ],
+      ],
+    ]);
+  }
+
+  String _receiptReason(String reason) => switch (reason) {
+    'pdf_empty_text' => context.l10n.companionReceiptNoText,
+    'input_not_read' || 'input_unavailable' || 'task_owner_stopping' || 'deadline_expired' => context.l10n.companionReceiptUnread,
+    'input_changed' || 'input_changed_at_publish' || 'input_unavailable_at_publish' => context.l10n.companionReceiptChanged,
+    'pdf_password_required' => context.l10n.companionReceiptPassword,
+    'pdf_unavailable' || 'pdf_runtime_unavailable' => context.l10n.companionReceiptPdfUnavailable,
+    'input_too_large' || 'pdf_input_limit' || 'pdf_page_limit' || 'pdf_text_limit' || 'pdf_item_limit' => context.l10n.companionReceiptLimit,
+    'input_not_utf8' || 'pdf_invalid' || 'pdf_parse_failed' => context.l10n.companionReceiptParseFailed,
+    'date_not_verified' || 'date_ambiguous_or_unsupported' => context.l10n.companionReceiptDateUnknown,
+    'item_not_verified' || 'item_ambiguous_or_unsupported' => context.l10n.companionReceiptItemUnknown,
+    'amount_not_verified' || 'amount_ambiguous_or_unsupported' => context.l10n.companionReceiptAmountUnknown,
+    _ => context.l10n.companionReceiptFieldUnknown,
+  };
 
   Widget _compareDetail(MemoryRow task) {
     final l10n = context.l10n;
@@ -2120,7 +2494,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
                 SettingsTile(
                   icon: row['kind'] == 'phone.map_open'
                       ? AppIcons.plan
-                      : const ['host.notes_to_todo', 'host.compare_drafts'].contains(row['kind'])
+                      : const ['host.notes_to_todo', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(row['kind'])
                       ? AppIcons.document
                       : row['kind'] == 'host.find_draft'
                       ? AppIcons.search
@@ -2137,12 +2511,14 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
                       ? l10n.companionFindTitle
                       : row['kind'] == 'host.compare_drafts'
                       ? l10n.companionCompareTitle
+                      : row['kind'] == 'host.receipts_to_sheet'
+                      ? l10n.companionReceiptTitle
                       : row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
                   subtitle: row['kind'] == 'phone.map_open'
                       ? companionMapLine(l10n, row, executorId: _executorId)
                       : row['kind'] == 'public.lookup'
                       ? companionLookupLine(l10n, row, executorId: _executorId)
-                      : const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'].contains(row['kind'])
+                      : const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(row['kind'])
                       ? companionNotesLine(l10n, row)
                       : companionReminderLine(l10n, row, executorId: _executorId),
                   onTap: () => Navigator.of(context).push(

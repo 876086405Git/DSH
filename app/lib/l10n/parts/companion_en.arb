@@ -835,5 +835,163 @@
   },
   "companionCompareChooseAgain": "Choose A and B again",
   "companionCompareKeepInputs": "Keep the originally selected A and B",
-  "companionCompareNewDeadline": "A new deadline uses the local time zone of this change. Leave blank to keep the original deadline."
+  "companionCompareNewDeadline": "A new deadline uses the local time zone of this change. Leave blank to keep the original deadline.",
+  "companionReceiptTitle": "Receipt table",
+  "companionReceiptSyntax": "Please specify four receipts, a new workbook name, and whether to continue after you leave. I can create a new file, not overwrite one.",
+  "companionReceiptUnavailable": "This computer cannot prepare this receipt table yet.",
+  "companionReceiptConnect": "Connect the original computer to choose all four receipts and an output folder. I cannot guess originals that have never been selected.",
+  "companionReceiptWhich": "Which table should stop? Open that task and cancel it there.",
+  "companionReceiptSaveFailed": "This request has not been handed over successfully. Your words are kept for another try.",
+  "companionReceiptOriginalHost": "Reconnect the original computer to continue or check the result.",
+  "companionReceiptNoInputs": "The four receipts and output folder have not all been chosen. Nothing will be handed over yet.",
+  "companionReceiptInput": "Receipt {index}",
+  "@companionReceiptInput": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptSavedInput": "Choose a previously selected receipt for position {index}",
+  "@companionReceiptSavedInput": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptChooseDirectory": "Which folder contains receipt {index}?",
+  "@companionReceiptChooseDirectory": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptFilename": "Filename of receipt {index}",
+  "@companionReceiptFilename": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptFormats": "This computer can read {formats}, up to 4 MiB each. Enter a filename within the selected folder.",
+  "@companionReceiptFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptSavedOutput": "Which previously selected folder should hold the new workbook?",
+  "companionReceiptQueued": "Saved on the phone; not yet handed to the computer.",
+  "companionReceiptRunning": "The computer accepted the request; no workbook is ready yet.",
+  "companionReceiptDone": "The new workbook is ready and the requested fields are verified.",
+  "companionReceiptPartial": "The new workbook is ready, with the unverified fields noted in it.",
+  "companionReceiptCancelled": "No further work will be done. Any workbook already written remains.",
+  "companionReceiptFailed": "No new workbook could be delivered. The observations already made are kept below.",
+  "companionReceiptWaiting": "This task is waiting for what it needs; the workbook is not ready.",
+  "companionReceiptUnknown": "It is not yet clear whether the workbook was written. Check the original task before making another.",
+  "companionReceiptCancelUnknown": "The stop request is saved. The original computer still needs to confirm whether a workbook was already written.",
+  "companionReceiptNoFields": "These four receipts currently have no verified fields available for the workbook, so no empty workbook was created.",
+  "companionReceiptOutputExists": "A file with that name already exists. It was not overwritten; you can choose a new name.",
+  "companionReceiptDeadline": "The agreed deadline has passed. No new work will start, and earlier results can still be checked.",
+  "companionReceiptOriginalPending": "The computer has not received the complete original request and will not start the workbook yet.",
+  "companionReceiptReport": "Receipt fields observed",
+  "companionReceiptPreviousReport": "Earlier receipt observations",
+  "companionReceiptCoverage": "In this result, {count} of the four receipts have verified fields.",
+  "@companionReceiptCoverage": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptImageScope": "Only the PDF text layer was read. Dates or other fields in images remain unverified.",
+  "companionReceiptUnread": "This original has not been read completely.",
+  "companionReceiptParseFailed": "Text could not be fully extracted from this original.",
+  "companionReceiptChanged": "The original version could not be confirmed before publication. This row cannot be treated as verified.",
+  "companionReceiptDate": "Date",
+  "companionReceiptItem": "Item",
+  "companionReceiptAmount": "Amount",
+  "companionReceiptUnverified": "Unverified: {reason}",
+  "@companionReceiptUnverified": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptFieldUnknown": "the original text does not establish this field",
+  "companionReceiptSourcePosition": "Lines {from}–{to}",
+  "@companionReceiptSourcePosition": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptPdfPosition": "Page {page}, extracted text lines {from}–{to}",
+  "@companionReceiptPdfPosition": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      },
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptOpenWorkbook": "Open {name}",
+  "@companionReceiptOpenWorkbook": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptOpenFailed": "The original workbook cannot be opened now. Its earlier completion record is kept; it will not be recreated automatically.",
+  "companionReceiptChooseAgain": "Choose the four receipts again",
+  "companionReceiptKeepInputs": "Keep the same four receipts",
+  "companionReceiptOutputName": "New workbook filename (.xlsx)",
+  "companionReceiptCancelSource": "Cancel this receipt task; stop unfinished work and keep any workbook already written.",
+  "companionReceiptAmendSource": "Amend this receipt task to create {name}; deadline: {deadline}; after leaving: {afterExit}; wait for computer: {queue}; originals: {inputs}; output folder: {output}.",
+  "@companionReceiptAmendSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      },
+      "afterExit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "inputs": {
+        "type": "String"
+      },
+      "output": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptNoText": "No usable text layer was read. Fields in images remain unverified.",
+  "companionReceiptPassword": "The original requires a password and could not be read.",
+  "companionReceiptPdfUnavailable": "This computer cannot extract PDF text yet.",
+  "companionReceiptLimit": "The file exceeds this task’s size, page, or text limit.",
+  "companionReceiptDateUnknown": "A complete date could not be verified, or the date is ambiguous.",
+  "companionReceiptItemUnknown": "A clear item description could not be verified.",
+  "companionReceiptAmountUnknown": "The amount or currency could not be confirmed.",
+  "companionReceiptKeepOutput": "Keep the original output folder",
+  "companionReceiptPriorResult": "The workbook from the earlier agreement was found; the new agreement has not been completed."
 }

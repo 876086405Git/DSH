@@ -76,6 +76,7 @@ import '../workspace/directory_picker.dart';
 import 'companion_ask.dart';
 import 'companion_chrome.dart';
 import 'companion_draft_inputs.dart';
+import 'companion_receipt_inputs.dart';
 import 'companion_log.dart';
 import 'companion_memory_page.dart';
 import 'companion_persona_page.dart';
@@ -466,13 +467,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // connection makes the currently displayed room use full mode.
       ...memory.store.pendingFindDraftTasks(hostKey: hostKey),
       ...memory.store.pendingCompareDraftTasks(hostKey: hostKey),
+      ...memory.store.pendingReceiptsTasks(hostKey: hostKey),
     ];
     for (final task in tasks) {
       try {
         final current = memory.store.hostTask(task['task_id']! as String)!;
         final agreement = current['agreement']! as MemoryRow;
         final firstDelivery =
-            const ['host.find_draft', 'host.compare_drafts'].contains(current['kind']) &&
+            const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(current['kind']) &&
             current['state'] == 'queued' &&
             current['host_store_id'] != null &&
             current['cancel_requested'] == 0 &&
@@ -481,7 +483,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             memory.store
                 .hostTaskCommands(current['task_id']! as String)
                 .every((row) => row['possible_sent_at_ms'] == null);
-        // Only an explicitly queued, never attempted H/I command may make its
+        // Only an explicitly queued, never attempted H/I/J command may make its
         // first delivery here. The store checks its original deadline at send.
         await memory.hostTasks.run(current, client: client, hostKey: hostKey, submitPending: firstDelivery);
       } on Object {
@@ -2203,6 +2205,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
               parseCompanionNotes(part.raw)?['operation'] == 'cancel' ||
               parseCompanionFind(part.raw)?['operation'] == 'cancel' ||
               parseCompanionCompare(part.raw)?['operation'] == 'cancel' ||
+              parseCompanionReceipts(part.raw)?['operation'] == 'cancel' ||
               const ['cancel', 'amend', 'reopen'].contains(parseCompanionMap(part.raw)?['operation']),
         );
   }
@@ -2284,16 +2287,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       final notes = parseCompanionNotes(part.raw);
       final draft = parseCompanionFind(part.raw);
       final compare = parseCompanionCompare(part.raw);
+      final receipts = parseCompanionReceipts(part.raw);
       // A complete known command wins over the other command's request to
       // clarify, including a find folder whose label contains “笔记待办”.
       notesCommands[part.itemNo] = notes != null && notes['operation'] != 'clarify'
           ? notes
           : draft != null && draft['operation'] != 'clarify'
           ? draft
-          : compare ?? draft ?? notes;
+          : compare != null && compare['operation'] != 'clarify'
+          ? compare
+          : receipts ?? compare ?? draft ?? notes;
     }
     final notes = notesCommands.values.any((command) => command != null);
     final compare = notesCommands.values.any((command) => command?['kind'] == 'host.compare_drafts');
+    final receipts = notesCommands.values.any((command) => command?['kind'] == 'host.receipts_to_sheet');
     final mapCommands = {for (final part in reminderParts) part.itemNo: parseCompanionMap(part.raw)};
     final map = mapCommands.values.any((command) => command != null);
     final reminderClock =
@@ -2420,6 +2427,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             ? companionReminderFailure(context.l10n, error)
             : lookup
             ? context.l10n.companionLookupSaveFailed
+            : receipts
+            ? context.l10n.companionReceiptSaveFailed
             : compare
             ? context.l10n.companionCompareSaveFailed
             : notes
@@ -2484,7 +2493,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             } on Object {
               failed = true;
               lines.add(
-                notesCommand['kind'] == 'host.compare_drafts'
+                notesCommand['kind'] == 'host.receipts_to_sheet'
+                    ? l10n.companionReceiptSaveFailed
+                    : notesCommand['kind'] == 'host.compare_drafts'
                     ? l10n.companionCompareSaveFailed
                     : l10n.companionNotesSaveFailed,
               );
@@ -2552,7 +2563,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       return;
     }
     if (notesCommands.values.any(
-          (command) => const ['host.find_draft', 'host.compare_drafts'].contains(command?['kind']),
+          (command) => const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(command?['kind']),
         ) &&
         (_logOpen || !(ModalRoute.of(context)?.isCurrent ?? true))) {
       return;
@@ -2718,6 +2729,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     bool Function() current,
   ) async {
     final l10n = context.l10n;
+    if (command['kind'] == 'host.receipts_to_sheet') {
+      return _handleReceipts(memory, source, itemNo, command, current);
+    }
     if (command['kind'] == 'host.compare_drafts') {
       return _handleCompare(memory, source, itemNo, command, current);
     }
@@ -3009,7 +3023,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         if (capability == null || !capability.compareDrafts) {
           return (line: l10n.companionCompareUnavailable, task: null);
         }
-      } else if (memory.store.hostTaskInputs(hostKey: hostKey).isEmpty) {
+      } else if (!memory.store.hostTaskInputs(hostKey: hostKey).any((row) =>
+          const ['text/plain', 'text/markdown'].contains(row['mediaType']) && (row['size']! as int) <= 65536)) {
         return (line: l10n.companionCompareConnect, task: null);
       }
       if (!mounted) {
@@ -3064,6 +3079,88 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       submitPending: true,
       capability: capability,
     );
+    return (line: companionNotesLine(l10n, task), task: task);
+  }
+
+  Future<({String line, MemoryRow? task})> _handleReceipts(
+    CompanionMemoryOwner memory, MemoryRow source, int itemNo, MemoryRow command, bool Function() current,
+  ) async {
+    final l10n = context.l10n;
+    if (command['operation'] == 'clarify') {
+      return (line: l10n.companionReceiptSyntax, task: null);
+    }
+    final host = ref.read(activeHostProvider);
+    final hostKey = companionHostKey(host);
+    final client = ref.read(activeConnectionProvider).value?.client;
+    final light = _light;
+    bool here() => mounted && current() && host == ref.read(activeHostProvider) &&
+      identical(client, ref.read(activeConnectionProvider).value?.client) &&
+      !_logOpen && (ModalRoute.of(context)?.isCurrent ?? true);
+    final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
+    CompanionTasksCapability? capability;
+    MemoryRow task;
+    if (accepted != null) {
+      task = memory.store.hostTask(accepted['task_id']! as String)!;
+    } else if (command['operation'] == 'cancel') {
+      final targets = memory.store.pendingReceiptsTasks(hostKey: hostKey)
+        .where((row) => row['source_session_id'] == source['session_id'] && row['cancel_requested'] == 0).toList();
+      if (targets.length != 1) {
+        return (line: l10n.companionReceiptWhich, task: null);
+      }
+      if (!here()) {
+        throw const DshClosedException('room changed before accepting receipt cancellation');
+      }
+      task = memory.store.cancelReceiptsTask(taskId: targets.single['task_id']! as String,
+        expectedTaskRev: targets.single['task_rev']! as int, messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+    } else {
+      final agreement = await companionCompareAgreement(source, command, ref.read(companionRemindersProvider));
+      if (!here()) {
+        throw const DshClosedException('room changed before selecting receipts');
+      }
+      if (agreement == null) {
+        return (line: l10n.companionCompareDeadlineMissing, task: null);
+      }
+      if (client != null) {
+        capability = await client.readCompanionTasksCapability();
+        if (!here()) {
+          throw const DshClosedException('room changed while checking receipt support');
+        }
+        if (capability == null || !capability.receiptsToSheet || !capability.artifactRead) {
+          return (line: l10n.companionReceiptUnavailable, task: null);
+        }
+      } else if (memory.store.hostTaskInputs(hostKey: hostKey).isEmpty ||
+          memory.store.hostTaskDirectories(hostKey: hostKey).isEmpty) {
+        return (line: l10n.companionReceiptConnect, task: null);
+      }
+      if (!mounted) {
+        throw const DshClosedException('room closed before choosing receipts');
+      }
+      final selected = await chooseCompanionReceiptInputs(context, store: memory.store, hostKey: hostKey,
+        client: client, capability: capability, isCurrent: here);
+      if (!here()) {
+        throw const DshClosedException('room changed before accepting the complete receipt task');
+      }
+      if (selected == null) {
+        return (line: l10n.companionReceiptNoInputs, task: null);
+      }
+      task = memory.store.createReceiptsTaskFromMessage(messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
+        roomMode: light ? 'light' : 'full', hostKey: hostKey, hostSessionId: light ? null : _sessionId,
+        inputs: selected.inputs, outputDirectory: selected.outputDirectory,
+        agreement: {...agreement, 'args': {
+          'inputs': [for (final input in selected.inputs) {'sourceRef': input['sourceRef'], 'version': input['version']}],
+          'outputDirRef': selected.outputDirectory['folderRef'], 'outputName': command['outputName'],
+          'writeMode': 'createNew',
+        }});
+    }
+    memory.changed();
+    if (client == null || hostKey != task['host_key']) {
+      return (line: l10n.companionReceiptOriginalHost, task: task);
+    }
+    // Once accepted locally, leaving the room does not erase the agreed work.
+    task = await memory.hostTasks.run(task, client: client, hostKey: hostKey,
+      initialOpportunity: accepted == null, submitPending: true, capability: capability);
     return (line: companionNotesLine(l10n, task), task: task);
   }
 
