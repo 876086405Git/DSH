@@ -810,6 +810,144 @@ void main() {
         await tester.pump(const Duration(seconds: 20));
       });
 
+      testWidgets('fixture 2 grouped Log names keep two submitted originals after reopening SQLite', (tester) async {
+        final chats = <Map<String, Object?>>[];
+        final extracts = <Map<String, Object?>>[];
+        final client = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          if (body['system'] == companionMemoryExtractionPrompt) {
+            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            extracts.add(input);
+            final sources = (input['source']! as List).cast<Map>();
+            return http.Response(_sse([jsonEncode({
+              'schema_version': 2, 'batch_id': input['batch_id'],
+              'covered_message_ids': sources.map((row) => row['id']).toList(),
+              'operations': [for (final row in sources) {
+                'op': 'create', 'kind': 'fact', 'text': row['text'],
+                'evidence': [{'message_id': row['id'], 'quote': row['text']}],
+              }],
+              'completion': 'complete',
+            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          }
+          chats.add(body);
+          return http.Response('{"error":"bad key"}', 401);
+        });
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        const firstText = '我改学长笛了';
+        const secondText = '老师约在周六';
+        await say(tester, firstText);
+        expect(find.textContaining('API Key 好像不对'), findsOneWidget);
+        final memory = await memoryOf(tester);
+        final first = Map<String, Object?>.from(memory.store.messages().single);
+        expect(first['text'], firstText);
+        await say(tester, secondText);
+        expect(find.textContaining('API Key 好像不对'), findsOneWidget);
+        expect(chats, hasLength(2));
+        expect(extracts, isEmpty);
+        final originals = {for (final row in memory.store.messages()) row['text']: row};
+        expect(originals.keys, unorderedEquals([firstText, secondText]));
+        final second = Map<String, Object?>.from(originals[secondText]!);
+        expect(first['id'], isNot(second['id']));
+        expect(first['session_id'], second['session_id']);
+        expect(first['first_seq'] as int, lessThan(second['first_seq'] as int));
+        for (final row in [first, second]) {
+          expect(row['role'], 'user');
+          expect(row['scope'], 'real');
+          expect(row['source_rev'], 1);
+          expect(row['said_at_utc'], isA<int>());
+          expect(row['offset_minutes'], isA<int>());
+        }
+        // These really are two failed HTTP attempts, with no fabricated
+        // assistant turn between them. Only the API view joins adjacent users.
+        String sentText(Map<String, Object?> body) {
+          final message = (body['messages']! as List).single as Map;
+          expect(message['role'], 'user');
+          final content = message['content'];
+          return content is String ? content : ((content! as List).first as Map)['text'] as String;
+        }
+        expect(chats.map(sentText), [firstText, '$firstText\n$secondText']);
+        final receipts = memory.store.requests();
+        expect(receipts, hasLength(2));
+        expect(receipts.map((row) => row['id']).toSet(), hasLength(2));
+        expect(receipts.every((row) => row['category'] == 'chat' && row['state'] == 'finished' &&
+          row['terminal'] == 'http_error' && row['sent_at_ms'] != null), isTrue);
+        await tester.tap(find.byIcon(AppIcons.history));
+        await settleMixed(tester, CompanionLightHistory.at(root).load());
+        await tester.pumpAndSettle();
+        final log = find.byType(CompanionLog);
+        expect(log, findsOneWidget);
+        final entries = tester.widget<CompanionLog>(log).entries;
+        expect(entries.map((entry) => entry.text), [firstText, secondText]);
+        expect(entries.every((entry) => entry.speaker == CompanionLogSpeaker.you), isTrue);
+        expect(find.descendant(of: log, matching: find.text(firstText)), findsOneWidget);
+        expect(find.descendant(of: log, matching: find.text(secondText)), findsOneWidget);
+        expect(find.descendant(of: log, matching: find.text('你')), findsOneWidget,
+          reason: 'the real Log groups names while keeping two separately rendered originals');
+        expect(find.descendant(of: log, matching: find.text('$firstText\n$secondText')), findsNothing);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        final reopened = await memoryOf(tester);
+        final extracted = Completer<void>();
+        final sourceIds = {first['id'], second['id']};
+        void observeExtraction() {
+          final rows = reopened.store.messages().where((row) => sourceIds.contains(row['id'])).toList();
+          if (rows.length == 2 && rows.every((row) => row['extraction_state'] == 'done') && !extracted.isCompleted) {
+            extracted.complete();
+          }
+        }
+        reopened.addListener(observeExtraction);
+        observeExtraction();
+        try {
+          await settleMixed(tester, extracted.future);
+        } finally {
+          reopened.removeListener(observeExtraction);
+        }
+        expect(identical(reopened.store, memory.store), isFalse);
+        final restored = {for (final row in reopened.store.messages()) row['id']: row};
+        expect(restored.keys, unorderedEquals([first['id'], second['id']]));
+        for (final original in [first, second]) {
+          final saved = restored[original['id']]!;
+          for (final field in ['id', 'session_id', 'first_seq', 'source_rev', 'said_at_utc', 'offset_minutes', 'text']) {
+            expect(saved[field], original[field], reason: field);
+          }
+        }
+        // Reopening legitimately extracts both pending originals. This is a
+        // separate real request, with parsed proposals and a completed receipt.
+        expect(extracts, hasLength(1));
+        final sentSources = {for (final row in (extracts.single['source']! as List).cast<Map>()) row['id']: row};
+        expect(sentSources.keys, unorderedEquals([first['id'], second['id']]));
+        final cards = reopened.store.cards();
+        expect(cards, hasLength(2));
+        for (final original in [first, second]) {
+          final saved = restored[original['id']]!;
+          expect(saved['extraction_state'], 'done');
+          expect(saved['format_failures'], 0);
+          final sent = sentSources[original['id']]!;
+          for (final field in ['id', 'first_seq', 'source_rev', 'offset_minutes', 'text']) {
+            expect(sent[field], original[field], reason: field);
+          }
+          expect(sent['said_at_utc'],
+            DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String());
+          final proof = (cards.singleWhere((row) => row['text'] == original['text'])['evidence']! as List).cast<Map>().single;
+          expect(proof['message_id'], original['id']);
+          expect(proof['source_rev'], original['source_rev']);
+          expect(proof['quote'], original['text']);
+        }
+        final after = reopened.store.requests();
+        expect(after.where((row) => row['category'] == 'chat').toList(), receipts);
+        final extract = after.singleWhere((row) => row['category'] == 'extract');
+        expect(extract['batch_id'], extracts.single['batch_id']);
+        expect(extract['state'], 'finished');
+        expect(extract['terminal'], 'complete');
+        expect(extract['sent_at_ms'], isNotNull);
+        expect(chats, hasLength(2), reason: 'opening extracts the originals without resending either ordinary chat');
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 20));
+      });
+
       testWidgets('聊天记录: read back right here, over her; back closes it first', (tester) async {
         final client = MockClient.streaming(
           (_, _) async => http.StreamedResponse(Stream.value(utf8.encode(_sse(['[表情:开心]', '你来啦。']))), 200),
