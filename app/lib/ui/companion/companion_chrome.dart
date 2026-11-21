@@ -653,8 +653,12 @@ class CompanionComposer extends StatelessWidget {
   static const _keySize = 40.0;
   static const _keyInset = 6.0;
 
+  /// Text changes rebuild the composer, not her room.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: input, builder: (context, _) => _buildComposer(context));
+
+  Widget _buildComposer(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final colors = DshColors.of(context);

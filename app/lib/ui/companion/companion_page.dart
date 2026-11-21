@@ -1307,8 +1307,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _refreshMood();
   }
 
+  /// Text changes tell only the initiative gate; the composer rebuilds itself (companion_chrome.dart).
   void _inputChanged() {
-    if (mounted) setState(() {});
+    if (mounted) _queueObserve();
   }
 
   CompanionActivity get _activity {

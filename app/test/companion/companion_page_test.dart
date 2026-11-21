@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_app/companion/companion_adapt.dart';
+import 'package:dsh_app/companion/companion_initiative.dart';
+import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_moves.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
@@ -74,6 +76,40 @@ class _Settings extends SettingsController {
   @override
   AppSettings build() => AppSettings(loaded: true, apiKey: apiKey);
 }
+
+/// Both clocks for the initiative owner, moved by the test.
+class _Clock {
+  int wall = DateTime.utc(2026, 11, 5, 10, 30).millisecondsSinceEpoch;
+  int mono = 0;
+  int offset = 0;
+
+  CompanionInitiativeClock call() => CompanionInitiativeClock(wallMs: wall, monoMs: mono, offsetMinutes: offset);
+}
+
+/// The owner, plus what the page told it: the room's gates as observed, and
+/// whether anything touched her (a tap or a typed word would hide an
+/// invitation without the gate ever seeing the room become busy).
+class _RecordingInitiative extends CompanionInitiative {
+  _RecordingInitiative(super.clock);
+
+  final observed = <CompanionInitiativeView>[];
+  int activations = 0;
+
+  @override
+  void observe(CompanionInitiativeRoom room, CompanionInitiativeView view) {
+    observed.add(view);
+    super.observe(room, view);
+  }
+
+  @override
+  void activate(CompanionInitiativeRoom room) {
+    activations++;
+    super.activate(room);
+  }
+}
+
+/// Her invitation to rest (companion_invite_test.dart drives the same one).
+const _inviteText = '要不要陪我在软垫上歇一会儿？';
 
 String _sse(List<String> words, {bool end = true}) => [
   for (final text in words)
@@ -228,6 +264,61 @@ void main() {
 
       // Leave cleanly: timers cancelled with the page.
       await tester.pumpWidget(_app(const SizedBox()));
+      await tester.pump(const Duration(seconds: 10));
+    });
+
+    testWidgets('a key builds the composer, not her stage; the gate still hears the room is busy', (tester) async {
+      SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
+      final clock = _Clock();
+      final initiative = _RecordingInitiative(clock.call);
+      addTearDown(initiative.dispose);
+      await tester.runAsync(() => initiative.ready);
+
+      CompanionStageEvents? stageEvents;
+      var stageBuilds = 0;
+      await tester.pumpWidget(
+        _app(
+          CompanionPage(
+            storeOverride: installedStore(),
+            stageBuilder: (controller, events) {
+              stageBuilds++;
+              stageEvents = events;
+              return const SizedBox.expand();
+            },
+          ),
+          extra: [companionInitiativeProvider.overrideWithValue(initiative)],
+        ),
+      );
+      final up = await _stageUp(tester, () => stageEvents);
+      up.onReady();
+      await _settle(tester);
+      // Her greeting first: nothing else of hers is on screen when this starts.
+      await tester.pump(const Duration(seconds: 10));
+      await _settle(tester);
+      // The field is not focused: only the text can make the room busy.
+      final field = tester.widget<TextField>(find.byType(TextField)).controller!;
+      initiative.observed.clear();
+      final builds = stageBuilds;
+
+      for (final text in ['在', '在吗', '在吗？']) {
+        field.text = text;
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byKey(const ValueKey('send')), findsOneWidget);
+      expect(stageBuilds, builds, reason: 'a key must not build her room or her stage again');
+      expect(initiative.observed, isNotEmpty);
+      expect(initiative.observed.last.blocked, isTrue, reason: 'the gate hears the input is busy');
+
+      field.text = '';
+      await tester.pump(const Duration(milliseconds: 16));
+      // The key's switch-out animation keeps the old key a moment.
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('send')), findsNothing);
+      expect(initiative.observed.last.blocked, isFalse, reason: 'the gate hears the input let go');
+
+      // Unmount the scope rather than updating it with fewer overrides.
+      await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
     });
 
@@ -1087,6 +1178,72 @@ void main() {
         // The first request's own 30-second timeout runs out into a cancelled subscription.
         await tester.pump(const Duration(seconds: 40));
       });
+    });
+
+    testWidgets('an invitation on screen goes the moment the person types', (tester) async {
+      SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
+      // A phone reports this long before the room opens; tests start with none.
+      final resumedBefore = tester.binding.lifecycleState;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      addTearDown(() {
+        if (resumedBefore != null) tester.binding.handleAppLifecycleStateChanged(resumedBefore);
+      });
+      // Both clocks follow the test's fake time, timers and all.
+      final start = tester.binding.clock.now();
+      CompanionInitiativeClock clock() {
+        final ms = tester.binding.clock.now().difference(start).inMilliseconds;
+        return CompanionInitiativeClock(wallMs: 1793899800000 + ms, monoMs: ms);
+      }
+
+      final owner = _RecordingInitiative(clock);
+      addTearDown(owner.dispose);
+      await tester.runAsync(() => owner.ready);
+
+      final commands = <(String, Map<String, Object?>)>[];
+      CompanionStageEvents? stageEvents;
+      await tester.pumpWidget(
+        _app(
+          CompanionPage(
+            storeOverride: installedStore(),
+            stageBuilder: (controller, events) {
+              stageEvents = events;
+              return const SizedBox.expand();
+            },
+            stageController: CompanionStageController(sink: (type, args) => commands.add((type, args))),
+          ),
+          extra: [
+            companionInitiativeProvider.overrideWithValue(owner),
+            companionInitiativeClockProvider.overrideWithValue(clock),
+          ],
+        ),
+      );
+      final up = await _stageUp(tester, () => stageEvents);
+      up.onReady();
+      await _settle(tester);
+      // Her greeting goes, then the quiet stretch: at the original pace she
+      // asks after ~45 s of quiet. Poll (up to 80 s of fake time) instead of
+      // trusting that number, so a pace change fails as "no invitation" here.
+      for (var i = 0; i < 80 && find.text(_inviteText).evaluate().isEmpty; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(find.text(_inviteText), findsOneWidget);
+      commands.clear();
+
+      // One key of text, the field not focused: no tap and no onUserInput
+      // runs, so only the page telling the gate can take her invitation away.
+      tester.widget<TextField>(find.byType(TextField)).controller!.text = '在吗';
+      await tester.pump(const Duration(milliseconds: 16)); // the gate is told
+      await tester.pump(); // the hide reaches the page
+      await tester.pump(const Duration(milliseconds: 300)); // its switch-out
+      await tester.pump();
+      expect(owner.activations, 0, reason: 'nothing touched her: the gate alone must hide it');
+      expect(owner.observed, isNotEmpty);
+      expect(owner.observed.last.blocked, isTrue, reason: 'the gate hears the room is busy');
+      expect(find.text(_inviteText), findsNothing);
+      expect(commands.where((c) => c.$1 == 'beckon').last.$2, {'prop': null});
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 10));
     });
   });
 }
