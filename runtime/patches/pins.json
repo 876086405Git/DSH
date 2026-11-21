@@ -179,8 +179,8 @@
     "ohos-attachment-diagnostic.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "fa79cf57daa5eed011b0ac0fbfb1b6554e2e3c279a00a76b1af488c08c19b7ef",
-          "before": "bf5c03ca763a7ee3ea7e6b193f07fd7e658d1ad4b43b24e69db12b51650e9b80"
+          "after": "3b9657ca65b26a4d02aa1c6dc2fad91f5506fa084391e54aef411874f079e430",
+          "before": "2c75fbaa9a704c782494931e399839d40366194af3e27873a1859b1b1f154190"
         }
       }
     },
@@ -319,16 +319,16 @@
     "ohos-piai-empty-models.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "1d8040c6834a847b8e785893440b07e3355cd3c01a3e673c8332b98cda6e9c9b",
-          "before": "fa79cf57daa5eed011b0ac0fbfb1b6554e2e3c279a00a76b1af488c08c19b7ef"
+          "after": "cd9521d90b2e7b92de46cc26cc2454d52a752b7600d27c84416beab1dd822400",
+          "before": "3b9657ca65b26a4d02aa1c6dc2fad91f5506fa084391e54aef411874f079e430"
         }
       }
     },
     "ohos-piai-text-preabort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "9102a3ff5f0e91c0d0d45025b384ff00c8364b45928ce5b9edec2337d530604d",
-          "before": "1d8040c6834a847b8e785893440b07e3355cd3c01a3e673c8332b98cda6e9c9b"
+          "after": "8e4483ef606383f9d1751a144f187371e13e575294a150400779ed194abb654c",
+          "before": "cd9521d90b2e7b92de46cc26cc2454d52a752b7600d27c84416beab1dd822400"
         }
       }
     },
@@ -469,6 +469,14 @@
         "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js": {
           "after": "26430731ff87ce6cd3b7fa038784dbbffd7fcab072bdf70e4ef9132c2af6764b",
           "before": "992daf485e2d479ac1df3886019946d0bf512ef6517ec730ce4c7315f9472ecc"
+        }
+      }
+    },
+    "piai-bedrock-usage-evidence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "2c75fbaa9a704c782494931e399839d40366194af3e27873a1859b1b1f154190",
+          "before": "bf5c03ca763a7ee3ea7e6b193f07fd7e658d1ad4b43b24e69db12b51650e9b80"
         }
       }
     },
@@ -2551,7 +2559,8 @@
       "profile-root-installation-precedence.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
-      "piai-tool-call-id.diff"
+      "piai-tool-call-id.diff",
+      "piai-bedrock-usage-evidence.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2712,6 +2721,7 @@
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
+      "piai-bedrock-usage-evidence.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
