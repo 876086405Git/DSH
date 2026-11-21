@@ -63,7 +63,7 @@ export async function openFind(root,options={}){
   return {status:response.status,body:await response.json()};
  };
  let closing;
- return {root,store,fs,backend,counters,start,request,values,
+ return {root,store,fs,backend,counters,start,request,values,base,
   close(){return closing??=(async()=>{route.dispose();await new Promise(resolve=>server.close(resolve));await store.close();await backend.close();})();}};
 }
 export async function findFixture(t,options={}){

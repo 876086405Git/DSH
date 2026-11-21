@@ -20,15 +20,16 @@ const {ApprovalService,approvalStateDefinition}=await load('node_modules/@deepse
 const {ReactLoopAgent}=await load('task-runtime.mjs');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-async function fixture(t,{full=false,approvalPolicy='ask'}={}) {
+async function fixture(t,{full=false,approvalPolicy='ask',receipts=false}={}) {
  const root=await mkdtemp(join(tmpdir(),'task-exec-')),backend=new JsonStorageBackend(root);
  backend.dshGoCompanionStatfs=async()=>({type:0xef53n});const registry=new BackendRegistry();registry.register('json',backend);
  const facility=new DomainFacility({storage:{backend:registry},emit(){},logger:{warn(){},error(){}},fiber:{assertActive(){}}},{backend:'json'});
  const fs={sandboxMode:'workspace-write'};const store=await openCompanionTaskStore({facility,fs});
  await store.folders.put('folder',{folderRef:'folder',directory:{target:{targetKey:'/chosen',displayPath:'/chosen'},identity:'1:2'},createdAtMs:1});
- await store.create({v:1,hostStoreId:store.hostStoreId,taskId:'task-1',taskRev:1,kind:'host.notes_to_todo',
+ if(receipts)for(let i=0;i<4;i++)await store.inputs.put(`receipt-${i}`,{sourceRef:`receipt-${i}`,directory:{target:{targetKey:'/chosen',displayPath:'/chosen'},identity:'1:2'},entry:{name:`receipt-${i}.txt`,version:'original',size:4},createdAtMs:1});
+ await store.create({v:1,hostStoreId:store.hostStoreId,taskId:'task-1',taskRev:1,kind:receipts?'host.receipts_to_sheet':'host.notes_to_todo',
   origin:{sourceSessionId:full?'full:phone-room':'light:phone-room',messageId:'message-1',itemNo:0},hostSessionId:full?'source-session':null,
-  deadlineAtMs:null,afterExit:'continue',allowQueue:true,args:{folderRef:'folder',outputDirRef:'folder',localDate:'2026-11-20',timeZone:'Asia/Shanghai',dateBy:'modified',outputName:'todo.md',writeMode:'createNew'}});
+  deadlineAtMs:null,afterExit:'continue',allowQueue:true,args:receipts?{inputs:Array.from({length:4},(_,i)=>({sourceRef:`receipt-${i}`,version:'original'})),outputDirRef:'folder',outputName:'receipts.xlsx',writeMode:'createNew'}:{folderRef:'folder',outputDirRef:'folder',localDate:'2026-11-20',timeZone:'Asia/Shanghai',dateBy:'modified',outputName:'todo.md',writeMode:'createNew'}});
  const live=new Map(),persisted=new Map(),creates=[],resumes=[],delivered=[];let resolveAnswer,selected={provider:'chosen-provider',model:'chosen-model'},currentPolicy='read-only',flushResult=true;
  const values={fs,llm:{actualSelectedRoute:true},agentDefaultModel:{currentSelection:()=>structuredClone(selected)},
   sandboxPolicy:{resolve:()=>({mode:currentPolicy,workspaceRoot:'/original-root'})},agentPresets:{presetForSession:()=>FULL_PRESET}};
@@ -127,4 +128,29 @@ test('a cached task agent takes stricter original policy and cannot reuse its ol
  const next=await f.execution.openExecution(f.store.read('task-1'));
  await assert.rejects(next.approve('writePage',{requestedMode:'workspace-write',justification:'原屋已禁止批准'}),/user rejected/);
  assert.equal(f.delivered.length,1);assert.equal(f.creates.length,1);
+});
+
+for(const full of [false,true])test('J SOURCE_APPROVAL zero configured model still owns original real fixed turn and actual approval: '+(full?'full':'light'),async t=>{
+ const f=await fixture(t,{full,receipts:true});f.setModel(null);
+ const original=f.store.read('task-1');const opened=await f.execution.openExecution(original,undefined,{requireModel:false});
+ assert.equal(opened.selected,null);assert.deepEqual(f.creates[0].agentOptions,{});
+ f.setModel({provider:'now-configured',model:'other-model'});assert.doesNotThrow(opened.guard,'zero-model J is not bound to an unused model selection');
+ assert.equal(f.store.read('task-1').execution.provider,undefined);
+ const result=opened.approve('writeSheet',{requestedMode:'workspace-write',justification:'只写本人选定的四份原票到同一新文件'});
+ while(!f.delivered.length)await tick();const card=f.delivered[0];
+ assert.equal(card.snapshot.approval.stepKey,'writeSheet');assert.equal(card.snapshot.approval.eventId,card.eventId);
+ assert.equal(card.snapshot.budget.heldMs,0);f.answer('allowed-once');assert.equal((await result).mode,'workspace-write');
+ assert.equal(f.store.read('task-1').notes['1'].approval.stepKey,'writeSheet');
+ const events=opened.agent.session.snapshotEvents();assert.equal(events.at(-1).type,'turn/end');
+ assert(!events.some(event=>/message|model|llm|inbox/.test(event.type)));
+ await f.reopen();const restored=await f.execution.openExecution(f.store.read('task-1'),undefined,{requireModel:false});
+ assert.equal(restored.agent.id,opened.agent.id);assert.deepEqual(f.resumes[0].agentOptions,{});
+ assert.equal((await restored.approve('writeSheet',{requestedMode:'workspace-write',justification:'同一四原件新表'})).mode,'workspace-write');
+ assert.equal(f.delivered.length,1);
+});
+test('J SOURCE_APPROVAL optional zero-model path does not relax the original F configured-model requirement',async t=>{
+ const f=await fixture(t);f.setModel(null);
+ await assert.rejects(f.execution.openExecution(f.store.read('task-1')),/not configured/);
+ await assert.rejects(f.execution.openExecution(f.store.read('task-1'),undefined,{requireModel:false}),/not configured/);
+ assert.equal(f.creates.length,0);assert.equal(f.store.read('task-1').execution,null);
 });

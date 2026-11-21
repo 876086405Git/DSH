@@ -23,7 +23,8 @@
     "lib/native/*.js",
     "cordis.patch.yml",
     "PRESET-NOTICE.txt",
-    "PDF-DEPENDENCY.md"
+    "PDF-DEPENDENCY.md",
+    "lib/vendor/receipt-sheet"
   ],
   "dsh": {
     "bundle": {

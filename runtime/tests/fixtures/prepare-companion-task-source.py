@@ -106,6 +106,13 @@ const assertNever=value=>{throw new Error(String(value));};
 """ + region(sources['dsh-agent-loop'], 'agent') + '\nexport {ReactLoopAgent};\n')
     bridge = here.parents[2] / 'runtime/bridge/dsh-go-bridge/lib/companion'
     shutil.copytree(bridge, out / 'companion')
+    vendor = bridge.parent / 'vendor'
+    if vendor.is_dir():
+        shutil.copytree(vendor, out / 'vendor')
+    for version in [1, 2]:
+        legacy = here / f'companion-task-v{version}-original'
+        if legacy.is_dir():
+            shutil.copytree(legacy, out / f'legacy-v{version}')
     dependency_spec = importlib.util.spec_from_file_location('bridge_dependencies',
         here.parents[2] / 'runtime/lib/bridge_dependencies.py')
     dependency_module = importlib.util.module_from_spec(dependency_spec)
@@ -123,7 +130,9 @@ const assertNever=value=>{throw new Error(String(value));};
         'pdf_dependency': {p.relative_to(pdf).as_posix(): sha(p.read_bytes())
                            for p in sorted(pdf.rglob('*')) if p.is_file()},
         'bridge': {p.relative_to(bridge).as_posix(): sha(p.read_bytes())
-                   for p in sorted(bridge.rglob('*.js'))}}
+                   for p in sorted(bridge.rglob('*')) if p.is_file()},
+        'vendor': {p.relative_to(vendor).as_posix(): sha(p.read_bytes())
+                   for p in sorted(vendor.rglob('*')) if p.is_file()}}
     (out / 'source-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(out)
 

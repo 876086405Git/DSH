@@ -1,0 +1,15 @@
+{
+  "scope": "Exact official fflate 0.8.3 browser ESM source and MIT license, from existing lock; only synchronous ZIP functions used; no imports/install/native/worker",
+  "package": "fflate",
+  "version": "0.8.3",
+  "files": {
+    "LICENSE.fflate": {
+      "bytes": 1069,
+      "sha256": "0a1df3a083d0c010560aa342e87959c8c1070e6fd54545741f083f22d0c8b551"
+    },
+    "fflate.mjs": {
+      "bytes": 90922,
+      "sha256": "b7ca4450b19559a1d50eb381adcee94b82449674be4cd17789d9beba7e6122a1"
+    }
+  }
+}

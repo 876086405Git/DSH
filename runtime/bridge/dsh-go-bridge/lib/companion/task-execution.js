@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { FULL_PRESET } from './prompt-context.js';
-import { fingerprint, taskError } from './task-schema.js';
+import { fingerprint, taskError, RECEIPT_KIND } from './task-schema.js';
 
 const raw = value => value?.[Symbol.for('cordis.original')] ?? value;
 const copy = value => value === undefined ? undefined : structuredClone(value);
@@ -9,7 +9,8 @@ const copy = value => value === undefined ? undefined : structuredClone(value);
 export function createNotesExecutionOwner(ctx, store) {
   const handles = new Map();
   let closing = false;
-  async function source(record) {
+  async function source(record, {requireModel = true} = {}) {
+    requireModel = requireModel || record.kind !== RECEIPT_KIND;
     let origin = null, scope = ctx;
     const controller = ctx.get('sessionController'), defaults = ctx.get('agentDefaultModel');
     if (record.hostSessionId !== null) {
@@ -20,8 +21,8 @@ export function createNotesExecutionOwner(ctx, store) {
       scope = origin.loopCtx ?? origin.ctx;
     }
     const selection = () => origin ? origin.model.current() : defaults?.currentSelection();
-    const selected = copy(selection());
-    if (!selected?.provider || !selected?.model) throw taskError(503, 'unavailable', 'The selected host model is not configured');
+    const selected = requireModel ? copy(selection()) ?? null : null;
+    if (requireModel && (!selected?.provider || !selected?.model)) throw taskError(503, 'unavailable', 'The selected host model is not configured');
     const llm = scope.get('llm'), fs = ctx.get('fs'), policyOwner = scope.get('sandboxPolicy'), approvalOwner = scope.get('approval');
     const standingPolicy = () => fs.sandboxMode === undefined ? undefined : policyOwner?.resolve(origin ? {session:origin.session} : {});
     const policy = copy(standingPolicy());
@@ -34,27 +35,27 @@ export function createNotesExecutionOwner(ctx, store) {
       if (closing || store.stopping || current.taskRev !== record.taskRev || current.cancelRequested ||
           current.agreement?.afterExit !== 'continue' ||
           current.agreement.deadlineAtMs !== null && Date.now() >= current.agreement.deadlineAtMs ||
-          raw(scope.get('llm')) !== raw(llm) || raw(ctx.get('fs')) !== raw(fs) ||
+          requireModel && raw(scope.get('llm')) !== raw(llm) || raw(ctx.get('fs')) !== raw(fs) ||
           raw(scope.get('sandboxPolicy')) !== raw(policyOwner) || raw(scope.get('approval')) !== raw(approvalOwner) ||
-          fingerprint(selection() ?? null) !== fingerprint(selected) ||
+          requireModel && fingerprint(selection() ?? null) !== fingerprint(selected) ||
           fingerprint(standingPolicy() ?? null) !== policyFingerprint || approvalPolicy() !== capturedApprovalPolicy ||
           (origin ? ctx.get('agents')?.get(origin.id) !== origin || raw(ctx.get('sessionController')) !== raw(controller)
-            : raw(ctx.get('agentDefaultModel')) !== raw(defaults)))
+            : requireModel && raw(ctx.get('agentDefaultModel')) !== raw(defaults)))
         throw taskError(409, 'conflict', 'The task agreement, original model selection or policy changed');
     };
     guard();
     return {origin, scope, selected, llm, fs, policy, policyFingerprint, capturedApprovalPolicy, guard};
   }
-  async function openExecution(record, signal) {
+  async function openExecution(record, signal, {requireModel = true} = {}) {
     if (closing) throw taskError(503, 'unavailable', 'Task execution owner is stopping');
-    const model = await source(record), agents = ctx.get('agents'), sessions = ctx.get('sessions'), persistence = ctx.get('sessionPersistence');
+    const model = await source(record, {requireModel}), agents = ctx.get('agents'), sessions = ctx.get('sessions'), persistence = ctx.get('sessionPersistence');
     if (typeof agents?.create !== 'function' || typeof agents?.resume !== 'function' ||
         typeof persistence?.stat !== 'function' || typeof sessions?.flush !== 'function')
       throw taskError(503, 'unavailable', 'Durable task agent services are unavailable');
     const originalExecution = store.read(record.taskId).execution;
     const agentId = originalExecution?.agentId ?? `companion-task-${randomUUID()}`;
     if (!originalExecution) await store.bindExecution(record.taskId, record.taskRev,
-      {agentId,provider:model.selected.provider,model:model.selected.model,prepared:true});
+      {agentId,...(model.selected ? {provider:model.selected.provider,model:model.selected.model} : {}),prepared:true});
     if (!handles.has(agentId)) {
       const opening = (async () => {
         if (agents.get(agentId)) throw taskError(409, 'conflict', 'The original task agent is owned by another live executor');
@@ -63,7 +64,7 @@ export function createNotesExecutionOwner(ctx, store) {
           throw taskError(503, 'unavailable', 'The original task session cannot be recovered');
         const [{setSandboxMode},{setApprovalPolicy}] = await Promise.all([
           import('@deepseek-ai/dsh-sandbox-policy'), import('@deepseek-ai/dsh-user-approval')]);
-        const options = {signal, agentOptions: {...model.selected,maxTokens:3000},
+        const options = {signal, agentOptions: model.selected ? {...model.selected,maxTokens:3000} : {},
           setup: (_scope, agent) => {
             if (model.policy) setSandboxMode(agent.session,model.policy.mode);
             setApprovalPolicy(agent.session,model.capturedApprovalPolicy);
@@ -77,7 +78,7 @@ export function createNotesExecutionOwner(ctx, store) {
           if (typeof handle.agent.dshGoRunTaskTurn !== 'function') throw taskError(503,'unavailable','Real fixed task turns are unavailable');
           if (await sessions.flush(handle.agent.session) !== true) throw taskError(503,'unavailable','Task session is not durable');
           await store.bindExecution(record.taskId,record.taskRev,
-            {agentId,provider:model.selected.provider,model:model.selected.model,prepared:false});
+            {agentId,...(model.selected ? {provider:model.selected.provider,model:model.selected.model} : {}),prepared:false});
           return handle;
         } catch(error) { await handle.dispose(); throw error; }
       })();
@@ -147,7 +148,7 @@ export function createNotesExecutionOwner(ctx, store) {
           return response.outcome;
         }};
         const mode = await approveEscalation({requestedMode,justification,effectiveMode:model.policy.mode,subject:'operation'},
-          {approver:facade,agent,toolName:'companion.notes.writePage',signal:fused});
+          {approver:facade,agent,toolName:record.kind === 'host.receipts_to_sheet' ? 'companion.receipts.writeSheet' : 'companion.notes.writePage',signal:fused});
         guard();return {...model.policy,mode};
       });
     }

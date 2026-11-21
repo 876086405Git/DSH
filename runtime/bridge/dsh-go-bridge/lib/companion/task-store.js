@@ -1,21 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { isAbsolute, join } from 'node:path';
-import { TASK_KIND, FIND_KIND, COMPARE_KIND, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
+import { TASK_KIND, FIND_KIND, COMPARE_KIND, RECEIPT_KIND, XLSX_TYPE, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
   inputSchema, inputRecordSchema, folderRecordSchema, globalSchema, recordSchema, parseTask, taskError, fingerprint, taskAgreement, dayRange } from './task-schema.js';
 
 const clone = value => structuredClone(value);
 const terminal = new Set(['done', 'partial', 'failed', 'cancelled']);
 const settled = step => step.finishedAtMs !== null;
+const writeKey = record => record.kind === RECEIPT_KIND ? 'writeSheet' : 'writePage';
 const unresolvedEffect = record => record.steps.some(step => !settled(step) ||
-  step.state === 'unknown' && step.stepKey === 'model' || step.stepKey === 'writePage' &&
+  step.state === 'unknown' && step.stepKey === 'model' || step.stepKey === writeKey(record) &&
   record.notes[String(step.taskRev)]?.publicationAttempted === true &&
-  !record.artifacts.some(artifact => artifact.taskRev === step.taskRev && artifact.stepKey === 'writePage'));
-const stepKeys = new Set(['selectInputs', 'readInputs', 'model', 'writePage', 'report']);
+  !record.artifacts.some(artifact => artifact.taskRev === step.taskRev && artifact.stepKey === writeKey(record)));
+const stepKeys = new Set(['selectInputs', 'readInputs', 'model', 'writePage', 'report', 'writeSheet']);
 
 export async function openCompanionTaskStore({facility, fs, now = Date.now}) {
   if (typeof facility?.dshGoOpenCompanionTasks !== 'function') throw taskError(503, 'unavailable', 'Task storage is not mounted');
   const {defineDomain, domainTable} = await import('@deepseek-ai/dsh-storage-domain');
-  const domain = await facility.dshGoOpenCompanionTasks(defineDomain({name: 'companion_tasks', version: 2, compatibleVersions: [1], layout: 'single',
+  const domain = await facility.dshGoOpenCompanionTasks(defineDomain({name: 'companion_tasks', version: 3, compatibleVersions: [1, 2], layout: 'single',
     global: {schema: globalSchema, initial: {v: 1, hostStoreId: null, createdAtMs: 0}},
     tables: {tasks: domainTable(recordSchema), folders: domainTable(folderRecordSchema), inputs: domainTable(inputRecordSchema)}}));
   const store = new CompanionTaskStore({domain, fs, now});
@@ -123,6 +124,9 @@ export class CompanionTaskStore {
   bindInput(input, signal) {
     const body = parseTask(inputSchema, input); this.checkStore(body.hostStoreId);
     return this.enqueue(async () => {
+      const receipt = body.kind === RECEIPT_KIND, limit = receipt ? 4194304 : 65536;
+      if (receipt && /\.pdf$/iu.test(body.name) && !this.runner?.receiptFormats?.includes('pdf'))
+        throw taskError(400, 'input-unavailable', 'This host does not support PDF text extraction');
       const directory = this.folder(body.folderRef);
       const checkDirectory = async () => {
         const current = await this.fs.dshGoBindNotesDirectory(directory.target, signal);
@@ -131,18 +135,42 @@ export class CompanionTaskStore {
       };
       await checkDirectory();
       const info = await this.fs.lstat(join(directory.target.displayPath, body.name), undefined, signal);
-      if (!info || info.type !== 'file' || info.size > 65536)
-        throw taskError(400, 'input-unavailable', 'Choose one regular text or Markdown file of at most 64 KiB');
+      if (!info || info.type !== 'file' || info.size > limit)
+        throw taskError(400, 'input-unavailable', receipt ? 'Choose one supported regular receipt of at most 4 MiB' :
+          'Choose one regular text or Markdown file of at most 64 KiB');
       await checkDirectory();
       const record = inputRecordSchema.parse({sourceRef: randomUUID(), directory,
         entry: {name: body.name, version: info.version, size: info.size}, createdAtMs: this.now()});
       await this.inputs.put(record.sourceRef, record);
       return {v: 1, hostStoreId: this.hostStoreId, sourceRef: record.sourceRef, displayName: body.name,
-        version: info.version, size: info.size, mediaType: /\.md$/iu.test(body.name) ? 'text/markdown' : 'text/plain'};
+        version: info.version, size: info.size, mediaType: /\.pdf$/iu.test(body.name) ? 'application/pdf' :
+          /\.md$/iu.test(body.name) ? 'text/markdown' : 'text/plain'};
     });
   }
   validateAgreement(agreement, kind) {
-    if (kind === COMPARE_KIND) { this.input(agreement.args.a); this.input(agreement.args.b); return null; }
+    if (kind === COMPARE_KIND) {
+      for (const reference of [agreement.args.a, agreement.args.b]) {
+        const selected = this.input(reference);
+        if (selected.entry.size > 65536 || !/\.(md|txt)$/iu.test(selected.entry.name))
+          throw taskError(400, 'invalid-request', 'A comparison requires two text drafts of at most 64 KiB each');
+      }
+      return null;
+    }
+    if (kind === RECEIPT_KIND) {
+      const seen = new Set();
+      for (const reference of agreement.args.inputs) {
+        const selected = this.input(reference), extension = selected.entry.name.split('.').at(-1).toLowerCase();
+        if (selected.entry.size > 4194304 || !['md', 'txt', 'pdf'].includes(extension) ||
+            extension === 'pdf' && !this.runner?.receiptFormats?.includes('pdf'))
+          throw taskError(400, 'invalid-request', 'The selected receipt format or size is unavailable');
+        const identity = JSON.stringify([selected.directory.identity, selected.directory.target.targetKey,
+          selected.entry.name, selected.entry.version]);
+        if (seen.has(identity)) throw taskError(400, 'invalid-request', 'Choose four distinct original receipts');
+        seen.add(identity);
+      }
+      this.folder(agreement.args.outputDirRef);
+      return null;
+    }
     this.folder(agreement.args.folderRef);
     if (agreement.args.outputDirRef !== undefined) this.folder(agreement.args.outputDirRef);
     return dayRange(agreement);
@@ -168,6 +196,10 @@ export class CompanionTaskStore {
       step.stepKey === 'report' && settled(step) && step.result?.completion?.published === true)) {
       const step = record.steps.findLast(step => step.taskRev === record.taskRev && step.stepKey === 'report');
       record.state = step.state; record.waitReason = step.reason;
+    }
+    else if (record.kind === RECEIPT_KIND && record.artifacts.some(value => value.taskRev === record.taskRev)) {
+      const step = record.steps.findLast(value => value.taskRev === record.taskRev && value.stepKey === 'writeSheet');
+      record.state = step?.state === 'partial' ? 'partial' : 'done'; record.waitReason = step?.reason ?? null;
     }
     else if (record.artifacts.length) {
       record.state = record.artifacts.every(item => item.taskRev === record.taskRev) ? 'done' : 'partial';
@@ -203,7 +235,7 @@ export class CompanionTaskStore {
       record.origin = body.origin; record.hostSessionId = body.hostSessionId;
       record.revisions.unshift({taskRev: 1, operation: 'create', acceptedAtMs: this.now(), agreement});
       if (record.taskRev === 1) record.agreement = agreement;
-      record.notes['1'] = body.kind === COMPARE_KIND ? {} : {dayRange: range};
+      record.notes['1'] = [COMPARE_KIND, RECEIPT_KIND].includes(body.kind) ? {} : {dayRange: range};
       this.setPlanState(record);
       const snapshot = await this.commit(record);
       this.wake(record.taskId);
@@ -233,7 +265,7 @@ export class CompanionTaskStore {
       record.taskRev = body.taskRev; record.agreement = agreement; record.cancelRequested = cancel;
       record.operations[body.operationId] = {fingerprint: hash, taskRev: body.taskRev};
       record.revisions.push({taskRev: body.taskRev, operation: cancel ? 'cancel' : 'amend', acceptedAtMs: this.now(), agreement});
-      if (!cancel) record.notes[String(body.taskRev)] = record.kind === COMPARE_KIND ? {} : {dayRange: range};
+      if (!cancel) record.notes[String(body.taskRev)] = [COMPARE_KIND, RECEIPT_KIND].includes(record.kind) ? {} : {dayRange: range};
       this.setPlanState(record);
       const snapshot = await this.commit(record);
       this.wake(id);
@@ -270,7 +302,8 @@ export class CompanionTaskStore {
       if (record.kind === FIND_KIND && !['selectInputs','readInputs'].includes(stepKey))
         throw taskError(400, 'invalid-request', 'Find tasks have only fixed read steps');
       if (record.kind === COMPARE_KIND && !['readInputs','model','report'].includes(stepKey) ||
-          record.kind === TASK_KIND && stepKey === 'report')
+          record.kind === RECEIPT_KIND && !['readInputs', 'writeSheet'].includes(stepKey) ||
+          record.kind === TASK_KIND && ['report', 'writeSheet'].includes(stepKey))
         throw taskError(400, 'invalid-request', 'This task has no such fixed step');
       if (record.kind === COMPARE_KIND && stepKey === 'model' && record.steps.some(step => step.stepKey === 'model'))
         throw taskError(409, 'conflict', 'This comparison already owns its one model attempt', this.project(record));
@@ -293,6 +326,15 @@ export class CompanionTaskStore {
     });
   }
   retryable(record, previous) {
+    if (record.kind === RECEIPT_KIND && previous.stepKey === 'readInputs')
+      return settled(previous) && previous.state === 'waiting' && previous.reason === 'receipt_read_interrupted' &&
+        !record.notes[String(previous.taskRev)]?.inputs;
+    if (record.kind === RECEIPT_KIND && previous.stepKey === 'writeSheet') {
+      const notes = record.notes[String(previous.taskRev)];
+      return settled(previous) && previous.state === 'waiting' &&
+        previous.result?.completion?.publicationNotAttempted === true && !!notes?.inputs &&
+        notes.publicationAttempted !== true && (!notes.publishIntent || !!notes.candidate) && record.artifacts.length === 0;
+    }
     if (record.kind === COMPARE_KIND && previous.stepKey === 'report')
       return settled(previous) && (previous.state === 'unknown' && previous.reason === 'report_interrupted' &&
         previous.result?.completion === undefined || previous.state === 'partial' &&
@@ -301,7 +343,7 @@ export class CompanionTaskStore {
     const notes = record.notes[String(previous.taskRev)];
     if (previous.stepKey === 'selectInputs') return !notes?.selection;
     if (previous.stepKey === 'readInputs') return !!notes?.selection && !notes.inputs;
-    if (previous.stepKey === 'writePage') return previous.result?.completion?.publicationNotAttempted === true &&
+    if (previous.stepKey === writeKey(record)) return previous.result?.completion?.publicationNotAttempted === true &&
       !!notes?.publishIntent && !!notes.candidate && notes.publicationAttempted !== true && record.artifacts.length === 0;
     if (previous.stepKey !== 'model' || notes?.candidate) return false;
     const proof = previous.result?.completion, observations = previous.result?.observations ?? [];
@@ -370,6 +412,23 @@ export class CompanionTaskStore {
     }, true);
   }
   saveInputs(claim, input) { return this.savePrivate(claim, 'inputs', input); }
+  saveReceiptObservation(claim, sourceRef, observation) {
+    return this.enqueue(async () => {
+      const record = this.read(claim.taskId); this.findClaim(record, claim);
+      const agreement = record.revisions.find(value => value.taskRev === claim.taskRev)?.agreement;
+      if (record.kind !== RECEIPT_KIND || claim.stepKey !== 'readInputs' ||
+          !agreement?.args.inputs.some(value => value.sourceRef === sourceRef))
+        throw taskError(409, 'conflict', 'The original receipt read claim is required');
+      const notes = record.notes[String(claim.taskRev)]; notes.receiptObservations ??= {};
+      if (Object.hasOwn(notes.receiptObservations, sourceRef)) {
+        if (fingerprint(notes.receiptObservations[sourceRef]) !== fingerprint(observation))
+          throw taskError(409, 'conflict', 'The first original receipt observation is immutable');
+        return this.project(record);
+      }
+      notes.receiptObservations[sourceRef] = clone(observation);
+      return this.commit(record);
+    }, true);
+  }
   finishCompare(claim, {report, elapsedMs, interruption = null}) {
     return this.enqueue(async () => {
       const record = this.read(claim.taskId), step = this.findClaim(record, claim);
@@ -483,7 +542,7 @@ export class CompanionTaskStore {
     return this.enqueue(async () => {
       const record = this.read(claim.taskId); this.current(record, claim.taskRev);
       const step = this.findClaim(record, claim), notes = record.notes[String(claim.taskRev)];
-      if (claim.stepKey !== 'writePage' || settled(step) || !notes?.publishIntent || !notes.candidate || notes.publicationAttempted === true || record.artifacts.length)
+      if (claim.stepKey !== writeKey(record) || settled(step) || !notes?.publishIntent || !notes.candidate || notes.publicationAttempted === true || record.artifacts.length)
         throw taskError(409, 'conflict', 'The original publication intent is not runnable', this.project(record));
       // Durable possible-send boundary: even a crash before the actual link consumes this attempt.
       notes.publicationAttempted = true; notes.publicationAttemptId = claim.attemptId;
@@ -491,10 +550,14 @@ export class CompanionTaskStore {
       this.current(record, claim.taskRev);
       try {
         const result = await job(clone(notes.publishIntent), clone(record));
-        const artifact = {...clone(result.artifact), artifactId: randomUUID(), taskRev: claim.taskRev, stepKey: 'writePage',
+        const artifact = {...clone(result.artifact), artifactId: randomUUID(), taskRev: claim.taskRev, stepKey: claim.stepKey,
           reference: clone(notes.publishIntent)};
         record.artifacts.push(artifact);
-        this.settle(record, step, {state: 'done', reason: null, result: {artifactId: artifact.artifactId}, elapsedMs: result.elapsedMs});
+        const receipt = record.kind === RECEIPT_KIND;
+        if (receipt && fingerprint(result.report) !== fingerprint(notes.candidate.report))
+          throw taskError(409, 'conflict', 'The original workbook report changed');
+        this.settle(record, step, {state: receipt ? result.state : 'done', reason: receipt ? result.reason : null,
+          result: {artifactId: artifact.artifactId, ...(receipt ? {report: clone(result.report)} : {})}, elapsedMs: result.elapsedMs});
         step.finishFingerprint = fingerprint({artifactId: artifact.artifactId});
         record.state = result.state ?? 'done'; record.waitReason = result.reason ?? null; record.approval = null;
         return await this.commit(record);
@@ -514,18 +577,24 @@ export class CompanionTaskStore {
     return this.enqueue(async () => {
       const record = this.read(claim.taskId), step = this.findClaim(record, claim);
       const notes = record.notes[String(claim.taskRev)], intent = notes?.publishIntent;
-      if (claim.stepKey !== 'writePage' || !intent || notes.publicationAttempted !== true || notes.publicationAttemptId !== claim.attemptId)
+      if (claim.stepKey !== writeKey(record) || !intent || notes.publicationAttempted !== true || notes.publicationAttemptId !== claim.attemptId)
         throw taskError(409, 'conflict', 'The original publication attempt is not bound to this claim');
-      const previous = record.artifacts.find(item => item.taskRev === claim.taskRev && item.stepKey === 'writePage');
+      const previous = record.artifacts.find(item => item.taskRev === claim.taskRev && item.stepKey === claim.stepKey);
       if (previous) {
         if (previous.identity !== result.artifact.identity || previous.sha256 !== result.artifact.sha256)
           throw taskError(409, 'conflict', 'The recorded original artifact differs', this.project(record));
         return this.project(record);
       }
-      const artifact = {...clone(result.artifact), artifactId: randomUUID(), taskRev: claim.taskRev, stepKey: 'writePage', reference: clone(intent)};
+      const artifact = {...clone(result.artifact), artifactId: randomUUID(), taskRev: claim.taskRev, stepKey: claim.stepKey, reference: clone(intent)};
+      const receipt = record.kind === RECEIPT_KIND;
+      if (receipt && fingerprint(result.report) !== fingerprint(notes.candidate.report))
+        throw taskError(409, 'conflict', 'The original workbook report changed');
+      const completion = {artifactId: artifact.artifactId, ...(receipt ? {report: clone(result.report)} : {})};
       record.artifacts.push(artifact);
-      if (!settled(step)) this.settle(record, step, {state: 'done', reason: null, result: {artifactId: artifact.artifactId}, elapsedMs: result.elapsedMs});
-      else { step.state = 'done'; step.reason = null; step.result = {...step.result, completion: {artifactId: artifact.artifactId}}; }
+      if (!settled(step)) this.settle(record, step, {state: receipt ? result.state : 'done', reason: receipt ? result.reason : null,
+        result: completion, elapsedMs: result.elapsedMs});
+      else { step.state = receipt ? result.state : 'done'; step.reason = receipt ? result.reason : null;
+        step.result = {...step.result, completion}; }
       step.finishFingerprint = fingerprint({artifactId: artifact.artifactId});
       if (record.taskRev === claim.taskRev && !record.cancelRequested) { record.state = result.state ?? 'done'; record.waitReason = result.reason ?? null; }
       else this.setPlanState(record);
@@ -535,6 +604,8 @@ export class CompanionTaskStore {
   async artifact(id, artifactId, signal) {
     const record = this.read(id), artifact = record.artifacts.find(value => value.artifactId === artifactId);
     if (!artifact) throw taskError(404, 'artifact-not-found', 'Artifact is not recorded for this task');
+    if (artifact.mediaType === XLSX_TYPE)
+      throw taskError(400, 'invalid-request', 'Use the original task workbook content route');
     const envelope = {v: 1, hostStoreId: this.hostStoreId, taskId: id, hostExecutionId: record.hostExecutionId,
       artifactId, mediaType: artifact.mediaType, content: null, reason: null};
     try {
@@ -544,6 +615,24 @@ export class CompanionTaskStore {
       if (error?.code === 'FS_NOT_FOUND' || error?.code === 'ENOENT') return {...envelope, status: 'missing', reason: 'original_missing'};
       if (error?.code === 'FS_STALE_VERSION') return {...envelope, status: 'changed', reason: 'original_changed'};
       return {...envelope, status: 'unknown', reason: 'original_unavailable'};
+    }
+  }
+  async artifactBytes(id, artifactId, hostExecutionId, signal) {
+    const record = this.read(id);
+    if (hostExecutionId !== record.hostExecutionId)
+      throw taskError(409, 'execution-mismatch', 'This workbook belongs to another task execution');
+    const artifact = record.kind === RECEIPT_KIND && record.artifacts.find(value => value.artifactId === artifactId &&
+      value.stepKey === 'writeSheet' && value.mediaType === XLSX_TYPE);
+    if (!artifact) throw taskError(404, 'artifact-not-found', 'Workbook is not registered for this task');
+    try {
+      const actual = await this.fs.dshGoReadTaskArtifactBytes(artifact.reference.directory, artifact.relativePath, artifact, signal);
+      return {mediaType: XLSX_TYPE, bytes: actual.bytes};
+    } catch (error) {
+      if (['FS_NOT_FOUND', 'ENOENT'].includes(error?.code))
+        throw taskError(404, 'artifact-missing', 'The original workbook is now missing');
+      if (['FS_STALE_VERSION', 'FS_NOT_DIRECTORY', 'ENOTDIR', 'ELOOP'].includes(error?.code))
+        throw taskError(409, 'artifact-changed', 'The original workbook or directory changed');
+      throw taskError(503, 'artifact-unavailable', 'The original workbook cannot currently be verified');
     }
   }
   async source(id, sourceRef, hostExecutionId, signal) {

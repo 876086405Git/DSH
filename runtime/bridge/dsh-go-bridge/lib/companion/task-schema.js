@@ -6,7 +6,9 @@ import { CompanionError } from './schema.js';
 export const TASK_KIND = 'host.notes_to_todo';
 export const FIND_KIND = 'host.find_draft';
 export const COMPARE_KIND = 'host.compare_drafts';
-const kinds = z.enum([TASK_KIND, FIND_KIND, COMPARE_KIND]);
+export const RECEIPT_KIND = 'host.receipts_to_sheet';
+export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const kinds = z.enum([TASK_KIND, FIND_KIND, COMPARE_KIND, RECEIPT_KIND]);
 export const TASK_LIMIT_MS = 300_000;
 export const taskId = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
 const integer = z.number().int().nonnegative().safe();
@@ -30,9 +32,15 @@ const sourceVersion = z.object({sourceRef: taskId, version: text}).strict();
 const compareAgreementSchema = notesAgreementSchema.extend({args: z.object({
   a: sourceVersion, b: sourceVersion, maxHighlights: z.literal(3),
 }).strict()}).strict();
-const agreementFor = kind => kind === COMPARE_KIND ? compareAgreementSchema
+const receiptAgreementSchema = notesAgreementSchema.extend({args: z.object({
+  inputs: z.array(sourceVersion).length(4).refine(value => new Set(value.map(item => item.sourceRef)).size === 4),
+  outputDirRef: taskId, outputName: text.max(255).refine(value =>
+    !/[\\/\u0000-\u001f\u007f]/.test(value) && /\.xlsx$/i.test(value)),
+  writeMode: z.literal('createNew'),
+}).strict()}).strict();
+const agreementFor = kind => kind === RECEIPT_KIND ? receiptAgreementSchema : kind === COMPARE_KIND ? compareAgreementSchema
   : kind === FIND_KIND ? findAgreementSchema : notesAgreementSchema;
-export const agreementSchema = z.union([notesAgreementSchema, findAgreementSchema, compareAgreementSchema]);
+export const agreementSchema = z.union([notesAgreementSchema, findAgreementSchema, compareAgreementSchema, receiptAgreementSchema]);
 const origin = z.object({sourceSessionId: text.max(256), messageId: taskId, itemNo: integer}).strict();
 const base = {v: z.literal(1), hostStoreId: taskId};
 const creation = {...base, taskId, taskRev: z.literal(1), origin, hostSessionId: taskId.nullable()};
@@ -40,6 +48,7 @@ export const createSchema = z.discriminatedUnion('kind', [
   notesAgreementSchema.extend({...creation, kind: z.literal(TASK_KIND)}).strict(),
   findAgreementSchema.extend({...creation, kind: z.literal(FIND_KIND)}).strict(),
   compareAgreementSchema.extend({...creation, kind: z.literal(COMPARE_KIND)}).strict(),
+  receiptAgreementSchema.extend({...creation, kind: z.literal(RECEIPT_KIND)}).strict(),
 ]);
 export const amendSchema = z.object({...base, operationId: taskId, expectedTaskRev: revision,
   kind: kinds.optional(), taskRev: revision, changes: agreementSchema}).strict()
@@ -49,9 +58,11 @@ export const cancelSchema = z.object({...base, operationId: taskId, expectedTask
   kind: kinds.optional(), taskRev: revision}).strict().refine(value => value.taskRev === value.expectedTaskRev + 1);
 export const folderSchema = z.object({...base, path: text.max(4096)}).strict();
 const inputName = text.max(255).refine(value => !/[\\/\0]/u.test(value) && /\.(md|txt)$/iu.test(value));
-export const inputSchema = z.object({...base, folderRef: taskId, name: inputName}).strict();
+const receiptName = text.max(255).refine(value => !/[\\/\u0000-\u001f\u007f]/u.test(value) && /\.(md|txt|pdf)$/iu.test(value));
+export const inputSchema = z.union([z.object({...base, folderRef: taskId, name: inputName}).strict(),
+  z.object({...base, kind: z.literal(RECEIPT_KIND), folderRef: taskId, name: receiptName}).strict()]);
 const states = z.enum(['queued', 'waiting', 'running', 'unknown', 'done', 'partial', 'failed', 'cancelled']);
-const stepKeys = z.enum(['selectInputs', 'readInputs', 'model', 'writePage', 'report']);
+const stepKeys = z.enum(['selectInputs', 'readInputs', 'model', 'writePage', 'report', 'writeSheet']);
 const object = z.record(z.string(), z.json());
 const approval = z.object({taskRev: revision, stepKey: stepKeys, agentId: taskId,
   approvalId: taskId, eventId: taskId, callId: taskId.nullable()}).strict();
@@ -59,7 +70,7 @@ const directory = z.object({target: z.object({targetKey: text, displayPath: text
   identity: text}).strict();
 export const folderRecordSchema = z.object({folderRef: taskId, directory, createdAtMs: integer}).strict();
 export const inputRecordSchema = z.object({sourceRef: taskId, directory,
-  entry: z.object({name: inputName, version: text, size: integer.max(65536)}).strict(), createdAtMs: integer}).strict();
+  entry: z.object({name: z.union([inputName, receiptName]), version: text, size: integer.max(4194304)}).strict(), createdAtMs: integer}).strict();
 export const globalSchema = z.object({v: z.literal(1), hostStoreId: taskId.nullable(), createdAtMs: integer}).strict();
 export const recordSchema = z.object({
   v: z.literal(1), taskId, hostExecutionId: taskId, kind: kinds,
@@ -74,7 +85,7 @@ export const recordSchema = z.object({
     startedAtMs: integer, finishedAtMs: integer.nullable(), reason: text.nullable(), result: object.nullable(),
     reserveMs: integer, finishFingerprint: text.nullable()}).strict()),
   artifacts: z.array(z.object({artifactId: taskId, taskRev: revision, stepKey: stepKeys,
-    relativePath: text, mediaType: z.enum(['text/markdown', 'text/plain']), size: integer,
+    relativePath: text, mediaType: z.enum(['text/markdown', 'text/plain', XLSX_TYPE]), size: integer,
     sha256: z.string().regex(/^[a-f0-9]{64}$/), verifiedAtMs: integer, sourceCount: integer,
     identity: text, reference: object}).strict()),
   approval: approval.nullable(), budget: z.object({limitMs: z.literal(TASK_LIMIT_MS), spentMs: integer, heldMs: integer}).strict(),
