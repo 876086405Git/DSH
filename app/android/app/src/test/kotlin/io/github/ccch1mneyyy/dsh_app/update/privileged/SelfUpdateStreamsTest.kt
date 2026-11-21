@@ -95,4 +95,27 @@ class SelfUpdateStreamsTest {
         assertEquals("blocked", result.status)
         assertFalse(result.outcomeUnknown)
     }
+
+    @Test fun adbFinalResultDoesNotWaitForEof() {
+        for ((text, status) in listOf(
+            "Success\n" to "success",
+            "Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE:\nnot enough space]\n" to "storage",
+        )) {
+            val data = ByteArrayInputStream(text.toByteArray())
+            // A final libadb WRTE can be readable even though EOF and available() are not.
+            val input = object : InputStream() {
+                override fun read(): Int = data.read().also { if (it < 0) throw IOException("Stream closed.") }
+                override fun read(b: ByteArray, off: Int, len: Int): Int =
+                    data.read(b, off, len).also { if (it < 0) throw IOException("Stream closed.") }
+                override fun available(): Int = throw IOException("Stream closed.")
+            }
+            val bytes = byteArrayOf(1, 2, 3)
+            val output = ByteArrayOutputStream()
+            val result = SelfUpdateStreams.exchange(ByteArrayInputStream(bytes), bytes.size.toLong(), hash(bytes),
+                input, output, endAtAdbResultLine = true, close = {})
+            assertEquals(status, result.status)
+            assertFalse(result.outcomeUnknown)
+            if (status == "success") assertArrayEquals(bytes, output.toByteArray())
+        }
+    }
 }
