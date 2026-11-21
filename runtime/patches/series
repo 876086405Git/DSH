@@ -159,6 +159,7 @@ companion-chat-usage-receipts.diff
 # Fixed Companion work belongs to the shared Android prefix.
 companion-task-approval-turn.diff
 companion-notes-files.diff
+companion-task-storage.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff

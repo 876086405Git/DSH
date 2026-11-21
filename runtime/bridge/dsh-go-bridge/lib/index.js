@@ -1,3 +1,4 @@
+import { mountCompanionTasks } from "./companion/task-service.js";
 // dsh-go-bridge, host half (docs/design/plugin-seams.md §5.2, §9.2).
 //
 //   GET  /dsh-go/v1/inventory   wire format v1: release, packages with browser halves, the last
@@ -323,6 +324,8 @@ export function apply(ctx, config) {
   ctx.on("internal/plugin", () => native.markDirty());
   let pluginConfig;
   ctx.on("internal/status", (fiber) => { native.markDirty(); pluginConfig?.statusChanged(fiber); });
+
+  mountCompanionTasks(ctx);
 
   ctx.inject(["webServer"], (webCtx) => {
     webCtx.effect(() => webCtx.webServer.tapIndex(injectPromiseWithResolvers),

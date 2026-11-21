@@ -2437,6 +2437,18 @@
           "after": "162870e0ef6e9c8fd9e94f767bba29e7a1cdebc7f06256eba42ab4384369570c"
         }
       }
+    },
+    "companion-task-storage.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-storage-domain/lib/index.js": {
+          "before": "910ceb1907427dc53f1444461c4b440610d99f5631ab7ccb05a2ff03a6d8f4b5",
+          "after": "28834dfc92984bb155619ab8502d6519f6da2074217b057d5573ef53d97ac811"
+        },
+        "node_modules/@deepseek-ai/dsh-storage-json/lib/index.js": {
+          "before": "30b255f943d5e24670cda9817c149700e88c490f17e7c244bfb6c0ce9685103f",
+          "after": "ab13e5bb0828148c169156160918c42db766d7b354c82cb5acf0bb8eed47cf88"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2601,6 +2613,7 @@
       "companion-chat-usage-receipts.diff",
       "companion-task-approval-turn.diff",
       "companion-notes-files.diff",
+      "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff"
     ],
@@ -2764,6 +2777,7 @@
       "companion-chat-usage-receipts.diff",
       "companion-task-approval-turn.diff",
       "companion-notes-files.diff",
+      "companion-task-storage.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",

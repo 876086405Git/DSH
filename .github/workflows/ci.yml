@@ -358,9 +358,13 @@ jobs:
         run: |
           prefix="$RUNNER_TEMP/dsh"
           pnpm_prefix="$RUNNER_TEMP/pnpm"
+          companion_task_harness="$RUNNER_TEMP/companion-task-source"
+          python3 -I runtime/tests/fixtures/prepare-companion-task-source.py \
+            --node-modules "$prefix/node_modules" --target android --out "$companion_task_harness"
           {
             echo "DSH_PREFIX=$prefix"
             echo "DSH_TEST_PREFIX=$prefix"
+            echo "COMPANION_TASK_HARNESS=$companion_task_harness"
             echo "PNPM_BIN=$pnpm_prefix/node_modules/pnpm/bin/pnpm.mjs"
             echo "DSH_INSTALL=$prefix/node_modules/@deepseek-ai/dsh"
             echo "DSH_TOOLS_DIR=$prefix/node_modules/@deepseek-ai/dsh-tools"

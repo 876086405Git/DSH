@@ -1,0 +1,107 @@
+--- a/node_modules/@deepseek-ai/dsh-storage-domain/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-storage-domain/lib/index.js
+@@ -176,6 +176,12 @@
+ 			};
+ 		}
+ 	}
++	/** A fixed companion task owner must drain physical work before either owner closes this unit. */
++	dshGoBindCompanionTaskOwner(stop) {
++		if (this.name !== "companion_tasks" || typeof stop !== "function" || this.unit.dshGoBeforeCompanionClose)
++			throw new DomainError("already-open", "companion task owner is already bound or invalid");
++		this.unit.dshGoBeforeCompanionClose = stop;
++	}
+ 	/** Global singleton handle; accessing it on a spec that declares no global is a caller bug and throws. */
+ 	get global() {
+ 		if (this.globalHandle === void 0) throw new Error(`domain '${this.name}' declares no global`);
+@@ -203,6 +209,7 @@
+ 		return this.disposal;
+ 	}
+ 	async runClose() {
++		if (this.unit.dshGoBeforeCompanionClose) await this.unit.dshGoBeforeCompanionClose();
+ 		this.disposing = true;
+ 		await this.chain;
+ 		await this.unit.close();
+@@ -454,6 +461,16 @@
+ 			throw error;
+ 		}
+ 	}
++	/** Open only on the actual routed backend that holds the task unit's lifetime lock. */
++	dshGoOpenCompanionTasks(spec) {
++		if (spec.name !== "companion_tasks" || spec.layout !== "single")
++			throw new DomainError("facet-unsupported", "invalid companion task domain");
++		const backendName = this.config.routes?.[spec.name] ?? this.config.backend;
++		const backend = this.ctx.storage.backend.get(backendName);
++		if (backend.kv?.dshGoCompanionTasks !== 1)
++			throw new DomainError("facet-unsupported", "routed backend has no companion task lifetime lock");
++		return this.open(spec);
++	}
+ 	/**
+ 	* Look up an open domain by name, untyped. Diagnostic surface; typed
+ 	* consumers hold the handle returned by {@link open}.
+--- a/node_modules/@deepseek-ai/dsh-storage-json/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-storage-json/lib/index.js
+@@ -1,8 +1,9 @@
+-import { mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
++import { mkdir, open, readFile, readdir, rename, rm, stat, statfs, realpath } from "node:fs/promises";
+ import z from "@deepseek-ai/schemastery";
+ import { StorageError, UNIT_NAME_RE, storageBackendServiceKey } from "@deepseek-ai/dsh-storage";
+ import { dirname, join } from "node:path";
+ import { randomUUID } from "node:crypto";
++import { withFileLock } from "@deepseek-ai/dsh-atomic-write";
+ //#region lib/types/atomic.js
+ /**
+ * Atomic whole-file replacement for the JSON backend.
+@@ -680,7 +681,7 @@
+ 	constructor(root) {
+ 		this.root = root;
+ 	}
+-	kv = { open: async (descriptor) => {
++	kv = { dshGoCompanionTasks: 1, open: async (descriptor) => {
+ 		if (this.closed) throw new StorageError("closed", "json backend is closed");
+ 		validateDescriptor(descriptor);
+ 		if (this.open.has(descriptor.name) || this.opening.has(descriptor.name)) throw new Error(`unit '${descriptor.name}' is already open; a unit has exactly one live handle`);
+@@ -694,7 +695,9 @@
+ 			mode: 448
+ 		});
+ 		const onClose = () => this.open.delete(descriptor.name);
+-		const unit = descriptor.layout === "per-record" ? await openPerRecordUnit(descriptor, this.root, onClose) : await openSingleUnit(descriptor, this.root, onClose);
++		const unit = descriptor.name === "companion_tasks"
++			? await this.openCompanionTaskUnit(descriptor, onClose)
++			: descriptor.layout === "per-record" ? await openPerRecordUnit(descriptor, this.root, onClose) : await openSingleUnit(descriptor, this.root, onClose);
+ 		if (this.closed) {
+ 			await unit.close();
+ 			throw new StorageError("closed", "json backend is closed");
+@@ -702,6 +705,33 @@
+ 		unit.dshGoDeletion = () => this.dshGoDeletion?.();
+ 		this.open.set(descriptor.name, unit);
+ 		return unit;
++	}
++	/** Same actual medium, one owner from load until physical work and writes have drained. */
++	async openCompanionTaskUnit(descriptor, onClose) {
++		if (descriptor.layout !== "single") throw new StorageError("malformed-medium", "companion tasks require single layout");
++		const root = await realpath(this.root);
++		const filesystem = await (this.dshGoCompanionStatfs ?? statfs)(root, { bigint: true });
++		// Same-host PID locks are not a cross-host network filesystem lock.
++		if (process.platform !== "linux" || ![0xef53n, 0x58465342n, 0x9123683en].includes(filesystem.type))
++			throw new StorageError("facet-unsupported", "companion task storage requires a verified local filesystem");
++		let ready, rejectOpen, release;
++		const opened = new Promise((resolve, reject) => { ready = resolve; rejectOpen = reject; });
++		const stopped = new Promise(resolve => { release = resolve; });
++		const holding = withFileLock(join(root, "companion_tasks.json"), async () => {
++			const unit = await openSingleUnit(descriptor, root, onClose);
++			const originalClose = unit.close.bind(unit);
++			let closing;
++			unit.close = () => closing ??= (async () => {
++				await unit.dshGoBeforeCompanionClose?.();
++				await originalClose();
++				release();
++				await holding;
++			})();
++			ready(unit);
++			await stopped;
++		});
++		holding.catch(rejectOpen);
++		return opened;
+ 	}
+ 	async close() {
+ 		if (!this.closed) this.closed = true;

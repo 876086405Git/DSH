@@ -1,0 +1,39 @@
+{
+  "scope": "SOURCE_CONTROLLED; real storage/lock/IO and exact extracted turn/approval source; controlled service/factory/persistence peers",
+  "targets": {
+    "android": {
+      "@deepseek-ai/dsh-storage-domain/lib/index.js": "28834dfc92984bb155619ab8502d6519f6da2074217b057d5573ef53d97ac811",
+      "@deepseek-ai/dsh-storage-json/lib/index.js": "ab13e5bb0828148c169156160918c42db766d7b354c82cb5acf0bb8eed47cf88",
+      "@deepseek-ai/dsh-storage/lib/index.js": "1289574c24ecfa5b134e2750d578c00ae59654de7d00133e117c4cc34095f3a3",
+      "@deepseek-ai/dsh-atomic-write/lib/index.js": "000b8994abcbec4e01b2b714fe8c2a37e61670c52e7d3acaf40ec8d39f484dc7",
+      "@deepseek-ai/dsh-agent-loop/lib/index.js": "c2510a4d02661f87f1c86fdc0bebd4ac9072328671b03e54cda717a5cc3b33f7",
+      "@deepseek-ai/dsh-user-approval/lib/index.js": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
+      "@deepseek-ai/dsh-sandbox-policy/lib/index.js": "5b5dc0b170f902a084b851147f08121bc7b8bcc75c7920d99110ba93ba70d3bf",
+      "@deepseek-ai/dsh-sandbox/lib/index.js": "cc4f6b7e84eaff0bb692413f59c1bc8de457dbe5569d02985ea8e87f68281ea7"
+    },
+    "ohos": {
+      "@deepseek-ai/dsh-storage-domain/lib/index.js": "28834dfc92984bb155619ab8502d6519f6da2074217b057d5573ef53d97ac811",
+      "@deepseek-ai/dsh-storage-json/lib/index.js": "ab13e5bb0828148c169156160918c42db766d7b354c82cb5acf0bb8eed47cf88",
+      "@deepseek-ai/dsh-storage/lib/index.js": "1289574c24ecfa5b134e2750d578c00ae59654de7d00133e117c4cc34095f3a3",
+      "@deepseek-ai/dsh-atomic-write/lib/index.js": "000b8994abcbec4e01b2b714fe8c2a37e61670c52e7d3acaf40ec8d39f484dc7",
+      "@deepseek-ai/dsh-agent-loop/lib/index.js": "4674309362ae3236b0132377c9f92bd4e2ff03328a5dddd7c3d876b7ec3fa5d5",
+      "@deepseek-ai/dsh-user-approval/lib/index.js": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
+      "@deepseek-ai/dsh-sandbox-policy/lib/index.js": "5b5dc0b170f902a084b851147f08121bc7b8bcc75c7920d99110ba93ba70d3bf",
+      "@deepseek-ai/dsh-sandbox/lib/index.js": "cc4f6b7e84eaff0bb692413f59c1bc8de457dbe5569d02985ea8e87f68281ea7"
+    }
+  },
+  "dependencies": {
+    "zod": {
+      "version": "4.4.3",
+      "tree_sha256": "e45330ae283532d8b142372513001a6900402c6ecf4d940bc374b63b6787b8ca"
+    },
+    "jsbi": {
+      "version": "4.3.2",
+      "tree_sha256": "d90dbe8bb1e39d4af3cc9bf0d57e261f00f75ea382092355c3292c85591378a7"
+    },
+    "@js-temporal/polyfill": {
+      "version": "0.5.1",
+      "tree_sha256": "3a624aeb7ed536abdc1df2d98599dd5b81f9081918723810af50df8421524401"
+    }
+  }
+}

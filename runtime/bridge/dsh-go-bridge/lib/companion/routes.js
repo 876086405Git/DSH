@@ -75,6 +75,7 @@ function readJson(req, maxBytes = MAX_BODY_BYTES, strictKeys = false) {
 // Store construction does no I/O, including on hosts that never open this page.
 export function createCompanionRoutes({ send, store = createCompanionStore(), signals, ctx, promptContext,
   recall = createRecallCoordinator({ store, promptContext }) }) {
+  let tasks;
   const auxiliary = createCompanionAuxiliaryRoutes({ ctx, send, readJson });
   const lookup = createCompanionLookupRoutes({ ctx, send, readJson, resolve: auxiliary.resolve });
   function usageRoute(req) {
@@ -164,6 +165,16 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
   return {
     async handle(req, res, path) {
       if (path !== ROOT && !path.startsWith(`${ROOT}/`)) return false;
+      if (path === `${ROOT}/tasks` || path.startsWith(`${ROOT}/tasks/`)) {
+        try {
+          tasks ??= import('./task-routes.js').then(module => module.createCompanionTaskRoutes({ctx, send, readJson}));
+          return await (await tasks).handle(req, res, path);
+        } catch {
+          req.resume();
+          send(res, 503, {error: {code: 'companion/task-unavailable', message: 'Task service is unavailable'}});
+          return true;
+        }
+      }
       if (await auxiliary.handle(req, res, path)) return true;
       if (await lookup.handle(req, res, path)) return true;
       if (signals && await signals.handle(req, res, path, send)) return true;
