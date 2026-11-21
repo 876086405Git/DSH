@@ -203,7 +203,9 @@ void main() {
       expect(database.select('PRAGMA user_version').single['user_version'], 13);
       expect(store.requests(), beforeRequests);
       expect(spends(), beforeSpends);
-      expect(store.cards(), beforeCards);
+      expect(store.cards(), [
+        for (final card in beforeCards) {...card, 'cleanup_history_complete': 0},
+      ]);
       expect(store.archive, beforeArchive);
       expect(store.followups().single['local_line'], isNull);
       expect(store.followups().single['state'], 'asked');
@@ -259,7 +261,9 @@ void main() {
       reopen();
       expect(database.select('PRAGMA user_version').single['user_version'], 13);
       expect(store.archive, before);
-      expect(store.cards(), cards);
+      expect(store.cards(), [
+        for (final card in cards) {...card, 'cleanup_history_complete': 0},
+      ]);
       expect(store.requests(), requests);
       expect(store.initiativeRecord(), isNull);
     });

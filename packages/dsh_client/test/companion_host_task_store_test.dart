@@ -473,7 +473,7 @@ void main() {
     final resolved = acceptSnapshot(id, snapshot(id, revision: 2, seq: 2));
     expect(resolved['state'], 'running');
     expect((resolved['agreement']! as Map)['args'], agreement(output: '新名.md')['args']);
-    expect(prepare(id, 1, replay: true), isNull);
+    expect(() => prepare(id, 1, replay: true), conflict);
     expect(prepare(id, 2, replay: true), isNull);
   });
 

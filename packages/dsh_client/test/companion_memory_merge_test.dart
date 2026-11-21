@@ -167,7 +167,9 @@ void main() {
       restoreOldMemorySchema(database, version);
       reopen();
       expect(database.select('PRAGMA user_version').single['user_version'], 13);
-      expect(store.cards(), before);
+      expect(store.cards(), [
+        for (final card in before) {...card, 'cleanup_history_complete': 0},
+      ]);
       expect(store.archive, meta);
       expect(store.initiativeRecord(), initiative);
       expect(store.requests(), receipts);

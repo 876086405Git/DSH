@@ -1132,6 +1132,9 @@ class CompanionMemoryStore {
       }
     }
     final rootCards = snapshot.where((card) => roots.contains(card['id'])).toList();
+    // Root originals are authorized before any derived history is checked,
+    // regardless of the cards' UUID order.
+    final planningOrder = [...rootCards, ...snapshot.where((card) => !roots.contains(card['id']))];
     final deleting = {...roots};
     final planned = <String>{};
     final rawSources = <String>{};
@@ -1161,7 +1164,7 @@ class CompanionMemoryStore {
           deleting.add(card['id'] as String);
         }
       }
-      for (final card in snapshot) {
+      for (final card in planningOrder) {
         final id = card['id'] as String;
         if (!deleting.contains(id) || !planned.add(id)) {
           continue;
@@ -1178,6 +1181,9 @@ class CompanionMemoryStore {
               for (final proof in (card['evidence'] as List<Object?>).cast<MemoryRow>()) proof['message_id'],
             };
             for (final origin in history) {
+              if (rawSources.contains(origin['message_id'])) {
+                continue;
+              }
               // Read the pre-operation role. This operation's planned group
               // withdrawal must not make a fresh independent AND member unknown.
               final source = _db.select('SELECT text FROM memory_messages WHERE id=?', [origin['message_id']]).single;
