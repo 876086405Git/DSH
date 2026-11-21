@@ -609,8 +609,22 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards, {List<MemoryR
   final topicIds = <String>{};
   final targetCardIds = <String>{};
   if (!RegExp(r'^(?:这|那)(?:件事|个事|事)$').hasMatch(target!)) {
+    final ending = RegExp(r'[。.!！?？]+$');
     for (final card in cards) {
-      if (card['scope'] != 'real' || card['status'] == 'withdrawn') continue;
+      if (card['scope'] != 'real') {
+        continue;
+      }
+      // An exact stored sentence can identify one stale fact for deletion.
+      // Include active identical facts too, so two targets stay ambiguous.
+      if (kind == 'forget' &&
+          normalizeMemoryText(card['text'] as String).replaceFirst(ending, '') == target.replaceFirst(ending, '')) {
+        topicIds.add(card['topic_id'] as String);
+        targetCardIds.add(card['id'] as String);
+        continue;
+      }
+      if (card['status'] == 'withdrawn') {
+        continue;
+      }
       if (_matchesControlTarget(card, target)) {
         topicIds.add(card['topic_id']! as String);
         targetCardIds.add(card['id']! as String);

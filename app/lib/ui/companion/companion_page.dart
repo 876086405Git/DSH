@@ -2034,7 +2034,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _memoryOwner != null && parseMemoryControl(input, _memoryOwner!.store.cards()) != null;
 
   Future<bool> _handleMemoryControl(CompanionMemoryOwner memory, MemoryRow source, String raw) async {
-    final cards = memory.store.cards();
+    final cards = memory.store.cards(includeInactive: true);
     final control = parseMemoryControl(raw, cards, topicControls: memory.store.topicControls());
     if (control == null) return false;
     final l10n = context.l10n;
@@ -2369,6 +2369,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       CompanionLightError(failure: CompanionLightFailure.noKey) => l10n.companionLightNoKey,
       CompanionLightError(failure: CompanionLightFailure.badKey) => l10n.companionLightBadKey,
       CompanionLightError(failure: CompanionLightFailure.busy) => l10n.companionLightBusy,
+      DshRemoteException(code: 'companion/cleanup-source-unknown') => l10n.companionMemoryCleanupUnknown,
       // Full mode only because nobody picked a mode yet: light would work without a host.
       DshClosedException() when ref.read(companionModeProvider) == null => l10n.companionNotConnectedTryLight,
       DshClosedException() => l10n.companionNotConnected,

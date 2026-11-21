@@ -286,6 +286,7 @@
   "companionMemoryDeleteSource": "Delete the phone copy",
   "companionMemoryDeleteSourceHint": "Delete these words from the phone and memories supported only by them. Old host conversations and separate copies remain.",
   "companionMemoryNoSource": "This was written by hand, or its original source is no longer available.",
+  "companionMemoryCleanupUnknown": "I can't confirm all the original messages that should be deleted. Nothing was deleted.",
   "companionMemoryTooLong": "Too long to extract automatically from this version",
   "companionMemoryNotExtracted": "This batch was not saved as memories",
   "companionMemoryPending": "Not processed yet",

@@ -135,11 +135,12 @@ class _Phone {
 }
 
 void main() {
-  for (final kind in ['never', 'forget', 'normal']) {
+  for (final kind in ['never', 'forget', 'normal', 'delete']) {
     final never = kind == 'never';
     final name = switch (kind) {
       'never' => 'fixture 5 never survives editing old mixed source across reopen and all three actual request paths',
       'forget' => 'fixture 5 forget keeps the edited old source out but admits a new source across all three actual request paths',
+      'delete' => 'fixture 16 deleting edited raw source removes withdrawn facts before extraction consolidation and actual chat',
       _ => 'fixture 5 natural normal command releases the saved control before new source extraction and actual chat',
     };
     test(name, () async {
@@ -191,9 +192,19 @@ void main() {
       await phone.reopen();
       expect(phone.store.archive['history_after_seq'], 202);
 
+      if (kind == 'delete') {
+        phone.store.deleteMessage(id: 'mixed-201', expectedSourceRev: 2);
+        await phone.reopen();
+        expect(phone.store.cards(includeInactive: true).map((row) => row['id']), [coffee['id']]);
+        expect(phone.store.topicControls(), isEmpty);
+        expect(phone.store.messages().any((row) => row['id'] == 'mixed-201'), isFalse);
+      }
+
       const newText = '我周六复诊。酸奶我现在只买原味，我买酸奶还是选原味。';
-      final newSource = phone.say('new-204', newText);
-      expect(newSource['first_seq'], 204);
+      final newSequence = kind == 'delete' ? 205 : 204;
+      final newSourceId = 'new-$newSequence';
+      final newSource = phone.say(newSourceId, newText);
+      expect(newSource['first_seq'], newSequence);
       if (kind == 'normal') {
         final release = phone.say('normal-205', '以后可以聊复诊');
         expect(release['first_seq'], 205);
@@ -211,17 +222,17 @@ void main() {
       }
       phone.now += 180000;
       phone.answer = (input) {
-        expect((input['source'] as List<Object?>).map((row) => (row as MemoryRow)['id']), ['new-204']);
+        expect((input['source'] as List<Object?>).map((row) => (row as MemoryRow)['id']), [newSourceId]);
         expect(((input['source'] as List<Object?>).single as MemoryRow)['text'], newText);
         for (final forbidden in ['mixed-201', 'control-202', 'normal-205', '以后可以聊复诊', '我周五复诊', '周日去公园']) {
           expect(jsonEncode(input), isNot(contains(forbidden)));
         }
         return {
-          'schema_version': 2, 'batch_id': input['batch_id'], 'covered_message_ids': ['new-204'],
+          'schema_version': 2, 'batch_id': input['batch_id'], 'covered_message_ids': [newSourceId],
           'completion': 'complete', 'operations': <MemoryRow>[
-            _create('new-204', '我周六复诊。', '你周六复诊。', '复诊'),
-            _create('new-204', '酸奶我现在只买原味', '你现在买酸奶只选原味。', '酸奶'),
-            _create('new-204', '我买酸奶还是选原味。', '酸奶你现在还是选原味。', '酸奶'),
+            _create(newSourceId, '我周六复诊。', '你周六复诊。', '复诊'),
+            _create(newSourceId, '酸奶我现在只买原味', '你现在买酸奶只选原味。', '酸奶'),
+            _create(newSourceId, '我买酸奶还是选原味。', '酸奶你现在还是选原味。', '酸奶'),
           ],
         };
       };
@@ -231,7 +242,7 @@ void main() {
       // The later independent source must not be conflated with edited old M.
       expect(freshClinic['topic_id'], never ? clinic['topic_id'] : isNot(clinic['topic_id']));
       expect(freshClinic['topic_mode'], never ? 'never' : 'normal');
-      expect((freshClinic['evidence'] as List<Object?>).cast<MemoryRow>().map((row) => row['message_id']), ['new-204']);
+      expect((freshClinic['evidence'] as List<Object?>).cast<MemoryRow>().map((row) => row['message_id']), [newSourceId]);
       final beforeMaintenance = phone.auxiliaryPosts.length;
       phone.answer = (input) {
         final rows = (input['rows'] as List<Object?>).cast<MemoryRow>();
@@ -254,11 +265,17 @@ void main() {
       expect((explicit['items'] as List<Object?>).map((item) => (item as MemoryRow)['id']), [freshClinic['id']]);
       expect(phone.store.cards().singleWhere((row) => row['id'] == freshClinic['id'])['topic_mode'], never ? 'never' : 'normal');
       for (final body in phone.chatPosts) {
-        for (final forbidden in ['我周五复诊', '你周五复诊', '周六去公园', '周日去公园', '旧助手行', 'control_anchors']) {
+        for (final forbidden in ['我周五复诊', '你周五复诊', '周六去公园', '周日去公园', '旧助手行', 'control_anchors',
+          'cleanup_history_complete', 'memory_card_cleanup_sources']) {
           expect(jsonEncode(body), isNot(contains(forbidden)));
         }
       }
-      expect(phone.store.messages().singleWhere((row) => row['id'] == 'mixed-201')['text'], '我周五复诊，周日去公园。');
+      final oldSource = phone.store.messages().where((row) => row['id'] == 'mixed-201');
+      if (kind == 'delete') {
+        expect(oldSource, isEmpty);
+      } else {
+        expect(oldSource.single['text'], '我周五复诊，周日去公园。');
+      }
       final receipts = phone.store.requests();
       expect(receipts.where((row) => row['category'] == 'extract'), hasLength(2));
       expect(receipts.where((row) => row['category'] == 'organize'), hasLength(1));
