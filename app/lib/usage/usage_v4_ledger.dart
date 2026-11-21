@@ -205,6 +205,9 @@ class UsageV4Ledger {
       .._latestDay = _latestDay;
     for (final entry in days.entries) {
       final day = entry.value;
+      // A day only the engine filled in has no foreground flag: a base-only
+      // report for it would be refused, so it goes with the rest.
+      if (!day.foreground) continue;
       daily.days[entry.key] = UsageV4Day(day.iid, foreground: day.foreground, first: day.first);
     }
     return daily;
