@@ -2035,7 +2035,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   Future<bool> _handleMemoryControl(CompanionMemoryOwner memory, MemoryRow source, String raw) async {
     final cards = memory.store.cards();
-    final control = parseMemoryControl(raw, cards);
+    final control = parseMemoryControl(raw, cards, topicControls: memory.store.topicControls());
     if (control == null) return false;
     final l10n = context.l10n;
     final kind = control['kind']! as String;
