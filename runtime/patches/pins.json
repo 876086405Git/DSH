@@ -203,8 +203,8 @@
     "ohos-api-gateway-idle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
-          "after": "9d69b0cfd60d7f747251a7c3354a201ac8fef3080c6991cd4ebd4e35e2d27240",
-          "before": "91abae7edfaa2bf3154680829e77b1f341aa01ba9094795aa70b96ff3e15f52b"
+          "after": "317fded12f60ce9f3f39a3c92f6ab6942f11f9e8d7dd6988e8baa6bab4e8703c",
+          "before": "d2eb9c6329133a42ffbaa1b0815d014d2b48e167d9ab1be3b3de06cfeaaafff0"
         }
       }
     },
@@ -1881,8 +1881,8 @@
     "zzzzzzzzzzzzz-ohos-lifecycle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
-          "after": "cbb78b530e5baa6c7780c2b26fad7a28c91be329c18ce6b225bf9bcbe4588755",
-          "before": "bd6312f32ed51becac225e349061817c4c27ca0cf587124f923ce0fa860e94b1"
+          "after": "4674309362ae3236b0132377c9f92bd4e2ff03328a5dddd7c3d876b7ec3fa5d5",
+          "before": "c2510a4d02661f87f1c86fdc0bebd4ac9072328671b03e54cda717a5cc3b33f7"
         },
         "node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js": {
           "after": "61254bcefd6a84084c021ca83b69834790347d56ee8f154554cb86b74869ba4d",
@@ -2409,6 +2409,22 @@
           "after": "7bdd4173c60c37aa02b3ced096221597f0213ddf9d5f91d181eebc87a95e072a"
         }
       }
+    },
+    "companion-task-approval-turn.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
+          "before": "bd6312f32ed51becac225e349061817c4c27ca0cf587124f923ce0fa860e94b1",
+          "after": "c2510a4d02661f87f1c86fdc0bebd4ac9072328671b03e54cda717a5cc3b33f7"
+        },
+        "node_modules/@deepseek-ai/dsh-user-approval/lib/index.js": {
+          "before": "45b7c170b6897f15a338037b1951997a1b99018c30b5fc95f7e08ad798075be2",
+          "after": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274"
+        },
+        "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
+          "before": "91abae7edfaa2bf3154680829e77b1f341aa01ba9094795aa70b96ff3e15f52b",
+          "after": "d2eb9c6329133a42ffbaa1b0815d014d2b48e167d9ab1be3b3de06cfeaaafff0"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2571,6 +2587,7 @@
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
+      "companion-task-approval-turn.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff"
     ],
@@ -2732,6 +2749,7 @@
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
+      "companion-task-approval-turn.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
