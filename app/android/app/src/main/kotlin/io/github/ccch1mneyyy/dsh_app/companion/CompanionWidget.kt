@@ -35,9 +35,26 @@ class CompanionWidgetProvider : AppWidgetProvider() {
 
         /** What she said stays on the widget this long. */
         private const val LINE_MS = 12 * 3600_000L
+        private val storeLock = Any()
 
-        fun store(context: Context, values: Map<*, *>) {
-            val edit = context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit()
+        fun store(context: Context, values: Map<*, *>): Boolean = synchronized(storeLock) {
+            val prefs = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+            val archive = values["memoryArchiveId"] as? String
+            val revision = (values["memoryControlRevision"] as? Number)?.toLong()
+            val keptArchive = prefs.getString("memoryArchiveId", null)
+            val keptRevision = prefs.getLong("memoryControlRevision", -1)
+            if (archive != null) {
+                if (revision == null || revision < 0 ||
+                    (keptArchive != null && keptArchive != archive) || revision < keptRevision) return@synchronized false
+            } else if (keptArchive != null && (values.containsKey("line") || values.containsKey("saidAt"))) {
+                return@synchronized false
+            }
+            val edit = prefs.edit()
+            if (archive != null && (keptArchive == null || revision!! > keptRevision)) {
+                // A new control fence clears both keys, without guessing which
+                // memory an old line may have contained.
+                edit.remove("line").remove("saidAt")
+            }
             for ((key, value) in values) {
                 if (key !is String) continue
                 when (value) {
@@ -46,7 +63,8 @@ class CompanionWidgetProvider : AppWidgetProvider() {
                     null -> edit.remove(key)
                 }
             }
-            edit.apply()
+            // The app acknowledges its pending clear only after durable write.
+            edit.commit()
         }
 
         fun refresh(context: Context) {
@@ -119,11 +137,21 @@ class CompanionWidgetPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         when (call.method) {
             "update" -> {
                 val values = call.arguments as? Map<*, *>
-                if (values != null) {
-                    CompanionWidgetProvider.store(context, values)
-                    CompanionWidgetProvider.refresh(context)
+                if (values == null) {
+                    result.error("invalid-widget-update", "Expected widget fields", null)
+                    return
                 }
-                result.success(null)
+                try {
+                    val stored = CompanionWidgetProvider.store(context, values)
+                    if (!stored) {
+                        result.success(false)
+                        return
+                    }
+                    CompanionWidgetProvider.refresh(context)
+                    result.success(true)
+                } catch (error: Exception) {
+                    result.error("widget-update-failed", error.message, null)
+                }
             }
             else -> result.notImplemented()
         }
