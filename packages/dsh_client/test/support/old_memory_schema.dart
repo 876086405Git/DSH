@@ -3,6 +3,10 @@ import 'package:sqlite3/sqlite3.dart';
 /// Reconstruct a real previous schema before exercising the production upgrade.
 /// Changing only user_version would leave new columns and hide migration bugs.
 void restoreOldMemorySchema(Database database, int version) {
+  if (version < 8) {
+    database.execute('DROP TABLE memory_merge_batches');
+    database.execute('ALTER TABLE memory_cards DROP COLUMN maintenance_row_rev');
+  }
   if (version < 7) {
     database.execute('''
       CREATE TABLE memory_requests_v6 (
