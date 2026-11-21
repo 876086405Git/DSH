@@ -1512,14 +1512,13 @@ class ChatController extends Notifier<ChatState> {
     if (stats.observesChatLogUsage) {
       final partial = event is! AssistantMessageEvent || event.interrupted;
       final raw = event.data['usage'];
-      stats.chatLogUsage(
-        raw is Map<String, Object?>
-            ? raw
-            : partial
-            ? _attemptUsage(event.data['stream'])
-            : null,
-        partial: partial,
-      );
+      final usage = raw is Map<String, Object?>
+          ? raw
+          : partial
+          ? _attemptUsage(event.data['stream'])
+          : null;
+      final reported = usage?['reported'];
+      stats.chatLogUsage(reported is Map<String, Object?> ? reported : usage, partial: partial);
     }
     if (event is! AssistantMessageEvent) return;
     final usage = event.usage;

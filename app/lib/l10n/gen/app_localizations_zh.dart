@@ -24675,7 +24675,7 @@ class L10nZh extends L10n {
 
   @override
   String get usageStatsFooter =>
-      '这只控制 dsh-go 自身的统计：功能次数、模型报告的 token、版本与设备型号。Android 还按日汇总前台使用、首次统计日期和聊天用量字段是否齐全。不含对话、角色卡、文件和账号；不控制 Google ML Kit SDK 的统计。关闭会清空未上报的数据，服务器已接收的数据无法撤回。';
+      '这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。';
 
   @override
   String get usageNoticeBody => '不含对话和个人信息，可随时关闭';
@@ -24694,6 +24694,10 @@ class L10nZh extends L10n {
 
   @override
   String get usageUpgradeOff => '关闭';
+
+  @override
+  String get usageStatsAndroidFooter =>
+      '这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。 Android 还按日汇总前台及首次参与统计、启动和远程连接结果与耗时区间，以及主聊天、酒馆和伙伴的用量字段是否齐全。关闭会清空未上报的数据。';
 
   @override
   String viewArtifactSaved(String value) {

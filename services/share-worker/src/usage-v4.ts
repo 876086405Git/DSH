@@ -22,9 +22,33 @@ function vector(value: unknown, lengths: readonly number[]): number[] | undefine
   return value as number[];
 }
 
+const operations = ['runtime_direct', 'runtime_proot', 'runtime_other',
+  'ssh_initial', 'ssh_reconnect', 'relay_initial', 'relay_reconnect'] as const;
+
+function tokenRows(value: unknown, source: string): Row[] | undefined {
+  const token = object(value);
+  if (!token || Object.keys(token).length !== 2) return undefined;
+  const counters = vector(token.counts, [...Array<number>(12).fill(MAX_CALLS), 1]);
+  const limits = [...Array<number>(7).fill(MAX_TOKENS), MAX_CALLS];
+  const values = vector(token.values, source === 'chat_log' && Array.isArray(token.values) && token.values.length === 8
+    ? limits : [...limits, MAX_TOKENS, MAX_TOKENS]);
+  if (!counters || !values) return undefined;
+  const total = counters[0]!;
+  const input = counters[1]! + counters[2]!;
+  const output = counters[6]! + counters[7]!;
+  const sum = (from: number, to: number) => counters.slice(from, to).reduce((a, b) => a + b, 0);
+  if (sum(1, 6) !== total || sum(6, 11) !== total || counters[11]! > Math.min(input, output) ||
+    counters[11]! < input + output - total || values[7]! > input ||
+    values[2]! > values[0]! || values[3]! > values[1]! ||
+    (!input && values[0] !== 0) || (!output && values[1] !== 0) ||
+    (!counters[3] && (values[8] ?? 0) !== 0) || (!counters[8] && (values[9] ?? 0) !== 0) ||
+    (!counters[11] && (values[2] !== 0 || values[3] !== 0))) return undefined;
+  return [{ type: `${source}_counts`, counts: counters }, { type: `${source}_values`, counts: values }];
+}
+
 function parse(value: unknown, now: number): Report | undefined {
   const obj = object(value);
-  if (!obj || Object.keys(obj).length !== 10) return undefined;
+  if (!obj || Object.keys(obj).length !== (Object.hasOwn(obj, 'extra') ? 11 : 10)) return undefined;
   const { v, iid, day, app, platform, maker, model, rom, base, chat_log } = obj;
   if (v !== 4 || platform !== 'android' || typeof iid !== 'string' || !/^[A-Za-z0-9_-]{21}[AQgw]$/.test(iid) ||
     typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || typeof app !== 'string' || !APP.test(app) ||
@@ -36,28 +60,30 @@ function parse(value: unknown, now: number): Report | undefined {
 
   const flags = vector(base, [1, 1]);
   if (!flags || flags[1]! > flags[0]!) return undefined;
-  const token = object(chat_log);
-  if (!token || Object.keys(token).length !== 2) return undefined;
-  // [observed, input positive/zero/partial/missing/invalid, output same, paired, clipped]
-  const counters = vector(token.counts, [...Array<number>(12).fill(MAX_CALLS), 1]);
-  // [input, output, paired input/output, uncached input, cache read/write, cache-known calls]
-  const values = vector(token.values, [...Array<number>(7).fill(MAX_TOKENS), MAX_CALLS]);
-  if (!counters || !values) return undefined;
-  const total = counters[0]!;
-  const input = counters[1]! + counters[2]!;
-  const output = counters[6]! + counters[7]!;
-  const sum = (from: number, to: number) => counters.slice(from, to).reduce((a, b) => a + b, 0);
-  if (sum(1, 6) !== total || sum(6, 11) !== total || counters[11]! > Math.min(input, output) ||
-    counters[11]! < input + output - total || values[7]! > input ||
-    values[2]! > values[0]! || values[3]! > values[1]! ||
-    (!input && values[0] !== 0) || (!output && values[1] !== 0) ||
-    (!counters[11] && (values[2] !== 0 || values[3] !== 0))) return undefined;
-  if (flags[0] === 0 && total === 0) return undefined;
-  return { iid, day, app, maker, model, rom, rows: [
-    { type: 'base', counts: [...flags, 3] },
-    { type: 'chat_log_counts', counts: counters },
-    { type: 'chat_log_values', counts: values },
-  ] };
+  const rows = tokenRows(chat_log, 'chat_log');
+  if (!rows) return undefined;
+  let mask = 3;
+  if (Object.hasOwn(obj, 'extra')) {
+    const extra = object(obj.extra);
+    if (!extra || Object.keys(extra).some((key) =>
+      key !== 'tavern' && key !== 'companion' && !operations.some((kind) => key === kind))) return undefined;
+    for (const source of ['tavern', 'companion']) {
+      const pair = tokenRows(extra[source], source);
+      if (!pair) return undefined;
+      rows.push(...pair);
+    }
+    mask = 63;
+    for (const [index, kind] of operations.entries()) {
+      if (!Object.hasOwn(extra, kind)) continue;
+      const bins = vector(extra[kind], [...Array<number>(15).fill(MAX_CALLS), 1]);
+      if (!bins || !bins[0] || bins.slice(1, 5).reduce((a, b) => a + b, 0) !== bins[0] ||
+        bins.slice(5, 15).reduce((a, b) => a + b, 0) !== bins[1]) return undefined;
+      rows.push({ type: kind, counts: bins });
+      mask |= 1 << (index + 6);
+    }
+  }
+  if (!flags[0] && !rows.some((row) => row.counts[0]! > 0)) return undefined;
+  return { iid, day, app, maker, model, rom, rows: [{ type: 'base', counts: [...flags, mask] }, ...rows] };
 }
 
 export async function usageV4(request: Request, env: Env, now = Date.now()): Promise<Response> {

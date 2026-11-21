@@ -160,6 +160,14 @@
         }
       }
     },
+    "messages-usage-evidence.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "2ef54c3220c6ff9ac3f7593efa7c3b3813f2d79bca43fefbc8dde7f9ddcfa457",
+          "before": "0ace65d8cf477ebaeaeaaf3af7080ea4695d46f5cc8a34c7f92d5107715e08a9"
+        }
+      }
+    },
     "ohos-api-gateway-idle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
@@ -2515,7 +2523,8 @@
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
-      "profile-root-installation-precedence.diff"
+      "profile-root-installation-precedence.diff",
+      "messages-usage-evidence.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2713,7 +2722,8 @@
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
-      "ohos-piai-text-preabort.diff"
+      "ohos-piai-text-preabort.diff",
+      "messages-usage-evidence.diff"
     ]
   }
 }

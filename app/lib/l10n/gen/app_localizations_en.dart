@@ -25995,7 +25995,7 @@ class L10nEn extends L10n {
 
   @override
   String get usageStatsFooter =>
-      'This controls dsh-go’s own stats: feature counts, reported tokens, versions and device model. Android also summarizes days in the foreground, the first day of collection and whether reply token fields were reported. No chats, character cards, files or accounts are included. This does not control Google ML Kit SDK stats. Turning it off clears unsent data; reports already received cannot be withdrawn.';
+      'This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics.';
 
   @override
   String get usageNoticeBody => 'No chats or personal info.\nTurn off anytime.';
@@ -26014,6 +26014,10 @@ class L10nEn extends L10n {
 
   @override
   String get usageUpgradeOff => 'Turn off';
+
+  @override
+  String get usageStatsAndroidFooter =>
+      'This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics. Android also summarizes foreground days, the first day of collection, startup and remote connection results and timing bands, and token coverage for chat, Tavern and Companion. Turning it off clears unsent data.';
 
   @override
   String viewArtifactSaved(String value) {

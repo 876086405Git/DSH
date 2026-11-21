@@ -53,3 +53,22 @@ it('rejects open or impossible dates, non-Android payloads and inconsistent fina
   expect(v4.points).toHaveLength(0);
   expect((await post(makeEnv({ USAGE_SECRET: secret }).env)).status).toBe(404);
 });
+
+it('writes independent sources and the exact accepted operation buckets', async () => {
+  const v4 = new FakeDataset();
+  const { env } = makeEnv({ USAGE_SECRET: secret, USAGE_V4: v4 });
+  const counters = Array(13).fill(0);
+  counters[0] = counters[3] = counters[8] = 1;
+  const values = [0, 0, 0, 0, 0, 0, 0, 0, 20, 6];
+  const blank = { counts: Array(13).fill(0), values: Array(10).fill(0) };
+  const bins = [2, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const body = { ...report, extra: { tavern: { counts: counters, values }, companion: blank, ssh_reconnect: bins } };
+  expect((await post(env, body)).status).toBe(204);
+  expect(v4.points.map(point => point.blobs[2])).toEqual([
+    'base', 'chat_log_counts', 'chat_log_values', 'tavern_counts', 'tavern_values',
+    'companion_counts', 'companion_values', 'ssh_reconnect',
+  ]);
+  expect(v4.points[0]!.doubles[2]).toBe(63 | (1 << 10));
+  expect(v4.points[4]!.doubles).toEqual(values);
+  expect((await post(env, { ...body, extra: { ...body.extra, ssh_reconnect: [5, ...bins.slice(1)] } })).status).toBe(400);
+});

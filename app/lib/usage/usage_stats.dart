@@ -22,6 +22,7 @@ import 'usage_net.dart';
 import 'usage_v4_ledger.dart';
 
 export 'usage_ledger.dart' show UsageCount;
+export 'usage_v4_ledger.dart' show UsageTokenSource, UsageOperation, UsageOutcome;
 
 class UsageStatsState {
   const UsageStatsState({this.loaded = false, this.enabled = true, this.noticed = false, this.v4Noticed = false});
@@ -160,6 +161,28 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     ref.onDispose(ref.read(usageResumesProvider)(() => unawaited(foreground())));
     // A cold start comes up in front.
     unawaited(foreground());
+    void Function(UsageOutcome, {UsageOperation? actual})? launch;
+    ref.listen(localRuntimeProvider.select((s) => s.status), (previous, next) {
+      if (next.phase == RuntimePhase.starting) {
+        launch ??= beginOperation(UsageOperation.runtimeOther);
+        return;
+      }
+      if (previous?.phase != RuntimePhase.starting) return;
+      launch?.call(
+        switch (next.phase) {
+          RuntimePhase.running when next.isRunning => UsageOutcome.ready,
+          RuntimePhase.error => UsageOutcome.failed,
+          RuntimePhase.stopping => UsageOutcome.cancelled,
+          _ => UsageOutcome.unknown,
+        },
+        actual: switch (next.currentExecutionMode ?? previous?.currentExecutionMode) {
+          'direct' => UsageOperation.runtimeDirect,
+          'proot' => UsageOperation.runtimeProot,
+          _ => UsageOperation.runtimeOther,
+        },
+      );
+      launch = null;
+    });
     ref.listen(localRuntimeProvider.select(_engineMode), (_, mode) {
       if (mode != null) _record((ledger, now) => ledger.engine(mode, now));
     }, fireImmediately: true);
@@ -192,11 +215,28 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   void tokens(int input, int output) => _record((ledger, now) => ledger.tokens(input, output, now));
 
   void chatLogUsage(Map<String, Object?>? rawUsage, {bool partial = false}) {
+    tokenUsage(UsageTokenSource.chatLog, rawUsage, partial: partial);
+  }
+
+  void tokenUsage(UsageTokenSource source, Map<String, Object?>? rawUsage, {bool partial = false}) {
     if (!observesChatLogUsage) return;
     final now = _now();
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) _v4.foreground(now);
-    _v4.chatLog(now, rawUsage, partial: partial);
+    _v4.token(now, source, rawUsage, partial: partial);
     unawaited(_saveV4());
+  }
+
+  void Function(UsageOutcome, {UsageOperation? actual})? beginOperation(UsageOperation kind) {
+    if (!observesChatLogUsage) return null;
+    final ledger = _v4;
+    final clock = Stopwatch()..start();
+    return (outcome, {actual}) {
+      if (!clock.isRunning) return;
+      clock.stop();
+      if (!ref.mounted || !observesChatLogUsage || !identical(ledger, _v4)) return;
+      _v4.operation(_now(), actual ?? kind, outcome, clock.elapsed);
+      unawaited(_saveV4());
+    };
   }
 
   /// The host's plugin list was read: [installed] plugins on it.

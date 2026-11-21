@@ -75,105 +75,124 @@ Stream<String> streamCompanionReply({
   CompanionTurnContext? context,
   int maxTokens = 800,
   void Function(int input, int output)? onUsage,
+  void Function(Map<String, Object?> usage, {required bool partial})? onUsageSettled,
 }) async* {
-  final request = http.Request('POST', Uri.parse(companionLightEndpoint))
-    ..headers.addAll({
-      'content-type': 'application/json',
-      'accept': 'text/event-stream',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    })
-    ..body = jsonEncode({
-      'model': companionLightModel,
-      'stream': true,
-      'max_tokens': maxTokens,
-      'thinking': {'type': 'disabled'},
-      'system': system,
-      'messages': companionRequestMessages([
-        for (final line in lines) (role: line.role, text: line.text),
-      ], context: context),
-    });
-  final http.StreamedResponse response;
+  final observed = <String, Object?>{};
+  var finished = false;
   try {
-    response = await client.send(request).timeout(const Duration(seconds: 30));
-  } on Object catch (error) {
-    throw CompanionLightError(CompanionLightFailure.network, '$error');
-  }
-  if (response.statusCode != 200) {
-    // The status already says what went wrong; the body is only a note, read
-    // for a moment and a few hundred bytes at most.
-    final failure = switch (response.statusCode) {
-      401 || 403 => CompanionLightFailure.badKey,
-      429 => CompanionLightFailure.busy,
-      _ => CompanionLightFailure.server,
-    };
-    throw CompanionLightError(failure, '${response.statusCode} ${await _note(response.stream)}');
-  }
-  final events = response.stream
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())
-      // A reply that stops arriving is a failed one, not a slow one.
-      .timeout(const Duration(seconds: 45));
-  // message_start carries the input, message_delta the output so far; each
-  // is a running total, not an increment, so the largest one seen stands.
-  int? input;
-  int? output;
-  void usageFrom(Object? usage) {
-    if (usage is! Map) return;
-    int? n(Object? v) => v is int && v >= 0 ? v : null;
-    if (n(usage['input_tokens']) case final fresh?) {
-      final all = fresh + (n(usage['cache_read_input_tokens']) ?? 0) + (n(usage['cache_creation_input_tokens']) ?? 0);
-      input = max(input ?? 0, all);
+    final request = http.Request('POST', Uri.parse(companionLightEndpoint))
+      ..headers.addAll({
+        'content-type': 'application/json',
+        'accept': 'text/event-stream',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      })
+      ..body = jsonEncode({
+        'model': companionLightModel,
+        'stream': true,
+        'max_tokens': maxTokens,
+        'thinking': {'type': 'disabled'},
+        'system': system,
+        'messages': companionRequestMessages([
+          for (final line in lines) (role: line.role, text: line.text),
+        ], context: context),
+      });
+    final http.StreamedResponse response;
+    try {
+      response = await client.send(request).timeout(const Duration(seconds: 30));
+    } on Object catch (error) {
+      throw CompanionLightError(CompanionLightFailure.network, '$error');
     }
-    if (n(usage['output_tokens']) case final out?) output = max(output ?? 0, out);
-  }
+    if (response.statusCode != 200) {
+      // The status already says what went wrong; the body is only a note, read
+      // for a moment and a few hundred bytes at most.
+      final failure = switch (response.statusCode) {
+        401 || 403 => CompanionLightFailure.badKey,
+        429 => CompanionLightFailure.busy,
+        _ => CompanionLightFailure.server,
+      };
+      throw CompanionLightError(failure, '${response.statusCode} ${await _note(response.stream)}');
+    }
+    final events = response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        // A reply that stops arriving is a failed one, not a slow one.
+        .timeout(const Duration(seconds: 45));
+    // message_start carries the input, message_delta the output so far; each
+    // is a running total, not an increment, so the largest one seen stands.
+    int? input;
+    int? output;
+    void usageFrom(Object? usage, {required bool terminalSource}) {
+      if (usage is! Map) return;
+      const names = {
+        'input_tokens': 'inputTokens',
+        'cache_read_input_tokens': 'cacheReadTokens',
+        'cache_creation_input_tokens': 'cacheWriteTokens',
+        'output_tokens': 'outputTokens',
+      };
+      for (final entry in names.entries) {
+        if (usage.containsKey(entry.key) && (terminalSource || entry.key != 'output_tokens')) {
+          observed[entry.value] = usage[entry.key] ?? -1;
+        }
+      }
+      int? n(Object? v) => v is int && v >= 0 ? v : null;
+      if (n(usage['input_tokens']) case final fresh?) {
+        final all = fresh + (n(usage['cache_read_input_tokens']) ?? 0) + (n(usage['cache_creation_input_tokens']) ?? 0);
+        input = max(input ?? 0, all);
+      }
+      if (n(usage['output_tokens']) case final out?) output = max(output ?? 0, out);
+    }
 
-  try {
-    await for (final line in events) {
-      if (!line.startsWith('data:')) continue;
-      final data = line.substring(5).trim();
-      if (data.isEmpty || data == '[DONE]') continue;
-      final Object? event;
-      try {
-        event = jsonDecode(data);
-      } on FormatException {
-        continue;
+    try {
+      await for (final line in events) {
+        if (!line.startsWith('data:')) continue;
+        final data = line.substring(5).trim();
+        if (data.isEmpty || data == '[DONE]') continue;
+        final Object? event;
+        try {
+          event = jsonDecode(data);
+        } on FormatException {
+          continue;
+        }
+        if (event is! Map) continue;
+        // An error event, or a bare {"error": …} (the API's own timeout answer has no type).
+        if (event['type'] == 'error' || (event['type'] == null && event['error'] != null)) {
+          final error = event['error'];
+          final kind = error is Map ? error['type'] : null;
+          throw CompanionLightError(
+            kind == 'overloaded_error' || kind == 'rate_limit_error'
+                ? CompanionLightFailure.busy
+                : CompanionLightFailure.server,
+            error is Map ? '${error['message']}' : '$error',
+          );
+        }
+        switch (event['type']) {
+          case 'content_block_delta':
+            final delta = event['delta'];
+            if (delta is Map && delta['type'] == 'text_delta' && delta['text'] is String) {
+              yield delta['text'] as String;
+            }
+          case 'message_start':
+            final message = event['message'];
+            if (message is Map) usageFrom(message['usage'], terminalSource: false);
+          case 'message_delta':
+            usageFrom(event['usage'], terminalSource: true);
+          case 'message_stop':
+            finished = true;
+            if (input != null || output != null) onUsage?.call(input ?? 0, output ?? 0);
+            return;
+        }
       }
-      if (event is! Map) continue;
-      // An error event, or a bare {"error": …} (the API's own timeout answer has no type).
-      if (event['type'] == 'error' || (event['type'] == null && event['error'] != null)) {
-        final error = event['error'];
-        final kind = error is Map ? error['type'] : null;
-        throw CompanionLightError(
-          kind == 'overloaded_error' || kind == 'rate_limit_error'
-              ? CompanionLightFailure.busy
-              : CompanionLightFailure.server,
-          error is Map ? '${error['message']}' : '$error',
-        );
-      }
-      switch (event['type']) {
-        case 'content_block_delta':
-          final delta = event['delta'];
-          if (delta is Map && delta['type'] == 'text_delta' && delta['text'] is String) {
-            yield delta['text'] as String;
-          }
-        case 'message_start':
-          final message = event['message'];
-          if (message is Map) usageFrom(message['usage']);
-        case 'message_delta':
-          usageFrom(event['usage']);
-        case 'message_stop':
-          if (input != null || output != null) onUsage?.call(input ?? 0, output ?? 0);
-          return;
-      }
+    } on CompanionLightError {
+      rethrow;
+    } on Object catch (error) {
+      throw CompanionLightError(CompanionLightFailure.network, '$error');
     }
-  } on CompanionLightError {
-    rethrow;
-  } on Object catch (error) {
-    throw CompanionLightError(CompanionLightFailure.network, '$error');
+    // The connection ended before message_stop: the reply is incomplete, not done.
+    throw const CompanionLightError(CompanionLightFailure.network, 'ended before message_stop');
+  } finally {
+    onUsageSettled?.call(observed, partial: !finished);
   }
-  // The connection ended before message_stop: the reply is incomplete, not done.
-  throw const CompanionLightError(CompanionLightFailure.network, 'ended before message_stop');
 }
 
 /// Up to [limit] bytes of an error body, within [wait]; never more, never longer.

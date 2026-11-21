@@ -17,20 +17,25 @@ COUNTS = (
     "out_positive", "out_zero", "out_partial", "out_missing", "out_invalid", "paired", "clipped",
 )
 VALUES = ("tokens_in", "tokens_out", "paired_in", "paired_out", "uncached_in",
-          "cache_read", "cache_write", "cache_known")
+          "cache_read", "cache_write", "cache_known", "partial_in", "partial_out")
+OPERATIONS = ("runtime_direct", "runtime_proot", "runtime_other",
+              "ssh_initial", "ssh_reconnect", "relay_initial", "relay_reconnect")
+OP_COLS = ("episodes", "ready", "failed", "cancelled", "unknown",
+           "le250ms", "le500ms", "le1s", "le2s", "le5s", "le10s", "le30s",
+           "le60s", "le180s", "gt180s", "clipped")
 READY = "has_base = 1 AND has_counts = 1 AND has_values = 1"
 
 
-def daily_query(first, last, span):
+def daily_query(first, last, span, source="chat_log"):
     fields = [
         "max(if(blob3 = 'base', 1, 0)) AS has_base",
-        "max(if(blob3 = 'chat_log_counts', 1, 0)) AS has_counts",
-        "max(if(blob3 = 'chat_log_values', 1, 0)) AS has_values",
+        f"max(if(blob3 = '{source}_counts', 1, 0)) AS has_counts",
+        f"max(if(blob3 = '{source}_values', 1, 0)) AS has_values",
         "max(if(blob3 = 'base', double1, 0.0)) AS active",
         "max(if(blob3 = 'base' AND blob7 != '' AND blob7 != 'unknown', 1.0, 0.0)) AS model_known",
         "max(if(blob3 = 'base' AND blob8 != '' AND blob8 != 'unknown', 1.0, 0.0)) AS rom_known",
     ]
-    for row_type, columns in (("chat_log_counts", COUNTS), ("chat_log_values", VALUES)):
+    for row_type, columns in ((f"{source}_counts", COUNTS), (f"{source}_values", VALUES)):
         fields.extend(f"max(if(blob3 = '{row_type}', double{i}, 0.0)) AS {name}"
                       for i, name in enumerate(columns, 1))
     joined_fields = ",\n    ".join(fields)
@@ -46,8 +51,23 @@ FROM (
     {joined_fields}
   FROM dshgo_usage_v4
   WHERE timestamp >= NOW() - INTERVAL '{span}' DAY AND blob1 >= '{first}' AND blob1 <= '{last}'
+    AND blob3 IN ('base', '{source}_counts', '{source}_values')
   GROUP BY day, device
 ) GROUP BY day ORDER BY day FORMAT JSON"""
+
+
+def operations_query(first, last, span):
+    names = ", ".join(f"'{name}'" for name in OPERATIONS)
+    maxima = ", ".join(f"max(double{i}) AS slot_{i}" for i in range(1, 17))
+    totals = ", ".join(f"sum(slot_{i}) AS {key}" for i, key in enumerate(OP_COLS, 1))
+    return f"""SELECT day, kind, max(sample_step) AS max_sample_interval, {totals}
+FROM (
+  SELECT blob1 AS day, blob2 AS device, blob3 AS kind, max(_sample_interval) AS sample_step, {maxima}
+  FROM dshgo_usage_v4
+  WHERE timestamp >= NOW() - INTERVAL '{span}' DAY AND blob1 >= '{first}' AND blob1 <= '{last}'
+    AND blob3 IN ({names})
+  GROUP BY day, device, kind
+) GROUP BY day, kind ORDER BY day, kind FORMAT JSON"""
 
 
 def retention_query(cohort, span):
@@ -117,10 +137,12 @@ def main():
     if not 1 <= args.days <= 60 or any(not 1 <= (today - day).days <= 60 for day in args.cohort):
         opts.error("choose 1–60 ended days and cohorts within the last 60 days")
     first, last = today - timedelta(days=args.days), today - timedelta(days=1)
-    daily = daily_query(first, last, args.days + 2)
+    sources = ("chat_log", "tavern", "companion")
+    daily = {source: daily_query(first, last, args.days + 2, source) for source in sources}
+    ops = operations_query(first, last, args.days + 2)
     cohorts = [(day, retention_query(day, (today - day).days + 2)) for day in sorted(set(args.cohort))]
     if args.dry_run:
-        print(daily, *(sql for _, sql in cohorts), sep=";\n\n")
+        print(*daily.values(), ops, *(sql for _, sql in cohorts), sep=";\n\n")
         return 0
     account = os.environ.get("CF_ACCOUNT_ID", "")
     path = os.environ.get("CF_TOKEN_FILE")
@@ -138,12 +160,14 @@ def main():
             with urlopen(req, timeout=30) as response:
                 return json.load(response)["data"]
 
-        rows = {row["day"]: row for row in query(daily)}
-        result = {"as_of_utc8": now.isoformat(), "source": "app_observed_chat_log", "daily": [], "retention": []}
-        for offset in range(args.days):
-            day = first + timedelta(days=offset)
-            row = rows.get(str(day))
-            result["daily"].append(summarize_daily(day, row, today) if row else {"day": str(day), "data": None})
+        result = {"as_of_utc8": now.isoformat(), "daily_by_source": {}, "operations": query(ops), "retention": []}
+        for source, sql in daily.items():
+            rows = {row["day"]: row for row in query(sql)}
+            reports = result["daily_by_source"][source] = []
+            for offset in range(args.days):
+                day = first + timedelta(days=offset)
+                row = rows.get(str(day))
+                reports.append(summarize_daily(day, row, today) if row else {"day": str(day), "data": None})
         for day, sql in cohorts:
             data = query(sql)
             result["retention"].append(summarize_retention(day, data[0] if data else {}, today))

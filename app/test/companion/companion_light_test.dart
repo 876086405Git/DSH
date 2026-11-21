@@ -24,6 +24,38 @@ MockClient _answering(int status, String body, {void Function(http.BaseRequest, 
 
 void main() {
   group('reply', () {
+    test('keeps the start-frame output out of final counts and settles a dropped stream once', () async {
+      for (final stopped in [true, false]) {
+        final settlements = <(Map<String, Object?>, bool)>[];
+        final result = streamCompanionReply(
+          client: _answering(
+            200,
+            _sse([
+              {
+                'type': 'message_start',
+                'message': {
+                  'usage': {'input_tokens': 12, 'output_tokens': 0},
+                },
+              },
+              _text('reply'),
+              if (stopped) {'type': 'message_stop'},
+            ]),
+          ),
+          apiKey: 'synthetic',
+          system: 'synthetic',
+          lines: const [CompanionLine.user('synthetic')],
+          onUsageSettled: (usage, {required partial}) => settlements.add((usage, partial)),
+        ).toList();
+        if (stopped) {
+          expect(await result, ['reply']);
+        } else {
+          await expectLater(result, throwsA(isA<CompanionLightError>()));
+        }
+        expect(settlements, hasLength(1));
+        expect(settlements.single.$1, {'inputTokens': 12});
+        expect(settlements.single.$2, !stopped);
+      }
+    });
     test('asks DeepSeek the way the engine does and streams her words', () async {
       late http.BaseRequest request;
       late Map<String, Object?> body;

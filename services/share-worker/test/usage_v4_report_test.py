@@ -20,12 +20,12 @@ class ReportTest(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.db.row_factory = sqlite3.Row
         self.db.create_function("if", 3, lambda test, a, b: a if test else b)
-        columns = [f"blob{i} TEXT" for i in range(1, 9)] + [f"double{i} REAL" for i in range(1, 14)]
+        columns = [f"blob{i} TEXT" for i in range(1, 9)] + [f"double{i} REAL" for i in range(1, 17)]
         self.db.execute(f"CREATE TABLE dshgo_usage_v4 (_sample_interval INTEGER, {', '.join(columns)})")
 
     def point(self, day, device, name, values, *, model="test-model", sample=1):
         data = [sample, day, device, name, "1.0.21", "android", "test-maker", model, "android", *values]
-        data += [0] * (22 - len(data))
+        data += [0] * (25 - len(data))
         self.db.execute(f"INSERT INTO dshgo_usage_v4 VALUES ({','.join('?' for _ in data)})", data)
 
     def query(self, sql):

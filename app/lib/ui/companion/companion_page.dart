@@ -1025,6 +1025,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         onUsage: (input, output) {
           if (mounted) ref.read(usageStatsProvider.notifier).tokens(input, output);
         },
+        onUsageSettled: (usage, {required partial}) {
+          if (mounted) {
+            ref.read(usageStatsProvider.notifier).tokenUsage(UsageTokenSource.companion, usage, partial: partial);
+          }
+        },
       );
       await companionAdapterWrite(store.pack, probe, adapter);
       if (!mounted) return;
@@ -2160,6 +2165,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           context: turnContext,
           onUsage: (input, output) {
             if (mounted) ref.read(usageStatsProvider.notifier).tokens(input, output);
+          },
+          onUsageSettled: (usage, {required partial}) {
+            if (mounted) {
+              ref.read(usageStatsProvider.notifier).tokenUsage(UsageTokenSource.companion, usage, partial: partial);
+            }
           },
         ).listen(
           (delta) {

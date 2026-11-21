@@ -7,17 +7,35 @@ String usageV4Day(DateTime at) => usageDay(at.toUtc().add(const Duration(hours: 
 
 int? _token(Object? v) => v is int && v >= 0 && v <= 9007199254740991 ? v : null;
 
-class UsageV4Day {
-  UsageV4Day(this.iid, {this.foreground = false, this.first = false});
+enum UsageTokenSource { chatLog, tavern, companion }
 
-  final String iid;
-  bool foreground;
-  bool first;
+enum UsageOperation {
+  runtimeDirect('runtime_direct'),
+  runtimeProot('runtime_proot'),
+  runtimeOther('runtime_other'),
+  sshInitial('ssh_initial'),
+  sshReconnect('ssh_reconnect'),
+  relayInitial('relay_initial'),
+  relayReconnect('relay_reconnect');
+
+  const UsageOperation(this.wire);
+  final String wire;
+}
+
+enum UsageOutcome { ready, failed, cancelled, unknown }
+
+class UsageV4Tokens {
   final counts = List<int>.filled(13, 0);
-  final values = List<int>.filled(8, 0);
-  String? snapshot;
+  final values = List<int>.filled(10, 0);
 
-  void chatLog(Map<String, Object?>? usage, {bool partial = false}) {
+  Map<String, Object?> get json => {'counts': counts, 'values': values};
+
+  void restore(Map<String, dynamic> json) {
+    counts.setAll(0, (json['counts'] as List).cast<int>());
+    values.setAll(0, (json['values'] as List).cast<int>());
+  }
+
+  void record(Map<String, Object?>? usage, {bool partial = false}) {
     if (counts[0] >= 100000) {
       counts[12] = 1;
       return;
@@ -58,6 +76,8 @@ class UsageV4Day {
       values[index] = min(cap, total);
     }
 
+    if (inputStatus == 2 && allIn != null) add(8, allIn);
+    if (outputStatus == 2 && rawOut != null) add(9, rawOut);
     final input = inputStatus <= 1 ? allIn : null;
     final output = outputStatus <= 1 ? rawOut : null;
     if (input != null) {
@@ -74,6 +94,36 @@ class UsageV4Day {
       add(3, output);
     }
   }
+}
+
+class UsageV4Day {
+  UsageV4Day(this.iid, {this.foreground = false, this.first = false});
+
+  final String iid;
+  bool foreground;
+  bool first;
+  String? snapshot;
+  final tokens = {for (final source in UsageTokenSource.values) source: UsageV4Tokens()};
+  final operations = <UsageOperation, List<int>>{};
+
+  void operation(UsageOperation operation, UsageOutcome outcome, Duration elapsed) {
+    final bins = operations.putIfAbsent(operation, () => List<int>.filled(16, 0));
+    if (bins[0] == 100000) {
+      bins[15] = 1;
+      return;
+    }
+    bins[0]++;
+    bins[1 + outcome.index]++;
+    if (outcome != UsageOutcome.ready) return;
+    const edges = [250, 500, 1000, 2000, 5000, 10000, 30000, 60000, 180000];
+    final index = edges.indexWhere((ms) => elapsed.inMicroseconds <= ms * 1000);
+    bins[index < 0 ? 14 : index + 5]++;
+  }
+
+  Map<String, Object?> get extra => {
+    for (final source in UsageTokenSource.values.skip(1)) source.name: tokens[source]!.json,
+    for (final entry in operations.entries) entry.key.wire: entry.value,
+  };
 
   String seal(String day, UsageDevice device) => snapshot ??= jsonEncode({
     'v': 4,
@@ -85,15 +135,16 @@ class UsageV4Day {
     'model': device.model.isEmpty ? '' : usageMaker(device.model),
     'rom': device.rom.isEmpty ? '' : usageMaker(device.rom),
     'base': [foreground ? 1 : 0, first ? 1 : 0],
-    'chat_log': {'counts': counts, 'values': values},
+    'chat_log': tokens[UsageTokenSource.chatLog]!.json,
+    'extra': extra,
   });
 
   Map<String, Object?> get json => {
     'iid': iid,
     'foreground': foreground,
     'first': first,
-    'counts': counts,
-    'values': values,
+    ...tokens[UsageTokenSource.chatLog]!.json,
+    'extra': extra,
     'snapshot': snapshot,
   };
 }
@@ -128,9 +179,14 @@ class UsageV4Ledger {
     }
   }
 
-  void chatLog(DateTime now, Map<String, Object?>? usage, {bool partial = false}) {
+  void token(DateTime now, UsageTokenSource source, Map<String, Object?>? usage, {bool partial = false}) {
     final day = _record(now);
-    if (day != null && day.snapshot == null) day.chatLog(usage, partial: partial);
+    if (day != null && day.snapshot == null) day.tokens[source]!.record(usage, partial: partial);
+  }
+
+  void operation(DateTime now, UsageOperation operation, UsageOutcome outcome, Duration elapsed) {
+    final day = _record(now);
+    if (day != null && day.snapshot == null) day.operation(operation, outcome, elapsed);
   }
 
   List<String> due(DateTime now) {
@@ -166,8 +222,15 @@ class UsageV4Ledger {
           foreground: item['foreground'] as bool,
           first: item['first'] as bool,
         );
-        day.counts.setAll(0, (item['counts'] as List).cast<int>());
-        day.values.setAll(0, (item['values'] as List).cast<int>());
+        day.tokens[UsageTokenSource.chatLog]!.restore(item);
+        if (item['extra'] case final Map<String, dynamic> extra) {
+          for (final source in UsageTokenSource.values.skip(1)) {
+            day.tokens[source]!.restore(extra[source.name] as Map<String, dynamic>);
+          }
+          for (final kind in UsageOperation.values) {
+            if (extra[kind.wire] case final List values) day.operations[kind] = values.cast<int>();
+          }
+        }
         day.snapshot = item['snapshot'] as String?;
         ledger.days[entry.key] = day;
       }
