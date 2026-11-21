@@ -285,15 +285,7 @@ class CompanionReminders {
   }
 
   MemoryRow? target(CompanionMemoryStore store, String sourceSession, CompanionReminderCommand command) {
-    final candidates = store
-        .tasks(sourceSessionId: sourceSession)
-        .where(
-          (task) =>
-              task['kind'] == 'phone.reminder' &&
-              task['cancel_requested'] == 0 &&
-              (command.target == null || task['reminder_text'] == command.target),
-        )
-        .toList();
+    final candidates = store.reminderTargets(sourceSessionId: sourceSession, text: command.target);
     return candidates.length == 1 ? candidates.single : null;
   }
 

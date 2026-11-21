@@ -292,6 +292,20 @@ extension CompanionTaskStore on CompanionMemoryStore {
     return [for (final row in rows) Map<String, Object?>.from(row)];
   }
 
+  /// Two matching current reminders are enough to establish ambiguity.
+  List<MemoryRow> reminderTargets({required String sourceSessionId, String? text}) {
+    final rows = _db.select(
+      '''
+      $_taskRead
+      WHERE t.source_session_id=? AND t.kind='phone.reminder' AND r.cancel_requested=0
+        ${text == null ? '' : 'AND r.reminder_text=?'}
+      LIMIT 2
+    ''',
+      [sourceSessionId, ?text],
+    );
+    return [for (final row in rows) Map<String, Object?>.from(row)];
+  }
+
   List<MemoryRow> taskReceipts(String taskId, {int afterSeq = 0}) {
     if (afterSeq < 0) {
       throw ArgumentError.value(afterSeq, 'afterSeq');

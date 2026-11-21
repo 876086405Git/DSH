@@ -223,6 +223,208 @@ void main() {
     expect(accepted['host_session_id'], isNull);
   });
 
+  group('reminder targets', () {
+    void addNewerMaps() {
+      for (var index = 0; index < 100; index++) {
+        now++;
+        final source = 'map-$index';
+        say(source, text: '打开地图去青桥广场。');
+        store.createMapOpenFromMessage(
+          messageId: source,
+          expectedSourceRev: 1,
+          itemNo: 0,
+          roomMode: 'light',
+          executorId: 'installation-one',
+          map: const CompanionMapSpec(address: '青桥广场'),
+        );
+      }
+    }
+
+    Map<String, List<MemoryRow>> taskRows() => {
+      for (final table in ['companion_tasks', 'companion_task_revisions', 'companion_task_receipts'])
+        table: [
+          for (final row in database.select('SELECT * FROM $table ORDER BY rowid')) Map<String, Object?>.from(row),
+        ],
+    };
+
+    test('finds a unique reminder outside the latest 100 tasks without writes', () {
+      say('original');
+      final original = create('original');
+      final id = original['task_id'] as String;
+      addNewerMaps();
+      final displayed = store.tasks(sourceSessionId: 'room:original');
+      expect(displayed, hasLength(100));
+      expect(displayed.map((row) => row['task_id']), isNot(contains(id)));
+      expect(displayed.every((row) => row['kind'] == 'phone.map_open'), isTrue);
+      final before = taskRows();
+      final changes = database.select('SELECT total_changes() AS n').single['n'];
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: '带证件'), [original]);
+      expect(store.reminderTargets(sourceSessionId: 'room:original'), [original]);
+      expect(database.select('SELECT total_changes() AS n').single['n'], changes);
+      expect(taskRows(), before);
+      reopen();
+      final reopenedChanges = database.select('SELECT total_changes() AS n').single['n'];
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: '带证件'), [original]);
+      expect(store.reminderTargets(sourceSessionId: 'room:original'), [original]);
+      expect(database.select('SELECT total_changes() AS n').single['n'], reopenedChanges);
+      expect(taskRows(), before);
+    });
+
+    test('keeps same-name reminders ambiguous across the display window and caps witnesses at two', () {
+      say('old');
+      final old = create('old')['task_id'] as String;
+      addNewerMaps();
+      now++;
+      say('recent');
+      final recent = create('recent')['task_id'] as String;
+      final displayed = store.tasks(sourceSessionId: 'room:original');
+      expect(displayed, hasLength(100));
+      expect(displayed.map((row) => row['task_id']), isNot(contains(old)));
+      expect(displayed.where((row) => row['kind'] == 'phone.reminder').single['task_id'], recent);
+      expect(
+        store.reminderTargets(sourceSessionId: 'room:original', text: '带证件').map((row) => row['task_id']),
+        unorderedEquals([old, recent]),
+      );
+      final before = taskRows();
+      reopen();
+      expect(
+        store.reminderTargets(sourceSessionId: 'room:original', text: '带证件').map((row) => row['task_id']),
+        unorderedEquals([old, recent]),
+      );
+      expect(taskRows(), before);
+      now++;
+      say('third');
+      final third = create('third')['task_id'] as String;
+      final witnesses = store.reminderTargets(sourceSessionId: 'room:original', text: '带证件');
+      expect(witnesses, hasLength(2));
+      expect(witnesses.map((row) => row['task_id']).toSet(), hasLength(2));
+      expect(witnesses.every((row) => {old, recent, third}.contains(row['task_id'])), isTrue);
+    });
+
+    test('filters cancelled revisions before limiting an unnamed target', () {
+      say('kept');
+      final kept = create('kept');
+      for (var index = 0; index < 100; index++) {
+        now++;
+        final source = 'withdrawn-$index';
+        say(source);
+        final id = create(source)['task_id'] as String;
+        now++;
+        final command = 'cancel-$index';
+        say(command, text: '取消提醒。');
+        expect(cancel(id, command)['cancel_requested'], 1);
+      }
+      final displayed = store.tasks(sourceSessionId: 'room:original');
+      expect(displayed, hasLength(100));
+      expect(displayed.every((row) => row['cancel_requested'] == 1), isTrue);
+      expect(store.reminderTargets(sourceSessionId: 'room:original'), [kept]);
+      now++;
+      say('second');
+      final second = create('second');
+      expect(
+        store.reminderTargets(sourceSessionId: 'room:original').map((row) => row['task_id']),
+        unorderedEquals([kept['task_id'], second['task_id']]),
+      );
+    });
+
+    test('uses the original room and exact current text without normalization', () {
+      say('original');
+      final id = create('original')['task_id'] as String;
+      say('elsewhere', session: 'room:other');
+      final elsewhere = create('elsewhere');
+      say('rename', text: '改成明早八点提醒我带钥匙。');
+      final revised = amend(
+        id,
+        'rename',
+        reminder: const CompanionReminderSpec(
+          text: '带钥匙',
+          localDate: '2026-11-03',
+          localTime: '08:00',
+          zoneId: 'Asia/Shanghai',
+          offsetSeconds: 28800,
+          epochMs: 1793664000000,
+        ),
+      );
+      expect(revised['task_rev'], 2);
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: '带钥匙'), [revised]);
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: '带证件'), isEmpty);
+      expect(store.reminderTargets(sourceSessionId: 'room:other', text: '带证件'), [elsewhere]);
+      expect(store.reminderTargets(sourceSessionId: 'room:other', text: '带钥匙'), isEmpty);
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: '带钥匙 '), isEmpty);
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: ''), isEmpty);
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: "' OR 1=1 --"), isEmpty);
+      expect(store.reminderTargets(sourceSessionId: 'room:original '), isEmpty);
+      expect(store.reminderTargets(sourceSessionId: 'room:original'), [revised]);
+      expect(store.reminderTargets(sourceSessionId: 'room:missing'), isEmpty);
+    });
+
+    test('keeps registered and notified reminders eligible without changing their receipts', () {
+      say('original');
+      final id = create('original')['task_id'] as String;
+      receipt(id);
+      receipt(id, event: 'returned', outcome: 'succeeded');
+      database.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=1", [id]);
+      now = _eight.epochMs! + 1000;
+      // Native-shaped stored facts only: this does not execute Android delivery.
+      database.execute(
+        '''
+        UPDATE companion_task_revisions SET notification_claim_id='notification-one',notification_claimed_at_ms=?
+        WHERE task_id=? AND task_rev=1
+      ''',
+        [now, id],
+      );
+      for (final event in ['received', 'claimed', 'returned', 'active_observed', 'opened']) {
+        database.execute(
+          '''
+          INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
+            executor_id,occurred_at_ms,effect_id,outcome,detail_json)
+          VALUES(?,1,'notification',?,?,'installation-one',?,?,?,?)
+        ''',
+          [
+            id,
+            event == 'received' || event == 'active_observed' ? 'observation-$event' : 'notification-one',
+            event,
+            now,
+            'dsh-reminder:$id:1',
+            event == 'returned' ? 'succeeded' : null,
+            jsonEncode({'fixture': 'persisted native notification; no system call'}),
+          ],
+        );
+      }
+      final current = store.task(id)!;
+      final facts = store.taskReceipts(id);
+      final before = taskRows();
+      expect(current['state'], 'done');
+      expect(current['epoch_ms'] as int, lessThan(now));
+      expect(current['notification_claim_id'], 'notification-one');
+      expect(store.reminderTargets(sourceSessionId: 'room:original', text: '带证件'), [current]);
+      reopen();
+      expect(store.reminderTargets(sourceSessionId: 'room:original'), [current]);
+      expect(store.taskReceipts(id), facts);
+      expect(taskRows(), before);
+      say('cancel', text: '取消带证件的提醒。');
+      final stopped = cancel(id, 'cancel');
+      expect(stopped['state'], 'queued');
+      expect(stopped['cancel_requested'], 1);
+      expect(store.reminderTargets(sourceSessionId: 'room:original'), isEmpty);
+      expect(store.taskReceipts(id), facts);
+    });
+
+    test('keeps another executor and an unknown registration in the candidate set', () {
+      say('old-installation');
+      final original = create('old-installation', executor: 'installation-old');
+      say('current-installation');
+      final id = create('current-installation')['task_id'] as String;
+      receipt(id);
+      database.execute("UPDATE companion_task_revisions SET state='unknown' WHERE task_id=? AND task_rev=1", [id]);
+      final pending = store.task(id)!;
+      expect(
+        store.reminderTargets(sourceSessionId: 'room:original', text: '带证件'),
+        unorderedEquals([original, pending]),
+      );
+    });
+  });
+
   test('a stored source retains its one clock observation through edit and restart', () {
     final original = say('source');
     expect(() => say('source', zone: 'Asia/Singapore'), error('companion/conflict'));

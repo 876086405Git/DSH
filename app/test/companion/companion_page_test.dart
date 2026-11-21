@@ -150,11 +150,13 @@ class _ReceiptMemory extends CompanionMemoryOwner {
   _ReceiptMemory(super.store, super.legacy, {super.nowMilliseconds});
 
   late Future<void> lastReceipt;
+  ValueChanged<Future<void>>? receiptStarted;
 
   @override
   void retainReceipt(Future<void> settled) {
     super.retainReceipt(settled);
     lastReceipt = settled;
+    receiptStarted?.call(settled);
   }
 }
 
@@ -3091,6 +3093,229 @@ void main() {
           expect(memory.store.hostTaskCommands(id), hasLength(1));
           expect(modelPosts, 0);
         });
+      }
+
+      for (final operation in ['amend', 'cancel']) {
+        for (final duplicate in [false, true]) {
+          testWidgets('R18 actual Page $operation keeps older reminder identity, duplicate=$duplicate', (tester) async {
+            final beforeLifecycle = tester.binding.lifecycleState;
+            tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+            addTearDown(() {
+              if (beforeLifecycle != null) {
+                tester.binding.handleAppLifecycleStateChanged(beforeLifecycle);
+              } else {
+                tester.binding.resetInternalState();
+              }
+            });
+            const channel = MethodChannel('dsh/companion_reminders');
+            var now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
+            final db = sqlite3.open('${root.path}/memory.sqlite');
+            final memory = _ReceiptMemory(
+              CompanionMemoryStore(db, nowMilliseconds: () => now),
+              CompanionLocal.at(root),
+              nowMilliseconds: () => now,
+            );
+            final calls = <MethodCall>[];
+            var posts = 0;
+            addTearDown(() async {
+              memory.receiptStarted = null;
+              await tester.pumpWidget(const SizedBox());
+              memory.dispose();
+              await tester.pump();
+              tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+            });
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              switch (call.method) {
+                case 'clock':
+                  return {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800};
+                case 'capabilities':
+                  return {'executorId': 'installation-A', 'exact': true, 'notifications': true};
+                case 'resolve':
+                  final args = call.arguments as Map;
+                  final local = DateTime.parse('${args['localDate']}T${args['localTime']}Z');
+                  return {
+                    'kind': 'unique',
+                    'moments': [
+                      {'epochMs': local.millisecondsSinceEpoch - 28800000, 'offsetSeconds': 28800},
+                    ],
+                  };
+                case 'recover':
+                  return {'recoveryQueued': true};
+                case 'wake':
+                  final task = memory.store.task((call.arguments as Map)['taskId']! as String)!;
+                  if (task['task_rev'] == 1) {
+                    // Controlled native receipt input, not an Android alarm.
+                    // Later amend/cancel wakes only ACK; they cannot prove stop.
+                    for (final event in ['claimed', 'returned']) {
+                      db.execute(
+                        '''
+                        INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
+                          executor_id,occurred_at_ms,outcome)
+                        VALUES(?,1,'alarm.register','r18-page-register',?,'installation-A',?,?)
+                      ''',
+                        [task['task_id'], event, now, event == 'returned' ? 'succeeded' : null],
+                      );
+                    }
+                    db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=1", [
+                      task['task_id'],
+                    ]);
+                  }
+                  return {'wakeCompleted': true};
+                default:
+                  throw StateError('Unexpected reminder method ${call.method}');
+              }
+            });
+            await openLight(
+              tester,
+              apiKey: '',
+              client: MockClient((_) async {
+                posts++;
+                return http.Response('', 401);
+              }),
+              extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+            );
+            expect(await memoryOf(tester), same(memory));
+            await settleMixed(tester, memory.migrateLocal());
+
+            Future<void> sendReminder(String raw) async {
+              final retained = Completer<void>();
+              memory.receiptStarted = (_) => retained.complete();
+              await tester.enterText(find.byType(TextField), raw);
+              await tester.pump();
+              await tester.tap(find.byIcon(AppIcons.send).last);
+              await settleMixed(tester, retained.future);
+              memory.receiptStarted = null;
+              await settleMixed(tester, memory.lastReceipt);
+              await tester.pump();
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            }
+
+            const originalRaw = '2026-11-22 08:00 Asia/Shanghai提醒我带证件';
+            await sendReminder(originalRaw);
+            final original = memory.store.tasks().single;
+            final id = original['task_id']! as String;
+            final source = memory.store.messages().singleWhere((row) => row['text'] == originalRaw);
+            final sourceBefore = Map<String, Object?>.from(
+              db.select('SELECT * FROM memory_messages WHERE id=?', [source['id']]).single,
+            );
+            expect(original['state'], 'done');
+            expect(memory.store.taskReceipts(id), hasLength(2));
+            final room = memory.store.lightSessionId;
+
+            MemoryRow addLater(String sourceId, String text) {
+              now++;
+              memory.store.submitMessage(
+                id: sourceId,
+                sessionId: room,
+                text: '2026-11-22 08:00 Asia/Shanghai提醒我$text',
+                saidAtUtc: now,
+                offsetMinutes: 480,
+                zoneId: 'Asia/Shanghai',
+                offsetSeconds: 28800,
+              );
+              return memory.store.createReminderFromMessage(
+                messageId: sourceId,
+                expectedSourceRev: 1,
+                itemNo: 0,
+                roomMode: 'light',
+                executorId: 'installation-A',
+                reminder: CompanionReminderSpec(
+                  text: text,
+                  localDate: '2026-11-22',
+                  localTime: '08:00',
+                  zoneId: 'Asia/Shanghai',
+                  offsetSeconds: 28800,
+                  epochMs: DateTime.utc(2026, 11, 22).millisecondsSinceEpoch,
+                ),
+              );
+            }
+
+            for (var index = 0; index < 100; index++) {
+              addLater('newer-$index', '处理第$index件事');
+            }
+            final other = duplicate ? addLater('independent-same-text', '带证件') : null;
+            final visible = memory.store.tasks(sourceSessionId: room);
+            expect(visible, hasLength(100));
+            expect(visible.map((row) => row['task_id']), isNot(contains(id)));
+            expect(
+              visible.where((row) => row['reminder_text'] == '带证件').map((row) => row['task_id']),
+              duplicate ? [other!['task_id']] : isEmpty,
+            );
+            final headsBefore = [
+              for (final row in db.select('SELECT * FROM companion_tasks ORDER BY task_id'))
+                Map<String, Object?>.from(row),
+            ];
+            final revisionsBefore = [
+              for (final row in db.select('SELECT * FROM companion_task_revisions ORDER BY task_id,task_rev'))
+                Map<String, Object?>.from(row),
+            ];
+            final receiptsBefore = [
+              for (final row in db.select('SELECT * FROM companion_task_receipts ORDER BY runner_receipt_seq'))
+                Map<String, Object?>.from(row),
+            ];
+            calls.clear();
+            now++;
+            final raw = operation == 'amend' ? '把带证件的提醒改到08:30' : '取消带证件的提醒';
+            await sendReminder(raw);
+            final command = memory.store.messages().singleWhere((row) => row['text'] == raw);
+            expect(command['session_id'], room);
+            expect(command['id'], isNot(source['id']));
+            expect(command['source_rev'], 1);
+            final accepted = memory.store.taskForCommand(command['id']! as String, 0);
+            final headsAfter = [
+              for (final row in db.select('SELECT * FROM companion_tasks ORDER BY task_id'))
+                Map<String, Object?>.from(row),
+            ];
+            final revisionsAfter = [
+              for (final row in db.select('SELECT * FROM companion_task_revisions ORDER BY task_id,task_rev'))
+                Map<String, Object?>.from(row),
+            ];
+            expect([
+              for (final row in db.select('SELECT * FROM companion_task_receipts ORDER BY runner_receipt_seq'))
+                Map<String, Object?>.from(row),
+            ], receiptsBefore);
+            if (duplicate) {
+              expect(accepted, isNull);
+              expect(headsAfter, headsBefore);
+              expect(revisionsAfter, revisionsBefore);
+              expect(calls.where((call) => const ['capabilities', 'resolve', 'wake'].contains(call.method)), isEmpty);
+              expect(find.text('你说的是哪一条？去「交代的事」里点给我看看。'), findsOneWidget);
+            } else {
+              expect(accepted!['task_id'], id);
+              expect(accepted['task_rev'], 2);
+              expect(accepted['source_message_id'], source['id']);
+              expect(accepted['source_session_id'], room);
+              expect(accepted['command_message_id'], command['id']);
+              expect(accepted['command_source_rev'], 1);
+              expect(accepted['command_item_no'], 0);
+              expect(accepted['operation'], operation);
+              expect(accepted['cancel_requested'], operation == 'cancel' ? 1 : 0);
+              expect(accepted['state'], 'queued', reason: 'A wake ACK is neither a new alarm nor a stop receipt');
+              expect(accepted['local_time'], operation == 'amend' ? '08:30' : '08:00');
+              expect(headsAfter, hasLength(headsBefore.length));
+              expect(
+                headsAfter.where((row) => row['task_id'] != id),
+                headsBefore.where((row) => row['task_id'] != id),
+              );
+              expect(revisionsAfter, hasLength(revisionsBefore.length + 1));
+              expect(
+                revisionsAfter.where((row) => row['task_id'] != id || row['task_rev'] == 1),
+                revisionsBefore,
+              );
+              final wakes = calls.where((call) => call.method == 'wake').toList();
+              expect(wakes, hasLength(1));
+              expect(wakes.single.arguments, {'taskId': id});
+              expect(calls.where((call) => call.method == 'resolve'), hasLength(operation == 'amend' ? 1 : 0));
+              expect(find.text('你说的是哪一条？去「交代的事」里点给我看看。'), findsNothing);
+            }
+            expect(
+              Map<String, Object?>.from(db.select('SELECT * FROM memory_messages WHERE id=?', [source['id']]).single),
+              sourceBefore,
+            );
+            expect(posts, 0);
+          });
+        }
       }
 
       for (final rejectSource in [false, true]) {
