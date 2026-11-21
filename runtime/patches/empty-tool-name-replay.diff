@@ -1,0 +1,19 @@
+--- a/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
+@@ -2073 +2073,6 @@
+-				const usageEvidence = {};
++				if (model.api === "openai-completions") for (const message of context.messages) {
++					if (message.role === "assistant") {
++						for (const block of message.content) if (block.type === "toolCall" && block.name === "") block.name = "unknown";
++					} else if (message.role === "toolResult" && message.toolName === "") message.toolName = "unknown";
++				}
++				const usageEvidence = {};
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -1578,3 +1578,3 @@
+-				type: "tool_use",
+-				id: block.id,
+-				name: block.name,
++				type: "tool_use",
++				id: block.id,
++				name: block.name === "" ? "unknown" : block.name,
