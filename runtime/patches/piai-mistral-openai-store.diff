@@ -1,0 +1,19 @@
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+@@ -1233,3 +1233,4 @@
+-    // Google's documented OpenAI endpoint rejects the optional store field.
+-    // Keep other compatibility defaults and explicit model.compat overrides.
+-    let isGoogleOpenAI = false;
++    // Google's OpenAI endpoint and Mistral's native endpoint reject store.
++    // Keep other compatibility defaults and explicit model.compat overrides.
++    let isGoogleOpenAI = false;
++    let isMistralNative = false;
+@@ -1240 +1241,4 @@
+-            (url.pathname === "/v1beta/openai" || url.pathname === "/v1beta/openai/");
++            (url.pathname === "/v1beta/openai" || url.pathname === "/v1beta/openai/");
++        isMistralNative = url.protocol === "https:" &&
++            url.hostname === "api.mistral.ai" && url.port === "" &&
++            (url.pathname === "/v1" || url.pathname === "/v1/");
+@@ -1271 +1275 @@
+-        supportsStore: !isNonStandard && !isGoogleOpenAI,
++        supportsStore: !isNonStandard && !isGoogleOpenAI && !isMistralNative,

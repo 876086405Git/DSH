@@ -383,8 +383,8 @@
     "ohos-provider-body-timeout.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
-          "after": "d9eca90d93cba3585fa214373eff02628a1b53838659d88aee7e776468f9621c",
-          "before": "f10502eab12993c68c1f886e5de5d3aa707604f504660cb861fc1b45faffecaf"
+          "after": "56c8036e7fb7f580097b17f5257a5f6f1b149e25b68a6caae6d2712de624949a",
+          "before": "0f90990333c18d9470b3bb02148159cbcbe754e0e7238cba577da0c012d7ba8f"
         }
       }
     },
@@ -485,6 +485,14 @@
         "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
           "after": "f10502eab12993c68c1f886e5de5d3aa707604f504660cb861fc1b45faffecaf",
           "before": "df81627c173163d0b918692f4a3b87e22cbdb5883b809e4d70d6152d1e68d948"
+        }
+      }
+    },
+    "piai-mistral-openai-store.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
+          "after": "0f90990333c18d9470b3bb02148159cbcbe754e0e7238cba577da0c012d7ba8f",
+          "before": "f10502eab12993c68c1f886e5de5d3aa707604f504660cb861fc1b45faffecaf"
         }
       }
     },
@@ -2384,6 +2392,7 @@
       "install-log-redaction.diff",
       "piai-anthropic-opus55-thinking.diff",
       "piai-google-openai-store.diff",
+      "piai-mistral-openai-store.diff",
       "plugin-manager-active-run-guard.diff",
       "plugin-manager-cancel-tree-confirmation.diff",
       "preset-legacy-delegation.diff",
@@ -2542,6 +2551,7 @@
       "install-log-redaction.diff",
       "piai-anthropic-opus55-thinking.diff",
       "piai-google-openai-store.diff",
+      "piai-mistral-openai-store.diff",
       "plugin-manager-active-run-guard.diff",
       "plugin-manager-cancel-tree-confirmation.diff",
       "preset-legacy-delegation.diff",
