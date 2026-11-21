@@ -6,7 +6,9 @@ import { readFile } from 'node:fs/promises';
 import { createCompanionRoutes } from '../bridge/dsh-go-bridge/lib/companion/routes.js';
 import { FULL_PRESET } from '../bridge/dsh-go-bridge/lib/companion/prompt-context.js';
 import { deferred, lookupPeer, lookupSource } from './fixtures/companion-lookup-source.mjs';
-import { sourceFixture, auxiliarySse, piAiSourceFixture } from './fixtures/companion-auxiliary-source.mjs';
+import { auxiliarySse, piAiSourceFixture } from './fixtures/companion-auxiliary-source.mjs';
+import { chatSourceFixture } from './fixtures/companion-chat-usage-source.mjs';
+import { estimateLookupInputTokens } from '../bridge/dsh-go-bridge/lib/companion/lookup-input.js';
 
 const PATH = '/dsh-go/v1/companion/lookup';
 const webSource = process.env.DSH_LOOKUP_SOURCE, llmSource = process.env.DSH_AUXILIARY_SOURCES;
@@ -28,14 +30,17 @@ async function fixture(t, options = {}) {
   t.after(() => plugin.dispose());
   const state = { selected: { provider: 'chosen-provider', model: 'chosen-model' }, owner: true,
     resolves: 0, web: plugin.web, deadlineAtMs: Date.now() + 60000 };
-  const engine = options.model ? await sourceFixture(llmSource, {
+  const engine = options.model ? await chatSourceFixture(llmSource, {
+    lookupWindow: true,
     authGate: options.modelAuthGate,
+    onAuth: options.modelAuthEntered?.resolve,
     transport(url, init) {
       assert.equal(new URL(url).hostname, '127.0.0.1', 'the answer uses only a numeric loopback endpoint');
       return globalThis.fetch(url, init);
     },
   }) : undefined;
   if (engine) engine.connection.baseURL = peer.baseURL.replace('/v1/tools', '/anthropic');
+  if (engine) t.after(() => engine.dispose());
   state.llm = engine?.llm ?? { companionAuxiliaryCapability: () => undefined };
   const session = { id: 'session', deriveMessages() { throw new Error('lookup must not read Session history'); },
     append() { throw new Error('lookup must not persist Session events'); } };
@@ -276,6 +281,9 @@ answerTest('lookup answer reaches actual locked model HTTP with the shared fixed
   assert.deepEqual(JSON.parse(body.messages[0].content[0].text), { task, sources: [source] });
   assert(!Object.hasOwn(body, 'tools')); assert(!Object.hasOwn(body, 'tool_choice'));
   assert(!JSON.stringify(body).includes('UNRELATED_PRIVATE_PROMPT'));
+  assert.deepEqual(last.inputBudget, { estimatedTokens: estimateLookupInputTokens(JSON.stringify(body)),
+    outputReserve: 800, contextWindow: 8192, scope: 'provider-request', estimator: 'companion-heuristic-v1' });
+  assert(!JSON.stringify(last.inputBudget).includes('synthetic-test-only'));
   const receipt = (await f.receipt('request')).body;
   assert.equal(receipt.finish.result.text, '{"items":[]}', 'transport retains model bytes; it does not claim their E schema or semantics passed');
   assert(!JSON.stringify(receipt).includes(source.content));
@@ -291,6 +299,7 @@ answerTest('lookup generic current provider keeps normalized usage distinct and 
   assert.equal(last.usage.final_usage, null); assert.equal(last.usage.input_uncached, null); assert.equal(last.usage.output_tokens, null);
   assert.equal(last.usage.runtime_normalized_usage[0].outputTokens, 2);
   assert.equal(pi.calls.length, 1); assert.equal(pi.calls[0].options.maxRetries, 0);
+  assert.equal(last.inputBudget.scope, 'adapter-input'); assert.equal(last.inputBudget.contextWindow, 8192);
   assert.equal(f.peer.requests.length, 0, 'pi-ai downstream streamSimple is an explicit fixture, not a physical HTTP claim');
 });
 
@@ -306,4 +315,79 @@ answerTest('lookup answer model change during real credential preparation preven
   f.state.selected = { provider: 'changed', model: 'changed' }; gate.resolve();
   const response = await pending;
   assert.equal(response.body.at(-1).dispatched, false); assert.equal(f.peer.requests.length, 0);
+});
+
+answerTest('lookup rejects the full final request above 12k estimated input before any model HTTP', async t => {
+  const f = await fixture(t, { model: true });
+  f.engine.connection.models[0].contextWindow = 100000;
+  const response = await f.post({ kind: 'answer', payload: { sources: [{ ...source, content: '馆'.repeat(20000) }] } });
+  const last = response.body.at(-1);
+  assert.equal(response.status, 200); assert.equal(last.dispatched, false);
+  assert.equal(last.error.code, 'companion/lookup-input-limit'); assert.equal(last.terminal, 'preflight_error');
+  assert(last.inputBudget.estimatedTokens > 12000); assert.equal(last.inputBudget.contextWindow, 100000);
+  assert.equal(last.inputBudget.scope, 'provider-request'); assert.equal(f.peer.requests.length, 0);
+});
+
+answerTest('lookup reserves all 800 output tokens within the same prepared model window', async t => {
+  const f = await fixture(t, { model: true, async respond(_req, res) {
+    res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(await auxiliarySse().text());
+  } });
+  const first = await f.post({ kind: 'answer', payload: { sources: [source] } });
+  const amount = first.body.at(-1).inputBudget.estimatedTokens;
+  assert(amount < 12000); assert.equal(f.peer.requests.length, 1);
+  f.engine.connection.models[0].contextWindow = amount + 799;
+  const tooSmall = await f.post({ requestId: 'small-window', kind: 'answer', payload: { sources: [source] } });
+  assert.equal(tooSmall.body.at(-1).dispatched, false);
+  assert.equal(tooSmall.body.at(-1).inputBudget.estimatedTokens, amount);
+  assert.equal(f.peer.requests.length, 1);
+  f.engine.connection.models[0].contextWindow = amount + 800;
+  const exact = await f.post({ requestId: 'exact-window', kind: 'answer', payload: { sources: [source] } });
+  assert.equal(exact.body.at(-1).dispatched, true); assert.equal(f.peer.requests.length, 2);
+});
+
+answerTest('lookup uses the captured preparation window rather than a later larger model-info lookup', async t => {
+  const entered = deferred(), gate = deferred();
+  const f = await fixture(t, { model: true, modelAuthEntered: entered, modelAuthGate: gate.promise });
+  f.engine.connection.models[0].contextWindow = 2048;
+  const pending = f.post({ kind: 'answer', payload: { sources: [{ ...source, content: 'x'.repeat(10000) }] } });
+  await entered.promise;
+  f.engine.connection.models[0].contextWindow = 100000;
+  gate.resolve(); const last = (await pending).body.at(-1);
+  assert.equal(last.dispatched, false); assert.equal(last.inputBudget.contextWindow, 2048);
+  assert(last.inputBudget.estimatedTokens < 12000); assert.equal(f.peer.requests.length, 0);
+});
+
+answerTest('lookup generic adapter input over budget rejects before adapter handoff', async t => {
+  const f = await fixture(t, { model: true });
+  const pi = await piAiSourceFixture(llmSource, f.engine);
+  f.engine.llm.adapters.set(pi.provider, { provider: { id: pi.provider, name: 'Chosen pi-ai' }, adapter: pi.adapter });
+  f.state.selected = { provider: pi.provider, model: pi.model.id };
+  const last = (await f.post({ kind: 'answer', payload: { sources: [{ ...source, content: '馆'.repeat(20000) }] } })).body.at(-1);
+  assert.equal(last.dispatched, false); assert.equal(last.error.code, 'companion/lookup-input-limit');
+  assert.equal(last.inputBudget.scope, 'adapter-input'); assert.equal(pi.calls.length, 0);
+  assert.equal(last.usage.host_adapter_handoff_at_ms, null); assert.equal(f.peer.requests.length, 0);
+});
+
+answerTest('lookup nullable actual generic model context remains unknown and does not become a made-up window', async t => {
+  const f = await fixture(t, { model: true });
+  let calls = 0;
+  // Explicit adapter contract fixture; the actual LlmRuntime validates and
+  // seals this absent optional context. No physical HTTP claim is made.
+  f.engine.llm.adapters.set('no-context', { provider: { id: 'no-context', name: 'No context fixture' }, adapter: {
+    async prepareCall(provider, id) { return { model: { provider, id, name: 'Unknown window' }, stream: async function* () {
+      calls++; yield { type: 'text-delta', text: 'synthetic result' }; yield { type: 'finish', reason: { kind: 'stop' } };
+    } }; },
+  } });
+  f.state.selected = { provider: 'no-context', model: 'fixture-model' };
+  const last = (await f.post({ kind: 'answer', payload: { sources: [source] } })).body.at(-1);
+  assert.equal(last.dispatched, null); assert.equal(last.inputBudget.contextWindow, null);
+  assert.equal(last.inputBudget.scope, 'adapter-input'); assert.equal(calls, 1);
+  assert.equal(f.peer.requests.length, 0);
+});
+
+test('lookup input estimate includes whitespace and Unicode using the existing phone heuristic, never raw usage', () => {
+  for (const [text, expected] of [['', 0], ['a'.repeat(10), 3], [' '.repeat(10), 3],
+    ['馆'.repeat(10), 6], ['🙂', 4], ['é', 2], ['\u0085', 2], ['\ud840\udc00', 1]]) {
+    assert.equal(estimateLookupInputTokens(text), expected);
+  }
 });

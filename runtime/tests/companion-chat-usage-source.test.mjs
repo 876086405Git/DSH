@@ -12,7 +12,8 @@ const eventually = async check => {
 };
 const frame = event => new TextEncoder().encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 async function fixture(t, options) {
-  const f = await chatSourceFixture(root, options); t.after(() => f.dispose()); return f;
+  const f = await chatSourceFixture(root, { ...options, lookupWindow: process.env.DSH_LOOKUP_WINDOW === '1' });
+  t.after(() => f.dispose()); return f;
 }
 const finish = f => { f.context.end(f.agent.session); return f.snapshot(); };
 

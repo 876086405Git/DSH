@@ -21,10 +21,11 @@ const between = (source, start, end) => {
 };
 const region = (source, name) => between(source, `//#region lib/types/${name}.js`, '//#endregion');
 
-export async function loadChatSource(root, fetch) {
+export async function loadChatSource(root, fetch, lookupWindow = false) {
+  const sourceFile = lookupWindow ? 'index.lookup-window.js' : 'index.chat-usage.js';
   const [llm, deepseek, agent, pins, values, timeouts, sse] = await Promise.all([
-    readFile(join(root, 'dsh-llm/index.chat-usage.js'), 'utf8'),
-    readFile(join(root, 'dsh-llm-deepseek/index.chat-usage.js'), 'utf8'),
+    readFile(join(root, 'dsh-llm', sourceFile), 'utf8'),
+    readFile(join(root, 'dsh-llm-deepseek', sourceFile), 'utf8'),
     readFile(join(root, 'dsh-agent/index.js'), 'utf8'),
     readFile(new URL('../../patches/pins.json', import.meta.url), 'utf8').then(JSON.parse),
     import(pathToFileURL(join(root, 'dsh-util-values/lib/index.js')).href),
@@ -33,7 +34,7 @@ export async function loadChatSource(root, fetch) {
   ]);
   for (const [name, value] of [['dsh-llm', llm], ['dsh-llm-deepseek', deepseek]]) {
     assert.equal(createHash('sha256').update(value).digest('hex'),
-      pins.patches['companion-chat-usage-receipts.diff']['0.2.2-rc.1'][`node_modules/@deepseek-ai/${name}/lib/index.js`].after);
+      pins.patches[lookupWindow ? 'companion-lookup-answer-window.diff' : 'companion-chat-usage-receipts.diff']['0.2.2-rc.1'][`node_modules/@deepseek-ai/${name}/lib/index.js`].after);
   }
   // The original lock package provenance is recorded in A03-upstream-provenance.
   assert.equal(createHash('sha256').update(agent).digest('hex'), '8673b5cfadfbb6e6ce0bcb341d0ea2877adc2986eab1c2b6c8baf32726534c92');
@@ -71,7 +72,7 @@ export async function chatSourceFixture(root, options = {}) {
   const engine = await loadChatSource(root, (url, init) => {
     requests.push({ url, init, body: JSON.parse(init.body) });
     return options.transport ? options.transport(url, init, requests.length) : Promise.resolve(auxiliarySse(options.response));
-  });
+  }, options.lookupWindow);
   const connection = {
     baseURL: 'https://synthetic.invalid/anthropic', models: [{ id: 'chosen-model', inputModalities: ['text'], contextWindow: 8192 }],
     defaults: { thinking: 'disabled' }, maxTokens: 1024, defaultContextWindow: 8192,

@@ -200,3 +200,6 @@ ohos-mcp-start-close.diff
 ohos-jobs-active.diff
 ohos-piai-text-preabort.diff
 companion-public-lookup-observer.diff
+
+# Public lookup answer: same-preparation context and complete-input estimate.
+companion-lookup-answer-window.diff

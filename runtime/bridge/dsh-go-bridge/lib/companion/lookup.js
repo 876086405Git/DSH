@@ -5,6 +5,7 @@ import { CompanionError, fields, isObject } from './schema.js';
 import { contextId } from './prompt-context.js';
 import { errorCode, usageReceipt } from './auxiliary.js';
 import { lookupAnswerSystem } from './lookup-answer.js';
+import { estimateLookupInputTokens } from './lookup-input.js';
 
 const ROOT = '/dsh-go/v1/companion/lookup';
 const MAX_BYTES = 65536, MAX_RECORDS = 4096;
@@ -104,7 +105,7 @@ export function createCompanionLookupRoutes({ ctx, send, readJson, resolve, inst
       digest: requestDigest, controller, provider: body.provider, model: body.model,
       dispatched: false, dispatchAtMs: null, httpStatus: null, complete: false, terminal: 'incomplete', finished: false,
       startUsage: null, finalUsage: null, stopReason: null, rawUsageAvailable: false,
-      normalizedUsage: [], handoffAtMs: null, runtimeFinishKind: null, text: '', result: null };
+      normalizedUsage: [], handoffAtMs: null, runtimeFinishKind: null, text: '', result: null, inputBudget: null };
     receipts.set(body.requestId, record); active = record;
     const abort = () => controller.abort(new Error('Public lookup HTTP closed'));
     req.once('aborted', abort); res.once('close', abort);
@@ -167,8 +168,17 @@ export function createCompanionLookupRoutes({ ctx, send, readJson, resolve, inst
         const reasoningEffort = record.rawUsageAvailable ? 'off' : target.selected.reasoningEffort;
         const config = { provider: body.provider, model: body.model, maxTokens: 800,
           ...(reasoningEffort === undefined ? {} : { reasoningEffort }) };
-        const call = await target.llm.prepareCompanionAuxiliaryCall(config, controller.signal, { guard, observe });
+        let call;
+        const checkRequest = (input, scope) => {
+          guard();
+          record.inputBudget = { estimatedTokens: estimateLookupInputTokens(input), outputReserve: 800,
+            contextWindow: call.contextWindow, scope, estimator: 'companion-heuristic-v1' };
+          return record.inputBudget.estimatedTokens <= 12000 && (call.contextWindow === null ||
+            record.inputBudget.estimatedTokens + 800 <= call.contextWindow);
+        };
+        call = await target.llm.prepareCompanionAuxiliaryCall(config, controller.signal, { guard, observe, checkRequest });
         guard();
+        if (!Object.hasOwn(call, 'contextWindow')) throw failure(422, 'unavailable', 'This host cannot check the prepared lookup input');
         if (call.config.provider !== body.provider || call.config.model !== body.model || call.config.maxTokens !== 800 ||
             reasoningEffort !== undefined && call.config.reasoningEffort !== reasoningEffort) throw failure(409, 'selection-changed', 'The answer model controls changed');
         let finish, outputBytes = 0;
@@ -201,6 +211,7 @@ export function createCompanionLookupRoutes({ ctx, send, readJson, resolve, inst
       }
     } catch (error) {
       failureCode = errorCode(error);
+      if (failureCode === 'COMPANION_LOOKUP_INPUT_LIMIT') failureCode = 'companion/lookup-input-limit';
       record.terminal = controller.signal.aborted ? 'cancelled' : record.dispatched === false ? 'preflight_error'
         : record.httpStatus >= 400 ? 'http_error'
           : body.kind !== 'answer' && (record.complete || error.cause instanceof SyntaxError) ? 'invalid_response'
@@ -211,7 +222,7 @@ export function createCompanionLookupRoutes({ ctx, send, readJson, resolve, inst
       record.finished = true;
       record.finish = { type: 'finish', requestId: body.requestId, taskId: body.taskId, taskRev: body.taskRev,
         dispatched: record.dispatched, dispatchAtMs: record.dispatchAtMs, httpStatus: record.httpStatus,
-        terminal: record.terminal, complete: record.complete, result: record.result, bodyRetained: false,
+        terminal: record.terminal, complete: record.complete, result: record.result, bodyRetained: false, inputBudget: record.inputBudget,
         usage: body.kind === 'answer' ? usageReceipt(record) : null, ...(failureCode ? { error: { code: failureCode } } : {}) };
       emit(record.finish);
       if (!res.destroyed && !res.writableEnded) res.end();

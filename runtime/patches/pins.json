@@ -2397,6 +2397,18 @@
           "before": "a1ad048cbbb7caefe5471c583f076aa8e393f534efbc5b11b625308096efdace"
         }
       }
+    },
+    "companion-lookup-answer-window.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "before": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890",
+          "after": "4f659541a67d7b089cfd9980cbae25777c8419d7504f3bd8da947182f0c2726b"
+        },
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "before": "07f3c01e9341e10e39e0cd685ab61bc76de5086bd34611ca6166b98f771e72b0",
+          "after": "7bdd4173c60c37aa02b3ced096221597f0213ddf9d5f91d181eebc87a95e072a"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2559,7 +2571,8 @@
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
-      "companion-public-lookup-observer.diff"
+      "companion-public-lookup-observer.diff",
+      "companion-lookup-answer-window.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2761,7 +2774,8 @@
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
       "ohos-piai-text-preabort.diff",
-      "companion-public-lookup-observer.diff"
+      "companion-public-lookup-observer.diff",
+      "companion-lookup-answer-window.diff"
     ]
   }
 }

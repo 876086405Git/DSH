@@ -13,9 +13,12 @@ sources, run:
 ```sh
 DSH_LOOKUP_SOURCE=/absolute/path/dsh-web-deepseek-api/lib/index.js \
 DSH_AUXILIARY_SOURCES=/absolute/path/verified-auxiliary-source-root \
+DSH_CHAT_USAGE_SOURCES=/absolute/path/verified-auxiliary-source-root \
+DSH_LOOKUP_WINDOW=1 \
 node --test --test-timeout=15000 \
   runtime/tests/companion-lookup-source-http.test.mjs \
   runtime/tests/companion-lookup-http.test.mjs \
+  runtime/tests/companion-chat-usage-source.test.mjs \
   runtime/tests/companion-auxiliary.test.mjs \
   runtime/tests/companion-route.test.mjs
 ```
@@ -24,6 +27,12 @@ Both source fixtures verify SHA-256 against the repository pins before using
 the provider code. Missing environment variables produce explicit skipped
 tests, not proof that the source path ran. A successful exit alone is
 insufficient; record the passed, failed, cancelled, skipped and todo totals.
+
+The E03 source root additionally contains `dsh-llm/index.lookup-window.js`
+and `dsh-llm-deepseek/index.lookup-window.js`, replayed through
+`companion-lookup-answer-window.diff`. `DSH_LOOKUP_WINDOW=1` runs the existing
+ordinary-chat receipt/retry tests against these same final bytes; it does not
+change a production environment or install dependencies.
 
 The lookup tests compose the production HTTP route with the pinned Direct
 Search/Fetch plugin, auth, serializer, dispatcher and decoder, using a numeric
@@ -69,6 +78,17 @@ bounded process-local metadata cache rejects new E attempts at capacity and
 does not change ordinary chat behavior.
 
 The host bounds the HTTP envelope to 64 KiB and sets answer output to 800 tokens.
-This byte limit is not a 12k-token estimate. The phone must check the complete
-system/task/source request, actual model window and original deadline before
-dispatch, then preserve partial evidence if the full pages do not fit.
+Separately, E03 checks the complete serialized DeepSeek model body immediately
+before fetch, using the same explicit heuristic as the phone. It rejects an
+estimated input above 12k or, when the prepared model exposes a context window,
+input plus the full 800 output reserve above that exact preparation's window.
+The receipt's `inputBudget` contains only the estimate, output reserve, nullable
+window, estimator name and coverage scope; it contains no model body or key.
+
+Generic adapters are checked before handoff over the complete canonical
+`system`/`messages` input. Their private final serialization is not observed:
+`scope:adapter-input` does not claim `scope:provider-request`. Unknown context
+remains null and does not create a provider gate. This heuristic is not exact
+tokenization, a guaranteed tokenizer bound, or a billing receipt. The byte
+limit is not substituted for token estimation. The phone still checks original
+deadline and preserves partial evidence if full pages do not fit.
