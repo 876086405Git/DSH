@@ -92,6 +92,20 @@ void main() {
     expect(copied, ['beta']);
   });
 
+  testWidgets('or once the keyboard reaches it: its select-all and copy shortcuts', (tester) async {
+    final copied = _clipboard(tester);
+    await _stream(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(copied, [_words]);
+  });
+
   testWidgets('what streams in reaches the selection once a finger comes down', (tester) async {
     final copied = _clipboard(tester);
     await _stream(tester);

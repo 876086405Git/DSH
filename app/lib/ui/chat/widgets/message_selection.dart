@@ -114,8 +114,9 @@ class _MessageSelectionState extends State<MessageSelection> {
 /// transform up to the root. Nobody is selecting most of the time, so that is
 /// held back here instead.
 ///
-/// A pointer down on the message, or the end of [live], hands everything
-/// held to the region and lets later registrations straight through. The
+/// A pointer down on the message, the region taking focus (the keyboard), or
+/// the end of [live], hands everything held to the region and lets later
+/// registrations straight through. The
 /// region takes them in at the end of the next frame, well before a
 /// long-press fires or a double tap's second tap comes down, so selecting
 /// works as on a finished message.
@@ -137,6 +138,9 @@ class _HeldSelectablesState extends State<_HeldSelectables> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _gate.region = SelectionContainer.maybeOf(context);
+    // The region's own focus, reached by the keyboard (Tab) with no pointer:
+    // its select-all and copy shortcuts work on what it holds.
+    if (Focus.maybeOf(context)?.hasFocus ?? false) _gate.open();
   }
 
   @override
