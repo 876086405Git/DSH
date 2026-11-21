@@ -27,6 +27,7 @@ import '../../companion/companion_memory.dart';
 import '../../companion/companion_memory_worker.dart';
 import '../../companion/companion_host_memory_transport.dart';
 import '../../companion/companion_host_tasks.dart';
+import '../../companion/companion_maps.dart';
 import '../../companion/companion_late_use.dart';
 import '../../companion/companion_moves.dart';
 import '../../companion/companion_light.dart';
@@ -234,6 +235,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   String? _bubble;
   List<({String taskId, String placeName})> _lookupResults = const [];
   List<String> _notesResults = const [];
+  List<String> _mapResults = const [];
+  late final CompanionMapHandoff _mapHandoff;
+  bool _mapChoosing = false;
   bool _bubbleIsError = false;
   String? _myLine;
   String? _lastLine;
@@ -329,6 +333,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   @override
   void initState() {
     super.initState();
+    _mapHandoff = CompanionMapHandoff(ref.read(companionMapsProvider));
     // Anonymous usage statistics: the room was opened once more.
     ref.read(usageStatsProvider.notifier).count(UsageCount.room);
     _initiative = ref.read(companionInitiativeProvider);
@@ -342,7 +347,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       utcNow: () => DateTime.fromMillisecondsSinceEpoch(_clock().wallMs, isUtc: true),
     );
     _lifecycle = AppLifecycleListener(
-      onStateChange: (_) {
+      onStateChange: (state) {
+        if (state != AppLifecycleState.resumed) {
+          _mapHandoff.close();
+        }
         _observeInitiative();
         _observeLateUse();
       },
@@ -496,6 +504,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   @override
   void dispose() {
+    _mapHandoff.close();
     // Leaving her: no invitation follows, and nothing comes back to this page.
     _leaving = true;
     _memoryQuiet?.cancel();
@@ -1601,6 +1610,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _bubbleIsError = error;
       _lookupResults = const [];
       _notesResults = const [];
+      _mapResults = const [];
     });
     if (hold != null) {
       _bubbleTimer = Timer(hold, () {
@@ -1914,6 +1924,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   }
 
   void _unbind() {
+    _mapHandoff.close();
     _bindingEpoch++;
     _greetingPending = true;
     _hush();
@@ -2169,7 +2180,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         parts.any(
           (part) =>
               parseCompanionLookup(part.raw)?['operation'] == 'cancel' ||
-              parseCompanionNotes(part.raw)?['operation'] == 'cancel',
+              parseCompanionNotes(part.raw)?['operation'] == 'cancel' ||
+              const ['cancel', 'amend', 'reopen'].contains(parseCompanionMap(part.raw)?['operation']),
         );
   }
 
@@ -2247,6 +2259,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final lookup = lookupCommands.values.any((command) => command != null);
     final notesCommands = {for (final part in reminderParts) part.itemNo: parseCompanionNotes(part.raw)};
     final notes = notesCommands.values.any((command) => command != null);
+    final mapCommands = {for (final part in reminderParts) part.itemNo: parseCompanionMap(part.raw)};
+    final map = mapCommands.values.any((command) => command != null);
     final reminderClock =
         reminderParts.any((part) => part.command != null && part.command!.operation != 'clarify') ||
         lookupCommands.values.any((command) => command != null && command['operation'] != 'clarify') ||
@@ -2255,7 +2269,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         _isMemoryControl(raw) ||
         _isReminderControl(reminderParts) ||
         lookupCommands.values.any((command) => command?['operation'] == 'cancel') ||
-        notesCommands.values.any((command) => command?['operation'] == 'cancel');
+        notesCommands.values.any((command) => command?['operation'] == 'cancel') ||
+        mapCommands.values.any((command) => const ['cancel', 'amend', 'reopen'].contains(command?['operation']));
     if (text.isEmpty || ((_sending || _lightReply != null) && !control)) return;
     if (control) {
       _retireLight(discard: true);
@@ -2314,8 +2329,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // Do not clear the composer's only copy before SQLite commits. If the
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
-      if (reminder || lookup || notes) {
-        await _handleTasks(memory, source, reminderParts, lookupCommands, notesCommands, current);
+      if (reminder || lookup || notes || map) {
+        await _handleTasks(memory, source, reminderParts, lookupCommands, notesCommands, mapCommands, current);
         return;
       }
       if (await _handleMemoryControl(memory, source, raw)) return;
@@ -2372,6 +2387,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             ? context.l10n.companionLookupSaveFailed
             : notes
             ? context.l10n.companionNotesSaveFailed
+            : map
+            ? context.l10n.companionMapSaveFailed
             : _failureText(error),
         hold: const Duration(seconds: 6),
         error: true,
@@ -2390,6 +2407,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     List<CompanionReminderPart> parts,
     Map<int, MemoryRow?> lookupCommands,
     Map<int, MemoryRow?> notesCommands,
+    Map<int, MemoryRow?> mapCommands,
     bool Function() current,
   ) async {
     final reminders = ref.read(companionRemindersProvider);
@@ -2397,10 +2415,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final roomMode = _light ? 'light' : 'full';
     final hostKey = _light ? null : _recallHostKey;
     final hostSession = _light ? null : _sessionId;
+    final mapGeneration = _mapHandoff.generation;
     final operation = () async {
       final lines = <String>[];
       final lookups = <({String taskId, String placeName})>[];
       final notes = <String>[];
+      final maps = <String>[];
       var failed = false;
       for (final part in parts) {
         final command = part.command;
@@ -2427,6 +2447,17 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             } on Object {
               failed = true;
               lines.add(l10n.companionNotesSaveFailed);
+            }
+          } else if (mapCommands[part.itemNo] case final mapCommand?) {
+            try {
+              final result = await _handleMap(memory, source, part.itemNo, mapCommand, current);
+              lines.add(result.line);
+              if (result.task case final task?) {
+                maps.add(task['task_id']! as String);
+              }
+            } on Object {
+              failed = true;
+              lines.add(l10n.companionMapSaveFailed);
             }
           } else if (part.raw.isNotEmpty) {
             lines.add(l10n.companionReminderUnhandled(part.raw));
@@ -2469,11 +2500,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         }
       }
       memory.changed();
-      return (lines: lines, failed: failed, lookups: lookups, notes: notes);
+      return (lines: lines, failed: failed, lookups: lookups, notes: notes, maps: maps);
     }();
     memory.retainReceipt(operation.then<void>((_) {}));
     final result = await operation;
-    if (!current()) return;
+    if (!mounted ||
+        !current() ||
+        (mapCommands.values.any((command) => command != null) &&
+            (!_mapHere || mapGeneration != _mapHandoff.generation))) {
+      return;
+    }
     if (result.failed) {
       if (_input.text.isEmpty) {
         _input.text = source['text']! as String;
@@ -2485,8 +2521,108 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     setState(() {
       _lookupResults = result.lookups;
       _notesResults = result.notes;
+      _mapResults = result.maps;
     });
     _queueMemoryExtraction();
+  }
+
+  bool get _mapHere => mounted && !_leaving && _routeShown && !_logOpen &&
+    WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+    (ModalRoute.of(context)?.isCurrent ?? true);
+
+  Future<({String line, MemoryRow? task})> _handleMap(CompanionMemoryOwner memory, MemoryRow source, int itemNo,
+    MemoryRow command, bool Function() current) async {
+    final l10n = context.l10n;
+    if (command['operation'] == 'clarify') {
+      return (line: l10n.companionMapSyntax, task: null);
+    }
+    final maps = ref.read(companionMapsProvider);
+    final generation = _mapHandoff.generation;
+    bool here() => current() && _mapHere && generation == _mapHandoff.generation;
+    final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
+    late final String executor;
+    try {
+      executor = await maps.executorId();
+    } on PlatformException {
+      return (line: l10n.companionMapUnavailable, task: accepted);
+    } on MissingPluginException {
+      return (line: l10n.companionMapUnavailable, task: accepted);
+    }
+    if (!mounted || !here()) {
+      throw const DshClosedException('map page changed before accepting the action');
+    }
+    if (accepted != null) {
+      final saved = memory.store.mapTask(accepted['task_id']! as String)!;
+      // Retrying the same persisted source is a read. A real explicit reopen
+      // has its own new source and task; it cannot hide an old unknown effect.
+      return (line: companionMapLine(l10n, saved, executorId: executor), task: saved);
+    }
+    MemoryRow? previous;
+    final operation = command['operation'];
+    if (operation != 'create') {
+      final candidates = memory.store.tasks(sourceSessionId: source['session_id']! as String);
+      if (candidates.length == 100) {
+        // A limited list cannot prove that an older matching task is absent.
+        return (line: l10n.companionMapWhich, task: null);
+      }
+      final targets = candidates
+        .where((row) => row['kind'] == 'phone.map_open' &&
+          (operation == 'reopen' || row['cancel_requested'] == 0))
+        .map((row) => memory.store.mapTask(row['task_id']! as String)!)
+        .where((row) => command['target'] == null || row['address'] == command['target']).toList();
+      if (targets.length != 1) {
+        return (line: l10n.companionMapWhich, task: null);
+      }
+      previous = targets.single;
+    }
+    MemoryRow task;
+    if (operation == 'cancel') {
+      task = memory.store.cancelMapOpen(taskId: previous!['task_id']! as String,
+        expectedTaskRev: previous['task_rev']! as int, messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+    } else if (operation == 'reopen') {
+      task = memory.store.reopenMapOpenFromMessage(oldTaskId: previous!['task_id']! as String,
+        expectedTaskRev: previous['task_rev']! as int, messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo, executorId: executor);
+    } else {
+      if (previous != null && previous['executor_id'] != executor) {
+        return (line: l10n.companionMapNotHere, task: previous);
+      }
+      final selected = await chooseCompanionMapTarget(context, maps, command['address']! as String,
+        isCurrent: here, choosing: (value) => _mapChoosing = value);
+      if (selected == null) {
+        return (line: l10n.companionMapNoTarget, task: null);
+      }
+      if (!here()) {
+        throw const DshClosedException('map page changed during target selection');
+      }
+      if (previous != null) {
+        task = memory.store.amendMapOpen(taskId: previous['task_id']! as String,
+          expectedTaskRev: previous['task_rev']! as int, messageId: source['id']! as String,
+          expectedSourceRev: source['source_rev']! as int, itemNo: itemNo, map: selected);
+      } else {
+        task = memory.store.createMapOpenFromMessage(messageId: source['id']! as String,
+          expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
+          roomMode: _light ? 'light' : 'full', hostKey: _light ? null : _recallHostKey,
+          hostSessionId: _light ? null : _sessionId, executorId: executor, map: selected);
+      }
+    }
+    memory.changed();
+    if (operation != 'cancel') {
+      final id = task['task_id']! as String;
+      final revision = task['task_rev']! as int;
+      try {
+        await _mapHandoff.execute(memory.store, task, isCurrent: () => here() && memory.store.mapTask(id)?['task_rev'] == revision);
+      } on PlatformException {
+        // Native may have claimed or dispatched before a reply was lost.
+        // Read its original ledger; never turn the channel exception into false.
+      } on MissingPluginException {
+        // A persisted task is still readable on a platform without this action.
+      }
+      task = memory.store.mapTask(id)!;
+      memory.changed();
+    }
+    return (line: companionMapLine(l10n, task, executorId: executor), task: task);
   }
 
   Future<({String line, MemoryRow? task})> _handleNotes(
@@ -3134,6 +3270,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   /// The backlog over her: this room's whole conversation, in either mode.
   Future<void> _openLog() async {
+    _mapHandoff.close();
     _acted();
     if (_light && _store != null) {
       final history = _lightHistory ??= CompanionLightHistory.at(_store!.root);
@@ -3899,7 +4036,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     });
     // What her invitation depends on that only a build can see: this page in
     // front (a sheet or another page over her isn't), a screen reader, the switch.
-    _routeShown = TickerMode.valuesOf(context).enabled && (ModalRoute.isCurrentOf(context) ?? true);
+    final routeShown = TickerMode.valuesOf(context).enabled && (ModalRoute.isCurrentOf(context) ?? true);
+    if (_routeShown && !routeShown && !_mapChoosing) {
+      _mapHandoff.close();
+    }
+    _routeShown = routeShown;
     _accessible = MediaQuery.accessibleNavigationOf(context);
     ref.watch(companionInitiativeEnabledProvider);
     ref.watch(companionNameProvider);
@@ -4137,6 +4278,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                               ),
                             ),
                           );
+                        },
+                      ),
+                  if (_bubble != null)
+                    for (final id in _mapResults)
+                      CompanionPill(icon: AppIcons.plan, label: l10n.companionMapView,
+                        onTap: () {
+                          if (_bubble == null || !_mapResults.contains(id)) {
+                            return;
+                          }
+                          _acted();
+                          unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
+                            memory: _memoryOwner!, taskId: id,
+                          ))));
                         },
                       ),
                   CompanionInvite(

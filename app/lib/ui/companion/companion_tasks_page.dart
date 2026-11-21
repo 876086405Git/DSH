@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../companion/companion_context.dart';
+import '../../companion/companion_maps.dart';
 import '../../companion/companion_memory.dart';
 import '../../companion/companion_public_lookup.dart';
 import '../../companion/companion_reminder.dart';
@@ -34,6 +35,76 @@ String _moment(L10n l10n, int epochMs) {
   String two(int value) => value.toString().padLeft(2, '0');
   final day = at.year == DateTime.now().year ? l10n.monthDay(at) : '${at.year}-${two(at.month)}-${two(at.day)}';
   return '$day ${two(at.hour)}:${two(at.minute)}';
+}
+
+Future<CompanionMapSpec?> chooseCompanionMapTarget(BuildContext context, CompanionMaps maps, String address,
+    {required bool Function() isCurrent, required void Function(bool) choosing}) async {
+  final found = await maps.targets(address);
+  if (!context.mounted || !isCurrent()) {
+    throw const DshClosedException('map page changed while querying targets');
+  }
+  final defaultTarget = found['defaultTarget'];
+  Map<Object?, Object?>? target = found['kind'] == 'known' && defaultTarget is Map<Object?, Object?> ? defaultTarget : null;
+  var kind = target == null ? 'choice' : 'default';
+  final targets = found['targets']! as List<Object?>;
+  if (target == null && targets.isNotEmpty) {
+    choosing(true);
+    try {
+      target = await showAppDialog<Map<String, Object?>>(context: context, builder: (dialog) => SimpleDialog(
+        title: Text(dialog.l10n.companionMapChoose),
+        children: [
+          for (final value in targets)
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialog, Map<String, Object?>.from(value as Map<Object?, Object?>)),
+              child: Text((value as Map<Object?, Object?>)['label']! as String)),
+          SimpleDialogOption(onPressed: () => Navigator.pop(dialog, <String, Object?>{'systemChoice': true}),
+            child: Text(dialog.l10n.companionMapSystemChoice)),
+          SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+        ],
+      ));
+    } finally {
+      choosing(false);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted || !isCurrent()) {
+      throw const DshClosedException('map page changed during target selection');
+    }
+    if (target == null) {
+      return null;
+    }
+    if (target['systemChoice'] == true) {
+      target = null;
+    } else {
+      kind = 'selected';
+    }
+  }
+  // An empty package query is not proof that no map can handle geo. A fixed
+  // native chooser handoff may still be attempted; its result stays waiting.
+  return CompanionMapSpec(address: address, targetKind: kind,
+    packageName: target?['packageName'] as String?, componentName: target?['componentName'] as String?,
+    packageUid: target?['uid'] as int?, targetLabel: target?['label'] as String?);
+}
+
+String companionMapLine(L10n l10n, MemoryRow task, {required String? executorId}) {
+  if (task['state'] == 'cancelled') {
+    return l10n.companionMapCancelled;
+  }
+  if (task['state'] == 'unknown') {
+    return l10n.companionMapUnknown;
+  }
+  if (task['state'] == 'done') {
+    return l10n.companionMapDone;
+  }
+  if (executorId == null) {
+    return l10n.companionMapUnavailable;
+  }
+  if (task['executor_id'] != executorId) {
+    return l10n.companionMapNotHere;
+  }
+  return switch (task['state']) {
+    'failed' => l10n.companionMapFailed,
+    'waiting' => task['wait_reason'] == 'map_target_choice' ? l10n.companionMapChoiceWaiting : l10n.companionMapWaiting,
+    _ => l10n.companionMapQueued,
+  };
 }
 
 String companionReminderFailure(L10n l10n, Object error) {
@@ -159,12 +230,20 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   DshClient? _notesVerifiedClient;
   String? _notesVerifiedStore;
   late final AppLifecycleListener _lifecycle;
+  late final CompanionMapHandoff _mapHandoff;
+  bool _mapRouteShown = true;
+  String? _mapViewedId;
   ({String taskId, String raw, MemoryRow source})? _retry;
 
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onResume: () => unawaited(_refresh(resume: true)));
+    _mapHandoff = CompanionMapHandoff(ref.read(companionMapsProvider));
+    _lifecycle = AppLifecycleListener(onResume: () => unawaited(_refresh(resume: true)), onStateChange: (state) {
+      if (state != AppLifecycleState.resumed) {
+        _mapHandoff.close();
+      }
+    });
     unawaited(_load());
   }
 
@@ -181,7 +260,13 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       _memory = memory;
       memory.addListener(_changed);
       try {
-        if (widget.taskId == null || memory.store.hostTask(widget.taskId!) == null) {
+        final task = widget.taskId == null ? null : memory.store.task(widget.taskId!);
+        final rows = widget.taskId == null && widget.sourceSessionId != null
+          ? memory.store.tasks(sourceSessionId: widget.sourceSessionId) : const <MemoryRow>[];
+        final mapsOnly = rows.isNotEmpty && rows.every((row) => row['kind'] == 'phone.map_open');
+        if (task?['kind'] == 'phone.map_open' || mapsOnly) {
+          _executorId = await ref.read(companionMapsProvider).executorId();
+        } else if (widget.taskId == null || memory.store.hostTask(widget.taskId!) == null) {
           _executorId = await ref.read(companionRemindersProvider).executorId();
         }
       } on PlatformException {
@@ -216,6 +301,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
 
   @override
   void dispose() {
+    _mapHandoff.close();
     _lifecycle.dispose();
     _memory?.removeListener(_changed);
     super.dispose();
@@ -229,7 +315,8 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final reminders = ref.read(companionRemindersProvider);
     setState(() => _busy = true);
     try {
-      final selected = widget.taskId == null ? null : memory.store.hostTask(widget.taskId!);
+      final selectedId = _mapViewedId ?? widget.taskId;
+      final selected = selectedId == null ? null : memory.store.hostTask(selectedId);
       if (selected != null) {
         _notesVerifiedClient = null;
         _notesVerifiedStore = null;
@@ -248,6 +335,13 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
             }
           }
         }
+        return;
+      }
+      final rows = selectedId == null && widget.sourceSessionId != null
+        ? memory.store.tasks(sourceSessionId: widget.sourceSessionId) : const <MemoryRow>[];
+      if ((selectedId != null && memory.store.mapTask(selectedId) != null) ||
+          (rows.isNotEmpty && rows.every((row) => row['kind'] == 'phone.map_open'))) {
+        _executorId = await ref.read(companionMapsProvider).executorId();
         return;
       }
       _executorId = await reminders.executorId();
@@ -542,6 +636,9 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   }
 
   Widget _detail(MemoryRow task) {
+    if (task['kind'] == 'phone.map_open') {
+      return _mapDetail(_memory!.store.mapTask(task['task_id']! as String)!);
+    }
     if (task['kind'] == 'host.notes_to_todo') {
       return _notesDetail(_memory!.store.hostTask(task['task_id']! as String)!);
     }
@@ -626,6 +723,104 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         ],
       ),
     );
+  }
+
+  bool get _mapHere => mounted && _mapRouteShown &&
+    WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+    (ModalRoute.of(context)?.isCurrent ?? true);
+
+  Future<void> _applyMap(MemoryRow task, {bool cancel = false}) async {
+    if (_busy || !_mapHere) {
+      return;
+    }
+    final memory = _memory!;
+    final id = task['task_id']! as String;
+    var activeId = id;
+    var revision = task['task_rev']! as int;
+    if (cancel) {
+      _mapHandoff.close();
+    }
+    final generation = _mapHandoff.generation;
+    bool current() => _mapHere && generation == _mapHandoff.generation &&
+      memory.store.mapTask(activeId)?['task_rev'] == revision;
+    final l10n = context.l10n;
+    final raw = cancel ? l10n.companionMapCancelSource : l10n.companionMapReopenSource;
+    setState(() => _busy = true);
+    try {
+      final retry = _retry;
+      MemoryRow source;
+      if (retry != null && retry.taskId == id && retry.raw == raw) {
+        source = retry.source;
+      } else {
+        final observed = await ref.read(companionRemindersProvider).clock();
+        if (!current()) {
+          return;
+        }
+        source = memory.store.submitMessage(id: companionMemoryId(), sessionId: task['source_session_id']! as String,
+          text: raw, saidAtUtc: observed.utcMs, offsetMinutes: observed.offsetSeconds ~/ 60,
+          zoneId: observed.zoneId, offsetSeconds: observed.offsetSeconds);
+        _retry = (taskId: id, raw: raw, source: source);
+      }
+      final accepted = memory.store.taskForCommand(source['id']! as String, 0);
+      MemoryRow updated;
+      if (accepted != null) {
+        updated = memory.store.mapTask(accepted['task_id']! as String)!;
+      } else if (cancel) {
+        updated = memory.store.cancelMapOpen(taskId: id, expectedTaskRev: revision,
+          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0);
+      } else {
+        final executor = await ref.read(companionMapsProvider).executorId();
+        if (!current()) {
+          return;
+        }
+        _executorId = executor;
+        updated = memory.store.reopenMapOpenFromMessage(oldTaskId: id, expectedTaskRev: revision,
+          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int,
+          itemNo: 0, executorId: executor);
+      }
+      memory.changed();
+      activeId = updated['task_id']! as String;
+      revision = updated['task_rev']! as int;
+      setState(() => _mapViewedId = activeId);
+      if (!cancel && accepted == null) {
+        try {
+          await _mapHandoff.execute(memory.store, updated, isCurrent: current);
+        } on PlatformException {
+          // The persisted claim determines whether this was not performed or
+          // may already have happened. A channel error is not a new receipt.
+        } on MissingPluginException {
+          // Keep the accepted task readable; reopening a page never dispatches it.
+        }
+      }
+      _retry = null;
+    } on Object {
+      if (mounted && _mapHere) {
+        showBriefNotice(context, l10n.companionMapSaveFailed);
+      }
+    } finally {
+      memory.changed();
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Widget _mapDetail(MemoryRow task) {
+    final l10n = context.l10n;
+    return Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(task['address']! as String, style: Theme.of(context).textTheme.titleLarge),
+      if (task['target_label'] case final String label) Text(l10n.companionMapTarget(label)),
+      const SizedBox(height: 12),
+      Text(companionMapLine(l10n, task, executorId: _executorId)),
+      if (_executorId != null && task['executor_id'] != _executorId) Text(l10n.companionMapNotHere),
+      OutlinedButton.icon(icon: const Icon(AppIcons.copy), label: Text(l10n.companionMapCopy), onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: task['address']! as String));
+      }),
+      if (_executorId != null)
+        FilledButton(onPressed: _busy ? null : () => _memory!.retainReceipt(_applyMap(task)), child: Text(l10n.companionMapReopen)),
+      if (task['cancel_requested'] == 0 && !const ['done', 'cancelled'].contains(task['state']))
+        OutlinedButton(onPressed: _busy ? null : () => _memory!.retainReceipt(_applyMap(task, cancel: true)), child: Text(l10n.companionMapCancel)),
+    ]));
   }
 
   bool _notesHostHere(MemoryRow task) =>
@@ -1155,8 +1350,14 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final shown = TickerMode.valuesOf(context).enabled && (ModalRoute.isCurrentOf(context) ?? true);
+    if (_mapRouteShown && !shown) {
+      _mapHandoff.close();
+    }
+    _mapRouteShown = shown;
     final memory = _memory;
-    final task = memory == null || widget.taskId == null ? null : memory.store.task(widget.taskId!);
+    final selectedId = _mapViewedId ?? widget.taskId;
+    final task = memory == null || selectedId == null ? null : memory.store.task(selectedId);
     final rows = memory == null || widget.sourceSessionId == null
         ? <MemoryRow>[]
         : memory.store.tasks(sourceSessionId: widget.sourceSessionId);
@@ -1174,7 +1375,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
           EmptyView(icon: AppIcons.reminder, title: l10n.companionMemoryLoadFailed)
         else if (memory == null)
           const Center(child: CircularProgressIndicator())
-        else if (widget.taskId != null)
+        else if (selectedId != null)
           if (task == null) EmptyView(icon: AppIcons.reminder, title: l10n.companionTaskMissing) else _detail(task)
         else if (rows.isEmpty)
           EmptyView(icon: AppIcons.reminder, title: l10n.companionTasksEmpty)
@@ -1183,17 +1384,23 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
             children: [
               for (final row in rows)
                 SettingsTile(
-                  icon: row['kind'] == 'host.notes_to_todo'
+                  icon: row['kind'] == 'phone.map_open'
+                      ? AppIcons.plan
+                      : row['kind'] == 'host.notes_to_todo'
                       ? AppIcons.document
                       : row['kind'] == 'public.lookup'
                       ? AppIcons.search
                       : AppIcons.reminder,
-                  title: row['kind'] == 'public.lookup'
+                  title: row['kind'] == 'phone.map_open'
+                      ? memory.store.mapTask(row['task_id']! as String)!['address']! as String
+                      : row['kind'] == 'public.lookup'
                       ? row['lookup_question']! as String
                       : row['kind'] == 'host.notes_to_todo'
                       ? l10n.companionNotesTitle
                       : row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
-                  subtitle: row['kind'] == 'public.lookup'
+                  subtitle: row['kind'] == 'phone.map_open'
+                      ? companionMapLine(l10n, row, executorId: _executorId)
+                      : row['kind'] == 'public.lookup'
                       ? companionLookupLine(l10n, row, executorId: _executorId)
                       : row['kind'] == 'host.notes_to_todo'
                       ? companionNotesLine(l10n, row)

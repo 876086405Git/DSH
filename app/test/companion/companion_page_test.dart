@@ -42,6 +42,7 @@ import 'package:dsh_client/dsh_client.dart'
         CompanionTaskStore,
         CompanionPublicLookupStore,
         CompanionHostTaskStore,
+        CompanionMapStore,
         MemoryBatch,
         companionMemoryExtractionPrompt,
         companionMemoryConsolidationPrompt,
@@ -59,6 +60,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
 import '../support/companion_notes_peer.dart';
+import '../support/companion_map_platform_peer.dart';
 
 Widget _app(Widget child, {List<Override> extra = const [], CompanionKeeper? phone, HostConnection? connection}) =>
     ProviderScope(
@@ -108,6 +110,11 @@ class _Settings extends SettingsController {
 class _NotesLightMode extends CompanionModeSetting {
   @override
   CompanionMode? build() => CompanionMode.light;
+}
+
+class _MapsFullMode extends CompanionModeSetting {
+  @override
+  CompanionMode? build() => CompanionMode.full;
 }
 
 Future<void> _notesVisible(WidgetTester tester, Finder finder, {bool absent = false}) async {
@@ -687,6 +694,221 @@ void main() {
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+      }
+
+      for (final scenario in ['default', 'full-offline', 'selected', 'query-empty', 'source-failure',
+        'targets-route', 'scope-route', 'queued-handoff-route', 'dispatched-cancel']) {
+        testWidgets('G actual Page map handoff boundary: $scenario', (tester) async {
+          final before = tester.binding.lifecycleState;
+          tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+          addTearDown(() {
+            if (before != null) {
+              tester.binding.handleAppLifecycleStateChanged(before);
+            } else {
+              tester.binding.resetInternalState();
+            }
+          });
+          const now = 1795219200000;
+          const address = ' 文华路 18 号东门 & A座（入口😀）；不走西门 ';
+          const raw = '在地图打开“$address”，我自己看路线；我午后练长笛';
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root), nowMilliseconds: () => now);
+          final peer = MapPlatformPeer(db, memory.store);
+          final reached = Completer<void>();
+          final release = Completer<void>();
+          final releaseNativeClose = Completer<void>();
+          Future<void>? handling;
+          var modelPosts = 0;
+          var simulatedPhysicalCalls = 0;
+          final sourceCommittedBeforePlatform = <bool>[];
+          int? queuedScopeClosed;
+          if (scenario == 'selected') {
+            peer.targets = {'kind': 'choice', 'targets': [MapPlatformPeer.target]};
+          } else if (scenario == 'query-empty') {
+            peer.targets = {'kind': 'unknown', 'targets': []};
+          }
+          peer.before = (call) async {
+            if (call.method == 'capabilities' || call.method == 'targets') {
+              sourceCommittedBeforePlatform.add(memory.store.messages().any((row) => row['role'] == 'user'));
+            }
+            if ((scenario == 'targets-route' && call.method == 'targets') ||
+                (scenario == 'scope-route' && call.method == 'openScope')) {
+              reached.complete();
+              await release.future;
+            }
+            if (scenario == 'queued-handoff-route' && call.method == 'closeScope') {
+              // Hold the asynchronous native close, so only the synchronous
+              // owning-store invalidation can have closed this scope row.
+              await releaseNativeClose.future;
+            }
+          };
+          peer.onHandoff = (task) async {
+            if (scenario == 'queued-handoff-route') {
+              reached.complete();
+              await release.future;
+              final scope = peer.calls.lastWhere((call) => call.method == 'handoff').arguments as Map<Object?, Object?>;
+              queuedScopeClosed = db.select('SELECT closed FROM companion_map_scopes WHERE scope_id=?',
+                [scope['scopeId']]).single['closed']! as int;
+              peer.blocked(task, 'not-started-at-closed-scope');
+              return;
+            }
+            final attempt = peer.claim(task);
+            simulatedPhysicalCalls++;
+            // Native commits the physical call and its returned receipt in
+            // one write transaction; only the channel ACK may arrive later.
+            peer.returned(task, attempt, chooser: scenario == 'query-empty');
+            if (scenario == 'dispatched-cancel') {
+              reached.complete();
+              await release.future;
+            }
+            if (!reached.isCompleted) {
+              reached.complete();
+            }
+          };
+          addTearDown(() async {
+            if (!release.isCompleted) {
+              release.complete();
+            }
+            if (!releaseNativeClose.isCompleted) {
+              releaseNativeClose.complete();
+            }
+            if (handling != null) {
+              await settleMixed(tester, handling!);
+            }
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(MapPlatformPeer.channel, null);
+          });
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(MapPlatformPeer.channel, peer.handle);
+          final commands = await openLight(tester, apiKey: '', client: MockClient((_) async {
+            modelPosts++;
+            throw StateError('A finite map action must not be sent as model chat');
+          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+            if (scenario == 'full-offline') companionModeProvider.overrideWith(_MapsFullMode.new)]);
+          expect(await memoryOf(tester), same(memory));
+          await settleMixed(tester, memory.migrateLocal());
+          if (scenario == 'source-failure') {
+            db.execute("CREATE TRIGGER reject_map_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+          }
+          await tester.enterText(find.byType(TextField), raw);
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          if (scenario == 'source-failure') {
+            await _notesVisible(tester, find.text('这次没能确认地图是否打开；不会自动再试。'));
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
+            expect(memory.store.messages(), isEmpty);
+            expect(memory.store.tasks(), isEmpty);
+            expect(peer.calls, isEmpty);
+            expect(modelPosts, 0);
+            return;
+          }
+          if (scenario == 'selected') {
+            await _notesVisible(tester, find.byType(SimpleDialog));
+            expect(memory.store.tasks(), isEmpty);
+            expect(peer.calls.where((call) => call.method == 'openScope'), isEmpty);
+            await tester.tap(find.text('实际候选地图'));
+          }
+          await settleMixed(tester, reached.future);
+          handling = memory.lastReceipt;
+          final original = memory.store.messages().singleWhere((row) => row['role'] == 'user');
+          expect(original['text'], raw);
+          expect(original['scope'], 'real');
+          final accepted = memory.store.tasks();
+          expect(accepted, hasLength(scenario == 'targets-route' ? 0 : 1));
+          commands.clear();
+          final route = scenario.endsWith('-route');
+          NavigatorState? navigator;
+          if (route) {
+            navigator = Navigator.of(tester.element(find.byType(CompanionPage)));
+            unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('与地图无关的页面')))));
+            await tester.pumpAndSettle();
+            if (scenario == 'queued-handoff-route') {
+              final scope = peer.calls.lastWhere((call) => call.method == 'handoff').arguments as Map<Object?, Object?>;
+              expect(db.select('SELECT closed FROM companion_map_scopes WHERE scope_id=?', [scope['scopeId']]).single['closed'], 1);
+              expect(releaseNativeClose.isCompleted, isFalse);
+              final methods = peer.calls.map((call) => call.method).toList();
+              expect(methods.indexOf('handoff'), lessThan(methods.indexOf('closeScope')));
+            }
+            release.complete();
+            if (scenario == 'queued-handoff-route') {
+              releaseNativeClose.complete();
+            }
+          } else if (scenario == 'dispatched-cancel') {
+            final changed = Completer<void>();
+            final id = accepted.single['task_id']! as String;
+            expect(memory.store.mapTask(id)!['state'], 'done');
+            expect(memory.store.taskReceipts(id).where((row) => row['event_kind'] == 'returned').single['task_rev'], 1);
+            void onChanged() {
+              if (!changed.isCompleted && memory.store.mapTask(id)!['cancel_requested'] == 1) {
+                changed.complete();
+              }
+            }
+            memory.addListener(onChanged);
+            await tester.enterText(find.byType(TextField), '取消打开地图');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await settleMixed(tester, changed.future);
+            memory.removeListener(onChanged);
+            await settleMixed(tester, memory.lastReceipt);
+            expect(memory.store.mapTask(id)!['state'], 'cancelled');
+            release.complete();
+          }
+          await settleMixed(tester, handling!);
+          await tester.pump();
+          expect(sourceCommittedBeforePlatform, isNotEmpty);
+          expect(sourceCommittedBeforePlatform, everyElement(isTrue),
+            reason: 'The actual source transaction must commit before platform work');
+          if (route) {
+            expect(simulatedPhysicalCalls, 0);
+            expect(peer.calls.where((call) => call.method == 'handoff'),
+              hasLength(scenario == 'queued-handoff-route' ? 1 : 0));
+            if (scenario == 'scope-route') {
+              expect(db.select('SELECT closed FROM companion_map_scopes').single['closed'], 1);
+            }
+            if (scenario == 'queued-handoff-route') {
+              expect(queuedScopeClosed, 1, reason: 'The queued native boundary observes the committed route closure');
+            }
+            navigator!.pop();
+            await tester.pumpAndSettle();
+            expect(find.text('查看地址'), findsNothing);
+            expect(find.text('地址已交给地图打开。'), findsNothing);
+            expect(commands.where((command) => command.$1 == 'say' && jsonEncode(command.$2).contains('地图')), isEmpty);
+          } else {
+            final task = memory.store.mapTask(accepted.single['task_id']! as String)!;
+            expect(task['address'], address);
+            expect(task['source_message_id'], original['id']);
+            expect(task['item_no'], 0);
+            expect(task['room_mode'], scenario == 'full-offline' ? 'full' : 'light');
+            if (scenario == 'full-offline') {
+              expect(task['host_key'], isNotEmpty);
+              expect(task['source_session_id'], startsWith('full:'));
+            }
+            expect(task['target_kind'], scenario == 'selected' ? 'selected' : scenario == 'query-empty' ? 'choice' : 'default');
+            expect(task['package_uid'], scenario == 'query-empty' ? null : 12001);
+            expect(task['state'], scenario == 'dispatched-cancel' ? 'cancelled' : scenario == 'query-empty' ? 'waiting' : 'done');
+            expect(simulatedPhysicalCalls, 1);
+            if (scenario == 'dispatched-cancel') {
+              expect(task['task_rev'], 2);
+              expect(memory.store.taskReceipts(task['task_id']! as String).where((row) => row['event_kind'] == 'returned').single['task_rev'], 1);
+              expect(find.text('地址已交给地图打开。'), findsNothing);
+              expect(commands.where((command) => command.$1 == 'say' &&
+                jsonEncode(command.$2).contains('地址已交给地图打开')), isEmpty);
+            } else {
+              expect(find.text('查看地址'), findsOneWidget);
+              await tester.tap(find.text('查看地址'));
+              await _notesVisible(tester, find.byType(CompanionTasksPage));
+              expect(find.text(address), findsOneWidget);
+              expect(find.text(scenario == 'query-empty' ? '刚才打开的是选择页面，还不能确定地址交给了哪个地图。' :
+                '地址已交给地图打开。'), findsOneWidget);
+              expect(peer.calls.where((call) => call.method == 'handoff'), hasLength(1));
+            }
+          }
+          expect(modelPosts, 0);
+        });
       }
 
       for (final scenario in [
