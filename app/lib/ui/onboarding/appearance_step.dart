@@ -1,4 +1,4 @@
-// First run, step 2 of 3 on this phone: 选择外观, while the runtime unpacks
+// First run, step 2 of 4 on this phone: 选择外观, while the runtime unpacks
 // (docs/design/onboarding-parallel-setup.md).
 
 import 'dart:async';

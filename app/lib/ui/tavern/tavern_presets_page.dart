@@ -1,7 +1,6 @@
 // 资源库 › 预设 (docs/design/roleplay-roadmap.md P0, engine T20): presets
 // exported from SillyTavern, and dsh-preset-enhance share packages, imported
-// as they are; which one chats use by default; export and delete. Editing a
-// preset's prompts and numbers, and a chat choosing its own, come next.
+// as they are; which one chats use by default; export and delete.
 
 import 'dart:async';
 import 'dart:convert';

@@ -68,7 +68,7 @@ used under the MIT License with the author's permission.
 - `chat/`：`chat_header.dart`、`chat_list.dart`、`chat_screen.dart`、`composer.dart`、`model_sheet.dart`
 - `chat/render/`：`ansi_text.dart`、`code_block.dart`、`diff_view.dart`、`markdown_body.dart`
 - `chat/widgets/`：`approval_card.dart`、`assistant_message.dart`、`question_card.dart`、`thinking_pill.dart`、`tool_row.dart`、`user_bubble.dart`
-- `common/`：`app_sheet.dart`、`glass_pill.dart`、`overscroll_forwarder.dart`、`sheet_navigator.dart`、`status_dot.dart`、`streaming_cursor.dart`、`tool_glyph.dart`
+- `common/`：`app_sheet.dart`、`overscroll_forwarder.dart`、`sheet_navigator.dart`、`status_dot.dart`、`streaming_cursor.dart`、`tool_glyph.dart`
 - `settings/`：`diagnostics_page.dart`、`settings_widgets.dart`
 - `shell/`：`drawer_drag.dart`、`home_shell.dart`、`sessions_drawer.dart`
 - `theme/`：`accent.dart`、`app_theme.dart`、`backdrop.dart`、`highlight_theme.dart`、`motion.dart`、`palette.dart`、`semantic_colors.dart`、`shapes.dart`、`squircle.dart`、`typography.dart`

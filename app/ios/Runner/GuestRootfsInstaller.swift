@@ -1,4 +1,4 @@
-// Apple SDK compilation and device execution have not been verified.
+// Device execution has not been verified (CI compiles it with the Apple SDK).
 import Foundation
 #if os(Linux)
 import FoundationNetworking

@@ -91,7 +91,6 @@ abstract class SSHKexUtils {
       }
 
       final dataToHash = writer.takeBytes();
-      // final digester = SHA256Digest();
       digest.update(dataToHash, 0, dataToHash.length);
       final hash = Uint8List(digest.digestSize);
       digest.doFinal(hash, 0);

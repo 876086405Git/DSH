@@ -30,7 +30,6 @@ class SSHEd25519PublicKey implements SSHHostKey {
 
   /// Verifies Ed25519 [signature] on [message] with private key matching [publicKey].
   bool verify(Uint8List message, SSHEd25519Signature signature) {
-    // tweetnacl.Signature(publicKey.key!, null).detached_verify(message, signature.sig!);
     return VerifyKey(key).verify(
       signature: Signature(signature.signature),
       message: message,

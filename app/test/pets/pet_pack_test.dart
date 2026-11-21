@@ -1,6 +1,7 @@
-// The runtime pack format (docs/design/pets.md §3): the two shipped packs parse
-// with their measured values, animations resolve by state and tier, hit boxes
-// by the documented lookup order, and broken packs are refused whole.
+// The runtime pack format (docs/design/pets.md §3): the two whale packs (鲸娘,
+// Deepy) parse with their measured values, animations resolve by state and
+// tier, hit boxes by the documented lookup order, and broken packs are refused
+// whole.
 
 import 'dart:convert';
 import 'dart:io';

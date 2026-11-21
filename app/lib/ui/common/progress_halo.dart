@@ -1,5 +1,5 @@
-// The centrepiece of the first-run runtime setup screen: a 3.6 s breathing loop
-// that reads as "alive but quiet".
+// The centrepiece of the first-run runtime setup screen: a 2.4 s breathing
+// loop per direction (4.8 s round trip) that reads as "alive but quiet".
 
 import 'dart:math' as math;
 
@@ -11,7 +11,7 @@ import '../theme/motion.dart';
 /// 安静的进度光环:**细环 + 渐变弧 + 背后一团缓慢呼吸的光**。
 ///
 /// 给首装解包(几百 MB、可能一两分钟)用:进度条会让人盯着数字焦虑,
-/// 一个慢慢长满的环 + 2.4s 一次的呼吸,传达的是"在稳稳地进行"。
+/// 一个慢慢长满的环 + 每 2.4s 单向的呼吸(4.8s 一次完整来回),传达的是"在稳稳地进行"。
 ///
 /// - [value] 为 null 时是不确定态(短弧缓慢旋转,1.6s 一圈);
 /// - 数值变化用 480ms 缓动过渡,解包进度跳变时环不会"抽"一下;

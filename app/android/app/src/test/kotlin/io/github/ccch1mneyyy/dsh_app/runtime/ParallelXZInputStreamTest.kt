@@ -7,7 +7,6 @@ import java.io.*
 import java.nio.file.Files
 import java.util.concurrent.*
 import java.util.zip.CRC32
-import kotlin.concurrent.thread
 
 class ParallelXZInputStreamTest {
     private class Fixture : AutoCloseable {
