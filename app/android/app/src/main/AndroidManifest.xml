@@ -312,6 +312,23 @@
         </receiver>
 
         <receiver android:name=".notify.NotifyActionReceiver" android:exported="false" />
+        <!-- Only this private native process opens Android SQLite for the existing
+             companion database. The Flutter process keeps its bundled SQLite. -->
+        <receiver android:name=".companion.CompanionReminderReceiver"
+            android:exported="false" android:process=":companion_reminder" />
+        <service android:name=".companion.CompanionReminderJob"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" android:process=":companion_reminder" />
+        <receiver android:name=".companion.CompanionReminderJob$Receiver"
+            android:exported="false" android:process=":companion_reminder">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".phone.a11y.A11yKeeper$Receiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

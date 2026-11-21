@@ -1,0 +1,296 @@
+package io.github.ccch1mneyyy.dsh_app.companion
+
+import android.content.Context
+import android.content.ContextWrapper
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteException
+import android.test.AndroidTestCase
+import java.io.Closeable
+import java.io.File
+import java.time.Instant
+import java.util.TimeZone
+import java.util.UUID
+
+/** Real platform SQLite and runner; only AlarmManager/NotificationManager effects are controlled. */
+@Suppress("DEPRECATION")
+class CompanionReminderLedgerTest : AndroidTestCase() {
+    private lateinit var f: Fixture
+
+    override fun setUp() { super.setUp(); f = Fixture(context) }
+    override fun tearDown() { try { f.close() } finally { super.tearDown() } }
+
+    fun testRegistrationClaimIsCommittedBeforeEffectAndReceiptIsNotDelivery() {
+        f.revision(1)
+        f.effects.beforeRegister = {
+            // This connection is separate from the runner's writer connection.
+            assertEquals(1L, f.count("step_key='alarm.register' AND event_kind='claimed'"))
+            assertEquals("unknown", f.ledger.current("t")!!.state)
+        }
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.registered)
+        assertEquals("done", f.ledger.current("t")!!.state)
+        assertEquals(1L, f.count("step_key='alarm.register' AND event_kind='returned'"))
+        assertEquals(0L, f.count("step_key='notification'"))
+        assertNull(f.ledger.current("t")!!.notificationClaim)
+    }
+
+    fun testFailedClaimTransactionsCannotCallRegisterOrNotify() {
+        f.revision(1)
+        f.sql.execSQL("""CREATE TRIGGER reject_register BEFORE INSERT ON companion_task_receipts
+            WHEN NEW.step_key='alarm.register' AND NEW.event_kind='claimed'
+            BEGIN SELECT RAISE(ABORT,'register claim failed'); END""")
+        expectSqlFailure { f.runner().resume("t") }
+        assertEquals(0, f.effects.registered.size)
+        assertEquals(0L, f.count("event_kind='claimed'"))
+        f.sql.execSQL("DROP TRIGGER reject_register")
+        assertTrue(f.runner().resume("t"))
+        f.now = DUE
+        f.sql.execSQL("""CREATE TRIGGER reject_notification BEFORE INSERT ON companion_task_receipts
+            WHEN NEW.step_key='notification' AND NEW.event_kind='claimed'
+            BEGIN SELECT RAISE(ABORT,'notification claim failed'); END""")
+        expectSqlFailure { f.runner().alarm(ReminderKey("t", 1)) }
+        assertEquals(0, f.effects.notified.size)
+        assertNull(f.ledger.current("t")!!.notificationClaim)
+        assertEquals(0L, f.count("step_key='notification' AND event_kind='claimed'"))
+    }
+
+    fun testReturnedSystemCallWithFailedReceiptStaysUnknownAndReusesSameIdentity() {
+        f.revision(1)
+        f.sql.execSQL("""CREATE TRIGGER reject_return BEFORE INSERT ON companion_task_receipts
+            WHEN NEW.step_key='alarm.register' AND NEW.event_kind='returned'
+            BEGIN SELECT RAISE(ABORT,'return receipt failed'); END""")
+        expectSqlFailure { f.runner().resume("t") }
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.registered)
+        assertEquals("unknown", f.ledger.current("t")!!.state)
+        assertEquals(0L, f.count("step_key='alarm.register' AND event_kind='returned'"))
+        f.sql.execSQL("DROP TRIGGER reject_return")
+        f.reopen()
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1), ReminderKey("t", 1)), f.effects.registered)
+        assertEquals("done", f.ledger.current("t")!!.state)
+        assertEquals(2L, f.count("step_key='alarm.register' AND event_kind='claimed'"))
+        assertEquals(1L, f.count("step_key='alarm.register' AND event_kind='returned'"))
+    }
+
+    fun testLostNotificationReturnNeverCausesASecondNotifyAfterReopen() {
+        f.revision(1)
+        assertTrue(f.runner().resume("t"))
+        f.now = DUE
+        f.effects.afterNotify = { throw LostProcess() }
+        try { f.runner().alarm(ReminderKey("t", 1)); fail("Expected the lost process boundary") }
+        catch (_: LostProcess) { }
+        val claim = f.ledger.current("t")!!.notificationClaim
+        assertNotNull(claim)
+        assertEquals(1, f.effects.notified.size)
+        assertEquals(0L, f.count("step_key='notification' AND event_kind='returned'"))
+        f.reopen() // Durable recovery only; this is not an Android process-kill test.
+        f.effects.afterNotify = { }
+        f.runner().alarm(ReminderKey("t", 1))
+        f.runner().resume("t")
+        assertEquals(1, f.effects.notified.size)
+        assertEquals(claim, f.ledger.current("t")!!.notificationClaim)
+        assertEquals(0L, f.count("event_kind='active_observed'"))
+        assertEquals("done", f.ledger.current("t")!!.state) // Registration result stays separate.
+        f.ledger.opened(ReminderKey("t", 1), EXECUTOR, f.now)
+        f.ledger.opened(ReminderKey("t", 1), EXECUTOR, f.now + 1)
+        assertEquals(1L, f.count("event_kind='opened'"))
+    }
+
+    fun testRevisionChangedAfterClaimCannotCallAnOldSystemEffect() {
+        f.revision(1)
+        f.revision(2, head = false)
+        f.sql.execSQL("""CREATE TRIGGER move_head AFTER INSERT ON companion_task_receipts
+            WHEN NEW.step_key='alarm.register' AND NEW.event_kind='claimed' AND NEW.task_rev=1
+            BEGIN UPDATE companion_tasks SET current_rev=2 WHERE task_id='t'; END""")
+        assertTrue(f.runner().resume("t"))
+        assertEquals(0, f.effects.registered.size)
+        assertEquals(1L, f.count("task_rev=1 AND event_kind='skipped' AND outcome='not_performed'"))
+        assertEquals(2L, f.ledger.current("t")!!.key.revision)
+        assertEquals("queued", f.ledger.current("t")!!.state)
+        assertEquals("unknown", f.ledger.revision(ReminderKey("t", 1))!!.state)
+    }
+
+    fun testAnotherAmendmentKeepsPreviouslyProvedCancellationAfterReopen() {
+        f.revision(1)
+        assertTrue(f.runner().resume("t"))
+        f.revision(2)
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.cancelled)
+        f.reopen()
+        f.revision(3)
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1), ReminderKey("t", 2)), f.effects.cancelled)
+        assertEquals(listOf(ReminderKey("t", 1), ReminderKey("t", 2), ReminderKey("t", 3)), f.effects.registered)
+        assertEquals(0L, f.count("task_rev=3 AND step_key='alarm.cancel:1'"))
+        assertEquals("done", f.ledger.current("t")!!.state)
+    }
+
+    fun testMissingTimeKeepsItsQuestionAndRestoredExecutorDoesNotAdoptIt() {
+        f.revision(1, resolved = false)
+        assertTrue(f.runner().resume("t"))
+        assertEquals("waiting", f.ledger.current("t")!!.state)
+        assertEquals("time_missing", f.ledger.current("t")!!.waitReason)
+        assertEquals(0, f.effects.registered.size)
+        val before = f.count("1=1")
+        CompanionReminderRunner(f.ledger, f.effects, "other-installation") { f.now }.resume("t")
+        assertEquals(before, f.count("1=1"))
+    }
+
+    fun testSavedOffsetDeterminesRecoveryAndExpiredTaskIsNotCaughtUp() {
+        f.revision(1)
+        val originalZone = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"))
+            assertTrue(f.runner().resume("t"))
+        } finally { TimeZone.setDefault(originalZone) }
+        assertEquals(listOf(DUE), f.effects.epochs)
+        f.now = DUE + 1
+        assertTrue(f.runner().resume("t"))
+        assertEquals("done", f.ledger.current("t")!!.state)
+        assertEquals(1, f.effects.registered.size)
+        f.revision(2)
+        assertTrue(f.runner().resume("t"))
+        assertEquals(1, f.effects.registered.size)
+        assertEquals(0, f.effects.notified.size)
+        assertEquals("failed", f.ledger.current("t")!!.state)
+        assertEquals("time_passed", f.ledger.current("t")!!.waitReason)
+    }
+
+    private fun expectSqlFailure(block: () -> Unit) {
+        try { block(); fail("Expected an actual SQLite transaction failure") }
+        catch (_: SQLiteException) { }
+    }
+
+    private class LostProcess : Error()
+
+    private class Effects : CompanionReminderEffects {
+        val registered = mutableListOf<ReminderKey>()
+        val epochs = mutableListOf<Long>()
+        val cancelled = mutableListOf<ReminderKey>()
+        val notified = mutableListOf<ReminderKey>()
+        var beforeRegister: () -> Unit = { }
+        var afterNotify: () -> Unit = { }
+        override fun capabilities() = mapOf<String, Any>("exact" to true, "appNotifications" to true,
+            "channelNotifications" to true, "groupNotifications" to true)
+        override fun register(key: ReminderKey, epochMs: Long) {
+            beforeRegister(); registered.add(key); epochs.add(epochMs)
+        }
+        override fun cancel(key: ReminderKey) { cancelled.add(key) }
+        override fun notify(reminder: StoredReminder) { notified.add(reminder.key); afterNotify() }
+        override fun isActive(key: ReminderKey) = false
+    }
+
+    private class Fixture(context: Context) : Closeable {
+        val directory = File(context.cacheDir, "companion-ledger-test-${UUID.randomUUID()}").apply { check(mkdirs()) }
+        private val isolated = object : ContextWrapper(context) { override fun getFilesDir() = directory }
+        val sql: SQLiteDatabase
+        var ledger: CompanionReminderLedger
+        val effects = Effects()
+        var now = DUE - 60_000
+        init {
+            val path = File(directory, "companion/memory.sqlite")
+            check(path.parentFile!!.mkdirs())
+            sql = SQLiteDatabase.openOrCreateDatabase(path, null)
+            sql.setForeignKeyConstraintsEnabled(true)
+            SCHEMA.split(';').filter { it.isNotBlank() }.forEach { sql.execSQL(it) }
+            sql.version = 11
+            sql.execSQL("""INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,
+                item_no,kind,room_mode,current_rev,created_at_ms,updated_at_ms)
+                VALUES('t','archive','source','light:s',0,'phone.reminder','light',1,0,0)""")
+            ledger = CompanionReminderLedger.open(isolated)
+        }
+        fun revision(revision: Long, operation: String = if (revision == 1L) "create" else "amend",
+                     head: Boolean = true, resolved: Boolean = true) {
+            sql.execSQL("""INSERT INTO companion_task_revisions(task_id,task_rev,operation,command_message_id,
+                command_source_rev,command_item_no,request_fingerprint,source_said_at_utc,source_zone_id,
+                source_offset_minutes,source_offset_seconds,executor_id,reminder_text,local_date,local_time,
+                zone_id,offset_seconds,epoch_ms,state,wait_reason,created_at_ms,updated_at_ms)
+                VALUES('t',?,?,?,1,0,?,?,'Asia/Singapore',480,28800,?,'带伞','2026-11-22',?,
+                'Asia/Singapore',?,?,?,?,?,?)""", arrayOf(revision, operation, "command-$revision",
+                "fingerprint-$revision", now, EXECUTOR, if (resolved) "09:00" else null,
+                if (resolved) 28800 else null, if (resolved) DUE else null,
+                if (resolved) "queued" else "waiting", if (resolved) null else "time_missing", now, now))
+            if (head) sql.execSQL("UPDATE companion_tasks SET current_rev=? WHERE task_id='t'", arrayOf(revision))
+        }
+        fun count(where: String): Long = sql.rawQuery("SELECT COUNT(*) FROM companion_task_receipts WHERE $where", null)
+            .use { check(it.moveToFirst()); it.getLong(0) }
+        fun runner() = CompanionReminderRunner(ledger, effects, EXECUTOR) { now }
+        fun reopen() { ledger.close(); ledger = CompanionReminderLedger.open(isolated) }
+        override fun close() { ledger.close(); sql.close(); check(directory.deleteRecursively()) }
+    }
+
+    companion object {
+        private const val EXECUTOR = "test-installation"
+        private val DUE = Instant.parse("2026-11-22T01:00:00Z").toEpochMilli()
+        // Literal three-table contract from companion_task_store.dart; no user database or asset.
+        private val SCHEMA = """
+CREATE TABLE companion_tasks (
+  task_id TEXT PRIMARY KEY,
+  archive_id TEXT NOT NULL,
+  source_message_id TEXT NOT NULL,
+  source_session_id TEXT NOT NULL,
+  item_no INTEGER NOT NULL CHECK(item_no>=0),
+  kind TEXT NOT NULL,
+  room_mode TEXT NOT NULL CHECK(room_mode IN ('light','full')),
+  host_key TEXT,
+  host_session_id TEXT,
+  current_rev INTEGER NOT NULL CHECK(current_rev>=1),
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE(source_message_id,item_no)
+);
+CREATE INDEX companion_tasks_room ON companion_tasks(source_session_id,created_at_ms,task_id);
+
+CREATE TABLE companion_task_revisions (
+  task_id TEXT NOT NULL REFERENCES companion_tasks(task_id) ON DELETE CASCADE,
+  task_rev INTEGER NOT NULL CHECK(task_rev>=1),
+  operation TEXT NOT NULL CHECK(operation IN ('create','amend','cancel')),
+  command_message_id TEXT NOT NULL,
+  command_source_rev INTEGER NOT NULL,
+  command_item_no INTEGER NOT NULL CHECK(command_item_no>=0),
+  request_fingerprint TEXT NOT NULL,
+  source_said_at_utc INTEGER NOT NULL,
+  source_zone_id TEXT,
+  source_offset_minutes INTEGER NOT NULL,
+  source_offset_seconds INTEGER,
+  executor_id TEXT NOT NULL,
+  reminder_text TEXT,
+  local_date TEXT,
+  local_time TEXT,
+  zone_id TEXT,
+  offset_seconds INTEGER,
+  epoch_ms INTEGER,
+  state TEXT NOT NULL CHECK(state IN ('queued','waiting','running','unknown','done','partial','failed','cancelled')),
+  wait_reason TEXT,
+  cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0,1)),
+  notification_claim_id TEXT,
+  notification_claimed_at_ms INTEGER,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY(task_id,task_rev),
+  UNIQUE(command_message_id,command_item_no),
+  CHECK((epoch_ms IS NULL)=(offset_seconds IS NULL)),
+  CHECK((notification_claim_id IS NULL)=(notification_claimed_at_ms IS NULL))
+);
+CREATE INDEX companion_task_executor ON companion_task_revisions(executor_id,state,epoch_ms);
+
+CREATE TABLE companion_task_receipts (
+  runner_receipt_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id TEXT NOT NULL,
+  task_rev INTEGER NOT NULL,
+  step_key TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL CHECK(event_kind IN
+    ('accepted','claimed','returned','failed','blocked','received','active_observed','opened','skipped')),
+  executor_id TEXT NOT NULL,
+  occurred_at_ms INTEGER NOT NULL,
+  effect_id TEXT,
+  outcome TEXT CHECK(outcome IN ('succeeded','not_performed','unknown')),
+  detail_json TEXT,
+  FOREIGN KEY(task_id,task_rev) REFERENCES companion_task_revisions(task_id,task_rev) ON DELETE CASCADE,
+  UNIQUE(task_id,task_rev,step_key,attempt_id,event_kind)
+);
+CREATE INDEX companion_task_receipts_task ON companion_task_receipts(task_id,runner_receipt_seq);
+        """.trimIndent()
+    }
+}
