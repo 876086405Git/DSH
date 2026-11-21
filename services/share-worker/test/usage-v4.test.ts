@@ -72,3 +72,21 @@ it('writes independent sources and the exact accepted operation buckets', async 
   expect(v4.points[4]!.doubles).toEqual(values);
   expect((await post(env, { ...body, extra: { ...body.extra, ssh_reconnect: [5, ...bins.slice(1)] } })).status).toBe(400);
 });
+
+it('takes a switched-off daily-activity package: the base row and nothing else', async () => {
+  const v4 = new FakeDataset();
+  const { env } = makeEnv({ USAGE_SECRET: secret, USAGE_V4: v4 });
+  const daily = {
+    v: 4, iid, day: '2026-11-20', app: '1.0.21', platform: 'android', maker: '', model: '', rom: '', base: [1, 0],
+  };
+  expect((await post(env, daily)).status).toBe(204);
+  const device = createHmac('sha256', secret).update('usage-v4\n' + iid).digest('hex').slice(0, 32);
+  expect(v4.points).toEqual([
+    { indexes: [device], blobs: [daily.day, device, 'base', daily.app, 'android', '', '', ''], doubles: [1, 0, 1] },
+  ]);
+  // Tokens or sources cannot come with the switch off, and a day without a
+  // foreground flag is not an active day.
+  expect((await post(env, { ...daily, extra: {} })).status).toBe(400);
+  expect((await post(env, { ...daily, base: [0, 0] })).status).toBe(400);
+  expect((await post(env, { ...daily, base: [0, 1] })).status).toBe(400);
+});

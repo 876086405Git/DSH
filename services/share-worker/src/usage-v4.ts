@@ -50,7 +50,13 @@ function tokenRows(value: unknown, source: string): Row[] | undefined {
 
 function parse(value: unknown, now: number): Report | undefined {
   const obj = object(value);
-  if (!obj || Object.keys(obj).length !== (Object.hasOwn(obj, 'extra') ? 11 : 10)) return undefined;
+  if (!obj) return undefined;
+  // A switched-off install sends the base row alone: no chat_log tokens and no
+  // extra sources. Those packages carry daily activity and nothing else.
+  const hasChat = Object.hasOwn(obj, 'chat_log');
+  const hasExtra = Object.hasOwn(obj, 'extra');
+  if (hasExtra && !hasChat) return undefined;
+  if (Object.keys(obj).length !== 9 + (hasChat ? 1 : 0) + (hasExtra ? 1 : 0)) return undefined;
   const { v, iid, day, app, platform, maker, model, rom, base, chat_log } = obj;
   if (v !== 4 || platform !== 'android' || typeof iid !== 'string' || !/^[A-Za-z0-9_-]{21}[AQgw]$/.test(iid) ||
     typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || typeof app !== 'string' || !APP.test(app) ||
@@ -62,10 +68,15 @@ function parse(value: unknown, now: number): Report | undefined {
 
   const flags = vector(base, [1, 1]);
   if (!flags || flags[1]! > flags[0]!) return undefined;
-  const rows = tokenRows(chat_log, 'chat_log');
-  if (!rows) return undefined;
-  let mask = 3;
-  if (Object.hasOwn(obj, 'extra')) {
+  const rows: Row[] = [];
+  let mask = 1;
+  if (hasChat) {
+    const token = tokenRows(chat_log, 'chat_log');
+    if (!token) return undefined;
+    rows.push(...token);
+    mask = 3;
+  }
+  if (hasExtra) {
     const extra = object(obj.extra);
     if (!extra || Object.keys(extra).some((key) =>
       key !== 'tavern' && key !== 'companion' && key !== 'engine' && !operations.some((kind) => key === kind))) return undefined;

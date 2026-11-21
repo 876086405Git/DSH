@@ -26027,7 +26027,8 @@ class L10nEn extends L10n {
   String get usageV4Welcome => 'Daily usage and token counts. No chats. Turn off anytime.';
 
   @override
-  String get usageV4Notice => 'Anonymous stats summarize feature results, model usage and abnormal exits. No chats.';
+  String get usageV4Notice =>
+      'Anonymous stats summarize feature results, model usage and abnormal exits. No chats. Off keeps only a daily activity count with no content.';
 
   @override
   String get usageUpgradeLearn => 'Learn more';
@@ -26037,7 +26038,7 @@ class L10nEn extends L10n {
 
   @override
   String get usageStatsAndroidFooter =>
-      'This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics. Android also summarizes foreground days, the first day of collection, startup and remote connection results and timing bands, model usage, plugin actions, setup, and abnormal exits confirmed by the operating system. Turning it off clears unsent data.';
+      'This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics. Android also summarizes foreground days, the first day of collection, startup and remote connection results and timing bands, model usage, plugin actions, setup, and abnormal exits confirmed by the operating system. Turning it off clears unsent data; a single anonymous daily-activity report still goes out (day, random id, app version, whether the app was in the foreground), with no model, feature or content data.';
 
   @override
   String viewArtifactSaved(String value) {

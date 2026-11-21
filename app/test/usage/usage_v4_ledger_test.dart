@@ -59,6 +59,36 @@ void main() {
     expect(day.tokens[UsageTokenSource.chatLog]!.values, [10167, 7, 10156, 7, 10165, 2, 0, 1, 50, 0]);
   });
 
+  test('switched off, a day seals the base row only and keeps no device fields', () {
+    final day = DateTime.utc(2026, 11, 19, 16);
+    final ledger = UsageV4Ledger()..foreground(day);
+    ledger.token(day, UsageTokenSource.chatLog, {'inputTokens': 10, 'outputTokens': 2});
+    final key = ledger.due(day.add(const Duration(days: 1))).single;
+    final sealed = jsonDecode(
+      ledger.days[key]!.seal(
+        key,
+        const UsageDevice(app: '1.0.21', maker: 'vivo', model: 'v2405a', rom: 'originos'),
+        dailyOnly: true,
+      ),
+    ) as Map<String, Object?>;
+    expect(sealed['base'], [1, 1]);
+    expect(sealed.keys, isNot(contains('chat_log')));
+    expect(sealed.keys, isNot(contains('extra')));
+    expect([sealed['maker'], sealed['model'], sealed['rom']], ['', '', '']);
+  });
+
+  test('onlyDaily keeps the install id and the foreground flags, dropping the rest', () {
+    final day = DateTime.utc(2026, 11, 19, 16);
+    final ledger = UsageV4Ledger()..foreground(day);
+    ledger.token(day, UsageTokenSource.chatLog, {'inputTokens': 10, 'outputTokens': 2});
+    ledger.operation(day, UsageOperation.crash, UsageOutcome.failed, Duration.zero);
+    final iid = ledger.days.values.single.iid;
+    final kept = UsageV4Ledger.decode(ledger.onlyDaily().encode()).days.values.single;
+    expect((kept.iid, kept.foreground, kept.first), (iid, true, true));
+    expect(kept.tokens[UsageTokenSource.chatLog]!.counts[0], 0);
+    expect(kept.operations, isEmpty);
+  });
+
   test('a sealed day persists unchanged across retries, metadata changes and a clock rollback', () {
     final day = DateTime.utc(2026, 11, 19, 16);
     final next = day.add(const Duration(days: 1));

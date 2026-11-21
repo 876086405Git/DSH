@@ -1,8 +1,9 @@
 // An install from before anonymous usage statistics never saw the welcome
 // page's switch. The first time it reaches the home (not during first run,
 // on this phone or a remote host), a toast tells it, once: 了解 opens
-// 设置 › 隐私与分享 at the switch, 关闭 turns the statistics off. Having shown
-// it counts as told (lib/usage/usage_stats.dart): counting starts then.
+// 设置 › 隐私与分享 at the switch, 关闭 turns the full statistics off. Counting
+// is on by default: showing it only records that the person was told
+// (lib/usage/usage_stats.dart).
 
 import 'dart:async';
 

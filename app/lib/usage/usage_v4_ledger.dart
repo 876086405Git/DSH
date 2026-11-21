@@ -156,18 +156,22 @@ class UsageV4Day {
     for (final entry in operations.entries) entry.key.wire: entry.value,
   };
 
-  String seal(String day, UsageDevice device) => snapshot ??= jsonEncode({
+  /// The day's v4 report body: the base row, and — while the full statistics
+  /// are on — the chat-log token pair plus [extra]. Switched off, [dailyOnly]
+  /// keeps the body to the base row and leaves the device fields empty: only
+  /// daily activity goes out.
+  String seal(String day, UsageDevice device, {bool dailyOnly = false}) => snapshot ??= jsonEncode({
     'v': 4,
     'iid': iid,
     'day': day,
     'app': device.app,
     'platform': 'android',
-    'maker': device.maker.isEmpty ? '' : usageMaker(device.maker),
-    'model': device.model.isEmpty ? '' : usageMaker(device.model),
-    'rom': device.rom.isEmpty ? '' : usageMaker(device.rom),
+    'maker': dailyOnly || device.maker.isEmpty ? '' : usageMaker(device.maker),
+    'model': dailyOnly || device.model.isEmpty ? '' : usageMaker(device.model),
+    'rom': dailyOnly || device.rom.isEmpty ? '' : usageMaker(device.rom),
     'base': [foreground ? 1 : 0, first ? 1 : 0],
-    'chat_log': tokens[UsageTokenSource.chatLog]!.json,
-    'extra': extra,
+    if (!dailyOnly) 'chat_log': tokens[UsageTokenSource.chatLog]!.json,
+    if (!dailyOnly) 'extra': extra,
   });
 
   Map<String, Object?> get json => {
@@ -189,6 +193,22 @@ class UsageV4Ledger {
   int exitCursor = 0;
   Map<String, dynamic> engineWatermark = {};
   String? sealedThrough;
+
+  /// The full statistics are switching off: a copy that keeps only what daily
+  /// activity needs — the install id, the first-foreground mark, and each
+  /// pending day's foreground flags.
+  UsageV4Ledger onlyDaily() {
+    final daily = UsageV4Ledger()
+      .._iid = _iid
+      .._since = _since
+      .._hadForeground = _hadForeground
+      .._latestDay = _latestDay;
+    for (final entry in days.entries) {
+      final day = entry.value;
+      daily.days[entry.key] = UsageV4Day(day.iid, foreground: day.foreground, first: day.first);
+    }
+    return daily;
+  }
 
   UsageV4Day? _record(DateTime now) {
     final day = usageV4Day(now);

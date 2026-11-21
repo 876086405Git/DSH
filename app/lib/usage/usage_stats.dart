@@ -1,8 +1,10 @@
 // 发送匿名使用统计: anonymous, per-day counts kept on the phone and sent once
-// each, the day after (contracts v1–v3, usage_ledger.dart). On by default, but
-// nothing is counted until the person has seen the switch (first run's
-// 「想让 DSH Go 帮你做哪些事」, or 设置 › 隐私与分享). Off means nothing is
-// counted or uploaded; the local engine lease is revoked and its aggregate discarded.
+// each, the day after (contracts v1–v3, usage_ledger.dart, and Android's v4
+// daily ledger). On by default; seeing the switch only records that it was
+// shown. Android daily activity is counted for every install, the switch on or
+// off: switched off, the v4 report carries the foreground flags and nothing
+// else. Off means the rest is neither counted nor uploaded; the local engine
+// lease is revoked and its aggregate discarded.
 
 import 'dart:async';
 import 'dart:convert';
@@ -38,10 +40,13 @@ class UsageStatsState {
 
   /// The person has seen the switch and what it says.
   final bool noticed;
+
+  /// The person has seen the Android v4 notice (the upgrade toast).
   final bool v4Noticed;
 
-  /// Counting and sending: switched on, and told about it.
-  bool get collecting => loaded && enabled && noticed;
+  /// The full statistics: switched on. Android daily activity is counted
+  /// either way (see [UsageStatsController.observesDaily]).
+  bool get collecting => loaded && enabled;
 
   UsageStatsState copyWith({bool? loaded, bool? enabled, bool? noticed, bool? v4Noticed}) => UsageStatsState(
     loaded: loaded ?? this.loaded,
@@ -120,7 +125,13 @@ class UsageStatsController extends Notifier<UsageStatsState> {
 
   DateTime _now() => ref.read(usageClockProvider)();
   bool get _v4Platform => ref.read(operatingSystemProvider) == 'android';
-  bool get observesChatLogUsage => UsageBuild.active && _v4Platform && state.collecting && state.v4Noticed;
+
+  /// Android's daily activity: counted for every install, whatever the switch
+  /// says. With the switch off only the foreground flags go out.
+  bool get observesDaily => UsageBuild.active && _v4Platform;
+
+  /// Model usage and operation results: the full statistics are on.
+  bool get observesChatLogUsage => observesDaily && state.collecting;
 
   @override
   UsageStatsState build() {
@@ -138,14 +149,15 @@ class UsageStatsController extends Notifier<UsageStatsState> {
         final int ms => DateTime.fromMillisecondsSinceEpoch(ms),
         null => null,
       };
+      // The v4 daily activity survives the switch: only its other rows are off.
+      _v4 = UsageV4Ledger.decode(prefs.getString(v4LedgerKey));
+      _v4Saved = _v4.encode();
       if (enabled) {
         _ledger = UsageLedger.decode(prefs.getString(daysKey));
         _iid = prefs.getString(iidKey);
         _iidSince = time(iidSinceKey);
         _failedAt = time(failedAtKey);
         _closedDay = prefs.getString(closedDayKey);
-        _v4 = UsageV4Ledger.decode(prefs.getString(v4LedgerKey));
-        _v4Saved = _v4.encode();
         _saved = (_ledger.encode(), _iid, _iidSince, _failedAt, _closedDay);
       }
       state = UsageStatsState(
@@ -358,7 +370,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   }
 
   /// The switch was in front of the person (first run, or the settings
-  /// page): from now on the app counts, unless it is off.
+  /// page): noted as told. Counting does not wait for this.
   Future<void> markNoticed() async {
     await _loaded;
     if (!ref.mounted) return;
@@ -372,12 +384,15 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     unawaited(foreground());
   }
 
-  /// 发送匿名使用统计. Off drops the install id and every count at once.
+  /// 发送匿名使用统计. Off drops the full statistics and their local data at
+  /// once; Android's daily activity keeps going, carrying just the foreground
+  /// flags (see [observesDaily]).
   Future<void> setEnabled(bool enabled) async {
     await _loaded;
     if (!ref.mounted) return;
     final local = !enabled && _v4Platform && UsageBuild.active ? ref.read(localConnectionProvider).value?.client : null;
     state = state.copyWith(enabled: enabled, noticed: true);
+    String? daily;
     if (!enabled) {
       _ledger = UsageLedger();
       _iid = null;
@@ -386,8 +401,9 @@ class UsageStatsController extends Notifier<UsageStatsState> {
       _closedDay = null;
       _device = null;
       _saved = null;
-      _v4 = UsageV4Ledger();
-      _v4Saved = null;
+      _v4 = _v4.onlyDaily();
+      daily = _v4.encode();
+      _v4Saved = daily;
       _v4Failed = null;
       _v4ClosedDay = null;
       if (local != null) unawaited(_syncEngineUsage(local, false));
@@ -396,9 +412,10 @@ class UsageStatsController extends Notifier<UsageStatsState> {
       await prefs.setBool(enabledKey, enabled);
       await prefs.setBool(noticedKey, true);
       if (!enabled) {
-        for (final key in [daysKey, iidKey, iidSinceKey, failedAtKey, closedDayKey, v4LedgerKey]) {
+        for (final key in [daysKey, iidKey, iidSinceKey, failedAtKey, closedDayKey]) {
           await prefs.remove(key);
         }
+        if (daily != null) await prefs.setString(v4LedgerKey, daily);
       }
     });
     if (enabled) unawaited(foreground());
@@ -409,21 +426,26 @@ class UsageStatsController extends Notifier<UsageStatsState> {
   Future<void> foreground() async {
     if (!UsageBuild.active) return;
     await _loaded;
-    if (!ref.mounted || !state.collecting) return;
-    _ledger.touch(_now());
-    _save();
-    if (observesChatLogUsage) {
-      final lifecycle = WidgetsBinding.instance.lifecycleState;
-      if (lifecycle == null || lifecycle == AppLifecycleState.resumed) _v4.foreground(_now());
+    if (!ref.mounted) return;
+    final full = state.collecting;
+    if (full) {
+      _ledger.touch(_now());
+      _save();
+    }
+    if (!observesDaily) {
+      if (full) await send();
+      return;
+    }
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle == null || lifecycle == AppLifecycleState.resumed) _v4.foreground(_now());
+    if (full) {
       final client = ref.read(localConnectionProvider).value?.client;
       if (client != null) await _syncEngineUsage(client, true);
-      if (!ref.mounted || !observesChatLogUsage) return;
+      if (!ref.mounted) return;
       unawaited(_readExits());
-      unawaited(_saveV4());
-      await Future.wait([send(), _v4Sending ??= _sendV4().whenComplete(() => _v4Sending = null)]);
-    } else {
-      await send();
     }
+    unawaited(_saveV4());
+    await Future.wait([if (full) send(), _v4Sending ??= _sendV4().whenComplete(() => _v4Sending = null)]);
   }
 
   Future<void> _readExits() async {
@@ -471,7 +493,7 @@ class UsageStatsController extends Notifier<UsageStatsState> {
 
   Future<void> _sendV4() async {
     final ledger = _v4;
-    bool live() => ref.mounted && identical(ledger, _v4) && observesChatLogUsage;
+    bool live() => ref.mounted && identical(ledger, _v4) && observesDaily;
     final now = _now();
     final today = usageV4Day(now);
     final endpoint = ref.read(usageV4EndpointProvider);
@@ -484,7 +506,8 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     if (!live() || device.app.isEmpty) return;
     final http = ref.read(usageHttpProvider);
     for (final day in due) {
-      final body = ledger.days[day]!.seal(day, device);
+      // Switched off, the day goes as a daily-activity report: the base row only.
+      final body = ledger.days[day]!.seal(day, device, dailyOnly: !state.collecting);
       ledger.sealedThrough = day;
       await _saveV4();
       if (!live()) return;

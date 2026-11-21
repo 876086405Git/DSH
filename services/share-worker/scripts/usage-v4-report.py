@@ -34,6 +34,7 @@ def daily_query(first, last, span, source="chat_log"):
         f"max(if(blob3 = '{source}_counts', 1, 0)) AS has_counts",
         f"max(if(blob3 = '{source}_values', 1, 0)) AS has_values",
         "max(if(blob3 = 'base', double1, 0.0)) AS active",
+        "max(if(blob3 = 'base', double3, 0.0)) AS mask",
         "max(if(blob3 = 'base' AND blob7 != '' AND blob7 != 'unknown', 1.0, 0.0)) AS model_known",
         "max(if(blob3 = 'base' AND blob8 != '' AND blob8 != 'unknown', 1.0, 0.0)) AS rom_known",
     ]
@@ -44,6 +45,7 @@ def daily_query(first, last, span, source="chat_log"):
     totals = ",\n  ".join(f"sum(if({READY}, {name}, 0.0)) AS {name}_total"
                             for name in COUNTS + VALUES)
     return f"""SELECT day, count() AS install_days_seen, sum(active) AS dau,
+  sum(if(mask = 1, 1, 0)) AS daily_only_install_days,
   sum(active * model_known) AS active_with_model, sum(active * rom_known) AS active_with_rom,
   sum(if({READY}, 1, 0)) AS complete_install_days,
   max(sample_step) AS max_sample_interval,
@@ -99,7 +101,9 @@ def summarize_daily(day, row, today):
     observed = row["observed_total"]
     result = {
         "day": str(day), "mature": (today - day).days > 7, **row,
-        "incomplete_install_days": row["install_days_seen"] - row["complete_install_days"],
+        "incomplete_install_days": (
+            row["install_days_seen"] - row["complete_install_days"] - row["daily_only_install_days"]
+        ),
         "model_coverage": ratio(row["active_with_model"], active),
         "rom_coverage": ratio(row["active_with_rom"], active),
         "input_coverage": ratio(row["in_positive_total"] + row["in_zero_total"], observed),

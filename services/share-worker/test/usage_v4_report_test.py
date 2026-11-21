@@ -37,29 +37,33 @@ class ReportTest(unittest.TestCase):
     def test_retry_is_counted_once_and_incomplete_rows_do_not_supply_tokens(self):
         day = str(D0)
         for _ in range(2):
-            self.point(day, "a", "base", [1, 1])
+            self.point(day, "a", "base", [1, 1, 3])
             self.point(day, "a", "chat_log_counts", [3, 2, 0, 0, 1, 0, 1, 1, 0, 1, 0, 2, 0])
             self.point(day, "a", "chat_log_values", [150, 9, 150, 9, 110, 40, 0, 1])
-        self.point(day, "b", "base", [1, 1], model="unknown")
+        self.point(day, "b", "base", [1, 1, 3], model="unknown")
         self.point(day, "b", "chat_log_values", [999, 999], sample=2)
+        # Switched off: the base row alone still counts as a day in use, and
+        # never supplies tokens or device coverage.
+        self.point(day, "c", "base", [1, 1, 1], model="")
         row = report.summarize_daily(D0, self.query(report.daily_query(D0, D0, 30)), TODAY)
-        self.assertEqual((row["dau"], row["complete_install_days"], row["incomplete_install_days"]), (2, 1, 1))
-        self.assertEqual((row["output_coverage"], row["model_coverage"]), (0.666667, 0.5))
+        self.assertEqual((row["dau"], row["daily_only_install_days"]), (3, 1))
+        self.assertEqual((row["complete_install_days"], row["incomplete_install_days"]), (1, 1))
+        self.assertEqual((row["output_coverage"], row["model_coverage"]), (0.666667, 0.333333))
         self.assertEqual((row["tokens_out_total"], row["max_sample_interval"]), (9, 2))
 
     def test_retention_uses_exact_return_day_and_requires_maturity_and_unobserved_sampling(self):
         for device in ("a", "b"):
-            self.point("2026-11-01", device, "base", [1, 1])
-        self.point("2026-11-02", "a", "base", [1, 0])
-        self.point("2026-11-02", "a", "base", [1, 0])
-        self.point("2026-11-03", "b", "base", [1, 0])
+            self.point("2026-11-01", device, "base", [1, 1, 3])
+        self.point("2026-11-02", "a", "base", [1, 0, 3])
+        self.point("2026-11-02", "a", "base", [1, 0, 3])
+        self.point("2026-11-03", "b", "base", [1, 0, 3])
         sql = report.retention_query(D0, 30)
         row = self.query(sql)
         result = report.summarize_retention(D0, row, TODAY)
         self.assertEqual(result["d1_rate"], 0.5)
         self.assertIsNone(result["d7_rate"])
         self.assertIsNone(report.summarize_retention(D0, row, date(2026, 11, 9))["d1_rate"])
-        self.point("2026-11-08", "b", "base", [1, 0], sample=10)
+        self.point("2026-11-08", "b", "base", [1, 0, 3], sample=10)
         sampled = report.summarize_retention(D0, self.query(sql), TODAY)
         self.assertEqual(sampled["d7_visible_returns"], 1)
         self.assertIsNone(sampled["d7_rate"])

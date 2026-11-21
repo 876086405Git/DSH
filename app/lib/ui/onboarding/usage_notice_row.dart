@@ -1,7 +1,7 @@
 // First run's welcome page, over 「开始」: the switch for anonymous usage
 // statistics (lib/usage/usage_stats.dart), on, and what it leaves out. Every
-// fresh install sees it, on this phone or a remote host; seeing it is what
-// lets the app start counting.
+// fresh install sees it, on this phone or a remote host; seeing it records
+// that the person was told — counting is on from the start.
 
 import 'dart:async';
 
