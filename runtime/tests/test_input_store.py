@@ -45,12 +45,12 @@ class InputStoreTest(unittest.TestCase):
     def test_current_inventory_covers_two_abis_host_and_all_npm_locks(self):
         current = store.inventory(REPO)
         historical = store.inventory(REPO, all_locks=True)
-        self.assertEqual(len(current), 723)
-        self.assertEqual(len(historical), 1061)
+        self.assertEqual(len(current), 736)
+        self.assertEqual(len(historical), 1074)
         npm = [obj for obj in current if obj["algorithm"] == "sha512"]
-        self.assertEqual(len(npm), 661)
-        self.assertEqual(sum(len(obj["refs"]) for obj in npm), 662)
-        self.assertEqual(sum(ref["optional"] for obj in npm for ref in obj["refs"]), 78)
+        self.assertEqual(len(npm), 674)
+        self.assertEqual(sum(len(obj["refs"]) for obj in npm), 675)
+        self.assertEqual(sum(ref["optional"] for obj in npm for ref in obj["refs"]), 90)
         refs = [ref for obj in current for ref in obj["refs"]]
         self.assertEqual({ref["abi"] for ref in refs if ref["kind"] == "termux_jni"},
                          {"arm64-v8a", "x86_64"})
@@ -120,6 +120,9 @@ class InputStoreTest(unittest.TestCase):
         values, _ = store.shell_inputs(repo)
         defaults = [repo / ("runtime/locks/" + name + "/package-lock.json") for name in
                     ("dsh-" + values["DSH_VERSION"], "pnpm-" + values["PNPM_VERSION"])]
+        bridge = self.file("repo/runtime/bridge/dsh-go-bridge/package-lock.json",
+                           (REPO / "runtime/bridge/dsh-go-bridge/package-lock.json").read_bytes())
+        defaults.append(bridge)
         selected = self.file("selected-lock.json", defaults[1].read_bytes())
         for missing in defaults:
             raw = missing.read_bytes()

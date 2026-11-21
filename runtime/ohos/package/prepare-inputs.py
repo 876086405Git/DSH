@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare private OHOS composition inputs from the two existing npm locks.
+"""Prepare private OHOS composition inputs from the existing DSH, process and bridge npm locks.
 
 No hardlink clone or lifecycle scripts. Partial failures are kept for diagnosis.
 """
@@ -49,7 +49,7 @@ def verify_inputs(receipt_path, config, dsh, process):
         raise ValueError('Input installation recipe differs from composition.json')
     if receipt.get('nodeVersion') != config['nodeVersion']:
         raise ValueError('Input preparation used a different Node version')
-    for name, prefix in [('dsh', dsh), ('process', process)]:
+    for name, prefix in [('dsh', dsh), ('process', process), ('bridge', receipt_path.parent / 'bridge')]:
         actual = prefix_files(prefix)
         if receipt['files'][name] != actual:
             raise ValueError(f'Prepared {name} input bytes/file set changed after its recipe ran')
@@ -90,7 +90,8 @@ def main():
     if run('npm-version', [str(args.npm), '--version'], output) != config['installation']['npmVersion']:
         raise ValueError('npm version differs from the fixed composition recipe')
     for name, source in [('dsh', repo / 'runtime/locks/dsh-0.2.2-rc.1'),
-                         ('process', repo / 'runtime/ohos/process')]:
+                         ('process', repo / 'runtime/ohos/process'),
+                         ('bridge', repo / 'runtime/bridge/dsh-go-bridge')]:
         prefix = output / name
         prefix.mkdir()
         for filename in ('package.json', 'package-lock.json'):
@@ -108,10 +109,11 @@ def main():
         shutil.copyfile(repo / 'runtime/ohos/native/hap-loader' / filename, helper / filename)
     shutil.copyfile(repo / 'LICENSE', helper / 'LICENSE')
     receipt = {'schema': 1, 'nodeVersion': config['nodeVersion'], 'installation': config['installation'],
-               'files': {name: prefix_files(output / name) for name in ('dsh', 'process')}}
+               'files': {name: prefix_files(output / name) for name in ('dsh', 'process', 'bridge')}}
     (output / 'prepared-inputs.json').write_bytes(encoded(receipt))
     print(json.dumps({'status': 'PREPARED', 'receiptSha256': digest(encoded(receipt)),
-                      'dshFiles': len(receipt['files']['dsh']), 'processFiles': len(receipt['files']['process'])}))
+                      'dshFiles': len(receipt['files']['dsh']), 'processFiles': len(receipt['files']['process']),
+                      'bridgeFiles': len(receipt['files']['bridge'])}))
 
 
 if __name__ == '__main__':

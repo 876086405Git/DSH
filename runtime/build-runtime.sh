@@ -327,6 +327,18 @@ install_dsh() {  # $1 = npm cpu, $2 = prefix dir
   [[ "$got" == "$DSH_VERSION" ]] || die "installed dsh $got != $DSH_VERSION"
 }
 
+# The bridge has a separate exact lock; optional native canvas is never installed.
+install_bridge() {  # $1 = npm cpu, $2 = private npm prefix, $3 = staged bridge
+  local cpu="$1" prefix="$2" output="$3" bin; bin="$(host_npm)"
+  local source="$HERE/bridge/dsh-go-bridge"
+  rm -rf "$prefix" "$output"; mkdir -p "$prefix"
+  cp "$source/package.json" "$source/package-lock.json" "$prefix/"
+  local -a npm_flags=(); npm_prefix_flags "$cpu" "$prefix"
+  warm_npm_cache "$bin" "$source/package-lock.json"
+  PATH="$bin:$PATH" npm ci "${npm_flags[@]}" --omit=optional
+  python3 -I "$HERE/lib/bridge_dependencies.py" --prefix "$prefix" --out "$output"
+}
+
 # pnpm for the guest (zero dependencies, plain JS). Same lock-then-`npm ci` scheme as DSH; the
 # lock's integrity must equal PNPM_INTEGRITY, so a regenerated lock cannot swap the tarball.
 install_pnpm() {  # $1 = npm cpu, $2 = prefix dir
@@ -450,7 +462,8 @@ PYEOF
   log "patching DSH (runtime/patches, pinned for $DSH_VERSION)"
   "${PY[@]}" patch-dsh --prefix "$prefix" --dsh-version "$DSH_VERSION" --target android --patches "$HERE/patches" \
     --out "$work/dsh-patches.json" --target-report "$work/dsh-patch-target.json" >&2
-  local bridge="$HERE/bridge/dsh-go-bridge"
+  local bridge="$work/dsh-go-bridge"
+  install_bridge "$npm_cpu" "$work/bridge-prefix" "$bridge"
   local bridge_version
   bridge_version="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$bridge/package.json")"
   local pnpm_prefix="$work/pnpm-prefix"
@@ -464,7 +477,7 @@ PYEOF
       echo "$RUNTIME_REVISION $abi $DSH_VERSION $NODE_VERSION $PNPM_VERSION $UBUNTU_VERSION $COMPRESS $XZ_PRESET $XZ_THREADS $PRUNE_DEV_METADATA $SOURCE_DATE_EPOCH $RUNTIME_LAYERS"
       sha256 "$base"; sha256 "$node"; sha256 "$python"; sha256sum "${extra_debs[@]}" | cut -d' ' -f1
       sha256 "$proot_deb"; sha256 "$talloc_deb"; sha256 "$shmem_deb"
-      sha256 "$lockfile"; sha256 "$pnpm_lockfile"
+      sha256 "$lockfile"; sha256 "$pnpm_lockfile"; sha256 "$HERE/lib/bridge_dependencies.py"
       # Preserve the reviewed pre-OHOS Android identity; changed Android inputs still invalidate it.
       python3 -I "$HERE/lib/android_recipe.py" --dsh-version "$DSH_VERSION"
     } | sha256sum | cut -c1-12 )"

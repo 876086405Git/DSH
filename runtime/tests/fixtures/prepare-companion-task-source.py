@@ -6,10 +6,14 @@ and model source files and copied dependencies must match the supplied pins.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import shutil
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 
 def sha(data):
@@ -102,6 +106,11 @@ const assertNever=value=>{throw new Error(String(value));};
 """ + region(sources['dsh-agent-loop'], 'agent') + '\nexport {ReactLoopAgent};\n')
     bridge = here.parents[2] / 'runtime/bridge/dsh-go-bridge/lib/companion'
     shutil.copytree(bridge, out / 'companion')
+    dependency_spec = importlib.util.spec_from_file_location('bridge_dependencies',
+        here.parents[2] / 'runtime/lib/bridge_dependencies.py')
+    dependency_module = importlib.util.module_from_spec(dependency_spec)
+    dependency_spec.loader.exec_module(dependency_module)
+    pdf = dependency_module.copy_pdf(bridge.parents[1], out / 'node_modules')
     (out / 'package.json').write_text('{"type":"module"}\n')
     for name, data in model_sources.items():
         destination = out / 'model-source' / name
@@ -111,6 +120,8 @@ const assertNever=value=>{throw new Error(String(value));};
     evidence = {'scope': pins['scope'], 'target': args.target,
         'sources': pins['targets'][args.target], 'dependencies': pins['dependencies'],
         'model_sources': pins['model_sources'][args.target],
+        'pdf_dependency': {p.relative_to(pdf).as_posix(): sha(p.read_bytes())
+                           for p in sorted(pdf.rglob('*')) if p.is_file()},
         'bridge': {p.relative_to(bridge).as_posix(): sha(p.read_bytes())
                    for p in sorted(bridge.rglob('*.js'))}}
     (out / 'source-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')

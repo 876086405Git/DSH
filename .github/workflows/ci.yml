@@ -360,6 +360,8 @@ jobs:
             ${{ runner.temp }}/dsh
             ${{ runner.temp }}/pnpm
           key: ${{ steps.runtime-prefixes.outputs.cache-primary-key }}
+      - name: Install the locked bridge extraction dependency
+        run: npm ci --prefix runtime/bridge/dsh-go-bridge --ignore-scripts --omit=optional --no-audit --no-fund
       - name: Export the runtime test paths
         run: |
           prefix="$RUNNER_TEMP/dsh"
@@ -386,6 +388,7 @@ jobs:
           c++ -std=c++17 -shared -fPIC -I "$node_headers" tooling/ohos/tests/runtime-zip-zlib.cc -lz -o "$RUNNER_TEMP/ohos-test-zlib.node"
           OHOS_TEST_ZLIB_ADDON="$RUNNER_TEMP/ohos-test-zlib.node" node --test tooling/ohos/tests/lifecycle-host.test.mjs tooling/ohos/tests/transient-task.test.mjs tooling/ohos/tests/runtime-channel.test.mjs
           python3 -I runtime/tests/test_patch_dsh.py
+          python3 -I runtime/tests/test_bridge_dependencies.py
       - name: Keep actual engine replay evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

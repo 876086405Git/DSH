@@ -425,14 +425,17 @@ def assemble(args):
         raise ValueError('Unsupported composition target/schema')
     dsh = args.dsh_prefix.resolve(strict=True)
     process = args.process_prefix.resolve(strict=True)
+    bridge_prefix = (args.prepared_inputs.parent / 'bridge').resolve(strict=True)
     output = args.out.absolute()
-    for source in (repo, dsh, process):
+    for source in (repo, dsh, process, bridge_prefix):
         if output.resolve().is_relative_to(source) or source.is_relative_to(output.resolve()):
             raise ValueError('Output must be separate from repository and input prefixes')
     if output.exists() or output.is_symlink():
         raise ValueError('Output already exists; preserved')
     packages = {'dsh': checked_lock(dsh, config['dshLockSha256']),
-                'process': checked_lock(process, config['processLockSha256'])}
+                'process': checked_lock(process, config['processLockSha256']),
+                'bridge': checked_lock(bridge_prefix, digest(
+                    (repo / 'runtime/bridge/dsh-go-bridge/package-lock.json').read_bytes()))}
     input_spec = importlib.util.spec_from_file_location('ohos_prepared_inputs', Path(__file__).with_name('prepare-inputs.py'))
     input_module = importlib.util.module_from_spec(input_spec)
     input_spec.loader.exec_module(input_module)
@@ -478,7 +481,15 @@ def assemble(args):
             destination = source.relative_to(repo).as_posix()
             composer.add(source, repo, 'repository', destination,
                          deletion_reason if destination in deletion_paths else None)
-        for name in ('package.json', 'cordis.patch.yml'):
+        dependency_spec = importlib.util.spec_from_file_location('bridge_dependencies',
+            repo / 'runtime/lib/bridge_dependencies.py')
+        dependency_module = importlib.util.module_from_spec(dependency_spec)
+        dependency_spec.loader.exec_module(dependency_module)
+        pdf, pdf_files = dependency_module.pdf_files(bridge_prefix)
+        for source in pdf_files:
+            destination = 'runtime/bridge/dsh-go-bridge/node_modules/pdfjs-dist/' + source.relative_to(pdf).as_posix()
+            composer.add(source, bridge_prefix, 'bridge-dependencies', destination)
+        for name in ('package.json', 'cordis.patch.yml', 'PDF-DEPENDENCY.md'):
             composer.add(bridge / name, repo, 'repository', (bridge / name).relative_to(repo).as_posix())
         for row in deletion['files']:
             composer.add(deletion_root / row['file'], deletion_root, 'generated-ohos-deletion', row['destination'])
