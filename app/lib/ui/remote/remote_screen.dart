@@ -53,8 +53,11 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
   void initState() {
     super.initState();
     // The account's hosts as they are now: who came online since the list
-    // was read (it is read once at start). Signed out: nothing to do.
-    unawaited(ref.read(relayAccountProvider.notifier).refresh());
+    // was read (it is read once at start). Signed out: nothing to do. After
+    // the first frame: providers can't change while the tree builds.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(ref.read(relayAccountProvider.notifier).refresh());
+    });
   }
 
   void _openConsole() {
@@ -163,12 +166,11 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
             ),
           ],
         ),
-        // Only meaningful once there is a host to come back to; compact
-        // history is a DSH Remote transfer.
-        if (ssh.isNotEmpty || signedIn)
-          SettingsSection(
-            title: l10n.remoteConnectionSettings,
-            children: [
+        SettingsSection(
+          title: l10n.remoteConnectionSettings,
+          children: [
+            // Only meaningful once there is a host to come back to.
+            if (ssh.isNotEmpty || signedIn)
               SettingsSwitchTile(
                 key: const ValueKey('remote-auto-connect'),
                 spot: Spots.remoteAutoConnect,
@@ -176,16 +178,16 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
                 value: ref.watch(remoteAutoConnectProvider),
                 onChanged: (value) => unawaited(ref.read(remoteAutoConnectProvider.notifier).set(value)),
               ),
-              if (signedIn)
-                SettingsSwitchTile(
-                  key: const ValueKey('remote-compact-history'),
-                  spot: Spots.remoteCompactHistory,
-                  subtitle: l10n.remoteCompactHistoryHint,
-                  value: ref.watch(remoteCompactHistoryProvider),
-                  onChanged: (value) => unawaited(ref.read(remoteCompactHistoryProvider.notifier).set(value)),
-                ),
-            ],
-          ),
+            // Always here: settings search lands on it, signed in or not.
+            SettingsSwitchTile(
+              key: const ValueKey('remote-compact-history'),
+              spot: Spots.remoteCompactHistory,
+              subtitle: l10n.remoteCompactHistoryHint,
+              value: ref.watch(remoteCompactHistoryProvider),
+              onChanged: (value) => unawaited(ref.read(remoteCompactHistoryProvider.notifier).set(value)),
+            ),
+          ],
+        ),
         SettingsSection(
           title: l10n.commonMore,
           children: [
@@ -242,7 +244,12 @@ class _AccountCard extends ConsumerWidget {
       ),
       title: Text(user.displayName),
       subtitle: Text(
-        ['DSH Remote', if (user.provider case final p?) _providerName(p), account.server].join(' · '),
+        [
+          'DSH Remote',
+          if (user.provider case final p?) _providerName(p),
+          // A self-hosted server is worth naming; the official one goes without.
+          if (account.server.isNotEmpty && account.server != 'dsh.r2049.cn') account.server,
+        ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),

@@ -108,6 +108,7 @@ void main() {
     await pump(tester, _InspectableLink(HostLinkStatus.idle), page: true);
     final compact = find.byKey(const ValueKey('remote-compact-history'));
     await tester.scrollUntilVisible(compact, 300);
+    await tester.pump();
     expect(SettingsIndex.spot('remote-compact-history'), isNotNull);
     expect(tester.widget<SettingsSwitchTile>(compact).value, isFalse);
     expect(find.textContaining('切换主机或重启 App 后生效'), findsOneWidget);
