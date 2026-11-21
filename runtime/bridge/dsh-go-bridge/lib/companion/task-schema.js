@@ -56,6 +56,8 @@ export const amendSchema = z.object({...base, operationId: taskId, expectedTaskR
     agreementFor(value.kind ?? TASK_KIND).safeParse(value.changes).success);
 export const cancelSchema = z.object({...base, operationId: taskId, expectedTaskRev: revision,
   kind: kinds.optional(), taskRev: revision}).strict().refine(value => value.taskRev === value.expectedTaskRev + 1);
+export const foregroundSchema = z.object({...base, hostExecutionId: taskId, taskRev: revision,
+  sourceSessionId: text.max(256)}).strict();
 export const folderSchema = z.object({...base, path: text.max(4096)}).strict();
 const inputName = text.max(255).refine(value => !/[\\/\0]/u.test(value) && /\.(md|txt)$/iu.test(value));
 const receiptName = text.max(255).refine(value => !/[\\/\u0000-\u001f\u007f]/u.test(value) && /\.(md|txt|pdf)$/iu.test(value));

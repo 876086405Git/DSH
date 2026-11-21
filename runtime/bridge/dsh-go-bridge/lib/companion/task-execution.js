@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { FULL_PRESET } from './prompt-context.js';
-import { fingerprint, taskError, RECEIPT_KIND } from './task-schema.js';
+import { fingerprint, taskError, TASK_KIND, RECEIPT_KIND } from './task-schema.js';
 
 const raw = value => value?.[Symbol.for('cordis.original')] ?? value;
 const copy = value => value === undefined ? undefined : structuredClone(value);
@@ -33,7 +33,7 @@ export function createNotesExecutionOwner(ctx, store) {
     const guard = () => {
       const current = store.read(record.taskId);
       if (closing || store.stopping || current.taskRev !== record.taskRev || current.cancelRequested ||
-          current.agreement?.afterExit !== 'continue' ||
+          !store.executionAllowed(current) ||
           current.agreement.deadlineAtMs !== null && Date.now() >= current.agreement.deadlineAtMs ||
           requireModel && raw(scope.get('llm')) !== raw(llm) || raw(ctx.get('fs')) !== raw(fs) ||
           raw(scope.get('sandboxPolicy')) !== raw(policyOwner) || raw(scope.get('approval')) !== raw(approvalOwner) ||
@@ -118,7 +118,9 @@ export function createNotesExecutionOwner(ctx, store) {
         if (decision) {
           await flush();await store.saveApproval(record.taskId,record.taskRev,{...saved,outcome:decision.data.outcome});
           if (decision.data.outcome === 'allowed-once') {guard();return {...model.policy,mode:requestedMode};}
-          if (decision.data.outcome === 'rejected' || decision.data.outcome === 'cancelled')
+          const foregroundRetry = decision.data.outcome === 'cancelled' && saved.foregroundInterrupted === true &&
+            record.kind === TASK_KIND && record.agreement.afterExit === 'pause';
+          if (decision.data.outcome === 'rejected' || decision.data.outcome === 'cancelled' && !foregroundRetry)
             throw taskError(409,'conflict','The original approval did not authorize this task step');
         } else {
           // A remote event not proven decided cannot be replaced by another visible card.
@@ -143,8 +145,12 @@ export function createNotesExecutionOwner(ctx, store) {
               binding = {...binding,eventId};await store.saveApproval(record.taskId,record.taskRev,binding);guard();
             },
           });
+          const foregroundInterrupted = record.kind === TASK_KIND && record.agreement.afterExit === 'pause' &&
+            response.outcome === 'cancelled' &&
+            ['foreground_withdrawn','task_owner_stopping'].includes(response.signalCancellation?.reason?.notesReason);
           await flush();
-          if (binding) await store.saveApproval(record.taskId,record.taskRev,{...binding,outcome:response.outcome});
+          if (binding) await store.saveApproval(record.taskId,record.taskRev,{...binding,outcome:response.outcome,
+            ...(foregroundInterrupted ? {foregroundInterrupted:true} : {})});
           return response.outcome;
         }};
         const mode = await approveEscalation({requestedMode,justification,effectiveMode:model.policy.mode,subject:'operation'},

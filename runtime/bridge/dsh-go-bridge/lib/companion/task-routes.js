@@ -13,6 +13,44 @@ export function createCompanionTaskRoutes({ctx, send, readJson}) {
     const admission = connection.admit(req);
     if (admission?.peer?.principal?.kind !== 'owner') throw taskError(admission?.rejection ?? 403, 'forbidden', 'Tasks require the paired host owner');
   }
+  async function foreground(req, res, store, id) {
+    const controller = new AbortController();
+    const abort = () => controller.abort(new Error('Original foreground response closed'));
+    req.once('aborted', abort); res.once('close', abort);
+    let unwatch = () => {}, completed;
+    try {
+      const body = await readJson(req, 32768, true);
+      if (req.aborted || res.destroyed) abort();
+      controller.signal.throwIfAborted();
+      completed = store.foreground(id, body, controller.signal);
+      let blocked = false, pending = null, ended = false;
+      const write = snapshot => {
+        if (controller.signal.aborted || res.destroyed) return;
+        if (blocked) { pending = snapshot; return; }
+        try { blocked = !res.write(`${JSON.stringify(snapshot)}\n`); }
+        catch { abort(); }
+      };
+      const drained = () => {
+        blocked = false;
+        if (pending) { const latest = pending; pending = null; write(latest); }
+        if (ended && !blocked && !res.destroyed) res.end();
+      };
+      const delivered = new Promise(resolve => {res.once('finish', resolve); res.once('close', resolve);});
+      res.on('drain', drained);
+      try {
+        res.writeHead(200, {'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store'});
+        unwatch = store.observe(id, write); write(store.snapshot(id));
+        await completed;
+        unwatch(); write(store.snapshot(id)); ended = true;
+        if (!blocked && !res.destroyed) res.end();
+        if (!res.destroyed) await delivered;
+      } finally {res.removeListener('drain', drained);}
+    } finally {
+      // Withdraw synchronously before awaiting the original task's observations.
+      abort(); unwatch(); await completed;
+      req.removeListener('aborted', abort); res.removeListener('close', abort);
+    }
+  }
   return {
     async handle(req, res, path) {
       if (path !== ROOT && !path.startsWith(`${ROOT}/`)) return false;
@@ -30,6 +68,7 @@ export function createCompanionTaskRoutes({ctx, send, readJson}) {
             sourceRead:!!findReady, artifactRead: typeof store?.fs?.dshGoReadNotesArtifact === 'function',
             ...(receiptReady ? {receiptInputs: {formats: receiptInputFormats(), maxFiles: 4, maxBytes: 4194304,
               maxPdfPages: 5, workbookBytes: 262144}} : {}),
+            ...(ready && typeof store.runner.foreground === 'function' ? {notesForeground: true} : {}),
             afterExit: ['continue'], pauseBehavior: 'waiting', reason: ready ? null : 'task_service_unavailable'});
           return true;
         }
@@ -65,6 +104,9 @@ export function createCompanionTaskRoutes({ctx, send, readJson}) {
           else throw taskError(404, 'not-found', 'Task route does not exist');
         } else if (req.method === 'POST') {
           if (!jsonType(req)) { req.resume(); throw taskError(415, 'invalid-request', 'Task requests require application/json'); }
+          if (part.length === 2 && part[1] === 'foreground') {
+            await foreground(req, res, store, part[0]); return true;
+          }
           const body = await readJson(req, 32768, true);
           if (part.length === 0) {
             if (!store.runner || body?.kind === FIND_KIND &&
@@ -85,6 +127,7 @@ export function createCompanionTaskRoutes({ctx, send, readJson}) {
           else throw taskError(404, 'not-found', 'Task route does not exist');
         } else throw taskError(405, 'invalid-request', 'Unsupported task method');
       } catch (error) {
+        if (res.headersSent || res.destroyed) { if (!res.destroyed) res.destroy(); return true; }
         if (typeof error?.code === 'string' && error.code.startsWith('companion/') && !error.code.startsWith('companion/task-'))
           error = taskError(error.status, 'invalid-request', 'Invalid task request');
         const known = typeof error?.code === 'string' && error.code.startsWith('companion/');

@@ -18,6 +18,8 @@ export function mountCompanionTasks(ctx) {
       const receipts = receiptsToSheetSupported(taskCtx.get('fs')) ? createReceiptsToSheetRunner({ctx:taskCtx,store,execution}) : null;
       store.attachRunner({kinds:['host.notes_to_todo',...(find?['host.find_draft']:[]),...(compare?['host.compare_drafts']:[]),
         ...(receipts?['host.receipts_to_sheet']:[])], receiptFormats: receipts ? receiptInputFormats() : [],
+        foreground:(id,rev,signal)=>runner.foreground(id,rev,signal),
+        foregroundActive:(id,rev)=>runner.foregroundActive(id,rev),
         wake:id=>store.read(id).kind==='host.find_draft'?find?.wake(id):
           store.read(id).kind==='host.compare_drafts'?compare?.wake(id):
             store.read(id).kind==='host.receipts_to_sheet'?receipts?.wake(id):runner.wake(id),

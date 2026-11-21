@@ -2,6 +2,7 @@
 import {join} from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {errorCode} from './auxiliary.js';
+import {taskError} from './task-schema.js';
 import {runTaskModel} from './task-model.js';
 import {NOTES_LIMITS, NotesTaskError, notesSystem, selectNotes, notesModelInput,
   notesInputEstimate, readNotesProposal, renderNotesPage} from './notes-content.js';
@@ -32,7 +33,7 @@ function deadlineTimer(controller, atMs) {
 }
 
 export function createNotesToTodosRunner({ctx, store, execution}) {
-  const queue = new Set();
+  const queue = new Set(), foregrounds = new Map();
   let closed = false, drain = null, active = null;
   const fs = ctx.get('fs');
   const required = ['dshGoListNotes', 'dshGoReadNote', 'dshGoNotesPublicationSupport',
@@ -46,7 +47,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     if (closed) throw new NotesTaskError('task_owner_stopping');
     const record = store.read(taskId);
     if (record.taskRev !== taskRev || record.cancelRequested || !record.originalCreate ||
-      record.agreement?.afterExit !== 'continue') throw new NotesTaskError('task_agreement_changed');
+      !store.executionAllowed(record)) throw new NotesTaskError('task_agreement_changed');
     if (record.agreement.deadlineAtMs !== null && Date.now() >= record.agreement.deadlineAtMs)
       throw new NotesTaskError('deadline_expired', 'failed');
     owner?.guard();
@@ -54,7 +55,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
   }
 
   async function segment(id, rev, key, reserveMs, controller, owner, job) {
-    guard(id, rev, controller.signal, owner);
+    const pause = guard(id, rev, controller.signal, owner).agreement.afterExit === 'pause';
     const claim = await store.claimStep(id, rev, key, {reserveMs,
       retryKnownSafe: step(store.read(id), key, rev)?.state === 'waiting'});
     const start = performance.now(), clock = new AbortController();
@@ -62,10 +63,14 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     timeout.unref?.();
     const signal = AbortSignal.any([controller.signal, clock.signal]);
     const current = () => guard(id, rev, signal, owner);
+    let jobEntered = false;
     try {
       current();
-      const result = await owner.runTurn(turnSignal => job({claim, signal: AbortSignal.any([signal, turnSignal]),
-        guard: () => {turnSignal.throwIfAborted(); return current();}, elapsed: () => duration(start)}));
+      const result = await owner.runTurn(turnSignal => {
+        jobEntered = true;
+        return job({claim, signal: AbortSignal.any([signal, turnSignal]),
+          guard: () => {turnSignal.throwIfAborted(); return current();}, elapsed: () => duration(start)});
+      });
       const latest = store.read(id), original = step(latest, key, rev);
       if (original.finishedAtMs === null)
         await store.finishStep(claim, {state: 'done', reason: null, result: result ?? null, elapsedMs: duration(start)});
@@ -92,8 +97,17 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
             state = latest.cancelRequested && finish?.usage?.complete === true ? 'cancelled' : 'unknown';
           }
         }
-        await store.finishStep(claim, {state, reason: error.notesReason ?? (key === 'model' ? 'model_unconfirmed' : 'step_unavailable'),
-          result: error.notesPreflightProof ?? null, elapsedMs: duration(start)});
+        const saved = key === 'selectInputs' ? notes?.selection : key === 'readInputs' ? notes?.inputs
+          : key === 'model' ? notes?.candidate : null;
+        const interrupted = pause && ['foreground_withdrawn', 'task_owner_stopping'].includes(error.notesReason);
+        if (interrupted && saved) state = 'done';
+        const completion = interrupted && saved ? {recoveredSavedResult: true}
+          : interrupted && key === 'model' && !jobEntered ? {preflightDispatched: false, streamEntered: false}
+          : interrupted && key === 'writePage' && notes?.publicationAttempted !== true ? {publicationNotAttempted: true}
+          : error.notesPreflightProof ?? null;
+        await store.finishStep(claim, {state, reason: state === 'done' ? null
+          : error.notesReason ?? (key === 'model' ? 'model_unconfirmed' : 'step_unavailable'),
+          result: completion, elapsedMs: duration(start)});
         if (state === 'waiting' && latest.taskRev === rev && !latest.cancelRequested && !closed)
           await store.wait(id, rev, error.notesReason ?? 'step_unavailable');
       }
@@ -187,12 +201,15 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     });
   }
 
-  async function run(id, controller) {
+  async function run(id, controller, foreground) {
     await reconcile(id);
     let record = store.read(id);
     if (closed || !record.originalCreate || record.cancelRequested || finished.has(record.state) ||
       unresolved(record)) return;
-    if (record.agreement.afterExit !== 'continue') {await store.wait(id, record.taskRev, 'foreground_control_unavailable'); return;}
+    if (!store.executionAllowed(record) || record.agreement.afterExit === 'pause' &&
+        (foreground?.revision !== record.taskRev || foreground !== foregrounds.get(id))) {
+      await store.wait(id, record.taskRev, 'foreground_required'); return;
+    }
     const revision = record.taskRev, stopDeadline = deadlineTimer(controller, record.agreement.deadlineAtMs);
     try {
       guard(id, revision, controller.signal);
@@ -245,14 +262,15 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
           if (notes.publishIntent && (notes.publicationAttempted === true ||
               (await fs.dshGoInspectNotesPublication(reference, signal)).state !== 'absent'))
             throw new NotesTaskError('publication_unconfirmed', 'unknown');
+          // Retain the actual stage even when foreground withdrawal interrupts the
+          // subsequent reads. This observation does not authorize publication.
+          await store.savePublishIntent(claim, reference);
           // Recheck the fixed whole versions after staging, immediately before the durable
           // publication boundary. This is not an atomic snapshot against unrelated writers.
           for (const entry of notes.inputs.entries) {
             const actual = await fs.dshGoReadNote(notes.inputs.directory, entry, NOTES_LIMITS.fileBytes, signal);
             if (actual.sha256 !== entry.sha256) throw new NotesTaskError('input_changed');
           }
-          current();
-          await store.savePublishIntent(claim, reference);
           current();
           const snapshot = await store.publish(claim, async saved => {
             current();
@@ -283,9 +301,14 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     while (!closed && queue.size) {
       const id = queue.values().next().value; queue.delete(id);
       const controller = new AbortController();
-      active = {id, revision: store.read(id).taskRev, controller};
-      try {await run(id, controller);} catch { /* Durable unresolved facts remain for explicit recovery. */ }
-      finally {controller.abort(); active = null;}
+      const revision = store.read(id).taskRev, held = foregrounds.get(id);
+      active = {id, revision, controller, foreground: held?.revision === revision ? held : null};
+      try {await run(id, controller, active.foreground);} catch { /* Durable unresolved facts remain for explicit recovery. */ }
+      finally {
+        controller.abort();
+        active.foreground?.finish();
+        active = null;
+      }
     }
   }
   function wake(id) {
@@ -298,8 +321,35 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     if (!drain) drain = Promise.resolve().then(work).finally(() => {drain = null; if (!closed && queue.size) wake(queue.values().next().value);});
     return drain;
   }
-  return {wake, async stop() {
+  function foregroundActive(id, revision) {
+    const held = foregrounds.get(id);
+    return !closed && held?.revision === revision && !held.signal.aborted;
+  }
+  function foreground(id, revision, signal) {
+    signal.throwIfAborted();
+    if (closed || foregrounds.has(id))
+      throw taskError(409, 'conflict', 'The original notes request is still draining');
+    let finish;
+    const completed = new Promise(resolve => { finish = resolve; });
+    const held = {revision, signal, finish}; foregrounds.set(id, held);
+    const abort = () => {
+      if (store.read(id).taskRev === revision) queue.delete(id);
+      if (active?.foreground === held)
+        active.controller.abort(new NotesTaskError('foreground_withdrawn'));
+      else finish();
+    };
+    signal.addEventListener('abort', abort, {once: true});
+    wake(id);
+    return completed.finally(() => {
+      signal.removeEventListener('abort', abort);
+      if (foregrounds.get(id) === held) foregrounds.delete(id);
+    });
+  }
+  return {wake, foreground, foregroundActive, async stop() {
     closed = true; queue.clear(); active?.controller.abort(new NotesTaskError('task_owner_stopping'));
+    for (const [id, held] of foregrounds) {
+      if (active?.foreground !== held) held.finish();
+    }
     await drain;
   }};
 }

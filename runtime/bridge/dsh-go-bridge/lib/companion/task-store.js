@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isAbsolute, join } from 'node:path';
-import { TASK_KIND, FIND_KIND, COMPARE_KIND, RECEIPT_KIND, XLSX_TYPE, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
+import { TASK_KIND, FIND_KIND, COMPARE_KIND, RECEIPT_KIND, XLSX_TYPE, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema, foregroundSchema,
   inputSchema, inputRecordSchema, folderRecordSchema, globalSchema, recordSchema, parseTask, taskError, fingerprint, taskAgreement, dayRange } from './task-schema.js';
 
 const clone = value => structuredClone(value);
@@ -37,6 +37,7 @@ export class CompanionTaskStore {
     this.domain = domain; this.fs = fs; this.now = now;
     this.table = domain.table('tasks'); this.folders = domain.table('folders'); this.inputs = domain.table('inputs');
     this.chain = Promise.resolve(); this.stopping = false; this.runner = null; this.stopped = null;
+    this.observers = new Map();
   }
   get hostStoreId() { return this.domain.global.get().hostStoreId; }
   attachRunner(runner) {
@@ -67,6 +68,27 @@ export class CompanionTaskStore {
     return clone(record);
   }
   snapshot(id) { return this.project(this.read(id)); }
+  observe(id, listener) {
+    const listeners = this.observers.get(id) ?? new Set();
+    listeners.add(listener); this.observers.set(id, listeners);
+    return () => { listeners.delete(listener); if (!listeners.size) this.observers.delete(id); };
+  }
+  executionAllowed(record) {
+    return record.agreement?.afterExit === 'continue' || record.kind === TASK_KIND &&
+      record.agreement?.afterExit === 'pause' && this.runner?.foregroundActive?.(record.taskId, record.taskRev) === true;
+  }
+  foreground(id, input, signal) {
+    const body = parseTask(foregroundSchema, input); this.checkStore(body.hostStoreId);
+    if (this.stopping || typeof this.runner?.foreground !== 'function')
+      throw taskError(503, 'unavailable', 'Notes foreground execution is unavailable');
+    signal.throwIfAborted();
+    const record = this.read(id); this.current(record, body.taskRev, false);
+    if (record.kind !== TASK_KIND || record.agreement.afterExit !== 'pause' ||
+        record.hostExecutionId !== body.hostExecutionId || record.origin.sourceSessionId !== body.sourceSessionId ||
+        terminal.has(record.state) || record.agreement.deadlineAtMs !== null && this.now() >= record.agreement.deadlineAtMs)
+      throw taskError(409, 'conflict', 'The original foreground notes agreement is not current', this.project(record));
+    return this.runner.foreground(id, body.taskRev, signal);
+  }
   project(record) {
     const {originalCreate, originalFingerprint, operations, notes, execution, ...publicRecord} = clone(record);
     publicRecord.hostStoreId = this.hostStoreId;
@@ -206,7 +228,10 @@ export class CompanionTaskStore {
       record.waitReason = record.state === 'partial' ? 'prior_revision_effect' : null;
     }
     else if (!record.originalCreate) { record.state = 'waiting'; record.waitReason = 'original_create_missing'; }
-    else if (record.agreement.afterExit === 'pause') { record.state = 'waiting'; record.waitReason = 'foreground_control_unavailable'; }
+    else if (record.agreement.afterExit === 'pause' && !this.executionAllowed(record)) {
+      record.state = 'waiting'; record.waitReason = record.kind === TASK_KIND && this.runner?.foreground
+        ? 'foreground_required' : 'foreground_control_unavailable';
+    }
     else if (record.agreement.deadlineAtMs !== null && this.now() >= record.agreement.deadlineAtMs) {
       record.state = 'failed'; record.waitReason = 'deadline_expired';
     } else { record.state = 'running'; record.waitReason = null; }
@@ -215,7 +240,12 @@ export class CompanionTaskStore {
     record.runnerReceiptSeq++; record.updatedAtMs = this.now();
     const checked = recordSchema.parse(record);
     await this.table.put(record.taskId, checked);
-    return this.project(checked);
+    const snapshot = this.project(checked);
+    for (const listener of this.observers.get(record.taskId) ?? []) {
+      // A disconnected reader cannot undo the already durable receipt.
+      try { listener(snapshot); } catch {}
+    }
+    return snapshot;
   }
   wake(id) { try { this.runner?.wake(id); } catch { /* Persisted work remains queryable and resumable. */ } }
   create(input) {
@@ -277,7 +307,7 @@ export class CompanionTaskStore {
   current(record, taskRev, physical = true) {
     if (record.taskRev !== taskRev || record.cancelRequested || !record.originalCreate)
       throw taskError(409, 'conflict', 'The task agreement no longer authorizes this step', this.project(record));
-    if (physical && (record.agreement.afterExit !== 'continue' || terminal.has(record.state) ||
+    if (physical && (!this.executionAllowed(record) || terminal.has(record.state) ||
       record.agreement.deadlineAtMs !== null && this.now() >= record.agreement.deadlineAtMs))
       throw taskError(409, 'conflict', 'The current task is not runnable', this.project(record));
   }
@@ -344,7 +374,9 @@ export class CompanionTaskStore {
     if (previous.stepKey === 'selectInputs') return !notes?.selection;
     if (previous.stepKey === 'readInputs') return !!notes?.selection && !notes.inputs;
     if (previous.stepKey === writeKey(record)) return previous.result?.completion?.publicationNotAttempted === true &&
-      !!notes?.publishIntent && !!notes.candidate && notes.publicationAttempted !== true && record.artifacts.length === 0;
+      (!!notes?.publishIntent || record.kind === TASK_KIND && record.agreement.afterExit === 'pause' &&
+        ['foreground_withdrawn', 'task_owner_stopping'].includes(previous.reason)) &&
+      !!notes?.candidate && notes.publicationAttempted !== true && record.artifacts.length === 0;
     if (previous.stepKey !== 'model' || notes?.candidate) return false;
     const proof = previous.result?.completion, observations = previous.result?.observations ?? [];
     const physical = new Set(['dispatch','handoff','http','usage','runtime-usage','stop','complete']);

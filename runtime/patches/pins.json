@@ -128,6 +128,14 @@
         }
       }
     },
+    "companion-task-approval-cause.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-user-approval/lib/index.js": {
+          "before": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
+          "after": "948aacea6b7348ad828b2685b7d38157beabd24e370d45d672172410d8c32ac2"
+        }
+      }
+    },
     "companion-task-storage.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-storage-domain/lib/index.js": {
@@ -2681,6 +2689,7 @@
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
       "companion-task-approval-turn.diff",
+      "companion-task-approval-cause.diff",
       "companion-notes-files.diff",
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
@@ -2853,6 +2862,7 @@
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
       "companion-task-approval-turn.diff",
+      "companion-task-approval-cause.diff",
       "companion-notes-files.diff",
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",

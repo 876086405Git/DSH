@@ -18,18 +18,47 @@ const {DomainFacility}=await load('node_modules/@deepseek-ai/dsh-storage-domain/
 const {BackendRegistry}=await load('node_modules/@deepseek-ai/dsh-storage/index.js');
 const {ApprovalService,approvalStateDefinition}=await load('node_modules/@deepseek-ai/dsh-user-approval/index.js');
 const {ReactLoopAgent}=await load('task-runtime.mjs');
+const {NotesTaskError}=await load('companion/notes-content.js');
+const {createNotesToTodosRunner}=await load('companion/notes-to-todos.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-async function fixture(t,{full=false,approvalPolicy='ask',receipts=false}={}) {
- const root=await mkdtemp(join(tmpdir(),'task-exec-')),backend=new JsonStorageBackend(root);
- backend.dshGoCompanionStatfs=async()=>({type:0xef53n});const registry=new BackendRegistry();registry.register('json',backend);
- const facility=new DomainFacility({storage:{backend:registry},emit(){},logger:{warn(){},error(){}},fiber:{assertActive(){}}},{backend:'json'});
- const fs={sandboxMode:'workspace-write'};const store=await openCompanionTaskStore({facility,fs});
+async function fixture(t,{full=false,approvalPolicy='ask',receipts=false,pause=false,realRunner=false}={}) {
+ const root=await mkdtemp(join(tmpdir(),'task-exec-')),fs={sandboxMode:'workspace-write'};
+ let backend,store;
+ async function openStore(){
+  backend=new JsonStorageBackend(root);
+  backend.dshGoCompanionStatfs=async()=>({type:0xef53n});const registry=new BackendRegistry();registry.register('json',backend);
+  const facility=new DomainFacility({storage:{backend:registry},emit(){},logger:{warn(){},error(){}},fiber:{assertActive(){}}},{backend:'json'});
+  store=await openCompanionTaskStore({facility,fs});
+ }
+ await openStore();
+ if(realRunner){
+  // Only filesystem contents/policy responses are peers here. The real runner,
+  // store.stop, execution owner, fixed turn and ApprovalService own the lifecycle.
+  const directory={target:{targetKey:'/chosen',displayPath:'/chosen'},identity:'1:2'};
+  Object.assign(fs,{
+   async resolve(path){return {targetKey:path,displayPath:path};},async stat(){return null;},
+   async checkedTarget(_target,policy){if(policy.mode==='read-only')throw Object.assign(new Error('read-only'),{code:'FS_SANDBOX_DENIED'});},
+   async dshGoNotesPublicationSupport(){return {supported:true};},
+   async dshGoListNotes(){return {directory,entries:[{name:'one.md',type:'file',version:'original',size:12,modifiedAtMs:Date.parse('2026-11-20T12:00:00Z')}]};},
+   async dshGoReadNote(){return {text:'TODO: bring notes',sha256:'controlled-complete-read'};},
+   async dshGoStageNotesFile(){assert.fail('no write before this approval regression ends');},
+   async dshGoPublishNotesFile(){assert.fail('no publication in this approval regression');},
+   async dshGoInspectNotesPublication(){assert.fail('no publication intent exists');},
+   async dshGoReadNotesArtifact(){assert.fail('no artifact exists');},
+   async dshGoReleaseNotesStage(){assert.fail('no stage exists');},
+  });
+ }
  await store.folders.put('folder',{folderRef:'folder',directory:{target:{targetKey:'/chosen',displayPath:'/chosen'},identity:'1:2'},createdAtMs:1});
  if(receipts)for(let i=0;i<4;i++)await store.inputs.put(`receipt-${i}`,{sourceRef:`receipt-${i}`,directory:{target:{targetKey:'/chosen',displayPath:'/chosen'},identity:'1:2'},entry:{name:`receipt-${i}.txt`,version:'original',size:4},createdAtMs:1});
  await store.create({v:1,hostStoreId:store.hostStoreId,taskId:'task-1',taskRev:1,kind:receipts?'host.receipts_to_sheet':'host.notes_to_todo',
   origin:{sourceSessionId:full?'full:phone-room':'light:phone-room',messageId:'message-1',itemNo:0},hostSessionId:full?'source-session':null,
-  deadlineAtMs:null,afterExit:'continue',allowQueue:true,args:receipts?{inputs:Array.from({length:4},(_,i)=>({sourceRef:`receipt-${i}`,version:'original'})),outputDirRef:'folder',outputName:'receipts.xlsx',writeMode:'createNew'}:{folderRef:'folder',outputDirRef:'folder',localDate:'2026-11-20',timeZone:'Asia/Shanghai',dateBy:'modified',outputName:'todo.md',writeMode:'createNew'}});
+  deadlineAtMs:null,afterExit:pause?'pause':'continue',allowQueue:true,args:receipts?{inputs:Array.from({length:4},(_,i)=>({sourceRef:`receipt-${i}`,version:'original'})),outputDirRef:'folder',outputName:'receipts.xlsx',writeMode:'createNew'}:{folderRef:'folder',outputDirRef:'folder',localDate:'2026-11-20',timeZone:'Asia/Shanghai',dateBy:'modified',outputName:'todo.md',writeMode:'createNew'}});
+ let foreground=false;
+ // The foreground gate is a peer here; actual runner/HTTP ownership is exercised
+ // separately in companion-notes-foreground-source.test.mjs.
+ if(pause&&!realRunner)store.attachRunner({wake(){},async stop(){},foreground(){assert.fail('no HTTP runner in this approval fixture');},
+   foregroundActive:(id,rev)=>foreground&&id==='task-1'&&rev===1});
  const live=new Map(),persisted=new Map(),creates=[],resumes=[],delivered=[];let resolveAnswer,selected={provider:'chosen-provider',model:'chosen-model'},currentPolicy='read-only',flushResult=true;
  const values={fs,llm:{actualSelectedRoute:true},agentDefaultModel:{currentSelection:()=>structuredClone(selected)},
   sandboxPolicy:{resolve:()=>({mode:currentPolicy,workspaceRoot:'/original-root'})},agentPresets:{presetForSession:()=>FULL_PRESET}};
@@ -43,8 +72,8 @@ async function fixture(t,{full=false,approvalPolicy='ask',receipts=false}={}) {
  ctx.waterfall=async(_scope,_name,request)=>{
   const binding=approval.dshGoTaskApproval(request),eventId=randomUUID();
   await binding.observer.remote({approvalId:binding.approvalId,eventId,agentId:request.agent.id});
-  delivered.push({eventId,approvalId:binding.approvalId,snapshot:store.snapshot('task-1')});
-  return new Promise(resolve=>{resolveAnswer=resolve;});
+  const card={eventId,approvalId:binding.approvalId,snapshot:store.snapshot('task-1')};delivered.push(card);
+  return new Promise(resolve=>{resolveAnswer=resolve;card.answer=resolve;});
  };
  function session(id,seed=[]){return {id,header:{id,cwd:'/original-root'},events:structuredClone(seed),append(type,data){
   this.events.push({seq:this.events.length,type,data:structuredClone(data)});},snapshotEvents(){return structuredClone(this.events);}};}
@@ -63,11 +92,23 @@ async function fixture(t,{full=false,approvalPolicy='ask',receipts=false}={}) {
   return {agent:driver,async dispose(){driver.cancel({kind:'disposed'});await driver.whenIdle();live.delete(id);}};
  }
  agents.create=options=>factory(options,false);agents.resume=options=>factory(options,true);
- let execution=createNotesExecutionOwner(ctx,store);
+ let execution=createNotesExecutionOwner(ctx,store),runner;
+ function startRunner(){
+  runner=createNotesToTodosRunner({ctx,store,execution});
+  store.attachRunner({wake:id=>runner.wake(id),foreground:(...args)=>runner.foreground(...args),
+   foregroundActive:(...args)=>runner.foregroundActive(...args),
+   async stop(){await runner.stop();await execution.close();}});
+  for(const id of store.runnable())store.wake(id);
+ }
+ if(realRunner)startRunner();
  t.after(async()=>{resolveAnswer?.('cancelled');await execution.close();await store.close();await backend.close();await rm(root,{recursive:true,force:true});});
- return {store,ctx,live,persisted,creates,resumes,delivered,origin,get execution(){return execution;},
+ return {get store(){return store;},ctx,live,persisted,creates,resumes,delivered,origin,get execution(){return execution;},
   answer:value=>resolveAnswer(value),setModel:value=>{selected=value;},setPolicy:value=>{currentPolicy=value;},setFlush:value=>{flushResult=value;},
-  async reopen(){await execution.close();execution=createNotesExecutionOwner(ctx,store);return execution;}};
+  setForeground:value=>{foreground=value;},
+  async reopen(){await execution.close();execution=createNotesExecutionOwner(ctx,store);return execution;},
+  async restartStore(){assert(realRunner);await store.close();await backend.close();await openStore();
+   execution=createNotesExecutionOwner(ctx,store);startRunner();await runner.wake('task-1');},
+ };
 }
 test('real factory signature uses durable reserved ID and source policy root, never chosen folder',async t=>{
  const f=await fixture(t);const opened=await f.execution.openExecution(f.store.read('task-1'));
@@ -153,4 +194,114 @@ test('J SOURCE_APPROVAL optional zero-model path does not relax the original F c
  await assert.rejects(f.execution.openExecution(f.store.read('task-1')),/not configured/);
  await assert.rejects(f.execution.openExecution(f.store.read('task-1'),undefined,{requireModel:false}),/not configured/);
  assert.equal(f.creates.length,0);assert.equal(f.store.read('task-1').execution,null);
+});
+
+test('F SOURCE_APPROVAL actual cancelled decision may reask only after proven foreground withdrawal and a new explicit opportunity',async t=>{
+ const f=await fixture(t,{pause:true});
+ await assert.rejects(f.execution.openExecution(f.store.read('task-1')),/changed/);assert.equal(f.creates.length,0);
+ f.setForeground(true);const first=new AbortController();
+ let owner=await f.execution.openExecution(f.store.read('task-1'),first.signal);
+ const rejected=assert.rejects(owner.approve('writePage',{requestedMode:'workspace-write',justification:'原笔记任务新文件'}));
+ while(f.delivered.length<1)await tick();const old=f.delivered[0];
+ f.setForeground(false);first.abort(new NotesTaskError('foreground_withdrawn'));await rejected;
+ const saved=f.store.read('task-1').notes['1'].approval;
+ assert.equal(saved.outcome,'cancelled');assert.equal(saved.foregroundInterrupted,true);
+ assert.equal(f.store.snapshot('task-1').approval,null);assert.equal(f.store.snapshot('task-1').cancelRequested,false);
+ await assert.rejects(f.execution.openExecution(f.store.read('task-1')),/changed/);
+ f.setForeground(true);owner=await f.execution.openExecution(f.store.read('task-1'),new AbortController().signal);
+ let settled=false;const next=owner.approve('writePage',{requestedMode:'workspace-write',justification:'同一目录同一新文件'})
+   .then(value=>{settled=true;return value;});
+ while(f.delivered.length<2)await tick();const fresh=f.delivered[1];
+ assert.notEqual(fresh.eventId,old.eventId);assert.notEqual(fresh.approvalId,old.approvalId);
+ assert.equal(fresh.snapshot.approval.agentId,old.snapshot.approval.agentId);
+ old.answer('allowed-once');await tick();assert.equal(settled,false,'late answer to cancelled original card is not the new decision');
+ fresh.answer('allowed-once');assert.equal((await next).mode,'workspace-write');
+ assert.equal(f.creates.length,1);assert.equal(f.store.read('task-1').notes['1'].approval.foregroundInterrupted,undefined);
+ assert.equal(owner.agent.session.snapshotEvents().filter(e=>e.type==='approval/decided').length,2);
+});
+
+for(const outcome of ['rejected','cancelled'])test(outcome==='rejected'
+ ? 'F SOURCE_APPROVAL an actual explicit rejection is not converted into another card by later foreground opportunity'
+ : 'F SOURCE_APPROVAL a cancelled decision without a proven scope interruption is not converted into another card',async t=>{
+ const f=await fixture(t,{pause:true});f.setForeground(true);const controller=new AbortController();
+ let owner=await f.execution.openExecution(f.store.read('task-1'),controller.signal);
+ const rejected=assert.rejects(owner.approve('writePage',{requestedMode:'workspace-write',justification:'原新文件'}),/user rejected|was cancelled/);
+ while(!f.delivered.length)await tick();f.answer(outcome);await rejected;
+ assert.equal(f.store.read('task-1').notes['1'].approval.foregroundInterrupted,undefined);
+ f.setForeground(false);controller.abort(new NotesTaskError('foreground_withdrawn'));f.setForeground(true);
+ owner=await f.execution.openExecution(f.store.read('task-1'),new AbortController().signal);
+ await assert.rejects(owner.approve('writePage',{requestedMode:'workspace-write',justification:'原新文件'}),/did not authorize/);
+ assert.equal(f.delivered.length,1);
+});
+
+for(const boundary of ['decision append','decision flush'])for(const reason of ['foreground_withdrawn','task_owner_stopping'])
+test(`F SOURCE_APPROVAL independent cancellation before its ${boundary} cannot inherit later ${reason}`,async t=>{
+ const f=await fixture(t,{pause:true});f.setForeground(true);const controller=new AbortController();
+ let owner=await f.execution.openExecution(f.store.read('task-1'),controller.signal);
+ const rejected=assert.rejects(owner.approve('writePage',{requestedMode:'workspace-write',justification:'原新文件'}),/was cancelled/);
+ while(!f.delivered.length)await tick();const old=f.delivered[0];
+ let abortedAtDecision,decisionVisible,enter,release;
+ const entered=new Promise(resolve=>{enter=resolve;}),held=new Promise(resolve=>{release=resolve;});
+ const withdraw=()=>{f.setForeground(false);controller.abort(new NotesTaskError(reason));};
+ const observe=session=>{
+  const decision=session.snapshotEvents().find(event=>event.type==='approval/decided'&&event.data.id===old.approvalId);
+  if(decision?.data.outcome!=='cancelled'||decisionVisible!==undefined)return false;
+  decisionVisible=true;abortedAtDecision=controller.signal.aborted;return true;
+ };
+ if(boundary==='decision append'){
+  const session=owner.agent.session,append=session.append.bind(session);
+  session.append=(type,data)=>{append(type,data);if(observe(session))withdraw();};
+ }else{
+  const flush=f.ctx.sessions.flush.bind(f.ctx.sessions);
+  f.ctx.sessions.flush=async session=>{if(observe(session)){enter();await held;}return flush(session);};
+ }
+ old.answer('cancelled');
+ if(boundary==='decision flush'){
+  await entered;withdraw();release();
+ }
+ await rejected;
+ assert.equal(decisionVisible,true);assert.equal(abortedAtDecision,false,'the independent decision existed before any signal cancellation');
+ const saved=f.store.read('task-1').notes['1'].approval;
+ assert.equal(saved.outcome,'cancelled');assert.equal(saved.foregroundInterrupted,undefined);
+ assert.equal(f.store.snapshot('task-1').cancelRequested,false);
+ f.setForeground(true);owner=await f.execution.openExecution(f.store.read('task-1'),new AbortController().signal);
+ await assert.rejects(owner.approve('writePage',{requestedMode:'workspace-write',justification:'同一原任务'}),/did not authorize/);
+ assert.equal(f.delivered.length,1,'a later foreground opportunity cannot replace the independently cancelled card');
+ assert.equal(f.creates.length,1);
+});
+
+test('F SOURCE_APPROVAL actual store stop drains the pending scope and only a new explicit scope can reask after reopening',async t=>{
+ const f=await fixture(t,{pause:true,realRunner:true});
+ const card=async count=>{const deadline=Date.now()+5000;while(f.delivered.length<count){
+  assert(Date.now()<deadline,'the expected actual approval card was not delivered');await tick();}return f.delivered[count-1];};
+ const initial=f.store.snapshot('task-1');
+ const body={v:1,hostStoreId:initial.hostStoreId,hostExecutionId:initial.hostExecutionId,
+  taskRev:1,sourceSessionId:initial.origin.sourceSessionId};
+ const first=f.store.foreground('task-1',body,new AbortController().signal);
+ const old=await card(1);
+ assert.equal(old.snapshot.approval.stepKey,'writePage');
+ assert.deepEqual(f.store.snapshot('task-1').steps.map(value=>[value.stepKey,value.state]),
+  [['selectInputs','done'],['readInputs','done']]);
+ await f.store.stop();await first;
+ const stopped=f.store.read('task-1');
+ assert.equal(stopped.notes['1'].approval.outcome,'cancelled');
+ assert.equal(stopped.notes['1'].approval.foregroundInterrupted,true);
+ assert.equal(stopped.cancelRequested,false);assert.equal(f.live.size,0);
+ assert.equal(f.persisted.get(stopped.execution.agentId).events.at(-1).type,'turn/end');
+ await f.restartStore();
+ const restored=f.store.snapshot('task-1');
+ assert.equal(restored.hostStoreId,initial.hostStoreId);assert.equal(restored.hostExecutionId,initial.hostExecutionId);
+ assert.equal(restored.taskRev,1);assert.equal(restored.state,'waiting');
+ assert.equal(f.delivered.length,1,'reopen and wake cannot create a foreground opportunity');
+ const next=f.store.foreground('task-1',body,new AbortController().signal);
+ const fresh=await card(2);
+ assert.notEqual(fresh.approvalId,old.approvalId);assert.notEqual(fresh.eventId,old.eventId);
+ assert.equal(fresh.snapshot.approval.agentId,old.snapshot.approval.agentId);
+ old.answer('allowed-once');await tick();
+ assert.equal(f.store.snapshot('task-1').approval.eventId,fresh.eventId,'the old card cannot decide the new request');
+ fresh.answer('rejected');await next;
+ assert.equal(f.store.read('task-1').notes['1'].approval.outcome,'rejected');
+ assert.equal(f.store.read('task-1').notes['1'].approval.foregroundInterrupted,undefined);
+ assert.equal(f.creates.length,1);assert.equal(f.resumes.length,1);
+ assert.equal(f.store.snapshot('task-1').steps.length,2,'neither a model nor a write started');
 });

@@ -88,7 +88,7 @@ test('SOURCE_INTEGRATION unverified model citations retain actual usage without 
 });
 test('SOURCE_INTEGRATION pause remains durably waiting and performs no selection or model work', async t => {
   const f = await fixture(t); f.body.afterExit = 'pause'; await launch(f);
-  await until(() => snapshot(f).waitReason === 'foreground_control_unavailable', 'pause limitation');
+  await until(() => snapshot(f).waitReason === 'foreground_required', 'explicit foreground request required');
   await f.store.stop();
   assert.equal(f.counters.lists, 0); assert.equal(f.counters.reads, 0); assert.equal(f.counters.modelCalls, 0);
 });

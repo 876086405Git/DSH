@@ -163,6 +163,7 @@ companion-auxiliary-single-request.diff
 companion-chat-usage-receipts.diff
 # Fixed Companion work belongs to the shared Android prefix.
 companion-task-approval-turn.diff
+companion-task-approval-cause.diff
 companion-notes-files.diff
 companion-task-storage.diff
 # Public lookup: direct observation and complete-input answer estimate.

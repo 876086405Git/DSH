@@ -7,7 +7,7 @@
       "@deepseek-ai/dsh-storage/lib/index.js": "1289574c24ecfa5b134e2750d578c00ae59654de7d00133e117c4cc34095f3a3",
       "@deepseek-ai/dsh-atomic-write/lib/index.js": "000b8994abcbec4e01b2b714fe8c2a37e61670c52e7d3acaf40ec8d39f484dc7",
       "@deepseek-ai/dsh-agent-loop/lib/index.js": "c2510a4d02661f87f1c86fdc0bebd4ac9072328671b03e54cda717a5cc3b33f7",
-      "@deepseek-ai/dsh-user-approval/lib/index.js": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
+      "@deepseek-ai/dsh-user-approval/lib/index.js": "948aacea6b7348ad828b2685b7d38157beabd24e370d45d672172410d8c32ac2",
       "@deepseek-ai/dsh-sandbox-policy/lib/index.js": "5b5dc0b170f902a084b851147f08121bc7b8bcc75c7920d99110ba93ba70d3bf",
       "@deepseek-ai/dsh-sandbox/lib/index.js": "cc4f6b7e84eaff0bb692413f59c1bc8de457dbe5569d02985ea8e87f68281ea7"
     },
@@ -17,7 +17,7 @@
       "@deepseek-ai/dsh-storage/lib/index.js": "1289574c24ecfa5b134e2750d578c00ae59654de7d00133e117c4cc34095f3a3",
       "@deepseek-ai/dsh-atomic-write/lib/index.js": "000b8994abcbec4e01b2b714fe8c2a37e61670c52e7d3acaf40ec8d39f484dc7",
       "@deepseek-ai/dsh-agent-loop/lib/index.js": "4674309362ae3236b0132377c9f92bd4e2ff03328a5dddd7c3d876b7ec3fa5d5",
-      "@deepseek-ai/dsh-user-approval/lib/index.js": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
+      "@deepseek-ai/dsh-user-approval/lib/index.js": "948aacea6b7348ad828b2685b7d38157beabd24e370d45d672172410d8c32ac2",
       "@deepseek-ai/dsh-sandbox-policy/lib/index.js": "5b5dc0b170f902a084b851147f08121bc7b8bcc75c7920d99110ba93ba70d3bf",
       "@deepseek-ai/dsh-sandbox/lib/index.js": "cc4f6b7e84eaff0bb692413f59c1bc8de457dbe5569d02985ea8e87f68281ea7"
     }

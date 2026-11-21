@@ -206,7 +206,13 @@ test('SOURCE_MOUNT production task service dispatches find through real runner w
  assert.equal(capabilities.sourceRead,true);assert.equal(snapshot.state,'done');assert.equal(f.counters.otherServices,0);
  const notes={...f.body,taskId:'notes-pause',kind:'host.notes_to_todo',afterExit:'pause',args:{folderRef:f.folder.folderRef,outputDirRef:f.folder.folderRef,
   localDate:'2026-11-20',timeZone:'UTC',dateBy:'modified',outputName:'todo.md',writeMode:'createNew'}};
- const paused=await f.request('',notes);assert.equal(paused.status,201);assert.equal(paused.body.waitReason,'foreground_control_unavailable');
+ const paused=await f.request('',notes);assert.equal(paused.status,201);assert.equal(paused.body.waitReason,'foreground_required');
+ assert.equal(capabilities.notesForeground,true);
+ const findPaused=await f.request('',{...f.body,taskId:'find-pause',afterExit:'pause'});
+ assert.equal(findPaused.body.waitReason,'foreground_control_unavailable');
+ const refused=await f.request('/find-pause/foreground',{v:1,hostStoreId:f.store.hostStoreId,
+   taskRev:1,hostExecutionId:findPaused.body.hostExecutionId,sourceSessionId:f.body.origin.sourceSessionId});
+ assert.equal(refused.status,409);assert.equal(f.store.snapshot('find-pause').steps.length,0);
  assert.equal(f.counters.otherServices,0);
 });
 test('SOURCE_HTTP amendment during a controlled held read preserves old report and later executes only the new revision',async t=>{
