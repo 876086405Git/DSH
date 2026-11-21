@@ -62,7 +62,7 @@ String sse(String text, {Map<String, Object?>? usage}) =>
     })}\n\nevent: message_delta\ndata: ${jsonEncode({
       'type': 'message_delta',
       'delta': {'stop_reason': 'end_turn'},
-      if (usage != null) 'usage': usage,
+      'usage': ?usage,
     })}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n';
 
 void main() {

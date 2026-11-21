@@ -71,7 +71,7 @@ class _Bridge extends DshConnection {
       return json({'v': 1, 'storeId': _store, 'revision': 0, 'memoryRevision': 0, 'memories': []});
     }
     if (path.endsWith('/prompt-context')) return json(capability(query!['sessionId']!));
-    if (path.endsWith('/usage'))
+    if (path.endsWith('/usage')) {
       return json({
         'v': 1,
         'instanceId': instance,
@@ -87,6 +87,7 @@ class _Bridge extends DshConnection {
         'physicalRequests': null,
         'receipts': [],
       });
+    }
     return json({
       'storeId': _store,
       'revision': 0,
@@ -103,10 +104,11 @@ class _Bridge extends DshConnection {
       prepared.add(update);
       final code = rejectPrepare;
       rejectPrepare = null;
-      if (code != null)
+      if (code != null) {
         return json({
           'error': {'code': code, 'message': 'scripted preparation rejection'},
         }, status: 409);
+      }
       if (update.containsKey('phoneMemory')) phoneSessions.add(update['sessionId']! as String);
       return json(capability(update['sessionId']! as String));
     }
@@ -121,7 +123,7 @@ class _Bridge extends DshConnection {
     bool autoUncompress = false,
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    if (path.endsWith('/recall'))
+    if (path.endsWith('/recall')) {
       return json({
         'v': 1,
         'supported': true,
@@ -132,6 +134,7 @@ class _Bridge extends DshConnection {
         'maxItems': 12,
         'textUtf16Budget': 1200,
       });
+    }
     return json({
       'error': {'code': 'companion/not-found'},
     }, status: 404);
@@ -152,10 +155,11 @@ class _Bridge extends DshConnection {
     if (path.endsWith('/bind')) binds.add(body);
     if (path.endsWith('/revoke')) {
       revokes.add(body);
-      if (failRevoke)
+      if (failRevoke) {
         return json({
           'error': {'code': 'companion/unavailable'},
         }, status: 503);
+      }
       return json({
         'v': 1,
         'bindingId': body['bindingId'],

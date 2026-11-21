@@ -110,7 +110,7 @@ class _InputHost {
 }
 
 void main() {
-  for (final entry in {'whitespace': '原话' + ' ' * 100000, 'emoji': '🙂' * 10000}.entries) {
+  for (final entry in {'whitespace': '原话${' ' * 100000}', 'emoji': '🙂' * 10000}.entries) {
     test('${entry.key}: oversized raw source stays exact without an auxiliary POST or a format retry', () async {
       final db = sqlite3.openInMemory();
       final store = CompanionMemoryStore(db, nowMilliseconds: () => _at);
@@ -157,7 +157,7 @@ void main() {
       nowMilliseconds: () => _at,
       estimateTokens: estimateCompanionMemoryTokens,
     );
-    final raw = '  原话🙂：' + '\\"\t\n' * 700;
+    final raw = '  原话🙂：${'\\"\t\n' * 700}';
     try {
       store.submitMessage(
         id: 'source',

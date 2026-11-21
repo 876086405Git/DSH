@@ -213,7 +213,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   bool _lightReceiptFinalized = false;
   CompanionAuxiliaryCapability? _memoryRoute;
   DshClient? _memoryRouteClient;
-  CompanionMemoryWork? _lastMemoryWork;
 
   // Her state on the Host (null: this host can't keep it).
   CompanionSnapshot? _vitals;
@@ -487,14 +486,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final client = ref.read(activeConnectionProvider).value?.client;
     if (memory == null || client == null || _light) return;
     _refreshHostChatUsage();
-    final current = _currentRoom();
     final hostKey = _recallHostKey;
+    // A pending migration retries on the next visit; she just keeps working.
     try {
-      final complete = await memory.migrateHost(client);
+      await memory.migrateHost(client);
       await _retireLegacyRecall(client, hostKey);
-      if (!complete && current()) _notice(context.l10n.companionMemoryMigrationPending);
     } on Object {
-      if (current()) _notice(context.l10n.companionMemoryMigrationPending);
+      // Retried on the next visit.
     }
   }
 
@@ -525,8 +523,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (route == null ||
           client == null ||
           route.sessionId != _sessionId ||
-          !identical(client, ref.read(activeConnectionProvider).value?.client))
+          !identical(client, ref.read(activeConnectionProvider).value?.client)) {
         return;
+      }
       memory.enter(
         this,
         transport: () => CompanionHostMemoryTransport(client: client, capability: route),
@@ -545,30 +544,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _memoryRoute = route;
       _memoryRouteClient = client;
       _attachMemoryWorker();
-      if (route == null) {
-        _notice(context.l10n.companionMemoryConfiguration);
-      } else {
-        unawaited(_extractMemory(forceTail: true));
-      }
+      if (route != null) unawaited(_extractMemory(forceTail: true));
     } on Object {
-      if (current()) _notice(context.l10n.companionMemoryWaiting);
+      // Memory waits for the next chance; nothing to tell her person about.
     }
   }
 
   Future<void> _extractMemory({bool forceTail = false}) async {
     final memory = _memoryOwner;
     if (memory == null || !mounted) return;
-    final current = _currentRoom();
     try {
-      final result = await memory.extract(this, forceTail: forceTail);
-      if (!current()) return;
-      if (_lastMemoryWork != result) {
-        if (result == CompanionMemoryWork.configuration) _notice(context.l10n.companionMemoryConfiguration);
-        if (result == CompanionMemoryWork.waiting) _notice(context.l10n.companionMemoryWaiting);
-      }
-      _lastMemoryWork = result;
+      await memory.extract(this, forceTail: forceTail);
     } on Object {
-      if (current()) _notice(context.l10n.companionMemoryWaiting);
+      // A batch that could not run stays queued for the next chance.
     }
   }
 
@@ -1679,8 +1667,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final archive = memory.store.archive;
     if (binding?.sessionId != sessionId ||
         binding?.memoryArchiveId != archive['id'] ||
-        binding?.memoryControlRevision != archive['control_revision'])
+        binding?.memoryControlRevision != archive['control_revision']) {
       return;
+    }
     if (_sessionId == sessionId && _chat != null) return;
     _chat?.close();
     _sessionId = sessionId;
@@ -1753,8 +1742,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   }
 
   void _onChat(ChatState state) {
-    if (!mounted || _memoryOwner == null || _fullControlRevision != _memoryOwner!.store.archive['control_revision'])
+    if (!mounted || _memoryOwner == null || _fullControlRevision != _memoryOwner!.store.archive['control_revision']) {
       return;
+    }
     _spendCommitted(state);
     if (_running && !state.running && state.pending.isEmpty) _refreshHostChatUsage();
     final asking = state.openApproval?.eventId ?? state.questions.firstOrNull?.eventId;
@@ -2182,7 +2172,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (!current()) return false;
       setState(_unbind);
       if (_input.text.isEmpty) _input.text = raw;
-      _notice(context.l10n.companionMemoryHostRestarted);
+      if (mounted) _notice(context.l10n.companionMemoryHostRestarted);
       return false;
     }
     if (answer.profileAccepted == true && update.containsKey('profile')) {
@@ -2194,8 +2184,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         profile: entry.profile,
       );
     }
-    if (!current() || (selected != null && selected['controlRevision'] != memory.store.archive['control_revision']))
+    if (!current() || (selected != null && selected['controlRevision'] != memory.store.archive['control_revision'])) {
       return false;
+    }
     if (answer.chatUsage && selected != null) {
       memory.store.rememberHostChatDelivery(
         hostKey: _recallHostKey,

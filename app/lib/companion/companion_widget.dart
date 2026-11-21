@@ -26,8 +26,9 @@ class CompanionWidget {
     }
     final result = _writes.then((_) async {
       if ((archive != null && (_archive != archive || control == null || control < _control)) ||
-          (archive == null && _archive != null && (copy.containsKey('line') || copy.containsKey('saidAt'))))
+          (archive == null && _archive != null && (copy.containsKey('line') || copy.containsKey('saidAt')))) {
         return false;
+      }
       try {
         return await _channel.invokeMethod<Object?>('update', copy) == true;
       } on MissingPluginException {

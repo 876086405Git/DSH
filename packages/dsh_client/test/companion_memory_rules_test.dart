@@ -100,8 +100,8 @@ void main() {
       }
       for (final whitespace in ['\t', '\n', '\r']) {
         final value = proposal();
-        firstOperation(value)['text'] = '咖啡${whitespace}喝无糖';
-        expect(firstOperation(parseExtractionProposal(jsonEncode(value), batch()))['text'], '咖啡${whitespace}喝无糖');
+        firstOperation(value)['text'] = '咖啡$whitespace喝无糖';
+        expect(firstOperation(parseExtractionProposal(jsonEncode(value), batch()))['text'], '咖啡$whitespace喝无糖');
       }
       const original = '我现在咖啡喝无糖。\u0007';
       final value = proposal();
@@ -573,7 +573,7 @@ void main() {
       expect(exact.ids, ['long']);
       expect(exact.block.runes.length, 1200);
       expect(exact.block.length, greaterThan(1200));
-      final tooLong = {...long, 'text': '${text}界'};
+      final tooLong = {...long, 'text': '$text界'};
       expect(select([tooLong], '长笛').ids, isEmpty);
       expect(
         select([

@@ -65,7 +65,7 @@ class _Bridge extends DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
   }) async {
-    if (path == '$dshGoCompanionPath/memories')
+    if (path == '$dshGoCompanionPath/memories') {
       return json({
         'v': 1,
         'storeId': '33333333-3333-4333-8333-333333333333',
@@ -73,10 +73,12 @@ class _Bridge extends DshConnection {
         'memoryRevision': 0,
         'memories': [],
       });
-    if (path != dshGoCompanionPath)
+    }
+    if (path != dshGoCompanionPath) {
       return json({
         'error': {'code': 'companion/not-found'},
       }, 404);
+    }
     getPaths.add(path);
     getCount++;
     return getCount == 1 ? initialRead.future : snapshot();

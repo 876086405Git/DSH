@@ -14,7 +14,7 @@ const _at = 1795260000123;
 const _host = 'local:test-owner';
 
 class _Store extends CompanionMemoryStore {
-  _Store(Database database, int Function() now) : super(database, nowMilliseconds: now);
+  _Store(super.database, int Function() now) : super(nowMilliseconds: now);
   final closed = Completer<void>();
   List<MemoryRow> atClose = [];
   @override

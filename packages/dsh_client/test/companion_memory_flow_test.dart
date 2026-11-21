@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_client/companion.dart';
-import 'package:dsh_client/src/companion_memory_rules.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
@@ -14,7 +13,7 @@ MemoryRow create(MemoryRow source, {String? text, String? quote, List<String>? k
   'op': 'create',
   'kind': 'fact',
   'text': text ?? source['text'],
-  if (keywords != null) 'keywords': keywords,
+  'keywords': ?keywords,
   'evidence': [
     {'message_id': source['id'], 'quote': quote ?? source['text']},
   ],
@@ -36,10 +35,10 @@ MemoryRow usage({int? input, int? read, int? write, int? output, bool complete =
   'model': 'deepseek-flash',
   'start_usage': {'input_tokens': 999, 'output_tokens': 1},
   'final_usage': {
-    if (input != null) 'input_tokens': input,
-    if (read != null) 'cache_read_input_tokens': read,
-    if (write != null) 'cache_creation_input_tokens': write,
-    if (output != null) 'output_tokens': output,
+    'input_tokens': ?input,
+    'cache_read_input_tokens': ?read,
+    'cache_creation_input_tokens': ?write,
+    'output_tokens': ?output,
     'vendor_extension': {'counter': 7},
   },
   'start_event': 'message_start',
@@ -999,11 +998,7 @@ void main() {
         store.commitExtraction(
           claimed,
           parsed(claimed, [
-            {
-              ...create(source, text: cardText, keywords: keywords),
-              'kind': kind,
-              if (followup != null) 'followup': followup,
-            },
+            {...create(source, text: cardText, keywords: keywords), 'kind': kind, 'followup': ?followup},
           ]),
         ),
         isTrue,
@@ -1723,10 +1718,11 @@ void main() {
         );
         expect(store.cards().singleWhere((row) => row['id'] == first['id'])['plan_state'], 'cancelled');
         final remaining = store.cards().singleWhere((row) => row['id'] == second['id']);
-        if (scope == 'explicit-topic')
+        if (scope == 'explicit-topic') {
           expect(remaining['plan_state'], 'cancelled');
-        else
+        } else {
           expect(remaining, second);
+        }
       });
     }
 

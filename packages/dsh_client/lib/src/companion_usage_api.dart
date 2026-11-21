@@ -129,10 +129,11 @@ class CompanionChatUsageSnapshot {
       }
       callIds.add(receipt['callId'] as String);
       final count = receipt['physicalRequests'] as int?;
-      if (count == null)
+      if (count == null) {
         physicalKnown = false;
-      else
+      } else {
         physical += count;
+      }
     }
     if (state != 'unknown' &&
         (callIds.length > calls ||
@@ -316,8 +317,9 @@ Map<String, Object?> _validateReceipt(Object? value, String requestId) {
       throw const DshProtocolException('invalid generic companion usage evidence');
     }
   } else {
-    if (usage['usage_semantics'] != 'cumulative')
+    if (usage['usage_semantics'] != 'cumulative') {
       throw const DshProtocolException('invalid companion raw usage semantics');
+    }
     final raw = _map(usage['final_usage']);
     for (var index = 0; index < _components.length; index++) {
       final value = raw?[_rawComponents[index]];
@@ -354,8 +356,9 @@ bool _unicode(String value) {
 }
 
 Object? _freeze(Object? value) {
-  if (value is Map)
+  if (value is Map) {
     return Map<String, Object?>.unmodifiable(value.map((key, value) => MapEntry(key as String, _freeze(value))));
+  }
   if (value is List) return List<Object?>.unmodifiable(value.map(_freeze));
   return value;
 }

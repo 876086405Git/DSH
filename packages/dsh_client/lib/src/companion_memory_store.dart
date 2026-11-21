@@ -399,8 +399,9 @@ class CompanionMemoryStore {
             row['role'] != role ||
             row['scope'] != scope ||
             row['said_at_utc'] != saidAtUtc ||
-            row['offset_minutes'] != offsetMinutes)
+            row['offset_minutes'] != offsetMinutes) {
           throw _conflict;
+        }
         return Map<String, Object?>.from(row);
       }
       final at = _checkedNow();
@@ -472,7 +473,7 @@ class CompanionMemoryStore {
       ${where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}'}
       ORDER BY m.first_seq ${limit == null ? 'ASC' : 'DESC LIMIT ?'}
     ''',
-      [...values, if (limit != null) limit],
+      [...values, ?limit],
     );
     return [for (final row in limit == null ? rows : rows.reversed) Map<String, Object?>.from(row)];
   }
@@ -625,14 +626,15 @@ class CompanionMemoryStore {
         final row = _db.select('SELECT topic_id FROM memory_cards WHERE id=?', [target]);
         if (row.isEmpty || !topics.contains(row.single['topic_id'])) throw _conflict;
       }
-      final reason = jsonEncode({...action, if (targets != null) 'target_card_ids': targets});
+      final reason = jsonEncode({...action, 'target_card_ids': ?targets});
       final at = _checkedNow();
       final sequence = message?['first_seq'] as int? ?? _sequence();
       if (kind == 'forget') {
-        if (targets == null)
+        if (targets == null) {
           _forgetTopics(topics, deleteChat: deleteChat);
-        else
+        } else {
           _removeFactRelations(targets.toSet(), deleteChat: deleteChat);
+        }
       } else if (kind == 'cancel') {
         final selected =
             targets ??
@@ -786,8 +788,12 @@ class CompanionMemoryStore {
         );
       }
       final basis = message['first_seq'] as int;
-      if (!canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: previous['current_basis_seq'] as int?))
+      if (!canApplyMemoryCurrentValue(
+        proposedBasisSeq: basis,
+        currentBasisSeq: previous['current_basis_seq'] as int?,
+      )) {
         throw _conflict;
+      }
       final at = _checkedNow();
       final keywords = (jsonDecode(previous['keywords'] as String) as List)
           .cast<String>()
@@ -839,8 +845,9 @@ class CompanionMemoryStore {
         final applied = Map<String, Object?>.from(decoded);
         final targets = applied.remove('target_card_ids');
         if (jsonEncode(applied) == jsonEncode(action) &&
-            (requestedTargets == null || jsonEncode(targets) == jsonEncode(requestedTargets)))
+            (requestedTargets == null || jsonEncode(targets) == jsonEncode(requestedTargets))) {
           return true;
+        }
         throw _conflict;
       }
     }
@@ -1021,8 +1028,9 @@ class CompanionMemoryStore {
         pending.first['format_failures'] == 0 &&
         pending.length < 8 &&
         sourceTokens < 1500 &&
-        at - latest < 120000)
+        at - latest < 120000) {
       return null;
+    }
     final id = _createId();
     final control = archive['control_revision'] as int;
     final sources = <MemoryRow>[];
@@ -1036,8 +1044,9 @@ class CompanionMemoryStore {
     for (final row in pending) {
       // An edited/stale batch can leave an old retry ahead of fresh events.
       // Its final permitted attempt must not consume a fresh event's retry.
-      if (sources.length == memoryBatchMessageLimit || row['format_failures'] != pending.first['format_failures'])
+      if (sources.length == memoryBatchMessageLimit || row['format_failures'] != pending.first['format_failures']) {
         break;
+      }
       final source = Map<String, Object?>.from(row)
         ..remove('queued_at_ms')
         ..remove('format_failures');
@@ -1088,8 +1097,9 @@ class CompanionMemoryStore {
           row['claim_seq'] != row['event_seq'] ||
           row['role'] != 'user' ||
           row['scope'] != 'real' ||
-          (row['first_seq'] as int) <= cutoff)
+          (row['first_seq'] as int) <= cutoff) {
         return null;
+      }
       sources.add(
         Map<String, Object?>.from(row)
           ..remove('claim_state')
@@ -1140,8 +1150,9 @@ class CompanionMemoryStore {
     final claims = _db.select("SELECT * FROM memory_batches WHERE id=? AND state='claimed'", [batch.id]);
     if (claims.isEmpty) return false;
     if (claims.single['control_revision'] != batch.controlRevision ||
-        archive['control_revision'] != batch.controlRevision)
+        archive['control_revision'] != batch.controlRevision) {
       return false;
+    }
     final sources = _currentBatchSources(batch.id);
     if (sources == null || sources.length != batch.sources.length) return false;
     for (var i = 0; i < sources.length; i++) {
@@ -1149,8 +1160,9 @@ class CompanionMemoryStore {
       final actual = sources[i];
       if (expected['id'] != actual['id'] ||
           expected['source_rev'] != actual['source_rev'] ||
-          expected['event_seq'] != actual['event_seq'])
+          expected['event_seq'] != actual['event_seq']) {
         return false;
+      }
     }
     return true;
   }
@@ -1166,8 +1178,9 @@ class CompanionMemoryStore {
       final rows = _db.select('SELECT * FROM memory_cards WHERE id=?', [operation['target_id']]);
       if (rows.isEmpty ||
           rows.single['row_rev'] != operation['expected_row_rev'] ||
-          !_currentCard(_card(rows.single), at))
+          !_currentCard(_card(rows.single), at)) {
         return false;
+      }
     }
     final skipped = <MemoryRow>[];
     var changed = false;
@@ -1262,8 +1275,9 @@ class CompanionMemoryStore {
     final text = _operationText(operation);
     for (final card in cards()) {
       if (!_currentAnchor(card, at) ||
-          canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: card['current_basis_seq'] as int?))
+          canApplyMemoryCurrentValue(proposedBasisSeq: basis, currentBasisSeq: card['current_basis_seq'] as int?)) {
         continue;
+      }
       if (_supportedWords(card).any((word) => _containsAnchor(text, word))) return card['id'] as String;
     }
     return null;
@@ -1389,8 +1403,9 @@ class CompanionMemoryStore {
             final time = row['sent_at_ms'] ?? row['uncertain_at_ms'] ?? row['reserved_at_ms'];
             if ((time as int) <= at - 30 * 86400000 ||
                 row['provider'] != 'deepseek' ||
-                row['model'] != 'deepseek-flash')
+                row['model'] != 'deepseek-flash') {
               continue;
+            }
             monthly += _heldCost(row);
             // Stop before another large but valid integer observation could
             // overflow the running 64-bit sum.
@@ -1510,8 +1525,9 @@ class CompanionMemoryStore {
     if (_usageCount(controlRevision) == null ||
         _usageCount(historyAfterSeq) == null ||
         observedAt < 0 ||
-        observedAt > 8640000000000000)
+        observedAt > 8640000000000000) {
       throw ArgumentError('Invalid host chat binding');
+    }
     return _transaction(() {
       if (archive['id'] != archiveId) throw _conflict;
       final previous = _db.select(
@@ -1525,8 +1541,9 @@ class CompanionMemoryStore {
         final row = previous.single;
         if (row['archive_id'] != archiveId ||
             row['control_revision'] != controlRevision ||
-            row['history_after_seq'] != historyAfterSeq)
+            row['history_after_seq'] != historyAfterSeq) {
           throw _conflict;
+        }
         return _hostDelivery(row);
       }
       final id = _createId();
@@ -1584,14 +1601,16 @@ class CompanionMemoryStore {
       if (incoming.sessionId != delivery['session_id'] ||
           incoming.requestId != delivery['request_id'] ||
           (incoming.instanceId != delivery['instance_id'] &&
-              (incoming.state != 'unknown' || !incoming.gaps.contains('instance-changed'))))
+              (incoming.state != 'unknown' || !incoming.gaps.contains('instance-changed')))) {
         throw _conflict;
+      }
       if (incoming.state == 'unknown') {
         final gaps = _canonicalJson(incoming.gaps);
         if (delivery['state'] == 'unknown' &&
             delivery['unknown_gaps'] == gaps &&
-            delivery['unknown_instance_id'] == incoming.instanceId)
+            delivery['unknown_instance_id'] == incoming.instanceId) {
           return false;
+        }
         _db.execute(
           '''
           UPDATE memory_host_chat_deliveries SET state='unknown',unknown_gaps=?,unknown_instance_id=?,updated_at_ms=?
@@ -1604,8 +1623,9 @@ class CompanionMemoryStore {
       final binding = incoming.binding!;
       if (binding.archiveId != delivery['archive_id'] ||
           binding.controlRevision != delivery['control_revision'] ||
-          binding.historyAfterSeq != delivery['history_after_seq'])
+          binding.historyAfterSeq != delivery['history_after_seq']) {
         throw _conflict;
+      }
       final metadata = _canonicalJson({
         'v': 1,
         'instanceId': incoming.instanceId,
@@ -1687,8 +1707,9 @@ class CompanionMemoryStore {
           ''',
                 [localId, delivery['session_id']],
               )
-              .isNotEmpty)
+              .isNotEmpty) {
             throw _conflict;
+          }
           final previousRevision = old['revision'] as int;
           if (receipt.revision == previousRevision) {
             if (encoded != old['receipt_json']) throw _conflict;
@@ -2112,8 +2133,9 @@ bool _containsAnchor(String text, String word) {
     if (at < 0) return false;
     final end = at + word.length;
     if ((!_asciiWord.hasMatch(word[0]) || at == 0 || !_asciiWord.hasMatch(text[at - 1])) &&
-        (!_asciiWord.hasMatch(word[word.length - 1]) || end == text.length || !_asciiWord.hasMatch(text[end])))
+        (!_asciiWord.hasMatch(word[word.length - 1]) || end == text.length || !_asciiWord.hasMatch(text[end]))) {
       return true;
+    }
     start = at + 1;
   }
   return false;

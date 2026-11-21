@@ -312,8 +312,9 @@ class _Receipt {
       if (_accepted ||
           frame['instanceId'] != host.instanceId ||
           frame['provider'] != host.provider ||
-          frame['model'] != host.model)
+          frame['model'] != host.model) {
         _protocol();
+      }
       _accepted = true;
       return null;
     }
@@ -332,8 +333,9 @@ class _Receipt {
       final raw = _map(frame['raw']);
       if (frame['semantics'] != 'cumulative' ||
           raw == null ||
-          !const {'message_start', 'message_delta'}.contains(frame['event']))
+          !const {'message_start', 'message_delta'}.contains(frame['event'])) {
         _protocol();
+      }
       if (frame['event'] == 'message_start') {
         _startUsage = raw;
       } else {
@@ -370,8 +372,9 @@ class _Receipt {
           value['terminal'] != terminal ||
           value['complete'] != complete ||
           value['http_status'] != status ||
-          (frame.containsKey('error') && (error == null || error['code'] is! String)))
+          (frame.containsKey('error') && (error == null || error['code'] is! String))) {
         _protocol();
+      }
       // Keep the complete receipt even if the owner cancels in onSent.
       _finishUsage = Map<String, Object?>.unmodifiable({...value, 'host_dispatch_at_ms': atMs});
       // A final observation may establish dispatch even if no earlier dispatch

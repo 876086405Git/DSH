@@ -304,8 +304,9 @@ MemorySelection selectMemoryContext(
     if (card['scope'] != 'real' ||
         card['eligible'] != true ||
         card['status'] == 'withdrawn' ||
-        card['plan_state'] == 'cancelled')
+        card['plan_state'] == 'cancelled') {
       return false;
+    }
     // Older stored automatic rows can predate the proposal text boundary.
     // Keep the exact same control-character contract as the v2 bridge.
     if (_memoryControls.hasMatch(card['text']! as String)) return false;
@@ -313,8 +314,9 @@ MemorySelection selectMemoryContext(
     if (expiry != null && expiry <= nowMs) return false;
     if (card['status'] == 'past' &&
         ((card['evidence']! as List<Object?>).isEmpty ||
-            !_pastWording.hasMatch(normalizeMemoryText(card['text']! as String))))
+            !_pastWording.hasMatch(normalizeMemoryText(card['text']! as String)))) {
       return false;
+    }
     return card['topic_mode'] != 'never' || explicitTopicIds.contains(card['topic_id']);
   }).toList();
   final hits = {for (final card in eligible) card['id']! as String: _hits(card, query)};

@@ -6,8 +6,8 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import '../../lib/companion/companion_host_memory_transport.dart';
-import '../../lib/companion/companion_memory_worker.dart';
+import 'package:dsh_app/companion/companion_host_memory_transport.dart';
+import 'package:dsh_app/companion/companion_memory_worker.dart';
 
 const _path = '/dsh-go/v1/companion/auxiliary';
 const _time = 1795260000123;
