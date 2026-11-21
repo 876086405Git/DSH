@@ -4,7 +4,7 @@ const _hostTaskInvalid = DshRemoteException('companion/task-invalid-request', 'I
   'status': 400,
 });
 
-/// Explicit notes and draft tasks. Remote effects remain in the original Host's
+/// Explicit file tasks. Remote effects remain in the original Host's
 /// complete snapshot; these commands never run a generic tool or chat loop.
 extension CompanionHostTaskStore on CompanionMemoryStore {
   MemoryRow createNotesTaskFromMessage({
@@ -74,6 +74,24 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     directoryLabels: {'inputs': inputs},
   );
 
+  /// Four original binding replies and one actual output-directory binding.
+  /// These are saved before handoff; no file is opened or model called here.
+  MemoryRow createReceiptsTaskFromMessage({
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required String roomMode,
+    required String hostKey,
+    String? hostSessionId,
+    required MemoryRow agreement,
+    required List<MemoryRow> inputs,
+    required MemoryRow outputDirectory,
+  }) => _createHostTaskFromMessage(kind: 'host.receipts_to_sheet',
+    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
+    agreement: agreement, directoryLabels: {'inputs': inputs, 'outputDirectory': outputDirectory},
+  );
+
   MemoryRow _createHostTaskFromMessage({
     required String kind,
     required String messageId,
@@ -95,15 +113,20 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       throw _hostTaskInvalid;
     }
     final normalized = _hostAgreement(agreement, kind);
-    final boundStoreId = kind == 'host.compare_drafts'
-        ? _compareInputStore(directoryLabels['inputs'], normalized['args']! as MemoryRow)
-        : directoryHostStoreId;
+    final boundStoreId = switch (kind) {
+      'host.compare_drafts' => _compareInputStore(directoryLabels['inputs'], normalized['args']! as MemoryRow),
+      'host.receipts_to_sheet' => _receiptInputStore(directoryLabels['inputs'],
+        directoryLabels['outputDirectory'], normalized['args']! as MemoryRow),
+      _ => directoryHostStoreId,
+    };
     final fingerprint = _taskFingerprint([
       kind == 'host.notes_to_todo'
           ? 'notes.create'
           : kind == 'host.find_draft'
           ? 'find.create'
-          : 'compare.create',
+          : kind == 'host.compare_drafts'
+          ? 'compare.create'
+          : 'receipts.create',
       messageId,
       expectedSourceRev,
       itemNo,
@@ -211,6 +234,21 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     directoryLabels: {'inputs': inputs},
   );
 
+  MemoryRow amendReceiptsTask({
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required MemoryRow agreement,
+    required List<MemoryRow> inputs,
+    required MemoryRow outputDirectory,
+  }) => _amendHostTask(kind: 'host.receipts_to_sheet',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    agreement: agreement, directoryLabels: {'inputs': inputs, 'outputDirectory': outputDirectory},
+  );
+
   MemoryRow _amendHostTask({
     required String kind,
     required String taskId,
@@ -222,22 +260,27 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     MemoryRow? directoryLabels,
   }) {
     final normalized = _hostAgreement(agreement, kind);
-    final inputStoreId = kind == 'host.compare_drafts'
-        ? _compareInputStore(directoryLabels?['inputs'], normalized['args']! as MemoryRow)
-        : null;
+    final inputStoreId = switch (kind) {
+      'host.compare_drafts' => _compareInputStore(directoryLabels?['inputs'], normalized['args']! as MemoryRow),
+      'host.receipts_to_sheet' => _receiptInputStore(directoryLabels?['inputs'],
+        directoryLabels?['outputDirectory'], normalized['args']! as MemoryRow),
+      _ => null,
+    };
     final fingerprint = _taskFingerprint([
       kind == 'host.notes_to_todo'
           ? 'notes.amend'
           : kind == 'host.find_draft'
           ? 'find.amend'
-          : 'compare.amend',
+          : kind == 'host.compare_drafts'
+          ? 'compare.amend'
+          : 'receipts.amend',
       taskId,
       expectedTaskRev,
       messageId,
       expectedSourceRev,
       itemNo,
       _canonicalJson(normalized),
-      if (kind == 'host.compare_drafts') inputStoreId,
+      if (kind == 'host.compare_drafts' || kind == 'host.receipts_to_sheet') inputStoreId,
     ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
@@ -245,9 +288,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         return hostTask(repeated['task_id']! as String)!;
       }
       final current = _hostCurrent(taskId, expectedTaskRev, kind);
+      final snapshot = current['snapshot'] as MemoryRow?;
       if (current['cancel_requested'] == 1 ||
           current['state'] == 'cancelled' ||
-          (kind == 'host.notes_to_todo' && const ['done', 'partial'].contains(current['state']))) {
+          (kind == 'host.notes_to_todo' && const ['done', 'partial'].contains(current['state'])) ||
+          (kind == 'host.receipts_to_sheet' && (snapshot?['artifacts'] as List<Object?>?)?.isNotEmpty == true)) {
         throw _conflict;
       }
       final source = _taskSource(messageId, expectedSourceRev);
@@ -260,7 +305,8 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           throw _hostTaskInvalid;
         }
       }
-      if (kind == 'host.compare_drafts' && inputStoreId != current['host_store_id']) {
+      if ((kind == 'host.compare_drafts' || kind == 'host.receipts_to_sheet') &&
+          inputStoreId != current['host_store_id']) {
         throw _conflict;
       }
       final revision = expectedTaskRev + 1;
@@ -346,6 +392,17 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     itemNo: itemNo,
   );
 
+  MemoryRow cancelReceiptsTask({
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+  }) => _cancelHostTask(kind: 'host.receipts_to_sheet',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  );
+
   MemoryRow _cancelHostTask({
     required String kind,
     required String taskId,
@@ -359,7 +416,9 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           ? 'notes.cancel'
           : kind == 'host.find_draft'
           ? 'find.cancel'
-          : 'compare.cancel',
+          : kind == 'host.compare_drafts'
+          ? 'compare.cancel'
+          : 'receipts.cancel',
       taskId,
       expectedTaskRev,
       messageId,
@@ -487,16 +546,27 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       hostTask(row['task_id']! as String)!,
   ];
 
+  List<MemoryRow> pendingReceiptsTasks({required String hostKey}) => [
+    for (final row in _db.select('''
+      SELECT t.task_id FROM companion_tasks t
+      JOIN companion_task_revisions r ON r.task_id=t.task_id AND r.task_rev=t.current_rev
+      WHERE t.kind='host.receipts_to_sheet' AND t.host_key=?
+        AND r.state IN ('queued','waiting','running','unknown')
+      ORDER BY t.created_at_ms,t.task_id
+    ''', [hostKey]))
+      hostTask(row['task_id']! as String)!,
+  ];
+
   /// Read retained, originally selected file bindings across all revisions.
   /// Choosing one again still requires a new explicit source and current Host checks.
   List<MemoryRow> hostTaskInputs({required String hostKey}) {
     final rows = _db.select(
       '''
-      SELECT h.host_store_id,c.display_json FROM companion_tasks t
+      SELECT t.kind,h.host_store_id,c.display_json FROM companion_tasks t
       JOIN companion_host_tasks h ON h.task_id=t.task_id
       JOIN companion_host_commands c ON c.task_id=t.task_id
       JOIN companion_task_revisions r ON r.task_id=c.task_id AND r.task_rev=c.task_rev
-      WHERE t.host_key=? AND t.kind='host.compare_drafts'
+      WHERE t.host_key=? AND t.kind IN ('host.compare_drafts','host.receipts_to_sheet')
         AND h.host_store_id IS NOT NULL AND r.operation IN ('create','amend')
       ORDER BY t.updated_at_ms DESC,c.task_rev DESC,t.task_id
     ''',
@@ -506,9 +576,10 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     final result = <MemoryRow>[];
     for (final row in rows) {
       final display = jsonDecode(row['display_json']! as String) as MemoryRow;
-      final inputs = display['inputs']! as MemoryRow;
-      for (final side in const ['a', 'b']) {
-        final binding = inputs[side]! as MemoryRow;
+      final inputs = row['kind'] == 'host.compare_drafts'
+          ? [for (final side in const ['a', 'b']) (display['inputs']! as MemoryRow)[side]! as MemoryRow]
+          : (display['inputs']! as List<Object?>).cast<MemoryRow>();
+      for (final binding in inputs) {
         if (seen.add((
           row['host_store_id']! as String,
           binding['sourceRef']! as String,
@@ -526,11 +597,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   List<MemoryRow> hostTaskDirectories({required String hostKey}) {
     final rows = _db.select(
       '''
-      SELECT h.host_store_id,c.request_json,c.display_json,r.operation
+      SELECT t.kind,h.host_store_id,c.request_json,c.display_json,r.operation
       FROM companion_tasks t JOIN companion_host_tasks h ON h.task_id=t.task_id
       JOIN companion_host_commands c ON c.task_id=t.task_id
       JOIN companion_task_revisions r ON r.task_id=c.task_id AND r.task_rev=c.task_rev
-      WHERE t.host_key=? AND t.kind IN ('host.notes_to_todo','host.find_draft')
+      WHERE t.host_key=? AND t.kind IN ('host.notes_to_todo','host.find_draft','host.receipts_to_sheet')
         AND h.host_store_id IS NOT NULL AND r.operation IN ('create','amend')
       ORDER BY t.updated_at_ms DESC,c.task_rev DESC,t.task_id
     ''',
@@ -541,14 +612,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     for (final row in rows) {
       final request = jsonDecode(row['request_json']! as String) as MemoryRow;
       final display = jsonDecode(row['display_json']! as String) as MemoryRow;
-      final path = display['source'];
+      final receipt = row['kind'] == 'host.receipts_to_sheet';
+      final path = receipt ? (display['outputDirectory']! as MemoryRow)['displayPath'] : display['source'];
       if (path is! String || path.isEmpty) {
         continue;
       }
       final args =
           (row['operation'] == 'create' ? request['args'] : (request['changes']! as MemoryRow)['args'])! as MemoryRow;
       final hostStoreId = row['host_store_id']! as String;
-      final folderRef = args['folderRef']! as String;
+      final folderRef = args[receipt ? 'outputDirRef' : 'folderRef']! as String;
       if (seen.add((hostStoreId, folderRef))) {
         result.add({'hostStoreId': hostStoreId, 'folderRef': folderRef, 'displayPath': path});
       }
@@ -781,6 +853,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
                   _canonicalJson(completion)) {
             throw _conflict;
           }
+          if (current['kind'] == 'host.receipts_to_sheet' && completion is MemoryRow &&
+              (completion['report'] != null || completion['publicationNotAttempted'] == true) &&
+              _canonicalJson(matching.single) != _canonicalJson(step)) {
+            throw _conflict;
+          }
         }
       }
       _db.execute(
@@ -875,7 +952,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   }
 }
 
-const _hostTaskKinds = ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'];
+const _hostTaskKinds = ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'];
 const _hostAgreementKeys = ['args', 'deadlineAtMs', 'afterExit', 'allowQueue'];
 const _findArgsKeys = ['folderRef', 'scope', 'localDate', 'timeZone', 'dateBy', 'extensions'];
 
@@ -893,6 +970,25 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
     throw _hostTaskInvalid;
   }
   final args = Map<String, Object?>.from(rawArgs);
+  if (kind == 'host.receipts_to_sheet') {
+    final inputs = args['inputs'];
+    final name = args['outputName'];
+    if (args.length != 4 || !const ['inputs', 'outputDirRef', 'outputName', 'writeMode'].every(args.containsKey) ||
+        inputs is! List<Object?> || inputs.length != 4 || !_hostId(args['outputDirRef']) ||
+        name is! String || name.isEmpty || name.length > 255 || RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(name) ||
+        !RegExp(r'\.xlsx$', caseSensitive: false).hasMatch(name) || args['writeMode'] != 'createNew') {
+      throw _hostTaskInvalid;
+    }
+    final sources = <String>{};
+    for (final input in inputs) {
+      if (input is! MemoryRow || input.length != 2 || !_hostId(input['sourceRef']) ||
+          !sources.add(input['sourceRef']! as String) || input['version'] is! String ||
+          (input['version']! as String).isEmpty) {
+        throw _hostTaskInvalid;
+      }
+    }
+    return {for (final key in _hostAgreementKeys) key: key == 'args' ? args : input[key]};
+  }
   if (kind == 'host.compare_drafts') {
     if (args.length != 3 || args['maxHighlights'] != 3 || !const ['a', 'b', 'maxHighlights'].every(args.containsKey)) {
       throw _hostTaskInvalid;
@@ -983,6 +1079,31 @@ String _compareInputStore(Object? value, MemoryRow args) {
     hostStoreId = input['hostStoreId']! as String;
   }
   return hostStoreId!;
+}
+
+String _receiptInputStore(Object? value, Object? output, MemoryRow args) {
+  if (value is! List<Object?> || value.length != 4 || output is! MemoryRow || output.length != 4 ||
+      output['v'] != 1 || !_hostId(output['hostStoreId']) || output['folderRef'] != args['outputDirRef'] ||
+      output['displayPath'] is! String || (output['displayPath']! as String).isEmpty) {
+    throw _hostTaskInvalid;
+  }
+  final selected = args['inputs']! as List<Object?>;
+  for (var index = 0; index < 4; index++) {
+    final binding = value[index];
+    final source = selected[index]! as MemoryRow;
+    if (binding is! MemoryRow || binding.length != 7 || binding['v'] != 1 ||
+        binding['hostStoreId'] != output['hostStoreId'] || binding['sourceRef'] != source['sourceRef'] ||
+        binding['version'] != source['version'] || binding['displayName'] is! String ||
+        (binding['displayName']! as String).isEmpty || (binding['displayName']! as String).length > 255 ||
+        RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(binding['displayName']! as String) ||
+        !RegExp(r'\.(md|txt|pdf)$', caseSensitive: false).hasMatch(binding['displayName']! as String) ||
+        !_hostCount(binding['size']) ||
+        (binding['size']! as int) > 4194304 ||
+        !const ['text/plain', 'text/markdown', 'application/pdf'].contains(binding['mediaType'])) {
+      throw _hostTaskInvalid;
+    }
+  }
+  return output['hostStoreId']! as String;
 }
 
 bool _hostId(Object? value) => value is String && value.isNotEmpty && value.length <= 128 && !value.contains('\u0000');
@@ -1087,6 +1208,12 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   final steps = <String>{};
   final findReports = <int, bool>{};
   final compareReports = <int, ({bool complete, bool retryable})>{};
+  final receiptReads = <int, int>{};
+  final receiptWrites = <int, ({String artifactId, bool complete})>{};
+  final receiptReadRetryable = <int, bool>{};
+  final receiptWriteRetryable = <int, bool>{};
+  final receiptWriteRevisions = <int>{};
+  final receiptEmptyWriteFailures = <int>{};
   final sourceRefs = <String>{};
   var compareModelSteps = 0;
   for (final value in snapshot['steps']! as List) {
@@ -1158,6 +1285,58 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         }
       }
     }
+    if (kind == 'host.receipts_to_sheet') {
+      final stepRevision = value['taskRev']! as int;
+      if (!const ['readInputs', 'writeSheet'].contains(value['stepKey'])) {
+        throw _hostTaskInvalid;
+      }
+      final read = value['stepKey'] == 'readInputs';
+      final retryable = read ? receiptReadRetryable : receiptWriteRetryable;
+      if (retryable[stepRevision] == false) {
+        throw _hostTaskInvalid;
+      }
+      retryable[stepRevision] = false;
+      if (!read) {
+        receiptWriteRevisions.add(stepRevision);
+      }
+      final completion = (value['result'] as Map<String, Object?>?)?['completion'];
+      if (completion is MemoryRow && completion.containsKey('report')) {
+        if (value['finishedAtMs'] == null || agreements[stepRevision] == null) {
+          throw _hostTaskInvalid;
+        }
+        final report = _validateReceiptReport(completion['report'], agreements[stepRevision]!['args']! as MemoryRow);
+        if (read) {
+          if (completion.length != 1 || !const ['done', 'waiting', 'failed', 'unknown', 'cancelled'].contains(value['state'])) {
+            throw _hostTaskInvalid;
+          }
+          receiptReads[stepRevision] = report.rowsWithVerifiedFields;
+          retryable[stepRevision] = value['state'] == 'waiting' && value['reason'] == 'receipt_read_interrupted';
+        } else if (const ['done', 'partial'].contains(value['state'])) {
+          if (completion.length != 2 || !_hostId(completion['artifactId']) || report.rowsWithVerifiedFields == 0 ||
+              !report.publishable || report.complete != (value['state'] == 'done')) {
+            throw _hostTaskInvalid;
+          }
+          receiptWrites[stepRevision] = (artifactId: completion['artifactId']! as String, complete: report.complete);
+        } else if (!const ['waiting', 'failed', 'unknown', 'cancelled'].contains(value['state']) ||
+            (completion['publicationNotAttempted'] == true ? completion.length != 2 : completion.length != 1)) {
+          throw _hostTaskInvalid;
+        }
+        if (!read && value['state'] == 'failed' && value['reason'] == 'receipt_fields_unavailable' &&
+            report.rowsWithVerifiedFields == 0) {
+          receiptEmptyWriteFailures.add(stepRevision);
+        }
+      } else if (const ['done', 'partial'].contains(value['state'])) {
+        throw _hostTaskInvalid;
+      }
+      if (completion is MemoryRow && completion.containsKey('publicationNotAttempted')) {
+        if (read || completion['publicationNotAttempted'] != true || value['finishedAtMs'] == null ||
+            value['state'] != 'waiting' || value['reason'] != 'publication_not_started' ||
+            completion.length != (completion.containsKey('report') ? 2 : 1)) {
+          throw _hostTaskInvalid;
+        }
+        retryable[stepRevision] = true;
+      }
+    }
   }
   final artifacts = <String>{};
   for (final value in snapshot['artifacts']! as List) {
@@ -1168,13 +1347,24 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         !_hostId(value['stepKey']) ||
         value['relativePath'] is! String ||
         (value['relativePath']! as String).isEmpty ||
-        !const ['text/markdown', 'text/plain'].contains(value['mediaType']) ||
+        !(kind == 'host.receipts_to_sheet'
+          ? value['mediaType'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : const ['text/markdown', 'text/plain'].contains(value['mediaType'])) ||
         !_hostCount(value['size']) ||
         value['sha256'] is! String ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(value['sha256']! as String) ||
         !_hostTime(value['verifiedAtMs']) ||
         !_hostCount(value['sourceCount'])) {
       throw _hostTaskInvalid;
+    }
+    if (kind == 'host.receipts_to_sheet') {
+      final stepRevision = value['taskRev']! as int;
+      final args = agreements[stepRevision]?['args'] as MemoryRow?;
+      if (value['stepKey'] != 'writeSheet' || (value['size']! as int) > 262144 || value['sourceCount'] != 4 ||
+          value['relativePath'] != args?['outputName'] ||
+          receiptWrites[stepRevision]?.artifactId != value['artifactId']) {
+        throw _hostTaskInvalid;
+      }
     }
   }
   if (kind == 'host.find_draft') {
@@ -1188,6 +1378,18 @@ void _validateHostSnapshot(MemoryRow snapshot) {
         (const ['done', 'partial'].contains(snapshot['state']) &&
             (compareReports[revision] == null ||
                 compareReports[revision]!.complete != (snapshot['state'] == 'done')))) {
+      throw _hostTaskInvalid;
+    }
+  } else if (kind == 'host.receipts_to_sheet') {
+    final priorEffect = snapshot['state'] == 'partial' && snapshot['waitReason'] == 'prior_revision_effect' &&
+      receiptWrites[revision] == null && (snapshot['artifacts']! as List<Object?>).cast<MemoryRow>()
+        .any((artifact) => (artifact['taskRev']! as int) < revision);
+    if (receiptWrites.values.any((result) => !artifacts.contains(result.artifactId)) ||
+        (const ['done', 'partial'].contains(snapshot['state']) &&
+          !priorEffect && (receiptWrites[revision] == null || receiptWrites[revision]!.complete != (snapshot['state'] == 'done'))) ||
+        (snapshot['waitReason'] == 'receipt_fields_unavailable' &&
+          (snapshot['state'] != 'failed' || artifacts.isNotEmpty || (receiptWriteRevisions.contains(revision)
+            ? !receiptEmptyWriteFailures.contains(revision) : receiptReads[revision] != 0)))) {
       throw _hostTaskInvalid;
     }
   } else if (const ['done', 'partial'].contains(snapshot['state']) && artifacts.isEmpty) {
@@ -1209,6 +1411,126 @@ void _validateHostSnapshot(MemoryRow snapshot) {
       !_hostCount(budget['heldMs'])) {
     throw _hostTaskInvalid;
   }
+}
+
+({bool complete, bool publishable, int rowsWithVerifiedFields}) _validateReceiptReport(Object? value, MemoryRow args) {
+  if (value is! MemoryRow || value.length != 3 || value['sources'] is! List<Object?> ||
+      value['rows'] is! List<Object?> || value['coverage'] is! MemoryRow) {
+    throw _hostTaskInvalid;
+  }
+  final sources = value['sources']! as List<Object?>;
+  final rows = value['rows']! as List<Object?>;
+  final selected = args['inputs']! as List<Object?>;
+  final coverage = value['coverage']! as MemoryRow;
+  if (sources.length != 4 || rows.length != 4 || coverage.length != 6 || coverage['inputCount'] != 4 ||
+      coverage['gaps'] is! List<Object?>) {
+    throw _hostTaskInvalid;
+  }
+  final requiredGaps = <(String, String), String?>{};
+  final originals = <String, MemoryRow>{};
+  var readCount = 0, parseCount = 0, evidencedRows = 0, fullRows = 0, verifiedAtPublish = 0;
+  var publishable = true;
+  for (var index = 0; index < 4; index++) {
+    final source = sources[index];
+    final row = rows[index];
+    final chosen = selected[index]! as MemoryRow;
+    if (source is! MemoryRow || source.length != 11 ||
+        source['sourceRef'] != chosen['sourceRef'] || source['version'] != chosen['version'] ||
+        source['displayName'] is! String || (source['displayName']! as String).isEmpty ||
+        !const ['text/plain', 'text/markdown', 'application/pdf'].contains(source['mediaType']) ||
+        !_hostCount(source['size']) || (source['size']! as int) > 4194304 ||
+        source['readComplete'] is! bool || source['parseComplete'] is! bool ||
+        source['textLayerOnly'] is! bool || source['verifiedAtPublish'] is! bool ||
+        !source.containsKey('pageCount') || !_hostNullableText(source['reason']) || !source.containsKey('reason') ||
+        row is! MemoryRow || row.length != 5 || row['sourceRef'] != chosen['sourceRef'] || row['version'] != chosen['version']) {
+      throw _hostTaskInvalid;
+    }
+    final ref = source['sourceRef']! as String;
+    originals[ref] = source;
+    final pdf = source['mediaType'] == 'application/pdf';
+    final pages = source['pageCount'];
+    if ((pages != null && (!_hostCount(pages) || pages == 0)) ||
+        (!pdf && (pages != null || source['textLayerOnly'] != false)) ||
+        (source['parseComplete'] == true &&
+          (source['readComplete'] != true || pdf && (source['textLayerOnly'] != true || pages == null || (pages as int) > 5)))) {
+      throw _hostTaskInvalid;
+    }
+    if (source['readComplete'] == true) {
+      readCount++;
+    } else {
+      requiredGaps[(ref, 'read')] = null;
+    }
+    if (source['parseComplete'] == true) {
+      parseCount++;
+    } else {
+      requiredGaps[(ref, 'parse')] = null;
+    }
+    if (source['verifiedAtPublish'] == true) {
+      verifiedAtPublish++;
+    }
+    var fields = 0;
+    for (final name in const ['date', 'item', 'amount']) {
+      final field = row[name];
+      if (field is! MemoryRow || field.length != 4 ||
+          !const ['state', 'value', 'evidence', 'reason'].every(field.containsKey) ||
+          !const ['verified', 'unverified'].contains(field['state'])) {
+        throw _hostTaskInvalid;
+      }
+      if (field['state'] == 'verified') {
+        if (source['parseComplete'] != true || field['value'] is! String ||
+            (field['value']! as String).isEmpty || field['reason'] != null || field['evidence'] == null) {
+          throw _hostTaskInvalid;
+        }
+        fields++;
+      } else {
+        if (field['value'] != null || field['reason'] is! String || (field['reason']! as String).isEmpty) {
+          throw _hostTaskInvalid;
+        }
+        requiredGaps[(ref, name)] = field['reason']! as String;
+      }
+      final evidence = field['evidence'];
+      if (evidence != null && (evidence is! MemoryRow || evidence.length != 4 ||
+          !evidence.containsKey('page') || !_hostCount(evidence['lineStart']) || evidence['lineStart'] == 0 ||
+          !_hostCount(evidence['lineEnd']) || (evidence['lineEnd']! as int) < (evidence['lineStart']! as int) ||
+          evidence['quote'] is! String || (evidence['quote']! as String).isEmpty ||
+          (pdf ? !_hostCount(evidence['page']) || evidence['page'] == 0 ||
+            pages != null && (evidence['page']! as int) > (pages as int) : evidence['page'] != null))) {
+        throw _hostTaskInvalid;
+      }
+    }
+    if (fields > 0) {
+      evidencedRows++;
+      if (source['verifiedAtPublish'] != true) {
+        publishable = false;
+      }
+    }
+    if (fields == 3) {
+      fullRows++;
+    }
+  }
+  final actualGaps = <(String, String)>{};
+  for (final value in coverage['gaps']! as List<Object?>) {
+    if (value is! MemoryRow || value.length != 4 || value['sourceRef'] is! String || value['field'] is! String ||
+        !const ['read', 'parse', 'date', 'item', 'amount', 'verification'].contains(value['field']) ||
+        value['reason'] is! String || (value['reason']! as String).isEmpty) {
+      throw _hostTaskInvalid;
+    }
+    final ref = value['sourceRef']! as String, field = value['field']! as String;
+    final source = originals[ref];
+    final key = (ref, field);
+    if (source == null || value['version'] != source['version'] || !actualGaps.add(key) ||
+        (field == 'verification' ? source['verifiedAtPublish'] != false :
+          !requiredGaps.containsKey(key) || requiredGaps[key] != null && requiredGaps[key] != value['reason'])) {
+      throw _hostTaskInvalid;
+    }
+  }
+  if (!actualGaps.containsAll(requiredGaps.keys) || coverage['readCompleteCount'] != readCount ||
+      coverage['parseCompleteCount'] != parseCount || coverage['rowsWithVerifiedFields'] != evidencedRows ||
+      coverage['fullyVerifiedRows'] != fullRows) {
+    throw _hostTaskInvalid;
+  }
+  return (complete: fullRows == 4 && verifiedAtPublish == 4 && actualGaps.isEmpty,
+    publishable: publishable, rowsWithVerifiedFields: evidencedRows);
 }
 
 bool _validateFindReport(Object? value, MemoryRow args, Set<String> sourceRefs) {

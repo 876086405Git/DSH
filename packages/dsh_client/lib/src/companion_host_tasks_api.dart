@@ -3,6 +3,9 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart' show sha256;
 
 import 'carrier.dart';
 import 'connection.dart';
@@ -10,6 +13,7 @@ import 'errors.dart';
 import 'session_api.dart';
 
 const _path = '/dsh-go/v1/companion/tasks';
+const _workbookMediaType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 typedef _Row = Map<String, Object?>;
 
 class CompanionTasksCapability {
@@ -19,6 +23,8 @@ class CompanionTasksCapability {
     this.notes,
     this.findDraft,
     this.compareDrafts,
+    this.receiptsToSheet,
+    this.receiptInputs,
     this.artifactRead,
     this.sourceRead,
     this.reason,
@@ -28,6 +34,8 @@ class CompanionTasksCapability {
   final bool notes;
   final bool findDraft;
   final bool compareDrafts;
+  final bool receiptsToSheet;
+  final Map<String, Object?>? receiptInputs;
   final bool artifactRead;
   final bool sourceRead;
   final String? reason;
@@ -59,7 +67,8 @@ extension CompanionHostTasksApi on DshClient {
         map['artifactRead'] is! bool ||
         (map['hostStoreId'] != null && !_id(map['hostStoreId'])) ||
         kinds is! List ||
-        kinds.any((kind) => !const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'].contains(kind)) ||
+        kinds.any((kind) => !const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts',
+          'host.receipts_to_sheet'].contains(kind)) ||
         (kinds.isNotEmpty && (map['durableAcceptance'] != true || !_id(map['hostStoreId']))) ||
         (map.containsKey('sourceRead') && map['sourceRead'] is! bool) ||
         (kinds.contains('host.find_draft') && map['sourceRead'] != true) ||
@@ -69,12 +78,35 @@ extension CompanionHostTasksApi on DshClient {
         (map['reason'] != null && map['reason'] is! String)) {
       _invalid();
     }
+    final receiptInputs = map['receiptInputs'];
+    final Map<String, Object?>? receiptLimits;
+    if (receiptInputs == null) {
+      receiptLimits = null;
+    } else {
+      if (receiptInputs is! _Row || receiptInputs.length != 5 || receiptInputs['formats'] is! List<Object?> ||
+          (receiptInputs['formats']! as List<Object?>).isEmpty ||
+          (receiptInputs['formats']! as List<Object?>).toSet().length != (receiptInputs['formats']! as List<Object?>).length ||
+          (receiptInputs['formats']! as List<Object?>).any((format) => !const ['md', 'txt', 'pdf'].contains(format)) ||
+          receiptInputs['maxFiles'] != 4 || receiptInputs['maxBytes'] != 4194304 ||
+          receiptInputs['maxPdfPages'] != 5 || receiptInputs['workbookBytes'] != 262144) {
+        _invalid();
+      }
+      receiptLimits = Map<String, Object?>.unmodifiable({
+        ...receiptInputs,
+        'formats': List<Object?>.unmodifiable(receiptInputs['formats']! as List<Object?>),
+      });
+    }
+    if (kinds.contains('host.receipts_to_sheet') && (receiptLimits == null || map['artifactRead'] != true)) {
+      _invalid();
+    }
     return CompanionTasksCapability._(
       this,
       map['hostStoreId'] as String?,
       kinds.contains('host.notes_to_todo'),
       kinds.contains('host.find_draft'),
       kinds.contains('host.compare_drafts'),
+      kinds.contains('host.receipts_to_sheet'),
+      receiptLimits,
       map['artifactRead']! as bool,
       map['sourceRead'] == true,
       map['reason'] as String?,
@@ -89,7 +121,7 @@ extension CompanionHostTasksApi on DshClient {
     Duration timeout = const Duration(seconds: 15),
   }) async {
     if (!identical(host._owner, this) ||
-        (!host.notes && !host.findDraft && !host.compareDrafts) ||
+        (!host.notes && !host.findDraft && !host.compareDrafts && !host.receiptsToSheet) ||
         host.hostStoreId == null) {
       throw const DshRemoteException('companion/task-unavailable', 'Directory tasks are unavailable');
     }
@@ -152,6 +184,46 @@ extension CompanionHostTasksApi on DshClient {
         (map['size']! as int) < 0 ||
         (map['size']! as int) > 65536 ||
         !const ['text/plain', 'text/markdown'].contains(map['mediaType'])) {
+      _invalid();
+    }
+    return map;
+  }
+
+  /// Bind exactly one original receipt. This never downloads its contents or
+  /// broadens the older draft-input route's text-only, 64 KiB contract.
+  Future<Map<String, Object?>> bindCompanionReceiptInput(
+    CompanionTasksCapability host, {
+    required String folderRef,
+    required String name,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    if (!identical(host._owner, this) || !host.receiptsToSheet || host.hostStoreId == null) {
+      throw const DshRemoteException('companion/task-unavailable', 'Receipt tasks are unavailable');
+    }
+    final extension = RegExp(r'\.([^.]+)$').firstMatch(name)?.group(1)?.toLowerCase();
+    if (!_id(folderRef) || name.isEmpty || name.length > 255 || RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(name) ||
+        !(host.receiptInputs!['formats']! as List<Object?>).contains(extension)) {
+      throw const DshProtocolException('Choose one supported receipt file inside the selected directory');
+    }
+    final response = await _connection(this).postBytes(
+      '$_path/inputs',
+      utf8.encode(jsonEncode({'v': 1, 'hostStoreId': host.hostStoreId, 'folderRef': folderRef, 'name': name,
+        'kind': 'host.receipts_to_sheet'})),
+      contentType: 'application/json', followRedirects: false, timeout: timeout, maxResponseBytes: 16384,
+    );
+    final map = _decode(response);
+    _success(response, map);
+    final mediaType = switch (extension) {
+      'md' => 'text/markdown',
+      'txt' => 'text/plain',
+      'pdf' => 'application/pdf',
+      _ => null,
+    };
+    if (map.length != 7 || map['v'] != 1 || map['hostStoreId'] != host.hostStoreId ||
+        !_id(map['sourceRef']) || map['displayName'] != name ||
+        map['version'] is! String || (map['version']! as String).isEmpty ||
+        map['size'] is! int || (map['size']! as int) < 0 || (map['size']! as int) > 4194304 ||
+        map['mediaType'] != mediaType) {
       _invalid();
     }
     return map;
@@ -235,6 +307,38 @@ extension CompanionHostTasksApi on DshClient {
       _invalid();
     }
     return map;
+  }
+
+  /// Fetch only an already imported workbook artifact on its original task.
+  /// The existing connection owns authentication, proxy/TLS and the byte cap.
+  Future<Uint8List> readCompanionHostArtifactBytes({
+    required String hostStoreId,
+    required String taskId,
+    required String hostExecutionId,
+    required Map<String, Object?> artifact,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final size = artifact['size'];
+    final hash = artifact['sha256'];
+    if (!_id(hostStoreId) || !_id(taskId) || !_id(hostExecutionId) || !_id(artifact['artifactId']) ||
+        artifact['mediaType'] != _workbookMediaType || size is! int || size < 0 || size > 262144 ||
+        hash is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
+      throw const DshProtocolException('Invalid original workbook artifact');
+    }
+    final response = await _connection(this).get(
+      '$_path/${Uri.encodeComponent(taskId)}/artifacts/${Uri.encodeComponent(artifact['artifactId']! as String)}/content',
+      query: {'hostStoreId': hostStoreId, 'hostExecutionId': hostExecutionId},
+      timeout: timeout, followRedirects: false, maxResponseBytes: 262144,
+    );
+    if (response.statusCode != 200) {
+      _success(response, _decode(response));
+      _invalid();
+    }
+    if (response.contentType != _workbookMediaType || response.body.length != size ||
+        sha256.convert(response.body).toString() != hash) {
+      _invalid();
+    }
+    return response.body;
   }
 
   /// Read only an original source registered in this task's saved report.
