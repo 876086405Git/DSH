@@ -330,14 +330,25 @@ extension CompanionHostTasksApi on DshClient {
     if (!identical(host._owner, this) || !host.notesForeground || host.hostStoreId != request['hostStoreId']) {
       throw const DshRemoteException('companion/task-unavailable', 'Foreground notes tasks are unavailable');
     }
-    if (!_id(taskId) || request.length != 5 || request['v'] != 1 || !_id(request['hostStoreId']) ||
-        !_id(request['hostExecutionId']) || request['taskRev'] is! int || (request['taskRev']! as int) < 1 ||
-        session is! String || session.isEmpty || session.length > 256 || session.contains('\u0000')) {
+    if (!_id(taskId) ||
+        request.length != 5 ||
+        request['v'] != 1 ||
+        !_id(request['hostStoreId']) ||
+        !_id(request['hostExecutionId']) ||
+        request['taskRev'] is! int ||
+        (request['taskRev']! as int) < 1 ||
+        session is! String ||
+        session.isEmpty ||
+        session.length > 256 ||
+        session.contains('\u0000')) {
       throw const DshProtocolException('Invalid persisted foreground task');
     }
     final response = await _connection(this).postJsonStream(
-      '$_path/${Uri.encodeComponent(taskId)}/foreground', request,
-      abort: abort, headerTimeout: const Duration(seconds: 15), idleTimeout: null,
+      '$_path/${Uri.encodeComponent(taskId)}/foreground',
+      request,
+      abort: abort,
+      headerTimeout: const Duration(seconds: 15),
+      idleTimeout: null,
     );
     var reportedAbnormal = false;
     void abnormal(Object error, StackTrace stack) {
@@ -346,6 +357,7 @@ extension CompanionHostTasksApi on DshClient {
         onAbnormal?.call(error, stack);
       }
     }
+
     try {
       if (response.statusCode != 200) {
         final bytes = BytesBuilder(copy: false);
@@ -382,13 +394,16 @@ extension CompanionHostTasksApi on DshClient {
           _invalid();
         }
         _identity(value, host.hostStoreId!, taskId);
-        if (value['hostExecutionId'] != request['hostExecutionId'] || value['kind'] != 'host.notes_to_todo' ||
-            value['taskRev'] is! int || (value['taskRev']! as int) < (request['taskRev']! as int)) {
+        if (value['hostExecutionId'] != request['hostExecutionId'] ||
+            value['kind'] != 'host.notes_to_todo' ||
+            value['taskRev'] is! int ||
+            (value['taskRev']! as int) < (request['taskRev']! as int)) {
           _invalid();
         }
         onSnapshot(value);
         received = true;
       }
+
       await for (final chunk in response.body) {
         try {
           var start = 0;

@@ -174,10 +174,20 @@ void main() {
     acceptSnapshot(id, received);
     final commands = jsonEncode(store.hostTaskCommands(id));
     final before = store.hostTask(id)!;
-    final request = store.prepareHostTaskForeground(taskId: id, taskRev: 1,
-      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original');
-    expect(request, {'v': 1, 'hostStoreId': 'store-original', 'hostExecutionId': 'execution-original',
-      'taskRev': 1, 'sourceSessionId': 'light:original-room'});
+    final request = store.prepareHostTaskForeground(
+      taskId: id,
+      taskRev: 1,
+      hostKey: 'ssh:original-host',
+      hostStoreId: 'store-original',
+      hostExecutionId: 'execution-original',
+    );
+    expect(request, {
+      'v': 1,
+      'hostStoreId': 'store-original',
+      'hostExecutionId': 'execution-original',
+      'taskRev': 1,
+      'sourceSessionId': 'light:original-room',
+    });
     expect(store.hostTask(id)!['state'], 'unknown');
     expect(store.hostTask(id)!['wait_reason'], 'host_receipt_unknown');
     expect(store.hostTask(id)!['applied_host_receipt_seq'], before['applied_host_receipt_seq']);
@@ -201,27 +211,63 @@ void main() {
     acceptSnapshot(id, snapshot(id, state: 'waiting'));
     final before = jsonEncode(store.hostTask(id));
     for (final wrong in ['host', 'store', 'execution', 'revision']) {
-      expect(() => store.prepareHostTaskForeground(taskId: id, taskRev: wrong == 'revision' ? 2 : 1,
-        hostKey: wrong == 'host' ? 'ssh:other-host' : 'ssh:original-host',
-        hostStoreId: wrong == 'store' ? 'other-store' : 'store-original',
-        hostExecutionId: wrong == 'execution' ? 'other-execution' : 'execution-original'), conflict);
+      expect(
+        () => store.prepareHostTaskForeground(
+          taskId: id,
+          taskRev: wrong == 'revision' ? 2 : 1,
+          hostKey: wrong == 'host' ? 'ssh:other-host' : 'ssh:original-host',
+          hostStoreId: wrong == 'store' ? 'other-store' : 'store-original',
+          hostExecutionId: wrong == 'execution' ? 'other-execution' : 'execution-original',
+        ),
+        conflict,
+      );
       expect(jsonEncode(store.hostTask(id)), before);
     }
     now = 1795219500000;
-    expect(() => store.prepareHostTaskForeground(taskId: id, taskRev: 1,
-      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original'), conflict);
+    expect(
+      () => store.prepareHostTaskForeground(
+        taskId: id,
+        taskRev: 1,
+        hostKey: 'ssh:original-host',
+        hostStoreId: 'store-original',
+        hostExecutionId: 'execution-original',
+      ),
+      conflict,
+    );
     now = 1795219200000;
     say('continue-source');
     final continuing = create('continue-source');
     final continuingId = continuing['task_id']! as String;
     prepare(continuingId, 1);
     acceptSnapshot(continuingId, snapshot(continuingId, state: 'waiting'));
-    expect(() => store.prepareHostTaskForeground(taskId: continuingId, taskRev: 1,
-      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original'), conflict);
+    expect(
+      () => store.prepareHostTaskForeground(
+        taskId: continuingId,
+        taskRev: 1,
+        hostKey: 'ssh:original-host',
+        hostStoreId: 'store-original',
+        hostExecutionId: 'execution-original',
+      ),
+      conflict,
+    );
     say('cancel-foreground');
-    store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'cancel-foreground', expectedSourceRev: 1, itemNo: 0);
-    expect(() => store.prepareHostTaskForeground(taskId: id, taskRev: 1,
-      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original'), conflict);
+    store.cancelNotesTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'cancel-foreground',
+      expectedSourceRev: 1,
+      itemNo: 0,
+    );
+    expect(
+      () => store.prepareHostTaskForeground(
+        taskId: id,
+        taskRev: 1,
+        hostKey: 'ssh:original-host',
+        hostStoreId: 'store-original',
+        hostExecutionId: 'execution-original',
+      ),
+      conflict,
+    );
     expect(store.hostTask(id)!['task_rev'], 2);
     expect(store.hostTask(id)!['cancel_requested'], 1);
   });
@@ -233,9 +279,14 @@ void main() {
     prepare(id, 1);
     final first = snapshot(id, state: 'waiting');
     acceptSnapshot(id, first);
-    bool mark(int seq) => store.markHostTaskForegroundUncertain(taskId: id, taskRev: 1,
-      hostKey: 'ssh:original-host', hostStoreId: 'store-original', hostExecutionId: 'execution-original',
-      expectedHostReceiptSeq: seq);
+    bool mark(int seq) => store.markHostTaskForegroundUncertain(
+      taskId: id,
+      taskRev: 1,
+      hostKey: 'ssh:original-host',
+      hostStoreId: 'store-original',
+      hostExecutionId: 'execution-original',
+      expectedHostReceiptSeq: seq,
+    );
     final commands = jsonEncode(store.hostTaskCommands(id));
     expect(mark(1), isTrue);
     reopen();
@@ -254,7 +305,13 @@ void main() {
     expect(mark(3), isFalse);
     expect(store.hostTask(id)!['state'], 'done');
     say('cancel-foreground');
-    store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'cancel-foreground', expectedSourceRev: 1, itemNo: 0);
+    store.cancelNotesTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'cancel-foreground',
+      expectedSourceRev: 1,
+      itemNo: 0,
+    );
     final cancelled = jsonEncode(store.hostTask(id));
     expect(mark(3), isFalse);
     expect(jsonEncode(store.hostTask(id)), cancelled);

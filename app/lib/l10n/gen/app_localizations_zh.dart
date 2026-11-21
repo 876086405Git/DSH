@@ -6279,7 +6279,7 @@ class L10nZh extends L10n {
   String get companionNotesQueued => '记下了，等电脑接手。';
 
   @override
-  String get companionNotesRunning => '电脑接手了，正在整理。';
+  String get companionNotesRunning => '电脑接下这件事了，结果还没出来。';
 
   @override
   String get companionNotesDone => '整理好了，待办存成了新文件，点开就能看。';
@@ -6291,13 +6291,13 @@ class L10nZh extends L10n {
   String get companionNotesFailed => '这次没整理成。';
 
   @override
-  String get companionNotesWaiting => '电脑那边停下来在等，可能要你点个头。';
+  String get companionNotesWaiting => '这件事暂时还做不了，先留在这里。';
 
   @override
   String get companionNotesUnknown => '电脑那边现在什么情况，我还不太清楚。';
 
   @override
-  String get companionNotesCancelUnknown => '我让电脑停了，不过还不确定它停下没；已经写好的文件会留着。';
+  String get companionNotesCancelUnknown => '已记下不再整理，还没确认电脑是否停下。已经写好的文件会保留。';
 
   @override
   String get companionNotesCancelled => '好，不整理了，已经写好的文件还在。';
@@ -6340,6 +6340,15 @@ class L10nZh extends L10n {
 
   @override
   String get companionNotesPause => '离开就先停';
+
+  @override
+  String get companionNotesForegroundStart => '在这里继续';
+
+  @override
+  String get companionNotesForegroundReady => '留在这里时，我请电脑继续做。离开后会请它先停，回来再核对进度。';
+
+  @override
+  String get companionNotesForegroundUnknown => '还没确认电脑现在的进度，先刷新看看。';
 
   @override
   String get companionNotesContinue => '离开也接着做';
@@ -6725,7 +6734,7 @@ class L10nZh extends L10n {
   String get companionCompareQueued => '两份稿件记下了，等电脑接手。';
 
   @override
-  String get companionCompareRunning => '电脑正在对比这两份稿件。';
+  String get companionCompareRunning => '两份稿件已经交给电脑了，对照还没出来。';
 
   @override
   String get companionCompareDone => '两份稿件的对照已经准备好。';

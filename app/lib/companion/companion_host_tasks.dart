@@ -6,11 +6,7 @@ import 'companion_reminder.dart';
 
 /// A single, just-accepted command's current-page opportunity. This value is
 /// never persisted or reconstructed by a read, reconnect or process restart.
-typedef CompanionNotesForegroundCapture = ({
-  MemoryRow task,
-  DshClient client,
-  CompanionTasksCapability capability,
-});
+typedef CompanionNotesForegroundCapture = ({MemoryRow task, DshClient client, CompanionTasksCapability capability});
 
 /// One task detail owns this exchange. Closing it never closes the shared
 /// client, cancels the durable task, or grants a later foreground opportunity.
@@ -73,7 +69,8 @@ class CompanionHostTasks {
     unawaited(() async {
       try {
         final snapshot = await client.readCompanionHostTask(
-          hostStoreId: captured['host_store_id']! as String, taskId: id,
+          hostStoreId: captured['host_store_id']! as String,
+          taskId: id,
         );
         if (snapshot == null) {
           throw const DshRemoteException('companion/task-not-found', 'The original task was not found');
@@ -84,14 +81,18 @@ class CompanionHostTasks {
         }
         observed(checked);
         final request = store.prepareHostTaskForeground(
-          taskId: id, taskRev: captured['task_rev']! as int, hostKey: hostKey,
+          taskId: id,
+          taskRev: captured['task_rev']! as int,
+          hostKey: hostKey,
           hostStoreId: captured['host_store_id']! as String,
           hostExecutionId: captured['host_execution_id']! as String,
         );
         var lastReceiptSeq = checked['applied_host_receipt_seq']! as int;
         int? uncertainSeq;
         bool mark(int seq) => store.markHostTaskForegroundUncertain(
-          taskId: id, taskRev: captured['task_rev']! as int, hostKey: hostKey,
+          taskId: id,
+          taskRev: captured['task_rev']! as int,
+          hostKey: hostKey,
           hostStoreId: captured['host_store_id']! as String,
           hostExecutionId: captured['host_execution_id']! as String,
           expectedHostReceiptSeq: seq,
@@ -106,7 +107,11 @@ class CompanionHostTasks {
           owned.close();
           return;
         }
-        await client.runCompanionNotesForeground(capability, taskId: id, request: request, abort: owned.abort,
+        await client.runCompanionNotesForeground(
+          capability,
+          taskId: id,
+          request: request,
+          abort: owned.abort,
           onAbnormal: (error, stack) {
             if (!owned.abort.isAborted) {
               owned._failure ??= (error: error, stack: stack);
@@ -115,9 +120,12 @@ class CompanionHostTasks {
           },
           onSnapshot: (value) {
             final before = store.hostTask(id)!;
-            final keepUncertain = owned._withdrawn && uncertainSeq != null &&
-              before['applied_host_receipt_seq'] == uncertainSeq &&
-              before['state'] == 'unknown' && before['wait_reason'] == 'host_receipt_unknown';
+            final keepUncertain =
+                owned._withdrawn &&
+                uncertainSeq != null &&
+                before['applied_host_receipt_seq'] == uncertainSeq &&
+                before['state'] == 'unknown' &&
+                before['wait_reason'] == 'host_receipt_unknown';
             final imported = store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: value);
             lastReceiptSeq = value['runnerReceiptSeq']! as int;
             if (keepUncertain) {
@@ -127,7 +135,8 @@ class CompanionHostTasks {
               observed(imported);
             }
             changed();
-          });
+          },
+        );
       } on Object catch (error, stack) {
         if (!owned.abort.isAborted) {
           owned._failure ??= (error: error, stack: stack);

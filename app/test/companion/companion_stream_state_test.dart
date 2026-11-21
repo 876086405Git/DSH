@@ -265,24 +265,45 @@ class _NotesForegroundBridge extends _NotesApprovalBridge {
   final capabilityRead = Completer<void>();
 
   @override
-  Future<DshHttpResponse> get(String path, {Map<String, String>? query, Map<String, String>? headers,
-    Duration? timeout, bool followRedirects = true, int? maxResponseBytes}) async {
+  Future<DshHttpResponse> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
+  }) async {
     if (path == '$notesPath/capabilities') {
       if (!capabilityRead.isCompleted) capabilityRead.complete();
-      return json({...notesCapability, 'notesForeground': true});
+      return this.json({...notesCapability, 'notesForeground': true});
     }
-    return super.get(path, query: query, headers: headers, timeout: timeout,
-      followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+    return super.get(
+      path,
+      query: query,
+      headers: headers,
+      timeout: timeout,
+      followRedirects: followRedirects,
+      maxResponseBytes: maxResponseBytes,
+    );
   }
 
   @override
-  Future<DshHttpStreamResponse> postJsonStream(String path, Object? body, {
-    required DshHttpAbort abort, Duration? headerTimeout, Duration? idleTimeout = const Duration(seconds: 20),
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path,
+    Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
+    Duration? idleTimeout = const Duration(seconds: 20),
   }) async {
     ownedAbort = abort;
     observedIdle = idleTimeout;
-    final response = await physical.postJsonStream(path, body, abort: abort,
-      headerTimeout: headerTimeout, idleTimeout: idleTimeout);
+    final response = await physical.postJsonStream(
+      path,
+      body,
+      abort: abort,
+      headerTimeout: headerTimeout,
+      idleTimeout: idleTimeout,
+    );
     return DshHttpStreamResponse(response.statusCode, response.contentType, response.body, () async {
       await response.cancel();
       if (!closed.isCompleted) closed.complete();
@@ -1229,17 +1250,44 @@ void main() {
       final release = Completer<void>();
       final imported = Completer<void>();
       var foregroundPosts = 0;
-      MemoryRow approval(String event) => {'taskRev': 1, 'stepKey': 'model', 'agentId': _notesAgent,
-        'approvalId': 'engine-approval-$event', 'eventId': 'gateway-$event', 'callId': 'call-$event'};
-      MemoryRow awaiting(String event, int seq) => {...notesSnapshot(create, state: 'waiting', seq: seq,
-        approval: approval(event), steps: [{
-          'taskRev': 1, 'stepKey': 'model', 'attemptId': 'foreground-model', 'state': 'waiting',
-          'startedAtMs': _now, 'finishedAtMs': null, 'reason': 'approval_required', 'result': null,
-        }]), 'waitReason': 'approval_required'};
-      void engineApproval(String event) => client.notesEvents.add(HostEvent.fromFrame({
-        'type': 'waterfall', 'event': 'approval/request', 'eventId': 'gateway-$event', 'agentId': _notesAgent,
-        'request': {'toolName': 'web_fetch', 'callId': 'call-$event'},
-      }));
+      MemoryRow approval(String event) => {
+        'taskRev': 1,
+        'stepKey': 'model',
+        'agentId': _notesAgent,
+        'approvalId': 'engine-approval-$event',
+        'eventId': 'gateway-$event',
+        'callId': 'call-$event',
+      };
+      MemoryRow awaiting(String event, int seq) => {
+        ...notesSnapshot(
+          create,
+          state: 'waiting',
+          seq: seq,
+          approval: approval(event),
+          steps: [
+            {
+              'taskRev': 1,
+              'stepKey': 'model',
+              'attemptId': 'foreground-model',
+              'state': 'waiting',
+              'startedAtMs': _now,
+              'finishedAtMs': null,
+              'reason': 'approval_required',
+              'result': null,
+            },
+          ],
+        ),
+        'waitReason': 'approval_required',
+      };
+      void engineApproval(String event) => client.notesEvents.add(
+        HostEvent.fromFrame({
+          'type': 'waterfall',
+          'event': 'approval/request',
+          'eventId': 'gateway-$event',
+          'agentId': _notesAgent,
+          'request': {'toolName': 'web_fetch', 'callId': 'call-$event'},
+        }),
+      );
       peer.respond = (request, _) async {
         foregroundPosts++;
         bridge.taskSnapshot = awaiting('E1', 2);
@@ -1255,36 +1303,66 @@ void main() {
           // The actual SDK abort closes this particular HTTP response.
         }
       };
-      await room.open(tester, seed: (memory) {
-        memory.store.submitMessage(id: 'foreground-source', sessionId: 'full:$hostKey',
-          text: '请电脑整理今天的笔记，离开这里就先停', saidAtUtc: _now,
-          offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
-        final task = memory.store.createNotesTaskFromMessage(messageId: 'foreground-source', expectedSourceRev: 1,
-          itemNo: 0, roomMode: 'full', hostKey: hostKey, hostSessionId: _session,
-          agreement: notesAgreement(afterExit: 'pause'));
-        id = task['task_id']! as String;
-        create = memory.store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: hostKey,
-          hostStoreId: 'original-store', initialOpportunity: true)!['request']! as MemoryRow;
-        bridge.taskSnapshot = {...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
-      });
+      await room.open(
+        tester,
+        seed: (memory) {
+          memory.store.submitMessage(
+            id: 'foreground-source',
+            sessionId: 'full:$hostKey',
+            text: '请电脑整理今天的笔记，离开这里就先停',
+            saidAtUtc: _now,
+            offsetMinutes: 480,
+            zoneId: 'Asia/Shanghai',
+            offsetSeconds: 28800,
+          );
+          final task = memory.store.createNotesTaskFromMessage(
+            messageId: 'foreground-source',
+            expectedSourceRev: 1,
+            itemNo: 0,
+            roomMode: 'full',
+            hostKey: hostKey,
+            hostSessionId: _session,
+            agreement: notesAgreement(afterExit: 'pause'),
+          );
+          id = task['task_id']! as String;
+          create =
+              memory.store.prepareHostTaskOperation(
+                    taskId: id,
+                    taskRev: 1,
+                    hostKey: hostKey,
+                    hostStoreId: 'original-store',
+                    initialOpportunity: true,
+                  )!['request']!
+                  as MemoryRow;
+          bridge.taskSnapshot = {...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+        },
+      );
       void changed() {
         final snapshot = room.memory.store.hostTask(id)!['snapshot'] as MemoryRow?;
         if ((snapshot?['approval'] as MemoryRow?)?['eventId'] == 'gateway-E1' && !imported.isCompleted) {
           imported.complete();
         }
       }
+
       room.memory.addListener(changed);
       try {
         final fresh = <CompanionNotesForegroundCapture>[];
         if (outcome == 'fresh-allow') {
           final capability = (await settleMixed(tester, client.readCompanionTasksCapability()))!;
-          final snapshot = (await settleMixed(tester, client.readCompanionHostTask(
-            hostStoreId: 'original-store', taskId: id)))!;
+          final snapshot = (await settleMixed(
+            tester,
+            client.readCompanionHostTask(hostStoreId: 'original-store', taskId: id),
+          ))!;
           final captured = room.memory.store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: snapshot);
           fresh.add((task: captured, client: client, capability: capability));
         }
-        unawaited(Navigator.of(tester.element(find.byType(CompanionPage))).push<void>(
-          MaterialPageRoute(builder: (_) => CompanionTasksPage(memory: room.memory, taskId: id, freshNotes: fresh))));
+        unawaited(
+          Navigator.of(tester.element(find.byType(CompanionPage))).push<void>(
+            MaterialPageRoute(
+              builder: (_) => CompanionTasksPage(memory: room.memory, taskId: id, freshNotes: fresh),
+            ),
+          ),
+        );
         await tester.pump();
         await settleMixed(tester, bridge.capabilityRead.future);
         await tester.pumpAndSettle();
@@ -1295,9 +1373,14 @@ void main() {
         }
         await settleMixed(tester, imported.future);
         await settleMixed(tester, client.notesWatched.future);
-        client.notesEvents.add(parseFollowFrame(_notesAgent, {
-          'type': 'snapshot', 'cursor': -1, 'records': [], 'assistantStream': {'revision': 0},
-        }));
+        client.notesEvents.add(
+          parseFollowFrame(_notesAgent, {
+            'type': 'snapshot',
+            'cursor': -1,
+            'records': [],
+            'assistantStream': {'revision': 0},
+          }),
+        );
         engineApproval('E1');
         await flush(tester);
         await tester.pump(CompanionAsk.detailWait);
@@ -1326,7 +1409,8 @@ void main() {
           expect(bridge.ownedAbort!.isAborted, isFalse);
           expect(room.container.read(chatProvider(_notesAgent)).autoApprove, isTrue);
           expect((bridge.results.single['payload']! as MemoryRow)['args'], {
-            'clientId': 'approval-peer', 'eventId': 'gateway-E1',
+            'clientId': 'approval-peer',
+            'eventId': 'gateway-E1',
             'outcome': {'kind': 'result', 'value': ApprovalDecision.allowOnce.wire},
           });
         } else if (outcome == 'ask-ai') {
@@ -1339,8 +1423,10 @@ void main() {
         } else if (outcome == 'another-route') {
           // A different route pushed while the exact risk Future is pending
           // is not covered by that sheet's owner exception.
-          unawaited(Navigator.of(tester.element(find.byKey(const ValueKey('risk-confirm')))).push<void>(
-            MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另外的页面')))));
+          unawaited(
+            Navigator.of(tester.element(find.byKey(const ValueKey('risk-confirm'))))
+                .push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另外的页面')))),
+          );
           await tester.pumpAndSettle();
           await settleMixed(tester, bridge.closed.future);
           expect(sheet.isCurrent, isFalse);
@@ -1364,8 +1450,13 @@ void main() {
         }
         expect(foregroundPosts, 1);
         expect(peer.calls.single.uri.path, '$notesPath/$id/foreground');
-        expect(peer.calls.single.body, {'v': 1, 'hostStoreId': 'original-store',
-          'hostExecutionId': 'actual-execution', 'taskRev': 1, 'sourceSessionId': 'full:$hostKey'});
+        expect(peer.calls.single.body, {
+          'v': 1,
+          'hostStoreId': 'original-store',
+          'hostExecutionId': 'actual-execution',
+          'taskRev': 1,
+          'sourceSessionId': 'full:$hostKey',
+        });
         expect(room.memory.store.hostTaskCommands(id), hasLength(1));
         expect(room.memory.store.hostTask(id)!['task_rev'], 1);
       } finally {

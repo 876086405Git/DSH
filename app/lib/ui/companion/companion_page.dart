@@ -2378,8 +2378,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
       if (reminder || lookup || notes || map) {
-        await _handleTasks(memory, source, reminderParts, lookupCommands, notesCommands, mapCommands, current,
-          notesEpoch: notesEpoch);
+        await _handleTasks(
+          memory,
+          source,
+          reminderParts,
+          lookupCommands,
+          notesCommands,
+          mapCommands,
+          current,
+          notesEpoch: notesEpoch,
+        );
         return;
       }
       if (await _handleMemoryControl(memory, source, raw)) return;
@@ -2514,9 +2522,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             }
           } else if (notesCommands[part.itemNo] case final notesCommand?) {
             try {
-              final result = await _handleNotes(memory, source, part.itemNo, notesCommand, current,
+              final result = await _handleNotes(
+                memory,
+                source,
+                part.itemNo,
+                notesCommand,
+                current,
                 deferForeground: (capture) => freshNotes.add((lineIndex: lines.length, capture: capture)),
-                onSelectionRoute: selectionRoute);
+                onSelectionRoute: selectionRoute,
+              );
               lines.add(result.line);
               if (result.task case final task?) {
                 notes.add(task['task_id']! as String);
@@ -2533,8 +2547,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             }
           } else if (mapCommands[part.itemNo] case final mapCommand?) {
             try {
-              final result = await _handleMap(memory, source, part.itemNo, mapCommand, current,
-                onSelectionRoute: selectionRoute);
+              final result = await _handleMap(
+                memory,
+                source,
+                part.itemNo,
+                mapCommand,
+                current,
+                onSelectionRoute: selectionRoute,
+              );
               lines.add(result.line);
               if (result.task case final task?) {
                 maps.add(task['task_id']! as String);
@@ -2598,22 +2618,34 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         var task = memory.store.hostTask(id)!;
         // A later part of this same source can cancel or amend the earlier
         // task. It cannot grant the earlier capture its replacement revision.
-        if (task['task_rev'] == original['task_rev'] && task['cancel_requested'] == 0 && opportunity() &&
+        if (task['task_rev'] == original['task_rev'] &&
+            task['cancel_requested'] == 0 &&
+            opportunity() &&
             identical(captured.client, ref.read(activeConnectionProvider).value?.client) &&
             task['host_key'] == companionHostKey(ref.read(activeHostProvider))) {
           try {
-            task = await memory.hostTasks.run(original, client: captured.client,
-              hostKey: original['host_key']! as String, initialOpportunity: true,
-              submitPending: true, capability: captured.capability);
-            if (opportunity() && task['task_rev'] == original['task_rev'] &&
-                task['cancel_requested'] == 0 && task['host_execution_id'] is String &&
+            task = await memory.hostTasks.run(
+              original,
+              client: captured.client,
+              hostKey: original['host_key']! as String,
+              initialOpportunity: true,
+              submitPending: true,
+              capability: captured.capability,
+            );
+            if (opportunity() &&
+                task['task_rev'] == original['task_rev'] &&
+                task['cancel_requested'] == 0 &&
+                task['host_execution_id'] is String &&
                 task['host_store_id'] == captured.capability.hostStoreId &&
                 identical(captured.client, ref.read(activeConnectionProvider).value?.client) &&
                 !const ['done', 'partial', 'failed', 'cancelled'].contains(task['state'])) {
               final deadline = (original['agreement']! as MemoryRow)['deadlineAtMs'] as int?;
               if (deadline == null || DateTime.now().millisecondsSinceEpoch < deadline) {
-                foregrounds.add((task: Map<String, Object?>.unmodifiable(task),
-                  client: captured.client, capability: captured.capability));
+                foregrounds.add((
+                  task: Map<String, Object?>.unmodifiable(task),
+                  client: captured.client,
+                  capability: captured.capability,
+                ));
               }
             }
           } on Object {
@@ -2625,8 +2657,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         lines[pending.lineIndex] = companionNotesLine(l10n, task);
       }
       memory.changed();
-      return (lines: lines, failed: failed, lookups: lookups, notes: notes, maps: maps,
-        foregrounds: foregrounds, foregroundCurrent: opportunity);
+      return (
+        lines: lines,
+        failed: failed,
+        lookups: lookups,
+        notes: notes,
+        maps: maps,
+        foregrounds: foregrounds,
+        foregroundCurrent: opportunity,
+      );
     }();
     memory.retainReceipt(operation.then<void>((_) {}));
     final result = await operation;
@@ -2662,13 +2701,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         if (memory.store.hostTask(capture.task['task_id']! as String)?['task_rev'] == capture.task['task_rev'] &&
             memory.store.hostTask(capture.task['task_id']! as String)?['cancel_requested'] == 0 &&
             identical(capture.client, ref.read(activeConnectionProvider).value?.client) &&
-            capture.task['host_key'] == companionHostKey(ref.read(activeHostProvider))) capture,
+            capture.task['host_key'] == companionHostKey(ref.read(activeHostProvider)))
+          capture,
     ];
     if (foregrounds.isNotEmpty && result.foregroundCurrent()) {
-      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
-        memory: memory, taskId: foregrounds.first.task['task_id']! as String,
-        freshNotes: List<CompanionNotesForegroundCapture>.unmodifiable(foregrounds),
-      ))));
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => CompanionTasksPage(
+              memory: memory,
+              taskId: foregrounds.first.task['task_id']! as String,
+              freshNotes: List<CompanionNotesForegroundCapture>.unmodifiable(foregrounds),
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -2677,16 +2724,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // Owned sheet/browser coverage is latched synchronously in selectionRoute;
     // this fallback is not proof of transitions with no intervening build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && (!TickerMode.valuesOf(context).enabled || !(ModalRoute.of(context)?.isCurrent ?? false)) &&
+      if (mounted &&
+          (!TickerMode.valuesOf(context).enabled || !(ModalRoute.of(context)?.isCurrent ?? false)) &&
           !_notesSelectionRoutes.any((route) => route.isActive && route.isCurrent)) {
         _notesForegroundEpoch++;
       }
     });
   }
 
-  bool get _notesForegroundHere => mounted && !_leaving && !_logOpen &&
-    WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
-    TickerMode.valuesOf(context).enabled && (ModalRoute.of(context)?.isCurrent ?? false);
+  bool get _notesForegroundHere =>
+      mounted &&
+      !_leaving &&
+      !_logOpen &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+      TickerMode.valuesOf(context).enabled &&
+      (ModalRoute.of(context)?.isCurrent ?? false);
 
   bool get _mapHere =>
       mounted &&
@@ -3062,9 +3114,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (client == null || hostKey != task['host_key']) {
       return (line: l10n.companionNotesOriginalHost, task: task);
     }
-    if (accepted == null && command['operation'] == 'create' && !find &&
-        task['kind'] == 'host.notes_to_todo' && (task['agreement']! as MemoryRow)['afterExit'] == 'pause' &&
-        capability != null && capability.notesForeground && deferForeground != null) {
+    if (accepted == null &&
+        command['operation'] == 'create' &&
+        !find &&
+        task['kind'] == 'host.notes_to_todo' &&
+        (task['agreement']! as MemoryRow)['afterExit'] == 'pause' &&
+        capability != null &&
+        capability.notesForeground &&
+        deferForeground != null) {
       deferForeground((task: task, client: client, capability: capability));
       return (line: companionNotesLine(l10n, task), task: task);
     }

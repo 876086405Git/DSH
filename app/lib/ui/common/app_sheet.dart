@@ -140,11 +140,23 @@ Future<T?> showAppSheet<T>(
 /// Only an opted-in owner observes this sheet, including a later route above
 /// it. A bool spanning the returned Future would also cover unrelated pages.
 class _AppSheetRoute<T> extends ModalBottomSheetRoute<T> {
-  _AppSheetRoute({required super.builder, required super.isScrollControlled,
-    super.capturedThemes, super.barrierLabel, super.barrierOnTapHint, super.modalBarrierColor,
-    super.useSafeArea, super.scrollControlDisabledMaxHeightRatio, super.showDragHandle,
-    super.enableDrag, super.isDismissible, super.backgroundColor, super.elevation,
-    super.sheetAnimationStyle, this.onRouteChanged});
+  _AppSheetRoute({
+    required super.builder,
+    required super.isScrollControlled,
+    super.capturedThemes,
+    super.barrierLabel,
+    super.barrierOnTapHint,
+    super.modalBarrierColor,
+    super.useSafeArea,
+    super.scrollControlDisabledMaxHeightRatio,
+    super.showDragHandle,
+    super.enableDrag,
+    super.isDismissible,
+    super.backgroundColor,
+    super.elevation,
+    super.sheetAnimationStyle,
+    this.onRouteChanged,
+  });
   final void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged;
 
   @override

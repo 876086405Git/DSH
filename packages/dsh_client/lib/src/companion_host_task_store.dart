@@ -803,11 +803,17 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     final origin = snapshot?['origin'] as MemoryRow?;
     final at = _checkedNow();
     final deadline = agreement['deadlineAtMs'] as int?;
-    if (current['host_key'] != hostKey || current['host_store_id'] != hostStoreId ||
-        current['host_execution_id'] != hostExecutionId || agreement['afterExit'] != 'pause' ||
-        current['cancel_requested'] != 0 || const ['done', 'partial', 'failed', 'cancelled'].contains(current['state']) ||
-        snapshot == null || snapshot['taskRev'] != taskRev || snapshot['originalCreatePresent'] != true ||
-        snapshot['hostExecutionId'] != hostExecutionId || snapshot['hostStoreId'] != hostStoreId ||
+    if (current['host_key'] != hostKey ||
+        current['host_store_id'] != hostStoreId ||
+        current['host_execution_id'] != hostExecutionId ||
+        agreement['afterExit'] != 'pause' ||
+        current['cancel_requested'] != 0 ||
+        const ['done', 'partial', 'failed', 'cancelled'].contains(current['state']) ||
+        snapshot == null ||
+        snapshot['taskRev'] != taskRev ||
+        snapshot['originalCreatePresent'] != true ||
+        snapshot['hostExecutionId'] != hostExecutionId ||
+        snapshot['hostStoreId'] != hostStoreId ||
         _canonicalJson(snapshot['agreement']) != _canonicalJson(agreement) ||
         origin?['sourceSessionId'] != current['source_session_id'] ||
         (deadline != null && at >= deadline)) {
@@ -815,11 +821,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     }
     _db.execute(
       "UPDATE companion_task_revisions SET state='unknown',wait_reason='host_receipt_unknown',updated_at_ms=? "
-      'WHERE task_id=? AND task_rev=?', [at, taskId, taskRev],
+      'WHERE task_id=? AND task_rev=?',
+      [at, taskId, taskRev],
     );
     return <String, Object?>{
-      'v': 1, 'hostStoreId': hostStoreId, 'hostExecutionId': hostExecutionId,
-      'taskRev': taskRev, 'sourceSessionId': current['source_session_id'],
+      'v': 1,
+      'hostStoreId': hostStoreId,
+      'hostExecutionId': hostExecutionId,
+      'taskRev': taskRev,
+      'sourceSessionId': current['source_session_id'],
     };
   });
 
@@ -835,9 +845,13 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int expectedHostReceiptSeq,
   }) => _transaction(() {
     final current = hostTask(taskId);
-    if (current == null || current['kind'] != 'host.notes_to_todo' || current['task_rev'] != taskRev ||
-        current['host_key'] != hostKey || current['host_store_id'] != hostStoreId ||
-        current['host_execution_id'] != hostExecutionId || current['cancel_requested'] != 0 ||
+    if (current == null ||
+        current['kind'] != 'host.notes_to_todo' ||
+        current['task_rev'] != taskRev ||
+        current['host_key'] != hostKey ||
+        current['host_store_id'] != hostStoreId ||
+        current['host_execution_id'] != hostExecutionId ||
+        current['cancel_requested'] != 0 ||
         (current['agreement']! as MemoryRow)['afterExit'] != 'pause' ||
         current['applied_host_receipt_seq'] != expectedHostReceiptSeq ||
         const ['done', 'partial', 'failed', 'cancelled'].contains(current['state'])) {
@@ -846,7 +860,8 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     if (current['state'] != 'unknown' || current['wait_reason'] != 'host_receipt_unknown') {
       _db.execute(
         "UPDATE companion_task_revisions SET state='unknown',wait_reason='host_receipt_unknown',updated_at_ms=? "
-        'WHERE task_id=? AND task_rev=?', [_checkedNow(), taskId, taskRev],
+        'WHERE task_id=? AND task_rev=?',
+        [_checkedNow(), taskId, taskRev],
       );
     }
     return true;

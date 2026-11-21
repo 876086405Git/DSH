@@ -147,8 +147,11 @@ Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseCompanionRe
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('receipt selection changed before durable acceptance');
     }
-    final path = await showDirectoryPicker(context, title: l10n.companionNotesChooseOutput,
-      onRouteChanged: onRouteChanged);
+    final path = await showDirectoryPicker(
+      context,
+      title: l10n.companionNotesChooseOutput,
+      onRouteChanged: onRouteChanged,
+    );
     if (!context.mounted || !isCurrent()) {
       throw const DshClosedException('receipt selection changed before durable acceptance');
     }

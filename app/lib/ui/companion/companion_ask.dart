@@ -138,8 +138,9 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
         onRespond: _respond,
         // Already trusting the whole conversation: nothing wider to offer.
         onAllowAll: asking.autoApprove ? null : _allowAll,
-        onRiskRouteChanged: widget.onApprovalRiskRouteChanged == null ? null :
-          (route) => widget.onApprovalRiskRouteChanged!(approval, route),
+        onRiskRouteChanged: widget.onApprovalRiskRouteChanged == null
+            ? null
+            : (route) => widget.onApprovalRiskRouteChanged!(approval, route),
       );
     } else if (approval == null && question != null) {
       card = QuestionCard(

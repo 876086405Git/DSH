@@ -6652,7 +6652,7 @@ class L10nEn extends L10n {
   String get companionNotesQueued => 'Got it. Waiting for the computer to pick it up.';
 
   @override
-  String get companionNotesRunning => 'The computer has it and is working on it.';
+  String get companionNotesRunning => 'The computer has accepted this task. The result isn\'t ready yet.';
 
   @override
   String get companionNotesDone => 'Done. The to-do list is saved as a new file. Tap to read it.';
@@ -6664,14 +6664,14 @@ class L10nEn extends L10n {
   String get companionNotesFailed => 'This one didn\'t work out.';
 
   @override
-  String get companionNotesWaiting => 'The computer is waiting on something. It may need your okay.';
+  String get companionNotesWaiting => 'This can\'t continue yet. The request is still here.';
 
   @override
   String get companionNotesUnknown => 'I\'m not sure what\'s happening on the computer right now.';
 
   @override
   String get companionNotesCancelUnknown =>
-      'I asked the computer to stop, but I\'m not sure it has. Files it already wrote will stay.';
+      'Your request to stop is saved, but I haven\'t confirmed that the computer has stopped. Files it already wrote will stay.';
 
   @override
   String get companionNotesCancelled => 'Okay, I\'ve stopped. Files already written are still there.';
@@ -6720,6 +6720,16 @@ class L10nEn extends L10n {
 
   @override
   String get companionNotesPause => 'Stop when I leave';
+
+  @override
+  String get companionNotesForegroundStart => 'Continue here';
+
+  @override
+  String get companionNotesForegroundReady =>
+      'I\'ll ask the computer to continue while you stay here. When you leave, I\'ll ask it to pause; we\'ll check its progress when you return.';
+
+  @override
+  String get companionNotesForegroundUnknown => 'I haven\'t confirmed the computer\'s progress yet. Refresh to check.';
 
   @override
   String get companionNotesContinue => 'Keep going after I leave';
@@ -7130,7 +7140,7 @@ class L10nEn extends L10n {
   String get companionCompareQueued => 'Both drafts are saved, waiting for the computer.';
 
   @override
-  String get companionCompareRunning => 'The computer is comparing these two drafts.';
+  String get companionCompareRunning => 'The computer has accepted this task. The comparison isn\'t ready yet.';
 
   @override
   String get companionCompareDone => 'The comparison of the two drafts is ready.';

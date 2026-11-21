@@ -82,22 +82,43 @@ class DelayedNotesForegroundRetirement extends DshConnection {
   final release = Completer<void>();
 
   @override
-  Future<DshHttpResponse> get(String path, {Map<String, String>? query, Map<String, String>? headers,
-    Duration? timeout, bool followRedirects = true, int? maxResponseBytes}) =>
-    physical.get(path, query: query, headers: headers, timeout: timeout,
-      followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+  Future<DshHttpResponse> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
+  }) => physical.get(
+    path,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    followRedirects: followRedirects,
+    maxResponseBytes: maxResponseBytes,
+  );
 
   @override
-  Future<DshHttpStreamResponse> postJsonStream(String path, Object? body, {
-    required DshHttpAbort abort, Duration? headerTimeout, Duration? idleTimeout = const Duration(seconds: 20),
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path,
+    Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
+    Duration? idleTimeout = const Duration(seconds: 20),
   }) async {
-    final response = await physical.postJsonStream(path, body, abort: abort,
-      headerTimeout: headerTimeout, idleTimeout: idleTimeout);
+    final response = await physical.postJsonStream(
+      path,
+      body,
+      abort: abort,
+      headerTimeout: headerTimeout,
+      idleTimeout: idleTimeout,
+    );
     Future<void> retire() async {
       await response.cancel();
       if (!retired.isCompleted) retired.complete();
       await release.future;
     }
+
     Stream<Uint8List> observedBody() async* {
       try {
         yield* response.body;
@@ -107,8 +128,13 @@ class DelayedNotesForegroundRetirement extends DshConnection {
         await retire();
       }
     }
-    return DshHttpStreamResponse(response.statusCode, response.contentType,
-      holdBodyCancellation ? observedBody() : response.body, retire);
+
+    return DshHttpStreamResponse(
+      response.statusCode,
+      response.contentType,
+      holdBodyCancellation ? observedBody() : response.body,
+      retire,
+    );
   }
 }
 

@@ -115,11 +115,17 @@ void main() {
         final accepted = await run(row);
         final capability = (await peer.client.readCompanionTasksCapability())!;
         var observations = 0;
-        final owned = tasks.foreground(accepted, client: peer.client, hostKey: 'local:original', capability: capability,
-          isCurrent: () => true, observed: (_) {
+        final owned = tasks.foreground(
+          accepted,
+          client: peer.client,
+          hostKey: 'local:original',
+          capability: capability,
+          isCurrent: () => true,
+          observed: (_) {
             observations++;
             if (observations == 2) firstFrame.complete();
-          });
+          },
+        );
         try {
           await firstFrame.future;
           expect(observations, 2);
@@ -180,11 +186,17 @@ void main() {
       final client = DshClient(delayed);
       final capability = (await client.readCompanionTasksCapability())!;
       var observations = 0;
-      final owned = tasks.foreground(accepted, client: client, hostKey: 'local:original', capability: capability,
-        isCurrent: () => true, observed: (_) {
+      final owned = tasks.foreground(
+        accepted,
+        client: client,
+        hostKey: 'local:original',
+        capability: capability,
+        isCurrent: () => true,
+        observed: (_) {
           observations++;
           if (observations == 2) firstFrame.complete();
-        });
+        },
+      );
       var finished = false;
       unawaited(owned.finished.then<void>((_) => finished = true));
       try {

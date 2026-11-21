@@ -2111,7 +2111,8 @@ void main() {
           tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
           final memory = _ReceiptMemory(
             CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now),
-            CompanionLocal.at(root), nowMilliseconds: () => now,
+            CompanionLocal.at(root),
+            nowMilliseconds: () => now,
           );
           final peer = (await tester.runAsync(NotesPeer.open))!;
           peer.capability = {...findCapability, 'notesForeground': true};
@@ -2119,9 +2120,11 @@ void main() {
           final followingFind = scenario == 'following-find-part';
           final followingCancel = scenario == 'following-cancel-part';
           final holdAcceptance = scenario.endsWith('before-acceptance');
-          final lostDuringSelection = scenario == 'route-return-before-capability' ||
-            scenario == 'route-return-during-browser' || scenario == 'route-return-during-typed-dialog' ||
-            scenario.startsWith('route-remove-same-frame-');
+          final lostDuringSelection =
+              scenario == 'route-return-before-capability' ||
+              scenario == 'route-return-during-browser' ||
+              scenario == 'route-return-during-typed-dialog' ||
+              scenario.startsWith('route-remove-same-frame-');
           final typedDirectory = scenario.contains('typed-');
           final capabilitySeen = Completer<void>();
           final releaseCapability = Completer<void>();
@@ -2151,12 +2154,14 @@ void main() {
           void changed() {
             for (var index = 0; index < foregroundPosts.length; index++) {
               final task = memory.store.hostTask(foregroundPosts[index].id)!;
-              if (task['state'] == 'waiting' && task['wait_reason'] == 'foreground_required' &&
+              if (task['state'] == 'waiting' &&
+                  task['wait_reason'] == 'foreground_required' &&
                   !imported[index].isCompleted) {
                 imported[index].complete();
               }
             }
           }
+
           memory.addListener(changed);
           tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
             if (call.method == 'clock') {
@@ -2172,23 +2177,41 @@ void main() {
           });
           peer.respond = (request, body) async {
             if (request.uri.path == '/api/directoryPicker/list') {
-              await NotesPeer.json(request, {'type': 'server-response', 'rpcId': body!['rpcId'],
-                'result': {'ok': true, 'value': {'path': '/实际笔记', 'home': '/实际笔记',
-                  'crumbs': [{'name': '实际笔记', 'path': '/实际笔记'}], 'entries': <Object?>[]}}});
+              await NotesPeer.json(request, {
+                'type': 'server-response',
+                'rpcId': body!['rpcId'],
+                'result': {
+                  'ok': true,
+                  'value': {
+                    'path': '/实际笔记',
+                    'home': '/实际笔记',
+                    'crumbs': [
+                      {'name': '实际笔记', 'path': '/实际笔记'},
+                    ],
+                    'entries': <Object?>[],
+                  },
+                },
+              });
             } else if (request.uri.path == '$notesPath/folders') {
               final index = taskCountsAtBind.length;
               taskCountsAtBind.add(memory.store.tasks().length);
-              await NotesPeer.json(request, {'v': 1, 'hostStoreId': 'original-store',
-                'folderRef': 'bound-source', 'displayPath': '/实际笔记'});
+              await NotesPeer.json(request, {
+                'v': 1,
+                'hostStoreId': 'original-store',
+                'folderRef': 'bound-source',
+                'displayPath': '/实际笔记',
+              });
               bindings[index].complete();
             } else if (request.method == 'POST' && request.uri.path == notesPath) {
               final create = body!;
               creations.add(create);
               final id = create['taskId']! as String;
               final isNotes = create['kind'] == 'host.notes_to_todo';
-              snapshots[id] = {...notesSnapshot(create, state: isNotes ? 'waiting' : 'running'),
+              snapshots[id] = {
+                ...notesSnapshot(create, state: isNotes ? 'waiting' : 'running'),
                 'hostExecutionId': 'execution-$id',
-                'waitReason': isNotes ? 'foreground_required' : null};
+                'waitReason': isNotes ? 'foreground_required' : null,
+              };
               if (!createSeen.isCompleted) createSeen.complete();
               if (holdAcceptance) await releaseCreate.future;
               await NotesPeer.json(request, snapshots[id], status: 201);
@@ -2211,29 +2234,44 @@ void main() {
               final id = request.uri.pathSegments[request.uri.pathSegments.length - 2];
               cancelBodies.add(body!);
               final previous = snapshots[id]!;
-              snapshots[id] = {...previous, 'taskRev': 2, 'runnerReceiptSeq': 2, 'state': 'cancelled',
-                'waitReason': null, 'cancelRequested': true, 'updatedAtMs': now + 2,
+              snapshots[id] = {
+                ...previous,
+                'taskRev': 2,
+                'runnerReceiptSeq': 2,
+                'state': 'cancelled',
+                'waitReason': null,
+                'cancelRequested': true,
+                'updatedAtMs': now + 2,
                 'revisions': [
                   ...(previous['revisions']! as List<Object?>),
                   {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': now + 1, 'agreement': previous['agreement']},
-                ]};
+                ],
+              };
               cancelSeen.complete();
               await releaseCancel.future;
               await NotesPeer.json(request, snapshots[id]);
             } else if (request.method == 'GET' && snapshots.containsKey(request.uri.pathSegments.last)) {
               await NotesPeer.json(request, snapshots[request.uri.pathSegments.last]);
             } else {
-              await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'missing'}}, status: 404);
+              await NotesPeer.json(request, {
+                'error': {'code': 'companion/task-not-found', 'message': 'missing'},
+              }, status: 404);
             }
           };
           try {
-            await openLight(tester, apiKey: '', client: MockClient((_) async {
-              modelPosts++;
-              throw StateError('A fixed Host task must not call the light model');
-            }), connection: HostConnection(client: peer.client, isLocal: false), extra: [
-              companionModeProvider.overrideWith(_NotesLightMode.new),
-              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
-            ]);
+            await openLight(
+              tester,
+              apiKey: '',
+              client: MockClient((_) async {
+                modelPosts++;
+                throw StateError('A fixed Host task must not call the light model');
+              }),
+              connection: HostConnection(client: peer.client, isLocal: false),
+              extra: [
+                companionModeProvider.overrideWith(_NotesLightMode.new),
+                companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+              ],
+            );
             expect(await memoryOf(tester), same(memory));
             await settleMixed(tester, memory.migrateLocal());
             final originalSession = memory.store.lightSessionId;
@@ -2241,10 +2279,11 @@ void main() {
             final navigator = Navigator.of(element);
             final container = ProviderScope.containerOf(element);
             final originalHost = container.read(activeHostProvider);
-            final raw = '请电脑把今天的笔记另存成一页待办，原件别动，文件名为《甲待办.md》，我离开就停'
-              '${two ? '；请电脑把今天的笔记另存成一页待办，原件别动，文件名为《乙待办.md》，我离开就停' : ''}'
-              '${followingFind ? '；请电脑在“演讲稿”本层找昨天改的稿子，不用翻别处，离开后继续' : ''}'
-              '${followingCancel ? '；取消《甲待办.md》的笔记整理' : ''}';
+            final raw =
+                '请电脑把今天的笔记另存成一页待办，原件别动，文件名为《甲待办.md》，我离开就停'
+                '${two ? '；请电脑把今天的笔记另存成一页待办，原件别动，文件名为《乙待办.md》，我离开就停' : ''}'
+                '${followingFind ? '；请电脑在“演讲稿”本层找昨天改的稿子，不用翻别处，离开后继续' : ''}'
+                '${followingCancel ? '；取消《甲待办.md》的笔记整理' : ''}';
             Future<void> externalRouteAndBack() async {
               unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('外来的页面')))));
               await _notesVisible(tester, find.text('外来的页面'));
@@ -2252,6 +2291,7 @@ void main() {
               navigator.pop();
               await tester.pump(const Duration(milliseconds: 400));
             }
+
             void externalRouteRemovedInSameFrame(Finder owner) {
               final original = ModalRoute.of(tester.element(owner))!;
               final covering = PageRouteBuilder<void>(
@@ -2268,6 +2308,7 @@ void main() {
               expect(original.isCurrent, isTrue);
               expect(find.text('同帧外来页面'), findsNothing);
             }
+
             holdNextCapability = scenario == 'route-return-before-capability';
             await tester.enterText(find.byType(TextField), raw);
             await tester.pump();
@@ -2295,14 +2336,20 @@ void main() {
                 if (scenario == 'route-return-during-typed-dialog') {
                   await externalRouteAndBack();
                 }
-                await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
-                  '/实际笔记');
+                await tester.enterText(
+                  find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+                  '/实际笔记',
+                );
                 await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.byType(FilledButton)));
               } else {
                 await tester.tap(find.text('主目录').last);
               }
-              final choose = find.descendant(of: find.byType(DirectoryBrowserPage),
-                matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null)).last;
+              final choose = find
+                  .descendant(
+                    of: find.byType(DirectoryBrowserPage),
+                    matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+                  )
+                  .last;
               await _notesVisible(tester, choose);
               if (scenario == 'route-return-during-browser') {
                 await externalRouteAndBack();
@@ -2314,7 +2361,10 @@ void main() {
             }
             if (holdAcceptance) {
               await settleMixed(tester, createSeen.future);
-              expect(memory.store.hostTaskCommands(creations.single['taskId']! as String).single['possible_sent_at_ms'], now);
+              expect(
+                memory.store.hostTaskCommands(creations.single['taskId']! as String).single['possible_sent_at_ms'],
+                now,
+              );
               if (scenario.startsWith('route-')) {
                 unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另一个页面')))));
                 await _notesVisible(tester, find.text('另一个页面'));
@@ -2347,7 +2397,10 @@ void main() {
               expect(task['task_rev'], 2);
               expect(task['cancel_requested'], 1);
               expect(task['state'], 'cancelled');
-              expect(memory.store.hostTaskCommands(task['task_id']! as String).map((row) => row['operation']), ['create', 'cancel']);
+              expect(memory.store.hostTaskCommands(task['task_id']! as String).map((row) => row['operation']), [
+                'create',
+                'cancel',
+              ]);
               expect(find.byType(CompanionTasksPage), findsNothing);
               return;
             }
@@ -2362,7 +2415,11 @@ void main() {
               await _notesVisible(tester, find.byType(CompanionTasksPage));
               await settleMixed(tester, memory.lastReceipt);
               expect(creations, isEmpty);
-              expect(foregroundPosts, isEmpty, reason: 'Ordinary detail loading cannot restore the lost selection opportunity');
+              expect(
+                foregroundPosts,
+                isEmpty,
+                reason: 'Ordinary detail loading cannot restore the lost selection opportunity',
+              );
               return;
             }
             expect(creations, hasLength(two || followingFind ? 2 : 1));
@@ -2379,7 +2436,11 @@ void main() {
               await _notesVisible(tester, find.byType(CompanionTasksPage));
               await settleMixed(tester, memory.lastReceipt);
               await _notesVisible(tester, find.text('在这里继续'));
-              expect(foregroundPosts, isEmpty, reason: 'A later ordinary read cannot restore the lost fresh opportunity');
+              expect(
+                foregroundPosts,
+                isEmpty,
+                reason: 'A later ordinary read cannot restore the lost fresh opportunity',
+              );
               return;
             }
             await settleMixed(tester, imported.first.future);
@@ -2388,8 +2449,13 @@ void main() {
             expect(find.byType(CompanionTasksPage), findsOneWidget);
             expect(foregroundPosts, hasLength(1), reason: 'The person never tapped the separate continue button');
             final first = foregroundPosts.single;
-            expect(first.body, {'v': 1, 'hostStoreId': 'original-store',
-              'hostExecutionId': 'execution-${first.id}', 'taskRev': 1, 'sourceSessionId': originalSession});
+            expect(first.body, {
+              'v': 1,
+              'hostStoreId': 'original-store',
+              'hostExecutionId': 'execution-${first.id}',
+              'taskRev': 1,
+              'sourceSessionId': originalSession,
+            });
             expect(first.prepared['state'], 'unknown');
             expect(first.prepared['wait_reason'], 'host_receipt_unknown');
             expect(memory.store.hostTaskCommands(first.id), hasLength(1));
@@ -3294,15 +3360,9 @@ void main() {
               expect(accepted['state'], 'queued', reason: 'A wake ACK is neither a new alarm nor a stop receipt');
               expect(accepted['local_time'], operation == 'amend' ? '08:30' : '08:00');
               expect(headsAfter, hasLength(headsBefore.length));
-              expect(
-                headsAfter.where((row) => row['task_id'] != id),
-                headsBefore.where((row) => row['task_id'] != id),
-              );
+              expect(headsAfter.where((row) => row['task_id'] != id), headsBefore.where((row) => row['task_id'] != id));
               expect(revisionsAfter, hasLength(revisionsBefore.length + 1));
-              expect(
-                revisionsAfter.where((row) => row['task_id'] != id || row['task_rev'] == 1),
-                revisionsBefore,
-              );
+              expect(revisionsAfter.where((row) => row['task_id'] != id || row['task_rev'] == 1), revisionsBefore);
               final wakes = calls.where((call) => call.method == 'wake').toList();
               expect(wakes, hasLength(1));
               expect(wakes.single.arguments, {'taskId': id});

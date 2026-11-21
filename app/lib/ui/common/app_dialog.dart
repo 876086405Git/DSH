@@ -17,10 +17,17 @@ Future<T?> showAppDialog<T>({
   final settings = onRouteChanged == null ? null : RouteSettings(arguments: onRouteChanged);
   Widget content(BuildContext context) => onRouteChanged == null
       ? builder(context)
-      : _DialogRouteObservation(onRouteChanged: onRouteChanged, child: Builder(builder: builder));
+      : _DialogRouteObservation(
+          onRouteChanged: onRouteChanged,
+          child: Builder(builder: builder),
+        );
   if (!AppMotion.fluid(context)) {
-    return showDialog<T>(context: context, builder: content, barrierDismissible: barrierDismissible,
-      routeSettings: settings);
+    return showDialog<T>(
+      context: context,
+      builder: content,
+      barrierDismissible: barrierDismissible,
+      routeSettings: settings,
+    );
   }
   return showDialog<T>(
     context: context,

@@ -11705,7 +11705,7 @@ abstract class L10n {
   /// No description provided for @companionNotesRunning.
   ///
   /// In zh, this message translates to:
-  /// **'电脑接手了，正在整理。'**
+  /// **'电脑接下这件事了，结果还没出来。'**
   String get companionNotesRunning;
 
   /// No description provided for @companionNotesDone.
@@ -11729,7 +11729,7 @@ abstract class L10n {
   /// No description provided for @companionNotesWaiting.
   ///
   /// In zh, this message translates to:
-  /// **'电脑那边停下来在等，可能要你点个头。'**
+  /// **'这件事暂时还做不了，先留在这里。'**
   String get companionNotesWaiting;
 
   /// No description provided for @companionNotesUnknown.
@@ -11741,7 +11741,7 @@ abstract class L10n {
   /// No description provided for @companionNotesCancelUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'我让电脑停了，不过还不确定它停下没；已经写好的文件会留着。'**
+  /// **'已记下不再整理，还没确认电脑是否停下。已经写好的文件会保留。'**
   String get companionNotesCancelUnknown;
 
   /// No description provided for @companionNotesCancelled.
@@ -11827,6 +11827,24 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'离开就先停'**
   String get companionNotesPause;
+
+  /// No description provided for @companionNotesForegroundStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'在这里继续'**
+  String get companionNotesForegroundStart;
+
+  /// No description provided for @companionNotesForegroundReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'留在这里时，我请电脑继续做。离开后会请它先停，回来再核对进度。'**
+  String get companionNotesForegroundReady;
+
+  /// No description provided for @companionNotesForegroundUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没确认电脑现在的进度，先刷新看看。'**
+  String get companionNotesForegroundUnknown;
 
   /// No description provided for @companionNotesContinue.
   ///
@@ -12518,7 +12536,7 @@ abstract class L10n {
   /// No description provided for @companionCompareRunning.
   ///
   /// In zh, this message translates to:
-  /// **'电脑正在对比这两份稿件。'**
+  /// **'两份稿件已经交给电脑了，对照还没出来。'**
   String get companionCompareRunning;
 
   /// No description provided for @companionCompareDone.

@@ -34,8 +34,12 @@ import 'workspace_format.dart';
 
 /// Picks a folder on the active host; null when dismissed. [confirmLabel]
 /// is the verb on the browser's button (「添加」 → 「添加「dsh-app」」).
-Future<String?> showDirectoryPicker(BuildContext context, {String? title, String? confirmLabel,
-  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged}) {
+Future<String?> showDirectoryPicker(
+  BuildContext context, {
+  String? title,
+  String? confirmLabel,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
+}) {
   final l10n = context.l10n;
   return showAppSheet<String>(
     context,
@@ -221,7 +225,10 @@ final _drivePath = RegExp(r'^[A-Za-z]:[\\/]');
 final _driveRoot = RegExp(r'^[A-Za-z]:[\\/]$');
 
 /// Asks for an absolute folder path, as the host writes it.
-Future<String?> askFolderPath(BuildContext context, {void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged}) async {
+Future<String?> askFolderPath(
+  BuildContext context, {
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
+}) async {
   final l10n = context.l10n;
   final path = await showTextPrompt(
     context,
@@ -238,8 +245,11 @@ Future<String?> askFolderPath(BuildContext context, {void Function(ModalRoute<Ob
 }
 
 /// Asks for a new folder's name.
-Future<String?> askFolderName(BuildContext context, {required String parentName,
-  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged}) => showTextPrompt(
+Future<String?> askFolderName(
+  BuildContext context, {
+  required String parentName,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
+}) => showTextPrompt(
   context,
   title: context.l10n.remoteDirectoryNewFolder,
   caption: context.l10n.remoteDirectoryParentCaption(parentName),
@@ -345,8 +355,11 @@ class _DirectoryBrowserPageState extends ConsumerState<DirectoryBrowserPage> {
     final client = _client;
     if (level == null || client == null) return;
     final local = ref.read(activeConnectionProvider).value?.isLocal ?? true;
-    final name = await askFolderName(context, parentName: levelTitle(level, local: local),
-      onRouteChanged: widget.onRouteChanged);
+    final name = await askFolderName(
+      context,
+      parentName: levelTitle(level, local: local),
+      onRouteChanged: widget.onRouteChanged,
+    );
     if (name == null || !mounted) return;
     try {
       final created = await client.createDirectory(level.path, name);

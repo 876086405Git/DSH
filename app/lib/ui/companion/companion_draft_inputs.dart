@@ -67,8 +67,11 @@ Future<MemoryRow?> chooseCompanionDraftInputs(
       if (capability == null || !capability.compareDrafts || (storeId != null && capability.hostStoreId != storeId)) {
         throw const DshRemoteException('companion/task-store-mismatch', 'The original input store is unavailable');
       }
-      final path = await showDirectoryPicker(context, title: l10n.companionCompareChooseDirectory(label),
-        onRouteChanged: onRouteChanged);
+      final path = await showDirectoryPicker(
+        context,
+        title: l10n.companionCompareChooseDirectory(label),
+        onRouteChanged: onRouteChanged,
+      );
       if (!context.mounted || !isCurrent()) {
         throw const DshClosedException('task selection changed during directory selection');
       }

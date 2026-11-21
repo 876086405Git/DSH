@@ -43,6 +43,7 @@ class _Memory extends CompanionMemoryOwner {
     super.retainReceipt(work);
     settled = work;
   }
+
   @override
   void dispose() {
     disposed = true;
@@ -180,7 +181,13 @@ void main() {
         as MemoryRow;
   }
 
-  Future<void> open(WidgetTester tester, String id, {bool connected = true, NavigatorObserver? observer, DshClient? client}) async {
+  Future<void> open(
+    WidgetTester tester,
+    String id, {
+    bool connected = true,
+    NavigatorObserver? observer,
+    DshClient? client,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -256,20 +263,36 @@ void main() {
     final previous = binding.lifecycleState;
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     peer.capability = {...notesCapability, 'notesForeground': true};
-    memory.store.submitMessage(id: 'saved-pause', sessionId: 'light:original-room',
-      text: '请电脑把今天的笔记整理成待办，我离开就先停', saidAtUtc: _now,
-      offsetMinutes: 480, offsetSeconds: 28800, zoneId: 'Asia/Shanghai');
-    final saved = memory.store.createNotesTaskFromMessage(messageId: 'saved-pause', expectedSourceRev: 1,
-      itemNo: 0, roomMode: 'light', hostKey: hostKey, agreement: notesAgreement(afterExit: 'pause'));
+    memory.store.submitMessage(
+      id: 'saved-pause',
+      sessionId: 'light:original-room',
+      text: '请电脑把今天的笔记整理成待办，我离开就先停',
+      saidAtUtc: _now,
+      offsetMinutes: 480,
+      offsetSeconds: 28800,
+      zoneId: 'Asia/Shanghai',
+    );
+    final saved = memory.store.createNotesTaskFromMessage(
+      messageId: 'saved-pause',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      roomMode: 'light',
+      hostKey: hostKey,
+      agreement: notesAgreement(afterExit: 'pause'),
+    );
     final id = saved['task_id']! as String;
     MemoryRow? accepted;
     peer.respond = (request, body) async {
       if (request.method == 'POST' && request.uri.path == notesPath) {
         accepted = body;
-        await NotesPeer.json(request, {...notesSnapshot(body!, state: 'waiting'),
-          'waitReason': 'foreground_required'}, status: 201);
+        await NotesPeer.json(request, {
+          ...notesSnapshot(body!, state: 'waiting'),
+          'waitReason': 'foreground_required',
+        }, status: 201);
       } else {
-        await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'Not accepted'}}, status: 404);
+        await NotesPeer.json(request, {
+          'error': {'code': 'companion/task-not-found', 'message': 'Not accepted'},
+        }, status: 404);
       }
     };
     try {
@@ -300,15 +323,21 @@ void main() {
       peer.capability = {...notesCapability, 'notesForeground': true};
       final create = command(afterExit: 'pause');
       final id = create['taskId']! as String;
-      final snapshot = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+      final snapshot = <String, Object?>{
+        ...notesSnapshot(create, state: 'waiting'),
+        'waitReason': 'foreground_required',
+      };
       final exchange = _ForegroundResponse();
       final imported = Completer<void>();
       final posted = <({MemoryRow body, MemoryRow prepared})>[];
       void changed() {
-        if (posted.isNotEmpty && memory.store.hostTask(id)!['wait_reason'] == 'foreground_required' && !imported.isCompleted) {
+        if (posted.isNotEmpty &&
+            memory.store.hostTask(id)!['wait_reason'] == 'foreground_required' &&
+            !imported.isCompleted) {
           imported.complete();
         }
       }
+
       memory.addListener(changed);
       peer.respond = (request, body) async {
         if (request.method == 'GET') {
@@ -330,8 +359,13 @@ void main() {
         unawaited(foreground.then<void>((_) => finished = true));
         await settleMixed(tester, imported.future);
         await tester.pumpAndSettle();
-        expect(posted.single.body, {'v': 1, 'hostStoreId': 'original-store',
-          'hostExecutionId': 'actual-execution', 'taskRev': 1, 'sourceSessionId': 'light:original-room'});
+        expect(posted.single.body, {
+          'v': 1,
+          'hostStoreId': 'original-store',
+          'hostExecutionId': 'actual-execution',
+          'taskRev': 1,
+          'sourceSessionId': 'light:original-room',
+        });
         expect(posted.single.prepared['state'], 'unknown');
         expect(posted.single.prepared['wait_reason'], 'host_receipt_unknown');
         expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 1);
@@ -362,8 +396,10 @@ void main() {
         expect(posted, hasLength(1));
         // The same authenticated connection still works after its owned
         // response has closed. There is no physical-stop claim in this read.
-        expect(await settleMixed(tester, peer.client.readCompanionHostTask(
-          hostStoreId: 'original-store', taskId: id)), snapshot);
+        expect(
+          await settleMixed(tester, peer.client.readCompanionHostTask(hostStoreId: 'original-store', taskId: id)),
+          snapshot,
+        );
         if (exit == 'route') {
           navigator.pop();
         } else if (exit == 'background') {
@@ -388,62 +424,73 @@ void main() {
   }
 
   for (final disposeOwner in [false, true]) {
-    testWidgets('F foreground late original GET retains its receipt but sends nothing after exit, dispose=$disposeOwner', (tester) async {
-      final previous = binding.lifecycleState;
-      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      peer.capability = {...notesCapability, 'notesForeground': true};
-      final create = command(afterExit: 'pause');
-      final id = create['taskId']! as String;
-      final initial = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
-      final later = <String, Object?>{...notesSnapshot(create, state: 'waiting', seq: 2), 'waitReason': 'foreground_required'};
-      final readStarted = Completer<void>();
-      final releaseRead = Completer<void>();
-      var reads = 0;
-      peer.respond = (request, _) async {
-        reads++;
-        if (reads == 1) {
-          await NotesPeer.json(request, initial);
-        } else {
-          readStarted.complete();
-          await releaseRead.future;
-          await NotesPeer.json(request, later);
-        }
-      };
-      try {
-        await open(tester, id);
-        await visible(tester, '在这里继续');
-        await tester.ensureVisible(find.text('在这里继续'));
-        await tester.tap(find.text('在这里继续'));
-        final foreground = memory.settled;
-        await settleMixed(tester, readStarted.future);
-        if (disposeOwner) {
-          await tester.pumpWidget(const SizedBox());
-          memory.dispose();
-        } else {
-          unawaited(Navigator.of(tester.element(find.byType(CompanionTasksPage))).push<void>(
-            MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另一页')))));
-          await tester.pumpAndSettle();
-        }
-        releaseRead.complete();
-        await settleMixed(tester, foreground);
-        await tester.pump();
-        final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+    testWidgets(
+      'F foreground late original GET retains its receipt but sends nothing after exit, dispose=$disposeOwner',
+      (tester) async {
+        final previous = binding.lifecycleState;
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        peer.capability = {...notesCapability, 'notesForeground': true};
+        final create = command(afterExit: 'pause');
+        final id = create['taskId']! as String;
+        final initial = <String, Object?>{
+          ...notesSnapshot(create, state: 'waiting'),
+          'waitReason': 'foreground_required',
+        };
+        final later = <String, Object?>{
+          ...notesSnapshot(create, state: 'waiting', seq: 2),
+          'waitReason': 'foreground_required',
+        };
+        final readStarted = Completer<void>();
+        final releaseRead = Completer<void>();
+        var reads = 0;
+        peer.respond = (request, _) async {
+          reads++;
+          if (reads == 1) {
+            await NotesPeer.json(request, initial);
+          } else {
+            readStarted.complete();
+            await releaseRead.future;
+            await NotesPeer.json(request, later);
+          }
+        };
         try {
-          expect(reopened.hostTask(id)!['applied_host_receipt_seq'], 2);
-          expect(reopened.hostTask(id)!['snapshot'], later);
-          expect(reopened.hostTask(id)!['state'], 'waiting');
-          expect(reopened.hostTaskCommands(id), hasLength(1));
+          await open(tester, id);
+          await visible(tester, '在这里继续');
+          await tester.ensureVisible(find.text('在这里继续'));
+          await tester.tap(find.text('在这里继续'));
+          final foreground = memory.settled;
+          await settleMixed(tester, readStarted.future);
+          if (disposeOwner) {
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+          } else {
+            unawaited(
+              Navigator.of(tester.element(find.byType(CompanionTasksPage)))
+                  .push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('另一页')))),
+            );
+            await tester.pumpAndSettle();
+          }
+          releaseRead.complete();
+          await settleMixed(tester, foreground);
+          await tester.pump();
+          final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+          try {
+            expect(reopened.hostTask(id)!['applied_host_receipt_seq'], 2);
+            expect(reopened.hostTask(id)!['snapshot'], later);
+            expect(reopened.hostTask(id)!['state'], 'waiting');
+            expect(reopened.hostTaskCommands(id), hasLength(1));
+          } finally {
+            reopened.close();
+          }
+          expect(reads, 2);
+          expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
         } finally {
-          reopened.close();
+          if (!releaseRead.isCompleted) releaseRead.complete();
+          await close(tester);
+          if (previous != null) binding.handleAppLifecycleStateChanged(previous);
         }
-        expect(reads, 2);
-        expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
-      } finally {
-        if (!releaseRead.isCompleted) releaseRead.complete();
-        await close(tester);
-        if (previous != null) binding.handleAppLifecycleStateChanged(previous);
-      }
-    });
+      },
+    );
   }
 
   testWidgets('F foreground final snapshot remains completed when its owned response closes', (tester) async {
@@ -454,8 +501,8 @@ void main() {
     final id = create['taskId']! as String;
     final waiting = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
     final exchange = _ForegroundResponse();
-    peer.respond = (request, _) => request.method == 'GET'
-      ? NotesPeer.json(request, waiting) : exchange.serve(request, waiting);
+    peer.respond = (request, _) =>
+        request.method == 'GET' ? NotesPeer.json(request, waiting) : exchange.serve(request, waiting);
     try {
       await open(tester, id);
       await visible(tester, '在这里继续');
@@ -463,10 +510,24 @@ void main() {
       await tester.tap(find.text('在这里继续'));
       final foreground = memory.settled;
       await settleMixed(tester, exchange.ready.future);
-      final done = notesSnapshot(create, seq: 2, state: 'done', artifacts: [notesArtifact()], steps: [{
-        'taskRev': 1, 'stepKey': 'writePage', 'attemptId': 'actual-write', 'state': 'done',
-        'startedAtMs': _now, 'finishedAtMs': _now + 1, 'reason': null, 'result': null,
-      }]);
+      final done = notesSnapshot(
+        create,
+        seq: 2,
+        state: 'done',
+        artifacts: [notesArtifact()],
+        steps: [
+          {
+            'taskRev': 1,
+            'stepKey': 'writePage',
+            'attemptId': 'actual-write',
+            'state': 'done',
+            'startedAtMs': _now,
+            'finishedAtMs': _now + 1,
+            'reason': null,
+            'result': null,
+          },
+        ],
+      );
       await settleMixed(tester, exchange.add(done));
       await settleMixed(tester, foreground);
       await tester.pumpAndSettle();
@@ -493,10 +554,12 @@ void main() {
       peer.capability = {...notesCapability, 'notesForeground': true};
       final create = command(afterExit: 'pause');
       final id = create['taskId']! as String;
-      final waiting = <String, Object?>{...notesSnapshot(create, state: 'waiting'), 'waitReason': 'foreground_required'};
+      final waiting = <String, Object?>{
+        ...notesSnapshot(create, state: 'waiting'),
+        'waitReason': 'foreground_required',
+      };
       final exchange = _ForegroundResponse();
-      final delayed = DelayedNotesForegroundRetirement(peer.client.connection,
-        holdBodyCancellation: completeBadLine);
+      final delayed = DelayedNotesForegroundRetirement(peer.client.connection, holdBodyCancellation: completeBadLine);
       final client = DshClient(delayed);
       final imported = Completer<void>();
       var posts = 0;
@@ -505,6 +568,7 @@ void main() {
           imported.complete();
         }
       }
+
       memory.addListener(changed);
       peer.respond = (request, _) {
         if (request.method == 'GET') return NotesPeer.json(request, waiting);
@@ -518,9 +582,12 @@ void main() {
         await visible(tester, '在这里继续');
         await tester.ensureVisible(find.text('在这里继续'));
         await tester.tap(find.text('在这里继续'));
-        settled = memory.settled.then<void>((_) {}, onError: (Object error, StackTrace _) {
-          failure = error;
-        });
+        settled = memory.settled.then<void>(
+          (_) {},
+          onError: (Object error, StackTrace _) {
+            failure = error;
+          },
+        );
         await settleMixed(tester, imported.future);
         // No explicit close: both failures come from the actual decoder. A
         // complete invalid line fails inside await-for while HTTP is still open;

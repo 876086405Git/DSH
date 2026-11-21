@@ -304,13 +304,20 @@ String companionNotesLine(L10n l10n, MemoryRow task) {
 /// notification opens only its stored task; it never selects another host or
 /// sends a model request. Native records the actual notification-open event.
 class CompanionTasksPage extends ConsumerStatefulWidget {
-  const CompanionTasksPage({super.key, this.memory, this.sourceSessionId, this.taskId, this.openedRevision,
-    this.freshNotes = const []});
+  const CompanionTasksPage({
+    super.key,
+    this.memory,
+    this.sourceSessionId,
+    this.taskId,
+    this.openedRevision,
+    this.freshNotes = const [],
+  });
 
   final CompanionMemoryOwner? memory;
   final String? sourceSessionId;
   final String? taskId;
   final int? openedRevision;
+
   /// Only the just-submitted Page supplies these captures. Historical reads,
   /// normal task navigation and reconstruction never create this opportunity.
   final List<CompanionNotesForegroundCapture> freshNotes;
@@ -355,8 +362,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       },
     );
     ref.listenManual(activeHostProvider, (_, _) => _foregroundConnectionChanged());
-    ref.listenManual(activeConnectionProvider.select((value) => value.value?.client),
-      (_, _) => _foregroundConnectionChanged());
+    ref.listenManual(
+      activeConnectionProvider.select((value) => value.value?.client),
+      (_, _) => _foregroundConnectionChanged(),
+    );
     unawaited(_load());
   }
 
@@ -463,15 +472,18 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         if (client != null && selected['host_key'] == hostKey) {
           try {
             final checked = await memory.hostTasks.run(selected, client: client, hostKey: hostKey);
-            if (mounted && identical(client, ref.read(activeConnectionProvider).value?.client) &&
-                hostKey == companionHostKey(ref.read(activeHostProvider)) && checked['observed_host_snapshot'] == true) {
+            if (mounted &&
+                identical(client, ref.read(activeConnectionProvider).value?.client) &&
+                hostKey == companionHostKey(ref.read(activeHostProvider)) &&
+                checked['observed_host_snapshot'] == true) {
               _notesVerifiedClient = client;
               _notesVerifiedStore = checked['host_store_id']! as String;
               _foregroundReadNeeded = false;
               if (checked['kind'] == 'host.notes_to_todo' &&
                   (checked['agreement']! as MemoryRow)['afterExit'] == 'pause') {
                 final capability = await client.readCompanionTasksCapability();
-                if (mounted && identical(client, ref.read(activeConnectionProvider).value?.client) &&
+                if (mounted &&
+                    identical(client, ref.read(activeConnectionProvider).value?.client) &&
                     capability?.hostStoreId == checked['host_store_id']) {
                   _notesForegroundCapability = capability;
                 }
@@ -1958,23 +1970,29 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final owned = _foreground;
     if (owned != null && owned.active) {
       final current = _memory?.store.hostTask(owned.captured['task_id']! as String);
-      _foregroundReadNeeded = current?['task_rev'] == owned.captured['task_rev'] &&
-        !const ['done', 'partial', 'failed', 'cancelled'].contains(current?['state']);
+      _foregroundReadNeeded =
+          current?['task_rev'] == owned.captured['task_rev'] &&
+          !const ['done', 'partial', 'failed', 'cancelled'].contains(current?['state']);
       owned.close();
     }
     _approvalRiskRoute = null;
   }
 
   bool _foregroundCurrent(CompanionNotesForeground owned) {
-    if (!mounted || !identical(owned, _foreground) || !owned.active ||
-        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed || !_taskTickerEnabled ||
+    if (!mounted ||
+        !identical(owned, _foreground) ||
+        !owned.active ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        !_taskTickerEnabled ||
         !identical(owned.client, ref.read(activeConnectionProvider).value?.client) ||
         owned.hostKey != companionHostKey(ref.read(activeHostProvider))) {
       return false;
     }
     final captured = owned.captured;
     final current = _memory!.store.hostTask(captured['task_id']! as String);
-    if (current == null || current['task_rev'] != captured['task_rev'] || current['cancel_requested'] != 0 ||
+    if (current == null ||
+        current['task_rev'] != captured['task_rev'] ||
+        current['cancel_requested'] != 0 ||
         current['source_session_id'] != captured['source_session_id'] ||
         current['host_store_id'] != captured['host_store_id'] ||
         current['host_execution_id'] != captured['host_execution_id'] ||
@@ -1987,11 +2005,15 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     }
     final risk = _approvalRiskRoute;
     final approval = (current['snapshot'] as MemoryRow?)?['approval'] as MemoryRow?;
-    return risk != null && identical(risk.owner, owned) && risk.route.isCurrent &&
-      approval?['eventId'] == risk.eventId;
+    return risk != null && identical(risk.owner, owned) && risk.route.isCurrent && approval?['eventId'] == risk.eventId;
   }
 
-  void _observeApprovalRiskRoute(MemoryRow task, MemoryRow captured, ApprovalRequest request, ModalRoute<Object?> route) {
+  void _observeApprovalRiskRoute(
+    MemoryRow task,
+    MemoryRow captured,
+    ApprovalRequest request,
+    ModalRoute<Object?> route,
+  ) {
     final owned = _foreground;
     if (owned == null || request.eventId != captured['eventId'] || request.callId != captured['callId']) {
       return;
@@ -2009,35 +2031,52 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     }
   }
 
-  bool _canForeground(MemoryRow task) => task['kind'] == 'host.notes_to_todo' &&
-    (task['agreement']! as MemoryRow)['afterExit'] == 'pause' && task['cancel_requested'] == 0 &&
-    !const ['done', 'partial', 'failed', 'cancelled'].contains(task['state']) &&
-    task['host_execution_id'] != null && _notesForegroundCapability?.notesForeground == true &&
-    _notesForegroundCapability?.hostStoreId == task['host_store_id'] &&
-    identical(_notesVerifiedClient, ref.read(activeConnectionProvider).value?.client) && _notesHostHere(task);
+  bool _canForeground(MemoryRow task) =>
+      task['kind'] == 'host.notes_to_todo' &&
+      (task['agreement']! as MemoryRow)['afterExit'] == 'pause' &&
+      task['cancel_requested'] == 0 &&
+      !const ['done', 'partial', 'failed', 'cancelled'].contains(task['state']) &&
+      task['host_execution_id'] != null &&
+      _notesForegroundCapability?.notesForeground == true &&
+      _notesForegroundCapability?.hostStoreId == task['host_store_id'] &&
+      identical(_notesVerifiedClient, ref.read(activeConnectionProvider).value?.client) &&
+      _notesHostHere(task);
 
   bool _freshNoteCurrent(CompanionNotesForegroundCapture capture) {
     final task = capture.task;
     final current = _memory?.store.hostTask(task['task_id']! as String);
     final deadline = (task['agreement']! as MemoryRow)['deadlineAtMs'] as int?;
-    return _freshNotesLive && current != null && task['kind'] == 'host.notes_to_todo' &&
-      capture.capability.notesForeground && capture.capability.hostStoreId == task['host_store_id'] &&
-      identical(capture.client, ref.read(activeConnectionProvider).value?.client) &&
-      task['host_key'] == companionHostKey(ref.read(activeHostProvider)) &&
-      const ['task_rev', 'host_store_id', 'host_execution_id', 'source_session_id']
-        .every((key) => current[key] == task[key]) &&
-      current['cancel_requested'] == 0 && (current['agreement']! as MemoryRow)['afterExit'] == 'pause' &&
-      !const ['done', 'partial', 'failed', 'cancelled'].contains(current['state']) &&
-      (deadline == null || DateTime.now().millisecondsSinceEpoch < deadline);
+    return _freshNotesLive &&
+        current != null &&
+        task['kind'] == 'host.notes_to_todo' &&
+        capture.capability.notesForeground &&
+        capture.capability.hostStoreId == task['host_store_id'] &&
+        identical(capture.client, ref.read(activeConnectionProvider).value?.client) &&
+        task['host_key'] == companionHostKey(ref.read(activeHostProvider)) &&
+        const [
+          'task_rev',
+          'host_store_id',
+          'host_execution_id',
+          'source_session_id',
+        ].every((key) => current[key] == task[key]) &&
+        current['cancel_requested'] == 0 &&
+        (current['agreement']! as MemoryRow)['afterExit'] == 'pause' &&
+        !const ['done', 'partial', 'failed', 'cancelled'].contains(current['state']) &&
+        (deadline == null || DateTime.now().millisecondsSinceEpoch < deadline);
   }
 
   void _startNextFreshNote() {
-    if (!_freshNotesLive || _foreground != null || _busy || _memory == null ||
+    if (!_freshNotesLive ||
+        _foreground != null ||
+        _busy ||
+        _memory == null ||
         _nextFreshNote >= widget.freshNotes.length) {
       return;
     }
-    if (!mounted || WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
-        !_taskTickerEnabled || _taskRoute?.isCurrent != true) {
+    if (!mounted ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        !_taskTickerEnabled ||
+        _taskRoute?.isCurrent != true) {
       _freshNotesLive = false;
       return;
     }
@@ -2058,9 +2097,12 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   }
 
   void _startForeground(MemoryRow task, {CompanionNotesForegroundCapture? fresh}) {
-    if (_busy || _foreground != null || (fresh == null ? !_canForeground(task) : !_freshNoteCurrent(fresh)) ||
+    if (_busy ||
+        _foreground != null ||
+        (fresh == null ? !_canForeground(task) : !_freshNoteCurrent(fresh)) ||
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
-        !_taskTickerEnabled || _taskRoute?.isCurrent != true) {
+        !_taskTickerEnabled ||
+        _taskRoute?.isCurrent != true) {
       return;
     }
     final memory = _memory!;
@@ -2068,7 +2110,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final hostKey = companionHostKey(ref.read(activeHostProvider));
     late final CompanionNotesForeground owned;
     try {
-      owned = memory.hostTasks.foreground(task, client: client, hostKey: hostKey,
+      owned = memory.hostTasks.foreground(
+        task,
+        client: client,
+        hostKey: hostKey,
         capability: fresh?.capability ?? _notesForegroundCapability!,
         isCurrent: () => _foregroundCurrent(owned),
         observed: (checked) {
@@ -2077,7 +2122,8 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
             _notesVerifiedStore = checked['host_store_id']! as String;
             _foregroundReadNeeded = false;
           }
-        });
+        },
+      );
     } on DshException {
       showBriefNotice(context, context.l10n.companionNotesSaveFailed);
       return;
@@ -2086,22 +2132,31 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       _foreground = owned;
       _foregroundReadNeeded = false;
     });
-    unawaited(owned.finished.then<void>((_) {}, onError: (Object _, StackTrace _) {
-      _freshNotesLive = false;
-      if (mounted && identical(_foreground, owned)) {
-        final current = memory.store.hostTask(task['task_id']! as String);
-        _foregroundReadNeeded = current?['task_rev'] == task['task_rev'] &&
-          current?['state'] == 'unknown' && current?['wait_reason'] == 'host_receipt_unknown';
-      }
-    }).whenComplete(() {
-      if (mounted && identical(_foreground, owned)) {
-        setState(() {
-          _foreground = null;
-          _approvalRiskRoute = null;
-        });
-        _startNextFreshNote();
-      }
-    }));
+    unawaited(
+      owned.finished
+          .then<void>(
+            (_) {},
+            onError: (Object _, StackTrace _) {
+              _freshNotesLive = false;
+              if (mounted && identical(_foreground, owned)) {
+                final current = memory.store.hostTask(task['task_id']! as String);
+                _foregroundReadNeeded =
+                    current?['task_rev'] == task['task_rev'] &&
+                    current?['state'] == 'unknown' &&
+                    current?['wait_reason'] == 'host_receipt_unknown';
+              }
+            },
+          )
+          .whenComplete(() {
+            if (mounted && identical(_foreground, owned)) {
+              setState(() {
+                _foreground = null;
+                _approvalRiskRoute = null;
+              });
+              _startNextFreshNote();
+            }
+          }),
+    );
   }
 
   Future<void> _openHostFile(MemoryRow task, Map<String, Object?> item, {int? sourceRevision}) async {
@@ -2215,9 +2270,14 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
           if (agreement['allowQueue'] == true) Text(l10n.companionNotesAllowQueue),
           if (agreement['deadlineAtMs'] case final int at) Text(l10n.companionNotesDue(_moment(l10n, at))),
           const SizedBox(height: 8),
-          Text(_foregroundReadNeeded && !find ? l10n.companionNotesForegroundUnknown :
-            _canForeground(task) && const ['foreground_control_unavailable', 'foreground_required'].contains(task['wait_reason'])
-              ? l10n.companionNotesForegroundReady : companionNotesLine(l10n, task)),
+          Text(
+            _foregroundReadNeeded && !find
+                ? l10n.companionNotesForegroundUnknown
+                : _canForeground(task) &&
+                      const ['foreground_control_unavailable', 'foreground_required'].contains(task['wait_reason'])
+                ? l10n.companionNotesForegroundReady
+                : companionNotesLine(l10n, task),
+          ),
           if (!_notesHostHere(task)) Text(l10n.companionNotesOriginalHost),
           if (approval is Map && _notesApprovalCurrent(task, approval)) ...[
             Text(l10n.companionNotesApproval),
@@ -2229,8 +2289,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
                 callId: approval['callId'] as String?,
                 isCurrent: () => _notesApprovalCurrent(task, approval),
               ),
-              onApprovalRiskRouteChanged: !find && agreement['afterExit'] == 'pause' ?
-                (request, route) => _observeApprovalRiskRoute(task, Map<String, Object?>.from(approval), request, route) : null,
+              onApprovalRiskRouteChanged: !find && agreement['afterExit'] == 'pause'
+                  ? (request, route) =>
+                        _observeApprovalRiskRoute(task, Map<String, Object?>.from(approval), request, route)
+                  : null,
             ),
           ],
           if (find)
@@ -2268,8 +2330,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
               spacing: 8,
               children: [
                 if (!pendingCommand && _canForeground(task))
-                  FilledButton(onPressed: _busy || _foreground != null ? null : () => _startForeground(task),
-                    child: Text(l10n.companionNotesForegroundStart)),
+                  FilledButton(
+                    onPressed: _busy || _foreground != null ? null : () => _startForeground(task),
+                    child: Text(l10n.companionNotesForegroundStart),
+                  ),
                 if (!pendingCommand &&
                     (find || agreement['afterExit'] != 'pause' || task['state'] == 'queued') &&
                     _notesHostHere(task) &&

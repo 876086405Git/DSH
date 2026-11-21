@@ -184,7 +184,9 @@ enum RiskChoice {
 /// Shows [notice] (a medium one only until it was confirmed with 「不再提示」)
 /// and resolves true to go ahead. 「问 AI」 resolves false and opens the
 /// question in a new conversation.
-Future<bool> confirmRisk(BuildContext context, RiskNotice notice, {
+Future<bool> confirmRisk(
+  BuildContext context,
+  RiskNotice notice, {
   ValueChanged<ModalRoute<Object?>>? onRouteChanged,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
