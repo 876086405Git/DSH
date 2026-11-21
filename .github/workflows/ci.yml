@@ -134,11 +134,11 @@ jobs:
           flutter analyze --no-pub
           python3 tool/l10n_merge.py
           git diff --exit-code -- lib/l10n
-      # Her stage's own contracts: render budget, the float window's bounds, and the
-      # model replay, whose adapt checker runs on this job's Dart.
+      # Her stage's own contracts: render budget, the float window (stage.js run against
+      # fake device boundaries), and the model replay, whose adapt checker runs on this job's Dart.
       - name: Companion stage contracts
         working-directory: .
-        run: node --test tooling/companion/*.test.mjs
+        run: node --test tooling/companion/*.test.mjs app/test/companion/*.test.cjs
 
   flutter:
     name: Flutter ${{ matrix.shard }}

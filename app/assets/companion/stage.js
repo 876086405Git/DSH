@@ -1888,7 +1888,9 @@
           if (slowSeconds >= 3 && quality > 0.5) {
             quality = Math.max(0.5, quality - 0.15);
             slowSeconds = 0;
+            // Once per step up that didn't hold, however far it then falls.
             if (ts - steppedUpAt < 60000) upAfter = Math.min(upAfter * 2, 300);
+            steppedUpAt = -Infinity;
           } else if (quickSeconds >= upAfter && quality < 1) {
             quality = Math.min(1, quality + 0.15);
             quickSeconds = 0;
@@ -2105,8 +2107,10 @@
   ];
   const WHALE_S = 74;
   const looks = new Map();
-  // Decided once: the room's reduced motion and bare page are fixed at load.
-  let stillWater = null;
+  // The app's reduced motion and a bare page are fixed at load; the system's own
+  // setting can change while she's open, so that one is asked on every frame.
+  const stillPage = FLOAT || REDUCED || document.documentElement.dataset.bare === '1';
+  const reduceQuery = (!FLOAT && window.matchMedia?.('(prefers-reduced-motion: reduce)')) || null;
 
   function look(el, transform, opacity) {
     if (!el?.style) return;
@@ -2118,14 +2122,15 @@
   }
 
   function water(ts) {
-    // Spelled out: WebView 83 (Android 10) cannot parse logical assignment (#1165).
-    stillWater ??
-      (stillWater =
-        FLOAT ||
-        REDUCED ||
-        document.documentElement.dataset.bare === '1' ||
-        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true);
-    if (stillWater) return;
+    if (stillPage || reduceQuery?.matches) {
+      // Turned off while she's here: the water rests as it does without motion.
+      for (const el of looks.keys()) {
+        el.style.transform = '';
+        el.style.opacity = '';
+      }
+      looks.clear();
+      return;
+    }
     const s = ts / 1000;
     shafts.forEach((el, i) => {
       const [tilt, period, start] = SHAFTS[i % SHAFTS.length];

@@ -427,6 +427,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       // A new view of her: nothing shown on the last one carries over.
       _stageEpoch++;
     });
+    // A stage started again under the open log is under its blur too.
+    if (_logOpen) _stage.command('covered', {'on': true});
     unawaited(_arrive());
     unawaited(_loadHint());
     if (!_light) {

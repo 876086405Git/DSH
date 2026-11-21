@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assets = path.resolve(__dirname, '../../assets/companion');
-const { FrameGate, opaqueBounds, stateEffect } = require(path.join(assets, 'float.js'));
+const { FrameGate, opaqueBounds, BoundsFollower, stateEffect } = require(path.join(assets, 'float.js'));
 const copy = value => JSON.parse(JSON.stringify(value));
 
 for (const hz of [60, 90, 120]) test(`30 fps ceiling at ${hz} Hz, including long stalls`, () => {
@@ -90,7 +90,7 @@ function stage(float = true, fetcher, devices = {}) {
   const Fw = { CubismUserModel: devices.UserModel ?? class {}, CubismModelSettingJson: devices.Setting,
     CubismMatrix44: class { setMatrix() {} },
     CubismFramework: { startUp() { initialized++; }, initialize() {} }, Option: class {} };
-  const window = { CubismFw: Fw, CompanionFloat: { FrameGate, opaqueBounds, stateEffect },
+  const window = { CubismFw: Fw, CompanionFloat: { FrameGate, opaqueBounds, BoundsFollower, stateEffect },
     companionScene: float ? null : scene, devicePixelRatio: 3,
     DshCompanion: { postMessage: value => posts.push(JSON.parse(value)) },
     addEventListener: (name, fn) => windowEvents.set(name, fn) };
@@ -138,8 +138,10 @@ test('real float render path has a hard ceiling, reports buffer bounds and no ro
   assert.equal(s.counts().reads, s.counts().draws);
   assert.equal(s.posts.length, 1, 'unchanged bounds need no new native geometry');
   // The 5×4 CSS canvas on a 3× screen: the buffer is drawn at device density.
+  // The one drawn pixel (1, 10)–(2, 11), with the window's room to spare (two
+  // pixels at the least, see float.js BoundsFollower) inside the buffer.
   assert.deepEqual(s.posts[0], { type: 'floatBounds', width: 15, height: 12,
-    bounds: { left: 1, top: 10, right: 2, bottom: 11 } });
+    bounds: { left: 0, top: 8, right: 4, bottom: 12 } });
   assert.equal(s.canvasEvents.has('pointerdown'), false);
   s.command({ type: 'pause' });
   assert.equal(s.frames.size, 0);
