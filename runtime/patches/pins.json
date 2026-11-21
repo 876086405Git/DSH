@@ -471,20 +471,20 @@
     "ohos-workspace-edit.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "fe8d6fa69462b0a76d73db9d857edbc9b82f8d7f8a793168e04e3e817d6ba2ba",
-          "before": "492128833d24c6a3762d5844e1101649bc3aec52e8e55cde2bc5d48cf66bcf5a"
+          "before": "880a87ea690d1f7f5f195a3048c545e9cdbff72c4dd7e21508249069e97acac9",
+          "after": "c5b65fe177a245f667e77e87ed1e39ee674e56f30fa0b0f0e3d9b5cf983618b7"
         },
         "node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js": {
-          "after": "08cca0535fa5368693e0f5141d92d0704c823dd1f331ddd9299e376ab49f2ac0",
-          "before": "f4edd14bf48f8d5bfdea10a61c6651ccde99f2d08a79855746ad2a8d89c6fb73"
+          "before": "162870e0ef6e9c8fd9e94f767bba29e7a1cdebc7f06256eba42ab4384369570c",
+          "after": "be457e123f63d9b44c1bb310ebb064d69d9c994310b36f4edb737323457d2482"
         }
       }
     },
     "ohos-workspace-grant-paths.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "492128833d24c6a3762d5844e1101649bc3aec52e8e55cde2bc5d48cf66bcf5a",
-          "before": "4f36f666d2b2e707d795fa2b9c1b673926fd7609d3bea99dd0e2e105f9ce06f4"
+          "before": "3d8a31573f7b4a411110a181441624c6f173157cd2f9c112505849a878e8e4e2",
+          "after": "880a87ea690d1f7f5f195a3048c545e9cdbff72c4dd7e21508249069e97acac9"
         },
         "node_modules/@deepseek-ai/dsh-working-directory/lib/index.js": {
           "after": "167c67034bde5de5862e99ddd27a42d6d690fc42d2cc8748ed58cedf06c01b50",
@@ -2425,6 +2425,18 @@
           "after": "d2eb9c6329133a42ffbaa1b0815d014d2b48e167d9ab1be3b3de06cfeaaafff0"
         }
       }
+    },
+    "companion-notes-files.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "before": "4f36f666d2b2e707d795fa2b9c1b673926fd7609d3bea99dd0e2e105f9ce06f4",
+          "after": "3d8a31573f7b4a411110a181441624c6f173157cd2f9c112505849a878e8e4e2"
+        },
+        "node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js": {
+          "before": "f4edd14bf48f8d5bfdea10a61c6651ccde99f2d08a79855746ad2a8d89c6fb73",
+          "after": "162870e0ef6e9c8fd9e94f767bba29e7a1cdebc7f06256eba42ab4384369570c"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2588,6 +2600,7 @@
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
       "companion-task-approval-turn.diff",
+      "companion-notes-files.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff"
     ],
@@ -2750,6 +2763,7 @@
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
       "companion-task-approval-turn.diff",
+      "companion-notes-files.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
