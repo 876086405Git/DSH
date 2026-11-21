@@ -36,11 +36,31 @@
         }
       }
     },
+    "companion-chat-usage-receipts.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "07f3c01e9341e10e39e0cd685ab61bc76de5086bd34611ca6166b98f771e72b0",
+          "before": "b9476975c7dc365cc065694d2658715eedaa2bfbfce4fce50b6d6a7d620aa809"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "after": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890",
+          "before": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1"
+        }
+      }
+    },
     "companion-phone-memory-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
           "after": "a800e1c863e7d64f2fee292676b6e96c2184b8d6c73ffbd56a5fc89101893aaa",
           "before": "e498311537374b963f955f57c9628961d55fdb518e9de77e86cc56f33f3562b3"
+        }
+      }
+    },
+    "companion-public-lookup-observer.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-web-deepseek-api/lib/index.js": {
+          "after": "de76f558035c3a69fbb62e51de928a04d10e13f8cefcd20ed3fdb48b0af06224",
+          "before": "d0ff968faef9e949c2949da29a2eaf8c35a5ef46555e18204b5d1afb2d4ec5b6"
         }
       }
     },
@@ -2377,18 +2397,6 @@
           "before": "a1ad048cbbb7caefe5471c583f076aa8e393f534efbc5b11b625308096efdace"
         }
       }
-    },
-    "companion-chat-usage-receipts.diff": {
-      "0.2.2-rc.1": {
-        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
-          "before": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1",
-          "after": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890"
-        },
-        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-          "before": "b9476975c7dc365cc065694d2658715eedaa2bfbfce4fce50b6d6a7d620aa809",
-          "after": "07f3c01e9341e10e39e0cd685ab61bc76de5086bd34611ca6166b98f771e72b0"
-        }
-      }
     }
   },
   "schema": 2,
@@ -2550,7 +2558,8 @@
       "profile-root-installation-precedence.diff",
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
-      "companion-chat-usage-receipts.diff"
+      "companion-chat-usage-receipts.diff",
+      "companion-public-lookup-observer.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2751,7 +2760,8 @@
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
-      "ohos-piai-text-preabort.diff"
+      "ohos-piai-text-preabort.diff",
+      "companion-public-lookup-observer.diff"
     ]
   }
 }
