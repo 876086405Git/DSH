@@ -177,6 +177,12 @@ void _fields(MemoryRow object, List<String> required, [List<String> optional = c
 
 final _memoryControls = RegExp(r'[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]');
 
+/// The same boundary applies to an automatic proposal and an explicit
+/// source-backed correction. It does not impose the legacy manual DTO limit.
+void validateMemoryCardText(String text) {
+  _text(text, card: true);
+}
+
 String _text(Object? value, {bool card = false}) {
   if (value is! String || normalizeMemoryText(value).isEmpty || (card && _memoryControls.hasMatch(value))) {
     throw const FormatException('Expected nonempty Unicode text');
@@ -278,7 +284,8 @@ MemorySelection selectMemoryContext(
   if (limit < 1 || limit > memoryContextHardLimit) throw ArgumentError.value(limit, 'limit');
   final query = normalizeMemoryText(input);
   final eligible = cards.where((card) {
-    if (card['scope'] != 'real' || card['eligible'] != true || card['status'] == 'withdrawn') return false;
+    if (card['scope'] != 'real' || card['eligible'] != true || card['status'] == 'withdrawn' ||
+        card['plan_state'] == 'cancelled') return false;
     // Older stored automatic rows can predate the proposal text boundary.
     // Keep the exact same control-character contract as the v2 bridge.
     if (_memoryControls.hasMatch(card['text']! as String)) return false;
@@ -326,7 +333,7 @@ bool canApplyMemoryCurrentValue({required int proposedBasisSeq, required int? cu
 
 bool _matchesControlTarget(MemoryRow card, String target) {
   if (normalizeMemoryText(card['text']! as String) == target) return true;
-  var remainder = target.replaceFirst(RegExp(r'^(?:这次|那次|上次|我的|那场|这场)'), '');
+  var remainder = target.replaceFirst(RegExp(r'^(?:(?:这次|那次|上次|我的|那场|这场))+'), '');
   if (remainder.isEmpty) return false;
   final keywords = _keywords(card)..sort((a, b) => b.length.compareTo(a.length));
   for (final keyword in keywords) {
@@ -335,11 +342,67 @@ bool _matchesControlTarget(MemoryRow card, String target) {
   return remainder.isEmpty;
 }
 
+String _controlInput(String input) => input.trim().replaceFirst(RegExp(r'^(?:请|麻烦你)[，, ]*'), '');
+
+bool _nonLiteralControl(String text) =>
+    const ['"', "'", '“', '‘', '「', '『'].any(text.startsWith) ||
+    RegExp(r'^(?:如果|假如|假设|剧本|小说|故事|台词|我在扮演|我扮演)').hasMatch(text);
+
+bool _correctionAnchor(MemoryRow card, String replacement) {
+  final body = normalizeMemoryText(card['text']! as String);
+  final support = card['manual'] == true ? [body] : [
+    for (final source in (card['evidence']! as List<Object?>).cast<MemoryRow>())
+      if (source['role'] == 'user' && source['scope'] == 'real') normalizeMemoryText(source['quote']! as String),
+  ];
+  return _keywords(card).any((word) => _containsTerm(body, word) && _containsTerm(replacement, word) &&
+      support.any((source) => _containsTerm(source, word)));
+}
+
+MemoryRow _correction(String replacement, String? target, List<MemoryRow> cards) {
+  final normalized = normalizeMemoryText(replacement);
+  final candidates = cards.where((card) => card['scope'] == 'real' && card['eligible'] == true &&
+    card['status'] == 'current' && (target == null
+      ? normalized.startsWith('我') && !_storyWording.hasMatch(normalized) && _correctionAnchor(card, normalized)
+      : _matchesControlTarget(card, target))).toList();
+  final unique = candidates.length == 1;
+  return {
+    'kind': 'correct', 'replacement_text': replacement,
+    'target_card_id': unique ? candidates.single['id'] : null,
+    'topic_ids': unique ? [candidates.single['topic_id']! as String] : <String>[],
+    'target': target, 'delete_chat': false, 'ambiguous': !unique || normalized.isEmpty,
+  };
+}
+
+/// Recognizes a few direct invitations, not arbitrary keyword questions.
+/// The returned permission lasts for one selection; it never changes a topic.
+Set<String> explicitMemoryTopics(String input, List<MemoryRow> cards) {
+  final text = normalizeMemoryText(_controlInput(input));
+  if (_nonLiteralControl(text)) return {};
+  final match = RegExp(r'^(?:聊聊|我想问)(.+?)[。！？.!?]*$').firstMatch(text) ??
+      RegExp(r'^(.+?)(?:怎么样|是哪天)[。！？.!?]*$').firstMatch(text);
+  if (match == null) return {};
+  final target = match.group(1)!.trim();
+  final topics = <String>{
+    for (final card in cards)
+      if (card['scope'] == 'real' && card['eligible'] == true && card['status'] != 'withdrawn' &&
+          _matchesControlTarget(card, target)) card['topic_id']! as String,
+  };
+  return topics.length == 1 ? topics : {};
+}
+
 /// A direct command with an unresolved target is returned as ambiguous. Its
 /// caller can ask which matter, rather than silently changing an arbitrary card.
 MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
-  var text = normalizeMemoryText(input).replaceFirst(RegExp(r'^(?:请|麻烦你)[，, ]*'), '');
-  if (RegExp(r'^(?:如果|假如|假设|剧本|小说|故事|台词|我在扮演|我扮演)').hasMatch(text)) return null;
+  final raw = _controlInput(input);
+  var text = normalizeMemoryText(raw);
+  if (_nonLiteralControl(text)) return null;
+  final directCorrection = RegExp(r'^(?:把|将)?(.+?)(?:改成|改为)[：: ]*(.+)$', dotAll: true).firstMatch(raw);
+  if (directCorrection != null) {
+    return _correction(directCorrection.group(2)!.trim(),
+      normalizeMemoryText(directCorrection.group(1)!), cards);
+  }
+  final correction = RegExp(r'^你记错了[，,：: ]*(.*)$', dotAll: true).firstMatch(raw);
+  if (correction != null) return _correction(correction.group(1)!.trim(), null, cards);
   final deleteChat = RegExp(r'连原话(?:也)?删|聊天(?:也|一起)删|包括原话').hasMatch(text);
   text = text.replaceFirst(RegExp(r'[，, ]*(?:聊天留着|保留聊天|连原话(?:也)?删|聊天(?:也|一起)删|包括原话)[。.!！]*$'), '');
   String? kind;
@@ -364,20 +427,28 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards) {
   }
   if (kind == null) return null;
   final topicIds = <String>{};
+  final targetCardIds = <String>{};
   if (!RegExp(r'^(?:这|那)(?:件事|个事|事)$').hasMatch(target!)) {
     for (final card in cards) {
       if (card['scope'] != 'real' || card['status'] == 'withdrawn') continue;
       if (_matchesControlTarget(card, target)) {
         topicIds.add(card['topic_id']! as String);
+        targetCardIds.add(card['id']! as String);
       }
     }
   }
+  // A shared expression topic does not prove that its independent facts or
+  // plans are the same target. Fact controls need one resolved card; the
+  // store follows its proved dependencies separately.
+  final factControl = kind == 'forget' || kind == 'cancel';
+  final resolved = topicIds.length == 1 && (!factControl || targetCardIds.length == 1);
   return {
     'kind': kind,
-    'topic_ids': topicIds.length == 1 ? topicIds.toList() : <String>[],
+    'topic_ids': resolved ? topicIds.toList() : <String>[],
+    'target_card_ids': resolved && factControl ? targetCardIds.toList() : <String>[],
     'target': target,
     'delete_chat': deleteChat,
-    'ambiguous': topicIds.length != 1,
+    'ambiguous': !resolved,
   };
 }
 

@@ -528,8 +528,13 @@ void main() {
           expectedRowRev: null, currentValueChange: true, realityKnown: true,
         );
         if (manualBeforeClaim) changeCurrent();
-        final claimed = batch();
-        if (!manualBeforeClaim) changeCurrent();
+        var claimed = batch();
+        if (!manualBeforeClaim) {
+          changeCurrent();
+          expect(store.commitExtraction(claimed, parsed(claimed)), isFalse,
+            reason: 'a current manual edit invalidates all already prepared replies and extraction');
+          claimed = batch();
+        }
         final source = claimed.sources.single;
         expect(store.commitExtraction(claimed, parsed(claimed, [
           create(source, text: '咖啡要无糖', quote: '我喝无糖咖啡'),
@@ -627,6 +632,715 @@ void main() {
         if (correction) expect(jsonEncode(current['evidence']), isNot(contains('半糖')));
       });
     }
+  });
+
+  group('immediate controls and deletion', () {
+    MemoryRow remember(String messageId, String text, {List<String> keywords = const [],
+      String? cardText, String kind = 'fact', MemoryRow? followup}) {
+      final source = submit(messageId, text);
+      final claimed = batch();
+      expect(store.commitExtraction(claimed, parsed(claimed, [{
+        ...create(source, text: cardText, keywords: keywords), 'kind': kind,
+        if (followup != null) 'followup': followup,
+      }])), isTrue);
+      return store.cards().singleWhere((card) => (card['evidence'] as List).any((value) =>
+        (value as Map)['message_id'] == messageId));
+    }
+
+    MemorySelection select(String input, {Set<String> explicit = const {}}) => selectMemoryContext(
+      store.cards(), input: input, nowMs: now, controlRevision: store.archive['control_revision'] as int,
+      explicitTopicIds: explicit,
+    );
+
+    CompanionMigrationSnapshot legacy() => CompanionMigrationSnapshot.fromJson({
+      'v': 1, 'storeId': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'revision': 2, 'memoryRevision': 2,
+      'memories': [{
+        'id': manualCard, 'kind': 'fact', 'text': '明天去听演出', 'keywords': <String>[], 'pinned': false,
+        'source': {'kind': 'manual'}, 'expiresAt': null, 'createdAt': 1000, 'updatedAt': 2000,
+      }],
+    });
+
+    test('an explicit correction replaces the wrong fact and its derivatives with the whole new source', () {
+      final before = remember('wrong', '我咖啡喝半糖。', keywords: ['咖啡', '半糖']);
+      database.execute('''
+        INSERT INTO memory_cards(id,row_rev,kind,text,eligible,manual,topic_id,source_at_ms,created_at_ms,updated_at_ms)
+        SELECT 'wrong-derived',1,'fact','半糖口味的错误派生',1,0,topic_id,source_at_ms,created_at_ms,updated_at_ms
+        FROM memory_cards WHERE id=?
+      ''', [before['id']]);
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        ['wrong-derived', 'derived-proof', 'wrong', 1, '我咖啡喝半糖。']);
+      submit('waiting', '今天练长笛');
+      final late = batch();
+      final originalControl = store.archive['control_revision'] as int;
+      const statement = '咖啡改成我咖啡一直喝无糖。';
+      final correction = submit('correction', statement);
+      store.correctFromMessage(cardId: before['id'] as String, expectedRowRev: 1,
+        messageId: 'correction', expectedSourceRev: 1, text: '我咖啡一直喝无糖。');
+      final changed = store.cards().single;
+      expect(changed['text'], '我咖啡一直喝无糖。');
+      expect(changed['status'], 'current');
+      expect(changed['manual'], isFalse);
+      expect(changed['current_basis_seq'], correction['first_seq']);
+      expect(changed['keywords'], ['咖啡']);
+      expect(changed['followup'], isNull);
+      expect(changed['evidence'], [allOf(containsPair('message_id', 'correction'), containsPair('quote', statement))]);
+      expect(database.select('SELECT * FROM memory_card_sources WHERE message_id=?', ['wrong']), isEmpty);
+      expect(store.messages().first['text'], '我咖啡喝半糖。', reason: 'a correction is not an unrequested raw-chat deletion');
+      expect(store.messages().last['extraction_state'], 'done');
+      expect(store.archive['control_revision'], originalControl + 1);
+      expect(store.commitExtraction(late, parsed(late)), isFalse);
+      expect(batch().sources.map((source) => source['id']), ['waiting']);
+      expect(select('咖啡').ids, [changed['id']]);
+      // Re-delivery of the same command is idempotent, despite its old row CAS.
+      store.correctFromMessage(cardId: before['id'] as String, expectedRowRev: 1,
+        messageId: 'correction', expectedSourceRev: 1, text: '我咖啡一直喝无糖。');
+      expect(store.cards().single['row_rev'], changed['row_rev']);
+      expect(store.archive['control_revision'], originalControl + 1);
+    });
+
+    test('correction rejects stale versions, an older logical statement and unproved scope', () {
+      submit('old-correction', '咖啡改成我咖啡一直喝无糖。');
+      store.saveManual(const CompanionMemory(id: manualCard, text: '我咖啡现在喝半糖。', keywords: ['咖啡']),
+        expectedRowRev: null, currentValueChange: true, realityKnown: true);
+      final originalControl = store.archive['control_revision'];
+      expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 1,
+        messageId: 'old-correction', expectedSourceRev: 1, text: '我咖啡一直喝无糖。'), throwsA(isA<DshRemoteException>()));
+      submit('ambiguous', '你记错了，我一直喝无糖。');
+      expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 1,
+        messageId: 'ambiguous', expectedSourceRev: 1, text: '我一直喝无糖。'), throwsA(isA<DshRemoteException>()));
+      submit('current', '咖啡改成我咖啡一直喝无糖。');
+      expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 2,
+        messageId: 'current', expectedSourceRev: 1, text: '我咖啡一直喝无糖。'), throwsA(isA<DshRemoteException>()));
+      expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 1,
+        messageId: 'current', expectedSourceRev: 2, text: '我咖啡一直喝无糖。'), throwsA(isA<DshRemoteException>()));
+      expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 1,
+        messageId: 'current', expectedSourceRev: 1, text: '来源里没有这句'), throwsA(isA<DshRemoteException>()));
+      for (final scope in ['assistant', 'story']) {
+        submit(scope, '咖啡改成我咖啡一直喝无糖。', role: scope == 'assistant' ? 'assistant' : 'user',
+          scope: scope == 'story' ? 'story' : 'real');
+        expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 1,
+          messageId: scope, expectedSourceRev: 1, text: '我咖啡一直喝无糖。'), throwsA(isA<DshRemoteException>()));
+      }
+      expect(store.cards().single['text'], '我咖啡现在喝半糖。');
+      expect(store.archive['control_revision'], originalControl);
+      expect(() => store.correctFromMessage(cardId: manualCard, expectedRowRev: 1,
+        messageId: 'current', expectedSourceRev: 1, text: '我咖啡\u0007'), throwsFormatException);
+    });
+
+    test('cancellation blocks a late reply and old re-extraction while a later independent plan can be created', () {
+      submit('old', '小鹿，我周四有面试。');
+      final plan = remember('plan', '我周四有面试，结束后问问我。', keywords: ['面试'], kind: 'episode', followup: {
+        'local_date': null, 'precision': 'unspecified', 'wording': '结束后问问我', 'basis': 'explicit_invitation',
+      });
+      store.editMessage(id: 'old', expectedSourceRev: 1, text: '小露，我周四有面试。');
+      final late = batch();
+      final cancellation = submit('cancel', '面试取消了');
+      store.applyControl(topicIds: [plan['topic_id'] as String], kind: 'cancel', controlMessageId: 'cancel');
+      final cancelled = store.cards().single;
+      expect(cancelled['text'], plan['text']);
+      expect(cancelled['plan_state'], 'cancelled');
+      expect(cancelled['followup'], isNull);
+      expect(cancelled['current_basis_seq'], cancellation['first_seq']);
+      expect(cancelled['evidence'], plan['evidence']);
+      expect(store.archive['history_after_seq'], 0);
+      expect(store.commitExtraction(late, parsed(late)), isFalse);
+      expect(select('面试', explicit: {plan['topic_id'] as String}).ids, isEmpty);
+      final retry = batch();
+      expect(retry.existing, isEmpty, reason: '09s has no cancellation field, so the old future wording is not sent');
+      expect(store.commitExtraction(retry, parsed(retry, [create(retry.sources.single, keywords: ['面试'])])), isTrue);
+      expect(store.cards(), hasLength(1));
+      expect(events().firstWhere((event) => event['seq'] == retry.sources.single['event_seq'])['reason'],
+        contains('possible_current_conflict'));
+      final fresh = remember('new-plan', '我重新约了下周面试，结束后问问我。', keywords: ['面试'], kind: 'episode', followup: {
+        'local_date': null, 'precision': 'unspecified', 'wording': '结束后问问我', 'basis': 'explicit_invitation',
+      });
+      expect(fresh['id'], isNot(plan['id']));
+      expect(fresh['plan_state'], isNull);
+      expect(select('面试').ids, [fresh['id']]);
+      expect(store.cards().firstWhere((card) => card['id'] == plan['id'])['plan_state'], 'cancelled');
+    });
+
+    test('removing one proof group cannot erase a later explicit cancellation order', () {
+      submit('early', '我周四有面试');
+      now += 100;
+      final plan = remember('later', '我周四有面试', keywords: ['面试']);
+      // Frozen independent group, representing a completed earlier merge.
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        [plan['id'], 'independent-early', 'early', 1, '我周四有面试']);
+      store.applyControl(topicIds: [plan['topic_id'] as String], kind: 'cancel');
+      final cancelBasis = store.cards().single['current_basis_seq'];
+      now += 100;
+      store.editMessage(id: 'later', expectedSourceRev: 1, text: '小露，我周四有面试');
+      final remaining = store.cards().single;
+      expect(remaining['current_basis_seq'], cancelBasis);
+      expect(remaining['source_at_ms'], 1000000);
+      expect(remaining['plan_state'], 'cancelled');
+      expect((remaining['evidence'] as List).single, containsPair('message_id', 'early'));
+      final claimed = batch();
+      expect(claimed.existing, isEmpty);
+      store.commitExtraction(claimed, parsed(claimed, [create(claimed.sources.single, keywords: ['面试'])]));
+      expect(store.cards(), hasLength(1));
+      expect(select('面试').ids, isEmpty);
+    });
+
+    test('less, never and explicit reopening retain distinct persistent behavior', () {
+      store.saveManual(const CompanionMemory(id: manualCard, text: '我希望你先听我讲完，再给建议',
+        kind: 'preference', pinned: true, keywords: ['先听', '讲完', '建议']),
+        expectedRowRev: null, currentValueChange: true, realityKnown: true);
+      final topic = store.cards().single['topic_id'] as String;
+      expect(select('你好').ids, [manualCard]);
+      store.applyControl(topicIds: [topic], kind: 'less');
+      expect(store.archive['history_after_seq'], 0);
+      expect(select('你好').ids, isEmpty);
+      expect(select('给我建议').ids, [manualCard]);
+      store.applyControl(topicIds: [topic], kind: 'never');
+      expect(store.archive['history_after_seq'], greaterThan(0));
+      expect(select('给我建议').ids, isEmpty);
+      expect(select('聊聊建议', explicit: explicitMemoryTopics('聊聊建议', store.cards())).ids, [manualCard]);
+      reopen();
+      expect(store.cards().single['topic_mode'], 'never');
+      expect(select('给我建议').ids, isEmpty);
+      final boundary = store.archive['history_after_seq'];
+      store.applyControl(topicIds: [topic], kind: 'normal');
+      expect(store.archive['history_after_seq'], boundary);
+      expect(select('你好').ids, [manualCard]);
+    });
+
+    for (final mode in ['less', 'never']) {
+      test('a new create inherits a unique $mode topic without taking an independent fact from the same source', () {
+        final clinic = remember('old-clinic', '我周五复诊。', keywords: ['复诊']);
+        store.applyControl(topicIds: [clinic['topic_id'] as String], kind: mode);
+        final source = submit('new', '我周六复诊，也去公园。');
+        final claimed = batch();
+        store.commitExtraction(claimed, parsed(claimed, [
+          create(source, text: '我周六复诊', quote: '我周六复诊'), // Omitted keywords cannot bypass control.
+          create(source, text: '也去公园', quote: '也去公园', keywords: ['公园']),
+        ]));
+        final newClinic = store.cards().singleWhere((card) => card['text'] == '我周六复诊');
+        final park = store.cards().singleWhere((card) => card['text'] == '也去公园');
+        expect(newClinic['topic_id'], clinic['topic_id']);
+        expect(newClinic['topic_mode'], mode);
+        expect(park['topic_id'], isNot(clinic['topic_id']));
+        expect(park['topic_mode'], 'normal');
+        expect(select('公园').ids, [park['id']]);
+        if (mode == 'never') expect(select('复诊').ids, isEmpty);
+      });
+    }
+
+    test('a create matching multiple controlled topics is skipped without skipping disjoint operations', () {
+      final clinic = remember('clinic', '我周五复诊', keywords: ['复诊']);
+      final music = remember('music', '我周五上琴课', keywords: ['琴课']);
+      store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'never');
+      store.applyControl(topicIds: [music['topic_id'] as String], kind: 'less');
+      final source = submit('new', '我复诊后上琴课，也会去公园。');
+      final claimed = batch();
+      store.commitExtraction(claimed, parsed(claimed, [
+        create(source, text: '复诊后上琴课', quote: '我复诊后上琴课'),
+        create(source, text: '也会去公园', quote: '也会去公园', keywords: ['公园']),
+      ]));
+      expect(store.cards(), hasLength(3));
+      expect(events().last['reason'], contains('ambiguous_controlled_topic'));
+      expect(store.cards().any((card) => card['text'] == '复诊后上琴课'), isFalse);
+      expect(select('公园').ids, hasLength(1));
+    });
+
+    test('forget removes controlled working copies, retains disjoint proof and cuts global history through the command', () {
+      final mixed = submit('mixed', '我周五复诊，周六去公园，我喝无糖咖啡。', session: 'room-a');
+      final independent = submit('independent', '我喝无糖咖啡。', session: 'room-b');
+      final initial = batch();
+      store.commitExtraction(initial, parsed(initial, [
+        create(mixed, text: '我周五复诊', quote: '我周五复诊', keywords: ['复诊']),
+        create(mixed, text: '周六去公园', quote: '周六去公园', keywords: ['公园']),
+        create(mixed, text: '我周五复诊，周六去公园', keywords: ['复诊', '公园']),
+        create(independent, keywords: ['咖啡']),
+      ]));
+      final clinic = store.cards().singleWhere((card) => card['text'] == '我周五复诊');
+      final coffee = store.cards().singleWhere((card) => card['text'] == '我喝无糖咖啡。');
+      // One broad proof contains the forgotten matter; a separate complete
+      // proof still supports the independent coffee card after it is removed.
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        [coffee['id'], 'broad-coffee-proof', 'mixed', 1, mixed['text']]);
+      for (var i = 0; i < 3; i++) {
+        expect(reserve(), isNotNull);
+      }
+      expect(reserve(), isNull);
+      submit('waiting', '以前那条尚未抽完', session: 'room-b');
+      final late = batch();
+      final command = submit('forget', '忘掉那次复诊，聊天留着', session: 'room-a');
+      submit('after', '这是控制之后独立新说的长笛', session: 'room-b');
+      store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'forget', controlMessageId: 'forget');
+      expect(store.cards().map((card) => card['text']), unorderedEquals(['周六去公园', '我喝无糖咖啡。']));
+      expect(database.select("SELECT * FROM memory_card_sources WHERE instr(quote,'复诊')>0"), isEmpty);
+      expect((store.cards().singleWhere((card) => card['id'] == coffee['id'])['evidence'] as List).single,
+        containsPair('message_id', 'independent'));
+      expect(store.requests(), hasLength(3), reason: 'immediate control is not an auxiliary model request');
+      expect(store.messages().first['text'], mixed['text']);
+      expect(store.archive['history_after_seq'], command['first_seq']);
+      expect(store.messages(forModel: true).map((source) => source['id']), ['after']);
+      expect(store.commitExtraction(late, parsed(late)), isFalse);
+      expect(select('咖啡').ids, hasLength(1), reason: 'the archive history boundary does not invalidate independent cards');
+      final revision = store.archive['control_revision'];
+      reopen();
+      store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'forget', controlMessageId: 'forget');
+      expect(store.archive['control_revision'], revision);
+      final edited = store.editMessage(id: 'mixed', expectedSourceRev: 1, text: '我周五复诊，周日去公园。');
+      expect(edited['first_seq'], mixed['first_seq']);
+      expect(store.messages().first['text'], '我周五复诊，周日去公园。');
+      expect(store.messages().first['extraction_reason'], 'history_cutoff');
+      expect(batch().sources.map((source) => source['id']), ['after']);
+      expect(select('咖啡').ids, hasLength(1));
+    });
+
+    test('forget with raw deletion removes whole source groups before foreign keys and preserves independent proof', () {
+      final mixed = submit('mixed', '我周五复诊，也去公园。');
+      submit('independent-park', '我去公园。');
+      final claimed = batch();
+      store.commitExtraction(claimed, parsed(claimed, [
+        create(mixed, text: '我周五复诊', quote: '我周五复诊', keywords: ['复诊']),
+        create(mixed, text: '我去公园', quote: '也去公园', keywords: ['公园']),
+      ]));
+      final clinic = store.cards().singleWhere((card) => card['text'] == '我周五复诊');
+      final park = store.cards().singleWhere((card) => card['text'] == '我去公园');
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        [park['id'], 'independent-park-proof', 'independent-park', 1, '我去公园。']);
+      submit('forget', '忘掉复诊，连原话也删');
+      store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'forget',
+        controlMessageId: 'forget', deleteChat: true);
+      expect(store.messages().map((source) => source['id']), ['independent-park', 'forget']);
+      expect(store.cards().single['id'], park['id']);
+      expect((store.cards().single['evidence'] as List).single, containsPair('message_id', 'independent-park'));
+      expect(database.select('SELECT * FROM memory_events WHERE message_id=?', ['mixed']), isEmpty);
+      expect(() => submit('mixed', '我周五复诊，也去公园。'), throwsA(isA<DshRemoteException>()
+        .having((error) => error.code, 'code', 'companion/deleted-source')));
+      expect(store.messages(forModel: true), isEmpty);
+      expect(select('公园').ids, [park['id']]);
+    });
+
+    for (final hasIndependentProof in [false, true]) {
+      for (final deleteChat in [false, true]) {
+        test('forget follows a known composite to another source ($hasIndependentProof, raw=$deleteChat)', () {
+          final m1 = submit('m1', '我周五复诊');
+          final m2 = submit('m2', '我周五复诊，也去公园');
+          final m3 = submit('m3', '我去公园');
+          final claimed = batch();
+          store.commitExtraction(claimed, parsed(claimed, [
+            create(m1, keywords: ['复诊']),
+            create(m2, keywords: ['复诊', '公园']),
+            create(m2, text: '我去公园', keywords: ['公园']),
+          ]));
+          final a = store.cards().singleWhere((card) => card['text'] == m1['text']);
+          final c = store.cards().singleWhere((card) => card['text'] == '我去公园');
+          if (hasIndependentProof) {
+            // As retained by a merge: this group is sufficient by itself.
+            database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+              [c['id'], 'independent-park', m3['id'], 1, m3['text']]);
+          }
+          if (deleteChat) {
+            store.applyControl(topicIds: [a['topic_id'] as String], kind: 'forget', deleteChat: true);
+          } else {
+            store.deleteCard(id: a['id'] as String, expectedRowRev: a['row_rev'] as int);
+          }
+          expect(store.cards().map((card) => card['id']), hasIndependentProof ? [c['id']] : isEmpty);
+          expect(database.select("SELECT * FROM memory_card_sources WHERE instr(quote,'复诊')>0"), isEmpty);
+          if (hasIndependentProof) {
+            expect((store.cards().single['evidence'] as List).single, containsPair('message_id', 'm3'));
+          }
+          expect(store.messages().map((source) => source['id']), deleteChat ? ['m3'] : ['m1', 'm2', 'm3']);
+          expect(database.select('SELECT * FROM memory_deleted_messages'), hasLength(deleteChat ? 2 : 0));
+          reopen();
+          expect(database.select("SELECT * FROM memory_card_sources WHERE instr(quote,'复诊')>0"), isEmpty);
+        });
+      }
+    }
+
+    for (final deleteChat in [false, true]) {
+      test('a composite AND proof does not contaminate its independent unrelated member (raw=$deleteChat)', () {
+        final x = submit('x', '我周五复诊');
+        final y = submit('y', '我去公园');
+        final claimed = batch();
+        store.commitExtraction(claimed, parsed(claimed, [
+          create(x, keywords: ['复诊']),
+          {'op': 'create', 'kind': 'fact', 'text': '我周五复诊，也去公园', 'keywords': ['复诊', '公园'],
+            'evidence': [{'message_id': 'x', 'quote': x['text']}, {'message_id': 'y', 'quote': y['text']}]},
+          create(y, keywords: ['公园']),
+        ]));
+        final a = store.cards().singleWhere((card) => card['text'] == x['text']);
+        final independent = store.cards().singleWhere((card) => card['text'] == y['text']);
+        store.applyControl(topicIds: [a['topic_id'] as String], kind: 'forget', deleteChat: deleteChat);
+        expect(store.cards(), [independent], reason: 'sharing only Y is not sharing the complete X+Y proof');
+        expect(store.messages().map((source) => source['id']), deleteChat ? ['y'] : ['x', 'y']);
+        expect(database.select('SELECT * FROM memory_card_sources WHERE message_id=?', ['y']), hasLength(1));
+      });
+    }
+
+    test('independent groups cannot be combined to manufacture a copied AND proof', () {
+      final x = submit('x', '我周五复诊');
+      final y = submit('y', '我去公园');
+      final claimed = batch();
+      store.commitExtraction(claimed, parsed(claimed, [
+        {'op': 'create', 'kind': 'fact', 'text': '我周五复诊，也去公园', 'keywords': ['复诊', '公园'],
+          'evidence': [{'message_id': 'x', 'quote': x['text']}, {'message_id': 'y', 'quote': y['text']}]},
+        create(x, text: '我有外出计划', keywords: []),
+      ]));
+      final composite = store.cards().singleWhere((card) => card['text'] == '我周五复诊，也去公园');
+      final independent = store.cards().singleWhere((card) => card['text'] == '我有外出计划');
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        [independent['id'], 'independent-y', 'y', 1, y['text']]);
+      final before = store.cards().singleWhere((card) => card['id'] == independent['id']);
+      store.deleteCard(id: composite['id'] as String, expectedRowRev: composite['row_rev'] as int);
+      expect(store.cards(), [before]);
+      expect((store.cards().single['evidence'] as List), hasLength(2));
+    });
+
+    test('a removed old source revision is not used to delete its independently corrected current version', () {
+      final x = submit('x', '我周五复诊');
+      final mixed = submit('mixed', '我周五复诊，也去公园');
+      final independent = submit('independent', '我去公园');
+      final initial = batch();
+      store.commitExtraction(initial, parsed(initial, [
+        create(x, keywords: ['复诊']), create(mixed, keywords: ['复诊', '公园']),
+        create(mixed, text: '我去公园', keywords: ['公园']),
+      ]));
+      final a = store.cards().singleWhere((card) => card['text'] == x['text']);
+      final park = store.cards().singleWhere((card) => card['text'] == '我去公园');
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        [park['id'], 'independent-park', 'independent', 1, independent['text']]);
+      store.editMessage(id: 'mixed', expectedSourceRev: 1, text: '我现在学长笛');
+      final updated = batch();
+      store.commitExtraction(updated, parsed(updated, [create(updated.sources.single, keywords: ['长笛'])]));
+      final keep = store.cards().where((card) => card['id'] != a['id']).toList();
+      expect(keep, hasLength(2));
+      store.applyControl(topicIds: [a['topic_id'] as String], kind: 'forget', deleteChat: true);
+      expect(store.cards(), keep);
+      expect(store.messages().singleWhere((source) => source['id'] == 'mixed')['source_rev'], 2);
+      expect(store.messages().singleWhere((source) => source['id'] == 'mixed')['text'], '我现在学长笛');
+      expect(database.select('SELECT * FROM memory_card_sources WHERE message_id=? AND source_rev=1', ['mixed']), isEmpty);
+    });
+
+    for (final correction in [false, true]) {
+      test('changing a current value keeps independent facts sharing its controlled topic (correction=$correction)', () {
+        final sugar = remember('sugar', '我咖啡喝半糖。', keywords: ['咖啡']);
+        store.applyControl(topicIds: [sugar['topic_id'] as String], kind: 'less');
+        final morning = remember('morning', '我只在上午喝咖啡。', keywords: ['咖啡']);
+        final alreadyNew = remember('already-new', '我咖啡喝无糖。', keywords: ['咖啡']);
+        expect(morning['topic_id'], sugar['topic_id']);
+        expect(alreadyNew['topic_id'], sugar['topic_id']);
+        if (correction) {
+          submit('correct', '把我咖啡喝半糖。改成我咖啡喝无糖。');
+          store.correctFromMessage(cardId: sugar['id'] as String, expectedRowRev: sugar['row_rev'] as int,
+            messageId: 'correct', expectedSourceRev: 1, text: '我咖啡喝无糖。');
+        } else {
+          store.saveManual(CompanionMemory(id: sugar['id'] as String, text: '我咖啡喝无糖。', keywords: const ['咖啡']),
+            expectedRowRev: sugar['row_rev'] as int, currentValueChange: true, realityKnown: true);
+        }
+        expect(store.cards(), hasLength(3));
+        expect(store.cards().singleWhere((card) => card['id'] == morning['id']), morning,
+          reason: 'topic controls expression; it does not prove fact dependence');
+        expect(store.cards().singleWhere((card) => card['id'] == alreadyNew['id']), alreadyNew,
+          reason: 'cleanup must inspect the old value, not expand from the newly written text');
+        expect(store.cards().every((card) => card['topic_mode'] == 'less'), isTrue);
+        expect(store.cards().singleWhere((card) => card['id'] == sugar['id'])['text'], '我咖啡喝无糖。');
+      });
+    }
+
+    test('deleting one explicit card does not forget every independent fact in its expression topic', () {
+      final sugar = remember('sugar', '我咖啡喝半糖。', keywords: ['咖啡']);
+      store.applyControl(topicIds: [sugar['topic_id'] as String], kind: 'less');
+      final morning = remember('morning', '我只在上午喝咖啡。', keywords: ['咖啡']);
+      expect(morning['topic_id'], sugar['topic_id']);
+      store.deleteCard(id: sugar['id'] as String, expectedRowRev: sugar['row_rev'] as int);
+      expect(store.cards(), [morning]);
+      expect(store.cards().single['topic_mode'], 'less');
+    });
+
+    for (final deleteChat in [false, true]) {
+      test('a precise spoken forget retains the independent fact sharing its topic (raw=$deleteChat)', () {
+        final sugar = remember('sugar', '我咖啡喝半糖', keywords: ['咖啡']);
+        final topic = sugar['topic_id'] as String;
+        store.applyControl(topicIds: [topic], kind: 'less');
+        final morning = remember('morning', '我只在上午喝咖啡', keywords: ['咖啡']);
+        expect(morning['topic_id'], topic);
+        final command = submit('forget', '忘掉我咖啡喝半糖${deleteChat ? '，连原话也删' : ''}');
+        final parsedControl = parseMemoryControl(command['text'] as String, store.cards())!;
+        expect(parsedControl['target_card_ids'], [sugar['id']]);
+        store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'forget', deleteChat: deleteChat);
+        expect(store.cards(), [morning]);
+        expect(store.messages().any((row) => row['id'] == 'morning'), isTrue);
+        expect(store.messages().any((row) => row['id'] == 'sugar'), !deleteChat);
+        expect(store.archive['history_after_seq'], command['first_seq']);
+        final meta = store.archive;
+        reopen();
+        store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'forget', deleteChat: deleteChat,
+          targetCardIds: [sugar['id'] as String]);
+        expect(store.archive, meta, reason: 'an exact replay stays idempotent after the selected card was removed');
+        expect(() => store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'forget',
+          deleteChat: deleteChat, targetCardIds: [morning['id'] as String]), throwsA(isA<DshRemoteException>()));
+        expect(store.cards(), [morning]);
+      });
+    }
+
+    for (final scope in ['spoken', 'selected-card', 'explicit-topic']) {
+      test('cancellation uses the actual explicit target scope ($scope)', () {
+        final first = remember('first-plan', '我周五去咖啡馆', keywords: ['咖啡馆'], kind: 'episode');
+        final topic = first['topic_id'] as String;
+        store.applyControl(topicIds: [topic], kind: 'less');
+        final second = remember('second-plan', '我周六在咖啡馆见朋友', keywords: ['咖啡馆'], kind: 'episode');
+        expect(second['topic_id'], topic);
+        if (scope == 'spoken') submit('cancel', '我周五去咖啡馆取消了');
+        store.applyControl(topicIds: [topic], kind: 'cancel',
+          controlMessageId: scope == 'spoken' ? 'cancel' : null,
+          targetCardIds: scope == 'selected-card' ? [first['id'] as String] : null);
+        expect(store.cards().singleWhere((row) => row['id'] == first['id'])['plan_state'], 'cancelled');
+        final remaining = store.cards().singleWhere((row) => row['id'] == second['id']);
+        if (scope == 'explicit-topic') expect(remaining['plan_state'], 'cancelled');
+        else expect(remaining, second);
+      });
+    }
+
+    test('fact control reparses an edited command and cannot expand its original selected IDs', () {
+      final sugar = remember('sugar', '我咖啡喝半糖', keywords: ['咖啡']);
+      final topic = sugar['topic_id'] as String;
+      store.applyControl(topicIds: [topic], kind: 'less');
+      final morning = remember('morning', '我只在上午喝咖啡', keywords: ['咖啡']);
+      submit('forget', '忘掉我咖啡喝半糖');
+      final original = parseMemoryControl('忘掉我咖啡喝半糖', store.cards())!;
+      store.editMessage(id: 'forget', expectedSourceRev: 1, text: '忘掉我只在上午喝咖啡');
+      final before = store.cards(), meta = store.archive;
+      expect(() => store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'forget',
+        targetCardIds: (original['target_card_ids'] as List).cast<String>()), throwsA(isA<DshRemoteException>()));
+      expect(() => store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'forget',
+        targetCardIds: [sugar['id'] as String, morning['id'] as String]), throwsA(isA<DshRemoteException>()));
+      expect(store.cards(), before);
+      expect(store.archive, meta);
+      expect(store.messages().last['extraction_state'], 'pending');
+    });
+
+    test('current card changes and shared-topic ambiguity are rechecked before fact control', () {
+      final sugar = remember('sugar', '我咖啡喝半糖', keywords: ['咖啡']);
+      final topic = sugar['topic_id'] as String;
+      store.applyControl(topicIds: [topic], kind: 'less');
+      final morning = remember('morning', '我只在上午喝咖啡', keywords: ['咖啡']);
+      submit('forget', '忘掉我咖啡喝半糖');
+      store.saveManual(CompanionMemory(id: sugar['id'] as String, text: '我咖啡喝无糖', keywords: const ['咖啡']),
+        expectedRowRev: sugar['row_rev'] as int, currentValueChange: true, realityKnown: true);
+      final before = store.cards(), meta = store.archive;
+      expect(() => store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'forget',
+        targetCardIds: [sugar['id'] as String]), throwsA(isA<DshRemoteException>()));
+      submit('ambiguous-forget', '忘掉咖啡');
+      expect(parseMemoryControl('忘掉咖啡', store.cards())!['ambiguous'], isTrue);
+      expect(() => store.applyControl(topicIds: [topic], kind: 'forget', controlMessageId: 'ambiguous-forget'),
+        throwsA(isA<DshRemoteException>()));
+      expect(() => store.applyControl(topicIds: [topic], kind: 'cancel', targetCardIds: ['missing']),
+        throwsA(isA<DshRemoteException>()));
+      expect(() => store.applyControl(topicIds: [topic], kind: 'less', targetCardIds: [morning['id'] as String]),
+        throwsArgumentError);
+      expect(store.cards(), before);
+      expect(store.archive['control_revision'], meta['control_revision']);
+    });
+
+    test('selected-card controls reject a target from another explicit topic', () {
+      final coffee = remember('coffee', '我周五去咖啡馆', keywords: ['咖啡馆'], kind: 'episode');
+      final flute = remember('flute', '我周六上长笛课', keywords: ['长笛'], kind: 'episode');
+      final before = store.cards(), meta = store.archive;
+      expect(() => store.applyControl(topicIds: [coffee['topic_id'] as String], kind: 'cancel',
+        targetCardIds: [flute['id'] as String]), throwsA(isA<DshRemoteException>()));
+      expect(store.cards(), before);
+      expect(store.archive, meta);
+    });
+
+    test('deleting one source withdraws a complete AND group rather than promoting its surviving half', () {
+      final a = submit('a', '我住上海');
+      final b = submit('b', '我喝无糖咖啡');
+      submit('independent', '我住上海，喝无糖咖啡');
+      final claimed = batch();
+      store.commitExtraction(claimed, parsed(claimed, [{
+        'op': 'create', 'kind': 'fact', 'text': '住上海，喝无糖咖啡', 'keywords': ['上海', '咖啡'],
+        'evidence': [{'message_id': a['id'], 'quote': a['text']}, {'message_id': b['id'], 'quote': b['text']}],
+      }, create(a, text: '只依赖 a 的上海卡', keywords: ['上海'])]));
+      final combined = store.cards().singleWhere((card) => card['text'] == '住上海，喝无糖咖啡');
+      database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)',
+        [combined['id'], 'independent-proof', 'independent', 1, '我住上海，喝无糖咖啡']);
+      final beforeControl = store.archive['control_revision'] as int;
+      expect(() => store.deleteMessage(id: 'a', expectedSourceRev: 2), throwsA(isA<DshRemoteException>()));
+      expect(store.archive['control_revision'], beforeControl);
+      store.deleteMessage(id: 'a', expectedSourceRev: 1);
+      expect(store.cards().single['id'], combined['id']);
+      expect((store.cards().single['evidence'] as List).single, containsPair('message_id', 'independent'));
+      expect(database.select('SELECT * FROM memory_card_sources WHERE message_id=?', ['b']), isEmpty);
+      expect(store.messages().map((source) => source['id']), ['b', 'independent']);
+      expect(store.messages(forModel: true), isEmpty);
+      expect(store.archive['control_revision'], beforeControl + 1);
+    });
+
+    test('a forgotten migrated card cannot be reimported and leaves only an identity cleanup receipt', () {
+      final read = legacy();
+      store.importLegacy(read);
+      final card = store.cards().single;
+      expect(() => store.deleteCard(id: card['id'] as String, expectedRowRev: 2), throwsA(isA<DshRemoteException>()));
+      store.deleteCard(id: card['id'] as String, expectedRowRev: 1);
+      store.importLegacy(read);
+      expect(store.cards(includeInactive: true), isEmpty);
+      expect(store.migrationCleanup().single['result'], 'forgotten');
+      expect(store.verifyLegacyImport(read, [manualCard]), isTrue);
+      expect(jsonEncode(store.migrationCleanup()), isNot(contains('明天去听演出')));
+      reopen();
+      store.importLegacy(read);
+      expect(store.cards(includeInactive: true), isEmpty);
+    });
+
+    test('only an explicit legacy reality confirmation changes display-only eligibility', () {
+      store.importLegacy(legacy());
+      final old = store.cards().single;
+      expect(old['reality_unconfirmed'], isTrue);
+      final beforePin = store.archive['control_revision'];
+      store.setPinned(id: old['id'] as String, expectedRowRev: 1, pinned: true);
+      final pinned = store.cards().single;
+      expect(pinned['eligible'], isFalse);
+      expect(pinned['current_basis_seq'], isNull);
+      expect(pinned['source_at_ms'], 2000);
+      expect(store.archive['control_revision'], beforePin);
+      store.confirmReality(id: old['id'] as String, expectedRowRev: 2);
+      final confirmed = store.cards().single;
+      expect(confirmed['eligible'], isTrue);
+      expect(confirmed['reality_unconfirmed'], isFalse);
+      expect(confirmed['current_basis_seq'], isNull);
+      expect(confirmed['source_at_ms'], 2000);
+      expect(confirmed['event_time'], isNull);
+      expect(confirmed['followup'], isNull);
+      expect(confirmed['evidence'], isEmpty);
+      expect(store.migrationCleanup().single['result'], 'imported');
+      expect(() => store.confirmReality(id: old['id'] as String, expectedRowRev: 3), throwsA(isA<DshRemoteException>()));
+    });
+
+    test('pinning a long automatic card does not turn it into a manual statement or apply the legacy text limit', () {
+      final text = '长笛${List.filled(598, '字').join()}';
+      final card = remember('long', text, keywords: ['长笛']);
+      final control = store.archive['control_revision'];
+      final sequence = store.archive['next_seq'];
+      store.setPinned(id: card['id'] as String, expectedRowRev: 1, pinned: true);
+      final pinned = store.cards().single;
+      expect(pinned['pinned'], isTrue);
+      expect(pinned['row_rev'], 2);
+      expect(pinned['text'], text);
+      for (final field in ['manual', 'eligible', 'status', 'current_basis_seq', 'source_at_ms', 'evidence', 'updated_at_ms']) {
+        expect(pinned[field], card[field], reason: 'pinning does not change $field');
+      }
+      expect(store.archive['control_revision'], control);
+      expect(store.archive['next_seq'], sequence);
+      expect(select('长笛').ids, [card['id']]);
+      expect(select('你好').ids, isEmpty);
+      expect(() => store.setPinned(id: card['id'] as String, expectedRowRev: 1, pinned: false), throwsA(isA<DshRemoteException>()));
+    });
+
+    test('an unresolved control completes its own event without changing topics, cards, history or retry count', () {
+      remember('u1', '我学长笛', keywords: ['长笛']);
+      final source = submit('ambiguous', '忘了那件事');
+      final claimed = batch();
+      store.recordInvalidProposal(claimed);
+      final beforeCards = store.cards();
+      final beforeControl = store.archive['control_revision'] as int;
+      store.finishUnresolvedControl(messageId: 'ambiguous', expectedSourceRev: 1);
+      expect(store.cards(), beforeCards);
+      expect(store.archive['history_after_seq'], 0);
+      expect(store.archive['control_revision'], beforeControl + 1);
+      final done = events().singleWhere((event) => event['seq'] == source['event_seq']);
+      expect(done['state'], 'done');
+      expect(done['reason'], 'ambiguous_control');
+      expect(done['format_failures'], 1);
+      expect(store.nextBatch(forceTail: true, estimateTokens: estimate), isNull);
+      store.finishUnresolvedControl(messageId: 'ambiguous', expectedSourceRev: 1);
+      expect(store.archive['control_revision'], beforeControl + 1);
+      submit('ordinary', '我去公园');
+      expect(() => store.finishUnresolvedControl(messageId: 'ordinary', expectedSourceRev: 1), throwsA(isA<DshRemoteException>()));
+      expect(store.messages().last['extraction_state'], 'pending');
+    });
+
+    test('deleted stable source identities cannot be resubmitted after restart as new statements', () {
+      final source = submit('old', '我周五复诊');
+      store.deleteMessage(id: 'old', expectedSourceRev: 1);
+      final sequence = store.archive['next_seq'];
+      reopen();
+      expect(database.select('SELECT * FROM memory_deleted_messages').single,
+        allOf(containsPair('id', 'old'), containsPair('first_seq', source['first_seq'])));
+      expect(() => submit('old', '我周五复诊'), throwsA(isA<DshRemoteException>()
+        .having((error) => error.code, 'code', 'companion/deleted-source')));
+      expect(() => submit('old', '换字也不能偷换同一已删身份'), throwsA(isA<DshRemoteException>()));
+      expect(store.archive['next_seq'], sequence);
+      expect(store.messages(), isEmpty);
+      submit('new-independent', '我周五复诊');
+      expect(batch().sources.single['id'], 'new-independent');
+    });
+
+    test('opening a v2 database adds deletion identities without replacing its original data', () {
+      final card = remember('u1', '我学长笛', keywords: ['长笛']);
+      final originalArchive = store.archive;
+      // Exact preceding schema: v3 only adds this table, no v2 fields changed.
+      database.execute('DROP TABLE memory_deleted_messages');
+      database.execute('PRAGMA user_version=2');
+      reopen();
+      expect(database.select('PRAGMA user_version').single['user_version'], 3);
+      expect(store.archive, originalArchive);
+      expect(store.cards().single, card);
+      expect(store.messages().single['text'], '我学长笛');
+      store.deleteMessage(id: 'u1', expectedSourceRev: 1);
+      expect(store.messages(), isEmpty);
+      expect(database.select('SELECT id FROM memory_deleted_messages').single['id'], 'u1');
+    });
+
+    test('widget clears are acknowledged only at the exact current control revision', () {
+      final card = remember('u1', '我学长笛', keywords: ['长笛']);
+      store.applyControl(topicIds: [card['topic_id'] as String], kind: 'less');
+      final older = store.archive['control_revision'] as int;
+      expect(store.archive['widget_clear_pending'], 1);
+      store.acknowledgeWidgetClear(controlRevision: older);
+      expect(store.archive['widget_clear_pending'], 0);
+      store.applyControl(topicIds: [card['topic_id'] as String], kind: 'never');
+      final current = store.archive['control_revision'] as int;
+      store.acknowledgeWidgetClear(controlRevision: older);
+      expect(store.archive['widget_clear_pending'], 1);
+      reopen();
+      expect(store.archive['widget_clear_pending'], 1);
+      store.acknowledgeWidgetClear(controlRevision: current);
+      expect(store.archive['widget_clear_pending'], 0);
+    });
+
+    test('a control transaction failure rolls back deleted data, versions, queue and pending widget clear', () {
+      final card = remember('u1', '我学长笛', keywords: ['长笛']);
+      submit('waiting', '下一条原话');
+      final claimed = batch();
+      final before = store.archive;
+      final cards = store.cards();
+      database.execute("""
+        CREATE TRIGGER fail_control BEFORE UPDATE OF control_revision ON memory_archive
+        BEGIN SELECT RAISE(ABORT,'fixture'); END
+      """);
+      expect(() => store.applyControl(topicIds: [card['topic_id'] as String], kind: 'forget'), throwsA(isA<SqliteException>()));
+      expect(store.archive, before);
+      expect(store.cards(), cards);
+      expect(store.isBatchCurrent(claimed), isTrue);
+      expect(store.messages().last['extraction_state'], 'pending');
+      database.execute('DROP TRIGGER fail_control');
+      store.applyControl(topicIds: [card['topic_id'] as String], kind: 'forget');
+      expect(store.cards(), isEmpty);
+      expect(store.archive['widget_clear_pending'], 1);
+    });
+
+    test('ordinary extraction does not invalidate a prepared chat, but real edits and manual changes do', () {
+      final initial = store.archive['control_revision'] as int;
+      final card = remember('u1', '我学长笛', keywords: ['长笛']);
+      expect(store.archive['control_revision'], initial);
+      store.editMessage(id: 'u1', expectedSourceRev: 1, text: '我改学钢琴');
+      final edited = store.archive['control_revision'] as int;
+      expect(edited, initial + 1);
+      final claimed = batch();
+      store.commitExtraction(claimed, parsed(claimed, [create(claimed.sources.single, keywords: ['钢琴'])]));
+      expect(store.archive['control_revision'], edited);
+      final current = store.cards().single;
+      store.saveManual(CompanionMemory(id: current['id'] as String, text: '我现在学手风琴', keywords: const ['手风琴']),
+        expectedRowRev: current['row_rev'] as int, currentValueChange: true, realityKnown: true);
+      expect(store.archive['control_revision'], edited + 1);
+      expect(store.cards(includeInactive: true).firstWhere((row) => row['id'] == card['id'])['status'], 'withdrawn');
+    });
   });
 
   group('request receipts and rolling reservations', () {

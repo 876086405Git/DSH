@@ -456,8 +456,32 @@ void main() {
         expect(result['topic_ids'], ['interview']);
         expect(result['ambiguous'], isFalse);
         expect(result['delete_chat'], isFalse);
+        expect(result['target_card_ids'], const ['forget', 'cancel'].contains(entry.value) ? ['interview'] : isEmpty);
       }
       expect(parseMemoryControl('忘掉蓝桥面试，连原话也删', [interview])!['delete_chat'], isTrue);
+    });
+
+    test('fact commands retain the exact card even when independent facts share an expression topic', () {
+      final sugar = card('sugar', '我咖啡喝半糖', keywords: ['咖啡']);
+      final morning = {...card('morning', '我只在上午喝咖啡', keywords: ['咖啡']), 'topic_id': 'sugar'};
+      for (final input in ['忘掉我咖啡喝半糖', '我咖啡喝半糖取消了']) {
+        final result = parseMemoryControl(input, [sugar, morning])!;
+        expect(result['topic_ids'], ['sugar']);
+        expect(result['target_card_ids'], ['sugar']);
+        expect(result['ambiguous'], isFalse);
+      }
+      for (final input in ['忘掉咖啡', '咖啡取消了']) {
+        final result = parseMemoryControl(input, [sugar, morning])!;
+        expect(result['ambiguous'], isTrue);
+        expect(result['target_card_ids'], isEmpty);
+        expect(result['topic_ids'], isEmpty);
+      }
+      for (final input in ['少提咖啡', '别再提咖啡', '以后可以聊咖啡']) {
+        final result = parseMemoryControl(input, [sugar, morning])!;
+        expect(result['topic_ids'], ['sugar']);
+        expect(result['target_card_ids'], isEmpty);
+        expect(result['ambiguous'], isFalse);
+      }
     });
 
     test('quoted or hypothetical commands do not execute; unresolved references ask for scope', () {
@@ -470,6 +494,55 @@ void main() {
       expect(parseMemoryControl('忘掉我的', [interview])!['ambiguous'], isTrue);
       expect(parseMemoryControl('忘掉蓝桥面试', [interview, {...interview, 'id': 'other', 'topic_id': 'other'}])!['topic_ids'], isEmpty);
       expect(parseMemoryControl('忘掉旅游', [interview])!['ambiguous'], isTrue);
+    });
+
+    test('explicit corrections keep the exact new wording and require one known target', () {
+      final coffee = card('coffee', '我咖啡喝半糖。', keywords: ['咖啡', '半糖'], evidence: [support('我咖啡喝半糖。')]);
+      final direct = parseMemoryControl('请把咖啡改成我喝 Cold Brew，  无糖。', [coffee])!;
+      expect(direct['kind'], 'correct');
+      expect(direct['target_card_id'], 'coffee');
+      expect(direct['replacement_text'], '我喝 Cold Brew，  无糖。');
+      expect(direct['ambiguous'], isFalse);
+      final anchored = parseMemoryControl('你记错了，我咖啡一直喝无糖。', [coffee])!;
+      expect(anchored['target_card_id'], 'coffee');
+      expect(anchored['replacement_text'], '我咖啡一直喝无糖。');
+      expect(parseMemoryControl('你记错了，我一直喝无糖。', [coffee])!['ambiguous'], isTrue,
+        reason: 'a new sugar value alone does not name coffee');
+      expect(parseMemoryControl('你记错了，我咖啡一直喝无糖。', [coffee,
+        {...coffee, 'id': 'other', 'topic_id': 'other'}])!['ambiguous'], isTrue);
+      expect(parseMemoryControl('咖啡改成我一直喝无糖。', [{...coffee, 'scope': 'story'}])!['ambiguous'], isTrue);
+      expect(parseMemoryControl('如果咖啡改成我喝无糖会怎样', [coffee]), isNull);
+      expect(parseMemoryControl('“咖啡改成我喝无糖”是台词。', [coffee]), isNull);
+      expect(parseMemoryControl('你记错了，我在扮演喝无糖咖啡的角色', [coffee])!['ambiguous'], isTrue);
+      expect(parseMemoryControl('你记错了', [coffee])!['ambiguous'], isTrue);
+    });
+
+    test('an implicit correction anchor must survive in the current evidence, not just a keyword list', () {
+      final unsupported = card('coffee', '我咖啡喝半糖。', keywords: ['咖啡'], evidence: [support('我在学长笛')]);
+      expect(parseMemoryControl('你记错了，我咖啡一直喝无糖。', [unsupported])!['ambiguous'], isTrue);
+      expect(parseMemoryControl('你记错了，我咖啡一直喝无糖。', [{...unsupported, 'manual': true}])!['ambiguous'], isFalse);
+    });
+
+    test('one explicit topic question grants a single selection without persistently reopening it', () {
+      final muted = {...interview, 'topic_mode': 'never'};
+      for (final text in ['聊聊蓝桥面试。', '我想问那次蓝桥面试', '蓝桥面试是哪天？', '蓝桥面试怎么样？']) {
+        final topics = explicitMemoryTopics(text, [muted, music]);
+        expect(topics, {'interview'});
+        expect(select([muted], text, explicit: topics).ids, ['interview']);
+      }
+      for (final text in ['你好', '面试？', '如果蓝桥面试怎么样', '我想问面试这个词的英文', '“聊聊蓝桥面试”是台词']) {
+        expect(explicitMemoryTopics(text, [muted]), isEmpty);
+      }
+      expect(explicitMemoryTopics('聊聊蓝桥面试', [muted,
+        {...muted, 'id': 'second', 'topic_id': 'second'}]), isEmpty);
+      expect(muted['topic_mode'], 'never');
+      expect(select([muted], '蓝桥面试').ids, isEmpty);
+    });
+
+    test('a cancelled plan stays visible data but is never selected as a live plan', () {
+      final cancelled = {...interview, 'plan_state': 'cancelled'};
+      expect(select([cancelled], '蓝桥面试', explicit: {'interview'}).ids, isEmpty);
+      expect(cancelled['text'], '你周四有蓝桥面试。');
     });
   });
 }
