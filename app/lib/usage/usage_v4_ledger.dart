@@ -16,7 +16,13 @@ enum UsageOperation {
   sshInitial('ssh_initial'),
   sshReconnect('ssh_reconnect'),
   relayInitial('relay_initial'),
-  relayReconnect('relay_reconnect');
+  relayReconnect('relay_reconnect'),
+  chatTurnLocal('chat_turn_local'),
+  chatTurnRemote('chat_turn_remote'),
+  chatFirstTextLocal('chat_first_text_local'),
+  chatFirstTextRemote('chat_first_text_remote'),
+  phoneTask('phone_task'),
+  updateDownload('update_download');
 
   const UsageOperation(this.wire);
   final String wire;

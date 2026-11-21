@@ -17,6 +17,7 @@ import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
 import '../state/android_features.dart';
 import '../state/phone_state.dart' show phoneChannelProvider;
+import '../state/update_state.dart';
 import 'usage_ledger.dart';
 import 'usage_net.dart';
 import 'usage_v4_ledger.dart';
@@ -186,6 +187,25 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     ref.listen(localRuntimeProvider.select(_engineMode), (_, mode) {
       if (mode != null) _record((ledger, now) => ledger.engine(mode, now));
     }, fireImmediately: true);
+    if (_v4Platform) {
+      void Function(UsageOutcome, {UsageOperation? actual})? download;
+      ref.listen(appUpdateProvider.select((s) => s.task), (_, task) {
+        switch (task) {
+          case UpdateTaskPhase.downloading:
+            download ??= beginOperation(UsageOperation.updateDownload);
+          case UpdateTaskPhase.verifying:
+            break;
+          default:
+            download?.call(switch (task) {
+              UpdateTaskPhase.ready => UsageOutcome.ready,
+              UpdateTaskPhase.failed => UsageOutcome.failed,
+              UpdateTaskPhase.idle => UsageOutcome.cancelled,
+              _ => UsageOutcome.unknown,
+            });
+            download = null;
+        }
+      });
+    }
     final channel = ref.read(phoneChannelProvider);
     StreamSubscription<PhoneStatus>? sub;
     var disposed = false;
@@ -199,9 +219,29 @@ class UsageStatsController extends Notifier<UsageStatsState> {
         // Listening with no native side reports an error: only once it answered.
         if (disposed || !first.ready) return;
         var last = first.task;
+        (String, int)? owner;
+        void Function(UsageOutcome, {UsageOperation? actual})? task;
         sub = channel.statusChanges.listen((s) {
-          if (phoneTaskStarted(last, s.task)) count(UsageCount.phone);
-          last = s.task;
+          final next = s.task;
+          if (owner != null && owner == (next.endedRunId, next.endedGeneration)) {
+            task?.call(switch (next) {
+              PhoneTaskStatus(cleanupFailed: true) => UsageOutcome.failed,
+              PhoneTaskStatus(stopped: true) => UsageOutcome.cancelled,
+              PhoneTaskStatus(completion: 'completed') => UsageOutcome.ready,
+              _ => UsageOutcome.unknown,
+            });
+            task = null;
+            owner = null;
+          }
+          if (phoneTaskStarted(last, next)) {
+            count(UsageCount.phone);
+            if ((next.runId, next.generation) case (final run?, final generation?)) {
+              task?.call(UsageOutcome.unknown);
+              task = beginOperation(UsageOperation.phoneTask);
+              owner = (run, generation);
+            }
+          }
+          last = next;
         }, onError: (_) {});
       } catch (_) {}
     }());

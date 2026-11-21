@@ -19,7 +19,8 @@ COUNTS = (
 VALUES = ("tokens_in", "tokens_out", "paired_in", "paired_out", "uncached_in",
           "cache_read", "cache_write", "cache_known", "partial_in", "partial_out")
 OPERATIONS = ("runtime_direct", "runtime_proot", "runtime_other",
-              "ssh_initial", "ssh_reconnect", "relay_initial", "relay_reconnect")
+              "ssh_initial", "ssh_reconnect", "relay_initial", "relay_reconnect",
+              "chat_turn_local", "chat_turn_remote", "chat_first_text_local", "chat_first_text_remote", "phone_task", "update_download")
 OP_COLS = ("episodes", "ready", "failed", "cancelled", "unknown",
            "le250ms", "le500ms", "le1s", "le2s", "le5s", "le10s", "le30s",
            "le60s", "le180s", "gt180s", "clipped")
