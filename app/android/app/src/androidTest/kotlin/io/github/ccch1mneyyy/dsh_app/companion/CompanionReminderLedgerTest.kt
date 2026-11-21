@@ -156,6 +156,50 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals("time_passed", f.ledger.current("t")!!.waitReason)
     }
 
+    fun testLookupUpgradeKeepsReminderRecoveryAndDoesNotExecuteTheLookupTask() {
+        f.revision(1)
+        f.installLookupSchema()
+        f.sql.execSQL("""INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,
+            item_no,kind,room_mode,current_rev,created_at_ms,updated_at_ms)
+            VALUES('q','archive','lookup-source','light:s',1,'public.lookup','light',1,0,0)""")
+        f.sql.execSQL("""INSERT INTO companion_task_revisions(task_id,task_rev,operation,command_message_id,
+            command_source_rev,command_item_no,request_fingerprint,source_said_at_utc,source_offset_minutes,
+            executor_id,local_date,zone_id,state,created_at_ms,updated_at_ms,
+            lookup_place_name,lookup_question,lookup_deadline_ms)
+            VALUES('q',1,'create','lookup-source',1,1,'lookup-fingerprint',?,480,?,'2026-11-22',
+            'Asia/Singapore','running',0,0,'青桥美术馆','今天开不开',?)""", arrayOf(f.now, EXECUTOR, DUE))
+        f.reopen()
+        assertEquals(12, f.sql.version)
+        assertEquals(listOf("t"), f.ledger.recoveryBatch(EXECUTOR, f.now, "", 50))
+        assertNull(f.ledger.current("q"))
+        assertNull(f.ledger.revision(ReminderKey("q", 1)))
+        assertTrue(f.runner().resume("q"))
+        assertEquals(0, f.effects.registered.size)
+        assertTrue(f.runner().resume("t"))
+        f.revision(2)
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.cancelled)
+        assertEquals(listOf(ReminderKey("t", 1), ReminderKey("t", 2)), f.effects.registered)
+        f.sql.rawQuery("SELECT state FROM companion_task_revisions WHERE task_id='q'", null).use {
+            assertTrue(it.moveToFirst()); assertEquals("running", it.getString(0))
+        }
+        assertEquals(0L, f.count("task_id='q'"))
+    }
+
+    fun testSchemaGateStillRejectsUnmigratedAndUnknownFutureStores() {
+        f.revision(1)
+        try {
+            for (version in listOf(10, 13)) {
+                f.sql.version = version
+                try { f.probe(); fail("Unsupported version $version was opened") }
+                catch (_: IllegalStateException) { }
+            }
+        } finally { f.sql.version = 11 }
+        assertEquals(0L, f.count("1=1"))
+        assertEquals(0, f.effects.registered.size)
+        assertTrue(f.runner().resume("t"))
+    }
+
     private fun expectSqlFailure(block: () -> Unit) {
         try { block(); fail("Expected an actual SQLite transaction failure") }
         catch (_: SQLiteException) { }
@@ -215,6 +259,15 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         fun count(where: String): Long = sql.rawQuery("SELECT COUNT(*) FROM companion_task_receipts WHERE $where", null)
             .use { check(it.moveToFirst()); it.getLong(0) }
         fun runner() = CompanionReminderRunner(ledger, effects, EXECUTOR) { now }
+        fun installLookupSchema() {
+            sql.beginTransaction()
+            try {
+                LOOKUP_SCHEMA.split(';').filter { it.isNotBlank() }.forEach { sql.execSQL(it) }
+                sql.version = 12
+                sql.setTransactionSuccessful()
+            } finally { sql.endTransaction() }
+        }
+        fun probe() { CompanionReminderLedger.open(isolated).use { } }
         fun reopen() { ledger.close(); ledger = CompanionReminderLedger.open(isolated) }
         override fun close() { ledger.close(); sql.close(); check(directory.deleteRecursively()) }
     }
@@ -291,6 +344,51 @@ CREATE TABLE companion_task_receipts (
   UNIQUE(task_id,task_rev,step_key,attempt_id,event_kind)
 );
 CREATE INDEX companion_task_receipts_task ON companion_task_receipts(task_id,runner_receipt_seq);
+        """.trimIndent()
+        // Literal v12 extension from the frozen E SDK, not a native migrator.
+        private val LOOKUP_SCHEMA = """
+ALTER TABLE companion_task_revisions ADD COLUMN lookup_place_name TEXT;
+ALTER TABLE companion_task_revisions ADD COLUMN lookup_city TEXT;
+ALTER TABLE companion_task_revisions ADD COLUMN lookup_question TEXT;
+ALTER TABLE companion_task_revisions ADD COLUMN lookup_deadline_ms INTEGER;
+ALTER TABLE companion_task_revisions ADD COLUMN lookup_result_json TEXT;
+ALTER TABLE companion_task_revisions ADD COLUMN lookup_result_fingerprint TEXT;
+CREATE TABLE companion_lookup_attempts (
+  request_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  task_rev INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('search','fetch','answer')),
+  attempt_no INTEGER NOT NULL CHECK(attempt_no>=1),
+  input_json TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  execution_mode TEXT NOT NULL CHECK(execution_mode IN ('phone','host')),
+  instance_id TEXT,
+  provider TEXT,
+  model TEXT,
+  unit_price_micro_cny INTEGER CHECK(unit_price_micro_cny>=0),
+  price_as_of TEXT,
+  dispatched INTEGER CHECK(dispatched IN (0,1)),
+  http_status INTEGER CHECK(http_status BETWEEN 100 AND 599),
+  terminal TEXT,
+  complete INTEGER NOT NULL DEFAULT 0 CHECK(complete IN (0,1)),
+  valid_result INTEGER NOT NULL DEFAULT 0 CHECK(valid_result IN (0,1)),
+  tool_response_json TEXT,
+  tool_response_fingerprint TEXT,
+  source_metadata_json TEXT,
+  answer_text TEXT,
+  raw_usage_json TEXT,
+  normalized_usage_json TEXT,
+  tool_success_units INTEGER CHECK(tool_success_units IN (0,1)),
+  estimated_tool_micro_cny INTEGER CHECK(estimated_tool_micro_cny>=0),
+  finish_fingerprint TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  finished_at_ms INTEGER,
+  FOREIGN KEY(task_id,task_rev) REFERENCES companion_task_revisions(task_id,task_rev) ON DELETE CASCADE,
+  UNIQUE(task_id,kind,attempt_no),
+  CHECK((execution_mode='host')=(instance_id IS NOT NULL))
+);
+CREATE INDEX companion_lookup_task ON companion_lookup_attempts(task_id,task_rev,created_at_ms,request_id);
         """.trimIndent()
     }
 }
