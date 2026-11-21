@@ -1,0 +1,977 @@
+{
+  "scope": "ACTUAL_PINNED_SOURCE_LOOPBACK_OWNER_STOP_AND_DOMAIN_REOPEN_WITH_CONTROLLED_MODEL",
+  "create": {
+    "v": 1,
+    "hostStoreId": "3b69efd4-dee3-41ca-a79e-9e43857c6978",
+    "taskId": "compare-one",
+    "taskRev": 1,
+    "kind": "host.compare_drafts",
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "args": {
+      "a": {
+        "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+        "version": "27:1320999:50:1795176000000000000:1795284852098951689"
+      },
+      "b": {
+        "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+        "version": "27:1321000:50:1795176000000000000:1795284852102951491"
+      },
+      "maxHighlights": 3
+    },
+    "deadlineAtMs": null,
+    "afterExit": "continue",
+    "allowQueue": true
+  },
+  "inputs": {
+    "a": {
+      "v": 1,
+      "hostStoreId": "3b69efd4-dee3-41ca-a79e-9e43857c6978",
+      "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+      "displayName": "A旧稿.md",
+      "version": "27:1320999:50:1795176000000000000:1795284852098951689",
+      "size": 50,
+      "mediaType": "text/markdown"
+    },
+    "b": {
+      "v": 1,
+      "hostStoreId": "3b69efd4-dee3-41ca-a79e-9e43857c6978",
+      "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+      "displayName": "B新稿.txt",
+      "version": "27:1321000:50:1795176000000000000:1795284852102951491",
+      "size": 50,
+      "mediaType": "text/plain"
+    }
+  },
+  "originals": {
+    "a": "开场原句。\n\n共同一段。\n\n结尾原句。\n",
+    "b": "开场新句。\n\n共同一段。\n\n结尾新句。\n"
+  },
+  "before": {
+    "v": 1,
+    "taskId": "compare-one",
+    "hostExecutionId": "497b257e-157e-4d54-be88-eff97ea8b304",
+    "kind": "host.compare_drafts",
+    "taskRev": 1,
+    "runnerReceiptSeq": 16,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "unknown",
+    "waitReason": "report_owner_stopped",
+    "cancelRequested": false,
+    "createdAtMs": 1795284852112,
+    "updatedAtMs": 1795284852165,
+    "agreement": {
+      "args": {
+        "a": {
+          "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+          "version": "27:1320999:50:1795176000000000000:1795284852098951689"
+        },
+        "b": {
+          "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+          "version": "27:1321000:50:1795176000000000000:1795284852102951491"
+        },
+        "maxHighlights": 3
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795284852113,
+        "agreement": {
+          "args": {
+            "a": {
+              "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+              "version": "27:1320999:50:1795176000000000000:1795284852098951689"
+            },
+            "b": {
+              "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+              "version": "27:1321000:50:1795176000000000000:1795284852102951491"
+            },
+            "maxHighlights": 3
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [
+      {
+        "taskRev": 1,
+        "stepKey": "readInputs",
+        "attemptId": "3ade18a1-1c19-4799-9425-f3fce4a18887",
+        "state": "done",
+        "startedAtMs": 1795284852115,
+        "finishedAtMs": 1795284852123,
+        "reason": null,
+        "result": {
+          "completion": {
+            "aComplete": true,
+            "bComplete": true,
+            "comparisonComplete": true
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "model",
+        "attemptId": "05ae9c21-4bc6-4b44-af9c-4dc5a9c8976f",
+        "state": "done",
+        "startedAtMs": 1795284852125,
+        "finishedAtMs": 1795284852156,
+        "reason": null,
+        "result": {
+          "observations": [
+            {
+              "type": "dispatch",
+              "atMs": 1795284852129,
+              "boundary": "fetch-invoked"
+            },
+            {
+              "type": "http",
+              "status": 200
+            },
+            {
+              "type": "usage",
+              "event": "message_start",
+              "semantics": "cumulative",
+              "raw": {
+                "input_tokens": 17
+              }
+            },
+            {
+              "type": "usage",
+              "event": "message_delta",
+              "semantics": "cumulative",
+              "raw": {
+                "output_tokens": 13
+              }
+            },
+            {
+              "type": "stop",
+              "stopReason": "end_turn"
+            },
+            {
+              "type": "complete"
+            },
+            {
+              "type": "model-finish",
+              "dispatched": true,
+              "httpStatus": 200,
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-compare",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              },
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 469,
+                "contextWindow": 64000,
+                "outputReservedTokens": 4000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "reason": null
+            }
+          ],
+          "completion": {
+            "suggestionCount": 2,
+            "usage": {
+              "provider": "fixture",
+              "model": "fixture-compare",
+              "start_usage": {
+                "input_tokens": 17
+              },
+              "final_usage": {
+                "output_tokens": 13
+              },
+              "start_event": "message_start",
+              "final_event": "message_delta",
+              "usage_semantics": "cumulative",
+              "input_uncached": null,
+              "input_cache_read": null,
+              "input_cache_write": null,
+              "output_tokens": 13,
+              "stop_reason": "end_turn",
+              "terminal": "complete",
+              "complete": true,
+              "http_status": 200
+            },
+            "inputBudget": {
+              "accepted": true,
+              "estimatedTokens": 469,
+              "contextWindow": 64000,
+              "outputReservedTokens": 4000,
+              "semantics": "heuristic-not-tokenizer-or-usage",
+              "boundary": "provider-request"
+            }
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "report",
+        "attemptId": "a8d3691d-eec0-4c30-8121-e45fd4cfd506",
+        "state": "partial",
+        "startedAtMs": 1795284852160,
+        "finishedAtMs": 1795284852165,
+        "reason": "report_owner_stopped",
+        "result": {
+          "completion": {
+            "sources": [
+              {
+                "side": "a",
+                "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+                "version": "27:1320999:50:1795176000000000000:1795284852098951689",
+                "displayName": "A旧稿.md",
+                "mediaType": "text/markdown",
+                "size": 50,
+                "readComplete": true,
+                "verifiedAtPublish": true,
+                "reason": null
+              },
+              {
+                "side": "b",
+                "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+                "version": "27:1321000:50:1795176000000000000:1795284852102951491",
+                "displayName": "B新稿.txt",
+                "mediaType": "text/plain",
+                "size": 50,
+                "readComplete": true,
+                "verifiedAtPublish": false,
+                "reason": "task_owner_stopping"
+              }
+            ],
+            "coverage": {
+              "aComplete": true,
+              "bComplete": true,
+              "comparisonComplete": true,
+              "totalChangeGroups": 2,
+              "displayedChangeGroups": 2,
+              "algorithm": "unique-line-anchors-v1",
+              "gaps": [
+                {
+                  "side": "b",
+                  "reason": "task_owner_stopping"
+                }
+              ]
+            },
+            "identical": false,
+            "differences": [
+              {
+                "id": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:14-20:14-20",
+                "kind": "replace",
+                "a": {
+                  "from": 14,
+                  "to": 20,
+                  "lineStart": 5,
+                  "lineEnd": 6,
+                  "paragraphs": {
+                    "from": 3,
+                    "to": 3
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 14,
+                      "to": 20,
+                      "text": "结尾原句。\n",
+                      "lineStart": 5,
+                      "lineEnd": 6,
+                      "paragraphs": {
+                        "from": 3,
+                        "to": 3
+                      },
+                      "boundary": null
+                    }
+                  ]
+                },
+                "b": {
+                  "from": 14,
+                  "to": 20,
+                  "lineStart": 5,
+                  "lineEnd": 6,
+                  "paragraphs": {
+                    "from": 3,
+                    "to": 3
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 14,
+                      "to": 20,
+                      "text": "结尾新句。\n",
+                      "lineStart": 5,
+                      "lineEnd": 6,
+                      "paragraphs": {
+                        "from": 3,
+                        "to": 3
+                      },
+                      "boundary": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:0-6:0-6",
+                "kind": "replace",
+                "a": {
+                  "from": 0,
+                  "to": 6,
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 0,
+                      "to": 6,
+                      "text": "开场原句。\n",
+                      "lineStart": 1,
+                      "lineEnd": 2,
+                      "paragraphs": {
+                        "from": 1,
+                        "to": 1
+                      },
+                      "boundary": null
+                    }
+                  ]
+                },
+                "b": {
+                  "from": 0,
+                  "to": 6,
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 0,
+                      "to": 6,
+                      "text": "开场新句。\n",
+                      "lineStart": 1,
+                      "lineEnd": 2,
+                      "paragraphs": {
+                        "from": 1,
+                        "to": 1
+                      },
+                      "boundary": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "selection": "model",
+            "suggestions": {
+              "status": "available",
+              "reason": null,
+              "items": [
+                {
+                  "differenceId": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:14-20:14-20",
+                  "practice": "建议按这一处的实际新句重新排练。"
+                },
+                {
+                  "differenceId": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:0-6:0-6",
+                  "practice": "建议按这一处的实际新句重新排练。"
+                }
+              ]
+            },
+            "published": false
+          }
+        }
+      }
+    ],
+    "artifacts": [],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 37,
+      "heldMs": 0
+    },
+    "hostStoreId": "3b69efd4-dee3-41ca-a79e-9e43857c6978",
+    "originalCreatePresent": true
+  },
+  "complete": {
+    "v": 1,
+    "taskId": "compare-one",
+    "hostExecutionId": "497b257e-157e-4d54-be88-eff97ea8b304",
+    "kind": "host.compare_drafts",
+    "taskRev": 1,
+    "runnerReceiptSeq": 18,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "original-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "done",
+    "waitReason": null,
+    "cancelRequested": false,
+    "createdAtMs": 1795284852112,
+    "updatedAtMs": 1795284852181,
+    "agreement": {
+      "args": {
+        "a": {
+          "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+          "version": "27:1320999:50:1795176000000000000:1795284852098951689"
+        },
+        "b": {
+          "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+          "version": "27:1321000:50:1795176000000000000:1795284852102951491"
+        },
+        "maxHighlights": 3
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795284852113,
+        "agreement": {
+          "args": {
+            "a": {
+              "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+              "version": "27:1320999:50:1795176000000000000:1795284852098951689"
+            },
+            "b": {
+              "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+              "version": "27:1321000:50:1795176000000000000:1795284852102951491"
+            },
+            "maxHighlights": 3
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [
+      {
+        "taskRev": 1,
+        "stepKey": "readInputs",
+        "attemptId": "3ade18a1-1c19-4799-9425-f3fce4a18887",
+        "state": "done",
+        "startedAtMs": 1795284852115,
+        "finishedAtMs": 1795284852123,
+        "reason": null,
+        "result": {
+          "completion": {
+            "aComplete": true,
+            "bComplete": true,
+            "comparisonComplete": true
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "model",
+        "attemptId": "05ae9c21-4bc6-4b44-af9c-4dc5a9c8976f",
+        "state": "done",
+        "startedAtMs": 1795284852125,
+        "finishedAtMs": 1795284852156,
+        "reason": null,
+        "result": {
+          "observations": [
+            {
+              "type": "dispatch",
+              "atMs": 1795284852129,
+              "boundary": "fetch-invoked"
+            },
+            {
+              "type": "http",
+              "status": 200
+            },
+            {
+              "type": "usage",
+              "event": "message_start",
+              "semantics": "cumulative",
+              "raw": {
+                "input_tokens": 17
+              }
+            },
+            {
+              "type": "usage",
+              "event": "message_delta",
+              "semantics": "cumulative",
+              "raw": {
+                "output_tokens": 13
+              }
+            },
+            {
+              "type": "stop",
+              "stopReason": "end_turn"
+            },
+            {
+              "type": "complete"
+            },
+            {
+              "type": "model-finish",
+              "dispatched": true,
+              "httpStatus": 200,
+              "usage": {
+                "provider": "fixture",
+                "model": "fixture-compare",
+                "start_usage": {
+                  "input_tokens": 17
+                },
+                "final_usage": {
+                  "output_tokens": 13
+                },
+                "start_event": "message_start",
+                "final_event": "message_delta",
+                "usage_semantics": "cumulative",
+                "input_uncached": null,
+                "input_cache_read": null,
+                "input_cache_write": null,
+                "output_tokens": 13,
+                "stop_reason": "end_turn",
+                "terminal": "complete",
+                "complete": true,
+                "http_status": 200
+              },
+              "inputBudget": {
+                "accepted": true,
+                "estimatedTokens": 469,
+                "contextWindow": 64000,
+                "outputReservedTokens": 4000,
+                "semantics": "heuristic-not-tokenizer-or-usage",
+                "boundary": "provider-request"
+              },
+              "reason": null
+            }
+          ],
+          "completion": {
+            "suggestionCount": 2,
+            "usage": {
+              "provider": "fixture",
+              "model": "fixture-compare",
+              "start_usage": {
+                "input_tokens": 17
+              },
+              "final_usage": {
+                "output_tokens": 13
+              },
+              "start_event": "message_start",
+              "final_event": "message_delta",
+              "usage_semantics": "cumulative",
+              "input_uncached": null,
+              "input_cache_read": null,
+              "input_cache_write": null,
+              "output_tokens": 13,
+              "stop_reason": "end_turn",
+              "terminal": "complete",
+              "complete": true,
+              "http_status": 200
+            },
+            "inputBudget": {
+              "accepted": true,
+              "estimatedTokens": 469,
+              "contextWindow": 64000,
+              "outputReservedTokens": 4000,
+              "semantics": "heuristic-not-tokenizer-or-usage",
+              "boundary": "provider-request"
+            }
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "report",
+        "attemptId": "a8d3691d-eec0-4c30-8121-e45fd4cfd506",
+        "state": "partial",
+        "startedAtMs": 1795284852160,
+        "finishedAtMs": 1795284852165,
+        "reason": "report_owner_stopped",
+        "result": {
+          "completion": {
+            "sources": [
+              {
+                "side": "a",
+                "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+                "version": "27:1320999:50:1795176000000000000:1795284852098951689",
+                "displayName": "A旧稿.md",
+                "mediaType": "text/markdown",
+                "size": 50,
+                "readComplete": true,
+                "verifiedAtPublish": true,
+                "reason": null
+              },
+              {
+                "side": "b",
+                "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+                "version": "27:1321000:50:1795176000000000000:1795284852102951491",
+                "displayName": "B新稿.txt",
+                "mediaType": "text/plain",
+                "size": 50,
+                "readComplete": true,
+                "verifiedAtPublish": false,
+                "reason": "task_owner_stopping"
+              }
+            ],
+            "coverage": {
+              "aComplete": true,
+              "bComplete": true,
+              "comparisonComplete": true,
+              "totalChangeGroups": 2,
+              "displayedChangeGroups": 2,
+              "algorithm": "unique-line-anchors-v1",
+              "gaps": [
+                {
+                  "side": "b",
+                  "reason": "task_owner_stopping"
+                }
+              ]
+            },
+            "identical": false,
+            "differences": [
+              {
+                "id": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:14-20:14-20",
+                "kind": "replace",
+                "a": {
+                  "from": 14,
+                  "to": 20,
+                  "lineStart": 5,
+                  "lineEnd": 6,
+                  "paragraphs": {
+                    "from": 3,
+                    "to": 3
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 14,
+                      "to": 20,
+                      "text": "结尾原句。\n",
+                      "lineStart": 5,
+                      "lineEnd": 6,
+                      "paragraphs": {
+                        "from": 3,
+                        "to": 3
+                      },
+                      "boundary": null
+                    }
+                  ]
+                },
+                "b": {
+                  "from": 14,
+                  "to": 20,
+                  "lineStart": 5,
+                  "lineEnd": 6,
+                  "paragraphs": {
+                    "from": 3,
+                    "to": 3
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 14,
+                      "to": 20,
+                      "text": "结尾新句。\n",
+                      "lineStart": 5,
+                      "lineEnd": 6,
+                      "paragraphs": {
+                        "from": 3,
+                        "to": 3
+                      },
+                      "boundary": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:0-6:0-6",
+                "kind": "replace",
+                "a": {
+                  "from": 0,
+                  "to": 6,
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 0,
+                      "to": 6,
+                      "text": "开场原句。\n",
+                      "lineStart": 1,
+                      "lineEnd": 2,
+                      "paragraphs": {
+                        "from": 1,
+                        "to": 1
+                      },
+                      "boundary": null
+                    }
+                  ]
+                },
+                "b": {
+                  "from": 0,
+                  "to": 6,
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 0,
+                      "to": 6,
+                      "text": "开场新句。\n",
+                      "lineStart": 1,
+                      "lineEnd": 2,
+                      "paragraphs": {
+                        "from": 1,
+                        "to": 1
+                      },
+                      "boundary": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "selection": "model",
+            "suggestions": {
+              "status": "available",
+              "reason": null,
+              "items": [
+                {
+                  "differenceId": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:14-20:14-20",
+                  "practice": "建议按这一处的实际新句重新排练。"
+                },
+                {
+                  "differenceId": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:0-6:0-6",
+                  "practice": "建议按这一处的实际新句重新排练。"
+                }
+              ]
+            },
+            "published": false
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "report",
+        "attemptId": "59e8a499-3a15-43c1-8a77-b5aa317d4101",
+        "state": "done",
+        "startedAtMs": 1795284852175,
+        "finishedAtMs": 1795284852181,
+        "reason": null,
+        "result": {
+          "completion": {
+            "sources": [
+              {
+                "side": "a",
+                "sourceRef": "03eb799c-b3be-42a2-bb65-e1b0c5630ff0",
+                "version": "27:1320999:50:1795176000000000000:1795284852098951689",
+                "displayName": "A旧稿.md",
+                "mediaType": "text/markdown",
+                "size": 50,
+                "readComplete": true,
+                "verifiedAtPublish": true,
+                "reason": null
+              },
+              {
+                "side": "b",
+                "sourceRef": "bfc27d63-ec6b-486a-a87f-88d13b6a85c0",
+                "version": "27:1321000:50:1795176000000000000:1795284852102951491",
+                "displayName": "B新稿.txt",
+                "mediaType": "text/plain",
+                "size": 50,
+                "readComplete": true,
+                "verifiedAtPublish": true,
+                "reason": null
+              }
+            ],
+            "coverage": {
+              "aComplete": true,
+              "bComplete": true,
+              "comparisonComplete": true,
+              "totalChangeGroups": 2,
+              "displayedChangeGroups": 2,
+              "algorithm": "unique-line-anchors-v1",
+              "gaps": []
+            },
+            "identical": false,
+            "differences": [
+              {
+                "id": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:14-20:14-20",
+                "kind": "replace",
+                "a": {
+                  "from": 14,
+                  "to": 20,
+                  "lineStart": 5,
+                  "lineEnd": 6,
+                  "paragraphs": {
+                    "from": 3,
+                    "to": 3
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 14,
+                      "to": 20,
+                      "text": "结尾原句。\n",
+                      "lineStart": 5,
+                      "lineEnd": 6,
+                      "paragraphs": {
+                        "from": 3,
+                        "to": 3
+                      },
+                      "boundary": null
+                    }
+                  ]
+                },
+                "b": {
+                  "from": 14,
+                  "to": 20,
+                  "lineStart": 5,
+                  "lineEnd": 6,
+                  "paragraphs": {
+                    "from": 3,
+                    "to": 3
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 14,
+                      "to": 20,
+                      "text": "结尾新句。\n",
+                      "lineStart": 5,
+                      "lineEnd": 6,
+                      "paragraphs": {
+                        "from": 3,
+                        "to": 3
+                      },
+                      "boundary": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:0-6:0-6",
+                "kind": "replace",
+                "a": {
+                  "from": 0,
+                  "to": 6,
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 0,
+                      "to": 6,
+                      "text": "开场原句。\n",
+                      "lineStart": 1,
+                      "lineEnd": 2,
+                      "paragraphs": {
+                        "from": 1,
+                        "to": 1
+                      },
+                      "boundary": null
+                    }
+                  ]
+                },
+                "b": {
+                  "from": 0,
+                  "to": 6,
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null,
+                  "excerpts": [
+                    {
+                      "from": 0,
+                      "to": 6,
+                      "text": "开场新句。\n",
+                      "lineStart": 1,
+                      "lineEnd": 2,
+                      "paragraphs": {
+                        "from": 1,
+                        "to": 1
+                      },
+                      "boundary": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "selection": "model",
+            "suggestions": {
+              "status": "available",
+              "reason": null,
+              "items": [
+                {
+                  "differenceId": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:14-20:14-20",
+                  "practice": "建议按这一处的实际新句重新排练。"
+                },
+                {
+                  "differenceId": "change:190a43495ec372124fc4e5680be7cd5aaa139bfc898093d80636f444289bd3c3:0-6:0-6",
+                  "practice": "建议按这一处的实际新句重新排练。"
+                }
+              ]
+            },
+            "published": true
+          }
+        }
+      }
+    ],
+    "artifacts": [],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 40,
+      "heldMs": 0
+    },
+    "hostStoreId": "3b69efd4-dee3-41ca-a79e-9e43857c6978",
+    "originalCreatePresent": true
+  }
+}

@@ -13,12 +13,13 @@ const _path = '/dsh-go/v1/companion/tasks';
 typedef _Row = Map<String, Object?>;
 
 class CompanionTasksCapability {
-  const CompanionTasksCapability._(this._owner, this.hostStoreId, this.notes, this.findDraft,
+  const CompanionTasksCapability._(this._owner, this.hostStoreId, this.notes, this.findDraft, this.compareDrafts,
     this.artifactRead, this.sourceRead, this.reason);
   final DshClient _owner;
   final String? hostStoreId;
   final bool notes;
   final bool findDraft;
+  final bool compareDrafts;
   final bool artifactRead;
   final bool sourceRead;
   final String? reason;
@@ -50,7 +51,7 @@ extension CompanionHostTasksApi on DshClient {
         map['artifactRead'] is! bool ||
         (map['hostStoreId'] != null && !_id(map['hostStoreId'])) ||
         kinds is! List ||
-        kinds.any((kind) => !const ['host.notes_to_todo', 'host.find_draft'].contains(kind)) ||
+        kinds.any((kind) => !const ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'].contains(kind)) ||
         (kinds.isNotEmpty && (map['durableAcceptance'] != true || !_id(map['hostStoreId']))) ||
         (map.containsKey('sourceRead') && map['sourceRead'] is! bool) ||
         (kinds.contains('host.find_draft') && map['sourceRead'] != true) ||
@@ -65,6 +66,7 @@ extension CompanionHostTasksApi on DshClient {
       map['hostStoreId'] as String?,
       kinds.contains('host.notes_to_todo'),
       kinds.contains('host.find_draft'),
+      kinds.contains('host.compare_drafts'),
       map['artifactRead']! as bool,
       map['sourceRead'] == true,
       map['reason'] as String?,
@@ -78,7 +80,7 @@ extension CompanionHostTasksApi on DshClient {
     String path, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    if (!identical(host._owner, this) || (!host.notes && !host.findDraft) || host.hostStoreId == null) {
+    if (!identical(host._owner, this) || (!host.notes && !host.findDraft && !host.compareDrafts) || host.hostStoreId == null) {
       throw const DshRemoteException('companion/task-unavailable', 'Directory tasks are unavailable');
     }
     final response = await _connection(this).postBytes(
@@ -96,6 +98,38 @@ extension CompanionHostTasksApi on DshClient {
         !_id(map['folderRef']) ||
         map['displayPath'] is! String ||
         (map['displayPath']! as String).isEmpty) {
+      _invalid();
+    }
+    return map;
+  }
+
+  /// Bind one explicitly selected name inside an actual bound directory.
+  /// The reply is metadata for that original object, never a whole-file read.
+  Future<Map<String, Object?>> bindCompanionDraftInput(
+    CompanionTasksCapability host, {
+    required String folderRef,
+    required String name,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    if (!identical(host._owner, this) || !host.compareDrafts || host.hostStoreId == null) {
+      throw const DshRemoteException('companion/task-unavailable', 'Draft comparison is unavailable');
+    }
+    if (!_id(folderRef) || name.isEmpty || name.length > 255 ||
+        RegExp(r'[/\\\x00]').hasMatch(name) || !RegExp(r'\.(md|txt)$', caseSensitive: false).hasMatch(name)) {
+      throw const DshProtocolException('Choose one supported file name inside the selected directory');
+    }
+    final response = await _connection(this).postBytes(
+      '$_path/inputs',
+      utf8.encode(jsonEncode({'v': 1, 'hostStoreId': host.hostStoreId, 'folderRef': folderRef, 'name': name})),
+      contentType: 'application/json', followRedirects: false, timeout: timeout, maxResponseBytes: 16384,
+    );
+    final map = _decode(response);
+    _success(response, map);
+    if (map.length != 7 || map['v'] != 1 || map['hostStoreId'] != host.hostStoreId ||
+        !_id(map['sourceRef']) || map['displayName'] != name ||
+        map['version'] is! String || (map['version']! as String).isEmpty ||
+        map['size'] is! int || (map['size']! as int) < 0 || (map['size']! as int) > 65536 ||
+        !const ['text/plain', 'text/markdown'].contains(map['mediaType'])) {
       _invalid();
     }
     return map;

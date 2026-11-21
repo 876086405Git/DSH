@@ -1,0 +1,139 @@
+{
+  "provenance": {
+    "scope": "SOURCE_UNIT synthetic texts; not a Host HTTP or file receipt",
+    "moduleSha256": "c05d77aa5010965d335bd0060f6be82a47b9419f89cbced321b8959920fe9bf8"
+  },
+  "a": "周五开放。\n\n中间不变。\n\n最后我们再想一想？\n",
+  "b": "周六开放。\n\n中间不变。\n\n最后我们再想一想。\n",
+  "comparison": {
+    "algorithm": "unique-line-anchors-v1",
+    "minimumEditScriptGuaranteed": false,
+    "complete": true,
+    "identical": false,
+    "totalChanges": 2,
+    "a": {
+      "utf8Bytes": 62,
+      "utf16Length": 24,
+      "lineCount": 5,
+      "paragraphCount": 3,
+      "sha256": "9426fcc13d041714f5edbacc1fc13a7aecdf049f6fc15e13bd644d84bb7a5411"
+    },
+    "b": {
+      "utf8Bytes": 62,
+      "utf16Length": 24,
+      "lineCount": 5,
+      "paragraphCount": 3,
+      "sha256": "6ac5b71b6905b17bd2a5a7074c894b330f70a4a27fcdba19e880e7c6b704a289"
+    },
+    "changes": [
+      {
+        "id": "change:13d51a91b2f0682ae891cc9f6b982d4888c49f6d2c2f647df5319c58679c4e80:0-6:0-6",
+        "kind": "replace",
+        "a": {
+          "from": 0,
+          "to": 6,
+          "lineStart": 1,
+          "lineEnd": 2,
+          "paragraphs": {
+            "from": 1,
+            "to": 1
+          },
+          "boundary": null,
+          "excerpts": [
+            {
+              "from": 0,
+              "to": 6,
+              "text": "周五开放。\n",
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null
+            }
+          ]
+        },
+        "b": {
+          "from": 0,
+          "to": 6,
+          "lineStart": 1,
+          "lineEnd": 2,
+          "paragraphs": {
+            "from": 1,
+            "to": 1
+          },
+          "boundary": null,
+          "excerpts": [
+            {
+              "from": 0,
+              "to": 6,
+              "text": "周六开放。\n",
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null
+            }
+          ]
+        }
+      },
+      {
+        "id": "change:13d51a91b2f0682ae891cc9f6b982d4888c49f6d2c2f647df5319c58679c4e80:14-24:14-24",
+        "kind": "replace",
+        "a": {
+          "from": 14,
+          "to": 24,
+          "lineStart": 5,
+          "lineEnd": 6,
+          "paragraphs": {
+            "from": 3,
+            "to": 3
+          },
+          "boundary": null,
+          "excerpts": [
+            {
+              "from": 14,
+              "to": 24,
+              "text": "最后我们再想一想？\n",
+              "lineStart": 5,
+              "lineEnd": 6,
+              "paragraphs": {
+                "from": 3,
+                "to": 3
+              },
+              "boundary": null
+            }
+          ]
+        },
+        "b": {
+          "from": 14,
+          "to": 24,
+          "lineStart": 5,
+          "lineEnd": 6,
+          "paragraphs": {
+            "from": 3,
+            "to": 3
+          },
+          "boundary": null,
+          "excerpts": [
+            {
+              "from": 14,
+              "to": 24,
+              "text": "最后我们再想一想。\n",
+              "lineStart": 5,
+              "lineEnd": 6,
+              "paragraphs": {
+                "from": 3,
+                "to": 3
+              },
+              "boundary": null
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

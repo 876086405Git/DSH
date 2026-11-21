@@ -4,7 +4,7 @@ const _hostTaskInvalid = DshRemoteException('companion/task-invalid-request', 'I
   'status': 400,
 });
 
-/// Explicit notes and draft-finding tasks. Remote effects remain in the original Host's
+/// Explicit notes and draft tasks. Remote effects remain in the original Host's
 /// complete snapshot; these commands never run a generic tool or chat loop.
 extension CompanionHostTaskStore on CompanionMemoryStore {
   MemoryRow createNotesTaskFromMessage({
@@ -39,6 +39,23 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     directoryHostStoreId: directoryHostStoreId,
   );
 
+  /// Both inputs are actual binding replies from the same original Host store.
+  /// Their metadata is retained for later explicit selection, never as a path grant.
+  MemoryRow createCompareDraftTaskFromMessage({
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required String roomMode,
+    required String hostKey,
+    String? hostSessionId,
+    required MemoryRow agreement,
+    required MemoryRow inputs,
+  }) => _createHostTaskFromMessage(kind: 'host.compare_drafts',
+    messageId: messageId, expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    roomMode: roomMode, hostKey: hostKey, hostSessionId: hostSessionId,
+    agreement: agreement, directoryLabels: {'inputs': inputs},
+  );
+
   MemoryRow _createHostTaskFromMessage({
     required String kind,
     required String messageId,
@@ -60,8 +77,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       throw _hostTaskInvalid;
     }
     final normalized = _hostAgreement(agreement, kind);
+    final boundStoreId = kind == 'host.compare_drafts'
+        ? _compareInputStore(directoryLabels['inputs'], normalized['args']! as MemoryRow)
+        : directoryHostStoreId;
     final fingerprint = _taskFingerprint([
-      kind == 'host.notes_to_todo' ? 'notes.create' : 'find.create',
+      kind == 'host.notes_to_todo' ? 'notes.create' : kind == 'host.find_draft' ? 'find.create' : 'compare.create',
       messageId,
       expectedSourceRev,
       itemNo,
@@ -69,7 +89,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       hostKey,
       hostSessionId,
       _canonicalJson(normalized),
-      if (kind == 'host.find_draft') directoryHostStoreId,
+      if (kind != 'host.notes_to_todo') boundStoreId,
     ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
@@ -92,7 +112,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         [id, archive['id'], messageId, source['session_id'], itemNo, kind, roomMode, hostKey, hostSessionId, at, at],
       );
       _insertHostRevision(id, 1, 'create', source, itemNo, fingerprint, hostKey, normalized, at: at);
-      _db.execute('INSERT INTO companion_host_tasks(task_id,host_store_id) VALUES(?,?)', [id, directoryHostStoreId]);
+      _db.execute('INSERT INTO companion_host_tasks(task_id,host_store_id) VALUES(?,?)', [id, boundStoreId]);
       final request = <String, Object?>{
         'v': 1,
         'taskId': id,
@@ -140,6 +160,20 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     agreement: agreement, directoryLabels: directoryLabels,
   );
 
+  MemoryRow amendCompareDraftTask({
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+    required MemoryRow agreement,
+    required MemoryRow inputs,
+  }) => _amendHostTask(kind: 'host.compare_drafts',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+    agreement: agreement, directoryLabels: {'inputs': inputs},
+  );
+
   MemoryRow _amendHostTask({
     required String kind,
     required String taskId,
@@ -151,14 +185,18 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     MemoryRow? directoryLabels,
   }) {
     final normalized = _hostAgreement(agreement, kind);
+    final inputStoreId = kind == 'host.compare_drafts'
+        ? _compareInputStore(directoryLabels?['inputs'], normalized['args']! as MemoryRow)
+        : null;
     final fingerprint = _taskFingerprint([
-      kind == 'host.notes_to_todo' ? 'notes.amend' : 'find.amend',
+      kind == 'host.notes_to_todo' ? 'notes.amend' : kind == 'host.find_draft' ? 'find.amend' : 'compare.amend',
       taskId,
       expectedTaskRev,
       messageId,
       expectedSourceRev,
       itemNo,
       _canonicalJson(normalized),
+      if (kind == 'host.compare_drafts') inputStoreId,
     ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
@@ -179,6 +217,10 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         if ((normalized['args']! as MemoryRow)['timeZone'] != originalArgs['timeZone']) {
           throw _hostTaskInvalid;
         }
+      }
+      if (kind == 'host.compare_drafts' &&
+          inputStoreId != current['host_store_id']) {
+        throw _conflict;
       }
       final revision = expectedTaskRev + 1;
       final operation = _createId();
@@ -205,7 +247,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           _canonicalJson({
             'v': 1,
             'operationId': operation,
-            if (kind == 'host.find_draft') 'kind': kind,
+            if (kind != 'host.notes_to_todo') 'kind': kind,
             'expectedTaskRev': expectedTaskRev,
             'taskRev': revision,
             'changes': normalized,
@@ -240,6 +282,17 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     expectedSourceRev: expectedSourceRev, itemNo: itemNo,
   );
 
+  MemoryRow cancelCompareDraftTask({
+    required String taskId,
+    required int expectedTaskRev,
+    required String messageId,
+    required int expectedSourceRev,
+    required int itemNo,
+  }) => _cancelHostTask(kind: 'host.compare_drafts',
+    taskId: taskId, expectedTaskRev: expectedTaskRev, messageId: messageId,
+    expectedSourceRev: expectedSourceRev, itemNo: itemNo,
+  );
+
   MemoryRow _cancelHostTask({
     required String kind,
     required String taskId,
@@ -249,7 +302,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int itemNo,
   }) {
     final fingerprint = _taskFingerprint([
-      kind == 'host.notes_to_todo' ? 'notes.cancel' : 'find.cancel',
+      kind == 'host.notes_to_todo' ? 'notes.cancel' : kind == 'host.find_draft' ? 'find.cancel' : 'compare.cancel',
       taskId,
       expectedTaskRev,
       messageId,
@@ -306,7 +359,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
           _canonicalJson({
             'v': 1,
             'operationId': operation,
-            if (kind == 'host.find_draft') 'kind': kind,
+            if (kind != 'host.notes_to_todo') 'kind': kind,
             'expectedTaskRev': expectedTaskRev,
             'taskRev': revision,
           }),
@@ -359,6 +412,45 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     ''', [hostKey]))
       hostTask(row['task_id']! as String)!,
   ];
+
+  List<MemoryRow> pendingCompareDraftTasks({required String hostKey}) => [
+    for (final row in _db.select('''
+      SELECT t.task_id FROM companion_tasks t
+      JOIN companion_task_revisions r ON r.task_id=t.task_id AND r.task_rev=t.current_rev
+      WHERE t.kind='host.compare_drafts' AND t.host_key=?
+        AND r.state IN ('queued','waiting','running','unknown')
+      ORDER BY t.created_at_ms,t.task_id
+    ''', [hostKey]))
+      hostTask(row['task_id']! as String)!,
+  ];
+
+  /// Read retained, originally selected file bindings across all revisions.
+  /// Choosing one again still requires a new explicit source and current Host checks.
+  List<MemoryRow> hostTaskInputs({required String hostKey}) {
+    final rows = _db.select('''
+      SELECT h.host_store_id,c.display_json FROM companion_tasks t
+      JOIN companion_host_tasks h ON h.task_id=t.task_id
+      JOIN companion_host_commands c ON c.task_id=t.task_id
+      JOIN companion_task_revisions r ON r.task_id=c.task_id AND r.task_rev=c.task_rev
+      WHERE t.host_key=? AND t.kind='host.compare_drafts'
+        AND h.host_store_id IS NOT NULL AND r.operation IN ('create','amend')
+      ORDER BY t.updated_at_ms DESC,c.task_rev DESC,t.task_id
+    ''', [hostKey]);
+    final seen = <(String, String, String)>{};
+    final result = <MemoryRow>[];
+    for (final row in rows) {
+      final display = jsonDecode(row['display_json']! as String) as MemoryRow;
+      final inputs = display['inputs']! as MemoryRow;
+      for (final side in const ['a', 'b']) {
+        final binding = inputs[side]! as MemoryRow;
+        if (seen.add((row['host_store_id']! as String,
+            binding['sourceRef']! as String, binding['version']! as String))) {
+          result.add(binding);
+        }
+      }
+    }
+    return result;
+  }
 
   /// Previously selected source directories on this original Host. These
   /// saved labels are choices for a new explicit task, not an access grant.
@@ -604,8 +696,11 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
             throw _conflict;
           }
           final completion = (step['result'] as Map<String, Object?>?)?['completion'];
-          if (current['kind'] == 'host.find_draft' &&
-              step['stepKey'] == 'readInputs' &&
+          if (current['kind'] == 'host.compare_drafts' && step['stepKey'] == 'report' &&
+              completion != null && _canonicalJson(matching.single) != _canonicalJson(step)) {
+            throw _conflict;
+          }
+          if (current['kind'] == 'host.find_draft' && step['stepKey'] == 'readInputs' &&
               completion != null &&
               _canonicalJson((matching.single['result'] as Map<String, Object?>?)?['completion']) !=
                   _canonicalJson(completion)) {
@@ -705,7 +800,7 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   }
 }
 
-const _hostTaskKinds = ['host.notes_to_todo', 'host.find_draft'];
+const _hostTaskKinds = ['host.notes_to_todo', 'host.find_draft', 'host.compare_drafts'];
 const _hostAgreementKeys = ['args', 'deadlineAtMs', 'afterExit', 'allowQueue'];
 const _findArgsKeys = ['folderRef', 'scope', 'localDate', 'timeZone', 'dateBy', 'extensions'];
 
@@ -723,6 +818,20 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
     throw _hostTaskInvalid;
   }
   final args = Map<String, Object?>.from(rawArgs);
+  if (kind == 'host.compare_drafts') {
+    if (args.length != 3 || args['maxHighlights'] != 3 ||
+        !const ['a', 'b', 'maxHighlights'].every(args.containsKey)) {
+      throw _hostTaskInvalid;
+    }
+    for (final side in const ['a', 'b']) {
+      final source = args[side];
+      if (source is! MemoryRow || source.length != 2 || !_hostId(source['sourceRef']) ||
+          source['version'] is! String || (source['version']! as String).isEmpty) {
+        throw _hostTaskInvalid;
+      }
+    }
+    return {for (final key in _hostAgreementKeys) key: key == 'args' ? args : input[key]};
+  }
   final fields = kind == 'host.find_draft'
       ? _findArgsKeys
       : const ['folderRef', 'localDate', 'timeZone', 'dateBy', 'outputDirRef', 'outputName', 'writeMode'];
@@ -761,6 +870,28 @@ MemoryRow _hostAgreement(MemoryRow input, String kind) {
     }
   }
   return {for (final key in _hostAgreementKeys) key: key == 'args' ? args : input[key]};
+}
+
+String _compareInputStore(Object? value, MemoryRow args) {
+  if (value is! MemoryRow || value.length != 2 || !const ['a', 'b'].every(value.containsKey)) {
+    throw _hostTaskInvalid;
+  }
+  String? hostStoreId;
+  for (final side in const ['a', 'b']) {
+    final input = value[side];
+    final selected = args[side]! as MemoryRow;
+    if (input is! MemoryRow || input.length != 7 || input['v'] != 1 ||
+        !_hostId(input['hostStoreId']) || input['sourceRef'] != selected['sourceRef'] ||
+        input['version'] != selected['version'] || input['displayName'] is! String ||
+        (input['displayName']! as String).isEmpty || !_hostCount(input['size']) ||
+        (input['size']! as int) > 65536 ||
+        !const ['text/plain', 'text/markdown'].contains(input['mediaType']) ||
+        (hostStoreId != null && input['hostStoreId'] != hostStoreId)) {
+      throw _hostTaskInvalid;
+    }
+    hostStoreId = input['hostStoreId']! as String;
+  }
+  return hostStoreId!;
 }
 
 bool _hostId(Object? value) => value is String && value.isNotEmpty && value.length <= 128 && !value.contains('\u0000');
@@ -861,7 +992,9 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   }
   final steps = <String>{};
   final findReports = <int, bool>{};
+  final compareReports = <int, ({bool complete, bool retryable})>{};
   final sourceRefs = <String>{};
+  var compareModelSteps = 0;
   for (final value in snapshot['steps']! as List) {
     if (value is! Map ||
         !revisions.contains(value['taskRev']) ||
@@ -890,6 +1023,38 @@ void _validateHostSnapshot(MemoryRow snapshot) {
           agreements[stepRevision]!['args']! as MemoryRow, sourceRefs);
       }
     }
+    if (kind == 'host.compare_drafts') {
+      if (!const ['readInputs', 'model', 'report'].contains(value['stepKey'])) {
+        throw _hostTaskInvalid;
+      }
+      if (value['stepKey'] == 'model' && ++compareModelSteps > 1) {
+        throw _hostTaskInvalid;
+      }
+      if (value['stepKey'] == 'report') {
+        final stepRevision = value['taskRev']! as int;
+        if (compareReports[stepRevision]?.retryable == false) {
+          throw _hostTaskInvalid;
+        }
+        final completion = (value['result'] as Map<String, Object?>?)?['completion'];
+        if (completion != null) {
+          if (value['finishedAtMs'] == null || !const ['done', 'partial'].contains(value['state']) ||
+              agreements[stepRevision] == null) {
+            throw _hostTaskInvalid;
+          }
+          final complete = _validateCompareReport(completion,
+            agreements[stepRevision]!['args']! as MemoryRow);
+          if (complete != (value['state'] == 'done')) {
+            throw _hostTaskInvalid;
+          }
+          // Only an owner-stopped, unpublished attempt can precede a recovered
+          // report. Published or ordinary stopped reports never permit a second
+          // publication; each old completion remains immutable during import.
+          compareReports[stepRevision] = (complete: complete,
+            retryable: value['state'] == 'partial' && value['reason'] == 'report_owner_stopped' &&
+              (completion as MemoryRow)['published'] == false);
+        }
+      }
+    }
   }
   final artifacts = <String>{};
   for (final value in snapshot['artifacts']! as List) {
@@ -912,6 +1077,11 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   if (kind == 'host.find_draft') {
     if (artifacts.isNotEmpty || (const ['done', 'partial'].contains(snapshot['state']) &&
         (findReports[revision] == null || findReports[revision] != (snapshot['state'] == 'done')))) {
+      throw _hostTaskInvalid;
+    }
+  } else if (kind == 'host.compare_drafts') {
+    if (artifacts.isNotEmpty || (const ['done', 'partial'].contains(snapshot['state']) &&
+        (compareReports[revision] == null || compareReports[revision]!.complete != (snapshot['state'] == 'done')))) {
       throw _hostTaskInvalid;
     }
   } else if (const ['done', 'partial'].contains(snapshot['state']) && artifacts.isEmpty) {
@@ -989,6 +1159,142 @@ bool _validateFindReport(Object? value, MemoryRow args, Set<String> sourceRefs) 
 }
 
 bool _findEpoch(Object? value) => value is int && value.abs() <= 8640000000000000;
+
+bool _validateCompareReport(Object? value, MemoryRow args) {
+  if (value is! MemoryRow || value['sources'] is! List<Object?> ||
+      value['coverage'] is! MemoryRow || value['differences'] is! List<Object?> ||
+      value['suggestions'] is! MemoryRow || value['published'] is! bool) {
+    throw _hostTaskInvalid;
+  }
+  final sources = value['sources']! as List<Object?>;
+  if (sources.length != 2) {
+    throw _hostTaskInvalid;
+  }
+  var verified = true;
+  final coverage = value['coverage']! as MemoryRow;
+  for (var index = 0; index < 2; index++) {
+    final side = index == 0 ? 'a' : 'b';
+    final source = sources[index];
+    final selected = args[side]! as MemoryRow;
+    if (source is! MemoryRow || source['side'] != side ||
+        source['sourceRef'] != selected['sourceRef'] || source['version'] != selected['version'] ||
+        source['displayName'] is! String || (source['displayName']! as String).isEmpty ||
+        !const ['text/plain', 'text/markdown'].contains(source['mediaType']) ||
+        !_hostCount(source['size']) || (source['size']! as int) > 65536 ||
+        source['readComplete'] is! bool || source['verifiedAtPublish'] is! bool ||
+        coverage['${side}Complete'] != source['readComplete'] || !source.containsKey('reason') ||
+        (source['verifiedAtPublish'] == true ? source['readComplete'] != true || source['reason'] != null :
+          source['reason'] is! String || (source['reason']! as String).isEmpty)) {
+      throw _hostTaskInvalid;
+    }
+    verified = verified && source['verifiedAtPublish'] == true;
+  }
+  final complete = coverage['comparisonComplete'];
+  final total = coverage['totalChangeGroups'];
+  final differences = value['differences']! as List<Object?>;
+  final gaps = coverage['gaps'];
+  if (complete is! bool || gaps is! List<Object?> || differences.length > 3 ||
+      coverage['displayedChangeGroups'] != differences.length ||
+      !const ['model', 'source_order', 'none'].contains(value['selection']) ||
+      (complete ? coverage['aComplete'] != true || coverage['bComplete'] != true ||
+        !_hostCount(total) || differences.length > (total! as int) ||
+        coverage['algorithm'] is! String || (coverage['algorithm']! as String).isEmpty ||
+        value['identical'] != (total == 0) :
+        total != null || coverage['algorithm'] != null || value['identical'] != null || differences.isNotEmpty)) {
+    throw _hostTaskInvalid;
+  }
+  for (final gap in gaps) {
+    if (gap is! MemoryRow || !gap.containsKey('side') ||
+        !const [null, 'a', 'b'].contains(gap['side']) ||
+        gap['reason'] is! String || (gap['reason']! as String).isEmpty) {
+      throw _hostTaskInvalid;
+    }
+  }
+  final ids = <String>{};
+  for (final difference in differences) {
+    if (difference is! MemoryRow || !_hostId(difference['id']) || !ids.add(difference['id']! as String) ||
+        !const ['insert', 'delete', 'replace'].contains(difference['kind'])) {
+      throw _hostTaskInvalid;
+    }
+    for (var index = 0; index < 2; index++) {
+      _validateCompareSide(difference[index == 0 ? 'a' : 'b'], (sources[index]! as MemoryRow)['size']! as int);
+    }
+    final a = difference['a']! as MemoryRow, b = difference['b']! as MemoryRow;
+    if ((a['from'] == a['to']) != (difference['kind'] == 'insert') ||
+        (b['from'] == b['to']) != (difference['kind'] == 'delete')) {
+      throw _hostTaskInvalid;
+    }
+  }
+  final suggestions = value['suggestions']! as MemoryRow;
+  final items = suggestions['items'];
+  if (!const ['available', 'not_needed', 'unavailable', 'unknown'].contains(suggestions['status']) ||
+      !suggestions.containsKey('reason') || items is! List<Object?> || items.length > 3 ||
+      (suggestions['status'] == 'available' ? items.isEmpty || value['selection'] != 'model' ||
+        suggestions['reason'] != null : items.isNotEmpty) ||
+      (const ['unavailable', 'unknown'].contains(suggestions['status']) &&
+        (suggestions['reason'] is! String || (suggestions['reason']! as String).isEmpty)) ||
+      (suggestions['status'] == 'not_needed' && (value['identical'] != true || suggestions['reason'] != null)) ||
+      (value['selection'] == 'model' && suggestions['status'] != 'available') ||
+      (differences.isEmpty ? value['selection'] != 'none' : value['selection'] == 'none')) {
+    throw _hostTaskInvalid;
+  }
+  final suggested = <String>{};
+  for (final item in items) {
+    if (item is! MemoryRow || !ids.contains(item['differenceId']) ||
+        !suggested.add(item['differenceId']! as String) || item['practice'] is! String ||
+        (item['practice']! as String).trim().isEmpty) {
+      throw _hostTaskInvalid;
+    }
+  }
+  return value['published'] == true && complete && verified && gaps.isEmpty &&
+      (value['identical'] == true || suggestions['status'] == 'available');
+}
+
+void _validateCompareRange(Object? value) {
+  if (value is! MemoryRow || !const ['from', 'to', 'lineStart', 'lineEnd'].every((key) => _hostCount(value[key])) ||
+      (value['to']! as int) < (value['from']! as int) || (value['to']! as int) > 65536 ||
+      (value['lineStart']! as int) < 1 || (value['lineEnd']! as int) < (value['lineStart']! as int) ||
+      ((value['from'] == value['to']) != (value['lineStart'] == value['lineEnd'])) ||
+      (value['lineEnd']! as int) > 65537 || !value.containsKey('paragraphs') || !value.containsKey('boundary')) {
+    throw _hostTaskInvalid;
+  }
+  final paragraphs = value['paragraphs'], boundary = value['boundary'];
+  if (paragraphs != null) {
+    if (paragraphs is! MemoryRow || boundary != null ||
+        !_hostCount(paragraphs['from']) || !_hostCount(paragraphs['to']) ||
+        (paragraphs['from']! as int) < 1 || (paragraphs['to']! as int) < (paragraphs['from']! as int) ||
+        value['from'] == value['to']) {
+      throw _hostTaskInvalid;
+    }
+  } else if (boundary is! MemoryRow || !const ['beforeParagraph', 'afterParagraph'].every(boundary.containsKey) ||
+      const ['beforeParagraph', 'afterParagraph'].any((key) =>
+        boundary[key] != null && (!_hostCount(boundary[key]) || (boundary[key]! as int) < 1))) {
+    throw _hostTaskInvalid;
+  }
+}
+
+void _validateCompareSide(Object? value, int sourceBytes) {
+  _validateCompareRange(value);
+  final side = value! as MemoryRow;
+  final excerpts = side['excerpts'];
+  // UTF-8 bytes are only an upper bound for UTF-16/line positions. The Host,
+  // which has the complete source, remains responsible for literal excerpts.
+  if ((side['to']! as int) > sourceBytes || (side['lineEnd']! as int) > sourceBytes + 1 ||
+      excerpts is! List<Object?> || excerpts.length > 2 ||
+      (side['from'] == side['to']) != excerpts.isEmpty) {
+    throw _hostTaskInvalid;
+  }
+  for (final excerpt in excerpts) {
+    _validateCompareRange(excerpt);
+    final quote = excerpt! as MemoryRow;
+    if (quote['text'] is! String || (quote['text']! as String).isEmpty ||
+        (quote['text']! as String).length > 512 || (quote['text']! as String).runes.length > 160 ||
+        (quote['to']! as int) - (quote['from']! as int) != (quote['text']! as String).length ||
+        (quote['from']! as int) < (side['from']! as int) || (quote['to']! as int) > (side['to']! as int)) {
+      throw _hostTaskInvalid;
+    }
+  }
+}
 
 // The Host's complete snapshot is authoritative for remote effects. Its
 // watermark is independent of the phone-wide task receipt AUTOINCREMENT.
