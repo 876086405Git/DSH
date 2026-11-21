@@ -656,5 +656,122 @@
   "companionMapReopen": "再打开一次",
   "companionMapCancel": "取消这次打开",
   "companionMapReopenSource": "用地图再次打开这个地址",
-  "companionMapCancelSource": "取消这个地址的地图打开"
+  "companionMapCancelSource": "取消这个地址的地图打开",
+  "companionFindTitle": "找稿件",
+  "companionFindSyntax": "请说明在哪个文件夹这一层找、找哪天改过的稿件，以及你离开后还要不要继续。有截止时间的话，也一起告诉我。",
+  "companionFindWhich": "要停下哪次找稿？可以在交代的事里选。",
+  "companionFindConnect": "还没选过这台电脑上的文件夹。请先连上电脑选一下。",
+  "companionFindSavedDirectory": "选一个之前用过的文件夹",
+  "companionFindSeven": "你说的七点是上午还是晚上？",
+  "companionFindMorningSeven": "上午 07:00",
+  "companionFindEveningSeven": "晚上 19:00",
+  "companionFindDeadlineMissing": "还没定好截止时间，这次先不开始。",
+  "companionFindChooseDirectory": "选择“{name}”文件夹",
+  "@companionFindChooseDirectory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindChooseAgain": "重新选择文件夹",
+  "companionFindKeepDirectory": "还找原来的文件夹",
+  "companionFindUnavailable": "这台电脑现在还不能帮你找稿并打开原稿。",
+  "companionFindNoDirectory": "还没选文件夹，这次先不开始。",
+  "companionFindDone": "找完了，结果在下面。",
+  "companionFindPartial": "这次没能全找完，已找到的稿件和没查完的地方在下面。",
+  "companionFindFailed": "这次没能找完，原来的记录还在。",
+  "companionFindWaiting": "暂时还没能继续找，稍后可以再查看。",
+  "companionFindCancelled": "已停止继续找，之前找到的清单还在。",
+  "companionFindCancelUnknown": "已记下不再找，但还没确认电脑是否停下。已有清单还在。",
+  "companionFindCancel": "停止找稿",
+  "companionFindCancelSource": "取消这次找稿",
+  "companionFindAmendSource": "修改找稿：只找这一层在 {date} 改过的 {formats} 文件。截止：{deadline}；{afterExit}；{queue}；{source}。",
+  "@companionFindAmendSource": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "formats": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      },
+      "afterExit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindDate": "稿件修改日期",
+  "companionFindScope": "只找这一层在这一天修改的 {formats} 文件，不改原稿。",
+  "@companionFindScope": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindSourceDirectory": "查找目录：{path}",
+  "@companionFindSourceDirectory": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindReport": "这次找到的稿件",
+  "companionFindPreviousReport": "之前找到的稿件",
+  "companionFindCoverage": "查看了 {entries} 项，其中 {supported} 份是所选格式，找到 {matches} 份符合日期的稿件。",
+  "@companionFindCoverage": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      },
+      "supported": {
+        "type": "String"
+      },
+      "matches": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindEnumerationComplete": "这一层的文件名已检查完，能否打开见下面的结果。查找时后来加入的文件可能不在结果里。",
+  "companionFindEnumerationPartial": "还有一些地方没查完。",
+  "companionFindEntryLimit": "这次最多检查 200 项，剩下的还没查。",
+  "companionFindCandidateLimit": "符合日期的稿件超过 20 份，这次先列出其中 20 份。",
+  "companionFindEmpty": "查过的范围里，没有这一天改过的所选格式稿件。",
+  "companionFindGap": "这项还没查清楚：{name}",
+  "@companionFindGap": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindModified": "修改时间：{time}",
+  "@companionFindModified": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindWasOpenable": "当时能打开；现在点开时会确认它有没有变化。",
+  "companionFindWasUnreadable": "当时没能读到这份稿件。",
+  "companionFindOpenSource": "打开这份原稿",
+  "companionFindSourceOffline": "清单还在。连上原来的电脑后才能打开稿件。",
+  "companionFindSourceMissing": "这份稿件现在找不到了，当时的清单还在。",
+  "companionFindSourceChanged": "这份稿件已被替换或修改，不能确认还是当时那一份。",
+  "companionFindSourceUnreadable": "这份稿件现在没能完整打开；没有换成别的文件。",
+  "companionFindSourceUnknown": "现在还打不开这份稿件，请连上原来的电脑再试。",
+  "companionFindDeadline": "已经过了约好的时间，不会再开始新的查找。已有结果会留在这里。",
+  "companionFindOriginalPending": "电脑已收到修改，还需要确认原先那次找稿。",
+  "companionFindUnknown": "还没确认电脑有没有收到，或找到了哪一步。"
 }

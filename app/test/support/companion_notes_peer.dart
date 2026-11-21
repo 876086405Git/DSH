@@ -37,7 +37,7 @@ class NotesPeer {
       final body = value is Map ? Map<String, Object?>.from(value) : null;
       calls.add((method: request.method, uri: request.uri, body: body));
       if (request.uri.path == '$notesPath/capabilities') {
-        await json(request, notesCapability);
+        await json(request, capability);
       } else {
         await respond(request, body);
       }
@@ -49,6 +49,7 @@ class NotesPeer {
   // server. Only this peer gets a real, numeric-loopback-only client.
   final HttpClient _http = CompanionOfflineHttpOverrides().createHttpClient(null);
   late final DshClient client;
+  MemoryRow capability = notesCapability;
   final calls = <({String method, Uri uri, MemoryRow? body})>[];
   late Future<void> Function(HttpRequest, MemoryRow?) respond = (request, _) => json(request, {
     'error': {'code': 'companion/task-not-found', 'message': 'No recorded task'},
@@ -103,7 +104,7 @@ MemoryRow notesSnapshot(
     'hostStoreId': 'original-store',
     'taskId': create['taskId'],
     'hostExecutionId': 'actual-execution',
-    'kind': 'host.notes_to_todo',
+    'kind': create['kind'] ?? 'host.notes_to_todo',
     'taskRev': rev,
     'runnerReceiptSeq': seq,
     'originalCreatePresent': original,
@@ -138,3 +139,39 @@ MemoryRow notesArtifact() => {
   'verifiedAtMs': 1795219200000,
   'sourceCount': 2,
 };
+
+const findCapability = <String, Object?>{...notesCapability,
+  'kinds': ['host.notes_to_todo', 'host.find_draft'], 'sourceRead': true};
+const findSpokenExample = '等家里电脑开了，帮我在‘演讲稿’这个文件夹的这一层找昨天改的稿子。'
+  '七点以前把能打开的入口留在小屋，我先去布场。不用翻别处。';
+
+MemoryRow findAgreement({bool queue = false, String afterExit = 'continue',
+  String day = '2026-11-20', List<String> extensions = const ['md', 'txt']}) => {
+  'args': {'folderRef': 'bound-source', 'scope': 'currentLevel', 'localDate': day,
+    'timeZone': 'Asia/Shanghai', 'dateBy': 'modified', 'extensions': extensions},
+  'deadlineAtMs': null, 'afterExit': afterExit, 'allowQueue': queue,
+};
+
+MemoryRow findMatch({String id = 'draft-original', String name = '开场 A.md',
+  bool openable = true}) => {'sourceRef': id, 'relativePath': name, 'size': 120,
+  'modifiedAtMs': 1795147200000, 'modifiedOffsetSeconds': 28800, 'version': 'version-$id',
+  'openable': openable, 'reason': openable ? null : 'read_not_allowed'};
+
+/// Fixed HTTP observations for the App boundary. They do not run the Host FS.
+MemoryRow findReportStep({int revision = 1, MemoryRow? agreement,
+  List<MemoryRow> matches = const [], bool complete = true,
+  List<MemoryRow> gaps = const []}) {
+  final args = (agreement ?? findAgreement())['args']! as Map<String, Object?>;
+  final day = DateTime.parse('${args['localDate']}T00:00:00Z');
+  final start = day.millisecondsSinceEpoch - 28800000;
+  return {'taskRev': revision, 'stepKey': 'readInputs', 'attemptId': 'find-read-$revision',
+    'state': complete ? 'done' : 'partial', 'startedAtMs': 1795219200000,
+    'finishedAtMs': 1795219200010, 'reason': complete ? null : 'coverage_partial',
+    'result': {'completion': {
+      'scope': {...args, 'displayPath': '/本人选的稿件', 'startAtMs': start, 'endAtMs': start + 86400000},
+      'coverage': {'entriesChecked': 4, 'supportedFilesChecked': matches.length,
+        'matchingCandidates': matches.length, 'enumerationComplete': true,
+        'entryLimitReached': false, 'candidateLimitReached': false, 'gaps': gaps},
+      'matches': matches,
+    }}};
+}

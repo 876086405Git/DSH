@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_app/companion/companion_local.dart';
@@ -98,6 +99,18 @@ void main() {
         as MemoryRow;
   }
 
+  MemoryRow findCommand() {
+    peer.capability = findCapability;
+    memory.store.submitMessage(id: 'find-source', sessionId: 'light:original-room',
+      text: '请电脑在“稿件”本层找昨天改的文件，离开后继续', saidAtUtc: _now,
+      offsetMinutes: 480, offsetSeconds: 28800, zoneId: 'Asia/Shanghai');
+    final task = memory.store.createFindDraftTaskFromMessage(messageId: 'find-source', expectedSourceRev: 1,
+      itemNo: 0, roomMode: 'light', hostKey: hostKey, directoryHostStoreId: 'original-store',
+      agreement: findAgreement(), directoryLabels: {'source': '/本人选的稿件'});
+    return memory.store.prepareHostTaskOperation(taskId: task['task_id']! as String, taskRev: 1,
+      hostKey: hostKey, hostStoreId: 'original-store', initialOpportunity: true)!['request']! as MemoryRow;
+  }
+
   Future<void> open(WidgetTester tester, String id, {bool connected = true}) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -128,6 +141,14 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     // dart:io keeps an idle loopback connection for 15 s on the fake clock.
     await tester.pump(const Duration(seconds: 16));
+  }
+
+  Future<void> visible(WidgetTester tester, String text) async {
+    for (var i = 0; i < 200 && find.text(text).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    expect(find.text(text), findsOneWidget);
   }
 
   for (final status in ['available', 'missing', 'changed', 'unknown']) {
@@ -581,4 +602,267 @@ void main() {
       );
     }
   }
+
+  testWidgets('H task page shows a complete empty find report and repeated reads never submit or create a model receipt', (tester) async {
+    final create = findCommand();
+    final id = create['taskId']! as String;
+    final report = findReportStep();
+    final snapshot = notesSnapshot(create, state: 'done', steps: [report]);
+    peer.respond = (request, _) => NotesPeer.json(request, snapshot);
+    await open(tester, id);
+    expect(peer.calls.map((call) => call.method), ['GET']);
+    expect(peer.calls.single.uri.path, '$notesPath/$id');
+    expect(find.text('找完了，结果在下面。'), findsOneWidget);
+    expect(find.textContaining('已用执行时间'), findsNothing);
+    expect(find.text('查找步骤记录'), findsNothing);
+    expect(find.text('版本 1'), findsNothing);
+    expect(find.text('查过的范围里，没有这一天改过的所选格式稿件。'), findsOneWidget);
+    expect(find.text('打开这份原稿'), findsNothing);
+    expect(find.text('打开原产物'), findsNothing);
+    expect(find.text('停止找稿'), findsNothing);
+    await close(tester);
+    await open(tester, id);
+    expect(peer.calls.map((call) => call.method), ['GET', 'GET']);
+    expect(memory.store.requests(), isEmpty);
+    expect((memory.store.hostTask(id)!['snapshot']! as MemoryRow)['artifacts'], isEmpty);
+    expect((memory.store.hostTask(id)!['snapshot']! as MemoryRow)['steps'], [report]);
+    expect((memory.store.hostTask(id)!['snapshot']! as MemoryRow)['budget'], snapshot['budget']);
+    await close(tester);
+  });
+
+  testWidgets('H task page keeps unreadable results after actual enumeration EOF without claiming all work complete', (tester) async {
+    // Consume the unchanged actual H02 HTTP fixture. It reached directory EOF,
+    // while one selected file was not readable and the task remained partial.
+    final wire = jsonDecode(
+      File('../packages/dsh_client/test/fixtures/companion_find_draft/H02-backslash-wire.json').readAsStringSync(),
+    ) as MemoryRow;
+    final request = wire['create']! as MemoryRow;
+    final origin = request['origin']! as MemoryRow;
+    final id = request['taskId']! as String;
+    final snapshot = wire['complete']! as MemoryRow;
+    final report = ((snapshot['steps']! as List<Object?>).cast<MemoryRow>()
+      .singleWhere((step) => step['stepKey'] == 'readInputs')['result']! as MemoryRow)['completion']! as MemoryRow;
+    expect(snapshot['state'], 'partial');
+    expect((report['coverage']! as MemoryRow)['enumerationComplete'], isTrue);
+    expect((report['matches']! as List<Object?>).cast<MemoryRow>().where((match) => match['openable'] == false), hasLength(1));
+    memory.dispose();
+    memory = _Memory(
+      CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now, createId: () => id),
+      CompanionLocal.at(root),
+      nowMilliseconds: () => now,
+    );
+    memory.store.submitMessage(id: origin['messageId']! as String, sessionId: origin['sourceSessionId']! as String,
+      text: '在已选演讲稿目录找2026年11月20日改的md和txt。', saidAtUtc: now,
+      offsetMinutes: 0, zoneId: 'UTC', offsetSeconds: 0);
+    memory.store.createFindDraftTaskFromMessage(messageId: origin['messageId']! as String,
+      expectedSourceRev: 1, itemNo: origin['itemNo']! as int, roomMode: 'light', hostKey: hostKey,
+      directoryHostStoreId: request['hostStoreId']! as String,
+      agreement: {for (final key in ['args', 'deadlineAtMs', 'afterExit', 'allowQueue']) key: request[key]},
+      directoryLabels: {'source': (wire['folder']! as MemoryRow)['displayPath']});
+    final prepared = memory.store.prepareHostTaskOperation(taskId: id, taskRev: 1,
+      hostKey: hostKey, hostStoreId: request['hostStoreId']! as String, initialOpportunity: true)!;
+    expect(prepared['request'], request);
+    peer.capability = wire['capabilities']! as MemoryRow;
+    peer.respond = (request, _) => NotesPeer.json(request, snapshot);
+    await open(tester, id);
+    try {
+      expect(peer.calls.map((call) => call.method), ['GET']);
+      expect(peer.calls.single.uri.path, '$notesPath/$id');
+      expect(peer.calls.single.uri.queryParameters, {'hostStoreId': snapshot['hostStoreId']});
+      expect(find.text('这一层的文件名已检查完，能否打开见下面的结果。查找时后来加入的文件可能不在结果里。'), findsOneWidget);
+      expect(find.text('这次没能全找完，已找到的稿件和没查完的地方在下面。'), findsOneWidget);
+      expect(find.text(r'unsafe\name.md'), findsOneWidget);
+      expect(find.text('ordinary.md'), findsOneWidget);
+      expect(find.text('当时没能读到这份稿件。'), findsOneWidget);
+      expect(find.textContaining('这一层已查完'), findsNothing);
+      expect(find.text('找完了，结果在下面。'), findsNothing);
+      expect(find.text('查过的范围里，没有这一天改过的所选格式稿件。'), findsNothing);
+      expect(peer.calls.map((call) => call.method), ['GET']);
+      expect(memory.store.hostTask(id)!['snapshot'], snapshot);
+      expect(memory.store.hostTask(id)!['state'], 'partial');
+      expect(memory.store.requests(), isEmpty);
+    } finally {
+      await close(tester);
+    }
+  });
+
+  for (final limit in ['entries', 'candidates']) {
+    testWidgets('H task page keeps the actual $limit coverage limit visible instead of claiming an empty complete search', (tester) async {
+      final create = findCommand();
+      final id = create['taskId']! as String;
+      final matches = limit == 'entries' ? <MemoryRow>[] : [
+        for (var i = 0; i < 20; i++) findMatch(id: 'draft-$i', name: '稿件$i.md'),
+      ];
+      final step = findReportStep(matches: matches, complete: false);
+      final report = (step['result']! as MemoryRow)['completion']! as MemoryRow;
+      report['coverage'] = {'entriesChecked': limit == 'entries' ? 200 : 25,
+        'supportedFilesChecked': limit == 'entries' ? 4 : 21,
+        'matchingCandidates': limit == 'entries' ? 0 : 21, 'enumerationComplete': false,
+        'entryLimitReached': limit == 'entries', 'candidateLimitReached': limit == 'candidates', 'gaps': []};
+      peer.respond = (request, _) => NotesPeer.json(request, notesSnapshot(create, state: 'partial', steps: [step]));
+      await open(tester, id);
+      try {
+        expect(find.text('这次没能全找完，已找到的稿件和没查完的地方在下面。'), findsOneWidget);
+        expect(find.text('查过的范围里，没有这一天改过的所选格式稿件。'), findsNothing);
+        expect(find.text(limit == 'entries' ? '这次最多检查 200 项，剩下的还没查。' :
+          '符合日期的稿件超过 20 份，这次先列出其中 20 份。'), findsOneWidget);
+        if (limit == 'candidates') {
+          expect(find.textContaining('找到 ≥21 份符合日期的稿件'), findsOneWidget);
+          expect(find.text('打开这份原稿'), findsNWidgets(20));
+        }
+        expect(peer.calls.map((call) => call.method), ['GET']);
+        expect(memory.store.requests(), isEmpty);
+      } finally {
+        await close(tester);
+      }
+    });
+  }
+
+  for (final status in ['available', 'missing', 'changed', 'not_readable', 'unknown']) {
+    testWidgets('H task page opens the original registered source after cancellation with actual $status readback', (tester) async {
+      final create = findCommand();
+      final id = create['taskId']! as String;
+      final match = findMatch(openable: false);
+      final report = findReportStep(matches: [match], complete: false);
+      memory.store.submitMessage(id: 'cancel-find', sessionId: 'light:original-room',
+        text: '取消这次找稿', saidAtUtc: _now + 1, offsetMinutes: 480);
+      memory.store.cancelFindDraftTask(taskId: id, expectedTaskRev: 1,
+        messageId: 'cancel-find', expectedSourceRev: 1, itemNo: 0);
+      final snapshot = notesSnapshot(create, rev: 2, seq: 7, state: 'cancelled', steps: [report], revisions: [
+        {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': _now, 'agreement': findAgreement()},
+        {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': _now + 1, 'agreement': null},
+      ]);
+      peer.respond = (request, _) {
+        if (request.uri.path == '$notesPath/$id') {
+          return NotesPeer.json(request, snapshot);
+        }
+        return NotesPeer.json(request, {'v': 1, 'hostStoreId': 'original-store', 'taskId': id,
+          'hostExecutionId': 'actual-execution', 'sourceRef': 'draft-original', 'taskRev': 1, 'stepKey': 'readInputs',
+          'relativePath': match['relativePath'], 'version': match['version'], 'mediaType': 'text/markdown',
+          'status': status, 'content': status == 'available' ? '# 原稿完整内容\n第二段保留。' : null,
+          'reason': status == 'available' ? null : 'observed-$status'});
+      };
+      await open(tester, id);
+      try {
+        expect(find.text('已停止继续找，之前找到的清单还在。'), findsOneWidget);
+        expect(find.text('之前找到的稿件'), findsOneWidget);
+        expect(find.textContaining('Asia/Shanghai (UTC+08:00)'), findsOneWidget);
+        expect(find.text('查过的范围里，没有这一天改过的所选格式稿件。'), findsNothing);
+        await tester.ensureVisible(find.text('打开这份原稿'));
+        await tester.tap(find.text('打开这份原稿'));
+        final expected = switch (status) {
+          'available' => '# 原稿完整内容\n第二段保留。',
+          'missing' => '这份稿件现在找不到了，当时的清单还在。',
+          'changed' => '这份稿件已被替换或修改，不能确认还是当时那一份。',
+          'not_readable' => '这份稿件现在没能完整打开；没有换成别的文件。',
+          _ => '现在还打不开这份稿件，请连上原来的电脑再试。',
+        };
+        await visible(tester, expected);
+        expect(peer.calls.map((call) => call.method), ['GET', 'GET']);
+        expect(peer.calls.last.uri.path, '$notesPath/$id/sources/draft-original');
+        expect(peer.calls.last.uri.queryParameters,
+          {'hostStoreId': 'original-store', 'hostExecutionId': 'actual-execution'});
+        expect(peer.calls.where((call) => call.method == 'POST'), isEmpty);
+        expect(memory.store.requests(), isEmpty);
+        expect(memory.store.hostTask(id)!['state'], 'cancelled');
+        expect(memory.store.hostTask(id)!['applied_host_receipt_seq'], 7);
+        expect((memory.store.hostTask(id)!['snapshot']! as MemoryRow)['steps'], [report]);
+        expect(memory.store.hostTask(id).toString(), isNot(contains('# 原稿完整内容')));
+        await tester.tap(find.widgetWithText(TextButton, '关闭'));
+        await tester.pumpAndSettle();
+      } finally {
+        await close(tester);
+      }
+    });
+  }
+
+  testWidgets('H offline task details retain the original list but do not offer an uncached source body', (tester) async {
+    final create = findCommand();
+    final id = create['taskId']! as String;
+    final snapshot = notesSnapshot(create, state: 'done', steps: [findReportStep(matches: [findMatch()])]);
+    memory.store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: snapshot);
+    await open(tester, id, connected: false);
+    try {
+      expect(find.text('开场 A.md'), findsOneWidget);
+      expect(find.text('清单还在。连上原来的电脑后才能打开稿件。'), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '打开这份原稿')).onPressed, isNull);
+      expect(peer.calls, isEmpty);
+      expect(memory.store.requests(), isEmpty);
+    } finally {
+      await close(tester);
+    }
+  });
+
+  testWidgets('H changing a completed report day and format uses a new original-room source and preserves the old result', (tester) async {
+    final clockCalls = <MethodCall>[];
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      clockCalls.add(call);
+      now = _now + 60000;
+      return {'utcMs': now, 'zoneId': 'America/New_York', 'offsetSeconds': -18000};
+    });
+    final create = findCommand();
+    final id = create['taskId']! as String;
+    final report = findReportStep(matches: [findMatch()]);
+    var snapshot = notesSnapshot(create, state: 'done', steps: [report]);
+    final returned = Completer<void>();
+    MemoryRow? sourceAtAmend;
+    Object? possibleSentAtAmend;
+    peer.respond = (request, body) async {
+      if (request.method == 'POST') {
+        final agreement = body!['changes']! as MemoryRow;
+        sourceAtAmend = memory.store.messages().last;
+        possibleSentAtAmend = memory.store.hostTaskCommands(id).last['possible_sent_at_ms'];
+        snapshot = notesSnapshot(create, rev: 2, seq: 2, agreement: agreement, steps: [report], revisions: [
+          {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': _now, 'agreement': findAgreement()},
+          {'taskRev': 2, 'operation': 'amend', 'acceptedAtMs': _now + 60000, 'agreement': agreement},
+        ]);
+      }
+      await NotesPeer.json(request, snapshot);
+      if (request.method == 'POST') {
+        returned.complete();
+      }
+    };
+    await open(tester, id);
+    try {
+      await tester.ensureVisible(find.text('改一下'));
+      await tester.tap(find.text('改一下'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).first, '2026-11-21');
+      await tester.tap(find.byType(DropdownButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('.txt').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await settleMixed(tester, returned.future);
+      await settleMixed(tester, memory.settled);
+      await tester.pumpAndSettle();
+      expect(clockCalls.map((call) => call.method), ['clock']);
+      final post = peer.calls.singleWhere((call) => call.method == 'POST');
+      expect(post.uri.path, '$notesPath/$id/amend');
+      expect(post.body!['kind'], 'host.find_draft');
+      expect(post.body!['taskRev'], 2);
+      final args = (post.body!['changes']! as MemoryRow)['args']! as MemoryRow;
+      expect(args['localDate'], '2026-11-21');
+      expect(args['timeZone'], 'Asia/Shanghai');
+      expect(args['extensions'], ['txt']);
+      expect(args['folderRef'], 'bound-source');
+      expect(args.containsKey('outputName'), isFalse);
+      expect(sourceAtAmend!['session_id'], 'light:original-room');
+      expect(sourceAtAmend!['zone_id'], 'America/New_York');
+      expect(sourceAtAmend!['offset_seconds'], -18000);
+      expect(sourceAtAmend!['text'], contains('2026-11-21'));
+      expect(sourceAtAmend!['text'], contains('txt'));
+      expect(possibleSentAtAmend, _now + 60000);
+      expect(find.text('之前找到的稿件'), findsOneWidget);
+      expect(find.text('开场 A.md'), findsOneWidget);
+      expect(memory.store.hostTask(id)!['task_rev'], 2);
+      expect(memory.store.hostTaskCommands(id), hasLength(2));
+      expect((memory.store.hostTask(id)!['snapshot']! as MemoryRow)['steps'], [report]);
+      expect(peer.calls.where((call) => call.method == 'POST'), hasLength(1));
+      expect(peer.calls.any((call) => call.uri.path.endsWith('/folders')), isFalse);
+      expect(memory.store.requests(), isEmpty);
+    } finally {
+      await close(tester);
+    }
+  });
 }

@@ -562,5 +562,122 @@
   "companionMapReopen": "Open again",
   "companionMapCancel": "Cancel this opening",
   "companionMapReopenSource": "Open this address in a map again",
-  "companionMapCancelSource": "Cancel opening this address in a map"
+  "companionMapCancelSource": "Cancel opening this address in a map",
+  "companionFindTitle": "Find drafts",
+  "companionFindSyntax": "Tell me which folder to search at this level, when the drafts were modified, and whether to continue after you leave. Include a deadline if you have one.",
+  "companionFindWhich": "Which search would you like to stop? You can select it in your tasks.",
+  "companionFindConnect": "No folder has been selected on this computer yet. Connect to it and choose one first.",
+  "companionFindSavedDirectory": "Choose a folder you used before",
+  "companionFindSeven": "Did you mean seven in the morning or evening?",
+  "companionFindMorningSeven": "07:00 in the morning",
+  "companionFindEveningSeven": "19:00 in the evening",
+  "companionFindDeadlineMissing": "The deadline is not settled yet, so this search has not started.",
+  "companionFindChooseDirectory": "Choose the “{name}” folder",
+  "@companionFindChooseDirectory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindChooseAgain": "Choose another folder",
+  "companionFindKeepDirectory": "Keep the same folder",
+  "companionFindUnavailable": "This computer cannot find and open your drafts yet.",
+  "companionFindNoDirectory": "No folder has been selected, so this search has not started.",
+  "companionFindDone": "The search is finished. The results are below.",
+  "companionFindPartial": "I could not finish the whole search. Found drafts and unfinished areas are listed below.",
+  "companionFindFailed": "This search could not finish. The earlier record is still here.",
+  "companionFindWaiting": "The search cannot continue yet. You can check again later.",
+  "companionFindCancelled": "The search has stopped. The earlier results are still here.",
+  "companionFindCancelUnknown": "Your request to stop is saved, but I have not confirmed that the computer stopped. Earlier results remain.",
+  "companionFindCancel": "Stop searching",
+  "companionFindCancelSource": "Cancel this draft search",
+  "companionFindAmendSource": "Change this search: only {formats} files modified on {date} at this level. Deadline: {deadline}; {afterExit}; {queue}; {source}.",
+  "@companionFindAmendSource": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "formats": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      },
+      "afterExit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindDate": "Draft modification date",
+  "companionFindScope": "Only {formats} files modified on this day at this level. Originals stay unchanged.",
+  "@companionFindScope": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindSourceDirectory": "Search folder: {path}",
+  "@companionFindSourceDirectory": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindReport": "Drafts found this time",
+  "companionFindPreviousReport": "Earlier search results",
+  "companionFindCoverage": "Checked {entries} entries, including {supported} in the selected formats, and found {matches} drafts matching the date.",
+  "@companionFindCoverage": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      },
+      "supported": {
+        "type": "String"
+      },
+      "matches": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindEnumerationComplete": "The file names in this level have been checked. See below for which files could be opened. Files added during the search may not be included.",
+  "companionFindEnumerationPartial": "Some areas have not been searched completely.",
+  "companionFindEntryLimit": "This search checks up to 200 entries. The remaining entries have not been checked.",
+  "companionFindCandidateLimit": "More than 20 drafts match the date. The first 20 are listed here.",
+  "companionFindEmpty": "No draft in the selected formats and date was found in the area searched.",
+  "companionFindGap": "This item still needs checking: {name}",
+  "@companionFindGap": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindModified": "Modified: {time}",
+  "@companionFindModified": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindWasOpenable": "This draft opened at the time. Opening it now will check whether it has changed.",
+  "companionFindWasUnreadable": "This draft could not be read at the time.",
+  "companionFindOpenSource": "Open this original",
+  "companionFindSourceOffline": "The list is still here. Connect to the original computer to open a draft.",
+  "companionFindSourceMissing": "This draft can no longer be found. The earlier search list is still here.",
+  "companionFindSourceChanged": "This draft has been replaced or modified. I cannot confirm it is still the same draft.",
+  "companionFindSourceUnreadable": "This draft could not be opened in full. It has not been replaced with a different file.",
+  "companionFindSourceUnknown": "This draft cannot be opened right now. Connect to the original computer and try again.",
+  "companionFindDeadline": "The agreed deadline has passed. No new search will start. Existing results will stay here.",
+  "companionFindOriginalPending": "The computer received the changes and still needs to confirm the original search.",
+  "companionFindUnknown": "I have not confirmed whether the computer received this search or how far it got."
 }

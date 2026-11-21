@@ -97,6 +97,16 @@ class CompanionHostTasks {
     var hostStore = current['host_store_id'] as String?;
     var readOriginal = false;
     var missingOriginal = false;
+    if (submitPending && current['kind'] == 'host.find_draft' &&
+        commands.every((row) => row['possible_sent_at_ms'] == null)) {
+      final available = capability ?? await client.readCompanionTasksCapability();
+      if (available == null || !available.findDraft || !available.sourceRead) {
+        throw const DshRemoteException('companion/task-unavailable', 'The Host cannot accept this find task');
+      }
+      if (available.hostStoreId != hostStore) {
+        throw const DshRemoteException('companion/task-store-mismatch', 'The selected directory belongs to the original task store');
+      }
+    }
     if (hostStore != null) {
       final snapshot = await client.readCompanionHostTask(hostStoreId: hostStore, taskId: id);
       readOriginal = true;
@@ -110,7 +120,8 @@ class CompanionHostTasks {
         return current;
       }
       final available = capability ?? await client.readCompanionTasksCapability();
-      if (available == null || !available.notes || available.hostStoreId == null) {
+      if (available == null || available.hostStoreId == null ||
+          (current['kind'] == 'host.find_draft' ? !available.findDraft : !available.notes)) {
         throw const DshRemoteException('companion/task-unavailable', 'The Host cannot durably accept this task');
       }
       hostStore = available.hostStoreId!;
@@ -290,9 +301,89 @@ MemoryRow? parseCompanionNotes(String raw) {
   };
 }
 
+/// Find commands name one directory and one civil day. The quoted label is
+/// only a picker hint; a real Host binding supplies the directory reference.
+MemoryRow? parseCompanionFind(String raw) {
+  final text = raw.trim().replaceFirst(RegExp(r'[。.!！]+$'), '');
+  const kind = 'host.find_draft';
+  if (const ['取消这次找稿', '取消找稿', '不用找稿了', '别找了'].contains(text)) {
+    return {'kind': kind, 'operation': 'cancel'};
+  }
+  if (RegExp(r'^(?:[“‘「『"\x27]|不要|不用|别|假设|故事|台词|他说|她说)').hasMatch(text)) {
+    return null;
+  }
+  const folder = r'(?:“([^”]+)”|‘([^’]+)’|「([^」]+)」|"([^"]+)")';
+  final main = RegExp(r'^(等(?:家里|这台)?电脑(?:开了|上线)[，,]\s*)?'
+    r'(?:请帮我|请|帮我)?(?:当前|这台|家里)?(?:电脑)?在' + folder +
+    r'(?:这个文件夹)?的?(?:这一层|本层)找(昨天|今天|\d{4}-\d{2}-\d{2})'
+    r'(?:改|修改)(?:过)?的(?:稿子|稿件|稿|文件)(?=$|[，,。])').firstMatch(text);
+  if (main == null) {
+    return text.contains('电脑') && text.contains('找') && (text.contains('稿') || text.contains('文件夹'))
+      ? {'kind': kind, 'operation': 'clarify'} : null;
+  }
+  final label = [for (var group = 2; group <= 5; group++) main.group(group)].whereType<String>().single;
+  if (label.trim().isEmpty) {
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  String? afterExit;
+  var allowQueue = main.group(1) != null;
+  String? deadlineTime;
+  List<String>? extensions;
+  List<String>? deadlineChoices;
+  final clauses = text.substring(main.end).split(RegExp(r'[，,。]')).map((part) => part.trim()).where((part) => part.isNotEmpty);
+  for (final clause in clauses) {
+    if (const ['不用翻别处', '不要翻别处', '只查这一层', '原件别动', '不要改原件'].contains(clause)) {
+      continue;
+    }
+    if (const ['离开后继续', '我先走了也继续', '我先去布场', '我离开就停', '我走就停'].contains(clause)) {
+      final value = clause.endsWith('停') ? 'pause' : 'continue';
+      if (afterExit != null && afterExit != value) {
+        return {'kind': kind, 'operation': 'clarify'};
+      }
+      afterExit = value;
+      continue;
+    }
+    if (const ['电脑上线以后再做', '电脑开了以后再做', '等电脑上线'].contains(clause)) {
+      allowQueue = true;
+      continue;
+    }
+    final format = switch (clause.toLowerCase()) {
+      '只查md' || '只查markdown' => <String>['md'],
+      '只查txt' || '只查纯文本' => <String>['txt'],
+      '只查md和txt' || '只查markdown和纯文本' => <String>['md', 'txt'],
+      _ => null,
+    };
+    if (format != null && extensions == null) {
+      extensions = format;
+      continue;
+    }
+    final deadline = RegExp(r'^(?:在|今天)?((?:[01]\d|2[0-3]):[0-5]\d|今晚七点|晚上七点|七点)(?:以)?前'
+      r'(?:完成|给我|把能打开的入口留在小屋|留在小屋)?$').firstMatch(clause);
+    if (deadline != null && deadlineTime == null && deadlineChoices == null) {
+      final wording = deadline.group(1)!;
+      if (wording == '七点') {
+        deadlineChoices = ['07:00', '19:00'];
+      } else {
+        deadlineTime = wording.endsWith('七点') ? '19:00' : wording;
+      }
+      continue;
+    }
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  // An unspoken permission to keep working after exit is not inferred from
+  // a date or a file name. The supported whole clauses above make it explicit.
+  if (afterExit == null) {
+    return {'kind': kind, 'operation': 'clarify'};
+  }
+  return {'kind': kind, 'operation': 'create', 'directory': label, 'day': main.group(6),
+    'afterExit': afterExit, 'allowQueue': allowQueue, 'deadlineTime': deadlineTime,
+    if (deadlineChoices != null) 'deadlineChoices': deadlineChoices,
+    'extensions': extensions ?? ['md', 'txt']};
+}
+
 /// Freeze the original source day and deadline once, before opening a picker.
 /// A repeated accepted command uses its stored agreement instead of this path.
-Future<MemoryRow?> companionNotesAgreement(MemoryRow source, MemoryRow command, CompanionReminders clock) async {
+Future<MemoryRow?> companionHostAgreement(MemoryRow source, MemoryRow command, CompanionReminders clock) async {
   final zone = source['zone_id'];
   final offset = source['offset_seconds'];
   if (zone is! String || zone.isEmpty || offset is! int) {
@@ -300,7 +391,11 @@ Future<MemoryRow?> companionNotesAgreement(MemoryRow source, MemoryRow command, 
   }
   final local = DateTime.fromMillisecondsSinceEpoch((source['said_at_utc']! as int) + offset * 1000, isUtc: true);
   final today = DateTime.utc(local.year, local.month, local.day).toIso8601String().substring(0, 10);
-  final date = command['day'] == '今天' ? today : command['day'] as String;
+  final date = switch (command['day']) {
+    '今天' => today,
+    '昨天' => DateTime.utc(local.year, local.month, local.day - 1).toIso8601String().substring(0, 10),
+    _ => command['day'] as String,
+  };
   final parsed = DateTime.tryParse('${date}T00:00:00Z');
   if (parsed == null || parsed.toIso8601String().substring(0, 10) != date) {
     return null;
@@ -321,6 +416,6 @@ Future<MemoryRow?> companionNotesAgreement(MemoryRow source, MemoryRow command, 
     'deadlineAtMs': deadlineAt,
     'afterExit': command['afterExit'],
     'allowQueue': command['allowQueue'],
-    'outputName': command['outputName'] ?? '$date-待办.md',
+    if (command.containsKey('outputName')) 'outputName': command['outputName'] ?? '$date-待办.md',
   };
 }

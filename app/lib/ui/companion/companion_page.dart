@@ -452,18 +452,30 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
     final hostKey = companionHostKey(ref.read(activeHostProvider));
     final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
-    final tasks = memory.store
-        .tasks(sourceSessionId: sourceSession)
-        .where(
-          (task) =>
-              task['kind'] == 'host.notes_to_todo' &&
-              task['host_key'] == hostKey &&
-              const ['queued', 'waiting', 'running', 'unknown'].contains(task['state']),
-        )
-        .toList();
+    final tasks = [
+      ...memory.store
+          .tasks(sourceSessionId: sourceSession)
+          .where(
+            (task) =>
+                task['kind'] == 'host.notes_to_todo' &&
+                task['host_key'] == hostKey &&
+                const ['queued', 'waiting', 'running', 'unknown'].contains(task['state']),
+          ),
+      // A queued light-room task keeps that source identity even when a
+      // connection makes the currently displayed room use full mode.
+      ...memory.store.pendingFindDraftTasks(hostKey: hostKey),
+    ];
     for (final task in tasks) {
       try {
-        await memory.hostTasks.run(task, client: client, hostKey: hostKey);
+        final current = memory.store.hostTask(task['task_id']! as String)!;
+        final agreement = current['agreement']! as MemoryRow;
+        final firstFind = current['kind'] == 'host.find_draft' && current['state'] == 'queued' &&
+          current['host_store_id'] != null && current['cancel_requested'] == 0 &&
+          agreement['allowQueue'] == true && agreement['afterExit'] == 'continue' &&
+          memory.store.hostTaskCommands(current['task_id']! as String).every((row) => row['possible_sent_at_ms'] == null);
+        // Only an explicitly queued, never attempted H command may make its
+        // first delivery here. The store checks its original deadline at send.
+        await memory.hostTasks.run(current, client: client, hostKey: hostKey, submitPending: firstFind);
       } on Object {
         // Keep the original command and any possible dispatch. A later visit
         // can query the original store; this does not create a replacement.
@@ -2181,6 +2193,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           (part) =>
               parseCompanionLookup(part.raw)?['operation'] == 'cancel' ||
               parseCompanionNotes(part.raw)?['operation'] == 'cancel' ||
+              parseCompanionFind(part.raw)?['operation'] == 'cancel' ||
               const ['cancel', 'amend', 'reopen'].contains(parseCompanionMap(part.raw)?['operation']),
         );
   }
@@ -2257,7 +2270,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final reminder = reminderParts.any((part) => part.command != null);
     final lookupCommands = {for (final part in reminderParts) part.itemNo: parseCompanionLookup(part.raw)};
     final lookup = lookupCommands.values.any((command) => command != null);
-    final notesCommands = {for (final part in reminderParts) part.itemNo: parseCompanionNotes(part.raw)};
+    final notesCommands = <int, MemoryRow?>{};
+    for (final part in reminderParts) {
+      final notes = parseCompanionNotes(part.raw);
+      final draft = parseCompanionFind(part.raw);
+      // A complete known command wins over the other command's request to
+      // clarify, including a find folder whose label contains “笔记待办”.
+      notesCommands[part.itemNo] = notes != null && notes['operation'] != 'clarify' ? notes : draft ?? notes;
+    }
     final notes = notesCommands.values.any((command) => command != null);
     final mapCommands = {for (final part in reminderParts) part.itemNo: parseCompanionMap(part.raw)};
     final map = mapCommands.values.any((command) => command != null);
@@ -2510,6 +2530,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
             (!_mapHere || mapGeneration != _mapHandoff.generation))) {
       return;
     }
+    if (notesCommands.values.any((command) => command?['kind'] == 'host.find_draft') &&
+        (_logOpen || !(ModalRoute.of(context)?.isCurrent ?? true))) {
+      return;
+    }
     if (result.failed) {
       if (_input.text.isEmpty) {
         _input.text = source['text']! as String;
@@ -2633,8 +2657,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     bool Function() current,
   ) async {
     final l10n = context.l10n;
+    final find = command['kind'] == 'host.find_draft';
     if (command['operation'] == 'clarify') {
-      return (line: l10n.companionNotesSyntax, task: null);
+      return (line: find ? l10n.companionFindSyntax : l10n.companionNotesSyntax, task: null);
     }
     final host = ref.read(activeHostProvider);
     final hostKey = companionHostKey(host);
@@ -2645,18 +2670,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     bool sameRoomAndHost() =>
         current() &&
         host == ref.read(activeHostProvider) &&
-        identical(client, ref.read(activeConnectionProvider).value?.client);
+        identical(client, ref.read(activeConnectionProvider).value?.client) &&
+        (!find || (!_logOpen && (ModalRoute.of(context)?.isCurrent ?? true)));
     final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
     CompanionTasksCapability? capability;
     MemoryRow task;
     if (accepted != null) {
       task = memory.store.hostTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
-      final targets = memory.store
-          .tasks(sourceSessionId: source['session_id']! as String)
+      final rows = find
+          ? memory.store.pendingFindDraftTasks(hostKey: hostKey).where((row) => row['source_session_id'] == source['session_id'])
+          : memory.store.tasks(sourceSessionId: source['session_id']! as String);
+      final targets = rows
           .where(
             (row) =>
-                row['kind'] == 'host.notes_to_todo' &&
+                row['kind'] == (find ? 'host.find_draft' : 'host.notes_to_todo') &&
                 row['cancel_requested'] == 0 &&
                 const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']),
           )
@@ -2668,84 +2696,156 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           )
           .toList();
       if (targets.length != 1) {
-        return (line: l10n.companionNotesWhich, task: null);
+        return (line: find ? l10n.companionFindWhich : l10n.companionNotesWhich, task: null);
       }
       if (!current()) {
         throw const DshClosedException('room changed before accepting task cancellation');
       }
-      task = memory.store.cancelNotesTask(
-        taskId: targets.single['task_id']! as String,
-        expectedTaskRev: targets.single['task_rev']! as int,
-        messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int,
-        itemNo: itemNo,
-      );
+      task = find
+          ? memory.store.cancelFindDraftTask(
+              taskId: targets.single['task_id']! as String,
+              expectedTaskRev: targets.single['task_rev']! as int,
+              messageId: source['id']! as String,
+              expectedSourceRev: source['source_rev']! as int,
+              itemNo: itemNo,
+            )
+          : memory.store.cancelNotesTask(
+              taskId: targets.single['task_id']! as String,
+              expectedTaskRev: targets.single['task_rev']! as int,
+              messageId: source['id']! as String,
+              expectedSourceRev: source['source_rev']! as int,
+              itemNo: itemNo,
+            );
     } else {
-      if (client == null) {
+      if (!find && client == null) {
         return (line: l10n.companionNotesConnect, task: null);
       }
-      final agreement = await companionNotesAgreement(source, command, ref.read(companionRemindersProvider));
+      var concrete = command;
+      if (command['deadlineChoices'] case final List<String> choices) {
+        final selected = await showAppDialog<String>(context: context, builder: (dialog) => SimpleDialog(
+          title: Text(l10n.companionFindSeven), children: [
+            for (final time in choices)
+              SimpleDialogOption(onPressed: () => Navigator.pop(dialog, time),
+                child: Text(time == '07:00' ? l10n.companionFindMorningSeven : l10n.companionFindEveningSeven)),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+          ],
+        ));
+        if (!sameRoomAndHost()) {
+          throw const DshClosedException('room changed during deadline clarification');
+        }
+        if (selected == null) {
+          return (line: l10n.companionFindDeadlineMissing, task: null);
+        }
+        concrete = {...command, 'deadlineTime': selected};
+      }
+      final agreement = await companionHostAgreement(source, concrete, ref.read(companionRemindersProvider));
       if (!sameRoomAndHost()) {
         throw const DshClosedException('room changed before task selection');
       }
       if (agreement == null) {
         return (line: l10n.companionNotesDateMissing, task: null);
       }
-      capability = await client.readCompanionTasksCapability();
+      MemoryRow? bound;
+      if (client == null) {
+        final saved = memory.store.hostTaskDirectories(hostKey: hostKey);
+        if (saved.isEmpty) {
+          return (line: l10n.companionFindConnect, task: null);
+        }
+        if (!mounted) {
+          throw const DshClosedException('room changed before task selection');
+        }
+        bound = await showAppDialog<MemoryRow>(context: context, builder: (dialog) => SimpleDialog(
+          title: Text(l10n.companionFindSavedDirectory),
+          children: [
+            for (final value in saved)
+              SimpleDialogOption(onPressed: () => Navigator.pop(dialog, value), child: Text(value['displayPath']! as String)),
+            SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+          ],
+        ));
+      } else {
+        capability = await client.readCompanionTasksCapability();
+        if (!sameRoomAndHost()) {
+          throw const DshClosedException('room changed before task selection');
+        }
+        if (capability == null || (find ? !capability.findDraft || !capability.sourceRead : !capability.notes)) {
+          return (line: find ? l10n.companionFindUnavailable : l10n.companionNotesUnavailable, task: null);
+        }
+        if (!mounted) {
+          throw const DshClosedException('room changed before task selection');
+        }
+        final path = await showDirectoryPicker(context, title: find
+          ? l10n.companionFindChooseDirectory(command['directory']! as String) : l10n.companionNotesChooseDirectory);
+        if (!sameRoomAndHost()) {
+          throw const DshClosedException('room changed during directory selection');
+        }
+        if (path != null) {
+          bound = await client.bindCompanionNotesDirectory(capability, path);
+        }
+      }
       if (!sameRoomAndHost()) {
-        throw const DshClosedException('room changed before task selection');
+        throw const DshClosedException('room changed before accepting the selected directory');
       }
-      if (capability == null || !capability.notes) {
-        return (line: l10n.companionNotesUnavailable, task: null);
+      if (bound == null) {
+        return (line: find ? l10n.companionFindNoDirectory : l10n.companionNotesNoDirectory, task: null);
       }
-      if (!mounted) throw const DshClosedException('room changed before task selection');
-      final path = await showDirectoryPicker(context, title: l10n.companionNotesChooseDirectory);
-      if (!sameRoomAndHost()) {
-        throw const DshClosedException('room changed during directory selection');
-      }
-      if (path == null) {
-        return (line: l10n.companionNotesNoDirectory, task: null);
-      }
-      final bound = await client.bindCompanionNotesDirectory(capability, path);
       String? session;
       if (!sameRoomAndHost()) {
         throw const DshClosedException('room changed before accepting notes task');
       }
       if (!light) {
-        final binding = await ref
-            .read(companionSessionsProvider.notifier)
-            .ensure(
-              memoryArchiveId: memory.store.archive['id']! as String,
-              memoryControlRevision: memory.store.archive['control_revision']! as int,
-            );
-        session = binding.sessionId;
+        if (find) {
+          session = _sessionId;
+        } else {
+          final binding = await ref
+              .read(companionSessionsProvider.notifier)
+              .ensure(
+                memoryArchiveId: memory.store.archive['id']! as String,
+                memoryControlRevision: memory.store.archive['control_revision']! as int,
+              );
+          session = binding.sessionId;
+        }
       }
       if (!sameRoomAndHost()) {
         throw const DshClosedException('room changed before accepting notes task');
       }
-      task = memory.store.createNotesTaskFromMessage(
-        messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int,
-        itemNo: itemNo,
-        roomMode: light ? 'light' : 'full',
-        hostKey: hostKey,
-        hostSessionId: session,
-        directoryLabels: {'source': bound['displayPath'], 'output': bound['displayPath']},
-        agreement: {
-          'args': {
-            'folderRef': bound['folderRef'],
-            'localDate': agreement['localDate'],
-            'timeZone': agreement['timeZone'],
-            'dateBy': 'modified',
-            'outputDirRef': bound['folderRef'],
-            'outputName': agreement['outputName'],
-            'writeMode': 'createNew',
-          },
-          'deadlineAtMs': agreement['deadlineAtMs'],
-          'afterExit': agreement['afterExit'],
-          'allowQueue': agreement['allowQueue'],
-        },
-      );
+      final args = <String, Object?>{
+        'folderRef': bound['folderRef'],
+        'localDate': agreement['localDate'],
+        'timeZone': agreement['timeZone'],
+        'dateBy': 'modified',
+        if (find)
+          ...{'scope': 'currentLevel', 'extensions': command['extensions']}
+        else
+          ...{'outputDirRef': bound['folderRef'], 'outputName': agreement['outputName'], 'writeMode': 'createNew'},
+      };
+      final complete = <String, Object?>{
+        'args': args,
+        'deadlineAtMs': agreement['deadlineAtMs'],
+        'afterExit': agreement['afterExit'],
+        'allowQueue': agreement['allowQueue'],
+      };
+      task = find
+          ? memory.store.createFindDraftTaskFromMessage(
+              messageId: source['id']! as String,
+              expectedSourceRev: source['source_rev']! as int,
+              itemNo: itemNo,
+              roomMode: light ? 'light' : 'full',
+              hostKey: hostKey,
+              hostSessionId: session,
+              directoryHostStoreId: bound['hostStoreId']! as String,
+              directoryLabels: {'source': bound['displayPath']},
+              agreement: complete,
+            )
+          : memory.store.createNotesTaskFromMessage(
+              messageId: source['id']! as String,
+              expectedSourceRev: source['source_rev']! as int,
+              itemNo: itemNo,
+              roomMode: light ? 'light' : 'full',
+              hostKey: hostKey,
+              hostSessionId: session,
+              directoryLabels: {'source': bound['displayPath'], 'output': bound['displayPath']},
+              agreement: complete,
+            );
     }
     memory.changed();
     if (client == null || hostKey != task['host_key']) {
