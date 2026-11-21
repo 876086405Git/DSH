@@ -174,10 +174,11 @@ private final class LiveActivityEngine {
       dismissed = false
     }
     guard !dismissed else { return }
-    // A finished turn's card still on the lock screen goes first: one DSH card at a time.
-    for old in all { await old.end(nil, dismissalPolicy: .immediate) }
     // Only in front; one that can't start now does when the app comes back (cameToFront).
+    // Until then a finished turn's card stays where it is.
     guard UIApplication.shared.applicationState == .active else { return }
+    // That card goes first: one DSH card at a time.
+    for old in all { await old.end(nil, dismissalPolicy: .immediate) }
     do {
       _ = try Activity.request(attributes: DSHLiveAttributes(),
         content: ActivityContent(state: state, staleDate: staleDate(state)), pushType: nil)
@@ -192,8 +193,10 @@ private final class LiveActivityEngine {
   @MainActor
   private func holdForResult() {
     guard hold == nil else { return }
-    hold = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
+    hold = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] timer in
       self?.enqueue { engine in
+        // Cancelled after it fired (a newer run came in while this waited in the queue).
+        guard engine.hold === timer else { return }
         engine.hold = nil
         await engine.render(engine.latest, art: nil, mayHold: false)
       }
