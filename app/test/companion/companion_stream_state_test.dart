@@ -202,10 +202,11 @@ void _seedFullFollowup(CompanionMemoryOwner memory) {
 }
 
 class _Room {
-  _Room(this.root, {_Client? client, this.clock}) : client = client ?? _Client();
+  _Room(this.root, {_Client? client, this.clock, this.initiative}) : client = client ?? _Client();
   final Directory root;
   final _Client client;
   final CompanionInitiativeClock Function()? clock;
+  final _FollowupObserver? initiative;
   late CompanionMemoryOwner memory;
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
@@ -230,6 +231,11 @@ class _Room {
             companionInitiativeClockProvider.overrideWithValue(clock!),
             initiativeMemory(clock!),
           ],
+          if (initiative != null)
+            companionInitiativeProvider.overrideWith((ref) {
+              ref.onDispose(initiative!.dispose);
+              return initiative!;
+            }),
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
         ],
@@ -290,6 +296,49 @@ class _Room {
       await client.close();
     });
   }
+}
+
+// Record accepted candidates and actual presentation calls without replacing
+// the owner/controller, Page.canPresent or the SQLite reservation path.
+class _FollowupObserver extends CompanionInitiative {
+  _FollowupObserver(super.clock);
+  final captured = <CompanionInitiativeSignal>[];
+  var presentations = 0;
+
+  @override
+  bool requestSignal(
+    CompanionInitiativeRoom room,
+    CompanionInitiativeView view,
+    CompanionInitiativeSignal candidate, {
+    required bool Function() isCurrent,
+    required bool Function(CompanionInitiativeDisplay) present,
+    required void Function(String) hide,
+    bool nightCareEnabled = false,
+    String? followupId,
+    Future<bool> Function()? prepare,
+  }) {
+    final accepted = super.requestSignal(room, view, candidate,
+      isCurrent: isCurrent,
+      present: (display) {
+        if (followupId != null) presentations++;
+        return present(display);
+      },
+      hide: hide, nightCareEnabled: nightCareEnabled, followupId: followupId, prepare: prepare,
+    );
+    if (accepted && followupId != null) captured.add(candidate);
+    return accepted;
+  }
+}
+
+Future<void> _captureFollowup(WidgetTester tester, _FollowupObserver observer) async {
+  // Only fake test time advances: the actual greeting must end before Page can
+  // capture the real opportunity, while the 45-second quiet gate stays closed.
+  for (var second = 0; second < 15 && observer.captured.isEmpty; second++) {
+    await tester.pump(const Duration(seconds: 1));
+  }
+  expect(observer.captured, hasLength(1));
+  expect(observer.captured.single.nightKey, isNull);
+  expect(observer.presentations, 0);
 }
 
 Future<void> flush(WidgetTester tester) async {
@@ -601,6 +650,90 @@ void main() {
       }
     });
   }
+
+  testWidgets('fixture 10 a captured followup waits while a real approval card is open', (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final started = tester.binding.clock.now();
+    final wall = DateTime.utc(2026, 11, 6, 12).millisecondsSinceEpoch;
+    CompanionInitiativeClock clock() {
+      final elapsed = tester.binding.clock.now().difference(started).inMilliseconds;
+      return CompanionInitiativeClock(wallMs: wall + elapsed, monoMs: elapsed);
+    }
+    final observer = _FollowupObserver(clock);
+    final bridge = _FollowupBridge();
+    final room = _Room(temporary, client: _Client(bridge), clock: clock, initiative: observer);
+    await room.open(tester, seed: _seedFullFollowup);
+    try {
+      await _captureFollowup(tester, observer);
+      expect(bridge.discovery, greaterThan(0));
+      expect(bridge.posts, isEmpty);
+      expect(room.memory.store.followups().single['state'], 'pending');
+      expect(room.state.running, isFalse);
+      // This is the real watch decoder and ChatController approval path. No
+      // synthetic Page blocked flag, generating turn, or fake canPresent gate.
+      room.client.events.add(HostEvent.fromFrame({
+        'type': 'waterfall', 'event': 'approval/request',
+        'eventId': 'approval-before-followup', 'agentId': _session,
+        'request': {'toolName': 'web_fetch', 'callId': 'pending-call', 'reason': '要打开一个网页'},
+      }));
+      await flush(tester);
+      expect(room.state.openApproval?.eventId, 'approval-before-followup');
+      expect(room.state.running, isFalse);
+      await tester.pump(CompanionAsk.detailWait);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ApprovalCard), findsOneWidget);
+      for (var second = 0; second < 60; second++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(find.byType(ApprovalCard), findsOneWidget);
+      expect(observer.presentations, 0);
+      expect(room.speech(tester), isNot(_followupLine));
+      expect(bridge.posts, isEmpty);
+      expect(room.memory.store.followups().single['state'], 'pending');
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(room.memory.store.initiativeRecord()!['inviteAtMs'], isEmpty);
+      expect(room.memory.store.requests(), isEmpty);
+    } finally {
+      if (!bridge.release.isCompleted) bridge.release.complete();
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('fixture 10 a captured followup is not shown after the actual clock reaches 23', (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final started = tester.binding.clock.now();
+    final wall = DateTime.utc(2026, 11, 6, 22, 59, 30).millisecondsSinceEpoch;
+    CompanionInitiativeClock clock() {
+      final elapsed = tester.binding.clock.now().difference(started).inMilliseconds;
+      return CompanionInitiativeClock(wallMs: wall + elapsed, monoMs: elapsed);
+    }
+    final observer = _FollowupObserver(clock);
+    final bridge = _FollowupBridge();
+    final room = _Room(temporary, client: _Client(bridge), clock: clock, initiative: observer);
+    await room.open(tester, seed: _seedFullFollowup);
+    try {
+      await _captureFollowup(tester, observer);
+      expect(bridge.discovery, greaterThan(0));
+      expect(bridge.posts, isEmpty);
+      expect(companionNightKey(clock().wallMs, clock().offsetMinutes), isNull);
+      expect(room.state.running, isFalse);
+      expect(room.state.openApproval, isNull);
+      for (var second = 0; second < 60; second++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(companionNightKey(clock().wallMs, clock().offsetMinutes), '2026-11-06');
+      expect(observer.presentations, 0);
+      expect(room.speech(tester), isNot(_followupLine));
+      expect(bridge.posts, isEmpty);
+      expect(room.memory.store.followups().single['state'], 'pending');
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(room.memory.store.initiativeRecord()!['inviteAtMs'], isEmpty);
+      expect(room.memory.store.requests(), isEmpty);
+    } finally {
+      if (!bridge.release.isCompleted) bridge.release.complete();
+      await room.close(tester);
+    }
+  });
 
   testWidgets('positive control: empty start, monotonic chunks and repeated status preserve one reply', (tester) async {
     final room = _Room(temporary);
