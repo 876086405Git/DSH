@@ -619,7 +619,7 @@ void main() {
     restoreOldMemorySchema(database, 11);
     expect(database.select("SELECT name FROM sqlite_schema WHERE name='companion_lookup_attempts'"), isEmpty);
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 13);
+    expect(database.select('PRAGMA user_version').single['user_version'], 14);
     expect(store.task(reminder['task_id'] as String), reminder);
     expect(store.messages().single, oldMessage);
     expect(database.select('PRAGMA foreign_key_check'), isEmpty);

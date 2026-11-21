@@ -16,6 +16,7 @@ import 'json.dart' show uuidV4;
 part 'companion_task_store.dart';
 part 'companion_public_lookup_store.dart';
 part 'companion_host_task_store.dart';
+part 'companion_map_store.dart';
 
 const _conflict = DshRemoteException('companion/conflict', 'Companion memory changed; read it again', {'status': 409});
 const _cleanupUnknown = DshRemoteException(
@@ -34,7 +35,7 @@ class CompanionMemoryStore {
       _db.execute('PRAGMA foreign_keys = ON');
       _db.execute('PRAGMA busy_timeout = 1000');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 13) {
+      if (version > 14) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -234,6 +235,12 @@ class CompanionMemoryStore {
         _transaction(() {
           _db.execute(_hostTaskSchema);
           _db.execute('PRAGMA user_version = 13');
+        });
+      }
+      if (version < 14) {
+        _transaction(() {
+          _db.execute(_mapSchema);
+          _db.execute('PRAGMA user_version = 14');
         });
       }
       _transaction(() {
