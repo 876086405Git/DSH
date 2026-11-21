@@ -159,11 +159,6 @@ class SSHMessageWriter {
     _builder.addByte(value);
   }
 
-  // void writeUint16(int value) {
-  //   _builder.addByte(value >> 8);
-  //   _builder.addByte(value);
-  // }
-
   void writeUint32(int value) {
     _builder.add(value.toUint32());
   }

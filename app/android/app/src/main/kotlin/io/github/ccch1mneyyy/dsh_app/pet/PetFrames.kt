@@ -99,12 +99,16 @@ class PetFrames(
 
     /**
      * The frame for [shown]: held while [holding] or while the held picture is still up (its
-     * successor's sheet may lag), a grown one while its animation shows, else rest.
+     * successor's sheet may lag), a grown one while its animation shows, else rest. During a
+     * crossfade the outgoing cell stays inside the window too, until [fadingFrom] is cleared.
      */
-    fun frameFor(shown: PetAnimation?, holding: Boolean): FramePx = when {
-        holding || (heldAnim != null && shown?.name == heldAnim.name) -> held
-        shown != null -> grown[shown.name] ?: rest
-        else -> rest
+    fun frameFor(shown: PetAnimation?, holding: Boolean, fadingFrom: PetAnimation? = null): FramePx {
+        val next = when {
+            holding || (heldAnim != null && shown?.name == heldAnim.name) -> held
+            shown != null -> grown[shown.name] ?: rest
+            else -> rest
+        }
+        return fadingFrom?.let { next.union(cell(it)) } ?: next
     }
 
     companion object {

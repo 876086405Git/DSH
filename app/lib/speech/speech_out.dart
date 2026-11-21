@@ -274,7 +274,7 @@ class DeepSeekOut implements SpeechOut {
   int _written = 0;
   int _played = 0;
 
-  /// Each level tick is 40 ms heard ([PcmStream] posts it when that audio plays).
+  /// Each level tick is 40 ms heard (the native PcmStream posts it when that audio plays).
   static const _tickBytes = deepSeekTtsRate * 2 * 40 ~/ 1000;
 
   @override

@@ -1,7 +1,7 @@
 // 酒馆设置 › 生成: how much of the story goes to the model, how long a reply
-// may be, and how freely it writes. They live in the engine's default preset
-// (readSettings / setSettings), until the preset library (T20) gives each chat
-// its own.
+// may be, and how freely it writes. The engine's global preset numbers are
+// read and written through readSettings / setSettings; a chat can select its
+// own library preset (tavern_presets_page.dart).
 
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -1,8 +1,7 @@
 // One tavern chat (docs/design/roleplay-ui.md §2, §7): the current path of the
 // tree, the reply as it streams, alternatives under the last reply (‹ 2/5 ›),
 // and a long-press menu for the rest. Messages draw with the chat's own
-// widgets for now; the canvas (WebView, ST's display pipeline) replaces the
-// list once regex and HTML land (R2).
+// widgets, or on the whole-page canvas when it is turned on (a trial, 酒馆设置).
 
 import 'dart:async';
 

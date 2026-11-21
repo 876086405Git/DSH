@@ -110,7 +110,7 @@
 
 ## 4. 可复用组件
 
-`SegmentedPill`、`SettingsSegmentTile`（分段选择）· `GlassSurface`、`GlassPill`、`GlassIconButton` · `SheetGroup`、`SettingsTile`、`SettingsSwitchTile` · `AppPage`、`showAppSheet`、`SheetHeader` · `TopFade`（实心背景后 16dp 羽化）、`BackdropVeil`（页面顶栏默认遮罩） · `ThinkGlyph`、`WhaleTail`。新的通用组件放 `app/lib/ui/common/` 的**新文件**里，名字别撞。
+`SegmentedPill`、`SettingsSegmentTile`（分段选择）· `GlassSurface`、`GlassIconButton` · `SheetGroup`、`SettingsTile`、`SettingsSwitchTile` · `AppPage`、`showAppSheet`、`SheetHeader` · `TopFade`（实心背景后 16dp 羽化）、`BackdropVeil`（页面顶栏默认遮罩） · `ThinkGlyph`、`WhaleTail`。新的通用组件放 `app/lib/ui/common/` 的**新文件**里，名字别撞。
 
 ## 5. 验收
 

@@ -1,2 +1,3 @@
 # Nested patches are applied to upstream sources byte for byte; never convert their line endings.
 tooling/ios/phone-self-runner/*.patch -text
+runtime/tawcroot/*.diff -text

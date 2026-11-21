@@ -1,0 +1,17 @@
+--- a/src/path.c
++++ b/src/path.c
+@@ -427 +427,13 @@
+-	if (tawcroot_rootfs_fd < 0)    return TAWC_EBADF;
++	if (tawcroot_rootfs_fd < 0)    return TAWC_EBADF;
++	/* A rootfs symlink can enter an active bind between orchestration
++	 * passes. Stop the rootfs-only walk at that boundary: ENOENT is
++	 * the resolver's existing stop-with-current-suffix result, and
++	 * the final bind pass selects the real fd and enforces read-only.
++	 * Do not inspect the hidden rootfs shadow or resolve bind-source
++	 * symlinks here; direct bind paths leave those to the kernel. */
++	for (size_t i = 0; i < tawcroot_n_binds; i++) {
++		const struct tawcroot_bind *b = &tawcroot_binds[i];
++		if (b->active && tawc_starts_with(suffix, b->dst) &&
++		    (suffix[b->dst_len] == 0 || suffix[b->dst_len] == '/'))
++			return TAWC_ENOENT;
++	}

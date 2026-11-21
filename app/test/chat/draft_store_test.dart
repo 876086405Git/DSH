@@ -40,6 +40,30 @@ void main() {
     container.dispose();
   });
 
+  test('a picture pasted as its bytes is not put back, what was typed before it is (#1684)', () async {
+    // As Android reads them: what UTF-8 cannot decode is U+FFFD.
+    final jpeg = '\ufffd\ufffd\ufffd\ufffd\u0000\u0010JFIF\u0000MM\u0000*' * 1000;
+    final png = '\ufffdPNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR' * 1000;
+    SharedPreferences.setMockInitialValues({
+      DraftStore.preferenceKey: jsonEncode({
+        'pasted': {'t': jpeg, 'at': 5},
+        'png': {'t': png, 'at': 4},
+        'both': {'t': '看看这张图 $jpeg', 'at': 3},
+        'cafe': {'t': 'café$png', 'at': 2},
+        'typed': {'t': '明天再问', 'at': 1},
+      }),
+    });
+    final container = ProviderContainer();
+    final store = container.read(draftStoreProvider.notifier);
+    await store.flush();
+    final drafts = container.read(draftStoreProvider).drafts;
+    expect(drafts.keys, ['both', 'cafe', 'typed']);
+    expect(drafts['both']!.text, '看看这张图');
+    expect(drafts['cafe']!.text, 'café');
+    expect(drafts['typed']!.text, '明天再问');
+    container.dispose();
+  });
+
   test('what was typed before the saved drafts load wins', () async {
     SharedPreferences.setMockInitialValues({
       DraftStore.preferenceKey: jsonEncode({

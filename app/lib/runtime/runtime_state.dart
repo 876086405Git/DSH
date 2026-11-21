@@ -29,7 +29,6 @@ class RuntimeNotice {
   final String text;
 }
 
-/// What the UI needs to know about the local runtime.
 /// What the engine reported about moving saved paths when the app's container changed
 /// (runtime/ios/storage/preload.mjs). Only ever said on iOS, and said again at every start while
 /// it's still true.
@@ -51,6 +50,7 @@ enum RelocationIssue {
   };
 }
 
+/// What the UI needs to know about the local runtime.
 class LocalRuntimeState {
   const LocalRuntimeState({
     this.status = const RuntimeStatus.unknown(),
