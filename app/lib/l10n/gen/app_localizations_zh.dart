@@ -19073,6 +19073,30 @@ class L10nZh extends L10n {
   String get starPromptPlea => '拜托你啦~ 这真的很重要！！';
 
   @override
+  String get starPromptBody2 => '看来你挺喜欢这里嘛！点个 Star 只要几秒钟，却能让更多人发现 DSH Go，本鱼也会更有干劲！';
+
+  @override
+  String get starPromptPlea2 => '就差你这一颗星星啦~';
+
+  @override
+  String get starPromptBody3 => 'DSH Go 不收费、没有广告，全靠大家的 Star 让更多人看到。如果它帮到了你，就送本鱼一颗星星吧！';
+
+  @override
+  String get starPromptPlea3 => '本鱼眼巴巴地等着呢~';
+
+  @override
+  String get starPromptBody4 => '这么久了，本鱼一直都在。如果 DSH Go 已经成了你每天都会打开的 App，点个 Star 就是给作者最好的回礼。';
+
+  @override
+  String get starPromptPlea4 => '求求你啦，就点一下下~';
+
+  @override
+  String get starPromptBody5 => '这是本鱼最后一次问你啦。不管点不点，本鱼都会一直陪着你。要是愿意的话，点个 Star 让本鱼开心一下吧！';
+
+  @override
+  String get starPromptPlea5 => '最后一次，拜托啦！';
+
+  @override
   String get starPromptStar => '去 GitHub 点 Star';
 
   @override
