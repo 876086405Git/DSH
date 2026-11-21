@@ -1,0 +1,12 @@
+--- a/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
+@@ -1489 +1489,8 @@
+-	if (event?.usageMetadata != null) {
++	const bedrock = event?.metadata?.usage;
++	if (bedrock != null) {
++		field("inputTokens", bedrock.inputTokens);
++		field("outputTokens", bedrock.outputTokens);
++		field("cacheReadTokens", bedrock.cacheReadInputTokens);
++		field("cacheWriteTokens", bedrock.cacheWriteInputTokens);
++	}
++	if (event?.usageMetadata != null) {

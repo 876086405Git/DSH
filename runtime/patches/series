@@ -5,6 +5,7 @@ fs-create-exclusive.diff
 install-log-redaction.diff
 piai-anthropic-opus55-thinking.diff
 piai-google-openai-store.diff
+piai-mistral-openai-store.diff
 plugin-manager-active-run-guard.diff
 plugin-manager-cancel-tree-confirmation.diff
 preset-legacy-delegation.diff
@@ -155,6 +156,8 @@ web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
 messages-usage-evidence.diff
 piai-usage-evidence.diff
+piai-tool-call-id.diff
+piai-bedrock-usage-evidence.diff
 companion-phone-memory-request.diff
 companion-auxiliary-single-request.diff
 companion-chat-usage-receipts.diff
