@@ -438,6 +438,7 @@ DSH npm 前缀（runtime/locks）→ rtbuild 按 series 应用目标平台的补
 | 新建页面/设置项 | `docs/design/settings-ia.md`、§2.2 | `ui/features/feature_catalog.dart`、`settings/index/spots.dart` | 同上 + 截图 |
 | 文案/本地化 | §2.5 | `l10n/parts/*.arb`（中英） | `python3 app/tool/l10n_merge.py --check` |
 | 用户指南 | §8 | `docs/guide/**` | `python3 app/tool/guide_sync.py --check` |
+| 匿名使用统计 | [埋点与报表设计](design/usage-metrics.md) | `app/lib/usage/`、`services/share-worker/` | App 日账本、Worker 接收与报表测试；新来源另做端到端对账 |
 | 原生插件协议/座位 | `docs/design/native-plugins.md`、`plugin-seams.md` | `plugins/native/`、`plugins/seams/`、`sdk/plugin-kit` | `cd sdk/plugin-kit && npm test` |
 | 桥路由 | `docs/design/bridge-contract.md` | `runtime/bridge/**`、`dsh_client dsh_go_api.dart` | `node --test runtime/tests/*.test.mjs` |
 | 引擎补丁/升级 | §5.4/§5.5、`docs/maintenance/*-contract.md` | `runtime/patches/**`、`runtime/build-runtime.sh` | `python3 -I runtime/tests/test_patch_dsh.py`（构建需 x86_64 主机） |
