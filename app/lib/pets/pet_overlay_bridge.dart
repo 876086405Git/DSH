@@ -3,10 +3,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../companion/companion_float.dart';
+import '../state/android_features.dart';
 import '../state/live_activity_state.dart';
+import '../state/notify_state.dart';
 import '../ui/common/app_dialog.dart';
 import 'overlay_channel.dart';
 import 'pet_overlay_actions.dart';
@@ -27,6 +30,18 @@ final petOverlayBridgeProvider = Provider<void>((ref) {
   ref.watch(petOverlayActionBridgeProvider);
   // The status bar's live activity tells the same state in words.
   ref.watch(liveActivityBridgeProvider);
+  // 停止 on the iOS live activity is the pet's own stop, with its checks.
+  if (ref.read(operatingSystemProvider) == 'ios') {
+    ref
+        .read(notifyChannelProvider)
+        .onLiveStop(
+          (host, session) async =>
+              await ref
+                  .read(petOverlayActionsProvider)
+                  .handle(MethodCall('stop', {'host': host, 'sessionId': session})) ==
+              true,
+        );
+  }
   ref.listen<PetState>(petStateProvider, (previous, next) {
     if (previous == next) return;
     final push = ref.read(petOverlayPushProvider);
