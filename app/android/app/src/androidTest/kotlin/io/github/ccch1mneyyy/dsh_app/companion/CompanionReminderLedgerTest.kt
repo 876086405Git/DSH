@@ -186,10 +186,48 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(0L, f.count("task_id='q'"))
     }
 
+    fun testHostUpgradeKeepsRemindersAndLeavesHostCommandsAndSnapshotsUntouched() {
+        f.revision(1)
+        f.installLookupSchema()
+        f.installHostSchema()
+        f.sql.execSQL("""INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,
+            item_no,kind,room_mode,current_rev,created_at_ms,updated_at_ms)
+            VALUES('h','archive','host-source','light:s',2,'host.notes_to_todo','light',1,0,0)""")
+        f.sql.execSQL("""INSERT INTO companion_task_revisions(task_id,task_rev,operation,command_message_id,
+            command_source_rev,command_item_no,request_fingerprint,source_said_at_utc,source_offset_minutes,
+            executor_id,state,created_at_ms,updated_at_ms)
+            VALUES('h',1,'create','host-source',1,2,'host-fingerprint',?,480,'original-host-store',
+            'running',0,0)""", arrayOf(f.now))
+        val snapshot = """{"taskId":"h","state":"unknown","receiptSeq":7}"""
+        val command = """{"taskId":"h","taskRev":1,"kind":"host.notes_to_todo"}"""
+        f.sql.execSQL("""INSERT INTO companion_host_tasks(task_id,host_store_id,host_execution_id,
+            applied_host_receipt_seq,snapshot_json) VALUES('h','original-host-store','original-execution',7,?)""",
+            arrayOf(snapshot))
+        f.sql.execSQL("""INSERT INTO companion_host_commands(task_id,task_rev,request_json,possible_sent_at_ms)
+            VALUES('h',1,?,123)""", arrayOf(command))
+        f.reopen()
+        assertEquals(13, f.sql.version)
+        assertEquals(listOf("t"), f.ledger.recoveryBatch(EXECUTOR, f.now, "", 50))
+        assertNull(f.ledger.current("h"))
+        assertNull(f.ledger.revision(ReminderKey("h", 1)))
+        assertTrue(f.runner().resume("h"))
+        assertEquals(0, f.effects.registered.size)
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.registered)
+        assertEquals(0L, f.count("task_id='h'"))
+        f.sql.rawQuery("SELECT applied_host_receipt_seq,snapshot_json FROM companion_host_tasks WHERE task_id='h'", null).use {
+            assertTrue(it.moveToFirst()); assertEquals(7L, it.getLong(0)); assertEquals(snapshot, it.getString(1))
+        }
+        f.sql.rawQuery("SELECT request_json,possible_sent_at_ms,display_json FROM companion_host_commands WHERE task_id='h'", null).use {
+            assertTrue(it.moveToFirst()); assertEquals(command, it.getString(0)); assertEquals(123L, it.getLong(1))
+            assertEquals("{}", it.getString(2))
+        }
+    }
+
     fun testSchemaGateStillRejectsUnmigratedAndUnknownFutureStores() {
         f.revision(1)
         try {
-            for (version in listOf(10, 13)) {
+            for (version in listOf(10, 14)) {
                 f.sql.version = version
                 try { f.probe(); fail("Unsupported version $version was opened") }
                 catch (_: IllegalStateException) { }
@@ -268,6 +306,14 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
             } finally { sql.endTransaction() }
         }
         fun probe() { CompanionReminderLedger.open(isolated).use { } }
+        fun installHostSchema() {
+            sql.beginTransaction()
+            try {
+                HOST_SCHEMA.split(';').filter { it.isNotBlank() }.forEach { sql.execSQL(it) }
+                sql.version = 13
+                sql.setTransactionSuccessful()
+            } finally { sql.endTransaction() }
+        }
         fun reopen() { ledger.close(); ledger = CompanionReminderLedger.open(isolated) }
         override fun close() { ledger.close(); sql.close(); check(directory.deleteRecursively()) }
     }
@@ -344,6 +390,26 @@ CREATE TABLE companion_task_receipts (
   UNIQUE(task_id,task_rev,step_key,attempt_id,event_kind)
 );
 CREATE INDEX companion_task_receipts_task ON companion_task_receipts(task_id,runner_receipt_seq);
+        """.trimIndent()
+        // Literal v13 extension from the F SDK, not a native migrator.
+        private val HOST_SCHEMA = """
+CREATE TABLE companion_host_tasks (
+  task_id TEXT PRIMARY KEY REFERENCES companion_tasks(task_id) ON DELETE CASCADE,
+  host_store_id TEXT,
+  host_execution_id TEXT,
+  applied_host_receipt_seq INTEGER NOT NULL DEFAULT 0 CHECK(applied_host_receipt_seq>=0),
+  snapshot_json TEXT
+);
+CREATE TABLE companion_host_commands (
+  task_id TEXT NOT NULL,
+  task_rev INTEGER NOT NULL,
+  operation_id TEXT UNIQUE,
+  request_json TEXT NOT NULL,
+  display_json TEXT NOT NULL DEFAULT '{}',
+  possible_sent_at_ms INTEGER,
+  PRIMARY KEY(task_id,task_rev),
+  FOREIGN KEY(task_id,task_rev) REFERENCES companion_task_revisions(task_id,task_rev) ON DELETE CASCADE
+);
         """.trimIndent()
         // Literal v12 extension from the frozen E SDK, not a native migrator.
         private val LOOKUP_SCHEMA = """
