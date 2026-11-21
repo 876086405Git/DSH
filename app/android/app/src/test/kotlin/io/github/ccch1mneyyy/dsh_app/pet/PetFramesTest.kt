@@ -383,6 +383,30 @@ class PetFramesTest {
         assertEquals(FramePx(0, -48, 176, 128), f.hit(p.reaction("drag")))
     }
 
+    @Test fun tappingTheSleepingFishKeepsItsOutgoingPixelsUntilTheBlendEnds() {
+        val p = shipped("pink-fish")
+        val f = frames(p, density = 3f)
+        val sleep = p.primary("sleeping", 0)
+        val poke = p.reaction("tapLeft")!!
+        val player = PetPlayer()
+        player.setState(sleep, listOf(PetIdleItem(sleep, sleep.totalMs, 1)), null, 0L)
+        val outgoing = player.frame(0L)!!.anim
+        player.react(poke, loop = false, now = 1L)
+        val shown = player.frame(1L)!!.anim
+        assertEquals(sleep, outgoing)
+        assertEquals(poke, shown)
+        assertFalse(p.pixelArt)
+
+        // Sleep's actual art reaches beyond poke's rest window on both sides.
+        val asleep = drawn("pink-fish", outgoing, f)
+        assertFalse(f.frameFor(shown, holding = false).contains(asleep))
+        val during = f.frameFor(shown, holding = false, fadingFrom = outgoing)
+        assertTrue(during.contains(asleep))
+        assertTrue(during.contains(f.cell(shown)))
+        // Once the outgoing picture is gone, do not keep its extra touch-blocking area.
+        assertEquals(f.rest, f.frameFor(shown, holding = false, fadingFrom = null))
+    }
+
     @Test fun eachFrameLastsWhileItsPictureIsUp() {
         val p = shipped("deepy-whale")
         val f = frames(p)
