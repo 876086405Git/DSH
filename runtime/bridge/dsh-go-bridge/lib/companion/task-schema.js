@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { CompanionError } from './schema.js';
 
 export const TASK_KIND = 'host.notes_to_todo';
+export const FIND_KIND = 'host.find_draft';
+const kinds = z.enum([TASK_KIND, FIND_KIND]);
 export const TASK_LIMIT_MS = 300_000;
 export const taskId = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
 const integer = z.number().int().nonnegative().safe();
@@ -15,16 +17,28 @@ const args = z.object({
   outputName: text.max(255).refine(value => !/[\\/\u0000-\u001f\u007f]/.test(value) &&
     value !== '.' && value !== '..' && /\.(md|txt)$/i.test(value)), writeMode: z.literal('createNew'),
 }).strict();
-export const agreementSchema = z.object({args, deadlineAtMs: integer.nullable(),
+const notesAgreementSchema = z.object({args, deadlineAtMs: integer.nullable(),
   afterExit: z.enum(['continue', 'pause']), allowQueue: z.boolean()}).strict();
+const findArgs = z.object({folderRef: taskId, scope: z.literal('currentLevel'),
+  localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timeZone: text.max(128).refine(value => !/^[+-]/.test(value)), dateBy: z.literal('modified'),
+  extensions: z.array(z.enum(['md','txt'])).min(1).max(2).refine(value => new Set(value).size === value.length),
+}).strict();
+const findAgreementSchema = notesAgreementSchema.extend({args: findArgs}).strict();
+export const agreementSchema = z.union([notesAgreementSchema, findAgreementSchema]);
 const origin = z.object({sourceSessionId: text.max(256), messageId: taskId, itemNo: integer}).strict();
 const base = {v: z.literal(1), hostStoreId: taskId};
-export const createSchema = agreementSchema.extend({...base, taskId, taskRev: z.literal(1),
-  kind: z.literal(TASK_KIND), origin, hostSessionId: taskId.nullable()}).strict();
+const creation = {...base, taskId, taskRev: z.literal(1), origin, hostSessionId: taskId.nullable()};
+export const createSchema = z.discriminatedUnion('kind', [
+  notesAgreementSchema.extend({...creation, kind: z.literal(TASK_KIND)}).strict(),
+  findAgreementSchema.extend({...creation, kind: z.literal(FIND_KIND)}).strict(),
+]);
 export const amendSchema = z.object({...base, operationId: taskId, expectedTaskRev: revision,
-  taskRev: revision, changes: agreementSchema}).strict().refine(value => value.taskRev === value.expectedTaskRev + 1);
+  kind: kinds.optional(), taskRev: revision, changes: agreementSchema}).strict()
+  .refine(value => value.taskRev === value.expectedTaskRev + 1 &&
+    ((value.kind ?? TASK_KIND) === FIND_KIND ? findAgreementSchema : notesAgreementSchema).safeParse(value.changes).success);
 export const cancelSchema = z.object({...base, operationId: taskId, expectedTaskRev: revision,
-  taskRev: revision}).strict().refine(value => value.taskRev === value.expectedTaskRev + 1);
+  kind: kinds.optional(), taskRev: revision}).strict().refine(value => value.taskRev === value.expectedTaskRev + 1);
 export const folderSchema = z.object({...base, path: text.max(4096)}).strict();
 const states = z.enum(['queued', 'waiting', 'running', 'unknown', 'done', 'partial', 'failed', 'cancelled']);
 const stepKeys = z.enum(['selectInputs', 'readInputs', 'model', 'writePage']);
@@ -36,7 +50,7 @@ const directory = z.object({target: z.object({targetKey: text, displayPath: text
 export const folderRecordSchema = z.object({folderRef: taskId, directory, createdAtMs: integer}).strict();
 export const globalSchema = z.object({v: z.literal(1), hostStoreId: taskId.nullable(), createdAtMs: integer}).strict();
 export const recordSchema = z.object({
-  v: z.literal(1), taskId, hostExecutionId: taskId, kind: z.literal(TASK_KIND),
+  v: z.literal(1), taskId, hostExecutionId: taskId, kind: kinds,
   taskRev: revision, runnerReceiptSeq: integer, originalCreate: createSchema.nullable(),
   originalFingerprint: text.nullable(), origin: origin.nullable(), hostSessionId: taskId.nullable(),
   state: states, waitReason: text.nullable(), cancelRequested: z.boolean(),
@@ -53,7 +67,13 @@ export const recordSchema = z.object({
     identity: text, reference: object}).strict()),
   approval: approval.nullable(), budget: z.object({limitMs: z.literal(TASK_LIMIT_MS), spentMs: integer, heldMs: integer}).strict(),
   execution: object.nullable(), notes: z.record(z.string(), object),
-}).strict();
+}).strict().superRefine((record, context) => {
+  const schema = record.kind === FIND_KIND ? findAgreementSchema : notesAgreementSchema;
+  if (record.originalCreate && record.originalCreate.kind !== record.kind ||
+      record.agreement && !schema.safeParse(record.agreement).success ||
+      record.revisions.some(value => value.agreement && !schema.safeParse(value.agreement).success))
+    context.addIssue({code: 'custom', message: 'Task kind and agreement must match'});
+});
 
 export function taskError(status, code, message, snapshot) {
   const error = new CompanionError(status, `task-${code}`, message);

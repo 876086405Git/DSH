@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
-import { TASK_KIND, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
+import { TASK_KIND, FIND_KIND, TASK_LIMIT_MS, createSchema, amendSchema, cancelSchema, folderSchema,
   folderRecordSchema, globalSchema, recordSchema, parseTask, taskError, fingerprint, taskAgreement, dayRange } from './task-schema.js';
 
 const clone = value => structuredClone(value);
@@ -114,12 +114,13 @@ export class CompanionTaskStore {
     });
   }
   validateAgreement(agreement) {
-    this.folder(agreement.args.folderRef); this.folder(agreement.args.outputDirRef);
+    this.folder(agreement.args.folderRef);
+    if (agreement.args.outputDirRef !== undefined) this.folder(agreement.args.outputDirRef);
     return dayRange(agreement);
   }
-  fresh(id) {
+  fresh(id, kind = TASK_KIND) {
     const now = this.now();
-    return {v: 1, taskId: id, hostExecutionId: randomUUID(), kind: TASK_KIND, taskRev: 1, runnerReceiptSeq: 0,
+    return {v: 1, taskId: id, hostExecutionId: randomUUID(), kind, taskRev: 1, runnerReceiptSeq: 0,
       originalCreate: null, originalFingerprint: null, origin: null, hostSessionId: null,
       state: 'waiting', waitReason: 'original_create_missing', cancelRequested: false,
       createdAtMs: now, updatedAtMs: now, agreement: null, revisions: [], operations: {}, steps: [], artifacts: [],
@@ -129,6 +130,11 @@ export class CompanionTaskStore {
     record.approval = null;
     if (record.steps.some(step => !settled(step))) { record.state = 'unknown'; record.waitReason = 'prior_step_unresolved'; }
     else if (record.cancelRequested) { record.state = 'cancelled'; record.waitReason = null; }
+    else if (record.kind === FIND_KIND && record.steps.some(step => step.taskRev === record.taskRev &&
+      step.stepKey === 'readInputs' && settled(step) && step.result?.completion?.scope && ['done','partial'].includes(step.state))) {
+      const step = record.steps.findLast(step => step.taskRev === record.taskRev && step.stepKey === 'readInputs');
+      record.state = step.state; record.waitReason = step.reason;
+    }
     else if (record.artifacts.length) {
       record.state = record.artifacts.every(item => item.taskRev === record.taskRev) ? 'done' : 'partial';
       record.waitReason = record.state === 'partial' ? 'prior_revision_effect' : null;
@@ -149,7 +155,8 @@ export class CompanionTaskStore {
   create(input) {
     const body = parseTask(createSchema, input); this.checkStore(body.hostStoreId);
     return this.enqueue(async () => {
-      const stored = this.table.get(body.taskId), record = stored ? clone(stored) : this.fresh(body.taskId);
+      const stored = this.table.get(body.taskId), record = stored ? clone(stored) : this.fresh(body.taskId, body.kind);
+      if (record.kind !== body.kind) throw taskError(409, 'conflict', 'The task kind is immutable', this.project(record));
       const hash = fingerprint(body);
       if (record.originalFingerprint !== null) {
         if (record.originalFingerprint !== hash) throw taskError(409, 'conflict', 'Task ID has another original creation', this.project(record));
@@ -172,7 +179,9 @@ export class CompanionTaskStore {
   operation(id, input, cancel) {
     const body = parseTask(cancel ? cancelSchema : amendSchema, input); this.checkStore(body.hostStoreId);
     return this.enqueue(async () => {
-      const stored = this.table.get(id), record = stored ? clone(stored) : this.fresh(id);
+      const kind = body.kind ?? TASK_KIND;
+      const stored = this.table.get(id), record = stored ? clone(stored) : this.fresh(id, kind);
+      if (record.kind !== kind) throw taskError(409, 'conflict', 'The task kind is immutable', this.project(record));
       const hash = fingerprint({cancel, body});
       const previous = Object.hasOwn(record.operations, body.operationId) ? record.operations[body.operationId] : undefined;
       if (previous) {
@@ -180,6 +189,8 @@ export class CompanionTaskStore {
         return this.project(record);
       }
       if (stored && record.cancelRequested && body.taskRev <= record.taskRev) return this.project(record);
+      if (!cancel && record.kind === FIND_KIND && record.cancelRequested)
+        throw taskError(409, 'conflict', 'A cancelled find task requires a new explicit task', this.project(record));
       if (stored && (record.originalCreate !== null ? body.expectedTaskRev !== record.taskRev : body.taskRev <= record.taskRev))
         throw taskError(409, 'conflict', 'Task agreement revision changed', this.project(record));
       if (!cancel && record.artifacts.length) throw taskError(409, 'conflict', 'This task already has a published result', this.project(record));
@@ -222,6 +233,8 @@ export class CompanionTaskStore {
       const record = this.read(id); this.current(record, taskRev);
       if (!stepKeys.has(stepKey) || !Number.isSafeInteger(reserveMs) || reserveMs <= 0)
         throw taskError(400, 'invalid-request', 'Invalid fixed task step');
+      if (record.kind === FIND_KIND && !['selectInputs','readInputs'].includes(stepKey))
+        throw taskError(400, 'invalid-request', 'Find tasks have only fixed read steps');
       const previous = record.steps.findLast(step => step.taskRev === taskRev && step.stepKey === stepKey);
       if (record.steps.some(step => !settled(step)) || previous && (!retryKnownSafe || !this.retryable(record, previous)))
         throw taskError(409, 'conflict', 'An original step must be reconciled before another claim', this.project(record));
@@ -267,6 +280,52 @@ export class CompanionTaskStore {
     }, true);
   }
   saveSelection(claim, selection) { return this.savePrivate(claim, 'selection', selection); }
+  finishFindSelection(claim, selection, elapsedMs) {
+    return this.enqueue(async () => {
+      const record = this.read(claim.taskId), step = this.findClaim(record, claim);
+      if (record.kind !== FIND_KIND || claim.stepKey !== 'selectInputs')
+        throw taskError(409, 'conflict', 'The original find selection claim is required');
+      const hash = fingerprint({selection, elapsedMs});
+      if (step.finishFingerprint) {
+        if (step.finishFingerprint !== hash) throw taskError(409, 'conflict', 'The original selection already completed');
+        return this.project(record);
+      }
+      record.notes[String(claim.taskRev)].selection = clone(selection);
+      this.settle(record, step, {state:'done', reason:null, result:{selectedCount:selection.entries.length}, elapsedMs});
+      step.finishFingerprint = hash;
+      // The saved selection and its read claim share one commit: cancellation or a crash
+      // cannot hide observed coverage between two steps. A zero hold authorizes no IO.
+      const remaining = TASK_LIMIT_MS - record.budget.spentMs - record.budget.heldMs;
+      const agreement = record.revisions.find(value => value.taskRev === claim.taskRev).agreement;
+      const deadlineMs = agreement.deadlineAtMs === null ? remaining : agreement.deadlineAtMs - this.now();
+      const reserveMs = record.taskRev === claim.taskRev && !record.cancelRequested && agreement.afterExit === 'continue'
+        ? Math.max(0, Math.min(remaining, deadlineMs)) : 0;
+      record.steps.push({taskRev:claim.taskRev, stepKey:'readInputs', attemptId:randomUUID(), state:'running',
+        startedAtMs:this.now(), finishedAtMs:null, reason:null, result:null, reserveMs, finishFingerprint:null});
+      record.budget.heldMs += reserveMs;
+      if (record.taskRev !== claim.taskRev || record.cancelRequested) this.setPlanState(record);
+      return this.commit(record);
+    }, true);
+  }
+  finishFind(claim, {report, sources, elapsedMs}) {
+    return this.enqueue(async () => {
+      const record = this.read(claim.taskId), step = this.findClaim(record, claim);
+      if (record.kind !== FIND_KIND || claim.stepKey !== 'readInputs' || !record.notes[String(claim.taskRev)]?.selection)
+        throw taskError(409, 'conflict', 'The original find read claim and selection are required');
+      const hash = fingerprint({report, sources, elapsedMs});
+      if (step.finishFingerprint) {
+        if (step.finishFingerprint !== hash) throw taskError(409, 'conflict', 'The original find report already completed');
+        return this.project(record);
+      }
+      const incomplete = !report.coverage.enumerationComplete || report.coverage.entryLimitReached ||
+        report.coverage.candidateLimitReached || report.coverage.gaps.length > 0 || report.matches.some(value => !value.openable);
+      record.notes[String(claim.taskRev)].sources = clone(sources);
+      this.settle(record, step, {state:incomplete?'partial':'done', reason:incomplete?'find_incomplete':null, result:report, elapsedMs});
+      step.finishFingerprint = hash;
+      this.setPlanState(record);
+      return this.commit(record);
+    }, true);
+  }
   saveInputs(claim, input) { return this.savePrivate(claim, 'inputs', input); }
   saveCandidate(claim, candidate) { return this.savePrivate(claim, 'candidate', candidate); }
   savePublishIntent(claim, reference) { return this.savePrivate(claim, 'publishIntent', reference); }
@@ -409,6 +468,29 @@ export class CompanionTaskStore {
       if (error?.code === 'FS_NOT_FOUND' || error?.code === 'ENOENT') return {...envelope, status: 'missing', reason: 'original_missing'};
       if (error?.code === 'FS_STALE_VERSION') return {...envelope, status: 'changed', reason: 'original_changed'};
       return {...envelope, status: 'unknown', reason: 'original_unavailable'};
+    }
+  }
+  async source(id, sourceRef, hostExecutionId, signal) {
+    const record = this.read(id);
+    if (hostExecutionId !== record.hostExecutionId)
+      throw taskError(409, 'execution-mismatch', 'This source belongs to another task execution');
+    const source = record.kind === FIND_KIND ? Object.values(record.notes).flatMap(value => value.sources ?? [])
+      .find(value => value.sourceRef === sourceRef) : null;
+    if (!source) throw taskError(404, 'source-not-found', 'The source is not registered for this find task');
+    const envelope = {v:1, hostStoreId:this.hostStoreId, taskId:id, hostExecutionId:record.hostExecutionId,
+      sourceRef, taskRev:source.taskRev, stepKey:'readInputs', relativePath:source.entry.name, version:source.entry.version,
+      mediaType:source.entry.name.toLowerCase().endsWith('.md')?'text/markdown':'text/plain', content:null, reason:null};
+    try {
+      const read = await this.fs.dshGoReadNote(source.directory, source.entry, 65536, signal);
+      if (source.sha256 !== null && read.sha256 !== source.sha256)
+        return {...envelope, status:'changed', reason:'original_changed'};
+      return {...envelope, status:'available', content:read.text};
+    } catch (error) {
+      if (['FS_NOT_FOUND','ENOENT'].includes(error?.code)) return {...envelope, status:'missing', reason:'original_missing'};
+      if (['FS_STALE_VERSION','FS_NOT_DIRECTORY','ENOTDIR','ELOOP'].includes(error?.code)) return {...envelope, status:'changed', reason:'original_changed'};
+      if (['FS_PERMISSION_DENIED','FS_SANDBOX_DENIED','FS_TOO_LARGE','FS_NOT_TEXT','FS_NOT_REGULAR_FILE','EACCES','EPERM'].includes(error?.code))
+        return {...envelope, status:'not_readable', reason:'original_not_readable'};
+      return {...envelope, status:'unknown', reason:'original_unavailable'};
     }
   }
 }
