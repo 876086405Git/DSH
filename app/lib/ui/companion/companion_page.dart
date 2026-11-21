@@ -231,6 +231,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   String? _lastLine;
   Timer? _bubbleTimer;
   String? _memoryFollowupTicket;
+  // A submitted goodbye retires memory questions for this page visit only.
+  // Ordinary conversation still permits a later, already invited followup.
+  bool _memoryFollowupRetired = false;
+  static final _memoryFarewell = RegExp(
+    r'^(?:(?:晚安|再见)(?:[，,\s]+(?:我)?先走了)?|(?:我)?先走了|good ?night|goodbye|bye)[。.!！]*$',
+    caseSensitive: false,
+  );
   Timer? _settleTimer;
   Timer? _objectTimer;
 
@@ -1581,7 +1588,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   /// The captured source and window are checked again at the actual render.
   void _requestMemoryFollowup(CompanionInitiativeView view) {
     final memory = _memoryOwner;
-    if (memory == null || !_presentable(view) || _initiative.fault != null) return;
+    if (memory == null || _memoryFollowupRetired || !_presentable(view) || _initiative.fault != null) {
+      return;
+    }
     final now = _clock();
     MemoryRow? opportunity;
     try {
@@ -1604,6 +1613,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     bool current() =>
         mounted &&
         !_leaving &&
+        !_memoryFollowupRetired &&
         candidate.contextKey == _initiativeContext &&
         memory.store.isFollowupCurrent(captured, nowMs: _clock().wallMs);
     String? line;
@@ -2142,6 +2152,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
               saidAtUtc: submittedAt.toUtc().millisecondsSinceEpoch,
               offsetMinutes: submittedAt.timeZoneOffset.inMinutes,
             );
+      // Only the person's complete submitted statement can retire this visit;
+      // a failed source transaction must not retire its pending question.
+      if (_memoryFarewell.hasMatch(raw.trim())) {
+        _memoryFollowupRetired = true;
+      }
       // Do not clear the composer's only copy before SQLite commits. If the
       // person typed ahead during opening, preserve that new draft too.
       if (_input.text == raw) _input.clear();
