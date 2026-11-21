@@ -198,6 +198,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
             text: text,
             onQuote: widget.onQuote,
             onMore: () => _menu(text),
+            live: streaming,
             child: _textAfterThinking ? _FirstTextIn(child: _markdown(text, streaming)) : _markdown(text, streaming),
           ),
         if (item.interrupted) const _InterruptedMark(),
