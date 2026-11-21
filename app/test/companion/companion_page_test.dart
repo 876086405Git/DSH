@@ -7,6 +7,7 @@ import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_local.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
+import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_app/companion/companion_moves.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_state.dart';
@@ -25,7 +26,8 @@ import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
-import 'package:dsh_client/dsh_client.dart' show CompanionMemory, CompanionMemoryStore, companionMemoryExtractionPrompt;
+import 'package:dsh_client/dsh_client.dart'
+    show CompanionMemory, CompanionMemoryStore, companionMemoryExtractionPrompt, companionMemoryConsolidationPrompt;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -545,6 +547,99 @@ void main() {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
       }
+
+      testWidgets('fixture 15 ordinary Page chat still sends after a real organize request reaches the daily limit', (tester) async {
+        late CompanionMemoryOwner memory;
+        final categories = <String>[];
+        final posts = <Map<String, Object?>>[];
+        final client = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          posts.add(body);
+          final system = body['system'];
+          final category = system == companionMemoryExtractionPrompt ? 'extract'
+              : system == companionMemoryConsolidationPrompt ? 'organize' : 'chat';
+          categories.add(category);
+          final receipt = memory.store.requests().singleWhere((row) =>
+            row['category'] == category && row['state'] == 'sent');
+          expect(receipt['sent_at_ms'], isNotNull);
+          var answer = '可以，我们慢慢聊。';
+          if (category != 'chat') {
+            final messages = body['messages']! as List;
+            final input = jsonDecode((messages.single as Map)['content'] as String) as Map<String, Object?>;
+            expect(receipt['batch_id'], input['batch_id']);
+            if (category == 'extract') {
+              answer = jsonEncode({
+                'schema_version': 2, 'batch_id': input['batch_id'],
+                'covered_message_ids': ['yogurt-a', 'yogurt-b'], 'completion': 'complete',
+                'operations': [
+                  {'op': 'create', 'kind': 'preference', 'text': '你买酸奶只选原味。', 'keywords': ['酸奶'],
+                    'evidence': [{'message_id': 'yogurt-a', 'quote': '酸奶我只买原味。'}]},
+                  {'op': 'create', 'kind': 'preference', 'text': '酸奶你只买原味的。', 'keywords': ['酸奶'],
+                    'evidence': [{'message_id': 'yogurt-b', 'quote': '我买酸奶一直只选原味。'}]},
+                ],
+              });
+            } else {
+              expect(input['rows'] as List, hasLength(2));
+              answer = jsonEncode({'schema_version': 2, 'batch_id': input['batch_id'],
+                'operations': [], 'completion': 'complete'});
+            }
+          }
+          return http.Response.bytes(utf8.encode([
+            {'type': 'message_start', 'message': {'usage': {'input_tokens': 900}}},
+            {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': answer}},
+            {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'},
+              'usage': {'input_tokens': 20, 'cache_read_input_tokens': 3,
+                'cache_creation_input_tokens': 0, 'output_tokens': category == 'chat' ? 7 : 12}},
+            {'type': 'message_stop'},
+          ].map((event) => 'data: ${jsonEncode(event)}\n\n').join()), 200,
+            headers: {'content-type': 'text/event-stream; charset=utf-8'});
+        });
+        await openLight(tester, apiKey: 'sk-test', client: client);
+        memory = await memoryOf(tester);
+        await settleMixed(tester, memory.migrateLocal());
+        final page = tester.state(find.byType(CompanionPage));
+        // Use the Page's already attached real owner/transport. No second
+        // worker, prefilled usage row or replacement budget implementation.
+        for (final (id, text) in [('yogurt-a', '酸奶我只买原味。'), ('yogurt-b', '我买酸奶一直只选原味。')]) {
+          memory.store.submitMessage(id: id, sessionId: memory.store.lightSessionId, text: text,
+            saidAtUtc: DateTime.now().millisecondsSinceEpoch, offsetMinutes: 0);
+        }
+        expect(await tester.runAsync(() => memory.extract(page, forceTail: true)), CompanionMemoryWork.committed);
+        expect(await tester.runAsync(() => memory.consolidate(page)), CompanionMemoryWork.committed);
+        expect(categories, ['extract', 'organize']);
+        expect(memory.store.cards(), hasLength(2));
+        final row = memory.store.cards().first;
+        memory.store.setPinned(id: row['id']! as String, expectedRowRev: row['row_rev']! as int, pinned: true);
+        memory.changed();
+        final auxiliary = memory.store.requests();
+        final organized = auxiliary.singleWhere((row) => row['category'] == 'organize');
+        expect(organized['state'], 'finished');
+        expect(organized['terminal'], 'complete');
+        expect(await tester.runAsync(() => memory.consolidate(page)), CompanionMemoryWork.waiting);
+        expect(categories, ['extract', 'organize']);
+        expect(memory.store.requests(), auxiliary);
+        // Within the same rolling window, an explicit ordinary composer send
+        // still makes its own actual HTTP request and settles its own receipt.
+        const query = '我想换个话题，今天过得怎么样？';
+        await say(tester, query);
+        expect(categories, ['extract', 'organize', 'chat']);
+        final content = (((posts.last['messages']! as List).last as Map)['content']! as List).cast<Map>();
+        expect(content.first['text'], query);
+        expect(find.text('可以，我们慢慢聊。'), findsOneWidget);
+        final receipts = memory.store.requests();
+        expect(receipts, hasLength(3));
+        expect(receipts.where((row) => row['category'] != 'chat').toList(), auxiliary);
+        final chat = receipts.singleWhere((row) => row['category'] == 'chat');
+        expect(chat['state'], 'finished');
+        expect(chat['terminal'], 'complete');
+        expect((chat['sent_at_ms']! as int) - (organized['sent_at_ms']! as int), inInclusiveRange(0, 86399999));
+        expect(chat['output_tokens'], 7);
+        expect((chat['raw_usage']! as Map)['final_usage'], {
+          'input_tokens': 20, 'cache_read_input_tokens': 3, 'cache_creation_input_tokens': 0, 'output_tokens': 7,
+        });
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 10));
+      });
 
       testWidgets('with no host she answers straight from the model and keeps the chat here', (tester) async {
         final asked = <Map<String, Object?>>[];
