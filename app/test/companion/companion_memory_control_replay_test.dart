@@ -23,25 +23,32 @@ const _usage = {
 };
 
 http.Response _reply(String text) => http.Response.bytes(
-  utf8.encode([
-    {
-      'type': 'content_block_delta',
-      'delta': {'type': 'text_delta', 'text': text},
-    },
-    {
-      'type': 'message_delta',
-      'delta': {'stop_reason': 'end_turn'},
-      'usage': _usage,
-    },
-    {'type': 'message_stop'},
-  ].map((event) => 'data: ${jsonEncode(event)}\n\n').join()),
+  utf8.encode(
+    [
+      {
+        'type': 'content_block_delta',
+        'delta': {'type': 'text_delta', 'text': text},
+      },
+      {
+        'type': 'message_delta',
+        'delta': {'stop_reason': 'end_turn'},
+        'usage': _usage,
+      },
+      {'type': 'message_stop'},
+    ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+  ),
   200,
   headers: {'content-type': 'text/event-stream; charset=utf-8'},
 );
 
 MemoryRow _create(String source, String quote, String text, String word) => {
-  'op': 'create', 'kind': 'fact', 'text': text, 'keywords': [word],
-  'evidence': <MemoryRow>[{'message_id': source, 'quote': quote}],
+  'op': 'create',
+  'kind': 'fact',
+  'text': text,
+  'keywords': [word],
+  'evidence': <MemoryRow>[
+    {'message_id': source, 'quote': quote},
+  ],
 };
 
 class _Phone {
@@ -81,7 +88,9 @@ class _Phone {
       }),
     );
     worker = CompanionMemoryWorker(
-      store: store, transport: () => route, nowMilliseconds: () => now,
+      store: store,
+      transport: () => route,
+      nowMilliseconds: () => now,
       estimateTokens: estimateCompanionMemoryTokens,
     );
   }
@@ -93,7 +102,12 @@ class _Phone {
   }
 
   MemoryRow say(String id, String text, {String role = 'user'}) => store.submitMessage(
-    id: id, sessionId: store.lightSessionId, text: text, role: role, saidAtUtc: now, offsetMinutes: 480,
+    id: id,
+    sessionId: store.lightSessionId,
+    text: text,
+    role: role,
+    saidAtUtc: now,
+    offsetMinutes: 480,
   );
 
   Future<MemoryRow> chat(String input) async {
@@ -105,23 +119,36 @@ class _Phone {
         row['role'] == 'user' ? CompanionLine.user(row['text'] as String) : CompanionLine.her(row['text'] as String),
     ]);
     final system = companionLightSystem();
-    final id = store.reserveRequest(category: 'chat', provider: 'deepseek', model: companionLightModel,
-      inputTokens: estimateCompanionMemoryTokens('$system\n${lines.map((line) => line.text).join('\n')}\n${selection.block}'),
-      outputTokens: 800)!;
+    final id = store.reserveRequest(
+      category: 'chat',
+      provider: 'deepseek',
+      model: companionLightModel,
+      inputTokens: estimateCompanionMemoryTokens(
+        '$system\n${lines.map((line) => line.text).join('\n')}\n${selection.block}',
+      ),
+      outputTokens: 800,
+    )!;
     final client = MockClient((request) async {
       chatPosts.add(jsonDecode(request.body) as MemoryRow);
       expect(store.requests().singleWhere((row) => row['id'] == id)['state'], 'sent');
       return _reply('固定回包，不评价回答语义。');
     });
     try {
-      expect(await streamCompanionReply(
-        client: client, apiKey: 'offline-replay-placeholder', system: system, lines: lines, memory: selection,
-        onSent: () => store.markRequestSent(id),
-        onUsage: (usage) {
-          store.recordUsage(id, usage.toJson());
-          store.finishRequest(id, terminal: usage.terminal);
-        },
-      ).join(), '固定回包，不评价回答语义。');
+      expect(
+        await streamCompanionReply(
+          client: client,
+          apiKey: 'offline-replay-placeholder',
+          system: system,
+          lines: lines,
+          memory: selection,
+          onSent: () => store.markRequestSent(id),
+          onUsage: (usage) {
+            store.recordUsage(id, usage.toJson());
+            store.finishRequest(id, terminal: usage.terminal);
+          },
+        ).join(),
+        '固定回包，不评价回答语义。',
+      );
     } finally {
       client.close();
     }
@@ -140,7 +167,8 @@ void main() {
     final name = switch (kind) {
       'never' => 'fixture 5 never survives editing old mixed source across reopen and all three actual request paths',
       'forget' => 'fixture 5 forget keeps the edited old source out but admits a new source across all three actual request paths',
-      'delete' => 'fixture 16 deleting edited raw source removes withdrawn facts before extraction consolidation and actual chat',
+      'delete' =>
+        'fixture 16 deleting edited raw source removes withdrawn facts before extraction consolidation and actual chat',
       _ => 'fixture 5 natural normal command releases the saved control before new source extraction and actual chat',
     };
     test(name, () async {
@@ -156,8 +184,11 @@ void main() {
       expect(original['first_seq'], 201);
       phone.now += 180000;
       phone.answer = (input) => {
-        'schema_version': 2, 'batch_id': input['batch_id'], 'covered_message_ids': ['coffee-200', 'mixed-201'],
-        'completion': 'complete', 'operations': <MemoryRow>[
+        'schema_version': 2,
+        'batch_id': input['batch_id'],
+        'covered_message_ids': ['coffee-200', 'mixed-201'],
+        'completion': 'complete',
+        'operations': <MemoryRow>[
           _create('coffee-200', '我喝咖啡都选无糖。', '你喝咖啡都选无糖。', '咖啡'),
           _create('mixed-201', '我周五复诊', '你周五复诊。', '复诊'),
           _create('mixed-201', '周六去公园', '你周六去公园。', '公园'),
@@ -174,7 +205,11 @@ void main() {
       expect(control['kind'], initialKind);
       expect(control['delete_chat'], isFalse);
       expect(control['target_card_ids'], kind == 'forget' ? [clinic['id']] : isEmpty);
-      phone.store.applyControl(topicIds: [clinic['topic_id'] as String], kind: initialKind, controlMessageId: 'control-202');
+      phone.store.applyControl(
+        topicIds: [clinic['topic_id'] as String],
+        kind: initialKind,
+        controlMessageId: 'control-202',
+      );
       if (kind == 'forget') {
         expect(phone.store.cards(includeInactive: true).map((row) => row['id']), isNot(contains(clinic['id'])));
       }
@@ -185,7 +220,10 @@ void main() {
       expect(edited['first_seq'], 201);
       expect(edited['event_seq'], 203);
       expect(edited['source_rev'], 2);
-      expect(phone.store.messages().singleWhere((row) => row['id'] == 'mixed-201')['extraction_reason'], 'history_cutoff');
+      expect(
+        phone.store.messages().singleWhere((row) => row['id'] == 'mixed-201')['extraction_reason'],
+        'history_cutoff',
+      );
       expect(phone.store.cards().map((row) => row['id']), [coffee['id']]);
       expect(await phone.worker.extract(), CompanionMemoryWork.idle);
       expect(phone.auxiliaryPosts, hasLength(1));
@@ -210,13 +248,19 @@ void main() {
         expect(release['first_seq'], 205);
         // No new clinic card exists yet: this uses only the continuing control,
         // through the same parser arguments and source check as the Page.
-        final parsed = parseMemoryControl(release['text'] as String, phone.store.cards(),
-          topicControls: phone.store.topicControls())!;
+        final parsed = parseMemoryControl(
+          release['text'] as String,
+          phone.store.cards(),
+          topicControls: phone.store.topicControls(),
+        )!;
         expect(parsed['ambiguous'], isFalse);
         expect(parsed['kind'], 'normal');
         expect(parsed['topic_ids'], [clinic['topic_id']]);
-        phone.store.applyControl(topicIds: (parsed['topic_ids'] as List<Object?>).cast<String>(),
-          kind: parsed['kind'] as String, controlMessageId: release['id'] as String);
+        phone.store.applyControl(
+          topicIds: (parsed['topic_ids'] as List<Object?>).cast<String>(),
+          kind: parsed['kind'] as String,
+          controlMessageId: release['id'] as String,
+        );
         expect(phone.store.topicControls(), isEmpty);
         expect(phone.auxiliaryPosts, hasLength(1), reason: 'release is also a local control');
       }
@@ -228,8 +272,11 @@ void main() {
           expect(jsonEncode(input), isNot(contains(forbidden)));
         }
         return {
-          'schema_version': 2, 'batch_id': input['batch_id'], 'covered_message_ids': [newSourceId],
-          'completion': 'complete', 'operations': <MemoryRow>[
+          'schema_version': 2,
+          'batch_id': input['batch_id'],
+          'covered_message_ids': [newSourceId],
+          'completion': 'complete',
+          'operations': <MemoryRow>[
             _create(newSourceId, '我周六复诊。', '你周六复诊。', '复诊'),
             _create(newSourceId, '酸奶我现在只买原味', '你现在买酸奶只选原味。', '酸奶'),
             _create(newSourceId, '我买酸奶还是选原味。', '酸奶你现在还是选原味。', '酸奶'),
@@ -242,7 +289,9 @@ void main() {
       // The later independent source must not be conflated with edited old M.
       expect(freshClinic['topic_id'], never ? clinic['topic_id'] : isNot(clinic['topic_id']));
       expect(freshClinic['topic_mode'], never ? 'never' : 'normal');
-      expect((freshClinic['evidence'] as List<Object?>).cast<MemoryRow>().map((row) => row['message_id']), [newSourceId]);
+      expect((freshClinic['evidence'] as List<Object?>).cast<MemoryRow>().map((row) => row['message_id']), [
+        newSourceId,
+      ]);
       final beforeMaintenance = phone.auxiliaryPosts.length;
       phone.answer = (input) {
         final rows = (input['rows'] as List<Object?>).cast<MemoryRow>();
@@ -263,10 +312,21 @@ void main() {
       expect(ordinaryIds, never ? isNot(contains(freshClinic['id'])) : contains(freshClinic['id']));
       final explicit = await phone.chat('我想问复诊');
       expect((explicit['items'] as List<Object?>).map((item) => (item as MemoryRow)['id']), [freshClinic['id']]);
-      expect(phone.store.cards().singleWhere((row) => row['id'] == freshClinic['id'])['topic_mode'], never ? 'never' : 'normal');
+      expect(
+        phone.store.cards().singleWhere((row) => row['id'] == freshClinic['id'])['topic_mode'],
+        never ? 'never' : 'normal',
+      );
       for (final body in phone.chatPosts) {
-        for (final forbidden in ['我周五复诊', '你周五复诊', '周六去公园', '周日去公园', '旧助手行', 'control_anchors',
-          'cleanup_history_complete', 'memory_card_cleanup_sources']) {
+        for (final forbidden in [
+          '我周五复诊',
+          '你周五复诊',
+          '周六去公园',
+          '周日去公园',
+          '旧助手行',
+          'control_anchors',
+          'cleanup_history_complete',
+          'memory_card_cleanup_sources',
+        ]) {
           expect(jsonEncode(body), isNot(contains(forbidden)));
         }
       }

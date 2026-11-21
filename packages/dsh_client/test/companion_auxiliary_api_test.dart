@@ -585,10 +585,7 @@ void main() {
     // Literal validation error from the owner B bridge, whose kind allowlist
     // has only extract/consolidate. This is an explicit current preflight.
     host.answer = (request) => _json(request, {
-      'error': {
-        'code': 'companion/auxiliary-invalid-request',
-        'message': 'Invalid companion auxiliary request',
-      },
+      'error': {'code': 'companion/auxiliary-invalid-request', 'message': 'Invalid companion auxiliary request'},
       'dispatched': false,
     }, status: 400);
     await expectLater(

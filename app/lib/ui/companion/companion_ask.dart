@@ -57,11 +57,13 @@ class _CompanionAskState extends ConsumerState<CompanionAsk> {
       return null;
     }
     return state.approvals
-        .where((request) =>
-            request.sessionId == widget.sessionId &&
-            request.eventId == target.eventId &&
-            (target.callId == null || request.callId == target.callId) &&
-            !state.autoAnswered.contains(request.eventId))
+        .where(
+          (request) =>
+              request.sessionId == widget.sessionId &&
+              request.eventId == target.eventId &&
+              (target.callId == null || request.callId == target.callId) &&
+              !state.autoAnswered.contains(request.eventId),
+        )
         .firstOrNull;
   }
 

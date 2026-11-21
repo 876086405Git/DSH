@@ -34,24 +34,26 @@ class _Phone {
         expect(receipt['batch_id'], input['batch_id']);
         final proposal = answer(input);
         return http.Response.bytes(
-          utf8.encode([
-            {
-              'type': 'message_start',
-              'message': {
-                'usage': {'input_tokens': 900},
+          utf8.encode(
+            [
+              {
+                'type': 'message_start',
+                'message': {
+                  'usage': {'input_tokens': 900},
+                },
               },
-            },
-            {
-              'type': 'content_block_delta',
-              'delta': {'type': 'text_delta', 'text': jsonEncode(proposal)},
-            },
-            {
-              'type': 'message_delta',
-              'delta': {'stop_reason': 'end_turn'},
-              'usage': _usage,
-            },
-            {'type': 'message_stop'},
-          ].map((event) => 'data: ${jsonEncode(event)}\n\n').join()),
+              {
+                'type': 'content_block_delta',
+                'delta': {'type': 'text_delta', 'text': jsonEncode(proposal)},
+              },
+              {
+                'type': 'message_delta',
+                'delta': {'stop_reason': 'end_turn'},
+                'usage': _usage,
+              },
+              {'type': 'message_stop'},
+            ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+          ),
           200,
           headers: {'content-type': 'text/event-stream; charset=utf-8'},
         );
@@ -116,12 +118,22 @@ void main() {
       'completion': 'complete',
       'operations': <MemoryRow>[
         {
-          'op': 'create', 'kind': 'preference', 'text': '你买酸奶只选原味。', 'keywords': ['酸奶'],
-          'evidence': <MemoryRow>[{'message_id': 'a', 'quote': '酸奶我只买原味。'}],
+          'op': 'create',
+          'kind': 'preference',
+          'text': '你买酸奶只选原味。',
+          'keywords': ['酸奶'],
+          'evidence': <MemoryRow>[
+            {'message_id': 'a', 'quote': '酸奶我只买原味。'},
+          ],
         },
         {
-          'op': 'create', 'kind': 'preference', 'text': '酸奶你只买原味的。', 'keywords': ['酸奶'],
-          'evidence': <MemoryRow>[{'message_id': 'b', 'quote': '我买酸奶一直只选原味。'}],
+          'op': 'create',
+          'kind': 'preference',
+          'text': '酸奶你只买原味的。',
+          'keywords': ['酸奶'],
+          'evidence': <MemoryRow>[
+            {'message_id': 'b', 'quote': '我买酸奶一直只选原味。'},
+          ],
         },
       ],
     };

@@ -13,9 +13,18 @@ void main() {
   late CompanionMemoryStore store;
   var now = 1795219200000;
   MemoryRow agreement({String output = '今日待办.md', String afterExit = 'continue', bool allowQueue = false}) => {
-    'args': {'folderRef': 'bound-notes', 'localDate': '2026-11-21', 'timeZone': 'Asia/Shanghai',
-      'dateBy': 'modified', 'outputDirRef': 'bound-notes', 'outputName': output, 'writeMode': 'createNew'},
-    'deadlineAtMs': 1795219500000, 'afterExit': afterExit, 'allowQueue': allowQueue,
+    'args': {
+      'folderRef': 'bound-notes',
+      'localDate': '2026-11-21',
+      'timeZone': 'Asia/Shanghai',
+      'dateBy': 'modified',
+      'outputDirRef': 'bound-notes',
+      'outputName': output,
+      'writeMode': 'createNew',
+    },
+    'deadlineAtMs': 1795219500000,
+    'afterExit': afterExit,
+    'allowQueue': allowQueue,
   };
 
   void open() {
@@ -29,56 +38,121 @@ void main() {
   }
 
   void say(String id, {String session = 'light:original-room', String role = 'user', String scope = 'real'}) {
-    store.submitMessage(id: id, sessionId: session, text: '请电脑把今天的笔记另存成一页待办，原件别动。',
-      role: role, scope: scope, saidAtUtc: now, offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+    store.submitMessage(
+      id: id,
+      sessionId: session,
+      text: '请电脑把今天的笔记另存成一页待办，原件别动。',
+      role: role,
+      scope: scope,
+      saidAtUtc: now,
+      offsetMinutes: 480,
+      zoneId: 'Asia/Shanghai',
+      offsetSeconds: 28800,
+    );
   }
 
   MemoryRow create(String source, {int itemNo = 0, MemoryRow? selected}) => store.createNotesTaskFromMessage(
-    messageId: source, expectedSourceRev: 1, itemNo: itemNo, roomMode: 'light',
-    hostKey: 'ssh:original-host', agreement: selected ?? agreement());
+    messageId: source,
+    expectedSourceRev: 1,
+    itemNo: itemNo,
+    roomMode: 'light',
+    hostKey: 'ssh:original-host',
+    agreement: selected ?? agreement(),
+  );
 
-  MemoryRow? prepare(String id, int revision, {bool initial = true, bool replay = false, String hostStore = 'store-original'}) =>
-    store.prepareHostTaskOperation(taskId: id, taskRev: revision, hostKey: 'ssh:original-host',
-      hostStoreId: hostStore, initialOpportunity: initial, replayAfterRead: replay);
+  MemoryRow? prepare(
+    String id,
+    int revision, {
+    bool initial = true,
+    bool replay = false,
+    String hostStore = 'store-original',
+  }) => store.prepareHostTaskOperation(
+    taskId: id,
+    taskRev: revision,
+    hostKey: 'ssh:original-host',
+    hostStoreId: hostStore,
+    initialOpportunity: initial,
+    replayAfterRead: replay,
+  );
 
-  MemoryRow snapshot(String id, {int revision = 1, int seq = 1, String state = 'running',
-    bool original = true, List<MemoryRow> steps = const [], List<MemoryRow> artifacts = const [], MemoryRow? approval}) {
+  MemoryRow snapshot(
+    String id, {
+    int revision = 1,
+    int seq = 1,
+    String state = 'running',
+    bool original = true,
+    List<MemoryRow> steps = const [],
+    List<MemoryRow> artifacts = const [],
+    MemoryRow? approval,
+  }) {
     final commands = store.hostTaskCommands(id);
     final first = commands.first['request']! as Map;
     MemoryRow? value(MemoryRow command) {
       final raw = command['request']! as Map;
       return switch (command['operation']) {
-        'create' => {for (final key in ['args', 'deadlineAtMs', 'afterExit', 'allowQueue']) key: raw[key]},
+        'create' => {
+          for (final key in ['args', 'deadlineAtMs', 'afterExit', 'allowQueue']) key: raw[key],
+        },
         'amend' => Map<String, Object?>.from(raw['changes']! as Map),
         _ => null,
       };
     }
-    final revisions = commands.where((command) => (command['task_rev']! as int) <= revision &&
-      (original || command['operation'] != 'create')).toList();
+
+    final revisions = commands
+        .where((command) => (command['task_rev']! as int) <= revision && (original || command['operation'] != 'create'))
+        .toList();
     final active = revisions.last;
     return {
-      'v': 1, 'hostStoreId': 'store-original', 'taskId': id, 'hostExecutionId': 'execution-original',
-      'kind': 'host.notes_to_todo', 'taskRev': revision, 'runnerReceiptSeq': seq,
-      'originalCreatePresent': original, 'origin': original ? first['origin'] : null,
-      'hostSessionId': original ? first['hostSessionId'] : null, 'state': state,
+      'v': 1,
+      'hostStoreId': 'store-original',
+      'taskId': id,
+      'hostExecutionId': 'execution-original',
+      'kind': 'host.notes_to_todo',
+      'taskRev': revision,
+      'runnerReceiptSeq': seq,
+      'originalCreatePresent': original,
+      'origin': original ? first['origin'] : null,
+      'hostSessionId': original ? first['hostSessionId'] : null,
+      'state': state,
       'waitReason': original ? null : 'original_create_missing',
-      'cancelRequested': active['operation'] == 'cancel', 'createdAtMs': now, 'updatedAtMs': now,
+      'cancelRequested': active['operation'] == 'cancel',
+      'createdAtMs': now,
+      'updatedAtMs': now,
       'agreement': value(active) ?? (original ? value(commands.first) : null),
-      'revisions': [for (final command in revisions) {'taskRev': command['task_rev'],
-        'operation': command['operation'], 'acceptedAtMs': now, 'agreement': value(command)}],
-      'steps': steps, 'artifacts': artifacts, 'approval': approval,
+      'revisions': [
+        for (final command in revisions)
+          {
+            'taskRev': command['task_rev'],
+            'operation': command['operation'],
+            'acceptedAtMs': now,
+            'agreement': value(command),
+          },
+      ],
+      'steps': steps,
+      'artifacts': artifacts,
+      'approval': approval,
       'budget': {'limitMs': 300000, 'spentMs': 12, 'heldMs': 0},
     };
   }
 
-  MemoryRow acceptSnapshot(String id, MemoryRow value) => store.importHostTaskSnapshot(
-    taskId: id, hostKey: 'ssh:original-host', snapshot: value);
+  MemoryRow acceptSnapshot(String id, MemoryRow value) =>
+      store.importHostTaskSnapshot(taskId: id, hostKey: 'ssh:original-host', snapshot: value);
 
-  MemoryRow artifact() => {'artifactId': 'file-1', 'taskRev': 1, 'stepKey': 'writePage',
-    'relativePath': '今日待办.md', 'mediaType': 'text/markdown', 'size': 25,
-    'sha256': List.filled(64, 'a').join(), 'verifiedAtMs': now, 'sourceCount': 2};
+  MemoryRow artifact() => {
+    'artifactId': 'file-1',
+    'taskRev': 1,
+    'stepKey': 'writePage',
+    'relativePath': '今日待办.md',
+    'mediaType': 'text/markdown',
+    'size': 25,
+    'sha256': List.filled(64, 'a').join(),
+    'verifiedAtMs': now,
+    'sourceCount': 2,
+  };
 
-  Matcher conflict = throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/conflict'));
+  final Matcher conflict = throwsA(
+    isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/conflict'),
+  );
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('companion-host-task-');
@@ -121,22 +195,25 @@ void main() {
   });
 
   for (final length in [129, 256]) {
-    test('F complete Host snapshot accepts the protocol source room length $length without changing other identities', () {
-      final room = List.filled(length, 's').join();
-      say('source', session: room);
-      final id = create('source')['task_id']! as String;
-      prepare(id, 1);
-      final accepted = acceptSnapshot(id, snapshot(id));
-      expect(accepted['source_session_id'], room);
-      expect((accepted['snapshot']! as Map)['origin'], {'sourceSessionId': room, 'messageId': 'source', 'itemNo': 0});
-      reopen();
-      expect(store.hostTask(id)!['applied_host_receipt_seq'], 1);
-      expect(store.hostTask(id)!['source_session_id'], room);
-    });
+    test(
+      'F complete Host snapshot accepts the protocol source room length $length without changing other identities',
+      () {
+        final room = List.filled(length, 's').join();
+        say('source', session: room);
+        final id = create('source')['task_id']! as String;
+        prepare(id, 1);
+        final accepted = acceptSnapshot(id, snapshot(id));
+        expect(accepted['source_session_id'], room);
+        expect((accepted['snapshot']! as Map)['origin'], {'sourceSessionId': room, 'messageId': 'source', 'itemNo': 0});
+        reopen();
+        expect(store.hostTask(id)!['applied_host_receipt_seq'], 1);
+        expect(store.hostTask(id)!['source_session_id'], room);
+      },
+    );
   }
 
   final wire = jsonDecode(File('test/fixtures/companion_host_tasks/F03-wire.json').readAsStringSync()) as Map;
-  for (final fixture in (wire['cases']! as List).cast<Map>()) {
+  for (final fixture in (wire['cases']! as List).cast<Map<String, Object?>>()) {
     test('F imports the unchanged frozen Host HTTP snapshot ${fixture['name']}', () {
       final response = Map<String, Object?>.from((fixture['response']! as Map)['body']! as Map);
       final id = response['taskId']! as String;
@@ -150,13 +227,23 @@ void main() {
       final message = origin?['messageId'] as String? ?? 'original-before-barrier';
       say(message, session: room);
       final selected = Map<String, Object?>.from(response['agreement']! as Map);
-      final original = store.createNotesTaskFromMessage(messageId: message, expectedSourceRev: 1,
+      final original = store.createNotesTaskFromMessage(
+        messageId: message,
+        expectedSourceRev: 1,
         itemNo: origin?['itemNo'] as int? ?? 0,
         roomMode: response['hostSessionId'] == null ? 'light' : 'full',
-        hostKey: 'ssh:original-host', hostSessionId: response['hostSessionId'] as String?, agreement: selected);
+        hostKey: 'ssh:original-host',
+        hostSessionId: response['hostSessionId'] as String?,
+        agreement: selected,
+      );
       expect(original['task_id'], id);
-      store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: 'ssh:original-host',
-        hostStoreId: response['hostStoreId']! as String, initialOpportunity: true);
+      store.prepareHostTaskOperation(
+        taskId: id,
+        taskRev: 1,
+        hostKey: 'ssh:original-host',
+        hostStoreId: response['hostStoreId']! as String,
+        initialOpportunity: true,
+      );
       if (response['taskRev'] == 2) {
         final operation = ((response['revisions']! as List).last as Map)['operation'];
         if (operation == 'cancel') {
@@ -165,11 +252,22 @@ void main() {
         }
         say('fixture-new-command', session: room);
         if (operation == 'cancel') {
-          store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'fixture-new-command',
-            expectedSourceRev: 1, itemNo: 0);
+          store.cancelNotesTask(
+            taskId: id,
+            expectedTaskRev: 1,
+            messageId: 'fixture-new-command',
+            expectedSourceRev: 1,
+            itemNo: 0,
+          );
         } else {
-          store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'fixture-new-command',
-            expectedSourceRev: 1, itemNo: 0, agreement: selected);
+          store.amendNotesTask(
+            taskId: id,
+            expectedTaskRev: 1,
+            messageId: 'fixture-new-command',
+            expectedSourceRev: 1,
+            itemNo: 0,
+            agreement: selected,
+          );
         }
       }
       final imported = acceptSnapshot(id, response);
@@ -179,7 +277,7 @@ void main() {
       expect(imported['applied_host_receipt_seq'], response['runnerReceiptSeq']);
       reopen();
       expect(store.hostTask(id)!['snapshot'], response);
-      if (response['approval'] case final Map approval) {
+      if (response['approval'] case final Map<String, Object?> approval) {
         expect(approval['approvalId'], isNot(approval['eventId']));
         expect(store.taskReceipts(id), isEmpty);
       }
@@ -214,38 +312,83 @@ void main() {
     final id = task['task_id']! as String;
     final original = jsonEncode(store.hostTaskCommands(id).single['request']);
     say('other-room', session: 'light:other-room');
-    expect(() => store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'other-room',
-      expectedSourceRev: 1, itemNo: 0, agreement: agreement(output: '更名.md')),
-      throwsA(isA<DshRemoteException>()));
+    expect(
+      () => store.amendNotesTask(
+        taskId: id,
+        expectedTaskRev: 1,
+        messageId: 'other-room',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        agreement: agreement(output: '更名.md'),
+      ),
+      throwsA(isA<DshRemoteException>()),
+    );
     say('amend');
-    final amended = store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'amend',
-      expectedSourceRev: 1, itemNo: 0, agreement: agreement(output: '更名.md'));
+    final amended = store.amendNotesTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'amend',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      agreement: agreement(output: '更名.md'),
+    );
     expect(amended['task_rev'], 2);
     expect(amended['source_session_id'], 'light:original-room');
     expect(jsonEncode(store.hostTaskCommands(id).first['request']), original);
     final operation = store.hostTaskCommands(id).last['operation_id'];
     reopen();
-    expect(store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'amend',
-      expectedSourceRev: 1, itemNo: 0, agreement: agreement(output: '更名.md')), amended);
+    expect(
+      store.amendNotesTask(
+        taskId: id,
+        expectedTaskRev: 1,
+        messageId: 'amend',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        agreement: agreement(output: '更名.md'),
+      ),
+      amended,
+    );
     expect(store.hostTaskCommands(id).last['operation_id'], operation);
     say('stale');
-    expect(() => store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'stale',
-      expectedSourceRev: 1, itemNo: 0, agreement: agreement()), conflict);
+    expect(
+      () => store.amendNotesTask(
+        taskId: id,
+        expectedTaskRev: 1,
+        messageId: 'stale',
+        expectedSourceRev: 1,
+        itemNo: 0,
+        agreement: agreement(),
+      ),
+      conflict,
+    );
   });
 
   test('F certainly never dispatched task cancels locally and preserves its original agreement', () {
     say('create');
     final task = create('create');
     say('cancel');
-    final cancelled = store.cancelNotesTask(taskId: task['task_id']! as String, expectedTaskRev: 1,
-      messageId: 'cancel', expectedSourceRev: 1, itemNo: 0);
+    final cancelled = store.cancelNotesTask(
+      taskId: task['task_id']! as String,
+      expectedTaskRev: 1,
+      messageId: 'cancel',
+      expectedSourceRev: 1,
+      itemNo: 0,
+    );
     expect(cancelled['state'], 'cancelled');
     expect(cancelled['cancel_requested'], 1);
     expect(cancelled['agreement'], agreement());
     expect(store.hostTaskCommands(task['task_id']! as String), hasLength(2));
     reopen();
-    expect(store.cancelNotesTask(taskId: task['task_id']! as String, expectedTaskRev: 1,
-      messageId: 'cancel', expectedSourceRev: 1, itemNo: 0), cancelled);
+    expect(
+      store.cancelNotesTask(
+        taskId: task['task_id']! as String,
+        expectedTaskRev: 1,
+        messageId: 'cancel',
+        expectedSourceRev: 1,
+        itemNo: 0,
+      ),
+      cancelled,
+    );
   });
 
   test('F handoff persists original store before HTTP and requires an original read before replay', () {
@@ -257,9 +400,14 @@ void main() {
     expect(store.hostTask(id)!['state'], 'unknown');
     final body = claimed['request'];
     reopen();
-    expect(() => prepare(id, 1), throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/task-read-required')));
-    expect(() => prepare(id, 1, replay: true, hostStore: 'replacement-store'),
-      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/task-store-mismatch')));
+    expect(
+      () => prepare(id, 1),
+      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/task-read-required')),
+    );
+    expect(
+      () => prepare(id, 1, replay: true, hostStore: 'replacement-store'),
+      throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'companion/task-store-mismatch')),
+    );
     final replay = prepare(id, 1, replay: true)!;
     expect(replay['newlyClaimed'], isFalse);
     expect(replay['request'], body);
@@ -309,8 +457,14 @@ void main() {
     final id = create('create')['task_id']! as String;
     final original = store.hostTaskCommands(id).single['request'];
     say('amend');
-    store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'amend', expectedSourceRev: 1,
-      itemNo: 0, agreement: agreement(output: '新名.md'));
+    store.amendNotesTask(
+      taskId: id,
+      expectedTaskRev: 1,
+      messageId: 'amend',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      agreement: agreement(output: '新名.md'),
+    );
     prepare(id, 2);
     expect(() => prepare(id, 1), conflict);
     acceptSnapshot(id, snapshot(id, revision: 2, original: false, state: 'waiting'));
@@ -355,7 +509,10 @@ void main() {
     final previous = acceptSnapshot(id, snapshot(id));
     database.execute('''CREATE TRIGGER fail_head BEFORE UPDATE ON companion_task_revisions
       BEGIN SELECT RAISE(ABORT,'disk full'); END;''');
-    expect(() => acceptSnapshot(id, snapshot(id, seq: 7, state: 'done', artifacts: [artifact()])), throwsA(isA<SqliteException>()));
+    expect(
+      () => acceptSnapshot(id, snapshot(id, seq: 7, state: 'done', artifacts: [artifact()])),
+      throwsA(isA<SqliteException>()),
+    );
     expect(store.hostTask(id), previous);
     reopen();
     expect(store.hostTask(id), previous);
@@ -365,15 +522,37 @@ void main() {
     say('create');
     final id = create('create')['task_id']! as String;
     prepare(id, 1);
-    final step = <String, Object?>{'taskRev': 1, 'stepKey': 'model', 'attemptId': 'actual-attempt',
-      'state': 'unknown', 'startedAtMs': now, 'finishedAtMs': null, 'reason': 'receipt_lost', 'result': null};
-    final original = snapshot(id, steps: [step], approval: {'taskRev': 1, 'stepKey': 'readInputs',
-      'agentId': 'real-task-agent', 'approvalId': 'session-asked-A', 'eventId': 'gateway-event-E1', 'callId': 'actual-call'});
+    final step = <String, Object?>{
+      'taskRev': 1,
+      'stepKey': 'model',
+      'attemptId': 'actual-attempt',
+      'state': 'unknown',
+      'startedAtMs': now,
+      'finishedAtMs': null,
+      'reason': 'receipt_lost',
+      'result': null,
+    };
+    final original = snapshot(
+      id,
+      steps: [step],
+      approval: {
+        'taskRev': 1,
+        'stepKey': 'readInputs',
+        'agentId': 'real-task-agent',
+        'approvalId': 'session-asked-A',
+        'eventId': 'gateway-event-E1',
+        'callId': 'actual-call',
+      },
+    );
     final accepted = acceptSnapshot(id, original);
     for (final changed in [
       {...original, 'runnerReceiptSeq': 2, 'hostStoreId': 'new-store'},
       {...original, 'runnerReceiptSeq': 2, 'hostExecutionId': 'new-execution'},
-      {...original, 'runnerReceiptSeq': 2, 'origin': {'sourceSessionId': 'other-room', 'messageId': 'create', 'itemNo': 0}},
+      {
+        ...original,
+        'runnerReceiptSeq': 2,
+        'origin': {'sourceSessionId': 'other-room', 'messageId': 'create', 'itemNo': 0},
+      },
       {...original, 'runnerReceiptSeq': 2, 'steps': []},
     ]) {
       expect(() => acceptSnapshot(id, changed), conflict);
@@ -386,10 +565,21 @@ void main() {
 
   test('F v12 upgrade keeps existing reminder agreement and adds only its two durable tables', () {
     say('reminder');
-    final reminder = store.createReminderFromMessage(messageId: 'reminder', expectedSourceRev: 1,
-      itemNo: 0, roomMode: 'light', executorId: 'phone-install',
-      reminder: const CompanionReminderSpec(text: '笔记', localDate: '2026-11-21', localTime: '08:10',
-        zoneId: 'Asia/Shanghai', offsetSeconds: 28800, epochMs: 1795219800000));
+    final reminder = store.createReminderFromMessage(
+      messageId: 'reminder',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      roomMode: 'light',
+      executorId: 'phone-install',
+      reminder: const CompanionReminderSpec(
+        text: '笔记',
+        localDate: '2026-11-21',
+        localTime: '08:10',
+        zoneId: 'Asia/Shanghai',
+        offsetSeconds: 28800,
+        epochMs: 1795219800000,
+      ),
+    );
     restoreOldMemorySchema(database, 12);
     reopen();
     expect(database.select('PRAGMA user_version').single['user_version'], 13);

@@ -130,13 +130,9 @@ void main() {
     final request = ((rpc['payload'] as Map)['args'] as Map)['request'] as Map;
     expect(request['sessionId'], session);
     expect(request['requestId'], plan.requestId);
-    expect(
-      request['content'],
-      [
-        {'type': 'text', 'text': input},
-      ],
-      reason: 'the ordinary user line contains no hidden memory copy',
-    );
+    expect(request['content'], [
+      {'type': 'text', 'text': input},
+    ], reason: 'the ordinary user line contains no hidden memory copy');
     return block;
   }
 
@@ -197,9 +193,18 @@ void main() {
     final second = source('daily-b', '拿铁我平时都选无糖。');
     final birthday = source('birthday', '生日这杯拿铁，我想喝半糖。');
     extract([
-      {...fixture.create(first, text: '你平常点无糖拿铁。', keywords: ['拿铁']), 'kind': 'preference'},
-      {...fixture.create(second, text: '平时你喝拿铁不加糖。', keywords: ['拿铁']), 'kind': 'preference'},
-      {...fixture.create(birthday, text: '你生日这杯拿铁要半糖。', keywords: ['拿铁']), 'kind': 'preference'},
+      {
+        ...fixture.create(first, text: '你平常点无糖拿铁。', keywords: ['拿铁']),
+        'kind': 'preference',
+      },
+      {
+        ...fixture.create(second, text: '平时你喝拿铁不加糖。', keywords: ['拿铁']),
+        'kind': 'preference',
+      },
+      {
+        ...fixture.create(birthday, text: '你生日这杯拿铁要半糖。', keywords: ['拿铁']),
+        'kind': 'preference',
+      },
     ]);
     final batch = store.nextMergeBatch(estimateTokens: estimateCompanionMemoryTokens)!;
     final target = batch.rows.singleWhere((row) => row['text'] == '你平常点无糖拿铁。');
@@ -244,7 +249,9 @@ void main() {
     store.applyControl(topicIds: [forbidden['topic_id'] as String], kind: 'never', controlMessageId: 'never-command');
     source('roleplay', '故事里的我开了茶馆，是茶馆老板。', scope: 'story');
     final allowed = source('new-fact', '我正在学长笛。');
-    extract([fixture.create(allowed, text: '你正在学长笛。', keywords: ['长笛'])]);
+    extract([
+      fixture.create(allowed, text: '你正在学长笛。', keywords: ['长笛']),
+    ]);
     reopen();
     expect(store.commitMerge(batch, late), isFalse);
     expect(store.cards().any((row) => deletedIds.contains(row['id'])), isFalse);

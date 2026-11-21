@@ -8,15 +8,19 @@ class CompanionOfflineHttpOverrides extends HttpOverrides {
   HttpClient createHttpClient(SecurityContext? context) {
     return super.createHttpClient(context)
       ..findProxy = (_) => 'DIRECT'
-      ..connectionFactory = (uri, proxyHost, proxyPort) {
-        final address = InternetAddress.tryParse(uri.host);
-        if (proxyHost != null || proxyPort != null || address == null ||
-            (address.address != '127.0.0.1' && address.address != '::1')) {
-          return Future<ConnectionTask<Socket>>.error(
-            SocketException('offline companion replay refused HTTP host: ${uri.host}'),
-          );
-        }
-        return Socket.startConnect(address, uri.port);
-      };
+        ..connectionFactory = (uri, proxyHost, proxyPort) {
+          final address = InternetAddress.tryParse(uri.host);
+          if (proxyHost != null ||
+              proxyPort != null ||
+              address == null ||
+              (address.address != '127.0.0.1' && address.address != '::1')) {
+            return Future<ConnectionTask<Socket>>.error(
+              SocketException(
+                'offline companion replay refused HTTP host: ${uri.host}',
+              ),
+            );
+          }
+          return Socket.startConnect(address, uri.port);
+        };
   }
 }

@@ -23,8 +23,11 @@ List<CompanionReminderPart> parseCompanionReminders(String input) {
   String? closeQuote;
   for (var index = 0; index < input.length; index++) {
     final character = input[index];
-    if (character == "'" && index > 0 && index + 1 < input.length &&
-        RegExp(r'[A-Za-z]').hasMatch(input[index - 1]) && RegExp(r'[A-Za-z]').hasMatch(input[index + 1])) {
+    if (character == "'" &&
+        index > 0 &&
+        index + 1 < input.length &&
+        RegExp(r'[A-Za-z]').hasMatch(input[index - 1]) &&
+        RegExp(r'[A-Za-z]').hasMatch(input[index + 1])) {
       continue;
     }
     if (closeQuote != null) {
@@ -76,7 +79,9 @@ List<CompanionReminderPart> parseCompanionReminders(String input) {
       // A bare explicit request is saved as waiting for its date/time. It is
       // never scheduled using a default hour or a time guessed from its text.
       command = (operation: 'create', text: after.group(1)!.trim(), when: '', target: null);
-    } else if (amend != null || english != null || text.startsWith('那条提醒改') ||
+    } else if (amend != null ||
+        english != null ||
+        text.startsWith('那条提醒改') ||
         (before != null && RegExp(r'^(今天|明天|后天|明早|明晚|周|下周|下下周|下个月|\d{4}-)').hasMatch(before.group(1)!))) {
       command = (operation: 'clarify', text: null, when: null, target: null);
     }
@@ -148,7 +153,8 @@ _ReminderTime? _reminderTime(String value) {
   if (hour > 23 || minute > 59 || second > 59) {
     return null;
   }
-  final time = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}'
+  final time =
+      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}'
       '${second == 0 ? '' : ':${second.toString().padLeft(2, '0')}'}';
   return (date: date, time: time, zone: match.group(8));
 }
@@ -178,7 +184,12 @@ String? _reminderDate(String? word, MemoryRow source) {
   if (word == null) {
     return null;
   }
-  final days = switch (word) { '今天' => 0, '明天' || '明早' || '明晚' => 1, '后天' => 2, _ => null };
+  final days = switch (word) {
+    '今天' => 0,
+    '明天' || '明早' || '明晚' => 1,
+    '后天' => 2,
+    _ => null,
+  };
   if (days != null) {
     final seconds = source['offset_seconds'] as int?;
     if (seconds == null) {
@@ -203,13 +214,19 @@ class CompanionReminders {
 
   Future<CompanionReminderClock> clock() async {
     final value = (await channel.invokeMapMethod<String, Object?>('clock'))!;
-    return (utcMs: value['utcMs']! as int, zoneId: value['zoneId']! as String, offsetSeconds: value['offsetSeconds']! as int);
+    return (
+      utcMs: value['utcMs']! as int,
+      zoneId: value['zoneId']! as String,
+      offsetSeconds: value['offsetSeconds']! as int,
+    );
   }
 
   Future<Map<String, Object?>> resolve(String date, String time, String zone, {int? selectedOffsetSeconds}) async =>
       (await channel.invokeMapMethod<String, Object?>('resolve', {
-        'localDate': date, 'localTime': time, 'zoneId': zone,
-        if (selectedOffsetSeconds != null) 'selectedOffsetSeconds': selectedOffsetSeconds,
+        'localDate': date,
+        'localTime': time,
+        'zoneId': zone,
+        'selectedOffsetSeconds': ?selectedOffsetSeconds,
       }))!;
 
   Future<CompanionReminderSpec> specification(
@@ -221,9 +238,7 @@ class CompanionReminders {
     final parsed = _reminderTime(command.when ?? '')!;
     final wording = command.text ?? (previous?['reminder_text'] as String?);
     final text = wording == '' ? null : wording;
-    final date = parsed.date == null
-        ? previous?['local_date'] as String?
-        : _reminderDate(parsed.date, source);
+    final date = parsed.date == null ? (previous?['local_date'] as String?) : _reminderDate(parsed.date, source);
     final time = parsed.time ?? (previous?['local_time'] as String?);
     final zone = parsed.zone ?? (previous?['zone_id'] as String?) ?? (source['zone_id'] as String?);
     String? missing;
@@ -241,29 +256,44 @@ class CompanionReminders {
     }
     // Relative words use the original phone's local date. A different named
     // zone needs an explicit date; no offset-to-region guess is made.
-    if (parsed.date != null && !parsed.date!.startsWith(RegExp(r'\d')) && parsed.zone != null && zone != source['zone_id']) {
+    if (parsed.date != null &&
+        !parsed.date!.startsWith(RegExp(r'\d')) &&
+        parsed.zone != null &&
+        zone != source['zone_id']) {
       return CompanionReminderSpec(text: text, localTime: time, zoneId: zone, waitReason: 'date_missing');
     }
     final resolved = await resolve(date!, time!, zone!, selectedOffsetSeconds: selectedOffsetSeconds);
     final moments = resolved['moments']! as List;
     if (resolved['kind'] != 'unique') {
       return CompanionReminderSpec(
-        text: text, localDate: date, localTime: time, zoneId: zone,
+        text: text,
+        localDate: date,
+        localTime: time,
+        zoneId: zone,
         waitReason: resolved['kind'] == 'gap' ? 'time_gap' : 'time_overlap',
       );
     }
     final moment = moments.single as Map;
     return CompanionReminderSpec(
-      text: text, localDate: date, localTime: time, zoneId: zone,
-      epochMs: moment['epochMs']! as int, offsetSeconds: moment['offsetSeconds']! as int,
+      text: text,
+      localDate: date,
+      localTime: time,
+      zoneId: zone,
+      epochMs: moment['epochMs']! as int,
+      offsetSeconds: moment['offsetSeconds']! as int,
     );
   }
 
   MemoryRow? target(CompanionMemoryStore store, String sourceSession, CompanionReminderCommand command) {
-    final candidates = store.tasks(sourceSessionId: sourceSession).where((task) =>
-      task['kind'] == 'phone.reminder' && task['cancel_requested'] == 0 &&
-      (command.target == null || task['reminder_text'] == command.target),
-    ).toList();
+    final candidates = store
+        .tasks(sourceSessionId: sourceSession)
+        .where(
+          (task) =>
+              task['kind'] == 'phone.reminder' &&
+              task['cancel_requested'] == 0 &&
+              (command.target == null || task['reminder_text'] == command.target),
+        )
+        .toList();
     return candidates.length == 1 ? candidates.single : null;
   }
 
@@ -299,29 +329,48 @@ class CompanionReminders {
       task = accepted;
     } else if (command.operation == 'cancel') {
       task = store.cancelReminder(
-        taskId: previous!['task_id']! as String, expectedTaskRev: previous['task_rev']! as int,
-        messageId: id, expectedSourceRev: sourceRev, itemNo: part.itemNo,
+        taskId: previous!['task_id']! as String,
+        expectedTaskRev: previous['task_rev']! as int,
+        messageId: id,
+        expectedSourceRev: sourceRev,
+        itemNo: part.itemNo,
       );
     } else {
-      final spec = await specification(source, command, previous: previous, selectedOffsetSeconds: selectedOffsetSeconds);
+      final spec = await specification(
+        source,
+        command,
+        previous: previous,
+        selectedOffsetSeconds: selectedOffsetSeconds,
+      );
       if (!isCurrent()) {
         throw const DshClosedException('Reminder command is no longer current');
       }
       if (command.operation == 'amend') {
         task = store.amendReminder(
-          taskId: previous!['task_id']! as String, expectedTaskRev: previous['task_rev']! as int,
-          messageId: id, expectedSourceRev: sourceRev, itemNo: part.itemNo, reminder: spec,
+          taskId: previous!['task_id']! as String,
+          expectedTaskRev: previous['task_rev']! as int,
+          messageId: id,
+          expectedSourceRev: sourceRev,
+          itemNo: part.itemNo,
+          reminder: spec,
         );
       } else {
         task = store.createReminderFromMessage(
-          messageId: id, expectedSourceRev: sourceRev, itemNo: part.itemNo, roomMode: roomMode,
-          hostKey: hostKey, hostSessionId: hostSessionId,
-          executorId: executor, reminder: spec,
+          messageId: id,
+          expectedSourceRev: sourceRev,
+          itemNo: part.itemNo,
+          roomMode: roomMode,
+          hostKey: hostKey,
+          hostSessionId: hostSessionId,
+          executorId: executor,
+          reminder: spec,
         );
       }
     }
     final acceptedRev = task['task_rev']! as int;
-    if (task['executor_id'] == executor && task['state'] != 'done' && task['state'] != 'cancelled' &&
+    if (task['executor_id'] == executor &&
+        task['state'] != 'done' &&
+        task['state'] != 'cancelled' &&
         (task['epoch_ms'] != null || task['operation'] == 'amend' || task['cancel_requested'] == 1)) {
       await wake(task['task_id']! as String);
     }

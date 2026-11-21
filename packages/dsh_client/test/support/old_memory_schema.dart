@@ -9,8 +9,14 @@ void restoreOldMemorySchema(Database database, int version) {
   }
   if (version < 12) {
     database.execute('DROP TABLE companion_lookup_attempts');
-    for (final column in ['lookup_place_name', 'lookup_city', 'lookup_question', 'lookup_deadline_ms',
-      'lookup_result_json', 'lookup_result_fingerprint']) {
+    for (final column in [
+      'lookup_place_name',
+      'lookup_city',
+      'lookup_question',
+      'lookup_deadline_ms',
+      'lookup_result_json',
+      'lookup_result_fingerprint',
+    ]) {
       database.execute('ALTER TABLE companion_task_revisions DROP COLUMN $column');
     }
   }

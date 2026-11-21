@@ -173,9 +173,11 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
       case OpenCompanionTaskEntry(:final taskId, :final taskRev):
         await _untilResumed();
         if (mounted) {
-          await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(
-            builder: (_) => CompanionTasksPage(taskId: taskId, openedRevision: taskRev),
-          ));
+          await Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute<void>(
+              builder: (_) => CompanionTasksPage(taskId: taskId, openedRevision: taskRev),
+            ),
+          );
         }
     }
   }

@@ -29,30 +29,68 @@ void main() {
     open();
   }
 
-  MemoryRow say(String id, {String role = 'user', String scope = 'real', String session = 'room-one',
-    String text = '帮我查今天青桥美术馆开不开，给我馆方公告。'}) =>
-    store.submitMessage(id: id, sessionId: session, text: text,
-      role: role, scope: scope, saidAtUtc: now, offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+  MemoryRow say(
+    String id, {
+    String role = 'user',
+    String scope = 'real',
+    String session = 'room-one',
+    String text = '帮我查今天青桥美术馆开不开，给我馆方公告。',
+  }) => store.submitMessage(
+    id: id,
+    sessionId: session,
+    text: text,
+    role: role,
+    scope: scope,
+    saidAtUtc: now,
+    offsetMinutes: 480,
+    zoneId: 'Asia/Shanghai',
+    offsetSeconds: 28800,
+  );
 
   MemoryRow create(String source, {bool full = false, int? deadline, int sourceRev = 1, int itemNo = 0}) =>
-    store.createLookupFromMessage(messageId: source, expectedSourceRev: sourceRev, itemNo: itemNo,
-      roomMode: full ? 'full' : 'light', hostKey: full ? 'original-host' : null,
-      hostSessionId: full ? 'original-host-session' : null, executorId: 'phone-installation',
-      lookup: CompanionLookupSpec(placeName: '青桥美术馆', localDate: '2026-11-21', zoneId: 'Asia/Shanghai',
-        question: '开不开，给我馆方公告', deadlineAtMs: deadline ?? 1795219320000));
+      store.createLookupFromMessage(
+        messageId: source,
+        expectedSourceRev: sourceRev,
+        itemNo: itemNo,
+        roomMode: full ? 'full' : 'light',
+        hostKey: full ? 'original-host' : null,
+        hostSessionId: full ? 'original-host-session' : null,
+        executorId: 'phone-installation',
+        lookup: CompanionLookupSpec(
+          placeName: '青桥美术馆',
+          localDate: '2026-11-21',
+          zoneId: 'Asia/Shanghai',
+          question: '开不开，给我馆方公告',
+          deadlineAtMs: deadline ?? 1795219320000,
+        ),
+      );
 
   MemoryRow accept({bool full = false}) {
     say('source');
     return create('source', full: full);
   }
 
-  MemoryRow claim(MemoryRow task, {String kind = 'search', MemoryRow input = const {'query': _query},
-    String? requestId, String instance = 'original-instance', String executor = 'phone-installation'}) =>
-    store.claimLookupAttempt(taskId: task['task_id'] as String, expectedTaskRev: task['task_rev'] as int,
-      requestId: requestId ?? 'request-${++serial}', kind: kind, input: input, executorId: executor,
-      executionMode: task['room_mode'] == 'full' ? 'host' : 'phone',
-      instanceId: task['room_mode'] == 'full' ? instance : null, provider: 'deepseek', model: 'configured-model',
-      toolUnitPriceMicroCny: kind == 'answer' ? null : 5000, toolPriceAsOf: kind == 'answer' ? null : '2026-11-21');
+  MemoryRow claim(
+    MemoryRow task, {
+    String kind = 'search',
+    MemoryRow input = const {'query': _query},
+    String? requestId,
+    String instance = 'original-instance',
+    String executor = 'phone-installation',
+  }) => store.claimLookupAttempt(
+    taskId: task['task_id'] as String,
+    expectedTaskRev: task['task_rev'] as int,
+    requestId: requestId ?? 'request-${++serial}',
+    kind: kind,
+    input: input,
+    executorId: executor,
+    executionMode: task['room_mode'] == 'full' ? 'host' : 'phone',
+    instanceId: task['room_mode'] == 'full' ? instance : null,
+    provider: 'deepseek',
+    model: 'configured-model',
+    toolUnitPriceMicroCny: kind == 'answer' ? null : 5000,
+    toolPriceAsOf: kind == 'answer' ? null : '2026-11-21',
+  );
 
   MemoryRow finishTool(MemoryRow attempt, MemoryRow raw, {int status = 200, String terminal = 'complete'}) {
     final id = attempt['request_id'] as String;
@@ -61,35 +99,68 @@ void main() {
   }
 
   MemoryRow search(MemoryRow task, {List<String> urls = const [_url]}) => finishTool(claim(task), {
-    'results': [for (final url in urls) {'url': url, 'title': '馆方公告', 'snippet': '待核原文', 'date': '2026-11-20'}],
+    'results': [
+      for (final url in urls) {'url': url, 'title': '馆方公告', 'snippet': '待核原文', 'date': '2026-11-20'},
+    ],
   });
 
   MemoryRow fetch(MemoryRow task, {String url = _url, MemoryRow page = _page}) =>
-    finishTool(claim(task, kind: 'fetch', input: {'url': url}), page);
+      finishTool(claim(task, kind: 'fetch', input: {'url': url}), page);
 
-  MemoryRow proposal(MemoryRow page, {String status = 'done', String quote = '2026年11月21日临时闭馆',
-    String day = '2026-11-21'}) => {'status': status, 'conclusion': '今天临时闭馆。', 'applicable_date': day,
-      'evidence': [{'fetchRequestId': page['request_id'], 'quote': quote}]};
+  MemoryRow proposal(
+    MemoryRow page, {
+    String status = 'done',
+    String quote = '2026年11月21日临时闭馆',
+    String day = '2026-11-21',
+  }) => {
+    'status': status,
+    'conclusion': '今天临时闭馆。',
+    'applicable_date': day,
+    'evidence': [
+      {'fetchRequestId': page['request_id'], 'quote': quote},
+    ],
+  };
 
   MemoryRow answer(MemoryRow task, MemoryRow page, MemoryRow result) {
-    final attempt = claim(task, kind: 'answer', input: {'fetchRequestIds': [page['request_id']]});
-    return store.finishLookupAttempt(attempt['request_id'] as String, terminal: 'complete', dispatched: true,
-      complete: true, answerText: jsonEncode(result), rawUsage: const {'prompt_tokens': 77, 'completion_tokens': 12},
-      normalizedUsage: const {'inputTokens': 77, 'outputTokens': 12});
+    final attempt = claim(
+      task,
+      kind: 'answer',
+      input: {
+        'fetchRequestIds': [page['request_id']],
+      },
+    );
+    return store.finishLookupAttempt(
+      attempt['request_id'] as String,
+      terminal: 'complete',
+      dispatched: true,
+      complete: true,
+      answerText: jsonEncode(result),
+      rawUsage: const {'prompt_tokens': 77, 'completion_tokens': 12},
+      normalizedUsage: const {'inputTokens': 77, 'outputTokens': 12},
+    );
   }
 
-  MemoryRow finish(MemoryRow task, {String state = 'done', MemoryRow? result, String? reason}) =>
-    store.finishLookup(taskId: task['task_id'] as String, expectedTaskRev: task['task_rev'] as int,
-      state: state, result: result, reason: reason);
+  MemoryRow finish(MemoryRow task, {String state = 'done', MemoryRow? result, String? reason}) => store.finishLookup(
+    taskId: task['task_id'] as String,
+    expectedTaskRev: task['task_rev'] as int,
+    state: state,
+    result: result,
+    reason: reason,
+  );
 
   MemoryRow cancel(MemoryRow task, {String session = 'room-one', String command = 'cancel'}) {
     say(command, session: session);
-    return store.cancelLookup(taskId: task['task_id'] as String, expectedTaskRev: task['task_rev'] as int,
-      messageId: command, expectedSourceRev: 1, itemNo: 0);
+    return store.cancelLookup(
+      taskId: task['task_id'] as String,
+      expectedTaskRev: task['task_rev'] as int,
+      messageId: command,
+      expectedSourceRev: 1,
+      itemNo: 0,
+    );
   }
 
   Matcher failure([String code = 'companion/conflict']) =>
-    throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', code));
+      throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', code));
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('companion-public-lookup-');
@@ -138,7 +209,9 @@ void main() {
 
   test('a failed acceptance transaction leaves no task or reusable command claim', () {
     say('source');
-    database.execute("CREATE TRIGGER deny_lookup BEFORE INSERT ON companion_task_revisions BEGIN SELECT RAISE(ABORT,'fixture'); END");
+    database.execute(
+      "CREATE TRIGGER deny_lookup BEFORE INSERT ON companion_task_revisions BEGIN SELECT RAISE(ABORT,'fixture'); END",
+    );
     expect(() => create('source'), throwsA(isA<SqliteException>()));
     expect(store.tasks(), isEmpty);
     database.execute('DROP TRIGGER deny_lookup');
@@ -176,7 +249,12 @@ void main() {
     final task = accept();
     for (var i = 0; i < 3; i++) {
       final request = claim(task)['request_id'] as String;
-      final receipt = store.finishLookupAttempt(request, terminal: 'preflight_error', dispatched: false, complete: false);
+      final receipt = store.finishLookupAttempt(
+        request,
+        terminal: 'preflight_error',
+        dispatched: false,
+        complete: false,
+      );
       expect(receipt['tool_success_units'], 0);
       expect(receipt['estimated_tool_micro_cny'], 0);
       expect(receipt['http_status'], isNull);
@@ -199,8 +277,9 @@ void main() {
   test('same-clock attempts retain claim order rather than sorting their random request ids', () {
     final task = accept();
     finishTool(claim(task, requestId: 'z-first'), const {'results': []});
-    finishTool(claim(task, requestId: 'a-second', input: const {'query': '青桥美术馆 2026-11-21 临时公告'}),
-      const {'results': []});
+    finishTool(claim(task, requestId: 'a-second', input: const {'query': '青桥美术馆 2026-11-21 临时公告'}), const {
+      'results': [],
+    });
     reopen();
     expect(store.lookupAttempts(task['task_id'] as String).map((row) => row['request_id']), ['z-first', 'a-second']);
   });
@@ -212,8 +291,12 @@ void main() {
     expect(bad['valid_result'], 0);
     expect(bad['tool_success_units'], 0);
     expect(search(task)['valid_result'], 1);
-    final failedPage = finishTool(claim(task, kind: 'fetch', input: const {'url': _url}),
-      const {'error': 'temporary'}, status: 503, terminal: 'http_error');
+    final failedPage = finishTool(
+      claim(task, kind: 'fetch', input: const {'url': _url}),
+      const {'error': 'temporary'},
+      status: 503,
+      terminal: 'http_error',
+    );
     expect(failedPage['tool_success_units'], 0);
     expect(() => fetch(task), failure()); // The task already used its one retry.
   });
@@ -234,7 +317,16 @@ void main() {
     expect(page['complete'], 1);
     expect(page['valid_result'], 0);
     expect(page['tool_success_units'], 0);
-    expect(() => claim(task, kind: 'answer', input: {'fetchRequestIds': [page['request_id']]}), failure());
+    expect(
+      () => claim(
+        task,
+        kind: 'answer',
+        input: {
+          'fetchRequestIds': [page['request_id']],
+        },
+      ),
+      failure(),
+    );
   });
 
   test('a nonempty original Fetch content needs no invented title', () {
@@ -281,17 +373,34 @@ void main() {
     final metadata = rows.singleWhere((row) => row['request_id'] == searched['request_id'])['sourceMetadata'] as List;
     expect((metadata.single as Map)['url'], _url);
     expect((metadata.single as Map)['publishedAt'], '2026-11-20');
-    expect(rows.singleWhere((row) => row['kind'] == 'answer')['rawUsage'], {'prompt_tokens': 77, 'completion_tokens': 12});
-    expect(rows.where((row) => row['kind'] != 'answer').fold<int>(0,
-      (sum, row) => sum + (row['estimated_tool_micro_cny'] as int)), 10000);
+    expect(rows.singleWhere((row) => row['kind'] == 'answer')['rawUsage'], {
+      'prompt_tokens': 77,
+      'completion_tokens': 12,
+    });
+    expect(
+      rows
+          .where((row) => row['kind'] != 'answer')
+          .fold<int>(0, (sum, row) => sum + (row['estimated_tool_micro_cny'] as int)),
+      10000,
+    );
     expect(() => claim(task), failure());
   });
 
   test('provider body and usage received before a lost host finish survive and close through original receipt', () {
     final task = accept(full: true);
     final request = claim(task)['request_id'] as String;
-    const raw = <String, Object?>{'results': [{'url': _url, 'title': '馆方公告'}]};
-    const firstUsage = <String, Object?>{'events': [{'raw': {'search_count': 1}}]};
+    const raw = <String, Object?>{
+      'results': [
+        {'url': _url, 'title': '馆方公告'},
+      ],
+    };
+    const firstUsage = <String, Object?>{
+      'events': [
+        {
+          'raw': {'search_count': 1},
+        },
+      ],
+    };
     store.observeLookupAttempt(request, dispatched: true, httpStatus: 200, toolResponse: raw, rawUsage: firstUsage);
     store.markLookupUncertain(request);
     reopen();
@@ -317,7 +426,16 @@ void main() {
     expect(recovered['valid_result'], 0);
     expect(recovered['tool_success_units'], isNull);
     expect(recovered['toolResponse'], isNull);
-    expect(() => claim(task, kind: 'answer', input: {'fetchRequestIds': [request]}), failure());
+    expect(
+      () => claim(
+        task,
+        kind: 'answer',
+        input: {
+          'fetchRequestIds': [request],
+        },
+      ),
+      failure(),
+    );
     expect(() => fetch(task), failure());
   });
 
@@ -347,16 +465,50 @@ void main() {
   test('observations only add usage evidence and cannot overwrite already known provider facts', () {
     final task = accept(full: true);
     final request = claim(task)['request_id'] as String;
-    const event = <String, Object?>{'raw': {'search_count': 1}};
-    store.observeLookupAttempt(request, dispatched: true, httpStatus: 200,
-      rawUsage: const {'events': [event]}, toolResponse: const {'results': []});
-    store.observeLookupAttempt(request, rawUsage: const {'events': [event, {'raw': {'cache': 'observed'}}]});
+    const event = <String, Object?>{
+      'raw': {'search_count': 1},
+    };
+    store.observeLookupAttempt(
+      request,
+      dispatched: true,
+      httpStatus: 200,
+      rawUsage: const {
+        'events': [event],
+      },
+      toolResponse: const {'results': []},
+    );
+    store.observeLookupAttempt(
+      request,
+      rawUsage: const {
+        'events': [
+          event,
+          {
+            'raw': {'cache': 'observed'},
+          },
+        ],
+      },
+    );
     expect(() => store.observeLookupAttempt(request, dispatched: false), failure());
     expect(() => store.observeLookupAttempt(request, httpStatus: 500), failure());
-    expect(() => store.observeLookupAttempt(request, toolResponse: const {'results': [{'url': _url, 'title': 'new'}]}), failure());
+    expect(
+      () => store.observeLookupAttempt(
+        request,
+        toolResponse: const {
+          'results': [
+            {'url': _url, 'title': 'new'},
+          ],
+        },
+      ),
+      failure(),
+    );
     expect(() => store.observeLookupAttempt(request, rawUsage: const {'events': []}), failure());
-    final finalRow = store.finishLookupAttempt(request, terminal: 'complete', dispatched: true, complete: true,
-      rawUsage: const {'vendorReceipt': 'actual-receipt'});
+    final finalRow = store.finishLookupAttempt(
+      request,
+      terminal: 'complete',
+      dispatched: true,
+      complete: true,
+      rawUsage: const {'vendorReceipt': 'actual-receipt'},
+    );
     expect((finalRow['rawUsage'] as Map)['events'], hasLength(2));
     expect((finalRow['rawUsage'] as Map)['vendorReceipt'], 'actual-receipt');
   });
@@ -364,8 +516,16 @@ void main() {
   test('late known receipt after the original deadline adds facts but never enables a new request', () {
     final task = accept(full: true);
     final request = claim(task)['request_id'] as String;
-    store.observeLookupAttempt(request, dispatched: true, httpStatus: 200,
-      toolResponse: const {'results': [{'url': _url, 'title': '公告'}]});
+    store.observeLookupAttempt(
+      request,
+      dispatched: true,
+      httpStatus: 200,
+      toolResponse: const {
+        'results': [
+          {'url': _url, 'title': '公告'},
+        ],
+      },
+    );
     store.markLookupUncertain(request);
     now += const Duration(minutes: 3).inMilliseconds;
     reopen();
@@ -383,10 +543,28 @@ void main() {
     final stopped = cancel(task);
     expect(stopped['task_rev'], 2);
     expect(stopped['state'], 'unknown');
-    store.observeLookupAttempt(request, dispatched: true, httpStatus: 200,
-      toolResponse: const {'results': [{'url': _url, 'title': '公告'}]});
-    final old = store.finishLookupAttempt(request, terminal: 'complete', dispatched: true, complete: true,
-      toolResponse: const {'results': [{'url': _url, 'title': '公告'}]}, rawUsage: const {'observed': 1});
+    store.observeLookupAttempt(
+      request,
+      dispatched: true,
+      httpStatus: 200,
+      toolResponse: const {
+        'results': [
+          {'url': _url, 'title': '公告'},
+        ],
+      },
+    );
+    final old = store.finishLookupAttempt(
+      request,
+      terminal: 'complete',
+      dispatched: true,
+      complete: true,
+      toolResponse: const {
+        'results': [
+          {'url': _url, 'title': '公告'},
+        ],
+      },
+      rawUsage: const {'observed': 1},
+    );
     expect(old['task_rev'], 1);
     expect(old['bodyRetained'], isFalse);
     expect(old['tool_success_units'], 1);
@@ -422,10 +600,21 @@ void main() {
 
   test('a real v11 upgrade preserves reminders, original clocks and receipt history', () {
     say('reminder-source', text: '今天八点提醒我带证件。');
-    final reminder = store.createReminderFromMessage(messageId: 'reminder-source', expectedSourceRev: 1, itemNo: 0,
-      roomMode: 'light', executorId: 'phone-installation', reminder: const CompanionReminderSpec(
-        text: '带证件', localDate: '2026-11-21', localTime: '08:00', zoneId: 'Asia/Shanghai',
-        offsetSeconds: 28800, epochMs: 1795219200000));
+    final reminder = store.createReminderFromMessage(
+      messageId: 'reminder-source',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      roomMode: 'light',
+      executorId: 'phone-installation',
+      reminder: const CompanionReminderSpec(
+        text: '带证件',
+        localDate: '2026-11-21',
+        localTime: '08:00',
+        zoneId: 'Asia/Shanghai',
+        offsetSeconds: 28800,
+        epochMs: 1795219200000,
+      ),
+    );
     final oldMessage = store.messages().single;
     restoreOldMemorySchema(database, 11);
     expect(database.select("SELECT name FROM sqlite_schema WHERE name='companion_lookup_attempts'"), isEmpty);

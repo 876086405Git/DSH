@@ -22,24 +22,55 @@ void main() {
     void open() {
       database = sqlite3.open('${directory.path}/memory.sqlite');
       store = CompanionMemoryStore(database, nowMilliseconds: () => now);
-      tasks = CompanionHostTasks(store: store, changed: () {}, retainReceipt: (work) {
-        retained.add(work);
-        unawaited(work.catchError((Object _) {}));
-      });
+      tasks = CompanionHostTasks(
+        store: store,
+        changed: () {},
+        retainReceipt: (work) {
+          retained.add(work);
+          unawaited(work.catchError((Object _) {}));
+        },
+      );
     }
-    MemoryRow source(String id) => store.submitMessage(id: id, sessionId: 'light:original-room',
-      text: '请电脑把今天的笔记另存成一页待办，原件别动', saidAtUtc: now,
-      offsetMinutes: 480, zoneId: 'Asia/Shanghai', offsetSeconds: 28800);
+
+    MemoryRow source(String id) => store.submitMessage(
+      id: id,
+      sessionId: 'light:original-room',
+      text: '请电脑把今天的笔记另存成一页待办，原件别动',
+      saidAtUtc: now,
+      offsetMinutes: 480,
+      zoneId: 'Asia/Shanghai',
+      offsetSeconds: 28800,
+    );
     MemoryRow create({bool queue = false}) {
       final message = source('create');
-      return store.createNotesTaskFromMessage(messageId: message['id']! as String, expectedSourceRev: 1,
-        itemNo: 0, roomMode: 'light', hostKey: 'local:original', agreement: notesAgreement(queue: queue),
-        directoryLabels: {'source': '/实际/笔记', 'output': '/实际/笔记'});
+      return store.createNotesTaskFromMessage(
+        messageId: message['id']! as String,
+        expectedSourceRev: 1,
+        itemNo: 0,
+        roomMode: 'light',
+        hostKey: 'local:original',
+        agreement: notesAgreement(queue: queue),
+        directoryLabels: {'source': '/实际/笔记', 'output': '/实际/笔记'},
+      );
     }
-    Future<MemoryRow> run(MemoryRow row, {bool initial = true, bool submit = true, bool retry = false, bool recover = false,
-      bool resend = false}) => tasks.run(row,
-      client: peer.client, hostKey: 'local:original', initialOpportunity: initial, submitPending: submit,
-      retryWaiting: retry, replayMissing: recover, resendPendingCommand: resend);
+
+    Future<MemoryRow> run(
+      MemoryRow row, {
+      bool initial = true,
+      bool submit = true,
+      bool retry = false,
+      bool recover = false,
+      bool resend = false,
+    }) => tasks.run(
+      row,
+      client: peer.client,
+      hostKey: 'local:original',
+      initialOpportunity: initial,
+      submitPending: submit,
+      retryWaiting: retry,
+      replayMissing: recover,
+      resendPendingCommand: resend,
+    );
 
     setUp(() async {
       directory = await Directory.systemTemp.createTemp('notes-coordinator-');
@@ -115,14 +146,21 @@ void main() {
     test('same-store missing observation keeps possible dispatch unknown without recreating the task', () async {
       final row = create();
       final id = row['task_id']! as String;
-      final first = store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: 'local:original',
-        hostStoreId: 'original-store', initialOpportunity: true)!;
+      final first = store.prepareHostTaskOperation(
+        taskId: id,
+        taskRev: 1,
+        hostKey: 'local:original',
+        hostStoreId: 'original-store',
+        initialOpportunity: true,
+      )!;
       // This represents the persisted-before-dispatch crash window. The real
       // recovery GET must not mistake a missing observation for permission to
       // start the unknown task again.
       peer.respond = (request, body) => request.method == 'GET'
-        ? NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'missing'}}, status: 404)
-        : NotesPeer.json(request, notesSnapshot(body!), status: 201);
+          ? NotesPeer.json(request, {
+              'error': {'code': 'companion/task-not-found', 'message': 'missing'},
+            }, status: 404)
+          : NotesPeer.json(request, notesSnapshot(body!), status: 201);
       final result = await run(store.hostTask(id)!, initial: false);
       expect(peer.calls.map((call) => call.method), ['GET']);
       expect(store.hostTaskCommands(id).single['request'], {
@@ -138,81 +176,138 @@ void main() {
       expect(restored['task_id'], id);
     });
 
-    test('viewing a waiting task is read only while explicit retry reuses its original create and Host sequence', () async {
-      final row = create();
-      MemoryRow? saved;
-      MemoryRow? original;
-      peer.respond = (request, body) {
-        if (request.method == 'POST') {
-          original ??= body;
-          expect(body, original);
-        }
-        saved ??= {...notesSnapshot(body!, state: 'waiting'), 'waitReason': 'model_preflight_waiting'};
-        return NotesPeer.json(request, saved!);
-      };
-      final accepted = await run(row);
-      final viewed = await run(accepted, initial: false, submit: false);
-      expect(viewed['state'], 'waiting');
-      expect(peer.calls.where((call) => call.method == 'POST'), hasLength(1));
-      final retried = await run(viewed, initial: false, submit: false, retry: true);
-      expect(retried['task_rev'], 1);
-      expect(retried['state'], 'waiting');
-      expect(retried['applied_host_receipt_seq'], 1);
-      expect(store.hostTaskCommands(row['task_id']! as String), hasLength(1));
-      expect(peer.calls.where((call) => call.method == 'POST'), hasLength(2));
-    });
+    test(
+      'viewing a waiting task is read only while explicit retry reuses its original create and Host sequence',
+      () async {
+        final row = create();
+        MemoryRow? saved;
+        MemoryRow? original;
+        peer.respond = (request, body) {
+          if (request.method == 'POST') {
+            original ??= body;
+            expect(body, original);
+          }
+          saved ??= {...notesSnapshot(body!, state: 'waiting'), 'waitReason': 'model_preflight_waiting'};
+          return NotesPeer.json(request, saved!);
+        };
+        final accepted = await run(row);
+        final viewed = await run(accepted, initial: false, submit: false);
+        expect(viewed['state'], 'waiting');
+        expect(peer.calls.where((call) => call.method == 'POST'), hasLength(1));
+        final retried = await run(viewed, initial: false, submit: false, retry: true);
+        expect(retried['task_rev'], 1);
+        expect(retried['state'], 'waiting');
+        expect(retried['applied_host_receipt_seq'], 1);
+        expect(store.hostTaskCommands(row['task_id']! as String), hasLength(1));
+        expect(peer.calls.where((call) => call.method == 'POST'), hasLength(2));
+      },
+    );
 
     for (final operation in ['amend', 'cancel']) {
-      test('explicit missing acceptance recovery sends the highest $operation barrier before any original create', () async {
-        final row = create();
-        final id = row['task_id']! as String;
-        final original = store.prepareHostTaskOperation(taskId: id, taskRev: 1, hostKey: 'local:original',
-          hostStoreId: 'original-store', initialOpportunity: true)!['request']! as Map<String, Object?>;
-        source('change');
-        final changedAgreement = {...notesAgreement(), 'args': {...(notesAgreement()['args']! as Map), 'outputName': '新约定.md'}};
-        final changed = operation == 'cancel'
-          ? store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'change', expectedSourceRev: 1, itemNo: 0)
-          : store.amendNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'change', expectedSourceRev: 1, itemNo: 0,
-              agreement: changedAgreement);
-        var barrierSeen = false;
-        peer.respond = (request, body) async {
-          if (request.method == 'GET') {
-            await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'missing'}}, status: 404);
-          } else if (request.uri.path == '$notesPath/$id/$operation') {
-            barrierSeen = true;
-            expect(body!['taskRev'], 2);
-            expect(body['operationId'], store.hostTaskCommands(id).last['operation_id']);
-            await NotesPeer.json(request, notesSnapshot(original, rev: 2, original: false,
-              state: operation == 'cancel' ? 'cancelled' : 'waiting', agreement: changedAgreement,
-              revisions: [{'taskRev': 2, 'operation': operation, 'acceptedAtMs': now,
-                'agreement': operation == 'cancel' ? null : changedAgreement}]));
-          } else {
-            expect(operation, 'amend');
-            expect(barrierSeen, isTrue);
-            expect(request.uri.path, notesPath);
-            expect(body, original);
-            await NotesPeer.json(request, notesSnapshot(original, rev: 2, seq: 2, agreement: changedAgreement,
-              revisions: [{'taskRev': 1, 'operation': 'create', 'acceptedAtMs': now, 'agreement': notesAgreement()},
-                {'taskRev': 2, 'operation': 'amend', 'acceptedAtMs': now, 'agreement': changedAgreement}]));
-          }
-        };
-        final result = await run(changed, submit: false, initial: false, recover: true);
-        expect(peer.calls.map((call) => call.uri.path), [
-          '$notesPath/$id', '$notesPath/$id/$operation', if (operation == 'amend') notesPath,
-        ]);
-        expect(result['task_id'], id);
-        expect(result['task_rev'], 2);
-        expect(result['state'], operation == 'cancel' ? 'cancelled' : 'running');
-        expect(store.tasks(), hasLength(1));
-      });
+      test(
+        'explicit missing acceptance recovery sends the highest $operation barrier before any original create',
+        () async {
+          final row = create();
+          final id = row['task_id']! as String;
+          final original =
+              store.prepareHostTaskOperation(
+                    taskId: id,
+                    taskRev: 1,
+                    hostKey: 'local:original',
+                    hostStoreId: 'original-store',
+                    initialOpportunity: true,
+                  )!['request']!
+                  as Map<String, Object?>;
+          source('change');
+          final changedAgreement = {
+            ...notesAgreement(),
+            'args': {...(notesAgreement()['args']! as Map), 'outputName': '新约定.md'},
+          };
+          final changed = operation == 'cancel'
+              ? store.cancelNotesTask(
+                  taskId: id,
+                  expectedTaskRev: 1,
+                  messageId: 'change',
+                  expectedSourceRev: 1,
+                  itemNo: 0,
+                )
+              : store.amendNotesTask(
+                  taskId: id,
+                  expectedTaskRev: 1,
+                  messageId: 'change',
+                  expectedSourceRev: 1,
+                  itemNo: 0,
+                  agreement: changedAgreement,
+                );
+          var barrierSeen = false;
+          peer.respond = (request, body) async {
+            if (request.method == 'GET') {
+              await NotesPeer.json(request, {
+                'error': {'code': 'companion/task-not-found', 'message': 'missing'},
+              }, status: 404);
+            } else if (request.uri.path == '$notesPath/$id/$operation') {
+              barrierSeen = true;
+              expect(body!['taskRev'], 2);
+              expect(body['operationId'], store.hostTaskCommands(id).last['operation_id']);
+              await NotesPeer.json(
+                request,
+                notesSnapshot(
+                  original,
+                  rev: 2,
+                  original: false,
+                  state: operation == 'cancel' ? 'cancelled' : 'waiting',
+                  agreement: changedAgreement,
+                  revisions: [
+                    {
+                      'taskRev': 2,
+                      'operation': operation,
+                      'acceptedAtMs': now,
+                      'agreement': operation == 'cancel' ? null : changedAgreement,
+                    },
+                  ],
+                ),
+              );
+            } else {
+              expect(operation, 'amend');
+              expect(barrierSeen, isTrue);
+              expect(request.uri.path, notesPath);
+              expect(body, original);
+              await NotesPeer.json(
+                request,
+                notesSnapshot(
+                  original,
+                  rev: 2,
+                  seq: 2,
+                  agreement: changedAgreement,
+                  revisions: [
+                    {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': now, 'agreement': notesAgreement()},
+                    {'taskRev': 2, 'operation': 'amend', 'acceptedAtMs': now, 'agreement': changedAgreement},
+                  ],
+                ),
+              );
+            }
+          };
+          final result = await run(changed, submit: false, initial: false, recover: true);
+          expect(peer.calls.map((call) => call.uri.path), [
+            '$notesPath/$id',
+            '$notesPath/$id/$operation',
+            if (operation == 'amend') notesPath,
+          ]);
+          expect(result['task_id'], id);
+          expect(result['task_rev'], 2);
+          expect(result['state'], operation == 'cancel' ? 'cancelled' : 'running');
+          expect(store.tasks(), hasLength(1));
+        },
+      );
     }
 
     test('changed task library never accepts an original command under a replacement store identity', () async {
       final row = create();
       peer.respond = (request, body) => NotesPeer.json(request, notesSnapshot(body!));
       final initial = await run(row);
-      peer.respond = (request, _) => NotesPeer.json(request,
-        {'error': {'code': 'companion/task-store-mismatch', 'message': 'different store'}}, status: 409);
+      peer.respond = (request, _) => NotesPeer.json(request, {
+        'error': {'code': 'companion/task-store-mismatch', 'message': 'different store'},
+      }, status: 409);
       await expectLater(run(initial, initial: false), throwsA(isA<DshRemoteException>()));
       expect(store.hostTask(initial['task_id']! as String), initial);
       expect(peer.calls.where((call) => call.method == 'POST'), hasLength(1));
@@ -230,25 +325,45 @@ void main() {
           original = body!;
           received.complete();
           await release.future;
-          await NotesPeer.json(request, {...cancelledSnapshot, 'runnerReceiptSeq': 2,
-            'originalCreatePresent': true, 'origin': original!['origin'], 'hostSessionId': original!['hostSessionId'],
+          await NotesPeer.json(request, {
+            ...cancelledSnapshot,
+            'runnerReceiptSeq': 2,
+            'originalCreatePresent': true,
+            'origin': original!['origin'],
+            'hostSessionId': original!['hostSessionId'],
             'revisions': [
               {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': now, 'agreement': notesAgreement()},
               ...(cancelledSnapshot['revisions']! as List),
-            ]});
+            ],
+          });
         } else if (request.method == 'GET') {
-          await NotesPeer.json(request, {'error': {'code': 'companion/task-not-found', 'message': 'not accepted yet'}}, status: 404);
+          await NotesPeer.json(request, {
+            'error': {'code': 'companion/task-not-found', 'message': 'not accepted yet'},
+          }, status: 404);
         } else {
           expect(request.uri.path, '$notesPath/$id/cancel');
-          cancelledSnapshot = notesSnapshot(original!, rev: 2, state: 'cancelled', original: false,
-            revisions: [{'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': now, 'agreement': null}]);
+          cancelledSnapshot = notesSnapshot(
+            original!,
+            rev: 2,
+            state: 'cancelled',
+            original: false,
+            revisions: [
+              {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': now, 'agreement': null},
+            ],
+          );
           await NotesPeer.json(request, cancelledSnapshot);
         }
       };
       final pending = run(row);
       await received.future;
       source('cancel');
-      final cancelled = store.cancelNotesTask(taskId: id, expectedTaskRev: 1, messageId: 'cancel', expectedSourceRev: 1, itemNo: 0);
+      final cancelled = store.cancelNotesTask(
+        taskId: id,
+        expectedTaskRev: 1,
+        messageId: 'cancel',
+        expectedSourceRev: 1,
+        itemNo: 0,
+      );
       final stopped = await run(cancelled);
       expect(stopped['state'], 'cancelled');
       release.complete();
@@ -265,8 +380,10 @@ void main() {
       peer.respond = (request, body) async {
         snapshot ??= notesSnapshot(body!, seq: 7, state: 'done', artifacts: [notesArtifact()]);
         if (request.method == 'POST') {
-          database.execute('''CREATE TRIGGER reject_snapshot BEFORE UPDATE OF applied_host_receipt_seq ON companion_host_tasks
-            BEGIN SELECT RAISE(ABORT,'disk full'); END;''');
+          database.execute(
+            '''CREATE TRIGGER reject_snapshot BEFORE UPDATE OF applied_host_receipt_seq ON companion_host_tasks
+            BEGIN SELECT RAISE(ABORT,'disk full'); END;''',
+          );
         }
         await NotesPeer.json(request, snapshot!);
       };
@@ -281,42 +398,66 @@ void main() {
       expect(peer.calls.where((call) => call.method == 'POST'), hasLength(1));
     });
 
-    test('explicit saved cancellation is not posted again when the fresh original read already accounts for it', () async {
-      final row = create();
-      late MemoryRow committed;
-      late MemoryRow original;
-      peer.respond = (request, body) async {
-        if (request.method == 'POST' && request.uri.path == notesPath) {
-          original = body!;
-          committed = notesSnapshot(original);
-          await NotesPeer.json(request, committed, status: 201);
-        } else if (request.method == 'POST') {
-          expect(request.uri.path, '$notesPath/${row['task_id']}/cancel');
-          committed = notesSnapshot(original, rev: 2, seq: 2, state: 'cancelled', revisions: [
-            {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': now, 'agreement': notesAgreement()},
-            {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': now, 'agreement': notesAgreement()},
-          ]);
-          final socket = await request.response.detachSocket(writeHeaders: false);
-          socket.destroy();
-        } else {
-          await NotesPeer.json(request, committed);
-        }
-      };
-      await run(row);
-      store.submitMessage(id: 'saved-cancel', sessionId: 'light:original-room', text: '取消这次笔记整理',
-        saidAtUtc: now, offsetMinutes: 480);
-      final cancel = store.cancelNotesTask(taskId: row['task_id']! as String, expectedTaskRev: 1,
-        messageId: 'saved-cancel', expectedSourceRev: 1, itemNo: 0);
-      await expectLater(run(cancel), throwsA(isA<DshException>()));
-      expect(store.hostTask(row['task_id']! as String)!['state'], 'unknown');
-      final posts = peer.calls.where((call) => call.method == 'POST').length;
-      final current = await run(store.hostTask(row['task_id']! as String)!, initial: false, submit: false, resend: true);
-      expect(current['state'], 'cancelled');
-      expect(current['task_rev'], 2);
-      expect(current['applied_host_receipt_seq'], 2);
-      expect(peer.calls.where((call) => call.method == 'POST'), hasLength(posts));
-      expect(store.hostTaskCommands(row['task_id']! as String), hasLength(2));
-    });
+    test(
+      'explicit saved cancellation is not posted again when the fresh original read already accounts for it',
+      () async {
+        final row = create();
+        late MemoryRow committed;
+        late MemoryRow original;
+        peer.respond = (request, body) async {
+          if (request.method == 'POST' && request.uri.path == notesPath) {
+            original = body!;
+            committed = notesSnapshot(original);
+            await NotesPeer.json(request, committed, status: 201);
+          } else if (request.method == 'POST') {
+            expect(request.uri.path, '$notesPath/${row['task_id']}/cancel');
+            committed = notesSnapshot(
+              original,
+              rev: 2,
+              seq: 2,
+              state: 'cancelled',
+              revisions: [
+                {'taskRev': 1, 'operation': 'create', 'acceptedAtMs': now, 'agreement': notesAgreement()},
+                {'taskRev': 2, 'operation': 'cancel', 'acceptedAtMs': now, 'agreement': notesAgreement()},
+              ],
+            );
+            final socket = await request.response.detachSocket(writeHeaders: false);
+            socket.destroy();
+          } else {
+            await NotesPeer.json(request, committed);
+          }
+        };
+        await run(row);
+        store.submitMessage(
+          id: 'saved-cancel',
+          sessionId: 'light:original-room',
+          text: '取消这次笔记整理',
+          saidAtUtc: now,
+          offsetMinutes: 480,
+        );
+        final cancel = store.cancelNotesTask(
+          taskId: row['task_id']! as String,
+          expectedTaskRev: 1,
+          messageId: 'saved-cancel',
+          expectedSourceRev: 1,
+          itemNo: 0,
+        );
+        await expectLater(run(cancel), throwsA(isA<DshException>()));
+        expect(store.hostTask(row['task_id']! as String)!['state'], 'unknown');
+        final posts = peer.calls.where((call) => call.method == 'POST').length;
+        final current = await run(
+          store.hostTask(row['task_id']! as String)!,
+          initial: false,
+          submit: false,
+          resend: true,
+        );
+        expect(current['state'], 'cancelled');
+        expect(current['task_rev'], 2);
+        expect(current['applied_host_receipt_seq'], 2);
+        expect(peer.calls.where((call) => call.method == 'POST'), hasLength(posts));
+        expect(store.hostTaskCommands(row['task_id']! as String), hasLength(2));
+      },
+    );
   });
 
   test('F finite commands retain explicit continue pause and queue conditions without an invented deadline', () {

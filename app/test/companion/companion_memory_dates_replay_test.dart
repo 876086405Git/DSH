@@ -99,13 +99,15 @@ class _Phone {
         expect(sent['state'], 'sent');
         expect(sent['sent_at_ms'], now);
         expect(sent['batch_id'], input['batch_id']);
-        return _reply(jsonEncode({
-          'schema_version': 2,
-          'batch_id': input['batch_id'],
-          'covered_message_ids': [(fixedOperation['evidence'] as List<MemoryRow>).single['message_id']],
-          'operations': <MemoryRow>[fixedOperation],
-          'completion': 'complete',
-        }));
+        return _reply(
+          jsonEncode({
+            'schema_version': 2,
+            'batch_id': input['batch_id'],
+            'covered_message_ids': [(fixedOperation['evidence'] as List<MemoryRow>).single['message_id']],
+            'operations': <MemoryRow>[fixedOperation],
+            'completion': 'complete',
+          }),
+        );
       }),
     );
     worker = CompanionMemoryWorker(
@@ -131,8 +133,10 @@ void _receipt(MemoryRow receipt, int attemptedAt, String localDay) {
   expect(receipt['terminal'], 'complete');
   // The store keeps instants and rolling windows, not a local-day column.
   // This projection only checks the fixture's stated UTC+8 calling day.
-  final local = DateTime.fromMillisecondsSinceEpoch(receipt['sent_at_ms'] as int, isUtc: true)
-      .add(const Duration(hours: 8));
+  final local = DateTime.fromMillisecondsSinceEpoch(
+    receipt['sent_at_ms'] as int,
+    isUtc: true,
+  ).add(const Duration(hours: 8));
   expect(local.toIso8601String().substring(0, 10), localDay);
   final raw = receipt['raw_usage'] as MemoryRow;
   expect(raw['start_usage'], {'input_tokens': 900});
@@ -163,10 +167,7 @@ void main() {
     final first = _Phone(saidAt);
     final later = _Phone(saidAt);
     expect(first.store.archive['id'], isNot(later.store.archive['id']));
-    final original = <MemoryRow>[
-      first.say('paper', '明天下午去看纸展'),
-      later.say('paper', '明天下午去看纸展'),
-    ];
+    final original = <MemoryRow>[first.say('paper', '明天下午去看纸展'), later.say('paper', '明天下午去看纸展')];
     // The second archive gets no running opportunity overnight; no HTTP call
     // or reservation is invented for that period.
     expect(first.store.requests(), isEmpty);

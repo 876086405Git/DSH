@@ -125,16 +125,35 @@ void main() {
   testWidgets('local consolidation notifies the real memories page when the host has no model route', (tester) async {
     final phone = _Phone();
     const text = '我只买原味酸奶';
-    phone.store.submitMessage(id: 'duplicate-source', sessionId: phone.store.lightSessionId,
-      text: text, saidAtUtc: phone.now, offsetMinutes: 480);
+    phone.store.submitMessage(
+      id: 'duplicate-source',
+      sessionId: phone.store.lightSessionId,
+      text: text,
+      saidAtUtc: phone.now,
+      offsetMinutes: 480,
+    );
     final batch = phone.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-    final proposal = parseExtractionProposal(jsonEncode({
-      'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': ['duplicate-source'],
-      'completion': 'complete', 'operations': [for (var i = 0; i < 2; i++) {
-        'op': 'create', 'kind': 'preference', 'text': text, 'keywords': ['酸奶'],
-        'evidence': [{'message_id': 'duplicate-source', 'quote': text}],
-      }],
-    }), batch);
+    final proposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'covered_message_ids': ['duplicate-source'],
+        'completion': 'complete',
+        'operations': [
+          for (var i = 0; i < 2; i++)
+            {
+              'op': 'create',
+              'kind': 'preference',
+              'text': text,
+              'keywords': ['酸奶'],
+              'evidence': [
+                {'message_id': 'duplicate-source', 'quote': text},
+              ],
+            },
+        ],
+      }),
+      batch,
+    );
     expect(phone.store.commitExtraction(batch, proposal), isTrue);
     await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();

@@ -1,8 +1,8 @@
 part of 'companion_memory_store.dart';
 
-const _hostTaskInvalid = DshRemoteException(
-  'companion/task-invalid-request', 'Invalid notes task agreement', {'status': 400},
-);
+const _hostTaskInvalid = DshRemoteException('companion/task-invalid-request', 'Invalid notes task agreement', {
+  'status': 400,
+});
 
 /// One explicit notes task. Remote effects remain in the original Host's
 /// complete snapshot; these commands never run a generic tool or chat loop.
@@ -17,14 +17,24 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required MemoryRow agreement,
     MemoryRow directoryLabels = const {},
   }) {
-    if (itemNo < 0 || expectedSourceRev < 1 || hostKey.trim().isEmpty ||
+    if (itemNo < 0 ||
+        expectedSourceRev < 1 ||
+        hostKey.trim().isEmpty ||
         !const ['light', 'full'].contains(roomMode) ||
         (hostSessionId != null && hostSessionId.trim().isEmpty)) {
       throw _hostTaskInvalid;
     }
     final normalized = _notesAgreement(agreement);
-    final fingerprint = _taskFingerprint(['notes.create', messageId, expectedSourceRev,
-      itemNo, roomMode, hostKey, hostSessionId, _canonicalJson(normalized)]);
+    final fingerprint = _taskFingerprint([
+      'notes.create',
+      messageId,
+      expectedSourceRev,
+      itemNo,
+      roomMode,
+      hostKey,
+      hostSessionId,
+      _canonicalJson(normalized),
+    ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
       if (repeated != null) {
@@ -33,21 +43,31 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       final source = _taskSource(messageId, expectedSourceRev);
       final id = _createId();
       final at = _checkedNow();
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,item_no,
           kind,room_mode,host_key,host_session_id,current_rev,created_at_ms,updated_at_ms)
         VALUES(?,?,?,?,?,'host.notes_to_todo',?,?,?,1,?,?)
-      ''', [id, archive['id'], messageId, source['session_id'], itemNo, roomMode, hostKey, hostSessionId, at, at]);
+      ''',
+        [id, archive['id'], messageId, source['session_id'], itemNo, roomMode, hostKey, hostSessionId, at, at],
+      );
       _insertNotesRevision(id, 1, 'create', source, itemNo, fingerprint, hostKey, normalized, at: at);
       _db.execute('INSERT INTO companion_host_tasks(task_id) VALUES(?)', [id]);
       final request = <String, Object?>{
-        'v': 1, 'taskId': id, 'taskRev': 1, 'kind': 'host.notes_to_todo',
+        'v': 1,
+        'taskId': id,
+        'taskRev': 1,
+        'kind': 'host.notes_to_todo',
         'origin': {'sourceSessionId': source['session_id'], 'messageId': messageId, 'itemNo': itemNo},
-        'hostSessionId': hostSessionId, ...normalized,
+        'hostSessionId': hostSessionId,
+        ...normalized,
       };
-      _db.execute('''
+      _db.execute(
+        '''
         INSERT INTO companion_host_commands(task_id,task_rev,request_json,display_json) VALUES(?,1,?,?)
-      ''', [id, _canonicalJson(request), jsonEncode(directoryLabels)]);
+      ''',
+        [id, _canonicalJson(request), jsonEncode(directoryLabels)],
+      );
       return hostTask(id)!;
     });
   }
@@ -62,8 +82,15 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     MemoryRow? directoryLabels,
   }) {
     final normalized = _notesAgreement(agreement);
-    final fingerprint = _taskFingerprint(['notes.amend', taskId, expectedTaskRev,
-      messageId, expectedSourceRev, itemNo, _canonicalJson(normalized)]);
+    final fingerprint = _taskFingerprint([
+      'notes.amend',
+      taskId,
+      expectedTaskRev,
+      messageId,
+      expectedSourceRev,
+      itemNo,
+      _canonicalJson(normalized),
+    ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
       if (repeated != null) {
@@ -80,14 +107,35 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       final revision = expectedTaskRev + 1;
       final operation = _createId();
       final at = _checkedNow();
-      _insertNotesRevision(taskId, revision, 'amend', source, itemNo, fingerprint,
-        current['host_key']! as String, normalized, at: at);
-      _db.execute('''
+      _insertNotesRevision(
+        taskId,
+        revision,
+        'amend',
+        source,
+        itemNo,
+        fingerprint,
+        current['host_key']! as String,
+        normalized,
+        at: at,
+      );
+      _db.execute(
+        '''
         INSERT INTO companion_host_commands(task_id,task_rev,operation_id,request_json,display_json) VALUES(?,?,?,?,?)
-      ''', [taskId, revision, operation, _canonicalJson({
-        'v': 1, 'operationId': operation,
-        'expectedTaskRev': expectedTaskRev, 'taskRev': revision, 'changes': normalized,
-      }), jsonEncode(directoryLabels ?? current['directory_labels'])]);
+      ''',
+        [
+          taskId,
+          revision,
+          operation,
+          _canonicalJson({
+            'v': 1,
+            'operationId': operation,
+            'expectedTaskRev': expectedTaskRev,
+            'taskRev': revision,
+            'changes': normalized,
+          }),
+          jsonEncode(directoryLabels ?? current['directory_labels']),
+        ],
+      );
       _db.execute('UPDATE companion_tasks SET current_rev=?,updated_at_ms=? WHERE task_id=?', [revision, at, taskId]);
       return hostTask(taskId)!;
     });
@@ -100,8 +148,14 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     required int expectedSourceRev,
     required int itemNo,
   }) {
-    final fingerprint = _taskFingerprint(['notes.cancel', taskId, expectedTaskRev,
-      messageId, expectedSourceRev, itemNo]);
+    final fingerprint = _taskFingerprint([
+      'notes.cancel',
+      taskId,
+      expectedTaskRev,
+      messageId,
+      expectedSourceRev,
+      itemNo,
+    ]);
     return _transaction(() {
       final repeated = _repeatTaskCommand(messageId, itemNo, fingerprint);
       if (repeated != null) {
@@ -116,21 +170,42 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         throw _hostTaskInvalid;
       }
       final agreement = current['agreement']! as MemoryRow;
-      final mayHaveSent = _db.select('''
+      final mayHaveSent = _db
+          .select(
+            '''
         SELECT 1 FROM companion_host_commands WHERE task_id=? AND possible_sent_at_ms IS NOT NULL LIMIT 1
-      ''', [taskId]).isNotEmpty;
+      ''',
+            [taskId],
+          )
+          .isNotEmpty;
       final revision = expectedTaskRev + 1;
       final operation = _createId();
       final at = _checkedNow();
-      _insertNotesRevision(taskId, revision, 'cancel', source, itemNo, fingerprint,
-        current['host_key']! as String, agreement, at: at, cancel: true,
-        state: mayHaveSent ? 'unknown' : 'cancelled', reason: mayHaveSent ? 'host_cancel_pending' : null);
-      _db.execute('''
+      _insertNotesRevision(
+        taskId,
+        revision,
+        'cancel',
+        source,
+        itemNo,
+        fingerprint,
+        current['host_key']! as String,
+        agreement,
+        at: at,
+        cancel: true,
+        state: mayHaveSent ? 'unknown' : 'cancelled',
+        reason: mayHaveSent ? 'host_cancel_pending' : null,
+      );
+      _db.execute(
+        '''
         INSERT INTO companion_host_commands(task_id,task_rev,operation_id,request_json) VALUES(?,?,?,?)
-      ''', [taskId, revision, operation, _canonicalJson({
-        'v': 1, 'operationId': operation,
-        'expectedTaskRev': expectedTaskRev, 'taskRev': revision,
-      })]);
+      ''',
+        [
+          taskId,
+          revision,
+          operation,
+          _canonicalJson({'v': 1, 'operationId': operation, 'expectedTaskRev': expectedTaskRev, 'taskRev': revision}),
+        ],
+      );
       _db.execute('UPDATE companion_tasks SET current_rev=?,updated_at_ms=? WHERE task_id=?', [revision, at, taskId]);
       return hostTask(taskId)!;
     });
@@ -142,11 +217,16 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       return null;
     }
     final binding = _db.select('SELECT * FROM companion_host_tasks WHERE task_id=?', [taskId]).single;
-    final command = _db.select('''
+    final command = _db
+        .select(
+          '''
       SELECT r.operation,c.request_json,c.display_json FROM companion_host_commands c
       JOIN companion_task_revisions r ON r.task_id=c.task_id AND r.task_rev=c.task_rev
       WHERE c.task_id=? AND r.operation<>'cancel' ORDER BY c.task_rev DESC LIMIT 1
-    ''', [taskId]).single;
+    ''',
+          [taskId],
+        )
+        .single;
     final request = Map<String, Object?>.from(jsonDecode(command['request_json']! as String) as Map);
     final agreement = command['operation'] == 'create'
         ? <String, Object?>{for (final key in _notesAgreementKeys) key: request[key]}
@@ -162,11 +242,14 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
   }
 
   List<MemoryRow> hostTaskCommands(String taskId) => [
-    for (final row in _db.select('''
+    for (final row in _db.select(
+      '''
       SELECT c.*,r.operation FROM companion_host_commands c
       JOIN companion_task_revisions r ON r.task_id=c.task_id AND r.task_rev=c.task_rev
       WHERE c.task_id=? ORDER BY c.task_rev
-    ''', [taskId]))
+    ''',
+      [taskId],
+    ))
       {
         for (final key in row.keys)
           if (key != 'request_json' && key != 'display_json') key: row[key],
@@ -193,7 +276,9 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     }
     final boundStore = current['host_store_id'];
     if (boundStore != null && boundStore != hostStoreId) {
-      throw const DshRemoteException('companion/task-store-mismatch', 'The original task store changed', {'status': 409});
+      throw const DshRemoteException('companion/task-store-mismatch', 'The original task store changed', {
+        'status': 409,
+      });
     }
     final commands = hostTaskCommands(taskId);
     final matching = commands.where((row) => row['task_rev'] == taskRev).toList();
@@ -205,23 +290,34 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     final snapshot = current['snapshot'] as Map?;
     final currentRevision = current['task_rev']! as int;
     final currentOperation = commands.last['operation'];
-    final originalAfterAmend = taskRev == 1 && operation == 'create' && currentOperation == 'amend' &&
-      snapshot?['taskRev'] == currentRevision && snapshot?['originalCreatePresent'] == false;
-    final originalForWake = retryWaiting && replayAfterRead && taskRev == 1 && operation == 'create' &&
-      snapshot?['taskRev'] == currentRevision && snapshot?['state'] == 'waiting' &&
-      current['state'] == 'waiting' && current['cancel_requested'] == 0;
+    final originalAfterAmend =
+        taskRev == 1 &&
+        operation == 'create' &&
+        currentOperation == 'amend' &&
+        snapshot?['taskRev'] == currentRevision &&
+        snapshot?['originalCreatePresent'] == false;
+    final originalForWake =
+        retryWaiting &&
+        replayAfterRead &&
+        taskRev == 1 &&
+        operation == 'create' &&
+        snapshot?['taskRev'] == currentRevision &&
+        snapshot?['state'] == 'waiting' &&
+        current['state'] == 'waiting' &&
+        current['cancel_requested'] == 0;
     if (retryWaiting && !originalForWake) {
       return null;
     }
     if (taskRev != currentRevision && !originalAfterAmend && !originalForWake) {
       throw _conflict;
     }
-    if (current['state'] == 'cancelled' ||
-        (current['cancel_requested'] == 1 && operation != 'cancel')) {
+    if (current['state'] == 'cancelled' || (current['cancel_requested'] == 1 && operation != 'cancel')) {
       return null;
     }
-    if (snapshot != null && (snapshot['taskRev']! as int) >= taskRev &&
-        (operation != 'create' || snapshot['originalCreatePresent'] == true) && !originalForWake) {
+    if (snapshot != null &&
+        (snapshot['taskRev']! as int) >= taskRev &&
+        (operation != 'create' || snapshot['originalCreatePresent'] == true) &&
+        !originalForWake) {
       // The current complete snapshot already accounts for this operation.
       return null;
     }
@@ -236,22 +332,39 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
       blocked = 'host_initial_opportunity_lost';
     }
     if (blocked != null) {
-      _db.execute('UPDATE companion_task_revisions SET state=?,wait_reason=?,updated_at_ms=? WHERE task_id=? AND task_rev=?',
-        [blocked == 'host_deadline' ? (anyPossible ? 'unknown' : 'failed') : 'waiting',
-          blocked, at, taskId, currentRevision]);
+      _db.execute(
+        'UPDATE companion_task_revisions SET state=?,wait_reason=?,updated_at_ms=? WHERE task_id=? AND task_rev=?',
+        [
+          blocked == 'host_deadline' ? (anyPossible ? 'unknown' : 'failed') : 'waiting',
+          blocked,
+          at,
+          taskId,
+          currentRevision,
+        ],
+      );
       return null;
     }
     if (command['possible_sent_at_ms'] != null && !replayAfterRead) {
-      throw const DshRemoteException('companion/task-read-required', 'Read the original task before replay', {'status': 409});
+      throw const DshRemoteException('companion/task-read-required', 'Read the original task before replay', {
+        'status': 409,
+      });
     }
-    _db.execute('UPDATE companion_host_tasks SET host_store_id=COALESCE(host_store_id,?) WHERE task_id=?',
-      [hostStoreId, taskId]);
-    _db.execute('''
+    _db.execute('UPDATE companion_host_tasks SET host_store_id=COALESCE(host_store_id,?) WHERE task_id=?', [
+      hostStoreId,
+      taskId,
+    ]);
+    _db.execute(
+      '''
       UPDATE companion_host_commands SET possible_sent_at_ms=COALESCE(possible_sent_at_ms,?)
       WHERE task_id=? AND task_rev=?
-    ''', [at, taskId, taskRev]);
-    _db.execute("UPDATE companion_task_revisions SET state='unknown',wait_reason='host_receipt_unknown',updated_at_ms=? "
-      'WHERE task_id=? AND task_rev=?', [at, taskId, currentRevision]);
+    ''',
+      [at, taskId, taskRev],
+    );
+    _db.execute(
+      "UPDATE companion_task_revisions SET state='unknown',wait_reason='host_receipt_unknown',updated_at_ms=? "
+      'WHERE task_id=? AND task_rev=?',
+      [at, taskId, currentRevision],
+    );
     return {
       ...command,
       'possible_sent_at_ms': command['possible_sent_at_ms'] ?? at,
@@ -267,15 +380,18 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     final encoded = _canonicalJson(snapshot);
     return _transaction(() {
       final current = hostTask(taskId);
-      if (current == null || current['host_key'] != hostKey || snapshot['taskId'] != taskId ||
-          current['host_store_id'] == null || snapshot['hostStoreId'] != current['host_store_id'] ||
+      if (current == null ||
+          current['host_key'] != hostKey ||
+          snapshot['taskId'] != taskId ||
+          current['host_store_id'] == null ||
+          snapshot['hostStoreId'] != current['host_store_id'] ||
           (current['host_execution_id'] != null && snapshot['hostExecutionId'] != current['host_execution_id'])) {
         throw _conflict;
       }
       final original = hostTaskCommands(taskId).first['request']! as Map;
       if (snapshot['originalCreatePresent'] == true &&
           (_canonicalJson(snapshot['origin']) != _canonicalJson(original['origin']) ||
-            snapshot['hostSessionId'] != original['hostSessionId'])) {
+              snapshot['hostSessionId'] != original['hostSessionId'])) {
         throw _conflict;
       }
       final incomingSeq = snapshot['runnerReceiptSeq']! as int;
@@ -304,44 +420,70 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
         // file or old step. A file's current availability is a separate GET.
         for (final old in previous['revisions']! as List) {
           final revision = old as Map;
-          final matching = (snapshot['revisions']! as List).cast<Map>().where((item) => item['taskRev'] == revision['taskRev']);
-          if (matching.length != 1 || revision.keys.any((key) =>
-              _canonicalJson(matching.single[key]) != _canonicalJson(revision[key]))) {
+          final matching = (snapshot['revisions']! as List).cast<Map<String, Object?>>().where(
+            (item) => item['taskRev'] == revision['taskRev'],
+          );
+          if (matching.length != 1 ||
+              revision.keys.any((key) => _canonicalJson(matching.single[key]) != _canonicalJson(revision[key]))) {
             throw _conflict;
           }
         }
         for (final old in previous['artifacts']! as List) {
           final artifact = old as Map;
-          final matches = (snapshot['artifacts']! as List).where((item) => (item as Map)['artifactId'] == artifact['artifactId']);
-          if (matches.length != 1 || artifact.keys.any((key) =>
-              _canonicalJson((matches.single as Map)[key]) != _canonicalJson(artifact[key]))) {
+          final matches = (snapshot['artifacts']! as List).where(
+            (item) => (item as Map)['artifactId'] == artifact['artifactId'],
+          );
+          if (matches.length != 1 ||
+              artifact.keys.any(
+                (key) => _canonicalJson((matches.single as Map)[key]) != _canonicalJson(artifact[key]),
+              )) {
             throw _conflict;
           }
         }
         for (final old in previous['steps']! as List) {
           final step = old as Map;
-          if (!(snapshot['steps']! as List).cast<Map>().any((item) => item['taskRev'] == step['taskRev'] &&
-              item['stepKey'] == step['stepKey'] && item['attemptId'] == step['attemptId'])) {
+          if (!(snapshot['steps']! as List).cast<Map<String, Object?>>().any(
+            (item) =>
+                item['taskRev'] == step['taskRev'] &&
+                item['stepKey'] == step['stepKey'] &&
+                item['attemptId'] == step['attemptId'],
+          )) {
             throw _conflict;
           }
         }
       }
-      _db.execute('''
+      _db.execute(
+        '''
         UPDATE companion_host_tasks SET host_execution_id=?,snapshot_json=?,applied_host_receipt_seq=? WHERE task_id=?
-      ''', [snapshot['hostExecutionId'], encoded, incomingSeq, taskId]);
+      ''',
+        [snapshot['hostExecutionId'], encoded, incomingSeq, taskId],
+      );
       final localRevision = current['task_rev']! as int;
       final remoteRevision = snapshot['taskRev']! as int;
       if (remoteRevision >= localRevision) {
         final commands = hostTaskCommands(taskId);
         final localOperation = commands.last['operation'];
-        final remote = (snapshot['revisions']! as List).cast<Map>().singleWhere((row) => row['taskRev'] == remoteRevision);
-        final matches = remoteRevision == localRevision && remote['operation'] == localOperation &&
-          (localOperation == 'cancel' ? snapshot['cancelRequested'] == true :
-            _canonicalJson(snapshot['agreement']) == _canonicalJson(current['agreement']));
-        _db.execute('''
+        final remote = (snapshot['revisions']! as List).cast<Map<String, Object?>>().singleWhere(
+          (row) => row['taskRev'] == remoteRevision,
+        );
+        final matches =
+            remoteRevision == localRevision &&
+            remote['operation'] == localOperation &&
+            (localOperation == 'cancel'
+                ? snapshot['cancelRequested'] == true
+                : _canonicalJson(snapshot['agreement']) == _canonicalJson(current['agreement']));
+        _db.execute(
+          '''
           UPDATE companion_task_revisions SET state=?,wait_reason=?,updated_at_ms=? WHERE task_id=? AND task_rev=?
-        ''', [matches ? snapshot['state'] : 'unknown',
-          matches ? snapshot['waitReason'] : 'host_revision_conflict', _checkedNow(), taskId, localRevision]);
+        ''',
+          [
+            matches ? snapshot['state'] : 'unknown',
+            matches ? snapshot['waitReason'] : 'host_revision_conflict',
+            _checkedNow(),
+            taskId,
+            localRevision,
+          ],
+        );
       }
       return hostTask(taskId)!;
     });
@@ -355,19 +497,50 @@ extension CompanionHostTaskStore on CompanionMemoryStore {
     return row;
   }
 
-  void _insertNotesRevision(String taskId, int revision, String operation, Row source,
-    int itemNo, String fingerprint, String hostKey, MemoryRow agreement, {
-    required int at, bool cancel = false, String state = 'queued', String? reason,
+  void _insertNotesRevision(
+    String taskId,
+    int revision,
+    String operation,
+    Row source,
+    int itemNo,
+    String fingerprint,
+    String hostKey,
+    MemoryRow agreement, {
+    required int at,
+    bool cancel = false,
+    String state = 'queued',
+    String? reason,
   }) {
     final args = agreement['args']! as Map;
-    _db.execute('''
+    _db.execute(
+      '''
       INSERT INTO companion_task_revisions(task_id,task_rev,operation,command_message_id,command_source_rev,
         command_item_no,request_fingerprint,source_said_at_utc,source_zone_id,source_offset_minutes,source_offset_seconds,
         executor_id,local_date,zone_id,state,wait_reason,cancel_requested,created_at_ms,updated_at_ms)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ''', [taskId, revision, operation, source['id'], source['source_rev'], itemNo, fingerprint,
-      source['said_at_utc'], source['zone_id'], source['offset_minutes'], source['offset_seconds'],
-      hostKey, args['localDate'], args['timeZone'], state, reason, cancel ? 1 : 0, at, at]);
+    ''',
+      [
+        taskId,
+        revision,
+        operation,
+        source['id'],
+        source['source_rev'],
+        itemNo,
+        fingerprint,
+        source['said_at_utc'],
+        source['zone_id'],
+        source['offset_minutes'],
+        source['offset_seconds'],
+        hostKey,
+        args['localDate'],
+        args['timeZone'],
+        state,
+        reason,
+        cancel ? 1 : 0,
+        at,
+        at,
+      ],
+    );
   }
 }
 
@@ -375,18 +548,24 @@ const _notesAgreementKeys = ['args', 'deadlineAtMs', 'afterExit', 'allowQueue'];
 
 MemoryRow _notesAgreement(MemoryRow input) {
   final rawArgs = input['args'];
-  if (input.length != _notesAgreementKeys.length || !_notesAgreementKeys.every(input.containsKey) ||
+  if (input.length != _notesAgreementKeys.length ||
+      !_notesAgreementKeys.every(input.containsKey) ||
       rawArgs is! Map<String, Object?> ||
-      (input['deadlineAtMs'] != null && (input['deadlineAtMs'] is! int ||
-        (input['deadlineAtMs']! as int) < 0 || (input['deadlineAtMs']! as int) > 8640000000000000)) ||
-      input['allowQueue'] is! bool || !const ['continue', 'pause'].contains(input['afterExit'])) {
+      (input['deadlineAtMs'] != null &&
+          (input['deadlineAtMs'] is! int ||
+              (input['deadlineAtMs']! as int) < 0 ||
+              (input['deadlineAtMs']! as int) > 8640000000000000)) ||
+      input['allowQueue'] is! bool ||
+      !const ['continue', 'pause'].contains(input['afterExit'])) {
     throw _hostTaskInvalid;
   }
   final args = Map<String, Object?>.from(rawArgs);
   const fields = ['folderRef', 'localDate', 'timeZone', 'dateBy', 'outputDirRef', 'outputName', 'writeMode'];
-  if (args.length != fields.length || !fields.every(args.containsKey) ||
+  if (args.length != fields.length ||
+      !fields.every(args.containsKey) ||
       fields.any((key) => args[key] is! String || (args[key]! as String).trim().isEmpty) ||
-      args['dateBy'] != 'modified' || args['writeMode'] != 'createNew') {
+      args['dateBy'] != 'modified' ||
+      args['writeMode'] != 'createNew') {
     throw _hostTaskInvalid;
   }
   for (final key in fields) {
@@ -395,9 +574,13 @@ MemoryRow _notesAgreement(MemoryRow input) {
   final date = args['localDate']! as String;
   final day = DateTime.tryParse('${date}T00:00:00Z');
   final name = args['outputName']! as String;
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) || day == null ||
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
+      day == null ||
       day.toIso8601String().substring(0, 10) != date ||
-      name == '.' || name == '..' || name.contains('/') || name.contains('\\') ||
+      name == '.' ||
+      name == '..' ||
+      name.contains('/') ||
+      name.contains('\\') ||
       !RegExp(r'\.(md|txt)$').hasMatch(name)) {
     throw _hostTaskInvalid;
   }
@@ -411,31 +594,67 @@ bool _hostNullableText(Object? value) => value == null || value is String;
 const _hostStates = ['queued', 'waiting', 'running', 'unknown', 'done', 'partial', 'failed', 'cancelled'];
 
 void _validateHostSnapshot(MemoryRow snapshot) {
-  const requiredKeys = ['v', 'hostStoreId', 'taskId', 'hostExecutionId', 'kind', 'taskRev', 'runnerReceiptSeq',
-    'originalCreatePresent', 'origin', 'hostSessionId', 'state', 'waitReason', 'cancelRequested',
-    'createdAtMs', 'updatedAtMs', 'agreement', 'revisions', 'steps', 'artifacts', 'approval', 'budget'];
-  if (!requiredKeys.every(snapshot.containsKey) || snapshot['v'] != 1 ||
+  const requiredKeys = [
+    'v',
+    'hostStoreId',
+    'taskId',
+    'hostExecutionId',
+    'kind',
+    'taskRev',
+    'runnerReceiptSeq',
+    'originalCreatePresent',
+    'origin',
+    'hostSessionId',
+    'state',
+    'waitReason',
+    'cancelRequested',
+    'createdAtMs',
+    'updatedAtMs',
+    'agreement',
+    'revisions',
+    'steps',
+    'artifacts',
+    'approval',
+    'budget',
+  ];
+  if (!requiredKeys.every(snapshot.containsKey) ||
+      snapshot['v'] != 1 ||
       !['hostStoreId', 'taskId', 'hostExecutionId'].every((key) => _hostId(snapshot[key])) ||
-      snapshot['kind'] != 'host.notes_to_todo' || !_hostCount(snapshot['taskRev']) || snapshot['taskRev'] == 0 ||
-      !_hostCount(snapshot['runnerReceiptSeq']) || snapshot['runnerReceiptSeq'] == 0 ||
-      snapshot['originalCreatePresent'] is! bool || snapshot['cancelRequested'] is! bool ||
-      !_hostStates.contains(snapshot['state']) || snapshot['state'] == 'queued' ||
-      !_hostNullableText(snapshot['waitReason']) || !_hostTime(snapshot['createdAtMs']) || !_hostTime(snapshot['updatedAtMs']) ||
+      snapshot['kind'] != 'host.notes_to_todo' ||
+      !_hostCount(snapshot['taskRev']) ||
+      snapshot['taskRev'] == 0 ||
+      !_hostCount(snapshot['runnerReceiptSeq']) ||
+      snapshot['runnerReceiptSeq'] == 0 ||
+      snapshot['originalCreatePresent'] is! bool ||
+      snapshot['cancelRequested'] is! bool ||
+      !_hostStates.contains(snapshot['state']) ||
+      snapshot['state'] == 'queued' ||
+      !_hostNullableText(snapshot['waitReason']) ||
+      !_hostTime(snapshot['createdAtMs']) ||
+      !_hostTime(snapshot['updatedAtMs']) ||
       (snapshot['hostSessionId'] != null && !_hostId(snapshot['hostSessionId'])) ||
-      snapshot['revisions'] is! List || snapshot['steps'] is! List || snapshot['artifacts'] is! List ||
+      snapshot['revisions'] is! List ||
+      snapshot['steps'] is! List ||
+      snapshot['artifacts'] is! List ||
       (snapshot['agreement'] != null && snapshot['agreement'] is! Map)) {
     throw _hostTaskInvalid;
   }
   final origin = snapshot['origin'];
   if (snapshot['originalCreatePresent'] == true) {
-    if (origin is! Map || origin['sourceSessionId'] is! String ||
-        (origin['sourceSessionId']! as String).isEmpty || (origin['sourceSessionId']! as String).length > 256 ||
+    if (origin is! Map ||
+        origin['sourceSessionId'] is! String ||
+        (origin['sourceSessionId']! as String).isEmpty ||
+        (origin['sourceSessionId']! as String).length > 256 ||
         (origin['sourceSessionId']! as String).contains('\u0000') ||
-        !_hostId(origin['messageId']) || !_hostCount(origin['itemNo'])) {
+        !_hostId(origin['messageId']) ||
+        !_hostCount(origin['itemNo'])) {
       throw _hostTaskInvalid;
     }
-  } else if (origin != null || snapshot['hostSessionId'] != null || (snapshot['steps']! as List).isNotEmpty ||
-      (snapshot['artifacts']! as List).isNotEmpty || snapshot['approval'] != null) {
+  } else if (origin != null ||
+      snapshot['hostSessionId'] != null ||
+      (snapshot['steps']! as List).isNotEmpty ||
+      (snapshot['artifacts']! as List).isNotEmpty ||
+      snapshot['approval'] != null) {
     throw _hostTaskInvalid;
   }
   if (snapshot['agreement'] != null) {
@@ -444,10 +663,15 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   final revision = snapshot['taskRev']! as int;
   final revisions = <int>{};
   for (final value in snapshot['revisions']! as List) {
-    if (value is! Map || !_hostCount(value['taskRev']) || value['taskRev'] == 0 ||
-        (value['taskRev']! as int) > revision || !revisions.add(value['taskRev']! as int) ||
-        !const ['create', 'amend', 'cancel'].contains(value['operation']) || !_hostTime(value['acceptedAtMs']) ||
-        !value.containsKey('agreement') || (value['agreement'] != null && value['agreement'] is! Map)) {
+    if (value is! Map ||
+        !_hostCount(value['taskRev']) ||
+        value['taskRev'] == 0 ||
+        (value['taskRev']! as int) > revision ||
+        !revisions.add(value['taskRev']! as int) ||
+        !const ['create', 'amend', 'cancel'].contains(value['operation']) ||
+        !_hostTime(value['acceptedAtMs']) ||
+        !value.containsKey('agreement') ||
+        (value['agreement'] != null && value['agreement'] is! Map)) {
       throw _hostTaskInvalid;
     }
     if (value['agreement'] != null) {
@@ -459,23 +683,37 @@ void _validateHostSnapshot(MemoryRow snapshot) {
   }
   final steps = <String>{};
   for (final value in snapshot['steps']! as List) {
-    if (value is! Map || !revisions.contains(value['taskRev']) || !_hostId(value['stepKey']) || !_hostId(value['attemptId']) ||
+    if (value is! Map ||
+        !revisions.contains(value['taskRev']) ||
+        !_hostId(value['stepKey']) ||
+        !_hostId(value['attemptId']) ||
         !steps.add(jsonEncode([value['taskRev'], value['stepKey'], value['attemptId']])) ||
-        !_hostStates.contains(value['state']) || !_hostTime(value['startedAtMs']) ||
-        !value.containsKey('finishedAtMs') || (value['finishedAtMs'] != null && !_hostTime(value['finishedAtMs'])) ||
-        !value.containsKey('reason') || !_hostNullableText(value['reason']) || !value.containsKey('result') ||
+        !_hostStates.contains(value['state']) ||
+        !_hostTime(value['startedAtMs']) ||
+        !value.containsKey('finishedAtMs') ||
+        (value['finishedAtMs'] != null && !_hostTime(value['finishedAtMs'])) ||
+        !value.containsKey('reason') ||
+        !_hostNullableText(value['reason']) ||
+        !value.containsKey('result') ||
         (value['result'] != null && value['result'] is! Map)) {
       throw _hostTaskInvalid;
     }
   }
   final artifacts = <String>{};
   for (final value in snapshot['artifacts']! as List) {
-    if (value is! Map || !_hostId(value['artifactId']) || !artifacts.add(value['artifactId']! as String) ||
-        !revisions.contains(value['taskRev']) || !_hostId(value['stepKey']) || value['relativePath'] is! String ||
-        (value['relativePath']! as String).isEmpty || !const ['text/markdown', 'text/plain'].contains(value['mediaType']) ||
-        !_hostCount(value['size']) || value['sha256'] is! String ||
+    if (value is! Map ||
+        !_hostId(value['artifactId']) ||
+        !artifacts.add(value['artifactId']! as String) ||
+        !revisions.contains(value['taskRev']) ||
+        !_hostId(value['stepKey']) ||
+        value['relativePath'] is! String ||
+        (value['relativePath']! as String).isEmpty ||
+        !const ['text/markdown', 'text/plain'].contains(value['mediaType']) ||
+        !_hostCount(value['size']) ||
+        value['sha256'] is! String ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(value['sha256']! as String) ||
-        !_hostTime(value['verifiedAtMs']) || !_hostCount(value['sourceCount'])) {
+        !_hostTime(value['verifiedAtMs']) ||
+        !_hostCount(value['sourceCount'])) {
       throw _hostTaskInvalid;
     }
   }
@@ -483,13 +721,19 @@ void _validateHostSnapshot(MemoryRow snapshot) {
     throw _hostTaskInvalid;
   }
   final approval = snapshot['approval'];
-  if (approval != null && (approval is! Map || !revisions.contains(approval['taskRev']) ||
-      !['stepKey', 'agentId', 'approvalId', 'eventId'].every((key) => _hostId(approval[key])) ||
-      !approval.containsKey('callId') || (approval['callId'] != null && !_hostId(approval['callId'])))) {
+  if (approval != null &&
+      (approval is! Map ||
+          !revisions.contains(approval['taskRev']) ||
+          !['stepKey', 'agentId', 'approvalId', 'eventId'].every((key) => _hostId(approval[key])) ||
+          !approval.containsKey('callId') ||
+          (approval['callId'] != null && !_hostId(approval['callId'])))) {
     throw _hostTaskInvalid;
   }
   final budget = snapshot['budget'];
-  if (budget is! Map || budget['limitMs'] != 300000 || !_hostCount(budget['spentMs']) || !_hostCount(budget['heldMs'])) {
+  if (budget is! Map ||
+      budget['limitMs'] != 300000 ||
+      !_hostCount(budget['spentMs']) ||
+      !_hostCount(budget['heldMs'])) {
     throw _hostTaskInvalid;
   }
 }

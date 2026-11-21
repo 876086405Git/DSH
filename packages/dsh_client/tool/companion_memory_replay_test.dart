@@ -20,9 +20,9 @@ import '../test/companion_prompt_commit_test.dart' as prompt_commit;
 import '../test/companion_prompt_context_test.dart' as prompt_context;
 
 final _offline = CompanionOfflineHttpOverrides();
-final _blocked = throwsA(isA<SocketException>().having(
-  (error) => error.message, 'message', startsWith('offline companion replay'),
-));
+final _blocked = throwsA(
+  isA<SocketException>().having((error) => error.message, 'message', startsWith('offline companion replay')),
+);
 
 void main() {
   HttpOverrides.global = _offline;

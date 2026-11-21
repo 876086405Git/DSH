@@ -25,7 +25,9 @@ const _raw = '2026-03-08 03:10 America/Los_Angeles提醒我带钥匙';
 const _clock = {'utcMs': 1772877000000, 'zoneId': 'America/Los_Angeles', 'offsetSeconds': -28800};
 const _unique = {
   'kind': 'unique',
-  'moments': [{'epochMs': 1772964600000, 'offsetSeconds': -25200}],
+  'moments': [
+    {'epochMs': 1772964600000, 'offsetSeconds': -25200},
+  ],
 };
 
 void main() {
@@ -57,9 +59,10 @@ void main() {
       return switch (call.method) {
         'clock' => clock,
         'resolve' => resolution,
-        'capabilities' => unavailable
-            ? throw PlatformException(code: 'reminder_platform')
-            : {'executorId': executor, 'exact': true, 'notifications': true},
+        'capabilities' =>
+          unavailable
+              ? throw PlatformException(code: 'reminder_platform')
+              : {'executorId': executor, 'exact': true, 'notifications': true},
         'wake' => {'wakeCompleted': true},
         _ => throw StateError('Unexpected platform method ${call.method}'),
       };
@@ -79,30 +82,49 @@ void main() {
   Future<MemoryRow> source(String id, String raw) async {
     final at = await reminders.clock();
     return store.submitMessage(
-      id: id, sessionId: store.lightSessionId, text: raw,
-      saidAtUtc: at.utcMs, offsetMinutes: at.offsetSeconds ~/ 60,
-      zoneId: at.zoneId, offsetSeconds: at.offsetSeconds,
+      id: id,
+      sessionId: store.lightSessionId,
+      text: raw,
+      saidAtUtc: at.utcMs,
+      offsetMinutes: at.offsetSeconds ~/ 60,
+      zoneId: at.zoneId,
+      offsetSeconds: at.offsetSeconds,
     );
   }
 
   Future<CompanionReminderResult> submit(MemoryRow source, {MemoryRow? previous}) => reminders.submit(
-    store: store, source: source, part: parseCompanionReminders(source['text']! as String).single,
-    roomMode: 'light', previous: previous, isCurrent: () => true,
+    store: store,
+    source: source,
+    part: parseCompanionReminders(source['text']! as String).single,
+    roomMode: 'light',
+    previous: previous,
+    isCurrent: () => true,
   );
 
   // Synthetic input at the native receipt boundary. These rows do not claim
   // that Kotlin, AlarmManager or a physical notification ran in this test.
   void registered(MemoryRow task) {
     for (final event in ['claimed', 'returned']) {
-      db.execute('''
+      db.execute(
+        '''
         INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
           executor_id,occurred_at_ms,outcome)
         VALUES(?,?,'alarm.register','native-fixture',?,?,?,?)
-      ''', [task['task_id'], task['task_rev'], event, task['executor_id'], 1772877000000,
-        event == 'returned' ? 'succeeded' : null]);
+      ''',
+        [
+          task['task_id'],
+          task['task_rev'],
+          event,
+          task['executor_id'],
+          1772877000000,
+          event == 'returned' ? 'succeeded' : null,
+        ],
+      );
     }
-    db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=?",
-      [task['task_id'], task['task_rev']]);
+    db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=?", [
+      task['task_id'],
+      task['task_rev'],
+    ]);
   }
 
   test('D complete reminder commands do not execute quoted story clauses or ordinary intentions', () {
@@ -115,15 +137,20 @@ void main() {
       '我明早八点记得带证件。',
       '明早八点不要提醒我带证件。',
     ]) {
-      expect(parseCompanionReminders(raw).every((part) =>
-        part.command == null || part.command!.operation == 'clarify'), isTrue, reason: raw);
+      expect(
+        parseCompanionReminders(raw).every((part) => part.command == null || part.command!.operation == 'clarify'),
+        isTrue,
+        reason: raw,
+      );
     }
     const raw = '明早八点提醒我带“证件；钥匙”；现实里明晚八点提醒我带书';
     final parts = parseCompanionReminders(raw);
     expect(parts.map((part) => part.itemNo), [0, 1]);
     expect(parts.map((part) => part.command!.text), ['带“证件；钥匙”', '带书']);
     expect(parts.map((part) => part.command!.operation), everyElement('create'));
-    final english = parseCompanionReminders("remind me at tomorrow 08:00 to bring dad's keys;remind me at tomorrow 09:00 to bring books");
+    final english = parseCompanionReminders(
+      "remind me at tomorrow 08:00 to bring dad's keys;remind me at tomorrow 09:00 to bring books",
+    );
     expect(english.map((part) => part.command!.text), ["bring dad's keys", 'bring books']);
     expect(parseCompanionReminders('2026-03-08 08:00 Etc/GMT-8提醒我带书').single.command?.operation, 'create');
   });
@@ -145,7 +172,9 @@ void main() {
     expect(result.task['state'], 'queued');
     expect(store.taskReceipts(result.task['task_id']! as String), isEmpty);
     expect(calls.singleWhere((call) => call.method == 'resolve').arguments, {
-      'localDate': '2026-03-08', 'localTime': '03:10', 'zoneId': 'America/Los_Angeles',
+      'localDate': '2026-03-08',
+      'localTime': '03:10',
+      'zoneId': 'America/Los_Angeles',
     });
     expect(result.task['epoch_ms'], 1772964600000);
     expect(result.task['source_offset_seconds'], -28800);
@@ -173,8 +202,11 @@ void main() {
     expect(changed['wait_reason'], 'time_gap');
     expect(changed['epoch_ms'], isNull);
     expect(changed['cancel_requested'], 0);
-    expect(calls.where((call) => call.method == 'wake'), hasLength(2),
-      reason: 'the missing new instant does not remove the need to stop an older registration');
+    expect(
+      calls.where((call) => call.method == 'wake'),
+      hasLength(2),
+      reason: 'the missing new instant does not remove the need to stop an older registration',
+    );
     final cancelled = (await submit(await source('cancel', '取消带钥匙的提醒'), previous: changed)).task;
     expect(cancelled['task_rev'], 3);
     expect(cancelled['cancel_requested'], 1);
@@ -183,8 +215,10 @@ void main() {
     final wakes = calls.where((call) => call.method == 'wake');
     expect(wakes, hasLength(3));
     expect(wakes.map((call) => (call.arguments as Map)['taskId']), everyElement(created['task_id']));
-    expect(reminders.target(store, store.lightSessionId,
-      (operation: 'cancel', text: null, when: null, target: '带钥匙')), isNull);
+    expect(
+      reminders.target(store, store.lightSessionId, (operation: 'cancel', text: null, when: null, target: '带钥匙')),
+      isNull,
+    );
     expect(store.taskReceipts(created['task_id']! as String), hasLength(2));
   });
 
@@ -196,8 +230,10 @@ void main() {
     final receipts = store.taskReceipts(created['task_id']! as String);
     executor = 'installation-B';
     calls.clear();
-    await expectLater(submit(await source('amend', '改到四点'), previous: saved),
-      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'reminder_executor_changed')));
+    await expectLater(
+      submit(await source('amend', '改到四点'), previous: saved),
+      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'reminder_executor_changed')),
+    );
     expect(store.task(created['task_id']! as String), saved);
     expect(store.taskReceipts(created['task_id']! as String), receipts);
     final replay = await submit(original);
@@ -214,8 +250,7 @@ void main() {
     expect(parts.first.itemNo, 0);
     expect(parts.last.itemNo, 1);
     expect(parts.last.command, isNull);
-    await reminders.submit(store: store, source: original, part: parts.first,
-      roomMode: 'light', isCurrent: () => true);
+    await reminders.submit(store: store, source: original, part: parts.first, roomMode: 'light', isCurrent: () => true);
     final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
     expect(batch.sources.single['id'], 'mixed');
     expect(batch.sources.single['text'], raw);
@@ -223,55 +258,71 @@ void main() {
   });
 
   for (final missing in [false, true]) {
-    testWidgets('D ${missing ? 'unavailable executor' : 'restored executor'} shows history without claiming a current registration', (tester) async {
-      final created = (await submit(await source('create', _raw))).task;
-      registered(created);
-      final task = store.task(created['task_id']! as String)!;
-      final receipts = store.taskReceipts(created['task_id']! as String);
-      executor = 'installation-B';
-      unavailable = missing;
-      calls.clear();
-      owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
-      await tester.pumpWidget(ProviderScope(child: MaterialApp(
-        theme: buildDarkTheme(),
-        localizationsDelegates: L10n.localizationsDelegates,
-        supportedLocales: L10n.supportedLocales,
-        locale: const Locale('zh'),
-        home: CompanionTasksPage(memory: owner, taskId: created['task_id']! as String),
-      )));
-      await tester.pumpAndSettle();
-      expect(find.text(missing ? '现在还无法核对这台手机的提醒安排。' : '这条旧安排没有在当前安装中接管，不能在这里修改或撤销。'), findsOneWidget);
-      expect(find.text('原记录显示，这条提醒曾经登记成功。'), findsOneWidget);
-      expect(find.text('这条提醒设好了。'), findsNothing);
-      expect(find.byType(OutlinedButton), findsNothing);
-      await tester.tap(find.byIcon(AppIcons.refresh));
-      await tester.pumpAndSettle();
-      expect(calls.where((call) => call.method == 'wake'), isEmpty);
-      expect(store.task(created['task_id']! as String), task);
-      expect(store.taskReceipts(created['task_id']! as String), receipts);
-      await tester.pumpWidget(const SizedBox());
-    });
+    testWidgets(
+      'D ${missing ? 'unavailable executor' : 'restored executor'} shows history without claiming a current registration',
+      (tester) async {
+        final created = (await submit(await source('create', _raw))).task;
+        registered(created);
+        final task = store.task(created['task_id']! as String)!;
+        final receipts = store.taskReceipts(created['task_id']! as String);
+        executor = 'installation-B';
+        unavailable = missing;
+        calls.clear();
+        owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: buildDarkTheme(),
+              localizationsDelegates: L10n.localizationsDelegates,
+              supportedLocales: L10n.supportedLocales,
+              locale: const Locale('zh'),
+              home: CompanionTasksPage(memory: owner, taskId: created['task_id']! as String),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(missing ? '现在还无法核对这台手机的提醒安排。' : '这条旧安排没有在当前安装中接管，不能在这里修改或撤销。'), findsOneWidget);
+        expect(find.text('原记录显示，这条提醒曾经登记成功。'), findsOneWidget);
+        expect(find.text('这条提醒设好了。'), findsNothing);
+        expect(find.byType(OutlinedButton), findsNothing);
+        await tester.tap(find.byIcon(AppIcons.refresh));
+        await tester.pumpAndSettle();
+        expect(calls.where((call) => call.method == 'wake'), isEmpty);
+        expect(store.task(created['task_id']! as String), task);
+        expect(store.taskReceipts(created['task_id']! as String), receipts);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
   }
 
   testWidgets('D a real integer cancellation row shows its unknown stop and offers no amendment', (tester) async {
     final created = (await submit(await source('create', _raw))).task;
     registered(created);
     final stopped = (await submit(await source('cancel', '取消带钥匙的提醒'), previous: created)).task;
-    db.execute('''
+    db.execute(
+      '''
       INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,executor_id,occurred_at_ms)
       VALUES(?,?,'alarm.cancel:1','cancel-fixture','claimed','installation-A',1772877000000)
-    ''', [stopped['task_id'], stopped['task_rev']]);
-    db.execute("UPDATE companion_task_revisions SET state='unknown' WHERE task_id=? AND task_rev=?",
-      [stopped['task_id'], stopped['task_rev']]);
+    ''',
+      [stopped['task_id'], stopped['task_rev']],
+    );
+    db.execute("UPDATE companion_task_revisions SET state='unknown' WHERE task_id=? AND task_rev=?", [
+      stopped['task_id'],
+      stopped['task_rev'],
+    ]);
     expect(store.task(stopped['task_id']! as String)!['cancel_requested'], 1);
     owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
-      theme: buildDarkTheme(),
-      localizationsDelegates: L10n.localizationsDelegates,
-      supportedLocales: L10n.supportedLocales,
-      locale: const Locale('zh'),
-      home: CompanionTasksPage(memory: owner, taskId: stopped['task_id']! as String),
-    )));
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: buildDarkTheme(),
+          localizationsDelegates: L10n.localizationsDelegates,
+          supportedLocales: L10n.supportedLocales,
+          locale: const Locale('zh'),
+          home: CompanionTasksPage(memory: owner, taskId: stopped['task_id']! as String),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('已经请求停下，但还没确认全部停成。'), findsOneWidget);
     expect(find.text('这条提醒可能已经安排，我还没核清。'), findsNothing);
@@ -295,17 +346,22 @@ void main() {
       void receipt(MemoryRow task, String attempt, String event, {String? outcome}) {
         final effect = 'dsh-reminder:${task['task_id']}:${task['task_rev']}';
         if (event == 'claimed') {
-          db.execute('''
+          db.execute(
+            '''
             UPDATE companion_task_revisions SET notification_claim_id=?,notification_claimed_at_ms=?
             WHERE task_id=? AND task_rev=?
-          ''', [attempt, clock['utcMs'], task['task_id'], task['task_rev']]);
+          ''',
+            [attempt, clock['utcMs'], task['task_id'], task['task_rev']],
+          );
         }
-        db.execute('''
+        db.execute(
+          '''
           INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
             executor_id,occurred_at_ms,effect_id,outcome)
           VALUES(?,?,'notification',?,?,?, ?,?,?)
-        ''', [task['task_id'], task['task_rev'], attempt, event, task['executor_id'],
-          clock['utcMs'], effect, outcome]);
+        ''',
+          [task['task_id'], task['task_rev'], attempt, event, task['executor_id'], clock['utcMs'], effect, outcome],
+        );
       }
 
       receipt(first, 'claim-old', 'claimed');
@@ -318,9 +374,12 @@ void main() {
         receipt(first, 'claim-old', 'failed', outcome: 'unknown');
       }
       clock = {...clock, 'utcMs': 1772964601000};
-      resolution = {'kind': 'unique', 'moments': [
-        {'epochMs': 1772964900000, 'offsetSeconds': -25200},
-      ]};
+      resolution = {
+        'kind': 'unique',
+        'moments': [
+          {'epochMs': 1772964900000, 'offsetSeconds': -25200},
+        ],
+      };
       final changed = (await submit(
         await source('amend', '把带钥匙的提醒改到2026-03-08 03:15 America/Los_Angeles'),
         previous: first,
@@ -331,7 +390,8 @@ void main() {
         // The final native check observed the revision change before notify.
         receipt(first, 'claim-old', 'skipped', outcome: 'not_performed');
       }
-      if (scenario == 'old_unknown_new_returned' || scenario == 'old_opened_new_unknown' ||
+      if (scenario == 'old_unknown_new_returned' ||
+          scenario == 'old_opened_new_unknown' ||
           scenario == 'old_unknown_new_active_observed') {
         clock = {...clock, 'utcMs': 1772964900000};
         receipt(changed, 'claim-new', 'claimed');
@@ -344,28 +404,40 @@ void main() {
       final before = store.taskReceipts(first['task_id']! as String);
       owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
       calls.clear();
-      await tester.pumpWidget(ProviderScope(child: MaterialApp(
-        theme: buildDarkTheme(),
-        localizationsDelegates: L10n.localizationsDelegates,
-        supportedLocales: L10n.supportedLocales,
-        locale: const Locale('zh'),
-        home: CompanionTasksPage(memory: owner, taskId: first['task_id']! as String),
-      )));
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: buildDarkTheme(),
+            localizationsDelegates: L10n.localizationsDelegates,
+            supportedLocales: L10n.supportedLocales,
+            locale: const Locale('zh'),
+            home: CompanionTasksPage(memory: owner, taskId: first['task_id']! as String),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       final l10n = L10n.of(tester.element(find.byType(CompanionTasksPage)));
-      expect(find.text(l10n.companionReminderUnknownNotification),
-        scenario == 'old_skipped' || scenario == 'old_active_observed' ? findsNothing : findsOneWidget);
-      expect(find.text(l10n.companionReminderSubmittedNotification),
-        scenario == 'old_unknown_new_returned' ? findsOneWidget : findsNothing);
-      expect(find.text(l10n.companionReminderOpened),
-        scenario == 'old_opened_new_unknown' ? findsOneWidget : findsNothing);
+      expect(
+        find.text(l10n.companionReminderUnknownNotification),
+        scenario == 'old_skipped' || scenario == 'old_active_observed' ? findsNothing : findsOneWidget,
+      );
+      expect(
+        find.text(l10n.companionReminderSubmittedNotification),
+        scenario == 'old_unknown_new_returned' ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text(l10n.companionReminderOpened),
+        scenario == 'old_opened_new_unknown' ? findsOneWidget : findsNothing,
+      );
       expect(store.taskReceipts(first['task_id']! as String), before);
       expect(calls.where((call) => call.method == 'wake' || call.method == 'resolve'), isEmpty);
       await tester.pumpWidget(const SizedBox());
     });
   }
 
-  testWidgets('D actual notification entry opens its original task and keeps a later revision without dispatch', (tester) async {
+  testWidgets('D actual notification entry opens its original task and keeps a later revision without dispatch', (
+    tester,
+  ) async {
     final first = (await submit(await source('first', _raw))).task;
     registered(first);
     final changed = (await submit(
@@ -391,24 +463,31 @@ void main() {
     const keptHost = HostRef.ssh('current-unrelated-host');
     SharedPreferences.setMockInitialValues({ActiveHostController.prefsKey: keptHost.encode()});
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpWidget(ProviderScope(overrides: [
-      activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-      companionMemoryOwnerProvider('${root.path}/companion').overrideWith((ref) => owner!),
-    ], child: MaterialApp(
-      theme: buildDarkTheme(),
-      localizationsDelegates: L10n.localizationsDelegates,
-      supportedLocales: L10n.supportedLocales,
-      locale: const Locale('zh'),
-      home: const Scaffold(body: SystemEntryHost()),
-    )));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+          companionMemoryOwnerProvider('${root.path}/companion').overrideWith((ref) => owner!),
+        ],
+        child: MaterialApp(
+          theme: buildDarkTheme(),
+          localizationsDelegates: L10n.localizationsDelegates,
+          supportedLocales: L10n.supportedLocales,
+          locale: const Locale('zh'),
+          home: const Scaffold(body: SystemEntryHost()),
+        ),
+      ),
+    );
     await tester.pump();
     final scope = ProviderScope.containerOf(tester.element(find.byType(SystemEntryHost)));
     await settleMixed(tester, scope.read(activeHostProvider.notifier).ready);
     expect(scope.read(activeHostProvider), keptHost);
-    await binding.defaultBinaryMessenger.handlePlatformMessage(entries.name,
-      const StandardMethodCodec().encodeMethodCall(MethodCall('entry', {
-        'kind': 'companion_task', 'taskId': first['task_id'], 'taskRev': 1,
-      })), (_) {},
+    await binding.defaultBinaryMessenger.handlePlatformMessage(
+      entries.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('entry', {'kind': 'companion_task', 'taskId': first['task_id'], 'taskRev': 1}),
+      ),
+      (_) {},
     );
     await tester.pumpAndSettle();
     expect(find.byType(CompanionTasksPage), findsOneWidget);

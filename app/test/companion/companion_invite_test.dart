@@ -8,9 +8,9 @@ import 'dart:io';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
-import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_state.dart' show companionLightClientProvider;
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
@@ -73,13 +73,15 @@ Future<http.Response> _conversationReply(Map<String, Object?> body) async {
   if (body['system'] == companionMemoryExtractionPrompt) {
     // Reopening and the two-minute tail still perform their real extraction.
     final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map;
-    return _generated(jsonEncode({
-      'schema_version': 2,
-      'batch_id': input['batch_id'],
-      'covered_message_ids': [for (final row in (input['source']! as List).cast<Map>()) row['id']],
-      'completion': 'complete',
-      'operations': [],
-    }));
+    return _generated(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': input['batch_id'],
+        'covered_message_ids': [for (final row in (input['source']! as List).cast<Map>()) row['id']],
+        'completion': 'complete',
+        'operations': [],
+      }),
+    );
   }
   return _generated('我听到了。');
 }
@@ -142,7 +144,10 @@ class _FollowupPreparation extends CompanionInitiative {
     bool nightCareEnabled = false,
     String? followupId,
     Future<bool> Function()? prepare,
-  }) => super.requestSignal(room, view, candidate,
+  }) => super.requestSignal(
+    room,
+    view,
+    candidate,
     isCurrent: isCurrent,
     present: present,
     hide: hide,
@@ -291,7 +296,10 @@ class _Room {
     final terminal = Completer<MemoryRow>();
     void receiptChanged() {
       for (final row in memory.store.requests()) {
-        if (!terminal.isCompleted && row['category'] == 'chat' && !before.contains(row['id']) && row['state'] == 'finished') {
+        if (!terminal.isCompleted &&
+            row['category'] == 'chat' &&
+            !before.contains(row['id']) &&
+            row['state'] == 'finished') {
           terminal.complete(row);
         }
       }
@@ -329,7 +337,9 @@ void main() {
 
   for (final pace in ['off', 'rare', 'often', 'chatty']) {
     for (final invited in [true, false]) {
-      testWidgets('fixture 9 $pace ${invited ? 'invitation' : 'date-only plan'} uses the actual room gate', (tester) async {
+      testWidgets('fixture 9 $pace ${invited ? 'invitation' : 'date-only plan'} uses the actual room gate', (
+        tester,
+      ) async {
         SharedPreferences.setMockInitialValues({
           'companion_touch_hint_done': true,
           'companion_home_hint_done': true,
@@ -337,13 +347,15 @@ void main() {
           'companion_initiative_pace': pace == 'off' ? 'rare' : pace,
         });
         final room = _Room(tester, root);
-        await room.open(seed: (memory) {
-          _seedFollowup(memory, invited: invited);
-          // Even the date-only proposal falsely labels itself an invitation.
-          // The real store must qualify the original words before Page sees it.
-          final candidate = memory.store.nextFollowup(nowMs: 1793899800000);
-          expect(candidate != null, invited);
-        });
+        await room.open(
+          seed: (memory) {
+            _seedFollowup(memory, invited: invited);
+            // Even the date-only proposal falsely labels itself an invitation.
+            // The real store must qualify the original words before Page sees it.
+            final candidate = memory.store.nextFollowup(nowMs: 1793899800000);
+            expect(candidate != null, invited);
+          },
+        );
         expect(room.memory.store.cards().single['text'], '我今天去修琴');
         var appearances = 0;
         var previouslyVisible = false;
@@ -398,85 +410,100 @@ void main() {
     ('negated farewell', '我还不想说再见，我们继续聊。', false),
     ('story dialogue', '故事里我说：“晚安，我先走了”。', false),
   ]) {
-    testWidgets(label == 'farewell'
-        ? 'saying goodbye before the pending question is shown retires this visit without a spend'
-        : 'fixture 11 $label is distinguished after a successful chat becomes idle', (tester) async {
-      final room = _Room(tester, root)..answer = _conversationReply;
-      await room.open(seed: _seedFollowup);
-      await room.wait(const Duration(seconds: 15));
-      final opportunity = room.memory.store.followups().single;
-      expect(opportunity['state'], 'pending');
-      expect(find.text(_followup), findsNothing);
-      final receipt = await room.sendChat(raw);
-      final chats = room.requests.where((body) =>
-          body['system'] != companionMemoryExtractionPrompt && body['system'] != companionMemoryFollowupPrompt);
-      expect(chats, hasLength(1));
-      expect(jsonEncode(chats.single), contains(raw));
-      expect(room.memory.store.messages().where((row) => row['role'] == 'user' && row['text'] == raw), hasLength(1));
-      expect(room.memory.store.messages().where((row) => row['role'] == 'assistant' && row['text'] == '我听到了。'), hasLength(1));
-      expect(receipt['sent_at_ms'], isNotNull);
-      expect((receipt['raw_usage']! as Map)['complete'], isTrue);
-      var composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
-      expect(composer.input.text, isEmpty, reason: 'a failed send must not masquerade as a farewell gate');
-      expect(composer.busy, isFalse);
-      expect(composer.running, isFalse);
-      expect(composer.listening, isFalse);
-      composer.focus.unfocus();
-      await tester.pump();
-      await room.wait(const Duration(seconds: 12));
-      composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
-      expect(composer.focus.hasFocus, isFalse);
-      expect(composer.input.text, isEmpty);
-      expect(tester.widget<CompanionMyLine>(find.byType(CompanionMyLine)).text, isNull);
-      final speech = tester.widget<CompanionSpeech>(find.byType(CompanionSpeech));
-      expect(speech.text, isNull);
-      expect(speech.thinking, isFalse);
-      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-      var appearances = 0;
-      var visible = false;
-      for (var second = 0; second < 120; second++) {
-        await room.wait(const Duration(seconds: 1));
-        final next = find.text(_followup).evaluate().isNotEmpty;
-        if (next && !visible) {
-          appearances++;
-        }
-        visible = next;
-      }
-      expect(appearances, farewell ? 0 : 1);
-      expect(room.memory.store.followups().single['state'], farewell ? 'pending' : 'asked');
-      expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(farewell ? 0 : 1));
-      final generated = room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt);
-      expect(generated, hasLength(farewell ? 0 : 1));
-      final auxiliary = room.memory.store.requests().where((row) => row['category'] == 'followup');
-      expect(auxiliary, hasLength(farewell ? 0 : 1));
-      if (!farewell) {
-        expect(auxiliary.single['state'], 'finished');
-        expect(((auxiliary.single['raw_usage']! as Map)['final_usage'] as Map)['output_tokens'], 12);
-      }
-      expect(chats, hasLength(1));
-      if (label == 'farewell') {
-        await room.close();
-        await room.open();
-        await room.waitForFollowup();
-        expect(room.memory.store.followups().single['id'], opportunity['id']);
-        expect(room.memory.store.followups().single['state'], 'asked');
-        expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-        expect(room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt), hasLength(1));
+    testWidgets(
+      label == 'farewell'
+          ? 'saying goodbye before the pending question is shown retires this visit without a spend'
+          : 'fixture 11 $label is distinguished after a successful chat becomes idle',
+      (tester) async {
+        final room = _Room(tester, root)..answer = _conversationReply;
+        await room.open(seed: _seedFollowup);
+        await room.wait(const Duration(seconds: 15));
+        final opportunity = room.memory.store.followups().single;
+        expect(opportunity['state'], 'pending');
+        expect(find.text(_followup), findsNothing);
+        final receipt = await room.sendChat(raw);
+        final chats = room.requests.where(
+          (body) =>
+              body['system'] != companionMemoryExtractionPrompt && body['system'] != companionMemoryFollowupPrompt,
+        );
         expect(chats, hasLength(1));
-        expect(room.requests.where((body) => body['system'] == companionMemoryExtractionPrompt), isNotEmpty,
-            reason: 'the submitted original receives its real tail opportunity');
-      }
-      await room.close();
-    });
+        expect(jsonEncode(chats.single), contains(raw));
+        expect(room.memory.store.messages().where((row) => row['role'] == 'user' && row['text'] == raw), hasLength(1));
+        expect(
+          room.memory.store.messages().where((row) => row['role'] == 'assistant' && row['text'] == '我听到了。'),
+          hasLength(1),
+        );
+        expect(receipt['sent_at_ms'], isNotNull);
+        expect((receipt['raw_usage']! as Map)['complete'], isTrue);
+        var composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
+        expect(composer.input.text, isEmpty, reason: 'a failed send must not masquerade as a farewell gate');
+        expect(composer.busy, isFalse);
+        expect(composer.running, isFalse);
+        expect(composer.listening, isFalse);
+        composer.focus.unfocus();
+        await tester.pump();
+        await room.wait(const Duration(seconds: 12));
+        composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
+        expect(composer.focus.hasFocus, isFalse);
+        expect(composer.input.text, isEmpty);
+        expect(tester.widget<CompanionMyLine>(find.byType(CompanionMyLine)).text, isNull);
+        final speech = tester.widget<CompanionSpeech>(find.byType(CompanionSpeech));
+        expect(speech.text, isNull);
+        expect(speech.thinking, isFalse);
+        expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+        var appearances = 0;
+        var visible = false;
+        for (var second = 0; second < 120; second++) {
+          await room.wait(const Duration(seconds: 1));
+          final next = find.text(_followup).evaluate().isNotEmpty;
+          if (next && !visible) {
+            appearances++;
+          }
+          visible = next;
+        }
+        expect(appearances, farewell ? 0 : 1);
+        expect(room.memory.store.followups().single['state'], farewell ? 'pending' : 'asked');
+        expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(farewell ? 0 : 1));
+        final generated = room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt);
+        expect(generated, hasLength(farewell ? 0 : 1));
+        final auxiliary = room.memory.store.requests().where((row) => row['category'] == 'followup');
+        expect(auxiliary, hasLength(farewell ? 0 : 1));
+        if (!farewell) {
+          expect(auxiliary.single['state'], 'finished');
+          expect(((auxiliary.single['raw_usage']! as Map)['final_usage'] as Map)['output_tokens'], 12);
+        }
+        expect(chats, hasLength(1));
+        if (label == 'farewell') {
+          await room.close();
+          await room.open();
+          await room.waitForFollowup();
+          expect(room.memory.store.followups().single['id'], opportunity['id']);
+          expect(room.memory.store.followups().single['state'], 'asked');
+          expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
+          expect(room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt), hasLength(1));
+          expect(chats, hasLength(1));
+          expect(
+            room.requests.where((body) => body['system'] == companionMemoryExtractionPrompt),
+            isNotEmpty,
+            reason: 'the submitted original receives its real tail opportunity',
+          );
+        }
+        await room.close();
+      },
+    );
   }
 
-  testWidgets('fixture 11 a failed farewell source does not retire the invitation after the draft is cleared', (tester) async {
+  testWidgets('fixture 11 a failed farewell source does not retire the invitation after the draft is cleared', (
+    tester,
+  ) async {
     final room = _Room(tester, root)..answer = _conversationReply;
     await room.open(seed: _seedFollowup);
     await room.wait(const Duration(seconds: 15));
     final before = room.memory.store.messages();
     final db = sqlite3.open('${root.path}/memory.sqlite');
-    db.execute("CREATE TRIGGER reject_farewell BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+    db.execute(
+      "CREATE TRIGGER reject_farewell BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
+    );
     db.close();
     await tester.enterText(find.byType(TextField), '晚安，我先走了');
     await tester.pump();
@@ -505,7 +532,9 @@ void main() {
     await room.close();
   });
 
-  testWidgets('fixture 11 a successful farewell during generation fences late wording without a display debit', (tester) async {
+  testWidgets('fixture 11 a successful farewell during generation fences late wording without a display debit', (
+    tester,
+  ) async {
     final answer = Completer<http.Response>();
     addTearDown(() {
       if (!answer.isCompleted) {
@@ -648,7 +677,9 @@ void main() {
     await room.close();
   });
 
-  testWidgets('B03 actual auxiliary usage exhausting the shared output budget suppresses the Page wording POST', (tester) async {
+  testWidgets('B03 actual auxiliary usage exhausting the shared output budget suppresses the Page wording POST', (
+    tester,
+  ) async {
     final room = _Room(tester, root)
       ..answer = (body) async {
         expect(body['system'], companionMemoryExtractionPrompt);
@@ -680,7 +711,11 @@ void main() {
     expect(room.memory.store.requests().map((row) => row['category']), everyElement('extract'));
     expect(room.memory.store.requests().map((row) => (row['raw_usage']! as Map)['output_tokens']), everyElement(720));
     await room.wait(const Duration(minutes: 2));
-    expect(room.requests, hasLength(4), reason: 'four 720-token receipts leave 120, less than the 128-token followup reservation');
+    expect(
+      room.requests,
+      hasLength(4),
+      reason: 'four 720-token receipts leave 120, less than the 128-token followup reservation',
+    );
     expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), isEmpty);
     expect(room.memory.store.followups().single['state'], 'pending');
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);

@@ -8,8 +8,11 @@ import 'companion_light.dart';
 
 /// The original agreement, without room history or personal context.
 MemoryRow companionLookupTaskInput(MemoryRow row) => {
-  'placeName': row['lookup_place_name'], 'city': row['lookup_city'],
-  'localDate': row['local_date'], 'zoneId': row['zone_id'], 'question': row['lookup_question'],
+  'placeName': row['lookup_place_name'],
+  'city': row['lookup_city'],
+  'localDate': row['local_date'],
+  'zoneId': row['zone_id'],
+  'question': row['lookup_question'],
 };
 
 const companionLookupSearchEndpoint = 'https://api.deepseek.com/v1/tools/search';
@@ -28,7 +31,9 @@ done 必须有支持结论的正文 evidence；没有有效依据时 evidence �
 /// One already-separated source clause. D's quote-aware splitter retains the
 /// item number; E does not split it again or reinterpret quoted dialogue.
 MemoryRow? parseCompanionLookup(String raw) {
-  final text = raw.trim().replaceFirst(RegExp(r'[。.!！]+$'), '')
+  final text = raw
+      .trim()
+      .replaceFirst(RegExp(r'[。.!！]+$'), '')
       .replaceFirst(RegExp(r'^(?:请帮我|帮我|请)?(?:现实中|现实里)?\s*'), '');
   final cancel = RegExp(r'^取消(?:(.+?)的)?(?:查询|查证)$').firstMatch(text);
   if (cancel != null || text == '不用查了' || text == '取消这次查询') {
@@ -39,25 +44,33 @@ MemoryRow? parseCompanionLookup(String raw) {
     return null;
   }
   const date = r'今天|明天|后天|\d{4}-\d{2}-\d{2}';
-  final match = RegExp('^(?:($date)\\s*)?(.+?(?:美术馆|博物馆|展览馆|图书馆))(?:\\s*($date))?'
-      r'(开不开|是否开放|开门吗|营业吗)'
-      r'(?:[，,]\s*(?:请)?(?:给我)?(?:馆方公告|官方公告|原文|来源))?'
-      r'(?:[，,]\s*城市[：:]([^，,]+))?'
-      r'(?:[，,]\s*时区[：:]([^，,]+))?$').firstMatch(request.group(1)!.trim());
+  final match = RegExp(
+    '^(?:($date)\\s*)?(.+?(?:美术馆|博物馆|展览馆|图书馆))(?:\\s*($date))?'
+    r'(开不开|是否开放|开门吗|营业吗)'
+    r'(?:[，,]\s*(?:请)?(?:给我)?(?:馆方公告|官方公告|原文|来源))?'
+    r'(?:[，,]\s*城市[：:]([^，,]+))?'
+    r'(?:[，,]\s*时区[：:]([^，,]+))?$',
+  ).firstMatch(request.group(1)!.trim());
   if (match == null) {
     return RegExp(r'美术馆|博物馆|展览馆|图书馆').hasMatch(request.group(1)!)
-        ? {'operation': 'clarify', 'waitReason': 'question_missing'} : null;
+        ? {'operation': 'clarify', 'waitReason': 'question_missing'}
+        : null;
   }
   final place = match.group(2)!.trim();
-  if (const {'美术馆', '博物馆', '展览馆', '图书馆'}.contains(place) ||
-      RegExp(r'[“”「」『』";；\n]|馆和|馆以及|、').hasMatch(place)) {
+  if (const {'美术馆', '博物馆', '展览馆', '图书馆'}.contains(place) || RegExp(r'[“”「」『』";；\n]|馆和|馆以及|、').hasMatch(place)) {
     return {'operation': 'clarify', 'waitReason': 'place_missing'};
   }
   if (match.group(1) != null && match.group(3) != null && match.group(1) != match.group(3)) {
     return {'operation': 'clarify', 'waitReason': 'date_missing'};
   }
-  return {'operation': 'create', 'placeName': place, 'when': match.group(1) ?? match.group(3),
-    'city': match.group(5)?.trim(), 'zoneId': match.group(6)?.trim(), 'question': raw};
+  return {
+    'operation': 'create',
+    'placeName': place,
+    'when': match.group(1) ?? match.group(3),
+    'city': match.group(5)?.trim(),
+    'zoneId': match.group(6)?.trim(),
+    'question': raw,
+  };
 }
 
 /// Original source time fixes relative dates and the two-minute window.
@@ -85,18 +98,32 @@ MemoryRow companionLookupAgreement(MemoryRow source, MemoryRow command) {
       return {'waitReason': 'date_missing'};
     }
     final original = DateTime.fromMillisecondsSinceEpoch((source['said_at_utc']! as int) + offset * 1000, isUtc: true);
-    final days = when == '明天' ? 1 : when == '后天' ? 2 : 0;
+    final days = when == '明天'
+        ? 1
+        : when == '后天'
+        ? 2
+        : 0;
     localDate = original.add(Duration(days: days)).toIso8601String().substring(0, 10);
   }
-  return {'placeName': command['placeName'], 'city': command['city'], 'localDate': localDate,
-    'zoneId': zone, 'question': command['question'], 'deadlineAtMs': (source['said_at_utc']! as int) + 120000};
+  return {
+    'placeName': command['placeName'],
+    'city': command['city'],
+    'localDate': localDate,
+    'zoneId': zone,
+    'question': command['question'],
+    'deadlineAtMs': (source['said_at_utc']! as int) + 120000,
+  };
 }
 
 /// Uses only the explicit object, optional city and frozen requested date. An
 /// overlong query needs clarification; clipping it could discard the date.
 String companionLookupQuery(MemoryRow task) {
-  final query = [task['placeName'], task['city'], task['localDate'], '开放 公告']
-      .whereType<String>().where((part) => part.isNotEmpty).join(' ');
+  final query = [
+    task['placeName'],
+    task['city'],
+    task['localDate'],
+    '开放 公告',
+  ].whereType<String>().where((part) => part.isNotEmpty).join(' ');
   _query(query);
   return query;
 }
@@ -109,8 +136,11 @@ void _query(String query) {
 
 bool companionLookupUrl(String url) {
   final uri = Uri.tryParse(url);
-  return url.runes.length <= 8192 && uri != null &&
-      (uri.scheme == 'https' || uri.scheme == 'http') && uri.host.isNotEmpty && uri.userInfo.isEmpty;
+  return url.runes.length <= 8192 &&
+      uri != null &&
+      (uri.scheme == 'https' || uri.scheme == 'http') &&
+      uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty;
 }
 
 String companionLookupAnswerInput(MemoryRow task, List<MemoryRow> sources) =>
@@ -120,11 +150,14 @@ String companionLookupAnswerInput(MemoryRow task, List<MemoryRow> sources) =>
 /// identity and the meaning of an effective date still require real reading.
 MemoryRow parseCompanionLookupAnswer(String raw, MemoryRow task, List<MemoryRow> sources) {
   final value = jsonDecode(raw);
-  if (value is! Map || value.length != 4 ||
+  if (value is! Map ||
+      value.length != 4 ||
       !value.keys.toSet().containsAll({'status', 'conclusion', 'applicable_date', 'evidence'}) ||
       !const {'done', 'partial', 'failed'}.contains(value['status']) ||
-      value['conclusion'] is! String || (value['conclusion'] as String).trim().isEmpty ||
-      value['applicable_date'] != task['localDate'] || value['evidence'] is! List) {
+      value['conclusion'] is! String ||
+      (value['conclusion'] as String).trim().isEmpty ||
+      value['applicable_date'] != task['localDate'] ||
+      value['evidence'] is! List) {
     throw const FormatException('invalid lookup answer');
   }
   final evidence = value['evidence'] as List;
@@ -132,8 +165,12 @@ MemoryRow parseCompanionLookupAnswer(String raw, MemoryRow task, List<MemoryRow>
     throw const FormatException('a completed lookup needs body evidence');
   }
   for (final item in evidence) {
-    if (item is! Map || item.length != 2 || !item.containsKey('fetchRequestId') || !item.containsKey('quote') ||
-        item['fetchRequestId'] is! String || item['quote'] is! String ||
+    if (item is! Map ||
+        item.length != 2 ||
+        !item.containsKey('fetchRequestId') ||
+        !item.containsKey('quote') ||
+        item['fetchRequestId'] is! String ||
+        item['quote'] is! String ||
         (item['quote'] as String).trim().isEmpty) {
       throw const FormatException('invalid lookup evidence');
     }
@@ -169,8 +206,14 @@ class CompanionLookupDirect {
     required void Function(MemoryRow) observe,
   }) {
     _query(query);
-    return _tool('search', {'query': query, 'count': 5, 'need_content': false},
-        deadlineAtMs: deadlineAtMs, isCurrent: isCurrent, cancelled: cancelled, observe: observe);
+    return _tool(
+      'search',
+      {'query': query, 'count': 5, 'need_content': false},
+      deadlineAtMs: deadlineAtMs,
+      isCurrent: isCurrent,
+      cancelled: cancelled,
+      observe: observe,
+    );
   }
 
   Future<MemoryRow> fetch({
@@ -183,11 +226,19 @@ class CompanionLookupDirect {
     if (!companionLookupUrl(url)) {
       throw const FormatException('invalid lookup source URL');
     }
-    return _tool('fetch', {'url': url},
-        deadlineAtMs: deadlineAtMs, isCurrent: isCurrent, cancelled: cancelled, observe: observe);
+    return _tool(
+      'fetch',
+      {'url': url},
+      deadlineAtMs: deadlineAtMs,
+      isCurrent: isCurrent,
+      cancelled: cancelled,
+      observe: observe,
+    );
   }
 
-  Future<MemoryRow> _tool(String kind, MemoryRow body, {
+  Future<MemoryRow> _tool(
+    String kind,
+    MemoryRow body, {
     required int deadlineAtMs,
     required bool Function() isCurrent,
     required Future<void> cancelled,
@@ -199,18 +250,32 @@ class CompanionLookupDirect {
       observe(finish);
       return finish;
     }
-    final connection = _LookupClient(client(), kind: kind, deadlineAtMs: deadlineAtMs,
-        isCurrent: isCurrent, nowMilliseconds: nowMilliseconds, estimateTokens: estimateTokens, observe: observe);
+    final connection = _LookupClient(
+      client(),
+      kind: kind,
+      deadlineAtMs: deadlineAtMs,
+      isCurrent: isCurrent,
+      nowMilliseconds: nowMilliseconds,
+      estimateTokens: estimateTokens,
+      observe: observe,
+    );
     unawaited(cancelled.then((_) => connection.close()));
     Map<String, Object?>? raw;
     var terminal = 'network_error';
     var complete = false;
     try {
-      final request = http.Request('POST', Uri.parse(kind == 'search'
-          ? companionLookupSearchEndpoint : companionLookupFetchEndpoint))
-        ..followRedirects = false
-        ..headers.addAll({'authorization': 'Bearer $key', 'content-type': 'application/json', 'accept': 'application/json'})
-        ..body = jsonEncode(body);
+      final request =
+          http.Request(
+              'POST',
+              Uri.parse(kind == 'search' ? companionLookupSearchEndpoint : companionLookupFetchEndpoint),
+            )
+            ..followRedirects = false
+            ..headers.addAll({
+              'authorization': 'Bearer $key',
+              'content-type': 'application/json',
+              'accept': 'application/json',
+            })
+            ..body = jsonEncode(body);
       observe({'type': 'accepted'});
       final response = await connection.send(request);
       final bytes = await response.stream.toBytes();
@@ -240,8 +305,13 @@ class CompanionLookupDirect {
     } finally {
       connection.close();
     }
-    final finish = _finish(dispatched: connection.dispatched, terminal: terminal, complete: complete,
-        httpStatus: connection.httpStatus, toolResponse: raw);
+    final finish = _finish(
+      dispatched: connection.dispatched,
+      terminal: terminal,
+      complete: complete,
+      httpStatus: connection.httpStatus,
+      toolResponse: raw,
+    );
     observe(finish);
     return finish;
   }
@@ -254,12 +324,20 @@ class CompanionLookupDirect {
     required Future<void> cancelled,
     required void Function(MemoryRow) observe,
   }) async {
-    if (sources.isEmpty || sources.length > 2 ||
+    if (sources.isEmpty ||
+        sources.length > 2 ||
         sources.any((source) => source['content'] is! String || (source['content'] as String).trim().isEmpty)) {
       throw const FormatException('lookup answer requires one or two actual fetched bodies');
     }
-    final connection = _LookupClient(client(), kind: 'answer', deadlineAtMs: deadlineAtMs,
-        isCurrent: isCurrent, nowMilliseconds: nowMilliseconds, estimateTokens: estimateTokens, observe: observe);
+    final connection = _LookupClient(
+      client(),
+      kind: 'answer',
+      deadlineAtMs: deadlineAtMs,
+      isCurrent: isCurrent,
+      nowMilliseconds: nowMilliseconds,
+      estimateTokens: estimateTokens,
+      observe: observe,
+    );
     unawaited(cancelled.then((_) => connection.close()));
     final text = StringBuffer();
     CompanionUsage? usage;
@@ -282,9 +360,14 @@ class CompanionLookupDirect {
     } finally {
       connection.close();
     }
-    final finish = _finish(dispatched: connection.dispatched, terminal: terminal,
-        complete: usage?.complete ?? false, httpStatus: connection.httpStatus,
-        answerText: text.toString(), usage: connection.dispatched ? usage?.toJson() : null);
+    final finish = _finish(
+      dispatched: connection.dispatched,
+      terminal: terminal,
+      complete: usage?.complete ?? false,
+      httpStatus: connection.httpStatus,
+      answerText: text.toString(),
+      usage: connection.dispatched ? usage?.toJson() : null,
+    );
     observe(finish);
     return finish;
   }
@@ -292,25 +375,50 @@ class CompanionLookupDirect {
 
 bool _searchResponse(MemoryRow? value) {
   final results = value?['results'];
-  return results is List && results.every((item) => item is Map &&
-      item['url'] is String && (item['url'] as String).isNotEmpty &&
-      item['title'] is String && item['snippet'] is String &&
-      (item['summary'] == null || item['summary'] is String) &&
-      (item['date'] == null || item['date'] is String));
+  return results is List &&
+      results.every(
+        (item) =>
+            item is Map &&
+            item['url'] is String &&
+            (item['url'] as String).isNotEmpty &&
+            item['title'] is String &&
+            item['snippet'] is String &&
+            (item['summary'] == null || item['summary'] is String) &&
+            (item['date'] == null || item['date'] is String),
+      );
 }
 
-MemoryRow _finish({required bool dispatched, required String terminal, required bool complete,
-    int? httpStatus, MemoryRow? toolResponse, String? answerText, MemoryRow? usage}) => {
-  'type': 'finish', 'dispatched': dispatched, 'httpStatus': httpStatus,
-  'terminal': terminal, 'complete': complete,
-  'toolResponse': toolResponse, 'answerText': answerText, 'usage': usage,
+MemoryRow _finish({
+  required bool dispatched,
+  required String terminal,
+  required bool complete,
+  int? httpStatus,
+  MemoryRow? toolResponse,
+  String? answerText,
+  MemoryRow? usage,
+}) => {
+  'type': 'finish',
+  'dispatched': dispatched,
+  'httpStatus': httpStatus,
+  'terminal': terminal,
+  'complete': complete,
+  'toolResponse': toolResponse,
+  'answerText': answerText,
+  'usage': usage,
 };
 
 /// A narrow actual-send boundary shared by the three calls. The answer check
 /// sees the exact serialized Messages request, including its fixed envelope.
 class _LookupClient extends http.BaseClient {
-  _LookupClient(this.inner, {required this.kind, required this.deadlineAtMs,
-    required this.isCurrent, required this.nowMilliseconds, required this.estimateTokens, required this.observe});
+  _LookupClient(
+    this.inner, {
+    required this.kind,
+    required this.deadlineAtMs,
+    required this.isCurrent,
+    required this.nowMilliseconds,
+    required this.estimateTokens,
+    required this.observe,
+  });
 
   final http.Client inner;
   final String kind;
@@ -353,8 +461,13 @@ class _LookupClient extends http.BaseClient {
     final response = await inner.send(request).timeout(remaining);
     httpStatus = response.statusCode;
     observe({'type': 'http', 'status': httpStatus, 'atMs': nowMilliseconds()});
-    return http.StreamedResponse(_body(response.stream), response.statusCode,
-        headers: response.headers, request: response.request, reasonPhrase: response.reasonPhrase);
+    return http.StreamedResponse(
+      _body(response.stream),
+      response.statusCode,
+      headers: response.headers,
+      request: response.request,
+      reasonPhrase: response.reasonPhrase,
+    );
   }
 
   Stream<List<int>> _body(Stream<List<int>> body) async* {
@@ -387,8 +500,12 @@ class _LookupClient extends http.BaseClient {
 /// not cancel accepted work; an explicit new command changes the task revision.
 /// The persisted attempt is the authority after process loss, never this map.
 class CompanionLookups {
-  CompanionLookups({required this.store, required this.nowMilliseconds,
-    required this.changed, required this.retainReceipt});
+  CompanionLookups({
+    required this.store,
+    required this.nowMilliseconds,
+    required this.changed,
+    required this.retainReceipt,
+  });
 
   final CompanionMemoryStore store;
   final int Function() nowMilliseconds;
@@ -396,7 +513,8 @@ class CompanionLookups {
   final void Function(Future<void>) retainReceipt;
   final Map<String, _LookupWork> _active = {};
 
-  Future<MemoryRow> run(MemoryRow task, {
+  Future<MemoryRow> run(
+    MemoryRow task, {
     required String executorId,
     required String Function() requestId,
     required int Function(String) estimateTokens,
@@ -409,19 +527,32 @@ class CompanionLookups {
     if (existing != null) {
       return existing.done.future;
     }
-    final work = _LookupWork(this, task, executorId: executorId, requestId: requestId,
-      estimateTokens: estimateTokens, direct: direct, host: host, hostKey: hostKey);
+    final work = _LookupWork(
+      this,
+      task,
+      executorId: executorId,
+      requestId: requestId,
+      estimateTokens: estimateTokens,
+      direct: direct,
+      host: host,
+      hostKey: hostKey,
+    );
     _active[key] = work;
     retainReceipt(work.done.future.then<void>((_) {}));
-    unawaited(work.execute().then<void>((value) {
-      _active.remove(key);
-      changed();
-      work.done.complete(value);
-    }, onError: (Object error, StackTrace stack) {
-      _active.remove(key);
-      changed();
-      work.done.completeError(error, stack);
-    }));
+    unawaited(
+      work.execute().then<void>(
+        (value) {
+          _active.remove(key);
+          changed();
+          work.done.complete(value);
+        },
+        onError: (Object error, StackTrace stack) {
+          _active.remove(key);
+          changed();
+          work.done.completeError(error, stack);
+        },
+      ),
+    );
     return work.done.future;
   }
 
@@ -445,22 +576,35 @@ class CompanionLookups {
       return;
     }
     final attempts = store.lookupAttempts(id);
-    final instances = attempts.where((row) => row['execution_mode'] == 'host' && row['dispatched'] != 0 &&
-        row['finished_at_ms'] == null)
-        .map((row) => row['instance_id']! as String).toSet();
+    final instances = attempts
+        .where((row) => row['execution_mode'] == 'host' && row['dispatched'] != 0 && row['finished_at_ms'] == null)
+        .map((row) => row['instance_id']! as String)
+        .toSet();
     if (instances.isEmpty) {
       store.confirmLookupCancellation(id, task['task_rev']! as int);
     } else if (host != null && hostKey == task['host_key']) {
-      final confirmed = store.taskReceipts(id).where((row) => row['task_rev'] == task['task_rev'] &&
-        row['step_key'] == 'lookup.stop' && row['event_kind'] == 'returned')
-        .map((row) => (row['detail'] as Map)['instanceId']).toSet();
+      final confirmed = store
+          .taskReceipts(id)
+          .where(
+            (row) =>
+                row['task_rev'] == task['task_rev'] &&
+                row['step_key'] == 'lookup.stop' &&
+                row['event_kind'] == 'returned',
+          )
+          .map((row) => (row['detail'] as Map)['instanceId'])
+          .toSet();
       for (final instance in instances) {
         if (confirmed.contains(instance)) {
           continue;
         }
-        await host.fenceCompanionLookup(instanceId: instance, sessionId: task['host_session_id']! as String,
-          taskId: id, taskRev: task['task_rev']! as int, cancelled: true,
-          deadlineAtMs: task['lookup_deadline_ms']! as int);
+        await host.fenceCompanionLookup(
+          instanceId: instance,
+          sessionId: task['host_session_id']! as String,
+          taskId: id,
+          taskRev: task['task_rev']! as int,
+          cancelled: true,
+          deadlineAtMs: task['lookup_deadline_ms']! as int,
+        );
         store.confirmLookupCancellation(id, task['task_rev']! as int, instanceId: instance);
       }
     }
@@ -491,9 +635,12 @@ class CompanionLookups {
 Future<void> _readLookupReceipts(CompanionMemoryStore store, DshClient host, List<MemoryRow> attempts) async {
   for (final attempt in attempts.where((row) => row['execution_mode'] == 'host' && row['finished_at_ms'] == null)) {
     try {
-      final receipt = await host.readCompanionLookupRequest(instanceId: attempt['instance_id']! as String,
-        requestId: attempt['request_id']! as String, taskId: attempt['task_id']! as String,
-        taskRev: attempt['task_rev']! as int);
+      final receipt = await host.readCompanionLookupRequest(
+        instanceId: attempt['instance_id']! as String,
+        requestId: attempt['request_id']! as String,
+        taskId: attempt['task_id']! as String,
+        taskRev: attempt['task_rev']! as int,
+      );
       final finish = receipt?['finish'];
       if (finish is Map) {
         _recordLookupFinish(store, attempt, Map<String, Object?>.from(finish));
@@ -505,8 +652,16 @@ Future<void> _readLookupReceipts(CompanionMemoryStore store, DshClient host, Lis
 }
 
 class _LookupWork {
-  _LookupWork(this.owner, this.task, {required this.executorId, required this.requestId,
-    required this.estimateTokens, required this.direct, required this.host, required this.hostKey});
+  _LookupWork(
+    this.owner,
+    this.task, {
+    required this.executorId,
+    required this.requestId,
+    required this.estimateTokens,
+    required this.direct,
+    required this.host,
+    required this.hostKey,
+  });
 
   final CompanionLookups owner;
   final MemoryRow task;
@@ -547,8 +702,12 @@ class _LookupWork {
       await _readLookupReceipts(store, host!, attempts);
     } else {
       for (final attempt in attempts.where((row) => row['finished_at_ms'] == null)) {
-        store.finishLookupAttempt(attempt['request_id']! as String, terminal: 'interrupted',
-          dispatched: _sent(attempt['dispatched']), complete: false);
+        store.finishLookupAttempt(
+          attempt['request_id']! as String,
+          terminal: 'interrupted',
+          dispatched: _sent(attempt['dispatched']),
+          complete: false,
+        );
       }
     }
     if (attempts.any((row) => row['finished_at_ms'] == null)) {
@@ -557,7 +716,9 @@ class _LookupWork {
       }
       return current;
     }
-    if (current['lookup_result_fingerprint'] != null || current['cancel_requested'] == 1 || current['task_rev'] != revision) {
+    if (current['lookup_result_fingerprint'] != null ||
+        current['cancel_requested'] == 1 ||
+        current['task_rev'] != revision) {
       return current;
     }
     // A deadline blocks a new request, not settlement of an answer that the
@@ -567,8 +728,10 @@ class _LookupWork {
       return recovered;
     }
     if (!canSend) {
-      return _finish(current['state'] == 'unknown' ? 'unknown' : 'failed',
-        current['state'] == 'unknown' ? 'lookup_receipt_unknown' : 'lookup_deadline');
+      return _finish(
+        current['state'] == 'unknown' ? 'unknown' : 'failed',
+        current['state'] == 'unknown' ? 'lookup_receipt_unknown' : 'lookup_deadline',
+      );
     }
     if (full) {
       try {
@@ -611,9 +774,15 @@ class _LookupWork {
         continue;
       }
       for (final hit in raw['results'] as List) {
-        if (hit is Map && hit['url'] is String && companionLookupUrl(hit['url'] as String) &&
-            [hit['title'], hit['snippet'], hit['summary']].whereType<String>()
-                .any((text) => text.contains(input['placeName']! as String)) && seen.add(hit['url'] as String)) {
+        if (hit is Map &&
+            hit['url'] is String &&
+            companionLookupUrl(hit['url'] as String) &&
+            [
+              hit['title'],
+              hit['snippet'],
+              hit['summary'],
+            ].whereType<String>().any((text) => text.contains(input['placeName']! as String)) &&
+            seen.add(hit['url'] as String)) {
           candidates.add(Map<String, Object?>.from(hit));
         }
       }
@@ -637,11 +806,25 @@ class _LookupWork {
     }
     final pages = _pages;
     if (pages.isEmpty || !canSend) {
-      final unknown = attempts.any((row) => row['finished_at_ms'] == null || row['dispatched'] == null ||
-        (row['dispatched'] == 1 && row['http_status'] == null));
+      final unknown = attempts.any(
+        (row) =>
+            row['finished_at_ms'] == null ||
+            row['dispatched'] == null ||
+            (row['dispatched'] == 1 && row['http_status'] == null),
+      );
       final found = attempts.any((row) => (row['sourceMetadata'] as List).isNotEmpty);
-      return _finish(unknown ? 'unknown' : found ? 'partial' : 'failed',
-        unknown ? 'lookup_receipt_unknown' : found ? 'lookup_summary_only' : 'lookup_no_material');
+      return _finish(
+        unknown
+            ? 'unknown'
+            : found
+            ? 'partial'
+            : 'failed',
+        unknown
+            ? 'lookup_receipt_unknown'
+            : found
+            ? 'lookup_summary_only'
+            : 'lookup_no_material',
+      );
     }
     // The phone check is an early whole-input bound. The host additionally
     // checks its prepared provider request/window immediately before dispatch.
@@ -653,7 +836,11 @@ class _LookupWork {
     }
     var answers = attempts.where((row) => row['kind'] == 'answer').toList();
     if (answers.isEmpty) {
-      await _call('answer', {'fetchRequestIds': pages.map((row) => row['fetchRequestId']).toList()}, {'sources': pages});
+      await _call(
+        'answer',
+        {'fetchRequestIds': pages.map((row) => row['fetchRequestId']).toList()},
+        {'sources': pages},
+      );
       answers = attempts.where((row) => row['kind'] == 'answer').toList();
     }
     if (current['cancel_requested'] == 1 || current['task_rev'] != revision) {
@@ -663,7 +850,9 @@ class _LookupWork {
       return current;
     }
     if (answers.length != 1 || answers.single['valid_result'] != 1) {
-      final limited = answers.any((row) => const {'input_limit', 'request-limit', 'companion/lookup-input-limit'}.contains(row['terminal']));
+      final limited = answers.any(
+        (row) => const {'input_limit', 'request-limit', 'companion/lookup-input-limit'}.contains(row['terminal']),
+      );
       return _finish('partial', limited ? 'lookup_input_limit' : 'lookup_answer_incomplete');
     }
     return _settleAnswer() ?? _finish('partial', 'lookup_answer_incomplete');
@@ -673,9 +862,13 @@ class _LookupWork {
     for (final row in attempts.where((row) => row['kind'] == 'fetch' && row['valid_result'] == 1))
       if (row['toolResponse'] case final Map raw)
         if (raw['content'] is String && (raw['content'] as String).trim().isNotEmpty)
-          {'fetchRequestId': row['request_id'], 'url': (row['input'] as Map)['url'],
-            'title': raw['title'] ?? '', 'content': raw['content'],
-            'fetchedAtMs': ((row['sourceMetadata']! as List).single as Map)['observedAtMs']},
+          {
+            'fetchRequestId': row['request_id'],
+            'url': (row['input'] as Map)['url'],
+            'title': raw['title'] ?? '',
+            'content': raw['content'],
+            'fetchedAtMs': ((row['sourceMetadata']! as List).single as Map)['observedAtMs'],
+          },
   ];
 
   MemoryRow? _settleAnswer() {
@@ -688,9 +881,17 @@ class _LookupWork {
       return _finish('partial', 'lookup_summary_only');
     }
     try {
-      final proposal = parseCompanionLookupAnswer(answers.single['answer_text']! as String,
-        companionLookupTaskInput(task), pages);
-      return store.finishLookup(taskId: id, expectedTaskRev: revision, state: proposal['status']! as String, result: proposal);
+      final proposal = parseCompanionLookupAnswer(
+        answers.single['answer_text']! as String,
+        companionLookupTaskInput(task),
+        pages,
+      );
+      return store.finishLookup(
+        taskId: id,
+        expectedTaskRev: revision,
+        state: proposal['status']! as String,
+        result: proposal,
+      );
     } on FormatException {
       return _finish('partial', 'lookup_answer_incomplete');
     }
@@ -717,12 +918,20 @@ class _LookupWork {
     if (!canSend) {
       throw const CompanionLookupFailure('not-current', notSent: true);
     }
-    final claim = store.claimLookupAttempt(taskId: id, expectedTaskRev: revision,
-      requestId: requestId(), kind: kind, input: identity, executorId: executorId,
-      executionMode: full ? 'host' : 'phone', instanceId: capability?.instanceId,
-      provider: full ? capability!.provider : 'deepseek', model: full ? capability!.model : companionLightModel,
+    final claim = store.claimLookupAttempt(
+      taskId: id,
+      expectedTaskRev: revision,
+      requestId: requestId(),
+      kind: kind,
+      input: identity,
+      executorId: executorId,
+      executionMode: full ? 'host' : 'phone',
+      instanceId: capability?.instanceId,
+      provider: full ? capability!.provider : 'deepseek',
+      model: full ? capability!.model : companionLightModel,
       toolUnitPriceMicroCny: full || kind == 'answer' ? null : 5000,
-      toolPriceAsOf: full || kind == 'answer' ? null : '2026-11-21');
+      toolPriceAsOf: full || kind == 'answer' ? null : '2026-11-21',
+    );
     if (claim['newlyClaimed'] != true) {
       return claim;
     }
@@ -749,6 +958,7 @@ class _LookupWork {
         store.observeLookupAttempt(claim['request_id']! as String, normalizedUsage: {'events': normalized});
       }
     }
+
     MemoryRow finish;
     try {
       if (full) {
@@ -756,14 +966,23 @@ class _LookupWork {
         if (remaining <= Duration.zero) {
           throw const CompanionLookupFailure('deadline', notSent: true);
         }
-        final pending = host!.callCompanionLookup(capability!, requestId: claim['request_id']! as String,
-          taskId: id, taskRev: revision, deadlineAtMs: deadline, kind: kind,
-          task: companionLookupTaskInput(task), payload: payload, abort: abort,
+        final pending = host!.callCompanionLookup(
+          capability!,
+          requestId: claim['request_id']! as String,
+          taskId: id,
+          taskRev: revision,
+          deadlineAtMs: deadline,
+          kind: kind,
+          task: companionLookupTaskInput(task),
+          payload: payload,
+          abort: abort,
           onHandoff: () {
             if (!canSend) {
               throw const CompanionLookupFailure('not-current', notSent: true);
             }
-          }, onEvent: observe);
+          },
+          onEvent: observe,
+        );
         try {
           finish = await pending.timeout(remaining);
         } on TimeoutException {
@@ -774,13 +993,28 @@ class _LookupWork {
         }
       } else {
         finish = switch (kind) {
-          'search' => await direct!.search(query: identity['query']! as String, deadlineAtMs: deadline,
-            isCurrent: () => canSend, cancelled: cancelled.future, observe: observe),
-          'fetch' => await direct!.fetch(url: identity['url']! as String, deadlineAtMs: deadline,
-            isCurrent: () => canSend, cancelled: cancelled.future, observe: observe),
-          _ => await direct!.answer(task: companionLookupTaskInput(task),
-            sources: (payload['sources']! as List).cast<MemoryRow>(), deadlineAtMs: deadline,
-            isCurrent: () => canSend, cancelled: cancelled.future, observe: observe),
+          'search' => await direct!.search(
+            query: identity['query']! as String,
+            deadlineAtMs: deadline,
+            isCurrent: () => canSend,
+            cancelled: cancelled.future,
+            observe: observe,
+          ),
+          'fetch' => await direct!.fetch(
+            url: identity['url']! as String,
+            deadlineAtMs: deadline,
+            isCurrent: () => canSend,
+            cancelled: cancelled.future,
+            observe: observe,
+          ),
+          _ => await direct!.answer(
+            task: companionLookupTaskInput(task),
+            sources: (payload['sources']! as List).cast<MemoryRow>(),
+            deadlineAtMs: deadline,
+            isCurrent: () => canSend,
+            cancelled: cancelled.future,
+            observe: observe,
+          ),
         };
       }
     } on CompanionLookupFailure catch (error) {
@@ -796,8 +1030,15 @@ class _LookupWork {
       store.markLookupUncertain(claim['request_id']! as String);
       return attempts.singleWhere((row) => row['request_id'] == claim['request_id']);
     }
-    return _recordLookupFinish(store, claim, finish, raw: raw, answerText: text.toString(),
-      rawEvents: rawEvents, normalized: normalized);
+    return _recordLookupFinish(
+      store,
+      claim,
+      finish,
+      raw: raw,
+      answerText: text.toString(),
+      rawEvents: rawEvents,
+      normalized: normalized,
+    );
   }
 
   MemoryRow _finish(String state, String reason) {
@@ -811,8 +1052,14 @@ class _LookupWork {
   bool? _sent(Object? value) => value == null ? null : value == 1;
 }
 
-MemoryRow _recordLookupFinish(CompanionMemoryStore store, MemoryRow claim, MemoryRow finish, {
-  MemoryRow? raw, String? answerText, List<MemoryRow> rawEvents = const [], List<MemoryRow> normalized = const [],
+MemoryRow _recordLookupFinish(
+  CompanionMemoryStore store,
+  MemoryRow claim,
+  MemoryRow finish, {
+  MemoryRow? raw,
+  String? answerText,
+  List<MemoryRow> rawEvents = const [],
+  List<MemoryRow> normalized = const [],
 }) {
   final request = claim['request_id']! as String;
   if (finish['httpStatus'] != null) {
@@ -823,12 +1070,25 @@ MemoryRow _recordLookupFinish(CompanionMemoryStore store, MemoryRow claim, Memor
   final result = finish['result'];
   final fromFinish = usageMap?['runtime_normalized_usage'];
   final error = finish['error'];
-  final code = error is Map && error['code'] is String && (error['code'] as String).isNotEmpty ? error['code'] as String : null;
-  return store.finishLookupAttempt(request, terminal: code ?? finish['terminal']! as String,
-    dispatched: finish['dispatched'] as bool?, complete: finish['complete']! as bool,
+  final code = error is Map && error['code'] is String && (error['code'] as String).isNotEmpty
+      ? error['code'] as String
+      : null;
+  return store.finishLookupAttempt(
+    request,
+    terminal: code ?? finish['terminal']! as String,
+    dispatched: finish['dispatched'] as bool?,
+    complete: finish['complete']! as bool,
     toolResponse: raw ?? finish['toolResponse'] as MemoryRow?,
-    answerText: claim['kind'] != 'answer' ? null : finish['answerText'] as String? ??
-      (result is Map ? result['text'] as String? : answerText),
-    rawUsage: usageMap == null && rawEvents.isEmpty ? null : {...?usageMap, if (rawEvents.isNotEmpty) 'events': rawEvents},
-    normalizedUsage: normalized.isNotEmpty ? {'events': normalized} : fromFinish is List ? {'events': fromFinish} : null);
+    answerText: claim['kind'] != 'answer'
+        ? null
+        : finish['answerText'] as String? ?? (result is Map ? result['text'] as String? : answerText),
+    rawUsage: usageMap == null && rawEvents.isEmpty
+        ? null
+        : {...?usageMap, if (rawEvents.isNotEmpty) 'events': rawEvents},
+    normalizedUsage: normalized.isNotEmpty
+        ? {'events': normalized}
+        : fromFinish is List
+        ? {'events': fromFinish}
+        : null,
+  );
 }

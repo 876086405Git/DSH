@@ -118,8 +118,16 @@ void main() {
         executor_id,occurred_at_ms,effect_id,outcome,detail_json)
       VALUES(?,?,'alarm.register',?,?,'installation-one',?,?,?,?)
     ''',
-      [taskId, revision, attempt, event, at ?? now, 'dsh-reminder://alarm/$taskId/$revision', outcome,
-        jsonEncode({'fixture': 'persisted native receipt; no system call'})],
+      [
+        taskId,
+        revision,
+        attempt,
+        event,
+        at ?? now,
+        'dsh-reminder://alarm/$taskId/$revision',
+        outcome,
+        jsonEncode({'fixture': 'persisted native receipt; no system call'}),
+      ],
     );
   }
 
@@ -164,13 +172,23 @@ void main() {
     say('source');
     final accepted = create('source', roomMode: 'full', hostKey: 'host-one', hostSessionId: 'host-session-one');
     expect(
-      () => create('source', roomMode: 'full', hostKey: 'host-one', hostSessionId: 'host-session-one',
-        reminder: _eightThirty),
+      () => create(
+        'source',
+        roomMode: 'full',
+        hostKey: 'host-one',
+        hostSessionId: 'host-session-one',
+        reminder: _eightThirty,
+      ),
       error('companion/conflict'),
     );
     expect(
-      () => create('source', roomMode: 'full', hostKey: 'host-one', hostSessionId: 'host-session-one',
-        executor: 'new-installation'),
+      () => create(
+        'source',
+        roomMode: 'full',
+        hostKey: 'host-one',
+        hostSessionId: 'host-session-one',
+        executor: 'new-installation',
+      ),
       error('companion/conflict'),
     );
     expect(() => create('source', roomMode: 'full', hostKey: 'host-two'), error('companion/conflict'));
@@ -227,9 +245,15 @@ void main() {
 
   test('waiting for a missing time is amended on the same task using a new command clock', () {
     say('source', text: '明天提醒我带证件。');
-    final waiting = create('source', reminder: const CompanionReminderSpec(
-      text: '带证件', localDate: '2026-11-03', zoneId: 'Asia/Shanghai', waitReason: 'time_missing',
-    ));
+    final waiting = create(
+      'source',
+      reminder: const CompanionReminderSpec(
+        text: '带证件',
+        localDate: '2026-11-03',
+        zoneId: 'Asia/Shanghai',
+        waitReason: 'time_missing',
+      ),
+    );
     expect(waiting['state'], 'waiting');
     expect(waiting['epoch_ms'], isNull);
     expect(waiting['offset_seconds'], isNull);
@@ -250,20 +274,39 @@ void main() {
 
   for (final invalid in <String, CompanionReminderSpec>{
     'nonexistent calendar date': const CompanionReminderSpec(
-      text: '带证件', localDate: '2026-02-30', zoneId: 'Asia/Shanghai', waitReason: 'time_missing',
+      text: '带证件',
+      localDate: '2026-02-30',
+      zoneId: 'Asia/Shanghai',
+      waitReason: 'time_missing',
     ),
     'invalid clock': const CompanionReminderSpec(
-      text: '带证件', localDate: '2026-11-03', localTime: '24:00', zoneId: 'Asia/Shanghai', waitReason: 'time_gap',
+      text: '带证件',
+      localDate: '2026-11-03',
+      localTime: '24:00',
+      zoneId: 'Asia/Shanghai',
+      waitReason: 'time_gap',
     ),
     'epoch without selected offset': const CompanionReminderSpec(
-      text: '带证件', localDate: '2026-11-03', localTime: '08:00', zoneId: 'Asia/Shanghai', epochMs: 1793664000000,
+      text: '带证件',
+      localDate: '2026-11-03',
+      localTime: '08:00',
+      zoneId: 'Asia/Shanghai',
+      epochMs: 1793664000000,
     ),
     'inconsistent epoch and explicit offset': const CompanionReminderSpec(
-      text: '带证件', localDate: '2026-11-03', localTime: '08:00', zoneId: 'Asia/Shanghai',
-      offsetSeconds: 28800, epochMs: 1793665800000,
+      text: '带证件',
+      localDate: '2026-11-03',
+      localTime: '08:00',
+      zoneId: 'Asia/Shanghai',
+      offsetSeconds: 28800,
+      epochMs: 1793665800000,
     ),
     'no actual missing field': const CompanionReminderSpec(
-      text: '带证件', localDate: '2026-11-03', localTime: '08:00', zoneId: 'Asia/Shanghai', waitReason: 'time_missing',
+      text: '带证件',
+      localDate: '2026-11-03',
+      localTime: '08:00',
+      zoneId: 'Asia/Shanghai',
+      waitReason: 'time_missing',
     ),
   }.entries) {
     test('${invalid.key} is rejected before a reminder is accepted', () {
@@ -285,10 +328,17 @@ void main() {
       database.execute("UPDATE companion_task_revisions SET state='unknown' WHERE task_id=? AND task_rev=1", [id]);
       say('amend', text: '改到 ${unresolved.date} ${unresolved.time}。');
       // The native resolver owns this classification; this checks storage only.
-      final task = amend(id, 'amend', reminder: CompanionReminderSpec(
-        text: '带证件', localDate: unresolved.date, localTime: unresolved.time,
-        zoneId: 'America/Los_Angeles', waitReason: unresolved.reason,
-      ));
+      final task = amend(
+        id,
+        'amend',
+        reminder: CompanionReminderSpec(
+          text: '带证件',
+          localDate: unresolved.date,
+          localTime: unresolved.time,
+          zoneId: 'America/Los_Angeles',
+          waitReason: unresolved.reason,
+        ),
+      );
       expect(task['task_rev'], 2);
       expect(task['operation'], 'amend');
       expect(task['state'], 'waiting');
@@ -306,8 +356,10 @@ void main() {
       final accepted = create('source', roomMode: 'full', hostKey: 'host-one', hostSessionId: 'host-session-one');
       final id = accepted['task_id'] as String;
       say('elsewhere', text: '改到八点半。', session: 'room:other');
-      expect(() => operation == 'amend' ? amend(id, 'elsewhere') : cancel(id, 'elsewhere'),
-        error('companion/conflict'));
+      expect(
+        () => operation == 'amend' ? amend(id, 'elsewhere') : cancel(id, 'elsewhere'),
+        error('companion/conflict'),
+      );
       expect(store.task(id), accepted);
       expect(store.taskForCommand('elsewhere', 0), isNull);
       say('stale', text: '改到八点半。');
@@ -406,8 +458,12 @@ void main() {
     expect(stopped['state'], 'queued');
     expect(stopped['cancel_requested'], 1);
     expect(stopped['task_rev'], 2);
-    expect(database.select('SELECT state FROM companion_task_revisions WHERE task_id=? AND task_rev=1', [id])
-      .single['state'], 'unknown');
+    expect(
+      database.select('SELECT state FROM companion_task_revisions WHERE task_id=? AND task_rev=1', [
+        id,
+      ]).single['state'],
+      'unknown',
+    );
     expect(store.taskReceipts(id).single['event_kind'], 'claimed');
   });
 
@@ -445,17 +501,30 @@ void main() {
       final id = task['task_id'] as String;
       receipt(id);
       final batch = store.nextBatch(forceTail: true, estimateTokens: fixture.estimate)!;
-      expect(store.commitExtraction(batch, fixture.parsed(batch, [
-        fixture.create(source, text: '我咖啡只喝无糖。', quote: '我咖啡只喝无糖。', keywords: ['咖啡']),
-      ])), isTrue);
+      expect(
+        store.commitExtraction(
+          batch,
+          fixture.parsed(batch, [
+            fixture.create(source, text: '我咖啡只喝无糖。', quote: '我咖啡只喝无糖。', keywords: ['咖啡']),
+          ]),
+        ),
+        isTrue,
+      );
       final text = raw ? '忘掉我咖啡只喝无糖，连原话也删' : '忘掉我咖啡只喝无糖';
       say('forget', text: text);
-      final control = parseMemoryControl(text, store.cards(includeInactive: true),
-        topicControls: store.topicControls())!;
+      final control = parseMemoryControl(
+        text,
+        store.cards(includeInactive: true),
+        topicControls: store.topicControls(),
+      )!;
       expect(control['ambiguous'], isFalse);
       expect(control['kind'], 'forget');
-      store.applyControl(topicIds: (control['topic_ids'] as List<Object?>).cast<String>(), kind: 'forget',
-        controlMessageId: 'forget', deleteChat: control['delete_chat'] == true);
+      store.applyControl(
+        topicIds: (control['topic_ids'] as List<Object?>).cast<String>(),
+        kind: 'forget',
+        controlMessageId: 'forget',
+        deleteChat: control['delete_chat'] == true,
+      );
       reopen();
       expect(store.cards(), isEmpty);
       expect(store.messages().any((row) => row['id'] == 'mixed'), !raw);
@@ -479,7 +548,15 @@ void main() {
   test('a genuine v10 store upgrades without inventing a source zone or replacing existing facts', () {
     final source = say('old', text: '我咖啡只喝无糖。');
     final batch = store.nextBatch(forceTail: true, estimateTokens: fixture.estimate)!;
-    expect(store.commitExtraction(batch, fixture.parsed(batch, [fixture.create(source, keywords: ['咖啡'])])), isTrue);
+    expect(
+      store.commitExtraction(
+        batch,
+        fixture.parsed(batch, [
+          fixture.create(source, keywords: ['咖啡']),
+        ]),
+      ),
+      isTrue,
+    );
     final card = store.cards().single;
     restoreOldMemorySchema(database, 10);
     expect(database.select('PRAGMA table_info(memory_messages)').map((row) => row['name']), isNot(contains('zone_id')));

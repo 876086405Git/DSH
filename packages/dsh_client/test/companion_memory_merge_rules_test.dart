@@ -4,21 +4,45 @@ import 'package:dsh_client/companion.dart';
 import 'package:test/test.dart';
 
 MemoryRow _row(String id, int revision, String text, String message, String quote, {int day = 10}) => {
-  'id': id, 'row_rev': revision, 'kind': 'preference', 'text': text,
-  'scope': 'real', 'status': 'current', 'manual': false, 'eligible': true,
-  'topic_mode': 'normal', 'pinned': false, 'keywords': ['原味', '酸奶'],
-  'current_basis_seq': day, 'source_at_ms': DateTime.utc(2026, 11, day, 2).millisecondsSinceEpoch,
-  'event_time': null, 'followup': null, 'plan_state': null, 'expires_at_ms': null,
-  'evidence': <MemoryRow>[{
-    'message_id': message, 'source_rev': 1, 'support_group': 'proof-$id',
-    'said_at_utc': DateTime.utc(2026, 11, day, 2).millisecondsSinceEpoch,
-    'offset_minutes': 480, 'quote': quote, 'role': 'user', 'scope': 'real', 'first_seq': day,
-  }],
+  'id': id,
+  'row_rev': revision,
+  'kind': 'preference',
+  'text': text,
+  'scope': 'real',
+  'status': 'current',
+  'manual': false,
+  'eligible': true,
+  'topic_mode': 'normal',
+  'pinned': false,
+  'keywords': ['原味', '酸奶'],
+  'current_basis_seq': day,
+  'source_at_ms': DateTime.utc(2026, 11, day, 2).millisecondsSinceEpoch,
+  'event_time': null,
+  'followup': null,
+  'plan_state': null,
+  'expires_at_ms': null,
+  'evidence': <MemoryRow>[
+    {
+      'message_id': message,
+      'source_rev': 1,
+      'support_group': 'proof-$id',
+      'said_at_utc': DateTime.utc(2026, 11, day, 2).millisecondsSinceEpoch,
+      'offset_minutes': 480,
+      'quote': quote,
+      'role': 'user',
+      'scope': 'real',
+      'first_seq': day,
+    },
+  ],
 };
 
 MemoryRow _merge(MemoryRow target, MemoryRow source) => {
-  'op': 'merge', 'target_id': target['id'], 'expected_row_rev': target['row_rev'],
-  'from': <MemoryRow>[{'id': source['id'], 'expected_row_rev': source['row_rev']}],
+  'op': 'merge',
+  'target_id': target['id'],
+  'expected_row_rev': target['row_rev'],
+  'from': <MemoryRow>[
+    {'id': source['id'], 'expected_row_rev': source['row_rev']},
+  ],
   'text': target['text'],
   'evidence': <MemoryRow>[
     for (final row in [target, source])
@@ -28,7 +52,10 @@ MemoryRow _merge(MemoryRow target, MemoryRow source) => {
 };
 
 MemoryRow _envelope(MemoryMergeBatch batch, List<MemoryRow> operations) => {
-  'schema_version': 2, 'batch_id': batch.id, 'operations': operations, 'completion': 'complete',
+  'schema_version': 2,
+  'batch_id': batch.id,
+  'operations': operations,
+  'completion': 'complete',
 };
 
 void main() {
@@ -74,8 +101,11 @@ void main() {
     expect(rows.first.keys, unorderedEquals(['id', 'row_rev', 'kind', 'text', 'evidence']));
     final proof = (rows.last['evidence'] as List<MemoryRow>).single;
     expect(proof, {
-      'message_id': 's12', 'source_rev': 1, 'said_at_utc': '2026-11-16T02:00:00.000Z',
-      'offset_minutes': 480, 'quote': '我买酸奶还是只选原味。',
+      'message_id': 's12',
+      'source_rev': 1,
+      'said_at_utc': '2026-11-16T02:00:00.000Z',
+      'offset_minutes': 480,
+      'quote': '我买酸奶还是只选原味。',
     });
     expect((second['evidence'] as List<MemoryRow>).single['support_group'], 'proof-m12');
   });
@@ -107,14 +137,14 @@ void main() {
     'extra model authority': (value) => value['pinned'] = true,
     'unknown target': (value) => value['target_id'] = 'missing',
     'wrong target revision': (value) => value['expected_row_rev'] = 1,
-    'non-integer source revision': (value) =>
-      (value['from'] as List<MemoryRow>).single['expected_row_rev'] = 4.0,
+    'non-integer source revision': (value) => (value['from'] as List<MemoryRow>).single['expected_row_rev'] = 4.0,
     'empty source list': (value) => value['from'] = <Object?>[],
     'two source rows': (value) => (value['from'] as List<MemoryRow>).add({'id': 'm11', 'expected_row_rev': 2}),
-    'self merge': (value) => value['from'] = <MemoryRow>[{'id': 'm11', 'expected_row_rev': 2}],
+    'self merge': (value) => value['from'] = <MemoryRow>[
+      {'id': 'm11', 'expected_row_rev': 2},
+    ],
     'one-sided evidence': (value) => (value['evidence'] as List<MemoryRow>).removeLast(),
-    'substring rather than supplied quote': (value) =>
-      (value['evidence'] as List<MemoryRow>).first['quote'] = '只买原味',
+    'substring rather than supplied quote': (value) => (value['evidence'] as List<MemoryRow>).first['quote'] = '只买原味',
     'invented source': (value) => (value['evidence'] as List<MemoryRow>).last['message_id'] = 'invented',
   };
   for (final scenario in invalidMerges.entries) {
@@ -136,8 +166,12 @@ void main() {
   test('two disjoint merges are allowed, while reusing any target or source is not', () {
     final third = _row('m13', 1, '你喜欢橙子。', 's13', '我喜欢橙子。');
     final fourth = _row('m14', 1, '橙子是你喜欢的水果。', 's14', '橙子是我喜欢的水果。');
-    final input = MemoryMergeBatch(id: 'batch', controlRevision: 9, memoryRevision: 12,
-      rows: [first, second, third, fourth]);
+    final input = MemoryMergeBatch(
+      id: 'batch',
+      controlRevision: 9,
+      memoryRevision: 12,
+      rows: [first, second, third, fourth],
+    );
     final valid = _envelope(input, [_merge(first, second), _merge(fourth, third)]);
     expect(parseMergeProposal(jsonEncode(valid), input)['operations'], hasLength(2));
     final reused = _envelope(input, [_merge(first, second), _merge(third, first)]);
@@ -162,10 +196,16 @@ void main() {
     second['event_time'] = {'wording': '周五', 'precision': 'day', 'local_date': '2026-11-20'};
     expect(sameMemoryMergeConditions(first, second), isTrue); // JSON key order is irrelevant.
     (second['event_time'] as MemoryRow)['local_date'] = '2026-11-27';
-    expect(() => parseMergeProposal(jsonEncode(_envelope(batch, [_merge(first, second)])), batch), throwsFormatException);
+    expect(
+      () => parseMergeProposal(jsonEncode(_envelope(batch, [_merge(first, second)])), batch),
+      throwsFormatException,
+    );
     second['event_time'] = first['event_time'];
     second['followup'] = {
-      'local_date': '2026-11-21', 'precision': 'day', 'wording': '过后问问我', 'basis': 'explicit_invitation',
+      'local_date': '2026-11-21',
+      'precision': 'day',
+      'wording': '过后问问我',
+      'basis': 'explicit_invitation',
     };
     expect(sameMemoryMergeConditions(first, second), isFalse);
     second['followup'] = null;

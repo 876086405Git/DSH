@@ -22,13 +22,19 @@ class CompanionTasksCapability {
 }
 
 extension CompanionHostTasksApi on DshClient {
-  Future<CompanionTasksCapability?> readCompanionTasksCapability({Duration timeout = const Duration(seconds: 8)}) async {
+  Future<CompanionTasksCapability?> readCompanionTasksCapability({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
     final transport = carrier;
     if (transport is! DshHttpCarrier) {
       return null;
     }
-    final response = await transport.connection.get('$_path/capabilities', timeout: timeout,
-      followRedirects: false, maxResponseBytes: 4096);
+    final response = await transport.connection.get(
+      '$_path/capabilities',
+      timeout: timeout,
+      followRedirects: false,
+      maxResponseBytes: 4096,
+    );
     final map = _decode(response);
     final error = map['error'];
     if (response.statusCode == 404 && (error == null || error is Map && error['code'] == 'companion/not-found')) {
@@ -36,32 +42,53 @@ extension CompanionHostTasksApi on DshClient {
     }
     _success(response, map);
     final kinds = map['kinds'];
-    if (map['v'] != 1 || map['durableAcceptance'] is! bool || map['artifactRead'] is! bool ||
-        (map['hostStoreId'] != null && !_id(map['hostStoreId'])) || kinds is! List ||
+    if (map['v'] != 1 ||
+        map['durableAcceptance'] is! bool ||
+        map['artifactRead'] is! bool ||
+        (map['hostStoreId'] != null && !_id(map['hostStoreId'])) ||
+        kinds is! List ||
         kinds.any((kind) => kind != 'host.notes_to_todo') ||
         (kinds.isNotEmpty && (map['durableAcceptance'] != true || !_id(map['hostStoreId']))) ||
-        map['afterExit'] is! List || jsonEncode(map['afterExit']) != '["continue"]' ||
-        map['pauseBehavior'] != 'waiting' || (map['reason'] != null && map['reason'] is! String)) {
+        map['afterExit'] is! List ||
+        jsonEncode(map['afterExit']) != '["continue"]' ||
+        map['pauseBehavior'] != 'waiting' ||
+        (map['reason'] != null && map['reason'] is! String)) {
       _invalid();
     }
-    return CompanionTasksCapability._(this, map['hostStoreId'] as String?,
-      kinds.contains('host.notes_to_todo'), map['artifactRead']! as bool, map['reason'] as String?);
+    return CompanionTasksCapability._(
+      this,
+      map['hostStoreId'] as String?,
+      kinds.contains('host.notes_to_todo'),
+      map['artifactRead']! as bool,
+      map['reason'] as String?,
+    );
   }
 
   /// path is from the actual Host directory picker. Only the Host can resolve
   /// and bind its directory identity; an entered path is not a folderRef.
-  Future<Map<String, Object?>> bindCompanionNotesDirectory(CompanionTasksCapability host, String path,
-      {Duration timeout = const Duration(seconds: 15)}) async {
+  Future<Map<String, Object?>> bindCompanionNotesDirectory(
+    CompanionTasksCapability host,
+    String path, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     if (!identical(host._owner, this) || !host.notes || host.hostStoreId == null) {
       throw const DshRemoteException('companion/task-unavailable', 'Notes tasks are unavailable');
     }
-    final response = await _connection(this).postBytes('$_path/folders', utf8.encode(jsonEncode({
-      'v': 1, 'hostStoreId': host.hostStoreId, 'path': path,
-    })), contentType: 'application/json', followRedirects: false, timeout: timeout, maxResponseBytes: 16384);
+    final response = await _connection(this).postBytes(
+      '$_path/folders',
+      utf8.encode(jsonEncode({'v': 1, 'hostStoreId': host.hostStoreId, 'path': path})),
+      contentType: 'application/json',
+      followRedirects: false,
+      timeout: timeout,
+      maxResponseBytes: 16384,
+    );
     final map = _decode(response);
     _success(response, map);
-    if (map['v'] != 1 || map['hostStoreId'] != host.hostStoreId || !_id(map['folderRef']) ||
-        map['displayPath'] is! String || (map['displayPath']! as String).isEmpty) {
+    if (map['v'] != 1 ||
+        map['hostStoreId'] != host.hostStoreId ||
+        !_id(map['folderRef']) ||
+        map['displayPath'] is! String ||
+        (map['displayPath']! as String).isEmpty) {
       _invalid();
     }
     return map;
@@ -69,14 +96,24 @@ extension CompanionHostTasksApi on DshClient {
 
   /// request is the already persisted, immutable package returned by
   /// prepareHostTaskOperation. Its possible handoff must be committed first.
-  Future<Map<String, Object?>> writeCompanionHostTask({required String taskId, required String operation,
-    required Map<String, Object?> request, Duration timeout = const Duration(seconds: 15)}) async {
+  Future<Map<String, Object?>> writeCompanionHostTask({
+    required String taskId,
+    required String operation,
+    required Map<String, Object?> request,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     if (!_id(taskId) || !_id(request['hostStoreId']) || !const ['create', 'amend', 'cancel'].contains(operation)) {
       throw const DshProtocolException('Invalid persisted task operation');
     }
     final suffix = operation == 'create' ? '' : '/${Uri.encodeComponent(taskId)}/$operation';
-    final response = await _connection(this).postBytes('$_path$suffix', utf8.encode(jsonEncode(request)),
-      contentType: 'application/json', followRedirects: false, timeout: timeout, maxResponseBytes: 1024 * 1024);
+    final response = await _connection(this).postBytes(
+      '$_path$suffix',
+      utf8.encode(jsonEncode(request)),
+      contentType: 'application/json',
+      followRedirects: false,
+      timeout: timeout,
+      maxResponseBytes: 1024 * 1024,
+    );
     final map = _decode(response);
     _success(response, map);
     _identity(map, request['hostStoreId']! as String, taskId);
@@ -86,12 +123,22 @@ extension CompanionHostTasksApi on DshClient {
   /// A same-store 404 is a missing observation, not proof that an old request
   /// was never sent. The coordinator alone decides whether the same ID can be
   /// replayed. A changed store is an error, never a new empty task list.
-  Future<Map<String, Object?>?> readCompanionHostTask({required String hostStoreId, required String taskId,
-    Duration timeout = const Duration(seconds: 8)}) async {
-    final response = await _connection(this).get('$_path/${Uri.encodeComponent(taskId)}',
-      query: {'hostStoreId': hostStoreId}, timeout: timeout, followRedirects: false, maxResponseBytes: 1024 * 1024);
+  Future<Map<String, Object?>?> readCompanionHostTask({
+    required String hostStoreId,
+    required String taskId,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final response = await _connection(this).get(
+      '$_path/${Uri.encodeComponent(taskId)}',
+      query: {'hostStoreId': hostStoreId},
+      timeout: timeout,
+      followRedirects: false,
+      maxResponseBytes: 1024 * 1024,
+    );
     final map = _decode(response);
-    if (response.statusCode == 404 && map['error'] is Map && (map['error']! as Map)['code'] == 'companion/task-not-found') {
+    if (response.statusCode == 404 &&
+        map['error'] is Map &&
+        (map['error']! as Map)['code'] == 'companion/task-not-found') {
       return null;
     }
     _success(response, map);
@@ -99,15 +146,25 @@ extension CompanionHostTasksApi on DshClient {
     return map;
   }
 
-  Future<Map<String, Object?>> readCompanionHostArtifact({required String hostStoreId, required String taskId,
-    required String hostExecutionId, required String artifactId,
-    Duration timeout = const Duration(seconds: 15)}) async {
-    final response = await _connection(this).get('$_path/${Uri.encodeComponent(taskId)}/artifacts/${Uri.encodeComponent(artifactId)}',
-      query: {'hostStoreId': hostStoreId}, timeout: timeout, followRedirects: false, maxResponseBytes: 1024 * 1024);
+  Future<Map<String, Object?>> readCompanionHostArtifact({
+    required String hostStoreId,
+    required String taskId,
+    required String hostExecutionId,
+    required String artifactId,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final response = await _connection(this).get(
+      '$_path/${Uri.encodeComponent(taskId)}/artifacts/${Uri.encodeComponent(artifactId)}',
+      query: {'hostStoreId': hostStoreId},
+      timeout: timeout,
+      followRedirects: false,
+      maxResponseBytes: 1024 * 1024,
+    );
     final map = _decode(response);
     _success(response, map);
     _identity(map, hostStoreId, taskId);
-    if (map['hostExecutionId'] != hostExecutionId || map['artifactId'] != artifactId ||
+    if (map['hostExecutionId'] != hostExecutionId ||
+        map['artifactId'] != artifactId ||
         !const ['available', 'missing', 'changed', 'unknown'].contains(map['status']) ||
         !const ['text/markdown', 'text/plain'].contains(map['mediaType']) ||
         (map['status'] == 'available' ? map['content'] is! String : map['content'] != null) ||
@@ -150,8 +207,10 @@ void _success(DshHttpResponse response, _Row map) {
   }
   final error = map['error'];
   if (error is Map && error['code'] is String && error['message'] is String) {
-    throw DshRemoteException(error['code']! as String, error['message']! as String,
-      {'status': response.statusCode, if (map['snapshot'] is Map) 'snapshot': map['snapshot']});
+    throw DshRemoteException(error['code']! as String, error['message']! as String, {
+      'status': response.statusCode,
+      if (map['snapshot'] is Map) 'snapshot': map['snapshot'],
+    });
   }
   throw DshHttpException(response.statusCode, 'Task request did not return a successful response');
 }

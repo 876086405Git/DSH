@@ -676,11 +676,14 @@ class CompanionMemoryStore {
   void _withdrawSourceGroup(String cardId, String groupId) {
     // A different AND member may have changed. Every member loses its old
     // proof role, even when this message's own revision remains unchanged.
-    _db.execute('''
+    _db.execute(
+      '''
       INSERT INTO memory_card_cleanup_sources(card_id,message_id,proof_withdrawn)
         SELECT card_id,message_id,1 FROM memory_card_sources WHERE card_id=? AND support_group=?
         ON CONFLICT(card_id,message_id) DO UPDATE SET proof_withdrawn=1
-    ''', [cardId, groupId]);
+    ''',
+      [cardId, groupId],
+    );
     _db.execute('DELETE FROM memory_card_sources WHERE card_id=? AND support_group=?', [cardId, groupId]);
   }
 
@@ -769,7 +772,11 @@ class CompanionMemoryStore {
       }
       List<String>? targets = requestedTargets;
       if (message != null) {
-        final control = parseMemoryControl(message['text'] as String, cards(includeInactive: true), topicControls: topicControls());
+        final control = parseMemoryControl(
+          message['text'] as String,
+          cards(includeInactive: true),
+          topicControls: topicControls(),
+        );
         final resolved = control == null ? <String>[] : (control['topic_ids'] as List<Object?>).cast<String>();
         resolved.sort();
         if (control == null ||
@@ -820,15 +827,22 @@ class CompanionMemoryStore {
       } else {
         for (final topic in topics) {
           if (kind == 'never' || kind == 'less' || kind == 'normal') {
-            _db.execute('''
+            _db.execute(
+              '''
               UPDATE memory_cards SET maintenance_row_rev=0 WHERE topic_id=?
                 AND EXISTS(SELECT 1 FROM memory_topics WHERE id=? AND mode!=?)
-            ''', [topic, topic, kind]);
+            ''',
+              [topic, topic, kind],
+            );
             // A source edit can withdraw the fact without retracting this
             // separate explicit control. Reaffirming/toggling less and never
             // retains its already-proved vocabulary; normal releases it.
             final anchors = kind == 'normal' ? <String>[] : _controlAnchors(topic);
-            _db.execute('UPDATE memory_topics SET mode=?,control_anchors=? WHERE id=?', [kind, jsonEncode(anchors), topic]);
+            _db.execute('UPDATE memory_topics SET mode=?,control_anchors=? WHERE id=?', [
+              kind,
+              jsonEncode(anchors),
+              topic,
+            ]);
           }
           if (kind == 'never' || kind == 'less') {
             _db.execute(
@@ -916,7 +930,11 @@ class CompanionMemoryStore {
     final message = _controlMessage(messageId)!;
     if (message['source_rev'] != expectedSourceRev) throw _conflict;
     if (_alreadyControlled(message, 'ambiguous_control')) return;
-    final control = parseMemoryControl(message['text'] as String, cards(includeInactive: true), topicControls: topicControls());
+    final control = parseMemoryControl(
+      message['text'] as String,
+      cards(includeInactive: true),
+      topicControls: topicControls(),
+    );
     if (control == null || control['ambiguous'] != true) {
       throw const DshRemoteException('companion/invalid-request', 'This source is not an unresolved control', {
         'status': 400,
@@ -980,7 +998,9 @@ class CompanionMemoryStore {
         _db.execute('DELETE FROM memory_card_sources WHERE card_id=?', [cardId]);
         _db.execute('DELETE FROM memory_card_cleanup_sources WHERE card_id=?', [cardId]);
       } else {
-        for (final group in _db.select('SELECT DISTINCT support_group FROM memory_card_sources WHERE card_id=?', [cardId])) {
+        for (final group in _db.select('SELECT DISTINCT support_group FROM memory_card_sources WHERE card_id=?', [
+          cardId,
+        ])) {
           _withdrawSourceGroup(cardId, group['support_group'] as String);
         }
       }
@@ -990,14 +1010,24 @@ class CompanionMemoryStore {
           current_basis_seq=?,source_at_ms=?,event_time=NULL,followup=NULL,plan_state=NULL,expires_at_ms=NULL,
           updated_at_ms=?,cleanup_history_complete=? WHERE id=?
       ''',
-        [text, jsonEncode(keywords), basis, message['edited_at_utc'] ?? message['said_at_utc'], at,
-          changedText ? 1 : previous['cleanup_history_complete'], cardId],
+        [
+          text,
+          jsonEncode(keywords),
+          basis,
+          message['edited_at_utc'] ?? message['said_at_utc'],
+          at,
+          changedText ? 1 : previous['cleanup_history_complete'],
+          cardId,
+        ],
       );
       _db.execute(
         'INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)',
         [cardId, _createId(), messageId, expectedSourceRev, message['text']],
       );
-      _db.execute('INSERT OR IGNORE INTO memory_card_cleanup_sources(card_id,message_id) VALUES(?,?)', [cardId, messageId]);
+      _db.execute('INSERT OR IGNORE INTO memory_card_cleanup_sources(card_id,message_id) VALUES(?,?)', [
+        cardId,
+        messageId,
+      ]);
       _db.execute("UPDATE memory_migrations SET result='imported' WHERE local_card_id=? AND result='display_only'", [
         cardId,
       ]);
@@ -1112,7 +1142,8 @@ class CompanionMemoryStore {
       // groups cannot be stitched together to manufacture an AND dependency.
       (removed) => removed.every(
         (proof) => group.any(
-          (member) => member['message_id'] == proof['message_id'] &&
+          (member) =>
+              member['message_id'] == proof['message_id'] &&
               member['source_rev'] == proof['source_rev'] &&
               (member['quote'] as String).contains(proof['quote'] as String),
         ),
@@ -1167,7 +1198,8 @@ class CompanionMemoryStore {
           for (final proof in group) {
             // A derived multi-message AND card does not authorize deleting its
             // independent Y original merely because its X member is removed.
-            if (roots.contains(id) || sameMessage ||
+            if (roots.contains(id) ||
+                sameMessage ||
                 rootCards.any((root) => _containsCardText(proof['quote'] as String, root))) {
               rawSources.add(proof['message_id'] as String);
             }
@@ -1192,8 +1224,9 @@ class CompanionMemoryStore {
           }
         }
         copiedGroups[id] = withdrawn;
-        final touchedRaw = (origins[id] ?? const <MemoryRow>[])
-            .any((origin) => rawSources.contains(origin['message_id']));
+        final touchedRaw = (origins[id] ?? const <MemoryRow>[]).any(
+          (origin) => rawSources.contains(origin['message_id']),
+        );
         if (card['manual'] != true && removed == current.length && (removed > 0 || touchedRaw)) {
           deleting.add(id);
         }
@@ -1513,7 +1546,9 @@ class CompanionMemoryStore {
           _db.execute('DELETE FROM memory_card_sources WHERE card_id=?', [id]);
           _db.execute('DELETE FROM memory_card_cleanup_sources WHERE card_id=?', [id]);
         } else {
-          for (final group in _db.select('SELECT DISTINCT support_group FROM memory_card_sources WHERE card_id=?', [id])) {
+          for (final group in _db.select('SELECT DISTINCT support_group FROM memory_card_sources WHERE card_id=?', [
+            id,
+          ])) {
             _withdrawSourceGroup(id as String, group['support_group'] as String);
           }
         }
@@ -1528,7 +1563,10 @@ class CompanionMemoryStore {
         ''',
           [id, group, source['id'], source['source_rev'], reference['quote']],
         );
-        _db.execute('INSERT OR IGNORE INTO memory_card_cleanup_sources(card_id,message_id) VALUES(?,?)', [id, source['id']]);
+        _db.execute('INSERT OR IGNORE INTO memory_card_cleanup_sources(card_id,message_id) VALUES(?,?)', [
+          id,
+          source['id'],
+        ]);
       }
       changed = true;
     }
@@ -1593,11 +1631,14 @@ class CompanionMemoryStore {
 
   /// Only for explicit topic controls; these rows are not memory facts.
   List<MemoryRow> topicControls() => [
-    for (final row in _db.select("SELECT id,mode,control_anchors FROM memory_topics WHERE mode IN ('less','never') ORDER BY id")) {
-      'topic_id': row['id'],
-      'mode': row['mode'],
-      'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
-    },
+    for (final row in _db.select(
+      "SELECT id,mode,control_anchors FROM memory_topics WHERE mode IN ('less','never') ORDER BY id",
+    ))
+      {
+        'topic_id': row['id'],
+        'mode': row['mode'],
+        'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
+      },
   ];
 
   /// A new card cannot turn one uniquely matched controlled topic back to
@@ -1667,15 +1708,15 @@ class CompanionMemoryStore {
     }
     if (archive['maintenance_revision'] == archive['memory_revision']) return null;
     var rows = _mergeRows(at);
-    final proofs = {for (final row in rows) row['id']:
-      _supportGroups(row).values.map(_mergeProofKey).toSet()};
+    final proofs = {for (final row in rows) row['id']: _supportGroups(row).values.map(_mergeProofKey).toSet()};
     final removed = <Object?>{};
     for (var i = 0; i < rows.length; i++) {
       final target = rows[i];
       if (removed.contains(target['id'])) continue;
       for (var j = i + 1; j < rows.length; j++) {
         final from = rows[j];
-        if (removed.contains(from['id']) || target['text'] != from['text'] ||
+        if (removed.contains(from['id']) ||
+            target['text'] != from['text'] ||
             !sameMemoryMergeConditions(target, from) ||
             !proofs[target['id']]!.any(proofs[from['id']]!.contains)) {
           continue;
@@ -1689,8 +1730,9 @@ class CompanionMemoryStore {
       _bumpMemory();
       rows = _mergeRows(at);
     }
-    final groups = memoryMergeGroups(rows).where((group) =>
-      group.any((row) => row['maintenance_row_rev'] != row['row_rev'])).toList();
+    final groups = memoryMergeGroups(
+      rows,
+    ).where((group) => group.any((row) => row['maintenance_row_rev'] != row['row_rev'])).toList();
     if (groups.isEmpty) {
       _db.execute('UPDATE memory_archive SET maintenance_revision=memory_revision WHERE singleton=1');
       return null;
@@ -1698,21 +1740,32 @@ class CompanionMemoryStore {
     final id = _createId();
     final meta = archive;
     final selected = <MemoryRow>[];
-    MemoryMergeBatch batch(List<MemoryRow> input) => MemoryMergeBatch(id: id,
-      controlRevision: meta['control_revision'] as int, memoryRevision: meta['memory_revision'] as int, rows: input);
+    MemoryMergeBatch batch(List<MemoryRow> input) => MemoryMergeBatch(
+      id: id,
+      controlRevision: meta['control_revision'] as int,
+      memoryRevision: meta['memory_revision'] as int,
+      rows: input,
+    );
     for (final group in groups) {
       final candidate = [...selected, ...group];
-      if (estimateTokens('$companionMemoryConsolidationPrompt\n${jsonEncode(consolidationInput(batch(candidate)))}')
-          <= memoryBatchInputTokens) {
+      if (estimateTokens('$companionMemoryConsolidationPrompt\n${jsonEncode(consolidationInput(batch(candidate)))}') <=
+          memoryBatchInputTokens) {
         selected.addAll(group);
       }
     }
     if (selected.isEmpty) return null;
-    _db.execute('''
+    _db.execute(
+      '''
       INSERT INTO memory_merge_batches(singleton,id,control_revision,memory_revision,card_revisions)
       VALUES(1,?,?,?,?)
-    ''', [id, meta['control_revision'], meta['memory_revision'],
-      jsonEncode({for (final row in selected) row['id'] as String: row['row_rev']})]);
+    ''',
+      [
+        id,
+        meta['control_revision'],
+        meta['memory_revision'],
+        jsonEncode({for (final row in selected) row['id'] as String: row['row_rev']}),
+      ],
+    );
     return batch(selected);
   });
 
@@ -1720,15 +1773,19 @@ class CompanionMemoryStore {
     final cutoff = archive['history_after_seq'] as int;
     final rows = <MemoryRow>[];
     for (final card in cards()) {
-      if (card['scope'] != 'real' || card['eligible'] != true || card['topic_mode'] == 'never' ||
+      if (card['scope'] != 'real' ||
+          card['eligible'] != true ||
+          card['topic_mode'] == 'never' ||
           const ['cancelled', 'postponed'].contains(card['plan_state']) ||
           (card['expires_at_ms'] != null && (card['expires_at_ms'] as int) <= at)) {
         continue;
       }
       final evidence = <MemoryRow>[
         for (final group in _supportGroups(card).values)
-          if (group.every((proof) => proof['role'] == 'user' && proof['scope'] == 'real' &&
-              (proof['first_seq'] as int) > cutoff)) ...group,
+          if (group.every(
+            (proof) => proof['role'] == 'user' && proof['scope'] == 'real' && (proof['first_seq'] as int) > cutoff,
+          ))
+            ...group,
       ];
       if (evidence.isNotEmpty) rows.add({...card, 'evidence': evidence});
     }
@@ -1748,17 +1805,22 @@ class CompanionMemoryStore {
       if (row == null || row['row_rev'] != entry.value) return null;
       rows.add(row);
     }
-    return MemoryMergeBatch(id: claim['id'] as String, controlRevision: claim['control_revision'] as int,
-      memoryRevision: claim['memory_revision'] as int, rows: rows);
+    return MemoryMergeBatch(
+      id: claim['id'] as String,
+      controlRevision: claim['control_revision'] as int,
+      memoryRevision: claim['memory_revision'] as int,
+      rows: rows,
+    );
   }
 
   bool isMergeBatchCurrent(MemoryMergeBatch batch) {
     final claims = _db.select('SELECT * FROM memory_merge_batches WHERE id=?', [batch.id]);
     if (claims.isEmpty) return false;
     final claim = claims.single;
-    return claim['control_revision'] == batch.controlRevision && claim['memory_revision'] == batch.memoryRevision &&
-      claim['card_revisions'] == jsonEncode({for (final row in batch.rows) row['id'] as String: row['row_rev']}) &&
-      _restoreMergeBatch(claim, _checkedNow()) != null;
+    return claim['control_revision'] == batch.controlRevision &&
+        claim['memory_revision'] == batch.memoryRevision &&
+        claim['card_revisions'] == jsonEncode({for (final row in batch.rows) row['id'] as String: row['row_rev']}) &&
+        _restoreMergeBatch(claim, _checkedNow()) != null;
   }
 
   /// JSON has passed parseMergeProposal. Even an empty result must still own
@@ -1788,15 +1850,23 @@ class CompanionMemoryStore {
     _db.execute('DELETE FROM memory_merge_batches WHERE id=?', [batch.id]);
   });
 
-  String _mergeProofKey(List<MemoryRow> group) => jsonEncode([
-    for (final proof in group) jsonEncode([proof['message_id'], proof['source_rev'], proof['quote']]),
-  ]..sort());
+  String _mergeProofKey(List<MemoryRow> group) => jsonEncode(
+    [
+      for (final proof in group) jsonEncode([proof['message_id'], proof['source_rev'], proof['quote']]),
+    ]..sort(),
+  );
 
   void _mergeCards(String targetId, String fromId, int at) {
-    final pair = {for (final row in _db.select('''
+    final pair = {
+      for (final row in _db.select(
+        '''
       SELECT c.*,t.mode AS topic_mode FROM memory_cards c JOIN memory_topics t ON t.id=c.topic_id
       WHERE c.id IN (?,?)
-    ''', [targetId, fromId])) row['id']: _card(row)};
+    ''',
+        [targetId, fromId],
+      ))
+        row['id']: _card(row),
+    };
     final target = pair[targetId]!;
     final from = pair[fromId]!;
     final keys = _supportGroups(target).values.map(_mergeProofKey).toSet();
@@ -1804,9 +1874,12 @@ class CompanionMemoryStore {
       if (!keys.add(_mergeProofKey(group))) continue;
       final id = _createId();
       for (final proof in group) {
-        _db.execute('''
+        _db.execute(
+          '''
           INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)
-        ''', [targetId, id, proof['message_id'], proof['source_rev'], proof['quote']]);
+        ''',
+          [targetId, id, proof['message_id'], proof['source_rev'], proof['quote']],
+        );
       }
     }
     final words = <String>[];
@@ -1818,38 +1891,60 @@ class CompanionMemoryStore {
         if (words.length < 8 && supported.contains(normalized) && seen.add(normalized)) words.add(word);
       }
     }
-    final proofs = [...(target['evidence'] as List<Object?>).cast<MemoryRow>(),
-      ...(from['evidence'] as List<Object?>).cast<MemoryRow>()];
+    final proofs = [
+      ...(target['evidence'] as List<Object?>).cast<MemoryRow>(),
+      ...(from['evidence'] as List<Object?>).cast<MemoryRow>(),
+    ];
     final revision = (target['row_rev'] as int) + 1;
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE memory_cards SET row_rev=?,pinned=?,keywords=?,current_basis_seq=?,source_at_ms=?,updated_at_ms=?,
         cleanup_history_complete=? WHERE id=?
-    ''', [revision, target['pinned'] == true || from['pinned'] == true ? 1 : 0, jsonEncode(words),
-      proofs.map((proof) => proof['first_seq'] as int).reduce(math.max),
-      proofs.map((proof) => (proof['edited_at_utc'] ?? proof['said_at_utc']) as int).reduce(math.max), at,
-      target['cleanup_history_complete'] == 1 && from['cleanup_history_complete'] == 1 ? 1 : 0, targetId]);
+    ''',
+      [
+        revision,
+        target['pinned'] == true || from['pinned'] == true ? 1 : 0,
+        jsonEncode(words),
+        proofs.map((proof) => proof['first_seq'] as int).reduce(math.max),
+        proofs.map((proof) => (proof['edited_at_utc'] ?? proof['said_at_utc']) as int).reduce(math.max),
+        at,
+        target['cleanup_history_complete'] == 1 && from['cleanup_history_complete'] == 1 ? 1 : 0,
+        targetId,
+      ],
+    );
     _db.execute('UPDATE memory_migrations SET local_card_id=? WHERE local_card_id=?', [targetId, fromId]);
     // Rebind before the card FK cascades. Consumption, invitation identity,
     // original clocks, completion support and shared spends are unchanged.
-    _db.execute('UPDATE memory_followups SET card_id=?,card_rev=?,row_rev=row_rev+1 WHERE card_id IN (?,?)',
-      [targetId, revision, targetId, fromId]);
-    _db.execute('''
+    _db.execute('UPDATE memory_followups SET card_id=?,card_rev=?,row_rev=row_rev+1 WHERE card_id IN (?,?)', [
+      targetId,
+      revision,
+      targetId,
+      fromId,
+    ]);
+    _db.execute(
+      '''
       INSERT INTO memory_card_cleanup_sources(card_id,message_id,proof_withdrawn)
         SELECT ?,message_id,proof_withdrawn FROM memory_card_cleanup_sources WHERE card_id=?
         ON CONFLICT(card_id,message_id) DO UPDATE SET
           proof_withdrawn=MAX(memory_card_cleanup_sources.proof_withdrawn,excluded.proof_withdrawn)
-    ''', [targetId, fromId]);
+    ''',
+      [targetId, fromId],
+    );
     if (target['topic_mode'] == 'less') {
       final anchors = {
-        for (final topic in _db.select('SELECT control_anchors FROM memory_topics WHERE id IN (?,?)',
-          [target['topic_id'], from['topic_id']]))
-            ...(jsonDecode(topic['control_anchors'] as String) as List<Object?>).cast<String>(),
+        for (final topic in _db.select('SELECT control_anchors FROM memory_topics WHERE id IN (?,?)', [
+          target['topic_id'],
+          from['topic_id'],
+        ]))
+          ...(jsonDecode(topic['control_anchors'] as String) as List<Object?>).cast<String>(),
       }.toList()..sort();
       _db.execute('UPDATE memory_topics SET control_anchors=? WHERE id=?', [jsonEncode(anchors), target['topic_id']]);
     }
     _db.execute('DELETE FROM memory_cards WHERE id=?', [fromId]);
-    _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)',
-      [from['topic_id'], from['topic_id']]);
+    _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)', [
+      from['topic_id'],
+      from['topic_id'],
+    ]);
   }
 
   String? reserveRequest({

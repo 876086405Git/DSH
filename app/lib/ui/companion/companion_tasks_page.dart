@@ -18,6 +18,7 @@ import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/settings_state.dart';
 import '../common/app_dialog.dart';
+import '../common/app_sheet.dart';
 import '../common/brief_notice.dart';
 import '../common/empty_view.dart';
 import '../settings/settings_widgets.dart';
@@ -35,7 +36,8 @@ String companionReminderFailure(L10n l10n, Object error) {
     return l10n.companionReminderPlatformUnavailable;
   }
   return error is DshRemoteException && error.code.endsWith('conflict')
-      ? l10n.companionMemoryConflict : l10n.companionReminderSaveFailed;
+      ? l10n.companionMemoryConflict
+      : l10n.companionReminderSaveFailed;
 }
 
 String companionReminderLine(L10n l10n, MemoryRow task, {required String? executorId}) {
@@ -160,9 +162,11 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
 
   Future<void> _load() async {
     try {
-      final memory = widget.memory ?? await ref.read(
-        companionMemoryOwnerProvider('${(await getApplicationSupportDirectory()).path}/companion').future,
-      );
+      final CompanionMemoryOwner memory =
+          widget.memory ??
+          (await ref.read(
+            companionMemoryOwnerProvider('${(await getApplicationSupportDirectory()).path}/companion').future,
+          ))!;
       if (!mounted) {
         return;
       }
@@ -245,8 +249,11 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       final row = widget.taskId == null ? null : memory.store.task(widget.taskId!);
       final pending = row != null && (row['state'] == 'waiting' || row['state'] == 'unknown');
       if (!resume && row != null && row['kind'] == 'public.lookup' && row['state'] == 'cancelled') {
-        final read = memory.lookups.readReceipts(row, host: ref.read(activeConnectionProvider).value?.client,
-          hostKey: companionHostKey(ref.read(activeHostProvider)));
+        final read = memory.lookups.readReceipts(
+          row,
+          host: ref.read(activeConnectionProvider).value?.client,
+          hostKey: companionHostKey(ref.read(activeHostProvider)),
+        );
         memory.retainReceipt(read);
         await read;
       } else if (row != null && row['kind'] == 'public.lookup' && _owns(row)) {
@@ -275,17 +282,29 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final factory = ref.read(companionLightClientProvider);
     final operation = task['cancel_requested'] == 1
         ? memory.lookups.stop(task, executorId: _executorId!, host: host, hostKey: hostKey)
-        : memory.lookups.run(task, executorId: _executorId!, requestId: companionMemoryId,
-            estimateTokens: estimateCompanionMemoryTokens, host: host, hostKey: hostKey,
-            direct: CompanionLookupDirect(client: factory, apiKey: () => key,
-              nowMilliseconds: memory.lookups.nowMilliseconds, estimateTokens: estimateCompanionMemoryTokens));
+        : memory.lookups.run(
+            task,
+            executorId: _executorId!,
+            requestId: companionMemoryId,
+            estimateTokens: estimateCompanionMemoryTokens,
+            host: host,
+            hostKey: hostKey,
+            direct: CompanionLookupDirect(
+              client: factory,
+              apiKey: () => key,
+              nowMilliseconds: memory.lookups.nowMilliseconds,
+              estimateTokens: estimateCompanionMemoryTokens,
+            ),
+          );
     final drained = operation.then<void>((_) {});
     memory.retainReceipt(drained);
-    unawaited(drained.catchError((Object _) {
-      if (mounted) {
-        showBriefNotice(context, context.l10n.companionLookupSaveFailed);
-      }
-    }));
+    unawaited(
+      drained.catchError((Object _) {
+        if (mounted) {
+          showBriefNotice(context, context.l10n.companionLookupSaveFailed);
+        }
+      }),
+    );
   }
 
   Future<void> _cancelLookup(MemoryRow task) async {
@@ -302,12 +321,22 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       if (!mounted) {
         return;
       }
-      final source = memory.store.submitMessage(id: companionMemoryId(), sessionId: task['source_session_id']! as String,
-        text: raw, saidAtUtc: clock.utcMs, offsetMinutes: clock.offsetSeconds ~/ 60,
-        zoneId: clock.zoneId, offsetSeconds: clock.offsetSeconds);
-      final cancelled = memory.store.cancelLookup(taskId: task['task_id']! as String,
-        expectedTaskRev: task['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: 0);
+      final source = memory.store.submitMessage(
+        id: companionMemoryId(),
+        sessionId: task['source_session_id']! as String,
+        text: raw,
+        saidAtUtc: clock.utcMs,
+        offsetMinutes: clock.offsetSeconds ~/ 60,
+        zoneId: clock.zoneId,
+        offsetSeconds: clock.offsetSeconds,
+      );
+      final cancelled = memory.store.cancelLookup(
+        taskId: task['task_id']! as String,
+        expectedTaskRev: task['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: 0,
+      );
       memory.changed();
       final operation = memory.lookups.stop(cancelled, executorId: _executorId!, host: host, hostKey: hostKey);
       memory.retainReceipt(operation);
@@ -342,14 +371,22 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       final source = old != null && old.taskId == taskId && old.raw == raw
           ? old.source
           : memory.store.submitMessage(
-              id: companionMemoryId(), sessionId: task['source_session_id']! as String, text: raw,
-              saidAtUtc: observed.utcMs, offsetMinutes: observed.offsetSeconds ~/ 60,
-              zoneId: observed.zoneId, offsetSeconds: observed.offsetSeconds,
+              id: companionMemoryId(),
+              sessionId: task['source_session_id']! as String,
+              text: raw,
+              saidAtUtc: observed.utcMs,
+              offsetMinutes: observed.offsetSeconds ~/ 60,
+              zoneId: observed.zoneId,
+              offsetSeconds: observed.offsetSeconds,
             );
       _retry = (taskId: taskId, raw: raw, source: source);
       final operation = reminders.submit(
-        store: memory.store, source: source, part: (itemNo: 0, raw: raw, command: command),
-        roomMode: task['room_mode']! as String, previous: task, selectedOffsetSeconds: selectedOffsetSeconds,
+        store: memory.store,
+        source: source,
+        part: (itemNo: 0, raw: raw, command: command),
+        roomMode: task['room_mode']! as String,
+        previous: task,
+        selectedOffsetSeconds: selectedOffsetSeconds,
         isCurrent: () => mounted,
       );
       memory.retainReceipt(operation.then<void>((_) {}));
@@ -377,49 +414,84 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     var saving = false;
     await showAppDialog<void>(
       context: context,
-      builder: (dialog) => StatefulBuilder(builder: (dialog, update) => AlertDialog(
-        title: Text(dialog.l10n.companionReminderEdit),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextFormField(initialValue: text, onChanged: (value) => text = value,
-              decoration: InputDecoration(labelText: dialog.l10n.companionReminderText)),
-          TextFormField(initialValue: when, onChanged: (value) => when = value,
-              decoration: InputDecoration(labelText: dialog.l10n.companionReminderWhen,
-                  hintText: dialog.l10n.companionReminderWhenHint, errorText: problem)),
-          TextFormField(initialValue: zone, onChanged: (value) => zone = value,
-              decoration: InputDecoration(labelText: dialog.l10n.companionReminderZone,
-                  hintText: dialog.l10n.companionReminderZoneHint)),
-        ])),
-        actions: [
-          TextButton(onPressed: saving ? null : () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
-          FilledButton(onPressed: saving ? null : () async {
-            final expression = '$when ${zone.trim()}'.trim();
-            final raw = '$expression提醒我$text';
-            final parts = parseCompanionReminders(raw);
-            final parsed = parts.length == 1 ? parts.single.command : null;
-            if (parsed == null || parsed.operation != 'create') {
-              update(() => problem = dialog.l10n.companionReminderSyntax);
-              return;
-            }
-            update(() => saving = true);
-            final ok = await _apply(task, (operation: 'amend', text: text, when: expression, target: null), raw);
-            if (!dialog.mounted) {
-              return;
-            }
-            if (ok) {
-              Navigator.pop(dialog);
-            } else {
-              update(() => saving = false);
-            }
-          }, child: Text(dialog.l10n.commonSave)),
-        ],
-      )),
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, update) => AlertDialog(
+          title: Text(dialog.l10n.companionReminderEdit),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: text,
+                  onChanged: (value) => text = value,
+                  decoration: InputDecoration(labelText: dialog.l10n.companionReminderText),
+                ),
+                TextFormField(
+                  initialValue: when,
+                  onChanged: (value) => when = value,
+                  decoration: InputDecoration(
+                    labelText: dialog.l10n.companionReminderWhen,
+                    hintText: dialog.l10n.companionReminderWhenHint,
+                    errorText: problem,
+                  ),
+                ),
+                TextFormField(
+                  initialValue: zone,
+                  onChanged: (value) => zone = value,
+                  decoration: InputDecoration(
+                    labelText: dialog.l10n.companionReminderZone,
+                    hintText: dialog.l10n.companionReminderZoneHint,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final expression = '$when ${zone.trim()}'.trim();
+                      final raw = '$expression提醒我$text';
+                      final parts = parseCompanionReminders(raw);
+                      final parsed = parts.length == 1 ? parts.single.command : null;
+                      if (parsed == null || parsed.operation != 'create') {
+                        update(() => problem = dialog.l10n.companionReminderSyntax);
+                        return;
+                      }
+                      update(() => saving = true);
+                      final ok = await _apply(task, (
+                        operation: 'amend',
+                        text: text,
+                        when: expression,
+                        target: null,
+                      ), raw);
+                      if (!dialog.mounted) {
+                        return;
+                      }
+                      if (ok) {
+                        Navigator.pop(dialog);
+                      } else {
+                        update(() => saving = false);
+                      }
+                    },
+              child: Text(dialog.l10n.commonSave),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Future<void> _chooseOccurrence(MemoryRow task) async {
     final reminders = ref.read(companionRemindersProvider);
     try {
-      final result = await reminders.resolve(task['local_date']! as String, task['local_time']! as String, task['zone_id']! as String);
+      final result = await reminders.resolve(
+        task['local_date']! as String,
+        task['local_time']! as String,
+        task['zone_id']! as String,
+      );
       if (!mounted) {
         return;
       }
@@ -428,15 +500,19 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         showBriefNotice(context, context.l10n.companionReminderInvalidTime);
         return;
       }
-      final selected = await showAppDialog<int>(context: context, builder: (dialog) => SimpleDialog(
-        title: Text(dialog.l10n.companionReminderOverlap),
-        children: [for (var index = 0; index < moments.length; index++)
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialog, (moments[index] as Map)['offsetSeconds']! as int),
-            child: Text(index == 0 ? dialog.l10n.companionReminderFirst : dialog.l10n.companionReminderSecond),
-          ),
-        ],
-      ));
+      final selected = await showAppDialog<int>(
+        context: context,
+        builder: (dialog) => SimpleDialog(
+          title: Text(dialog.l10n.companionReminderOverlap),
+          children: [
+            for (var index = 0; index < moments.length; index++)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialog, (moments[index] as Map)['offsetSeconds']! as int),
+                child: Text(index == 0 ? dialog.l10n.companionReminderFirst : dialog.l10n.companionReminderSecond),
+              ),
+          ],
+        ),
+      );
       if (!mounted || selected == null) {
         return;
       }
@@ -444,7 +520,12 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       final first = selected == (moments.first as Map)['offsetSeconds'];
       final choice = first ? context.l10n.companionReminderFirst : context.l10n.companionReminderSecond;
       final raw = '$expression提醒我${task['reminder_text']}，$choice';
-      await _apply(task, (operation: 'amend', text: null, when: expression, target: null), raw, selectedOffsetSeconds: selected);
+      await _apply(
+        task,
+        (operation: 'amend', text: null, when: expression, target: null),
+        raw,
+        selectedOffsetSeconds: selected,
+      );
     } on Object {
       if (mounted) {
         showBriefNotice(context, context.l10n.companionReminderInvalidTime);
@@ -463,62 +544,104 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final receipts = _memory!.store.taskReceipts(task['task_id']! as String);
     final notification = receipts.where((receipt) => receipt['step_key'] == 'notification').toList();
     final opened = notification.any((receipt) => receipt['event_kind'] == 'opened');
-    final submitted = notification.any((receipt) => receipt['event_kind'] == 'returned' && receipt['outcome'] == 'succeeded');
+    final submitted = notification.any(
+      (receipt) => receipt['event_kind'] == 'returned' && receipt['outcome'] == 'succeeded',
+    );
     // Another revision's returned/opened receipt cannot settle this claim.
     // Active observations use their own attempt ID but the same revision/tag.
-    final unknown = notification.any((claim) => claim['event_kind'] == 'claimed' &&
-      !notification.any((receipt) => receipt['task_rev'] == claim['task_rev'] && (
-        (receipt['attempt_id'] == claim['attempt_id'] && (
-          receipt['event_kind'] == 'opened' ||
-          (receipt['event_kind'] == 'returned' && receipt['outcome'] == 'succeeded') ||
-          (receipt['event_kind'] == 'skipped' && receipt['outcome'] == 'not_performed')
-        )) ||
-        (receipt['event_kind'] == 'active_observed' && claim['effect_id'] != null &&
-          receipt['effect_id'] == claim['effect_id'])
-      )));
+    final unknown = notification.any(
+      (claim) =>
+          claim['event_kind'] == 'claimed' &&
+          !notification.any(
+            (receipt) =>
+                receipt['task_rev'] == claim['task_rev'] &&
+                ((receipt['attempt_id'] == claim['attempt_id'] &&
+                        (receipt['event_kind'] == 'opened' ||
+                            (receipt['event_kind'] == 'returned' && receipt['outcome'] == 'succeeded') ||
+                            (receipt['event_kind'] == 'skipped' && receipt['outcome'] == 'not_performed'))) ||
+                    (receipt['event_kind'] == 'active_observed' &&
+                        claim['effect_id'] != null &&
+                        receipt['effect_id'] == claim['effect_id'])),
+          ),
+    );
     final reason = task['wait_reason'];
     final settings = switch (reason) {
       'exact_alarm_unavailable' => 'exact',
       'notifications_disabled' || 'notification_channel_disabled' || 'notification_group_disabled' => 'notifications',
       _ => null,
     };
-    return Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(task['reminder_text'] as String? ?? l10n.companionReminderTextMissing, style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 12),
-      if (task['local_date'] != null || task['local_time'] != null)
-        Text('${task['local_date'] ?? ''} ${task['local_time'] ?? ''} ${task['zone_id'] ?? ''}'.trim()),
-      const SizedBox(height: 8),
-      Text(companionReminderLine(l10n, task, executorId: _executorId)),
-      if (!_owns(task) && task['state'] == 'done') Text(l10n.companionReminderPastRegistration),
-      if (widget.openedRevision != null && widget.openedRevision != task['task_rev'])
-        Text(l10n.companionTaskChanged),
-      if (opened) Text(l10n.companionReminderOpened),
-      if (submitted) Text(l10n.companionReminderSubmittedNotification),
-      if (unknown) Text(l10n.companionReminderUnknownNotification),
-      const SizedBox(height: 16),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        if (_owns(task) && task['cancel_requested'] == 0) ...[
-          OutlinedButton(onPressed: _busy ? null : () => _edit(task), child: Text(l10n.companionReminderEdit)),
-          OutlinedButton(onPressed: _busy ? null : () => _apply(task,
-            (operation: 'cancel', text: null, when: null, target: null),
-            l10n.companionReminderCancelSource(task['reminder_text'] as String? ?? ''),
-          ), child: Text(l10n.companionReminderCancel)),
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            task['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          if (task['local_date'] != null || task['local_time'] != null)
+            Text('${task['local_date'] ?? ''} ${task['local_time'] ?? ''} ${task['zone_id'] ?? ''}'.trim()),
+          const SizedBox(height: 8),
+          Text(companionReminderLine(l10n, task, executorId: _executorId)),
+          if (!_owns(task) && task['state'] == 'done') Text(l10n.companionReminderPastRegistration),
+          if (widget.openedRevision != null && widget.openedRevision != task['task_rev'])
+            Text(l10n.companionTaskChanged),
+          if (opened) Text(l10n.companionReminderOpened),
+          if (submitted) Text(l10n.companionReminderSubmittedNotification),
+          if (unknown) Text(l10n.companionReminderUnknownNotification),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (_owns(task) && task['cancel_requested'] == 0) ...[
+                OutlinedButton(onPressed: _busy ? null : () => _edit(task), child: Text(l10n.companionReminderEdit)),
+                OutlinedButton(
+                  onPressed: _busy
+                      ? null
+                      : () => _apply(task, (
+                          operation: 'cancel',
+                          text: null,
+                          when: null,
+                          target: null,
+                        ), l10n.companionReminderCancelSource(task['reminder_text'] as String? ?? '')),
+                  child: Text(l10n.companionReminderCancel),
+                ),
+              ],
+              if (_owns(task) && task['cancel_requested'] == 0 && reason == 'time_overlap')
+                FilledButton(
+                  onPressed: _busy ? null : () => _chooseOccurrence(task),
+                  child: Text(l10n.companionReminderOverlap),
+                ),
+              if (_owns(task) && settings != null)
+                FilledButton(
+                  onPressed: _busy ? null : () => ref.read(companionRemindersProvider).openSettings(settings),
+                  child: Text(l10n.companionReminderSettings),
+                ),
+            ],
+          ),
         ],
-        if (_owns(task) && task['cancel_requested'] == 0 && reason == 'time_overlap')
-          FilledButton(onPressed: _busy ? null : () => _chooseOccurrence(task), child: Text(l10n.companionReminderOverlap)),
-        if (_owns(task) && settings != null)
-          FilledButton(onPressed: _busy ? null : () => ref.read(companionRemindersProvider).openSettings(settings),
-              child: Text(l10n.companionReminderSettings)),
-      ]),
-    ]));
+      ),
+    );
   }
 
-  bool _notesHostHere(MemoryRow task) => ref.read(activeConnectionProvider).value?.client != null &&
-    task['host_key'] == companionHostKey(ref.read(activeHostProvider));
+  bool _notesHostHere(MemoryRow task) =>
+      ref.read(activeConnectionProvider).value?.client != null &&
+      task['host_key'] == companionHostKey(ref.read(activeHostProvider));
 
-  Future<bool> _applyNotes(MemoryRow task, {bool cancel = false, String? date, String? name,
-    String deadlineText = '', bool clearDeadline = false, String? afterExit, bool? allowQueue,
-    bool chooseSource = false, bool chooseOutput = false}) async {
+  Future<bool> _applyNotes(
+    MemoryRow task, {
+    bool cancel = false,
+    String? date,
+    String? name,
+    String deadlineText = '',
+    bool clearDeadline = false,
+    String? afterExit,
+    bool? allowQueue,
+    bool chooseSource = false,
+    bool chooseOutput = false,
+  }) async {
     if (_busy) {
       return false;
     }
@@ -531,16 +654,27 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final args = Map<String, Object?>.from(agreement['args']! as Map);
     final id = task['task_id']! as String;
     final revision = task['task_rev']! as int;
-    final raw = cancel ? l10n.companionNotesCancelSource(args['outputName']! as String) :
-      l10n.companionNotesAmendSource(date!, name!, clearDeadline ? l10n.companionNotesClearDeadline :
-        deadlineText.isEmpty ? l10n.companionNotesKeepDeadline : deadlineText,
-        afterExit == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue,
-        allowQueue == true ? l10n.companionNotesAllowQueue : l10n.companionNotesNoQueue,
-        chooseSource ? l10n.companionNotesChooseDirectory : l10n.companionNotesKeepDirectory,
-        chooseOutput ? l10n.companionNotesChooseOutput : l10n.companionNotesKeepOutput);
+    final raw = cancel
+        ? l10n.companionNotesCancelSource(args['outputName']! as String)
+        : l10n.companionNotesAmendSource(
+            date!,
+            name!,
+            clearDeadline
+                ? l10n.companionNotesClearDeadline
+                : deadlineText.isEmpty
+                ? l10n.companionNotesKeepDeadline
+                : deadlineText,
+            afterExit == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue,
+            allowQueue == true ? l10n.companionNotesAllowQueue : l10n.companionNotesNoQueue,
+            chooseSource ? l10n.companionNotesChooseDirectory : l10n.companionNotesKeepDirectory,
+            chooseOutput ? l10n.companionNotesChooseOutput : l10n.companionNotesKeepOutput,
+          );
     bool current() => mounted && memory.store.hostTask(id)?['task_rev'] == revision;
-    bool selectedHost() => current() && task['host_key'] == hostKey &&
-      hostKey == companionHostKey(ref.read(activeHostProvider)) && identical(client, ref.read(activeConnectionProvider).value?.client);
+    bool selectedHost() =>
+        current() &&
+        task['host_key'] == hostKey &&
+        hostKey == companionHostKey(ref.read(activeHostProvider)) &&
+        identical(client, ref.read(activeConnectionProvider).value?.client);
     setState(() => _busy = true);
     try {
       final retry = _retry;
@@ -552,9 +686,15 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         if (!current()) {
           return false;
         }
-        source = memory.store.submitMessage(id: companionMemoryId(), sessionId: task['source_session_id']! as String,
-          text: raw, saidAtUtc: observed.utcMs, offsetMinutes: observed.offsetSeconds ~/ 60,
-          zoneId: observed.zoneId, offsetSeconds: observed.offsetSeconds);
+        source = memory.store.submitMessage(
+          id: companionMemoryId(),
+          sessionId: task['source_session_id']! as String,
+          text: raw,
+          saidAtUtc: observed.utcMs,
+          offsetMinutes: observed.offsetSeconds ~/ 60,
+          zoneId: observed.zoneId,
+          offsetSeconds: observed.offsetSeconds,
+        );
         _retry = (taskId: id, raw: raw, source: source);
       }
       final accepted = memory.store.taskForCommand(source['id']! as String, 0);
@@ -562,8 +702,13 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       if (accepted != null) {
         updated = memory.store.hostTask(accepted['task_id']! as String)!;
       } else if (cancel) {
-        updated = memory.store.cancelNotesTask(taskId: id, expectedTaskRev: revision,
-          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0);
+        updated = memory.store.cancelNotesTask(
+          taskId: id,
+          expectedTaskRev: revision,
+          messageId: source['id']! as String,
+          expectedSourceRev: source['source_rev']! as int,
+          itemNo: 0,
+        );
       } else {
         int? deadline = clearDeadline ? null : agreement['deadlineAtMs'] as int?;
         if (!clearDeadline && deadlineText.isNotEmpty) {
@@ -586,7 +731,9 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
             throw const DshRemoteException('companion/task-original-host', 'Connect the original task Host');
           }
           final capability = await client.readCompanionTasksCapability();
-          if (!selectedHost() || capability == null || !capability.notes ||
+          if (!selectedHost() ||
+              capability == null ||
+              !capability.notes ||
               (task['host_store_id'] != null && capability.hostStoreId != task['host_store_id'])) {
             throw const DshRemoteException('companion/task-store-mismatch', 'The original task store is unavailable');
           }
@@ -594,8 +741,11 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
             if (!(output ? chooseOutput : chooseSource)) {
               continue;
             }
-            final path = await showDirectoryPicker(context,
-              title: output ? l10n.companionNotesChooseOutput : l10n.companionNotesChooseDirectory);
+            if (!mounted) return false;
+            final path = await showDirectoryPicker(
+              context,
+              title: output ? l10n.companionNotesChooseOutput : l10n.companionNotesChooseDirectory,
+            );
             if (!selectedHost() || path == null) {
               return false;
             }
@@ -612,14 +762,25 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         }
         args['localDate'] = date;
         args['outputName'] = name;
-        updated = memory.store.amendNotesTask(taskId: id, expectedTaskRev: revision,
-          messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int, itemNo: 0,
+        updated = memory.store.amendNotesTask(
+          taskId: id,
+          expectedTaskRev: revision,
+          messageId: source['id']! as String,
+          expectedSourceRev: source['source_rev']! as int,
+          itemNo: 0,
           agreement: {'args': args, 'deadlineAtMs': deadline, 'afterExit': afterExit, 'allowQueue': allowQueue},
-          directoryLabels: labels);
+          directoryLabels: labels,
+        );
       }
       memory.changed();
       if (client != null && updated['host_key'] == hostKey) {
-        await memory.hostTasks.run(updated, client: client, hostKey: hostKey, initialOpportunity: true, submitPending: true);
+        await memory.hostTasks.run(
+          updated,
+          client: client,
+          hostKey: hostKey,
+          initialOpportunity: true,
+          submitPending: true,
+        );
       }
       _retry = null;
       return true;
@@ -647,61 +808,122 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     var chooseSource = false;
     var chooseOutput = false;
     var saving = false;
-    await showAppDialog<void>(context: context, builder: (dialog) => StatefulBuilder(builder: (dialog, update) => AlertDialog(
-      title: Text(dialog.l10n.companionNotesEdit),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextFormField(initialValue: date, onChanged: (value) => date = value,
-          decoration: InputDecoration(labelText: dialog.l10n.companionNotesDate, hintText: 'YYYY-MM-DD')),
-        TextFormField(initialValue: name, onChanged: (value) => name = value,
-          decoration: InputDecoration(labelText: dialog.l10n.companionNotesFilename)),
-        TextFormField(onChanged: (value) => deadline = value,
-          decoration: InputDecoration(labelText: dialog.l10n.companionNotesDeadlineField,
-            hintText: 'YYYY-MM-DD HH:mm (${args['timeZone']})')),
-        CheckboxListTile(value: clearDeadline, onChanged: (value) => update(() => clearDeadline = value!),
-          title: Text(dialog.l10n.companionNotesClearDeadline)),
-        DropdownButton<String>(value: afterExit, isExpanded: true,
-          items: [DropdownMenuItem(value: 'continue', child: Text(dialog.l10n.companionNotesContinue)),
-            DropdownMenuItem(value: 'pause', child: Text(dialog.l10n.companionNotesPause))],
-          onChanged: (value) => update(() => afterExit = value!)),
-        CheckboxListTile(value: allowQueue, onChanged: (value) => update(() => allowQueue = value!),
-          title: Text(dialog.l10n.companionNotesAllowQueue)),
-        CheckboxListTile(value: chooseSource, onChanged: (value) => update(() => chooseSource = value!),
-          title: Text(dialog.l10n.companionNotesChooseDirectory)),
-        CheckboxListTile(value: chooseOutput, onChanged: (value) => update(() => chooseOutput = value!),
-          title: Text(dialog.l10n.companionNotesChooseOutput)),
-      ])),
-      actions: [
-        TextButton(onPressed: saving ? null : () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
-        FilledButton(onPressed: saving ? null : () async {
-          update(() => saving = true);
-          final ok = await _applyNotes(task, date: date.trim(), name: name.trim(), afterExit: afterExit,
-            allowQueue: allowQueue, deadlineText: deadline.trim(), clearDeadline: clearDeadline,
-            chooseSource: chooseSource, chooseOutput: chooseOutput);
-          if (!dialog.mounted) {
-            return;
-          }
-          if (ok) {
-            Navigator.pop(dialog);
-          } else {
-            update(() => saving = false);
-          }
-        }, child: Text(dialog.l10n.commonSave)),
-      ],
-    )));
+    await showAppDialog<void>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, update) => AlertDialog(
+          title: Text(dialog.l10n.companionNotesEdit),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: date,
+                  onChanged: (value) => date = value,
+                  decoration: InputDecoration(labelText: dialog.l10n.companionNotesDate, hintText: 'YYYY-MM-DD'),
+                ),
+                TextFormField(
+                  initialValue: name,
+                  onChanged: (value) => name = value,
+                  decoration: InputDecoration(labelText: dialog.l10n.companionNotesFilename),
+                ),
+                TextFormField(
+                  onChanged: (value) => deadline = value,
+                  decoration: InputDecoration(
+                    labelText: dialog.l10n.companionNotesDeadlineField,
+                    hintText: 'YYYY-MM-DD HH:mm (${args['timeZone']})',
+                  ),
+                ),
+                CheckboxListTile(
+                  value: clearDeadline,
+                  onChanged: (value) => update(() => clearDeadline = value!),
+                  title: Text(dialog.l10n.companionNotesClearDeadline),
+                ),
+                DropdownButton<String>(
+                  value: afterExit,
+                  isExpanded: true,
+                  items: [
+                    DropdownMenuItem(value: 'continue', child: Text(dialog.l10n.companionNotesContinue)),
+                    DropdownMenuItem(value: 'pause', child: Text(dialog.l10n.companionNotesPause)),
+                  ],
+                  onChanged: (value) => update(() => afterExit = value!),
+                ),
+                CheckboxListTile(
+                  value: allowQueue,
+                  onChanged: (value) => update(() => allowQueue = value!),
+                  title: Text(dialog.l10n.companionNotesAllowQueue),
+                ),
+                CheckboxListTile(
+                  value: chooseSource,
+                  onChanged: (value) => update(() => chooseSource = value!),
+                  title: Text(dialog.l10n.companionNotesChooseDirectory),
+                ),
+                CheckboxListTile(
+                  value: chooseOutput,
+                  onChanged: (value) => update(() => chooseOutput = value!),
+                  title: Text(dialog.l10n.companionNotesChooseOutput),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(dialog), child: Text(dialog.l10n.commonCancel)),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      update(() => saving = true);
+                      final ok = await _applyNotes(
+                        task,
+                        date: date.trim(),
+                        name: name.trim(),
+                        afterExit: afterExit,
+                        allowQueue: allowQueue,
+                        deadlineText: deadline.trim(),
+                        clearDeadline: clearDeadline,
+                        chooseSource: chooseSource,
+                        chooseOutput: chooseOutput,
+                      );
+                      if (!dialog.mounted) {
+                        return;
+                      }
+                      if (ok) {
+                        Navigator.pop(dialog);
+                      } else {
+                        update(() => saving = false);
+                      }
+                    },
+              child: Text(dialog.l10n.commonSave),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   bool _notesApprovalCurrent(MemoryRow task, Map captured) {
-    if (!mounted || !_notesHostHere(task) || !identical(_notesVerifiedClient, ref.read(activeConnectionProvider).value?.client) ||
+    if (!mounted ||
+        !_notesHostHere(task) ||
+        !identical(_notesVerifiedClient, ref.read(activeConnectionProvider).value?.client) ||
         task['host_store_id'] != _notesVerifiedStore) {
       return false;
     }
     final current = _memory!.store.hostTask(task['task_id']! as String);
     final snapshot = current?['snapshot'] as Map?;
     final approval = snapshot?['approval'];
-    return current?['task_rev'] == task['task_rev'] && current?['cancel_requested'] == 0 &&
-      current?['state'] == 'waiting' && approval is Map &&
-      const ['taskRev', 'stepKey', 'agentId', 'approvalId', 'eventId', 'callId']
-        .every((key) => approval[key] == captured[key]) && approval['taskRev'] == current?['task_rev'];
+    return current?['task_rev'] == task['task_rev'] &&
+        current?['cancel_requested'] == 0 &&
+        current?['state'] == 'waiting' &&
+        approval is Map &&
+        const [
+          'taskRev',
+          'stepKey',
+          'agentId',
+          'approvalId',
+          'eventId',
+          'callId',
+        ].every((key) => approval[key] == captured[key]) &&
+        approval['taskRev'] == current?['task_rev'];
   }
 
   Future<void> _openNotesArtifact(MemoryRow task, Map artifact) async {
@@ -711,22 +933,33 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final client = ref.read(activeConnectionProvider).value!.client;
     setState(() => _busy = true);
     try {
-      final result = await client.readCompanionHostArtifact(hostStoreId: task['host_store_id']! as String,
-        taskId: task['task_id']! as String, hostExecutionId: task['host_execution_id']! as String,
-        artifactId: artifact['artifactId']! as String);
+      final result = await client.readCompanionHostArtifact(
+        hostStoreId: task['host_store_id']! as String,
+        taskId: task['task_id']! as String,
+        hostExecutionId: task['host_execution_id']! as String,
+        artifactId: artifact['artifactId']! as String,
+      );
       if (!mounted) {
         return;
       }
-      await showAppDialog<void>(context: context, builder: (dialog) => AlertDialog(
-        title: Text(artifact['relativePath']! as String),
-        content: SingleChildScrollView(child: SelectableText(result['status'] == 'available'
-          ? result['content']! as String : switch (result['status']) {
-            'missing' => dialog.l10n.companionNotesFileMissing,
-            'changed' => dialog.l10n.companionNotesFileChanged,
-            _ => dialog.l10n.companionNotesFileUnknown,
-          })),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonClose))],
-      ));
+      await showAppDialog<void>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(artifact['relativePath']! as String),
+          content: SingleChildScrollView(
+            child: SelectableText(
+              result['status'] == 'available'
+                  ? result['content']! as String
+                  : switch (result['status']) {
+                      'missing' => dialog.l10n.companionNotesFileMissing,
+                      'changed' => dialog.l10n.companionNotesFileChanged,
+                      _ => dialog.l10n.companionNotesFileUnknown,
+                    },
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: Text(dialog.l10n.commonClose))],
+        ),
+      );
     } on Object {
       if (mounted) {
         showBriefNotice(context, context.l10n.companionNotesFileUnknown);
@@ -748,60 +981,105 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final artifacts = (snapshot?['artifacts'] as List?) ?? const [];
     final steps = (snapshot?['steps'] as List?) ?? const [];
     final budget = snapshot?['budget'] as Map?;
-    final pendingCommand = task['host_store_id'] != null &&
-      const ['amend', 'cancel'].contains(task['operation']) &&
-      (snapshot == null || (snapshot['taskRev']! as int) < (task['task_rev']! as int));
-    return Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(args['outputName']! as String, style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 12),
-      Text('${args['localDate']} ${args['timeZone']}'),
-      Text(l10n.companionNotesModifiedDay),
-      if (labels['source'] case final String path) Text(l10n.companionNotesSourceDirectory(path)),
-      if (labels['output'] case final String path) Text(l10n.companionNotesOutputDirectory(path)),
-      Text(agreement['afterExit'] == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue),
-      if (agreement['allowQueue'] == true) Text(l10n.companionNotesAllowQueue),
-      if (agreement['deadlineAtMs'] case final int at)
-        Text(l10n.companionNotesDue(DateTime.fromMillisecondsSinceEpoch(at, isUtc: true).toIso8601String())),
-      const SizedBox(height: 8),
-      Text(companionNotesLine(l10n, task)),
-      if (!_notesHostHere(task)) Text(l10n.companionNotesOriginalHost),
-      if (budget != null) Text(l10n.companionNotesBudget(
-        ((budget['spentMs']! as int) / 1000).toStringAsFixed(1), ((budget['heldMs']! as int) / 1000).toStringAsFixed(1))),
-      if (approval is Map && _notesApprovalCurrent(task, approval)) ...[
-        Text(l10n.companionNotesApproval),
-        CompanionAsk(key: ValueKey('notes-${task['task_id']}-${approval['eventId']}'),
-          sessionId: approval['agentId']! as String,
-          approvalTarget: (eventId: approval['eventId']! as String, callId: approval['callId'] as String?,
-            isCurrent: () => _notesApprovalCurrent(task, approval))),
-      ],
-      for (final value in artifacts) ...[
-        const SizedBox(height: 16),
-        Text(l10n.companionNotesArtifactRevision('${(value as Map)['taskRev']}')),
-        Text(value['relativePath']! as String),
-        Text(l10n.companionNotesArtifactDetails('${value['sourceCount']}',
-          DateTime.fromMillisecondsSinceEpoch(value['verifiedAtMs']! as int, isUtc: true).toIso8601String())),
-        OutlinedButton(onPressed: _busy || !_notesHostHere(task) ? null : () => _openNotesArtifact(task, value),
-          child: Text(l10n.companionNotesOpenFile)),
-      ],
-      if (steps.isNotEmpty) ExpansionTile(title: Text(l10n.companionNotesSteps), children: [
-        for (final value in steps) _notesStep(Map<String, Object?>.from(value as Map)),
-      ]),
-      if (_notesHostHere(task) && pendingCommand)
-        OutlinedButton(onPressed: _busy ? null : () => _retryNotes(task, pendingCommand: true),
-          child: Text(task['operation'] == 'cancel' ? l10n.companionNotesResendCancel : l10n.companionNotesResendAmend))
-      else if (_notesHostHere(task) && task['snapshot'] == null && task['host_store_id'] != null && task['state'] == 'unknown')
-        OutlinedButton(onPressed: _busy ? null : () => _retryNotes(task, missing: true),
-          child: Text(l10n.companionNotesResendOriginal)),
-      if (task['cancel_requested'] == 0 && !const ['done', 'partial', 'cancelled'].contains(task['state']))
-        Wrap(spacing: 8, children: [
-          if (!pendingCommand && _notesHostHere(task) && approval == null && task['wait_reason'] != 'foreground_control_unavailable' &&
-              (task['state'] == 'waiting' || task['state'] == 'queued'))
-            FilledButton(onPressed: _busy ? null : () => _retryNotes(task),
-              child: Text(task['state'] == 'queued' ? l10n.companionNotesSubmitSaved : l10n.companionNotesRetry)),
-          OutlinedButton(onPressed: _busy ? null : () => _editNotes(task), child: Text(l10n.companionNotesEdit)),
-          OutlinedButton(onPressed: _busy ? null : () => _applyNotes(task, cancel: true), child: Text(l10n.companionNotesCancel)),
-        ]),
-    ]));
+    final pendingCommand =
+        task['host_store_id'] != null &&
+        const ['amend', 'cancel'].contains(task['operation']) &&
+        (snapshot == null || (snapshot['taskRev']! as int) < (task['task_rev']! as int));
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(args['outputName']! as String, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          Text('${args['localDate']} ${args['timeZone']}'),
+          Text(l10n.companionNotesModifiedDay),
+          if (labels['source'] case final String path) Text(l10n.companionNotesSourceDirectory(path)),
+          if (labels['output'] case final String path) Text(l10n.companionNotesOutputDirectory(path)),
+          Text(agreement['afterExit'] == 'pause' ? l10n.companionNotesPause : l10n.companionNotesContinue),
+          if (agreement['allowQueue'] == true) Text(l10n.companionNotesAllowQueue),
+          if (agreement['deadlineAtMs'] case final int at)
+            Text(l10n.companionNotesDue(DateTime.fromMillisecondsSinceEpoch(at, isUtc: true).toIso8601String())),
+          const SizedBox(height: 8),
+          Text(companionNotesLine(l10n, task)),
+          if (!_notesHostHere(task)) Text(l10n.companionNotesOriginalHost),
+          if (budget != null)
+            Text(
+              l10n.companionNotesBudget(
+                ((budget['spentMs']! as int) / 1000).toStringAsFixed(1),
+                ((budget['heldMs']! as int) / 1000).toStringAsFixed(1),
+              ),
+            ),
+          if (approval is Map && _notesApprovalCurrent(task, approval)) ...[
+            Text(l10n.companionNotesApproval),
+            CompanionAsk(
+              key: ValueKey('notes-${task['task_id']}-${approval['eventId']}'),
+              sessionId: approval['agentId']! as String,
+              approvalTarget: (
+                eventId: approval['eventId']! as String,
+                callId: approval['callId'] as String?,
+                isCurrent: () => _notesApprovalCurrent(task, approval),
+              ),
+            ),
+          ],
+          for (final value in artifacts) ...[
+            const SizedBox(height: 16),
+            Text(l10n.companionNotesArtifactRevision('${(value as Map)['taskRev']}')),
+            Text(value['relativePath']! as String),
+            Text(
+              l10n.companionNotesArtifactDetails(
+                '${value['sourceCount']}',
+                DateTime.fromMillisecondsSinceEpoch(value['verifiedAtMs']! as int, isUtc: true).toIso8601String(),
+              ),
+            ),
+            OutlinedButton(
+              onPressed: _busy || !_notesHostHere(task) ? null : () => _openNotesArtifact(task, value),
+              child: Text(l10n.companionNotesOpenFile),
+            ),
+          ],
+          if (steps.isNotEmpty)
+            ExpansionTile(
+              title: Text(l10n.companionNotesSteps),
+              children: [for (final value in steps) _notesStep(Map<String, Object?>.from(value as Map))],
+            ),
+          if (_notesHostHere(task) && pendingCommand)
+            OutlinedButton(
+              onPressed: _busy ? null : () => _retryNotes(task, pendingCommand: true),
+              child: Text(
+                task['operation'] == 'cancel' ? l10n.companionNotesResendCancel : l10n.companionNotesResendAmend,
+              ),
+            )
+          else if (_notesHostHere(task) &&
+              task['snapshot'] == null &&
+              task['host_store_id'] != null &&
+              task['state'] == 'unknown')
+            OutlinedButton(
+              onPressed: _busy ? null : () => _retryNotes(task, missing: true),
+              child: Text(l10n.companionNotesResendOriginal),
+            ),
+          if (task['cancel_requested'] == 0 && !const ['done', 'partial', 'cancelled'].contains(task['state']))
+            Wrap(
+              spacing: 8,
+              children: [
+                if (!pendingCommand &&
+                    _notesHostHere(task) &&
+                    approval == null &&
+                    task['wait_reason'] != 'foreground_control_unavailable' &&
+                    (task['state'] == 'waiting' || task['state'] == 'queued'))
+                  FilledButton(
+                    onPressed: _busy ? null : () => _retryNotes(task),
+                    child: Text(task['state'] == 'queued' ? l10n.companionNotesSubmitSaved : l10n.companionNotesRetry),
+                  ),
+                OutlinedButton(onPressed: _busy ? null : () => _editNotes(task), child: Text(l10n.companionNotesEdit)),
+                OutlinedButton(
+                  onPressed: _busy ? null : () => _applyNotes(task, cancel: true),
+                  child: Text(l10n.companionNotesCancel),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _retryNotes(MemoryRow task, {bool missing = false, bool pendingCommand = false}) async {
@@ -813,9 +1091,16 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final unsent = _memory!.store.hostTaskCommands(task['task_id']! as String).last['possible_sent_at_ms'] == null;
     setState(() => _busy = true);
     try {
-      await _memory!.hostTasks.run(task, client: client, hostKey: hostKey,
-        submitPending: !missing && !pendingCommand && unsent, initialOpportunity: !missing && !pendingCommand && unsent,
-        retryWaiting: !missing && !pendingCommand && !unsent, replayMissing: missing, resendPendingCommand: pendingCommand);
+      await _memory!.hostTasks.run(
+        task,
+        client: client,
+        hostKey: hostKey,
+        submitPending: !missing && !pendingCommand && unsent,
+        initialOpportunity: !missing && !pendingCommand && unsent,
+        retryWaiting: !missing && !pendingCommand && !unsent,
+        replayMissing: missing,
+        resendPendingCommand: pendingCommand,
+      );
     } on Object {
       if (mounted) {
         showBriefNotice(context, context.l10n.companionNotesSaveFailed);
@@ -851,23 +1136,36 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         }
       }
     }
-    return ListTile(title: Text('$title · ${l10n.companionNotesArtifactRevision('${step['taskRev']}')}'),
-      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(switch (step['state']) {
-          'done' => l10n.companionNotesStepDone,
-          'partial' => l10n.companionNotesStepPartial,
-          'running' => l10n.companionNotesStepRunning,
-          'waiting' || 'queued' => l10n.companionNotesStepWaiting,
-          'failed' => l10n.companionNotesStepFailed,
-          'cancelled' => l10n.companionNotesStepCancelled,
-          _ => l10n.companionNotesStepUnknown,
-        }),
-        if (step['stepKey'] == 'model' && completion is Map && completion['itemCount'] is int)
-          Text(l10n.companionNotesItemCount('${completion['itemCount']}')),
-        if (step['stepKey'] == 'model') Text(usage == null ? l10n.companionLookupUsageUnknown :
-          l10n.companionLookupModelUsage('${usage['input_uncached'] ?? '?'}', '${usage['input_cache_read'] ?? '?'}',
-            '${usage['input_cache_write'] ?? '?'}', '${usage['output_tokens'] ?? '?'}')),
-      ]));
+    return ListTile(
+      title: Text('$title · ${l10n.companionNotesArtifactRevision('${step['taskRev']}')}'),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(switch (step['state']) {
+            'done' => l10n.companionNotesStepDone,
+            'partial' => l10n.companionNotesStepPartial,
+            'running' => l10n.companionNotesStepRunning,
+            'waiting' || 'queued' => l10n.companionNotesStepWaiting,
+            'failed' => l10n.companionNotesStepFailed,
+            'cancelled' => l10n.companionNotesStepCancelled,
+            _ => l10n.companionNotesStepUnknown,
+          }),
+          if (step['stepKey'] == 'model' && completion is Map && completion['itemCount'] is int)
+            Text(l10n.companionNotesItemCount('${completion['itemCount']}')),
+          if (step['stepKey'] == 'model')
+            Text(
+              usage == null
+                  ? l10n.companionLookupUsageUnknown
+                  : l10n.companionLookupModelUsage(
+                      '${usage['input_uncached'] ?? '?'}',
+                      '${usage['input_cache_read'] ?? '?'}',
+                      '${usage['input_cache_write'] ?? '?'}',
+                      '${usage['output_tokens'] ?? '?'}',
+                    ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _lookupDetail(MemoryRow task) {
@@ -889,43 +1187,74 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final knownCosts = toolCalls.map((row) => row['estimated_tool_micro_cny']).whereType<int>().toList();
     final cost = knownCosts.fold<int>(0, (a, b) => a + b) / 1000000;
     final answers = attempts.where((row) => row['kind'] == 'answer').toList();
-    return Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(task['lookup_question']! as String, style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 12),
-      Text('${task['local_date']} ${task['zone_id']}'),
-      const SizedBox(height: 8),
-      Text(companionLookupLine(l10n, task, executorId: _executorId)),
-      if (!_owns(task) && result is Map && result['conclusion'] is String)
-        Text(result['conclusion']! as String),
-      if (sources.isNotEmpty) ...[
-        const SizedBox(height: 20),
-        Text(l10n.companionLookupSources, style: Theme.of(context).textTheme.titleMedium),
-        for (final source in sources.values) ...[
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(task['lookup_question']! as String, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          Text(source['title'] as String? ?? l10n.companionLookupNoTitle),
-          TextButton(onPressed: () => unawaited(launchUrl(Uri.parse(source['url']! as String),
-            mode: LaunchMode.externalApplication).catchError((_) => false)), child: Text(source['url']! as String)),
-          Text(l10n.companionLookupObservedAt(DateTime.fromMillisecondsSinceEpoch(source['observedAtMs']! as int)
-            .toLocal().toIso8601String())),
-          if (source['kind'] == 'search') Text(l10n.companionLookupSearchOnly),
-          for (final proof in evidence)
-            if ((proof as Map)['url'] == source['url']) Text(proof['quote']! as String),
+          Text('${task['local_date']} ${task['zone_id']}'),
+          const SizedBox(height: 8),
+          Text(companionLookupLine(l10n, task, executorId: _executorId)),
+          if (!_owns(task) && result is Map && result['conclusion'] is String) Text(result['conclusion']! as String),
+          if (sources.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Text(l10n.companionLookupSources, style: Theme.of(context).textTheme.titleMedium),
+            for (final source in sources.values) ...[
+              const SizedBox(height: 12),
+              Text(source['title'] as String? ?? l10n.companionLookupNoTitle),
+              TextButton(
+                onPressed: () => unawaited(
+                  launchUrl(
+                    Uri.parse(source['url']! as String),
+                    mode: LaunchMode.externalApplication,
+                  ).catchError((_) => false),
+                ),
+                child: Text(source['url']! as String),
+              ),
+              Text(
+                l10n.companionLookupObservedAt(
+                  DateTime.fromMillisecondsSinceEpoch(source['observedAtMs']! as int).toLocal().toIso8601String(),
+                ),
+              ),
+              if (source['kind'] == 'search') Text(l10n.companionLookupSearchOnly),
+              for (final proof in evidence)
+                if ((proof as Map)['url'] == source['url']) Text(proof['quote']! as String),
+            ],
+          ],
+          if (attempts.isNotEmpty)
+            ExpansionTile(
+              title: Text(l10n.companionLookupCostDetails),
+              children: [
+                if (knownCosts.isNotEmpty) Text(l10n.companionLookupToolCost(cost.toStringAsFixed(3))),
+                if (toolCalls.any((row) => row['estimated_tool_micro_cny'] == null))
+                  Text(l10n.companionLookupCostUnknown),
+                for (final answer in answers)
+                  if (answer['rawUsage'] case final Map usage)
+                    Text(
+                      l10n.companionLookupModelUsage(
+                        '${usage['input_uncached'] ?? '?'}',
+                        '${usage['input_cache_read'] ?? '?'}',
+                        '${usage['input_cache_write'] ?? '?'}',
+                        '${usage['output_tokens'] ?? '?'}',
+                      ),
+                    )
+                  else
+                    Text(l10n.companionLookupUsageUnknown),
+              ],
+            ),
+          const SizedBox(height: 16),
+          if (_owns(task) &&
+              task['cancel_requested'] == 0 &&
+              const ['queued', 'running', 'unknown'].contains(task['state']))
+            OutlinedButton(
+              onPressed: _busy ? null : () => _cancelLookup(task),
+              child: Text(l10n.companionLookupCancel),
+            ),
         ],
-      ],
-      if (attempts.isNotEmpty)
-        ExpansionTile(title: Text(l10n.companionLookupCostDetails), children: [
-          if (knownCosts.isNotEmpty) Text(l10n.companionLookupToolCost(cost.toStringAsFixed(3))),
-          if (toolCalls.any((row) => row['estimated_tool_micro_cny'] == null)) Text(l10n.companionLookupCostUnknown),
-          for (final answer in answers)
-            if (answer['rawUsage'] case final Map usage)
-              Text(l10n.companionLookupModelUsage('${usage['input_uncached'] ?? '?'}', '${usage['input_cache_read'] ?? '?'}',
-                '${usage['input_cache_write'] ?? '?'}', '${usage['output_tokens'] ?? '?'}'))
-            else Text(l10n.companionLookupUsageUnknown),
-        ]),
-      const SizedBox(height: 16),
-      if (_owns(task) && task['cancel_requested'] == 0 && const ['queued', 'running', 'unknown'].contains(task['state']))
-        OutlinedButton(onPressed: _busy ? null : () => _cancelLookup(task), child: Text(l10n.companionLookupCancel)),
-    ]));
+      ),
+    );
   }
 
   @override
@@ -934,30 +1263,55 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final memory = _memory;
     final task = memory == null || widget.taskId == null ? null : memory.store.task(widget.taskId!);
     final rows = memory == null || widget.sourceSessionId == null
-        ? <MemoryRow>[] : memory.store.tasks(sourceSessionId: widget.sourceSessionId);
-    return AppPage.list(title: l10n.companionTasksTitle, actions: [
-      IconButton(tooltip: l10n.companionReminderCheck, icon: const Icon(AppIcons.refresh),
-          onPressed: memory == null || _busy ? null : _refresh),
-    ], children: [
-      if (_loadFailed) EmptyView(icon: AppIcons.reminder, title: l10n.companionMemoryLoadFailed)
-      else if (memory == null) const Center(child: CircularProgressIndicator())
-      else if (widget.taskId != null)
-        if (task == null) EmptyView(icon: AppIcons.reminder, title: l10n.companionTaskMissing)
-        else _detail(task)
-      else if (rows.isEmpty) EmptyView(icon: AppIcons.reminder, title: l10n.companionTasksEmpty)
-      else SheetGroup(children: [for (final row in rows)
-        SettingsTile(icon: row['kind'] == 'host.notes_to_todo' ? AppIcons.document :
-            row['kind'] == 'public.lookup' ? AppIcons.search : AppIcons.reminder,
-          title: row['kind'] == 'public.lookup' ? row['lookup_question']! as String :
-            row['kind'] == 'host.notes_to_todo' ? l10n.companionNotesTitle :
-            row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
-          subtitle: row['kind'] == 'public.lookup' ? companionLookupLine(l10n, row, executorId: _executorId) :
-            row['kind'] == 'host.notes_to_todo' ? companionNotesLine(l10n, row) :
-            companionReminderLine(l10n, row, executorId: _executorId), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => CompanionTasksPage(memory: memory, taskId: row['task_id']! as String),
-          )),
+        ? <MemoryRow>[]
+        : memory.store.tasks(sourceSessionId: widget.sourceSessionId);
+    return AppPage.list(
+      title: l10n.companionTasksTitle,
+      actions: [
+        IconButton(
+          tooltip: l10n.companionReminderCheck,
+          icon: const Icon(AppIcons.refresh),
+          onPressed: memory == null || _busy ? null : _refresh,
         ),
-      ]),
-    ]);
+      ],
+      children: [
+        if (_loadFailed)
+          EmptyView(icon: AppIcons.reminder, title: l10n.companionMemoryLoadFailed)
+        else if (memory == null)
+          const Center(child: CircularProgressIndicator())
+        else if (widget.taskId != null)
+          if (task == null) EmptyView(icon: AppIcons.reminder, title: l10n.companionTaskMissing) else _detail(task)
+        else if (rows.isEmpty)
+          EmptyView(icon: AppIcons.reminder, title: l10n.companionTasksEmpty)
+        else
+          SheetGroup(
+            children: [
+              for (final row in rows)
+                SettingsTile(
+                  icon: row['kind'] == 'host.notes_to_todo'
+                      ? AppIcons.document
+                      : row['kind'] == 'public.lookup'
+                      ? AppIcons.search
+                      : AppIcons.reminder,
+                  title: row['kind'] == 'public.lookup'
+                      ? row['lookup_question']! as String
+                      : row['kind'] == 'host.notes_to_todo'
+                      ? l10n.companionNotesTitle
+                      : row['reminder_text'] as String? ?? l10n.companionReminderTextMissing,
+                  subtitle: row['kind'] == 'public.lookup'
+                      ? companionLookupLine(l10n, row, executorId: _executorId)
+                      : row['kind'] == 'host.notes_to_todo'
+                      ? companionNotesLine(l10n, row)
+                      : companionReminderLine(l10n, row, executorId: _executorId),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => CompanionTasksPage(memory: memory, taskId: row['task_id']! as String),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+      ],
+    );
   }
 }

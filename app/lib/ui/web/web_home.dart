@@ -337,9 +337,11 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
         ref.read(currentSessionProvider.notifier).select(sessionId);
       case OpenCompanionTaskEntry(:final taskId, :final taskRev):
         if (mounted) {
-          await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(
-            builder: (_) => CompanionTasksPage(taskId: taskId, openedRevision: taskRev),
-          ));
+          await Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute<void>(
+              builder: (_) => CompanionTasksPage(taskId: taskId, openedRevision: taskRev),
+            ),
+          );
         }
     }
   }

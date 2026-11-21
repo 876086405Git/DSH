@@ -40,8 +40,12 @@ class CompanionMemoryOwner extends ChangeNotifier {
   final CompanionMemoryStore store;
   final CompanionLocal legacy;
   final int Function() _now;
-  late final lookups = CompanionLookups(store: store, nowMilliseconds: _now,
-    changed: changed, retainReceipt: retainReceipt);
+  late final lookups = CompanionLookups(
+    store: store,
+    nowMilliseconds: _now,
+    changed: changed,
+    retainReceipt: retainReceipt,
+  );
   late final hostTasks = CompanionHostTasks(store: store, changed: changed, retainReceipt: retainReceipt);
   Future<bool>? _localMigration;
   Future<bool>? _widgetClear;

@@ -6267,6 +6267,10 @@ class L10nEn extends L10n {
   String get companionMemoryNoSource => 'This was written by hand, or its original source is no longer available.';
 
   @override
+  String get companionMemoryCleanupUnknown =>
+      'I can\'t confirm all the original messages that should be deleted. Nothing was deleted.';
+
+  @override
   String get companionMemoryTooLong => 'Too long to extract automatically from this version';
 
   @override
@@ -6379,10 +6383,536 @@ class L10nEn extends L10n {
       'This host is a bit out of date, so here she can\'t recall what you\'ve talked about. Updating the host fixes it.';
 
   @override
-  String get companionMemoryFollowup => 'Would you like to talk about that thing you mentioned?';
+  String get companionMemoryPostponedDone => 'Okay, let\'s pick it up once you have a new time.';
 
   @override
-  String get companionMemoryPostponedDone => 'Okay, let\'s pick it up once you have a new time.';
+  String get companionTasksTitle => 'Tasks';
+
+  @override
+  String get companionTasksEmpty => 'No reminders have been requested here.';
+
+  @override
+  String get companionTaskMissing => 'This task is no longer available here.';
+
+  @override
+  String get companionTaskChanged => 'The task has changed. The current agreement is shown below.';
+
+  @override
+  String get companionReminderEdit => 'Edit reminder';
+
+  @override
+  String get companionReminderCancel => 'Cancel reminder';
+
+  @override
+  String get companionReminderText => 'What to remind you about';
+
+  @override
+  String get companionReminderWhen => 'Local date and time';
+
+  @override
+  String get companionReminderWhenHint => 'For example, 2026-11-21 08:00';
+
+  @override
+  String get companionReminderZone => 'Time zone';
+
+  @override
+  String get companionReminderZoneHint => 'For example, Asia/Shanghai or +08:00';
+
+  @override
+  String get companionReminderQueued => 'This reminder is saved. Registration has not yet been confirmed.';
+
+  @override
+  String get companionReminderDone => 'This reminder is registered.';
+
+  @override
+  String get companionReminderUnknown => 'This reminder may have been scheduled; I have not confirmed it yet.';
+
+  @override
+  String get companionReminderFailed => 'This reminder has not been set.';
+
+  @override
+  String get companionReminderCancelled => 'Further scheduling for this reminder has been cancelled.';
+
+  @override
+  String get companionReminderTextMissing => 'What should the reminder say?';
+
+  @override
+  String get companionReminderDateMissing => 'Which date should I use?';
+
+  @override
+  String get companionReminderTimeMissing => 'What time on that date?';
+
+  @override
+  String get companionReminderZoneMissing => 'Which time zone should this use?';
+
+  @override
+  String get companionReminderGap => 'That local time does not exist. Please choose another time.';
+
+  @override
+  String get companionReminderOverlap => 'That local time occurs twice. Which occurrence do you mean?';
+
+  @override
+  String get companionReminderFirst => 'First occurrence';
+
+  @override
+  String get companionReminderSecond => 'Second occurrence';
+
+  @override
+  String get companionReminderExactMissing =>
+      'This phone cannot currently schedule exact reminders. It has not been set.';
+
+  @override
+  String get companionReminderNotificationsMissing => 'Notifications are disabled. This reminder has not been set.';
+
+  @override
+  String get companionReminderChannelMissing => 'The reminder notification channel is disabled. It has not been set.';
+
+  @override
+  String get companionReminderGroupMissing => 'The reminder notification group is disabled. It has not been set.';
+
+  @override
+  String get companionReminderTimePassed => 'The agreed time has passed. No late notification has been sent.';
+
+  @override
+  String get companionReminderInvalidTime =>
+      'The time could not be resolved. Please specify the date, time and zone again.';
+
+  @override
+  String get companionReminderCancelUnknown => 'Cancellation was requested, but it has not been fully confirmed.';
+
+  @override
+  String get companionReminderWhich => 'Which reminder do you mean? Please choose it in Tasks.';
+
+  @override
+  String get companionReminderSyntax =>
+      'Please give a complete date and time, for example “Remind me at tomorrow 08:00 to bring my ID”.';
+
+  @override
+  String get companionReminderSaveFailed => 'The agreement was not saved. Your input is still here.';
+
+  @override
+  String get companionReminderSettings => 'Open system settings';
+
+  @override
+  String get companionReminderCheck => 'Check again';
+
+  @override
+  String get companionReminderSubmittedNotification =>
+      'A notification was submitted for this reminder. This does not confirm that you saw it.';
+
+  @override
+  String get companionReminderUnknownNotification =>
+      'A notification for this reminder may have been sent; it has not been confirmed.';
+
+  @override
+  String get companionReminderOpened => 'A notification for this reminder was opened.';
+
+  @override
+  String companionReminderUnhandled(String text) {
+    return 'This part has not been handled: $text';
+  }
+
+  @override
+  String companionReminderCancelSource(String text) {
+    return 'Cancel reminder: $text';
+  }
+
+  @override
+  String get companionReminderNotHere =>
+      'This saved arrangement has not been adopted by this installation and cannot be changed or cancelled here.';
+
+  @override
+  String get companionReminderPlatformUnavailable => 'The reminder setup on this phone cannot be checked right now.';
+
+  @override
+  String get companionReminderPastRegistration =>
+      'The saved record shows that this reminder was registered previously.';
+
+  @override
+  String get companionLookupAccepted => 'I’ll check this and keep the result with the task.';
+
+  @override
+  String get companionLookupSyntax =>
+      'Which museum or library, and which local date? Please give its full name and date.';
+
+  @override
+  String get companionLookupDateMissing => 'Which local date should I check? Please give a specific date.';
+
+  @override
+  String get companionLookupZoneMissing =>
+      'Which time zone applies there? Please give the local date and time zone together.';
+
+  @override
+  String get companionLookupWhich => 'Which lookup should I cancel? You can select it in this room’s task list.';
+
+  @override
+  String get companionLookupQueued => 'Checking public sources.';
+
+  @override
+  String get companionLookupDone => 'This lookup is complete. Its evidence is below.';
+
+  @override
+  String get companionLookupPartial =>
+      'Some material was found, but it does not establish the arrangement for the requested date.';
+
+  @override
+  String get companionLookupFailed => 'This attempt did not obtain enough material to confirm an answer.';
+
+  @override
+  String get companionLookupUnknown =>
+      'The request receipt is unresolved. The original record is kept without resending that step.';
+
+  @override
+  String get companionLookupCancelled =>
+      'This lookup is cancelled. Requests that already happened remain in its record.';
+
+  @override
+  String get companionLookupCancelUnknown =>
+      'Stop was requested, but delivery to the original host is not yet confirmed.';
+
+  @override
+  String get companionLookupUnavailable => 'The lookup channel is unavailable, so the result is not confirmed.';
+
+  @override
+  String get companionLookupDeadline =>
+      'The original lookup deadline has passed. Obtained material is kept without further requests.';
+
+  @override
+  String get companionLookupInputLimit =>
+      'The complete material exceeds this request’s capacity. Its sources are kept for further review.';
+
+  @override
+  String get companionLookupQueryLong =>
+      'The name and date make the query too long. Please confirm a shorter, unambiguous name.';
+
+  @override
+  String get companionLookupAnswerIncomplete =>
+      'Material was obtained, but the answer did not finish reliably. Its sources are kept for you.';
+
+  @override
+  String get companionLookupNotHere =>
+      'This lookup belongs to its original installation. Its record is shown without automatically running it here.';
+
+  @override
+  String get companionLookupSources => 'Sources observed in this lookup';
+
+  @override
+  String get companionLookupSearchOnly => 'Search metadata; not body evidence';
+
+  @override
+  String get companionLookupNoTitle => 'No title supplied';
+
+  @override
+  String get companionLookupCancel => 'Cancel lookup';
+
+  @override
+  String get companionLookupSaveFailed => 'This operation did not finish. Check its original record in the task list.';
+
+  @override
+  String get companionLookupUsageUnknown => 'Answer-model usage was not fully reported; it is not treated as free.';
+
+  @override
+  String get companionLookupCostUnknown => 'Some request costs remain unknown.';
+
+  @override
+  String companionLookupCancelSource(String name) {
+    return 'Cancel the lookup for $name';
+  }
+
+  @override
+  String companionLookupObservedAt(String time) {
+    return 'Observed at $time';
+  }
+
+  @override
+  String companionLookupToolCost(String amount) {
+    return 'Tools estimated from confirmed successful requests and the published rate: CNY $amount. Answer-model usage is separate.';
+  }
+
+  @override
+  String companionLookupModelUsage(String input, String read, String write, String output) {
+    return 'Answer usage: uncached input $input, cache read $read, cache write $write, output $output. A question mark means unreported.';
+  }
+
+  @override
+  String get companionLookupCostDetails => 'Cost and usage';
+
+  @override
+  String companionLookupViewSources(String name) {
+    return 'View sources · $name';
+  }
+
+  @override
+  String get companionNotesTitle => 'Computer notes task';
+
+  @override
+  String get companionNotesView => 'View this task';
+
+  @override
+  String get companionNotesSyntax =>
+      'Please specify the date and whether work may continue after you leave, then choose a folder.';
+
+  @override
+  String get companionNotesDateMissing =>
+      'The original date, time zone or deadline is not yet clear. Please specify it.';
+
+  @override
+  String get companionNotesConnect => 'Connect the computer that holds your notes, then choose its folder.';
+
+  @override
+  String get companionNotesOriginalHost =>
+      'Connect the original computer to check or continue. The original record is retained here.';
+
+  @override
+  String get companionNotesUnavailable => 'This computer cannot durably accept this notes task right now.';
+
+  @override
+  String get companionNotesNoDirectory => 'No folder was selected. This notes task has not been accepted.';
+
+  @override
+  String get companionNotesChooseDirectory => 'Choose the notes folder';
+
+  @override
+  String get companionNotesChooseOutput => 'Choose the output folder';
+
+  @override
+  String get companionNotesKeepDirectory => 'Keep the original notes folder';
+
+  @override
+  String get companionNotesKeepOutput => 'Keep the original output folder';
+
+  @override
+  String get companionNotesWhich => 'Which notes task should be cancelled? Choose it from the task list.';
+
+  @override
+  String get companionNotesQueued => 'The agreement is saved. The computer has not yet confirmed acceptance.';
+
+  @override
+  String get companionNotesRunning => 'The computer has accepted the task. Waiting for further results.';
+
+  @override
+  String get companionNotesDone => 'The new to-do file has been saved. You can open the recorded artifact.';
+
+  @override
+  String get companionNotesPartial => 'Automatic work has stopped with a partial artifact available.';
+
+  @override
+  String get companionNotesFailed => 'This notes task did not finish. Its original record is retained.';
+
+  @override
+  String get companionNotesWaiting => 'The computer is waiting for a required condition or the original approval.';
+
+  @override
+  String get companionNotesUnknown => 'Acceptance or progress on the computer has not yet been verified.';
+
+  @override
+  String get companionNotesCancelUnknown =>
+      'The cancellation is saved, but whether the computer has stopped is not yet verified. Existing files remain.';
+
+  @override
+  String get companionNotesCancelled => 'Further work has stopped. Previously created files are retained.';
+
+  @override
+  String get companionNotesPauseUnavailable =>
+      'The stop-on-leaving condition is saved, but cannot currently be enforced reliably, so work has not started. You may amend it to continue after leaving.';
+
+  @override
+  String get companionNotesOpportunityLost =>
+      'The task was not handed off at the original opportunity, and later queuing was not allowed. Please explicitly say whether to continue.';
+
+  @override
+  String get companionNotesDeadline =>
+      'The original deadline has passed. No new execution will be started; prior effects remain available for verification.';
+
+  @override
+  String get companionNotesOriginalPending =>
+      'The computer has received the amendment and is still reconciling the original task identity.';
+
+  @override
+  String get companionNotesSaveFailed =>
+      'This operation could not be verified. Check the original task record; no replacement task will be created.';
+
+  @override
+  String get companionNotesModifiedDay =>
+      'Only Markdown and plain-text notes in this directory modified on that date in the original time zone are selected. Original files are unchanged.';
+
+  @override
+  String get companionNotesNoInputs =>
+      'This revision found no notes modified on that date in this directory and created no new to-do page.';
+
+  @override
+  String get companionNotesOutputExists =>
+      'A file with that name already exists and was not overwritten. Change the agreement to use a new name.';
+
+  @override
+  String get companionNotesFileCountLimit =>
+      'More than 20 matching notes were found in this directory. Choose a smaller directory or split the work into another batch.';
+
+  @override
+  String get companionNotesFileSizeLimit =>
+      'A selected note exceeds 64 KiB. Reduce the scope; no partial file was used in its place.';
+
+  @override
+  String get companionNotesTotalSizeLimit =>
+      'The selected notes exceed 256 KiB in total. Reduce the scope or split the work into another batch.';
+
+  @override
+  String get companionNotesModelLimit =>
+      'The notes request exceeds the model input limit. Reduce the scope; the source text was not truncated to continue.';
+
+  @override
+  String get companionNotesPause => 'Stop when I leave';
+
+  @override
+  String get companionNotesContinue => 'Continue after I leave';
+
+  @override
+  String get companionNotesAllowQueue => 'Allow work after the computer comes online';
+
+  @override
+  String get companionNotesNoQueue => 'Do not queue for a later opportunity';
+
+  @override
+  String get companionNotesApproval =>
+      'This is the original approval for this step. Responding is not an execution receipt.';
+
+  @override
+  String get companionNotesSteps => 'Steps and usage across revisions';
+
+  @override
+  String get companionNotesOpenFile => 'Open the recorded artifact';
+
+  @override
+  String get companionNotesFileMissing => 'The original artifact is missing. It has not been regenerated.';
+
+  @override
+  String get companionNotesFileChanged => 'The artifact has changed. Its current contents are not the original result.';
+
+  @override
+  String get companionNotesFileUnknown =>
+      'The original artifact cannot currently be verified or read. Its record is retained.';
+
+  @override
+  String get companionNotesCancel => 'Cancel further work';
+
+  @override
+  String get companionNotesEdit => 'Change the agreement';
+
+  @override
+  String get companionNotesDate => 'Notes date';
+
+  @override
+  String get companionNotesFilename => 'New file name (.md or .txt)';
+
+  @override
+  String get companionNotesDeadlineField => 'New deadline (leave blank to keep the original)';
+
+  @override
+  String get companionNotesClearDeadline => 'Remove the user-specified deadline';
+
+  @override
+  String get companionNotesKeepDeadline => 'Keep the original deadline';
+
+  @override
+  String get companionNotesSelectStep => 'Select original notes';
+
+  @override
+  String get companionNotesReadStep => 'Read and verify notes';
+
+  @override
+  String get companionNotesModelStep => 'Draft to-dos';
+
+  @override
+  String get companionNotesWriteStep => 'Save and verify the new file';
+
+  @override
+  String get companionNotesStepDone => 'This step is complete.';
+
+  @override
+  String get companionNotesStepPartial => 'This step completed only in part.';
+
+  @override
+  String get companionNotesStepRunning => 'This step is running.';
+
+  @override
+  String get companionNotesStepWaiting => 'This step is waiting.';
+
+  @override
+  String get companionNotesStepFailed => 'This step did not complete.';
+
+  @override
+  String get companionNotesStepCancelled => 'Further work on this step has stopped.';
+
+  @override
+  String get companionNotesStepUnknown => 'The outcome of this step is not yet verified.';
+
+  @override
+  String companionNotesSourceDirectory(String path) {
+    return 'Notes folder: $path';
+  }
+
+  @override
+  String companionNotesOutputDirectory(String path) {
+    return 'Output folder: $path';
+  }
+
+  @override
+  String companionNotesDue(String time) {
+    return 'Saved deadline: $time';
+  }
+
+  @override
+  String companionNotesBudget(String spent, String held) {
+    return 'Execution time used: $spent s; unresolved reservation: $held s. Cumulative limit: 300 s. Approval waiting is excluded.';
+  }
+
+  @override
+  String companionNotesArtifactRevision(String revision) {
+    return 'Revision $revision';
+  }
+
+  @override
+  String companionNotesArtifactDetails(String count, String time) {
+    return 'Sources: $count; verified at $time';
+  }
+
+  @override
+  String companionNotesCancelSource(String name) {
+    return 'Cancel the notes task for “$name”';
+  }
+
+  @override
+  String companionNotesAmendSource(
+    String date,
+    String name,
+    String deadline,
+    String afterExit,
+    String queue,
+    String source,
+    String output,
+  ) {
+    return 'Amend the notes task: date $date, file “$name”, deadline: $deadline; $afterExit; $queue; $source; $output.';
+  }
+
+  @override
+  String get companionNotesRetry => 'Try the original task again';
+
+  @override
+  String get companionNotesSubmitSaved => 'Submit the saved agreement';
+
+  @override
+  String get companionNotesResendOriginal => 'Resend the original agreement (same task)';
+
+  @override
+  String get companionNotesResendCancel => 'Resend the saved cancellation';
+
+  @override
+  String get companionNotesResendAmend => 'Resend the saved amendment';
+
+  @override
+  String companionNotesItemCount(String count) {
+    return 'This version lists $count to-do items. The artifact record establishes whether it was saved.';
+  }
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

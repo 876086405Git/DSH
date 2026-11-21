@@ -15,12 +15,32 @@ class CompanionHostTasks {
   final void Function(Future<void>) retainReceipt;
   final Map<(String, int, String), Future<MemoryRow>> _pending = {};
 
-  Future<MemoryRow> run(MemoryRow captured, {required DshClient client, required String hostKey,
-    bool initialOpportunity = false, bool submitPending = false, bool retryWaiting = false,
-    bool replayMissing = false, bool resendPendingCommand = false, CompanionTasksCapability? capability}) {
+  Future<MemoryRow> run(
+    MemoryRow captured, {
+    required DshClient client,
+    required String hostKey,
+    bool initialOpportunity = false,
+    bool submitPending = false,
+    bool retryWaiting = false,
+    bool replayMissing = false,
+    bool resendPendingCommand = false,
+    CompanionTasksCapability? capability,
+  }) {
     final id = captured['task_id']! as String;
     final revision = captured['task_rev']! as int;
-    final key = (id, revision, resendPendingCommand ? 'command' : retryWaiting ? 'retry' : replayMissing ? 'recover' : submitPending ? 'submit' : 'read');
+    final key = (
+      id,
+      revision,
+      resendPendingCommand
+          ? 'command'
+          : retryWaiting
+          ? 'retry'
+          : replayMissing
+          ? 'recover'
+          : submitPending
+          ? 'submit'
+          : 'read',
+    );
     final pending = _pending[key];
     if (pending != null) {
       return pending;
@@ -31,8 +51,20 @@ class CompanionHostTasks {
     retainReceipt(completed.future.then<void>((_) {}));
     unawaited(() async {
       try {
-        completed.complete(await _execute(id, revision, client, hostKey, initialOpportunity,
-          submitPending, retryWaiting, replayMissing, resendPendingCommand, capability));
+        completed.complete(
+          await _execute(
+            id,
+            revision,
+            client,
+            hostKey,
+            initialOpportunity,
+            submitPending,
+            retryWaiting,
+            replayMissing,
+            resendPendingCommand,
+            capability,
+          ),
+        );
       } on Object catch (error, stack) {
         completed.completeError(error, stack);
       } finally {
@@ -42,9 +74,18 @@ class CompanionHostTasks {
     return completed.future;
   }
 
-  Future<MemoryRow> _execute(String id, int revision, DshClient client, String hostKey,
-    bool initialOpportunity, bool submitPending, bool retryWaiting, bool replayMissing,
-    bool resendPendingCommand, CompanionTasksCapability? capability) async {
+  Future<MemoryRow> _execute(
+    String id,
+    int revision,
+    DshClient client,
+    String hostKey,
+    bool initialOpportunity,
+    bool submitPending,
+    bool retryWaiting,
+    bool replayMissing,
+    bool resendPendingCommand,
+    CompanionTasksCapability? capability,
+  ) async {
     var current = store.hostTask(id)!;
     if (current['host_key'] != hostKey) {
       throw const DshRemoteException('companion/task-original-host', 'Connect the original task Host');
@@ -81,47 +122,94 @@ class CompanionHostTasks {
       return current;
     }
     if (retryWaiting) {
-      return _dispatch(id, 1, client, hostKey, hostStore, initialOpportunity: false,
-        readOriginal: readOriginal, retryWaiting: true);
+      return _dispatch(
+        id,
+        1,
+        client,
+        hostKey,
+        hostStore,
+        initialOpportunity: false,
+        readOriginal: readOriginal,
+        retryWaiting: true,
+      );
     }
     final recoverMissing = replayMissing && readOriginal && missingOriginal && current['snapshot'] == null;
     final observed = current['snapshot'] as Map?;
     // An unacknowledged higher amendment/cancellation is an existing command,
     // not permission to rerun an unknown physical step. Only this explicit
     // action may replay it after an actual read of the original task store.
-    final resendCommand = resendPendingCommand && readOriginal &&
-      const ['amend', 'cancel'].contains(current['operation']) &&
-      (observed == null || (observed['taskRev']! as int) < revision);
-    if (!recoverMissing && !resendCommand && (!submitPending || store.hostTaskCommands(id).last['possible_sent_at_ms'] != null)) {
+    final resendCommand =
+        resendPendingCommand &&
+        readOriginal &&
+        const ['amend', 'cancel'].contains(current['operation']) &&
+        (observed == null || (observed['taskRev']! as int) < revision);
+    if (!recoverMissing &&
+        !resendCommand &&
+        (!submitPending || store.hostTaskCommands(id).last['possible_sent_at_ms'] != null)) {
       // This per-call observation is not a new persisted task state. A page
       // cannot enable an old approval just because a cached snapshot remains
       // readable after the original store returned a real 404.
       return {...current, 'observed_host_snapshot': readOriginal && !missingOriginal};
     }
-    current = await _dispatch(id, revision, client, hostKey, hostStore,
-      initialOpportunity: initialOpportunity, readOriginal: readOriginal);
+    current = await _dispatch(
+      id,
+      revision,
+      client,
+      hostKey,
+      hostStore,
+      initialOpportunity: initialOpportunity,
+      readOriginal: readOriginal,
+    );
     final snapshot = current['snapshot'] as Map?;
-    if (current['task_rev'] == revision && current['operation'] == 'amend' && current['cancel_requested'] == 0 &&
-        snapshot?['taskRev'] == revision && snapshot?['originalCreatePresent'] == false) {
+    if (current['task_rev'] == revision &&
+        current['operation'] == 'amend' &&
+        current['cancel_requested'] == 0 &&
+        snapshot?['taskRev'] == revision &&
+        snapshot?['originalCreatePresent'] == false) {
       // The Host has durably stored the new full agreement but still needs
       // the unchanged original identity. It must never execute revision one.
-      current = await _dispatch(id, 1, client, hostKey, hostStore,
-        initialOpportunity: initialOpportunity, readOriginal: readOriginal);
+      current = await _dispatch(
+        id,
+        1,
+        client,
+        hostKey,
+        hostStore,
+        initialOpportunity: initialOpportunity,
+        readOriginal: readOriginal,
+      );
     }
     return current;
   }
 
-  Future<MemoryRow> _dispatch(String id, int revision, DshClient client, String hostKey, String hostStore,
-    {required bool initialOpportunity, required bool readOriginal, bool retryWaiting = false}) async {
-    final command = store.prepareHostTaskOperation(taskId: id, taskRev: revision, hostKey: hostKey,
-      hostStoreId: hostStore, initialOpportunity: initialOpportunity, replayAfterRead: readOriginal, retryWaiting: retryWaiting);
+  Future<MemoryRow> _dispatch(
+    String id,
+    int revision,
+    DshClient client,
+    String hostKey,
+    String hostStore, {
+    required bool initialOpportunity,
+    required bool readOriginal,
+    bool retryWaiting = false,
+  }) async {
+    final command = store.prepareHostTaskOperation(
+      taskId: id,
+      taskRev: revision,
+      hostKey: hostKey,
+      hostStoreId: hostStore,
+      initialOpportunity: initialOpportunity,
+      replayAfterRead: readOriginal,
+      retryWaiting: retryWaiting,
+    );
     changed();
     if (command == null) {
       return store.hostTask(id)!;
     }
     try {
-      final snapshot = await client.writeCompanionHostTask(taskId: id, operation: command['operation']! as String,
-        request: Map<String, Object?>.from(command['request']! as Map));
+      final snapshot = await client.writeCompanionHostTask(
+        taskId: id,
+        operation: command['operation']! as String,
+        request: Map<String, Object?>.from(command['request']! as Map),
+      );
       final result = store.importHostTaskSnapshot(taskId: id, hostKey: hostKey, snapshot: snapshot);
       changed();
       return result;
@@ -151,11 +239,12 @@ MemoryRow? parseCompanionNotes(String raw) {
     return null;
   }
   final clauses = text.split(RegExp(r'[，,]')).map((item) => item.trim()).toList();
-  final main = RegExp(r'^(?:请|帮我|让)?(?:当前|这台)?电脑(?:把|将)'
-    r'(今天|\d{4}-\d{2}-\d{2})的笔记(?:整理|另存)(?:成|为)(?:一页)?待办(?:清单)?$').firstMatch(clauses.first);
+  final main = RegExp(
+    r'^(?:请|帮我|让)?(?:当前|这台)?电脑(?:把|将)'
+    r'(今天|\d{4}-\d{2}-\d{2})的笔记(?:整理|另存)(?:成|为)(?:一页)?待办(?:清单)?$',
+  ).firstMatch(clauses.first);
   if (main == null) {
-    return text.contains('电脑') && text.contains('笔记') && text.contains('待办')
-        ? {'operation': 'clarify'} : null;
+    return text.contains('电脑') && text.contains('笔记') && text.contains('待办') ? {'operation': 'clarify'} : null;
   }
   String? afterExit;
   var allowQueue = false;
@@ -191,8 +280,14 @@ MemoryRow? parseCompanionNotes(String raw) {
     // permission to silently keep only the recognised first clause.
     return {'operation': 'clarify'};
   }
-  return {'operation': 'create', 'day': main.group(1), 'afterExit': afterExit ?? 'continue',
-    'allowQueue': allowQueue, 'deadlineTime': deadlineTime, 'outputName': outputName};
+  return {
+    'operation': 'create',
+    'day': main.group(1),
+    'afterExit': afterExit ?? 'continue',
+    'allowQueue': allowQueue,
+    'deadlineTime': deadlineTime,
+    'outputName': outputName,
+  };
 }
 
 /// Freeze the original source day and deadline once, before opening a picker.
@@ -220,7 +315,12 @@ Future<MemoryRow?> companionNotesAgreement(MemoryRow source, MemoryRow command, 
     }
     deadlineAt = ((resolved['moments']! as List).single as Map)['epochMs']! as int;
   }
-  return {'localDate': date, 'timeZone': zone, 'deadlineAtMs': deadlineAt,
-    'afterExit': command['afterExit'], 'allowQueue': command['allowQueue'],
-    'outputName': command['outputName'] ?? '$date-待办.md'};
+  return {
+    'localDate': date,
+    'timeZone': zone,
+    'deadlineAtMs': deadlineAt,
+    'afterExit': command['afterExit'],
+    'allowQueue': command['allowQueue'],
+    'outputName': command['outputName'] ?? '$date-待办.md',
+  };
 }

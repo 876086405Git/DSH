@@ -10982,6 +10982,12 @@ abstract class L10n {
   /// **'这条是手写的，或原来的出处已经找不到了。'**
   String get companionMemoryNoSource;
 
+  /// No description provided for @companionMemoryCleanupUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'还不能确认所有该删的原话，这次没有删除。'**
+  String get companionMemoryCleanupUnknown;
+
   /// No description provided for @companionMemoryTooLong.
   ///
   /// In zh, this message translates to:
@@ -11198,17 +11204,925 @@ abstract class L10n {
   /// **'这台主机的版本有点旧，在这里她暂时想不起你们聊过的事。升级主机就好。'**
   String get companionMemoryHostUnsupported;
 
-  /// No description provided for @companionMemoryFollowup.
-  ///
-  /// In zh, this message translates to:
-  /// **'上次提到的这件事，现在想聊聊吗？'**
-  String get companionMemoryFollowup;
-
   /// No description provided for @companionMemoryPostponedDone.
   ///
   /// In zh, this message translates to:
   /// **'好，那等你定了新时间再说。'**
   String get companionMemoryPostponedDone;
+
+  /// No description provided for @companionTasksTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交代的事'**
+  String get companionTasksTitle;
+
+  /// No description provided for @companionTasksEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'这里还没有交代过提醒。'**
+  String get companionTasksEmpty;
+
+  /// No description provided for @companionTaskMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条约定现在找不到了。'**
+  String get companionTaskMissing;
+
+  /// No description provided for @companionTaskChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'约定已经改过，下面是现在这一条。'**
+  String get companionTaskChanged;
+
+  /// No description provided for @companionReminderEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'改提醒'**
+  String get companionReminderEdit;
+
+  /// No description provided for @companionReminderCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消提醒'**
+  String get companionReminderCancel;
+
+  /// No description provided for @companionReminderText.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒什么'**
+  String get companionReminderText;
+
+  /// No description provided for @companionReminderWhen.
+  ///
+  /// In zh, this message translates to:
+  /// **'日期和当地时间'**
+  String get companionReminderWhen;
+
+  /// No description provided for @companionReminderWhenHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如 2026-11-21 08:00'**
+  String get companionReminderWhenHint;
+
+  /// No description provided for @companionReminderZone.
+  ///
+  /// In zh, this message translates to:
+  /// **'时区'**
+  String get companionReminderZone;
+
+  /// No description provided for @companionReminderZoneHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如 Asia/Shanghai 或 +08:00'**
+  String get companionReminderZoneHint;
+
+  /// No description provided for @companionReminderQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒已收下，还没确认设好。'**
+  String get companionReminderQueued;
+
+  /// No description provided for @companionReminderDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒设好了。'**
+  String get companionReminderDone;
+
+  /// No description provided for @companionReminderUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒可能已经安排，我还没核清。'**
+  String get companionReminderUnknown;
+
+  /// No description provided for @companionReminderFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒还没设好。'**
+  String get companionReminderFailed;
+
+  /// No description provided for @companionReminderCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒后续的安排已停。'**
+  String get companionReminderCancelled;
+
+  /// No description provided for @companionReminderTextMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'要提醒你什么？'**
+  String get companionReminderTextMissing;
+
+  /// No description provided for @companionReminderDateMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'要在哪一天提醒？'**
+  String get companionReminderDateMissing;
+
+  /// No description provided for @companionReminderTimeMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'那天具体几点提醒？'**
+  String get companionReminderTimeMissing;
+
+  /// No description provided for @companionReminderZoneMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次用哪个时区？'**
+  String get companionReminderZoneMissing;
+
+  /// No description provided for @companionReminderGap.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个当地时间不存在，请改一个时间。'**
+  String get companionReminderGap;
+
+  /// No description provided for @companionReminderOverlap.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个当地时间有两次，要第一次还是第二次？'**
+  String get companionReminderOverlap;
+
+  /// No description provided for @companionReminderFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'第一次'**
+  String get companionReminderFirst;
+
+  /// No description provided for @companionReminderSecond.
+  ///
+  /// In zh, this message translates to:
+  /// **'第二次'**
+  String get companionReminderSecond;
+
+  /// No description provided for @companionReminderExactMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台手机现在不能安排准点提醒，还没设好。'**
+  String get companionReminderExactMissing;
+
+  /// No description provided for @companionReminderNotificationsMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知没有打开，这条提醒还没设好。'**
+  String get companionReminderNotificationsMissing;
+
+  /// No description provided for @companionReminderChannelMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒通知的渠道没有打开，还没设好。'**
+  String get companionReminderChannelMissing;
+
+  /// No description provided for @companionReminderGroupMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒所属的通知组没有打开，还没设好。'**
+  String get companionReminderGroupMissing;
+
+  /// No description provided for @companionReminderTimePassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'约定的时间已经过去，没有补响。'**
+  String get companionReminderTimePassed;
+
+  /// No description provided for @companionReminderInvalidTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次时间还不能确定，请重新指定日期、时间和时区。'**
+  String get companionReminderInvalidTime;
+
+  /// No description provided for @companionReminderCancelUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经请求停下，但还没确认全部停成。'**
+  String get companionReminderCancelUnknown;
+
+  /// No description provided for @companionReminderWhich.
+  ///
+  /// In zh, this message translates to:
+  /// **'你指哪一条提醒？请在「交代的事」里选一下。'**
+  String get companionReminderWhich;
+
+  /// No description provided for @companionReminderSyntax.
+  ///
+  /// In zh, this message translates to:
+  /// **'请写完整日期和时间，例如“明早八点提醒我带证件”。'**
+  String get companionReminderSyntax;
+
+  /// No description provided for @companionReminderSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次约定没保存好，原输入还在。'**
+  String get companionReminderSaveFailed;
+
+  /// No description provided for @companionReminderSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开系统设置'**
+  String get companionReminderSettings;
+
+  /// No description provided for @companionReminderCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新核对'**
+  String get companionReminderCheck;
+
+  /// No description provided for @companionReminderSubmittedNotification.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒有过通知提交记录；这不表示你已经看到。'**
+  String get companionReminderSubmittedNotification;
+
+  /// No description provided for @companionReminderUnknownNotification.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒的通知可能已经发出，还没核清。'**
+  String get companionReminderUnknownNotification;
+
+  /// No description provided for @companionReminderOpened.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条提醒的通知已打开。'**
+  String get companionReminderOpened;
+
+  /// No description provided for @companionReminderUnhandled.
+  ///
+  /// In zh, this message translates to:
+  /// **'这部分还没办理：{text}'**
+  String companionReminderUnhandled(String text);
+
+  /// No description provided for @companionReminderCancelSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消提醒：{text}'**
+  String companionReminderCancelSource(String text);
+
+  /// No description provided for @companionReminderNotHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条旧安排没有在当前安装中接管，不能在这里修改或撤销。'**
+  String get companionReminderNotHere;
+
+  /// No description provided for @companionReminderPlatformUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'现在还无法核对这台手机的提醒安排。'**
+  String get companionReminderPlatformUnavailable;
+
+  /// No description provided for @companionReminderPastRegistration.
+  ///
+  /// In zh, this message translates to:
+  /// **'原记录显示，这条提醒曾经登记成功。'**
+  String get companionReminderPastRegistration;
+
+  /// No description provided for @companionLookupAccepted.
+  ///
+  /// In zh, this message translates to:
+  /// **'我来查一下，结果会留在这件事里。'**
+  String get companionLookupAccepted;
+
+  /// No description provided for @companionLookupSyntax.
+  ///
+  /// In zh, this message translates to:
+  /// **'想查哪家馆、哪一天？请告诉我完整馆名和当地日期。'**
+  String get companionLookupSyntax;
+
+  /// No description provided for @companionLookupDateMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'想查当地哪一天的安排？请给我具体日期。'**
+  String get companionLookupDateMissing;
+
+  /// No description provided for @companionLookupZoneMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个地点用哪个时区？请把当地日期和时区一起告诉我。'**
+  String get companionLookupZoneMissing;
+
+  /// No description provided for @companionLookupWhich.
+  ///
+  /// In zh, this message translates to:
+  /// **'你想取消哪一项查询？可以到这间屋子的事情列表里选它。'**
+  String get companionLookupWhich;
+
+  /// No description provided for @companionLookupQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在查证公开资料。'**
+  String get companionLookupQueued;
+
+  /// No description provided for @companionLookupDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次查证已完成，依据留在下面。'**
+  String get companionLookupDone;
+
+  /// No description provided for @companionLookupPartial.
+  ///
+  /// In zh, this message translates to:
+  /// **'查到了一部分，还不能确认所问日期的安排。'**
+  String get companionLookupPartial;
+
+  /// No description provided for @companionLookupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次没有取得足够材料，没法确认。'**
+  String get companionLookupFailed;
+
+  /// No description provided for @companionLookupUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次请求的回执还没核清。我会保留原记录，不重新发同一步。'**
+  String get companionLookupUnknown;
+
+  /// No description provided for @companionLookupCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'这项查询已取消；已经发生的请求仍保留在记录里。'**
+  String get companionLookupCancelled;
+
+  /// No description provided for @companionLookupCancelUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经要求停止，主机是否收到还没核清。'**
+  String get companionLookupCancelUnknown;
+
+  /// No description provided for @companionLookupUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时连不上查证通道，结果还没有确认。'**
+  String get companionLookupUnavailable;
+
+  /// No description provided for @companionLookupDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'原定查询时间已过，保留已取得的材料，不再继续请求。'**
+  String get companionLookupDeadline;
+
+  /// No description provided for @companionLookupInputLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整资料超过这次可读范围，已保留来源供继续核对。'**
+  String get companionLookupInputLimit;
+
+  /// No description provided for @companionLookupQueryLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'馆名和日期合起来太长，先确认更简短且明确的名称。'**
+  String get companionLookupQueryLong;
+
+  /// No description provided for @companionLookupAnswerIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'材料已取得，但这次答案没有完整核好，先把来源留给你。'**
+  String get companionLookupAnswerIncomplete;
+
+  /// No description provided for @companionLookupNotHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'这项查询由原安装环境受理，当前只查看记录，不在这里自动重做。'**
+  String get companionLookupNotHere;
+
+  /// No description provided for @companionLookupSources.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次实际来源'**
+  String get companionLookupSources;
+
+  /// No description provided for @companionLookupSearchOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索摘要，尚未作为正文依据'**
+  String get companionLookupSearchOnly;
+
+  /// No description provided for @companionLookupNoTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未提供标题'**
+  String get companionLookupNoTitle;
+
+  /// No description provided for @companionLookupCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消查询'**
+  String get companionLookupCancel;
+
+  /// No description provided for @companionLookupSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次处理没完成，请先查看事情列表里的原记录。'**
+  String get companionLookupSaveFailed;
+
+  /// No description provided for @companionLookupUsageUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'答案模型用量未完整报告，不能当作免费。'**
+  String get companionLookupUsageUnknown;
+
+  /// No description provided for @companionLookupCostUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'另有请求费用尚未核清。'**
+  String get companionLookupCostUnknown;
+
+  /// No description provided for @companionLookupCancelSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消{name}的查询'**
+  String companionLookupCancelSource(String name);
+
+  /// No description provided for @companionLookupObservedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'取得于 {time}'**
+  String companionLookupObservedAt(String time);
+
+  /// No description provided for @companionLookupToolCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'工具按已核成功请求和公开费率估算：¥{amount}。答案模型用量另列。'**
+  String companionLookupToolCost(String amount);
+
+  /// No description provided for @companionLookupModelUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'答案用量：未缓存输入 {input}，缓存读取 {read}，缓存写入 {write}，输出 {output}；问号表示未报告。'**
+  String companionLookupModelUsage(String input, String read, String write, String output);
+
+  /// No description provided for @companionLookupCostDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'费用与用量'**
+  String get companionLookupCostDetails;
+
+  /// No description provided for @companionLookupViewSources.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看来源 · {name}'**
+  String companionLookupViewSources(String name);
+
+  /// No description provided for @companionNotesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑整理笔记'**
+  String get companionNotesTitle;
+
+  /// No description provided for @companionNotesView.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看这件事'**
+  String get companionNotesView;
+
+  /// No description provided for @companionNotesSyntax.
+  ///
+  /// In zh, this message translates to:
+  /// **'请说明电脑要整理哪一天的笔记，是否离开后继续；随后可以选择目录。'**
+  String get companionNotesSyntax;
+
+  /// No description provided for @companionNotesDateMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'原话的日期、时区或截止时刻还没确定，请补充明确时间。'**
+  String get companionNotesDateMissing;
+
+  /// No description provided for @companionNotesConnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'先连接要整理笔记的那台电脑，再选目录。'**
+  String get companionNotesConnect;
+
+  /// No description provided for @companionNotesOriginalHost.
+  ///
+  /// In zh, this message translates to:
+  /// **'请连接原先那台电脑再核对或继续；这里保留原记录。'**
+  String get companionNotesOriginalHost;
+
+  /// No description provided for @companionNotesUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台电脑目前还不能可靠接下这项整理。'**
+  String get companionNotesUnavailable;
+
+  /// No description provided for @companionNotesNoDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有选定目录，这项整理尚未受理。'**
+  String get companionNotesNoDirectory;
+
+  /// No description provided for @companionNotesChooseDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择笔记目录'**
+  String get companionNotesChooseDirectory;
+
+  /// No description provided for @companionNotesChooseOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择输出目录'**
+  String get companionNotesChooseOutput;
+
+  /// No description provided for @companionNotesKeepDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留原笔记目录'**
+  String get companionNotesKeepDirectory;
+
+  /// No description provided for @companionNotesKeepOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留原输出目录'**
+  String get companionNotesKeepOutput;
+
+  /// No description provided for @companionNotesWhich.
+  ///
+  /// In zh, this message translates to:
+  /// **'想取消哪一项笔记整理？请到事情列表里选它。'**
+  String get companionNotesWhich;
+
+  /// No description provided for @companionNotesQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'约定已记下，电脑是否接到还未确认。'**
+  String get companionNotesQueued;
+
+  /// No description provided for @companionNotesRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑已接下，等待后续结果。'**
+  String get companionNotesRunning;
+
+  /// No description provided for @companionNotesDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'待办文件已经另存，可以查看原产物。'**
+  String get companionNotesDone;
+
+  /// No description provided for @companionNotesPartial.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动整理已停止，已有部分产物可查看。'**
+  String get companionNotesPartial;
+
+  /// No description provided for @companionNotesFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次整理没有完成，原记录仍保留。'**
+  String get companionNotesFailed;
+
+  /// No description provided for @companionNotesWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑正在等必要条件或原批准，尚未完成。'**
+  String get companionNotesWaiting;
+
+  /// No description provided for @companionNotesUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑是否接到、做到哪一步，还没有核清。'**
+  String get companionNotesUnknown;
+
+  /// No description provided for @companionNotesCancelUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消约定已保存，电脑是否停止还没核清；已有文件保留。'**
+  String get companionNotesCancelUnknown;
+
+  /// No description provided for @companionNotesCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'后续整理已停止，此前生成的文件保留。'**
+  String get companionNotesCancelled;
+
+  /// No description provided for @companionNotesPauseUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保留“离开就停”的约定，但目前无法可靠执行这一条件，因此尚未开始。可修改为“离开后继续”。'**
+  String get companionNotesPauseUnavailable;
+
+  /// No description provided for @companionNotesOpportunityLost.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次没有及时交给电脑，也未允许上线后再做。请重新说明是否继续。'**
+  String get companionNotesOpportunityLost;
+
+  /// No description provided for @companionNotesDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'原定截止时间已过，不再安排新的执行；已发生的效果仍保留待核。'**
+  String get companionNotesDeadline;
+
+  /// No description provided for @companionNotesOriginalPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑已收到修改，原任务身份还在核对。'**
+  String get companionNotesOriginalPending;
+
+  /// No description provided for @companionNotesSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次处理没能核清，请查看这件事的原记录；不会另建一项重做。'**
+  String get companionNotesSaveFailed;
+
+  /// No description provided for @companionNotesModifiedDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'按原时区内这一天修改的本层 Markdown／纯文本笔记整理；原件不改。'**
+  String get companionNotesModifiedDay;
+
+  /// No description provided for @companionNotesNoInputs.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到该日修改的本层笔记，这一版没有新建待办页。'**
+  String get companionNotesNoInputs;
+
+  /// No description provided for @companionNotesOutputExists.
+  ///
+  /// In zh, this message translates to:
+  /// **'同名文件已经在那儿，没有覆盖。可以修改约定换个新文件名。'**
+  String get companionNotesOutputExists;
+
+  /// No description provided for @companionNotesFileCountLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'符合条件的本层笔记超过 20 份。请改选更小的目录或另拆一批。'**
+  String get companionNotesFileCountLimit;
+
+  /// No description provided for @companionNotesFileSizeLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选笔记中有单份超过 64 KiB。请缩小范围；没有截掉文件的一部分继续。'**
+  String get companionNotesFileSizeLimit;
+
+  /// No description provided for @companionNotesTotalSizeLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选笔记合计超过 256 KiB。请缩小范围或另拆一批。'**
+  String get companionNotesTotalSizeLimit;
+
+  /// No description provided for @companionNotesModelLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'整理请求超过模型输入限额。请缩小笔记范围；原文没有被截断后继续。'**
+  String get companionNotesModelLimit;
+
+  /// No description provided for @companionNotesPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开就先停'**
+  String get companionNotesPause;
+
+  /// No description provided for @companionNotesContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开后继续'**
+  String get companionNotesContinue;
+
+  /// No description provided for @companionNotesAllowQueue.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许电脑上线后再做'**
+  String get companionNotesAllowQueue;
+
+  /// No description provided for @companionNotesNoQueue.
+  ///
+  /// In zh, this message translates to:
+  /// **'不允许另行排队'**
+  String get companionNotesNoQueue;
+
+  /// No description provided for @companionNotesApproval.
+  ///
+  /// In zh, this message translates to:
+  /// **'这里是这一步的原批准卡。响应后仍以电脑的实际执行回执为准。'**
+  String get companionNotesApproval;
+
+  /// No description provided for @companionNotesSteps.
+  ///
+  /// In zh, this message translates to:
+  /// **'各版本步骤与用量'**
+  String get companionNotesSteps;
+
+  /// No description provided for @companionNotesOpenFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原产物'**
+  String get companionNotesOpenFile;
+
+  /// No description provided for @companionNotesFileMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'原产物已找不到；没有自动重新生成。'**
+  String get companionNotesFileMissing;
+
+  /// No description provided for @companionNotesFileChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'原产物已改变，不能把现内容当作原结果。'**
+  String get companionNotesFileChanged;
+
+  /// No description provided for @companionNotesFileUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'原产物目前无法核读；保留原记录。'**
+  String get companionNotesFileUnknown;
+
+  /// No description provided for @companionNotesCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消后续整理'**
+  String get companionNotesCancel;
+
+  /// No description provided for @companionNotesEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改约定'**
+  String get companionNotesEdit;
+
+  /// No description provided for @companionNotesDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记日期'**
+  String get companionNotesDate;
+
+  /// No description provided for @companionNotesFilename.
+  ///
+  /// In zh, this message translates to:
+  /// **'新文件名（.md 或 .txt）'**
+  String get companionNotesFilename;
+
+  /// No description provided for @companionNotesDeadlineField.
+  ///
+  /// In zh, this message translates to:
+  /// **'新截止时刻（留空保留原约定）'**
+  String get companionNotesDeadlineField;
+
+  /// No description provided for @companionNotesClearDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消用户指定的截止时刻'**
+  String get companionNotesClearDeadline;
+
+  /// No description provided for @companionNotesKeepDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留原截止约定'**
+  String get companionNotesKeepDeadline;
+
+  /// No description provided for @companionNotesSelectStep.
+  ///
+  /// In zh, this message translates to:
+  /// **'选定原笔记'**
+  String get companionNotesSelectStep;
+
+  /// No description provided for @companionNotesReadStep.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取并核对笔记'**
+  String get companionNotesReadStep;
+
+  /// No description provided for @companionNotesModelStep.
+  ///
+  /// In zh, this message translates to:
+  /// **'整理待办'**
+  String get companionNotesModelStep;
+
+  /// No description provided for @companionNotesWriteStep.
+  ///
+  /// In zh, this message translates to:
+  /// **'另存并核读产物'**
+  String get companionNotesWriteStep;
+
+  /// No description provided for @companionNotesStepDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步已完成。'**
+  String get companionNotesStepDone;
+
+  /// No description provided for @companionNotesStepPartial.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步只完成了一部分。'**
+  String get companionNotesStepPartial;
+
+  /// No description provided for @companionNotesStepRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步正在进行。'**
+  String get companionNotesStepRunning;
+
+  /// No description provided for @companionNotesStepWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步正在等待。'**
+  String get companionNotesStepWaiting;
+
+  /// No description provided for @companionNotesStepFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步没有完成。'**
+  String get companionNotesStepFailed;
+
+  /// No description provided for @companionNotesStepCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步的后续已停止。'**
+  String get companionNotesStepCancelled;
+
+  /// No description provided for @companionNotesStepUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一步的结果尚未核清。'**
+  String get companionNotesStepUnknown;
+
+  /// No description provided for @companionNotesSourceDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记目录：{path}'**
+  String companionNotesSourceDirectory(String path);
+
+  /// No description provided for @companionNotesOutputDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出目录：{path}'**
+  String companionNotesOutputDirectory(String path);
+
+  /// No description provided for @companionNotesDue.
+  ///
+  /// In zh, this message translates to:
+  /// **'原定截止：{time}'**
+  String companionNotesDue(String time);
+
+  /// No description provided for @companionNotesBudget.
+  ///
+  /// In zh, this message translates to:
+  /// **'已用执行时间 {spent} 秒，尚未核清的预留 {held} 秒；累计上限 300 秒。批准等待不计入。'**
+  String companionNotesBudget(String spent, String held);
+
+  /// No description provided for @companionNotesArtifactRevision.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本 {revision}'**
+  String companionNotesArtifactRevision(String revision);
+
+  /// No description provided for @companionNotesArtifactDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源 {count} 份；核读于 {time}'**
+  String companionNotesArtifactDetails(String count, String time);
+
+  /// No description provided for @companionNotesCancelSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消《{name}》的笔记整理'**
+  String companionNotesCancelSource(String name);
+
+  /// No description provided for @companionNotesAmendSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改笔记整理：日期 {date}，文件名《{name}》，截止：{deadline}；{afterExit}；{queue}；{source}；{output}。'**
+  String companionNotesAmendSource(
+    String date,
+    String name,
+    String deadline,
+    String afterExit,
+    String queue,
+    String source,
+    String output,
+  );
+
+  /// No description provided for @companionNotesRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续尝试原任务'**
+  String get companionNotesRetry;
+
+  /// No description provided for @companionNotesSubmitSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交已保存约定'**
+  String get companionNotesSubmitSaved;
+
+  /// No description provided for @companionNotesResendOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'补送原约定（同一任务）'**
+  String get companionNotesResendOriginal;
+
+  /// No description provided for @companionNotesResendCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'补送已保存的取消'**
+  String get companionNotesResendCancel;
+
+  /// No description provided for @companionNotesResendAmend.
+  ///
+  /// In zh, this message translates to:
+  /// **'补送已保存的修改'**
+  String get companionNotesResendAmend;
+
+  /// No description provided for @companionNotesItemCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一版内容列出 {count} 项待办；是否已保存以产物记录为准。'**
+  String companionNotesItemCount(String count);
 
   /// No description provided for @automaticDiagnosticsRecover.
   ///

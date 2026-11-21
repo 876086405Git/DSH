@@ -390,8 +390,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   Future<void> _resumeLookups(CompanionMemoryOwner memory) async {
     final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
-    final pending = memory.store.tasks(sourceSessionId: sourceSession).where((task) =>
-      task['kind'] == 'public.lookup' && const ['queued', 'running', 'unknown'].contains(task['state'])).toList();
+    final pending = memory.store
+        .tasks(sourceSessionId: sourceSession)
+        .where(
+          (task) => task['kind'] == 'public.lookup' && const ['queued', 'running', 'unknown'].contains(task['state']),
+        )
+        .toList();
     if (pending.isEmpty) {
       return;
     }
@@ -408,10 +412,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           if (task['cancel_requested'] == 1) {
             await memory.lookups.stop(task, executorId: executor, host: client, hostKey: hostKey);
           } else {
-            await memory.lookups.run(task, executorId: executor, requestId: companionMemoryId,
-              estimateTokens: estimateCompanionMemoryTokens, host: client, hostKey: hostKey,
-              direct: CompanionLookupDirect(client: factory, apiKey: () => key,
-                nowMilliseconds: memory.lookups.nowMilliseconds, estimateTokens: estimateCompanionMemoryTokens));
+            await memory.lookups.run(
+              task,
+              executorId: executor,
+              requestId: companionMemoryId,
+              estimateTokens: estimateCompanionMemoryTokens,
+              host: client,
+              hostKey: hostKey,
+              direct: CompanionLookupDirect(
+                client: factory,
+                apiKey: () => key,
+                nowMilliseconds: memory.lookups.nowMilliseconds,
+                estimateTokens: estimateCompanionMemoryTokens,
+              ),
+            );
           }
         }
       } on Object {
@@ -429,9 +443,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     }
     final hostKey = companionHostKey(ref.read(activeHostProvider));
     final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
-    final tasks = memory.store.tasks(sourceSessionId: sourceSession).where((task) =>
-      task['kind'] == 'host.notes_to_todo' && task['host_key'] == hostKey &&
-      const ['queued', 'waiting', 'running', 'unknown'].contains(task['state'])).toList();
+    final tasks = memory.store
+        .tasks(sourceSessionId: sourceSession)
+        .where(
+          (task) =>
+              task['kind'] == 'host.notes_to_todo' &&
+              task['host_key'] == hostKey &&
+              const ['queued', 'waiting', 'running', 'unknown'].contains(task['state']),
+        )
+        .toList();
     for (final task in tasks) {
       try {
         await memory.hostTasks.run(task, client: client, hostKey: hostKey);
@@ -522,9 +542,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       final memory = await _openMemory();
       if (!mounted) return;
       final sourceSession = _light ? memory.store.lightSessionId : 'full:$_recallHostKey';
-      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
-        memory: memory, sourceSessionId: sourceSession,
-      )));
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CompanionTasksPage(memory: memory, sourceSessionId: sourceSession),
+        ),
+      );
     } on Object {
       if (mounted) _notice(context.l10n.companionMemoryLoadFailed);
     }
@@ -2130,8 +2152,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   bool _isTaskControl(String input) {
     final parts = parseCompanionReminders(input);
-    return _isReminderControl(parts) || parts.any((part) =>
-      parseCompanionLookup(part.raw)?['operation'] == 'cancel' || parseCompanionNotes(part.raw)?['operation'] == 'cancel');
+    return _isReminderControl(parts) ||
+        parts.any(
+          (part) =>
+              parseCompanionLookup(part.raw)?['operation'] == 'cancel' ||
+              parseCompanionNotes(part.raw)?['operation'] == 'cancel',
+        );
   }
 
   Future<bool> _handleMemoryControl(CompanionMemoryOwner memory, MemoryRow source, String raw) async {
@@ -2208,12 +2234,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final lookup = lookupCommands.values.any((command) => command != null);
     final notesCommands = {for (final part in reminderParts) part.itemNo: parseCompanionNotes(part.raw)};
     final notes = notesCommands.values.any((command) => command != null);
-    final reminderClock = reminderParts.any((part) => part.command != null && part.command!.operation != 'clarify') ||
-      lookupCommands.values.any((command) => command != null && command['operation'] != 'clarify') ||
-      notesCommands.values.any((command) => command != null && command['operation'] != 'clarify');
-    final control = _isMemoryControl(raw) || _isReminderControl(reminderParts) ||
-      lookupCommands.values.any((command) => command?['operation'] == 'cancel') ||
-      notesCommands.values.any((command) => command?['operation'] == 'cancel');
+    final reminderClock =
+        reminderParts.any((part) => part.command != null && part.command!.operation != 'clarify') ||
+        lookupCommands.values.any((command) => command != null && command['operation'] != 'clarify') ||
+        notesCommands.values.any((command) => command != null && command['operation'] != 'clarify');
+    final control =
+        _isMemoryControl(raw) ||
+        _isReminderControl(reminderParts) ||
+        lookupCommands.values.any((command) => command?['operation'] == 'cancel') ||
+        notesCommands.values.any((command) => command?['operation'] == 'cancel');
     if (text.isEmpty || ((_sending || _lightReply != null) && !control)) return;
     if (control) {
       _retireLight(discard: true);
@@ -2319,13 +2348,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (!sent) throw StateError(ref.read(chatProvider(binding.sessionId)).error ?? 'send');
       _retryMemorySource = null;
     } on Object catch (error) {
-      if (!current()) return;
+      if (!current() || !mounted) return;
       if (_input.text.isEmpty) _input.text = raw;
       _stage.command('emotion', {'name': 'worried', 'hold': 3000});
       setState(() => _myLine = null);
-      _showBubble(reminder ? companionReminderFailure(context.l10n, error) :
-          lookup ? context.l10n.companionLookupSaveFailed : notes ? context.l10n.companionNotesSaveFailed : _failureText(error),
-          hold: const Duration(seconds: 6), error: true);
+      _showBubble(
+        reminder
+            ? companionReminderFailure(context.l10n, error)
+            : lookup
+            ? context.l10n.companionLookupSaveFailed
+            : notes
+            ? context.l10n.companionNotesSaveFailed
+            : _failureText(error),
+        hold: const Duration(seconds: 6),
+        error: true,
+      );
     } finally {
       if (current()) {
         setState(() => _sending = false);
@@ -2389,15 +2426,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         }
         final accepted = memory.store.taskForCommand(source['id']! as String, part.itemNo);
         final previous = command.operation == 'create' || accepted != null
-            ? null : reminders.target(memory.store, source['session_id']! as String, command);
+            ? null
+            : reminders.target(memory.store, source['session_id']! as String, command);
         if (command.operation != 'create' && accepted == null && previous == null) {
           lines.add(l10n.companionReminderWhich);
           continue;
         }
         try {
           final result = await reminders.submit(
-            store: memory.store, source: source, part: part, roomMode: roomMode,
-            hostKey: hostKey, hostSessionId: hostSession, previous: previous,
+            store: memory.store,
+            source: source,
+            part: part,
+            roomMode: roomMode,
+            hostKey: hostKey,
+            hostSessionId: hostSession,
+            previous: previous,
             isCurrent: current,
           );
           if (result.task['task_rev'] != result.acceptedRev) {
@@ -2433,8 +2476,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _queueMemoryExtraction();
   }
 
-  Future<({String line, MemoryRow? task})> _handleNotes(CompanionMemoryOwner memory, MemoryRow source, int itemNo,
-    MemoryRow command, bool Function() current) async {
+  Future<({String line, MemoryRow? task})> _handleNotes(
+    CompanionMemoryOwner memory,
+    MemoryRow source,
+    int itemNo,
+    MemoryRow command,
+    bool Function() current,
+  ) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
       return (line: l10n.companionNotesSyntax, task: null);
@@ -2445,29 +2493,44 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final light = _light;
     // A light room itself has no Host binding. Its explicit computer task
     // still captures the selected Host throughout directory selection.
-    bool sameRoomAndHost() => current() && host == ref.read(activeHostProvider) &&
-      identical(client, ref.read(activeConnectionProvider).value?.client);
+    bool sameRoomAndHost() =>
+        current() &&
+        host == ref.read(activeHostProvider) &&
+        identical(client, ref.read(activeConnectionProvider).value?.client);
     final accepted = memory.store.taskForCommand(source['id']! as String, itemNo);
     CompanionTasksCapability? capability;
     MemoryRow task;
     if (accepted != null) {
       task = memory.store.hostTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
-      final targets = memory.store.tasks(sourceSessionId: source['session_id']! as String)
-        .where((row) => row['kind'] == 'host.notes_to_todo' && row['cancel_requested'] == 0 &&
-          const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']))
-        .map((row) => memory.store.hostTask(row['task_id']! as String)!)
-        .where((row) => command['outputName'] == null ||
-          ((row['agreement']! as Map)['args']! as Map)['outputName'] == command['outputName']).toList();
+      final targets = memory.store
+          .tasks(sourceSessionId: source['session_id']! as String)
+          .where(
+            (row) =>
+                row['kind'] == 'host.notes_to_todo' &&
+                row['cancel_requested'] == 0 &&
+                const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']),
+          )
+          .map((row) => memory.store.hostTask(row['task_id']! as String)!)
+          .where(
+            (row) =>
+                command['outputName'] == null ||
+                ((row['agreement']! as Map)['args']! as Map)['outputName'] == command['outputName'],
+          )
+          .toList();
       if (targets.length != 1) {
         return (line: l10n.companionNotesWhich, task: null);
       }
       if (!current()) {
         throw const DshClosedException('room changed before accepting task cancellation');
       }
-      task = memory.store.cancelNotesTask(taskId: targets.single['task_id']! as String,
-        expectedTaskRev: targets.single['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+      task = memory.store.cancelNotesTask(
+        taskId: targets.single['task_id']! as String,
+        expectedTaskRev: targets.single['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+      );
     } else {
       if (client == null) {
         return (line: l10n.companionNotesConnect, task: null);
@@ -2486,6 +2549,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (capability == null || !capability.notes) {
         return (line: l10n.companionNotesUnavailable, task: null);
       }
+      if (!mounted) throw const DshClosedException('room changed before task selection');
       final path = await showDirectoryPicker(context, title: l10n.companionNotesChooseDirectory);
       if (!sameRoomAndHost()) {
         throw const DshClosedException('room changed during directory selection');
@@ -2499,34 +2563,63 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         throw const DshClosedException('room changed before accepting notes task');
       }
       if (!light) {
-        final binding = await ref.read(companionSessionsProvider.notifier).ensure(
-          memoryArchiveId: memory.store.archive['id']! as String,
-          memoryControlRevision: memory.store.archive['control_revision']! as int);
+        final binding = await ref
+            .read(companionSessionsProvider.notifier)
+            .ensure(
+              memoryArchiveId: memory.store.archive['id']! as String,
+              memoryControlRevision: memory.store.archive['control_revision']! as int,
+            );
         session = binding.sessionId;
       }
       if (!sameRoomAndHost()) {
         throw const DshClosedException('room changed before accepting notes task');
       }
-      task = memory.store.createNotesTaskFromMessage(messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
-        roomMode: light ? 'light' : 'full', hostKey: hostKey, hostSessionId: session,
-        directoryLabels: {'source': bound['displayPath'], 'output': bound['displayPath']}, agreement: {
-          'args': {'folderRef': bound['folderRef'], 'localDate': agreement['localDate'], 'timeZone': agreement['timeZone'],
-            'dateBy': 'modified', 'outputDirRef': bound['folderRef'], 'outputName': agreement['outputName'], 'writeMode': 'createNew'},
-          'deadlineAtMs': agreement['deadlineAtMs'], 'afterExit': agreement['afterExit'], 'allowQueue': agreement['allowQueue'],
-        });
+      task = memory.store.createNotesTaskFromMessage(
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+        roomMode: light ? 'light' : 'full',
+        hostKey: hostKey,
+        hostSessionId: session,
+        directoryLabels: {'source': bound['displayPath'], 'output': bound['displayPath']},
+        agreement: {
+          'args': {
+            'folderRef': bound['folderRef'],
+            'localDate': agreement['localDate'],
+            'timeZone': agreement['timeZone'],
+            'dateBy': 'modified',
+            'outputDirRef': bound['folderRef'],
+            'outputName': agreement['outputName'],
+            'writeMode': 'createNew',
+          },
+          'deadlineAtMs': agreement['deadlineAtMs'],
+          'afterExit': agreement['afterExit'],
+          'allowQueue': agreement['allowQueue'],
+        },
+      );
     }
     memory.changed();
     if (client == null || hostKey != task['host_key']) {
       return (line: l10n.companionNotesOriginalHost, task: task);
     }
-    task = await memory.hostTasks.run(task, client: client, hostKey: hostKey,
-      initialOpportunity: accepted == null, submitPending: true, capability: capability);
+    task = await memory.hostTasks.run(
+      task,
+      client: client,
+      hostKey: hostKey,
+      initialOpportunity: accepted == null,
+      submitPending: true,
+      capability: capability,
+    );
     return (line: companionNotesLine(l10n, task), task: task);
   }
 
-  Future<({String line, MemoryRow? task})> _handleLookup(CompanionMemoryOwner memory, MemoryRow source, int itemNo,
-      MemoryRow command, bool Function() current) async {
+  Future<({String line, MemoryRow? task})> _handleLookup(
+    CompanionMemoryOwner memory,
+    MemoryRow source,
+    int itemNo,
+    MemoryRow command,
+    bool Function() current,
+  ) async {
     final l10n = context.l10n;
     if (command['operation'] == 'clarify') {
       return (line: l10n.companionLookupSyntax, task: null);
@@ -2544,10 +2637,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (accepted != null) {
       task = memory.store.lookupTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
-      final targets = memory.store.tasks(sourceSessionId: source['session_id']! as String).where((row) =>
-        row['kind'] == 'public.lookup' && row['cancel_requested'] == 0 &&
-        const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']) &&
-        (command['placeName'] == null || command['placeName'] == row['lookup_place_name'])).toList();
+      final targets = memory.store
+          .tasks(sourceSessionId: source['session_id']! as String)
+          .where(
+            (row) =>
+                row['kind'] == 'public.lookup' &&
+                row['cancel_requested'] == 0 &&
+                const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']) &&
+                (command['placeName'] == null || command['placeName'] == row['lookup_place_name']),
+          )
+          .toList();
       if (targets.length != 1) {
         return (line: l10n.companionLookupWhich, task: null);
       }
@@ -2557,30 +2656,51 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       if (!current()) {
         throw const DshClosedException('room changed before accepting lookup cancellation');
       }
-      task = memory.store.cancelLookup(taskId: targets.single['task_id']! as String,
-        expectedTaskRev: targets.single['task_rev']! as int, messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo);
+      task = memory.store.cancelLookup(
+        taskId: targets.single['task_id']! as String,
+        expectedTaskRev: targets.single['task_rev']! as int,
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+      );
     } else {
       final agreement = companionLookupAgreement(source, command);
       if (agreement['waitReason'] != null) {
-        return (line: agreement['waitReason'] == 'zone_missing'
-          ? l10n.companionLookupZoneMissing : l10n.companionLookupDateMissing, task: null);
+        return (
+          line: agreement['waitReason'] == 'zone_missing'
+              ? l10n.companionLookupZoneMissing
+              : l10n.companionLookupDateMissing,
+          task: null,
+        );
       }
       String? hostSession;
       if (!light) {
-        final binding = await sessions.ensure(memoryArchiveId: memory.store.archive['id']! as String,
-          memoryControlRevision: memory.store.archive['control_revision']! as int);
+        final binding = await sessions.ensure(
+          memoryArchiveId: memory.store.archive['id']! as String,
+          memoryControlRevision: memory.store.archive['control_revision']! as int,
+        );
         hostSession = binding.sessionId;
       }
       if (!current()) {
         throw const DshClosedException('room changed before accepting lookup');
       }
-      task = memory.store.createLookupFromMessage(messageId: source['id']! as String,
-        expectedSourceRev: source['source_rev']! as int, itemNo: itemNo,
-        roomMode: light ? 'light' : 'full', hostKey: hostKey, hostSessionId: hostSession, executorId: executor,
-        lookup: CompanionLookupSpec(placeName: agreement['placeName']! as String, city: agreement['city'] as String?,
-          localDate: agreement['localDate']! as String, zoneId: agreement['zoneId']! as String,
-          question: agreement['question']! as String, deadlineAtMs: agreement['deadlineAtMs']! as int));
+      task = memory.store.createLookupFromMessage(
+        messageId: source['id']! as String,
+        expectedSourceRev: source['source_rev']! as int,
+        itemNo: itemNo,
+        roomMode: light ? 'light' : 'full',
+        hostKey: hostKey,
+        hostSessionId: hostSession,
+        executorId: executor,
+        lookup: CompanionLookupSpec(
+          placeName: agreement['placeName']! as String,
+          city: agreement['city'] as String?,
+          localDate: agreement['localDate']! as String,
+          zoneId: agreement['zoneId']! as String,
+          question: agreement['question']! as String,
+          deadlineAtMs: agreement['deadlineAtMs']! as int,
+        ),
+      );
       memory.changed();
       if (current()) {
         _say(l10n.companionLookupAccepted, widgetLine: false);
@@ -2590,10 +2710,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       await memory.lookups.stop(task, executorId: executor, host: client, hostKey: hostKey);
       task = memory.store.lookupTask(task['task_id']! as String)!;
     } else {
-      task = await memory.lookups.run(task, executorId: executor, requestId: companionMemoryId,
-        estimateTokens: estimateCompanionMemoryTokens, host: client, hostKey: hostKey,
-        direct: CompanionLookupDirect(client: factory, apiKey: () => key,
-          nowMilliseconds: memory.lookups.nowMilliseconds, estimateTokens: estimateCompanionMemoryTokens));
+      task = await memory.lookups.run(
+        task,
+        executorId: executor,
+        requestId: companionMemoryId,
+        estimateTokens: estimateCompanionMemoryTokens,
+        host: client,
+        hostKey: hostKey,
+        direct: CompanionLookupDirect(
+          client: factory,
+          apiKey: () => key,
+          nowMilliseconds: memory.lookups.nowMilliseconds,
+          estimateTokens: estimateCompanionMemoryTokens,
+        ),
+      );
     }
     memory.changed();
     return (line: companionLookupLine(l10n, task, executorId: executor), task: task);
@@ -3916,18 +4046,24 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                         _openAgent(pill.sessionId);
                       },
                     ),
-                  if (!_light && _sessionId != null) Consumer(builder: (_, ref, _) {
-                    final session = _sessionId!;
-                    final approval = ref.watch(chatProvider(session).select((state) => state.openApproval));
-                    final current = _currentRoom();
-                    return CompanionAsk(
-                      sessionId: session,
-                      approvalTarget: approval == null ? null : (
-                        eventId: approval.eventId, callId: approval.callId,
-                        isCurrent: () => current() && _sessionId == session,
-                      ),
-                    );
-                  }),
+                  if (!_light && _sessionId != null)
+                    Consumer(
+                      builder: (_, ref, _) {
+                        final session = _sessionId!;
+                        final approval = ref.watch(chatProvider(session).select((state) => state.openApproval));
+                        final current = _currentRoom();
+                        return CompanionAsk(
+                          sessionId: session,
+                          approvalTarget: approval == null
+                              ? null
+                              : (
+                                  eventId: approval.eventId,
+                                  callId: approval.callId,
+                                  isCurrent: () => current() && _sessionId == session,
+                                ),
+                        );
+                      },
+                    ),
                   CompanionMyLine(text: _myLine),
                   CompanionSpeech(
                     text: _bubble,
@@ -3945,22 +4081,32 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                             return;
                           }
                           _acted();
-                          unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
-                            memory: _memoryOwner!, taskId: result.taskId,
-                          ))));
+                          unawaited(
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: result.taskId),
+                              ),
+                            ),
+                          );
                         },
                       ),
                   if (_bubble != null)
                     for (final id in _notesResults)
-                      CompanionPill(icon: AppIcons.document, label: l10n.companionNotesView,
+                      CompanionPill(
+                        icon: AppIcons.document,
+                        label: l10n.companionNotesView,
                         onTap: () {
                           if (_bubble == null || !_notesResults.contains(id)) {
                             return;
                           }
                           _acted();
-                          unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(
-                            memory: _memoryOwner!, taskId: id,
-                          ))));
+                          unawaited(
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: id),
+                              ),
+                            ),
+                          );
                         },
                       ),
                   CompanionInvite(

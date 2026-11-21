@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_adapt.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
@@ -59,21 +58,22 @@ import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
 import '../support/companion_notes_peer.dart';
 
-Widget _app(Widget child, {List<Override> extra = const [], CompanionKeeper? phone, HostConnection? connection}) => ProviderScope(
-  // By default there is no host: the page must stand on its own without one.
-  overrides: [
-    activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(connection)),
-    companionPhoneKeeperProvider.overrideWithValue((_) => phone ?? FakePhoneKeeper()),
-    ...extra,
-  ],
-  child: MaterialApp(
-    theme: buildDarkTheme(),
-    localizationsDelegates: L10n.localizationsDelegates,
-    supportedLocales: L10n.supportedLocales,
-    locale: const Locale('zh'),
-    home: child,
-  ),
-);
+Widget _app(Widget child, {List<Override> extra = const [], CompanionKeeper? phone, HostConnection? connection}) =>
+    ProviderScope(
+      // By default there is no host: the page must stand on its own without one.
+      overrides: [
+        activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(connection)),
+        companionPhoneKeeperProvider.overrideWithValue((_) => phone ?? FakePhoneKeeper()),
+        ...extra,
+      ],
+      child: MaterialApp(
+        theme: buildDarkTheme(),
+        localizationsDelegates: L10n.localizationsDelegates,
+        supportedLocales: L10n.supportedLocales,
+        locale: const Locale('zh'),
+        home: child,
+      ),
+    );
 
 /// Lets real file and preference futures finish, then the frames they cause.
 Future<void> _settle(WidgetTester tester) async {
@@ -598,13 +598,22 @@ void main() {
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
       }
 
-      for (final scenario in ['accepted', 'source-failure', 'leave-during-bind', 'cancel-during-bind', 'leave-after-acceptance']) {
+      for (final scenario in [
+        'accepted',
+        'source-failure',
+        'leave-during-bind',
+        'cancel-during-bind',
+        'leave-after-acceptance',
+      ]) {
         testWidgets('F actual Page directory binding and stable source: $scenario', (tester) async {
           const channel = MethodChannel('dsh/companion_reminders');
           const now = 1795219200000;
           final db = sqlite3.open('${root.path}/memory.sqlite');
-          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => now),
-            CompanionLocal.at(root), nowMilliseconds: () => now);
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root),
+            nowMilliseconds: () => now,
+          );
           final peer = (await tester.runAsync(NotesPeer.open))!;
           final clockRead = Completer<void>();
           final browserRead = Completer<void>();
@@ -648,9 +657,21 @@ void main() {
           peer.respond = (request, body) async {
             if (request.uri.path == '/api/directoryPicker/list') {
               expect(memory.store.messages().where((row) => row['role'] == 'user'), hasLength(1));
-              await NotesPeer.json(request, {'type': 'server-response', 'rpcId': body!['rpcId'],
-                'result': {'ok': true, 'value': {'path': '/实际笔记', 'home': '/实际笔记',
-                  'crumbs': [{'name': '实际笔记', 'path': '/实际笔记'}], 'entries': []}}});
+              await NotesPeer.json(request, {
+                'type': 'server-response',
+                'rpcId': body!['rpcId'],
+                'result': {
+                  'ok': true,
+                  'value': {
+                    'path': '/实际笔记',
+                    'home': '/实际笔记',
+                    'crumbs': [
+                      {'name': '实际笔记', 'path': '/实际笔记'},
+                    ],
+                    'entries': [],
+                  },
+                },
+              });
               browserRead.complete();
             } else if (request.uri.path == '$notesPath/folders') {
               expect(body, {'v': 1, 'hostStoreId': 'original-store', 'path': '/实际笔记'});
@@ -659,8 +680,12 @@ void main() {
               if (scenario.endsWith('during-bind')) {
                 await releaseBind.future;
               }
-              await NotesPeer.json(request, {'v': 1, 'hostStoreId': 'original-store', 'folderRef': 'bound-source',
-                'displayPath': '/实际笔记'});
+              await NotesPeer.json(request, {
+                'v': 1,
+                'hostStoreId': 'original-store',
+                'folderRef': 'bound-source',
+                'displayPath': '/实际笔记',
+              });
             } else if (request.method == 'POST' && request.uri.path == notesPath) {
               final row = memory.store.tasks().single;
               final command = memory.store.hostTaskCommands(row['task_id']! as String).single;
@@ -678,21 +703,33 @@ void main() {
               }
               await NotesPeer.json(request, snapshot!, status: 201);
               posted.complete();
-            } else if (request.method == 'GET' && snapshot != null && request.uri.path == '$notesPath/${snapshot!['taskId']}') {
+            } else if (request.method == 'GET' &&
+                snapshot != null &&
+                request.uri.path == '$notesPath/${snapshot!['taskId']}') {
               await NotesPeer.json(request, snapshot!);
             } else {
-              await NotesPeer.json(request, {'error': {'code': 'companion/not-found', 'message': 'No route'}}, status: 404);
+              await NotesPeer.json(request, {
+                'error': {'code': 'companion/not-found', 'message': 'No route'},
+              }, status: 404);
             }
           };
-          await openLight(tester, apiKey: '', client: MockClient((_) async => throw StateError('F must not call the light model')),
+          await openLight(
+            tester,
+            apiKey: '',
+            client: MockClient((_) async => throw StateError('F must not call the light model')),
             connection: HostConnection(client: peer.client, isLocal: false),
-            extra: [companionModeProvider.overrideWith(_NotesLightMode.new),
-              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+            extra: [
+              companionModeProvider.overrideWith(_NotesLightMode.new),
+              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+            ],
+          );
           expect(await memoryOf(tester), same(memory));
           await settleMixed(tester, memory.migrateLocal());
           final sourceRoom = memory.store.lightSessionId;
           if (scenario == 'source-failure') {
-            db.execute("CREATE TRIGGER reject_notes_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+            db.execute(
+              "CREATE TRIGGER reject_notes_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
+            );
           }
           final afterExit = scenario == 'leave-after-acceptance' ? '我先走了也继续' : '我离开就停';
           final raw = '请电脑把今天的笔记另存成一页待办，原件别动，$afterExit；我午后练长笛';
@@ -706,7 +743,12 @@ void main() {
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             expect(memory.store.messages(), isEmpty);
             expect(memory.store.tasks(), isEmpty);
-            expect(peer.calls.where((call) => call.uri.path.startsWith(notesPath) || call.uri.path.contains('directoryPicker')), isEmpty);
+            expect(
+              peer.calls.where(
+                (call) => call.uri.path.startsWith(notesPath) || call.uri.path.contains('directoryPicker'),
+              ),
+              isEmpty,
+            );
             expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
             return;
           }
@@ -715,8 +757,12 @@ void main() {
           final handling = memory.lastReceipt;
           await tester.tap(find.text('主目录').last);
           await settleMixed(tester, browserRead.future);
-          final choose = find.descendant(of: find.byType(DirectoryBrowserPage),
-            matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null)).last;
+          final choose = find
+              .descendant(
+                of: find.byType(DirectoryBrowserPage),
+                matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+              )
+              .last;
           await _notesVisible(tester, choose);
           expect(tester.widget<FilledButton>(choose).onPressed, isNotNull);
           await tester.tap(choose);
@@ -743,10 +789,16 @@ void main() {
             // This does not claim to exercise the restart-menu gesture.
             memory.store.startLightConversation();
             expect(memory.store.lightSessionId, isNot(sourceRoom));
-            await openLight(tester, apiKey: '', client: MockClient((_) async => throw StateError('F must not call the light model')),
+            await openLight(
+              tester,
+              apiKey: '',
+              client: MockClient((_) async => throw StateError('F must not call the light model')),
               connection: HostConnection(client: peer.client, isLocal: false),
-              extra: [companionModeProvider.overrideWith(_NotesLightMode.new),
-                companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+              extra: [
+                companionModeProvider.overrideWith(_NotesLightMode.new),
+                companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+              ],
+            );
             expect(await memoryOf(tester), same(memory));
             releasePost.complete();
           }
@@ -791,7 +843,10 @@ void main() {
             memory.dispose();
             closed = true;
             await tester.pump();
-            final reopened = CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now);
+            final reopened = CompanionMemoryStore(
+              sqlite3.open('${root.path}/memory.sqlite'),
+              nowMilliseconds: () => now,
+            );
             expect(reopened.hostTask(row['task_id']! as String)!['agreement'], task['agreement']);
             expect(reopened.messages().singleWhere((item) => item['id'] == sources.single['id'])['said_at_utc'], now);
             reopened.close();
@@ -800,12 +855,17 @@ void main() {
       }
 
       for (final rejectSource in [false, true]) {
-        testWidgets('E actual Page keeps reminder lookup and factual clause identities, sourceFailure=$rejectSource', (tester) async {
+        testWidgets('E actual Page keeps reminder lookup and factual clause identities, sourceFailure=$rejectSource', (
+          tester,
+        ) async {
           const channel = MethodChannel('dsh/companion_reminders');
           final now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
           final db = sqlite3.open('${root.path}/memory.sqlite');
-          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => now),
-            CompanionLocal.at(root), nowMilliseconds: () => now);
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(db, nowMilliseconds: () => now),
+            CompanionLocal.at(root),
+            nowMilliseconds: () => now,
+          );
           final clockRead = Completer<void>();
           final answerSent = Completer<void>();
           final calls = <String>[];
@@ -828,7 +888,12 @@ void main() {
               return {'executorId': 'installation-A', 'exact': true, 'notifications': true};
             }
             if (call.method == 'resolve') {
-              return {'kind': 'unique', 'moments': [{'epochMs': now + 72000000, 'offsetSeconds': 28800}]};
+              return {
+                'kind': 'unique',
+                'moments': [
+                  {'epochMs': now + 72000000, 'offsetSeconds': 28800},
+                ],
+              };
             }
             if (call.method == 'recover') {
               return {'recoveryQueued': true};
@@ -847,14 +912,21 @@ void main() {
             Object body;
             if (request.url.toString() == companionLookupSearchEndpoint) {
               expect(jsonDecode(request.body), {'query': '青桥美术馆 2026-11-21 开放 公告', 'count': 5, 'need_content': false});
-              body = {'results': [{'url': 'https://museum.example/notice', 'title': '青桥美术馆公告', 'snippet': '临时安排'}]};
+              body = {
+                'results': [
+                  {'url': 'https://museum.example/notice', 'title': '青桥美术馆公告', 'snippet': '临时安排'},
+                ],
+              };
             } else if (request.url.toString() == companionLookupFetchEndpoint) {
               body = {'title': '青桥美术馆公告', 'content': '2026-11-21临时闭馆一天。'};
             } else {
               final sent = jsonDecode(request.body) as Map;
               if (sent['system'] == companionMemoryExtractionPrompt) {
-                return http.Response.bytes(utf8.encode(_sse(['{"ops":[]}'])), 200,
-                  headers: {'content-type': 'text/event-stream; charset=utf-8'});
+                return http.Response.bytes(
+                  utf8.encode(_sse(['{"ops":[]}'])),
+                  200,
+                  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+                );
               }
               expect(sent['system'], companionLookupAnswerPrompt);
               final input = jsonDecode(sent['messages'][0]['content']) as Map;
@@ -862,23 +934,39 @@ void main() {
               expect(jsonEncode(input), isNot(contains('带证件')));
               expect(jsonEncode(input), isNot(contains('练长笛')));
               final source = (input['sources'] as List).single as Map;
-              final answer = {'status': 'done', 'conclusion': '馆方公告说明今天临时闭馆。',
-                'applicable_date': '2026-11-21', 'evidence': [
+              final answer = {
+                'status': 'done',
+                'conclusion': '馆方公告说明今天临时闭馆。',
+                'applicable_date': '2026-11-21',
+                'evidence': [
                   {'fetchRequestId': source['fetchRequestId'], 'quote': '2026-11-21临时闭馆一天。'},
-                ]};
+                ],
+              };
               answerSent.complete();
-              return http.Response.bytes(utf8.encode(_sse([jsonEncode(answer)])), 200,
-                headers: {'content-type': 'text/event-stream; charset=utf-8'});
+              return http.Response.bytes(
+                utf8.encode(_sse([jsonEncode(answer)])),
+                200,
+                headers: {'content-type': 'text/event-stream; charset=utf-8'},
+              );
             }
-            return http.Response.bytes(utf8.encode(jsonEncode(body)), 200,
-              headers: {'content-type': 'application/json; charset=utf-8'});
+            return http.Response.bytes(
+              utf8.encode(jsonEncode(body)),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
           });
-          await openLight(tester, apiKey: 'dedicated-test-key', client: client,
-            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          await openLight(
+            tester,
+            apiKey: 'dedicated-test-key',
+            client: client,
+            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+          );
           expect(await memoryOf(tester), same(memory));
           await settleMixed(tester, memory.migrateLocal());
           if (rejectSource) {
-            db.execute("CREATE TRIGGER reject_lookup_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+            db.execute(
+              "CREATE TRIGGER reject_lookup_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
+            );
           }
           const raw = '明天十四点提醒我带证件；帮我查今天青桥美术馆开不开，给我馆方公告；我午后练长笛';
           await tester.enterText(find.byType(TextField), raw);
@@ -926,17 +1014,26 @@ void main() {
             await tester.pumpAndSettle();
             expect(find.textContaining('¥0.010'), findsOneWidget);
             expect(find.textContaining('问号表示未报告'), findsOneWidget);
-            expect(posts, hasLength(postsBeforeOpening), reason: 'The source action opens the original result without querying again');
+            expect(
+              posts,
+              hasLength(postsBeforeOpening),
+              reason: 'The source action opens the original result without querying again',
+            );
           }
         });
       }
 
       for (final after in ['cancel', 'leave']) {
-        testWidgets('E actual Page $after after search dispatch preserves the original task and late receipt', (tester) async {
+        testWidgets('E actual Page $after after search dispatch preserves the original task and late receipt', (
+          tester,
+        ) async {
           const channel = MethodChannel('dsh/companion_reminders');
           final now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
-          final memory = _ReceiptMemory(CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
-            nowMilliseconds: () => now), CompanionLocal.at(root), nowMilliseconds: () => now);
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => now),
+            CompanionLocal.at(root),
+            nowMilliseconds: () => now,
+          );
           final sent = Completer<void>();
           final release = Completer<void>();
           var searches = 0;
@@ -951,39 +1048,70 @@ void main() {
             await tester.pump();
             tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
           });
-          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => switch (call.method) {
-            'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
-            'capabilities' => {'executorId': 'installation-A', 'exact': true, 'notifications': true},
-            'recover' => {'recoveryQueued': true},
-            _ => throw StateError('Unexpected reminder call ${call.method}'),
-          });
-          final commands = await openLight(tester, apiKey: 'dedicated-test-key', client: MockClient((request) async {
-            if (request.url.toString() == companionLookupSearchEndpoint) {
-              searches++;
-              sent.complete();
-              await release.future;
-              return http.Response.bytes(utf8.encode(jsonEncode({'results': [
-                {'url': 'https://museum.example/notice', 'title': '青桥美术馆公告', 'snippet': '临时安排'},
-              ]})), 200, headers: {'content-type': 'application/json; charset=utf-8'});
-            }
-            if (request.url.toString() == companionLookupFetchEndpoint) {
-              fetches++;
-              return http.Response.bytes(utf8.encode(jsonEncode({'content': '2026-11-21临时闭馆一天。'})), 200,
-                headers: {'content-type': 'application/json; charset=utf-8'});
-            }
-            final body = jsonDecode(request.body) as Map;
-            if (body['system'] == companionMemoryExtractionPrompt) {
-              return http.Response.bytes(utf8.encode(_sse(['{"ops":[]}'])), 200,
-                headers: {'content-type': 'text/event-stream; charset=utf-8'});
-            }
-            expect(body['system'], companionLookupAnswerPrompt);
-            answers++;
-            final input = jsonDecode(body['messages'][0]['content']) as Map;
-            final answer = {'status': 'done', 'conclusion': '馆方公告说明今天临时闭馆。', 'applicable_date': '2026-11-21',
-              'evidence': [{'fetchRequestId': input['sources'][0]['fetchRequestId'], 'quote': '2026-11-21临时闭馆一天。'}]};
-            return http.Response.bytes(utf8.encode(_sse([jsonEncode(answer)])), 200,
-              headers: {'content-type': 'text/event-stream; charset=utf-8'});
-          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            (call) async => switch (call.method) {
+              'clock' => {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800},
+              'capabilities' => {'executorId': 'installation-A', 'exact': true, 'notifications': true},
+              'recover' => {'recoveryQueued': true},
+              _ => throw StateError('Unexpected reminder call ${call.method}'),
+            },
+          );
+          final commands = await openLight(
+            tester,
+            apiKey: 'dedicated-test-key',
+            client: MockClient((request) async {
+              if (request.url.toString() == companionLookupSearchEndpoint) {
+                searches++;
+                sent.complete();
+                await release.future;
+                return http.Response.bytes(
+                  utf8.encode(
+                    jsonEncode({
+                      'results': [
+                        {'url': 'https://museum.example/notice', 'title': '青桥美术馆公告', 'snippet': '临时安排'},
+                      ],
+                    }),
+                  ),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                );
+              }
+              if (request.url.toString() == companionLookupFetchEndpoint) {
+                fetches++;
+                return http.Response.bytes(
+                  utf8.encode(jsonEncode({'content': '2026-11-21临时闭馆一天。'})),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                );
+              }
+              final body = jsonDecode(request.body) as Map;
+              if (body['system'] == companionMemoryExtractionPrompt) {
+                return http.Response.bytes(
+                  utf8.encode(_sse(['{"ops":[]}'])),
+                  200,
+                  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+                );
+              }
+              expect(body['system'], companionLookupAnswerPrompt);
+              answers++;
+              final input = jsonDecode(body['messages'][0]['content']) as Map;
+              final answer = {
+                'status': 'done',
+                'conclusion': '馆方公告说明今天临时闭馆。',
+                'applicable_date': '2026-11-21',
+                'evidence': [
+                  {'fetchRequestId': input['sources'][0]['fetchRequestId'], 'quote': '2026-11-21临时闭馆一天。'},
+                ],
+              };
+              return http.Response.bytes(
+                utf8.encode(_sse([jsonEncode(answer)])),
+                200,
+                headers: {'content-type': 'text/event-stream; charset=utf-8'},
+              );
+            }),
+            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+          );
           await settleMixed(tester, memory.migrateLocal());
           await tester.enterText(find.byType(TextField), '帮我查今天青桥美术馆开不开，给我馆方公告');
           await tester.pump();
@@ -1001,6 +1129,7 @@ void main() {
                 cancelledTask.complete();
               }
             }
+
             memory.addListener(changed);
             await tester.enterText(find.byType(TextField), '取消青桥美术馆的查询');
             await tester.pump();
@@ -1022,126 +1151,145 @@ void main() {
           expect(searches, 1);
           expect([fetches, answers], after == 'cancel' ? [0, 0] : [1, 1]);
           expect(finalTask['state'], after == 'cancel' ? 'cancelled' : 'done');
-          expect(commands.where((command) => command.$1 == 'say' &&
-            jsonEncode(command.$2).contains('馆方公告说明今天临时闭馆')), isEmpty);
+          expect(
+            commands.where((command) => command.$1 == 'say' && jsonEncode(command.$2).contains('馆方公告说明今天临时闭馆')),
+            isEmpty,
+          );
         });
       }
 
       for (final after in ['cancel', 'leave', 'accepted then leave']) {
-        testWidgets('D actual Page $after while the reminder platform call is pending preserves the acceptance boundary', (tester) async {
-          const channel = MethodChannel('dsh/companion_reminders');
-          final started = Completer<void>();
-          final release = Completer<void>();
-          final calls = <MethodCall>[];
-          final memory = _ReceiptMemory(
-            CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => 1772877000000),
-            CompanionLocal.at(root),
-          );
-          Future<void>? operation;
-          var posts = 0;
-          addTearDown(() async {
-            if (!release.isCompleted) {
-              release.complete();
-            }
-            final pending = operation;
-            if (pending != null) {
-              await settleMixed(tester, pending);
-            }
-            await tester.pumpWidget(const SizedBox());
-            memory.dispose();
-            await tester.pump();
-            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-          });
-          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-            calls.add(call);
-            if ((after == 'accepted then leave' && call.method == 'wake') ||
-                (after != 'accepted then leave' && call.method == 'resolve')) {
-              started.complete();
-              await release.future;
-            }
-            return switch (call.method) {
-              'clock' => {'utcMs': 1772877000000, 'zoneId': 'America/Los_Angeles', 'offsetSeconds': -28800},
-              'capabilities' => {'executorId': 'installation-A', 'exact': true, 'notifications': true},
-              'resolve' => {'kind': 'unique', 'moments': [{'epochMs': 1772964600000, 'offsetSeconds': -25200}]},
-              'wake' => {'wakeCompleted': true},
-              'recover' => {'recoveryQueued': true},
-              _ => throw StateError('Unexpected reminder method ${call.method}'),
-            };
-          });
-          await openLight(tester, apiKey: 'sk-test', client: MockClient((_) async {
-            posts++;
-            return http.Response('', 401);
-          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
-          expect(await memoryOf(tester), same(memory));
-          await settleMixed(tester, memory.migrateLocal());
-          const first = '2026-03-08 03:10 America/Los_Angeles提醒我带钥匙';
-          final raw = after == 'accepted then leave'
-              ? '$first；2026-03-08 03:10 America/Los_Angeles提醒我带证件' : first;
-          await tester.enterText(find.byType(TextField), raw);
-          await tester.pump();
-          await tester.tap(find.byIcon(AppIcons.send).last);
-          await settleMixed(tester, started.future);
-          operation = memory.lastReceipt;
-          final original = memory.store.messages().single;
-          expect(original['text'], raw);
-          expect(original['said_at_utc'], 1772877000000);
-          expect(original['zone_id'], 'America/Los_Angeles');
-          expect(original['offset_seconds'], -28800);
-          final accepted = memory.store.tasks();
-          expect(accepted, hasLength(after == 'accepted then leave' ? 1 : 0));
-          if (after == 'cancel') {
-            final cancelledSource = Completer<void>();
-            void changed() {
-              if (!cancelledSource.isCompleted &&
-                  memory.store.messages().any((row) => row['text'] == '不用提醒了')) {
-                cancelledSource.complete();
+        testWidgets(
+          'D actual Page $after while the reminder platform call is pending preserves the acceptance boundary',
+          (tester) async {
+            const channel = MethodChannel('dsh/companion_reminders');
+            final started = Completer<void>();
+            final release = Completer<void>();
+            final calls = <MethodCall>[];
+            final memory = _ReceiptMemory(
+              CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'), nowMilliseconds: () => 1772877000000),
+              CompanionLocal.at(root),
+            );
+            Future<void>? operation;
+            var posts = 0;
+            addTearDown(() async {
+              if (!release.isCompleted) {
+                release.complete();
               }
-            }
-            memory.addListener(changed);
-            await tester.enterText(find.byType(TextField), '我午后练长笛');
+              final pending = operation;
+              if (pending != null) {
+                await settleMixed(tester, pending);
+              }
+              await tester.pumpWidget(const SizedBox());
+              memory.dispose();
+              await tester.pump();
+              tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+            });
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              if ((after == 'accepted then leave' && call.method == 'wake') ||
+                  (after != 'accepted then leave' && call.method == 'resolve')) {
+                started.complete();
+                await release.future;
+              }
+              return switch (call.method) {
+                'clock' => {'utcMs': 1772877000000, 'zoneId': 'America/Los_Angeles', 'offsetSeconds': -28800},
+                'capabilities' => {'executorId': 'installation-A', 'exact': true, 'notifications': true},
+                'resolve' => {
+                  'kind': 'unique',
+                  'moments': [
+                    {'epochMs': 1772964600000, 'offsetSeconds': -25200},
+                  ],
+                },
+                'wake' => {'wakeCompleted': true},
+                'recover' => {'recoveryQueued': true},
+                _ => throw StateError('Unexpected reminder method ${call.method}'),
+              };
+            });
+            await openLight(
+              tester,
+              apiKey: 'sk-test',
+              client: MockClient((_) async {
+                posts++;
+                return http.Response('', 401);
+              }),
+              extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+            );
+            expect(await memoryOf(tester), same(memory));
+            await settleMixed(tester, memory.migrateLocal());
+            const first = '2026-03-08 03:10 America/Los_Angeles提醒我带钥匙';
+            final raw = after == 'accepted then leave' ? '$first；2026-03-08 03:10 America/Los_Angeles提醒我带证件' : first;
+            await tester.enterText(find.byType(TextField), raw);
             await tester.pump();
-            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
-            await tester.enterText(find.byType(TextField), '不用提醒了');
-            await tester.pump();
-            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             await tester.tap(find.byIcon(AppIcons.send).last);
-            await settleMixed(tester, cancelledSource.future);
-            memory.removeListener(changed);
-            final cancellation = memory.lastReceipt;
-            expect(identical(cancellation, operation), isFalse);
-            await settleMixed(tester, cancellation);
-            expect(memory.store.messages().where((row) => row['text'] == '不用提醒了'), hasLength(1));
-          } else {
-            await tester.pumpWidget(_app(const Scaffold(body: Text('新的页面'))));
-          }
-          release.complete();
-          await settleMixed(tester, operation!);
-          await tester.pump();
-          expect(memory.store.tasks(), hasLength(accepted.length));
-          expect(calls.where((call) => call.method == 'wake'), hasLength(accepted.length));
-          expect(posts, 0);
-          if (accepted.isNotEmpty) {
-            final task = memory.store.tasks().single;
-            expect(task['task_id'], accepted.single['task_id']);
-            expect(task['task_rev'], 1);
-            expect(task['source_message_id'], original['id']);
-            expect(task['source_session_id'], original['session_id']);
-            expect(task['state'], 'queued', reason: 'wake completion alone is not a registration receipt');
-            expect(memory.store.taskReceipts(task['task_id']! as String), isEmpty);
-            expect(find.text('新的页面'), findsOneWidget);
-            expect(find.textContaining('这条提醒'), findsNothing);
-          }
-        });
+            await settleMixed(tester, started.future);
+            operation = memory.lastReceipt;
+            final original = memory.store.messages().single;
+            expect(original['text'], raw);
+            expect(original['said_at_utc'], 1772877000000);
+            expect(original['zone_id'], 'America/Los_Angeles');
+            expect(original['offset_seconds'], -28800);
+            final accepted = memory.store.tasks();
+            expect(accepted, hasLength(after == 'accepted then leave' ? 1 : 0));
+            if (after == 'cancel') {
+              final cancelledSource = Completer<void>();
+              void changed() {
+                if (!cancelledSource.isCompleted && memory.store.messages().any((row) => row['text'] == '不用提醒了')) {
+                  cancelledSource.complete();
+                }
+              }
+
+              memory.addListener(changed);
+              await tester.enterText(find.byType(TextField), '我午后练长笛');
+              await tester.pump();
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
+              await tester.enterText(find.byType(TextField), '不用提醒了');
+              await tester.pump();
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+              await tester.tap(find.byIcon(AppIcons.send).last);
+              await settleMixed(tester, cancelledSource.future);
+              memory.removeListener(changed);
+              final cancellation = memory.lastReceipt;
+              expect(identical(cancellation, operation), isFalse);
+              await settleMixed(tester, cancellation);
+              expect(memory.store.messages().where((row) => row['text'] == '不用提醒了'), hasLength(1));
+            } else {
+              await tester.pumpWidget(_app(const Scaffold(body: Text('新的页面'))));
+            }
+            release.complete();
+            await settleMixed(tester, operation);
+            await tester.pump();
+            expect(memory.store.tasks(), hasLength(accepted.length));
+            expect(calls.where((call) => call.method == 'wake'), hasLength(accepted.length));
+            expect(posts, 0);
+            if (accepted.isNotEmpty) {
+              final task = memory.store.tasks().single;
+              expect(task['task_id'], accepted.single['task_id']);
+              expect(task['task_rev'], 1);
+              expect(task['source_message_id'], original['id']);
+              expect(task['source_session_id'], original['session_id']);
+              expect(task['state'], 'queued', reason: 'wake completion alone is not a registration receipt');
+              expect(memory.store.taskReceipts(task['task_id']! as String), isEmpty);
+              expect(find.text('新的页面'), findsOneWidget);
+              expect(find.textContaining('这条提醒'), findsNothing);
+            }
+          },
+        );
       }
 
       for (final rejectSource in [false, true]) {
-        testWidgets('D actual Page separates reminder receipts from acceptance, sourceFailure=$rejectSource', (tester) async {
+        testWidgets('D actual Page separates reminder receipts from acceptance, sourceFailure=$rejectSource', (
+          tester,
+        ) async {
           const channel = MethodChannel('dsh/companion_reminders');
           final clockRead = Completer<void>();
           final twoWakes = Completer<void>();
           final calls = <MethodCall>[];
           final db = sqlite3.open('${root.path}/memory.sqlite');
-          final memory = _ReceiptMemory(CompanionMemoryStore(db, nowMilliseconds: () => 1772877000000), CompanionLocal.at(root));
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(db, nowMilliseconds: () => 1772877000000),
+            CompanionLocal.at(root),
+          );
           var wakes = 0;
           var posts = 0;
           addTearDown(() async {
@@ -1159,7 +1307,12 @@ void main() {
               case 'capabilities':
                 return {'executorId': 'installation-A', 'exact': true, 'notifications': true};
               case 'resolve':
-                return {'kind': 'unique', 'moments': [{'epochMs': 1772964600000, 'offsetSeconds': -25200}]};
+                return {
+                  'kind': 'unique',
+                  'moments': [
+                    {'epochMs': 1772964600000, 'offsetSeconds': -25200},
+                  ],
+                };
               case 'recover':
                 return {'recoveryQueued': true};
               case 'wake':
@@ -1169,25 +1322,40 @@ void main() {
                 // The Page must read the same database after wake completes.
                 if (wakes == 1) {
                   for (final event in ['claimed', 'returned']) {
-                    db.execute('''
+                    db.execute(
+                      '''
                       INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
                         executor_id,occurred_at_ms,outcome)
                       VALUES(?,?,'alarm.register','page-native-peer',?,'installation-A',1772877000000,?)
-                    ''', [task['task_id'], task['task_rev'], event, event == 'returned' ? 'succeeded' : null]);
+                    ''',
+                      [task['task_id'], task['task_rev'], event, event == 'returned' ? 'succeeded' : null],
+                    );
                   }
-                  db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=?",
-                    [task['task_id'], task['task_rev']]);
+                  db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=?", [
+                    task['task_id'],
+                    task['task_rev'],
+                  ]);
                 } else {
-                  db.execute('''
+                  db.execute(
+                    '''
                     INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
                       executor_id,occurred_at_ms,outcome,detail_json)
                     VALUES(?,?,'executor','page-native-peer','blocked','installation-A',1772877000000,
                       'not_performed',?)
-                  ''', [task['task_id'], task['task_rev'], jsonEncode({'reason': 'notifications_disabled'})]);
-                  db.execute('''
+                  ''',
+                    [
+                      task['task_id'],
+                      task['task_rev'],
+                      jsonEncode({'reason': 'notifications_disabled'}),
+                    ],
+                  );
+                  db.execute(
+                    '''
                     UPDATE companion_task_revisions SET state='waiting',wait_reason='notifications_disabled'
                     WHERE task_id=? AND task_rev=?
-                  ''', [task['task_id'], task['task_rev']]);
+                  ''',
+                    [task['task_id'], task['task_rev']],
+                  );
                   twoWakes.complete();
                 }
                 return {'wakeCompleted': true};
@@ -1195,14 +1363,21 @@ void main() {
                 throw StateError('Unexpected reminder method ${call.method}');
             }
           });
-          await openLight(tester, apiKey: 'sk-test', client: MockClient((_) async {
-            posts++;
-            return http.Response('', 401);
-          }), extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)]);
+          await openLight(
+            tester,
+            apiKey: 'sk-test',
+            client: MockClient((_) async {
+              posts++;
+              return http.Response('', 401);
+            }),
+            extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+          );
           expect(await memoryOf(tester), same(memory));
           await settleMixed(tester, memory.migrateLocal());
           if (rejectSource) {
-            db.execute("CREATE TRIGGER reject_reminder BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+            db.execute(
+              "CREATE TRIGGER reject_reminder BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
+            );
           }
           const raw = '2026-03-08 03:10 America/Los_Angeles提醒我带钥匙；2026-03-08 03:10 America/Los_Angeles提醒我带证件';
           await tester.enterText(find.byType(TextField), raw);
@@ -1239,7 +1414,9 @@ void main() {
         });
       }
 
-      testWidgets('fixture 6 original Tavern chat reopens with its story name while the real Page keeps its own name', (tester) async {
+      testWidgets('fixture 6 original Tavern chat reopens with its story name while the real Page keeps its own name', (
+        tester,
+      ) async {
         await tester.binding.setSurfaceSize(const Size(390, 844));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final storyRoot = Directory('${root.path}/tavern');
@@ -1282,36 +1459,53 @@ void main() {
           await tester.runAsync(() async {
             engine = await story.TavernEngine.openDirectory(
               storyRoot,
-              config: story.TavernModelConfig(
-                apiKey: () async => 'sk-story-test',
-                baseUrl: 'https://example.invalid',
+              config: story.TavernModelConfig(apiKey: () async => 'sk-story-test', baseUrl: 'https://example.invalid'),
+              modelClient: story.TavernModelClient(
+                clientFactory: () => MockClient((request) async {
+                  expect(request.method, 'POST');
+                  expect(request.url.path, endsWith('/chat/completions'));
+                  storyPosts.add(jsonDecode(request.body) as Map<String, Object?>);
+                  storyEntered.complete();
+                  return storyResponse!.future;
+                }),
               ),
-              modelClient: story.TavernModelClient(clientFactory: () => MockClient((request) async {
-                expect(request.method, 'POST');
-                expect(request.url.path, endsWith('/chat/completions'));
-                storyPosts.add(jsonDecode(request.body) as Map<String, Object?>);
-                storyEntered.complete();
-                return storyResponse!.future;
-              })),
             );
             engines.add(engine);
             if (first) {
-              final character = await engine.importCard(Uint8List.fromList(utf8.encode(jsonEncode({
-                'spec': 'chara_card_v3', 'spec_version': '3.0',
-                'data': {
-                  'name': '故事同行者', 'nickname': '', 'description': '',
-                  'personality': '', 'scenario': '', 'first_mes': '故事从这里开始。',
-                  'alternate_greetings': [], 'mes_example': '', 'system_prompt': '',
-                  'post_history_instructions': '', 'creator_notes': '', 'tags': [], 'extensions': {},
-                },
-              }))));
+              final character = await engine.importCard(
+                Uint8List.fromList(
+                  utf8.encode(
+                    jsonEncode({
+                      'spec': 'chara_card_v3',
+                      'spec_version': '3.0',
+                      'data': {
+                        'name': '故事同行者',
+                        'nickname': '',
+                        'description': '',
+                        'personality': '',
+                        'scenario': '',
+                        'first_mes': '故事从这里开始。',
+                        'alternate_greetings': [],
+                        'mes_example': '',
+                        'system_prompt': '',
+                        'post_history_instructions': '',
+                        'creator_notes': '',
+                        'tags': [],
+                        'extensions': {},
+                      },
+                    }),
+                  ),
+                ),
+              );
               characterId = character.id;
               chatId = await engine.createChat(characterId);
             }
-            final scope = ProviderContainer(overrides: [
-              tavernProvider.overrideWithValue(engine),
-              settingsProvider.overrideWith(() => _Settings('sk-story-test')),
-            ]);
+            final scope = ProviderContainer(
+              overrides: [
+                tavernProvider.overrideWithValue(engine),
+                settingsProvider.overrideWith(() => _Settings('sk-story-test')),
+              ],
+            );
             storyScope = scope;
             await scope.read(tavernCharactersProvider.future);
             await scope.read(tavernChatsProvider(null).future);
@@ -1324,10 +1518,9 @@ void main() {
             await scope.read(scripts.future);
             await readStoryRows();
           });
-          await tester.pumpWidget(UncontrolledProviderScope(
-            container: storyScope!,
-            child: _app(const TavernHomePage()),
-          ));
+          await tester.pumpWidget(
+            UncontrolledProviderScope(container: storyScope!, child: _app(const TavernHomePage())),
+          );
           await tester.pumpAndSettle();
           final resume = find.byKey(ValueKey('tavern-continue-$chatId'));
           expect(resume, findsOneWidget);
@@ -1347,11 +1540,28 @@ void main() {
           await settleMixed(tester, storyEntered.future);
           // Subscribe to the actual Page-started turn while HTTP is held.
           final done = engine.resumeTurn(chatId).toList();
-          response.complete(http.Response([
-            'data: ${jsonEncode({'choices': [{'index': 0, 'delta': {'content': '故事继续了。'}}]})}\n\n',
-            'data: ${jsonEncode({'choices': [{'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'}]})}\n\n',
-            'data: [DONE]\n\n',
-          ].join(), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'}));
+          response.complete(
+            http.Response(
+              [
+                'data: ${jsonEncode({
+                  'choices': [
+                    {
+                      'index': 0,
+                      'delta': {'content': '故事继续了。'},
+                    },
+                  ],
+                })}\n\n',
+                'data: ${jsonEncode({
+                  'choices': [
+                    {'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'},
+                  ],
+                })}\n\n',
+                'data: [DONE]\n\n',
+              ].join(),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            ),
+          );
           final events = await settleMixed(tester, done);
           expect(events.whereType<story.TavernTurnFailed>(), isEmpty);
           expect(events.whereType<story.TavernTurnDone>(), hasLength(1));
@@ -1377,8 +1587,14 @@ void main() {
         expect(storyPosts, isEmpty);
         await storySay(storyName);
         expect(storyPosts, hasLength(1));
-        expect((storyPosts.single['messages']! as List).cast<Map>()
-          .where((row) => row['role'] == 'user').map((row) => row['content']).join('\n'), contains(storyName));
+        expect(
+          (storyPosts.single['messages']! as List)
+              .cast<Map>()
+              .where((row) => row['role'] == 'user')
+              .map((row) => row['content'])
+              .join('\n'),
+          contains(storyName),
+        );
         final before = (await tester.runAsync(() => engine.path(chatId)))!;
         expect(before.where((row) => row.role == story.TavernRole.user).single.text, storyName);
         final oldPath = [for (final row in before) (row.nodeId, row.parentId, row.role, row.text, row.at)];
@@ -1387,8 +1603,10 @@ void main() {
         // The phone owner lives across room visits, as in the app. The test
         // adds only a receipt observer; the Page still submits and extracts.
         final memory = _ReceiptMemory(
-          CompanionMemoryStore(sqlite3.open('${root.path}/memory.sqlite'),
-            nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch),
+          CompanionMemoryStore(
+            sqlite3.open('${root.path}/memory.sqlite'),
+            nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
+          ),
           CompanionLocal.at(root),
         );
         phoneMemory = memory;
@@ -1399,27 +1617,45 @@ void main() {
         final phoneClient = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['system'] == companionMemoryExtractionPrompt) {
-            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            final input =
+                jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
             extracts.add(input);
             final source = (input['source']! as List).cast<Map>().single;
             expect(source['text'], realName);
-            return http.Response(_sse([jsonEncode({
-              'schema_version': 2, 'batch_id': input['batch_id'],
-              'covered_message_ids': [source['id']], 'completion': 'complete',
-              'operations': [{
-                'op': 'create', 'kind': 'fact', 'text': realName, 'keywords': ['称呼', '阿橙'],
-                'evidence': [{'message_id': source['id'], 'quote': source['text']}],
-              }],
-            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            return http.Response(
+              _sse([
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': input['batch_id'],
+                  'covered_message_ids': [source['id']],
+                  'completion': 'complete',
+                  'operations': [
+                    {
+                      'op': 'create',
+                      'kind': 'fact',
+                      'text': realName,
+                      'keywords': ['称呼', '阿橙'],
+                      'evidence': [
+                        {'message_id': source['id'], 'quote': source['text']},
+                      ],
+                    },
+                  ],
+                }),
+              ]),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            );
           }
           chats.add(body);
           phoneEntered.complete();
-          return http.Response(_sse(['我听到了。']), 200,
-            headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          return http.Response(_sse(['我听到了。']), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
         });
-        await openLight(tester, apiKey: 'sk-test', client: phoneClient, extra: [
-          companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
-        ]);
+        await openLight(
+          tester,
+          apiKey: 'sk-test',
+          client: phoneClient,
+          extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+        );
         expect(await memoryOf(tester), same(memory));
         await settleMixed(tester, memory.migrateLocal());
         await tester.pumpAndSettle();
@@ -1454,7 +1690,9 @@ void main() {
         expect(chats, hasLength(2));
         expect(jsonEncode(chats), isNot(contains('校长')));
         final lastContent = (((chats.last['messages']! as List).last as Map)['content']! as List).cast<Map>();
-        final block = lastContent.map((part) => part['text'] as String).singleWhere((text) => text.contains('companion_memory'));
+        final block = lastContent
+            .map((part) => part['text'] as String)
+            .singleWhere((text) => text.contains('companion_memory'));
         expect((jsonDecode(block) as Map)['items'], [
           {'id': card['id'], 'kind': 'fact', 'text': realName},
         ]);
@@ -1485,7 +1723,9 @@ void main() {
         expect(outgoing, isNot(contains('companion_memory')));
         expect(outgoing, isNot(contains('phoneMemory')));
         final after = (await tester.runAsync(() => engine.path(chatId)))!;
-        expect([for (final row in after.take(before.length)) (row.nodeId, row.parentId, row.role, row.text, row.at)], oldPath);
+        expect([
+          for (final row in after.take(before.length)) (row.nodeId, row.parentId, row.role, row.text, row.at),
+        ], oldPath);
         expect(memory.store.messages(), phoneMessages);
         expect(memory.store.cards(), phoneCards);
         expect(memory.store.requests(), phoneReceipts);
@@ -1493,125 +1733,193 @@ void main() {
       });
 
       for (final changedPreference in [false, true]) {
-        testWidgets(changedPreference
-            ? 'fixture 4 a personal writing change reaches the next Page request with its own complete source'
-            : 'fixture 4 joining a writing group keeps the original preference in the next Page request', (tester) async {
-          final posts = <Map<String, Object?>>[];
-          await openLight(tester, apiKey: 'sk-test', client: MockClient((request) async {
-            posts.add(jsonDecode(request.body) as Map<String, Object?>);
-            return http.Response(_sse(['我们按你的习惯慢慢来。']), 200,
-              headers: {'content-type': 'text/event-stream; charset=utf-8'});
-          }));
-          final memory = await memoryOf(tester);
-          Map<String, Object?> source(String id, String text, {String role = 'user'}) =>
-              memory.store.submitMessage(id: id, sessionId: memory.store.lightSessionId, text: text,
-                role: role, saidAtUtc: DateTime.now().millisecondsSinceEpoch, offsetMinutes: 0);
-          void commit(MemoryBatch batch, List<Map<String, Object?>> operations) {
-            final proposal = parseExtractionProposal(jsonEncode({
-              'schema_version': 2, 'batch_id': batch.id,
-              'covered_message_ids': batch.sources.map((row) => row['id']).toList(),
-              'operations': operations, 'completion': 'complete',
-            }), batch);
-            expect(memory.store.commitExtraction(batch, proposal), isTrue);
-            memory.changed();
-          }
-          const originalText = '我练写作喜欢先看一个例子';
-          final originalSource = source('writing-original', originalText);
-          final first = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-          expect(first.sources.map((row) => row['id']), ['writing-original']);
-          commit(first, [{
-            'op': 'create', 'kind': 'preference', 'text': originalText, 'keywords': ['写作', '例子'],
-            'evidence': [{'message_id': 'writing-original', 'quote': originalText}],
-          }]);
-          final originalCard = memory.store.cards().single;
-          expect(isMemoryResponsePreference(originalCard), isTrue);
-          // The group-membership fact and an assistant's steps do not stand in
-          // for the person's own statement of a new response preference.
-          const groupText = '我最近加入了写作小组';
-          final groupSource = source('writing-group', groupText);
-          const assistantText = '练写作先列三个步骤，例子放最后。';
-          source('assistant-suggestion', assistantText, role: 'assistant');
-          final joining = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-          expect(joining.sources.map((row) => row['id']), ['writing-group']);
-          expect(() => parseExtractionProposal(jsonEncode({
-            'schema_version': 2, 'batch_id': joining.id, 'covered_message_ids': ['writing-group'],
-            'completion': 'complete', 'operations': [{
-              'op': 'replace', 'target_id': originalCard['id'], 'expected_row_rev': originalCard['row_rev'],
-              'kind': 'preference', 'text': assistantText, 'keywords': ['写作', '步骤'],
-              'evidence': [{'message_id': 'assistant-suggestion', 'quote': assistantText}],
-              'change_kind': 'new_current_value',
-            }],
-          }), joining), throwsFormatException);
-          commit(joining, [{
-            'op': 'create', 'kind': 'fact', 'text': groupText, 'keywords': ['写作', '小组'],
-            'evidence': [{'message_id': 'writing-group', 'quote': groupText}],
-          }]);
-          expect(memory.store.cards().singleWhere((row) => row['id'] == originalCard['id']), originalCard);
-          final groupCard = memory.store.cards().singleWhere((row) => row['text'] == groupText);
-          var expectedSource = originalSource;
-          var expectedText = originalText;
-          if (changedPreference) {
-            const newText = '我现在改习惯了，练写作时先给我三个步骤，例子放最后';
-            expectedSource = source('writing-new-preference', newText);
-            expectedText = newText;
-            final replacement = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
-            expect(replacement.sources.map((row) => row['id']), ['writing-new-preference']);
-            expect(replacement.existing.singleWhere((row) => row['id'] == originalCard['id'])['row_rev'],
-              originalCard['row_rev']);
-            commit(replacement, [{
-              'op': 'replace', 'target_id': originalCard['id'], 'expected_row_rev': originalCard['row_rev'],
-              'kind': 'preference', 'text': newText, 'keywords': ['写作', '步骤', '例子'],
-              'evidence': [{'message_id': 'writing-new-preference', 'quote': newText}],
-              'change_kind': 'new_current_value',
-            }]);
-          }
-          final preference = memory.store.cards().singleWhere((row) => row['kind'] == 'preference');
-          expect(preference['id'], originalCard['id']);
-          expect(preference['text'], expectedText);
-          expect(preference['row_rev'], (originalCard['row_rev']! as int) + (changedPreference ? 1 : 0));
-          expect(preference['current_basis_seq'], expectedSource['first_seq']);
-          expect(isMemoryResponsePreference(preference), isTrue);
-          final proof = (preference['evidence']! as List).cast<Map>().single;
-          expect(proof['message_id'], expectedSource['id']);
-          expect(proof['source_rev'], expectedSource['source_rev']);
-          expect(proof['first_seq'], expectedSource['first_seq']);
-          expect(proof['said_at_utc'], expectedSource['said_at_utc']);
-          expect(proof['offset_minutes'], expectedSource['offset_minutes']);
-          expect(proof['role'], 'user');
-          expect(proof['scope'], 'real');
-          expect(proof['quote'], expectedText);
-          final groupProof = (groupCard['evidence']! as List).cast<Map>().single;
-          expect(groupProof['message_id'], groupSource['id']);
-          expect(groupProof['source_rev'], groupSource['source_rev']);
-          expect(groupProof['quote'], groupText);
-          for (final original in [originalSource, groupSource]) {
-            final saved = memory.store.messages().singleWhere((row) => row['id'] == original['id']);
-            expect({for (final key in original.keys) key: saved[key]}, original);
-          }
-          expect(memory.store.messages().singleWhere((row) => row['id'] == 'assistant-suggestion')['role'], 'assistant');
-          const query = '今天练写作，怎么起手？';
-          await say(tester, query);
-          expect(posts, hasLength(1));
-          final content = (((posts.single['messages']! as List).last as Map)['content']! as List).cast<Map>();
-          expect(content.first['text'], changedPreference ? '$expectedText\n$query' : query);
-          // Check the actual selected block, not matching words in old chat
-          // history (which legitimately still includes the assistant's idea).
-          final block = content.where((part) => part['type'] == 'text')
-              .map((part) => part['text'] as String)
-              .singleWhere((text) => text.startsWith('{"type":"companion_memory",'));
-          final items = ((jsonDecode(block) as Map)['items']! as List).cast<Map>();
-          expect(items.map((row) => row['id']), unorderedEquals([originalCard['id'], groupCard['id']]));
-          expect(items.singleWhere((row) => row['kind'] == 'preference')['text'], expectedText);
-          expect(items.singleWhere((row) => row['kind'] == 'fact')['text'], groupText);
-          if (!changedPreference) {
-            expect(items.any((row) => (row['text'] as String).contains('三个步骤')), isFalse);
-          }
-          await tester.pumpWidget(const SizedBox());
-          await tester.pump(const Duration(seconds: 10));
-        });
+        testWidgets(
+          changedPreference
+              ? 'fixture 4 a personal writing change reaches the next Page request with its own complete source'
+              : 'fixture 4 joining a writing group keeps the original preference in the next Page request',
+          (tester) async {
+            final posts = <Map<String, Object?>>[];
+            await openLight(
+              tester,
+              apiKey: 'sk-test',
+              client: MockClient((request) async {
+                posts.add(jsonDecode(request.body) as Map<String, Object?>);
+                return http.Response(
+                  _sse(['我们按你的习惯慢慢来。']),
+                  200,
+                  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+                );
+              }),
+            );
+            final memory = await memoryOf(tester);
+            Map<String, Object?> source(String id, String text, {String role = 'user'}) => memory.store.submitMessage(
+              id: id,
+              sessionId: memory.store.lightSessionId,
+              text: text,
+              role: role,
+              saidAtUtc: DateTime.now().millisecondsSinceEpoch,
+              offsetMinutes: 0,
+            );
+            void commit(MemoryBatch batch, List<Map<String, Object?>> operations) {
+              final proposal = parseExtractionProposal(
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': batch.id,
+                  'covered_message_ids': batch.sources.map((row) => row['id']).toList(),
+                  'operations': operations,
+                  'completion': 'complete',
+                }),
+                batch,
+              );
+              expect(memory.store.commitExtraction(batch, proposal), isTrue);
+              memory.changed();
+            }
+
+            const originalText = '我练写作喜欢先看一个例子';
+            final originalSource = source('writing-original', originalText);
+            final first = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+            expect(first.sources.map((row) => row['id']), ['writing-original']);
+            commit(first, [
+              {
+                'op': 'create',
+                'kind': 'preference',
+                'text': originalText,
+                'keywords': ['写作', '例子'],
+                'evidence': [
+                  {'message_id': 'writing-original', 'quote': originalText},
+                ],
+              },
+            ]);
+            final originalCard = memory.store.cards().single;
+            expect(isMemoryResponsePreference(originalCard), isTrue);
+            // The group-membership fact and an assistant's steps do not stand in
+            // for the person's own statement of a new response preference.
+            const groupText = '我最近加入了写作小组';
+            final groupSource = source('writing-group', groupText);
+            const assistantText = '练写作先列三个步骤，例子放最后。';
+            source('assistant-suggestion', assistantText, role: 'assistant');
+            final joining = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+            expect(joining.sources.map((row) => row['id']), ['writing-group']);
+            expect(
+              () => parseExtractionProposal(
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': joining.id,
+                  'covered_message_ids': ['writing-group'],
+                  'completion': 'complete',
+                  'operations': [
+                    {
+                      'op': 'replace',
+                      'target_id': originalCard['id'],
+                      'expected_row_rev': originalCard['row_rev'],
+                      'kind': 'preference',
+                      'text': assistantText,
+                      'keywords': ['写作', '步骤'],
+                      'evidence': [
+                        {'message_id': 'assistant-suggestion', 'quote': assistantText},
+                      ],
+                      'change_kind': 'new_current_value',
+                    },
+                  ],
+                }),
+                joining,
+              ),
+              throwsFormatException,
+            );
+            commit(joining, [
+              {
+                'op': 'create',
+                'kind': 'fact',
+                'text': groupText,
+                'keywords': ['写作', '小组'],
+                'evidence': [
+                  {'message_id': 'writing-group', 'quote': groupText},
+                ],
+              },
+            ]);
+            expect(memory.store.cards().singleWhere((row) => row['id'] == originalCard['id']), originalCard);
+            final groupCard = memory.store.cards().singleWhere((row) => row['text'] == groupText);
+            var expectedSource = originalSource;
+            var expectedText = originalText;
+            if (changedPreference) {
+              const newText = '我现在改习惯了，练写作时先给我三个步骤，例子放最后';
+              expectedSource = source('writing-new-preference', newText);
+              expectedText = newText;
+              final replacement = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+              expect(replacement.sources.map((row) => row['id']), ['writing-new-preference']);
+              expect(
+                replacement.existing.singleWhere((row) => row['id'] == originalCard['id'])['row_rev'],
+                originalCard['row_rev'],
+              );
+              commit(replacement, [
+                {
+                  'op': 'replace',
+                  'target_id': originalCard['id'],
+                  'expected_row_rev': originalCard['row_rev'],
+                  'kind': 'preference',
+                  'text': newText,
+                  'keywords': ['写作', '步骤', '例子'],
+                  'evidence': [
+                    {'message_id': 'writing-new-preference', 'quote': newText},
+                  ],
+                  'change_kind': 'new_current_value',
+                },
+              ]);
+            }
+            final preference = memory.store.cards().singleWhere((row) => row['kind'] == 'preference');
+            expect(preference['id'], originalCard['id']);
+            expect(preference['text'], expectedText);
+            expect(preference['row_rev'], (originalCard['row_rev']! as int) + (changedPreference ? 1 : 0));
+            expect(preference['current_basis_seq'], expectedSource['first_seq']);
+            expect(isMemoryResponsePreference(preference), isTrue);
+            final proof = (preference['evidence']! as List).cast<Map>().single;
+            expect(proof['message_id'], expectedSource['id']);
+            expect(proof['source_rev'], expectedSource['source_rev']);
+            expect(proof['first_seq'], expectedSource['first_seq']);
+            expect(proof['said_at_utc'], expectedSource['said_at_utc']);
+            expect(proof['offset_minutes'], expectedSource['offset_minutes']);
+            expect(proof['role'], 'user');
+            expect(proof['scope'], 'real');
+            expect(proof['quote'], expectedText);
+            final groupProof = (groupCard['evidence']! as List).cast<Map>().single;
+            expect(groupProof['message_id'], groupSource['id']);
+            expect(groupProof['source_rev'], groupSource['source_rev']);
+            expect(groupProof['quote'], groupText);
+            for (final original in [originalSource, groupSource]) {
+              final saved = memory.store.messages().singleWhere((row) => row['id'] == original['id']);
+              expect({for (final key in original.keys) key: saved[key]}, original);
+            }
+            expect(
+              memory.store.messages().singleWhere((row) => row['id'] == 'assistant-suggestion')['role'],
+              'assistant',
+            );
+            const query = '今天练写作，怎么起手？';
+            await say(tester, query);
+            expect(posts, hasLength(1));
+            final content = (((posts.single['messages']! as List).last as Map)['content']! as List).cast<Map>();
+            expect(content.first['text'], changedPreference ? '$expectedText\n$query' : query);
+            // Check the actual selected block, not matching words in old chat
+            // history (which legitimately still includes the assistant's idea).
+            final block = content
+                .where((part) => part['type'] == 'text')
+                .map((part) => part['text'] as String)
+                .singleWhere((text) => text.startsWith('{"type":"companion_memory",'));
+            final items = ((jsonDecode(block) as Map)['items']! as List).cast<Map>();
+            expect(items.map((row) => row['id']), unorderedEquals([originalCard['id'], groupCard['id']]));
+            expect(items.singleWhere((row) => row['kind'] == 'preference')['text'], expectedText);
+            expect(items.singleWhere((row) => row['kind'] == 'fact')['text'], groupText);
+            if (!changedPreference) {
+              expect(items.any((row) => (row['text'] as String).contains('三个步骤')), isFalse);
+            }
+            await tester.pumpWidget(const SizedBox());
+            await tester.pump(const Duration(seconds: 10));
+          },
+        );
       }
 
-      testWidgets('fixture 15 ordinary Page chat still sends after a real organize request reaches the daily limit', (tester) async {
+      testWidgets('fixture 15 ordinary Page chat still sends after a real organize request reaches the daily limit', (
+        tester,
+      ) async {
         late CompanionMemoryOwner memory;
         final categories = <String>[];
         final posts = <Map<String, Object?>>[];
@@ -1619,11 +1927,15 @@ void main() {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           posts.add(body);
           final system = body['system'];
-          final category = system == companionMemoryExtractionPrompt ? 'extract'
-              : system == companionMemoryConsolidationPrompt ? 'organize' : 'chat';
+          final category = system == companionMemoryExtractionPrompt
+              ? 'extract'
+              : system == companionMemoryConsolidationPrompt
+              ? 'organize'
+              : 'chat';
           categories.add(category);
-          final receipt = memory.store.requests().singleWhere((row) =>
-            row['category'] == category && row['state'] == 'sent');
+          final receipt = memory.store.requests().singleWhere(
+            (row) => row['category'] == category && row['state'] == 'sent',
+          );
           expect(receipt['sent_at_ms'], isNotNull);
           var answer = '可以，我们慢慢聊。';
           if (category != 'chat') {
@@ -1632,30 +1944,70 @@ void main() {
             expect(receipt['batch_id'], input['batch_id']);
             if (category == 'extract') {
               answer = jsonEncode({
-                'schema_version': 2, 'batch_id': input['batch_id'],
-                'covered_message_ids': ['yogurt-a', 'yogurt-b'], 'completion': 'complete',
+                'schema_version': 2,
+                'batch_id': input['batch_id'],
+                'covered_message_ids': ['yogurt-a', 'yogurt-b'],
+                'completion': 'complete',
                 'operations': [
-                  {'op': 'create', 'kind': 'preference', 'text': '你买酸奶只选原味。', 'keywords': ['酸奶'],
-                    'evidence': [{'message_id': 'yogurt-a', 'quote': '酸奶我只买原味。'}]},
-                  {'op': 'create', 'kind': 'preference', 'text': '酸奶你只买原味的。', 'keywords': ['酸奶'],
-                    'evidence': [{'message_id': 'yogurt-b', 'quote': '我买酸奶一直只选原味。'}]},
+                  {
+                    'op': 'create',
+                    'kind': 'preference',
+                    'text': '你买酸奶只选原味。',
+                    'keywords': ['酸奶'],
+                    'evidence': [
+                      {'message_id': 'yogurt-a', 'quote': '酸奶我只买原味。'},
+                    ],
+                  },
+                  {
+                    'op': 'create',
+                    'kind': 'preference',
+                    'text': '酸奶你只买原味的。',
+                    'keywords': ['酸奶'],
+                    'evidence': [
+                      {'message_id': 'yogurt-b', 'quote': '我买酸奶一直只选原味。'},
+                    ],
+                  },
                 ],
               });
             } else {
               expect(input['rows'] as List, hasLength(2));
-              answer = jsonEncode({'schema_version': 2, 'batch_id': input['batch_id'],
-                'operations': [], 'completion': 'complete'});
+              answer = jsonEncode({
+                'schema_version': 2,
+                'batch_id': input['batch_id'],
+                'operations': [],
+                'completion': 'complete',
+              });
             }
           }
-          return http.Response.bytes(utf8.encode([
-            {'type': 'message_start', 'message': {'usage': {'input_tokens': 900}}},
-            {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': answer}},
-            {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'},
-              'usage': {'input_tokens': 20, 'cache_read_input_tokens': 3,
-                'cache_creation_input_tokens': 0, 'output_tokens': category == 'chat' ? 7 : 12}},
-            {'type': 'message_stop'},
-          ].map((event) => 'data: ${jsonEncode(event)}\n\n').join()), 200,
-            headers: {'content-type': 'text/event-stream; charset=utf-8'});
+          return http.Response.bytes(
+            utf8.encode(
+              [
+                {
+                  'type': 'message_start',
+                  'message': {
+                    'usage': {'input_tokens': 900},
+                  },
+                },
+                {
+                  'type': 'content_block_delta',
+                  'delta': {'type': 'text_delta', 'text': answer},
+                },
+                {
+                  'type': 'message_delta',
+                  'delta': {'stop_reason': 'end_turn'},
+                  'usage': {
+                    'input_tokens': 20,
+                    'cache_read_input_tokens': 3,
+                    'cache_creation_input_tokens': 0,
+                    'output_tokens': category == 'chat' ? 7 : 12,
+                  },
+                },
+                {'type': 'message_stop'},
+              ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+            ),
+            200,
+            headers: {'content-type': 'text/event-stream; charset=utf-8'},
+          );
         });
         await openLight(tester, apiKey: 'sk-test', client: client);
         memory = await memoryOf(tester);
@@ -1664,8 +2016,13 @@ void main() {
         // Use the Page's already attached real owner/transport. No second
         // worker, prefilled usage row or replacement budget implementation.
         for (final (id, text) in [('yogurt-a', '酸奶我只买原味。'), ('yogurt-b', '我买酸奶一直只选原味。')]) {
-          memory.store.submitMessage(id: id, sessionId: memory.store.lightSessionId, text: text,
-            saidAtUtc: DateTime.now().millisecondsSinceEpoch, offsetMinutes: 0);
+          memory.store.submitMessage(
+            id: id,
+            sessionId: memory.store.lightSessionId,
+            text: text,
+            saidAtUtc: DateTime.now().millisecondsSinceEpoch,
+            offsetMinutes: 0,
+          );
         }
         expect(await tester.runAsync(() => memory.extract(page, forceTail: true)), CompanionMemoryWork.committed);
         expect(await tester.runAsync(() => memory.consolidate(page)), CompanionMemoryWork.committed);
@@ -1698,7 +2055,10 @@ void main() {
         expect((chat['sent_at_ms']! as int) - (organized['sent_at_ms']! as int), inInclusiveRange(0, 86399999));
         expect(chat['output_tokens'], 7);
         expect((chat['raw_usage']! as Map)['final_usage'], {
-          'input_tokens': 20, 'cache_read_input_tokens': 3, 'cache_creation_input_tokens': 0, 'output_tokens': 7,
+          'input_tokens': 20,
+          'cache_read_input_tokens': 3,
+          'cache_creation_input_tokens': 0,
+          'output_tokens': 7,
         });
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 10));
@@ -1753,18 +2113,33 @@ void main() {
         final client = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['system'] == companionMemoryExtractionPrompt) {
-            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            final input =
+                jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
             extracts.add(input);
             final sources = (input['source']! as List).cast<Map>();
-            return http.Response(_sse([jsonEncode({
-              'schema_version': 2, 'batch_id': input['batch_id'],
-              'covered_message_ids': sources.map((row) => row['id']).toList(),
-              'operations': [for (final row in sources) {
-                'op': 'create', 'kind': 'fact', 'text': row['text'],
-                'evidence': [{'message_id': row['id'], 'quote': row['text']}],
-              }],
-              'completion': 'complete',
-            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            return http.Response(
+              _sse([
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': input['batch_id'],
+                  'covered_message_ids': sources.map((row) => row['id']).toList(),
+                  'operations': [
+                    for (final row in sources)
+                      {
+                        'op': 'create',
+                        'kind': 'fact',
+                        'text': row['text'],
+                        'evidence': [
+                          {'message_id': row['id'], 'quote': row['text']},
+                        ],
+                      },
+                  ],
+                  'completion': 'complete',
+                }),
+              ]),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            );
           }
           chats.add(body);
           return http.Response('{"error":"bad key"}', 401);
@@ -1802,12 +2177,21 @@ void main() {
           final content = message['content'];
           return content is String ? content : ((content! as List).first as Map)['text'] as String;
         }
+
         expect(chats.map(sentText), [firstText, '$firstText\n$secondText']);
         final receipts = memory.store.requests();
         expect(receipts, hasLength(2));
         expect(receipts.map((row) => row['id']).toSet(), hasLength(2));
-        expect(receipts.every((row) => row['category'] == 'chat' && row['state'] == 'finished' &&
-          row['terminal'] == 'http_error' && row['sent_at_ms'] != null), isTrue);
+        expect(
+          receipts.every(
+            (row) =>
+                row['category'] == 'chat' &&
+                row['state'] == 'finished' &&
+                row['terminal'] == 'http_error' &&
+                row['sent_at_ms'] != null,
+          ),
+          isTrue,
+        );
         await tester.tap(find.byIcon(AppIcons.history));
         await settleMixed(tester, CompanionLightHistory.at(root).load());
         await tester.pumpAndSettle();
@@ -1818,8 +2202,11 @@ void main() {
         expect(entries.every((entry) => entry.speaker == CompanionLogSpeaker.you), isTrue);
         expect(find.descendant(of: log, matching: find.text(firstText)), findsOneWidget);
         expect(find.descendant(of: log, matching: find.text(secondText)), findsOneWidget);
-        expect(find.descendant(of: log, matching: find.text('你')), findsOneWidget,
-          reason: 'the real Log groups names while keeping two separately rendered originals');
+        expect(
+          find.descendant(of: log, matching: find.text('你')),
+          findsOneWidget,
+          reason: 'the real Log groups names while keeping two separately rendered originals',
+        );
         expect(find.descendant(of: log, matching: find.text('$firstText\n$secondText')), findsNothing);
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
@@ -1835,6 +2222,7 @@ void main() {
             extracted.complete();
           }
         }
+
         reopened.addListener(observeExtraction);
         observeExtraction();
         try {
@@ -1847,7 +2235,15 @@ void main() {
         expect(restored.keys, unorderedEquals([first['id'], second['id']]));
         for (final original in [first, second]) {
           final saved = restored[original['id']]!;
-          for (final field in ['id', 'session_id', 'first_seq', 'source_rev', 'said_at_utc', 'offset_minutes', 'text']) {
+          for (final field in [
+            'id',
+            'session_id',
+            'first_seq',
+            'source_rev',
+            'said_at_utc',
+            'offset_minutes',
+            'text',
+          ]) {
             expect(saved[field], original[field], reason: field);
           }
         }
@@ -1866,9 +2262,13 @@ void main() {
           for (final field in ['id', 'first_seq', 'source_rev', 'offset_minutes', 'text']) {
             expect(sent[field], original[field], reason: field);
           }
-          expect(sent['said_at_utc'],
-            DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String());
-          final proof = (cards.singleWhere((row) => row['text'] == original['text'])['evidence']! as List).cast<Map>().single;
+          expect(
+            sent['said_at_utc'],
+            DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String(),
+          );
+          final proof = (cards.singleWhere((row) => row['text'] == original['text'])['evidence']! as List)
+              .cast<Map>()
+              .single;
           expect(proof['message_id'], original['id']);
           expect(proof['source_rev'], original['source_rev']);
           expect(proof['quote'], original['text']);
@@ -2388,13 +2788,22 @@ void main() {
         final client = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, Object?>;
           if (body['system'] == companionMemoryExtractionPrompt) {
-            final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
+            final input =
+                jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map<String, Object?>;
             extracts.add(input);
-            return http.Response(_sse([jsonEncode({
-              'schema_version': 2, 'batch_id': input['batch_id'],
-              'covered_message_ids': (input['source']! as List).cast<Map>().map((row) => row['id']).toList(),
-              'operations': [], 'completion': 'complete',
-            })]), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+            return http.Response(
+              _sse([
+                jsonEncode({
+                  'schema_version': 2,
+                  'batch_id': input['batch_id'],
+                  'covered_message_ids': (input['source']! as List).cast<Map>().map((row) => row['id']).toList(),
+                  'operations': [],
+                  'completion': 'complete',
+                }),
+              ]),
+              200,
+              headers: {'content-type': 'text/event-stream; charset=utf-8'},
+            );
           }
           chats.add(body);
           return chats.length == 1
@@ -2437,6 +2846,7 @@ void main() {
             extracted.complete();
           }
         }
+
         reopened.addListener(observeExtraction);
         observeExtraction();
         try {
@@ -2458,8 +2868,10 @@ void main() {
         for (final field in ['id', 'first_seq', 'source_rev', 'offset_minutes', 'text']) {
           expect(sentSource[field], original[field], reason: field);
         }
-        expect(sentSource['said_at_utc'],
-          DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String());
+        expect(
+          sentSource['said_at_utc'],
+          DateTime.fromMillisecondsSinceEpoch(original['said_at_utc']! as int, isUtc: true).toIso8601String(),
+        );
         final after = reopened.store.requests();
         expect(after.where((row) => row['category'] == 'chat').toList(), receipts);
         final extract = after.singleWhere((row) => row['category'] == 'extract');
@@ -2482,7 +2894,9 @@ void main() {
         final memory = await memoryOf(tester);
         final before = memory.store.archive['next_seq'];
         final db = sqlite3.open('${root.path}/memory.sqlite');
-        db.execute("CREATE TRIGGER reject_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END");
+        db.execute(
+          "CREATE TRIGGER reject_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
+        );
         db.close();
 
         await say(tester, '我改学长笛了');
@@ -2506,7 +2920,9 @@ void main() {
         await tester.pump(const Duration(seconds: 20));
       });
 
-      testWidgets('explicit story and generic unconfirmed cards survive reentry but stay out of the real request', (tester) async {
+      testWidgets('explicit story and generic unconfirmed cards survive reentry but stay out of the real request', (
+        tester,
+      ) async {
         final asked = <Map<String, Object?>>[];
         final client = MockClient((request) async {
           asked.add(jsonDecode(request.body) as Map<String, Object?>);
@@ -2514,19 +2930,44 @@ void main() {
         });
         await openLight(tester, apiKey: 'sk-test', client: client);
         final memory = await memoryOf(tester);
-        memory.store.submitMessage(id: 'original-story', sessionId: memory.store.lightSessionId,
-          text: '故事里叫我校长。', scope: 'story', saidAtUtc: 1793899800000, offsetMinutes: 480);
+        memory.store.submitMessage(
+          id: 'original-story',
+          sessionId: memory.store.lightSessionId,
+          text: '故事里叫我校长。',
+          scope: 'story',
+          saidAtUtc: 1793899800000,
+          offsetMinutes: 480,
+        );
         // Explicit SDK eligibility fixtures; the App legacy importer still
         // treats the owner's old handwritten cards as real.
-        memory.store.saveManual(const CompanionMemory(id: '11111111-1111-4111-8111-111111111111',
-          text: '这是剧本，我是海盗。', keywords: ['称呼'], pinned: true), expectedRowRev: null,
-          currentValueChange: false, realityKnown: false);
-        memory.store.saveManual(const CompanionMemory(id: '22222222-2222-4222-8222-222222222222',
-          text: '归属未知的称呼是店长。', keywords: ['称呼'], pinned: true), expectedRowRev: null,
-          currentValueChange: false, realityKnown: false);
-        memory.store.saveManual(const CompanionMemory(id: '33333333-3333-4333-8333-333333333333',
-          text: '本人现实称呼是阿橙。', keywords: ['称呼']), expectedRowRev: null,
-          currentValueChange: true, realityKnown: true);
+        memory.store.saveManual(
+          const CompanionMemory(
+            id: '11111111-1111-4111-8111-111111111111',
+            text: '这是剧本，我是海盗。',
+            keywords: ['称呼'],
+            pinned: true,
+          ),
+          expectedRowRev: null,
+          currentValueChange: false,
+          realityKnown: false,
+        );
+        memory.store.saveManual(
+          const CompanionMemory(
+            id: '22222222-2222-4222-8222-222222222222',
+            text: '归属未知的称呼是店长。',
+            keywords: ['称呼'],
+            pinned: true,
+          ),
+          expectedRowRev: null,
+          currentValueChange: false,
+          realityKnown: false,
+        );
+        memory.store.saveManual(
+          const CompanionMemory(id: '33333333-3333-4333-8333-333333333333', text: '本人现实称呼是阿橙。', keywords: ['称呼']),
+          expectedRowRev: null,
+          currentValueChange: true,
+          realityKnown: true,
+        );
         memory.changed();
         await _settle(tester);
         await tester.pumpWidget(const SizedBox());

@@ -38,7 +38,8 @@ sealed class LauncherEntry {
         HostRef.decode(host is String ? host : null),
         sessionId,
       ),
-      'companion_task' when taskId is String && taskId.isNotEmpty && !taskId.contains('\u0000') && taskRev is int && taskRev > 0 =>
+      'companion_task'
+          when taskId is String && taskId.isNotEmpty && !taskId.contains('\u0000') && taskRev is int && taskRev > 0 =>
         OpenCompanionTaskEntry(taskId, taskRev),
       _ => null,
     };

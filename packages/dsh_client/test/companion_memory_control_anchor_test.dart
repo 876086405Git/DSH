@@ -31,13 +31,20 @@ void main() {
     final source = say(id, text);
     final batch = store.nextBatch(forceTail: true, estimateTokens: fixture.estimate)!;
     expect(store.commitExtraction(batch, fixture.parsed(batch, [fixture.create(source, keywords: words)])), isTrue);
-    return store.cards().singleWhere((card) => (card['evidence'] as List<Object?>)
-      .cast<MemoryRow>().any((proof) => proof['message_id'] == id));
+    return store.cards().singleWhere(
+      (card) => (card['evidence'] as List<Object?>).cast<MemoryRow>().any((proof) => proof['message_id'] == id),
+    );
   }
 
-  List<String> anchors(String topic) => (jsonDecode(database
-    .select('SELECT control_anchors FROM memory_topics WHERE id=?', [topic]).single['control_anchors'] as String) as List<Object?>)
-    .cast<String>();
+  List<String> anchors(String topic) =>
+      (jsonDecode(
+                database.select('SELECT control_anchors FROM memory_topics WHERE id=?', [
+                      topic,
+                    ]).single['control_anchors']
+                    as String,
+              )
+              as List<Object?>)
+          .cast<String>();
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('companion-control-anchor-');
@@ -90,8 +97,11 @@ void main() {
       final control = parseMemoryControl(text, store.cards(), topicControls: store.topicControls())!;
       expect(control['ambiguous'], isFalse);
       expect(control['topic_ids'], [topic]);
-      store.applyControl(topicIds: (control['topic_ids'] as List<Object?>).cast<String>(),
-        kind: control['kind'] as String, controlMessageId: source['id'] as String);
+      store.applyControl(
+        topicIds: (control['topic_ids'] as List<Object?>).cast<String>(),
+        kind: control['kind'] as String,
+        controlMessageId: source['id'] as String,
+      );
       reopen();
       expect(anchors(topic), ['复诊'], reason: text);
     }
@@ -101,10 +111,15 @@ void main() {
     expect(control['ambiguous'], isFalse);
     expect(control['kind'], 'normal');
     expect(control['topic_ids'], [topic]);
-    expect(() => store.finishUnresolvedControl(messageId: 'release', expectedSourceRev: 1),
-      throwsA(isA<DshRemoteException>()));
-    store.applyControl(topicIds: (control['topic_ids'] as List<Object?>).cast<String>(),
-      kind: control['kind'] as String, controlMessageId: source['id'] as String);
+    expect(
+      () => store.finishUnresolvedControl(messageId: 'release', expectedSourceRev: 1),
+      throwsA(isA<DshRemoteException>()),
+    );
+    store.applyControl(
+      topicIds: (control['topic_ids'] as List<Object?>).cast<String>(),
+      kind: control['kind'] as String,
+      controlMessageId: source['id'] as String,
+    );
     expect(anchors(topic), isEmpty);
     reopen();
     final fresh = remember('fresh', '我周日复诊。', ['复诊']);
@@ -186,7 +201,10 @@ void main() {
     store.applyControl(topicIds: [topic], kind: 'never');
     final before = store.cards();
     restoreOldMemorySchema(database, 8);
-    expect(database.select('PRAGMA table_info(memory_topics)').map((row) => row['name']), isNot(contains('control_anchors')));
+    expect(
+      database.select('PRAGMA table_info(memory_topics)').map((row) => row['name']),
+      isNot(contains('control_anchors')),
+    );
     reopen();
     expect(database.select('PRAGMA user_version').single['user_version'], 13);
     expect(store.cards(), before);
@@ -221,15 +239,30 @@ void main() {
     final batch = store.nextMergeBatch(estimateTokens: fixture.estimate)!;
     final target = batch.rows.singleWhere((row) => row['id'] == a['id']);
     final from = batch.rows.singleWhere((row) => row['id'] == b['id']);
-    final proposal = parseMergeProposal(jsonEncode({
-      'schema_version': 2, 'batch_id': batch.id, 'completion': 'complete',
-      'operations': [{
-        'op': 'merge', 'target_id': target['id'], 'expected_row_rev': target['row_rev'], 'text': target['text'],
-        'from': [{'id': from['id'], 'expected_row_rev': from['row_rev']}],
-        'evidence': [for (final row in batch.rows) for (final proof in (row['evidence'] as List<Object?>).cast<MemoryRow>())
-          {'message_id': proof['message_id'], 'quote': proof['quote']}],
-      }],
-    }), batch);
+    final proposal = parseMergeProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'completion': 'complete',
+        'operations': [
+          {
+            'op': 'merge',
+            'target_id': target['id'],
+            'expected_row_rev': target['row_rev'],
+            'text': target['text'],
+            'from': [
+              {'id': from['id'], 'expected_row_rev': from['row_rev']},
+            ],
+            'evidence': [
+              for (final row in batch.rows)
+                for (final proof in (row['evidence'] as List<Object?>).cast<MemoryRow>())
+                  {'message_id': proof['message_id'], 'quote': proof['quote']},
+            ],
+          },
+        ],
+      }),
+      batch,
+    );
     expect(store.commitMerge(batch, proposal), isTrue);
     expect(anchors(target['topic_id'] as String), unorderedEquals(['原味', '酸奶']));
     expect(database.select('SELECT * FROM memory_topics WHERE id=?', [from['topic_id']]), isEmpty);
