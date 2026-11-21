@@ -124,12 +124,11 @@ if ((want_beta)) && [[ $mode == release && -n $beta_file && -s $beta_file ]]; th
   beta=1
 fi
 
-# The star prompt: every public release build, unless the extra flags already say.
+# The star prompt: on in every public release build. Handed to flutter as a file
+# ahead of the extra flags, so a DSH_STAR_PROMPT among them (inline, or in a later
+# file) still wins: flutter merges files in order, then inline defines over them.
 star_on=0
-if ((star && !want_beta && !side)) && [[ $mode == release ]]; then
-  star_on=1
-  for arg in "${extra[@]}"; do [[ $arg == --dart-define=DSH_STAR_PROMPT=* ]] && star_on=0; done
-fi
+((star && !want_beta && !side)) && [[ $mode == release ]] && star_on=1
 
 commands=()
 for f in "${flavors[@]}"; do
@@ -137,7 +136,7 @@ for f in "${flavors[@]}"; do
     --build-name "$name" --build-number "$code" "--dart-define=DSH_APP_VERSION=$name+$code")
   [[ -n $target ]] && cmd+=(-t "$target")
   ((beta)) && cmd+=("--dart-define-from-file=$beta_json")
-  ((star_on)) && cmd+=("--dart-define=DSH_STAR_PROMPT=true")
+  ((star_on)) && cmd+=("--dart-define-from-file=../tooling/star-prompt-on.json")
   cmd+=("${extra[@]}")
   commands+=("$(printf '%q ' "${cmd[@]}")")
 done

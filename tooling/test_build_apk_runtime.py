@@ -282,17 +282,22 @@ apk.write_bytes(b'fake APK: shell flow only')
         self.assertEqual(result.stdout.count("flutter build apk"), 2)
 
     def test_public_release_builds_ask_for_a_star(self):
-        star = "--dart-define=DSH_STAR_PROMPT=true"
+        star = "--dart-define-from-file=../tooling/star-prompt-on.json"
+        self.assertEqual(json.loads((ROOT / "tooling/star-prompt-on.json").read_text()), {"DSH_STAR_PROMPT": "true"})
         self.make_bundle("arm64", 2)
         result = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(star, self.calls()[0])
+        # Ahead of the extra flags: a DSH_STAR_PROMPT there, inline or in a file, wins.
+        result = self.run_script("--", "--dart-define-from-file=release.json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.calls()[0]
+        self.assertLess(args.index(star), args.index("--dart-define-from-file=release.json"))
         token = self.root / "beta.token"
         token.write_text("dshc_fixture\n")
         token.chmod(0o600)
         self.env["DSH_BETA_TOKEN_FILE"] = str(token)
-        for args in (("--no-star",), ("--side",), ("--beta",), ("--debug",),
-                     ("--", "--dart-define=DSH_STAR_PROMPT=false")):
+        for args in (("--no-star",), ("--side",), ("--beta",), ("--debug",)):
             with self.subTest(args=args):
                 result = self.run_script(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)

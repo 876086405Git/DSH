@@ -77,7 +77,7 @@
 ## 5. 公测开关
 
 - 常量 `starPromptEnabled = bool.fromEnvironment('DSH_STAR_PROMPT')`，默认 `false`。关闭时不计时、不读写偏好、不弹，更新弹层里的「点 Star」键也不出现。内测期间不留状态，公测版从零开始计时。
-- **正式包由 `tooling/build-apk.sh` 自动打开**（2026-11-21 起）。`--beta`、`--side`、debug/profile 包不开，`--no-star` 手动关。以前要手动加 `-- --dart-define=DSH_STAR_PROMPT=true`，最近的正式包漏了（1.3.0 确认没加，1.1.0、1.2.0 的打包记录里也没有）：这些版本既不弹对话框，更新弹层也没有「点 Star」，只剩设置里那一行。开关关着的版本不计时，所以这些用户升级到打开的版本后从零算，再用满 30 分钟就会被问到。
+- **正式包由 `tooling/build-apk.sh` 自动打开**（2026-11-21 起，经 `tooling/star-prompt-on.json`，额外参数里的 `DSH_STAR_PROMPT` 优先）。`--beta`、`--side`、debug/profile 包不开，`--no-star` 手动关。以前要手动加 `-- --dart-define=DSH_STAR_PROMPT=true`，最近的正式包漏了（1.3.0 确认没加，1.1.0、1.2.0 的打包记录里也没有）：这些版本既不弹对话框，更新弹层也没有「点 Star」，只剩设置里那一行。开关关着的版本不计时，所以这些用户升级到打开的版本后从零算，再用满 30 分钟就会被问到。
 - 设置里的那一行不受开关影响。
 - 不用远程配置，理由同前：公测包的更新检查读 GitHub API，放不了自定义字段；这个开关只在公测发版时拨一次。
 
