@@ -4,14 +4,16 @@
 -    let isMistralNative = false;
 +    let isMistralNative = false;
 +    let isDashScopeOpenAI = false;
-@@ -1244,1 +1245,6 @@
+@@ -1244,1 +1245,8 @@
 -            (url.pathname === "/v1" || url.pathname === "/v1/");
 +            (url.pathname === "/v1" || url.pathname === "/v1/");
-+        // DashScope Chat uses system instructions, including on reasoning models.
++        // DashScope/Qianwen Chat uses system instructions, including on reasoning models.
 +        isDashScopeOpenAI = url.protocol === "https:" && url.port === "" &&
 +            (url.hostname === "dashscope.aliyuncs.com" || url.hostname === "dashscope-intl.aliyuncs.com" ||
++                url.hostname === "cn-hongkong.dashscope.aliyuncs.com" ||
++                url.hostname === "maas.qianwenaiapi.com" || url.hostname === "cn-beijing.maas.qianwenaiapi.com" ||
 +                /^[^.]+\.[^.]+\.maas\.aliyuncs\.com$/.test(url.hostname)) &&
 +            (url.pathname === "/compatible-mode/v1" || url.pathname === "/compatible-mode/v1/");
-@@ -1276,1 +1282,1 @@
+@@ -1276,1 +1284,1 @@
 -        supportsDeveloperRole: isOpenRouterDeveloperRoleModel || (!isNonStandard && !isOpenRouter),
 +        supportsDeveloperRole: !isDashScopeOpenAI && (isOpenRouterDeveloperRoleModel || (!isNonStandard && !isOpenRouter)),

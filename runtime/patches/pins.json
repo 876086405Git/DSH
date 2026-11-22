@@ -395,8 +395,8 @@
     "ohos-provider-body-timeout.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
-          "after": "36cad7733e5e6d594f2f2751e672c2c7eecfc77cd562084bdc9e9fa4952f7c71",
-          "before": "4aab9d6a269605fbce671e1dea78a55bec068dd07c962399f355358024822e6a"
+          "after": "c117c1627bd2b08af6d071b3ae1d236c76d17852824b3ea1c7d94d855d65eaa0",
+          "before": "74585638619cfec03393d04da4f3f7211d5009bef24daaf7f771309e19ec6592"
         }
       }
     },
@@ -495,7 +495,7 @@
     "piai-dashscope-system-role.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
-          "after": "4aab9d6a269605fbce671e1dea78a55bec068dd07c962399f355358024822e6a",
+          "after": "74585638619cfec03393d04da4f3f7211d5009bef24daaf7f771309e19ec6592",
           "before": "0f90990333c18d9470b3bb02148159cbcbe754e0e7238cba577da0c012d7ba8f"
         }
       }
