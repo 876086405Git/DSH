@@ -137,6 +137,9 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     fun addSink(sink: EventSink) = synchronized(sinks) { sinks += sink }
     fun removeSink(sink: EventSink) = synchronized(sinks) { sinks -= sink }
 
+    internal fun shouldAutoStart(autoStart: Boolean): Boolean =
+        LaunchStart.shouldStart(autoStart, phase.wire, safeState.wire, autoSafe(), strikes)
+
     fun status(): Map<String, Any?> = mapOf(
         "abi" to (runCatching { manifest.abi }.getOrNull() ?: Build.SUPPORTED_ABIS.firstOrNull()),
         "bundledVersion" to runCatching { manifest.runtimeVersion }.getOrNull(),

@@ -56,15 +56,7 @@ object LaunchStart {
         try {
             val prefs = context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
             val controller = RuntimeController.get(context)
-            val status = controller.status()
-            val start = shouldStart(
-                autoStart = PerformancePolicy.autoStart(context, profile),
-                phase = status["phase"] as? String,
-                safeState = status["safeState"] as? String,
-                autoSafe = status["autoSafe"] as? Boolean ?: true,
-                strikes = (status["strikes"] as? Number)?.toInt() ?: 0,
-            )
-            if (!start) {
+            if (!controller.shouldAutoStart(PerformancePolicy.autoStart(context, profile))) {
                 decided = false
                 return
             }
