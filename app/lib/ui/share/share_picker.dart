@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/l10n.dart';
@@ -53,6 +54,21 @@ class _MessagePickerState extends State<MessagePicker> {
   final _scroll = ScrollController();
   final _rows = <String, GlobalKey>{};
   final _listKey = GlobalKey();
+  final _sliverKey = GlobalKey();
+
+  /// Each message's [MessagePickRow.preview] while the picker is open, so
+  /// picking or dragging over rows doesn't mask and strip every visible
+  /// message again. A prompt's pictures and the language go into the line.
+  final _lines = Expando<(int, Locale, String)>();
+
+  String _lineOf(ChatItem item) {
+    final images = item is UserChatItem ? item.images.length : 0;
+    final locale = AppLocale.current;
+    if (_lines[item] case (final n, final l, final line) when n == images && l == locale) return line;
+    final line = MessagePickRow.preview(item);
+    _lines[item] = (images, locale, line);
+    return line;
+  }
 
   /// A stretch being drawn by a long press: what was picked before it, the
   /// message it is anchored at, and the last one the finger was over.
@@ -93,13 +109,20 @@ class _MessagePickerState extends State<MessagePicker> {
 
   /// The row under [global], if one is built there.
   int? _rowAt(Offset global) {
-    for (final (i, item) in widget.items.indexed) {
-      final box = _rows[item.key]?.currentContext?.findRenderObject();
-      if (box is! RenderBox || !box.attached || !box.hasSize) continue;
+    final sliver = _sliverKey.currentContext?.findRenderObject();
+    if (sliver is! RenderSliverMultiBoxAdaptor) return null;
+    int? first;
+    // Includes kept-alive rows, which visitChildren visits after the laid-out ones.
+    sliver.visitChildren((child) {
+      final i = sliver.indexOf(child as RenderBox);
+      if (first != null && i >= first!) return;
+      if (i >= widget.items.length) return;
+      final box = _rows[widget.items[i].key]?.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.attached || !box.hasSize) return;
       final local = box.globalToLocal(global);
-      if (local.dy >= 0 && local.dy < box.size.height) return i;
-    }
-    return null;
+      if (local.dy >= 0 && local.dy < box.size.height) first = i;
+    });
+    return first;
   }
 
   void _startStretch(LongPressStartDetails details) {
@@ -200,22 +223,31 @@ class _MessagePickerState extends State<MessagePicker> {
             onLongPressEnd: (_) => _endStretch(),
             onLongPressCancel: _endStretch,
             child: ScrollEdgeFade(
-              child: ListView.builder(
+              child: CustomScrollView(
                 key: _listKey,
                 controller: _scroll,
-                padding: const EdgeInsets.fromLTRB(kSheetGutter - 8, 0, kSheetGutter - 8, 8),
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  final item = items[i];
-                  return MessagePickRow(
-                    key: _rows.putIfAbsent(item.key, GlobalKey.new),
-                    item: item,
-                    picked: picked(i),
-                    joinAbove: picked(i) && picked(i - 1),
-                    joinBelow: picked(i) && picked(i + 1),
-                    onTap: () => _toggle(item.key),
-                  );
-                },
+                semanticChildCount: items.length,
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(kSheetGutter - 8, 0, kSheetGutter - 8, 8),
+                    sliver: SliverList.builder(
+                      key: _sliverKey,
+                      itemCount: items.length,
+                      itemBuilder: (context, i) {
+                        final item = items[i];
+                        return MessagePickRow(
+                          key: _rows.putIfAbsent(item.key, GlobalKey.new),
+                          item: item,
+                          line: _lineOf(item),
+                          picked: picked(i),
+                          joinAbove: picked(i) && picked(i - 1),
+                          joinBelow: picked(i) && picked(i + 1),
+                          onTap: () => _toggle(item.key),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -248,6 +280,7 @@ class MessagePickRow extends StatelessWidget {
   const MessagePickRow({
     super.key,
     required this.item,
+    required this.line,
     required this.picked,
     required this.onTap,
     this.joinAbove = false,
@@ -255,6 +288,9 @@ class MessagePickRow extends StatelessWidget {
   });
 
   final ChatItem item;
+
+  /// Two lines of it: [preview] of [item].
+  final String line;
   final bool picked;
   final VoidCallback onTap;
   final bool joinAbove;
@@ -329,7 +365,7 @@ class MessagePickRow extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          preview(item),
+                          line,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
