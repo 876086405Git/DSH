@@ -121,6 +121,12 @@ android {
             // Keep the Termux binaries byte-identical to runtime/out (their hashes are in the manifest).
             keepDebugSymbols += listOf("**/libproot.so", "**/libproot-loader.so", "**/libtalloc.so", "**/libandroid-shmem.so", "**/libtawcroot.so")
         }
+        // BouncyCastle's Picnic signature tables (1.2 MB compressed): nothing here registers the PQC provider.
+        resources.excludes += listOf(
+            "org/bouncycastle/pqc/crypto/picnic/lowmcL1.bin.properties",
+            "org/bouncycastle/pqc/crypto/picnic/lowmcL3.bin.properties",
+            "org/bouncycastle/pqc/crypto/picnic/lowmcL5.bin.properties",
+        )
     }
 
     lint {
