@@ -3408,16 +3408,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     if (accepted != null) {
       task = memory.store.lookupTask(accepted['task_id']! as String)!;
     } else if (command['operation'] == 'cancel') {
-      final targets = memory.store
-          .tasks(sourceSessionId: source['session_id']! as String)
-          .where(
-            (row) =>
-                row['kind'] == 'public.lookup' &&
-                row['cancel_requested'] == 0 &&
-                const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']) &&
-                (command['placeName'] == null || command['placeName'] == row['lookup_place_name']),
-          )
-          .toList();
+      final targets = memory.store.lookupTargets(
+        sourceSessionId: source['session_id']! as String,
+        placeName: command['placeName'] as String?,
+      );
       if (targets.length != 1) {
         return (line: l10n.companionLookupWhich, task: null);
       }

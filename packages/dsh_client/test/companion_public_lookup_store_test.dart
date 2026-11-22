@@ -174,6 +174,192 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  group('lookup targets', () {
+    MemoryRow target(
+      String source, {
+      String room = 'room-one',
+      String place = '青桥美术馆',
+      String executor = 'phone-installation',
+      bool full = false,
+    }) {
+      say(source, session: room, text: '帮我查今天${place}开不开，给我馆方公告。');
+      return store.createLookupFromMessage(
+        messageId: source,
+        expectedSourceRev: 1,
+        itemNo: 0,
+        roomMode: full ? 'full' : 'light',
+        hostKey: full ? 'original-host' : null,
+        hostSessionId: full ? 'original-host-session' : null,
+        executorId: executor,
+        lookup: CompanionLookupSpec(
+          placeName: place,
+          localDate: '2026-11-21',
+          zoneId: 'Asia/Shanghai',
+          question: '开不开，给我馆方公告',
+          deadlineAtMs: now + 120000,
+        ),
+      );
+    }
+
+    void uncertain(MemoryRow task) {
+      final request = claim(task)['request_id']! as String;
+      store.observeLookupAttempt(request, dispatched: true, httpStatus: 200);
+      store.markLookupUncertain(request);
+    }
+
+    Map<String, List<MemoryRow>> ledger() => {
+      for (final table in [
+        'companion_tasks',
+        'companion_task_revisions',
+        'companion_task_receipts',
+        'companion_lookup_attempts',
+      ])
+        table: [
+          for (final row in database.select('SELECT * FROM $table ORDER BY rowid')) Map<String, Object?>.from(row),
+        ],
+    };
+
+    test('keeps two unfinished host targets across the display window, deadline and restart', () {
+      final first = target('old-lookup', full: true);
+      final firstId = first['task_id']! as String;
+      uncertain(first);
+      for (var index = 0; index < 99; index++) {
+        now++;
+        final source = 'later-reminder-$index';
+        say(source, text: '2026-11-22 08:00提醒我处理第$index件事');
+        store.createReminderFromMessage(
+          messageId: source,
+          expectedSourceRev: 1,
+          itemNo: 0,
+          roomMode: 'light',
+          executorId: 'phone-installation',
+          reminder: CompanionReminderSpec(
+            text: '处理第$index件事',
+            localDate: '2026-11-22',
+            localTime: '08:00',
+            zoneId: 'Asia/Shanghai',
+            offsetSeconds: 28800,
+            epochMs: DateTime.utc(2026, 11, 22).millisecondsSinceEpoch,
+          ),
+        );
+      }
+      now++;
+      final second = target('new-lookup', full: true);
+      final secondId = second['task_id']! as String;
+      uncertain(second);
+      final displayed = store.tasks(sourceSessionId: 'room-one');
+      expect(displayed, hasLength(100));
+      expect(displayed.map((row) => row['task_id']), isNot(contains(firstId)));
+      expect(displayed.where((row) => row['kind'] == 'public.lookup').single['task_id'], secondId);
+      final before = ledger();
+      final changes = database.select('SELECT total_changes() AS n').single['n'];
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one').map((row) => row['task_id']),
+        unorderedEquals([firstId, secondId]),
+      );
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one', placeName: '青桥美术馆').map((row) => row['task_id']),
+        unorderedEquals([firstId, secondId]),
+      );
+      expect(database.select('SELECT total_changes() AS n').single['n'], changes);
+      expect(ledger(), before);
+
+      now += 120001;
+      reopen();
+      final reopenedChanges = database.select('SELECT total_changes() AS n').single['n'];
+      expect(store.lookupIsCurrent(firstId, 1), isFalse);
+      expect(store.lookupIsCurrent(secondId, 1), isFalse);
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one').map((row) => row['task_id']),
+        unorderedEquals([firstId, secondId]),
+      );
+      expect(database.select('SELECT total_changes() AS n').single['n'], reopenedChanges);
+      expect(ledger(), before);
+      for (final id in [firstId, secondId]) {
+        final attempt = store.lookupAttempts(id).single;
+        expect(attempt['dispatched'], 1);
+        expect(attempt['finished_at_ms'], isNull);
+        expect(store.lookupTask(id)!['state'], 'unknown');
+      }
+
+      final thirdId = target('third-lookup')['task_id'];
+      final witnesses = store.lookupTargets(sourceSessionId: 'room-one');
+      expect(witnesses, hasLength(2));
+      expect(witnesses.map((row) => row['task_id']).toSet(), hasLength(2));
+      expect(witnesses.every((row) => {firstId, secondId, thirdId}.contains(row['task_id'])), isTrue);
+    });
+
+    test('filters current cancellation and terminal outcomes before limiting lookup targets', () {
+      final withdrawn = target('withdrawn', full: true);
+      uncertain(withdrawn);
+      say('withdraw-command', text: '取消青桥美术馆的查询');
+      final stopped = store.cancelLookup(
+        taskId: withdrawn['task_id']! as String,
+        expectedTaskRev: 1,
+        messageId: 'withdraw-command',
+        expectedSourceRev: 1,
+        itemNo: 0,
+      );
+      expect(stopped['state'], 'unknown');
+      expect(stopped['cancel_requested'], 1);
+      expect(store.lookupTask(withdrawn['task_id']! as String, taskRev: 1)!['cancel_requested'], 0);
+      final failed = target('failed');
+      finish(failed, state: 'failed', reason: 'lookup_no_evidence');
+      final partial = target('partial');
+      finish(partial, state: 'partial', reason: 'lookup_no_evidence');
+      final completed = target('completed');
+      search(completed);
+      final page = fetch(completed);
+      final result = proposal(page);
+      answer(completed, page, result);
+      finish(completed, result: result);
+      expect(store.lookupTargets(sourceSessionId: 'room-one'), isEmpty);
+
+      final queued = target('queued');
+      final running = target('running');
+      final request = claim(running)['request_id']! as String;
+      store.observeLookupAttempt(request, dispatched: true, httpStatus: 200);
+      final before = ledger();
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one').map((row) => row['task_id']),
+        unorderedEquals([queued['task_id'], running['task_id']]),
+      );
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one').map((row) => row['state']),
+        unorderedEquals(['queued', 'running']),
+      );
+      expect(ledger(), before);
+    });
+
+    test('uses the exact original room and place while retaining other executors as candidates', () {
+      target('elsewhere', room: 'another-room');
+      target('other-place', place: '北岸博物馆');
+      target('longer-name', place: '青桥美术馆分馆');
+      final local = target('local');
+      final foreign = target('other-installation', executor: 'another-phone');
+      final before = ledger();
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one', placeName: '青桥美术馆').map((row) => row['task_id']),
+        unorderedEquals([local['task_id'], foreign['task_id']]),
+      );
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one', placeName: '青桥美术馆').map((row) => row['executor_id']),
+        unorderedEquals(['phone-installation', 'another-phone']),
+      );
+      for (final text in ['青桥美术馆 ', '', "' OR 1=1 --"]) {
+        expect(store.lookupTargets(sourceSessionId: 'room-one', placeName: text), isEmpty);
+      }
+      expect(store.lookupTargets(sourceSessionId: 'room-one '), isEmpty);
+      expect(store.lookupTargets(sourceSessionId: 'missing-room'), isEmpty);
+      expect(ledger(), before);
+      final exact = target('quoted-name', place: "O'Neil美术馆");
+      expect(
+        store.lookupTargets(sourceSessionId: 'room-one', placeName: "O'Neil美术馆").single['task_id'],
+        exact['task_id'],
+      );
+    });
+  });
+
   test('accepted lookup keeps the original day, room and command across restart and source deletion', () {
     final task = accept(full: true);
     store.deleteMessage(id: 'source', expectedSourceRev: 1);

@@ -122,6 +122,21 @@ extension CompanionPublicLookupStore on CompanionMemoryStore {
     };
   }
 
+  /// Two matching current lookups are enough to establish ambiguity.
+  List<MemoryRow> lookupTargets({required String sourceSessionId, String? placeName}) {
+    final rows = _db.select(
+      '''
+      $_taskRead
+      WHERE t.source_session_id=? AND t.kind='public.lookup' AND r.cancel_requested=0
+        AND r.state IN ('queued','waiting','running','unknown')
+        ${placeName == null ? '' : 'AND r.lookup_place_name=?'}
+      LIMIT 2
+    ''',
+      [sourceSessionId, ?placeName],
+    );
+    return [for (final row in rows) Map<String, Object?>.from(row)];
+  }
+
   List<MemoryRow> lookupAttempts(String taskId, {int? taskRev}) => [
     for (final row in _db.select(
       '''
