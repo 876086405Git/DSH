@@ -110,7 +110,8 @@ abstract interface class CompanionInitiativeRoom {
 }
 
 class _SignalRequest {
-  _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide, this.followupId, this.prepare);
+  _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide, this.followupId, this.prepare,
+    this.deliver, this.retainDelivery);
   final CompanionInitiativeRoom room;
   final CompanionInitiativeSignal candidate;
   final bool Function() isCurrent;
@@ -118,6 +119,8 @@ class _SignalRequest {
   final void Function(String) hide;
   final String? followupId;
   final Future<bool> Function()? prepare;
+  final Future<bool> Function(CompanionInitiativeDisplay)? deliver;
+  final void Function(Future<void>)? retainDelivery;
   bool preparing = false;
   bool prepared = false;
 }
@@ -155,6 +158,7 @@ class CompanionInitiative {
   CompanionInitiativeView? _view;
   bool _disposed = false;
   bool _draining = false;
+  bool _waitingDelivery = false;
   int _revision = 0;
   final _queue = Queue<_QueuedInitiative>();
   _SignalRequest? _signal;
@@ -317,6 +321,8 @@ class CompanionInitiative {
     bool nightCareEnabled = false,
     String? followupId,
     Future<bool> Function()? prepare,
+    Future<bool> Function(CompanionInitiativeDisplay)? deliver,
+    void Function(Future<void>)? retainDelivery,
   }) {
     if (_disposed ||
         _controller == null ||
@@ -330,7 +336,8 @@ class CompanionInitiative {
     _retireRequest();
     _view = view;
     _revision++;
-    final request = _SignalRequest(room, candidate, isCurrent, present, hide, followupId, prepare);
+    final request = _SignalRequest(room, candidate, isCurrent, present, hide, followupId, prepare,
+      deliver, retainDelivery);
     _signal = request;
     if (previous != null) _enqueue(CompanionInitiativeEvent.cancelSignal(previous.candidate.id), room);
     _enqueue(CompanionInitiativeEvent.signal(candidate, nightCareEnabled: nightCareEnabled, view: view), room);
@@ -391,11 +398,11 @@ class CompanionInitiative {
 
   void _drain() {
     final controller = _controller;
-    if (_draining || _disposed || controller == null) return;
+    if (_draining || _waitingDelivery || _disposed || controller == null) return;
     _draining = true;
     var transitions = 0;
     try {
-      while (_queue.isNotEmpty && !_disposed) {
+      while (_queue.isNotEmpty && !_disposed && !_waitingDelivery) {
         if (++transitions > 64) {
           _queue.clear();
           final op = _QueuedInitiative(const CompanionInitiativeEvent.storageFault(), _room, _revision);
@@ -430,6 +437,7 @@ class CompanionInitiative {
           _offer(controller, ticket, _QueuedInitiative(const CompanionInitiativeEvent.check(), _room, _revision));
         }
       }
+      if (_waitingDelivery) return;
       final pending = _signal;
       if (pending != null && controller.pendingSignal?.id != pending.candidate.id) _retireRequest();
       _plan(controller);
@@ -446,6 +454,7 @@ class CompanionInitiative {
       (request == null || identical(_signal, request));
 
   void _offer(CompanionInitiativeController controller, CompanionInitiativeTicket ticket, _QueuedInitiative op) {
+    if (_waitingDelivery) return;
     final room = op.room;
     final request = ticket.kind == CompanionPromptKind.signal ? _signal : null;
     bool allowed =
@@ -487,6 +496,15 @@ class CompanionInitiative {
       if (staged == null || room == null || !_same(op, room, request)) {
         if (reservation != null) _store!.settleInitiative(reservation, outcome: 'released');
         _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+        return;
+      }
+      if (request?.deliver != null) {
+        // Native notify returns an actual delivery fact. Keep the staged
+        // controller state until that result; observations still update their
+        // immediate current/room facts and queue their controller transitions.
+        _waitingDelivery = true;
+        final work = _deliver(controller, staged, op, room, request!, reservation);
+        request.retainDelivery?.call(work);
         return;
       }
       var shown = false;
@@ -549,6 +567,53 @@ class CompanionInitiative {
       // Do not show another prompt from a cache after the database failed.
       _hide(ticket.id);
       _apply(controller, controller.handle(const CompanionInitiativeEvent.storageFault(), _now()), op);
+    }
+  }
+
+  Future<void> _deliver(CompanionInitiativeController controller,
+    CompanionInitiativePresentation staged, _QueuedInitiative op,
+    CompanionInitiativeRoom room, _SignalRequest request, String? reservation) async {
+    final ticket = staged.display.ticket;
+    var shown = false;
+    var unknown = false;
+    try {
+      try {
+        if (_requestCurrent(request)) shown = await request.deliver!(staged.display);
+      } on Object {
+        unknown = true;
+      }
+      if (!shown) {
+        try { request.hide(ticket.id); } on Object { /* no evidence of absence */ }
+      }
+      if (reservation != null) {
+        _store!.settleInitiative(reservation,
+          outcome: shown ? 'shown' : unknown ? 'unknown' : 'released');
+      }
+      if (!shown && !unknown) {
+        _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+        return;
+      }
+      // The ledger spends a true or uncertain native delivery exactly once,
+      // including a response that arrives after a window/switch changes.
+      final committed = controller.commitPresentation(staged);
+      if (committed.isEmpty) {
+        _apply(controller, controller.handle(const CompanionInitiativeEvent.storageFault(), _now()), op);
+        return;
+      }
+      if (shown && !_disposed) {
+        _shownRoom = room;
+        _shownSignal = request;
+        _shownId = ticket.id;
+        _arm(ticket.id, staged.display.expiresAtMono);
+      }
+      _apply(controller, committed.where((effect) => effect.type != CompanionInitiativeEffectType.show).toList(), op);
+      if (unknown) _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+    } on Object {
+      // A failed settlement leaves the original reservation occupied.
+      _apply(controller, controller.handle(const CompanionInitiativeEvent.storageFault(), _now()), op);
+    } finally {
+      _waitingDelivery = false;
+      _drain();
     }
   }
 
@@ -629,7 +694,7 @@ class CompanionInitiative {
   }
 
   static bool _quietLooking(CompanionInitiativeView? view) =>
-      view != null && view.visible && view.resumed && !view.blocked && view.enabled;
+      view != null && ((view.visible && view.resumed) || view.notificationAvailable) && !view.blocked && view.enabled;
   void _track(CompanionInitiativeEvent event) {
     final view = _view;
     final context = view?.contextKey;

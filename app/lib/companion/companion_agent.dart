@@ -17,6 +17,7 @@ import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
 import '../state/run_pulse.dart' show estimateTokens;
 import 'companion_agent_loop.dart';
+import 'companion_agent_phone_tools.dart';
 import 'companion_memory_id.dart';
 import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
@@ -34,10 +35,14 @@ import 'companion_pack.dart';
 import 'companion_public_lookup.dart';
 import 'companion_recall_prefs.dart';
 import 'companion_reminder.dart';
+import 'companion_resident_signals.dart';
+import 'companion_signals.dart';
 import 'companion_state.dart';
 import 'companion_widget.dart';
 
 part 'companion_agent_visit.dart';
+part 'companion_agent_resident.dart';
+part 'companion_agent_screen_classifier.dart';
 
 /// One phone loop in either room mode. The caller supplies the tool bindings
 /// once per original user source, including any genuine foreground capability.
@@ -73,21 +78,54 @@ class CompanionAgent extends ChangeNotifier {
     if (_disposed || ref == null || _memoryTransport == null || _host == null) {
       throw const DshClosedException('Companion room owner is not available');
     }
-    _visit?.close();
-    final visit = _CompanionAgentVisit(this, ref, root, character, moves, ui, mapHandoff);
+    final retained = _visit;
+    if (retained != null && retained.residentUi != null && !retained.closed) {
+      return retained.attachWindow(ui, mapHandoff);
+    }
+    retained?.close();
+    final visit = _CompanionAgentVisit(this, ref, root, character, moves);
     _visit = visit;
-    return CompanionAgentAttachment._(visit);
+    return visit.attachWindow(ui, mapHandoff);
   }
+
+  /// The foreground service retains this lease; a Page owns a separate window
+  /// handle. Both use the same visit, database and model/tool loop.
+  CompanionAgentResident retainAlwaysOn({
+    required Future<Directory> root,
+    required CompanionCharacter character,
+    required CompanionMoves moves,
+    required String sourceKey,
+    required CompanionAgentRoomUi ui,
+    required CompanionMapHandoff mapHandoff,
+  }) {
+    final ref = _ref;
+    if (_disposed || ref == null || _memoryTransport == null || _host == null) {
+      throw const DshClosedException('Companion owner is not available');
+    }
+    final visit = _visit ??= _CompanionAgentVisit(this, ref, root, character, moves);
+    if (visit.residentUi != null) throw const DshClosedException('Companion resident already retained');
+    visit.residentUi = ui;
+    visit.residentMapHandoff = mapHandoff;
+    if (visit.window == null) visit.updateCharacter(character, moves, sourceKey);
+    return CompanionAgentResident._(visit, ui);
+  }
+
+  DateTime? get lastUserInteractionAt => _visit?.lastUserInteractionAt;
+  int? get lastUserInteractionAtMs => lastUserInteractionAt?.millisecondsSinceEpoch;
+  void Function(String)? onScreenUserText;
+  void Function(String requestId, int atMs, double? estimatedCny)? onScreenCost;
 
   final http.Client Function() _client;
   final String Function() _apiKey;
   final void Function(CompanionUsage)? _onUsage;
   final void Function(Map<String, Object?>, {required bool partial})? _onUsageSettled;
   _CompanionAgentRun? _run;
+  CompanionAgentModelRequest? _asideRequest;
+  int _asideGeneration = 0;
   int _replies = 0;
   bool _disposed = false;
 
-  bool get running => _run?.running ?? false;
+  bool get running => (_run?.running ?? false) || _asideRequest != null;
   String get text => _run?.text ?? '';
   CompanionLightError? get error => _run?.error;
 
@@ -145,9 +183,11 @@ class CompanionAgent extends ChangeNotifier {
     tools,
     required bool Function() isCurrent,
     void Function(MemorySelection)? onSelected,
+    void Function()? onStop,
   }) async {
     if (_disposed) throw const DshClosedException('Companion agent closed');
     stop();
+    if (source['role'] == 'user') onScreenUserText?.call(source['text']! as String);
     final run = _CompanionAgentRun(
       replyId: 'companion-${++_replies}',
       memory: memory,
@@ -157,6 +197,7 @@ class CompanionAgent extends ChangeNotifier {
       tools: List.unmodifiable(tools),
       isCurrent: isCurrent,
       onSelected: onSelected,
+      onStop: onStop,
       controlRevision: memory.store.archive['control_revision'] as int,
     );
     _run = run;
@@ -409,9 +450,22 @@ class CompanionAgent extends ChangeNotifier {
 
   /// Retire presentation immediately. Its captured request still drains to
   /// the original owner; neither a new turn nor a new window inherits it.
+  void cancelScreenObservation() {
+    _asideGeneration++;
+    final aside = _asideRequest;
+    if (aside != null) {
+      aside.client?.close();
+      unawaited(aside.drain().catchError((Object _) {}));
+    }
+  }
+
   void stop({bool discard = false}) {
+    cancelScreenObservation();
+    final background = _visit?.residentUi;
+    if (background is CompanionAgentAmbientUi) background.stopSpeech();
     final run = _run;
     if (run == null || !run.running) return;
+    run.onStop?.call();
     run.cancelled = true;
     run.running = false;
     run.discard = discard;
@@ -453,10 +507,12 @@ class _CompanionAgentRun {
     required this.tools,
     required this.isCurrent,
     required this.onSelected,
+    required this.onStop,
     required this.controlRevision,
   });
 
   final String replyId;
+  final void Function()? onStop;
   final CompanionMemoryOwner memory;
   final MemoryRow source;
   final String system;

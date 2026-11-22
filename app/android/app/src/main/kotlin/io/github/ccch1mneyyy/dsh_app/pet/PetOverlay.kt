@@ -27,6 +27,7 @@ import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -154,6 +155,11 @@ internal object PetOverlay {
     private var petView: PetView? = null
     private var petParams: WindowManager.LayoutParams? = null
     private var systemShown = true
+    private var companionResident = false
+    private var companionName = "Companion"
+    private var companionBubble: PetBubble? = null
+    private var companionDisplayedId: String? = null
+    private var companionLineSerial = 0L
     private var companionEndpoint: CompanionFloatEndpoint? = null
     private var companionView: CompanionFloatView? = null
     private var companionEpoch = 0L
@@ -306,6 +312,66 @@ internal object PetOverlay {
         return true
     }
 
+    /** Temporary role selection; the person's pixel/visibility preferences stay intact. */
+    fun companionMode(enabled: Boolean, name: String?) {
+        if (!initialized) return
+        companionName = PetPush.clean(name, 40) ?: "Companion"
+        if (companionResident == enabled) return
+        companionResident = enabled
+        companionBubble = null
+        companionDisplayedId = null
+        removeAsk()
+        removeBubble()
+        machine.enabled = enabled || prefs.getBoolean(K_ENABLED, false)
+        machine.alwaysShow = enabled || prefs.getBoolean(K_ALWAYS, false)
+        evaluate()
+    }
+
+    /** A real window acknowledgement, never an enqueue-as-shown receipt. */
+    fun companionLine(id: String?, text: String?, emotion: String?, speaking: Boolean): Boolean {
+        if (!companionResident || !interactive() || machine.appForeground || capture.inFlight ||
+            petView?.isAttachedToWindow != true || !systemShown || machine.bubbles.current(now())?.ask != null ||
+            answerState.bubbleId != null) return false
+        val words = PetPush.clean(text, 600) ?: return false
+        val key = "companion:${id.orEmpty()}:${++companionLineSerial}"
+        companionBubble = PetBubble(key, "companion", words, companionName, null, null, now() + 15_000)
+        evaluate()
+        val shown = bubbleId == key && bubbleView?.isAttachedToWindow == true
+        if (shown) {
+            companionDisplayedId = id
+            companionView?.companionLine(emotion ?: "neutral", words.length, speaking)
+        }
+        main.postDelayed({ if (companionBubble?.id == key) { companionBubble = null; evaluate() } }, 15_000)
+        return shown
+    }
+
+    fun companionSpeech(id: String?, chars: Int, speaking: Boolean) {
+        if (!companionResident || id != companionDisplayedId || companionBubble?.id != bubbleId ||
+            bubbleView?.isAttachedToWindow != true || !interactive() || machine.appForeground) return
+        companionView?.speech(chars.coerceAtLeast(0), speaking)
+    }
+
+    fun clearCompanion() {
+        companionBubble = null
+        companionDisplayedId = null
+        companionView?.speech(0, false)
+        evaluate()
+    }
+
+    private fun companionWords(original: PetBubble?): PetBubble? {
+        if (!companionResident || original == null || original.ask != null) return original
+        val chinese = app.resources.configuration.locales[0].language == "zh"
+        val words = when (original.kind) {
+            "done" -> if (chinese) "那边做完了，要看看吗？" else "That task is done. Want to take a look?"
+            "error" -> if (chinese) "那边遇到点问题，一起看看吧。" else "That task hit a problem. Shall we look?"
+            else -> return original
+        }
+        return original.copy(text = words)
+    }
+
+    private fun openCompanion() = openIntent(Intent(app, MainActivity::class.java)
+        .setAction(Intent.ACTION_VIEW).setData(Uri.parse("dshgo://open/companion")), companionName)
+
     fun setEnabled(on: Boolean): Map<String, Any?> {
         if (!on) capture.invalidate()
         machine.enabled = on
@@ -403,7 +469,8 @@ internal object PetOverlay {
         machine.phoneTask = PhoneControl.peek()?.foregroundLine() != null
         machine.dshService = DshService.isRunning
         machine.interactive = interactive()
-        machine.holding = askView != null || menuView != null || answerState.bubbleId != null || returnAsk
+        machine.holding = askView != null || menuView != null || answerState.bubbleId != null || returnAsk ||
+            (companionBubble?.untilMs ?: 0) > now()
         val t = now()
         val d = machine.decide(t)
         if (d.visibility != lastVisibility || d.why != lastWhy) {
@@ -435,7 +502,9 @@ internal object PetOverlay {
                     retarget()
                     companionView?.freeze(dimmed)
                     if (dimmed || !systemShown || companionView != null) stopLoop() else startLoop()
-                    showBubble(d.bubble)
+                    val bubble = if (d.bubble?.ask != null || answerState.bubbleId != null) d.bubble else
+                        companionBubble?.takeIf { it.untilMs > t } ?: companionWords(d.bubble)
+                    showBubble(bubble)
                     if (returnAsk) {
                         returnAsk = false
                         main.post { if (!machine.appForeground && alive(petTicket)) showAsk(askFresh) }
@@ -1151,6 +1220,7 @@ internal object PetOverlay {
             machine.onTouch(now())
             if (dimmed) evaluate()
             dismissMenu()
+            if (companionResident) { showAsk(false); return }
             companionView?.tap(x, y) ?: react(if (leftHalf) "tapLeft" else "tapRight", loop = false)
             // One tap used to open the conversation: say where that went, a few times.
             val told = prefs.getInt(K_TAP_HINTS, 0)
@@ -1166,6 +1236,7 @@ internal object PetOverlay {
             if (dimmed) evaluate()
             dismissMenu()
             prefs.edit().putInt(K_TAP_HINTS, TAP_HINTS).apply()
+            if (companionResident) { openCompanion(); return }
             val push = machine.last
             open(push?.sessionId, push?.host, null)
         }
@@ -1298,7 +1369,11 @@ internal object PetOverlay {
         if (bubbleId == b.id && alive(bubbleView?.let { windowTickets[it] })) return
         removeBubble()
         val ticket = windows.claim(OverlayWindowOwner.Role.BUBBLE) ?: return
-        val view = BubbleView(ctx) { if (alive(ticket)) onBubbleTap(b) }
+        val view = BubbleView(ctx) {
+            if (alive(ticket)) {
+                if (b.kind == "companion") showAsk(false) else onBubbleTap(b)
+            }
+        }
         view.bind(b)
         b.ask?.let { ask ->
             // Laid out once first: the buttons depend on whether the request's text shows whole.
@@ -1755,8 +1830,9 @@ internal object PetOverlay {
         view.post { if (askView === view) view.context.getSystemService(InputMethodManager::class.java)?.showSoftInput(view.input, 0) }
         evaluate()
         val request = ++askRequest
-        callDart("askTarget", mapOf("fresh" to fresh)) { raw ->
-            if (request != askRequest || askView !== view) return@callDart
+        val companion = companionResident
+        callDart(if (companion) "companionAskTarget" else "askTarget", mapOf("fresh" to fresh)) { raw ->
+            if (request != askRequest || askView !== view || companion != companionResident) return@callDart
             // No answer: nothing known to stand in the way; a send hands the text to the app.
             askTarget = AskTarget.fromMap(raw) ?: AskTarget(null, null, null, AskTarget.VOICE_OFF)
             showTarget(view)
@@ -1836,8 +1912,9 @@ internal object PetOverlay {
         view.setState(sending = true)
         view.setStatus(AppStrings.get(app, R.string.pet_ask_sending))
         val request = askRequest
-        val args = mapOf("offer" to askTarget?.offer, "text" to text, "fresh" to (chat?.sessionId == null), "sessionId" to chat?.sessionId, "host" to chat?.host)
-        callDart("ask", args) { raw ->
+        val companion = companionResident
+        val args = if (companion) mapOf("text" to text) else mapOf("offer" to askTarget?.offer, "text" to text, "fresh" to (chat?.sessionId == null), "sessionId" to chat?.sessionId, "host" to chat?.host)
+        callDart(if (companion) "companionAsk" else "ask", args) { raw ->
             val r = raw as? Map<*, *>
             val completion = askDraftState.finish(send, accepted = r?.get("sent") == true) ?: return@callDart
             val current = request == askRequest && askView === view
@@ -1859,8 +1936,13 @@ internal object PetOverlay {
                 }
                 // Closed meanwhile, the text stays the bar's draft (removeAsk kept it).
                 current -> {
-                    removeAsk()
-                    openIntent(EntryActivity.newChat(app).putExtra(EntryActivity.EXTRA_TEXT, text), null)
+                    if (companion) {
+                        view.setState(sending = false)
+                        view.setStatus(AppStrings.get(app, R.string.pet_ask_failed), error = true)
+                    } else {
+                        removeAsk()
+                        openIntent(EntryActivity.newChat(app).putExtra(EntryActivity.EXTRA_TEXT, text), null)
+                    }
                 }
             }
             evaluate()

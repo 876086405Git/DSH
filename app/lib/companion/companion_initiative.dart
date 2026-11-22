@@ -261,6 +261,7 @@ class CompanionInitiativeView {
     required this.enabled,
     required this.accessible,
     required this.contextKey,
+    this.notificationAvailable = false,
   });
 
   /// Combine independently observed gates; do not include this controller's
@@ -301,6 +302,9 @@ class CompanionInitiativeView {
   final bool enabled;
   final bool accessible;
   final String contextKey;
+  /// A retained background conversation can deliver signals, not room greetings
+  /// or cushion invitations. It is never counted as visible/resumed presence.
+  final bool notificationAvailable;
 
   Map<String, Object?> toJson() => {
     'visible': visible,
@@ -309,6 +313,7 @@ class CompanionInitiativeView {
     'enabled': enabled,
     'accessible': accessible,
     'contextKey': contextKey,
+    if (notificationAvailable) 'notificationAvailable': true,
   };
 }
 
@@ -528,6 +533,8 @@ class _State {
 
   bool get eligible =>
       fault == null && inRoom && (view?.visible ?? false) && view!.resumed && !view!.blocked && view!.enabled;
+  bool get signalEligible => eligible ||
+      (fault == null && inRoom && view?.notificationAvailable == true && !view!.blocked && view!.enabled);
   bool get quietEligible => eligible && stay != null && !stay!.interacted && !stay!.invited;
 
   Map<String, Object?> toJson() => {
@@ -688,7 +695,7 @@ class CompanionInitiativeController {
         if (ticket == null || ticket.id != event.ticketId) break;
         s.ticket = null;
         final current =
-            s.eligible &&
+            (ticket.kind == CompanionPromptKind.signal ? s.signalEligible : s.eligible) &&
             s.display == null &&
             ticket.ownerEpoch == s.ownerEpoch &&
             ticket.stayId == s.stay?.id &&
@@ -746,7 +753,7 @@ class CompanionInitiativeController {
       case CompanionInitiativeEventType.signal:
         if (event.view != null) _applyView(s, event.view!, now, effects);
         final signal = event.signal!;
-        if (!s.eligible ||
+        if (!s.signalEligible ||
             s.display != null ||
             signal.id.isEmpty ||
             signal.contextKey != s.view!.contextKey ||
@@ -780,7 +787,7 @@ class CompanionInitiativeController {
     } else {
       s.quietSinceMono ??= now.monoMs;
     }
-    if (!s.eligible) {
+    if (!s.signalEligible) {
       s.signalQuietSinceMono = null;
     } else {
       s.signalQuietSinceMono ??= now.monoMs;
@@ -840,7 +847,7 @@ class CompanionInitiativeController {
     }
     final oldAccessible = s.view?.accessible;
     s.view = view;
-    if (!s.eligible) {
+    if (!s.signalEligible) {
       s.quietSinceMono = null;
       _cancel(s, effects, 'not-presentable');
     } else if (s.display != null && oldAccessible != view.accessible) {
@@ -932,7 +939,7 @@ class CompanionInitiativeController {
   bool _signalAllows(_State s, CompanionInitiativeClock now) {
     final candidate = s.signal;
     if (candidate == null ||
-        !s.eligible ||
+        !s.signalEligible ||
         s.signalQuietSinceMono == null ||
         now.monoMs - s.signalQuietSinceMono! < pace.quietMs ||
         now.monoMs >= candidate.expiresAtMonoMs ||

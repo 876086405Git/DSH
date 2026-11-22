@@ -34,6 +34,17 @@ internal class CompanionReminderAndroid(private val context: Context) : Companio
     )
 
     override fun notify(reminder: StoredReminder) {
+        val resident = CompanionAlwaysOnState.read(context)
+        if (resident.enabled) {
+            // This remains the original synchronous effect inside its claimed
+            // reminder attempt, not a queued send through a second executor.
+            if (!CompanionConversationNotification.update(context, resident.epoch,
+                    reminder.key.notificationTag, reminder.text.orEmpty(), "", false, false,
+                    reminder.key.uri("open").toString())) {
+                throw IllegalStateException("companion_notification_unavailable")
+            }
+            return
+        }
         val open = PendingIntent.getActivity(context, 0,
             Intent(context, EntryActivity::class.java).setAction(EntryActivity.ACTION_COMPANION_TASK)
                 .setData(reminder.key.uri("open")),
@@ -54,5 +65,5 @@ internal class CompanionReminderAndroid(private val context: Context) : Companio
 
     override fun isActive(key: ReminderKey): Boolean = notifications.activeNotifications.any {
         it.tag == key.notificationTag && it.id == 0
-    }
+    } || CompanionConversationNotification.contains(context, key.notificationTag)
 }

@@ -633,4 +633,58 @@ void main() {
     expect(saved()['signalAtMs'], isEmpty);
     owner.dispose();
   });
+
+  for (final outcome in ['shown', 'released', 'unknown']) {
+    testWidgets('resident notification settles its held original receipt after leave: $outcome', (tester) async {
+      final clock = Clock();
+      final owner = await make(tester, clock);
+      final room = Room();
+      const background = CompanionInitiativeView(visible: false, resumed: false,
+        blocked: false, enabled: true, accessible: false, notificationAvailable: true, contextKey: 'room');
+      final native = Completer<bool>();
+      Future<void>? retained;
+      var deliveries = 0;
+      var current = true;
+      try {
+        owner.enter(room, background);
+        owner.requestSignal(room, background, candidate(clock), isCurrent: () => current,
+          present: (_) => throw StateError('A notification is not a Page frame'),
+          hide: (_) {},
+          deliver: (_) {
+            deliveries++;
+            return native.future;
+          },
+          retainDelivery: (work) => retained = work,
+        );
+        await pass(tester, clock, 46000);
+        expect(deliveries, 1);
+        expect(retained, isNotNull);
+        expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
+        expect(room.shown, isEmpty);
+        current = false;
+        owner.leave(room);
+        // Native delivery may already have happened. Leaving retires the
+        // recipient immediately but must not fabricate a released receipt.
+        expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
+        if (outcome == 'unknown') {
+          native.completeError(StateError('native result lost after dispatch'));
+        } else {
+          native.complete(outcome == 'shown');
+        }
+        await tester.pump();
+        await retained;
+        expect(_database!.select('SELECT state FROM memory_initiative_spends').single['state'], outcome);
+        expect(saved()['signalAtMs'], outcome == 'released' ? isEmpty : hasLength(1));
+        expect(saved()['inviteAtMs'], isEmpty);
+        await pass(tester, clock, 46000);
+        expect(deliveries, 1);
+        expect(owner.fault, isNull);
+      } finally {
+        if (!native.isCompleted) native.complete(false);
+        await tester.pump();
+        await retained;
+        owner.dispose();
+      }
+    });
+  }
 }

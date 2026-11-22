@@ -1,6 +1,7 @@
 // Public attachment retry tests. The Agent, Ref, SQLite owner, wire decoder
 // and reminder adapter are real. HTTP/native replies and the room UI port are
 // explicit test boundaries; no Page, model service or native alarm is run.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -268,6 +269,7 @@ class _Visit {
   static Future<_Visit> open(
     List<http.Response> replies, {
     http.Response? Function(http.Request request)? auxiliary,
+    Future<void> Function(Map<String, Object?> body)? beforeReply,
   }) async {
     final root = await Directory.systemTemp.createTemp('agent-public-visit-');
     final database = sqlite3.openInMemory();
@@ -312,6 +314,7 @@ class _Visit {
           if (auxiliary?.call(request) case final response?) return response;
           visit.requests.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
           final index = visit.requests.length - 1;
+          await beforeReply?.call(visit.requests[index]);
           return index < replies.length ? replies[index] : http.Response('Unexpected extra model request', 503);
         }),
       );
@@ -748,6 +751,110 @@ void main() {
       expect(sources.map((row) => row['said_at_utc']), [_now, _now + 300000]);
       expect(sources.map((row) => row['text']), ['今天你好。', '明天是哪一天？']);
     } finally {
+      await visit.close();
+    }
+  });
+
+  test('resident lease preserves the original turn across window detach and reattachment', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final visit = await _Visit.open([_message(words: '我还在这儿。')], beforeReply: (_) async {
+      if (!entered.isCompleted) entered.complete();
+      await release.future;
+    });
+    const character = CompanionCharacter(name: '伙伴');
+    const sourceKey = 'builtin:companion/whale-girl';
+    visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
+    final background = _RoomUi();
+    final resident = visit.agent.retainAlwaysOn(root: Future.value(visit.root),
+      character: character, moves: const CompanionMoves(), sourceKey: sourceKey,
+      ui: background, mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+    CompanionAgentAttachment? reopened;
+    Future<void>? work;
+    try {
+      work = resident.submit('我先把页面收起来。');
+      await entered.future;
+      final source = visit.userSource;
+      final turn = visit.turn;
+      final role = resident.characterId;
+      expect(role, isNotNull);
+      expect(source['character_id'], role);
+      visit.attachment.detach();
+      expect(visit.attachment.isAttached, isFalse);
+      expect(resident.active, isTrue);
+      expect(visit.agent.running, isTrue);
+      release.complete();
+      await work;
+      expect(visit.requests, hasLength(1));
+      expect(visit.calls('clock'), 1);
+      expect(visit.userSource, source);
+      expect(visit.turn['id'], turn['id']);
+      expect(visit.turn['closed'], 1);
+      expect(visit.memory.store.requests().single['terminal'], 'complete');
+      expect(resident.recentMessages.map((row) => row['text']), ['我先把页面收起来。', '我还在这儿。']);
+      expect(resident.recentMessages.every((row) => row['character_id'] == role), isTrue);
+      reopened = visit.agent.attach(root: Future.value(visit.root), character: character,
+        moves: const CompanionMoves(), ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+      expect(await reopened.openMemory(), same(visit.memory));
+      expect(reopened.characterId, role);
+      expect(reopened.text, '我还在这儿。');
+      await visit.attachment.submit('旧窗口迟到的提交。');
+      expect(visit.requests, hasLength(1));
+      expect(visit.userSource, source);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await work;
+      reopened?.detach();
+      resident.close();
+      await visit.close();
+    }
+  });
+
+  test('a newer resident input cancels a held request and a late reply cannot replace the new source', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var physical = 0;
+    final visit = await _Visit.open([_message(words: '迟到的旧回答。'), _message(words: '我听见新的话了。')],
+      beforeReply: (_) async {
+        if (++physical == 1) { entered.complete(); await release.future; }
+      });
+    const character = CompanionCharacter(name: '伙伴');
+    const sourceKey = 'builtin:companion/whale-girl';
+    visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
+    final resident = visit.agent.retainAlwaysOn(root: Future.value(visit.root),
+      character: character, moves: const CompanionMoves(), sourceKey: sourceKey,
+      ui: _RoomUi(), mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+    Future<void>? old;
+    try {
+      old = resident.submit('第一句话。');
+      await entered.future;
+      final firstSource = visit.userSource;
+      await resident.submit('停一下，听这一句。');
+      final newSourceId = visit.agent.sourceId;
+      final newReplyId = visit.agent.replyId;
+      expect(newSourceId, isNot(firstSource['id']));
+      expect(visit.agent.text, '我听见新的话了。');
+      expect(visit.requests, hasLength(2));
+      release.complete();
+      await old;
+      expect(visit.agent.sourceId, newSourceId);
+      expect(visit.agent.replyId, newReplyId);
+      expect(visit.agent.text, '我听见新的话了。');
+      expect(visit.requests, hasLength(2));
+      expect(visit.calls('clock'), 2);
+      final history = visit.memory.store.messages();
+      expect(history.where((row) => row['role'] == 'user').map((row) => row['text']),
+        ['第一句话。', '停一下，听这一句。']);
+      expect(history.where((row) => row['role'] == 'assistant').map((row) => row['text']),
+        ['我听见新的话了。']);
+      expect(visit.memory.store.requests().map((row) => row['terminal']), containsAll(['cancelled', 'complete']));
+      expect(visit.memory.store.tasks(), isEmpty);
+      expect(visit.database.select('SELECT * FROM memory_agent_calls'), isEmpty);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await old;
+      resident.close();
       await visit.close();
     }
   });
