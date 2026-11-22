@@ -529,20 +529,17 @@ void main() {
       // Android's first system-voice initialization can also finish after stop.
       final readyEntered = Completer<void>();
       final ready = Completer<bool>();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-        channel,
-        (call) async {
-          calls.add(call);
-          if (call.method == 'ready') {
-            readyEntered.complete();
-            return ready.future;
-          }
-          return switch (call.method) {
-            'speak' || 'play' => true,
-            _ => null,
-          };
-        },
-      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'ready') {
+          readyEntered.complete();
+          return ready.future;
+        }
+        return switch (call.method) {
+          'speak' || 'play' => true,
+          _ => null,
+        };
+      });
       final systemPreview = speaker.preview(const CompanionVoiceSettings(on: true), '系统试听。');
       await readyEntered.future;
       speaker.stop();

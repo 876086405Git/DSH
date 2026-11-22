@@ -159,8 +159,14 @@ class _Line {
 /// sentence that can't be fetched or played is read in the phone's own voice
 /// when it has one. Events carry the loudness of fetched WAV audio for her mouth.
 class CompanionSpeaker {
-  CompanionSpeaker(this._voice, this._client, this._folder, [
-    this._deepseek, this._ohosCall, this._ohosOutput, this._ohos = false,
+  CompanionSpeaker(
+    this._voice,
+    this._client,
+    this._folder, [
+    this._deepseek,
+    this._ohosCall,
+    this._ohosOutput,
+    this._ohos = false,
   ]) {
     _native = _voice.events.listen(_heard);
   }
