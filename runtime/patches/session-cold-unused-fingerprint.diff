@@ -1,0 +1,10 @@
+--- a/node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js
+@@ -1067,6 +1067 @@
+-		documents: buildSessionEventSearchDocuments(detachedHeader.id, detachedEvents),
+-		fingerprint: createHash("sha256").update(JSON.stringify({
+-			header: detachedHeader,
+-			inheritedEventCount,
+-			events: detachedEvents
+-		})).digest("base64url")
++		documents: buildSessionEventSearchDocuments(detachedHeader.id, detachedEvents)

@@ -94,7 +94,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
     const current = read => guard(id,rev,timer.signal,owner,read);
     let completion, failure, entered = false;
     try {
-      current();
+      current(store.stored);
       entered = true;
       completion = await job({claim,signal:timer.signal,current});
     } catch (error) {
@@ -133,7 +133,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
       const record = current(), sources = originalSources(record), texts = {}, hashes = {};
       for (const source of sources) {
         try {
-          current();
+          current(store.stored);
           const input = store.input(record.agreement.args[source.side]);
           const read = await fs.dshGoReadNote(input.directory,input.entry,COMPARE_DRAFT_SOURCE_BYTES,signal);
           source.readComplete = true; source.reason = null;
@@ -167,7 +167,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
       if (!compareInputEstimate(body).accepted) throw new NotesTaskError('model_input_limit');
       const generated = await runTaskModel({store,claim,owner,signal,guard:()=>current(store.stored),system:compareSystem,input,
         capability,inputEstimate:compareInputEstimate,outputTokens:4000});
-      current();
+      current(store.stored);
       const candidate = {...proposal(generated.text,comparison),usage:generated.usage};
       await store.saveCandidate(claim,candidate);
       return {state:'done',reason:null,result:{suggestionCount:candidate.suggestions.items.length,
@@ -189,7 +189,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
       for (const source of sources) {
         if (!source.readComplete) continue;
         try {
-          guard(id,rev,timer.signal);
+          guard(id,rev,timer.signal,undefined,store.stored);
           const original = store.input(record.agreement.args[source.side]);
           const read = await fs.dshGoReadNote(original.directory,original.entry,COMPARE_DRAFT_SOURCE_BYTES,timer.signal);
           if (read.sha256 !== inputs.hashes[source.side]) throw Object.assign(new Error('source changed'),{code:'FS_STALE_VERSION'});
@@ -210,7 +210,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
         displayedChangeGroups:differences.length,algorithm:compared?.algorithm??null,gaps},
         identical:compared?.identical??null,differences,selection:candidate?'model':differences.length?'source_order':'none',suggestions};
       let interruption = null;
-      try {guard(id,rev,timer.signal);} catch (error) {interruption=reasonOf(timer.signal.aborted?timer.signal.reason:error);}
+      try {guard(id,rev,timer.signal,undefined,store.stored);} catch (error) {interruption=reasonOf(timer.signal.aborted?timer.signal.reason:error);}
       await store.finishCompare(claim,{report:result,elapsedMs:elapsed(start),interruption});
     } finally {timer.stop();}
   }
@@ -224,7 +224,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
     if (record.agreement.afterExit!=='continue') {await store.wait(id,rev,'foreground_control_unavailable');return;}
     let comparison = null, modelReason = null;
     try {
-      guard(id,rev,controller.signal);
+      guard(id,rev,controller.signal,undefined,store.stored);
       if (!stepAt(record,'readInputs')) comparison = await readInputs(id,rev,controller);
       record = guard(id,rev,controller.signal);
       const inputs = record.notes[String(rev)].inputs;
