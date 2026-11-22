@@ -85,6 +85,12 @@ class PetSheets {
     _evict();
   }
 
+  /// No pet shown: the last one's idle sheet goes back to the LRU too.
+  void unpin() {
+    _pinned.clear();
+    _evict();
+  }
+
   _Decode _start(String key, Future<Uint8List> Function() read) {
     final job = _Decode();
     _loading[key] = job;
