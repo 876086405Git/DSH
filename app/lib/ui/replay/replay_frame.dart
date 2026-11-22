@@ -110,6 +110,9 @@ class ReplayFrames {
     );
   }
 
+  /// Elapsed time in the original conversation, before replay pacing.
+  late final Duration originalSpan = share.span;
+
   /// The whole conversation, everything finished.
   ReplayFrame get end => at(double.infinity);
 
