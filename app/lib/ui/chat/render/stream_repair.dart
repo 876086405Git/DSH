@@ -338,9 +338,12 @@ class _InlineScan {
   }
 }
 
+final _inlineRepairMarker = RegExp(r'[`*_~\[<]');
+
 /// Closes what the last block left open: emphasis, a code span, a link
 /// destination; holds back a half-written image or HTML tag.
 String _repairInline(String tail) {
+  if (!_inlineRepairMarker.hasMatch(tail)) return tail;
   var text = tail;
   var scan = _InlineScan(text);
   // Each cut can expose another unfinished marker (`**a *` → `**a`).
