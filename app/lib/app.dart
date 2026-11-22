@@ -189,7 +189,11 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
         !appearance.loaded ||
         (appearance.source == AccentSource.wallpaper && ref.watch(wallpaperAccentProvider).isLoading);
     final locale = _resolveLocale();
-    final performance = ref.watch(performanceDefaultsProvider);
+    final performance = ref.watch(
+      performanceDefaultsProvider.select(
+        (p) => (blur: p.blur, reduceMotion: p.reduceMotion, fluidMotion: p.fluidMotion),
+      ),
+    );
     final reduced =
         performance.reduceMotion || WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     final fluid = performance.fluidMotion && !reduced;
