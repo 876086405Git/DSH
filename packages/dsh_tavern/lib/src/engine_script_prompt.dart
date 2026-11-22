@@ -654,7 +654,14 @@ class _ScriptPromptRun {
               if (message.role != 'system')
                 WorldInfoMessage(
                   message.content,
-                  speaker: message.role == 'user' ? environment.userName : _string(card['name']),
+                  // A stored message keeps its own speaker (a group's other
+                  // member); an override row without one is the user's or
+                  // the character's by its role.
+                  speaker: message.name.isNotEmpty
+                      ? message.name
+                      : message.role == 'user'
+                      ? environment.userName
+                      : _string(card['name']),
                 ),
           ];
     world = await owner.engine._worldInfoEngine.evaluate(
