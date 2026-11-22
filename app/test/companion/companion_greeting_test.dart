@@ -4,7 +4,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
@@ -775,7 +774,9 @@ void main() {
           expect(heard.last.type, CompanionVoiceEventType.done);
           await tester.pump(const Duration(seconds: 4));
           expect(stops(), beforeStops);
-          expect(spoken().map((call) => call['text']), [reply], reason: 'No deferred closer line after voice completion');
+          expect(spoken().map((call) => call['text']), [
+            reply,
+          ], reason: 'No deferred closer line after voice completion');
         } else {
           expect(room.speech(tester), closer);
           expect(spoken().map((call) => call['text']), [reply, closer]);
