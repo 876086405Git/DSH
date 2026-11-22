@@ -1415,8 +1415,8 @@ void main() {
           });
         } else if (outcome == 'ask-ai') {
           await tester.tap(find.byKey(const ValueKey('ask-ai-link')));
-          await settleMixed(tester, bridge.closed.future);
           await tester.pumpAndSettle();
+          await settleMixed(tester, bridge.closed.future);
           expect(find.byType(CompanionTasksPage), findsNothing);
           expect(room.container.read(composeInboxProvider).single.text, contains('本对话都允许'));
           expect(bridge.results, isEmpty);
