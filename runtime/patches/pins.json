@@ -400,14 +400,6 @@
         }
       }
     },
-    "ohos-cordis-catalog-lazy.diff": {
-      "0.2.2-rc.1": {
-        "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
-          "after": "d03cb1f3c28eca98d500d51467ed2491510a0d18cf5c0caf8fe576a8ecb7a428",
-          "before": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8"
-        }
-      }
-    },
     "ohos-forge-github-unavailable.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-experimental-forge-github/lib/index.js": {
@@ -2635,6 +2627,7 @@
   "targetSets": {
     "android": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-inspect-catalog-on-query.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
       "install-log-redaction.diff",
@@ -2826,6 +2819,7 @@
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-inspect-catalog-on-query.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
       "install-log-redaction.diff",
@@ -3048,7 +3042,6 @@
       "ohos-workspace-edit.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-image-codec.diff",
-      "ohos-cordis-catalog-lazy.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
