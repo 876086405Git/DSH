@@ -691,6 +691,12 @@ final _followupAsk = RegExp(
   r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(我)?',
 );
 
+final _otherRecipient = RegExp(
+  r'^(?:他|她|他们|她们|医生|大夫|护士|老师|教练|导师|我妈|我爸|妈妈|爸爸|老妈|老爸|爷爷|奶奶|外公|外婆|'
+  r'哥哥|姐姐|弟弟|妹妹|老板|领导|上司|经理|同事|同学|朋友|室友|房东|对象|老公|老婆|男朋友|女朋友|客服|物业|'
+  r'老[一-龥]|[一-龥]总)',
+);
+
 /// A small literal invitation grammar. Unsupported language remains waiting
 /// or has no opportunity; a model's explicit_invitation label is not authority.
 /// Source and card storage eligibility are checked by the caller separately.
@@ -724,11 +730,9 @@ MemoryRow? qualifyMemoryFollowup(MemoryRow card, MemoryRow source) {
   var afterDay = false;
   var reason = subject == null ? 'date_unresolved' : 'waiting_for_completion';
   if (ask != null) {
-    // Keep every original head in the uniqueness check. Inspect the tail
-    // before optional 我 consumption; these two known recipients are not a
-    // general person-name classifier or a restriction on the topic itself.
+    // 「问医生/问我妈/问老师……」是让本人去问别人，不是请她回头来问。
     final recipient = '${ask.group(3) ?? ''}${asks.single.substring(ask.end)}';
-    if (recipient.startsWith('医生') || recipient.startsWith('我妈')) return null;
+    if (_otherRecipient.hasMatch(recipient)) return null;
     date = _followupDay(ask.group(1) ?? '', source);
     if (date == null && event != null && ask.group(2) != null) {
       date = _followupDay(event['wording'] as String, source);
