@@ -124,7 +124,11 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
                 pending?.success(mapOf("texture" to id, "width" to p.videoWidth, "height" to p.videoHeight, "durationMs" to p.duration, "rotation" to rotation))
             }
             clips[id] = clip
-            val timeout = Runnable { if (clip.pending != null) close(id, "timeout") }
+            val timeout = Runnable {
+                // A prepared player still opens; an unread rotation just falls back to none.
+                if (clip.pending == null) return@Runnable
+                if (clip.prepared) { clip.rotation = clip.rotation ?: 0; publish() } else close(id, "timeout")
+            }
             clip.timeout = timeout
             main.postDelayed(timeout, 20_000)
             surface.setCallback(object : TextureRegistry.SurfaceProducer.Callback {
