@@ -419,9 +419,11 @@ test('read results are detached from durable memory and queued upserts capture t
   input.expectedRevision = 999;
   const saved = await pending;
   assert.equal(saved.memory.text, 'Original confirmed text.');
+  const clone = t.mock.method(globalThis, 'structuredClone');
   const list = await f.store.getMemories();
   const context = await f.store.getContext({ query: 'confirmed' });
   const exported = await f.store.exportData();
+  assert.equal(clone.mock.callCount(), 0);
   list.memories[0].text = 'Changed list response.';
   context.memories[0].keywords.push('changed');
   exported.memories[0].source.kind = 'user-confirmed';

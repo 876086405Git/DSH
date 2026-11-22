@@ -49,7 +49,7 @@ function selectContext(doc, query, limit, now) {
   // Expiry changes retrieval without a write/revision. Clients should fetch each turn;
   // this boundary also prevents a revision-only cache from serving expired records.
   const expiries = candidates.map(({ memory }) => memory.expiresAt).filter((at) => at !== null);
-  return { ...envelope(doc), memories: copy(memories), truncated, textCodePoints,
+  return { ...envelope(doc), memories, truncated, textCodePoints,
     nextExpiryAt: expiries.length === 0 ? null : Math.min(...expiries) };
 }
 
@@ -156,14 +156,14 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
         asOf: at, ...selectRecallContext(doc.memories, at) }));
     },
     getSnapshot() { return transaction((doc, at) => snapshot(doc, at)); },
-    getMemories() { return transaction((doc) => ({ ...envelope(doc), memories: copy(doc.memories) })); },
+    getMemories() { return transaction((doc) => ({ ...envelope(doc), memories: doc.memories })); },
     getContext(input) {
       const { query, limit } = validateContext(input);
       return transaction((doc, at) => selectContext(doc, query, limit, at));
     },
     exportData() {
       return transaction((doc, at) => ({ schema: "dsh-go/companion-export", ...snapshot(doc, at),
-        exportedAt: at, memories: copy(doc.memories) }));
+        exportedAt: at, memories: doc.memories }));
     },
     event(input) {
       validateWrite(input, ["type"]);
