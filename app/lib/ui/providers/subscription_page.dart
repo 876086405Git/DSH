@@ -61,7 +61,10 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       ),
     );
     if (ok != true || !mounted) return;
-    if (_official && ref.read(officialChatGptStatusProvider)?.signedIn != true) return;
+    if (_official) {
+      final current = ref.read(officialChatGptStatusProvider);
+      if (current == null || (!current.signedIn && !current.signOutPending)) return;
+    }
     final backend = ref.read(subscriptionBackendProvider);
     if (backend == null) return;
     setState(() => _busy = true);
@@ -79,10 +82,14 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
         Navigator.of(context).pop();
         return;
       }
+      final cleanupFailed = _official && error is DshRemoteException && error.code == 'app-auth/sign-out-failed';
+      if (cleanupFailed) refreshAfterSubscriptionChange(ref);
       setState(() => _busy = false);
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(SnackBar(content: Text(context.l10n.engineSubscriptionSignOutFailed(describeLoginError(error)))));
+      final l10n = context.l10n;
+      final reason = cleanupFailed ? l10n.commonFailedTryAgain : describeLoginError(error);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(l10n.engineSubscriptionSignOutFailed(reason))),
+      );
     }
   }
 
@@ -119,7 +126,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
     final status = _official
         ? ref.watch(officialChatGptStatusProvider)
         : ref.watch(subscriptionsProvider).value?.of(widget.subscription);
-    final signedIn = status?.signedIn ?? false;
+    final signOutPending = _official && (status?.signOutPending ?? false);
+    final signedIn = !signOutPending && (status?.signedIn ?? false);
     final catalog = ref.watch(modelCatalogProvider);
     final wire = widget.subscription.wire;
     // The pi-ai route this subscription declared: the model overrides hang off
@@ -172,7 +180,9 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               ],
             ),
             gap,
-            if (_official && signedIn && status?.planEnabled == false)
+            if (signOutPending)
+              FeatureNote(l10n.engineSubscriptionSignOutFailed(l10n.commonRetry))
+            else if (_official && signedIn && status?.planEnabled == false)
               FeatureMessage(
                 icon: AppIcons.account,
                 title: l10n.engineSubscriptionPlanNotEnabled,
@@ -211,7 +221,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             Center(
               child: TextButton.icon(
                 style: TextButton.styleFrom(foregroundColor: colors.danger),
-                onPressed: _busy || !signedIn ? null : _signOut,
+                onPressed: _busy || (!signedIn && !signOutPending) ? null : _signOut,
                 icon: const Icon(AppIcons.logout, size: 19),
                 label: Text(l10n.commonSignOut),
               ),

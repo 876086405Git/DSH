@@ -353,8 +353,8 @@ class FakeSubscriptionBackend implements SubscriptionBackend {
   }
 
   @override
-  Future<String> begin(Subscription subscription) async {
-    calls.add('begin:${subscription.wire}');
+  Future<String> begin(Subscription subscription, {bool newAccount = false}) async {
+    calls.add('begin:${subscription.wire}${newAccount ? ':newAccount' : ''}');
     if (beginError case final error?) throw error;
     _polled = 0;
     return 'att-${++_attempts}';

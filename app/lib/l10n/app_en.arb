@@ -2491,6 +2491,8 @@
   "engineProvidersSignInOrKey": "Sign in or enter an API key",
   "engineProvidersOfficial": "Official",
   "engineProvidersChatGptOfficial": "Official ChatGPT subscription",
+  "engineSubscriptionReconnectAccount": "Sign in to previous account",
+  "engineSubscriptionUseAnotherAccount": "Use another account",
   "engineSubscriptionPlanNotEnabled": "This grant does not allow ChatGPT subscription models.",
   "engineSubscriptionRevocationUnconfirmed": "Signed out on this phone, but OpenAI revocation could not be confirmed.",
   "engineProvidersSubscription": "Subscriptions",

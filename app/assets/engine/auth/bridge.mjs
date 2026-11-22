@@ -408,14 +408,24 @@ export class AuthBridge {
     if (siwc) {
       const status = await siwc.oauth.status().catch(() => ({ signedIn: false }))
       const account = status.account?.email
-      providers.push({ id: SIWC_PROVIDER, signedIn: status.signedIn, planEnabled: status.planEnabled === true, ...(account ? { account } : {}) })
+      providers.push({
+        id: SIWC_PROVIDER,
+        signedIn: status.signedIn,
+        planEnabled: status.planEnabled === true,
+        ...(account ? { account } : {}),
+        ...(status.reconnectAvailable === true ? { reconnectAvailable: true } : {}),
+        ...(status.signOutPending === true ? { signOutPending: true } : {}),
+      })
     }
     return { providers }
   }
 
   /** `appAuth/begin`: starts a sign-in and returns its id at once; progress is polled. */
-  async begin(provider) {
+  async begin(provider, newAccount) {
     const spec = this.#spec(provider)
+    if (newAccount === true && !spec.siwc) {
+      throw new this.#RemoteError('app-auth/unknown-provider', '不支持这个登录方式', {})
+    }
     this.#prune()
     // Tapping "sign in" again replaces the attempt in flight (DSH runs one per key).
     const previous = this.#liveByProvider.get(provider)
@@ -432,7 +442,7 @@ export class AuthBridge {
       this.#abort(attempt)
     }, this.#ttlMs)
     attempt.timer.unref?.()
-    attempt.done = this.#run(attempt, spec, previous !== undefined)
+    attempt.done = this.#run(attempt, spec, previous !== undefined, newAccount === true)
     return { attemptId: attempt.id }
   }
 
@@ -513,6 +523,12 @@ export class AuthBridge {
     return {}
   }
 
+  /** A detached LLM owner no longer accepts an uncommitted OpenAI sign-in. */
+  withdrawOpenAiAttempt() {
+    const attempt = this.#liveByProvider.get(SIWC_PROVIDER)
+    if (attempt) this.cancel(attempt.id)
+  }
+
   /** Withdraws every attempt (plugin unload). */
   dispose() {
     for (const attempt of this.#attempts.values()) {
@@ -524,9 +540,9 @@ export class AuthBridge {
 
   // ── one attempt ─────────────────────────────────────────────────────────
 
-  async #run(attempt, spec, replaced) {
+  async #run(attempt, spec, replaced, newAccount) {
     const { provider } = attempt
-    if (spec.siwc) return this.#runSiwc(attempt, spec.siwc)
+    if (spec.siwc) return this.#runSiwc(attempt, spec.siwc, newAccount)
     const key = recordKeyFor(provider)
     try {
       const authorization = this.#get('authorization')
@@ -571,19 +587,21 @@ export class AuthBridge {
     }
   }
 
-  async #runSiwc(attempt, siwc) {
+  async #runSiwc(attempt, siwc, newAccount) {
     try {
       await siwc.oauth.signIn({
+        newAccount,
         signal: attempt.controller.signal,
         notify: (url) => this.#onNotice(attempt, { url }),
       })
       siwc.invalidate()
-      if (attempt.controller.signal.aborted) this.#finishWithdrawn(attempt)
-      else this.#finish(attempt, 'done')
+      // A returned authorization has already committed. Late cancellation did not undo it.
+      this.#finish(attempt, 'done')
     } catch (error) {
       if (attempt.controller.signal.aborted) this.#finishWithdrawn(attempt)
       else this.#finish(attempt, 'failed', error?.code === 'siwc_access_denied' ? ERRORS.denied
-        : error?.code === 'siwc_network' ? ERRORS.network : ERRORS.generic)
+        : error?.code === 'siwc_network' ? ERRORS.network
+          : error?.code === 'siwc_sign_out_incomplete' ? ERRORS.signOut : ERRORS.generic)
     }
   }
 

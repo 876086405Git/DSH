@@ -8042,6 +8042,12 @@ class L10nZh extends L10n {
   String get engineProvidersChatGptOfficial => 'ChatGPT 官方订阅';
 
   @override
+  String get engineSubscriptionReconnectAccount => '登录原账号';
+
+  @override
+  String get engineSubscriptionUseAnotherAccount => '使用其他账号';
+
+  @override
   String get engineSubscriptionPlanNotEnabled => '此授权无法使用 ChatGPT 订阅模型。';
 
   @override

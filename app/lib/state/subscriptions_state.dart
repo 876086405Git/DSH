@@ -47,7 +47,7 @@ String describeLoginError(Object error) {
 abstract class SubscriptionBackend {
   Future<List<SubscriptionStatus>> list();
 
-  Future<String> begin(Subscription subscription);
+  Future<String> begin(Subscription subscription, {bool newAccount = false});
 
   Future<LoginStep> poll(String attemptId);
 
@@ -67,7 +67,8 @@ class ClientSubscriptionBackend implements SubscriptionBackend {
   Future<List<SubscriptionStatus>> list() => client.subscriptions();
 
   @override
-  Future<String> begin(Subscription subscription) => client.beginLogin(subscription);
+  Future<String> begin(Subscription subscription, {bool newAccount = false}) =>
+      client.beginLogin(subscription, newAccount: newAccount);
 
   @override
   Future<LoginStep> poll(String attemptId) => client.pollLogin(attemptId);
@@ -179,10 +180,11 @@ final subscriptionProfileProvider = FutureProvider.autoDispose.family<ProviderPr
 /// [close] stops polling and requests cancellation unless the engine has
 /// reported the attempt finished.
 class LoginSession extends ChangeNotifier {
-  LoginSession(this.backend, this.subscription, {this.interval = const Duration(seconds: 1)});
+  LoginSession(this.backend, this.subscription, {this.newAccount = false, this.interval = const Duration(seconds: 1)});
 
   final SubscriptionBackend backend;
   final Subscription subscription;
+  final bool newAccount;
   final Duration interval;
 
   LoginStep _step = const LoginStep(phase: LoginPhase.starting);
@@ -215,7 +217,7 @@ class LoginSession extends ChangeNotifier {
     if (previous != null) unawaited(backend.cancel(previous).catchError((_) {}));
     _set(const LoginStep(phase: LoginPhase.starting));
     try {
-      final id = await backend.begin(subscription);
+      final id = await backend.begin(subscription, newAccount: newAccount);
       if (_closed) {
         unawaited(backend.cancel(id).catchError((_) {}));
         return;

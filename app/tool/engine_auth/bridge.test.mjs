@@ -525,6 +525,52 @@ test('official OpenAI is published only with its own adapter and preserves the o
   assert.doesNotMatch(logs.join(' '), /private-test-state|private-subject|private-upstream-error/)
 })
 
+test('only an explicit OpenAI login requests new account registration', async () => {
+  const attempts = []
+  const { bridge } = setup({ siwc: () => ({
+    invalidate() {},
+    oauth: {
+      status: async () => ({ signedIn: false, reconnectAvailable: true }),
+      signIn: async ({ newAccount }) => { attempts.push(newAccount) },
+    },
+  }) })
+  assert.deepEqual((await bridge.list()).providers.at(-1), {
+    id: 'openai-siwc', signedIn: false, planEnabled: false, reconnectAvailable: true,
+  })
+  for (const options of [[], [true]]) {
+    const { attemptId } = await bridge.begin('openai-siwc', ...options)
+    await waitFor(bridge, attemptId, phase('done'))
+  }
+  assert.deepEqual(attempts, [false, true])
+  await assert.rejects(bridge.begin('openai-codex', true), { code: 'app-auth/unknown-provider' })
+})
+
+test('OpenAI withdraws the browser on owner teardown but reports an acknowledged commit as done', async () => {
+  const committed = deferred()
+  let saving = false
+  const { bridge } = setup({ siwc: () => ({
+    invalidate() {},
+    oauth: {
+      signIn: ({ signal, notify }) => {
+        notify('https://auth.openai.com/authorize')
+        if (saving) return committed.promise
+        return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+      },
+    },
+  }) })
+  const browser = await bridge.begin('openai-siwc')
+  await waitFor(bridge, browser.attemptId, phase('open'))
+  bridge.withdrawOpenAiAttempt()
+  await waitFor(bridge, browser.attemptId, phase('cancelled'))
+
+  saving = true
+  const persisted = await bridge.begin('openai-siwc')
+  await waitFor(bridge, persisted.attemptId, phase('open'))
+  bridge.cancel(persisted.attemptId)
+  committed.resolve()
+  await waitFor(bridge, persisted.attemptId, phase('done'))
+})
+
 test('accountOf: email, then plan, never for an opaque token', () => {
   assert.equal(accountOf('openai-codex', { access: CODEX_TOKEN }), 'tester@example.invalid')
   assert.equal(accountOf('openai-codex', { access: fakeCodexToken({ 'https://api.openai.com/auth': { chatgpt_plan_type: 'pro' } }) }), 'ChatGPT Pro')
@@ -563,6 +609,6 @@ test('index.mjs loads the host protocol package and exposes SRC-compatible Remot
   }
   assert.deepEqual(
     Object.fromEntries(['list', 'usage', 'begin', 'poll', 'answer', 'cancel', 'signOut'].map((m) => [m, wireNames(m)])),
-    { list: [], usage: ['provider'], begin: ['provider'], poll: ['attemptId'], answer: ['attemptId', 'value'], cancel: ['attemptId'], signOut: ['provider'] },
+    { list: [], usage: ['provider'], begin: ['provider', 'newAccount'], poll: ['attemptId'], answer: ['attemptId', 'value'], cancel: ['attemptId'], signOut: ['provider'] },
   )
 })

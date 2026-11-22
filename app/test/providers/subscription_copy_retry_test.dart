@@ -29,8 +29,8 @@ class _Backend extends FakeSubscriptionBackend {
   final pollTimes = <DateTime>[];
 
   @override
-  Future<String> begin(Subscription subscription) {
-    final operation = super.begin(subscription);
+  Future<String> begin(Subscription subscription, {bool newAccount = false}) {
+    final operation = super.begin(subscription, newAccount: newAccount);
     starts.add(operation);
     return operation;
   }

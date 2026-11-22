@@ -44,7 +44,14 @@ enum Subscription {
 
 /// Sign-in state of one subscription.
 class SubscriptionStatus {
-  const SubscriptionStatus({required this.subscription, required this.signedIn, this.account, this.planEnabled});
+  const SubscriptionStatus({
+    required this.subscription,
+    required this.signedIn,
+    this.account,
+    this.planEnabled,
+    this.reconnectAvailable = false,
+    this.signOutPending = false,
+  });
 
   factory SubscriptionStatus.fromJson(Subscription subscription, Map<String, Object?> json) => SubscriptionStatus(
     subscription: subscription,
@@ -54,6 +61,8 @@ class SubscriptionStatus {
       final bool value => value,
       _ => null,
     },
+    reconnectAvailable: json['reconnectAvailable'] == true,
+    signOutPending: json['signOutPending'] == true,
   );
 
   final Subscription subscription;
@@ -65,6 +74,12 @@ class SubscriptionStatus {
   /// Whether the official ChatGPT grant permits subscription inference.
   /// Omitted for older bridges and legacy subscriptions.
   final bool? planEnabled;
+
+  /// The host has a saved registration for the signed-out official account.
+  final bool reconnectAvailable;
+
+  /// Sign-out cleanup failed; the host blocks login until cleanup is retried.
+  final bool signOutPending;
 }
 
 /// A provider-reported usage window. Percent is used, not remaining.
@@ -196,9 +211,10 @@ extension DshSubscriptions on DshClient {
   }
 
   /// `appAuth/begin`: starts a sign-in; returns the attempt id to poll.
-  Future<String> beginLogin(Subscription subscription) async {
-    final result = asMap(await rpc.call('appAuth/begin', {'provider': subscription.wire})) ?? const {};
-    final id = asString(result['attemptId']);
+  /// [newAccount] opts out of reusing the official ChatGPT registration.
+  Future<String> beginLogin(Subscription subscription, {bool newAccount = false}) async {
+    final result = await rpc.call('appAuth/begin', {'provider': subscription.wire, if (newAccount) 'newAccount': true});
+    final id = asString(asMap(result)?['attemptId']);
     if (id == null) throw const FormatException('appAuth/begin: no attemptId');
     return id;
   }

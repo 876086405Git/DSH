@@ -170,6 +170,30 @@ void main() {
       }
     });
 
+    test('only literal true advertises official reconnect or pending cleanup', () async {
+      for (final available in <Object?>[true, false, null, 'true']) {
+        final client = DshClient.withCarrier(
+          _ScriptedCarrier({
+            'appAuth/list': (_) => ok({
+              'providers': [
+                {
+                  'id': 'openai-siwc',
+                  'signedIn': false,
+                  'reconnectAvailable': ?available,
+                  'signOutPending': ?available,
+                },
+              ],
+            }),
+          }),
+        );
+        final status = (await client.subscriptions()).single;
+        expect(status.subscription, Subscription.chatgptOfficial);
+        expect(status.signedIn, isFalse);
+        expect(status.reconnectAvailable, available == true);
+        expect(status.signOutPending, available == true);
+      }
+    });
+
     test('unknown ids, malformed entries and non-true flags are dropped or read as signed out', () async {
       final client = DshClient.withCarrier(
         _ScriptedCarrier({
@@ -233,6 +257,23 @@ void main() {
         [
           'appAuth/begin',
           {'provider': 'openai-siwc'},
+        ],
+      ]);
+    });
+
+    test('only opting into another account adds newAccount to the request', () async {
+      final carrier = _ScriptedCarrier({'appAuth/begin': (_) => ok({'attemptId': 'a1'})});
+      final client = DshClient.withCarrier(carrier);
+      expect(await client.beginLogin(Subscription.chatgptOfficial, newAccount: false), 'a1');
+      expect(await client.beginLogin(Subscription.chatgptOfficial, newAccount: true), 'a1');
+      expect(_sent(carrier), [
+        [
+          'appAuth/begin',
+          {'provider': 'openai-siwc'},
+        ],
+        [
+          'appAuth/begin',
+          {'provider': 'openai-siwc', 'newAccount': true},
         ],
       ]);
     });

@@ -22,7 +22,7 @@ const ACCOUNT = { subject: 'mock-subject', email: 'mock@example.invalid' }
 const OUT = { signedIn: false, planEnabled: false }
 const IN = { signedIn: true, planEnabled: true, account: ACCOUNT }
 const META = { ...ACCOUNT, clientId: CLIENT, scopes: [] }
-const SIGNED_OUT_META = { ...META, signedOut: true }
+const RECONNECT = { ...OUT, reconnectAvailable: true }
 const key = generateKeyPairSync('rsa', { modulusLength: 2048 })
 const jwk = { ...key.publicKey.export({ format: 'jwk' }), kid: 'mock-kid', alg: 'RS256', use: 'sig' }
 
@@ -50,7 +50,7 @@ const rotation = (fields = {}) => Response.json({
   access_token: 'rotated-access', refresh_token: 'rotated-refresh', token_type: 'Bearer', expires_in: 3600, ...fields,
 })
 
-function fixture({ exchange, revoke = () => new Response(null), keys = () => Response.json({ keys: [jwk] }), initial = null, discovery, save, onGrantLost } = {}) {
+function fixture({ exchange, revoke = () => new Response(null), keys = () => Response.json({ keys: [jwk] }), initial = null, discovery, save, onClear, onGrantLost } = {}) {
   let record = initial
   const saves = [], calls = []
   const store = {
@@ -60,7 +60,10 @@ function fixture({ exchange, revoke = () => new Response(null), keys = () => Res
       saves.push(structuredClone(value))
       record = structuredClone(value)
     },
-    async clear() { record = null },
+    async clear() {
+      await onClear?.()
+      record = null
+    },
   }
   async function fetch(url, options) {
     const form = options.body && Object.fromEntries(options.body)
@@ -103,8 +106,8 @@ function callbackOf(auth, fields = {}) {
   return redirect
 }
 
-function signInAs(oauth, inspect, fields = { client_id: CLIENT }) {
-  return oauth.signIn({ notify: async (url) => {
+function signInAs(oauth, inspect, fields = { client_id: CLIENT }, newAccount = false) {
+  return oauth.signIn({ newAccount, notify: async (url) => {
     const auth = new URL(url)
     await inspect(auth)
     await hit(callbackOf(auth, fields))
@@ -185,6 +188,37 @@ test('validated existing client can be reused; swapped client and subject never 
   for (const key of ['state', 'nonce', 'code_challenge']) {
     assert.equal(new Set(auths.map((url) => url.searchParams.get(key))).size, 3)
   }
+})
+
+test('reconnect reuses the saved client, and switching requires explicit intent after sign-out', async () => {
+  const otherClient = 'oaiapp_other'
+  const otherAccount = { subject: 'other-subject', email: 'other@example.invalid' }
+  let nonce, offline = false
+  const f = fixture({ initial: { ...META, signedOut: true }, exchange: (form) => {
+    if (offline) throw new Error('mock network failure')
+    const claims = form.client_id === otherClient ? { aud: otherClient, sub: otherAccount.subject, email: otherAccount.email } : {}
+    return Response.json(tokens(nonce, { claims }))
+  } })
+  const inspect = (clientId) => (auth) => {
+    assert.equal(auth.searchParams.get('client_id'), clientId)
+    assert.equal(auth.searchParams.get('ext_agent_host_id'), HOST)
+    nonce = auth.searchParams.get('nonce')
+  }
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
+  assert.deepEqual(await signInAs(f.oauth, inspect(CLIENT), {}), IN)
+  await assert.rejects(f.oauth.signIn({ newAccount: true, notify: () => assert.fail('must not notify') }), { code: 'siwc_sign_out_required' })
+  await f.oauth.signOut()
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
+  const dynamic = inspect('dynamic_agent_client')
+  await assert.rejects(signInAs(f.oauth, dynamic, { code: null, error: 'access_denied' }, true), { code: 'siwc_access_denied' })
+  offline = true
+  await assert.rejects(signInAs(f.oauth, dynamic, { client_id: otherClient }, true), { code: 'siwc_network' })
+  assert.deepEqual(f.record(), META)
+  assert.deepEqual(await f.open().status(), RECONNECT)
+  offline = false
+  assert.deepEqual(await signInAs(f.oauth, dynamic, { client_id: otherClient }, true), { ...IN, account: otherAccount })
+  assert.equal(f.record().clientId, otherClient)
+  assert.deepEqual(await f.open().status(), { ...IN, account: otherAccount })
 })
 
 test('invalid_grant restarts only once with the issued client and a new verifier', async () => {
@@ -292,11 +326,60 @@ test('one refresh for concurrent readers; one cancellation does not cancel rotat
   assert.equal(await f.open().token(), 'rotated-access')
 })
 
+test('refresh scope loss invalidates once after save, while keeping the account signed in', async () => {
+  const scope = 'openid profile email offline_access resource.invoke'
+  let failSave = true
+  const notices = []
+  const f = fixture({
+    initial: expired(),
+    exchange: () => rotation({ scope }),
+    save: () => { if (failSave) throw new Error('mock storage error') },
+    onGrantLost: () => notices.push(f.record().scopes),
+  })
+  await assert.rejects(f.oauth.token(), { code: 'siwc_store_failed' })
+  assert.deepEqual(notices, [])
+  assert.deepEqual(f.record().scopes, SCOPE.split(' '))
+  failSave = false
+  await assert.rejects(f.oauth.token(), { code: 'siwc_plan_permission_missing' })
+  await assert.rejects(f.oauth.token(), { code: 'siwc_plan_permission_missing' })
+  const signedInWithoutPlan = { ...IN, planEnabled: false }
+  assert.deepEqual(await f.oauth.status(), signedInWithoutPlan)
+  assert.deepEqual(await f.open().status(), signedInWithoutPlan)
+  assert.deepEqual(notices, [scope.split(' ')])
+  assert.equal(f.record().refreshToken, 'rotated-refresh')
+  assert.equal(f.calls.filter(({ url }) => url === TOKEN).length, 1)
+})
+
+test('JWKS-pending scope loss invalidates once; saving verified identity does not repeat it', async () => {
+  const scope = 'openid profile email offline_access resource.invoke'
+  let available = false
+  const notices = []
+  const f = fixture({
+    initial: expired(),
+    exchange: () => rotation({ scope, id_token: tokens('old-nonce').id_token }),
+    keys: () => available ? Response.json({ keys: [jwk] }) : new Response(null, { status: 503 }),
+    onGrantLost: () => notices.push(f.record().scopes),
+  })
+  await assert.rejects(f.oauth.token(), { code: 'siwc_unavailable' })
+  assert.equal(f.record().pendingIdentity, true)
+  assert.deepEqual(await f.oauth.status(), { ...IN, planEnabled: false })
+  assert.deepEqual(notices, [scope.split(' ')])
+  await assert.rejects(f.oauth.token(), { code: 'siwc_unavailable' })
+  assert.deepEqual(notices, [scope.split(' ')])
+  available = true
+  await assert.rejects(f.oauth.token(), { code: 'siwc_plan_permission_missing' })
+  await assert.rejects(f.open().token(), { code: 'siwc_plan_permission_missing' })
+  assert.equal(f.record().pendingIdentity, undefined)
+  assert.deepEqual(notices, [scope.split(' ')])
+  assert.equal(f.calls.filter(({ url }) => url === TOKEN).length, 1)
+})
+
 test('temporary JWKS failure persists rotation without returning an unverified access token', async (t) => {
   for (const action of ['retry', 'sign out', 'reject']) await t.test(action, async () => {
-    let unavailable = true
+    let unavailable = true, lost = 0
     const f = fixture({
       initial: expired(),
+      onGrantLost: () => lost++,
       exchange: () => rotation({ id_token: tokens('old-nonce', { forged: action === 'reject' }).id_token }),
       keys: () => unavailable ? new Response(null, { status: 503 }) : Response.json({ keys: [jwk] }),
     })
@@ -307,7 +390,7 @@ test('temporary JWKS failure persists rotation without returning an unverified a
     if (action === 'sign out') {
       await restarted.signOut()
       assert.equal(f.calls.at(-1).form.token, 'rotated-refresh')
-      assert.deepEqual(f.record(), SIGNED_OUT_META)
+      assert.deepEqual(f.record(), META)
     } else {
       unavailable = false
       if (action === 'retry') {
@@ -319,6 +402,7 @@ test('temporary JWKS failure persists rotation without returning an unverified a
       }
     }
     assert.equal(f.calls.filter(({ url }) => url === TOKEN).length, 1)
+    assert.equal(lost, action === 'reject' ? 1 : 0)
   })
 })
 
@@ -332,17 +416,17 @@ test('sign-out hides account immediately, revokes the rotated token, and persist
   const inFlight = assert.rejects(f.oauth.token(), { code: 'siwc_sign_in_required' })
   await started.promise
   const out = f.oauth.signOut()
-  assert.deepEqual(await f.oauth.status(), OUT)
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
   await assert.rejects(f.oauth.token(), { code: 'siwc_sign_in_required' })
   ready.resolve()
   await Promise.all([out, inFlight])
   assert.deepEqual(f.calls.at(-1), {
     url: REVOKE, form: { token: 'rotated-refresh', token_type_hint: 'refresh_token', client_id: CLIENT },
   })
-  assert.deepEqual(f.saves, [SIGNED_OUT_META])
-  assert.deepEqual(await f.open().status(), OUT)
+  assert.deepEqual(f.saves, [META])
+  assert.deepEqual(await f.open().status(), RECONNECT)
   await assert.rejects(signInAs(f.open(), (auth) => {
-    assert.equal(auth.searchParams.get('client_id'), 'dynamic_agent_client')
+    assert.equal(auth.searchParams.get('client_id'), CLIENT)
     assert.equal(auth.searchParams.get('ext_agent_host_id'), HOST)
     assert.equal(auth.searchParams.has('id_token_hint'), false)
   }, { code: null, error: 'access_denied' }), { code: 'siwc_access_denied' })
@@ -360,9 +444,9 @@ test('sign-out aborts reauthorization and does not allow its delayed token respo
   await f.oauth.signOut()
   ready.resolve(Response.json(tokens(nonce)))
   await attempt
-  assert.deepEqual(f.saves, [SIGNED_OUT_META])
+  assert.deepEqual(f.saves, [META])
   assert.equal(f.calls.at(-1).form.token, 'old-refresh')
-  assert.deepEqual(await f.oauth.status(), OUT)
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
 })
 
 test('sign-out waits for an already-started sign-in save and removes the committed tokens', async () => {
@@ -383,8 +467,8 @@ test('sign-out waits for an already-started sign-in save and removes the committ
   ready.resolve()
   await Promise.all([out, attempt])
   assert.equal(f.calls.at(-1).form.token, 'mock-refresh')
-  assert.deepEqual(f.record(), SIGNED_OUT_META)
-  assert.deepEqual(await f.open().status(), OUT)
+  assert.deepEqual(f.record(), META)
+  assert.deepEqual(await f.open().status(), RECONNECT)
 })
 
 test('terminal refresh clears credentials; transient refresh and its secret text do not', async () => {
@@ -411,10 +495,46 @@ test('terminal refresh clears credentials; transient refresh and its secret text
   }, { code: null, error: 'access_denied' }), { code: 'siwc_access_denied' })
 })
 
+test('failed metadata save falls back to clear and preserves the revocation outcome', async (t) => {
+  for (const status of [200, 400]) await t.test(String(status), async () => {
+    const f = fixture({
+      initial: expired(),
+      revoke: () => new Response(null, { status }),
+      save: () => { throw new Error('mock metadata failure') },
+    })
+    if (status === 200) await f.oauth.signOut()
+    else await assert.rejects(f.oauth.signOut(), { code: 'siwc_revocation_unconfirmed' })
+    assert.equal(f.record(), null)
+    assert.deepEqual(await f.oauth.status(), RECONNECT)
+    assert.deepEqual(await f.open().status(), OUT)
+  })
+})
+
+test('failed local sign-out is visible and a retry can revoke without re-enabling inference', async () => {
+  let fail = true
+  const f = fixture({
+    initial: expired(),
+    revoke: () => new Response(null, { status: fail ? 400 : 200 }),
+    save: () => { if (fail) throw new Error('mock metadata failure') },
+    onClear: () => { if (fail) throw new Error('mock clear failure') },
+  })
+  await assert.rejects(f.oauth.signOut(), { code: 'siwc_sign_out_incomplete' })
+  assert.deepEqual(await f.oauth.status(), { ...RECONNECT, signOutPending: true })
+  assert.equal(f.record().refreshToken, 'old-refresh')
+  await assert.rejects(f.oauth.token(), { code: 'siwc_sign_out_incomplete' })
+  await assert.rejects(f.oauth.signIn({ notify: () => assert.fail('must not notify') }), { code: 'siwc_sign_out_incomplete' })
+  fail = false
+  await f.oauth.signOut()
+  assert.deepEqual(f.calls.filter(({ url }) => url === REVOKE).map(({ form }) => form.token), ['old-refresh', 'old-refresh'])
+  assert.deepEqual(f.record(), META)
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
+  await assert.rejects(f.oauth.token(), { code: 'siwc_sign_in_required' })
+})
+
 test('unconfirmed revocation still clears tokens and refuses an untrusted discovered endpoint', async () => {
   const f = fixture({ initial: expired(), discovery: { issuer: ISSUER, revocation_endpoint: 'https://mock.invalid/revoke' } })
   await assert.rejects(f.oauth.signOut(), { code: 'siwc_revocation_unconfirmed' })
   assert.deepEqual(f.calls, [{ url: DISCOVERY, form: undefined }])
-  assert.deepEqual(await f.oauth.status(), OUT)
-  assert.deepEqual(f.record(), SIGNED_OUT_META)
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
+  assert.deepEqual(f.record(), META)
 })

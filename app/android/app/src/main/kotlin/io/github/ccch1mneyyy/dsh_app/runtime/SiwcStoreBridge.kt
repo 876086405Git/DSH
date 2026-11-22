@@ -32,7 +32,7 @@ internal class SiwcStoreBridge private constructor(
     private val secret: ByteArray,
 ) : AutoCloseable {
     private val server = LocalServerSocket(address)
-    private var closed = false
+    @Volatile private var closed = false
     private var active: LocalSocket? = null
 
     // DshProcess redacts this environment variable (SECRET_KEY). It contains no OAuth data.
@@ -77,6 +77,14 @@ internal class SiwcStoreBridge private constructor(
         }
     }
 
+    // Recheck this launch after acquiring the cross-launch vault lock. An operation
+    // already admitted can finish, but always before any new launch accesses the vault.
+    // close() only marks retirement and shuts down sockets; it never waits for the vault.
+    private inline fun <T> withVault(action: SiwcVault.() -> T): T = synchronized(SiwcVault) {
+        check(!closed)
+        SiwcVault.action()
+    }
+
     private fun handle(socket: LocalSocket) {
         if (socket.peerCredentials.uid != Process.myUid()) return
         socket.soTimeout = 2_000
@@ -88,21 +96,21 @@ internal class SiwcStoreBridge private constructor(
         output.write(mac.doFinal(challenge))
         val result = try {
             when (input.readUnsignedByte()) {
-                1 -> SiwcVault.hostId(directory)
-                2 -> SiwcVault.load(directory)
+                1 -> withVault { hostId(directory) }
+                2 -> withVault { load(directory) }
                 3 -> {
                     val length = input.readInt()
                     require(length in 1..MAX_GRANT_BYTES)
                     val grant = ByteArray(length)
                     try {
                         input.readFully(grant)
-                        SiwcVault.save(directory, grant)
+                        withVault { save(directory, grant) }
                     } finally {
                         grant.fill(0)
                     }
                     ByteArray(0)
                 }
-                4 -> { SiwcVault.clear(directory); ByteArray(0) }
+                4 -> { withVault { clear(directory) }; ByteArray(0) }
                 else -> throw IllegalArgumentException("Invalid SIWC operation")
             }
         } catch (_: Exception) {
@@ -137,7 +145,7 @@ internal class SiwcStoreBridge private constructor(
 
 private const val MAX_GRANT_BYTES = 64 * 1024
 
-/** Serialized across launches (an old request can finish while its socket is being retired). */
+/** Accessed exclusively through SiwcStoreBridge.withVault. */
 private object SiwcVault {
     private const val KEYSTORE = "AndroidKeyStore"
     private const val ALIAS = "dsh-app.openai-siwc.v1"
@@ -150,7 +158,6 @@ private object SiwcVault {
     private fun grantFile(directory: File) = AtomicFile(File(directory, "openai-siwc.grant"))
     private fun keyStore() = KeyStore.getInstance(KEYSTORE).apply { load(null) }
 
-    @Synchronized
     fun hostId(directory: File): ByteArray {
         val file = AtomicFile(File(directory, "openai-siwc.host-id"))
         val bytes = read(file, 36) ?: UUID.randomUUID().toString().toByteArray().also { write(file, it) }
@@ -159,7 +166,6 @@ private object SiwcVault {
         return bytes
     }
 
-    @Synchronized
     fun load(directory: File): ByteArray {
         val envelope = read(grantFile(directory), MAX_GRANT_BYTES + OVERHEAD) ?: return ByteArray(0)
         check(envelope.size > OVERHEAD && envelope[0] == VERSION)
@@ -170,7 +176,6 @@ private object SiwcVault {
         }
     }
 
-    @Synchronized
     fun save(directory: File, grant: ByteArray) {
         val key = (keyStore().getKey(ALIAS, null) as SecretKey?) ?: KeyGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_AES, KEYSTORE,
@@ -190,7 +195,6 @@ private object SiwcVault {
         write(grantFile(directory), envelope)
     }
 
-    @Synchronized
     fun clear(directory: File) {
         val file = grantFile(directory)
         // Retire the key too, so stale ciphertext from this grant cannot be decrypted again.

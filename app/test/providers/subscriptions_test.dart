@@ -216,11 +216,76 @@ void main() {
       await tester.tap(find.descendant(of: openAi, matching: find.widgetWithText(FilledButton, '登录')));
       await settle(tester);
       expect(find.text('登录 ChatGPT'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
       expect(bridge.calls.where((call) => call.startsWith('begin:')), ['begin:openai-siwc']);
       expect(browser.opened, [Uri.parse(_url)]);
       await tester.tap(find.byTooltip('关闭'));
       await settle(tester);
       expect(bridge.calls, contains('cancel:att-1'));
+    });
+
+    for (final (button, expected) in [
+      ('取消', null),
+      ('登录原账号', 'begin:openai-siwc'),
+      ('使用其他账号', 'begin:openai-siwc:newAccount'),
+    ]) {
+      testWidgets('previous official registration: $button', (tester) async {
+        final bridge = FakeSubscriptionBackend(
+          statuses: const [SubscriptionStatus(subscription: _official, signedIn: false, reconnectAvailable: true)],
+          steps: const [LoginStep(phase: LoginPhase.failed)],
+        );
+        await _pump(tester, const ProvidersPage(), [
+          ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
+          operatingSystemProvider.overrideWithValue('android'),
+          modelCatalogProvider.overrideWith((ref) async => _codexCatalog),
+        ]);
+        final openAi = find.widgetWithText(ListPageRow, 'OpenAI');
+        await tester.tap(find.descendant(of: openAi, matching: find.byType(LoginCapsule)));
+        await settle(tester);
+        expect(find.widgetWithText(AlertDialog, '登录 ChatGPT'), findsOneWidget);
+        expect(find.widgetWithText(FilledButton, '登录原账号'), findsOneWidget);
+        expect(find.widgetWithText(TextButton, '使用其他账号'), findsOneWidget);
+        expect(bridge.calls.where((call) => call.startsWith('begin:')), isEmpty);
+        await tester.tap(find.text(button));
+        await settle(tester);
+        expect(bridge.calls.where((call) => call.startsWith('begin:')), [if (expected != null) expected]);
+        expect(find.byType(SubscriptionLoginSheet), expected == null ? findsNothing : findsOneWidget);
+      });
+    }
+
+    testWidgets('pending sign-out blocks login and can be retried after a refreshed failure', (tester) async {
+      final bridge = _PendingSignOutBridge();
+      await _pump(tester, const ProvidersPage(), [
+        ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
+        operatingSystemProvider.overrideWithValue('android'),
+        modelCatalogProvider.overrideWith((ref) async => _officialCatalog),
+      ]);
+      final openAi = find.widgetWithText(ListPageRow, 'OpenAI');
+      expect(find.descendant(of: openAi, matching: find.byType(LoginCapsule)), findsNothing);
+      await tester.tap(find.text('OpenAI'));
+      await settle(tester);
+      expect(find.byType(SubscriptionPage), findsOneWidget);
+      expect(find.text('Official test model'), findsNothing);
+      expect(find.text('重新登录'), findsNothing);
+      expect(find.text('使用其他账号'), findsNothing);
+
+      Future<void> signOut() async {
+        await tester.tap(find.text('退出登录'));
+        await settle(tester);
+        await tester.tap(find.widgetWithText(FilledButton, '退出登录'));
+        await settle(tester);
+      }
+
+      final before = bridge.calls.where((call) => call == 'list').length;
+      await signOut();
+      expect(bridge.calls.where((call) => call == 'list').length, greaterThan(before));
+      expect(find.byType(SubscriptionPage), findsOneWidget);
+      expect(find.byType(SubscriptionLoginSheet), findsNothing);
+      await signOut();
+      expect(find.byType(SubscriptionPage), findsNothing);
+      expect(find.descendant(of: openAi, matching: find.byType(LoginCapsule)), findsOneWidget);
+      expect(bridge.calls.where((call) => call.startsWith('signOut:')), ['signOut:openai-siwc', 'signOut:openai-siwc']);
+      expect(bridge.calls.where((call) => call.startsWith('begin:')), isEmpty);
     });
 
     for (final (os, local, advertised) in [
@@ -748,6 +813,27 @@ class _PageOpener extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _PendingSignOutBridge extends FakeSubscriptionBackend {
+  _PendingSignOutBridge()
+    : super(
+        statuses: const [
+          SubscriptionStatus(subscription: _official, signedIn: false, reconnectAvailable: true, signOutPending: true),
+        ],
+      );
+
+  bool fail = true;
+
+  @override
+  Future<void> signOut(Subscription subscription) async {
+    if (fail) {
+      fail = false;
+      calls.add('signOut:${subscription.wire}');
+      throw const DshRemoteException('app-auth/sign-out-failed', 'local cleanup failed');
+    }
+    await super.signOut(subscription);
+  }
 }
 
 class _UnconfirmedRevocationBridge extends FakeSubscriptionBackend {

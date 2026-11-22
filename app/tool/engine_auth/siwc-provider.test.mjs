@@ -112,6 +112,66 @@ test('visible models use catalog order and display names without invented capabi
   assert.deepEqual(routes, [[provider], [provider], [provider], []])
 })
 
+test('model catalog timeout aborts fetch and both success and error bodies', { timeout: 2000 }, async (t) => {
+  for (const phase of ['headers', 'success body', 'error body']) {
+    await t.test(phase, async (t) => {
+      const deadline = new AbortController()
+      const timeout = t.mock.method(AbortSignal, 'timeout', () => deadline.signal)
+      const reached = Promise.withResolvers()
+      const { adapter, requests } = harness((url, { signal }) => {
+        assert.equal(url, base + '/models')
+        if (phase === 'headers') return new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+          reached.resolve()
+        })
+        return new Response(new ReadableStream({
+          start(controller) {
+            signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+          },
+          pull() { reached.resolve() },
+        }, { highWaterMark: 0 }), { status: phase === 'success body' ? 200 : 503 })
+      })
+      const result = adapter.listModels()
+      await reached.promise
+      assert.equal(timeout.mock.callCount(), 1)
+      assert.deepEqual(timeout.mock.calls[0].arguments, [5_000])
+      deadline.abort(new DOMException('mock model catalog timeout', 'TimeoutError'))
+      assert.equal(requests[0].signal.aborted, true)
+      await assert.rejects(result, { code: 'TIMEOUT', message: 'OpenAI model catalog request timed out.' })
+    })
+  }
+})
+
+test('a catalog fetched before permission loss cannot restore old models', async () => {
+  const fetched = Promise.withResolvers()
+  const response = Promise.withResolvers()
+  const { adapter, lifecycle, oauth } = harness(() => {
+    fetched.resolve()
+    return response.promise
+  })
+  const old = adapter.listModels()
+  await fetched.promise
+  oauth.status = () => ({ signedIn: true, planEnabled: false })
+  lifecycle.invalidate({ stopRequests: false })
+  response.resolve(Response.json({ models: [{ slug: model, display_name: 'Stale', visibility: 'list' }] }))
+  assert.deepEqual(await old, [])
+  assert.deepEqual(await adapter.listModels(), [])
+  assert.equal((await adapter.resolveModel(provider, model)).name, model)
+})
+
+test('aborting after usage prevents a successful terminal event', async () => {
+  const caller = new AbortController()
+  const { adapter } = harness(() => sse(started, delta, ended, complete))
+  const stream = adapter.stream({ ...options, signal: caller.signal })
+  for await (const chunk of stream) {
+    if (chunk.type !== 'usage') continue
+    caller.abort()
+    await assert.rejects(stream.next(), { code: 'ABORTED' })
+    return
+  }
+  assert.fail('expected the usage event before completion')
+})
+
 test('stateless text history and DSH stream blocks, usage and stop', async () => {
   const { adapter, requests } = harness(() => sse(started, delta, ended, complete))
   const chunks = await collect(adapter.stream({
@@ -140,6 +200,17 @@ test('stateless text history and DSH stream blocks, usage and stop', async () =>
     { type: 'text-delta', index: 0, text: 'Hello!' },
     { type: 'block-end', index: 0, block: { type: 'text', text: 'Hello!' } },
     { type: 'usage', usage: { inputTokens: 5, outputTokens: 3, totalTokens: 12, cacheReadTokens: 4 } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ])
+})
+
+test('completed text without a usage object still finishes successfully', async () => {
+  const terminal = { type: 'response.completed', response: { status: 'completed', output: [ended.item] } }
+  const { adapter } = harness(() => sse(started, delta, ended, terminal))
+  const chunks = await collect(adapter.stream(options))
+  assert.deepEqual(chunks.slice(-3), [
+    { type: 'block-end', index: 0, block: { type: 'text', text: 'Hello!' } },
+    { type: 'usage', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
     { type: 'finish', reason: { kind: 'stop' } },
   ])
 })

@@ -15,6 +15,7 @@ import '../../state/read_list_identity.dart';
 import '../../state/settings_state.dart';
 import '../../state/subscriptions_state.dart';
 import '../account/account_page.dart';
+import '../common/app_dialog.dart';
 import '../common/list_page_row.dart';
 import '../common/read_list_status.dart';
 import '../common/status_chip.dart';
@@ -54,6 +55,7 @@ class ProvidersPage extends ConsumerWidget {
     final official = ref.watch(officialChatGptStatusProvider);
     final officialReady =
         official?.signedIn == true &&
+        official?.signOutPending != true &&
         official?.planEnabled == true &&
         _officialModelsReady(ref.watch(modelCatalogProvider));
     final summary = _summary(ref, conn, snapshot, legacy, hasOfficial: official != null, officialReady: officialReady);
@@ -228,14 +230,14 @@ class _SubscriptionAccounts extends StatelessWidget {
   );
 }
 
-class _SubscriptionRow extends StatelessWidget {
+class _SubscriptionRow extends ConsumerWidget {
   const _SubscriptionRow({required this.status, this.ready = true});
 
   final SubscriptionStatus status;
   final bool ready;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final subscription = status.subscription;
     final label = subscriptionLabel(subscription);
@@ -243,22 +245,51 @@ class _SubscriptionRow extends StatelessWidget {
     final title = official ? 'OpenAI' : label;
     final subtitle = official ? l10n.engineProvidersChatGptOfficial : null;
     final leading = Monogram(title, letter: subscriptionLetter(subscription));
-    if (status.signedIn) {
+    final signOutPending = official && status.signOutPending;
+    if (status.signedIn || signOutPending) {
       final account = status.account?.trim();
       return ListPageRow(
         leading: leading,
         title: title,
-        subtitle:
-            subtitle ??
-            (account == null || account.isEmpty ? l10n.commonSignedIn : l10n.engineProvidersSignedInAccount(account)),
-        trailing: ready ? const ProviderDot(StatusTone.ok) : const ProviderDot(StatusTone.idle),
+        subtitle: signOutPending
+            ? l10n.engineSubscriptionSignOutFailed(l10n.commonRetry)
+            : subtitle ??
+                  (account == null || account.isEmpty ? l10n.commonSignedIn : l10n.engineProvidersSignedInAccount(account)),
+        trailing: ProviderDot(signOutPending ? StatusTone.warn : ready ? StatusTone.ok : StatusTone.idle),
         chevron: true,
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(builder: (_) => SubscriptionPage(subscription: subscription)),
         ),
       );
     }
-    void signIn() => showSubscriptionLogin(context, subscription);
+    Future<void> signIn() async {
+      var newAccount = false;
+      if (official && status.reconnectAvailable) {
+        final choice = await showAppDialog<bool>(
+          context: context,
+          builder: (dialog) => AlertDialog(
+            title: Text(l10n.engineSubscriptionSignIn(label)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog), child: Text(l10n.commonCancel)),
+              TextButton(
+                onPressed: () => Navigator.pop(dialog, true),
+                child: Text(l10n.engineSubscriptionUseAnotherAccount),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialog, false),
+                child: Text(l10n.engineSubscriptionReconnectAccount),
+              ),
+            ],
+          ),
+        );
+        if (choice == null || !context.mounted) return;
+        final current = ref.read(officialChatGptStatusProvider);
+        if (current == null || current.signedIn || current.signOutPending || !current.reconnectAvailable) return;
+        newAccount = choice;
+      }
+      await showSubscriptionLogin(context, subscription, newAccount: newAccount);
+    }
+
     return ListPageRow(
       leading: leading,
       title: title,

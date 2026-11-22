@@ -26,6 +26,8 @@ const { _iterSSEMessages } = hostRequire('openai/streaming')
 const PROVIDER = 'openai-siwc'
 const BASE_URL = 'https://api.openai.com/v1'
 const API = 'openai-responses'
+// Let the combined catalog report this provider's failure without blocking other routes.
+const MODEL_CATALOG_TIMEOUT_MS = 5_000
 const RETRY_POLICY = resolveRetryPolicy({ mode: 'normal', maxRetries: 0 }, PROVIDER)
 const ITEM_TYPES = new Set(['message', 'reasoning', 'function_call'])
 const LOGIN_ERRORS = new Set(['siwc_sign_in_required', 'siwc_session_expired', 'siwc_plan_permission_missing'])
@@ -133,7 +135,10 @@ async function* decodeResponse(response, request, model) {
   const events = new AssistantMessageEventStream()
   const output = {
     content: [], stopReason: 'pending',
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 },
+    usage: {
+      input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
   }
   let failure
   const decoded = processResponsesStream(responsesEvents(response, request), output, events, model)
@@ -169,7 +174,11 @@ async function* decodeResponse(response, request, model) {
   request.signal.throwIfAborted()
   if (failure) throw failure
   // An item-level done event is not enough to dispatch a local tool.
-  yield* tools
+  for (const tool of tools) {
+    request.signal.throwIfAborted()
+    yield tool
+  }
+  request.signal.throwIfAborted()
   const { input, output: outputTokens, totalTokens, cacheRead, cacheWrite, reasoning } = output.usage
   yield { type: 'usage', usage: {
     inputTokens: input, outputTokens, totalTokens,
@@ -177,11 +186,13 @@ async function* decodeResponse(response, request, model) {
     ...(cacheWrite ? { cacheWriteTokens: cacheWrite } : {}),
     ...(reasoning ? { reasoningTokens: reasoning } : {}),
   } }
+  request.signal.throwIfAborted()
   yield { type: 'finish', reason: { kind: tools.length ? 'tool-calls' : 'stop' } }
 }
 
 export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
   let account = new AbortController()
+  let catalog = new AbortController()
   let names = new Map()
   let disposed = false
 
@@ -226,13 +237,15 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
     providerRetryPolicy() { return RETRY_POLICY }
 
     async listModels() {
-      const { signal } = account
+      const catalogSignal = catalog.signal
       const status = await oauth.status()
-      if (signal.aborted || !status.signedIn || status.planEnabled === false) return []
+      if (catalogSignal.aborted || !status.signedIn || status.planEnabled === false) return []
+      const deadline = AbortSignal.timeout(MODEL_CATALOG_TIMEOUT_MS)
+      const signal = AbortSignal.any([catalogSignal, deadline])
       try {
         const response = await request('/models', signal)
         const { models } = await response.json()
-        if (signal.aborted) return []
+        signal.throwIfAborted()
         if (!Array.isArray(models)) throw new LlmError('Invalid OpenAI model catalog.', 'INVALID_CATALOG')
         const listed = new Map()
         for (const row of models) {
@@ -242,7 +255,10 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
         names = listed
         return [...listed].map(([id, name]) => ({ provider: PROVIDER, id, name, inputModalities: ['text'] }))
       } catch (error) {
-        if (signal.aborted) return []
+        if (deadline.aborted && signal.reason === deadline.reason) {
+          throw new LlmError('OpenAI model catalog request timed out.', 'TIMEOUT')
+        }
+        if (catalogSignal.aborted) return []
         throw error
       }
     }
@@ -281,12 +297,15 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
     dispose() {
       if (disposed) return
       disposed = true
+      catalog.abort()
       account.abort()
       names.clear()
       unregister()
     },
     invalidate({ stopRequests = true } = {}) {
       if (disposed) return
+      catalog.abort()
+      catalog = new AbortController()
       if (stopRequests) {
         account.abort()
         account = new AbortController()

@@ -10,6 +10,7 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12
 const ENDPOINT = new RegExp('^(dsh-app\\.siwc\\.' + UUID + '):([0-9a-f]{64})$')
 const HOST_ID = new RegExp('^' + UUID + '$')
 const [IDENTIFY, LOAD, SAVE, CLEAR] = [1, 2, 3, 4]
+const SAVE_UNCONFIRMED = Symbol('save confirmation lost')
 
 // Keep the launch descriptor in this module for llm re-injection, not in the
 // environment of later children. This does not isolate untrusted same-UID
@@ -36,15 +37,26 @@ function request(address, secret, op, payload) {
   const response = []
   return new Promise((resolve, reject) => {
     const socket = createConnection({ path: '\0' + address })
-    const timeout = setTimeout(fail, 5000)
-    function fail() {
+    let saveSent = false
+    let settled = false
+    const timeout = setTimeout(disconnected, 5000)
+    function finish() {
+      settled = true
       clearTimeout(timeout)
-      socket.destroy()
-      reject(storeError())
+      for (const chunk of response) chunk.fill(0)
     }
+    function fail(unconfirmed = false) {
+      if (settled) return
+      finish()
+      socket.destroy()
+      const error = storeError()
+      if (unconfirmed) error[SAVE_UNCONFIRMED] = true
+      reject(error)
+    }
+    function disconnected() { fail(saveSent) }
     socket.once('connect', () => socket.write(challenge))
-    socket.once('error', fail)
-    socket.once('close', fail)
+    socket.once('error', disconnected)
+    socket.once('close', disconnected)
     socket.on('data', chunk => {
       if (proofSize < proof.length) {
         // The legitimate peer sends nothing else until it receives the operation.
@@ -57,17 +69,22 @@ function request(address, secret, op, payload) {
         header[0] = op
         if (payload) header.writeUInt32BE(payload.length, 1)
         socket.write(header)
-        if (payload) socket.write(payload)
+        if (payload) {
+          socket.write(payload)
+          saveSent = op === SAVE
+        }
         return
       }
+      response.push(chunk)
+      if (responseSize === 0 && chunk[0] !== 0) return fail()
       responseSize += chunk.length
       if (responseSize > MAX_GRANT_BYTES + 1) return fail()
-      response.push(chunk)
     })
     socket.once('end', () => {
+      if (settled) return
+      if (!responseSize) return disconnected()
       const result = Buffer.concat(response, responseSize)
-      if (result[0] !== 0) return fail()
-      clearTimeout(timeout)
+      finish()
       resolve(result.subarray(1))
     })
   })
@@ -115,6 +132,17 @@ export async function openSiwcStore() {
         try {
           if (bytes.length > MAX_GRANT_BYTES) throw storeError()
           await call(SAVE, bytes)
+        } catch (error) {
+          if (!error?.[SAVE_UNCONFIRMED]) throw error
+          // The vault serializes requests. Read back once to confirm the exact
+          // saved bytes after losing the acknowledgement; never replay SAVE.
+          let saved
+          try { saved = await call(LOAD) } catch { throw error }
+          try {
+            if (!saved.equals(bytes)) throw error
+          } finally {
+            saved.fill(0)
+          }
         } finally {
           bytes.fill(0)
         }

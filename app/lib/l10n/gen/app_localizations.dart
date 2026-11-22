@@ -15060,6 +15060,18 @@ abstract class L10n {
   /// **'ChatGPT 官方订阅'**
   String get engineProvidersChatGptOfficial;
 
+  /// No description provided for @engineSubscriptionReconnectAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录原账号'**
+  String get engineSubscriptionReconnectAccount;
+
+  /// No description provided for @engineSubscriptionUseAnotherAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用其他账号'**
+  String get engineSubscriptionUseAnotherAccount;
+
   /// No description provided for @engineSubscriptionPlanNotEnabled.
   ///
   /// In zh, this message translates to:
