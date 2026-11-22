@@ -1,6 +1,6 @@
 // Delayed arrival reads must not replace newer room intent. The page,
-// CompanionSessions, follow decoder and ChatController are real; the HTTP,
-// session-read and watch transport boundaries are local synthetic fixtures.
+// CompanionSessions, the phone model loop and its SSE reader are real; the
+// Host HTTP and the model's HTTP response are local synthetic fixtures.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -10,9 +10,10 @@ import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
-import 'package:dsh_app/state/chat_state.dart';
+import 'package:dsh_app/state/companion_agent_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
@@ -21,6 +22,8 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -140,6 +143,11 @@ class _Host extends ActiveHostController {
   HostRef build() => HostRef.local;
 }
 
+class _Settings extends SettingsController {
+  @override
+  AppSettings build() => const AppSettings(loaded: true, apiKey: 'synthetic-test-key');
+}
+
 class _Room {
   _Room(this.root);
   final Directory root;
@@ -148,7 +156,61 @@ class _Room {
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
   late ProviderContainer container;
-  ChatState get state => container.read(chatProvider(_session));
+  late CompanionMemoryOwner memory;
+
+  /// The room's chat is the phone model loop in either mode: what it asked,
+  /// and the Messages stream each request is answered with.
+  final asked = <Map<String, Object?>>[];
+  final replies = <StreamController<List<int>>>[];
+  http.Client newClient() => MockClient.streaming((request, body) async {
+    asked.add(jsonDecode(await body.bytesToString()) as Map<String, Object?>);
+    final reply = StreamController<List<int>>();
+    replies.add(reply);
+    return http.StreamedResponse(reply.stream, 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+  });
+
+  bool get running => tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running;
+  late WidgetTester tester;
+
+  void words(String text) => replies.last.add(
+    utf8.encode(
+      'data: ${jsonEncode({
+        'type': 'content_block_delta',
+        'index': 0,
+        'delta': {'type': 'text_delta', 'text': text},
+      })}\n\n',
+    ),
+  );
+
+  /// Ends the current model request as a finished turn without any tool.
+  Future<void> finish() async {
+    replies.last.add(
+      utf8.encode(
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}\n\n'
+        'data: {"type":"message_stop"}\n\n',
+      ),
+    );
+    unawaited(replies.last.close());
+    for (var i = 0; i < 100 && running; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    await flush(tester);
+  }
+
+  Future<void> send(String text) async {
+    final before = asked.length;
+    await tester.enterText(find.byType(TextField), text);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('send')));
+    for (var i = 0; i < 100 && asked.length == before; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    expect(asked, hasLength(before + 1));
+    await flush(tester);
+  }
+
   String? speech(WidgetTester tester) => tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text;
   L10n l10n(WidgetTester tester) => L10n.of(tester.element(find.byType(CompanionPage)));
 
@@ -165,7 +227,8 @@ class _Room {
     });
   }
 
-  Future<void> open(WidgetTester tester, {Map<String, Object?>? initialSnapshot}) async {
+  Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed}) async {
+    this.tester = tester;
     Directory('${root.path}/pack/runtime').createSync(recursive: true);
     Directory('${root.path}/pack/character').createSync(recursive: true);
     File('${root.path}/pack/runtime/live2dcubismcore.min.js').writeAsStringSync('core');
@@ -175,6 +238,8 @@ class _Room {
         overrides: [
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
+          settingsProvider.overrideWith(_Settings.new),
+          companionLightClientProvider.overrideWithValue(newClient),
         ],
         child: MaterialApp(
           theme: buildDarkTheme(),
@@ -199,27 +264,16 @@ class _Room {
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
     container.read(companionSessionsProvider);
-    final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    memory = (await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future)))!;
     await tester.pump();
-    await settleMixed(tester, memory!.migrateLocal());
+    await settleMixed(tester, memory.migrateLocal());
+    seed?.call(memory);
     await flush(tester);
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
     await flush(tester);
-    client.events.add(
-      parseFollowFrame(
-        _session,
-        initialSnapshot ??
-            {
-              'type': 'snapshot',
-              'cursor': -1,
-              'records': [],
-              'assistantStream': {'revision': 0},
-            },
-      ),
-    );
-    await flush(tester);
-    expect(state.loading, isFalse);
+    // The room no longer watches the Host chat; the delayed arrival read is
+    // still the actual Host keeper's first snapshot.
     expect(bridge.getCount, 1);
     commands.clear();
   }
@@ -232,7 +286,12 @@ class _Room {
     if (read != null && !read.isCompleted) read.complete(SessionProjections.empty);
     await tester.pump();
     await tester.runAsync(() async {
-      await client.events.close();
+      for (final reply in replies) {
+        if (!reply.isClosed) await reply.close();
+      }
+      // Nothing in the room watches the Host chat any more: a close of an
+      // unlistened controller would wait for a listener forever.
+      unawaited(client.events.close());
       await client.mux.connection.close();
       await client.close();
     });
@@ -243,131 +302,6 @@ Future<void> flush(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 40));
   await tester.pump();
-}
-
-// Source-derived follow events. A full message may be coalesced into one page
-// publication; durable sequence, stream revision and attempt index stay valid.
-class _Wire {
-  _Wire([this.room]);
-  final _Room? room;
-  final frames = <Map<String, Object?>>[];
-  int seq = -1;
-  int revision = 0;
-  int index = 0;
-  final chunks = <Map<String, Object?>>[];
-  void frame(Map<String, Object?> value) {
-    frames.add(value);
-    final event = parseFollowFrame(_session, value);
-    expect(event, isNot(isA<UnknownFrameEvent>()));
-    room?.client.events.add(event);
-  }
-
-  void log(String type, Map<String, Object?> data) => frame({
-    'type': 'event',
-    'event': {'type': type, 'seq': ++seq, 'time': _now, 'data': data},
-  });
-
-  void begin() {
-    log('user/message', {
-      'id': 'synthetic-user',
-      'role': 'user',
-      'content': [
-        {'type': 'text', 'text': '说一句。'},
-      ],
-      'source': {'kind': 'user', 'rpcId': 'synthetic-request'},
-    });
-    log('turn/start', {'turn': 1});
-    log('step/start', {'turn': 1, 'step': 1});
-  }
-
-  void chunk(Map<String, Object?> value) {
-    chunks.add({'type': 'chunk', 'time': _now, 'chunk': value});
-    frame({
-      'type': 'assistant-stream',
-      'frame': {
-        'type': 'chunk',
-        'attemptId': 'synthetic-attempt',
-        'revision': ++revision,
-        'index': index++,
-        'time': _now,
-        'chunk': value,
-      },
-    });
-  }
-
-  void answer(String text) {
-    frame({
-      'type': 'assistant-stream',
-      'frame': {
-        'type': 'start',
-        'attemptId': 'synthetic-attempt',
-        'revision': ++revision,
-        'turn': 1,
-        'step': 1,
-        'startedAfterSeq': seq,
-      },
-    });
-    chunk({'type': 'block-start', 'index': 0, 'blockType': 'text'});
-    chunk({'type': 'text-delta', 'index': 0, 'text': text});
-    chunk({
-      'type': 'block-end',
-      'index': 0,
-      'block': {'type': 'text', 'text': text},
-    });
-    chunk({
-      'type': 'finish',
-      'reason': {'kind': 'stop'},
-    });
-    log('assistant/message', {
-      'turn': 1,
-      'step': 1,
-      'stream': List.of(chunks),
-      'message': {
-        'id': 'synthetic-assistant',
-        'role': 'assistant',
-        'content': [
-          {'type': 'text', 'text': text},
-        ],
-        'source': {'kind': 'model', 'provider': 'synthetic', 'model': 'synthetic'},
-      },
-    });
-    frame({
-      'type': 'assistant-stream',
-      'frame': {
-        'type': 'end',
-        'attemptId': 'synthetic-attempt',
-        'revision': ++revision,
-        'index': index,
-        'outcome': {'kind': 'committed', 'eventType': 'assistant/message', 'seq': seq},
-      },
-    });
-    log('step/end', {'turn': 1, 'step': 1});
-    log('turn/end', {
-      'turn': 1,
-      'reason': {'kind': 'completed'},
-    });
-  }
-
-  void stopBeforeText() {
-    log('step/end', {'turn': 1, 'step': 1});
-    log('turn/end', {
-      'turn': 1,
-      'reason': {
-        'kind': 'aborted',
-        'reason': {'kind': 'user'},
-      },
-    });
-  }
-
-  Map<String, Object?> snapshot() => {
-    'type': 'snapshot',
-    'cursor': seq,
-    'records': [
-      for (final frame in frames)
-        if (frame['type'] == 'event') {'event': frame['event']},
-    ],
-    'assistantStream': {'revision': revision},
-  };
 }
 
 void main() {
@@ -448,18 +382,15 @@ void main() {
     }
   });
 
-  testWidgets('an accepted send awaiting its session read already supersedes the greeting', (tester) async {
+  // The send is accepted and its model request is out; no words have come
+  // back yet. (The Host session read this once waited on is gone: the room's
+  // chat is the phone loop in full mode too.)
+  testWidgets('an accepted send awaiting her first words already supersedes the greeting', (tester) async {
     final room = _Room(temporary);
-    room.client.projectionRead = Completer<SessionProjections?>();
     await room.open(tester);
     try {
-      await tester.enterText(find.byType(TextField), '稍等这一句');
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('send')));
-      await settleMixed(tester, room.client.projectionStarted.future);
-      await flush(tester);
-      expect(room.client.projectionCalls, 1);
-      expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
+      await room.send('稍等这一句');
+      expect(room.running, isTrue);
       room.bridge.release();
       await flush(tester);
       room.expectVisitAndVitals();
@@ -475,14 +406,14 @@ void main() {
     final room = _Room(temporary);
     await room.open(tester);
     try {
-      final wire = _Wire(room)..begin();
-      await flush(tester);
-      expect(room.state.running, isTrue);
+      await room.send('说一句。');
+      expect(room.running, isTrue);
       expect(room.speech(tester), isNull);
-      wire.stopBeforeText();
-      await flush(tester);
-      expect(room.state.running, isFalse);
-      expect(room.state.error, isNull);
+      // The turn ends without a word.
+      await room.finish();
+      expect(room.running, isFalse);
+      expect(find.text(room.l10n(tester).companionSendFailed), findsNothing);
+      expect(find.text(room.l10n(tester).companionAgentRetryClosed), findsNothing);
       expect(room.speech(tester), isNull);
       room.bridge.release();
       await flush(tester);
@@ -498,12 +429,14 @@ void main() {
     final room = _Room(temporary);
     await room.open(tester);
     try {
-      _Wire(room)
-        ..begin()
-        ..answer('[表情:担心]');
-      await flush(tester);
-      expect(room.state.running, isFalse);
-      expect(room.state.items.whereType<AssistantChatItem>().single.text, '[表情:担心]');
+      await room.send('说一句。');
+      room.words('[表情:担心]');
+      await room.finish();
+      expect(room.running, isFalse);
+      expect(
+        room.memory.store.messages().where((row) => row['role'] == 'assistant').map((row) => row['text']),
+        ['[表情:担心]'],
+      );
       expect(room.speech(tester), isNull);
       room.bridge.release();
       await flush(tester);
@@ -520,16 +453,28 @@ void main() {
   testWidgets('old idle history and an unchanged status notification still permit the arrival greeting', (
     tester,
   ) async {
-    final history = _Wire()
-      ..begin()
-      ..answer('[表情:开心]以前说过。');
     final room = _Room(temporary);
-    await room.open(tester, initialSnapshot: history.snapshot());
+    await room.open(
+      tester,
+      seed: (memory) {
+        for (final (id, role, text) in [('old-user', 'user', '说一句。'), ('old-her', 'assistant', '[表情:开心]以前说过。')]) {
+          memory.store.submitMessage(
+            id: id,
+            sessionId: memory.store.lightSessionId,
+            role: role,
+            text: text,
+            saidAtUtc: _now,
+            offsetMinutes: 0,
+          );
+        }
+      },
+    );
     try {
-      expect(room.state.running, isFalse);
-      expect(room.state.items.whereType<AssistantChatItem>().single.text, '[表情:开心]以前说过。');
+      expect(room.running, isFalse);
+      expect(room.memory.store.messages().where((row) => row['role'] == 'assistant').single['text'], '[表情:开心]以前说过。');
       expect(room.speech(tester), isNull);
-      room.client.events.add(const SessionStatusEvent(_session, false));
+      // The process-level agent repeats its unchanged idle state to the window.
+      room.container.read(companionAgentProvider).changed();
       await flush(tester);
       room.bridge.release();
       await flush(tester);
@@ -537,6 +482,7 @@ void main() {
       // This pack has no name: she introduces herself without one.
       expect(room.speech(tester), room.l10n(tester).companionGreetFirstNameless);
       expect(room.commands.where((command) => command.$1 == 'emotion').map((command) => command.$2['name']), ['shy']);
+      expect(room.asked, isEmpty);
     } finally {
       await room.close(tester);
     }

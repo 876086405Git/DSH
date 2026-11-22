@@ -650,7 +650,9 @@ class _CompanionAgentVisit {
     vitalsQueue = Future.value();
     ui.connectionChanged();
     unawaited(migrateHostMemory());
-    if (ui.stageReady) unawaited(refreshKeeper());
+    // She arrives at the new keeper as on opening: its state, her greeting,
+    // then this visit recorded there.
+    if (ui.stageReady) unawaited(arrive());
   }
 
   Future<void> migrateHostMemory() async {

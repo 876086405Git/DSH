@@ -468,6 +468,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (!mounted || !_attachment.isAttached) return;
     if (retry != null && _input.text.isEmpty) _input.text = retry;
     _stage.command('emotion', {'name': 'worried', 'hold': 3000});
+    // The line did not become her conversation: it must not stay above her.
+    _myLine = null;
     _showBubble(_failureText(error), hold: const Duration(seconds: 6), error: true, clearTasks: false);
   }
 
