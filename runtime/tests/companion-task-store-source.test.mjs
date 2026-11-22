@@ -114,7 +114,13 @@ test('stored selection and whole input are private and cannot change on recovery
   const read=await store.claimStep('t-1',1,'readInputs',{reserveMs:100});
   await store.saveInputs(read,{directory,entries:[{name:'one.md',version:'opaque',text:'独有正文'}],scope:{}});
   assert.equal(JSON.stringify(store.snapshot('t-1')).includes('独有正文'),false);
-  assert.equal(store.read('t-1').notes['1'].inputs.entries[0].text,'独有正文');
+  const record=store.read('t-1'),input=record.notes['1'].inputs.entries[0];
+  assert.equal(input.text,'独有正文');
+  // The public projection must not walk private notes (they may hold a whole workbook).
+  let bodyReads=0;
+  Object.defineProperty(input,'text',{enumerable:true,get(){bodyReads++;return '独有正文';}});
+  store.project(record);
+  assert.equal(bodyReads,0);
   await assert.rejects(store.saveSelection(select,{directory,entries:[],scope:{}}),/already saved/);
 });
 test('unknown model claim reserves time and cannot make another physical attempt',async t=>{
