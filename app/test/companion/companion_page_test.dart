@@ -157,15 +157,6 @@ List<Override> get _hostRoom => [
 /// window and handoff generation were still current at the end.
 const _routeMapPillGap = false;
 
-/// Skipped, product gap: a character-scoped extraction cannot finish after it
-/// remembers two originals. Its first request is already ~5650 of the 6000
-/// memoryBatchInputTokens (13 tool definitions + prompt); the continuation
-/// that carries the two tool results (or, one call per round, the new card in
-/// the context) no longer fits, CompanionMemoryWorker._maintenanceRequest
-/// throws _MemoryRequestBudget, the turn ends incomplete and both sources are
-/// marked skipped (maintenance_incomplete) although the cards were written.
-const _maintenanceContinuationBudgetGap = true;
-
 /// What her model asks for when told [receiptSpokenExample]: the four chosen
 /// receipts into a new 差旅小表.xlsx by eight tonight, carrying on after she leaves.
 const _receiptsCall = (
@@ -880,9 +871,9 @@ void main() {
       stageEvents!.onTouch('body', 'hug');
       await _settle(tester);
       expect(phone.events, ['visit', 'snack', 'pet']);
-      // Any of her four hug lines: since A2 the closer one is no longer gated
-      // on the keeper's activity closeness.
-      expect(find.textContaining(RegExp('抱抱|好安心|再抱一会儿|抱紧一点')), findsOneWidget);
+      // One of her three ordinary hug lines: the fonder one waits for the Close tier.
+      expect(find.textContaining(RegExp('抱抱|好安心|再抱一会儿')), findsOneWidget);
+      expect(find.textContaining('抱紧一点'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
@@ -6347,7 +6338,7 @@ void main() {
         expect(chats, hasLength(2), reason: 'opening extracts the originals without resending either ordinary chat');
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 20));
-      }, skip: _maintenanceContinuationBudgetGap);
+      });
 
       testWidgets('聊天记录: read back right here, over her; back closes it first', (tester) async {
         final client = MockClient.streaming(

@@ -234,11 +234,7 @@ void main() {
         'fixture 16 deleting edited raw source removes withdrawn facts before extraction consolidation and actual chat',
       _ => 'fixture 5 natural normal command releases the saved control before new source extraction and actual chat',
     };
-    // A2 gap (ADDENDUM-46/47): the maintenance continuation exceeds
-    // memoryBatchInputTokens because of the tool definitions, so the worker
-    // stays waiting. Pro's fix restores these three.
-    final maintenanceContinuationBudgetGap = kind != 'never';
-    test(name, skip: maintenanceContinuationBudgetGap, () async {
+    test(name, () async {
       final phone = _Phone(await Directory.systemTemp.createTemp('companion-never-replay-'));
       // Real non-extractable history gives the fixture its literal 200..204
       // sequence numbers, without directly changing the archive's counter.
