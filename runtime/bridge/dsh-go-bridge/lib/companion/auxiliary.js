@@ -59,6 +59,9 @@ export function usageReceipt(record) {
 
 export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId = randomUUID(), timeoutMs = DEADLINE_MS } = {}) {
   const receipts = new Map();
+  // Full receipts are bounded; exact replay protection lasts for this instance.
+  // This smaller index still grows with the number of accepted request IDs.
+  const requestDigests = new Map();
   let closed = false, active;
 
   function admit(req) {
@@ -111,20 +114,23 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       throw error;
     }
     const digest = createHash('sha256').update(JSON.stringify(body)).digest('hex');
-    const previous = receipts.get(body.requestId);
-    if (previous) {
-      const error = failure(409, previous.digest === digest ? 'request-used' : 'request-conflict', 'This auxiliary request ID has already been used');
+    const previousDigest = requestDigests.get(body.requestId);
+    if (previousDigest !== undefined) {
+      const error = failure(409, previousDigest === digest ? 'request-used' : 'request-conflict', 'This auxiliary request ID has already been used');
       error.dispatched = null;
-      error.receipt = snapshot(previous);
+      const previous = receipts.get(body.requestId);
+      if (previous) error.receipt = snapshot(previous);
       throw error;
     }
     if (active) throw failure(409, 'busy', 'Another companion auxiliary request is still active');
-    if (receipts.size >= MAX_RECEIPTS) throw failure(503, 'capacity', 'The companion bridge receipt capacity is exhausted');
+    // The busy gate proves all retained records have finished; evict only detail.
+    if (receipts.size === MAX_RECEIPTS) receipts.delete(receipts.keys().next().value);
     const controller = new AbortController();
-    const record = { requestId: body.requestId, provider: body.provider, model: body.model, digest, controller,
+    const record = { requestId: body.requestId, provider: body.provider, model: body.model, controller,
       dispatched: false, dispatchAtMs: null, startUsage: null, finalUsage: null, stopReason: null,
       httpStatus: null, complete: false, terminal: 'incomplete', finished: false,
       rawUsageAvailable: false, normalizedUsage: [], handoffAtMs: null, runtimeFinishKind: null };
+    requestDigests.set(body.requestId, digest);
     receipts.set(body.requestId, record);
     active = record;
     const abort = () => controller.abort(new Error('Auxiliary client disconnected'));

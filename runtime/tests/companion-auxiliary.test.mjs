@@ -240,3 +240,103 @@ test('followup uses one selected auxiliary call with exact supplied material and
   assert.equal(receipt.body.finish.complete, true);
   assert(!JSON.stringify(receipt.body).includes('周四'));
 });
+
+test('full receipt FIFO stays available past 4096 accepted attempts without admitting an evicted ID again', async t => {
+  const f = await fixture(t, { prepareError: Object.assign(new Error('synthetic credential unavailable'), { code: 'MISSING_CREDENTIAL' }) });
+  const status = id => f.http({ path: `${PATH}/requests/${id}?instanceId=${f.info.body.instanceId}` });
+  // Use the real limit and HTTP acceptance path, including finished preflight
+  // failures. No private cache mutation or smaller production limit is used.
+  for (let i = 0; i < 4096; i++) {
+    const response = await f.post({ requestId: `cached-${i}` });
+    assert.equal(response.status, 200);
+    assert.equal(response.body[0].type, 'accepted');
+    assert.equal(response.body.at(-1).terminal, 'preflight_error');
+    assert.equal(response.body.at(-1).dispatched, false);
+  }
+  assert.equal(f.state.prepares, 4096); assert.equal(f.state.invocations, 0);
+  assert.equal((await status('cached-0')).status, 200);
+  const retained = await status('cached-4095');
+  assert.equal(retained.status, 200); assert.equal(retained.body.phase, 'finished');
+
+  const prepareGate = defer();
+  f.state.prepareError = undefined; f.state.prepareGate = prepareGate;
+  const pending = f.post({ requestId: 'after-capacity' });
+  let response;
+  try {
+    await until(() => f.state.prepares === 4097);
+    const active = await status('after-capacity');
+    assert.equal(active.status, 200); assert.equal(active.body.phase, 'accepted');
+    assert.equal(active.body.dispatched, null); assert.equal(Object.hasOwn(active.body, 'finish'), false);
+    const missing = await status('cached-0');
+    assert.equal(missing.status, 404); assert.equal(missing.body.error.code, 'companion/auxiliary-request-unknown');
+    assert.equal(missing.body.dispatched, null);
+    // Reading the next oldest detail does not promote it out of FIFO order.
+    assert.equal((await status('cached-1')).status, 200);
+    assert.deepEqual((await status('cached-4095')).body, retained.body);
+
+    const resolves = f.state.resolves;
+    for (const [extra, code] of [[{}, 'request-used'], [{ input: 'changed body' }, 'request-conflict']]) {
+      const replay = await f.post({ requestId: 'cached-0', ...extra });
+      assert.equal(replay.status, 409); assert.equal(replay.body.error.code, `companion/auxiliary-${code}`);
+      assert.equal(replay.body.dispatched, null); assert.equal(Object.hasOwn(replay.body, 'receipt'), false);
+    }
+    const busy = await f.post({ requestId: 'waiting-for-slot' });
+    assert.equal(busy.status, 409); assert.equal(busy.body.error.code, 'companion/auxiliary-busy');
+    assert.equal(busy.body.dispatched, false);
+    assert.equal(f.state.resolves, resolves); assert.equal(f.state.prepares, 4097); assert.equal(f.state.invocations, 0);
+    assert.deepEqual((await status('after-capacity')).body, active.body);
+  } finally {
+    prepareGate.resolve();
+    response = await pending;
+  }
+  assert.equal(response.status, 200); assert.equal(response.body.at(-1).terminal, 'complete');
+  assert.equal(response.body.at(-1).dispatched, true); assert.equal(f.state.invocations, 1);
+  const finished = await status('after-capacity');
+  assert.equal(finished.body.phase, 'finished'); assert.deepEqual(finished.body.finish, response.body.at(-1));
+
+  const next = await f.post({ requestId: 'waiting-for-slot' });
+  assert.equal(next.status, 200); assert.equal(next.body.at(-1).terminal, 'complete');
+  assert.equal(f.state.invocations, 2, 'busy did not consume the new ID');
+  const secondEvicted = await status('cached-1');
+  assert.equal(secondEvicted.status, 404); assert.equal(secondEvicted.body.dispatched, null);
+  assert.deepEqual((await status('cached-4095')).body, retained.body);
+  assert.deepEqual((await status('after-capacity')).body, finished.body);
+});
+
+test('Agent retirement keeps instance-wide used IDs and a new route rejects the old generation', async t => {
+  const f = await fixture(t);
+  const original = f.body();
+  const response = await f.http({ method: 'POST', body: original });
+  assert.equal(response.status, 200); assert.equal(f.state.invocations, 1);
+  const receiptPath = `${PATH}/requests/request?instanceId=${f.info.body.instanceId}`;
+  const saved = await f.http({ path: receiptPath });
+  f.state.retired = true;
+  f.listeners.get('agent/disposed')({ agent: f.agent });
+  assert.deepEqual((await f.http({ path: receiptPath })).body, saved.body);
+  const resolves = f.state.resolves;
+  const same = await f.http({ method: 'POST', body: original });
+  assert.equal(same.status, 409); assert.equal(same.body.error.code, 'companion/auxiliary-request-used');
+  assert.equal(same.body.dispatched, null); assert.deepEqual(same.body.receipt, saved.body);
+  const changedSession = await f.post({ sessionId: 'another-session' });
+  assert.equal(changedSession.status, 409); assert.equal(changedSession.body.error.code, 'companion/auxiliary-request-conflict');
+  assert.equal(changedSession.body.dispatched, null);
+  assert.equal(f.state.resolves, resolves); assert.equal(f.state.prepares, 1); assert.equal(f.state.invocations, 1);
+  // This is the existing controlled context, not an engine cold-resume claim.
+  f.state.retired = false;
+  assert.equal((await f.http()).body.instanceId, f.info.body.instanceId);
+  assert.equal((await f.post({ requestId: 'fresh-in-instance' })).body.at(-1).terminal, 'complete');
+  assert.equal(f.state.invocations, 2);
+
+  f.route.dispose();
+  const reopened = await fixture(t);
+  assert.notEqual(reopened.info.body.instanceId, f.info.body.instanceId);
+  const reopenedResolves = reopened.state.resolves;
+  const old = await reopened.http({ method: 'POST', body: original });
+  assert.equal(old.status, 409); assert.equal(old.body.error.code, 'companion/auxiliary-instance-changed');
+  assert.equal(old.body.dispatched, null);
+  assert.equal(reopened.state.resolves, reopenedResolves); assert.equal(reopened.state.prepares, 0);
+  assert.equal(reopened.state.invocations, 0);
+  const fresh = await reopened.post({ requestId: 'new-generation-request' });
+  assert.equal(fresh.status, 200); assert.equal(fresh.body.at(-1).terminal, 'complete');
+  assert.equal(reopened.state.invocations, 1);
+});
