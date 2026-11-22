@@ -3396,6 +3396,332 @@ void main() {
         }
       }
 
+      for (final hostWindow in [false, true]) {
+        testWidgets(
+          hostWindow
+              ? 'R22 earlier errands refreshes phone capability beyond a Host-only window without execution'
+              : 'R22 ambiguous reminder opens earlier errands and cancels only the chosen old task',
+          (tester) async {
+            final beforeLifecycle = tester.binding.lifecycleState;
+            tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+            addTearDown(() {
+              if (beforeLifecycle != null) {
+                tester.binding.handleAppLifecycleStateChanged(beforeLifecycle);
+              } else {
+                tester.binding.resetInternalState();
+              }
+            });
+            const channel = MethodChannel('dsh/companion_reminders');
+            var now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
+            final db = sqlite3.open('${root.path}/memory.sqlite');
+            final memory = _ReceiptMemory(
+              CompanionMemoryStore(db, nowMilliseconds: () => now),
+              CompanionLocal.at(root),
+              nowMilliseconds: () => now,
+            );
+            final calls = <MethodCall>[];
+            var posts = 0;
+            addTearDown(() async {
+              memory.receiptStarted = null;
+              await tester.pumpWidget(const SizedBox());
+              memory.dispose();
+              await tester.pump();
+              tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+            });
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              switch (call.method) {
+                case 'clock':
+                  return {'utcMs': now, 'zoneId': 'Asia/Shanghai', 'offsetSeconds': 28800};
+                case 'capabilities':
+                  return {'executorId': 'installation-A', 'exact': true, 'notifications': true};
+                case 'resolve':
+                  final args = call.arguments as Map;
+                  final local = DateTime.parse('${args['localDate']}T${args['localTime']}Z');
+                  return {
+                    'kind': 'unique',
+                    'moments': [
+                      {'epochMs': local.millisecondsSinceEpoch - 28800000, 'offsetSeconds': 28800},
+                    ],
+                  };
+                case 'recover':
+                  return {'recoveryQueued': true};
+                case 'wake':
+                  final task = memory.store.task((call.arguments as Map)['taskId']! as String)!;
+                  if (task['task_rev'] == 1) {
+                    // Controlled native-boundary facts, not a real alarm or notification.
+                    // Cancellation below receives only a wake ACK.
+                    for (final event in ['claimed', 'returned']) {
+                      db.execute(
+                        '''
+                        INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,event_kind,
+                          executor_id,occurred_at_ms,outcome)
+                        VALUES(?,1,'alarm.register','r22-page-register',?,'installation-A',?,?)
+                      ''',
+                        [task['task_id'], event, now, event == 'returned' ? 'succeeded' : null],
+                      );
+                    }
+                    db.execute("UPDATE companion_task_revisions SET state='done' WHERE task_id=? AND task_rev=1", [
+                      task['task_id'],
+                    ]);
+                  }
+                  return {'wakeCompleted': true};
+                default:
+                  throw StateError('Unexpected reminder method ${call.method}');
+              }
+            });
+            await openLight(
+              tester,
+              apiKey: '',
+              client: MockClient((_) async {
+                posts++;
+                return http.Response('', 401);
+              }),
+              extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
+            );
+            expect(await memoryOf(tester), same(memory));
+            await settleMixed(tester, memory.migrateLocal());
+
+            Future<void> say(String raw) async {
+              final retained = Completer<void>();
+              memory.receiptStarted = (_) => retained.complete();
+              await tester.enterText(find.byType(TextField), raw);
+              await tester.pump();
+              await tester.tap(find.byIcon(AppIcons.send).last);
+              await settleMixed(tester, retained.future);
+              memory.receiptStarted = null;
+              await settleMixed(tester, memory.lastReceipt);
+              await tester.pump();
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            }
+
+            List<MemoryRow> readRows(String sql) => [
+              for (final row in db.select(sql)) Map<String, Object?>.from(row),
+            ];
+            List<List<MemoryRow>> ledger() => [
+              readRows('SELECT * FROM companion_tasks ORDER BY task_id'),
+              readRows('SELECT * FROM companion_task_revisions ORDER BY task_id,task_rev'),
+              readRows('SELECT * FROM companion_task_receipts ORDER BY runner_receipt_seq'),
+            ];
+            const originalRaw = '2026-11-23 08:00 Asia/Shanghai提醒我带证件';
+            await say(originalRaw);
+            final original = memory.store.tasks().single;
+            final id = original['task_id']! as String;
+            final room = memory.store.lightSessionId;
+            final originalSource = memory.store.messages().singleWhere((row) => row['text'] == originalRaw);
+            final sourceBefore = Map<String, Object?>.from(
+              db.select('SELECT * FROM memory_messages WHERE id=?', [originalSource['id']]).single,
+            );
+            expect(original['state'], 'done');
+            expect(memory.store.taskReceipts(id), hasLength(2));
+
+            void addLater(int index) {
+              now++;
+              final sourceId = 'r22-later-$index';
+              memory.store.submitMessage(
+                id: sourceId,
+                sessionId: room,
+                text: hostWindow ? '电脑连上以后，把今天的笔记存成第$index页待办' : '2026-11-25 08:00提醒我处理第$index件事',
+                saidAtUtc: now,
+                offsetMinutes: 480,
+                zoneId: 'Asia/Shanghai',
+                offsetSeconds: 28800,
+              );
+              if (hostWindow) {
+                // Real local queued Host tasks. No Host request, file or model is run.
+                memory.store.createNotesTaskFromMessage(
+                  messageId: sourceId,
+                  expectedSourceRev: 1,
+                  itemNo: 0,
+                  roomMode: 'light',
+                  hostKey: 'ssh:r22-original-host',
+                  agreement: notesAgreement(queue: true),
+                );
+              } else {
+                memory.store.createReminderFromMessage(
+                  messageId: sourceId,
+                  expectedSourceRev: 1,
+                  itemNo: 0,
+                  roomMode: 'light',
+                  executorId: 'installation-A',
+                  reminder: CompanionReminderSpec(
+                    text: '处理第$index件事',
+                    localDate: '2026-11-25',
+                    localTime: '08:00',
+                    zoneId: 'Asia/Shanghai',
+                    offsetSeconds: 28800,
+                    epochMs: DateTime.utc(2026, 11, 25).millisecondsSinceEpoch,
+                  ),
+                );
+              }
+            }
+
+            for (var index = 0; index < 100; index++) {
+              addLater(index);
+            }
+            MemoryRow? other;
+            MemoryRow? ambiguousSource;
+            if (!hostWindow) {
+              now++;
+              const otherRaw = '2026-11-24 08:00 Asia/Shanghai提醒我带证件';
+              await say(otherRaw);
+              final source = memory.store.messages().singleWhere((row) => row['text'] == otherRaw);
+              other = memory.store.taskForCommand(source['id']! as String, 0)!;
+              expect(other['task_id'], isNot(id));
+              final before = ledger();
+              calls.clear();
+              now++;
+              await say('取消带证件的提醒');
+              ambiguousSource = memory.store.messages().singleWhere((row) => row['text'] == '取消带证件的提醒');
+              expect(memory.store.taskForCommand(ambiguousSource['id']! as String, 0), isNull);
+              expect(ledger(), before);
+              expect(calls.where((call) => const ['capabilities', 'resolve', 'wake'].contains(call.method)), isEmpty);
+              expect(find.text('你说的是哪一条？去「交代的事」里点给我看看。'), findsOneWidget);
+            }
+            final defaultRows = memory.store.tasks(sourceSessionId: room);
+            expect(defaultRows, hasLength(100));
+            expect(defaultRows.map((row) => row['task_id']), isNot(contains(id)));
+            if (hostWindow) {
+              expect(defaultRows.map((row) => row['kind']), everyElement('host.notes_to_todo'));
+            }
+
+            Future<void> openErrands() async {
+              await tester.tap(find.byIcon(AppIcons.more));
+              await tester.pumpAndSettle();
+              await tester.ensureVisible(find.text('交代的事'));
+              await tester.pumpAndSettle();
+              await tester.tap(find.text('交代的事'));
+              await tester.pumpAndSettle();
+              expect(tester.widget<CompanionTasksPage>(find.byType(CompanionTasksPage)).taskId, isNull);
+            }
+
+            final beforeBrowse = ledger();
+            calls.clear();
+            await openErrands();
+            expect(find.text('带证件'), hostWindow ? findsNothing : findsOneWidget);
+            expect(find.text('更早的事'), findsOneWidget);
+            expect(calls.map((call) => call.method), hostWindow ? isEmpty : ['capabilities']);
+            expect(ledger(), beforeBrowse);
+
+            Future<void> earlier() async {
+              calls.clear();
+              await tester.ensureVisible(find.text('更早的事'));
+              await tester.pumpAndSettle();
+              await tester.tap(find.text('更早的事'));
+              await tester.pumpAndSettle();
+              expect(calls.map((call) => call.method), ['capabilities']);
+            }
+
+            await earlier();
+            expect(find.text('带证件'), hostWindow ? findsOneWidget : findsNWidgets(2));
+            expect(find.text('更早的事'), findsNothing);
+            expect(ledger(), beforeBrowse);
+            calls.clear();
+            await tester.tap(find.byIcon(AppIcons.refresh));
+            await tester.pumpAndSettle();
+            expect(find.text('带证件'), hostWindow ? findsOneWidget : findsNWidgets(2));
+            expect(find.text('更早的事'), findsNothing);
+            expect(calls.map((call) => call.method), ['capabilities']);
+            expect(ledger(), beforeBrowse);
+
+            if (hostWindow) {
+              // At exactly the expanded limit there is no sentinel row to show.
+              for (var index = 100; index < 199; index++) {
+                addLater(index);
+              }
+              memory.changed();
+              await tester.pump();
+              expect(find.text('带证件'), findsOneWidget);
+              expect(find.text('更早的事'), findsNothing);
+              addLater(199);
+              memory.changed();
+              await tester.pump();
+              expect(find.text('带证件'), findsNothing);
+              expect(find.text('更早的事'), findsOneWidget);
+              final afterInsertion = ledger();
+              await earlier();
+              expect(find.text('带证件'), findsOneWidget);
+              expect(find.text('更早的事'), findsNothing);
+              expect(ledger(), afterInsertion);
+            } else {
+              // The visible newer namesake is a different date. Returning from
+              // its real detail route keeps the already expanded list.
+              await tester.ensureVisible(find.text('带证件').first);
+              await tester.pumpAndSettle();
+              await tester.tap(find.text('带证件').first);
+              await tester.pumpAndSettle();
+              expect(tester.widget<CompanionTasksPage>(find.byType(CompanionTasksPage)).taskId, other!['task_id']);
+              expect(find.textContaining('2026-11-24'), findsOneWidget);
+              await tester.tap(find.byIcon(AppIcons.back));
+              await tester.pumpAndSettle();
+              expect(find.text('带证件'), findsNWidgets(2));
+              expect(find.text('更早的事'), findsNothing);
+            }
+
+            final beforeDetail = ledger();
+            calls.clear();
+            await tester.ensureVisible(find.text('带证件').last);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('带证件').last);
+            await tester.pumpAndSettle();
+            expect(tester.widget<CompanionTasksPage>(find.byType(CompanionTasksPage)).taskId, id);
+            expect(find.textContaining('2026-11-23'), findsOneWidget);
+            expect(find.text('不用提醒了'), findsOneWidget);
+            expect(memory.store.tasks(sourceSessionId: room).map((row) => row['task_id']), isNot(contains(id)));
+            expect(calls.map((call) => call.method), ['capabilities']);
+            expect(ledger(), beforeDetail);
+
+            if (!hostWindow) {
+              final receipts = memory.store.taskReceipts(id);
+              final cancelStarted = Completer<void>();
+              memory.receiptStarted = (_) => cancelStarted.complete();
+              calls.clear();
+              now++;
+              await tester.tap(find.text('不用提醒了'));
+              await settleMixed(tester, cancelStarted.future);
+              memory.receiptStarted = null;
+              await settleMixed(tester, memory.lastReceipt);
+              await tester.pump();
+              final stopped = memory.store.task(id)!;
+              expect(stopped['task_rev'], 2);
+              expect(stopped['operation'], 'cancel');
+              expect(stopped['cancel_requested'], 1);
+              expect(stopped['state'], 'queued', reason: 'The wake ACK does not prove that the alarm stopped');
+              expect(stopped['source_message_id'], originalSource['id']);
+              expect(stopped['source_session_id'], room);
+              expect(stopped['command_message_id'], isNot(ambiguousSource!['id']));
+              final source = memory.store.messages().singleWhere((row) => row['id'] == stopped['command_message_id']);
+              expect(source['session_id'], room);
+              expect(source['text'], '取消带证件的提醒');
+              expect(memory.store.task(other!['task_id']! as String), other);
+              expect(memory.store.taskReceipts(id), receipts);
+              final afterCancel = ledger();
+              expect(
+                afterCancel[0].where((row) => row['task_id'] != id),
+                beforeDetail[0].where((row) => row['task_id'] != id),
+              );
+              expect(afterCancel[1], hasLength(beforeDetail[1].length + 1));
+              expect(
+                afterCancel[1].where((row) => row['task_id'] != id || row['task_rev'] == 1),
+                beforeDetail[1],
+              );
+              expect(afterCancel[2], beforeDetail[2]);
+              expect(calls.where((call) => call.method == 'wake').single.arguments, {'taskId': id});
+              expect(calls.where((call) => call.method == 'resolve'), isEmpty);
+              expect(find.text('取消的要求已记下，还没确认这条提醒已撤下。'), findsOneWidget);
+              expect(find.text('好，这条不提醒了。'), findsNothing);
+            }
+            expect(
+              Map<String, Object?>.from(
+                db.select('SELECT * FROM memory_messages WHERE id=?', [originalSource['id']]).single,
+              ),
+              sourceBefore,
+            );
+            expect(posts, 0);
+          },
+        );
+      }
+
       for (final rejectSource in [false, true]) {
         testWidgets('E actual Page keeps reminder lookup and factual clause identities, sourceFailure=$rejectSource', (
           tester,

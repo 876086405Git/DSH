@@ -420,6 +420,7 @@
   "companionMemoryPostponedDone": "好，那等你定了新时间再说。",
   "companionTasksTitle": "交代的事",
   "companionTasksEmpty": "你还没交代我什么事呢。",
+  "companionTasksEarlier": "更早的事",
   "companionTaskMissing": "这件事我这儿找不到了。",
   "companionTaskChanged": "这件事后来又改过了，我按最新的来。",
   "companionReminderEdit": "改提醒",

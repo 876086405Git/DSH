@@ -334,6 +334,8 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
   String? _executorId;
   bool _busy = false;
   bool _loadFailed = false;
+  static const _taskPageSize = 100;
+  int _taskLimit = _taskPageSize;
   DshClient? _notesVerifiedClient;
   String? _notesVerifiedStore;
   CompanionTasksCapability? _notesForegroundCapability;
@@ -387,7 +389,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
       try {
         final task = widget.taskId == null ? null : memory.store.task(widget.taskId!);
         final rows = widget.taskId == null && widget.sourceSessionId != null
-            ? memory.store.tasks(sourceSessionId: widget.sourceSessionId)
+            ? memory.store.tasks(sourceSessionId: widget.sourceSessionId, limit: _taskLimit)
             : const <MemoryRow>[];
         final mapsOnly = rows.isNotEmpty && rows.every((row) => row['kind'] == 'phone.map_open');
         final hostsOnly =
@@ -501,7 +503,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         return;
       }
       final rows = selectedId == null && widget.sourceSessionId != null
-          ? memory.store.tasks(sourceSessionId: widget.sourceSessionId)
+          ? memory.store.tasks(sourceSessionId: widget.sourceSessionId, limit: _taskLimit)
           : const <MemoryRow>[];
       if (rows.isNotEmpty &&
           rows.every(
@@ -2962,7 +2964,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final task = memory == null || selectedId == null ? null : memory.store.task(selectedId);
     final rows = memory == null || widget.sourceSessionId == null
         ? <MemoryRow>[]
-        : memory.store.tasks(sourceSessionId: widget.sourceSessionId);
+        : memory.store.tasks(sourceSessionId: widget.sourceSessionId, limit: _taskLimit + 1);
     return AppPage.list(
       title: l10n.companionTasksTitle,
       actions: [
@@ -2984,7 +2986,7 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         else
           SheetGroup(
             children: [
-              for (final row in rows)
+              for (final row in rows.take(_taskLimit))
                 SettingsTile(
                   icon: row['kind'] == 'phone.map_open'
                       ? AppIcons.plan
@@ -3028,6 +3030,18 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
                     MaterialPageRoute<void>(
                       builder: (_) => CompanionTasksPage(memory: memory, taskId: row['task_id']! as String),
                     ),
+                  ),
+                ),
+              if (rows.length > _taskLimit)
+                Center(
+                  child: TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            setState(() => _taskLimit += _taskPageSize);
+                            unawaited(_refresh());
+                          },
+                    child: Text(l10n.companionTasksEarlier),
                   ),
                 ),
             ],

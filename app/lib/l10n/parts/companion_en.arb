@@ -326,6 +326,7 @@
   "companionMemoryPostponedDone": "Okay, let's pick it up once you have a new time.",
   "companionTasksTitle": "Errands",
   "companionTasksEmpty": "You haven't asked me to do anything yet.",
+  "companionTasksEarlier": "Earlier errands",
   "companionTaskMissing": "I can't find this one anymore.",
   "companionTaskChanged": "This was changed later. I'm going with the latest.",
   "companionReminderEdit": "Change reminder",
