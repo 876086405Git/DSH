@@ -7,6 +7,7 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -115,7 +116,11 @@ internal object EdgeRim {
     private val B = DoubleArray(COUNT) { hash(it.toDouble(), 78.233, 4.1) }
     private val C = DoubleArray(COUNT) { hash(it.toDouble(), 39.425, 2.7) }
 
-    /** The rim's thickness never gets past this share of [EdgeBeamSpec.WIDTH_DP] (one lump at its deepest breath). */
+    /**
+     * The rim's thickness never gets past this share of [EdgeBeamSpec.WIDTH_DP]: one lump at its
+     * deepest breath. Lumps drifting over each other could sum past it, so [thickness] (and the
+     * shader) cap there: the drawn reach is built on it.
+     */
     val MAX_THICKNESS: Float = even((B.maxOf { (0.2 + 2.6 * it) * 1.25 } + BASE).div(NORM).toFloat())
 
     /** The length round a [w] × [h] rect with corners of radius [r] (any unit). */
@@ -158,7 +163,7 @@ internal object EdgeRim {
             val k = ds / lumps[i * STRIDE + 1]
             t += lumps[i * STRIDE + 2] * exp(-k * k)
         }
-        return even(max((t / NORM).toFloat(), 0.04f))
+        return min(even(max((t / NORM).toFloat(), 0.04f)), MAX_THICKNESS)
     }
 
     /** The lumps' thickness [raw] pulled towards 1 by [EdgeBeamSpec.UNEVEN]: one band all round, gently uneven. */
