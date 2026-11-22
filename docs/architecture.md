@@ -318,8 +318,10 @@ DshConnection      单个 Host 的物理连接：launch-token → cookie、Host 
 ### 4.2 dsh_remote
 
 `RemoteAccount`（登录/设备/Host 目录/key pinning）→ `RemoteServerApi`（REST）+
-`RelayTransport`（控制 WS）→ Noise IK `SecureChannel` → `WebRtcTransport`（LAN/P2P/TURN）或 relay →
+`RelayTransport`（控制 WS）→ `WebRtcTransport`（LAN/P2P/TURN）或 Relay 数据面 → Noise IK `SecureChannel` →
 `RemoteRpcClient` → `RemoteTunnelCarrier`（实现 `DshCarrier`，交给普通 `DshClient`）。
+Control 已确认 lease 且独立数据面仍存活时，仅恢复 Control，保留 Noise/RPC/事件流；数据面断开或 recovery 被拒绝时，
+由既有 mux 建立新 tunnel、新 Noise 与新 `$events` 世代，不重放结果未知的 RPC。票据仅在 transport 内存保存，关闭/换 Host/登出时清除。
 端点白名单 `harnessRemoteAllowlist` 与上游 Host 插件版本耦合，新增端点前先看它。
 
 对话备份走 `RemoteSessionTransfer` 的顶层 `session.transfer.*` Noise RPC，不经 Harness 端点白名单。

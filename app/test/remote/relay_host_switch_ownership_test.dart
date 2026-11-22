@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_app/remote/relay/dsh_remote_backend.dart';
+import 'package:dsh_app/remote/relay/network_route.dart';
+import 'package:dsh_app/remote/relay/relay_backend.dart';
 import 'package:dsh_app/remote/secret_store.dart' as app_secrets;
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -17,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../packages/dsh_remote/test/support/fake_remote.dart';
+import '../../../packages/dsh_remote/test/support/fake_rtc.dart';
 
 const _guard = Duration(seconds: 10);
 
@@ -215,6 +218,64 @@ class _Fixture {
 void main() {
   _LoopbackBinding();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('network kicks probe a healthy data plane instead of replacing it on route changes', () async {
+    final server = await FakeRemoteServer.start();
+    addTearDown(() => server.close().timeout(_guard));
+    server.webrtc = true;
+    final network = FakeRtcNetwork();
+    final host = await FakeRemoteHost.start(server)
+      ..webrtc = true
+      ..rtcNetwork = network;
+    addTearDown(() => host.close().timeout(_guard));
+    await host.goOffline();
+    await host.goOnline();
+    host.handlers['session/list'] = (_) => {
+      'ok': true,
+      'value': {'items': <Object?>[]},
+    };
+    var route = RemoteNetworkRoute.local;
+    var routeReads = 0;
+    final backend = DshRemoteRelayBackend(
+      secrets: app_secrets.MemorySecretStore(),
+      serverUrl: server.url,
+      peerConnector: network.connector,
+      resolveNetworkRoute: () async {
+        routeReads++;
+        return route;
+      },
+    );
+    addTearDown(() => backend.close().timeout(_guard));
+    await backend.loginWithPassword(FakeRemoteServer.account, FakeRemoteServer.password);
+    final target = (await backend.listHosts()).single;
+    backend.approveHost(target);
+    final link = RelayHostLink(backend: backend, hostId: target.id, resolveHost: () async => target);
+    addTearDown(() => link.close().timeout(_guard));
+    final client = await link.open().timeout(_guard);
+    final carrier = client.remoteCarrier!;
+    final session = carrier.session!;
+    final connectionId = server.links.keys.single;
+    final initialRouteReads = routeReads;
+    expect(initialRouteReads, greaterThan(0));
+    var describes = host.rpcMethods.where((method) => method == 'harness.transport.describe').length;
+
+    for (final next in [RemoteNetworkRoute.remote, RemoteNetworkRoute.local]) {
+      route = next;
+      link.kick();
+      expect(await backend.probe(client).timeout(_guard), isTrue);
+      expect(host.rpcMethods.where((method) => method == 'harness.transport.describe'), hasLength(++describes));
+      expect(routeReads, initialRouteReads, reason: 'interface hints are read only for a new transport selection');
+      expect(link.status.isConnected, isTrue);
+      expect(link.currentClient, same(client));
+      expect(carrier.session, same(session));
+      expect(server.links.keys.single, connectionId);
+      expect(host.handshakes, [connectionId]);
+      expect(network.clients, hasLength(1));
+      expect(network.clients.single.closed, isFalse);
+      expect(await client.listSessions().timeout(_guard), isEmpty);
+    }
+    expect(server.protocolErrors, isEmpty);
+  });
 
   for (final attach in [false, true]) {
     final mode = attach ? 'relay.attach' : 'control relay';

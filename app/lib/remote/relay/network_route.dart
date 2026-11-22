@@ -13,17 +13,11 @@ RemoteNetworkRoute remoteNetworkRoute(List<ConnectivityResult> interfaces) {
   return RemoteNetworkRoute.unknown;
 }
 
-bool shouldRenegotiateRemoteRoute(RemoteNetworkRoute previous, RemoteNetworkRoute next) =>
-    previous != RemoteNetworkRoute.unknown && next != RemoteNetworkRoute.unknown && previous != next;
-
+/// Interface hints only; ICE validates actual reachability and the selected path.
 List<remote.RemoteTransportMode> transportsForRemoteRoute(RemoteNetworkRoute route) =>
     route == RemoteNetworkRoute.remote
     ? const [remote.RemoteTransportMode.p2p, remote.RemoteTransportMode.turn, remote.RemoteTransportMode.relay]
     : remote.RemoteTransportMode.values;
-
-/// Interface hints only; ICE validates actual reachability and the selected path.
-List<remote.RemoteTransportMode> automaticRemoteTransports(List<ConnectivityResult> interfaces) =>
-    transportsForRemoteRoute(remoteNetworkRoute(interfaces));
 
 Future<RemoteNetworkRoute> resolveRemoteNetworkRoute() async {
   try {

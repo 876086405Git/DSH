@@ -59,12 +59,12 @@ class RemoteMessage {
     }
     final id = map['id'];
     final type = map['type'];
-    final timestamp = map['timestamp'];
+    final timestamp = asInt(map['timestamp']);
     if (id is! String || id.isEmpty) throw const ProtocolError('Remote message id is required.');
     if (type is! String || !remoteMessageTypes.contains(type)) {
       throw const ProtocolError('Unknown Remote message type.');
     }
-    if (timestamp is! int || timestamp <= 0) {
+    if (timestamp == null || timestamp <= 0 || timestamp > maxSafeInteger) {
       throw const ProtocolError('Remote message timestamp is invalid.');
     }
     return RemoteMessage(type, map['payload'], id: id, timestamp: timestamp);
@@ -94,7 +94,7 @@ class RpcErrorPayload {
     if (message is! String || message.isEmpty) {
       throw const ProtocolError('rpc.error message is required.');
     }
-    if (map.containsKey('retryable') && map['retryable'] != null && map['retryable'] is! bool) {
+    if (map.containsKey('retryable') && map['retryable'] is! bool) {
       throw const ProtocolError('rpc.error retryable must be a boolean.');
     }
     return RpcErrorPayload(requestId, code, message, retryable: map['retryable'] as bool?, details: map['details']);

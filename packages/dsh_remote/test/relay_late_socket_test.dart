@@ -112,9 +112,11 @@ class _ConnectObservation {
     ),
   );
 
-  void expireLast() {
+  void expireConnector({required bool attach}) {
     expired = true;
-    deadlines.last.fire();
+    // The data-ready deadline is installed after its connector deadline. This
+    // regression still expires the connector and observes its late source value.
+    deadlines[deadlines.length - (attach ? 2 : 1)].fire();
   }
 }
 
@@ -211,7 +213,7 @@ void main() {
         final request = await server.held.future.timeout(_watchdog);
         expect(request.uri.path, attach ? '/data' : '/control');
         expect(observation.deadlines.where((t) => t.isActive), hasLength(attach ? 2 : 1));
-        observation.expireLast();
+        observation.expireConnector(attach: attach);
         await rejected;
 
         final peer = await server.upgrade(request);
