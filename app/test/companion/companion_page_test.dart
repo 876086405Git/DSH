@@ -14,9 +14,12 @@ import 'package:dsh_app/companion/companion_moves.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_voice_source.dart';
+import 'package:dsh_app/companion/companion_widget.dart';
 import 'package:dsh_app/pets/pet_mood.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
 import 'package:dsh_app/notify/chat_alerts.dart' show companionHostKey;
+import 'package:dsh_app/speech/speech_settings.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
@@ -5543,6 +5546,228 @@ void main() {
         for (var i = 0; i < 4; i++) {
           await _settle(tester);
         }
+      }
+
+      for (final newerChat in [false, true]) {
+        testWidgets(
+          newerChat
+              ? 'R21 late widget clear and EOF keep the newer Page reply and voice'
+              : 'R21 memory control confirms locally while widget clear waits',
+          (tester) async {
+            const original = '我琴课一直在周四。';
+            const correction = '琴课改成我琴课一直在周五。';
+            const acknowledgment = '啊，是我记岔了。';
+            const question = '刚才窗边那只橘猫怎么样？';
+            const answer = '它还在窗边晒太阳呢。';
+            const voiceChannel = MethodChannel('dsh/companion_voice');
+            const widgetChannel = MethodChannel('dsh/companion_widget');
+            final memory = _ReceiptMemory(
+              CompanionMemoryStore(
+                sqlite3.open('${root.path}/memory.sqlite'),
+                nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
+              ),
+              CompanionLocal.at(root),
+            );
+            final voiceCalls = <MethodCall>[];
+            final widgetUpdates = <Map<String, Object?>>[];
+            final voiceReady = Completer<void>();
+            final answerSpoken = Completer<void>();
+            final clearEntered = Completer<void>();
+            final releaseClear = Completer<void>();
+            final requestEntered = Completer<void>();
+            final posts = <Map<String, Object?>>[];
+            final destinations = <Uri>[];
+            StreamController<List<int>>? body;
+            Future<bool>? clearSettled;
+            Future<void>? chatSettled;
+            int? clearedRevision;
+            final client = MockClient.streaming((request, bytes) async {
+              destinations.add(request.url);
+              posts.add(jsonDecode(await bytes.transform(utf8.decoder).join()) as Map<String, Object?>);
+              final response = body = StreamController<List<int>>();
+              if (!requestEntered.isCompleted) requestEntered.complete();
+              return http.StreamedResponse(response.stream, 200, headers: {'content-type': 'text/event-stream'});
+            });
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voiceChannel, (call) async {
+              voiceCalls.add(call);
+              if (call.method == 'ready' && !voiceReady.isCompleted) voiceReady.complete();
+              if (call.method == 'speak' && (call.arguments as Map)['text'] == answer && !answerSpoken.isCompleted) {
+                answerSpoken.complete();
+              }
+              return switch (call.method) {
+                'ready' || 'speak' => true,
+                _ => null,
+              };
+            });
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, (call) async {
+              final values = Map<String, Object?>.from(call.arguments as Map);
+              widgetUpdates.add(values);
+              if (clearedRevision != null &&
+                  values['memoryControlRevision'] == clearedRevision &&
+                  values.containsKey('line') &&
+                  values['line'] == null &&
+                  values.containsKey('saidAt') &&
+                  values['saidAt'] == null &&
+                  !clearEntered.isCompleted) {
+                clearEntered.complete();
+                await releaseClear.future;
+              }
+              return true;
+            });
+            addTearDown(() async {
+              if (!releaseClear.isCompleted) releaseClear.complete();
+              if (clearSettled case final clearing?) await settleMixed(tester, clearing);
+              await tester.pumpWidget(const SizedBox());
+              final response = body;
+              if (response != null && !response.isClosed) await settleMixed(tester, response.close());
+              if (chatSettled case final chatting?) await settleMixed(tester, chatting);
+              memory.dispose();
+              client.close();
+              await tester.pump(const Duration(seconds: 20));
+              tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voiceChannel, null);
+              tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, null);
+            });
+            memory.store.submitMessage(
+              id: 'r21-lesson-original',
+              sessionId: memory.store.lightSessionId,
+              text: original,
+              saidAtUtc: DateTime.now().millisecondsSinceEpoch,
+              offsetMinutes: 0,
+            );
+            final batch = memory.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+            final proposal = parseExtractionProposal(
+              jsonEncode({
+                'schema_version': 2,
+                'batch_id': batch.id,
+                'covered_message_ids': ['r21-lesson-original'],
+                'completion': 'complete',
+                'operations': [
+                  {
+                    'op': 'create',
+                    'kind': 'fact',
+                    'text': original,
+                    'keywords': ['琴课'],
+                    'evidence': [
+                      {'message_id': 'r21-lesson-original', 'quote': original},
+                    ],
+                  },
+                ],
+              }),
+              batch,
+            );
+            expect(memory.store.commitExtraction(batch, proposal), isTrue);
+            await openLight(
+              tester,
+              apiKey: 'sk-test',
+              client: client,
+              extra: [
+                companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+                companionEffectiveVoiceProvider.overrideWithValue(const CompanionVoiceSettings(on: true)),
+              ],
+            );
+            expect(await memoryOf(tester), same(memory));
+            await settleMixed(tester, voiceReady.future);
+            final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+            final widget = container.read(companionWidgetProvider);
+            final before = memory.store.archive['control_revision']! as int;
+            clearedRevision = before + 1;
+            voiceCalls.clear();
+            widgetUpdates.clear();
+
+            await tester.enterText(find.byType(TextField), correction);
+            await tester.pump();
+            await tester.tap(find.byIcon(AppIcons.send).last);
+            await settleMixed(tester, clearEntered.future);
+            // Observe the same in-flight clear already started by the Page;
+            // the real Widget queue stays held until its platform ACK arrives.
+            final clearing = clearSettled = memory.clearWidget(widget);
+            await tester.pump();
+            expect(releaseClear.isCompleted, isFalse);
+            expect(memory.store.archive['control_revision'], clearedRevision);
+            expect(memory.store.archive['widget_clear_pending'], 1);
+            expect(memory.store.cards().single['text'], '我琴课一直在周五。');
+            final controlSource = memory.store.messages().singleWhere((row) => row['text'] == correction);
+            final proof = (memory.store.cards().single['evidence']! as List).cast<Map>().single;
+            expect(proof['message_id'], controlSource['id']);
+            expect(proof['source_rev'], controlSource['source_rev']);
+            expect(proof['quote'], correction);
+            expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, acknowledgment);
+            expect(voiceCalls.where((call) => call.method == 'speak').map((call) => (call.arguments as Map)['text']), [
+              acknowledgment,
+            ]);
+            expect(posts, isEmpty, reason: 'the explicit correction is a local control, not a model request');
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+
+            if (newerChat) {
+              await tester.enterText(find.byType(TextField), question);
+              await tester.pump();
+              await tester.tap(find.byIcon(AppIcons.send).last);
+              await settleMixed(tester, requestEntered.future);
+              chatSettled = memory.lastReceipt;
+              expect(posts, hasLength(1));
+              expect(destinations.single.toString(), companionLightEndpoint);
+              expect(jsonEncode(posts.single['messages']), contains(question));
+              expect(memory.store.messages().singleWhere((row) => row['text'] == question)['role'], 'user');
+              body!.add(utf8.encode(_sse([answer], end: false)));
+              await settleMixed(tester, answerSpoken.future);
+              await tester.pump();
+              expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, answer);
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running, isTrue);
+              expect(voiceCalls.where((call) => call.method == 'speak').map((call) => (call.arguments as Map)['text']), [
+                acknowledgment,
+                answer,
+              ]);
+              final spoken = voiceCalls.lastWhere((call) => call.method == 'speak').arguments as Map;
+              expect(spoken['flush'], isFalse, reason: 'the new streamed sentence uses the actual speaker queue');
+              expect(memory.store.archive['widget_clear_pending'], 1);
+              expect(releaseClear.isCompleted, isFalse);
+            }
+
+            final callsBeforeAck = List<MethodCall>.of(voiceCalls);
+            releaseClear.complete();
+            expect(await settleMixed(tester, clearing), isTrue);
+            // Drain metadata behind the real queue without changing its line.
+            expect(
+              await settleMixed(tester, widget.update({
+                'memoryArchiveId': memory.store.archive['id'],
+                'memoryControlRevision': clearedRevision,
+              })),
+              isTrue,
+            );
+            await tester.pump();
+            expect(memory.store.archive['widget_clear_pending'], 0);
+            expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, newerChat ? answer : acknowledgment);
+            expect(voiceCalls, callsBeforeAck, reason: 'late clearing must not speak again or flush newer speech');
+
+            if (newerChat) {
+              body!.add(utf8.encode(_sse(const [])));
+              await settleMixed(tester, body!.close());
+              await settleMixed(tester, chatSettled!);
+              await tester.pump();
+              expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, answer);
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running, isFalse);
+              expect(
+                voiceCalls,
+                callsBeforeAck,
+                reason: 'EOF must neither restore the old ACK nor repeat the new sentence',
+              );
+              expect(memory.store.requests().singleWhere((row) => row['category'] == 'chat')['terminal'], 'complete');
+              expect(memory.store.messages().singleWhere((row) => row['role'] == 'assistant')['text'], answer);
+              expect(
+                await settleMixed(tester, widget.update({
+                  'memoryArchiveId': memory.store.archive['id'],
+                  'memoryControlRevision': clearedRevision,
+                })),
+                isTrue,
+              );
+              expect(widgetUpdates.where((value) => value['line'] != null).map((value) => value['line']), [answer]);
+            } else {
+              expect(posts, isEmpty);
+              expect(memory.store.requests().where((row) => row['category'] == 'chat'), isEmpty);
+              expect(widgetUpdates.where((value) => value['line'] != null), isEmpty);
+            }
+          },
+        );
       }
 
       testWidgets('starting over drops the reply on its way: it never writes itself back', (tester) async {

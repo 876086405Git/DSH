@@ -2256,8 +2256,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _retryMemorySource = null;
     memory.changed();
     final current = _currentRoom();
-    final cleared = await memory.clearWidget(ref.read(companionWidgetProvider));
-    if (!current()) return true;
     final line = control['ambiguous'] == true
         ? l10n.companionMemoryWhich
         : switch (kind) {
@@ -2272,8 +2270,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // A local acknowledgement must not write a fresh widget line immediately
     // after the control deliberately cleared both persisted fields.
     _say(line, widgetLine: false);
-    if (!cleared) _notice(l10n.companionMemoryWidgetPending);
     if (hostSourceRemoved) _notice(l10n.companionMemoryHostSourceRemaining);
+    // A newer reply may begin while platform cleanup is still pending.
+    final cleared = await memory.clearWidget(ref.read(companionWidgetProvider));
+    if (!current()) return true;
+    if (!cleared) _notice(l10n.companionMemoryWidgetPending);
     _queueMemoryExtraction();
     return true;
   }
