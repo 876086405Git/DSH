@@ -296,6 +296,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     final controller = _controller ??= WebViewController();
     final textZoom = MediaQuery.textScalerOf(context).scale(100).round().clamp(50, 300);
     final dark = theme.brightness == Brightness.dark;
+    final generation = _document;
     unawaited(() async {
       await Future.wait(
         [
@@ -312,8 +313,13 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       if (!mounted || controller != _controller) return;
       await _guard.attach(controller, dark: dark, textZoom: textZoom).catchError((_) {});
       if (!mounted || controller != _controller) return;
+      // A later _open has its own document to load; this one is not loaded.
+      if (generation != _document) return;
       _darkSent = dark;
       _syncDark();
+      // Whatever came up meanwhile (a page still loading when _open ran) is
+      // replaced now: what it was given is settled.
+      widget.calls?.pageLost();
       await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }
