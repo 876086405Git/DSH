@@ -31,6 +31,11 @@ class EdgeBeamModelTest {
         // One band: no thin stretches between peaks, nowhere past the bound the shader's reach is built on.
         assertTrue("min ${t.min()}", t.min() >= 0.65f)
         assertTrue(t.max() <= EdgeRim.MAX_THICKNESS)
+        // Lumps drifting over each other never take it past the bound the reach is built on.
+        for (time in listOf(0.0, 60.0, 137.0, 600.0, 3_600.0)) {
+            val m = lumpsAt(time)
+            for (i in 0 until n) assertTrue(EdgeRim.thickness(perimeter * i / n, perimeter, m) <= EdgeRim.MAX_THICKNESS)
+        }
         // Still a little uneven, so it doesn't read as a drawn frame.
         assertTrue("min ${t.min()} max ${t.max()}", t.max() in (1.2f * t.min())..(2.5f * t.min()))
     }

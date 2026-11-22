@@ -343,6 +343,7 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
             s.setFloatUniform("bloom", bloom, p.bloom)
             s.setFloatUniform("bloomRest", EdgeBeamSpec.BLOOM_REST)
             s.setFloatUniform("uneven", EdgeBeamSpec.UNEVEN)
+            s.setFloatUniform("maxThick", EdgeRim.MAX_THICKNESS)
             s.setFloatUniform("gain", EdgeBeamSpec.BEAM_GAIN)
             s.setFloatUniform("whiten", if (dark) EdgeBeamSpec.CORE_WHITEN else 0f)
             s.setFloatUniform("beamOn", if (travels) 1f else 0f)
@@ -387,6 +388,7 @@ uniform float core;
 uniform float2 bloom;
 uniform float bloomRest;
 uniform float uneven;
+uniform float maxThick;
 uniform float reach;
 uniform float4 peaks;
 uniform float gain;
@@ -445,7 +447,7 @@ half4 main(float2 xy) {
         beam += exp(-k * k);
     }
     beam = min(beam, 1.0) * beamOn * (1.0 - still);
-    float rimK = inset / (width * (1.0 + uneven * (max(t / 1.0498, 0.04) - 1.0)));
+    float rimK = inset / (width * min(1.0 + uneven * (max(t / 1.0498, 0.04) - 1.0), maxThick));
     float lineK = inset / line;
     float coreK = inset / core;
     float rimA = mix(exp(-rimK * rimK) * peaks.x * (1.0 + gain * beam) / (1.0 + gain), exp(-lineK * lineK) * peaks.y, still);
