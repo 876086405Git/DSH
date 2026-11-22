@@ -515,7 +515,9 @@ class _DurableFold {
           ),
         );
       case AssistantMessageEvent(:final message):
-        if (message.text.trim().isNotEmpty || message.reasoning.trim().isNotEmpty || event.interrupted) {
+        final text = message.text;
+        final reasoning = message.reasoning;
+        if (text.trim().isNotEmpty || reasoning.trim().isNotEmpty || event.interrupted) {
           final rowKey = 'm${event.turn}.${event.step}';
           items.add(
             AssistantChatItem(
@@ -523,8 +525,8 @@ class _DurableFold {
               rowKey: messageKeys.add(rowKey) ? rowKey : null,
               seq: event.seq,
               time: event.time,
-              text: message.text,
-              reasoning: message.reasoning,
+              text: text,
+              reasoning: reasoning,
               interrupted: event.interrupted,
               isFinalAnswer: message.isFinalAnswer,
               usage: event.usage,
