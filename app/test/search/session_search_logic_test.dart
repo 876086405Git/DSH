@@ -143,6 +143,17 @@ void main() {
       expect(ids(r.archived), ['a1']);
     });
 
+    test('different paths with the same folder label stay hidden across sections', () {
+      final date = DateTime(2026, 10, 20);
+      final view = deriveSessionSearchResults(
+        query: 'project',
+        sessions: [searchSession('a', 'first', date, cwd: '/home/project/')],
+        archived: [searchSession('b', 'second', date, cwd: r'C:\work\project')],
+      );
+      expect(view.showFolders, isFalse);
+      expect(view.isEmpty, isTrue);
+    });
+
     test('the folder matches only when the sessions span several folders', () {
       final one = deriveSessionSearchResults(query: 'workspace', sessions: sessions);
       expect(one.isEmpty, isTrue);

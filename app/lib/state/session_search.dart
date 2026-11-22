@@ -195,10 +195,10 @@ SessionSearchResults deriveSessionSearchResults({
 }) {
   final terms = searchTerms(query);
   if (terms.isEmpty) return SessionSearchResults.empty;
-  final folders = {
-    for (final s in [...sessions, ...archived]) folderLabel(s.cwd),
-  };
-  final showFolders = folders.length > 1;
+  final all = sessions.followedBy(archived);
+  final firstCwd = all.firstOrNull?.cwd;
+  final firstLabel = folderLabel(firstCwd);
+  final showFolders = all.any((s) => s.cwd != firstCwd && folderLabel(s.cwd) != firstLabel);
   final snippets = <String, String>{};
   if (hits.isNotEmpty && sameSearchQuery(contentQuery, query)) {
     for (final hit in hits) {
