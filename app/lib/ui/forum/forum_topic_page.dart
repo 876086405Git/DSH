@@ -296,7 +296,7 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
 
     final page = NotificationListener<ScrollUpdateNotification>(
       onNotification: (n) {
-        if (detail != null && detail.hasMore && n.metrics.extentAfter < 900 && _moreError == null) {
+        if (detail != null && n.metrics.extentAfter < 900 && _moreError == null && !_loadingMore && detail.hasMore) {
           unawaited(_loadMore());
         }
         return false;
