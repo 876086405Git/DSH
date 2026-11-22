@@ -271,6 +271,9 @@ void main() {
         owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
         await tester.pumpWidget(
           ProviderScope(
+            overrides: [
+              activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+            ],
             child: MaterialApp(
               theme: buildDarkTheme(),
               localizationsDelegates: L10n.localizationsDelegates,
@@ -314,6 +317,9 @@ void main() {
     owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+        ],
         child: MaterialApp(
           theme: buildDarkTheme(),
           localizationsDelegates: L10n.localizationsDelegates,
@@ -324,11 +330,115 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('我在撤了，但不太确定撤干净没；要是到点还响，别理它就好。'), findsOneWidget);
+    expect(find.text('取消的要求已记下，还没确认这条提醒已撤下。'), findsOneWidget);
     expect(find.text('这条提醒我不太确定设上没，你看一眼系统闹钟？'), findsNothing);
     expect(find.byType(OutlinedButton), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final language in ['zh', 'en']) {
+    testWidgets('R19 task page distinguishes queued cancellation and locally cancelled reminders: $language', (
+      tester,
+    ) async {
+      final created = (await submit(await source('create', _raw))).task;
+      final id = created['task_id']! as String;
+      owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
+      final queued = language == 'zh'
+          ? '好，提醒记下了，还没确认设好。'
+          : "Okay, I've saved the reminder request. I haven't confirmed it's set.";
+      final pending = language == 'zh'
+          ? '取消的要求已记下，还没确认这条提醒已撤下。'
+          : "Your request to cancel is saved. I haven't confirmed that this reminder has been removed.";
+
+      Future<void> openTask(String taskId) async {
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+            ],
+            child: MaterialApp(
+              theme: buildDarkTheme(),
+              localizationsDelegates: L10n.localizationsDelegates,
+              supportedLocales: L10n.supportedLocales,
+              locale: Locale(language),
+              home: CompanionTasksPage(memory: owner, taskId: taskId),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await openTask(id);
+      final l10n = L10n.of(tester.element(find.byType(CompanionTasksPage)));
+      expect(find.text(queued), findsOneWidget);
+      expect(store.task(id)!['state'], 'queued');
+      expect(store.taskReceipts(id), isEmpty);
+      expect(find.text(l10n.companionReminderDone), findsNothing);
+
+      registered(created); // Controlled native receipt input, not an Android execution.
+      owner!.changed();
+      await tester.pump();
+      expect(find.text(l10n.companionReminderDone), findsOneWidget);
+      final registeredReceipts = store.taskReceipts(id);
+      calls.clear();
+      await tester.tap(find.text(l10n.companionReminderCancel));
+      await tester.pumpAndSettle();
+      final stopped = store.task(id)!;
+      expect(stopped['task_rev'], 2);
+      expect(stopped['operation'], 'cancel');
+      expect(stopped['cancel_requested'], 1);
+      expect(stopped['state'], 'queued');
+      expect(stopped['wait_reason'], isNull);
+      final command = store.messages().singleWhere((row) => row['id'] == stopped['command_message_id']);
+      expect(command['text'], l10n.companionReminderCancelSource('带钥匙'));
+      expect(command['session_id'], created['source_session_id']);
+      expect(calls.where((call) => call.method == 'wake'), hasLength(1));
+      expect(store.taskReceipts(id), registeredReceipts);
+      expect(find.text(pending), findsOneWidget);
+      expect(find.text(queued), findsNothing);
+      expect(find.text(l10n.companionReminderDone), findsNothing);
+      expect(find.text(l10n.companionReminderCancelled), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+
+      // Cancellation does not override the existing installation checks.
+      executor = 'installation-B';
+      calls.clear();
+      await openTask(id);
+      expect(find.text(l10n.companionReminderNotHere), findsOneWidget);
+      expect(find.text(pending), findsNothing);
+      unavailable = true;
+      await openTask(id);
+      expect(find.text(l10n.companionReminderPlatformUnavailable), findsOneWidget);
+      expect(find.text(pending), findsNothing);
+      expect(store.task(id), stopped);
+      expect(store.taskReceipts(id), registeredReceipts);
+      expect(calls.where((call) => call.method == 'wake' || call.method == 'resolve'), isEmpty);
+
+      // A never-claimed reminder is safely cancelled locally, without a wake.
+      executor = 'installation-A';
+      unavailable = false;
+      final unclaimed = (await submit(await source('unclaimed', _raw.replaceFirst('带钥匙', '带书')))).task;
+      final unclaimedId = unclaimed['task_id']! as String;
+      await openTask(unclaimedId);
+      expect(find.text(queued), findsOneWidget);
+      calls.clear();
+      await tester.tap(find.text(l10n.companionReminderCancel));
+      await tester.pumpAndSettle();
+      expect(store.task(unclaimedId)!['task_rev'], 2);
+      expect(store.task(unclaimedId)!['cancel_requested'], 1);
+      expect(store.task(unclaimedId)!['state'], 'cancelled');
+      expect(store.taskReceipts(unclaimedId), isEmpty);
+      expect(calls.where((call) => call.method == 'wake'), isEmpty);
+      expect(find.text(l10n.companionReminderCancelled), findsOneWidget);
+      expect(find.text(pending), findsNothing);
+      expect(find.text(queued), findsNothing);
+      expect(store.task(id), stopped);
+      expect(store.taskReceipts(id), registeredReceipts);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   for (final scenario in [
     'old_unknown_new_returned',
@@ -406,6 +516,9 @@ void main() {
       calls.clear();
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+          ],
           child: MaterialApp(
             theme: buildDarkTheme(),
             localizationsDelegates: L10n.localizationsDelegates,

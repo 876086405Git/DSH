@@ -153,8 +153,11 @@ String companionReminderLine(L10n l10n, MemoryRow task, {required String? execut
   if (task['executor_id'] != executorId) {
     return l10n.companionReminderNotHere;
   }
+  if (task['cancel_requested'] == 1) {
+    return task['state'] == 'cancelled' ? l10n.companionReminderCancelled : l10n.companionReminderCancelUnknown;
+  }
   if (task['state'] == 'unknown') {
-    return task['cancel_requested'] == 1 ? l10n.companionReminderCancelUnknown : l10n.companionReminderUnknown;
+    return l10n.companionReminderUnknown;
   }
   return switch (task['wait_reason']) {
     'text_missing' => l10n.companionReminderTextMissing,

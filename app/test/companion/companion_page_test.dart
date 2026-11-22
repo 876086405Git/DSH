@@ -3368,6 +3368,11 @@ void main() {
               expect(accepted['operation'], operation);
               expect(accepted['cancel_requested'], operation == 'cancel' ? 1 : 0);
               expect(accepted['state'], 'queued', reason: 'A wake ACK is neither a new alarm nor a stop receipt');
+              if (operation == 'cancel') {
+                expect(find.text('带证件：取消的要求已记下，还没确认这条提醒已撤下。'), findsOneWidget);
+                expect(find.textContaining('正在帮你设'), findsNothing);
+                expect(find.text('带证件：好，这条不提醒了。'), findsNothing);
+              }
               expect(accepted['local_time'], operation == 'amend' ? '08:30' : '08:00');
               expect(headsAfter, hasLength(headsBefore.length));
               expect(headsAfter.where((row) => row['task_id'] != id), headsBefore.where((row) => row['task_id'] != id));
