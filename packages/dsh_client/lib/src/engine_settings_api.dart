@@ -22,6 +22,8 @@
 ///   names the credential the secret is read from instead.
 library;
 
+import 'dart:collection';
+
 import 'background_session_read.dart';
 import 'features_api.dart';
 import 'json.dart';
@@ -219,10 +221,10 @@ class SchemaNode {
   SchemaNode? _sKey;
 
   /// Properties of an `object` (declaration order).
-  Map<String, SchemaNode> get dict => Map.unmodifiable(_dict);
+  Map<String, SchemaNode> get dict => UnmodifiableMapView(_dict);
 
   /// Members of a `union`, `intersect` or `tuple`.
-  List<SchemaNode> get list => List.unmodifiable(_list);
+  List<SchemaNode> get list => UnmodifiableListView(_list);
 
   /// Item of an `array` / `dict`; wrapped schema of `transform` / `lazy`.
   SchemaNode? get inner => _inner;
