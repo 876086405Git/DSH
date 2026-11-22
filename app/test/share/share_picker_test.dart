@@ -163,10 +163,10 @@ void main() {
     addTearDown(() => AppLocale.use(AppLocale.zhCN));
     final images = <ImageAttachment>[];
     final prompt = UserChatItem(seq: 1, time: DateTime(2026), text: '帮我调一下', images: images, files: const []);
-    Future<void> show({bool picked = false}) => tester.pumpWidget(
+    Future<void> show() => tester.pumpWidget(
       testApp(
         Scaffold(
-          body: MessagePickRow(item: prompt, picked: picked, onTap: () {}),
+          body: MessagePicker(items: [prompt], selected: const {}),
         ),
       ),
     );
@@ -174,7 +174,8 @@ void main() {
     await show();
     expect(find.text('帮我调一下'), findsOneWidget);
     images.add(const ImageAttachment(attachmentId: 'x', mediaType: 'image/png'));
-    await show(picked: true);
+    await tester.tap(find.byType(MessagePickRow));
+    await tester.pump();
     expect(find.text('〔图片〕 帮我调一下'), findsOneWidget);
     AppLocale.use(AppLocale.en);
     await show();
