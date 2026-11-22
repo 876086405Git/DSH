@@ -12,8 +12,10 @@ class OverlayPrefsTest {
         val p = OverlayPrefs()
         assertEquals(0.7f, p.idleOpacity)
         assertTrue(p.autoFold)
-        assertEquals(mapOf("idleOpacity" to 0.7f.toDouble(), "autoCollapse" to true), p.toMap())
+        assertTrue(p.edgeGlow)
+        assertEquals(mapOf("idleOpacity" to 0.7f.toDouble(), "autoCollapse" to true, "edgeGlow" to true), p.toMap())
         assertFalse(p.copy(autoFold = false).toMap()["autoCollapse"] as Boolean)
+        assertFalse(p.copy(edgeGlow = false).toMap()["edgeGlow"] as Boolean)
     }
 
     @Test fun opacityStaysWithin30And100Percent() {

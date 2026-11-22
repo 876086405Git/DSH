@@ -13729,6 +13729,12 @@ class L10nZh extends L10n {
   String get phoneAutoCollapseHint => '收成小球，点按展开';
 
   @override
+  String get phoneEdgeGlow => '屏幕边缘光效';
+
+  @override
+  String get phoneEdgeGlowHint => '操控时屏幕四周的流光';
+
+  @override
   String get phoneDeveloperOptions => '开发者选项';
 
   @override
@@ -18656,6 +18662,9 @@ class L10nZh extends L10n {
 
   @override
   String get searchKwPhoneAutoCollapse => '悬浮条,收起,悬浮球';
+
+  @override
+  String get searchKwPhoneEdgeGlow => '边缘光,光效,流光,特效,边框';
 
   @override
   String get searchKwPhoneReturn => '返回,完成后返回';

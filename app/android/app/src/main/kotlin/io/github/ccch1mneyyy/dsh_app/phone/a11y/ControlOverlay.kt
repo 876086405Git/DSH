@@ -184,11 +184,14 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     /** A narrower line may shrink the capsule now. */
     private val shrinkTick = Runnable { renderPill() }
 
-    // 闲置时不透明度 (the ball's) and 「闲置时自动收起」 (设置 → 手机操控 → 悬浮条), live while showing.
+    // 闲置时不透明度 (the ball's), 「闲置时自动收起」 and 「屏幕边缘光效」 (设置 → 手机操控 → 悬浮条), live while showing.
     private val overlayPrefs = OverlayPrefs.prefs(service)
     private var idleOpacity = OverlayPrefs.from(overlayPrefs).idleOpacity
+    private var edgeGlow = OverlayPrefs.from(overlayPrefs).edgeGlow
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == OverlayPrefs.K_OPACITY || key == OverlayPrefs.K_AUTO_FOLD) main.post { onPrefsChanged() }
+        if (key == OverlayPrefs.K_OPACITY || key == OverlayPrefs.K_AUTO_FOLD || key == OverlayPrefs.K_EDGE_GLOW) {
+            main.post { onPrefsChanged() }
+        }
     }
 
     init {
@@ -650,11 +653,11 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
 
     /**
      * The edge beam: on while the control shows for a live task (not once 已停止, not while the
-     * handoff card has the screen), still and faint while paused, not drawn during a screenshot or
-     * an injected stroke.
+     * handoff card has the screen, never with 屏幕边缘光效 off), still and faint while paused, not
+     * drawn during a screenshot or an injected stroke.
      */
     private fun syncBeam() {
-        beam.set(on = pill != null && !stoppedNote && handoffCard == null, paused = paused)
+        beam.set(on = edgeGlow && pill != null && !stoppedNote && handoffCard == null, paused = paused)
         beam.setHidden(captureHidden || passThrough)
     }
 
@@ -1400,6 +1403,11 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         val p = OverlayPrefs.from(overlayPrefs)
         idleOpacity = p.idleOpacity
         fold.setAutoFold(p.autoFold, now())
+        // 屏幕边缘光效 turned off fades the glow out at once; turned on, it fades in for a live task.
+        if (p.edgeGlow != edgeGlow) {
+            edgeGlow = p.edgeGlow
+            syncBeam()
+        }
         // A new 不透明度 shows at once on a faded ball or capsule.
         applyIdle(animated = false)
         scheduleFold()

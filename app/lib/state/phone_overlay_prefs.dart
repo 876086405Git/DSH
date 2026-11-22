@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'phone_state.dart';
 
-/// 设置 → 手机操控 → 悬浮条: 闲置时不透明度 and 闲置时自动收起, kept on the
+/// 设置 → 手机操控 → 悬浮条: 闲置时不透明度, 闲置时自动收起 and 屏幕边缘光效, kept on the
 /// native side (the overlay reads them there, live). The page shows a change at
 /// once and sends it on; without the native side the change stays for this run.
 class PhoneOverlayPrefsController extends Notifier<PhoneOverlayPrefs> {
@@ -36,6 +36,13 @@ class PhoneOverlayPrefsController extends Notifier<PhoneOverlayPrefs> {
     if (!ref.mounted || state.autoCollapse == on) return;
     state = state.copyWith(autoCollapse: on);
     await _channel.setOverlayPrefs(autoCollapse: on);
+  }
+
+  Future<void> setEdgeGlow(bool on) async {
+    await _loaded;
+    if (!ref.mounted || state.edgeGlow == on) return;
+    state = state.copyWith(edgeGlow: on);
+    await _channel.setOverlayPrefs(edgeGlow: on);
   }
 }
 
