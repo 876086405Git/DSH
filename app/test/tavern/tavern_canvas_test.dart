@@ -296,7 +296,7 @@ void main() {
     expect(open, contains("if(d.kind==='invoke'){invoke(d);return;}"));
     // The whole config goes to the engine's Helper requests; the engine's
     // iframe-namespace events are 酒馆助手's js_ ones.
-    expect(open, contains("return call(kind,{config:json});"));
+    expect(open, contains("return ask(kind,{config:json});"));
     expect(open, contains("var name=d.namespace==='iframe'?'js_'+String(d.name||'').toLowerCase():(d.name||'');"));
     expect(open, contains('if(!window.iframe_events)window.iframe_events=iframe_events;'));
     expect(open, contains('if(!window.injectPrompts)window.injectPrompts=injectPrompts;'));

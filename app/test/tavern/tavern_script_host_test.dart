@@ -564,6 +564,14 @@ void main() {
         throwsA(isA<TavernHelperImageConversionFailure>()),
       );
       expect(await pages.resolveHelperProxy('主代理', _Never()), isNull);
+      // Offline chosen: nothing is fetched, and it is not a skipped image.
+      final offline = TavernScriptPages(client: () => throw StateError('fetched'), offline: () => true);
+      await expectLater(
+        offline.resolveHelperImage('https://x.test/cat.png', _Never()),
+        throwsA(
+          isA<TavernScriptException>().having((e) => e.code, 'code', TavernScriptErrorCode.unsupportedCapability),
+        ),
+      );
     },
   );
 }

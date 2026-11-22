@@ -92,7 +92,7 @@ TavernModelConfig tavernModelConfig(
 /// to a canvas page's script context goes to that page.
 final tavernScriptPagesProvider = Provider<TavernScriptPages>((ref) {
   ref.watch(tavernProvider);
-  return TavernScriptPages();
+  return TavernScriptPages(offline: () => ref.read(tavernSettingsProvider).islandOffline);
 });
 
 /// Every character, as the library lists them.

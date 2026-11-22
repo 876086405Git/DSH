@@ -1325,8 +1325,10 @@ ${lowPower ? tavernCalmJs : ''}
     return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(r.result);};
       r.onerror=function(){no(r.error||new Error('The file could not be read'));};r.readAsDataURL(f);});
   }
+  // A script's frame has its own Blob: told by its kind, not instanceof.
+  function isBlob(v){var k=Object.prototype.toString.call(v);return k==='[object File]'||k==='[object Blob]';}
   function plainConfig(v,filterIds){
-    if(typeof Blob!=='undefined'&&v instanceof Blob)return fileUri(v);
+    if(isBlob(v))return fileUri(v);
     if(Array.isArray(v))return Promise.all(v.map(function(x){return plainConfig(x,filterIds);}));
     if(v&&typeof v==='object'){
       var keys=Object.keys(v);
@@ -1361,7 +1363,9 @@ ${lowPower ? tavernCalmJs : ''}
         return helperConfig(c,filterIds);
       }).then(function(json){
         g=generating[id]={};
-        return call(kind,{config:json});
+        // Asked, not kept among the writes events and filters wait for:
+        // its own injects' filters are answered while it runs.
+        return ask(kind,{config:json});
       }).then(function(res){return res.value;}).finally(function(){
         if(id!=null&&generating[id]===g)delete generating[id];
         filterIds.forEach(function(cb){delete filters[cb];});

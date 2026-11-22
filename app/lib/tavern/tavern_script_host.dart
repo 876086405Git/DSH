@@ -49,9 +49,14 @@ typedef TavernScriptInteractor = Future<TavernInteractAnswer> Function(
 
 class TavernScriptPages
     implements TavernScriptHost, TavernSPresetScriptHost, TavernHelperImageHost, TavernHelperProxyHost {
-  TavernScriptPages({http.Client Function()? client}) : _client = client ?? http.Client.new;
+  TavernScriptPages({http.Client Function()? client, bool Function()? offline})
+    : _client = client ?? http.Client.new,
+      _offline = offline ?? (() => false);
 
   final http.Client Function() _client;
+
+  /// 酒馆设置 › 安全's 离线 choice: then no image is fetched for a script.
+  final bool Function() _offline;
 
   final _pages = <String, TavernScriptPage>{};
 
@@ -404,6 +409,13 @@ class TavernScriptPages
   /// stays a cancel.
   @override
   Future<String> resolveHelperImage(String source, TavernScriptCancellation cancellation) async {
+    if (_offline()) {
+      throw TavernScriptException(
+        code: TavernScriptErrorCode.unsupportedCapability,
+        operation: 'resolveHelperImage',
+        message: "Offline is on in 酒馆设置 › 安全: a script's image is not fetched from the web.",
+      );
+    }
     final client = _client();
     unawaited(cancellation.whenCancelled.then((_) => client.close()));
     final http.Response response;
