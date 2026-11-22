@@ -69,7 +69,7 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
     const data = JSON.stringify(doc);
     if (Buffer.byteLength(data) > MAX_FILE_BYTES) throw new CompanionError(413, "too-large", "Companion store size limit reached");
     const directory = dirname(path);
-    const temporary = join(directory, `.state-${randomUUID()}.tmp`);
+    let temporary = join(directory, `.state-${randomUUID()}.tmp`);
     let handle;
     try {
       await io.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -79,11 +79,12 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
       await handle.close();
       handle = undefined;
       await io.rename(temporary, path);
+      temporary = undefined;
     } catch {
       throw ioError();
     } finally {
       if (handle !== undefined) await handle.close().catch(() => {});
-      await io.unlink(temporary).catch(() => {});
+      if (temporary !== undefined) await io.unlink(temporary).catch(() => {});
     }
   }
 

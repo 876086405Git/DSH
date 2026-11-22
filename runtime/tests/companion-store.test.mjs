@@ -318,6 +318,24 @@ test('rename failure preserves the old file and revision, removes temporary data
   assert.equal(retried.revision, saved.revision + 1);
 });
 
+test('published state skips unlink while a rejected rename cleans the temporary file', async t => {
+  let unlinks = 0, failRename = false;
+  const io = {...fs,
+    async rename(...args) {
+      if (failRename) throw new Error('synthetic rename failure');
+      return fs.rename(...args);
+    },
+    async unlink(path) { unlinks++; return fs.unlink(path); },
+  };
+  const f = await fixture(t, {io});
+  const saved = await f.store.getSnapshot();
+  assert.equal(unlinks, 0);
+  failRename = true;
+  await rejects(() => f.store.event({...versionOf(saved), type: 'play'}), 500, 'io-error');
+  assert.equal(unlinks, 1);
+  assert.deepEqual(await fs.readdir(dirname(f.filePath)), ['state.json']);
+});
+
 test('malformed writes fail before initializing a file', async (t) => {
   const f = await fixture(t);
   for (const operation of [
