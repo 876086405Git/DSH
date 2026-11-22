@@ -1174,20 +1174,22 @@ void main() {
             return;
           }
           for (var index = 0; index < 4; index++) {
-            await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            // Wait for this input's own sheet: the previous one may still be closing.
+            await _notesVisible(tester, find.text('第 ${index + 1} 份票据在哪个文件夹？'));
             handling ??= memory.lastReceipt;
             // Let the directory sheet finish sliding in before tapping an entry.
             await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('主目录').last);
             await settleMixed(tester, browsers[index].future);
-            final choose = find
-                .descendant(
-                  of: find.byType(DirectoryBrowserPage),
-                  matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
-                )
-                .last;
+            // Wait on the whole set: `.last` of a not-yet-listed page throws.
+            final choose = find.descendant(
+              of: find.byType(DirectoryBrowserPage),
+              matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+            );
             await _notesVisible(tester, choose);
-            await tester.tap(choose);
+            // The browser page is still sliding in; tap once it has landed.
+            await tester.pump(const Duration(milliseconds: 500));
+            await tester.tap(choose.last);
             await _notesVisible(tester, find.text('第 ${index + 1} 份票据的文件名'));
             final dialog = find.byType(AlertDialog);
             await tester.enterText(
@@ -1230,19 +1232,20 @@ void main() {
           releaseFourth.complete();
           final accepted = scenario == 'accepted' || scenario == 'leave-after-acceptance';
           if (accepted) {
-            await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            await _notesVisible(tester, find.text('选存放的文件夹'));
             // Let the directory sheet finish sliding in before tapping an entry.
             await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('主目录').last);
             await settleMixed(tester, browsers[4].future);
-            final choose = find
-                .descendant(
-                  of: find.byType(DirectoryBrowserPage),
-                  matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
-                )
-                .last;
+            // Wait on the whole set: `.last` of a not-yet-listed page throws.
+            final choose = find.descendant(
+              of: find.byType(DirectoryBrowserPage),
+              matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+            );
             await _notesVisible(tester, choose);
-            await tester.tap(choose);
+            // The browser page is still sliding in; tap once it has landed.
+            await tester.pump(const Duration(milliseconds: 500));
+            await tester.tap(choose.last);
             await settleMixed(tester, postRead.future);
             expect(memory.store.tasks(), hasLength(1));
             if (scenario == 'leave-after-acceptance') {
@@ -1309,6 +1312,9 @@ void main() {
             isEmpty,
           );
           expect(modelPosts, 0);
+          await tester.pumpWidget(const SizedBox());
+          // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
+          await tester.pump(const Duration(seconds: 16));
         });
       }
 
@@ -1584,6 +1590,9 @@ void main() {
             );
             expect(memory.store.hostTaskCommands(id), hasLength(1));
             expect(modelPosts, 0);
+            await tester.pumpWidget(const SizedBox());
+            // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
+            await tester.pump(const Duration(seconds: 16));
           },
         );
       }
@@ -1742,20 +1751,22 @@ void main() {
             return;
           }
           for (var side = 0; side < 2; side++) {
-            await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            // Wait for this side's own sheet: the previous one may still be closing.
+            await _notesVisible(tester, find.text(side == 0 ? '选择 A · 旧稿 所在的文件夹' : '选择 B · 新稿 所在的文件夹'));
             handling ??= memory.lastReceipt;
             // Let the directory sheet finish sliding in before tapping an entry.
             await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('主目录').last);
             await settleMixed(tester, browsers[side].future);
-            final choose = find
-                .descendant(
-                  of: find.byType(DirectoryBrowserPage),
-                  matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
-                )
-                .last;
+            // Wait on the whole set: `.last` of a not-yet-listed page throws.
+            final choose = find.descendant(
+              of: find.byType(DirectoryBrowserPage),
+              matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+            );
             await _notesVisible(tester, choose);
-            await tester.tap(choose);
+            // The browser page is still sliding in; tap once it has landed.
+            await tester.pump(const Duration(milliseconds: 500));
+            await tester.tap(choose.last);
             final title = side == 0 ? '输入 A · 旧稿 的文件名' : '输入 B · 新稿 的文件名';
             await _notesVisible(tester, find.text(title));
             final dialog = find.byType(AlertDialog);
@@ -1852,6 +1863,9 @@ void main() {
             isEmpty,
           );
           expect(modelPosts, 0);
+          await tester.pumpWidget(const SizedBox());
+          // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
+          await tester.pump(const Duration(seconds: 16));
         });
       }
 
@@ -1904,6 +1918,9 @@ void main() {
             } else if (request.uri.path == '$notesPath/inputs') {
               await NotesPeer.json(request, compareInputs()[body!['name'] == 'A.md' ? 'a' : 'b']);
             } else if (request.method == 'POST' && request.uri.path == notesPath) {
+              // Read before replying: the seeding client can return and clear
+              // `seeding` while this handler is still closing the response.
+              final delivered = !seeding;
               snapshot = {
                 ...notesSnapshot(
                   body!,
@@ -1913,7 +1930,7 @@ void main() {
                 'hostExecutionId': seeding ? 'previous-comparison' : 'new-comparison',
               };
               await NotesPeer.json(request, snapshot!, status: 201);
-              if (!seeding) {
+              if (delivered) {
                 posted.complete();
               }
             } else if (request.method == 'GET' && request.uri.path.startsWith('$notesPath/')) {
@@ -2103,6 +2120,9 @@ void main() {
           );
           expect(memory.store.hostTaskCommands(id), hasLength(1));
           expect(modelPosts, 0);
+          await tester.pumpWidget(const SizedBox());
+          // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
+          await tester.pump(const Duration(seconds: 16));
         });
       }
 
