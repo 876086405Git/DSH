@@ -837,7 +837,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _stage.command('emotion', {'name': 'happy', 'hold': 3200});
     _stage.command('action', {'name': 'hop'});
     _remember('pet', '你觉得和对方又亲近了一些');
-    if (!mounted || _running || _sending) return;
+    if (!mounted || _running || _sending || _ttsPending.isNotEmpty) return;
     final l10n = context.l10n;
     _say(switch (step) {
       1 => l10n.companionCloser1,

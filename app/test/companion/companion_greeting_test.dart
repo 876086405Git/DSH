@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_voice.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
@@ -19,6 +20,7 @@ import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +30,7 @@ import 'companion_test_settle.dart';
 
 const _session = 'synthetic-greeting-session';
 const _now = 1793937600000;
+const _voiceChannel = MethodChannel('dsh/companion_voice');
 
 class _Bridge extends DshConnection {
   _Bridge() : super(Uri.parse('http://127.0.0.1:9'));
@@ -106,6 +109,62 @@ class _Bridge extends DshConnection {
   }
 }
 
+// 合成 HTTP 边界：两次 visit 分别发生于 12／6 小时前，本次合法增益
+// 从 .02 到 .03。固定值遵守 state.js 的衰减、冷却和六小时间隔规则；
+// 没有在此执行 Host 事务。提交后的原快照先保存，再扣住它的返回。
+class _VisitBridge extends _Bridge {
+  _VisitBridge() {
+    revision = 2;
+  }
+
+  static const storeId = '44444444-4444-4444-8444-444444444444';
+  final visitSeen = Completer<void>();
+  final visitRelease = Completer<void>();
+  final visitTimeouts = <Duration?>[];
+
+  @override
+  DshHttpResponse snapshot() => this.json({
+    'storeId': storeId,
+    'revision': revision,
+    'memoryRevision': 0,
+    'asOf': _now,
+    'state': {
+      'valence': revision == 2 ? 0.25007827758789064 : 0.2900782775878906,
+      'energy': 0.75,
+      'closeness': revision == 2 ? 0.02 : 0.03,
+      'activity': 'idle',
+      'activityUntil': null,
+      'lastVisitAt': revision == 2 ? _now - 21600000 : _now,
+      'lastInteractionAt': null,
+      'thought': 'enjoy-company',
+    },
+  });
+
+  void releaseVisit() {
+    if (!visitRelease.isCompleted) visitRelease.complete();
+  }
+
+  @override
+  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
+    if (path != '$dshGoCompanionPath/events') return super.postJson(path, body, timeout: timeout);
+    final command = Map<String, Object?>.from(body! as Map<String, Object?>);
+    posts.add(command);
+    postPaths.add(path);
+    visitTimeouts.add(timeout);
+    if (!visitSeen.isCompleted) visitSeen.complete();
+    if (command['storeId'] != storeId || command['expectedRevision'] != revision || command['type'] != 'visit') {
+      return this.json({
+        'error': {'code': 'companion/conflict'},
+      }, 409);
+    }
+    revision++;
+    final committed = snapshot();
+    // 只记录原 SDK 传下来的 8 秒参数；替身不实现真实网络 timeout。
+    await visitRelease.future;
+    return committed;
+  }
+}
+
 class _Mux extends DshMux {
   _Mux(super.carrier);
   final connection = StreamController<DshConnectionState>.broadcast();
@@ -135,16 +194,47 @@ class _Client extends DshClient {
   }
 }
 
+class _PromptClient extends _Client {
+  _PromptClient(super.connection);
+  final prompts = <Map<String, Object?>>[];
+  final promptSeen = Completer<String>();
+
+  @override
+  Future<String> prompt(
+    String sessionId,
+    String text, {
+    List<PromptImage> images = const [],
+    List<String> fileReceiptIds = const [],
+    String? requestId,
+    PromptMode mode = PromptMode.queue,
+    String? timeZone,
+  }) async {
+    if (requestId == null) throw StateError('ChatController must supply its actual request id');
+    prompts.add({
+      'sessionId': sessionId,
+      'text': text,
+      'requestId': requestId,
+      'images': images,
+      'fileReceiptIds': fileReceiptIds,
+      'mode': mode,
+      'timeZone': timeZone,
+    });
+    if (!promptSeen.isCompleted) promptSeen.complete(requestId);
+    return requestId;
+  }
+}
+
 class _Host extends ActiveHostController {
   @override
   HostRef build() => HostRef.local;
 }
 
 class _Room {
-  _Room(this.root);
+  _Room(this.root, {_Bridge? bridge, _Client? client}) : bridge = bridge ?? _Bridge(), _providedClient = client;
   final Directory root;
-  final bridge = _Bridge();
-  late final client = _Client(bridge);
+  final _Bridge bridge;
+  final _Client? _providedClient;
+  late final client = _providedClient ?? _Client(bridge);
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
   late ProviderContainer container;
@@ -245,6 +335,13 @@ Future<void> flush(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _voiceEvent(WidgetTester tester, Map<String, Object?> args) =>
+    tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      _voiceChannel.name,
+      const StandardMethodCodec().encodeMethodCall(MethodCall('event', args)),
+      (_) {},
+    );
+
 // Source-derived follow events. A full message may be coalesced into one page
 // publication; durable sequence, stream revision and attempt index stay valid.
 class _Wire {
@@ -267,14 +364,14 @@ class _Wire {
     'event': {'type': type, 'seq': ++seq, 'time': _now, 'data': data},
   });
 
-  void begin() {
+  void begin({String text = '说一句。', String requestId = 'synthetic-request'}) {
     log('user/message', {
       'id': 'synthetic-user',
       'role': 'user',
       'content': [
-        {'type': 'text', 'text': '说一句。'},
+        {'type': 'text', 'text': text},
       ],
-      'source': {'kind': 'user', 'rpcId': 'synthetic-request'},
+      'source': {'kind': 'user', 'rpcId': requestId},
     });
     log('turn/start', {'turn': 1});
     log('step/start', {'turn': 1, 'step': 1});
@@ -541,4 +638,175 @@ void main() {
       await room.close(tester);
     }
   });
+
+  for (final (name, finishedBeforeVisit) in const [
+    ('R23 a delayed visit after text completion keeps the current voice', false),
+    ('R23 a delayed visit after voice completion still gives one closer line', true),
+  ]) {
+    testWidgets(name, (tester) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('companion_voice_enabled', true);
+      await prefs.setString('companion_voice_v1', '{"source":"system"}');
+      final bridge = _VisitBridge();
+      final client = _PromptClient(bridge);
+      final room = _Room(temporary, bridge: bridge, client: client);
+      final calls = <MethodCall>[];
+      final ready = Completer<void>();
+      final spoke = Completer<Map<String, Object?>>();
+      final heard = <CompanionVoiceEvent>[];
+      StreamSubscription<CompanionVoiceEvent>? subscription;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_voiceChannel, (call) async {
+        calls.add(call);
+        if (call.method == 'ready' && !ready.isCompleted) ready.complete();
+        if (call.method == 'speak' && !spoke.isCompleted) {
+          spoke.complete(Map<String, Object?>.from(call.arguments! as Map<Object?, Object?>));
+        }
+        return switch (call.method) {
+          'ready' || 'speak' => true,
+          _ => null,
+        };
+      });
+      List<Map<String, Object?>> spoken() => [
+        for (final call in calls)
+          if (call.method == 'speak') Map<String, Object?>.from(call.arguments! as Map<Object?, Object?>),
+      ];
+      int stops() => calls.where((call) => call.method == 'stop').length;
+      int hops() => room.commands.where((command) => command.$1 == 'action' && command.$2['name'] == 'hop').length;
+      final sayCommands = room.commands.where((command) => command.$1 == 'say');
+      try {
+        await room.open(tester);
+        await settleMixed(tester, ready.future);
+        subscription = room.container.read(companionSpeakerProvider).events.listen(heard.add);
+        expect(spoken(), isEmpty);
+
+        const said = '今天走了一段路。';
+        const reply = '辛苦啦，慢慢说，我在听。';
+        await tester.enterText(find.byType(TextField), said);
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('send')));
+        final requestId = await settleMixed(tester, client.promptSeen.future);
+        await flush(tester);
+        expect(client.prompts, [
+          {
+            'sessionId': _session,
+            'text': said,
+            'requestId': requestId,
+            'images': <PromptImage>[],
+            'fileReceiptIds': <String>[],
+            'mode': PromptMode.queue,
+            'timeZone': null,
+          },
+        ]);
+        expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+        expect(room.state.error, isNull);
+        final wire = _Wire(room)..begin(text: said, requestId: requestId);
+        await flush(tester);
+        expect(room.state.running, isTrue);
+
+        // 原 _arrive GET 只有 3 秒外层期限；在任何秒级 pump 前放回它。
+        // 此时普通发送已收尾，欢迎已退休，visit 仍沿真实原快照提交。
+        bridge.release();
+        await settleMixed(tester, bridge.visitSeen.future);
+        await flush(tester);
+        expect(bridge.getCount, 1);
+        expect(bridge.posts, [
+          {'storeId': _VisitBridge.storeId, 'expectedRevision': 2, 'type': 'visit'},
+        ]);
+        expect(bridge.visitTimeouts, [const Duration(seconds: 8)]);
+        expect(bridge.revision, 3);
+        expect(bridge.visitRelease.isCompleted, isFalse);
+        expect(room.commands.where((command) => command.$1 == 'vitals').last.$2['closeness'], 0.02);
+        expect(spoken(), isEmpty);
+
+        wire.answer(reply);
+        final speech = await settleMixed(tester, spoke.future);
+        await flush(tester);
+        expect(room.state.running, isFalse);
+        expect(room.state.pending, isEmpty);
+        expect(room.state.error, isNull);
+        expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+        expect(room.state.items.whereType<AssistantChatItem>().single.text, reply);
+        expect(room.speech(tester), reply);
+        expect(speech['text'], reply);
+        expect(speech['flush'], isFalse);
+        final id = speech['id']! as String;
+        final beforeStart = sayCommands.length;
+        await _voiceEvent(tester, {'type': 'start', 'id': id});
+        await _voiceEvent(tester, {'type': 'range', 'id': id, 'start': 0, 'end': 2});
+        await flush(tester);
+        expect(heard.where((event) => event.id == id).map((event) => event.type), [
+          CompanionVoiceEventType.start,
+          CompanionVoiceEventType.range,
+        ]);
+        expect(sayCommands.skip(beforeStart).map((command) => command.$2['chars']), [reply.length, 2]);
+
+        if (finishedBeforeVisit) {
+          await _voiceEvent(tester, {'type': 'done', 'id': id});
+          await flush(tester);
+          expect(heard.last.type, CompanionVoiceEventType.done);
+          // 原嘴型收束最多 4 秒；不延长 GET、POST 或测试期限。
+          await tester.pump(const Duration(seconds: 4));
+        }
+        final beforeStops = stops();
+        final beforeSpoken = spoken().length;
+        final beforeHops = hops();
+        final closer = room.l10n(tester).companionCloser1;
+        bridge.releaseVisit();
+        await flush(tester);
+        expect(room.commands.where((command) => command.$1 == 'vitals').last.$2, {
+          'valence': 0.2900782775878906,
+          'energy': 0.75,
+          'closeness': 0.03,
+        });
+        expect(hops(), beforeHops + 1, reason: 'The held visit was actually applied, including its closer action');
+        expect(room.commands.where((command) => command.$1 == 'emotion').last.$2['name'], 'happy');
+
+        if (!finishedBeforeVisit) {
+          expect(room.speech(tester), reply);
+          expect(stops(), beforeStops);
+          expect(spoken(), hasLength(beforeSpoken));
+          expect(spoken().where((call) => call['text'] == closer), isEmpty);
+          final beforeRange = sayCommands.length;
+          await _voiceEvent(tester, {'type': 'range', 'id': id, 'start': 2, 'end': 5});
+          await flush(tester);
+          expect(sayCommands.skip(beforeRange).map((command) => command.$2['chars']), [3]);
+          await _voiceEvent(tester, {'type': 'done', 'id': id});
+          await flush(tester);
+          expect(heard.last.type, CompanionVoiceEventType.done);
+          await tester.pump(const Duration(seconds: 4));
+          expect(stops(), beforeStops);
+          expect(spoken().map((call) => call['text']), [reply], reason: 'No deferred closer line after voice completion');
+        } else {
+          expect(room.speech(tester), closer);
+          expect(spoken().map((call) => call['text']), [reply, closer]);
+          final next = spoken().last;
+          expect(next['id'], isNot(id));
+          expect(next['flush'], isTrue);
+          await _voiceEvent(tester, {'type': 'start', 'id': next['id']});
+          await _voiceEvent(tester, {'type': 'range', 'id': next['id'], 'start': 0, 'end': 2});
+          await _voiceEvent(tester, {'type': 'done', 'id': next['id']});
+          await flush(tester);
+          expect(heard.where((event) => event.id == next['id']).map((event) => event.type), [
+            CompanionVoiceEventType.start,
+            CompanionVoiceEventType.range,
+            CompanionVoiceEventType.done,
+          ]);
+          client.events.add(const SessionStatusEvent(_session, false));
+          await flush(tester);
+          expect(spoken().where((call) => call['text'] == closer), hasLength(1));
+        }
+        expect(client.prompts, hasLength(1));
+        expect(bridge.postPaths, ['$dshGoCompanionPath/events'], reason: 'Ordinary chat did not submit another visit');
+      } finally {
+        bridge.release();
+        bridge.releaseVisit();
+        await subscription?.cancel();
+        try {
+          await room.close(tester);
+        } finally {
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_voiceChannel, null);
+        }
+      }
+    });
+  }
 }
