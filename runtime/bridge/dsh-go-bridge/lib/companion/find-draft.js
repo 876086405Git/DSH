@@ -60,7 +60,9 @@ export function createFindDraftRunner({ctx, store}) {
     const budget = new AbortController();
     const timers = [];
     if (claim.reserveMs <= 0) budget.abort(stopped('execution_budget_exhausted'));
-    else timers.push(setTimeout(() => budget.abort(stopped('execution_budget_exhausted')), claim.reserveMs));
+    // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
+    else timers.push(setTimeout(() => budget.abort(stopped(claim.deadlineAtMs !== null && store.now() >= claim.deadlineAtMs
+      ? 'deadline_expired' : 'execution_budget_exhausted')), claim.reserveMs));
     const tick = () => {
       if (claim.deadlineAtMs === null || budget.signal.aborted) return;
       const left = claim.deadlineAtMs - store.now();
