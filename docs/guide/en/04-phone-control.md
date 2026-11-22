@@ -79,17 +79,20 @@ Alarms, events, maps and sharing don't need the accessibility service.
 
 ## Floating bar
 
-When a task starts, a floating bar appears in the lower middle of the screen, and a faint band of colour lights up round the screen's edge to show the phone is being operated. The bar takes three shapes, and a tap moves between them:
+When a task starts, a floating bar appears in the lower middle of the screen, and a band of light runs round the screen's edge to show the phone is being operated. The bar is a dark "island" in three shapes, and a tap moves between them:
 
-- Capsule: one line saying what DSH is doing, like "Tap “Send”", with **Pause** and **Stop** on the right. After **Pause**, the button reads **Continue**; tap it to let DSH carry on. Hold and drag the capsule to move it: it stays at the height you let go, against the left, the middle or the right, and is there next time. Drag it off the left or right edge to shrink it to a ball on that side.
-- Card: tap the line on the capsule to open it. It shows the app DSH is working in, whether approvals are off, the last few steps, and a field to steer DSH another way. Left alone for a few seconds, it goes back to the capsule.
-- Ball: tap the dot at the capsule's left end, or **Shrink to a ball** in the card, to shrink it to a ball at the screen edge. Left alone for 3 seconds, the ball fades and slides half out of sight over the edge; a touch brings it back. Tap the ball to open it. Drag it anywhere; it snaps to the nearest edge and stays there next time. **Hold the ball for a second to stop**: a ring closes round it first, and letting go cancels.
+- Capsule: on the left, the icon of the app DSH is working in; the first line says what DSH is doing, like "Tap “Send”", the second the app, the step and how long it has taken. While DSH works, a thin light runs round the capsule's edge. On the right are **Pause** and **Back to DSH Go**. After **Pause**, the button reads **Continue**; tap it to let DSH carry on. Hold the pause key for a second to stop: a ring closes round it first, and letting go cancels. **Back to DSH Go** opens the chat this task belongs to; if DSH is operating your screen, it pauses first. Hold and drag the capsule to move it: it stays at the height you let go, against the left, the middle or the right, and is there next time. Drag it off the left or right edge to shrink it to a ball on that side.
+- Card: tap the line on the capsule to open it. It shows the app DSH is working in, whether approvals are off, the last few steps, and a field to steer DSH another way; at the top are **Shrink to a ball** and **Stop**. Left alone for a few seconds, it goes back to the capsule.
+- Ball: tap the dot at the capsule's left end, or **Shrink to a ball** in the card, to shrink it to a ball at the screen edge. Left alone for 3 seconds, the ball fades and slides half out of sight over the edge; a touch brings it back. Tap the ball to open it. Drag it anywhere; it snaps to the nearest edge and stays there next time. **Hold pause or the ball for a second to stop**: a ring closes first, and letting go cancels.
+
+When a task runs on the background screen of Do Not Disturb mode and **Live background preview** is on, there is no floating bar: a small window at the screen's side shows the background screen itself (view only), with what DSH is doing, **Pause** (hold to stop) and **Back to DSH Go** under it. Tap the picture to switch between two sizes; drag it to the left or right side, and it stays there next time. No light runs round your screen then, as your own screen isn't being operated.
 
 When DSH needs your approval, the capsule says "Waiting for you below" and the approval card appears at the bottom of the screen.
 
 Expand **More settings** on the phone control page, then adjust it under **Floating bar** (shown once phone control is on):
 
 - **Idle opacity**: how far the ball fades after 3 seconds untouched, 30% to 100%, 70% by default. A touch brings it back; the capsule, the card and anything waiting for you stay solid.
+- **Screen edge glow**: on by default. Turned off, no light runs round the screen while DSH works.
 - **Collapse when idle**: on by default. The capsule shrinks to a ball at the edge after a few idle seconds, and opens by itself when you need to approve something. Turned off, the capsule stays; drag it out of the way.
 - **Back to DSH Go when done**: on by default. When the reply ends and the app is in the background, it tries to bring you back to that chat. If the system blocks background windows, use the notification; see Confirmations and return below.
 
@@ -97,7 +100,7 @@ Whatever the settings, the bar closes when the reply ends.
 
 ## Stop
 
-- **Stop** on the floating bar, or hold the ball for a second.
+- Hold the pause key on the floating bar for a second, or hold the ball for a second; the open card also has **Stop**.
 - **Stop** on the "Operating your phone" card on the phone control page.
 - **Stop phone control** on the engine notification. **Stop engine** on the same notification stops the whole engine.
 
