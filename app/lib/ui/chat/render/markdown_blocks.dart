@@ -68,7 +68,7 @@ class ListItem extends StatelessWidget {
     final label = marker;
     return _ListItemBox(
       fontSize: fontSize,
-      listMarkerLength: _listMarkerLength(context),
+      listMarkerLength: label == null ? 0 : _listMarkerLength(context),
       dotRise: _dotRise(DefaultTextStyle.of(context).style, scaler),
       marker: label == null
           ? null
@@ -486,7 +486,9 @@ class _RenderListItem extends RenderShiftedBox implements ListItemGeometry {
 
   /// The list's column for this item's size, read fresh (intrinsics and dry
   /// layout run before or outside a layout pass).
-  double get _columnPx => _fontSize * _columnEm(_listItems());
+  double get _columnPx => _fontSize * _listColumnEm;
+
+  double get _listColumnEm => _marker == null ? listGutterEm : _columnEm(_listItems());
 
   @override
   Rect? get markerRect {
@@ -544,7 +546,7 @@ class _RenderListItem extends RenderShiftedBox implements ListItemGeometry {
 
   @override
   void performLayout() {
-    final columnEm = _columnEm(_listItems());
+    final columnEm = _listColumnEm;
     _laidOutEm = columnEm;
     _indentPx = _fontSize * columnEm;
     final child = this.child;
