@@ -299,56 +299,53 @@ void main() {
     expect(await texts(), [greeting, '一改']);
   });
 
-  test("asking the model: the engine's request as given, its events told as they come, the result as JSON", () async {
+  test("asking the model as 酒馆助手: its config read by the engine's Helper requests, the Helper value back", () async {
     final bridge = _Generating();
-    final told = <Map<String, Object?>>[];
-    final wire = TavernScriptWire(bridge, onGeneration: told.add);
+    final wire = TavernScriptWire(bridge);
     final result =
         _result(
               await _ask(wire, 'generate', {
                 'contextId': 'ctx',
-                'request': {
-                  'generationId': 'g1',
-                  'userInput': '在吗',
-                  'stream': true,
+                'config': {
+                  'generation_id': 'g1',
+                  'user_input': '在吗',
+                  'should_stream': true,
                   'overrides': {'scenario': '雨夜'},
+                  'custom_api': {'model': 'm', 'temperature': 'same_as_preset'},
                 },
               }),
             )!
             as Map<String, Object?>;
-    expect(result, {'id': 'g1', 'text': '你好', 'reasoning': null, 'finishReason': 'stop', 'hookIssues': <Object?>[]});
-    expect(bridge.asked!.userInput, '在吗');
-    expect(bridge.asked!.stream, isTrue);
-    expect(bridge.asked!.overrides.fields, {'scenario': '雨夜'});
-    expect(
-      [for (final e in told) (e['event'], e['delta'])],
-      [('started', null), ('textDelta', '你'), ('textDelta', '好')],
-    );
-    expect(told.every((e) => e['id'] == 'g1'), isTrue);
+    expect(result, {'id': 'g1', 'value': '你好', 'hookIssues': <Object?>[]});
+    final asked = bridge.asked! as TavernHelperGenerateRequest;
+    expect(asked.userInput, '在吗');
+    expect(asked.stream, isTrue);
+    expect(asked.overrides.fields, {'scenario': '雨夜'});
+    expect(asked.helperOptions.customApi, isNotNull);
 
-    // Raw: its ordered prompts as the engine reads them.
-    told.clear();
+    // Raw: its ordered prompts as ST names them.
     _result(
       await _ask(wire, 'generateRaw', {
         'contextId': 'ctx',
-        'request': {
-          'generationId': 'g2',
-          'orderedPrompts': [
-            {'kind': 'placeholder', 'placeholder': 'chatHistory'},
-            {'kind': 'literal', 'role': 'system', 'content': '只说一句'},
+        'config': {
+          'generation_id': 'g2',
+          'ordered_prompts': [
+            'chat_history',
+            {'role': 'system', 'content': '只说一句'},
           ],
         },
       }),
     );
+    expect(bridge.raw, isA<TavernHelperRawRequest>());
     expect(bridge.raw!.orderedPrompts, hasLength(2));
 
-    // A field the engine does not have is refused by it; a failure is a
-    // structured error; a stop for nothing running is false.
+    // A field in the wrong shape is refused; a model failure is a
+    // structured error.
     expect(
       _error(
         await _ask(wire, 'generate', {
           'contextId': 'ctx',
-          'request': {'tools': <Object?>[]},
+          'config': {'max_chat_history': 'some'},
         }),
       )['code'],
       isA<String>(),
@@ -358,7 +355,7 @@ void main() {
       _error(
         await _ask(wire, 'generate', {
           'contextId': 'ctx',
-          'request': {'generationId': 'g3'},
+          'config': {'generation_id': 'g3'},
         }),
       )['code'],
       'model',

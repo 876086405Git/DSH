@@ -339,6 +339,10 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
 
   bool get _running => _turn != null && !_rejoining;
 
+  /// A script's non-silent 酒馆助手 generation is running (in any page).
+  bool _helperBusy = false;
+  StreamSubscription<TavernHelperGenerationControlState>? _helperWatch;
+
   /// Listening for a reply from before this page opened, none seen yet: not
   /// running until one shows.
   bool _rejoining = false;
@@ -363,6 +367,15 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     super.initState();
     _readAloud; // Bound now: dispose can't read providers.
     _changes = _tavern.pathChanges(widget.chatId).listen((_) => unawaited(_reload()));
+    // A script's 酒馆助手 generation that is not silent holds the composer,
+    // as ST's send button is held.
+    if (_tavern.scripts case final TavernHelperGenerationControl helper) {
+      _helperWatch = helper.watchHelperGenerations().listen((state) {
+        if (mounted && state.blocksMainGeneration != _helperBusy) {
+          setState(() => _helperBusy = state.blocksMainGeneration);
+        }
+      });
+    }
     _director = _tavern.watchDirector(widget.chatId).listen(
       (view) {
         final run = view.latestSuccess;
@@ -400,6 +413,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   @override
   void dispose() {
     unawaited(_changes?.cancel());
+    unawaited(_helperWatch?.cancel());
     unawaited(_director?.cancel());
     unawaited(_groupWatch?.cancel());
     // A reply goes on without the page (engine T24) and is picked up when it
@@ -1070,7 +1084,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   }
 
   void _send() {
-    if (_running) return;
+    if (_running || _helperBusy) return;
     _quietTavern();
     // A slash command (/sys, /send: no model, so no key needed).
     final slash = tavernSlashOf(_input.text);
@@ -1121,7 +1135,14 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     }
   }
 
-  void _stop() => _tavern.stop(widget.chatId);
+  /// Stop, as ST's button: the reply, and the scripts' generations that are
+  /// not silent (silent ones go on).
+  void _stop() {
+    _tavern.stop(widget.chatId);
+    if (_tavern.scripts case final TavernHelperGenerationControl helper) {
+      unawaited(helper.stopNonSilentHelperGenerations());
+    }
+  }
 
   /// One of the director's suggestions, into the box to change and send (or
   /// not); never sent for you.
@@ -2102,7 +2123,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
                     controller: _input,
                     focusNode: _focus,
                     connected: messages != null,
-                    running: _running,
+                    running: _running || _helperBusy,
                     onSend: _send,
                     // Long-pressing send, as the key beside it: the line another way.
                     onSendOptions: _input.text.isEmpty ? null : () => unawaited(_sendOptions()),
