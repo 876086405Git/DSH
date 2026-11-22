@@ -269,6 +269,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       fontSize: reading.$1,
       lineHeight: reading.$2,
       nonce: _nonce(),
+      page: _document,
       userLabel: context.l10n.tavernYou,
       labels: TavernCanvasLabels(
         letter: context.l10n.tavernLetter,
@@ -334,7 +335,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     } on FormatException {
       return;
     }
-    if (data is! Map || !mounted) return;
+    // A page since replaced says nothing more (its ready, its answers).
+    if (data is! Map || !mounted || data['page'] != _document) return;
     switch (data['type']) {
       case 'ready':
         _ready = true;

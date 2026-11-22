@@ -240,7 +240,8 @@ const tavernToastMax = 300;
 /// when scripts do not run.
 /// [card] (its fields) and [characterId] are the chat's character, for the
 /// scripts that ask about it; none for a group. [lowPower] is 省电渲染
-/// ([tavernCalmJs]); [perf] the frame log ([tavernPerfJs]).
+/// ([tavernCalmJs]); [perf] the frame log ([tavernPerfJs]). [page] is which
+/// document this is to the app: every message the page sends carries it.
 String tavernCanvasDocument({
   required Color text,
   required Color accent,
@@ -261,6 +262,7 @@ String tavernCanvasDocument({
   String? characterId,
   bool lowPower = false,
   bool perf = false,
+  int page = 0,
 }) {
   // The card goes in as JSON (see [_inScript]).
   final cardJson = noScripts || card == null ? 'null' : _inScript(card);
@@ -1406,7 +1408,7 @@ ${lowPower ? tavernCalmJs : ''}
   if(!window.injectPrompts)window.injectPrompts=injectPrompts;
   if(!window.uninjectPrompts)window.uninjectPrompts=uninjectPrompts;
   var hold=null,from=null;
-  function post(o){if(window.DshTavern)DshTavern.postMessage(JSON.stringify(o));}
+  function post(o){if(window.DshTavern){o.page=$page;DshTavern.postMessage(JSON.stringify(o));}}
   function owner(t){while(t&&t!==chat){if(t.classList&&t.classList.contains('mes'))return t;t=t.parentNode;}return null;}
   chat.addEventListener('touchstart',function(ev){
     var m=owner(ev.target);if(!m||!m.dataset.node)return;
