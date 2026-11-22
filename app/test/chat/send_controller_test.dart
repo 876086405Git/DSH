@@ -296,11 +296,17 @@ void main() {
       await chat().send('之后再说', mode: SendMode.queue);
       expect(client.calls, ['prompt:queue:之后再说']);
 
-      // Only a prompt that arrives after the stop starts the next turn.
+      // Only a prompt that arrives after the stopped turn has ended starts the
+      // next one: while it winds down, an interjection it hands back drops the
+      // wake (#1762).
       client.calls.clear();
-      await chat().send('停一下', mode: SendMode.interrupt, attachments: [file]);
-      expect(client.calls, ['upload:notes.md', 'cancel', 'prompt:queue:停一下']);
+      final sending = chat().send('停一下', mode: SendMode.interrupt, attachments: [file]);
+      await settle();
+      expect(client.calls, ['upload:notes.md', 'cancel']);
       expect(state().stopping, isTrue);
+      client.events.add(const SessionStatusEvent('s1', false));
+      expect(await sending, isTrue);
+      expect(client.calls, ['upload:notes.md', 'cancel', 'prompt:queue:停一下']);
       expect(state().error, isNull);
     });
 
@@ -321,7 +327,10 @@ void main() {
       client.events.add(const SessionStatusEvent('s1', true));
       await settle();
       client.promptError = const DshRemoteException('session/agent-busy', 'busy', {'reason': 'x'});
-      expect(await chat().send('停一下', mode: SendMode.interrupt), isFalse);
+      final sending = chat().send('停一下', mode: SendMode.interrupt);
+      await settle();
+      client.events.add(const SessionStatusEvent('s1', false));
+      expect(await sending, isFalse);
       expect(client.calls, ['cancel', 'prompt:queue:停一下']);
       expect(state().pending, isEmpty);
       expect(state().error, '发送失败：AI 正忙，稍后再试');
