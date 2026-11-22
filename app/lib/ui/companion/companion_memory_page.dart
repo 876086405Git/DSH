@@ -1,13 +1,13 @@
 // Both room modes edit the same phone-owned memory store. A dialog keeps its
 // card/source revision; a stale save refreshes instead of overwriting a change.
 import 'dart:async';
-import 'dart:math';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../companion/companion_memory.dart';
+import '../../companion/companion_memory_id.dart';
 import '../../companion/companion_widget.dart';
 import '../../l10n/l10n.dart';
 import '../common/app_dialog.dart';
@@ -21,16 +21,6 @@ import '../theme/semantic_colors.dart';
 
 const _maxLength = 512;
 
-/// A v4 UUID: memories are named by the client so a retried save can't add two.
-String companionMemoryId() {
-  final random = Random.secure();
-  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
-      '${hex.substring(16, 20)}-${hex.substring(20)}';
-}
 
 class CompanionMemoryPage extends ConsumerStatefulWidget {
   const CompanionMemoryPage({super.key, required this.memory});

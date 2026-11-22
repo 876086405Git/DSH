@@ -1071,7 +1071,7 @@
         {
           "id": "B03-full-page-1",
           "suite": "app",
-          "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the selected auxiliary route, approval=false",
+          "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the phone memory route, covered=false",
           "file": "app/test/companion/companion_stream_state_test.dart",
           "scope": "真实full Page→owner→worker→HTTP→SDK收据；审批期间迟到拟文不得显示，明确固定最终HTTP peer。"
         },
@@ -1529,7 +1529,7 @@
         {
           "id": "captured-followup-approval-page-1",
           "suite": "app",
-          "name": "test/companion/companion_stream_state_test.dart fixture 10 a captured followup waits while a real approval card is open",
+          "name": "test/companion/companion_stream_state_test.dart fixture 10 a captured followup waits while the tasks page covers the room",
           "file": "app/test/companion/companion_stream_state_test.dart",
           "scope": "Actual Page + ChatController approval UI / injected production clock + SQLite; available HTTP boundary fixed by B03 peer. No external model or semantic judgment. This tests before generation; B03 tests separately cover approval after the generation request."
         },
@@ -1585,7 +1585,7 @@
         {
           "id": "B03-full-page-2",
           "suite": "app",
-          "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the selected auxiliary route, approval=true",
+          "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the phone memory route, covered=true",
           "file": "app/test/companion/companion_stream_state_test.dart",
           "scope": "真实full Page→owner→worker→HTTP→SDK收据；审批期间迟到拟文不得显示，明确固定最终HTTP peer。"
         }

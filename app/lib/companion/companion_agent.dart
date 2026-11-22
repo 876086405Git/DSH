@@ -16,7 +16,7 @@ import '../notify/chat_alerts.dart' show companionHostKey;
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
 import '../state/run_pulse.dart' show estimateTokens;
-import '../ui/companion/companion_memory_page.dart' show companionMemoryId;
+import 'companion_memory_id.dart';
 import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
 import 'companion_agent_tools.dart';

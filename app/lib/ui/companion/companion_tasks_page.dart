@@ -33,7 +33,7 @@ import '../workspace/directory_picker.dart';
 import 'companion_ask.dart';
 import 'companion_draft_inputs.dart';
 import 'companion_receipt_inputs.dart';
-import 'companion_memory_page.dart' show companionMemoryId;
+import '../../companion/companion_memory_id.dart';
 
 /// 「11月21日 08:00」 in this phone's local time; the year only when it is not this one.
 String _moment(L10n l10n, int epochMs) {
