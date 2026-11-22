@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // See THIRD_PARTY_NOTICES.md.
 
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import 'backdrop_frame.dart';
 import 'surfaces.dart';
+import 'theme_style.dart';
 
 /// 全屏页面背景:**竖向雾蓝渐变 + 两团极淡的光**。
 ///
@@ -39,6 +41,11 @@ class AppBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = DshSurfaces.of(context);
+    final themeStyle = DshThemeStyle.of(context);
+    final packImage = picture == null ? themeStyle.surfaces.backdropImage : null;
+    final packFolder = themeStyle.folderPath;
+    final showPackBackdrop =
+        packImage != null && packFolder != null && themeStyle.surfaces.backdropOpacity > 0;
     return _BackdropScope(
       picture: picture,
       child: Stack(
@@ -59,6 +66,22 @@ class AppBackdrop extends StatelessWidget {
               ),
             ),
           ),
+          if (showPackBackdrop)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: themeStyle.surfaces.backdropOpacity.clamp(0.0, 1.0),
+                  child: Image.file(
+                    File('$packFolder/$packImage'),
+                    key: ValueKey('$packFolder/$packImage#${themeStyle.assetRevision}'),
+                    fit: themeStyle.surfaces.backdropRepeat ? BoxFit.none : BoxFit.cover,
+                    repeat: themeStyle.surfaces.backdropRepeat ? ImageRepeat.repeat : ImageRepeat.noRepeat,
+                    filterQuality: FilterQuality.medium,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
           Material(type: MaterialType.transparency, child: child),
         ],
       ),

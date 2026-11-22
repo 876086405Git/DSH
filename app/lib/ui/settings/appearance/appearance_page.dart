@@ -25,6 +25,7 @@ import '../settings_widgets.dart';
 import 'app_icon_picker.dart';
 import 'icon_shortcut_sheet.dart';
 import 'launch_screen_section.dart';
+import 'theme_packs_section.dart';
 import 'tile_style_picker.dart';
 import 'wallpaper_section.dart';
 
@@ -68,7 +69,11 @@ class AppearanceEntryTile extends ConsumerWidget {
 /// 选什么都即时生效:整个 App 的主题随之交叉淡变(`AppMotion.standard`),
 /// 这一页本身就是预览。
 class AppearancePage extends ConsumerWidget {
-  const AppearancePage({super.key});
+  const AppearancePage({super.key, this.showThemePacks});
+
+  /// Whether to show the declarative Theme Packs & Workshop section.
+  /// Defaults to true inside the real app shell ([ThemeRevealHost]).
+  final bool? showThemePacks;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,6 +82,7 @@ class AppearancePage extends ConsumerWidget {
     final wallpaper = ref.watch(wallpaperAccentProvider).value;
     // A picture as a launcher shortcut: Android and HarmonyOS, not iOS.
     final pictureShortcut = ref.watch(operatingSystemProvider) != 'ios';
+    final includeThemePacks = showThemePacks ?? ThemeRevealHost.presentIn(context);
     return AppPage.list(
       title: l10n.pluginsTheme,
       children: [
@@ -113,6 +119,11 @@ class AppearancePage extends ConsumerWidget {
           footer: Text(l10n.wallpaperFooter),
           children: [SpotAnchor(spot: Spots.wallpaper, child: const WallpaperSection())],
         ),
+        if (includeThemePacks)
+          SettingsSection(
+            title: AppLocale.isEnglish ? 'Theme Packs & Workshop' : '主题包与创意工坊',
+            children: const [ThemePacksSection()],
+          ),
       ],
     );
   }
@@ -152,7 +163,10 @@ class ThemeModePicker extends ConsumerWidget {
       (ThemeMode.system, l10n.commonFollowSystem),
     ];
     final mode = ref.watch(uiThemeModeProvider);
-    final (light, dark) = _themesFor(ref.watch(accentProvider));
+    final (light, dark) = _themesFor(
+      ref.watch(accentProvider),
+      ref.watch(activeThemePackProvider),
+    );
     // The ring sits outside each preview, in [_ModeTile.room]: the padding
     // and gap leave room for it, so previews land 16 from the card and 12
     // apart, column for column with the tile styles below.
@@ -198,15 +212,19 @@ class ThemeModePicker extends ConsumerWidget {
   }
 }
 
-/// Light and dark themes of [accent], built once per palette.
-(ThemeData, ThemeData) _themesFor(AppAccent accent) {
-  final hit = _themeCache[accent];
+/// Light and dark themes of [accent] and optional [pack], built once per pair.
+(ThemeData, ThemeData) _themesFor(AppAccent accent, [ThemePack? pack]) {
+  final key = (accent, pack);
+  final hit = _themeCache[key];
   if (hit != null) return hit;
-  if (_themeCache.length > 4) _themeCache.clear();
-  return _themeCache[accent] = (buildLightTheme(accent: accent), buildDarkTheme(accent: accent));
+  if (_themeCache.length > 6) _themeCache.clear();
+  return _themeCache[key] = (
+    buildLightTheme(accent: accent, themePack: pack),
+    buildDarkTheme(accent: accent, themePack: pack),
+  );
 }
 
-final _themeCache = <AppAccent, (ThemeData, ThemeData)>{};
+final _themeCache = <(AppAccent, ThemePack?), (ThemeData, ThemeData)>{};
 
 class _ModeTile extends StatelessWidget {
   const _ModeTile({

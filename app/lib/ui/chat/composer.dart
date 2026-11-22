@@ -648,12 +648,45 @@ class _ComposerGlass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final open = this.open;
-    if (open == null) return GlassSurface(tier: GlassTier.chrome, borderRadius: AppShape.radiusXl, child: child);
+    final themeStyle = DshThemeStyle.of(context);
+    final closedRadius = themeStyle.pack == null
+        ? AppShape.radiusXl
+        : themeStyle.scaledBorderRadius(AppShape.xl);
+    final openedRadius = themeStyle.pack == null
+        ? _opened
+        : themeStyle.scaledBorderRadius(AppShape.lg);
+    final scheme = Theme.of(context).colorScheme;
+    final GlassStyle? overrideStyle = switch (themeStyle.components.composerStyle) {
+      ThemeComposerStyle.floatingGlass => null,
+      ThemeComposerStyle.solidPaper => GlassStyle(
+        fill: scheme.surfaceContainerLowest,
+        fallbackFill: scheme.surfaceContainerLowest,
+        hairline: scheme.outlineVariant,
+        hairlineWidth: themeStyle.borderWidth.clamp(0.5, 2.5),
+        rim: Colors.transparent,
+      ),
+      ThemeComposerStyle.outlined => GlassStyle(
+        fill: scheme.surface.withValues(alpha: 0.92),
+        fallbackFill: scheme.surface,
+        hairline: scheme.outline,
+        hairlineWidth: themeStyle.borderWidth.clamp(1.0, 2.5),
+        rim: Colors.transparent,
+      ),
+    };
+    if (open == null) {
+      return GlassSurface(
+        tier: GlassTier.chrome,
+        style: overrideStyle,
+        borderRadius: closedRadius,
+        child: child,
+      );
+    }
     return AnimatedBuilder(
       animation: open,
       builder: (context, child) => GlassSurface(
         tier: GlassTier.chrome,
-        borderRadius: BorderRadius.lerp(AppShape.radiusXl, _opened, open.value),
+        style: overrideStyle,
+        borderRadius: BorderRadius.lerp(closedRadius, openedRadius, open.value),
         child: child,
       ),
       child: child,
@@ -866,17 +899,24 @@ class _SendButtonState extends State<_SendButton> {
     final fluid = AppMotion.fluid(context);
     final enabled = widget.enabled && !widget.busy;
     final mode = widget.mode;
+    final sendStyle = DshThemeStyle.of(context).components.sendButtonStyle;
+    final inkMic = mode == _KeyMode.mic && sendStyle == ThemeSendButtonStyle.ink;
+    final tonalKey = sendStyle == ThemeSendButtonStyle.tonal;
     final mic = mode == _KeyMode.mic || widget.quiet;
     final active = enabled || widget.busy;
-    final bg = mic
+    final bg = inkMic
+        ? colors.onSurface
+        : mic
         ? colors.onSurface.withValues(alpha: 0.06)
         : active
-        ? colors.primary
+        ? (tonalKey ? colors.primaryContainer : colors.primary)
         : colors.onSurface.withValues(alpha: 0.12);
-    final fg = mic
+    final fg = inkMic
+        ? colors.surface
+        : mic
         ? colors.onSurface
         : active
-        ? colors.onPrimary
+        ? (tonalKey ? colors.onPrimaryContainer : colors.onPrimary)
         : colors.onSurface.withValues(alpha: 0.38);
     final (icon, size, label) = switch (mode) {
       _KeyMode.send => (AppIcons.send, 20.0, widget.sendLabel ?? l10n.commonSend),

@@ -116,6 +116,7 @@ class _WorkshopBrowseSliverState extends ConsumerState<WorkshopBrowseSliver> {
                   (WorkshopKindFilter.all, l10n.workshopKindAll),
                   (WorkshopKindFilter.pet, l10n.workshopKindPet),
                   (WorkshopKindFilter.companion, l10n.workshopKindCompanion),
+                  (WorkshopKindFilter.theme, AppLocale.isEnglish ? 'Themes' : '主题包'),
                 ])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),

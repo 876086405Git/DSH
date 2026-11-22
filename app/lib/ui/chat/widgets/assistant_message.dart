@@ -139,7 +139,14 @@ class _AssistantMessageState extends State<AssistantMessage> {
       // Selection is the message's own (MessageSelection around the text).
       // repairBareViews: a model that forgets the ```dsh-ui fence still gets
       // its view drawn instead of a wall of JSON.
-      _body = MarkdownBody(text: text, streaming: streaming, reveal: reveal, selectable: false, repairBareViews: true);
+      _body = MarkdownBody(
+        text: text,
+        streaming: streaming,
+        reveal: reveal,
+        selectable: false,
+        repairBareViews: true,
+        replyTypography: true,
+      );
       _bodyText = text;
       _bodyStreaming = streaming;
       _bodyReveal = reveal;
@@ -194,12 +201,15 @@ class _AssistantMessageState extends State<AssistantMessage> {
         // Always wrapped, streaming too: the Markdown subtree keeps its place
         // when the turn ends.
         if (text.isNotEmpty)
-          MessageSelection(
-            text: text,
-            onQuote: widget.onQuote,
-            onMore: () => _menu(text),
-            live: streaming,
-            child: _textAfterThinking ? _FirstTextIn(child: _markdown(text, streaming)) : _markdown(text, streaming),
+          _wrapAssistantBody(
+            context,
+            MessageSelection(
+              text: text,
+              onQuote: widget.onQuote,
+              onMore: () => _menu(text),
+              live: streaming,
+              child: _textAfterThinking ? _FirstTextIn(child: _markdown(text, streaming)) : _markdown(text, streaming),
+            ),
           ),
         if (item.interrupted) const _InterruptedMark(),
         // 一轮结束时和输入条上的胶囊同一节奏展开:胶囊收回多少,这里长出
@@ -239,6 +249,36 @@ class _AssistantMessageState extends State<AssistantMessage> {
       child: reply,
     );
     return _waited ? _HandOff(waiting: false, child: message) : message;
+  }
+
+  Widget _wrapAssistantBody(BuildContext context, Widget child) {
+    final themeStyle = DshThemeStyle.of(context);
+    if (themeStyle.pack == null) return child;
+    final scheme = Theme.of(context).colorScheme;
+    return switch (themeStyle.components.assistantStyle) {
+      ThemeAssistantStyle.plain => child,
+      ThemeAssistantStyle.card => DecoratedBox(
+        decoration: ShapeDecoration(
+          color: themeStyle.assistantBubble ?? DshSurfaces.of(context).card.fill,
+          shape: themeStyle.cardShape(scheme.outlineVariant, themeStyle.borderWidth),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: child,
+        ),
+      ),
+      ThemeAssistantStyle.leftRule => DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: scheme.primary.withValues(alpha: 0.65), width: 2.5),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: child,
+        ),
+      ),
+    };
   }
 
   Future<void> _menu(String markdown) async {

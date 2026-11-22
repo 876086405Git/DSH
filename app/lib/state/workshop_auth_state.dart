@@ -41,7 +41,8 @@ class WorkshopAccessState {
   bool get signInAvailable => capabilities?.account.clientId != null;
   bool get companionEnabled => capabilities?.features.companion ?? false;
   bool canSubmit(String kind) => canAuthenticate && accountId != null && uploadsEnabled &&
-      capabilities!.kinds.contains(kind) && (kind == 'pet' || kind == 'companion' && companionEnabled);
+      capabilities!.kinds.contains(kind) &&
+      (kind == 'pet' || kind == 'theme' || kind == 'companion' && companionEnabled);
 
   WorkshopAccessState copyWith({bool? loading, bool? disclosureAccepted,
     bool? disclosureSaved, bool? savingDisclosure, WorkshopException? error,

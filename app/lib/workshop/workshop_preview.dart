@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -16,7 +17,10 @@ final class WorkshopPreviewInput {
   WorkshopPreviewInput._companion(this._png, this.width, this.height)
       : source = 'companion-preview';
 
-  factory WorkshopPreviewInput.companionPng(Uint8List bytes) {
+  WorkshopPreviewInput._theme(this._png, this.width, this.height)
+      : source = 'theme-preview';
+
+  static (Uint8List, int, int) _validateCoverPng(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length > workshopPreviewBytes) {
       workshopInvalid('workshop_preview_size');
     }
@@ -34,7 +38,17 @@ final class WorkshopPreviewInput {
     if (!pngIntact(snapshot)) {
       workshopInvalid('workshop_preview_png');
     }
+    return (snapshot, width, height);
+  }
+
+  factory WorkshopPreviewInput.companionPng(Uint8List bytes) {
+    final (snapshot, width, height) = _validateCoverPng(bytes);
     return WorkshopPreviewInput._companion(snapshot, width, height);
+  }
+
+  factory WorkshopPreviewInput.themePng(Uint8List bytes) {
+    final (snapshot, width, height) = _validateCoverPng(bytes);
+    return WorkshopPreviewInput._theme(snapshot, width, height);
   }
 
   final String source;
@@ -88,6 +102,77 @@ Uint8List workshopCompanionPreviewZip((Uint8List, WorkshopPreviewInput) input) {
   }
   archive.add(ArchiveFile.bytes(name, png));
   final encoded = ZipEncoder().encode(archive);
+  if (encoded.length > workshopArchiveBytes) {
+    workshopInvalid('workshop_body_too_large');
+  }
+  return Uint8List.fromList(encoded);
+}
+
+Uint8List workshopThemePreviewZip((Uint8List, WorkshopPreviewInput) input) {
+  final (bytes, preview) = input;
+  if (preview.source != 'theme-preview') {
+    workshopInvalid('workshop_bad_metadata');
+  }
+  final png = preview._png!;
+  final decoded = ZipDecoder().decodeBytes(bytes);
+  const coverName = 'preview.png';
+  final coverAlias = petNameAlias(coverName);
+  final existingAliases = {for (final m in decoded.files) petNameAlias(m.name)};
+  String? renamedFrom;
+  String? renamedTo;
+  for (final member in decoded.files) {
+    final existing = petNameAlias(member.name);
+    if (existing.startsWith('$coverAlias/')) {
+      workshopInvalid('workshop_preview_conflict');
+    }
+    if (existing == coverAlias) {
+      renamedFrom = member.name;
+      var candidate = 'theme-asset-preview.png';
+      var seq = 1;
+      while (existingAliases.contains(petNameAlias(candidate))) {
+        candidate = 'theme-asset-preview-$seq.png';
+        seq++;
+      }
+      renamedTo = candidate;
+      existingAliases.add(petNameAlias(candidate));
+    }
+  }
+  final rebuilt = Archive();
+  var expanded = png.length;
+  for (final member in decoded.files) {
+    if (!member.isFile) continue;
+    final rawBytes = Uint8List.fromList(member.content as List<int>);
+    if (renamedFrom != null && member.name == renamedFrom) {
+      expanded += rawBytes.length;
+      rebuilt.add(ArchiveFile.bytes(renamedTo!, rawBytes));
+    } else if (renamedFrom != null && member.name == 'theme.json') {
+      final parsed = jsonDecode(utf8.decode(rawBytes));
+      if (parsed is Map<String, Object?>) {
+        final surfaces = parsed['surfaces'];
+        if (surfaces is Map && surfaces['backdropImage'] == renamedFrom) {
+          surfaces['backdropImage'] = renamedTo;
+        }
+        final emptyState = parsed['emptyState'];
+        if (emptyState is Map && emptyState['heroImage'] == renamedFrom) {
+          emptyState['heroImage'] = renamedTo;
+        }
+        final updated = Uint8List.fromList(utf8.encode(jsonEncode(parsed)));
+        expanded += updated.length;
+        rebuilt.add(ArchiveFile.bytes('theme.json', updated));
+      } else {
+        expanded += rawBytes.length;
+        rebuilt.add(ArchiveFile.bytes(member.name, rawBytes));
+      }
+    } else {
+      expanded += rawBytes.length;
+      rebuilt.add(ArchiveFile.bytes(member.name, rawBytes));
+    }
+  }
+  if (rebuilt.files.length >= 256 || expanded > workshopExpandedBytes) {
+    workshopInvalid('workshop_body_too_large');
+  }
+  rebuilt.add(ArchiveFile.bytes(coverName, png));
+  final encoded = ZipEncoder().encode(rebuilt);
   if (encoded.length > workshopArchiveBytes) {
     workshopInvalid('workshop_body_too_large');
   }

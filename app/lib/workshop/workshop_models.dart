@@ -6,7 +6,7 @@ const workshopExpandedBytes = 256 * 1024 * 1024;
 const workshopPreviewSide = 512;
 const workshopPreviewPixels = 262144;
 const workshopPreviewBytes = 2 * 1024 * 1024;
-const workshopPreviewSources = {'pet': 'pet-idle', 'companion': 'companion-preview'};
+const workshopPreviewSources = {'pet': 'pet-idle', 'companion': 'companion-preview', 'theme': 'theme-preview'};
 const workshopLicenses = {
   'CC0-1.0', 'CC-BY-4.0', 'CC-BY-SA-4.0', 'MIT', 'Apache-2.0',
   'BSD-2-Clause', 'BSD-3-Clause', 'LicenseRef-Author-Permission',
@@ -159,7 +159,7 @@ class WorkshopMetadata {
     final m = workshopMap(value), title = m['title'];
     final description = m.containsKey('description') ? m['description'] : '';
     final tags = m.containsKey('tags') ? m['tags'] : const <String>[];
-    final supported = const {'pet', 'companion'}.contains(m['kind']);
+    final supported = const {'pet', 'companion', 'theme'}.contains(m['kind']);
     // Unknown public kinds retain their existing unsupported-kind projection;
     // this client does not interpret their future preview source modes.
     final previewSource = supported ? m['previewSource'] : null;
@@ -186,7 +186,7 @@ class WorkshopMetadata {
   final String? previewSource;
   String get identity => '$kind/$id';
   String get release => '$identity/$version';
-  bool get supported => kind == 'pet' || kind == 'companion';
+  bool get supported => kind == 'pet' || kind == 'companion' || kind == 'theme';
   String get archivePath => '/market/workshop/$release/$sha256.zip';
   Map<String, Object?> toJson({bool submission = true}) => {
     'kind': kind, 'id': id, 'version': version, 'minApp': minApp, 'title': title,

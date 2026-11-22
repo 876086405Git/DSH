@@ -18,6 +18,9 @@ class ThemeRevealHost extends StatefulWidget {
   /// 揭开过程中:`MaterialApp` 不再交叉淡变配色,下面的新配色一步到位。
   static bool get active => _ThemeRevealHostState._active;
 
+  static bool presentIn(BuildContext context) =>
+      context.findAncestorStateOfType<_ThemeRevealHostState>() != null;
+
   /// 跑 [change](改主题的操作,要等它改完);灵动档且深浅真的变了时带揭开动画。
   static Future<void> run(BuildContext context, Future<void> Function() change) async {
     final host = context.findAncestorStateOfType<_ThemeRevealHostState>();

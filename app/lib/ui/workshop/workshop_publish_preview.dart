@@ -153,7 +153,12 @@ class _WorkshopPublishPreviewGroupState extends ConsumerState<WorkshopPublishPre
     String? problem;
     try {
       final bytes = await ref.read(workshopCoverPickerProvider)();
-      if (bytes != null) cover = (input: WorkshopPreviewInput.companionPng(bytes), bytes: bytes);
+      if (bytes != null) {
+        final input = widget.source.kind == 'theme'
+            ? WorkshopPreviewInput.themePng(bytes)
+            : WorkshopPreviewInput.companionPng(bytes);
+        cover = (input: input, bytes: bytes);
+      }
     } on WorkshopException catch (error) {
       problem = error.code;
     } on Object {
@@ -187,7 +192,7 @@ class _WorkshopPublishPreviewGroupState extends ConsumerState<WorkshopPublishPre
     }
     return switch (source.kind) {
       'pet' => _pet(l10n, preview != null),
-      'companion' => _companion(l10n, preview),
+      'companion' || 'theme' => _companion(l10n, preview),
       _ => const SizedBox.shrink(),
     };
   }

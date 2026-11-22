@@ -16,6 +16,8 @@ export 'palette.dart';
 export 'semantic_colors.dart';
 export 'shapes.dart';
 export 'squircle.dart';
+export '../../themes/theme_pack.dart';
 export 'surfaces.dart';
 export 'theme_reveal.dart';
+export 'theme_style.dart';
 export 'typography.dart';

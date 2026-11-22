@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -217,6 +219,23 @@ class ChatEmptyState extends StatelessWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final dsh = DshColors.of(context);
+    final themeStyle = DshThemeStyle.of(context);
+    final emptySpec = themeStyle.emptyState;
+    final editorial = emptySpec.layout == ThemeEmptyLayout.editorial;
+    final compact = emptySpec.layout == ThemeEmptyLayout.compact;
+    final textAlign = editorial ? TextAlign.start : TextAlign.center;
+    final blockAlign = editorial ? Alignment.centerLeft : Alignment.center;
+    final baseGreeting = (compact ? theme.textTheme.headlineMedium! : theme.textTheme.displaySmall!).copyWith(
+      color: theme.colorScheme.onSurface,
+    );
+    final greetingStyle = emptySpec.useReadingFontForGreeting
+        ? themeStyle.readingTextStyle(baseGreeting).copyWith(
+            fontSize: (compact ? 24 : 32) * themeStyle.typography.headingScale,
+          )
+        : baseGreeting;
+    final effectiveSlotGap = compact ? 10.0 : slotGap;
+    final effectiveOptionsGap = compact ? 8.0 : optionsGap;
+    final effectiveSuggestionsGap = compact ? 14.0 : suggestionsGap;
     final retry = connected ? null : onReconnect;
     final idle = connected || retry != null ? null : this.idle;
     final subtitle = connected
@@ -267,82 +286,81 @@ class ChatEmptyState extends StatelessWidget {
               // The pet stands on the composer below: one mascot a screen,
               // so the still whale tail fades while the pet is drawn. Its
               // room stays, so nothing moves when the pet comes and goes.
-              enter(
-                Consumer(
-                  builder: (context, ref, child) => AnimatedOpacity(
-                    opacity: ref.watch(petTakesWhaleProvider) ? 0 : 1,
-                    duration: AppMotion.of(context, AppMotion.standard),
-                    curve: AppMotion.std,
-                    child: child,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Center(
-                      child: WhaleTail(
-                        still: true,
-                        height: 40,
-                        color: whaleColorFor(theme.brightness).withValues(alpha: 0.4),
+              if (emptySpec.heroStyle != ThemeHeroStyle.hidden)
+                enter(
+                  Consumer(
+                    builder: (context, ref, child) => AnimatedOpacity(
+                      opacity: ref.watch(petTakesWhaleProvider) ? 0 : 1,
+                      duration: AppMotion.of(context, AppMotion.standard),
+                      curve: AppMotion.std,
+                      child: child,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        bottom: compact ? 8 : (emptySpec.heroStyle == ThemeHeroStyle.badge ? 18 : 12),
+                      ),
+                      child: Align(
+                        alignment: blockAlign,
+                        child: _buildHero(context, theme, themeStyle, emptySpec, compact: compact),
                       ),
                     ),
                   ),
                 ),
-              ),
               enter(
                 Text(
                   greetingFor(now ?? chatClock()),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.displaySmall?.copyWith(color: theme.colorScheme.onSurface),
+                  textAlign: textAlign,
+                  style: greetingStyle,
                 ),
               ),
-              const SizedBox(height: 4),
-              enter(
-                AnimatedSwitcher(
-                  duration: AppMotion.of(context, AppMotion.quick),
-                  child: Text(
-                    subtitle,
-                    key: ValueKey(subtitle),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(color: dsh.textTertiary),
+              if (emptySpec.showConnectedSubtitle || !connected) ...[
+                const SizedBox(height: 4),
+                enter(
+                  AnimatedSwitcher(
+                    duration: AppMotion.of(context, AppMotion.quick),
+                    child: Text(
+                      subtitle,
+                      key: ValueKey(subtitle),
+                      textAlign: textAlign,
+                      style: theme.textTheme.bodyLarge?.copyWith(color: dsh.textTertiary),
+                    ),
                   ),
                 ),
-              ),
+              ],
               if (slot != null) ...[
-                const SizedBox(height: slotGap),
+                SizedBox(height: effectiveSlotGap),
                 enter(
-                  Center(
+                  Align(
+                    alignment: blockAlign,
                     child: AnimatedSwitcher(duration: AppMotion.of(context, AppMotion.quick), child: slot),
                   ),
                 ),
               ],
               if (connected && options != null) ...[
-                const SizedBox(height: optionsGap),
-                enter(Center(child: options!)),
+                SizedBox(height: effectiveOptionsGap),
+                enter(Align(alignment: blockAlign, child: options!)),
               ],
-              if (suggestions.isNotEmpty || tipList.isNotEmpty)
+              if (emptySpec.suggestionsDisplay == ThemeSuggestionsDisplay.collapsible &&
+                  connected &&
+                  (suggestions.isNotEmpty || tipList.isNotEmpty))
+                Padding(
+                  padding: EdgeInsets.only(top: compact ? 14 : 24),
+                  child: ExpansionTile(
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    leading: const Icon(AppIcons.tip, size: 18),
+                    title: Text(AppLocale.isEnglish ? 'Quick start' : '快速上手'),
+                    children: [
+                      _suggestionsBlock(order, tipList),
+                    ],
+                  ),
+                )
+              else if (suggestions.isNotEmpty || tipList.isNotEmpty)
                 ExpandReveal(
                   open: retry == null && idle == null,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: suggestionsGap),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (suggestions.isNotEmpty)
-                          SuggestionCards(
-                            suggestions: suggestions,
-                            enabled: connected,
-                            onSuggestion: onSuggestion,
-                            firstIndex: order,
-                          ),
-                        if (connected && tipList.isNotEmpty) ...[
-                          const SizedBox(height: tipGap),
-                          FadeSlideIn(
-                            index: order + suggestions.length,
-                            child: TipLine(tips: tipList, start: tipStart),
-                          ),
-                        ],
-                      ],
-                    ),
+                    padding: EdgeInsets.only(top: effectiveSuggestionsGap),
+                    child: _suggestionsBlock(order, tipList),
                   ),
                 ),
             ],
@@ -351,6 +369,68 @@ class ChatEmptyState extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildHero(
+    BuildContext context,
+    ThemeData theme,
+    DshThemeStyle themeStyle,
+    ThemeEmptyStateSpec emptySpec, {
+    bool compact = false,
+  }) {
+    Widget badge() => DecoratedBox(
+      decoration: ShapeDecoration(
+        color: theme.colorScheme.primaryContainer,
+        shape: themeStyle.pack == null ? AppShape.card : themeStyle.cardShape(),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(compact ? 8 : 10),
+        child: WhaleTail(still: true, height: compact ? 20 : 26, color: theme.colorScheme.primary),
+      ),
+    );
+    return switch (emptySpec.heroStyle) {
+      ThemeHeroStyle.whale => WhaleTail(
+        still: true,
+        height: compact ? 30 : 40,
+        color: whaleColorFor(theme.brightness).withValues(alpha: 0.4),
+      ),
+      ThemeHeroStyle.badge => badge(),
+      ThemeHeroStyle.customImage =>
+        (themeStyle.folderPath != null && emptySpec.heroImage != null)
+            ? ClipRRect(
+                borderRadius: themeStyle.scaledBorderRadius(AppShape.md),
+                child: Image.file(
+                  File('${themeStyle.folderPath}/${emptySpec.heroImage}'),
+                  key: ValueKey('${themeStyle.folderPath}/${emptySpec.heroImage}#${themeStyle.assetRevision}'),
+                  height: compact ? 48 : 64,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => badge(),
+                ),
+              )
+            : badge(),
+      ThemeHeroStyle.hidden => const SizedBox.shrink(),
+    };
+  }
+
+  Widget _suggestionsBlock(int order, List<String> tipList) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (suggestions.isNotEmpty)
+        SuggestionCards(
+          suggestions: suggestions,
+          enabled: connected,
+          onSuggestion: onSuggestion,
+          firstIndex: order,
+        ),
+      if (connected && tipList.isNotEmpty) ...[
+        const SizedBox(height: tipGap),
+        FadeSlideIn(
+          index: order + suggestions.length,
+          child: TipLine(tips: tipList, start: tipStart),
+        ),
+      ],
+    ],
+  );
 }
 
 /// [ChatEmptyState.idle]: what the subtitle says and the pill under it.

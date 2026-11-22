@@ -10,11 +10,13 @@ import '../pets/pet_library.dart';
 import '../pets/pet_prefs.dart';
 import '../pets/pet_sheets.dart';
 import '../pets/pet_signals.dart' show petPackProvider, userPetsProvider;
+import '../themes/theme_library.dart';
 import '../workshop/workshop_client.dart';
 import '../workshop/workshop_http.dart';
 import '../workshop/workshop_models.dart';
 import '../workshop/workshop_repository.dart';
 import 'app_info.dart';
+import 'appearance_state.dart';
 
 /// Our own deployment unless the build names another; an empty value builds
 /// without a Workshop. Never an implicit third-party host.
@@ -62,10 +64,11 @@ final workshopClientProvider = FutureProvider<WorkshopClient>((ref) async {
 /// Stores are borrowed; this provider never closes a companion reader/store.
 final workshopPackagesProvider = FutureProvider<WorkshopPackages>((ref) async {
   final pets = ref.watch(petLibraryProvider);
+  final themes = ref.watch(themeLibraryProvider);
   final loadCompanion = ref.watch(companionFloatStoreProvider);
   final companion = await loadCompanion();
   if (!ref.mounted) workshopInvalid('workshop_cancelled');
-  return LocalWorkshopPackages(pets: pets, companion: companion);
+  return LocalWorkshopPackages(pets: pets, companion: companion, themes: themes);
 }, retry: (_, _) => null);
 
 final workshopRepositoryProvider = FutureProvider<WorkshopRepository>((ref) async {
@@ -138,6 +141,17 @@ Future<void> _waitPetPreferences(Ref ref) async {
 /// operation can still refresh the local resource it changed.
 final workshopPackageChangedProvider = Provider<WorkshopPackageChanged>((ref) {
   return (item, {required removed}) async {
+    if (item.receipt.kind == 'theme') {
+      ThemeFonts.instance.forget(item.localId);
+      if (!ref.mounted) return;
+      ref.invalidate(themePackByIdProvider(item.localId));
+      ref.invalidate(themeLoadedFontsProvider(item.localId));
+      ref.invalidate(userThemesProvider);
+      if (removed && ref.read(appearanceProvider).themePackId == item.localId) {
+        await ref.read(appearanceProvider.notifier).selectThemePack(null);
+      }
+      return;
+    }
     if (item.receipt.kind != 'pet') return;
     PetSheets.instance.forget(item.localId);
     if (!ref.mounted) return;

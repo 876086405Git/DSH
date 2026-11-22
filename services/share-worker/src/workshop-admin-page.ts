@@ -6,7 +6,7 @@ export const WORKSHOP_ADMIN_SCRIPT = String.raw`
 const adminLogic = (() => {
   const base = '/api/workshop/v1/admin';
   const statuses = ['draft', 'pending', 'approved', 'rejected', 'withdrawn'];
-  const kinds = ['pet', 'companion'];
+  const kinds = ['pet', 'companion', 'theme'];
   const media = ['image/png', 'image/jpeg', 'image/webp'];
   const fail = (code) => { throw { code: code || 'console_bad_response', unknown: false }; };
   const sid = (value) => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
@@ -192,7 +192,7 @@ const adminLogic = (() => {
     return bytes.length >= 12 && [82,73,70,70].every((value, i) => bytes[i] === value) && [87,69,66,80].every((value, i) => bytes[i + 8] === value);
   }
   const statusName = (value) => ({ draft: '尚未上传', pending: '待审核', approved: '已通过', rejected: '已拒绝', withdrawn: '已撤回', open: '未处理', resolved: '已处理' }[value] || plain(value));
-  const kindName = (value) => ({ pet: '像素宠物', companion: 'Live2D 伙伴' }[value] || plain(value));
+  const kindName = (value) => ({ pet: '像素宠物', companion: 'Live2D 伙伴', theme: '主题包' }[value] || plain(value));
   const actor = (value) => value === 'admin' ? '管理密钥持有人（admin）' : object(value)
     ? plain(value.username) + ' · GitHub · 用户 ' + plain(value.accountId) : plain(value);
   const size = (value) => Number.isSafeInteger(value) && value >= 0 ? value.toLocaleString('zh-CN') + ' 字节' : plain(value);
@@ -851,7 +851,7 @@ input,select,textarea{width:100%;min-height:48px;border:1px solid #aebac9;border
 <p id="global-notice" class="notice" role="status" aria-live="polite" hidden></p>
 <section id="view-submissions"><div class="card"><h2>投稿列表</h2>
 <label for="submission-status">投稿状态</label><select id="submission-status"><option value="pending">待审核</option><option value="approved">已通过</option><option value="rejected">已拒绝</option><option value="withdrawn">已撤回</option><option value="draft">尚未上传</option><option value="">全部状态</option></select>
-<label for="submission-kind">作品种类</label><select id="submission-kind"><option value="">全部种类</option><option value="pet">像素宠物</option><option value="companion">Live2D 伙伴</option></select>
+<label for="submission-kind">作品种类</label><select id="submission-kind"><option value="">全部种类</option><option value="pet">像素宠物</option><option value="companion">Live2D 伙伴</option><option value="theme">主题包</option></select>
 <button id="submissions-refresh" class="spaced" type="button">刷新当前列表</button><p id="submissions-status" class="notice" role="status" hidden></p><div id="submissions-rows"></div>
 <div class="stack spaced"><button id="submissions-prev" type="button">上一页</button><button id="submissions-next" type="button">下一页</button></div><p class="muted">每页 20 条，按服务器标识排序。分页是实时视图，不保证跨页快照。</p></div>
 <section id="submission-detail" class="card" hidden><h2>投稿详情</h2><button id="submission-refresh" type="button">刷新此投稿</button><p id="submission-status-text" class="notice" role="status" hidden></p><div id="submission-summary"></div>
@@ -861,7 +861,7 @@ input,select,textarea{width:100%;min-height:48px;border:1px solid #aebac9;border
 <section id="preview" class="preview" hidden><h3>图片预览</h3><p id="preview-caption" class="preview-caption"></p><p id="preview-status" class="notice" role="status" hidden></p><img id="preview-image" alt="所选包内图片的静态预览" decoding="async" hidden><button id="preview-clear" type="button">关闭预览</button></section>
 <hr><label for="review-reason">操作理由（必填，原文写入审计）</label><textarea id="review-reason" rows="3" maxlength="4000" placeholder="请填写通过、拒绝或撤回的理由"></textarea>
 <div class="stack spaced"><button id="approve" class="primary" type="button">通过此投稿</button><button id="reject" class="danger" type="button">拒绝此投稿</button><button id="withdraw" class="danger" type="button">撤回此已批准版本</button></div><p class="muted">撤回曾获批准的投稿会撤回同一版本的全部已批准记录，不会自动回退到旧版本。</p></section></section>
-<section id="view-reports" hidden><div class="card"><h2>举报列表</h2><label for="report-status">处理状态</label><select id="report-status"><option value="open">未处理</option><option value="resolved">已处理</option><option value="">全部状态</option></select><label for="report-kind">作品种类</label><select id="report-kind"><option value="">全部种类</option><option value="pet">像素宠物</option><option value="companion">Live2D 伙伴</option></select>
+<section id="view-reports" hidden><div class="card"><h2>举报列表</h2><label for="report-status">处理状态</label><select id="report-status"><option value="open">未处理</option><option value="resolved">已处理</option><option value="">全部状态</option></select><label for="report-kind">作品种类</label><select id="report-kind"><option value="">全部种类</option><option value="pet">像素宠物</option><option value="companion">Live2D 伙伴</option><option value="theme">主题包</option></select>
 <button id="reports-refresh" class="spaced" type="button">刷新举报列表</button><p id="reports-status" class="notice" role="status" hidden></p><div id="reports-rows"></div><div class="stack spaced"><button id="reports-prev" type="button">上一页</button><button id="reports-next" type="button">下一页</button></div></div>
 <section id="report-detail" class="card" hidden><h2>举报详情</h2><button id="report-refresh" type="button">刷新此举报及目标版本</button><p id="report-status-text" class="notice" role="status" hidden></p><div id="report-content"></div>
 <p class="notice">标记举报已处理不会自动下架。撤回版本是另一个需要确认的操作。</p><label for="report-reason">处理或撤回理由（必填）</label><textarea id="report-reason" rows="3" maxlength="4000"></textarea><div class="stack spaced"><button id="resolve-handled" class="primary" type="button">标记已处理</button><button id="resolve-dismissed" type="button">标记不予处理</button><button id="report-withdraw" class="danger" type="button">撤回被举报版本</button></div></section></section>
