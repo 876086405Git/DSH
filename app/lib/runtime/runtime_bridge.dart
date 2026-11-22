@@ -813,7 +813,7 @@ class RuntimeBridge {
   /// HarmonyOS: closes the app and opens it again, the only way to another engine start.
   Future<void> reopenApp() => _methods.invokeMethod<void>('reopenApp');
 
-  /// iOS: whether a local turn is running, which is what asks the system to let it go on.
+  /// iOS and Android: report a local turn to the native background protection owner.
   Future<void> setTurnRunning(bool running) => _methods.invokeMethod<void>('turnRunning', {'running': running});
 
   /// Deletes the runtime with everything in /root except [keep].

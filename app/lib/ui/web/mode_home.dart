@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../runtime/android_background_turns.dart';
 import '../../state/sessions_state.dart';
 import '../../state/ui_mode_state.dart';
 import '../modes/mode_switch.dart';
@@ -40,6 +41,7 @@ class _ModeHomeState extends ConsumerState<ModeHome> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(androidBackgroundTurnsProvider);
     final mode = ref.watch(uiModeProvider);
     if (!mode.loaded) {
       // Read back with the rest of the settings: no frame of the other home.

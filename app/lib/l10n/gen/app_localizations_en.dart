@@ -1929,6 +1929,25 @@ class L10nEn extends L10n {
       'The outcome could not be confirmed. Verify it first; never automatically retry a dispatched command.';
 
   @override
+  String get androidBackgroundProtectionTitle => 'Enhanced background protection';
+
+  @override
+  String get androidBackgroundProtectionAudioHint =>
+      'Plays silent audio while local tasks run in the background. May use more battery.';
+
+  @override
+  String get androidBackgroundProtectionLocationHint =>
+      'Uses approximate location and may use more battery. Coordinates are not saved or sent. Turning it off stops location updates without revoking system access.';
+
+  @override
+  String get androidBackgroundProtectionNeedsLocation =>
+      'Location access hasn’t been granted. Tap to open the app’s system settings and allow location under Permissions.';
+
+  @override
+  String get androidBackgroundProtectionNeedsAlways =>
+      'Background location is not active. Tap to open the app’s system settings and choose “Allow all the time” for Location under Permissions.';
+
+  @override
   String get backgroundProtectionDescription =>
       'Off by default. Protection is attempted only while local tasks are active and the app is in the background; the system may still pause them.';
 

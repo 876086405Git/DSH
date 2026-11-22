@@ -1831,6 +1831,21 @@ class L10nZh extends L10n {
   String get androidShellErrorUnknown => '未能确认操作结果。先核实结果；已派发的命令不要自动重试。';
 
   @override
+  String get androidBackgroundProtectionTitle => '增强保活';
+
+  @override
+  String get androidBackgroundProtectionAudioHint => '有本机任务时在后台播放静音音频，可能增加耗电。';
+
+  @override
+  String get androidBackgroundProtectionLocationHint => '使用粗略位置，可能增加耗电；不保存或发送坐标。关闭后停止定位，但不撤回系统权限。';
+
+  @override
+  String get androidBackgroundProtectionNeedsLocation => '尚未授予位置权限。点此打开 App 的系统设置，在「权限」中允许访问位置。';
+
+  @override
+  String get androidBackgroundProtectionNeedsAlways => '后台定位尚未生效。点此打开 App 的系统设置，在「权限」中将位置设为“始终允许”。';
+
+  @override
   String get backgroundProtectionDescription => '默认关闭，仅在有本机任务且 App 退到后台时尝试保护；系统仍可能暂停任务。';
 
   @override
