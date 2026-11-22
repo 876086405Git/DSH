@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -45,16 +46,78 @@ class ImageSnapshots {
   static final _loading = <(String, String), Set<_SnapshotLoad>>{};
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
 
+  // Each directory's index as this process last read or wrote it. Every change
+  // goes through a transaction below, so a directory is read from disk once; a
+  // change whose write fails is dropped with the whole entry ([_forget]).
+  static final _indexes = <String, _SnapshotIndex>{};
+  // Directories whose access order moved (a hit) since their index was written.
+  static final _touched = <String>{};
+  // Transactions queued or running per directory.
+  static final _queued = <String, int>{};
+
   static Future<T> _exclusive<T>(String directory, Future<T> Function() action) {
-    final result = (_tails[directory] ?? Future<void>.value()).then((_) => action());
+    _queued[directory] = (_queued[directory] ?? 0) + 1;
+    final result = (_tails[directory] ?? Future<void>.value()).then((_) async {
+      try {
+        return await action();
+      } finally {
+        // The last one in line writes what the hits before it moved: a run of
+        // hits writes the index once, and once the line is empty the disk has
+        // every move (unless that write failed, see [_writeTouches]).
+        if (_queued[directory] == 1) await _writeTouches(directory);
+      }
+    });
     late final Future<void> tail;
     void release() {
+      final left = _queued[directory]! - 1;
+      if (left == 0) {
+        _queued.remove(directory);
+      } else {
+        _queued[directory] = left;
+      }
       if (identical(_tails[directory], tail)) _tails.remove(directory);
     }
 
     tail = result.then<void>((_) => release(), onError: (Object _, StackTrace _) => release());
     _tails[directory] = tail;
     return result;
+  }
+
+  /// Test seam: hold nothing, as a freshly started process does.
+  @visibleForTesting
+  static void forgetHeldIndexes() {
+    _indexes.clear();
+    _touched.clear();
+  }
+
+  /// [directory]'s index, read from disk only the first time.
+  static Future<_SnapshotIndex> _indexOf(String directory) async =>
+      _indexes[directory] ??= await _readIndex(Directory(directory));
+
+  /// Drops what is held for [directory]: the next transaction reads the disk.
+  static void _forget(String directory) {
+    _indexes.remove(directory);
+    _touched.remove(directory);
+  }
+
+  /// Writes the access order hits moved. Best effort: it is only the order, and
+  /// a failure stays marked for the next transaction to write.
+  static Future<void> _writeTouches(String directory) async {
+    if (!_touched.contains(directory)) return;
+    final index = _indexes[directory];
+    if (index == null) {
+      _touched.remove(directory);
+      return;
+    }
+    try {
+      await _write(directory, index);
+    } catch (_) {}
+  }
+
+  /// Writes the whole of [index], the access order hits moved included.
+  static Future<void> _write(String directory, _SnapshotIndex index) async {
+    await _saveIndex(Directory(directory), index);
+    _touched.remove(directory);
   }
 
   Future<File> get({
@@ -91,10 +154,10 @@ class ImageSnapshots {
   ) async {
     final directory = await _directory();
     final scopeKey = (await directory.resolveSymbolicLinks(), scope);
+    final held = scopeKey.$1;
     final token = _SnapshotLoad(cancelPending);
-    final cached = await _exclusive(scopeKey.$1, () async {
-      final index = await _readIndex(directory);
-      final file = await _find(directory, index, scope, key, maxBytes);
+    final cached = await _exclusive(held, () async {
+      final file = await _find(held, directory, await _indexOf(held), scope, key, maxBytes);
       if (file == null) _loading.putIfAbsent(scopeKey, () => <_SnapshotLoad>{}).add(token);
       return file;
     });
@@ -102,19 +165,25 @@ class ImageSnapshots {
     try {
       final bytes = await load();
       final content = bytes.length > maxBytes || bytes.length > _maxBytes ? null : sha256.convert(bytes).toString();
-      return await _exclusive(scopeKey.$1, () async {
+      return await _exclusive(held, () async {
         if (!token.valid) throw const ImageSnapshotMissing();
         // Another store may have fixed the same key while this load was out of
         // the transaction. Its first successful snapshot wins, even a tombstone.
-        final index = await _readIndex(directory);
-        final file = await _find(directory, index, scope, key, maxBytes);
+        final index = await _indexOf(held);
+        final file = await _find(held, directory, index, scope, key, maxBytes);
         if (file != null) return file;
         if (content == null) throw const ImageSnapshotTooLarge();
         final target = _contentFile(directory, content);
         if (!await target.exists()) await _writeAtomic(target, bytes);
-        index.references.putIfAbsent(scope, () => <String, String?>{})[key] = content;
-        _touch(index, content);
-        await _commit(directory, index);
+        try {
+          index.references.putIfAbsent(scope, () => <String, String?>{})[key] = content;
+          _touch(index, content);
+          await _commit(held, directory, index);
+        } catch (_) {
+          // Not written: the next transaction reads what the disk has.
+          _forget(held);
+          rethrow;
+        }
         return target;
       });
     } finally {
@@ -126,7 +195,16 @@ class ImageSnapshots {
     }
   }
 
-  static Future<File?> _find(Directory directory, _SnapshotIndex index, String scope, String key, int maxBytes) async {
+  /// [key]'s file, its access moved to the front (written by the last
+  /// transaction in line, see [_exclusive]); null when it was never read.
+  static Future<File?> _find(
+    String held,
+    Directory directory,
+    _SnapshotIndex index,
+    String scope,
+    String key,
+    int maxBytes,
+  ) async {
     final references = index.references[scope];
     if (references == null || !references.containsKey(key)) return null;
     // Null is a durable tombstone, not permission to reload today's source.
@@ -136,7 +214,7 @@ class ImageSnapshots {
     if (!await file.exists()) throw const ImageSnapshotMissing();
     if (await file.length() > maxBytes) throw const ImageSnapshotTooLarge();
     _touch(index, digest);
-    await _saveIndex(directory, index);
+    _touched.add(held);
     return file;
   }
 
@@ -152,19 +230,25 @@ class ImageSnapshots {
     final directory = await _directory();
     final scope = _identity([host, sessionId]);
     final scopeKey = (await directory.resolveSymbolicLinks(), scope);
-    await _exclusive(scopeKey.$1, () async {
-      final index = await _readIndex(directory);
-      index.references.remove(scope);
-      final retained = <String>{
-        for (final references in index.references.values)
-          for (final digest in references.values) ?digest,
-      };
-      index.accessed.removeWhere((digest, _) => !retained.contains(digest));
+    final held = scopeKey.$1;
+    await _exclusive(held, () async {
+      final index = await _indexOf(held);
       final discarded = <File>[];
-      await for (final file in _contentDirectory(directory).list(followLinks: false)) {
-        if (file is File && !retained.contains(file.uri.pathSegments.last)) discarded.add(file);
+      try {
+        index.references.remove(scope);
+        final retained = <String>{
+          for (final references in index.references.values)
+            for (final digest in references.values) ?digest,
+        };
+        index.accessed.removeWhere((digest, _) => !retained.contains(digest));
+        await for (final file in _contentDirectory(directory).list(followLinks: false)) {
+          if (file is File && !retained.contains(file.uri.pathSegments.last)) discarded.add(file);
+        }
+        await _write(held, index);
+      } catch (_) {
+        _forget(held);
+        rethrow;
       }
-      await _saveIndex(directory, index);
       final loading = _loading.remove(scopeKey);
       if (loading != null) {
         for (final token in loading) {
@@ -213,7 +297,7 @@ class ImageSnapshots {
     utf8.encode(jsonEncode({'version': 1, 'references': index.references, 'accessed': index.accessed})),
   );
 
-  Future<void> _commit(Directory directory, _SnapshotIndex index) async {
+  Future<void> _commit(String held, Directory directory, _SnapshotIndex index) async {
     final contents = <({File file, String digest, int bytes})>[];
     var total = 0;
     await for (final entry in _contentDirectory(directory).list(followLinks: false)) {
@@ -239,7 +323,7 @@ class ImageSnapshots {
     }
     // Persist tombstones before deleting bytes: an interrupted eviction may
     // leave an orphan, but never a key that can reload today's source file.
-    await _saveIndex(directory, index);
+    await _write(held, index);
     for (final file in discarded) {
       await file.delete();
     }

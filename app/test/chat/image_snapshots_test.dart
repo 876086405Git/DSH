@@ -153,6 +153,53 @@ void main() {
     expect(sizes.fold<int>(0, (a, b) => a + b), lessThanOrEqualTo(8));
   });
 
+  test('hits find the held index: the file on disk is not read again', () async {
+    for (var turn = 1; turn <= 3; turn++) {
+      await get(turn: turn, text: 'image $turn');
+    }
+    // Reading it now would fail; a hit only writes it.
+    await File('${root.path}/image-snapshots/index.json').writeAsString('not an index');
+    final files = await Future.wait([
+      for (final turn in [3, 1, 2, 3]) get(turn: turn, load: _unexpectedLoad),
+    ]);
+    expect(await Future.wait(files.map((file) => file.readAsString())), ['image 3', 'image 1', 'image 2', 'image 3']);
+    expect(jsonDecode(await File('${root.path}/image-snapshots/index.json').readAsString()), isA<Map>());
+  });
+
+  test('the order hits moved is on disk once they are done, for the next start', () async {
+    store = ImageSnapshots(root: () async => root, maxBytes: 12);
+    final a = await get(turn: 1, text: 'aaaa');
+    final b = await get(turn: 2, text: 'bbbb');
+    final c = await get(turn: 3, text: 'cccc');
+    // Together, so the first in line leaves the write to the last.
+    await Future.wait([get(turn: 2, load: _unexpectedLoad), get(turn: 1, load: _unexpectedLoad)]);
+
+    ImageSnapshots.forgetHeldIndexes();
+    final restarted = ImageSnapshots(root: () async => root, maxBytes: 12);
+    await get(from: restarted, turn: 4, text: 'dddd');
+    expect(await c.exists(), isFalse, reason: 'the one not seen since is the least recent');
+    expect(await a.exists(), isTrue);
+    expect(await b.exists(), isTrue);
+  });
+
+  test('a hit whose order cannot be written still returns its image, and writes it later', () async {
+    final first = await get(turn: 1, text: 'aaaa');
+    await get(turn: 2, text: 'bbbb');
+    final blocker = Directory('${root.path}/image-snapshots/index.json.tmp');
+    await blocker.create(recursive: true);
+    expect((await get(turn: 1, load: _unexpectedLoad)).path, first.path);
+    await blocker.delete();
+
+    await get(turn: 2, load: _unexpectedLoad);
+    ImageSnapshots.forgetHeldIndexes();
+    final index = jsonDecode(await File('${root.path}/image-snapshots/index.json').readAsString()) as Map;
+    final accessed = (index['accessed'] as Map).cast<String, int>();
+    String digest(String text) => sha256.convert(_bytes(text)).toString();
+    expect(accessed[digest('bbbb')], greaterThan(accessed[digest('aaaa')]!));
+    expect(accessed[digest('aaaa')], greaterThan(2), reason: 'the blocked hit on turn 1 was written after all');
+    expect(await root.list(recursive: true).where((file) => file.path.endsWith('.tmp')).toList(), isEmpty);
+  });
+
   test('external content removal reports missing without falling back to the loader', () async {
     final first = await get();
     await first.delete();
