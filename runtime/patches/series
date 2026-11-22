@@ -186,6 +186,7 @@ companion-compare-output-window.diff
 companion-receipt-file-bytes.diff
 web-table-pipes.diff
 ohos-web-converter-lazy.diff
+office-converter-lazy.diff
 input-recovery.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff

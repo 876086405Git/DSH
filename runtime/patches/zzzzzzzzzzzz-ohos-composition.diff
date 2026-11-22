@@ -25,19 +25,6 @@
  		"darwin-x64",
 --- a/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
-@@ -2,11 +2,11 @@
- import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
- import { tmpdir } from "node:os";
- import { extname, isAbsolute, join } from "node:path";
--import { createConverter } from "@deepseek-ai/libreoffice-kit";
- import z from "@deepseek-ai/schemastery";
- import { brandString } from "@deepseek-ai/dsh-brand";
- import { Remote, RemoteError, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
- import { constants } from "node:fs";
-+const createConverter = async (options) => (await import("@deepseek-ai/libreoffice-kit")).createConverter(options);
- //#region lib/types/errors.js
- /** Classified conversion failure; engine details stay in the cause. */
- var OfficeToPdfError = class extends Error {
 @@ -582,12 +582,13 @@
  				};
  			} catch (cause) {

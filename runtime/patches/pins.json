@@ -2819,6 +2819,7 @@
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
+      "office-converter-lazy.diff",
       "input-recovery.diff"
     ],
     "ohos": [
@@ -3007,6 +3008,7 @@
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
+      "office-converter-lazy.diff",
       "input-recovery.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
