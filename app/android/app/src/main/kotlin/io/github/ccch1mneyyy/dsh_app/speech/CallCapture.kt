@@ -127,6 +127,13 @@ class CallCapture(
 
     private fun capture(r: AudioRecord, g: TurnGate, mine: Int) {
         val frame = ShortArray((RATE * SpeechGate.FRAME_MS / 1000).toInt())
+        val buffer = ByteBuffer.allocate(frame.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+        fun append(out: ByteArrayOutputStream, samples: ShortArray) {
+            buffer.clear()
+            for (s in samples) buffer.putShort(s)
+            out.write(buffer.array())
+        }
+
         val preroll = ArrayDeque<ShortArray>()
         var utterance: ByteArrayOutputStream? = null
         var utteranceFrames = 0
@@ -201,12 +208,6 @@ class CallCapture(
             frame.fill(0)
             preroll.clear()
         }
-    }
-
-    private fun append(out: ByteArrayOutputStream, samples: ShortArray) {
-        val buffer = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-        for (s in samples) buffer.putShort(s)
-        out.write(buffer.array())
     }
 
     private fun post(mine: Int, block: () -> Unit) {
