@@ -90,6 +90,7 @@ zzzzzzzzzzzz-plugin-update-hmr-selection.diff
 zzzzzzzzzzzzz-plan-failed-command-pending.diff
 zzzzzzzzzzzzz-plugin-update-hmr-precondition.diff
 zzzzzzzzzzzzzz-plugin-manager-lock-lifetime.diff
+plugin-manager-execa-lazy.diff
 zzzzzzzzzzzzzzz-read-line-surrogate.diff
 zzzzzzzzzzzzzzz-workflow-result-unicode.diff
 zzzzzzzzzzzzzzzz-read-line-cr-truncation.diff
