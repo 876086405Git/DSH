@@ -719,6 +719,43 @@ void main() {
     expect(store.requests(), isEmpty);
   });
 
+  test('ADD49 a person card keeps typed editor keywords through manual save and reopen', () {
+    final role = character('local:person-editor');
+    final original = sayAs('person-source', '小周就是周老师，是我的朋友。', role);
+    final turn = begin(original);
+    final person = call(turn, 'new-person', 'person', {
+      'text': '周老师是用户的朋友。',
+      'aliases': ['小周', '周老师'],
+      'keywords': ['朋友', '小周'],
+    }).targetId!;
+    store.closeAgentTurn(turn);
+    final row = store.memoryPageCards(characterId: role).single;
+    // This is the editor's public-row contract and its actual save API. A
+    // List<dynamic> containing strings still fails this List<String> cast.
+    final keywords = row['keywords'] as List<String>;
+    expect(keywords, unorderedEquals(['朋友', '小周', '周老师']));
+    final revision = store.saveManual(
+      CompanionMemory(
+        id: row['id']! as String,
+        text: '周老师是我的提琴老师。',
+        kind: row['kind']! as String,
+        keywords: keywords,
+        pinned: row['pinned'] == true,
+      ),
+      expectedRowRev: row['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    reopen();
+    final saved = store.memoryPageCards(characterId: role).single;
+    expect(saved['id'], person);
+    expect(saved['row_rev'], revision);
+    expect(saved['text'], '周老师是我的提琴老师。');
+    expect(saved['collection'], 'person');
+    expect(saved['keywords'] as List<String>, unorderedEquals(keywords));
+    expect(store.messages().single['text'], original['text']);
+  });
+
   test('person aliases stay shared while stories and model history keep their captured character', () {
     final firstRole = character('workshop:["https://example.test","companion","one"]');
     final secondRole = character('local:other');
