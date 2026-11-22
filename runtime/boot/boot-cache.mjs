@@ -39,6 +39,8 @@ export function createBootCache({ roots = ROOTS, fsImpl = fs } = {}) {
     !/(?:^|\/)\.{1,2}(?:\/|$)/u.test(p) && inRoots(p);
 
   function real(p) {
+    const cached = components.get(p);
+    if (typeof cached === 'string') return cached;
     const parts = resolve(p).split('/');
     const last = parts.length - 1;
     let cur = '';
