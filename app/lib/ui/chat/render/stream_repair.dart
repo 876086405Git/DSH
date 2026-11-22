@@ -130,6 +130,7 @@ final _delimiterCell = RegExp(r'^\s*:?-+:?\s*$');
 /// not complete yet (-1 when there is none): its header row would otherwise
 /// show as a paragraph of pipes and then jump into a grid.
 int _unfinishedTableAt(String tail) {
+  if (!tail.contains('|')) return -1;
   final lines = tail.replaceFirst(RegExp(r'\n+$'), '').split('\n');
   var first = lines.length;
   while (first > 0 && _tableRow.hasMatch(lines[first - 1])) {
