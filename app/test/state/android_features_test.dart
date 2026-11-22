@@ -71,6 +71,7 @@ const _rows = {
   'phone-a11y-restore',
   'phone-confirm',
   'phone-auto-collapse',
+  'phone-edge-glow',
   'phone-return',
   'phone-background-guide',
   'phone-files',
