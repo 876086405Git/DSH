@@ -289,7 +289,11 @@ class ChatTranscript {
     // Only these appended events change the two projections. Snapshots,
     // history and replacements still invalidate both through appended == null.
     if (appended == null || appended is TodoWriteEvent || appended is TurnStartedEvent) _todos = null;
-    if (appended == null || appended.type == 'goal/change' || appended.type == 'user/message') _goal = null;
+    if (appended == null ||
+        appended.type == 'goal/change' ||
+        (appended.type == 'user/message' && asMap(appended.data['source'])?['kind'] == 'goal')) {
+      _goal = null;
+    }
   }
 
   List<ChatItem> get items {
@@ -298,12 +302,13 @@ class ChatTranscript {
     if (_items case final cached?) return cached;
     // A draft shares its step's row key with the message it commits to; keys stay unique when a step
     // is already committed or has more than one live attempt (the latest keeps the key).
-    final used = {for (final item in durable) item.key};
     final latest = {for (final draft in _drafts.values) draft.rowKey: draft};
+    for (final item in durable.whereType<AssistantChatItem>()) {
+      latest.remove(item.key);
+    }
     return _items = [
       ...durable,
-      for (final draft in _drafts.values)
-        ...draft.items(useRowKey: !used.contains(draft.rowKey) && identical(latest[draft.rowKey], draft)),
+      for (final draft in _drafts.values) ...draft.items(useRowKey: identical(latest[draft.rowKey], draft)),
     ];
   }
 
@@ -1150,9 +1155,9 @@ class _TurnTracer {
             lastToken: bounds.last,
             retries: failures.length,
             retryFailures: List.unmodifiable(failures.where((f) => f.isNotEmpty)),
-            hasText: message.text.trim().isNotEmpty,
-            hasReasoning: message.reasoning.trim().isNotEmpty,
-            toolCalls: message.toolCalls.length,
+            hasText: message.parts.any((p) => p is TextPart && p.text.trim().isNotEmpty),
+            hasReasoning: message.parts.any((p) => p is ReasoningPart && p.text.trim().isNotEmpty),
+            toolCalls: message.parts.whereType<ToolCallPart>().length,
             interrupted: event.interrupted,
           ),
         );

@@ -39,6 +39,7 @@ final _quoteLine = RegExp(r'^ {0,3}> ?');
 /// A message split into the blockquote it opens with and the rest; [quote]
 /// is null when it does not open with one.
 ({String? quote, String body}) splitQuote(String text) {
+  if (!_quoteLine.hasMatch(text)) return (quote: null, body: text);
   final lines = text.replaceAll('\r\n', '\n').split('\n');
   var i = 0;
   final quoted = <String>[];

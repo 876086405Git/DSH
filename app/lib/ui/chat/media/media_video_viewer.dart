@@ -158,7 +158,13 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
     _polling = true;
     try {
       final state = await widget.video.state(handle.texture);
-      if (mounted && identical(_handle, handle)) setState(() => _state = state);
+      if (!mounted || !identical(_handle, handle)) return;
+      final previous = _state;
+      if (previous?.positionMs != state.positionMs ||
+          previous?.durationMs != state.durationMs ||
+          previous?.playing != state.playing) {
+        setState(() => _state = state);
+      }
     } catch (error) {
       if (mounted && identical(_handle, handle)) _fail(error);
     } finally {
