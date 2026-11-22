@@ -222,6 +222,19 @@ void main() {
   });
 
   group('exact, unique navigation controls', () {
+    for (final icon in ['📝', 'M']) {
+      test('a text icon ($icon) does not become part of the section label', () async {
+        final out = await page({
+          'sections': [
+            _general,
+            {..._memo, 'icon': icon},
+          ],
+        });
+        landed(out, 'memo');
+        expect(pressed(out), ['direct', 'section:memo']);
+      }, skip: skip);
+    }
+
     test('a longer prefix is not the section; matching content is not navigation', () async {
       final out = await page({
         'sections': [

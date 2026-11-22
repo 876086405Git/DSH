@@ -7,7 +7,7 @@
 // [data-shortcut-modal=settings] with nav buttons (labels in spans, no ids).
 // Selecting a section updates aria-current and the section content later.
 //
-// Scenario: open, sections [{id, label}], entry ('direct' | 'account' | 'none'),
+// Scenario: open, sections [{id, label, icon?}], entry ('direct' | 'account' | 'none'),
 // locale ('zh' | 'en'), opened, active, bootMs, entryMs, menuMs, dialogMs,
 // sectionsMs (since boot), selectMs, ignoreClicks, occupants [{cell, label}],
 // sectionButtons [labels], outsideButtons [labels], touchAt, touchType,
@@ -111,8 +111,11 @@ class El {
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
 }
-const button = (label, name, onClick, attrs = {}) => {
-  const el = new El('button', attrs, [new El('svg'), new El('span', {}, [], label)]);
+const button = (label, name, onClick, attrs = {}, icon) => {
+  const el = new El('button', attrs, [
+    icon === undefined ? new El('svg') : new El('span', { 'aria-hidden': 'true' }, [], icon),
+    new El('span', {}, [], label),
+  ]);
   el.clickName = name;
   el.onClick = onClick;
   return el;
@@ -140,6 +143,7 @@ function settingsDialog() {
         setTimer(() => { activeId = section.id; render(); }, s.selectMs ?? 16);
       },
       activeId === section.id ? { 'aria-current': 'true' } : {},
+      section.icon,
     )),
   )]);
   const content = new El('div', { 'data-slot': 'settings.section' }, [

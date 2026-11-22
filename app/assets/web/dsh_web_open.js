@@ -135,6 +135,15 @@
     return (el.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
+  function namesOf(n) {
+    var names = [n.getAttribute('aria-label') || '', text(n)];
+    var leaves = n.querySelectorAll('*');
+    for (var l = 0; l < leaves.length; l++) {
+      if (!leaves[l].children.length) names.push(text(leaves[l]));
+    }
+    return names;
+  }
+
   // A control whose aria-label, text, or the text of one of its leaf
   // elements (cards: title + description) is one of [labels]; a label may
   // also be followed by a space ("新建终端 在会话工作区运行命令").
@@ -143,11 +152,7 @@
     var nodes = root.querySelectorAll(selector);
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      var names = [n.getAttribute('aria-label') || '', text(n)];
-      var leaves = n.querySelectorAll('*');
-      for (var l = 0; l < leaves.length; l++) {
-        if (!leaves[l].children.length) names.push(text(leaves[l]));
-      }
+      var names = namesOf(n);
       for (var j = 0; j < labels.length; j++) {
         for (var k = 0; k < names.length; k++) {
           var name = names[k];
@@ -218,7 +223,7 @@
       } catch (e) {}
     }
     return Array.prototype.filter.call(dialog.querySelectorAll('nav button'), function (button) {
-      return names.indexOf(button.getAttribute('aria-label') || text(button)) >= 0;
+      return namesOf(button).some(function (name) { return names.indexOf(name) >= 0; });
     });
   }
 
