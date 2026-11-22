@@ -135,9 +135,12 @@ class NeuralGate(
     private fun samples(ms: Int) = RATE / 1000 * ms
 
     private fun append(frame: ShortArray) {
-        for (sample in frame) {
-            audio[written] = sample
-            if (++written == WINDOW_SAMPLES) written = 0
+        var offset = 0
+        while (offset < frame.size) {
+            val count = minOf(frame.size - offset, WINDOW_SAMPLES - written)
+            frame.copyInto(audio, written, offset, offset + count)
+            written = (written + count) % WINDOW_SAMPLES
+            offset += count
         }
         size = minOf(size + frame.size, WINDOW_SAMPLES)
     }
