@@ -20,6 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileDescriptor
 import java.io.FileInputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -110,6 +111,7 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
             player = MediaPlayer()
             val p = player
             val surface = producer
+            var rotation = 0
             val id = surface.id()
             val clip = Clip(surface, p).also { it.pending = result }
             clips[id] = clip
@@ -134,9 +136,12 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
                 clip.timeout?.let(main::removeCallbacks)
                 val pending = clip.pending
                 clip.pending = null
-                pending?.success(mapOf("texture" to id, "width" to it.videoWidth, "height" to it.videoHeight, "durationMs" to it.duration))
+                pending?.success(mapOf("texture" to id, "width" to it.videoWidth, "height" to it.videoHeight, "durationMs" to it.duration, "rotation" to rotation))
             }
-            FileInputStream(path!!).use { p.setDataSource(it.fd) }
+            FileInputStream(path!!).use {
+                p.setDataSource(it.fd)
+                if (!surface.handlesCropAndRotation()) rotation = videoRotation(it.fd)
+            }
             p.setSurface(surface.surface)
             p.prepareAsync()
         } catch (_: Exception) {
@@ -148,6 +153,21 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
             }
         }
     }
+
+    /** Display dimensions already include rotation; only the untransformed texture needs it. */
+    private fun videoRotation(fd: FileDescriptor): Int = runCatching {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(fd)
+            when (val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0) {
+                90, 180, 270 -> rotation
+                else -> 0
+            }
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }.getOrDefault(0)
+
     private fun requestFocus(): Boolean {
         if (focusListener != null) return true
         val listener = object : AudioManager.OnAudioFocusChangeListener {

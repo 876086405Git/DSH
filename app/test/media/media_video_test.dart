@@ -98,7 +98,7 @@ class _Video extends MediaVideoChannel {
       MediaVideoState(positionMs: position, durationMs: 5000, playing: playing);
 }
 
-Future<void> _pumpViewer(WidgetTester tester, _Files files, _Video video) async {
+Future<void> _pumpViewer(WidgetTester tester, _Files files, MediaVideoChannel video) async {
   await tester.pumpWidget(
     MaterialApp(
       home: MediaVideoViewerPage(
@@ -156,6 +156,7 @@ void main() {
     const video = MediaVideoChannel(channel);
     final handle = await video.open('/phone/movie.mp4');
     expect(handle.aspectRatio, 1920 / 1080);
+    expect(handle.rotation, 0);
     await video.play(handle.texture);
     await video.seek(handle.texture, 1200);
     expect((await video.state(handle.texture)).positionMs, 1200);
@@ -256,6 +257,33 @@ void main() {
   test('time labels clamp negative position', () {
     expect(mediaVideoTime(-1), '0:00');
     expect(mediaVideoTime(65_999), '1:05');
+  });
+
+  testWidgets('90 degree video rotation keeps display ratio and swaps the texture constraints', (tester) async {
+    const channel = MethodChannel('test/video-rotation');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      return switch (call.method) {
+        'open' => {'texture': 17, 'width': 1080, 'height': 1920, 'durationMs': 5000, 'rotation': 90},
+        'state' => {'positionMs': 0, 'durationMs': 5000, 'playing': false},
+        _ => null,
+      };
+    });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null),
+    );
+    await _pumpViewer(tester, _Files(), const MediaVideoChannel(channel));
+    final texture = find.byType(Texture);
+    final rotated = find.ancestor(of: texture, matching: find.byType(RotatedBox));
+    final display = find.ancestor(of: texture, matching: find.byType(AspectRatio));
+    expect(tester.widget<RotatedBox>(rotated).quarterTurns, 1);
+    expect(tester.widget<AspectRatio>(display).aspectRatio, 1080 / 1920);
+    final displaySize = tester.getSize(rotated);
+    final textureSize = tester.getSize(texture);
+    expect(textureSize.width, closeTo(displaySize.height, 0.001));
+    expect(textureSize.height, closeTo(displaySize.width, 0.001));
+    expect(textureSize.width / textureSize.height, closeTo(1920 / 1080, 0.000001));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('late prepared player is released after viewer disposal', (tester) async {
