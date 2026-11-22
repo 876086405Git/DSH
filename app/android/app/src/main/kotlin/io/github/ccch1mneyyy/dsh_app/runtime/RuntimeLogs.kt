@@ -87,8 +87,8 @@ class RuntimeLogs(
         delivery.add(entry)
     }
 
-    fun snapshot(lines: Int): Snapshot = synchronized(guard) { Snapshot(ring.toList().takeLast(lines), sequence) }
-    fun recent(lines: Int): List<String> = synchronized(guard) { ring.toList().takeLast(lines).map { it.line } }
+    fun snapshot(lines: Int): Snapshot = synchronized(guard) { Snapshot(ring.takeLast(lines), sequence) }
+    fun recent(lines: Int): List<String> = synchronized(guard) { ring.takeLast(lines).map { it.line } }
     fun dropped(): Pair<Long, Long> = synchronized(guard) { disk.totalDropped to delivery.totalDropped }
 
     private fun schedule(delay: Long) {
