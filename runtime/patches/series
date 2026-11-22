@@ -36,6 +36,7 @@ zzzzzzz-input-recovery.diff
 zzzzzzz-job-follow-removal.diff
 zzzzzzz-job-ring-trim.diff
 zzzzzzz-jsonl-root-check-retry.diff
+job-release-producer-cancel.diff
 zzzzzzz-mcp-resource-lookup.diff
 zzzzzzz-piai-developer-tools.diff
 zzzzzzz-plugin-list-index.diff
