@@ -33,8 +33,6 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
     private val main = Handler(Looper.getMainLooper())
     private val clips = HashMap<Long, Clip>()
     private val posterWorker = Executors.newSingleThreadExecutor { r -> Thread(r, "dsh-video-poster").apply { isDaemon = true } }
-    // A container without an index can take a full scan; keep it off the platform thread.
-    private val rotationWorker = Executors.newSingleThreadExecutor { r -> Thread(r, "dsh-video-rotation").apply { isDaemon = true } }
     private val probing = AtomicBoolean(false)
     private var activity: Activity? = null
     private var foreground = false
@@ -69,7 +67,6 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
         app.unregisterActivityLifecycleCallbacks(lifecycle)
         closeAll()
         posterWorker.shutdownNow()
-        rotationWorker.shutdownNow()
     }
     override fun onAttachedToActivity(binding: ActivityPluginBinding) { activity = binding.activity }
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) = onAttachedToActivity(binding)
@@ -148,10 +145,12 @@ class MediaVideoPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallH
                 publish()
             }
             FileInputStream(path!!).use { p.setDataSource(it.fd) }
-            if (clip.rotation == null) rotationWorker.execute {
+            // A container without an index can take a full scan: read it off the platform thread, on its
+            // own thread so a stale scan never delays the next video.
+            if (clip.rotation == null) Thread({
                 val rotation = videoRotation(path)
                 main.post { if (clips[id] === clip) { clip.rotation = rotation; publish() } }
-            }
+            }, "dsh-video-rotation").apply { isDaemon = true }.start()
             p.setSurface(surface.surface)
             p.prepareAsync()
         } catch (_: Exception) {
