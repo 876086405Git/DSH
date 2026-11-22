@@ -31,6 +31,10 @@ class CompanionMemoryEmbeddings extends ChangeNotifier {
   bool _failed = false;
   int _generation = 0;
   String? _modelKey;
+
+  /// The last query's vector: each tool round trip of a turn ranks again with
+  /// the same text, which encodes to the same vector under the same model.
+  ({String modelKey, String text, List<double> vector})? _lastQuery;
   Future<bool>? _loading;
   Future<void>? _downloadFuture;
   CompanionMemoryModelDownload? _installer;
@@ -198,7 +202,11 @@ class CompanionMemoryEmbeddings extends ChangeNotifier {
         modelKey: modelKey,
         dimensions: 512,
       );
-      final queryVector = (await _vectors([query], query: true, modelKey: modelKey)).single;
+      final last = _lastQuery;
+      final queryVector = last != null && last.modelKey == modelKey && last.text == query
+          ? last.vector
+          : (await _vectors([query], query: true, modelKey: modelKey)).single;
+      _lastQuery = (modelKey: modelKey, text: query, vector: queryVector);
       sameModel();
       final missing = [
         for (final card in candidates)
