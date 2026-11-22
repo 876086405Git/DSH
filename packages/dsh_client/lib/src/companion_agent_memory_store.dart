@@ -740,6 +740,13 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       sourceAt = math.max(sourceAt, retained['source_at_ms'] as int);
     }
     if (proofGroups.isEmpty && references.isEmpty) throw const _AgentMemoryRejected('source_not_in_turn');
+    if (previous != null &&
+        !canApplyMemoryCurrentValue(
+          proposedBasisSeq: basis,
+          currentBasisSeq: previous['current_basis_seq'] as int? ?? 0,
+        )) {
+      throw const _AgentMemoryRejected('older_than_current');
+    }
     final rawAliases = input['aliases'];
     final aliases = collection != 'person'
         ? const <String>[]

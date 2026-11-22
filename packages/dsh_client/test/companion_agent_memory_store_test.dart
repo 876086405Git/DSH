@@ -319,6 +319,71 @@ void main() {
     expect(database.select('SELECT * FROM memory_deleted_messages'), isEmpty);
   });
 
+  test('ADD49 current maintenance cannot replace a manual correction with older evidence or partly apply its group', () {
+    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+    final old = say('old-interview', '面试安排在周四。');
+    final initial = begin(old);
+    final interview = call(initial, 'first-interview', 'remember', {'text': '面试安排在周四。'}).targetId!;
+    store.closeAgentTurn(initial);
+    final beforeEdit = actualCard(interview);
+    now += 3600000;
+    store.saveManual(
+      CompanionMemory(id: interview, text: '面试安排在周五。'),
+      expectedRowRev: beforeEdit['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    final corrected = actualCard(interview);
+    expect(corrected['current_basis_seq'], greaterThan(old['first_seq']! as int));
+    now += 3600000;
+    final fresh = say('new-interview', '面试又改成周六了；我也开始学提琴。');
+    final later = begin(fresh);
+    final violin = call(later, 'first-violin', 'remember', {'text': '我开始学提琴。'}).targetId!;
+    store.closeAgentTurn(later);
+    final independent = actualCard(violin);
+    expect(fresh['first_seq'], greaterThan(corrected['current_basis_seq']! as int));
+    now += 86400000;
+    final claim = store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length)!;
+    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    final turnId = turn['id']! as String;
+    grantMaintenance(turn);
+    expect(store.isAgentTurnCurrent(turnId), isTrue, reason: 'this is a new claim after the manual control, not a stale run');
+    final control = store.archive['control_revision'];
+    expect(
+      call(turnId, 'old-again', 'revise', {'card': interview, 'source': old['id'], 'text': '面试安排在周四。'}).code,
+      'older_than_current',
+    );
+    expect(actualCard(interview), corrected);
+    expect(
+      call(turnId, 'group-old', 'revise', {
+        'changes': [
+          {'card': violin, 'source': fresh['id'], 'text': '我在学提琴。'},
+          {'card': interview, 'source': old['id'], 'text': '面试安排在周四。'},
+        ],
+      }).code,
+      'older_than_current',
+    );
+    expect(actualCard(violin), independent, reason: 'an earlier valid member cannot survive a rejected group');
+    expect(actualCard(interview), corrected);
+    expect(store.archive['control_revision'], control);
+    expect(store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String)['changed_cards'], isEmpty);
+    final accepted = call(turnId, 'group-new', 'revise', {
+      'changes': [
+        {'card': violin, 'source': fresh['id'], 'text': '我在学提琴。'},
+        {'card': interview, 'source': fresh['id'], 'text': '面试安排在周六。'},
+      ],
+    });
+    expect(accepted.applied, isTrue, reason: 'equal-basis rewording and genuinely newer evidence remain legal');
+    expect(accepted.changedCardIds, unorderedEquals([violin, interview]));
+    expect(actualCard(violin)['current_basis_seq'], independent['current_basis_seq']);
+    expect(actualCard(interview)['current_basis_seq'], fresh['first_seq']);
+    expect(actualCard(interview)['text'], '面试安排在周六。');
+    store.finishAgentMaintenance(turnId: turnId, complete: true);
+    reopen();
+    expect(actualCard(interview)['text'], '面试安排在周六。');
+    expect(store.messages().singleWhere((row) => row['id'] == old['id'])['text'], old['text']);
+  });
+
   test('an external control invalidates a turn after recall grants only its actual returned IDs', () {
     final card = seed('我喜欢蓝色', keywords: ['蓝色']);
     final other = seed('另一个独立事实');
