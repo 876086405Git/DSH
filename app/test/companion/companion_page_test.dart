@@ -1176,6 +1176,8 @@ void main() {
           for (var index = 0; index < 4; index++) {
             await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
             handling ??= memory.lastReceipt;
+            // Let the directory sheet finish sliding in before tapping an entry.
+            await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('主目录').last);
             await settleMixed(tester, browsers[index].future);
             final choose = find
@@ -1229,6 +1231,8 @@ void main() {
           final accepted = scenario == 'accepted' || scenario == 'leave-after-acceptance';
           if (accepted) {
             await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
+            // Let the directory sheet finish sliding in before tapping an entry.
+            await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('主目录').last);
             await settleMixed(tester, browsers[4].future);
             final choose = find
@@ -1740,6 +1744,8 @@ void main() {
           for (var side = 0; side < 2; side++) {
             await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
             handling ??= memory.lastReceipt;
+            // Let the directory sheet finish sliding in before tapping an entry.
+            await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('主目录').last);
             await settleMixed(tester, browsers[side].future);
             final choose = find
@@ -2355,6 +2361,8 @@ void main() {
                 );
                 await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.byType(FilledButton)));
               } else {
+                // Let the directory sheet finish sliding in before tapping an entry.
+                await tester.pump(const Duration(milliseconds: 500));
                 await tester.tap(find.text('主目录').last);
               }
               final choose = find
@@ -2774,6 +2782,8 @@ void main() {
           await _notesVisible(tester, find.byType(DirectoryLocationsSheet));
           expect(find.byType(DirectoryLocationsSheet), findsOneWidget);
           final handling = memory.lastReceipt;
+          // Let the directory sheet finish sliding in before tapping an entry.
+          await tester.pump(const Duration(milliseconds: 500));
           await tester.tap(find.text('主目录').last);
           await settleMixed(tester, browserRead.future);
           final choose = find

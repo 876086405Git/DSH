@@ -5,12 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// Waits for [work] that mixes real I/O with futures the page started on the
 /// fake clock (the page may already be running the same memoized migration).
 /// `runAsync` alone would wait forever for the fake-clock half.
-Future<T> settleMixed<T>(WidgetTester tester, Future<T> work) async {
+///
+/// Bounded: work that never finishes fails this test instead of holding the
+/// whole file until the runner's timeout and failing every later test.
+Future<T> settleMixed<T>(WidgetTester tester, Future<T> work, {Duration limit = const Duration(seconds: 20)}) async {
   var done = false;
   unawaited(work.whenComplete(() => done = true).then((_) {}, onError: (_) {}));
-  // Returning an unfinished fake-zone future would stop the pumps it still needs.
-  // Keep its existing test timeout; do not impose a separate polling window.
+  final watch = Stopwatch()..start();
   while (!done) {
+    if (watch.elapsed > limit) fail('settleMixed: work did not finish within $limit');
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
     await tester.pump();
   }
