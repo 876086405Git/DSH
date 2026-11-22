@@ -65,7 +65,7 @@ class ReplayFrames {
     final items = <ChatItem>[];
     final commands = <CommandNotice>[];
     final turns = <TurnTrace>[];
-    List<TodoItem>? todos;
+    TodosEntry? todoSource;
     GoalEntry? goal;
     var running = false;
     for (var i = 0; i < visible; i++) {
@@ -74,7 +74,7 @@ class ReplayFrames {
       final done = time >= beat.end;
       switch (entry) {
         case TurnEntry():
-          todos = null;
+          todoSource = null;
           final end = timeline.turnEnds[i];
           final closed = end != null && time >= end;
           if (!closed) running = true;
@@ -93,7 +93,7 @@ class ReplayFrames {
         case CommandEntry():
           commands.add(_command(i, entry));
         case TodosEntry():
-          todos = [for (final item in entry.items) TodoItem(item.text, item.status)];
+          todoSource = entry;
         case GoalEntry():
           goal = entry.text == null ? null : entry;
       }
@@ -102,7 +102,7 @@ class ReplayFrames {
       items: items,
       turns: turns,
       commands: commands,
-      todos: todos,
+      todos: todoSource == null ? null : [for (final item in todoSource.items) TodoItem(item.text, item.status)],
       goal: goal,
       running: running,
       visible: visible,
