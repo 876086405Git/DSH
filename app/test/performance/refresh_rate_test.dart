@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:dsh_app/performance/performance_state.dart';
@@ -136,13 +137,30 @@ void main() {
       expect(calls.last, 'setFrameActive false');
     });
 
-    testWidgets('long motion says active once, with no renewals', (tester) async {
+    testWidgets('long motion says active once, with no renewals and no timer per frame', (tester) async {
       final calls = record();
       RefreshRateService.instance.start();
-      await play(tester, 1000, cadence);
+      var timers = 0;
+      final counted = Zone.current.fork(
+        specification: ZoneSpecification(
+          createTimer: (self, parent, zone, duration, callback) {
+            timers++;
+            return parent.createTimer(zone, duration, callback);
+          },
+        ),
+      );
+      var at = Duration.zero;
+      for (var i = 0; i < 1000; i++) {
+        await tester.pump(cadence);
+        at += cadence;
+        counted.run(() => RefreshRateService.instance.frameForTest(at));
+      }
       await tester.pump();
       expect(calls, ['setRefreshRateMode auto', 'setFrameActive true']);
       await tester.pump(RefreshRateService.idleAfter);
+      expect(calls.last, 'setFrameActive false');
+      // 8 s of frames: about one timer per 700 ms, where it was one per frame.
+      expect(timers, lessThan(20));
     });
 
     testWidgets('modes pass through and frames do nothing outside auto', (tester) async {
