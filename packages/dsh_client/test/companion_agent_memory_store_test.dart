@@ -1348,6 +1348,20 @@ void main() {
         isFalse,
       );
       expect(store.cards().map((row) => row['id']), [diary]);
+      final fresh = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
+      expect(fresh['id'], next['id']);
+      expect(fresh['closed'], 0);
+      expect(fresh['sources'], isEmpty, reason: 'the same live claim uses the new history cutoff');
+      final visible = (fresh['cards'] as List<MemoryRow>).single;
+      expect(visible['id'], diary);
+      expect(visible['row_rev'], retained['row_rev']);
+      expect(visible['text'], '喜欢红茶。');
+      expect(visible['local_day'], retained['local_day']);
+      expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
+      grantMaintenance(fresh);
+      expect(store.isAgentTurnCurrent(next['id']! as String), isTrue);
+      expect(actualCard(diary), retained, reason: 'context projection and actual grants do not rewrite local proof');
+      expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
     },
   );
 
