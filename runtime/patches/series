@@ -181,6 +181,7 @@ companion-read-file-capacity.diff
 companion-compare-output-window.diff
 companion-receipt-file-bytes.diff
 web-table-pipes.diff
+ohos-web-converter-lazy.diff
 input-recovery.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
@@ -217,7 +218,6 @@ ohos-workspace-grant-paths.diff
 ohos-workspace-edit.diff
 ohos-client-hmr-idle.diff
 ohos-image-codec.diff
-ohos-web-converter-lazy.diff
 ohos-cordis-catalog-lazy.diff
 ohos-skill-root-events.diff
 ohos-piai-empty-models.diff
