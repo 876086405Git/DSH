@@ -260,6 +260,7 @@ class _InlineScan {
   static const _closeBracket = 0x5d;
 
   final String text;
+  late final int _trimmedEnd = text.trimRight().length;
   final openers = <_Opener>[];
   int? openCode;
   int codeRun = 0;
@@ -310,7 +311,7 @@ class _InlineScan {
         used = true;
       }
     }
-    if (!used && text.substring(i + run).trim().isEmpty) dangling = i;
+    if (!used && i + run >= _trimmedEnd) dangling = i;
     return i + run;
   }
 
