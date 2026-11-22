@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.voice
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -46,6 +47,17 @@ class StreamingPcmTest {
         queued.removeAt(0)()
         assertEquals(1, delivered)
         StreamingPcm.disable()
+    }
+
+    @Test fun aPartialNextReadLeavesTheLastNativeRateFrameIntact() {
+        val converter = PcmFrames(16000)
+        val samples = ShortArray(320) { (Short.MIN_VALUE + it * 211).toShort() }
+        samples[319] = Short.MAX_VALUE
+        lateinit var emitted: ShortArray
+        converter.consume(samples, samples.size) { emitted = it }
+        assertArrayEquals(samples, emitted)
+        converter.consume(shortArrayOf(1, 2), 2) { error("partial frame emitted") }
+        assertArrayEquals(samples, emitted)
     }
 
     @Test fun arbitraryReadSizesYieldExactTwentyMillisecondFramesAtAllRecorderRates() {

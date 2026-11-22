@@ -254,6 +254,22 @@ class NeuralGateTest {
         }
     }
 
+    @Test fun aFrameLongerThanTheRingWrapsFromANonzeroPosition() {
+        Capture().use { c ->
+            c.feed(0.9f, 6)
+            val frame = ShortArray(NeuralGate.WINDOW_SAMPLES + 37) { it.toShort() }
+            c.gate.consume(frame, -30.0, c.now)
+            c.feed(0.1f, 10, 0)
+            c.worker.runNext()
+            val quiet = 10 * 320
+            val kept = NeuralGate.WINDOW_SAMPLES - quiet
+            for (i in 0 until kept) {
+                assertEquals(frame[frame.size - kept + i] / 32768f, c.turn.input[i], 0f)
+            }
+            for (i in kept until NeuralGate.WINDOW_SAMPLES) assertEquals(0f, c.turn.input[i], 0f)
+        }
+    }
+
     @Test fun theModelOnlySeesTheLastEightSeconds() {
         Capture().use { c ->
             c.feed(0.9f, 6, 1000)
