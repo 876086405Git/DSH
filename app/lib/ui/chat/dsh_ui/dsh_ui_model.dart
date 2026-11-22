@@ -1379,8 +1379,8 @@ String dshUiPlainText(String markdown) {
 bool _closes(String line, String fence) {
   final t = line.trim();
   if (t.length < fence.length) return false;
-  final ch = fence[0];
-  return t.split('').every((c) => c == ch);
+  final ch = fence.codeUnitAt(0);
+  return t.codeUnits.every((c) => c == ch);
 }
 
 /// 模型偶尔不写围栏:把视图 JSON 直接当正文发出来。渲染前把这些裸 JSON
