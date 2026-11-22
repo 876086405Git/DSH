@@ -1,22 +1,32 @@
 package io.github.ccch1mneyyy.dsh_app.companion
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.PluginRegistry
+import io.github.ccch1mneyyy.dsh_app.notify.ChatNotifier
 
 /** Channel ownership follows the cached engine, not an Activity. */
-class CompanionAlwaysOnPlugin : FlutterPlugin {
+class CompanionAlwaysOnPlugin : FlutterPlugin, ActivityAware, PluginRegistry.ActivityResultListener {
     private lateinit var context: Context
     private lateinit var channel: MethodChannel
     private var ready = false
+    private var activity: ActivityPluginBinding? = null
+    private data class NotificationRequest(val code: Int, val epoch: Long,
+        val results: MutableList<MethodChannel.Result>)
+    private var notificationRequest: NotificationRequest? = null
     private var batteryLow: Boolean? = null
     private var powerSave = false
     private var powerReceiverRegistered = false
@@ -40,9 +50,7 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
                 when (call.method) {
                     "ready" -> {
                         ready = true
-                        if (CompanionAlwaysOnState.read(context).enabled && !CompanionAlwaysOnService.running) {
-                            try { CompanionAlwaysOnService.start(context) } catch (error: Exception) { failure = error.javaClass.simpleName }
-                        }
+                        startIfAvailable()
                         result.success(status())
                         Handler(Looper.getMainLooper()).post { flush() }
                     }
@@ -57,18 +65,15 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
                         CompanionAlwaysOnState.set(context, enabled)
                         failure = null
                         if (enabled) {
-                            try { CompanionAlwaysOnService.start(context) }
-                            catch (error: Exception) {
-                                CompanionAlwaysOnState.set(context, false)
-                                failure = error.javaClass.simpleName
-                            }
+                            enableWithNotification(result)
                         } else {
                             pending.clear()
                             CompanionConversationNotification.clear(context)
                             context.stopService(Intent(context, CompanionAlwaysOnService::class.java))
+                            finishNotificationRequest()
+                            result.success(status())
+                            statusChanged()
                         }
-                        result.success(status())
-                        statusChanged()
                     }
                     "update" -> result.success(CompanionConversationNotification.update(context,
                         call.argument<Number>("epoch")!!.toLong(), call.argument<String>("id")!!,
@@ -97,6 +102,91 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
         })
         powerReceiverRegistered = true
         readPower(sticky)
+    }
+
+    /** Only the explicit switch may ask. Restoring a lease never opens a prompt. */
+    private fun enableWithNotification(result: MethodChannel.Result) {
+        notificationRequest?.let {
+            it.results.add(result)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            val host = activity?.activity
+            if (host != null && !host.isFinishing && !host.isDestroyed) {
+                val request = NotificationRequest(nextNotificationRequestCode++,
+                    CompanionAlwaysOnState.read(context).epoch, mutableListOf(result))
+                notificationRequest = request
+                statusChanged()
+                // target 28 is required by the rootfs. Its notification
+                // permission cannot be requested by this app at runtime.
+                val notifier = ChatNotifier(context)
+                for (intent in listOf(notifier.settingsIntent(null), notifier.detailsIntent())) {
+                    try {
+                        host.startActivityForResult(intent, request.code)
+                        failure = null
+                        return
+                    } catch (error: Exception) { failure = error.javaClass.simpleName }
+                }
+                finishNotificationRequest()
+                return
+            }
+        } else {
+            startIfAvailable(disableOnFailure = true)
+        }
+        result.success(status())
+        statusChanged()
+    }
+
+    private fun startIfAvailable(disableOnFailure: Boolean = false) {
+        if (current !== this || notificationRequest != null ||
+            !CompanionAlwaysOnState.read(context).enabled || CompanionAlwaysOnService.running ||
+            !CompanionConversationNotification.available(context)) return
+        try { CompanionAlwaysOnService.start(context) }
+        catch (error: Exception) {
+            if (disableOnFailure) CompanionAlwaysOnState.set(context, false)
+            failure = error.javaClass.simpleName
+        }
+    }
+
+    private fun finishNotificationRequest(continueEnable: Boolean = false) {
+        val request = notificationRequest ?: return
+        notificationRequest = null
+        val state = CompanionAlwaysOnState.read(context)
+        if (continueEnable && current === this && activity != null && state.enabled && state.epoch == request.epoch) {
+            startIfAvailable(disableOnFailure = true)
+        }
+        val value = status()
+        request.results.forEach { it.success(value) }
+        statusChanged()
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding
+        binding.addActivityResultListener(this)
+    }
+
+    private fun detachActivity() {
+        activity?.removeActivityResultListener(this)
+        activity = null
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() = detachActivity()
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) = onAttachedToActivity(binding)
+
+    override fun onDetachedFromActivity() {
+        detachActivity()
+        finishNotificationRequest()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        val request = notificationRequest ?: return false
+        if (requestCode != request.code) return false
+        // Settings has no grant result. Returning only permits a fresh read of
+        // available(); neither opening the page nor RESULT_OK is authorization.
+        finishNotificationRequest(continueEnable = true)
+        return true
     }
 
     private fun readPower(intent: Intent?) {
@@ -132,6 +222,8 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        detachActivity()
+        finishNotificationRequest()
         ready = false
         if (powerReceiverRegistered) {
             context.unregisterReceiver(powerReceiver)
@@ -142,6 +234,8 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
     }
 
     companion object {
+        // A retired Activity's result must not complete a later enable request.
+        private var nextNotificationRequestCode = 0x434f0000
         private var current: CompanionAlwaysOnPlugin? = null
         private val pending = ArrayDeque<Map<String, Any>>()
         private val accepted = linkedSetOf<String>()

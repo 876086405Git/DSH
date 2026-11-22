@@ -18,7 +18,10 @@ class CompanionAlwaysOnService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!CompanionAlwaysOnState.read(this).enabled) {
+        // This feature needs a visible conversation notification. Android itself
+        // can run an FGS without POST_NOTIFICATIONS; do not mistake that for
+        // permission to show a reply surface, or request permission on restore.
+        if (!CompanionAlwaysOnState.read(this).enabled || !CompanionConversationNotification.available(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
