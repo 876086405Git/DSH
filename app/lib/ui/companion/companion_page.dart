@@ -159,6 +159,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// The backlog is over her (companion_log.dart).
   bool _logOpen = false;
+  ({(CompanionMemoryStore, int, int, String?, String) key, List<CompanionLogEntry> entries})? _savedLightLog;
 
   /// What she's doing in her corner (the stage's word for it).
   String _home = 'idle';
@@ -176,6 +177,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   // What's on screen.
   String? _bubble;
+  String? _bubbleReplyId;
   List<({String taskId, String placeName})> _lookupResults = const [];
   List<String> _notesResults = const [];
   List<String> _mapResults = const [];
@@ -288,6 +290,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         if (state != AppLifecycleState.resumed) {
           _notesForegroundEpoch++;
           _mapHandoff.close();
+        } else if (mounted) {
+          // A reply can finish while this window is paused. Its next actual
+          // frame, even without another Agent notification, may present it.
+          setState(() {});
         }
         _observeInitiative();
         _observeLateUse();
@@ -1388,12 +1394,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
   }
 
-  void _showBubble(String text, {Duration? hold, bool error = false, bool clearTasks = true}) {
+  void _showBubble(String text, {Duration? hold, bool error = false, bool clearTasks = true, String? replyId}) {
     _retireGreeting();
     _bubbleTimer?.cancel();
     _memoryFollowupTicket = null;
     setState(() {
       _bubble = text;
+      _bubbleReplyId = replyId;
       _bubbleIsError = error;
       if (clearTasks) {
         _lookupResults = const [];
@@ -1621,7 +1628,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _bubbleIsError = false;
     } else {
       _myLine = null;
-      _showBubble(words, clearTasks: false);
+      _showBubble(words, clearTasks: false, replyId: _baselineUser);
     }
   }
 
@@ -1721,21 +1728,38 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _running = running;
       _needsAttention = attention;
     });
-    if (user != null && reply.words.isNotEmpty && error == null) {
-      final attachment = _attachment;
-      final current = attachment.captureCurrent();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            current() &&
-            identical(_attachment, attachment) &&
-            _notesForegroundHere &&
-            _baselineUser == user &&
-            !_bubbleIsError &&
-            _bubble == reply.words) {
-          attachment.presentedReply(user, text);
-        }
-      });
-    }
+  }
+
+  /// Capture the reply rendered by this frame. Returning to this room can
+  /// show words whose Agent notifications all finished while it was hidden.
+  void _queueReplyPresentation() {
+    final attachment = _attachment;
+    final user = attachment.replyId;
+    final text = attachment.text;
+    if (!attachment.isAttached || user == null || _baselineUser != user || attachment.error != null) return;
+    final reply = parseCompanionReply(
+      text,
+      streaming: attachment.running,
+      emotions: _moves.emotionLabels,
+      actions: _moves.actionLabels,
+    );
+    if (reply.words.isEmpty || _bubbleReplyId != user || _bubbleIsError || _bubble != reply.words) return;
+    final current = attachment.captureCurrent();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          current() &&
+          identical(_attachment, attachment) &&
+          _notesForegroundHere &&
+          _phase == _Phase.stage &&
+          _stageReady &&
+          _baselineUser == user &&
+          _bubbleReplyId == user &&
+          attachment.error == null &&
+          !_bubbleIsError &&
+          _bubble == reply.words) {
+        attachment.presentedReply(user, text);
+      }
+    });
   }
 
   Future<void> _send() async {
@@ -1837,7 +1861,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   void _closeLog() {
     if (!mounted || !_logOpen) return;
-    setState(() => _logOpen = false);
+    setState(() {
+      _logOpen = false;
+      _savedLightLog = null;
+    });
     _stage.command('covered', {'on': false});
   }
 
@@ -1854,16 +1881,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         else
           entry,
     ];
+    List<CompanionLogEntry> saved() {
+      final store = _memoryOwner?.store;
+      if (store == null) return const [];
+      final role = _attachment.characterId;
+      List<CompanionLogEntry> project() => [
+        for (final row in store.messages())
+          if ((row['session_id']! as String).startsWith('light:') &&
+              (row['character_id'] == null || row['character_id'] == role))
+            ...read([
+              row['role'] == 'user'
+                  ? CompanionLine.user(row['text']! as String)
+                  : CompanionLine.her(row['text']! as String),
+            ], legacy: row['character_id'] == null),
+      ];
+      if (!_logOpen) return project();
+      // New/edited messages advance next_seq. Forget can remove older messages
+      // under an existing sequence and advances control_revision instead.
+      final archive = store.archive;
+      final key = (
+        store,
+        archive['next_seq']! as int,
+        archive['control_revision']! as int,
+        role,
+        context.l10n.companionLegacyConversation,
+      );
+      final previous = _savedLightLog;
+      if (previous != null && previous.key == key) return previous.entries;
+      final entries = project();
+      _savedLightLog = (key: key, entries: entries);
+      return entries;
+    }
+
     return [
       ...read(_lightHistory?.lines ?? const [], legacy: true),
-      for (final row in _memoryOwner?.store.messages() ?? const <MemoryRow>[])
-        if ((row['session_id']! as String).startsWith('light:') &&
-            (row['character_id'] == null || row['character_id'] == _attachment.characterId))
-          ...read([
-            row['role'] == 'user'
-                ? CompanionLine.user(row['text']! as String)
-                : CompanionLine.her(row['text']! as String),
-          ], legacy: row['character_id'] == null),
+      ...saved(),
       ...read(const [], speaking: _attachment.pendingText),
     ];
   }
@@ -2733,6 +2785,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     final padding = MediaQuery.paddingOf(context);
     final store = _store;
     final showStage = _phase == _Phase.stage && store != null;
+    if (showStage && _stageReady) _queueReplyPresentation();
     final name = _name(l10n);
     // Shown only while it still belongs here and nothing else has the floor,
     // in this very frame (the owner hears about it right after).

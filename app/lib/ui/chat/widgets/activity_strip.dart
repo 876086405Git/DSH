@@ -98,7 +98,7 @@ class _ActivityStripSlotState extends ConsumerState<ActivityStripSlot> with Sing
   @override
   Widget build(BuildContext context) {
     final sessionId = widget.sessionId;
-    final activity = ref.watch(chatProvider(sessionId).select(runActivityOf));
+    final activity = ref.watch(runActivityProvider(sessionId));
     final pulse = ref.watch(runPulseProvider(sessionId));
     return ListenableBuilder(
       listenable: pulse,

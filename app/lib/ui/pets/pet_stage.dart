@@ -31,6 +31,7 @@ import '../../state/chat_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/sessions_state.dart';
 import '../../state/ui_mode_state.dart';
+import '../chat/run_info.dart';
 import '../chat/widgets/approval_card.dart';
 import '../chat/widgets/question_card.dart';
 import '../common/discard_guard.dart';
@@ -210,7 +211,8 @@ final _pageFocusProvider = Provider.autoDispose.family<PetFocus?, String?>((ref,
   if (id == null) return null;
   final host = ref.watch(activeHostProvider);
   final compacting = ref.watch(petCompactingProvider(id));
-  return ref.watch(chatProvider(id).select((s) => petFocusOf(host, id, s, compacting: compacting)));
+  final activity = ref.watch(runActivityProvider(id));
+  return ref.watch(chatProvider(id).select((s) => petFocusOf(host, id, s, activity, compacting: compacting)));
 });
 
 /// Tells the pet what the conversation on screen is doing (its activity,
@@ -864,10 +866,14 @@ class PetLayerState extends ConsumerState<PetLayer> with TickerProviderStateMixi
       final next = pet.state;
       WidgetsBinding.instance.addPostFrameCallback((_) => _onState(next));
     }
-    if (pack != null && !identical(pack, _pinned)) {
+    if (!identical(pack, _pinned)) {
       _pinned = pack;
-      PetSheets.instance.pin(pack, pack.animFor(PetStateName.idle));
-      _ready = false;
+      if (pack == null) {
+        PetSheets.instance.unpin();
+      } else {
+        PetSheets.instance.pin(pack, pack.animFor(PetStateName.idle));
+        _ready = false;
+      }
     }
     _armUnhide(prefs);
     _schedulePoll();

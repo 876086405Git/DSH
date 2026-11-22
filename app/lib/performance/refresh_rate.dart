@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -55,6 +56,13 @@ class RefreshRateService {
   bool _active = false;
   bool _started = false;
   Timer? _idle;
+
+  /// One timer per idle stretch, not one per frame: a held frame's time stamp, the
+  /// clock's time for it, and the latest frame held since. On firing the timer
+  /// waits out whatever is left after that latest frame.
+  Duration _anchor = Duration.zero;
+  DateTime _anchorAt = DateTime(0);
+  Duration _heldAt = Duration.zero;
   Duration _lastFrame = Duration.zero;
   Duration _renewedAt = Duration.zero;
   int _motionRun = 0;
@@ -83,6 +91,7 @@ class RefreshRateService {
     if (_mode == mode || _systemDecides) return;
     _mode = mode;
     _idle?.cancel();
+    _idle = null;
     if (mode != RefreshRateMode.auto) _active = false;
     _sendMode();
   }
@@ -90,8 +99,7 @@ class RefreshRateService {
   void _onFrame(Duration timeStamp) {
     if (_mode != RefreshRateMode.auto) return;
     if (_motionOnly) return _onMotionFrame(timeStamp);
-    _idle?.cancel();
-    _idle = Timer(idleAfter, _release);
+    _hold(timeStamp);
     if (_active) return;
     _active = true;
     _sendActive(true);
@@ -101,12 +109,34 @@ class RefreshRateService {
     _motionRun = timeStamp - _lastFrame <= motionGap ? _motionRun + 1 : 0;
     _lastFrame = timeStamp;
     if (_motionRun < motionFrames) return;
-    _idle?.cancel();
-    _idle = Timer(idleAfter, _release);
+    _hold(timeStamp);
     if (_active && timeStamp - _renewedAt < renewEvery) return;
     _active = true;
     _renewedAt = timeStamp;
     _sendActive(true);
+  }
+
+  /// Releases [idleAfter] after the frame at [timeStamp], unless a later one is held.
+  void _hold(Duration timeStamp) {
+    _heldAt = timeStamp;
+    if (_idle != null) return;
+    _anchor = timeStamp;
+    _anchorAt = clock.now();
+    _idle = Timer(idleAfter, _idleCheck);
+  }
+
+  /// Measured from now, so a timer that ran late doesn't add its delay.
+  void _idleCheck() {
+    final lastAt = _anchorAt.add(_heldAt - _anchor);
+    final left = idleAfter - clock.now().difference(lastAt);
+    if (left > Duration.zero) {
+      _anchor = _heldAt;
+      _anchorAt = lastAt;
+      _idle = Timer(left, _idleCheck);
+      return;
+    }
+    _idle = null;
+    _release();
   }
 
   void _release() {

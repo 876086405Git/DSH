@@ -46,8 +46,8 @@ internal object LaunchThemes {
      * The theme for the next launches: the custom launch screen's plain colour, else [icon]'s.
      * [dark]: the system is in dark mode now (the page colour follows it).
      */
-    fun next(icon: String, custom: Custom?, dark: Boolean): String =
-        if (custom != null) plain(custom, dark) else forIcon(icon)
+    fun next(custom: Custom?, dark: Boolean, icon: () -> String): String =
+        if (custom != null) plain(custom, dark) else forIcon(icon())
 
     /** An icon-less splash on the colour nearest the custom picture's background. */
     fun plain(custom: Custom, dark: Boolean): String = when (custom.backdrop) {
@@ -127,7 +127,7 @@ internal object LaunchThemeSync {
     fun sync(activity: Activity) {
         if (Build.VERSION.SDK_INT < 33) return
         try {
-            val want = LaunchThemes.next(LauncherIconPlugin.current(activity), custom(activity), dark(activity))
+            val want = LaunchThemes.next(custom(activity), dark(activity)) { LauncherIconPlugin.current(activity) }
             val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             if (prefs.getString(KEY_APPLIED, null) == want) return
             activity.splashScreen.setSplashScreenTheme(styleOf(want))

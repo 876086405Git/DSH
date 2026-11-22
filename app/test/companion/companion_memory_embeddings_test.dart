@@ -125,6 +125,9 @@ void main() {
     final count = calls.where((call) => call.method == 'embed').length;
     await embeddings.rank(store: store, characterId: a, query: '第二次查询', isCurrent: () => true);
     expect(calls.where((call) => call.method == 'embed').length, count + 1);
+    // A tool round trip of the same turn ranks the same text again: no new encoding.
+    await embeddings.rank(store: store, characterId: a, query: '第二次查询', isCurrent: () => true);
+    expect(calls.where((call) => call.method == 'embed').length, count + 1);
     expect(
       store.saveMemoryEmbedding(
         characterId: a,

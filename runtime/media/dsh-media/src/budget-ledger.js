@@ -35,7 +35,6 @@ function text(value, max = 256) {
     || /[\u0000-\u001f]/.test(value)) fail('invalid_record');
   return value;
 }
-function copy(value) { return structuredClone(value); }
 function validDay(value) {
   if (typeof value !== 'string' || !DAY.test(value)) return false;
   const date = new Date(value + 'T00:00:00Z');
@@ -89,8 +88,11 @@ function validateState(value) {
     ids.add(record.rid); amount(record.estimateMicros, true);
     if (record.outputDate !== undefined && !validDay(record.outputDate)) fail('corrupt');
     const normalized = normalizeRequest(record.request);
-    if (record.payload !== undefined && (Buffer.byteLength(JSON.stringify(record.payload)) > 32768
-      || createHash('sha256').update(JSON.stringify(record.payload)).digest('hex') !== normalized.paramsHash)) fail('corrupt');
+    if (record.payload !== undefined) {
+      const payload = JSON.stringify(record.payload);
+      if (Buffer.byteLength(payload) > 32768
+        || createHash('sha256').update(payload).digest('hex') !== normalized.paramsHash) fail('corrupt');
+    }
     if (requestIdentity(normalized, record.estimateMicros) !== record.identity) fail('corrupt');
     if (record.providerTaskId !== undefined
       && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(record.providerTaskId)) fail('corrupt');
@@ -232,7 +234,7 @@ export function createBudgetLedger(trustedDirectory, { clock = Date.now, checkpo
           validateState(state);
           await durableReplace(filename, state, outcome.label);
         }
-        return copy(outcome.result(state));
+        return outcome.result(state); // state was parsed for this transaction alone
       }, { signal });
     } catch (error) {
       if (error instanceof BudgetError) throw error;

@@ -1,4 +1,4 @@
-# OH-only: retire the heartbeat after the last WebSocket closes.
+# Shared: retire the heartbeat after the last WebSocket closes.
 --- a/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js
 @@ -337,6 +337,12 @@

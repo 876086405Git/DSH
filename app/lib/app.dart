@@ -20,6 +20,7 @@ import 'state/notify_state.dart' show notifyChannelProvider;
 import 'state/star_prompt.dart' show starPromptGateProvider, starPromptProvider;
 import 'state/tile_style_state.dart';
 import 'ui/chat/dsh_ui/dsh_ui_model.dart' show DshUiAppAccent;
+import 'ui/chat/run_info.dart' show runActivityProvider;
 import 'ui/common/keyboard_motion.dart';
 import 'ui/common/side_insets.dart';
 import 'ui/launch/launch_overlay.dart';
@@ -168,7 +169,15 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
       final first = _shown == null;
       _shown = locale;
       AppLocale.use(locale);
-      if (!first) WidgetsBinding.instance.addPostFrameCallback((_) => _rebuildAll());
+      if (!first) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          // Providers refresh before this build switches appL10n: redo the
+          // activity titles in the new language.
+          ref.invalidate(runActivityProvider);
+          _rebuildAll();
+        });
+      }
     }
     return locale;
   }
@@ -194,7 +203,11 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
         !appearance.loaded ||
         (appearance.source == AccentSource.wallpaper && ref.watch(wallpaperAccentProvider).isLoading);
     final locale = _resolveLocale();
-    final performance = ref.watch(performanceDefaultsProvider);
+    final performance = ref.watch(
+      performanceDefaultsProvider.select(
+        (p) => (blur: p.blur, reduceMotion: p.reduceMotion, fluidMotion: p.fluidMotion),
+      ),
+    );
     final reduced =
         performance.reduceMotion || WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     final fluid = performance.fluidMotion && !reduced;

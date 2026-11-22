@@ -104,11 +104,19 @@
         }
       }
     },
+    "companion-read-file-capacity.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "after": "539356cf42c1b8790d500eb4645a71d7a74b3ce41cf3e82081f69922101ad7cc",
+          "before": "24d7ab45cea046840da34475447cacc7f71053c3a2bf52925a6872b54dca3eaa"
+        }
+      }
+    },
     "companion-receipt-file-bytes.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "d68bfbdfdd9afbfa2a1d2819f6f0cd2565da25b4ba84436e94626db54e944061",
-          "before": "24d7ab45cea046840da34475447cacc7f71053c3a2bf52925a6872b54dca3eaa"
+          "after": "33871a2abe09c90bc82acf1ffcb0b329e7e3acfa4a6f56a00079fd63be2a5b58",
+          "before": "539356cf42c1b8790d500eb4645a71d7a74b3ce41cf3e82081f69922101ad7cc"
         }
       }
     },
@@ -214,6 +222,22 @@
         }
       }
     },
+    "file-reference-basename-match.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js": {
+          "after": "3491e50c9cd4031027331dc21a3de6d84530c87b9d351dcee24d31875750263c",
+          "before": "6b9316d8cc57c228fabff1f2b8bbea612ff1a48a58781cf7ab014546ce741082"
+        }
+      }
+    },
+    "file-reference-hidden-paths.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js": {
+          "after": "6b9316d8cc57c228fabff1f2b8bbea612ff1a48a58781cf7ab014546ce741082",
+          "before": "158927a41db5c86c781e9e03073f76e7e0c4fa6b69f7eb4ec4345021fbd26921"
+        }
+      }
+    },
     "fork-default-effort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
@@ -285,6 +309,38 @@
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "da9d664272068326529de7774909387499a0a1bc6d4e8e5219a43977ad1efcf1",
           "before": "6f0fdc6a6e4cd2bc9d969ba582636729ade450e415f0fc20bbef9da3f65823f3"
+        }
+      }
+    },
+    "job-release-producer-cancel.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
+          "after": "57fb0fa47e25fee6e87e6952138d2899c0cc4f12b27e4d16433fba5ae8ea69fd",
+          "before": "223f6569c2be54c26cf537ed8014b3330ea2f69cc0a3e3d5bba46c2fc413cbf8"
+        }
+      }
+    },
+    "jsonl-decoder-stream-buffer.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "4022ad10ebf4d792a83111cf87252ded165f658c0633a4f0d878bb1e7ff2e441",
+          "before": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3"
+        }
+      }
+    },
+    "jsonl-frozen-live-event.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "4ce5ef22bc25c37ead321f86427231ca8b4491e46ffa6033c6760d0783fc38eb",
+          "before": "4a1cafd5a6db7e51c9e0e7b27f841ab0653056cbbf76767e6a818f21e6a73988"
+        }
+      }
+    },
+    "jsonl-header-first-read.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "4a1cafd5a6db7e51c9e0e7b27f841ab0653056cbbf76767e6a818f21e6a73988",
+          "before": "4022ad10ebf4d792a83111cf87252ded165f658c0633a4f0d878bb1e7ff2e441"
         }
       }
     },
@@ -383,8 +439,8 @@
     "ohos-jobs-active.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
-          "after": "5585ee7025496ad1ab9cdb46bcb58307a971bee7db39dab6eebc76ded9e53186",
-          "before": "223f6569c2be54c26cf537ed8014b3330ea2f69cc0a3e3d5bba46c2fc413cbf8"
+          "after": "4b9af1409a81c9324c5109ca5a542d6a6b3e2d5de4d2f351a40fd892896ef86c",
+          "before": "57fb0fa47e25fee6e87e6952138d2899c0cc4f12b27e4d16433fba5ae8ea69fd"
         }
       }
     },
@@ -455,8 +511,8 @@
     "ohos-output-utf8.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js": {
-          "after": "feea1fd338ab0c3b2cab0509fbaf9e6d4a849fede0715350cf6591f98bcaf229",
-          "before": "a32309bee49a3cb7f518cd748e2b2f2c0dd680de0bc19e1533e2182913567c04"
+          "after": "c3d39c2ea8839667e90dd4abe8688931e9e6ac23176b33b5392682ddebe654cc",
+          "before": "e90e0cb48967f438bba11d8a67ff381ca6adf36f9bf65e5085c52dd13c6ea699"
         }
       }
     },
@@ -583,8 +639,8 @@
     "ohos-workspace-edit.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "1a57974e2fdbea0f5e8d8690e3ecf11df9f3daedb7450176fda498354b175f4e",
-          "before": "7cd9a18afbb29165e6393e831c81fc7979be9b3a0776f3373e47bb9457314279"
+          "after": "eac93d34db79b3d96554aba5c458386c3f9355a69aca1087005c3b835a5480e3",
+          "before": "2e3e8585762ae5a1ad8fb8c9ff7a9ff56802f1d1f6f386f06052c685f2f4142d"
         },
         "node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js": {
           "after": "be457e123f63d9b44c1bb310ebb064d69d9c994310b36f4edb737323457d2482",
@@ -595,8 +651,8 @@
     "ohos-workspace-grant-paths.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
-          "after": "7cd9a18afbb29165e6393e831c81fc7979be9b3a0776f3373e47bb9457314279",
-          "before": "d68bfbdfdd9afbfa2a1d2819f6f0cd2565da25b4ba84436e94626db54e944061"
+          "after": "2e3e8585762ae5a1ad8fb8c9ff7a9ff56802f1d1f6f386f06052c685f2f4142d",
+          "before": "33871a2abe09c90bc82acf1ffcb0b329e7e3acfa4a6f56a00079fd63be2a5b58"
         },
         "node_modules/@deepseek-ai/dsh-working-directory/lib/index.js": {
           "after": "167c67034bde5de5862e99ddd27a42d6d690fc42d2cc8748ed58cedf06c01b50",
@@ -842,6 +898,14 @@
         }
       }
     },
+    "session-cold-unused-fingerprint.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
+          "after": "f226f15108bd2079a6a88f3cc5d9e7e022b6b46bf6628fde38df66f0c1ec83a4",
+          "before": "6a70f328528d9c799b9f15a0c4505712ebb259163d4e9abe7a6a7dfa0557730b"
+        }
+      }
+    },
     "session-format-error.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
@@ -883,6 +947,14 @@
         "node_modules/@deepseek-ai/dsh-tool-str-replace-editor/lib/index.js": {
           "after": "ad2ebafd722a97b7d641b59e03f5c969c0958aa989ea7361fcd7e78ff2c7e92d",
           "before": "14a7380c94b53150ec5545dfb8fcf28bb26c99b6deef9b27bb9cf4ff6fabb616"
+        }
+      }
+    },
+    "subprocess-latest-chunk.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js": {
+          "after": "e90e0cb48967f438bba11d8a67ff381ca6adf36f9bf65e5085c52dd13c6ea699",
+          "before": "a32309bee49a3cb7f518cd748e2b2f2c0dd680de0bc19e1533e2182913567c04"
         }
       }
     },
@@ -1397,8 +1469,8 @@
     "zzzzzzz-ohos-session-publication.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "a2fccd3b699d7d327246f684a2a3eb6b7e26f50d4ed57ec34c9eb750fa0cd199",
-          "before": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3"
+          "after": "53a8eb489be48479da039d63696d831149c37c8b9d645b9ae94560fcc86941dc",
+          "before": "4ce5ef22bc25c37ead321f86427231ca8b4491e46ffa6033c6760d0783fc38eb"
         }
       }
     },
@@ -1641,8 +1713,8 @@
           "before": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b"
         },
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "ad21b818c567beb6f42e1091a37e622e3172d19e81952118e877b74195952fc1",
-          "before": "a2fccd3b699d7d327246f684a2a3eb6b7e26f50d4ed57ec34c9eb750fa0cd199"
+          "after": "4ea142d366555ee3cf64992e56745a9299dff44404fa8ccd7abaecbdd88b019b",
+          "before": "53a8eb489be48479da039d63696d831149c37c8b9d645b9ae94560fcc86941dc"
         }
       }
     },
@@ -2017,8 +2089,8 @@
     "zzzzzzzzzzzz-ohos-runtime-capabilities.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "31fb1a973e40c7886ebe6987344434bb5e33f6288850fcd861fb95f43cab27c9",
-          "before": "ad21b818c567beb6f42e1091a37e622e3172d19e81952118e877b74195952fc1"
+          "after": "7718483b03c2b036c14318a6123fd43e5e07a521dbd2bdf0a7b9a078bb50353a",
+          "before": "4ea142d366555ee3cf64992e56745a9299dff44404fa8ccd7abaecbdd88b019b"
         }
       }
     },
@@ -2592,11 +2664,14 @@
       "zzzzzzz-domain-owner-dispose.diff",
       "zzzzzzz-file-query-normalization.diff",
       "zzzzzzz-file-reference-owner-dispose.diff",
+      "file-reference-hidden-paths.diff",
       "zzzzzzz-grep-retention-preview.diff",
+      "file-reference-basename-match.diff",
       "zzzzzzz-input-recovery.diff",
       "zzzzzzz-job-follow-removal.diff",
       "zzzzzzz-job-ring-trim.diff",
       "zzzzzzz-jsonl-root-check-retry.diff",
+      "job-release-producer-cancel.diff",
       "zzzzzzz-mcp-resource-lookup.diff",
       "zzzzzzz-piai-developer-tools.diff",
       "zzzzzzz-plugin-list-index.diff",
@@ -2632,6 +2707,7 @@
       "zzzzzzzzz-subprocess-zsingle-read.diff",
       "zzzzzzzzz-subprocess-zzspill-write-all.diff",
       "zzzzzzzzz-subprocess-zzzero-tail.diff",
+      "subprocess-latest-chunk.diff",
       "zzzzzzzzz-terminal-tail.diff",
       "zzzzzzzzz-tool-history-lookup.diff",
       "zzzzzzzzz-workspace-domain-close.diff",
@@ -2676,9 +2752,11 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
+      "session-cold-unused-fingerprint.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
+      "jsonl-decoder-stream-buffer.diff",
       "attachment-link-fallback.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff",
@@ -2702,10 +2780,12 @@
       "session-format-error.diff",
       "session-queue-steer-deletion.diff",
       "webserver-resource-abort.diff",
+      "jsonl-header-first-read.diff",
       "rrule-negative-position-range.diff",
       "rrule-weekly-first-period.diff",
       "rrule-mixed-byday.diff",
       "input-trigger-source-recovery.diff",
+      "jsonl-frozen-live-event.diff",
       "web-preset-save-freshness.diff",
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
@@ -2732,10 +2812,13 @@
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff",
+      "ohos-api-gateway-idle.diff",
       "companion-find-drafts-files.diff",
+      "companion-read-file-capacity.diff",
       "companion-compare-output-window.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
+      "ohos-web-converter-lazy.diff",
       "input-recovery.diff"
     ],
     "ohos": [
@@ -2769,11 +2852,14 @@
       "zzzzzzz-domain-owner-dispose.diff",
       "zzzzzzz-file-query-normalization.diff",
       "zzzzzzz-file-reference-owner-dispose.diff",
+      "file-reference-hidden-paths.diff",
       "zzzzzzz-grep-retention-preview.diff",
+      "file-reference-basename-match.diff",
       "zzzzzzz-input-recovery.diff",
       "zzzzzzz-job-follow-removal.diff",
       "zzzzzzz-job-ring-trim.diff",
       "zzzzzzz-jsonl-root-check-retry.diff",
+      "job-release-producer-cancel.diff",
       "zzzzzzz-mcp-resource-lookup.diff",
       "zzzzzzz-piai-developer-tools.diff",
       "zzzzzzz-plugin-list-index.diff",
@@ -2809,6 +2895,7 @@
       "zzzzzzzzz-subprocess-zsingle-read.diff",
       "zzzzzzzzz-subprocess-zzspill-write-all.diff",
       "zzzzzzzzz-subprocess-zzzero-tail.diff",
+      "subprocess-latest-chunk.diff",
       "zzzzzzzzz-terminal-tail.diff",
       "zzzzzzzzz-tool-history-lookup.diff",
       "zzzzzzzzz-workspace-domain-close.diff",
@@ -2853,9 +2940,11 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
+      "session-cold-unused-fingerprint.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
+      "jsonl-decoder-stream-buffer.diff",
       "attachment-link-fallback.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff",
@@ -2879,10 +2968,12 @@
       "session-format-error.diff",
       "session-queue-steer-deletion.diff",
       "webserver-resource-abort.diff",
+      "jsonl-header-first-read.diff",
       "rrule-negative-position-range.diff",
       "rrule-weekly-first-period.diff",
       "rrule-mixed-byday.diff",
       "input-trigger-source-recovery.diff",
+      "jsonl-frozen-live-event.diff",
       "web-preset-save-freshness.diff",
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
@@ -2909,10 +3000,13 @@
       "companion-task-storage.diff",
       "companion-public-lookup-observer.diff",
       "companion-lookup-answer-window.diff",
+      "ohos-api-gateway-idle.diff",
       "companion-find-drafts-files.diff",
+      "companion-read-file-capacity.diff",
       "companion-compare-output-window.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
+      "ohos-web-converter-lazy.diff",
       "input-recovery.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
@@ -2947,9 +3041,7 @@
       "ohos-workspace-grant-paths.diff",
       "ohos-workspace-edit.diff",
       "ohos-client-hmr-idle.diff",
-      "ohos-api-gateway-idle.diff",
       "ohos-image-codec.diff",
-      "ohos-web-converter-lazy.diff",
       "ohos-cordis-catalog-lazy.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",

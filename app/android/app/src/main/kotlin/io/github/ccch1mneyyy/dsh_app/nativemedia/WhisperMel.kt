@@ -49,9 +49,18 @@ internal class WhisperMel {
         val scale = 1.0 / sqrt(variance / SAMPLES + 1e-7)
         for (i in 0 until SAMPLES) normalized[i] = ((audio[i] - mean) * scale).toFloat()
 
+        // A short utterance is left-padded. Identical normalized samples give identical windowed FFT input.
+        val firstBits = normalized[0].toRawBits()
+        var prefix = 1
+        while (prefix < SAMPLES && normalized[prefix].toRawBits() == firstBits) prefix++
+
         var peak = Float.NEGATIVE_INFINITY
         for (time in 0 until FRAMES) {
             val start = time * HOP - FFT / 2
+            if (time > 0 && minOf(SAMPLES, start + FFT) <= prefix) {
+                for (band in 0 until MELS) features[band * FRAMES + time] = features[band * FRAMES]
+                continue
+            }
             for (i in 0 until FFT) {
                 val position = start + i
                 val reflected = when {

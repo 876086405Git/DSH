@@ -4,11 +4,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,writeFile,rename,unlink,chmod,utimes,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
+import {registerHooks} from 'node:module';
 import {randomUUID} from 'node:crypto';
 import {findFixture,openFind,putDraft,completeFind,completion,sourcePath,until,load} from './fixtures/companion-find-runner-fixture.mjs';
 const {fingerprint,parseTask,amendSchema,cancelSchema}=await load('companion/task-schema.js');
 const operation=(f,rev=1,id='operation-2')=>({v:1,hostStoreId:f.store.hostStoreId,kind:'host.find_draft',operationId:id,expectedTaskRev:rev,taskRev:rev+1});
 const agreement=body=>({args:body.args,deadlineAtMs:body.deadlineAtMs,afterExit:body.afterExit,allowQueue:body.allowQueue});
+
+test('SOURCE_MOUNT task services advertise receipt support without loading the workbook codec', async t => {
+  const loads = [];
+  const hook = registerHooks({load(url, context, next) {
+    if (url.endsWith('/receipt-workbook.js') || url.endsWith('/fflate.mjs')) loads.push(url);
+    return next(url, context);
+  }});
+  t.after(() => hook.deregister());
+  const f = await findFixture(t, {mountService: true});
+  assert((await f.request('/capabilities')).body.kinds.includes('host.receipts_to_sheet'));
+  assert.deepEqual(loads, []);
+});
 
 test('SOURCE_HTTP actual read-only sandbox search, atomic report/source commit and explicit source opening use zero model services',async t=>{
  const f=await findFixture(t,{sandboxed:true});await putDraft(f.root,'开场 A.md');await putDraft(f.root,'提纲 B.txt','B');
@@ -43,6 +56,18 @@ test('SOURCE_HTTP 21 matching candidates reports partial and verifies only the o
  assert.equal(report.coverage.matchingCandidates,21);assert.equal(report.coverage.candidateLimitReached,true);
  assert.equal(report.matches.length,20);assert.equal(f.counters.reads.length,20);
  assert.equal(f.store.read(f.body.taskId).notes['1'].sources.length,20);
+});
+test('find verifies originals without copying the task between file reads', async t => {
+ const f=await findFixture(t);
+ await putDraft(f.root,'a.md'); await putDraft(f.root,'b.md');
+ const runner=f.start(), fileRead=f.fs.dshGoReadNote.bind(f.fs), taskRead=f.store.read.bind(f.store);
+ const finish=f.store.finishFind.bind(f.store);
+ let verifying=false, copies=0;
+ t.mock.method(f.fs,'dshGoReadNote',(...args)=>{verifying=true;return fileRead(...args);});
+ t.mock.method(f.store,'read',id=>{if(verifying)copies++;return taskRead(id);});
+ t.mock.method(f.store,'finishFind',(...args)=>{verifying=false;return finish(...args);});
+ await f.store.create(f.body); await runner.wake(f.body.taskId);
+ assert.equal(f.counters.reads.length,2); assert.equal(copies,0);
 });
 test('SOURCE_HTTP 201 out-of-window entries retain the 200-entry bound and cannot claim zero complete',async t=>{
  const f=await findFixture(t);for(let i=0;i<201;i++)await putDraft(f.root,`${i}.md`,'old',Date.parse('2026-11-19T12:00:00Z'));

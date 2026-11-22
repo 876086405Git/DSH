@@ -4,6 +4,7 @@
 // step start to first token; work in progress has no invented end).
 
 import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/chat_state.dart';
@@ -189,7 +190,7 @@ List<TrajectoryRow> trajectoryRows(TurnTrace trace) {
 
 /// 一组工具调用的摘要("执行 2 条命令 · 读了 3 个文件")。
 String groupLabel(List<TraceSpan> spans, Map<String, ToolChatItem> tools) =>
-    summarizeTools([for (final span in spans) viewOfSpan(span, tools[span.callId]).item]).label;
+    summarizeTools([for (final span in spans) tools[span.callId] ?? viewOfSpan(span).item]).label;
 
 /// 列表里的工具调用,按 callId。
 Map<String, ToolChatItem> toolsById(List<ChatItem> items) => {
@@ -325,6 +326,13 @@ class RunActivity {
     rateLimited,
   );
 }
+
+/// [runActivityOf] of a conversation, worked out once per chat update for the
+/// activity strip and the pet alike. Its titles are in the language of the
+/// moment: the app invalidates it after switching [appL10n].
+final runActivityProvider = Provider.autoDispose.family<RunActivity?, String>(
+  (ref, sessionId) => ref.watch(chatProvider(sessionId).select(runActivityOf)),
+);
 
 /// 生成中的这一刻在做什么:正在停止 > 等你 > 正在跑的工具 > 正在流的回复 /
 /// 推理 > 重试 > 等首字。

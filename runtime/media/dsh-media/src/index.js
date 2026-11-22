@@ -296,10 +296,11 @@ export function installMedia(ctx, config, { generate, admit = admitGeneration, e
               },
             };
             if (production) {
-              context.referencePins = [];
-              context.referenceSources = await readReferences(selected.request.refs, { ...context, captureReference: pin => context.referencePins.push(pin) });
+              const pins = [];
+              const sources = await readReferences(selected.request.refs, { ...context, captureReference: pin => pins.push(pin) });
+              context.references = { pins, sources };
               context.admission = admission = await admit(selected.request, context);
-              await validateReferencePins(context.referencePins);
+              await validateReferencePins(pins);
             }
             checkAbort(signal);
             if (!background) return validateResult(await generate(selected.request, context));

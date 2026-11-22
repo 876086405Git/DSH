@@ -143,6 +143,17 @@ void main() {
       expect(ids(r.archived), ['a1']);
     });
 
+    test('different paths with the same folder label stay hidden across sections', () {
+      final date = DateTime(2026, 10, 20);
+      final view = deriveSessionSearchResults(
+        query: 'project',
+        sessions: [searchSession('a', 'first', date, cwd: '/home/project/')],
+        archived: [searchSession('b', 'second', date, cwd: r'C:\work\project')],
+      );
+      expect(view.showFolders, isFalse);
+      expect(view.isEmpty, isTrue);
+    });
+
     test('the folder matches only when the sessions span several folders', () {
       final one = deriveSessionSearchResults(query: 'workspace', sessions: sessions);
       expect(one.isEmpty, isTrue);
@@ -645,6 +656,14 @@ void main() {
       final corpus = extractCheckpointJsonSearchCorpus(checkpointJson);
       expect(corpus.userMessages, ['排队中的追问消息', '顺便加上回归测试', '帮我排查一下为什么正常模式启动会卡死在健康检查阶段，并且切换安全模式又能恢复']);
       expect(corpus.assistantPreviews, ['已补充启动探针测试。', '已定位到 PID 残留导致的门禁死锁。']);
+    });
+
+    test('a repeated word can still match across user and assistant messages', () {
+      final session = searchSession('s', 'title', DateTime(2026, 10, 20));
+      final corpus = {
+        's': const SessionSearchCorpusEntry(userMessages: ['word'], assistantPreviews: ['word']),
+      };
+      expect(searchSessionCorpus('word word', [session], corpus).items.single.sessionId, 's');
     });
 
     test('matches CJK substrings, multi-turn user terms, and ranks user messages above reply previews', () {

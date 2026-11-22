@@ -573,7 +573,7 @@ class MarkdownBody extends StatefulWidget {
   /// change when the reply finishes. Formulas are left to the library's own hold.
   static String _prepareRevealed(String text, {required bool repairBareViews}) {
     final repaired = repairBareViews ? fenceBareDshUiViews(text) : text;
-    return boldTableHeaders(blankLineBeforeTables(normalizeMath(repaired)));
+    return prepareTables(normalizeMath(repaired));
   }
 
   static String _prepareSource(
@@ -583,7 +583,7 @@ class MarkdownBody extends StatefulWidget {
     StreamingMarkdownRepair? repair,
   }) {
     final repaired = repairBareViews ? fenceBareDshUiViews(text) : text;
-    final source = boldTableHeaders(blankLineBeforeTables(normalizeMath(repaired, streaming: streaming)));
+    final source = prepareTables(normalizeMath(repaired, streaming: streaming));
     if (!streaming) return source;
     return _withCursor(repair?.repair(source) ?? repairStreamingMarkdown(source));
   }

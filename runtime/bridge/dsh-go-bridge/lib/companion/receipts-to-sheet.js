@@ -4,7 +4,6 @@ import {XLSX_TYPE} from './task-schema.js';
 import {canReadReceiptPdf, readReceiptPdf} from './receipt-pdf.js';
 import {RECEIPT_LIMITS, ReceiptTaskError, receiptTextLines, receiptObservation, receiptReport,
   excludeReceiptAtPublish, receiptGrid, completeReceiptReport} from './receipt-content.js';
-import {createReceiptWorkbook, verifyReceiptWorkbook} from './receipt-workbook.js';
 
 const finished = new Set(['done', 'partial', 'failed', 'cancelled']);
 const stepOf = (record, key, rev = record.taskRev) => record.steps.findLast(step => step.taskRev === rev && step.stepKey === key);
@@ -37,10 +36,11 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
   const fs = ctx.get('fs'), queue = new Set();
   let closed = false, drain = null, active = null;
   if (!receiptsToSheetSupported(fs)) throw new ReceiptTaskError('receipt_filesystem_unavailable');
-  function guard(id, rev, signal, owner) {
+  // read = store.stored for checks that discard the record.
+  function guard(id, rev, signal, owner, read = store.read) {
     signal?.throwIfAborted();
     if (closed) throw new ReceiptTaskError('task_owner_stopping', 'waiting');
-    const record = store.read(id);
+    const record = read.call(store, id);
     if (record.taskRev !== rev || record.cancelRequested || !record.originalCreate || record.agreement?.afterExit !== 'continue')
       throw new ReceiptTaskError('task_agreement_changed');
     if (record.agreement.deadlineAtMs !== null && Date.now() >= record.agreement.deadlineAtMs)
@@ -54,10 +54,10 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
       receiptObservation(store.input(reference), {reason: missingReason})));
   }
   async function segment(id, rev, key, reserveMs, controller, owner, job) {
-    guard(id, rev, controller.signal, owner);
+    guard(id, rev, controller.signal, owner, store.stored);
     const start = performance.now();
     const claim = await store.claimStep(id, rev, key, {reserveMs,
-      retryKnownSafe: stepOf(store.read(id), key, rev)?.state === 'waiting'});
+      retryKnownSafe: stepOf(store.stored(id), key, rev)?.state === 'waiting'});
     const clock = new AbortController();
     // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
     const timer = setTimeout(() => clock.abort(new ReceiptTaskError(
@@ -65,18 +65,17 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
     claim.reserveMs);
     timer.unref?.();
     const signal = AbortSignal.any([controller.signal, clock.signal]);
-    const current = () => {
+    const current = read => {
       if (elapsed(start) > claim.reserveMs) throw new ReceiptTaskError('execution_budget_exhausted');
-      return guard(id, rev, signal, owner);
+      return guard(id, rev, signal, owner, read);
     };
     try {
       const invoke = async turnSignal => {
         const fused = turnSignal ? AbortSignal.any([signal, turnSignal]) : signal;
-        return job({claim, signal: fused, current: () => { fused.throwIfAborted(); return current(); }, elapsed: () => elapsed(start)});
+        return job({claim, signal: fused, current: read => { fused.throwIfAborted(); return current(read); }, elapsed: () => elapsed(start)});
       };
       const result = owner ? await owner.runTurn(invoke) : await invoke();
-      const original = stepOf(store.read(id), key, rev);
-      if (original.finishedAtMs === null)
+      if (stepOf(store.stored(id), key, rev).finishedAtMs === null)
         await store.finishStep(claim, {state: 'done', reason: null, result: result ?? null, elapsedMs: elapsed(start)});
       return result;
     } catch (caught) {
@@ -108,12 +107,12 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
         const binding = store.input(reference); let read = null, extraction = null, reason = null;
         try {
           read = await fs.dshGoReadReceipt(binding.directory, binding.entry, RECEIPT_LIMITS.fileBytes, signal);
-          current();
+          current(store.stored);
           extraction = /\.pdf$/iu.test(binding.entry.name)
             ? await readReceiptPdf(read.bytes, {signal, maxPages: RECEIPT_LIMITS.pdfPages, maxTextBytes: RECEIPT_LIMITS.textBytes})
             : receiptTextLines(read.bytes);
-          current();
-        } catch (error) { signal.throwIfAborted(); current(); reason = failure(error); }
+          current(store.stored);
+        } catch (error) { signal.throwIfAborted(); current(store.stored); reason = failure(error); }
         await store.saveReceiptObservation(claim, reference.sourceRef, receiptObservation(binding, {read, extraction, reason}));
       }
       const observations = args.inputs.map(reference => notesOf(current()).receiptObservations[reference.sourceRef]);
@@ -135,7 +134,7 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
       catch (error) { if (error?.code !== 'FS_SANDBOX_DENIED') throw error; }
     }
     if (!requestedMode) throw new ReceiptTaskError('output_policy_unavailable');
-    guard(record.taskId, record.taskRev, signal, owner);
+    guard(record.taskId, record.taskRev, signal, owner, store.stored);
     return owner.approve('writeSheet', {requestedMode,
       justification: `只在 ${directory.target.displayPath} 新建《${record.agreement.args.outputName}》，将本人选定的四份票据整理为日期、项目、金额和来源；不覆盖已有文件，不改原票。`}, signal);
   }
@@ -155,6 +154,7 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
   }
   async function reopenWorkbook(reference, verified, candidate, signal) {
     const actual = await fs.dshGoReadTaskArtifactBytes(reference.directory, reference.outputName, verified, signal);
+    const {verifyReceiptWorkbook} = await import('./receipt-workbook.js');
     verifyReceiptWorkbook(actual.bytes, candidate.grid);
     if (actual.sha256 !== candidate.sha256) throw new ReceiptTaskError('workbook_verification_failed');
   }
@@ -200,20 +200,21 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
       if (!candidate) {
         const observations = [];
         for (const observed of notes.inputs.observations) {
-          current(); let observation = structuredClone(observed);
+          current(store.stored); let observation = structuredClone(observed);
           try { observation.source.verifiedAtPublish = await verifyOriginal(observation, signal); }
-          catch (error) { signal.throwIfAborted(); current(); observation = excludeReceiptAtPublish(observation,
+          catch (error) { signal.throwIfAborted(); current(store.stored); observation = excludeReceiptAtPublish(observation,
             failure(error) === 'input_changed' ? 'input_changed_at_publish' : 'input_unavailable_at_publish'); }
           observations.push(observation);
         }
         const report = receiptReport(observations);
         if (!report.coverage.rowsWithVerifiedFields)
           throw Object.assign(new ReceiptTaskError('receipt_fields_unavailable'), {receiptReport: report});
+        const {createReceiptWorkbook, verifyReceiptWorkbook} = await import('./receipt-workbook.js');
         const grid = receiptGrid(report), bytes = createReceiptWorkbook(grid);
         verifyReceiptWorkbook(bytes, grid);
         const {createHash} = await import('node:crypto');
         candidate = {bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex'), grid, report};
-        current(); await store.saveCandidate(claim, candidate);
+        current(store.stored); await store.saveCandidate(claim, candidate);
       }
       record = current(); notes = notesOf(record);
       const reference = notes.publishIntent ?? await fs.dshGoStageNotesFile(store.folder(record.agreement.args.outputDirRef),
@@ -225,11 +226,11 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
       await store.savePublishIntent(claim, reference);
       // Only sources included as current in this candidate may support its published cells.
       for (let index = 0; index < 4; index++) if (candidate.report.sources[index].verifiedAtPublish) {
-        current(); await verifyOriginal(notes.inputs.observations[index], signal);
+        current(store.stored); await verifyOriginal(notes.inputs.observations[index], signal);
       }
-      current();
+      current(store.stored);
       const snapshot = await store.publish(claim, async saved => {
-        current();
+        current(store.stored);
         const verified = await fs.dshGoPublishNotesFile(saved, signal, policy);
         await reopenWorkbook(saved, verified, candidate, signal);
         return {...artifactResult(saved, verified, candidate), elapsedMs: elapsed()};

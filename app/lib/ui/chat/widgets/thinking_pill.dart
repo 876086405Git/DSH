@@ -536,6 +536,7 @@ class _FluidTickerState extends State<_FluidTicker> with SingleTickerProviderSta
     final seconds = (elapsed - _last).inMicroseconds / Duration.microsecondsPerSecond;
     _last = elapsed;
     _sinceLine += seconds;
+    final wasCaughtUp = _pacer.caughtUp(widget.text.length);
     _pacer.advance(seconds, widget.text.length);
     _sincePublish += seconds;
     final behind = _behind.value;
@@ -547,8 +548,10 @@ class _FluidTickerState extends State<_FluidTicker> with SingleTickerProviderSta
     // The last of it goes out at once: the ticker is about to stop.
     if (_sincePublish >= _publishEvery || _pacer.caughtUp(widget.text.length)) {
       _sincePublish = 0;
-      final next = fluidTickerText(widget.text.substring(0, _pacer.shown));
-      if (next != _shown) setState(() => _shown = next);
+      if (!wasCaughtUp) {
+        final next = fluidTickerText(widget.text.substring(0, _pacer.shown));
+        if (next != _shown) setState(() => _shown = next);
+      }
     }
     if (_pacer.caughtUp(widget.text.length) && _behind.value == 0) _ticker.stop();
   }

@@ -43,10 +43,10 @@ object OverlayAccess {
      * until an attempt fails — also when `canDrawOverlays` says no (a vendor build that lies).
      * During an accessibility failure's cooldown, fallback requires explicit overlay permission.
      */
-    fun host(a11yConnected: Boolean, lastAdd: AddResult?, a11yFailed: Boolean = false, canDraw: Boolean = false): OverlayHost = when {
+    fun host(a11yConnected: Boolean, lastAdd: AddResult?, a11yFailed: Boolean = false, canDraw: () -> Boolean = { false }): OverlayHost = when {
         a11yConnected && !a11yFailed -> OverlayHost.ACCESSIBILITY
         // A failed accessibility add does not grant permission to use an application overlay.
-        a11yFailed && !canDraw -> OverlayHost.NONE
+        a11yFailed && !canDraw() -> OverlayHost.NONE
         lastAdd == AddResult.FAILED -> OverlayHost.NONE
         else -> OverlayHost.APPLICATION
     }

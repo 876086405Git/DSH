@@ -273,7 +273,7 @@ TextSpan _highlightChunk(String code, String language, Brightness brightness, Te
 
 /// 把长代码切成能各自高亮的块,拼起来和原文一字不差。
 ///
-/// 不超过 200 行、8000 字是一块。更长的从上一刀起满 200 行后,切在「空行
+/// 不超过 200 行是一块。更长的从上一刀起满 200 行后,切在「空行
 /// 之后顶格的一行」前面(多半是下一个声明),块注释和多行字符串里不切;
 /// 满 400 行还没找到就硬切。
 @visibleForTesting
@@ -285,7 +285,7 @@ List<String> codeChunks(String code) {
     lines.add(code.substring(at, next));
     at = next;
   }
-  if (lines.length <= 200 && code.length <= 8000) return [code];
+  if (lines.length <= 200) return [code];
   final topLevel = RegExp(r'^[A-Za-z0-9_]');
   final chunks = <String>[];
   var start = 0;

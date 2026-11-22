@@ -90,14 +90,14 @@ class LaunchThemesTest {
 
     @Test fun theNextLaunchesShowTheChosenIcon() {
         for (variant in LauncherIcons.variants) {
-            assertEquals(LaunchThemes.forIcon(variant), LaunchThemes.next(variant, custom = null, dark = false))
+            assertEquals(LaunchThemes.forIcon(variant), LaunchThemes.next(custom = null, dark = false) { variant })
         }
         assertEquals("LaunchTheme.Night", LaunchThemes.forIcon(LauncherIcons.NIGHT))
     }
 
     @Test fun aCustomLaunchScreenGetsAPlainSplashOnTheNearestColour() {
         fun next(backdrop: String, edge: Int? = null, dark: Boolean = false) =
-            LaunchThemes.next(LauncherIcons.NIGHT, LaunchThemes.Custom(backdrop, edge), dark)
+            LaunchThemes.next(LaunchThemes.Custom(backdrop, edge), dark) { LauncherIcons.NIGHT }
         assertEquals(LaunchThemes.BLANK, next("auto"))
         assertEquals(LaunchThemes.WHITE, next("white"))
         assertEquals(LaunchThemes.BLACK, next("black"))
@@ -110,6 +110,15 @@ class LaunchThemesTest {
         assertEquals(LaunchThemes.BLANK, next("edge", 0xFF8DB3E2.toInt()))
         // No colour to take: the page.
         assertEquals(LaunchThemes.BLANK, next("edge", null))
+    }
+
+    @Test fun onlyAnIconSplashReadsTheLauncherIcon() {
+        var reads = 0
+        val icon = { reads++; LauncherIcons.NIGHT }
+        assertEquals(LaunchThemes.BLACK, LaunchThemes.next(LaunchThemes.Custom("black", null), false, icon))
+        assertEquals(0, reads)
+        assertEquals(LaunchThemes.forIcon(LauncherIcons.NIGHT), LaunchThemes.next(null, false, icon))
+        assertEquals(1, reads)
     }
 
     @Test fun onlyTheChosenIconsOwnThemeShowsIt() {

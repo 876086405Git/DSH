@@ -653,7 +653,7 @@ internal object PetOverlay {
     private fun overlayHost(): OverlayHost = OverlayAccess.host(
         a11yConnected(), lastAdd,
         a11yFailed = accessibilityRetry.remaining(PhoneA11yService.instance, now()) != null,
-        canDraw = canDraw(),
+        canDraw = ::canDraw,
     )
 
     private fun canDraw(): Boolean = try { Settings.canDrawOverlays(app) } catch (_: Exception) { false }

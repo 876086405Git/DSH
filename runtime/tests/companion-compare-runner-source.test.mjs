@@ -8,10 +8,15 @@ import {compareFixture,completeCompare,comparison,openCompare,operation,agreemen
 import {putDraft,until} from './fixtures/companion-find-runner-fixture.mjs';
 
 test('I SOURCE_HTTP two explicitly bound originals produce real paragraph facts and one separate suggested ordering',async t=>{
-  const f=await compareFixture(t,{sandboxed:true});
+  let checkReads;
+  const f=await compareFixture(t,{sandboxed:true,model:{prepare({observer}) {
+    const read=t.mock.method(f.store,'read');
+    try { observer.guard(); checkReads=read.mock.callCount(); } finally { read.mock.restore(); }
+  }}});
   await putDraft(f.root,'third-secret.md','This third file must never be read.');
   assert.equal(f.counters.reads.length,0,'binding performs metadata IO only');
   const {response,snapshot}=await completeCompare(f),report=comparison(snapshot);
+  assert.equal(checkReads,0,'the model check only reads control fields');
   assert.equal(snapshot.state,'done');assert.equal(report.published,true);
   assert.equal(report.coverage.comparisonComplete,true);assert.equal(report.coverage.totalChangeGroups,2);
   assert.equal(report.coverage.displayedChangeGroups,2);assert.equal(report.identical,false);

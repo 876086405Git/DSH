@@ -2177,7 +2177,7 @@ class ChatController extends Notifier<ChatState> {
     final seq = item.seq;
     if (seq == null || item.streaming) return null;
     _checkLookups();
-    return _branchPoints.putIfAbsent(seq, () => forkPointAfterReply(_transcript.events, seq));
+    return _branchPoints.putIfAbsent(seq, () => forkPointAfterReply(_transcript.eventsFrom(seq), seq));
   }
 
   /// DSH `message.id` of the durable reply [item] (the feedback target).
@@ -2186,7 +2186,7 @@ class ChatController extends Notifier<ChatState> {
     if (seq == null || item.streaming) return null;
     _checkLookups();
     return _replyIds.putIfAbsent(seq, () {
-      for (final event in _transcript.events) {
+      for (final event in _transcript.eventsFrom(seq)) {
         if (event.seq == seq) {
           final id = event is AssistantMessageEvent ? event.message.id : '';
           return id.isEmpty ? null : id;

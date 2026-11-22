@@ -52965,7 +52965,7 @@ abstract class L10n {
   /// No description provided for @workshopPublishCoverHelper.
   ///
   /// In zh, this message translates to:
-  /// **'PNG，每边不超过 512 像素，不超过 2 MB。不选就显示名字的第一个字。'**
+  /// **'支持 JPEG、PNG、WebP 等，上传前自动缩小。不选就显示名字的第一个字。'**
   String get workshopPublishCoverHelper;
 
   /// No description provided for @workshopPublishCoverChosen.
@@ -52989,19 +52989,19 @@ abstract class L10n {
   /// No description provided for @workshopPublishCoverBadSize.
   ///
   /// In zh, this message translates to:
-  /// **'这张图是空的或超过 2 MB，换一张试试。'**
+  /// **'图片为空或超过 32 MB，换一张试试。'**
   String get workshopPublishCoverBadSize;
 
   /// No description provided for @workshopPublishCoverBadPng.
   ///
   /// In zh, this message translates to:
-  /// **'这不是一张完整的 PNG 图片，换一张试试。'**
+  /// **'图片损坏或格式不支持，换一张试试。'**
   String get workshopPublishCoverBadPng;
 
   /// No description provided for @workshopPublishCoverBadDimensions.
   ///
   /// In zh, this message translates to:
-  /// **'这张图太大了，每边最多 512 像素。缩小后再选。'**
+  /// **'图片分辨率过高，缩小后再选。'**
   String get workshopPublishCoverBadDimensions;
 
   /// No description provided for @workshopPublishCoverUnreadable.

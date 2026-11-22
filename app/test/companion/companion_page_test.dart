@@ -23,6 +23,7 @@ import 'package:dsh_app/speech/speech_settings.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/state/companion_agent_state.dart';
 import 'package:dsh_app/tavern/tavern_card_scripts.dart';
 import 'package:dsh_app/tavern/tavern_provider.dart';
 import 'package:http/http.dart' as http;
@@ -31,6 +32,7 @@ import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_log.dart';
+import 'package:dsh_app/ui/companion/companion_memory_page.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/companion/companion_tasks_page.dart';
@@ -1237,6 +1239,163 @@ void main() {
       Future<CompanionMemoryOwner> memoryOf(WidgetTester tester) async {
         final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
         return settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+      }
+
+      for (final sameWordsFromWake in [false, true]) {
+        testWidgets('a completed hidden reply is presented only by its actual bubble: $sameWordsFromWake', (
+          tester,
+        ) async {
+          _resumeApp(tester);
+          final clock = _Clock()..wall = DateTime.now().toUtc().millisecondsSinceEpoch;
+          final db = sqlite3.open('${root.path}/memory.sqlite');
+          final memory = _ReceiptMemory(
+            CompanionMemoryStore(db, nowMilliseconds: () => clock.wall),
+            CompanionLocal.at(root),
+            nowMilliseconds: () => clock.wall,
+          );
+          final reached = Completer<void>();
+          final release = Completer<void>();
+          final posts = <Map<String, Object?>>[];
+          var words = '等你回来，我们接着聊刚才的小事。';
+          CompanionStageEvents? stageEvents;
+          final client = MockClient.streaming((request, bytes) async {
+            final body = jsonDecode(await bytes.bytesToString()) as Map<String, Object?>;
+            posts.add(body);
+            if (_isChat2(body)) {
+              if (!reached.isCompleted) reached.complete();
+              await release.future;
+            }
+            return http.StreamedResponse(
+              Stream.value(utf8.encode(_messageEvents(_wordsTurn(_isChat2(body) ? words : '')))),
+              200,
+            );
+          });
+          addTearDown(() async {
+            if (!release.isCompleted) release.complete();
+            await _drained(tester, memory);
+            await tester.pumpWidget(const SizedBox());
+            memory.dispose();
+            await tester.pump();
+            client.close();
+          });
+          await openLight(
+            tester,
+            apiKey: 'sk-test',
+            client: client,
+            events: (events) => stageEvents = events,
+            extra: [
+              companionInitiativeClockProvider.overrideWithValue(clock.call),
+              companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+            ],
+          );
+          expect(await memoryOf(tester), same(memory));
+          final page = tester.element(find.byType(CompanionPage));
+          final container = ProviderScope.containerOf(page);
+          final agent = container.read(companionAgentProvider);
+          final navigator = Navigator.of(page);
+          final memoryTitle = L10n.of(page).companionMemoryTitle;
+          if (sameWordsFromWake) words = L10n.of(page).companionWake;
+          // Keep independent invitations out of this reply-presentation scenario.
+          await settleMixed(tester, container.read(companionInitiativeEnabledProvider.notifier).set(false));
+          expect(container.read(companionInitiativeEnabledProvider) ?? false, isFalse);
+          var agentChanges = 0;
+          var memoryChanges = 0;
+          void changed() => agentChanges++;
+          void memoryChanged() => memoryChanges++;
+          agent.addListener(changed);
+          memory.addListener(memoryChanged);
+          addTearDown(() => agent.removeListener(changed));
+          addTearDown(() => memory.removeListener(memoryChanged));
+
+          await tester.enterText(find.byType(TextField), '等我看一下记忆，再回来听你说。');
+          await tester.pump();
+          await tester.tap(find.byIcon(AppIcons.send).last);
+          await settleMixed(tester, reached.future);
+          // Use the real room's menu and read-only memory route. The same Page,
+          // Agent and SQLite owner remain attached underneath it.
+          await tester.tap(find.byIcon(AppIcons.more));
+          await _notesVisible(tester, find.text(memoryTitle));
+          await _settle(tester);
+          // The real menu scrolls on a short screen; existence is not a hit target.
+          await tester.ensureVisible(find.text(memoryTitle));
+          await _notesVisible(tester, find.text(memoryTitle).hitTestable());
+          expect(find.text(memoryTitle).hitTestable(), findsOneWidget);
+          await tester.tap(find.text(memoryTitle));
+          await _notesVisible(tester, find.byType(CompanionMemoryPage));
+          await tester.pump(const Duration(milliseconds: 400));
+          await _settle(tester);
+          expect(ModalRoute.of(page)!.isCurrent, isFalse);
+          expect(TickerMode.valuesOf(page).enabled, isFalse);
+
+          release.complete();
+          await _drained(tester, memory);
+          // The worker can notify after the Agent's retained turn has settled.
+          // Finish that work and its frames while the room is still hidden.
+          await _until2(
+            tester,
+            () => !memory.working && memory.store.requests().every((r) => r['state'] == 'finished'),
+          );
+          await _drained(tester, memory);
+          await _settle(tester);
+          expect(agent.running, isFalse);
+          expect(agent.text, words);
+          final assistant = memory.store.messages().singleWhere((row) => row['role'] == 'assistant');
+          expect(assistant['text'], words);
+          // The Agent saves assistant sources with its real wall clock. Keep
+          // the existing fake presentation clock at or after that real source,
+          // and complete any changed-day settlement under the hidden route.
+          clock.wall = (assistant['said_at_utc']! as int) + 1;
+          memory.changed();
+          await _drained(tester, memory);
+          await _settle(tester);
+          expect(memory.working, isFalse);
+          expect(memory.store.requests().every((r) => r['state'] == 'finished'), isTrue);
+          expect(memory.store.archive['widget_clear_pending'], 0);
+          if (sameWordsFromWake) {
+            // A real stage wake replaces the hidden model bubble with identical
+            // words. Text equality must not give that other line its source ID.
+            stageEvents!.onWake();
+            await _settle(tester);
+          }
+          expect(posts.where(_isChat2), hasLength(1));
+          expect(db.select('SELECT * FROM memory_affinity_presentations'), isEmpty);
+          expect(find.text(words), findsNothing);
+          final changesBeforeReturn = agentChanges;
+          final memoryChangesBeforeReturn = memoryChanges;
+          final requestsBeforeReturn = memory.store.requests();
+          final postsBeforeReturn = posts.length;
+          final receiptsBeforeReturn = memory.receipts.length;
+          final messagesBeforeReturn = memory.store.messages();
+
+          navigator.pop();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.pump();
+          expect(find.text(words), findsOneWidget);
+          expect(agentChanges, changesBeforeReturn, reason: 'returning must not rely on another Agent notification');
+          expect(memoryChanges, memoryChangesBeforeReturn);
+          final shown = db.select('SELECT * FROM memory_affinity_presentations');
+          expect(shown, hasLength(sameWordsFromWake ? 0 : 1));
+          if (!sameWordsFromWake) {
+            expect(shown.single['id'], 'assistant:${assistant['id']}');
+            expect(shown.single['assistant_source_id'], assistant['id']);
+            expect(shown.single['kind'], 'assistant');
+            expect(shown.single['presented_at_ms'], clock.wall);
+          }
+
+          // Another actual frame and a pause/resume keep the same durable fact;
+          // they do not submit another turn or manufacture a new model receipt.
+          tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+          await tester.pump();
+          tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+          await tester.pump();
+          await tester.pump();
+          expect(db.select('SELECT * FROM memory_affinity_presentations'), shown);
+          expect(memory.store.messages(), messagesBeforeReturn);
+          expect(memory.store.requests(), requestsBeforeReturn);
+          expect(memory.receipts, hasLength(receiptsBeforeReturn));
+          expect(posts, hasLength(postsBeforeReturn));
+        });
       }
 
       for (final scenario in [
@@ -6361,6 +6520,25 @@ void main() {
         expect(find.descendant(of: log, matching: find.text('你好')), findsOneWidget);
         expect(find.descendant(of: log, matching: find.text('你来啦。')), findsOneWidget);
         expect(find.descendant(of: log, matching: find.textContaining('〔')), findsNothing);
+
+        final memory = await memoryOf(tester);
+        final before = tester.widget<CompanionLog>(log);
+        memory.changed();
+        await tester.pump();
+        final after = tester.widget<CompanionLog>(log);
+        expect(after, isNot(same(before)));
+        expect(after.entries.first, same(before.entries.first));
+
+        final saved = memory.store.messages().firstWhere((row) => row['text'] == '你好');
+        memory.store.editMessage(
+          id: saved['id']! as String,
+          expectedSourceRev: saved['source_rev']! as int,
+          text: '早上好',
+        );
+        memory.changed();
+        await tester.pump();
+        expect(find.descendant(of: log, matching: find.text('早上好')), findsOneWidget);
+        expect(find.descendant(of: log, matching: find.text('你好')), findsNothing);
 
         // Back closes the log, not the room.
         await tester.binding.handlePopRoute();

@@ -50,6 +50,25 @@ const _pack = PetPack(
   },
 );
 
+/// Every sheet reads at once.
+class _ReadyBundle extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) async => ByteData.sublistView(png(8, 8));
+}
+
+PetPack _petOf(String id) => PetPack(
+  id: id,
+  name: id,
+  canvas: const Size(8, 8),
+  anchorX: 4,
+  baseline: 8,
+  contentBox: const Rect.fromLTWH(0, 0, 8, 8),
+  animations: const {'idle': _anim},
+  states: const {
+    'idle': ['idle'],
+  },
+);
+
 void main() {
   setUp(() => PetSheets.enabled = true);
   tearDown(() {
@@ -113,6 +132,23 @@ void main() {
       bundle.fail(0);
       await expectLater(load, throwsA(isA<FileSystemException>()));
       expect(bundle.reads, hasLength(1));
+    });
+  });
+
+  testWidgets("a pet switched away from keeps its idle sheet only as one of the LRU's", (tester) async {
+    await tester.runAsync(() async {
+      final sheets = PetSheets.instance;
+      final bundle = _ReadyBundle();
+      final first = _petOf('first'), second = _petOf('second');
+      sheets.pin(first, _anim);
+      (await sheets.load(first, _anim, bundle)).dispose();
+      sheets.pin(second, _anim);
+      (await sheets.load(second, _anim, bundle)).dispose();
+      for (final id in ['a', 'b', 'c']) {
+        (await sheets.load(_petOf(id), _anim, bundle)).dispose();
+      }
+      expect(sheets.peek(first, _anim), isNull);
+      sheets.peek(second, _anim)!.dispose();
     });
   });
 

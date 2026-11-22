@@ -114,11 +114,12 @@ class _BlockScan {
       _fenceChar = fence.group(1)![0];
       _fenceLength = fence.group(1)!.length;
       _openFenceLine = offset;
-    } else if (line.trim().isEmpty || line.replaceAll(RegExp(r'[\s>]'), '').isEmpty) {
+    } else if (line.trim().isEmpty || !_nonQuoteText.hasMatch(line)) {
       lastBlockStart = offset + line.length + 1;
     }
   }
 
+  static final _nonQuoteText = RegExp(r'[^\s>]');
   static final _fence = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})(?!.*`)');
   static final _fenceClose = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})[ \t]*$');
 }
@@ -130,6 +131,7 @@ final _delimiterCell = RegExp(r'^\s*:?-+:?\s*$');
 /// not complete yet (-1 when there is none): its header row would otherwise
 /// show as a paragraph of pipes and then jump into a grid.
 int _unfinishedTableAt(String tail) {
+  if (!tail.contains('|')) return -1;
   final lines = tail.replaceFirst(RegExp(r'\n+$'), '').split('\n');
   var first = lines.length;
   while (first > 0 && _tableRow.hasMatch(lines[first - 1])) {
@@ -225,7 +227,7 @@ class _InlineScan {
       } else if (c == _closeBracket && brackets.isNotEmpty) {
         final label = brackets.removeLast();
         if (i + 1 < n && text.codeUnitAt(i + 1) == _openParen) {
-          final close = text.indexOf(_linkTargetEnd, i + 2);
+          final close = _linkTargetEnd.allMatches(text, i + 2).firstOrNull?.start ?? -1;
           if (close == -1 || text[close] == '\n') {
             if (label > 0 && text[label - 1] == '!') {
               openImage = label - 1;
@@ -258,6 +260,7 @@ class _InlineScan {
   static const _closeBracket = 0x5d;
 
   final String text;
+  late final int _trimmedEnd = text.trimRight().length;
   final openers = <_Opener>[];
   int? openCode;
   int codeRun = 0;
@@ -308,7 +311,7 @@ class _InlineScan {
         used = true;
       }
     }
-    if (!used && text.substring(i + run).trim().isEmpty) dangling = i;
+    if (!used && i + run >= _trimmedEnd) dangling = i;
     return i + run;
   }
 
@@ -335,9 +338,12 @@ class _InlineScan {
   }
 }
 
+final _inlineRepairMarker = RegExp(r'[`*_~\[<]');
+
 /// Closes what the last block left open: emphasis, a code span, a link
 /// destination; holds back a half-written image or HTML tag.
 String _repairInline(String tail) {
+  if (!_inlineRepairMarker.hasMatch(tail)) return tail;
   var text = tail;
   var scan = _InlineScan(text);
   // Each cut can expose another unfinished marker (`**a *` → `**a`).

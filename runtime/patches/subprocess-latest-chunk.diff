@@ -1,0 +1,10 @@
+--- a/node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js
++++ b/node_modules/@deepseek-ai/dsh-subprocess-local/lib/output.js
+@@ -221 +221,3 @@
+-		const buffer = this.chunks.length === 1 ? this.chunks[0] : Buffer.concat(this.chunks);
++		const last = this.chunks[this.chunks.length - 1];
++		const buffer = this.chunks.length === 1 || fromByte >= this.total - last.length && Buffer.isBuffer(last)
++			? last : Buffer.concat(this.chunks);
+@@ -223 +225 @@
+-		const available = lossy ? buffer : buffer.subarray(fromByte - windowStart);
++		const available = lossy ? buffer : buffer.subarray(fromByte - (this.total - buffer.length));

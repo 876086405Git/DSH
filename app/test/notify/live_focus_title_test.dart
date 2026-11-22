@@ -8,6 +8,7 @@ import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/live_activity_state.dart';
 import 'package:dsh_app/state/notify_state.dart';
 import 'package:dsh_app/state/ui_mode_state.dart';
+import 'package:dsh_app/ui/chat/run_info.dart';
 import 'package:dsh_app/ui/pets/pet_stage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,8 +40,10 @@ class _Pet extends Notifier<PetState> {
 final _signals = NotifierProvider<_Signals, PetSignals>(_Signals.new);
 final _pet = NotifierProvider<_Pet, PetState>(_Pet.new);
 
-PetFocus _focus(String? title, {HostRef host = _local, String id = 'a'}) =>
-    petFocusOf(host, id, ChatState(loading: false, running: true, title: title));
+PetFocus _focus(String? title, {HostRef host = _local, String id = 'a'}) {
+  final s = ChatState(loading: false, running: true, title: title);
+  return petFocusOf(host, id, s, runActivityOf(s));
+}
 
 PetSignals _snapshot({PetFocus? focus, List<PetRun> runs = const []}) =>
     PetSignals(focus: focus, runs: runs, lastInteraction: _time);

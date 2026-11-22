@@ -138,9 +138,10 @@ String? _flat(String? text) {
 
 /// 认 `[dsh-ui reply]` 消息；不是的返回 null。
 DshUiReply? parseDshUiReply(String text) {
-  final lines = text.trimLeft().split(RegExp(r'\r?\n'));
+  final trimmed = text.trimLeft();
+  if (!trimmed.startsWith(dshUiReplyMarker)) return null;
+  final lines = trimmed.split(RegExp(r'\r?\n'));
   final head = lines.first.trim();
-  if (!head.startsWith(dshUiReplyMarker)) return null;
   final title = _flat(head.substring(dshUiReplyMarker.length));
   final body = [
     for (final line in lines.skip(1))

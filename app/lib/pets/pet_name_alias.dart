@@ -42,6 +42,7 @@ int? _compose(int a, int b) {
 /// Exactly Python 3.12's unicodedata.normalize('NFC', name).casefold().
 /// This is an alias key only: the original spelling remains the file name.
 String petNameAlias(String name) {
+  if (name.codeUnits.every((unit) => unit <= 0x7f)) return name.toLowerCase();
   final decomposed = <int>[];
   for (final cp in name.runes) {
     _decompose(cp, decomposed);

@@ -29,4 +29,39 @@ void main() {
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });
+
+  testWidgets('a hero scrolled out of sight stops asking for frames', (tester) async {
+    usePhoneSurface(tester);
+    await tester.pumpWidget(
+      goldenApp(
+        brightness: Brightness.light,
+        animations: true,
+        home: AppPage(
+          title: '引擎',
+          hero: const SizedBox(height: 120, child: Center(child: CircularProgressIndicator())),
+          slivers: [
+            SliverList.list(children: [for (var i = 0; i < 30; i++) SizedBox(height: 60, child: Text('日志 $i'))]),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    Opacity header() => tester.widget<Opacity>(
+      find.ancestor(of: find.byType(CircularProgressIndicator), matching: find.byType(Opacity)).first,
+    );
+    // Half faded: still spinning.
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -30));
+    await tester.pump(const Duration(seconds: 1));
+    expect(header().opacity, inExclusiveRange(0, 1));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    // Settles only because the faded-out spinner holds still.
+    await tester.pumpAndSettle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 600));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+  });
 }

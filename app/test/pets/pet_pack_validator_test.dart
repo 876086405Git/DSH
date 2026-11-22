@@ -274,6 +274,12 @@ void main() {
     expect(checked.json['source'], '\uFEFF');
   });
 
+  test('ASCII aliases change only uppercase letters', () {
+    final units = List.generate(128, (i) => i);
+    final expected = String.fromCharCodes([for (final i in units) i >= 65 && i <= 90 ? i + 32 : i]);
+    expect(petNameAlias(String.fromCharCodes(units)), expected);
+  });
+
   test('UTF16 sheet length and Unicode15 NFC/full casefold aliases', () {
     expect(petNameAlias('Straße'), petNameAlias('STRASSE'));
     expect(petNameAlias('ς'), petNameAlias('σ'));

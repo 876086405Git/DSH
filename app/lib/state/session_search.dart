@@ -182,6 +182,8 @@ class SessionSearchResults {
   int get length => active.length + archived.length;
 }
 
+String _foldTitle(String? title, String? cwd) => foldForSearch('${title?.trim() ?? ''}\n${folderLabel(cwd) ?? ''}');
+
 /// Merges local title (and folder) matches of [query] with the Host's content
 /// [hits]. [sessions] are the visible ones and [archived] the archived ones;
 /// [hits] only count when [contentQuery] is the same search as [query], and a
@@ -192,13 +194,14 @@ SessionSearchResults deriveSessionSearchResults({
   List<SessionSummary> archived = const [],
   String contentQuery = '',
   List<ContentHit> hits = const [],
+  String Function(String?, String?) foldTitle = _foldTitle,
 }) {
   final terms = searchTerms(query);
   if (terms.isEmpty) return SessionSearchResults.empty;
-  final folders = {
-    for (final s in [...sessions, ...archived]) folderLabel(s.cwd),
-  };
-  final showFolders = folders.length > 1;
+  final all = sessions.followedBy(archived);
+  final firstCwd = all.firstOrNull?.cwd;
+  final firstLabel = folderLabel(firstCwd);
+  final showFolders = all.any((s) => s.cwd != firstCwd && folderLabel(s.cwd) != firstLabel);
   final snippets = <String, String>{};
   if (hits.isNotEmpty && sameSearchQuery(contentQuery, query)) {
     for (final hit in hits) {
@@ -207,12 +210,9 @@ SessionSearchResults deriveSessionSearchResults({
   }
 
   List<SessionSearchResult> section(List<SessionSummary> members, bool isArchived) {
-    final byId = {for (final s in members) s.sessionId: s};
     final local = <SessionSummary>[];
     for (final s in members) {
-      final title = s.title?.trim() ?? '';
-      final folder = showFolders ? folderLabel(s.cwd) ?? '' : '';
-      final haystack = foldForSearch('$title\n$folder');
+      final haystack = foldTitle(s.title, showFolders ? s.cwd : null);
       if (terms.every(haystack.contains)) local.add(s);
     }
     local.sort((a, b) {
@@ -223,6 +223,8 @@ SessionSearchResults deriveSessionSearchResults({
       for (final s in local)
         SessionSearchResult(session: s, archived: isArchived, byTitle: true, snippet: snippets[s.sessionId]),
     ];
+    if (snippets.isEmpty) return results;
+    final byId = {for (final s in members) s.sessionId: s};
     final included = {for (final s in local) s.sessionId};
     for (final MapEntry(key: id, value: snippet) in snippets.entries) {
       final s = byId[id];
@@ -591,7 +593,7 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
     return (text: bestText, occurrences: bestOccurrences);
   }
 
-  final hits = <({SessionSummary session, int tier, int occurrences, int length, String snippet})>[];
+  final hits = <({SessionSummary session, int tier, int occurrences, int length, String text})>[];
   for (final session in sessions) {
     if (session.blank || session.isSubagent) continue;
     final entry = corpus[session.sessionId];
@@ -604,19 +606,19 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
         tier: 0,
         occurrences: singleUser.occurrences,
         length: singleUser.text.length,
-        snippet: buildSearchSnippet(singleUser.text, distinctTerms),
+        text: singleUser.text,
       ));
       continue;
     }
 
-    final multiUser = bestCombinedMatch(entry.userMessages);
+    final multiUser = rawTerms.length > 1 ? bestCombinedMatch(entry.userMessages) : null;
     if (multiUser != null) {
       hits.add((
         session: session,
         tier: 1,
         occurrences: multiUser.occurrences,
         length: multiUser.text.length,
-        snippet: buildSearchSnippet(multiUser.text, distinctTerms),
+        text: multiUser.text,
       ));
       continue;
     }
@@ -628,11 +630,12 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
         tier: 2,
         occurrences: singleAssistant.occurrences,
         length: singleAssistant.text.length,
-        snippet: buildSearchSnippet(singleAssistant.text, distinctTerms),
+        text: singleAssistant.text,
       ));
       continue;
     }
 
+    if (rawTerms.length == 1) continue;
     final combinedAll = bestCombinedMatch([...entry.userMessages, ...entry.assistantPreviews]);
     if (combinedAll != null) {
       hits.add((
@@ -640,7 +643,7 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
         tier: 2,
         occurrences: combinedAll.occurrences,
         length: combinedAll.text.length,
-        snippet: buildSearchSnippet(combinedAll.text, distinctTerms),
+        text: combinedAll.text,
       ));
     }
   }
@@ -659,7 +662,10 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
 
   final hasMore = hits.length > limit;
   return (
-    items: [for (final hit in hits.take(limit)) (sessionId: hit.session.sessionId, snippet: hit.snippet)],
+    items: [
+      for (final hit in hits.take(limit))
+        (sessionId: hit.session.sessionId, snippet: buildSearchSnippet(hit.text, distinctTerms)),
+    ],
     hasMore: hasMore,
   );
 }
@@ -1024,6 +1030,7 @@ SessionSearchView buildSessionSearchView(
   SessionSearchState state, {
   required List<SessionSummary> sessions,
   List<SessionSummary> archived = const [],
+  String Function(String?, String?) foldTitle = _foldTitle,
 }) {
   SessionSearchView viewFor(String text) {
     final query = text.trim();
@@ -1044,6 +1051,7 @@ SessionSearchView buildSessionSearchView(
         archived: archived,
         contentQuery: state.contentQuery,
         hits: sameQuery ? state.hits : const [],
+        foldTitle: foldTitle,
       ),
       content: content,
       hasMore: sameQuery && state.hasMore,
@@ -1055,11 +1063,22 @@ SessionSearchView buildSessionSearchView(
   return viewFor(state.committed);
 }
 
+// A page may search the same titles on every keystroke and again as content
+// hits arrive. Keep only folds for the current inventory and nonempty search.
+final _foldTitleProvider = Provider.autoDispose<String Function(String?, String?)>((ref) {
+  ref.watch(sessionsProvider);
+  final folded = <(String?, String?), String>{};
+  return (title, cwd) => folded.putIfAbsent((title, cwd), () => _foldTitle(title, cwd));
+});
+
 final sessionSearchViewProvider = Provider.autoDispose<SessionSearchView>((ref) {
   final state = ref.watch(sessionSearchProvider);
   final sessions = ref.watch(sessionsProvider).value ?? const <SessionSummary>[];
   final archived = ref.read(sessionsProvider.notifier).archivedSessions;
-  return buildSessionSearchView(state, sessions: sessions, archived: archived);
+  final foldTitle = state.text.trim().isEmpty && state.committed.trim().isEmpty
+      ? _foldTitle
+      : ref.watch(_foldTitleProvider);
+  return buildSessionSearchView(state, sessions: sessions, archived: archived, foldTitle: foldTitle);
 });
 
 /// Restores an archived session on the active host (it comes back in the list

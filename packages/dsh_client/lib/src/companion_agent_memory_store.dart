@@ -514,18 +514,34 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       throw const _AgentMemoryRejected('incomplete_effect_set');
     }
     final planned = {for (final id in revised.keys) id: (originals[id]!['row_rev'] as int) + 1};
-    final writes = [
-      for (final entry in revised.entries)
-        _agentPrepareEntry(
-          turn,
-          entry.key,
-          originals[entry.key],
-          entry.value,
-          planned,
-          deleted,
-          preserveProof: deleted.isNotEmpty && raw != null,
-        ),
-    ];
+    final prepared = <String, _AgentEntryWrite>{};
+    final preparing = <String>{};
+    _AgentEntryWrite? prepare(String id) {
+      final change = revised[id];
+      if (change == null) return null;
+      final existing = prepared[id];
+      if (existing != null) return existing;
+      if (!preparing.add(id)) throw const _AgentMemoryRejected('reference_cycle');
+      // Resolve each referenced member's validated final basis and source time
+      // before the dependent's current-value check, regardless of input order.
+      final write = _agentPrepareEntry(
+        turn,
+        id,
+        originals[id],
+        change,
+        planned,
+        deleted,
+        preserveProof: deleted.isNotEmpty && raw != null,
+        plannedReference: (reference) {
+          final parent = prepare(reference);
+          return parent == null ? null : (basis: parent.basis, sourceAt: parent.sourceAt);
+        },
+      );
+      preparing.remove(id);
+      return prepared[id] = write;
+    }
+
+    final writes = [for (final id in revised.keys) prepare(id)!];
     _agentValidateReferencePlan({for (final write in writes) write.id: write.references}, deleted);
     // Every ID/revision, retained nonempty body, reference and shared budget
     // above is settled before the first card is touched.
@@ -628,6 +644,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     Map<String, int> planned,
     Set<String> deleted, {
     bool preserveProof = false,
+    ({int basis, int sourceAt})? Function(String)? plannedReference,
   }) {
     final text = _agentText(input, 'text');
     final collection = previous?['collection'] as String? ?? input['collection'] as String? ?? 'about_you';
@@ -671,8 +688,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       }
       references[reference] = planned[reference] ?? card['row_rev'] as int;
       cleanup = cleanup && card['cleanup_history_complete'] == 1;
-      basis = math.max(basis, card['current_basis_seq'] as int? ?? 0);
-      sourceAt = math.max(sourceAt, card['source_at_ms'] as int);
+      final preparedReference = plannedReference?.call(reference);
+      basis = math.max(basis, preparedReference?.basis ?? card['current_basis_seq'] as int? ?? 0);
+      sourceAt = math.max(sourceAt, preparedReference?.sourceAt ?? card['source_at_ms'] as int);
     }
     final sources = <MemoryRow>[];
     final rawSources = input['sources'] ?? (input['source'] == null ? null : [input['source']]);
@@ -740,6 +758,13 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       sourceAt = math.max(sourceAt, retained['source_at_ms'] as int);
     }
     if (proofGroups.isEmpty && references.isEmpty) throw const _AgentMemoryRejected('source_not_in_turn');
+    if (previous != null &&
+        !canApplyMemoryCurrentValue(
+          proposedBasisSeq: basis,
+          currentBasisSeq: previous['current_basis_seq'] as int? ?? 0,
+        )) {
+      throw const _AgentMemoryRejected('older_than_current');
+    }
     final rawAliases = input['aliases'];
     final aliases = collection != 'person'
         ? const <String>[]
@@ -792,6 +817,17 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           )
         : const <String>[];
     if (controlled.length > 1) throw const _AgentMemoryRejected('ambiguous_controlled_topic');
+    var keywords = _agentKeywords(input, text);
+    if (retained != null && input['keywords'] == null) {
+      // Omitted keywords follow the rewritten fact, not a removed old clause.
+      // Keep old terms still present in that body; otherwise use its text.
+      final previousKeywords = (jsonDecode(retained['keywords'] as String) as List).cast<String>();
+      final normalizedText = normalizeMemoryText(text);
+      final safeKeywords = previousKeywords
+          .where((word) => normalizedText.contains(normalizeMemoryText(word)))
+          .toList();
+      if (previousKeywords.isEmpty || safeKeywords.isNotEmpty) keywords = safeKeywords;
+    }
     return _AgentEntryWrite(
       id: id,
       previous: previous,
@@ -799,9 +835,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       characterId: character,
       text: text,
       kind: kind,
-      keywords: retained != null && input['keywords'] == null
-          ? (jsonDecode(retained['keywords'] as String) as List).cast<String>()
-          : _agentKeywords(input, text),
+      keywords: keywords,
       proofGroups: proofGroups,
       cleanupSources: cleanupSources,
       references: references,
@@ -818,11 +852,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
 
   void _agentCheckDiarySources(Row turn, Iterable<MemoryRow> sources) {
     final claim = _agentClaim(turn['claim_id'] as String);
-    if (!sources.any(
-      (source) =>
-          source['role'] == 'user' &&
-          _agentSourceOnDay(source, claim['local_day'] as String, claim['zone_id'] as String),
-    )) {
+    if (!sources.any((source) => source['role'] == 'user' && _agentSourceOnDay(source, claim['local_day'] as String))) {
       throw const _AgentMemoryRejected('diary_day_source_required');
     }
   }
@@ -997,11 +1027,21 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       targetId: (target['row_rev'] as int) + 1,
       for (final id in updateInputs.keys) id: (rows[id]!['row_rev'] as int) + 1,
     };
+    final mergedRows = [target, for (final id in fromIds) rows[id]!];
+    final basis = mergedRows.map((row) => row['current_basis_seq'] as int? ?? 0).reduce(math.max);
+    final sourceAt = mergedRows.map((row) => row['source_at_ms'] as int).reduce(math.max);
     final writes = {
       for (final entry in updateInputs.entries)
-        entry.key: _agentPrepareEntry(turn, entry.key, rows[entry.key], entry.value, planned, fromIds),
+        entry.key: _agentPrepareEntry(
+          turn,
+          entry.key,
+          rows[entry.key],
+          entry.value,
+          planned,
+          fromIds,
+          plannedReference: (reference) => reference == targetId ? (basis: basis, sourceAt: sourceAt) : null,
+        ),
     };
-    final mergedRows = [target, for (final id in fromIds) rows[id]!];
     final targetRefs = <String, int>{};
     for (final row in mergedRows) {
       for (final reference in _db.select(
@@ -1033,8 +1073,6 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         if (proofKeys.add(_mergeProofKey(group))) proofs.add(group);
       }
     }
-    final basis = mergedRows.map((row) => row['current_basis_seq'] as int? ?? 0).reduce(math.max);
-    final sourceAt = mergedRows.map((row) => row['source_at_ms'] as int).reduce(math.max);
     final at = _checkedNow();
     void mergeBody() {
       // The original AND groups remain AND groups; distinct support groups

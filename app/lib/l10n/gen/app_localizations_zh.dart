@@ -28946,7 +28946,7 @@ class L10nZh extends L10n {
   String get workshopPublishCoverPick => '选一张封面';
 
   @override
-  String get workshopPublishCoverHelper => 'PNG，每边不超过 512 像素，不超过 2 MB。不选就显示名字的第一个字。';
+  String get workshopPublishCoverHelper => '支持 JPEG、PNG、WebP 等，上传前自动缩小。不选就显示名字的第一个字。';
 
   @override
   String get workshopPublishCoverChosen => '自选封面';
@@ -28958,13 +28958,13 @@ class L10nZh extends L10n {
   String get workshopPublishCoverRemove => '移除';
 
   @override
-  String get workshopPublishCoverBadSize => '这张图是空的或超过 2 MB，换一张试试。';
+  String get workshopPublishCoverBadSize => '图片为空或超过 32 MB，换一张试试。';
 
   @override
-  String get workshopPublishCoverBadPng => '这不是一张完整的 PNG 图片，换一张试试。';
+  String get workshopPublishCoverBadPng => '图片损坏或格式不支持，换一张试试。';
 
   @override
-  String get workshopPublishCoverBadDimensions => '这张图太大了，每边最多 512 像素。缩小后再选。';
+  String get workshopPublishCoverBadDimensions => '图片分辨率过高，缩小后再选。';
 
   @override
   String get workshopPublishCoverUnreadable => '没能读出这张图，换一张试试。';

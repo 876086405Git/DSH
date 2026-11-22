@@ -13,7 +13,7 @@ const raw = value => value?.[Symbol.for('cordis.original')] ?? value;
 const failure = (status, code, message) => new CompanionError(status, `auxiliary-${code}`, message);
 const text = value => typeof value === 'string' && value.trim() !== '' &&
   !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value) &&
-  [...value].every(c => c.codePointAt(0) < 0xd800 || c.codePointAt(0) > 0xdfff);
+  value.isWellFormed();
 const inputKeys = ['v', 'instanceId', 'requestId', 'sessionId', 'provider', 'model', 'kind', 'system', 'input', 'maxTokens'];
 
 function validate(value) {

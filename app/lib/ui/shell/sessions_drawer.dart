@@ -420,7 +420,7 @@ class _ViewOptionsKey extends ConsumerWidget {
     final scope = ref.watch(drawerScopeProvider);
     final filtered = ref.watch(drawerFilterProvider) != DrawerFilter.all;
     ref.watch(sessionsProvider);
-    final hasArchived = ref.read(sessionsProvider.notifier).archivedSessions.isNotEmpty;
+    late final hasArchived = ref.read(sessionsProvider.notifier).archivedSessions.isNotEmpty;
     if (scope == null || (scope.sessions.isEmpty && !filtered && !hasArchived)) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(right: 10),

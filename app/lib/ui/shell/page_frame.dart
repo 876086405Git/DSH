@@ -46,7 +46,7 @@ class AppPage extends StatefulWidget {
 
   /// Detail-page header (usually a `PageHero`) shown instead of the large title
   /// and [subtitle]. It fades out as the page scrolls, and [title] moves into
-  /// the bar.
+  /// the bar; fully faded, its tickers are muted.
   final Widget? hero;
 
   /// Page content. Use [AppPage.list] for a plain column of boxes.
@@ -198,14 +198,18 @@ class _AppPageState extends State<AppPage> {
                         child: ValueListenableBuilder<double>(
                           valueListenable: _offset,
                           // Pulled past the top (only the fluid tier's lists go there), the
-                          // headline swells a little with the pull.
+                          // headline swells a little with the pull. Faded out, its
+                          // animations (the engine's status ring) hold still.
                           builder: (context, offset, child) => Opacity(
                             opacity: _headerOpacity(offset),
                             alwaysIncludeSemantics: true,
-                            child: Transform.scale(
-                              scale: 1 + (-offset / 900).clamp(0.0, 0.1),
-                              alignment: AlignmentDirectional.topStart,
-                              child: child,
+                            child: TickerMode(
+                              enabled: _headerOpacity(offset) > 0,
+                              child: Transform.scale(
+                                scale: 1 + (-offset / 900).clamp(0.0, 0.1),
+                                alignment: AlignmentDirectional.topStart,
+                                child: child,
+                              ),
                             ),
                           ),
                           child: KeyedSubtree(key: _headerKey, child: header),

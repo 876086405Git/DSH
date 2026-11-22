@@ -62,12 +62,14 @@ export class CompanionTaskStore {
   checkStore(id) {
     if (id !== this.hostStoreId) throw taskError(409, 'store-mismatch', 'This request belongs to another task store');
   }
-  read(id) {
+  stored(id) {
     const record = this.table.get(id);
     if (!record) throw taskError(404, 'not-found', 'Task is not present in this store');
-    return clone(record);
+    return record;
   }
-  snapshot(id) { return this.project(this.read(id)); }
+  read(id) { return clone(this.stored(id)); }
+  // project() copies only the public fields, so the stored record is not cloned first.
+  snapshot(id) { return this.project(this.stored(id)); }
   observe(id, listener) {
     const listeners = this.observers.get(id) ?? new Set();
     listeners.add(listener); this.observers.set(id, listeners);
@@ -90,12 +92,12 @@ export class CompanionTaskStore {
     return this.runner.foreground(id, body.taskRev, signal);
   }
   project(record) {
-    const {originalCreate, originalFingerprint, operations, notes, execution, ...publicRecord} = clone(record);
+    const {originalCreate, originalFingerprint, operations, notes, execution, ...publicRecord} = record;
     publicRecord.hostStoreId = this.hostStoreId;
     publicRecord.originalCreatePresent = originalCreate !== null;
-    publicRecord.steps = record.steps.map(({reserveMs, finishFingerprint, ...step}) => clone(step));
-    publicRecord.artifacts = record.artifacts.map(({identity, reference, ...artifact}) => clone(artifact));
-    return publicRecord;
+    publicRecord.steps = record.steps.map(({reserveMs, finishFingerprint, ...step}) => step);
+    publicRecord.artifacts = record.artifacts.map(({identity, reference, ...artifact}) => artifact);
+    return clone(publicRecord);
   }
   list(cursor) {
     let after = '';
@@ -109,7 +111,7 @@ export class CompanionTaskStore {
     const keys = [...this.table.keys()].sort().filter(id => id > after);
     const page = keys.slice(0, 50);
     const tasks = page.map(id => {
-      const {taskId, hostExecutionId, taskRev, runnerReceiptSeq, kind, state, waitReason, updatedAtMs} = this.read(id);
+      const {taskId, hostExecutionId, taskRev, runnerReceiptSeq, kind, state, waitReason, updatedAtMs} = this.table.get(id);
       return {taskId, hostExecutionId, taskRev, runnerReceiptSeq, kind, state, waitReason, updatedAtMs};
     });
     return {v: 1, hostStoreId: this.hostStoreId, tasks, nextCursor: keys.length > page.length

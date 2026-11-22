@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import {
   advanceState, applyEvent, initialState, publicState,
 } from '../bridge/dsh-go-bridge/lib/companion/state.js';
-import { MAX_FILE_BYTES } from '../bridge/dsh-go-bridge/lib/companion/schema.js';
+import { MAX_FILE_BYTES, validMemory } from '../bridge/dsh-go-bridge/lib/companion/schema.js';
 import { createCompanionStore } from '../bridge/dsh-go-bridge/lib/companion/store.js';
 
 const MINUTE = 60_000;
@@ -143,6 +143,36 @@ test('rule values are clamped and public state omits persistence internals', () 
   const visible = publicState(snack, START);
   assert.equal(visible.thought, 'enjoy-snack');
   for (const key of ['anchorAt', 'lastEvents', 'lastGainAt']) assert.equal(Object.hasOwn(visible, key), false);
+});
+
+test('small state reads follow the file size and keep reading if it grows after stat', async t => {
+  const f = await fixture(t);
+  const initial = await f.store.getSnapshot();
+  const size = (await fs.stat(f.filePath)).size;
+  const buffers = new Set();
+  let append = '';
+  const store = createCompanionStore({filePath: f.filePath, now: f.now, io: {...fs, async open(...args) {
+    const handle = await fs.open(...args);
+    return {
+      async stat() {
+        const info = await handle.stat();
+        if (append) await fs.appendFile(f.filePath, append);
+        return info;
+      },
+      read(buffer, offset, length, position) {
+        buffers.add(buffer.length);
+        return handle.read(buffer, offset, Math.min(length, 64 * 1024), position);
+      },
+      close: () => handle.close(),
+    };
+  }}});
+  assert.deepEqual(await store.getSnapshot(), initial);
+  assert.deepEqual([...buffers], [size + 1]);
+  append = '  ';
+  assert.deepEqual(await store.getSnapshot(), initial);
+  assert.deepEqual([...buffers], [size + 1, MAX_FILE_BYTES + 1]);
+  append = ' '.repeat(MAX_FILE_BYTES);
+  await rejects(() => store.getSnapshot(), 503, 'corrupt-store');
 });
 
 test('store identity, state and memories survive reopening the file', async (t) => {
@@ -288,6 +318,24 @@ test('rename failure preserves the old file and revision, removes temporary data
   assert.equal(retried.revision, saved.revision + 1);
 });
 
+test('published state skips unlink while a rejected rename cleans the temporary file', async t => {
+  let unlinks = 0, failRename = false;
+  const io = {...fs,
+    async rename(...args) {
+      if (failRename) throw new Error('synthetic rename failure');
+      return fs.rename(...args);
+    },
+    async unlink(path) { unlinks++; return fs.unlink(path); },
+  };
+  const f = await fixture(t, {io});
+  const saved = await f.store.getSnapshot();
+  assert.equal(unlinks, 0);
+  failRename = true;
+  await rejects(() => f.store.event({...versionOf(saved), type: 'play'}), 500, 'io-error');
+  assert.equal(unlinks, 1);
+  assert.deepEqual(await fs.readdir(dirname(f.filePath)), ['state.json']);
+});
+
 test('malformed writes fail before initializing a file', async (t) => {
   const f = await fixture(t);
   for (const operation of [
@@ -298,6 +346,27 @@ test('malformed writes fail before initializing a file', async (t) => {
     () => f.store.getContext({ limit: 13 }),
   ]) await rejects(operation, 400, 'invalid-request');
   await assert.rejects(fs.stat(f.filePath), { code: 'ENOENT' });
+});
+
+test('memory text validation avoids code point arrays inside UTF-16 bounds', () => {
+  const text = '喜欢无糖茶。', keyword = '茶', sourceId = 'message-1';
+  const counted = new Set([text, keyword, sourceId]);
+  const iterator = String.prototype[Symbol.iterator];
+  let arrays = 0;
+  const input = memory({text, keywords: [keyword], source: {kind: 'manual', messageId: sourceId}});
+  String.prototype[Symbol.iterator] = function () {
+    if (counted.has(this.valueOf())) arrays++;
+    return iterator.call(this);
+  };
+  try {
+    assert.equal(validMemory(input), true);
+    assert.equal(arrays, 0);
+  } finally { String.prototype[Symbol.iterator] = iterator; }
+  for (const [value, expected] of [
+    ['😀'.repeat(512), true], ['😀'.repeat(513), false],
+    ['a'.repeat(512), true], ['a'.repeat(513), false],
+    ['\ud800', false], ['\udc00', false], ['😀\ud800', false], ['a\n😀', true],
+  ]) assert.equal(validMemory({...input, text: value}), expected);
 });
 
 test('Unicode scalar and documented source-ID limits are enforced without truncation', async (t) => {
@@ -371,9 +440,11 @@ test('read results are detached from durable memory and queued upserts capture t
   input.expectedRevision = 999;
   const saved = await pending;
   assert.equal(saved.memory.text, 'Original confirmed text.');
+  const clone = t.mock.method(globalThis, 'structuredClone');
   const list = await f.store.getMemories();
   const context = await f.store.getContext({ query: 'confirmed' });
   const exported = await f.store.exportData();
+  assert.equal(clone.mock.callCount(), 0);
   list.memories[0].text = 'Changed list response.';
   context.memories[0].keywords.push('changed');
   exported.memories[0].source.kind = 'user-confirmed';

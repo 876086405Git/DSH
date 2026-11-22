@@ -319,6 +319,173 @@ void main() {
     expect(database.select('SELECT * FROM memory_deleted_messages'), isEmpty);
   });
 
+  test(
+    'ADD49 current maintenance cannot replace a manual correction with older evidence or partly apply its group',
+    () {
+      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+      final old = say('old-interview', '面试安排在周四。');
+      final initial = begin(old);
+      final interview = call(initial, 'first-interview', 'remember', {'text': '面试安排在周四。'}).targetId!;
+      store.closeAgentTurn(initial);
+      final beforeEdit = actualCard(interview);
+      now += 3600000;
+      store.saveManual(
+        CompanionMemory(id: interview, text: '面试安排在周五。'),
+        expectedRowRev: beforeEdit['row_rev']! as int,
+        currentValueChange: true,
+        realityKnown: true,
+      );
+      final corrected = actualCard(interview);
+      expect(corrected['current_basis_seq'], greaterThan(old['first_seq']! as int));
+      now += 3600000;
+      final fresh = say('new-interview', '面试又改成周六了；我也开始学提琴。');
+      final later = begin(fresh);
+      final violin = call(later, 'first-violin', 'remember', {'text': '我开始学提琴。'}).targetId!;
+      store.closeAgentTurn(later);
+      final independent = actualCard(violin);
+      expect(fresh['first_seq'], greaterThan(corrected['current_basis_seq']! as int));
+      now += 86400000;
+      final claim = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+      final turnId = turn['id']! as String;
+      grantMaintenance(turn);
+      expect(
+        store.isAgentTurnCurrent(turnId),
+        isTrue,
+        reason: 'this is a new claim after the manual control, not a stale run',
+      );
+      final control = store.archive['control_revision'];
+      expect(
+        call(turnId, 'old-again', 'revise', {'card': interview, 'source': old['id'], 'text': '面试安排在周四。'}).code,
+        'older_than_current',
+      );
+      expect(actualCard(interview), corrected);
+      expect(
+        call(turnId, 'group-old', 'revise', {
+          'changes': [
+            {'card': violin, 'source': fresh['id'], 'text': '我在学提琴。'},
+            {'card': interview, 'source': old['id'], 'text': '面试安排在周四。'},
+          ],
+        }).code,
+        'older_than_current',
+      );
+      expect(actualCard(violin), independent, reason: 'an earlier valid member cannot survive a rejected group');
+      expect(actualCard(interview), corrected);
+      expect(store.archive['control_revision'], control);
+      expect(store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String)['changed_cards'], isEmpty);
+      final accepted = call(turnId, 'group-new', 'revise', {
+        'changes': [
+          {'card': violin, 'source': fresh['id'], 'text': '我在学提琴。'},
+          {'card': interview, 'source': fresh['id'], 'text': '面试安排在周六。'},
+        ],
+      });
+      expect(accepted.applied, isTrue, reason: 'equal-basis rewording and genuinely newer evidence remain legal');
+      expect(accepted.changedCardIds, unorderedEquals([violin, interview]));
+      expect(actualCard(violin)['current_basis_seq'], independent['current_basis_seq']);
+      expect(actualCard(interview)['current_basis_seq'], fresh['first_seq']);
+      expect(actualCard(interview)['text'], '面试安排在周六。');
+      store.finishAgentMaintenance(turnId: turnId, complete: true);
+      reopen();
+      expect(actualCard(interview)['text'], '面试安排在周六。');
+      expect(store.messages().singleWhere((row) => row['id'] == old['id'])['text'], old['text']);
+    },
+  );
+
+  test('ADD53 grouped corrections use the planned parent basis without accepting genuinely older evidence', () {
+    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+    final old = say('group-parent-old', '面试安排在周四。');
+    final creating = begin(old);
+    final parent = call(creating, 'parent', 'remember', {'text': '面试安排在周四。'}).targetId!;
+    store.closeAgentTurn(creating);
+    now += 3600000;
+    final detail = say('group-child-old', '面试前要把材料准备好。');
+    final linking = begin(detail, [actualCard(parent)]);
+    final child = call(linking, 'child', 'remember', {
+      'text': '周四面试前要准备好材料。',
+      'references': [parent],
+    }).targetId!;
+    store.closeAgentTurn(linking);
+    final parentBefore = actualCard(parent);
+    final childBefore = actualCard(child);
+    expect(childBefore['current_basis_seq'], greaterThan(parentBefore['current_basis_seq']! as int));
+    expect(parentBefore['source_at_ms'], old['said_at_utc']);
+    expect(childBefore['source_at_ms'], detail['said_at_utc']);
+    now += 3600000;
+    final fresh = say('group-parent-new', '面试改到周五，材料也按周五安排。');
+    expect(fresh['first_seq'], greaterThan(childBefore['current_basis_seq']! as int));
+    now += 86400000;
+    final claim = store.nextAgentMaintenance(
+      kind: 'organize',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+    )!;
+    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    final turnId = turn['id']! as String;
+    grantMaintenance(turn);
+    expect((turn['sources'] as List).map((row) => (row as MemoryRow)['id']), containsAll([old['id'], fresh['id']]));
+    expect((turn['cards'] as List).map((row) => (row as MemoryRow)['id']), containsAll([parent, child]));
+    final archive = store.archive;
+    final rejected = call(turnId, 'old-group', 'revise', {
+      'changes': [
+        {
+          'card': child,
+          'text': '周四面试前要准备好材料。',
+          'sources': <String>[],
+          'references': [parent],
+        },
+        {'card': parent, 'source': old['id'], 'text': '面试还是安排在周四。'},
+      ],
+    });
+    expect(rejected.code, 'older_than_current');
+    expect(rejected.applied, isFalse);
+    expect(actualCard(parent), parentBefore);
+    expect(actualCard(child), childBefore);
+    expect(store.archive, archive);
+    expect(store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String)['changed_cards'], isEmpty);
+    final accepted = call(turnId, 'fresh-group', 'revise', {
+      'changes': [
+        {
+          'card': child,
+          'text': '周五面试前要准备好材料。',
+          'sources': <String>[],
+          'references': [parent],
+        },
+        {'card': parent, 'source': fresh['id'], 'text': '面试安排在周五。'},
+      ],
+    });
+    expect(accepted.applied, isTrue, reason: 'the child precedes its freshly revised parent in the same plan');
+    expect(accepted.changedCardIds, unorderedEquals([parent, child]));
+    final parentAfter = actualCard(parent);
+    final childAfter = actualCard(child);
+    expect(parentAfter['text'], '面试安排在周五。');
+    expect(childAfter['text'], '周五面试前要准备好材料。');
+    expect(parentAfter['row_rev'], (parentBefore['row_rev']! as int) + 1);
+    expect(childAfter['row_rev'], (childBefore['row_rev']! as int) + 1);
+    expect(parentAfter['current_basis_seq'], fresh['first_seq']);
+    expect(childAfter['current_basis_seq'], fresh['first_seq']);
+    expect(parentAfter['source_at_ms'], fresh['said_at_utc']);
+    expect(childAfter['source_at_ms'], fresh['said_at_utc']);
+    expect(
+      database.select('SELECT parent_card_id,parent_row_rev FROM memory_card_references WHERE card_id=?', [child]),
+      [
+        {'parent_card_id': parent, 'parent_row_rev': parentAfter['row_rev']},
+      ],
+    );
+    expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
+    expect(store.archive['control_revision'], (archive['control_revision']! as int) + 1);
+    store.finishAgentMaintenance(turnId: turnId, complete: true);
+    reopen();
+    expect(actualCard(parent)['current_basis_seq'], fresh['first_seq']);
+    expect(actualCard(child)['current_basis_seq'], fresh['first_seq']);
+    expect(actualCard(parent)['source_at_ms'], fresh['said_at_utc']);
+    expect(actualCard(child)['source_at_ms'], fresh['said_at_utc']);
+    expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
+  });
+
   test('an external control invalidates a turn after recall grants only its actual returned IDs', () {
     final card = seed('我喜欢蓝色', keywords: ['蓝色']);
     final other = seed('另一个独立事实');
@@ -489,8 +656,14 @@ void main() {
     final original = say('original-group', '我住杭州，也喜欢红茶。');
     final creating = begin(original);
     final home = call(creating, 'home', 'remember', {'text': '我住杭州。'}).targetId!;
-    final tea = call(creating, 'tea', 'remember', {'text': '我喜欢红茶。'}).targetId!;
-    final combined = call(creating, 'both', 'remember', {'text': '我住杭州，也喜欢红茶。'}).targetId!;
+    final tea = call(creating, 'tea', 'remember', {
+      'text': '我喜欢红茶。',
+      'keywords': ['红茶', '饮品'],
+    }).targetId!;
+    final combined = call(creating, 'both', 'remember', {
+      'text': '我住杭州，也喜欢红茶。',
+      'keywords': ['我住杭州，也喜欢红茶。', '红茶'],
+    }).targetId!;
     store.closeAgentTurn(creating);
     final turn = begin(say('forget-address', '住址不要保留，红茶那部分留着。'), [actualCard(home)]);
     final related = call(turn, 'related', 'related', {'card': home});
@@ -526,6 +699,7 @@ void main() {
     expect(applied.changedCardIds, unorderedEquals([home, combined]));
     expect(store.cards().map((row) => row['id']), unorderedEquals([tea, combined]));
     expect(actualCard(tea), before.singleWhere((row) => row['id'] == tea));
+    expect(actualCard(combined)['keywords'], ['红茶']);
     final retainedProof = (actualCard(combined)['evidence'] as List).cast<MemoryRow>();
     expect(retainedProof.single['message_id'], original['id']);
     expect(retainedProof.single['quote'], original['text']);
@@ -610,7 +784,17 @@ void main() {
       'sources': [first['id'], second['id']],
     }).targetId!;
     store.finishAgentMaintenance(turnId: turn, complete: true);
+    final detail = say('proof-dependent', '住处也是我们聊过的话题。');
+    final dependentTurn = begin(detail, [actualCard(target)]);
+    final dependent = call(dependentTurn, 'dependent', 'remember', {
+      'text': '我们聊过用户在杭州的住处。',
+      'references': [target],
+    }).targetId!;
+    store.closeAgentTurn(dependentTurn);
+    expect(actualCard(dependent)['current_basis_seq'], greaterThan(actualCard(target)['current_basis_seq']! as int));
+    now += 3600000;
     final third = say('proof-three', '我的居住地是杭州。');
+    expect(third['said_at_utc'], greaterThan(actualCard(target)['source_at_ms']! as int));
     final otherTurn = begin(third);
     final from = call(otherTurn, 'one-proof', 'remember', {'text': '我的居住地是杭州。'}).targetId!;
     store.closeAgentTurn(otherTurn);
@@ -627,13 +811,34 @@ void main() {
     final spend = store.reserveInitiative(kind: 'followup', nowMs: now, maxPerDay: 2, gapMs: 0, followupId: ticket)!;
     store.settleInitiative(spend, outcome: 'shown');
     store.closeAgentTurn(invitation);
-    final merging = begin(say('merge', '这两条说的是同一个住处。'), [actualCard(target), actualCard(from)]);
+    expect(third['first_seq'], greaterThan(actualCard(dependent)['current_basis_seq']! as int));
+    final merging = begin(say('merge', '这两条说的是同一个住处。'), [actualCard(target), actualCard(from), actualCard(dependent)]);
     final merged = call(merging, 'merge-same', 'merge', {
       'card': target,
       'from': [from],
       'text': '我住杭州。',
+      'updates': [
+        {
+          'card': dependent,
+          'text': '我们聊过用户在杭州的同一个住处。',
+          'sources': <String>[],
+          'references': [target],
+        },
+      ],
     });
     expect(merged.applied, isTrue);
+    expect(merged.changedCardIds, unorderedEquals([target, from, dependent]));
+    expect(actualCard(target)['current_basis_seq'], third['first_seq']);
+    expect(actualCard(dependent)['current_basis_seq'], third['first_seq']);
+    expect(actualCard(target)['source_at_ms'], third['said_at_utc']);
+    expect(actualCard(dependent)['source_at_ms'], third['said_at_utc']);
+    expect(
+      database.select('SELECT parent_row_rev FROM memory_card_references WHERE card_id=?', [
+        dependent,
+      ]).single['parent_row_rev'],
+      actualCard(target)['row_rev'],
+    );
+    expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), contains(dependent));
     final proofs = (actualCard(target)['evidence'] as List).cast<MemoryRow>();
     final groups = <String, Set<Object?>>{};
     for (final proof in proofs) {
@@ -646,12 +851,49 @@ void main() {
         {third['id']},
       ]),
     );
-    expect(store.cards().map((row) => row['id']), [target]);
+    expect(store.cards().map((row) => row['id']), unorderedEquals([target, dependent]));
     final consumed = store.followups().singleWhere((row) => row['id'] == ticket);
     expect(consumed['state'], 'asked');
     expect(consumed['card_id'], target);
     expect(store.nextFollowup(nowMs: now), isNull);
     expect(store.requests(), isEmpty);
+  });
+
+  test('ADD49 a person card keeps typed editor keywords through manual save and reopen', () {
+    final role = character('local:person-editor');
+    final original = sayAs('person-source', '小周就是周老师，是我的朋友。', role);
+    final turn = begin(original);
+    final person = call(turn, 'new-person', 'person', {
+      'text': '周老师是用户的朋友。',
+      'aliases': ['小周', '周老师'],
+      'keywords': ['朋友', '小周'],
+    }).targetId!;
+    store.closeAgentTurn(turn);
+    final row = store.memoryPageCards(characterId: role).single;
+    // This is the editor's public-row contract and its actual save API. A
+    // List<dynamic> containing strings still fails this List<String> cast.
+    final keywords = row['keywords'] as List<String>;
+    expect(keywords, unorderedEquals(['朋友', '小周', '周老师']));
+    final revision = store.saveManual(
+      CompanionMemory(
+        id: row['id']! as String,
+        text: '周老师是我的提琴老师。',
+        kind: row['kind']! as String,
+        keywords: keywords,
+        pinned: row['pinned'] == true,
+      ),
+      expectedRowRev: row['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    reopen();
+    final saved = store.memoryPageCards(characterId: role).single;
+    expect(saved['id'], person);
+    expect(saved['row_rev'], revision);
+    expect(saved['text'], '周老师是我的提琴老师。');
+    expect(saved['collection'], 'person');
+    expect(saved['keywords'] as List<String>, unorderedEquals(keywords));
+    expect(store.messages().single['text'], original['text']);
   });
 
   test('person aliases stay shared while stories and model history keep their captured character', () {
@@ -987,6 +1229,76 @@ void main() {
     expect(database.select('SELECT * FROM memory_agent_maintenance_claims'), hasLength(1));
   });
 
+  for (final day in [
+    (
+      name: 'spring',
+      today: DateTime.utc(2026, 3, 9, 12),
+      localDay: '2026-03-08',
+      oldOffset: -300,
+      currentOffset: -240,
+      before: DateTime.utc(2026, 3, 8, 4, 30),
+      early: DateTime.utc(2026, 3, 8, 5, 30),
+      late: DateTime.utc(2026, 3, 9, 3, 30),
+      after: DateTime.utc(2026, 3, 9, 4, 30),
+    ),
+    (
+      name: 'autumn',
+      today: DateTime.utc(2026, 11, 2, 12),
+      localDay: '2026-11-01',
+      oldOffset: -240,
+      currentOffset: -300,
+      before: DateTime.utc(2026, 11, 1, 3, 30),
+      early: DateTime.utc(2026, 11, 1, 4, 30),
+      late: DateTime.utc(2026, 11, 2, 4, 30),
+      after: DateTime.utc(2026, 11, 2, 5, 30),
+    ),
+  ]) {
+    test('ADD49 ${day.name} diary selects and validates the original source offset', () {
+      now = day.today.millisecondsSinceEpoch;
+      MemoryRow put(String messageId, String text, DateTime at, int offset) => store.submitMessage(
+        id: messageId,
+        sessionId: 'light:agent',
+        text: text,
+        saidAtUtc: at.millisecondsSinceEpoch,
+        offsetMinutes: offset,
+      );
+      put('outside-before', '前一天的话。', day.before, day.oldOffset);
+      final early = put('day-early', '当天一早的话。', day.early, day.oldOffset);
+      final late = put('day-late', '当天晚间的话。', day.late, day.currentOffset);
+      put('outside-after', '第二天的话。', day.after, day.currentOffset);
+      final claim = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: day.currentOffset,
+        estimateTokens: (text) => text.length,
+      )!;
+      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+      expect(turn['local_day'], day.localDay);
+      final sources = (turn['sources'] as List).cast<MemoryRow>();
+      expect(sources.map((source) => source['id']), [early['id'], late['id']]);
+      for (final original in [early, late]) {
+        final captured = sources.singleWhere((source) => source['id'] == original['id']);
+        expect(captured['said_at_utc'], original['said_at_utc']);
+        expect(captured['offset_minutes'], original['offset_minutes']);
+      }
+      // Use the early source alone: autumn's 00:30 would be rejected as the
+      // previous day if the diary validator still used today's new offset.
+      final written = call(turn['id']! as String, 'write-local-day', 'diary', {
+        'text': '当天一早的记录。',
+        'source': early['id'],
+      });
+      expect(written.applied, isTrue);
+      store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
+      reopen();
+      final diary = actualCard(written.targetId!);
+      expect(diary['local_day'], day.localDay);
+      expect(diary['day_zone_id'], 'offset:${day.currentOffset}');
+      final proof = (diary['evidence'] as List).single as MemoryRow;
+      expect(proof['message_id'], early['id']);
+      expect(proof['said_at_utc'], early['said_at_utc']);
+      expect(proof['offset_minutes'], day.oldOffset);
+    });
+  }
+
   test(
     'a new diary needs its real target-day source while a controlled old-diary rewrite keeps its original day and proof',
     () {
@@ -1018,6 +1330,7 @@ void main() {
         'source': original['id'],
       }).targetId!;
       expect(actualCard(diary)['local_day'], '2026-10-01');
+      expect(actualCard(diary)['keywords'], ['住在杭州，也喜欢红茶。']);
       store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
       final control = say('later-control', '不要记住我的住处，喜欢红茶这件事保留。');
       now += 86400000;
@@ -1040,6 +1353,7 @@ void main() {
       );
       final retained = actualCard(diary);
       expect(retained['text'], '喜欢红茶。');
+      expect(retained['keywords'], ['喜欢红茶。']);
       expect(retained['local_day'], '2026-10-01');
       expect(retained['day_zone_id'], 'offset:0');
       expect((retained['evidence'] as List).map((proof) => (proof as MemoryRow)['message_id']), [original['id']]);
@@ -1048,6 +1362,22 @@ void main() {
         isFalse,
       );
       expect(store.cards().map((row) => row['id']), [diary]);
+      final fresh = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
+      expect(fresh['id'], next['id']);
+      expect(fresh['closed'], 0);
+      expect(fresh['sources'], isEmpty, reason: 'the same live claim uses the new history cutoff');
+      final visible = (fresh['cards'] as List<MemoryRow>).single;
+      expect(visible['id'], diary);
+      expect(visible['row_rev'], retained['row_rev']);
+      expect(visible['text'], '喜欢红茶。');
+      expect(visible['keywords'], ['喜欢红茶。']);
+      expect(jsonEncode(fresh), isNot(contains('杭州')));
+      expect(visible['local_day'], retained['local_day']);
+      expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
+      grantMaintenance(fresh);
+      expect(store.isAgentTurnCurrent(next['id']! as String), isTrue);
+      expect(actualCard(diary), retained, reason: 'context projection and actual grants do not rewrite local proof');
+      expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
     },
   );
 

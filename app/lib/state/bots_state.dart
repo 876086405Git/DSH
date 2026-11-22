@@ -742,7 +742,7 @@ class BotChatController extends Notifier<BotChatState> {
     final live = <({String sessionId, DsBotItem item})>[];
     _liveDuringLoad = live;
     _earlier++;
-    state = state.copyWith(loadingEarlier: false);
+    if (state.loadingEarlier) state = state.copyWith(loadingEarlier: false);
     try {
       final page = await api.chat(botId);
       if (!_current(generation) || load != _load) return;
@@ -987,7 +987,7 @@ class RoomChatController extends Notifier<RoomChatState> {
     _busyGeneration = generation;
     final load = ++_load;
     _earlier++;
-    state = state.copyWith(loadingEarlier: false);
+    if (state.loadingEarlier) state = state.copyWith(loadingEarlier: false);
     try {
       final page = await api.roomChat(roomId);
       if (!_current(generation) || load != _load) return;

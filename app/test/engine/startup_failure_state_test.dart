@@ -195,6 +195,35 @@ void main() {
     expect(EngineFailureCard.visibleFor(status), false);
   });
 
+  testWidgets('engine ring loop repaints without rebuilding its paint widget', (tester) async {
+    await tester.pumpWidget(
+      goldenApp(
+        brightness: Brightness.light,
+        animations: true,
+        home: const Center(child: EngineRing(tone: StatusTone.busy)),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    final ringPaint = find.descendant(of: find.byType(EngineRing), matching: find.byType(CustomPaint));
+    final widget = tester.widget<CustomPaint>(ringPaint);
+    final painter = widget.painter!;
+    var repaints = 0;
+    void countRepaint() => repaints++;
+    painter.addListener(countRepaint);
+    try {
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(tester.widget<CustomPaint>(ringPaint), same(widget));
+        expect(tester.widget<CustomPaint>(ringPaint).painter, same(painter));
+      }
+      expect(repaints, 4);
+      expect(tester.takeException(), isNull);
+    } finally {
+      painter.removeListener(countRepaint);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
   test('ordinary stopping is not called a startup failure', () {
     final status = _status(error: null, failure: _latest());
     expect(EngineStatusView.of(_state(status)).label, appL10n.commonStopping);

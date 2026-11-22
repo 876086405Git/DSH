@@ -22,6 +22,7 @@
 #   runtime/out/<abi>/assets/runtime/licenses/...
 #   runtime/out/<abi>/jniLibs/<abi>/lib{proot,proot-loader,talloc,android-shmem}.so
 #   runtime/out/<abi>/build-report.json                  (ELF audit, pruned files, warnings)
+#   runtime/out/<abi>/debug/<runtimeVersion>/...         (Node/ORT with DWARF; not packaged)
 #   runtime/out/manifest.json                            (index of all built ABIs)
 #
 # Idempotent: downloads are cached in runtime/.cache and verified on every run; the npm

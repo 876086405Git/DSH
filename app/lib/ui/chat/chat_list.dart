@@ -370,11 +370,6 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// 正在准备重新回答的那条回复(读原图、分叉;挡连点)。
   String? _regeneratingId;
 
-  // 一轮在眼前结束时怎么收起过程(开着「收起过程」时):贴底看着的,先按原样
-  // 画一帧再平滑收起;往上翻着看的,下一次派生里直接收掉,不保留展开。
-  // 冷打开、重新加载时已结束的轮照旧直接收着。
-  Set<int> _runningTurns = const {};
-
   /// 要播收起动画的过程行;第一次建出来就拿掉(同 [_fresh])。
   final Set<String> _settling = {};
 
@@ -631,24 +626,22 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   // 行与分界
 
   void _deriveRows(ChatState s, {required bool foldTurns, List<TurnArtifacts> artifacts = const []}) {
+    final previous = _builtState;
     if (s.loading || !foldTurns) {
       _settling.clear();
-    } else {
+    } else if (_pinned && previous != null && !previous.loading && !identical(previous.turns, s.turns)) {
+      // 只在眼前这一轮结束时平滑收起；冷打开、加载历史和往上翻时直接收起。
+      final runningTurns = {
+        for (final turn in previous.turns)
+          if (turn.running) turn.startSeq,
+      };
       for (final turn in s.turns) {
-        if (turn.running || !_runningTurns.contains(turn.startSeq) || !(turn.endReason?.isCompleted ?? false)) {
-          continue;
+        if (!turn.running && runningTurns.contains(turn.startSeq) && (turn.endReason?.isCompleted ?? false)) {
+          _settling.add('tp${turn.startSeq}');
         }
-        // 贴底看着的一轮:先按原样画一帧,再平滑收成摘要。往上翻着看的
-        // 不播动画,直接收 —— 过程一律收起来,不再有"读过就不收"。
-        if (_pinned) _settling.add('tp${turn.startSeq}');
       }
     }
-    _runningTurns = {
-      if (!s.loading)
-        for (final turn in s.turns)
-          if (turn.running) turn.startSeq,
-    };
-    final changed = !identical(s, _builtState);
+    final changed = !identical(s, previous);
     _builtState = s;
     final inputs = (
       foldTurns,
@@ -703,16 +696,18 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     _draftSays = draftSays;
     // 被插话切开的轮:前几片的摘要行(`tp<轮起点>@<插话>`)跟最后一片一起收。
     // 这一帧没建出来的(在屏幕外)不留到以后:翻回去时不该再播一遍。
-    for (final row in _rows) {
-      if (row is TurnProcessRow &&
-          row.cut != null &&
-          _settling.contains('tp${row.trace.startSeq}') &&
-          _settling.add(row.key)) {
-        final key = row.key;
-        _afterFrame(() => _settling.remove(key));
+    if (_settling.isNotEmpty) {
+      for (final row in _rows) {
+        if (row is TurnProcessRow &&
+            row.cut != null &&
+            _settling.contains('tp${row.trace.startSeq}') &&
+            _settling.add(row.key)) {
+          final key = row.key;
+          _afterFrame(() => _settling.remove(key));
+        }
       }
+      _settling.removeWhere((key) => !_index.containsKey(key));
     }
-    _settling.removeWhere((key) => !_index.containsKey(key));
     _autoAnswered = s.autoAnswered;
     if (!identical(previousKeys, _index)) {
       _markFresh(previousKeys, hadPending: previousRows.any((row) => row is PendingRow), loading: s.loading);
@@ -1242,8 +1237,10 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   Widget _reply(AssistantChatItem item, bool showActions, TurnTrace? footnote) {
     // A picture a media card shows is not drawn again in the reply.
-    if (withoutShownImages(item.text, ref.read(sessionMediaPathsProvider(widget.sessionId))) case final text?) {
-      item = replyWithText(item, text);
+    if (item.text.contains('![')) {
+      if (withoutShownImages(item.text, ref.read(sessionMediaPathsProvider(widget.sessionId))) case final text?) {
+        item = replyWithText(item, text);
+      }
     }
     final chat = ref.read(chatProvider(widget.sessionId).notifier);
     final branchable = chat.branchPointAfter(item) != null;

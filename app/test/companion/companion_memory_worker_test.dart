@@ -55,7 +55,7 @@ Map<String, Object?> _input(http.Request request) {
   return jsonDecode((messages.first as Map)['content'] as String) as Map<String, Object?>;
 }
 
-http.Response _tool(String name, String arguments) => http.Response(
+http.Response _tool(String name, String arguments, {String? text}) => http.Response(
   [
     {
       'type': 'message_start',
@@ -63,17 +63,25 @@ http.Response _tool(String name, String arguments) => http.Response(
         'usage': {'input_tokens': 900},
       },
     },
+    if (text != null) ...[
+      {
+        'type': 'content_block_start',
+        'index': 0,
+        'content_block': {'type': 'text', 'text': text},
+      },
+      {'type': 'content_block_stop', 'index': 0},
+    ],
     {
       'type': 'content_block_start',
-      'index': 0,
+      'index': text == null ? 0 : 1,
       'content_block': {'type': 'tool_use', 'id': 'maintenance-call', 'name': name, 'input': <String, Object?>{}},
     },
     {
       'type': 'content_block_delta',
-      'index': 0,
+      'index': text == null ? 0 : 1,
       'delta': {'type': 'input_json_delta', 'partial_json': arguments},
     },
-    {'type': 'content_block_stop', 'index': 0},
+    {'type': 'content_block_stop', 'index': text == null ? 0 : 1},
     {
       'type': 'message_delta',
       'delta': {'stop_reason': 'tool_use'},
@@ -570,6 +578,175 @@ void main() {
       }
     });
   }
+
+  test(
+    'maintenance forget keeps independent local proof out of later HTTP input while fresh OR proof remains usable',
+    () async {
+      final phone = _Phone();
+      const original = '我住杭州，也养猫。';
+      const support = '养猫这件事没有变化。';
+      phone.say('home-and-cat', original);
+      phone.say('cat-support', support);
+      final batch = phone.store.nextBatch(forceTail: true, estimateTokens: estimateCompanionMemoryTokens)!;
+      final proposal = parseExtractionProposal(
+        jsonEncode({
+          'schema_version': 2,
+          'batch_id': batch.id,
+          'covered_message_ids': [for (final source in batch.sources) source['id']],
+          'completion': 'complete',
+          'operations': [
+            {
+              'op': 'create',
+              'kind': 'fact',
+              'text': '我住杭州。',
+              'keywords': ['杭州'],
+              'evidence': [
+                {'message_id': 'home-and-cat', 'quote': original},
+              ],
+            },
+            {
+              'op': 'create',
+              'kind': 'fact',
+              'text': '我养猫。',
+              'keywords': ['养猫'],
+              'evidence': [
+                {'message_id': 'home-and-cat', 'quote': original},
+                {'message_id': 'cat-support', 'quote': support},
+              ],
+            },
+          ],
+        }),
+        batch,
+      );
+      expect(phone.store.commitExtraction(batch, proposal), isTrue);
+      final home = phone.store.cards().singleWhere((row) => row['text'] == '我住杭州。');
+      final cat = phone.store.cards().singleWhere((row) => row['text'] == '我养猫。');
+      final originalProof = (cat['evidence'] as List).cast<MemoryRow>();
+      expect(originalProof.map((proof) => proof['support_group']).toSet(), hasLength(1));
+      expect(originalProof.map((proof) => proof['message_id']), unorderedEquals(['home-and-cat', 'cat-support']));
+      phone.say('forget-home', '不要记住我的住处，养猫这件事保留。');
+      phone.now += const Duration(days: 1).inMilliseconds;
+      final bodies = <Map<String, Object?>>[];
+      final measured = <int>[];
+      final worker = phone.withHttp((request) async {
+        bodies.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
+        measured.add(estimateCompanionMemoryTokens(request.body));
+        return bodies.length == 1
+            ? _tool('forget', jsonEncode({'card': home['id']}), text: '我会忘掉杭州的住处，只保留养猫这件事。')
+            : _reply('Done.');
+      });
+      expect(await worker.consolidate(offsetMinutes: 480), CompanionMemoryWork.committed);
+      expect(bodies, hasLength(2));
+      expect(jsonEncode(bodies.first), contains(original));
+      expect(jsonEncode(bodies.last), isNot(contains('杭州')));
+      final continuation = jsonDecode(((bodies.last['messages'] as List).first as Map)['content'] as String) as Map;
+      expect(continuation['sources'], isEmpty);
+      final kept = (continuation['cards'] as List).single as Map;
+      expect(kept['id'], cat['id']);
+      expect(kept['row_rev'], cat['row_rev']);
+      expect(kept['text'], '我养猫。');
+      expect(kept['evidence'], isEmpty);
+      final messages = bodies.last['messages'] as List;
+      expect(messages, hasLength(3));
+      expect((messages[1] as Map)['role'], 'assistant');
+      final calls = ((messages[1] as Map)['content'] as List).cast<Map>();
+      expect(calls, hasLength(1), reason: 'the pre-forget assistant text is no longer model input');
+      expect(calls.single['type'], 'tool_use');
+      expect(calls.single['id'], 'maintenance-call');
+      expect(calls.single['name'], 'forget');
+      expect(calls.single['input'], {'_retired_after_memory_change': true});
+      final result = ((messages.last as Map)['content'] as List).single as Map;
+      expect(result['tool_use_id'], 'maintenance-call');
+      expect((jsonDecode(result['content'] as String) as Map)['applied'], isTrue);
+      final keptLocal = phone.store.cards().single;
+      expect(keptLocal['id'], cat['id']);
+      expect(keptLocal['row_rev'], cat['row_rev']);
+      expect(keptLocal['text'], cat['text']);
+      expect(keptLocal['evidence'], originalProof, reason: 'the complete independent AND proof remains local');
+      expect(phone.store.messages().singleWhere((row) => row['id'] == 'home-and-cat')['text'], original);
+      expect(phone.store.requests(), hasLength(2));
+      expect(phone.store.requests().map((row) => row['batch_id']).toSet(), hasLength(1));
+
+      // A real later source may independently support the retained fact. Keep
+      // the old two-source AND group locally and add a new, valid OR group via
+      // the real semantic-merge tool; do not forge rows or trim a quote.
+      phone.say('fresh-cat', '我现在仍然养猫。');
+      final source = phone.store.messages().singleWhere((row) => row['id'] == 'fresh-cat');
+      expect(source['first_seq'], greaterThan(phone.store.archive['history_after_seq']! as int));
+      final turn =
+          phone.store.beginAgentTurn(
+                messageId: source['id']! as String,
+                expectedSourceRev: source['source_rev']! as int,
+                shownCardRevisions: {cat['id']! as String: cat['row_rev']! as int},
+              )['id']!
+              as String;
+      final fresh = phone.store.applyAgentMemoryTool(
+        turnId: turn,
+        callId: 'fresh-proof',
+        toolName: 'remember',
+        input: {'text': '我养猫。'},
+      );
+      expect(fresh.applied, isTrue);
+      expect(
+        phone.store
+            .applyAgentMemoryTool(
+              turnId: turn,
+              callId: 'merge-fresh-proof',
+              toolName: 'merge',
+              input: {
+                'card': cat['id'],
+                'from': [fresh.targetId],
+              },
+            )
+            .applied,
+        isTrue,
+      );
+      phone.store.closeAgentTurn(turn);
+      final retained = phone.store.cards().single;
+      final localProof = (retained['evidence'] as List).cast<MemoryRow>();
+      final localGroups = <String, Set<Object?>>{};
+      for (final proof in localProof) {
+        (localGroups[proof['support_group']! as String] ??= {}).add(proof['message_id']);
+      }
+      expect(
+        localGroups.values,
+        unorderedEquals([
+          {'home-and-cat', 'cat-support'},
+          {'fresh-cat'},
+        ]),
+      );
+      expect(await worker.extract(forceTail: true, offsetMinutes: 480), CompanionMemoryWork.committed);
+      expect(bodies, hasLength(3));
+      final renewed = jsonDecode(((bodies.last['messages'] as List).first as Map)['content'] as String) as Map;
+      final renewedCard = (renewed['cards'] as List).single as Map;
+      expect(renewedCard['id'], cat['id']);
+      expect(renewedCard['row_rev'], retained['row_rev']);
+      final visibleProof = (renewedCard['evidence'] as List).single as Map;
+      expect(visibleProof['message_id'], 'fresh-cat');
+      expect(visibleProof['quote'], source['text']);
+      expect(
+        visibleProof['support_group'],
+        localProof.singleWhere((proof) => proof['message_id'] == 'fresh-cat')['support_group'],
+      );
+      expect(jsonEncode(bodies.last), isNot(contains('杭州')));
+      final finalCard = phone.store.cards().single;
+      expect(finalCard['id'], retained['id']);
+      expect(finalCard['row_rev'], retained['row_rev']);
+      expect(finalCard['text'], retained['text']);
+      expect(finalCard['evidence'], localProof);
+      expect(phone.store.messages().singleWhere((row) => row['id'] == 'home-and-cat')['text'], original);
+      final receipts = phone.store.requests();
+      expect(receipts, hasLength(3));
+      expect(receipts.map((row) => row['id']).toSet(), hasLength(3));
+      expect(receipts.map((row) => row['reserved_input']), unorderedEquals(measured));
+      expect(receipts.map((row) => row['batch_id']).toSet(), hasLength(2));
+      for (final receipt in receipts) {
+        expect(receipt['state'], 'finished');
+        expect(receipt['terminal'], 'complete');
+        expect((receipt['raw_usage'] as Map)['final_usage'], _usage);
+      }
+    },
+  );
 
   test('A2 organize uses completed tool results, one parent, and one receipt for each physical request', () async {
     final phone = _Phone()..pair();

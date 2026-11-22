@@ -198,8 +198,8 @@ class CallCapture(
                         }
                     }
                 }
-                preroll.addLast(frame.copyOf())
-                while (preroll.size > PREROLL_FRAMES) preroll.removeFirst()
+                val slot = if (preroll.size == PREROLL_FRAMES) preroll.removeFirst() else ShortArray(frame.size)
+                preroll.addLast(frame.copyInto(slot))
             }
         } catch (_: Exception) {
             post(mine) { listener.onError("capture") }

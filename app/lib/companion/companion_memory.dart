@@ -292,14 +292,8 @@ class CompanionMemoryOwner extends ChangeNotifier {
     final firstDay = today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10);
     final todayKey = today.toIso8601String().substring(0, 10);
     final fixed = [
-      for (final row in store.memoryPageCards(characterId: characterId))
-        if (isMemoryContextEligible(row, nowMs: _now()) &&
-            ((row['layer'] == 'impression' && characterId != null && row['character_id'] == characterId) ||
-                (row['layer'] == 'diary' &&
-                    row['local_day'] is String &&
-                    (row['local_day']! as String).compareTo(firstDay) >= 0 &&
-                    (row['local_day']! as String).compareTo(todayKey) < 0)))
-          row,
+      for (final row in store.memoryFixedLayerCards(characterId: characterId, fromDay: firstDay, beforeDay: todayKey))
+        if (isMemoryContextEligible(row, nowMs: _now())) row,
     ];
     final diaries = fixed.where((row) => row['layer'] == 'diary').toList()
       ..sort((a, b) => (a['local_day']! as String).compareTo(b['local_day']! as String));

@@ -1,0 +1,450 @@
+{
+  "schema": 1,
+  "parent": "b09c6ce962a7cf4f90b651fdc14944013636e184",
+  "purpose": "Manual real-DeepSeek replay through the actual phone CompanionAgent. Never discovered by CI.",
+  "humanReviewRequired": true,
+  "clock": "Fresh native Android clock plus elapsed time for actual turns; affinityReplay uses labelled local-noon facts on previous completed days at the sampled offset.",
+  "cases": [
+    {
+      "id": "memory-edit-forget",
+      "title": "记住、改说法、忘掉后不再回流",
+      "turns": [
+        {
+          "say": "请记住，我喝咖啡只喝不加糖的美式。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "更正一下，我现在改喝拿铁了，旧的咖啡偏好不用再保留。",
+          "expect": {
+            "appliedAny": [
+              "revise",
+              "forget",
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "请忘掉我的咖啡口味。",
+          "expect": {
+            "appliedAny": [
+              "forget"
+            ]
+          }
+        },
+        {
+          "say": "你还记得我喝什么咖啡吗？",
+          "expect": {
+            "forbidden": [
+              "remember",
+              "revise"
+            ],
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "第二轮应处理同一偏好，不同时保留互相矛盾的当前值。",
+        "删除成功后的最后回答不得从旧消息、工具结果或证明中恢复已忘口味；不能捏造仍记得。"
+      ]
+    },
+    {
+      "id": "ask-other-people",
+      "title": "问别人不等于邀她回访",
+      "turns": [
+        {
+          "say": "我先问问医生这个药怎么吃，等医生回复再说。",
+          "expect": {
+            "forbidden": [
+              "ask_later"
+            ]
+          }
+        },
+        {
+          "say": "曲子怎么练我去问我的老师，你现在不用替我安排回访。",
+          "expect": {
+            "forbidden": [
+              "ask_later"
+            ]
+          }
+        }
+      ],
+      "human": [
+        "区分‘我问别人’与‘你以后问我’，没有凭空生成对用户的回访。",
+        "可以自然接话，不给用药结论。"
+      ]
+    },
+    {
+      "id": "interview-friday",
+      "title": "面试改到周五",
+      "turns": [
+        {
+          "say": "记一下，我的星河公司面试在本周三上午十点。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "刚通知了，星河公司那场面试改到本周五上午十点。",
+          "expect": {
+            "appliedAny": [
+              "revise",
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "那场面试现在是哪天？",
+          "expect": {
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "同一件面试只保留最新周五状态，不能额外新增一场仍在周三的面试。",
+        "日期依据每轮实际本地时钟，原话和修改来源都可追溯。"
+      ]
+    },
+    {
+      "id": "forgot-umbrella",
+      "title": "随口忘带伞不是删除记忆",
+      "turns": [
+        {
+          "say": "记住，我每天早上坐公交去学校。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "唉，今天出门又忘带伞了。",
+          "expect": {
+            "forbidden": [
+              "forget",
+              "quiet",
+              "cancel",
+              "postpone"
+            ],
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "‘忘带伞’是经历，不是忘记记忆的授权。",
+        "可以安慰或正常记事，原公交事实不能消失。"
+      ]
+    },
+    {
+      "id": "dont-get-time-wrong",
+      "title": "别记错时间不是静音或删除",
+      "turns": [
+        {
+          "say": "记住，我周六下午三点有长笛课。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "别记错时间，是下午三点，不是上午。",
+          "expect": {
+            "forbidden": [
+              "forget",
+              "quiet",
+              "cancel",
+              "postpone"
+            ],
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "保留课的事实，只做必要更正；不能把‘别记错’解释成删除或静音。"
+      ]
+    },
+    {
+      "id": "postpone-unknown",
+      "title": "改期未定",
+      "turns": [
+        {
+          "say": "记一下，周日的面试后你可以问问我结果。",
+          "expect": {
+            "appliedAny": [
+              "remember",
+              "ask_later"
+            ]
+          }
+        },
+        {
+          "say": "面试改期了，哪天还没定，先别按原来的时间追问。",
+          "expect": {
+            "forbidden": [
+              "ask_later"
+            ]
+          }
+        },
+        {
+          "say": "新日期仍然没定。",
+          "expect": {
+            "forbidden": [
+              "ask_later"
+            ]
+          }
+        }
+      ],
+      "human": [
+        "原日期不继续作为可执行回访；不猜明天、下周或任意日期。",
+        "保留事项和未定状态，允许正确使用 postponed/cancel 与后续澄清。"
+      ]
+    },
+    {
+      "id": "web-then-forget",
+      "title": "看网页后本轮不删记忆，下一轮恢复",
+      "requires": [
+        "public_web"
+      ],
+      "turns": [
+        {
+          "say": "请记住，我最喜欢蓝色。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "先查一下上海博物馆今天是否开放；等查完网页，再把刚才我的颜色偏好忘掉。",
+          "expect": {
+            "required": [
+              "public_lookup"
+            ],
+            "webIsolation": true
+          }
+        },
+        {
+          "say": "现在这是新的一轮：请忘掉我的颜色偏好。",
+          "expect": {
+            "appliedAny": [
+              "forget"
+            ]
+          }
+        }
+      ],
+      "human": [
+        "必须先观察到真实外部网页报告才判断隔离路径；查询未返回报告时记为环境/路径未覆盖，不能算通过。",
+        "查网页后的同批与后续批次破坏性记忆调用不能执行。下一真实用户轮应恢复合法删除能力。",
+        "真实报告之后还须观察到破坏性或替换原卡的请求及 Agent 实际拒绝结果，才能记隔离通过；未尝试记 PATH_NOT_EXERCISED。",
+        "报告可包含失败或局部结果，不能伪造查询成功。"
+      ]
+    },
+    {
+      "id": "relative-day",
+      "title": "明天与后天用真实本地日",
+      "turns": [
+        {
+          "say": "请记住，我明天下午两点去参加面试。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "改成后天下午两点了。",
+          "expect": {
+            "appliedAny": [
+              "revise",
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "把现在的日期和面试安排一起告诉我。",
+          "expect": {
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "每轮上下文有真实带偏移的本地时刻与原生时区；面试日期与该原话一致。",
+        "不把旧原话的相对日按下一次时间重新解释；不凭空选时区。"
+      ]
+    },
+    {
+      "id": "person-alias-shared",
+      "title": "人物别名与跨角色共享关于你",
+      "turns": [
+        {
+          "role": "a",
+          "say": "记住，我妈妈叫林岚，是一位美术老师；我平时也叫她老妈。",
+          "expect": {
+            "appliedAny": [
+              "person",
+              "remember"
+            ]
+          }
+        },
+        {
+          "role": "b",
+          "say": "我老妈叫什么、做什么工作？",
+          "expect": {
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "‘妈妈/老妈/林岚’是同一人的别名，不应该生成互相竞争的人物。",
+        "第二个角色可以读取共享的人物事实，不应冒认第一个角色的私密共同经历。"
+      ]
+    },
+    {
+      "id": "our-story-private",
+      "title": "我们的事隐藏并分角色，仍可忘掉",
+      "turns": [
+        {
+          "role": "a",
+          "say": "把这件事记在我们之间：今天我们一起给那盆小绿植起名叫‘团团’。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "role": "b",
+          "say": "你和我给小绿植起过什么名字吗？",
+          "expect": {
+            "forbidden": [
+              "remember",
+              "revise"
+            ]
+          }
+        },
+        {
+          "role": "a",
+          "say": "请忘掉我们给小绿植起名字的那件事。",
+          "expect": {
+            "appliedAny": [
+              "forget"
+            ]
+          }
+        }
+      ],
+      "human": [
+        "第一轮共同经历应属于当前角色 our_story，不能漏进关于你的共享列表。",
+        "第二个角色不读取或自述第一个角色的共同经历；允许如实说不知道。",
+        "隐藏层仍能按本人要求定位并忘掉，不能因没有页面条目就不可删除。"
+      ]
+    },
+    {
+      "id": "quiet-and-direct-question",
+      "title": "持续不提与直接问一次分开",
+      "turns": [
+        {
+          "say": "请记住，我最近在准备北星公司的面试。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "以后不要主动提这场面试了。",
+          "expect": {
+            "appliedAny": [
+              "quiet"
+            ]
+          }
+        },
+        {
+          "say": "我现在主动问你：我在准备哪家公司的面试？",
+          "expect": {
+            "forbidden": [
+              "remember"
+            ],
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "持续静音应落在原主题上；本次直接问一次不自动解除持续控制。",
+        "如果 Agent 当前没有合法解除 normal 的入口，明确记限制，不把直接询问冒充解除。"
+      ]
+    },
+    {
+      "id": "retraction-with-compound-card",
+      "title": "复合事实改一部分保另一部分",
+      "turns": [
+        {
+          "say": "记住，我学长笛，老师每周六带我练习。",
+          "expect": {
+            "appliedAny": [
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "我不学长笛了，改学钢琴；老师每周六带我练习这件事没变。",
+          "expect": {
+            "appliedAny": [
+              "revise",
+              "remember"
+            ]
+          }
+        },
+        {
+          "say": "我现在学什么，什么时候跟老师练？",
+          "expect": {
+            "noCardLoss": true
+          }
+        }
+      ],
+      "human": [
+        "更正乐器时保留独立仍有效的周六练习事实。",
+        "不要以删除一张复合卡为由丢掉未撤销事实，也不保留旧乐器为当前值。"
+      ]
+    },
+    {
+      "id": "affinity-completed-days",
+      "title": "真实 SDK 日结与模型语气",
+      "affinityReplay": {
+        "completeDays": 5,
+        "presenceMinutes": 60,
+        "chatTurns": 8,
+        "expectedTier": 1
+      },
+      "turns": [
+        {
+          "role": "a",
+          "say": "这几天一起待着感觉怎么样？",
+          "expect": {
+            "forbidden": [
+              "relationship"
+            ]
+          }
+        },
+        {
+          "role": "b",
+          "say": "你好，今天第一次见面。",
+          "expect": {
+            "forbidden": [
+              "relationship"
+            ]
+          }
+        }
+      ],
+      "human": [
+        "日志中的陪伴/聊天是隔离回放事实，不冒充真实用户经过五天。分数和档位只由 SDK 公共日结生成。",
+        "前五个已完成日各在当地中午开始60分钟；首结算应到tier 1，再核重复结算不涨分和第二角色不继承。23:59启动也不将末段种进开放日。",
+        "人工检查台词强度符合真实各角色档位，不因只是喂了模型关系文字就当事实加分。"
+      ]
+    }
+  ]
+}

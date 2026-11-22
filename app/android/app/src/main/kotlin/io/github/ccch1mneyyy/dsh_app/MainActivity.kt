@@ -115,17 +115,14 @@ class MainActivity : FlutterActivity() {
      * max: pinned. system: never declared.
      */
     private fun applyRefreshRate() {
-        @Suppress("DEPRECATION")
-        val display = windowManager.defaultDisplay
-        val now = display.mode
-        val fastest = display.supportedModes
-            .filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight }
-            .maxByOrNull { it.refreshRate }
-        val want = when (refreshMode) {
-            "max" -> fastest
-            "system" -> null
-            else -> if (framesActive) fastest else null
-        }
+        val want = if (refreshMode == "max" || (refreshMode != "system" && framesActive)) {
+            @Suppress("DEPRECATION")
+            val display = windowManager.defaultDisplay
+            val now = display.mode
+            display.supportedModes
+                .filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight }
+                .maxByOrNull { it.refreshRate }
+        } else null
         val target = want?.modeId ?: 0
         if (window.attributes.preferredDisplayModeId != target) {
             window.attributes = window.attributes.apply { preferredDisplayModeId = target }

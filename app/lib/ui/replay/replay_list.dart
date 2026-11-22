@@ -71,7 +71,7 @@ class _ReplayListState extends ConsumerState<ReplayList> {
   late final _physics = _FollowPhysics(() => _pinned);
 
   List<ChatRow> _rows = const [];
-  Set<String> _keys = const {};
+  Map<String, int> _rowIndices = const {};
   Set<int> _running = const {};
   final Map<String, int> _fresh = {};
   final Set<String> _settling = {};
@@ -97,7 +97,7 @@ class _ReplayListState extends ConsumerState<ReplayList> {
     if (widget.live) {
       var order = 0;
       for (final row in rows) {
-        if (_keys.contains(row.key)) continue;
+        if (_rowIndices.containsKey(row.key)) continue;
         final animate = switch (row) {
           TurnProcessRow() => false,
           _ => true,
@@ -112,7 +112,8 @@ class _ReplayListState extends ConsumerState<ReplayList> {
       _settling.clear();
     }
     _rows = rows;
-    _keys = {for (final r in rows) r.key};
+    // The first row wins, as in the delegate's original indexWhere lookup.
+    _rowIndices = {for (var i = rows.length - 1; i >= 0; i--) rows[i].key: i};
     _running = running;
   }
 
@@ -151,6 +152,7 @@ class _ReplayListState extends ConsumerState<ReplayList> {
     _derive(widget.frame, fold: ref.watch(settingsProvider.select((s) => s.foldCompletedTurns)));
     _followAfterFrame();
     final rows = _rows;
+    final indices = _rowIndices;
     return NotificationListener<ScrollNotification>(
       onNotification: _onScroll,
       child: CustomScrollView(
@@ -162,11 +164,7 @@ class _ReplayListState extends ConsumerState<ReplayList> {
             delegate: SliverChildBuilderDelegate(
               (context, i) => _buildRow(rows, i),
               childCount: rows.length,
-              findChildIndexCallback: (key) {
-                if (key is! ValueKey<String>) return null;
-                final i = rows.indexWhere((r) => r.key == key.value);
-                return i < 0 ? null : i;
-              },
+              findChildIndexCallback: (key) => key is ValueKey<String> ? indices[key.value] : null,
             ),
           ),
           SliverToBoxAdapter(child: SizedBox(height: widget.bottomInset + AppSpace.sm)),

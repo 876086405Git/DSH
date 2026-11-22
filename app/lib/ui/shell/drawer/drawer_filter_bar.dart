@@ -29,9 +29,11 @@ class DrawerFilterBar extends ConsumerWidget {
     if (scope == null || (scope.sessions.isEmpty && filter == DrawerFilter.all)) {
       return const SizedBox(width: double.infinity);
     }
-    final listed = {for (final s in scope.sessions) s.sessionId};
-    final pending = scope.readOnly ? 0 : ref.watch(pendingInteractionsProvider).keys.where(listed.contains).length;
-    final unread = scope.readOnly ? 0 : ref.watch(unreadSessionIdsProvider).where(listed.contains).length;
+    late final listed = {for (final s in scope.sessions) s.sessionId};
+    final pending = scope.readOnly
+        ? 0
+        : ref.watch(pendingInteractionsProvider).keys.where((id) => listed.contains(id)).length;
+    final unread = scope.readOnly ? 0 : ref.watch(unreadSessionIdsProvider).where((id) => listed.contains(id)).length;
     String label(DrawerFilter f) => switch (f) {
       _ when f == filter && scope.readOnly => readListHeading(f.label, scope.status),
       DrawerFilter.pending when pending > 0 => '${f.label} $pending',

@@ -25,7 +25,10 @@ class LogRedactor {
                 privateKeyLines = 0
             } else {
                 val begin = KEY_BEGIN.find(text, at)
-                if (begin == null) return out.append(text.substring(at)).toString()
+                if (begin == null) {
+                    if (at == 0) return text
+                    return out.append(text.substring(at)).toString()
+                }
                 out.append(text, at, begin.range.first)
                 val end = KEY_END.find(text, begin.range.last + 1)
                 if (end == null) {
@@ -197,6 +200,7 @@ class LogRedactor {
                     cursor = valueStart
                 }
             }
+            if (copied == 0) return text
             return out.append(text, copied, text.length).toString()
         }
 
