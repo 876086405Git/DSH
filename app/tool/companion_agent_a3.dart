@@ -265,7 +265,7 @@ class _Replay {
       'correctnessMeaning': 'Structural tool checks only; meaning and factual scope require the supplied human rubric.',
     };
     File('${output.path}/summary.json').writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(summary).replaceAll(key, '[REDACTED_API_KEY]') + '\n',
+      '${const JsonEncoder.withIndent('  ').convert(summary).replaceAll(key, '[REDACTED_API_KEY]')}\n',
       flush: true,
     );
     human.writeln('## Actual requested tool calls\n');
