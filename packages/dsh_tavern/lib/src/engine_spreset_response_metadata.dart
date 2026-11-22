@@ -8,6 +8,7 @@ class _SPresetResponseMetadata {
   final bool streamingToolsSupported;
   int? _attempt;
   bool observed = false;
+  bool hasBlockedPrimaryToolFragments = false;
   Map<String, Object?>? nonStreamingResponse;
   final _choices = <int, Map<int, Map<String, Object?>>>{};
   final _toolSignatures = <String, Object?>{};
@@ -16,6 +17,7 @@ class _SPresetResponseMetadata {
     if (_attempt != attempt) {
       _attempt = attempt;
       observed = false;
+      hasBlockedPrimaryToolFragments = false;
       nonStreamingResponse = null;
       _choices.clear();
       _toolSignatures.clear();
@@ -40,7 +42,30 @@ class _SPresetResponseMetadata {
     }
     // getStreamingReply records signatures before ToolManager's support gate.
     // A later catalog update can enable a tool referring to an earlier frame.
-    if (!(toolsSupported ?? streamingToolsSupported)) return;
+    if (!(toolsSupported ?? streamingToolsSupported)) {
+      // Match the production decoder's _firstChoice, including a non-map row
+      // becoming an empty primary choice. Filtering such rows would invent a
+      // blocked native fragment that the decoder never emitted.
+      Map<String, Object?> primary = const {};
+      final rawChoices = frame['choices'];
+      if (rawChoices is List<Object?>) {
+        for (final value in rawChoices) {
+          final choice = _spMap(value);
+          if (choice['index'] == null || choice['index'] == 0) {
+            primary = choice;
+            break;
+          }
+        }
+      }
+      final calls = _spMap(primary['delta'])['tool_calls'];
+      // The production decoder emits native fragments for every non-null
+      // nonempty envelope, including malformed ones requiring rejection. Do
+      // not hide that validation/replay path after formatting a different call.
+      if (calls != null && (calls is! List<Object?> || calls.isNotEmpty)) {
+        hasBlockedPrimaryToolFragments = true;
+      }
+      return;
+    }
     for (final choice in choices) {
       // ToolManager requires a numeric choice index. Array properties that
       // are not JavaScript array indices do not enter its formatting traversal.

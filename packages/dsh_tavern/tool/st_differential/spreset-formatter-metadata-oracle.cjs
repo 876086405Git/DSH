@@ -13,7 +13,7 @@ function read(relative, expected) {
 }
 const sp = read(spresetPath, '4858bcb57530e3ff6ef68f0c94a4d291e2914c766c274f888e9a2fdf8d0efb59');
 const st = read(toolCallingPath, '934be74f6bd672a821e5f3e5dc34ad4548c1cac60ee41c48feaa630e6e2f7712');
-const oa = read(openaiPath, '09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a');
+const oa = read(openaiPath, '0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604');
 function between(source, start, end) {
   const a = source.indexOf(start), b = source.indexOf(end, a + start.length);
   assert.ok(a >= 0 && b > a, 'Missing fixed source boundary: ' + start);

@@ -16,7 +16,7 @@ function between(source, start, end) {
   return source.slice(a, b);
 }
 const toolSha = '934be74f6bd672a821e5f3e5dc34ad4548c1cac60ee41c48feaa630e6e2f7712';
-const openaiSha = '09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a';
+const openaiSha = '0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604';
 const tool = read(toolPath, toolSha), openai = read(openaiPath, openaiSha);
 const selector = between(openai, 'export function getChatCompletionModel(', 'function getOpenRouterModelTemplate(').replace(/^export /, '');
 const modelFields = [...new Set([...selector.matchAll(/settings\.([a-z_]+_model)/g)].map(match => match[1]))];

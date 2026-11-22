@@ -8,19 +8,21 @@ import 'p2_script_generation_test_support.dart';
 import 'spreset_engine_test.dart' show SPresetHost;
 
 void main() {
-  test('Helper separate history reports an unset page collection before HTTP', () async {
+  test('Helper raw separate history uses its own messages before any page snapshot', () async {
     final h = await generationFixture();
     await h.engine.setPreset(_preset('CURRENT', separate: true));
     final actor = await h.card('History actor');
     final context = await h.context(await h.emptyChat(actor));
-    h.reply('unexpected');
+    final plan = h.reply('done');
     final generation = await h.bridge.generateRaw(context.id, _raw('RAW'));
-    final failure = await generationFailure(generation);
-    expect(failure.message, contains('PromptManager'));
-    expect(h.requests, isEmpty);
+    final request = await generationRequest(generation, plan);
+    await generation.result;
+    expect(generationMessages(request), [
+      {'role': 'user', 'content': 'RAW'},
+    ]);
   });
 
-  test('Helper raw and named use the prior normal collection across preset switches and private ends', () async {
+  test('Helper raw and named use their current inputs across preset switches and private ends', () async {
     final h = await generationFixture();
     await h.engine.setPreset(_preset('OLD MAIN'));
     final actor = await h.card('History actor');
@@ -39,15 +41,53 @@ void main() {
           : await h.bridge.generateRaw(context.id, _raw('RAW INPUT'));
       final request = await generationRequest(generation, plan);
       await generation.result;
-      expect(_text(request), contains('OLD MAIN'), reason: path);
-      expect(_text(request), contains('U[OLD INPUT]'), reason: path);
-      expect(_text(request), isNot(contains('RAW INPUT')), reason: path);
-      expect(_text(request), isNot(contains('NAMED MAIN')), reason: path);
-      expect(_text(request), isNot(contains('NEW INPUT')), reason: path);
+      expect(_text(request), isNot(contains('OLD MAIN')), reason: path);
+      expect(_text(request), isNot(contains('OLD INPUT')), reason: path);
+      if (path == 'named') {
+        expect(_text(request), contains('NAMED MAIN'));
+        expect(_text(request), contains('NEW INPUT'));
+        expect(_text(request), isNot(contains('RAW INPUT')));
+      } else {
+        expect(generationMessages(request), [
+          {'role': 'user', 'content': 'RAW INPUT'},
+        ]);
+      }
     }
   });
 
-  test('Native normal publishes the real shared collection before its model response', () async {
+  test('Raw system squash retains the real history membership without swallowing a literal', () async {
+    final h = await generationFixture();
+    await h.engine.setPreset(ChatPreset({..._preset('MAIN', separate: true).raw, 'squash_system_messages': true}));
+    final actor = await h.card('Raw system actor');
+    final context = await h.context(await h.emptyChat(actor));
+    final plan = h.reply('done');
+    final generation = await h.bridge.generateRaw(
+      context.id,
+      TavernHelperRawRequest.fromJson({
+        'ordered_prompts': [
+          'chat_history',
+          {'role': 'user', 'content': 'OUTSIDE'},
+        ],
+        'overrides': {
+          'chat_history': {
+            'with_depth_entries': false,
+            'prompts': [
+              {'role': 'system', 'content': 'S1'},
+              {'role': 'system', 'content': 'S2'},
+            ],
+          },
+        },
+      }),
+    );
+    final request = await generationRequest(generation, plan);
+    await generation.result;
+    expect(generationMessages(request), [
+      {'role': 'assistant', 'content': 'S[S1\nS2]'},
+      {'role': 'user', 'content': 'OUTSIDE'},
+    ]);
+  });
+
+  test('Helper raw owns its messages after a completed native normal request', () async {
     final h = await generationFixture();
     await h.engine.setPreset(_preset('NATIVE MAIN'));
     final actor = await h.card('Native history actor');
@@ -63,13 +103,12 @@ void main() {
     final raw = await h.bridge.generateRaw(context.id, _raw('RAW INPUT'));
     final request = await generationRequest(raw, rawPlan);
     await raw.result;
-    expect(_text(request), contains('NATIVE MAIN'));
-    expect(_text(request), contains('U[NATIVE INPUT]'));
-    expect(_text(request), isNot(contains('MODEL RESPONSE')));
-    expect(_text(request), isNot(contains('RAW INPUT')));
+    expect(generationMessages(request), [
+      {'role': 'user', 'content': 'RAW INPUT'},
+    ]);
   });
 
-  test('Quiet ordinary assembly publishes controls while native raw retains its existing ABI', () async {
+  test('Native and Helper raw retain their own messages after quiet ordinary assembly', () async {
     final h = await generationFixture();
     final actor = await h.card('Quiet actor');
     final context = await h.context(await h.emptyChat(actor));
@@ -92,12 +131,11 @@ void main() {
     await nativeRaw.result;
     expect(_text(nativeWire), 'NATIVE RAW');
     expect(generationMessages(await _rawRequest(h, context.id, 'HELPER RAW')), [
-      {'role': 'system', 'content': 'QUIET MAIN'},
-      {'role': 'system', 'content': 'QUIET CONTROL'},
+      {'role': 'user', 'content': 'HELPER RAW'},
     ]);
   });
 
-  test('Conditional gate reads current input first and removes the old tag after squash', () async {
+  test('Conditional raw squash removes only the current input tag', () async {
     final h = await generationFixture();
     final actor = await h.card('Tag actor');
     final context = await h.context(await h.emptyChat(actor));
@@ -112,11 +150,11 @@ void main() {
     );
     expect(_text(await _rawRequest(h, context.id, 'NO TAG')), 'NO TAG');
     final replaced = _text(await _rawRequest(h, context.id, 'NEW [[GO]] INPUT'));
-    expect(replaced, 'OLD  MAIN|U[OLD  INPUT]');
+    expect(replaced, 'NEW  INPUT');
     expect(replaced, isNot(contains('[[GO]]')));
   });
 
-  test('An initialized empty collection replaces raw input with a real empty message array', () async {
+  test('An initialized empty shared collection cannot replace current raw input', () async {
     final h = await generationFixture();
     final actor = await h.card('Empty actor');
     final context = await h.context(await h.emptyChat(actor));
@@ -131,10 +169,12 @@ void main() {
     final warm = await _normal(h, context.id, 'UNPLACED');
     expect(generationMessages(warm), isEmpty);
     await h.engine.setPreset(_preset('CURRENT', separate: true));
-    expect(generationMessages(await _rawRequest(h, context.id, 'RAW')), isEmpty);
+    expect(generationMessages(await _rawRequest(h, context.id, 'RAW')), [
+      {'role': 'user', 'content': 'RAW'},
+    ]);
   });
 
-  test('Normal separate reads the pre-injection manager instead of the mutated getChat body', () async {
+  test('Normal separate keeps the complete current MessageInjections exchange', () async {
     final h = await generationFixture();
     final actor = await h.card('Injection actor');
     final context = await h.context(await h.emptyChat(actor));
@@ -156,11 +196,21 @@ void main() {
     await h.engine.setPreset(ChatPreset(raw));
     final wire = await _normal(h, context.id, 'INPUT');
     expect(generationMessages(wire), [
-      {'role': 'system', 'content': 'MAIN'},
+      {
+        'role': 'assistant',
+        'content': 'MAIN',
+        'tool_calls': [
+          {
+            'id': 'injected_call',
+            'type': 'function',
+            'function': {'name': 'look', 'arguments': '{}'},
+          },
+        ],
+      },
+      {'role': 'tool', 'content': 'INJECTED RESULT', 'tool_call_id': 'injected_call'},
       {'role': 'assistant', 'content': 'U[INPUT]'},
     ]);
-    expect(jsonEncode(wire.body), isNot(contains('injected_call')));
-    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'MAIN|U[INPUT]');
+    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'RAW');
   });
 
   for (final systemSquash in [false, true]) {
@@ -169,11 +219,13 @@ void main() {
       final actor = await h.card('Header actor', description: 'DESCRIPTION');
       final context = await h.context(await h.emptyChat(actor));
       await h.engine.setPreset(
-        ChatPreset({..._preset('MAIN').raw, 'new_chat_prompt': 'HEADER', 'squash_system_messages': systemSquash}),
+        ChatPreset({
+          ..._preset('MAIN', separate: true).raw,
+          'new_chat_prompt': 'HEADER',
+          'squash_system_messages': systemSquash,
+        }),
       );
-      await _normal(h, context.id, 'INPUT');
-      await h.engine.setPreset(_preset('CURRENT', separate: true));
-      final messages = generationMessages(await _rawRequest(h, context.id, 'RAW'));
+      final messages = generationMessages(await _normal(h, context.id, 'INPUT'));
       if (systemSquash) {
         expect(messages, [
           {'role': 'system', 'content': 'MAIN\nDESCRIPTION'},
@@ -202,36 +254,27 @@ void main() {
       ]);
       await h.engine.setPreset(
         ChatPreset({
-          ..._preset('MAIN').raw,
+          ..._preset('MAIN', separate: true).raw,
           'continue_prefill': false,
           'continue_nudge_prompt': 'NUDGE',
           'continue_postfix': '',
           'squash_system_messages': systemSquash,
         }),
       );
-      h.reply('MODEL APPEND');
+      final plan = h.reply('MODEL APPEND');
       final continuation = ScriptEvents(h.engine.continueReply(chat, (await h.engine.path(chat)).last.nodeId));
       await continuation.done.future;
       expect(continuation.values.whereType<TavernTurnFailed>(), isEmpty);
-      await h.engine.setPreset(_preset('CURRENT', separate: true));
-      if (systemSquash) {
-        final generation = await h.bridge.generateRaw(context.id, _raw('RAW'));
-        final error = await generationFailure(generation);
-        expect(error.code, TavernScriptErrorCode.hookFailure);
-        expect(error.message, contains('logical identifier'));
-        expect(h.requests, hasLength(1));
-      } else {
-        expect(generationMessages(await _rawRequest(h, context.id, 'RAW')), [
-          {'role': 'system', 'content': 'MAIN'},
-          {'role': 'assistant', 'content': 'U[HISTORY]'},
-          {'role': 'assistant', 'content': 'CONTINUED'},
-          {'role': 'system', 'content': 'NUDGE'},
-        ]);
-      }
+      expect(generationMessages(await plan.seen.future), [
+        {'role': 'system', 'content': 'MAIN'},
+        {'role': 'assistant', 'content': 'U[HISTORY]'},
+        {'role': 'assistant', 'content': 'CONTINUED'},
+        {'role': 'system', 'content': 'NUDGE'},
+      ]);
     });
   }
 
-  test('Failed mandatory admission replaces the previous cache with actual partial root', () async {
+  test('Failed mandatory admission cannot leak its partial root into later Helper raw', () async {
     final h = await generationFixture();
     final actor = await h.card('Partial actor', description: 'L' * 2000);
     final context = await h.context(await h.emptyChat(actor));
@@ -246,11 +289,11 @@ void main() {
     expect(h.requests, hasLength(1));
     await h.engine.setPreset(_preset('CURRENT', separate: true));
     expect(generationMessages(await _rawRequest(h, context.id, 'RAW')), [
-      {'role': 'system', 'content': 'PARTIAL MAIN'},
+      {'role': 'user', 'content': 'RAW'},
     ]);
   });
 
-  test('Cancellation after assembly retains the published collection for later Helper raw', () async {
+  test('Cancelled normal assembly cannot replace later Helper raw input', () async {
     final h = await generationFixture();
     final actor = await h.card('Cancelled actor');
     final context = await h.context(await h.emptyChat(actor));
@@ -265,10 +308,10 @@ void main() {
     plan.finish();
     expect((await generationFailure(generation)).code, TavernScriptErrorCode.cancelled);
     await h.engine.setPreset(_preset('CURRENT', separate: true));
-    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'CANCELLED MAIN|U[CANCELLED INPUT]');
+    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'RAW');
   });
 
-  test('Per-chat snapshots share same-chat contexts and reset only the addressed page', () async {
+  test('Helper raw uses its current input across chat, page reset and host replacement', () async {
     final h = await generationFixture();
     final actor = await h.card('Partition actor');
     final chatA = await h.emptyChat(actor), chatB = await h.emptyChat(actor);
@@ -278,19 +321,17 @@ void main() {
     await _normal(h, a.id, 'A');
     await _normal(h, b.id, 'B');
     await h.engine.setPreset(_preset('CURRENT', separate: true));
-    expect(_text(await _rawRequest(h, aScript.id, 'RAW')), 'MAIN|U[A]');
-    expect(_text(await _rawRequest(h, b.id, 'RAW')), 'MAIN|U[B]');
+    expect(_text(await _rawRequest(h, aScript.id, 'RAW A')), 'RAW A');
+    expect(_text(await _rawRequest(h, b.id, 'RAW B')), 'RAW B');
     (h.engine as TavernSPresetPageLifecycle).resetSPresetPage(chatA);
-    final missing = await h.bridge.generateRaw(a.id, _raw('RAW'));
-    expect((await generationFailure(missing)).message, contains('PromptManager'));
-    expect(_text(await _rawRequest(h, b.id, 'RAW')), 'MAIN|U[B]');
+    expect(_text(await _rawRequest(h, a.id, 'RESET A')), 'RESET A');
+    expect(_text(await _rawRequest(h, b.id, 'UNCHANGED B')), 'UNCHANGED B');
     await h.engine.setPreset(_preset('NEW MAIN'));
     await _normal(h, aScript.id, 'NEW A');
     await h.engine.setPreset(_preset('CURRENT', separate: true));
-    expect(_text(await _rawRequest(h, a.id, 'RAW')), 'NEW MAIN|U[NEW A]');
+    expect(_text(await _rawRequest(h, a.id, 'RAW')), 'RAW');
     h.bridge.attachHost(ScriptHost());
-    final replaced = await h.bridge.generateRaw(b.id, _raw('RAW'));
-    expect((await generationFailure(replaced)).message, contains('PromptManager'));
+    expect(_text(await _rawRequest(h, b.id, 'REPLACED HOST')), 'REPLACED HOST');
   });
 
   test('A page reset rejects a late Final result while a new document publishes its own collection', () async {
@@ -337,7 +378,7 @@ void main() {
     expect(failure.message, contains('document'));
     expect(h.requests, hasLength(1));
     await h.engine.setPreset(_preset('CURRENT', separate: true));
-    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'NEW MAIN|U[NEW INPUT]');
+    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'RAW');
   });
 
   test('Page reset clears only its active Entry map and rejects a late entry evaluation', () async {
@@ -414,7 +455,7 @@ void main() {
     expect(nativeB.values.whereType<TavernTurnFailed>(), isEmpty);
   });
 
-  test('Detached authoring preview does not replace the active page collection', () async {
+  test('Detached authoring preview cannot replace Helper raw input', () async {
     final h = await generationFixture();
     final actor = await h.card('Preview actor');
     final chat = await h.emptyChat(actor);
@@ -442,36 +483,33 @@ void main() {
     expect(preview.status, TavernAuthoringPreviewStatus.complete);
     expect(jsonEncode(preview.assembly!.body), contains('PREVIEW INPUT'));
     await h.engine.setPreset(_preset('CURRENT', separate: true));
-    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'ACTIVE MAIN|U[ACTIVE INPUT]');
+    expect(_text(await _rawRequest(h, context.id, 'RAW')), 'RAW');
   });
 
   for (final separateDuringNormal in [false, true]) {
-    test(
-      'Normal image-array getChat mutation does not replace the shared source marker: $separateDuringNormal',
-      () async {
-        final h = await generationFixture();
-        final actor = await h.card('Array marker actor');
-        final context = await h.context(await h.emptyChat(actor));
-        await h.engine.setPreset(_preset('MAIN', separate: separateDuringNormal));
-        final plan = h.reply('done');
-        final normal = await h.bridge.generate(
-          context.id,
-          TavernHelperGenerateRequest.fromJson({
-            'user_input': 'IMAGE INPUT',
-            'image': ['data:image/png;base64,AA=='],
-          }),
-        );
-        final original = await generationRequest(normal, plan);
-        await normal.result;
-        expect(jsonEncode(original.body).contains('image_url'), !separateDuringNormal);
-        if (separateDuringNormal) expect(_text(original), contains('__IMG_ARRAY_MARKER_'));
-        await h.engine.setPreset(_preset('CURRENT', separate: true));
-        final reread = await _rawRequest(h, context.id, 'RAW');
-        expect(_text(reread), 'MAIN|U[IMAGE INPUT__IMG_ARRAY_MARKER_]');
-        expect(jsonEncode(reread.body), isNot(contains('image_url')));
-        expect(jsonEncode(reread.body), isNot(contains('helper-image-')));
-      },
-    );
+    test('Normal keeps current image parts and later raw owns its input: $separateDuringNormal', () async {
+      final h = await generationFixture();
+      final actor = await h.card('Array marker actor');
+      final context = await h.context(await h.emptyChat(actor));
+      await h.engine.setPreset(_preset('MAIN', separate: separateDuringNormal));
+      final plan = h.reply('done');
+      final normal = await h.bridge.generate(
+        context.id,
+        TavernHelperGenerateRequest.fromJson({
+          'user_input': 'IMAGE INPUT',
+          'image': ['data:image/png;base64,AA=='],
+        }),
+      );
+      final original = await generationRequest(normal, plan);
+      await normal.result;
+      expect(jsonEncode(original.body), contains('image_url'));
+      expect(jsonEncode(original.body), isNot(contains('__IMG_ARRAY_MARKER_')));
+      await h.engine.setPreset(_preset('CURRENT', separate: true));
+      final reread = await _rawRequest(h, context.id, 'RAW');
+      expect(_text(reread), 'RAW');
+      expect(jsonEncode(reread.body), isNot(contains('image_url')));
+      expect(jsonEncode(reread.body), isNot(contains('helper-image-')));
+    });
   }
 }
 

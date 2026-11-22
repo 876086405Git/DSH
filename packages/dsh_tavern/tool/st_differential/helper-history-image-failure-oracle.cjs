@@ -6,7 +6,7 @@ const {stripTypeScriptTypes} = require('node:module');
 const st = fs.readFileSync(process.argv[2], 'utf8');
 const helper = fs.readFileSync(process.argv[3], 'utf8');
 const hash = s => crypto.createHash('sha256').update(s).digest('hex');
-assert.equal(hash(st), '09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a');
+assert.equal(hash(st), '0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604');
 assert.equal(hash(helper), '9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff');
 function extract(source, marker) {
   const start = source.indexOf(marker);

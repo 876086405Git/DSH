@@ -251,7 +251,7 @@ void main() {
     expect(fixture.h.inspect((db) => db.select('SELECT COUNT(*) AS n FROM tool_receipts').single['n']), 0);
   });
 
-  test('HTTP catalog is sampled per frame and blocked-frame signatures remain available', () async {
+  test('Mixed HTTP catalog retains native replay separately from blocked-frame signatures', () async {
     final host = _CapabilityHost();
     final values = [
       _matched(['tools']),
@@ -272,7 +272,9 @@ void main() {
     );
     _frame(active.response, id: 'third', index: 2);
     active.response.finish();
-    expect((await active.generation.result).text, 'body\nformatted');
+    // A successful partial formatter must not swallow the unformatted native
+    // call. Legacy background generation visibly rejects native tool replay.
+    expect((await generationFailure(active.generation)).code, TavernScriptErrorCode.unsupportedCapability);
     expect(host.lookups, hasLength(4));
     final calls = (scriptMap(_formats(host).single.arguments.single)['calls']! as List).map(scriptMap).toList();
     expect(calls.map((call) => call['id']), ['first', 'third']);
@@ -305,6 +307,92 @@ void main() {
     expect(host.lookups, isEmpty);
     expect(_formats(host), hasLength(1));
   });
+
+  test('Mixed HTTP catalog replays all native calls through their existing authorization', () async {
+    final host = _CapabilityHost();
+    final values = [
+      _matched(['tools']),
+      _matched([]),
+      _matched(['tools']),
+    ];
+    host.handlerLookup = (_) => values.isEmpty ? _matched(['tools']) : values.removeAt(0);
+    final fixture = await _fixture(host);
+    final response = fixture.h.stream();
+    final events = ScriptEvents(fixture.h.engine.send(fixture.chat, 'question'));
+    await events.waitRequest(response);
+    await response.listening.future;
+    _frame(response, id: 'first');
+    _frame(response, id: 'blocked', index: 1);
+    _frame(response, id: 'third', index: 2);
+    response.finish();
+    await events.done.future;
+    expect(events.values.whereType<TavernTurnFailed>(), isEmpty);
+    final receipts = fixture.h.inspect(
+      (db) => db.select('SELECT tool_name, status, result_json FROM tool_receipts ORDER BY tool_name'),
+    );
+    expect(receipts.map((row) => row['tool_name']), ['fixture_blocked', 'fixture_first', 'fixture_third']);
+    expect(receipts.map((row) => row['status']), everyElement('rejected'));
+    expect(receipts.map((row) => row['result_json']), everyElement(contains('unknown_tool')));
+    expect(_formats(host), hasLength(1));
+    expect(host.actions, 0, reason: 'Formatter eligibility does not grant native action permission.');
+    expect(fixture.h.requests, hasLength(1));
+  });
+
+  for (final ordinary in [false, true]) {
+    test('Malformed primary choice preserves consumption for ${ordinary ? 'ordinary' : 'background'} HTTP', () async {
+      final host = _CapabilityHost();
+      final values = [
+        _matched(['tools']),
+        _matched([]),
+        _matched(['tools']),
+      ];
+      host.handlerLookup = (_) => values.removeAt(0);
+      final fixture = await _fixture(host);
+      final response = fixture.h.stream();
+      ScriptEvents<TavernEvent>? events;
+      TavernScriptGeneration? generation;
+      if (ordinary) {
+        events = ScriptEvents(fixture.h.engine.send(fixture.chat, 'question'));
+        await events.waitRequest(response);
+      } else {
+        generation = await fixture.h.bridge.generate(
+          fixture.context.id,
+          TavernScriptGenerateRequest(userInput: 'question', stream: true),
+        );
+        await generationRequest(generation, response);
+      }
+      await response.listening.future;
+      _frame(response, id: 'first');
+      generationSse(response, {
+        'choices': [
+          null,
+          {
+            'index': 0,
+            'delta': {
+              'tool_calls': [_call('not-decoded', 1)],
+            },
+          },
+        ],
+      }, splitAt: 7);
+      response.finish();
+      if (events != null) {
+        await events.done.future;
+        expect(events.values.whereType<TavernTurnFailed>(), isEmpty);
+        expect(events.values.whereType<TavernTurnDone>().single.message.text, 'body\nformatted');
+      } else {
+        expect((await generation!.result).text, 'body\nformatted');
+      }
+      // The production decoder selects the leading non-map as an empty primary
+      // choice. It never accepts not-decoded, so the unsupported frame must not
+      // restore the already formatted first call to the native replay path.
+      final calls = (scriptMap(_formats(host).single.arguments.single)['calls']! as List).map(scriptMap).toList();
+      expect(calls.map((call) => call['id']), ['first']);
+      expect(host.lookups, hasLength(3));
+      expect(fixture.h.inspect((db) => db.select('SELECT COUNT(*) AS n FROM tool_receipts').single['n']), 0);
+      expect(host.actions, 0);
+      expect(fixture.h.requests, hasLength(1));
+    });
+  }
 
   test('captured source and model survive saved connection fields and Final wire rewrite', () async {
     final host = _CapabilityHost()..value = _matched(['tools']);

@@ -136,23 +136,25 @@
       "repository": "SillyTavern/SillyTavern",
       "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
       "path": "public/scripts/openai.js",
-      "localResearchPath": "research/st/public/scripts/openai.js",
-      "sha256": "09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a",
-      "bytes": 307268,
-      "calculatedGitBlob": "6f89419898987f019c0a57e4d71547ab93dffbf9",
+      "localResearchPath": "research/batch2-r2-squash/source-pins/public/scripts/openai.js",
+      "sha256": "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604",
+      "bytes": 307267,
+      "calculatedGitBlob": "bab82eec57e0927b809b0571534e96f1b13360e1",
       "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/openai.js",
-      "license": "AGPL-3.0"
+      "license": "AGPL-3.0",
+      "verification": "ADDENDUM-14 #11: fixed-commit original bytes recompute the repository Git blob. The former local copy had one additional trailing LF; old research files and frozen reports remain unchanged. See tool/st_differential/ST-SOURCE-PIN.md for current raw identity and historical correction."
     },
     {
       "repository": "SillyTavern/SillyTavern",
       "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
       "path": "public/scripts/reasoning.js",
-      "localResearchPath": "research/st/public/scripts/reasoning.js",
-      "sha256": "0eea2fa307bc67953acce95df5283371ef1af7a248415f084aa79a9efcbe3b2c",
-      "bytes": 68727,
-      "calculatedGitBlob": "ca20d3e78e04e42832aff5980f6fced274ff1de6",
+      "localResearchPath": "research/batch2-r2-squash/source-pins/public/scripts/reasoning.js",
+      "sha256": "c489812f2598d1a4879b1a7287abde092741adafdf67f5b15cf18f2dd71d82d1",
+      "bytes": 68726,
+      "calculatedGitBlob": "c82e95fc1abc4d8547254886c758c8b926cf4453",
       "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/reasoning.js",
-      "license": "AGPL-3.0"
+      "license": "AGPL-3.0",
+      "verification": "ADDENDUM-14 #11: fixed-commit original bytes recompute the repository Git blob. The former local copy had one additional trailing LF; old research files and frozen reports remain unchanged. See tool/st_differential/ST-SOURCE-PIN.md for current raw identity and historical correction."
     },
     {
       "repository": "SillyTavern/SillyTavern",

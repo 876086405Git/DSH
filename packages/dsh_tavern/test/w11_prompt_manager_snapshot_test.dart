@@ -203,7 +203,13 @@ PromptManagerMessage _message(String id, String role, String content, {Map<Strin
     );
 
 Future<List<PromptSegment>> _squash(PromptManagerSnapshot snapshot) => spresetSquashSegments(
-  [_message('incoming', 'user', 'IGNORED CURRENT BODY').segment],
+  [
+    for (final item in snapshot.items)
+      if (item is PromptManagerMessage)
+        item.serialize(_counter, direct: true, collectionId: item.collectionIdentifier)
+      else if (item is PromptManagerCollection)
+        for (final message in item.messages) message.serialize(_counter, direct: false, collectionId: item.identifier),
+  ],
   SPresetConfig.fromPreset({
     'extensions': {
       'SPreset': {

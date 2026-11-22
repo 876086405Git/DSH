@@ -125,9 +125,9 @@ streaming_fps 缺省 30；过早帧直接跳过进度，不睡眠。无效/非�
 非流消费先验证脚本，按 choice 通道格式化原始调用签名；成功追加并删 calls，任一 formatter 失败完整回退；不运行正文 processor。native response 保持既有行为。
 Entry 是按 chat 画布分区的当前活动状态，不是上轮缓存；Helper 私有 ended 不清，成功 global STOP 清，原生结束/host replacement 清，取消旧求值不复活。命名按转换后 raw 分类。
 宿主原样透传可选 sessionScope；公开 generationId 不是宿主会话所有权键。同 ID 旧 release 不得删新 state，沿现 evaluate/release/取消协议，不另造 nonce。
-normal/native/quiet 在真实装配准入的 finally 发布 MI 前的 PromptManager 集合视图；Helper raw 与命名 raw 不刷新。separate 先检查本次输入 tag，再读当前 chat 的共享集合；未初始化可见失败，已初始化空集合输出空数组，END/STOP/换预设保留。集合与 system squash 后的 direct Message 按固定源分别处理，continueNudge 不当 chatHistory，细节与例外见 HELPER-PROMPT-MANAGER.md。
-可选 TavernSPresetPageLifecycle.resetSPresetPage(chatId) 由可信 App 文档生命周期同步调用，清本 chat 的 Entry/集合并递增 epoch；旧求值不采用晚结果。现 owner App 尚未接此新能力，不能把同 host 的 reload 宣称已验证。
-仍须单独处理的组合边界：native START 的源 makeFirst 条件先于普通监听器，本候选仍沿既有准备顺序，START handler 内重入早窗口未签等价。ST UI dryRun setter、全部失败副作用顺序及 system squash 计数拒绝后的中间对象状态也不在本次完整对齐范围。
+normal/native/quiet 在真实准入 finally 保留本代 PromptManager 拓扑，身份有效才发布共享状态。按 ADD14，separate 把拓扑应用于本次当前 segments，保留 MI 一对多及图片；postscript 看到的是已经去掉本次条件标签的内容。Helper raw 与命名 raw 使用自身集合，不重读旧共享内容；首次 raw 不因缺少旧快照失败。continueNudge 即使 flatten 后缺逻辑 ID 也保留独立尾部，空 tool 结果保留。固定上游同类缺陷与本轮有意修正见 HELPER-PROMPT-MANAGER.md。
+可选 TavernSPresetPageLifecycle.resetSPresetPage(chatId) 由可信 App 同步调用，清本 chat 的 Entry/集合并递增 epoch；旧 JS 求值不采用晚结果，过期快照观察仅跳过共享发布。PR1771 已接此信号，本轮仍无同 host reload 的 Flutter/WebView 真机验收。
+native SP Entry/early sync 已在普通 START 处理器之前；仍不声称复现任意外部 makeFirst 监听器重排。ST UI dryRun setter、全部失败副作用顺序及 system squash 计数拒绝后的中间对象状态不在完整对齐范围。
 
 ## 7. 停止、同步 JS 返回与按钮
 

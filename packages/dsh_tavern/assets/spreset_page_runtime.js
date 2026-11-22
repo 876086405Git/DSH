@@ -9,6 +9,7 @@
   const evaluations = new Map();
   const registrations = new Map();
   let activeIdentifiers = new Set();
+  let registryTail = Promise.resolve();
   // This independent public surface mirrors ST's registration receiver. User
   // callbacks must see a registration instance, not the returned definition
   // object or the page global. Private storage leaves own script fields free.
@@ -171,7 +172,16 @@
     if (uuid) definitions.set(uuid, retained);
     return retained;
   }
-  async function evaluate(request, signal) {
+  function evaluate(request, signal) {
+    if (request.kind !== 'toolRegistry') return evaluateNow(request, signal);
+    // shouldRegister awaits the receiver. Keep sync/read/refresh in invocation
+    // order so another registry RPC cannot replace its active set or entries
+    // halfway through enumeration. Other script evaluation is independent.
+    const result = registryTail.then(() => evaluateNow(request, signal));
+    registryTail = result.then(() => {}, () => {});
+    return result;
+  }
+  async function evaluateNow(request, signal) {
     check(signal);
     const args = copy(request.arguments ?? []);
     const capture = {enabled: request.captureLogs === true, logs: [], chars: 0, dropped: 0, truncatedValues: 0};

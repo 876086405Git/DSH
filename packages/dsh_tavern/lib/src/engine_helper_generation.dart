@@ -323,10 +323,16 @@ extension _HelperPromptPreparation on _ScriptPromptRun {
       for (final piece in pieces) {
         final previous = squashed.lastOrNull;
         if (previous != null && eligible(previous) && eligible(piece)) {
-          squashed[squashed.length - 1] = _piece({
-            ...previous.message,
-            'content': '${previous.message['content']}\n${piece.message['content']}',
-          }, previous.source);
+          squashed[squashed.length - 1] = _ScriptRawPiece(
+            previous.id,
+            _captureScriptObject({
+              ...previous.message,
+              'content': '${previous.message['content']}\n${piece.message['content']}',
+            }),
+            previous.source,
+            worldIdentity: previous.worldIdentity,
+            optional: previous.optional,
+          );
         } else {
           squashed.add(piece);
         }
@@ -344,7 +350,7 @@ extension _HelperPromptPreparation on _ScriptPromptRun {
         expand: (text) => environment.expand(text, const {}),
         evaluate: spreset!.evaluate,
         diagnose: spreset!.diagnose,
-        readPromptManager: spreset!.readPromptManager,
+        historyIds: {for (final piece in collections[historyIndex] ?? const <_ScriptRawPiece>[]) piece.id},
         onUnconvertedMessages: spreset!.allowsRawMessageArray(mode) ? (messages) => rawMessages = messages : null,
       );
       spreset!.check();

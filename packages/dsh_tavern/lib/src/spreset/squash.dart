@@ -45,7 +45,6 @@ Future<List<PromptSegment>> spresetSquashSegments(
     ];
   }
   var prepared = input;
-  Object? Function(Object?)? removeConditionalTag;
   if (presetTruthy(settings['conditional_enabled'])) {
     final tag = _spString(settings['conditional_tag']);
     if (tag.isEmpty) return input;
@@ -60,7 +59,6 @@ Future<List<PromptSegment>> spresetSquashSegments(
       return value;
     }
 
-    removeConditionalTag = remove;
     prepared = [
       for (final segment in input)
         _spSegment(segment, {...segment.message, 'content': remove(segment.message['content'])}, counter),
@@ -83,7 +81,7 @@ Future<List<PromptSegment>> spresetSquashSegments(
     if (snapshot == null) {
       throw const SPresetException('ChatSquash', 'The chat PromptManager collection has not been initialized.');
     }
-    for (final item in snapshot.items) {
+    for (final item in snapshot.withCurrentMessages(prepared).items) {
       switch (item) {
         case PromptManagerCollection():
           await flush();
@@ -99,11 +97,12 @@ Future<List<PromptSegment>> spresetSquashSegments(
         case PromptManagerMessage():
           if (!item.meaningful) continue;
           final identifier = item.identifier;
-          if (identifier == null) {
+          final continuation = item.collectionIdentifier == 'continueNudge';
+          if (identifier == null && !continuation) {
             throw const SPresetException('ChatSquash', 'A direct PromptManager message has no logical identifier.');
           }
-          final message = item.serialize(counter, direct: true);
-          if (identifier.startsWith('chatHistory')) {
+          final message = item.serialize(counter, direct: true, collectionId: item.collectionIdentifier);
+          if (!continuation && identifier!.startsWith('chatHistory')) {
             group.add(message);
           } else {
             await flush();
@@ -112,13 +111,7 @@ Future<List<PromptSegment>> spresetSquashSegments(
       }
     }
     await flush();
-    final remove = removeConditionalTag;
-    return remove == null
-        ? output
-        : [
-            for (final segment in output)
-              _spSegment(segment, {...segment.message, 'content': remove(segment.message['content'])}, counter),
-          ];
+    return output;
   }
 
   for (final segment in prepared) {

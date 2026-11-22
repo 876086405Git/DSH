@@ -176,14 +176,20 @@ class _SPresetGeneration {
       providerOverride ?? SPresetProvider(source: _modelChatCompletionSource(model), model: model.model);
   List<SPresetTool> tools = const [];
   Map<String, bool>? _entryDecisions;
+  PromptManagerSnapshot? _promptManagerSnapshot;
   late final Object? _originalPromptOrder = _captureScriptJson(preset['prompt_order']);
   final _registryModes = <String>{};
   final _reportedNativeToolConflicts = <(String, String)>{};
   List<Map<String, Object?>> _nativeToolRows = const [];
   bool _nativeEntryPhase = false;
-  // Data-only presets without a page host keep their existing native path.
-  // An attached legacy JavaScript host must explicitly acknowledge new modes.
-  bool get _nativeRegistryPhases => _nativeEntryPhase && host is TavernSPresetScriptHost;
+  // A host interface does not prove that its current page loaded the runtime.
+  // Keep temporarily order/Entry-filtered bindings in the shared sync path,
+  // but data-only or wholly disabled/invalid bindings need no page registry.
+  late final bool _hasEnabledToolBindings = config.module('ToolBindings').values.any((value) {
+    final binding = _spMap(value);
+    return presetTruthy(binding['valid']) && presetTruthy(binding['enabled']);
+  });
+  bool get _nativeRegistryPhases => _nativeEntryPhase && _hasEnabledToolBindings && host is TavernSPresetScriptHost;
   int _sequence = 0, _response = 0;
   bool _closed = false;
   bool get logEnabled =>
@@ -203,20 +209,27 @@ class _SPresetGeneration {
     );
   }
 
+  bool get _currentPage =>
+      !_closed &&
+      !token.isCancelled &&
+      engine._scripts._hostVersion == hostVersion &&
+      (engine._spresetPageEpochs[chatId] ?? 0) == pageEpoch &&
+      identical(host, engine._scripts._host);
+
   void check() {
     cancellation.check();
-    if (_closed ||
-        token.isCancelled ||
-        engine._scripts._hostVersion != hostVersion ||
-        (engine._spresetPageEpochs[chatId] ?? 0) != pageEpoch ||
-        !identical(host, engine._scripts._host)) {
+    if (!_currentPage) {
       throw const SPresetException('host', 'The SPreset page document or host changed during generation.');
     }
   }
 
   void capturePromptManager(PromptManagerSnapshot snapshot) {
-    check();
-    if (chatId.isNotEmpty) engine._spresetPromptManagers[chatId] = snapshot;
+    // Local assembly belongs to this generation. Page publication is only an
+    // observer: an obsolete page cannot repopulate its cleared shared state.
+    _promptManagerSnapshot = snapshot;
+    if (chatId.isNotEmpty && !cancellation.isCancelled && _currentPage) {
+      engine._spresetPromptManagers[chatId] = snapshot;
+    }
   }
 
   PromptManagerSnapshot? readPromptManager() {
@@ -323,10 +336,10 @@ class _SPresetGeneration {
   }
 
   Future<void> _evaluateEntryConditions(String type, List<Map<String, Object?>> Function() readChat) async {
+    if (!config.present) return;
     check();
     engine._clearSPresetEntryDecisions(chatId);
     _entryDecisions = null;
-    if (!config.present) return;
     final selectedProvider = provider;
     final entries = _spRows(preset['prompts']).where((entry) => presetTruthy(entry['spreset_condition_enabled']));
     final evaluated = <String, bool>{};
@@ -371,6 +384,8 @@ class _SPresetGeneration {
   }, chatId.isEmpty ? _entryDecisions : engine._currentSPresetEntryDecisions(chatId));
 
   Future<List<SPresetTool>> _resolveRegistry(Map<String, Object?> effective, {String mode = 'sync'}) async {
+    cancellation.check();
+    if (!_hasEnabledToolBindings) return const [];
     check();
     if (mode != 'sync' && !_registryModes.contains(mode)) {
       final error = SPresetException('ToolBindings', 'The App host has not advertised tool registry mode $mode.');
@@ -435,8 +450,9 @@ class _SPresetGeneration {
   }
 
   Future<PromptAssembly> selectNativeWireTools(PromptAssembly original, PromptInput input) async {
-    check();
+    cancellation.check();
     if (!_nativeRegistryPhases || !config.present || !canPerformTools) return original;
+    check();
     // Source wire selection follows GENERATE_AFTER_DATA. It reads the current
     // shared registry, not this generation's earlier budget-time tool list.
     tools = await _resolveRegistry(_currentEntryPreset(), mode: 'read');
@@ -531,7 +547,7 @@ class _SPresetGeneration {
       }.contains(mode);
 
   Future<PromptAssembly> assembly(PromptAssembly original, PromptInput input, PromptTokenCounter counter) async {
-    check();
+    cancellation.check();
     if (!config.present) return original;
     final squash = config.chatSquash;
     if (!presetTruthy(squash['enabled']) && !presetTruthy(squash['squashed_post_script_enable'])) return original;
@@ -543,12 +559,12 @@ class _SPresetGeneration {
       expand: (text) => input.expansion?.call(text, const {}) ?? text,
       evaluate: evaluate,
       diagnose: diagnose,
-      readPromptManager: readPromptManager,
+      readPromptManager: () => _promptManagerSnapshot,
       onUnconvertedMessages: allowsRawMessageArray(_spString(input.preset.settings['custom_prompt_post_processing']))
           ? (messages) => rawMessages = messages
           : null,
     );
-    check();
+    cancellation.check();
     if (rawMessages != null) {
       // Admission/token provenance predates GENERATE_AFTER_DATA, as in ST.
       // body carries the later script result to FinalRequestProcessing.
@@ -573,13 +589,13 @@ class _SPresetGeneration {
     String? requestSource,
     void Function(Map<String, Object?>)? validateFinalBody,
   }) async {
-    check();
+    cancellation.check();
     final base = prepared ? _captureScriptObject(body) : prepareModelRequestBody(model, body);
     if (!config.present && host is! TavernSPresetRequestObserver) return base;
     if (config.present) {
       spresetApplyStops(config, base);
     }
-    if (_nativeRegistryPhases && config.present) {
+    if (_nativeRegistryPhases && config.present && (canPerformTools || _registryModes.contains('refresh'))) {
       // SETTINGS_READY refresh occurs after tools were selected for this
       // body. It changes future registration only; neither the body nor its
       // generation-owned action sessions are rebound from this response.
@@ -593,10 +609,10 @@ class _SPresetGeneration {
       diagnose('FinalRequestProcessing', error);
       rethrow;
     }
-    check();
+    cancellation.check();
     validateFinalBody?.call(finalBody);
     final observer = host;
-    if (observer is TavernSPresetRequestObserver) {
+    if (observer is TavernSPresetRequestObserver && _currentPage) {
       await cancellation.wait(
         engine._trackOperation(
           (observer as TavernSPresetRequestObserver).observeSPresetRequest(
@@ -605,7 +621,7 @@ class _SPresetGeneration {
           ),
         ),
       );
-      check();
+      cancellation.check();
     }
     if (logEnabled) {
       try {
@@ -839,7 +855,10 @@ class _SPresetGeneration {
                     } else {
                       nonstreamRaw = cumulative;
                     }
-                    consumed = !toolFailure;
+                    // The formatter sees only supported frame metadata. If
+                    // any primary fragment was excluded, retain the complete
+                    // native batch and its original authorization/replay path.
+                    consumed = !toolFailure && frames?.hasBlockedPrimaryToolFragments != true;
                   }
                 }
               } catch (error) {

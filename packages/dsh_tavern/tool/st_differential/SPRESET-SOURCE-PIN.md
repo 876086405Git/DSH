@@ -34,7 +34,7 @@ PY
 ## 从 `packages/dsh_tavern` 运行
 
 把下列 `inject.js`、`tool-calling.js`、`openai.js` 换成已校验文件的路径，输出写入独立临时目录。
-formatter 另需固定 [ST 7e8663 的 tool-calling.js](https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/tool-calling.js)（SHA256 `934be74f6bd672a821e5f3e5dc34ad4548c1cac60ee41c48feaa630e6e2f7712`）及同提交 [openai.js](https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/openai.js)（SHA256 `09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a`）。
+formatter 另需固定 [ST 7e8663 的 tool-calling.js](https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/tool-calling.js)（SHA256 `934be74f6bd672a821e5f3e5dc34ad4548c1cac60ee41c48feaa630e6e2f7712`）及同提交 [openai.js](https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/openai.js)（SHA256 `0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604`）。
 
 ```sh
 node tool/st_differential/spreset-conditional-tag-oracle.cjs inject.js > /tmp/spreset-conditional.json
@@ -53,4 +53,5 @@ cmp /tmp/spreset-squash.json test/fixtures/spreset/squash-boundaries.json
 这些是固定函数与明确边界替身的 Node 证据，不是完整网站、用户预设或 WebView 验收；没有执行整个外部 runtime。
 
 现有 `spreset_page_runtime_test.cjs`、`spreset_tool_registry_test.cjs`、`spreset_tool_receiver_test.cjs` 的可选原源差分没有旧 whole-file SHA 门禁，传入原始文件仍通过。它们不自行核仓库身份，输入仍须先完成上述字节校验。
-`spreset-tool-capability-oracle.cjs` 只读固定 ST 文件，不读 SPreset 原件，不受本次差异影响。
+`spreset-tool-capability-oracle.cjs` 只读固定 ST 文件，不读 SPreset 原件，不受 ADDENDUM-10 的 SPreset 尾 LF 差异影响。
+ADDENDUM-14 #11 随后确认 ST openai.js 的旧副本也多一个尾 LF；上述 formatter 与 capability 的 ST guard 现按原始字节更正。详见 [ST-SOURCE-PIN.md](ST-SOURCE-PIN.md)，旧 ADDENDUM-10 运行记录不回写。

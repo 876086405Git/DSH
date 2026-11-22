@@ -4,7 +4,11 @@ part of 'engine.dart';
 /// decoder keeps its established aliases and completion-envelope validation.
 extension _HelperResponseText on _HelperRequestRuntime {
   ({String text, String reasoning}) projectResponseText(bool streaming, Map<String, Object?> frame) {
-    final choices = _spRows(frame['choices']);
+    var choices = _spRows(frame['choices']);
+    if (streaming && response != null) {
+      final selected = response!.selectStreamingChoice(choices);
+      choices = selected.isEmpty ? const [] : [selected];
+    }
     final first = choices.firstOrNull ?? <String, Object?>{};
     final message = _map(first['message']);
     Object? text;
@@ -75,6 +79,8 @@ class _HelperResponseCapture {
   final bool hasTools;
   final fallback = <ModelToolFragment>[];
   final calls = <int, Map<String, Object?>>{};
+  final _callsByChoice = <int, Map<int, Map<String, Object?>>>{};
+  int? _streamingChoice;
   final signatures = <String, String>{};
   String? reasoningSignature;
   Map<String, Object?>? _nonstream;
@@ -86,6 +92,8 @@ class _HelperResponseCapture {
     attempt = number;
     fallback.clear();
     calls.clear();
+    _callsByChoice.clear();
+    _streamingChoice = null;
     signatures.clear();
     reasoningSignature = null;
     _nonstream = null;
@@ -114,17 +122,39 @@ class _HelperResponseCapture {
     }
   }
 
+  /// The first response array item owns the Helper body. Keep that identity
+  /// when later frames reorder choices or contain only another choice. This
+  /// deliberately repairs the upstream cross-choice behavior (ADDENDUM-14).
+  Map<String, Object?> selectStreamingChoice(List<Map<String, Object?>> choices) {
+    if (choices.isEmpty) return const {};
+    _streamingChoice ??= _choiceIndex(choices.first, 0);
+    for (final (ordinal, choice) in choices.indexed) {
+      if (_choiceIndex(choice, ordinal) == _streamingChoice) return choice;
+    }
+    return const {};
+  }
+
+  static int _choiceIndex(Map<String, Object?> choice, int ordinal) {
+    final index = choice['index'];
+    return index is num && index.isFinite && index >= 0 && index == index.truncateToDouble() ? index.toInt() : ordinal;
+  }
+
   /// Called after all deltas of exactly one production-decoded event. Neither
   /// an unterminated EOF record nor data after [DONE] reaches this boundary.
   void frame(Map<String, Object?> value) {
     framed = true;
     final choices = _spRows(value['choices']);
-    if (choices.isNotEmpty) {
-      _readSignatures(_map(choices.first['delta']), append: true);
-      _readSignatures(_map(choices.first['message']), append: true);
+    final selected = selectStreamingChoice(choices);
+    if (selected.isNotEmpty) {
+      _readSignatures(_map(selected['delta']), append: true);
+      _readSignatures(_map(selected['message']), append: true);
     }
-    for (final choice in choices) {
-      _readCalls(_map(choice['delta']), append: true);
+    for (final (ordinal, choice) in choices.indexed) {
+      _readCalls(
+        _map(choice['delta']),
+        append: true,
+        target: _callsByChoice.putIfAbsent(_choiceIndex(choice, ordinal), () => {}),
+      );
     }
   }
 
@@ -151,7 +181,8 @@ class _HelperResponseCapture {
     }
   }
 
-  void _readCalls(Map<String, Object?> value, {required bool append}) {
+  void _readCalls(Map<String, Object?> value, {required bool append, Map<int, Map<String, Object?>>? target}) {
+    final destination = target ?? calls;
     final rawCalls = value['tool_calls'];
     if (rawCalls is! List<Object?>) return;
     for (final (ordinal, raw) in rawCalls.indexed) {
@@ -169,9 +200,9 @@ class _HelperResponseCapture {
           ? 0
           : ordinal;
       if (append) {
-        _merge(calls.putIfAbsent(index, () => {}), item);
+        _merge(destination.putIfAbsent(index, () => {}), item);
       } else {
-        calls[index] = _captureScriptObject(item);
+        destination[index] = _captureScriptObject(item);
       }
     }
   }
@@ -221,13 +252,20 @@ class _HelperResponseCapture {
 
   TavernHelperGenerationMetadata finish(ModelAssistantSnapshot? finalSnapshot) {
     _readFallback(finalSnapshot);
-    final consumed = finalSnapshot != null && !finalSnapshot.wireMessage.containsKey('tool_calls');
-    final indices = calls.keys.toList()..sort();
+    final selected = streaming && framed
+        ? _callsByChoice[_streamingChoice] ?? const <int, Map<String, Object?>>{}
+        : calls;
+    // Helper streaming does not run the SPreset fetch tool-consumption hook.
+    // The native decoder's index-zero snapshot may describe a different
+    // choice, so absence there cannot erase this selected choice's calls.
+    final consumed =
+        !(streaming && framed) && finalSnapshot != null && !finalSnapshot.wireMessage.containsKey('tool_calls');
+    final indices = selected.keys.toList()..sort();
     return TavernHelperGenerationMetadata(
       reasoningSignature: reasoningSignature,
       toolCalls: [
         if (hasTools && !consumed)
-          for (final index in indices) _call(calls[index]!),
+          for (final index in indices) _call(selected[index]!),
       ],
     );
   }

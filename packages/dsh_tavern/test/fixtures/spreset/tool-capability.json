@@ -2,7 +2,7 @@
   "source": {
     "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
     "toolCallingSha256": "934be74f6bd672a821e5f3e5dc34ad4548c1cac60ee41c48feaa630e6e2f7712",
-    "openaiSha256": "09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a",
+    "openaiSha256": "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604",
     "method": "ToolManager.isToolCallingSupported; true function, not a support stub"
   },
   "scope": "catalog portion only; common gates use their own engine tests",

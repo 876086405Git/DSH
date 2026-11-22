@@ -82,3 +82,5 @@ ST 单图 `Message.addImage` 的 createThumbnail、尺寸读取和图像 token �
 源数组直接创建 parts 或在 READY 修改内容，不走单图 addImage；本次仅对显式 raw input 的 Message 准入费用作上述对齐，normal READY、历史及其它路径不因此宣称 token 完全等价。
 原始历史宏与图片的更细逐条交错、完整页面 listener 竞争和外部供应商均未在此签全等价；失败时原有背景写意图仍不会自动落盘。
 App 必须接入真实 resolver 及明确失败映射；本补丁没有修改 App 页面，也没有真机/浏览器签署。
+
+ADDENDUM-14 #11 更正上述 ST 整文件摘要：证据根中的 `research/st` 路径现须放固定提交的原始字节，不能复用旧追加尾 LF 的研究副本。取源表和六个 oracle 的重放资格见 [ST-SOURCE-PIN.md](../tool/st_differential/ST-SOURCE-PIN.md)；历史日志与行为向量不改。

@@ -644,10 +644,24 @@ class _ScriptPromptRun {
     final prepared =
         ordinaryFields ?? PreparedCharacterFields(_preparedFields, _preparedFields['persona'] ?? '', const []);
     final real = eligibleRealHistory;
+    // Helper scans the same prepared/limited/overridden history that feeds
+    // its prompt, even when raw output omits the chat_history slot. Its
+    // independent physical chat clocks must not shrink with this scan list.
+    final scan = _helperOptions(capture.request) == null
+        ? [for (final node in real) WorldInfoMessage(node.message.text, speaker: node.message.speaker)]
+        : [
+            for (final message in _history())
+              if (message.role != 'system')
+                WorldInfoMessage(
+                  message.content,
+                  speaker: message.role == 'user' ? environment.userName : _string(card['name']),
+                ),
+          ];
     world = await owner.engine._worldInfoEngine.evaluate(
       WorldInfoInput(
         books: books,
-        messages: [for (final node in real) WorldInfoMessage(node.message.text, speaker: node.message.speaker)],
+        messages: scan,
+        messageCount: real.length,
         maxContext: environment.maxContext - environment.maxResponse,
         tokenCount: owner.engine._counter.countText,
         random: owner.engine._random,

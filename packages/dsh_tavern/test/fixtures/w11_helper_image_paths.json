@@ -14,7 +14,7 @@
     ],
     "st": [
       "research/st/public/scripts/openai.js",
-      "09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a"
+      "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604"
     ]
   },
   "scope": "Synthetic inputs and actual fixed-source expectations only; no upstream implementation bodies. Catalog host is an explicit boundary. Non-chat-completion source input is not exercised by this chat-completion-only engine.",

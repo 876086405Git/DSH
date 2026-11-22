@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:test/test.dart';
@@ -7,6 +8,34 @@ import 'p2_script_generation_test_support.dart';
 import 'spreset_engine_test.dart' show SPresetHost, preset, toolExtension;
 
 void main() {
+  test('A nested ordinary legacy preparation preserves the active native Entry map', () async {
+    final f = await _fixture(defaultEnabled: false, condition: true);
+    final h = f.h, host = f.host;
+    final ordinary = (await h.engine.importPreset(jsonEncode(scriptPreset().raw))).preset.id;
+    TavernScriptGeneration? nested;
+    ScriptResponsePlan? nestedPlan;
+    host.onDispatch = (event, _) async {
+      if (event.namespace == 'tavern' && event.name == 'GENERATION_STARTED') {
+        nestedPlan = h.stream();
+        nested = await h.bridge.generate(
+          f.context.id,
+          TavernScriptGenerateRequest(presetId: ordinary, userInput: 'ordinary background', stream: true),
+        );
+        await generationSignal(nested!, nestedPlan!.listening.future);
+        h.reply('native completed');
+      }
+      return TavernScriptDispatchAck(eventId: event.eventId);
+    };
+    final events = await h.engine.send(f.chat, 'native input').toList();
+    // Finish the independent background stream before assertion/teardown.
+    nestedPlan!.delta('background completed');
+    nestedPlan!.finish();
+    await nested!.result;
+    _succeeded(events);
+    expect(host.conditions, 1);
+    expect(_visible(h.requests.last), isTrue);
+  });
+
   test('Entry completes before ordinary START and a real nested Helper sees its map', () async {
     final f = await _fixture();
     final h = f.h, host = f.host;
@@ -195,6 +224,7 @@ void main() {
       final f = await _fixture();
       final h = f.h, host = f.host;
       final entered = Completer<void>(), release = Completer<void>();
+      final replacement = SPresetHost();
       addTearDown(() {
         if (!release.isCompleted) release.complete();
       });
@@ -213,13 +243,17 @@ void main() {
       } else if (invalidation == 'page reset') {
         (h.engine as TavernSPresetPageLifecycle).resetSPresetPage(f.chat);
       } else {
-        h.bridge.attachHost(SPresetHost());
+        h.bridge.attachHost(replacement);
       }
       release.complete();
       await native.done.future;
       expect(native.values.whereType<TavernTurnFailed>(), hasLength(1));
       expect(
         host.deliveries.where((event) => event.namespace == 'tavern' && event.name == 'GENERATION_STARTED'),
+        isEmpty,
+      );
+      expect(
+        replacement.deliveries.where((event) => event.namespace == 'tavern' && event.name == 'GENERATION_STARTED'),
         isEmpty,
       );
       h.expectNoGeneration();

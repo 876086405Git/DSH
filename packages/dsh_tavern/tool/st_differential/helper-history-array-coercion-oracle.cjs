@@ -9,8 +9,8 @@ const image = 'data:image/png;base64,AQ==';
 const pins = {
   utils: ['research/helper/src/function/generate/utils.ts', '9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff'],
   raw: ['research/helper/src/function/generate/generateRaw.ts', '2bcb8b91a0657b6788c32899ec0b8256749cf00c83d1f4a22d7d1e3fca694a57'],
-  st: ['research/st/public/scripts/openai.js', '09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a'],
-  pm: ['research/st/PromptManager.js', '9cb20c2c52fb1e311c5ba95786da42fff459f52db0c02d36901599ea37b624c1'],
+  st: ['research/st/public/scripts/openai.js', '0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604'],
+  pm: ['research/st/PromptManager.js', 'b0054793b763d92b265f5f487645b68b4eca0867cb5ad6b5deb1034004b2c1cc'],
   script: ['research/st/public/script.js', '955c603d0bad84bac5a716f0818d85c2543e44d4c43878e0d63ef1e55ca91855'],
   input: ['research/helper/src/function/generate/inputProcessor.ts', 'db994f43c5672c6264bd6da4ebc72d0533d9fcdab6ea54d3d0611cc44a997b7a'],
 };

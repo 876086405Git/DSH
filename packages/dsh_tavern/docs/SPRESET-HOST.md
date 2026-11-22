@@ -66,6 +66,8 @@ toolRegistry 的 arguments[0] 为 `{bindings:[{identifier,code,uuid?}],activeIde
 附加JavaScript host只有明确声明能力后才接收新模式，每次新响应必须同名ack；缺能力/缺ack会可见失败，不能以空tools或退回sync冒充支持。已有Tavern/Host抽象接口没有新成员。
 升级页面asset并重新加载该画布后可重新发起生成；能力按本次生成的实际响应读取，不保留永久失败标记。
 没有附加JavaScript host的数据型预设沿既有路径，不因该协议额外要求页面；原本需JS的模块仍沿原可见失败规则。完全没有启用SPreset的普通预设保留原来的晚host/page捕获，START内host更换仍按原issue-only规则处理；不是把所有普通生成都纳入新增SP phase。
+ADD13/14：整个配置没有任何 valid 且 enabled 的 ToolBindings 时，native 与 Helper 均不发 registry RPC；即使 host 实现了接口而页面 runtime 关闭，纯数据 SPreset 也可生成。配置有可用绑定、只是被 order/Entry 暂时筛空时，仍保留原 empty sync/read/refresh 清理与晚读。前一种零 RPC 会跳过固定源本会执行的旧注册清理，是 owner 指定的 native 可用性取舍，不能称三种空集合行为都与原源相同。
+已配置绑定仍尝试 START sync。本次 function_calling=false 且失败响应未广告 refresh 能力时，sync 失败只诊断、不强制不存在的 refresh；实际广告了 refresh 则仍刷新。真正需要 registry 的 read/refresh 失败继续可见阻断；启用的其他 JS 模块仍独立校验，不能统一吞掉 runtime 缺失。
 
 | registryMode | 定义/注册行为 | 本次返回与绑定 |
 | --- | --- | --- |
@@ -75,6 +77,7 @@ toolRegistry 的 arguments[0] 为 `{bindings:[{identifier,code,uuid?}],activeIde
 
 同页嵌套请求可在outer wire前改变当前注册；read必须查询页面实际集合，不能用outer早期返回的私有副本。
 refresh可改变未来请求，但本次已选工具和其action receiver保持；generation release仍只释放自己的sessionScope。
+同一页面的 toolRegistry 调用按到达顺序串行处理 sync/read/refresh，失败后队列仍可继续；其它 Output、Final、action 求值不进入此队列。一次 await 期间另一请求不能改写本次 activeIdentifiers 的选择。
 `test/spreset_entry_phase_test.cjs`直接加载实际asset验证这三种行为；旧sync缓存/receiver/session测试保持。
 
 `isUndefined` 与 JSON null 分开：FinalRequestProcessing 的 undefined 采用修改后的 arguments[0].request；ChatSquash 数组 undefined 采用修改后的 arguments[0]。
@@ -182,7 +185,7 @@ node test/spreset_tool_receiver_test.cjs /path/to/fixed/regex_bind/inject.js /pa
 Helper 适配器按转换后的实际请求类型选择路径：named `generate()` 转成 raw 后也用 helperRaw。Helper 私有 `js_generation_ended` 不清共享 Map；实际向该聊天画布发出全局 STOP 时调用 `_clearSPresetEntryDecisions(chatId)`。取消或更换 host 后的原生晚结果不可采用；普通全局 STOP 仅清该画布当前 Map，不额外使同画布另一条仍活着的原生条件求值失效，该求值随后仍可发布。
 owner App 的同一 TavernScriptPages host 分派多个画布，SP evaluate 明确按 chatId 路由。因此活动 Map 按非空 chatId 分开；同 chat 的多个 script contexts 共享，不同 chat 的开始/END/STOP 不互相清理。host 替换清全部；无 chat 的调用不借用其他聊天的状态。公开 generationId 和单个 script contextId 都不是这份共享状态的键，Helper 关闭自己的求值 session 不清另一条原生生成的决策。
 上游 ST 单个网页的全局变量可跨该页 chat 切换共享；不能据此推定 App 的不同画布是同一个 JS realm。当前按 owner 明示路由实现 per-chat 作用域，没有为未知宿主自动启用跨chat共享。
-页面文档重建可能保留同一个 host/context，不能任意关闭一个 script context 就清整页 Map。现提供可选 TavernSPresetPageLifecycle.resetSPresetPage(chatId)，见下节；owner 当前页面代码尚未调用此新能力，因此 reload 完整接线仍未验收。
+页面文档重建可能保留同一个 host/context，不能任意关闭一个 script context 就清整页 Map。可选 TavernSPresetPageLifecycle.resetSPresetPage(chatId) 见下节；PR1771 的 App 已调用此信号，本轮仍没有 Flutter/WebView reload 真机验收。
 启用SPreset的实际公开_Turn现已前移Entry：在普通tavern GENERATION_STARTED/AFTER_COMMANDS处理器之前，创建同一SPresetGeneration、逐条await条件及early tool sync。provider在本次求值中捕获一次，chat在每次调用前重新读取/复制；前一条件通过实际bridge修改chat，下一条件可见。随后prepare只读取当时当前Map；START里的Helper STOP可以清它，不能把早先私有Map重新发布。
 这针对实际已有公开lifecycle的send/continue/regenerate/impersonate及使用同_Turn的路径。ST generateQuietPrompt本身会走全局Generate START，但当前dsh slashquiet/B2是iframe私有生命周期；本块不改其公开ABI或伪造全局事件，仍是明确的范围边界。原显式native raw也保持原private prepare合同；Helper private START绝不触发fresh Entry。
 固定ST事件实现证明later注册的makeFirst可以排在SP监听器之前；当前引擎仅保证相对其普通START处理器的次序，不声称复现任意外部listener重排。
@@ -214,9 +217,10 @@ if (lifecycle is TavernSPresetPageLifecycle) {
 ```
 
 由可信 App 在该画布 pageLost 或更换 document、开始新文档调用之前调用；不直接暴露成页面可调用的任意 reset RPC。一个 chat 的多个 script contexts 共用该画布，不应在关闭任意脚本或最后一个 context 时猜测 realm 是否重建。固定 owner canvas_calls.pageLost 明确保留 context，document 过滤只处理消息归属，不能代替这个 engine 通知。
-reset 清该 chat 的活动 Entry 与 PromptManager 集合，每 chat 单调 epoch 使先前捕获的 SPresetGeneration 在 check 拒绝采用晚结果；不清另一 chat，不执行 JS，不撤销已发生副作用，也不声称令实际宿主 Future 结束。真实载体仍沿既有排空和回执规则。
-PromptManager 集合在普通/native/quiet/Helper normal 的准入 finally 更新；END/STOP 和换预设保留，raw/named 不刷新。快照含 MI 前 admitted 集合拓扑和独立 ST system squash 视图，集合重读见 HELPER-PROMPT-MANAGER.md。此处不将孤立 authoring preview 作为 ST UI dryRun。
-现交付只实现 engine 能力和明确手动信号的引擎/HTTP测试。没有修改 owner App，没有 Flutter/WebView 真机结果；只有 owner 实际接入 reset 信号后才能检验 reload 组合。
+reset 清该 chat 的活动 Entry 与共享 PromptManager 集合，每 chat 单调 epoch 拒绝采用旧异步 JS 结果；不清另一 chat、不执行 JS、不撤销已发生副作用，也不声称令实际宿主 Future 结束。真实载体仍沿既有排空和回执规则。
+准入 finally 先保存本代局部 PromptManager，再检查 host/page/取消身份是否允许发布共享 Map；过期观察只跳过共享发布，不抛错终止纯 Dart 准备。真正需要 JS/registry 的阶段继续检查身份；纯数据路径不因无关旧页面失效而失败。
+separate 用本代拓扑分组当前 MI/图片后的消息；raw/named 使用本次 raw 自己的集合，不读取旧共享内容。完整合同与 owner 要求的上游缺陷修正见 HELPER-PROMPT-MANAGER.md。孤立 authoring preview 仍不是 ST UI dryRun。
+本轮只改 engine/bridge/protocol，没有修改 owner App；PR1771 的接线代码已只读核查，仍没有 Flutter/WebView 真机结果。
 
 ## 12. 原生流式 formatter 的模型目录事实（可选）
 
@@ -233,5 +237,6 @@ PromptManager 集合在普通/native/quiet/Helper normal 的准入 finally 更�
 source/model 绑定本次生成捕获的真实连接，预设残留连接字段、Final 改写的 wire model 均不改它；不同 chat 的目录事实不能因共享 dispatcher host 串用。目录逐帧变化已对照原源，但 native 保留既有捕获的 source/model/预设，未声称 UI 中途换源/换开关的全部 live-global 时序等价。OpenRouter 签名在支持门槛之前收集，先前不支持工具的帧仍可给后来启用的工具提供签名。
 
 非流式 SP response 消费不查询此接口。未提供 parsed-frame 回调的旧 custom ModelClient 仅在流式 EOF 查一次，这是旧入口的明确边界，不是逐帧源复刻。被门槛排除或格式化失败时仍沿现有原生 fragment 回放和工具授权；ST 的 unsupported 流原本不解析工具，两者授权体系的差异没有在此被重写。
+一次批次混有允许/不允许 formatter 的实际 primary 工具片段时，formatter 只能看到允许部分；即使该部分成功，仍保留原生整批供原授权与回放，不能把没交给 formatter 的调用一并丢弃。阻断标记按生产 decoder 的 primary 选择规则判断，不能把 decoder 未接受的畸形 choice 算成原生片段；签名仍按既有顺序收集。
 
 `tool/st_differential/spreset-tool-capability-oracle.cjs` 从固定 ST 真函数生成 103 个目录向量；`test/spreset_tool_capability_test.dart`、`test/spreset_tool_capability_engine_test.dart` 覆盖公共 DTO、真实生产 HTTP 编解码和宿主边界。旧 formatter 形状向量把 support 固定为 true，只证明其声明的形状/签名范围，不能单独作为完整 provider 能力证据；新接口尚需 owner 在实际 App 接线验证。

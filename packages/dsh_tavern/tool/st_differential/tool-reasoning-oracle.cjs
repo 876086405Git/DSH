@@ -7,9 +7,9 @@ const sourceFiles = process.argv.slice(2);
 assert.equal(sourceFiles.length, 3, 'Supply the three exact ST 1.19.0 source files.');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const pins = {
-  openai: ['research/st/public/scripts/openai.js', '09a580a06b351991cecef1577306ae6b4326a3972edd3dceb66dc89c29eacc4a'],
-  prompt: ['research/st/PromptManager.js', '9cb20c2c52fb1e311c5ba95786da42fff459f52db0c02d36901599ea37b624c1'],
-  reasoning: ['research/st/public/scripts/reasoning.js', '0eea2fa307bc67953acce95df5283371ef1af7a248415f084aa79a9efcbe3b2c'],
+  openai: ['research/st/public/scripts/openai.js', '0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604'],
+  prompt: ['research/st/PromptManager.js', 'b0054793b763d92b265f5f487645b68b4eca0867cb5ad6b5deb1034004b2c1cc'],
+  reasoning: ['research/st/public/scripts/reasoning.js', 'c489812f2598d1a4879b1a7287abde092741adafdf67f5b15cf18f2dd71d82d1'],
 };
 const sources = {}, extracted = [];
 for (const [index, [name, [file, sha]]] of Object.entries(pins).entries()) {
