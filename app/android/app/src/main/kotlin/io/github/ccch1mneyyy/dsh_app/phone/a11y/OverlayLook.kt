@@ -1,3 +1,5 @@
+// Portions derived from Libraries.dev Border beam (https://github.com/Jakubantalik/Libraries.dev), MIT, Copyright (c) 2026 Jakub Antalik. See THIRD_PARTY_NOTICES.md.
+
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
 import android.animation.ValueAnimator
