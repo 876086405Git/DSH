@@ -12,17 +12,12 @@ export function base64DecodedLength(value, limit) {
   const length = value.length / 4 * 3 - padding;
   if (length > limit) fail('too_large');
   const end = value.length - padding;
-  let last = 0;
-  for (let i = 0; i < end; i += 1) {
-    const c = value.charCodeAt(i);
-    if (c >= 65 && c <= 90) last = c - 65;
-    else if (c >= 97 && c <= 122) last = c - 71;
-    else if (c >= 48 && c <= 57) last = c + 4;
-    else if (c === 43) last = 62;
-    else if (c === 47) last = 63;
-    else fail('response');
+  // Only the known trailing padding may fall outside the base64 alphabet.
+  const firstInvalid = value.search(/[^A-Za-z0-9+/]/);
+  if (firstInvalid !== (padding ? end : -1)) fail('response');
+  if (padding) {
+    const last = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(value[end - 1]);
+    if ((last & (padding === 2 ? 15 : 3)) !== 0) fail('response');
   }
-  if ((padding === 2 && (last & 15) !== 0)
-    || (padding === 1 && (last & 3) !== 0)) fail('response');
   return length;
 }
