@@ -70,12 +70,13 @@ Object? _spresetRedactKnownValue(Object? value, Iterable<String> secrets) {
 
 /// Raw transport text is retained only after a complete JSON/SSE parse. A
 /// truncated or malformed body cannot be safely redacted by field name.
-Object? redactSPresetResponseBody(String text, {bool truncated = false}) {
+/// Known secrets are also removed from values decoded from JSON escapes.
+Object? redactSPresetResponseBody(String text, {bool truncated = false, Iterable<String> secrets = const []}) {
   Map<String, Object?> omitted(String reason) => {'omitted': true, 'reason': reason};
   if (truncated) return omitted('truncated response body');
   if (text.isEmpty) return '';
   try {
-    return redactSPresetLogValue(jsonDecode(text));
+    return _spresetRedactKnownValue(redactSPresetLogValue(jsonDecode(text)), secrets);
   } on FormatException {
     // SSE data may itself span several lines; parse complete events rather
     // than independently attempting JSON.parse on each data line.
@@ -91,7 +92,7 @@ Object? redactSPresetResponseBody(String text, {bool truncated = false}) {
       return true;
     }
     try {
-      events.add('data: ${jsonEncode(redactSPresetLogValue(jsonDecode(payload)))}');
+      events.add('data: ${jsonEncode(_spresetRedactKnownValue(redactSPresetLogValue(jsonDecode(payload)), secrets))}');
       return true;
     } on FormatException {
       return false;
@@ -123,11 +124,16 @@ class SPresetScriptLogBuffer {
   int _chars = 0, dropped = 0, truncatedValues = 0, consoleDropped = 0;
   List<Map<String, Object?>> get records => _records.map(_spObjectCopy).toList();
 
-  void add(Map<String, Object?> record, {Iterable<String> secrets = const [], int upstreamDropped = 0}) {
+  void add(
+    Map<String, Object?> record, {
+    Iterable<String> secrets = const [],
+    int upstreamDropped = 0,
+    int upstreamTruncatedValues = 0,
+  }) {
     consoleDropped += upstreamDropped;
     final budget = _SPresetLogValueBudget();
     final bounded = budget.copy(record);
-    truncatedValues += budget.truncated;
+    truncatedValues += budget.truncated + upstreamTruncatedValues;
     var clean =
         _spresetRedactKnownValue(redactSPresetLogValue(_spresetRedactKnownValue(bounded, secrets)), secrets)!
             as Map<String, Object?>;
@@ -190,7 +196,11 @@ class SPresetLogBuffer {
             as Map<String, Object?>;
     for (final transport in _spRows(_spMap(clean['response'])['transport'])) {
       if (transport['body'] case final String text) {
-        transport['body'] = redactSPresetResponseBody(text, truncated: transport['truncated'] == true);
+        transport['body'] = redactSPresetResponseBody(
+          text,
+          truncated: transport['truncated'] == true,
+          secrets: secrets,
+        );
       }
     }
     for (final key in const ['request', 'response', 'apiConfig', 'scriptLogs']) {

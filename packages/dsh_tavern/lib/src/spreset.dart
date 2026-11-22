@@ -138,6 +138,7 @@ class TavernSPresetEvaluationResult {
     this.isUndefined = false,
     this.committed,
     this.scriptLogsDropped = 0,
+    this.scriptLogValuesTruncated = 0,
     List<Object?> arguments = const [],
     List<TavernScriptIssue> issues = const [],
     List<Map<String, Object?>> scriptLogs = const [],
@@ -154,6 +155,7 @@ class TavernSPresetEvaluationResult {
     arguments: value['arguments'] as List<Object?>? ?? const [],
     scriptLogs: _spRows(value['scriptLogs']),
     scriptLogsDropped: (value['scriptLogsDropped'] as num?)?.toInt() ?? 0,
+    scriptLogValuesTruncated: (value['scriptLogValuesTruncated'] as num?)?.toInt() ?? 0,
   );
   final Object? _value;
   final List<Map<String, Object?>> _scriptLogs;
@@ -161,6 +163,7 @@ class TavernSPresetEvaluationResult {
   List<Map<String, Object?>> get scriptLogs => _scriptLogs.map(_spObjectCopy).toList();
   final bool isUndefined;
   final int scriptLogsDropped;
+  final int scriptLogValuesTruncated;
 
   /// Actual side-effect fact for tool actions: true = known committed effects,
   /// false = known no committed effects, null = unknown. Returning normally

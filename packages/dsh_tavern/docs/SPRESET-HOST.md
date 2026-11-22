@@ -57,7 +57,7 @@ abstract interface class TavernSPresetRequestObserver {
 | toolAction | 调用已保留的 action(args)，顺序 await；不重新求值定义。 |
 | toolFormatMessage | 调用已保留的 formatMessage(args)。 |
 
-响应 JSON：`{requestId,value,isUndefined,arguments,scriptLogs}`；App 另可添加真实 `committed` 事实，并用 `TavernSPresetEvaluationResult.fromJson` 还原。带结构化宿主 issues 时可直接构造 DTO 的 issues 参数（JSON convenience factory 当前不解析 issues）。
+响应 JSON：`{requestId,value,isUndefined,arguments,scriptLogs,scriptLogsDropped,scriptLogValuesTruncated}`；App 另可添加真实 `committed` 事实，并用 `TavernSPresetEvaluationResult.fromJson` 还原。两项计数缺省为 0，兼容旧页面返回。带结构化宿主 issues 时可直接构造 DTO 的 issues 参数（JSON convenience factory 当前不解析 issues）。
 toolRegistry 的 arguments[0] 为 `{bindings:[{identifier,code,uuid?}],activeIdentifiers:[...]}`。value 为 `{tools:[{identifier,code,sessionId,definition}],diagnostics:[{identifier,message}]}`；definition 含 name/description/parameters/hasAction/hasFormatMessage，以及可选 displayName/stealth。页面保留回调于 `generationId + ':' + returnedSessionId`；主引擎随后按该 sessionId 调用，不能重新执行定义来找 action。
 `isUndefined` 与 JSON null 分开：FinalRequestProcessing 的 undefined 采用修改后的 arguments[0].request；ChatSquash 数组 undefined 采用修改后的 arguments[0]。
 关闭合并时，原源 runPostScript 也接受 `['A']` 这样的 primitive 消息数组；本包后续 PromptSegment 需要消息 object，会在该类型边界报错，不把它伪装成源脚本回退。固定源54向量中53项对齐，这1项边界有单独测试与说明。
@@ -113,6 +113,10 @@ owner 可通过既有 settings API 写 `spresetRuntimeMode: 'external'`。该模
 外部模式仍受 owner 原有脚本执行入口控制；本包不自动下载或执行 loader。
 
 ## 8. 日志与导出
+
+页面诊断按既有 8192 UTF-16 code unit 边界省略超长字符串；超长属性名在读取该值、构造快照、序列化之前跳过整个字段，不截短键名以免碰撞。前 50 个属性中被跳过的字段不再补读后面的字段。
+`scriptLogValuesTruncated` 累计页面与 Dart 两端实际发生的裁剪：每个被省略的参数/属性/数组槽计 1，长标量计 1，节点/深度预算省略的整个子树计 1，整条事件改为 preview 再计 1。不递归统计未访问的子树，不把 Accessor/Circular/undefined 等类型表示算成预算裁剪；同一槽不会既因超长键又读取其值再计数。
+页面 `scriptLogsDropped` 只数被容量挤出的 console 记录，Dart 报告仍分别给 `scriptConsoleLogsDropped`（页面记录）与 `scriptLogsDropped`（Dart 求值记录）。计数按实际收集动作累计，即使相应记录后来被容量挤出也不撤销；captureLogs=false 不做快照、两项页面计数均为 0。新增字段由现有 fromJson 路径读取，不增加 App/Host 抽象接口。
 
 `spresetLogUploadEnabled` 只读 App 全局 setting，缺省 false；聊天级同名配置忽略，聊天级写入拒绝。预设的 LogUpload.enabled 不得单独开启。owner 开启后才收集模型请求/transport/本求值通道日志。
 TavernEngine 额外 implements 可选 `TavernSPresetLogApi`；`exportSPresetLogs(chatId)` 返回当前预设报告，`uploadSPresetLogs(chatId, address: ...)` 显式上传。它们没有加入原 Tavern 抽象接口；现有 Preview/Deferred wrapper 不因日志功能新增必实现成员。owner 要暴露日志时先检查实际 delegate 是否支持此能力，再显式实现/转发；不能假设所有 Tavern 都是 TavernEngine。没有自动上传。

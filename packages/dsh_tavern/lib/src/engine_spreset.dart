@@ -61,7 +61,7 @@ class _SPresetGeneration {
     final records = _transportLogs.remove(number) ?? <Map<String, Object?>>[];
     for (final record in records) {
       final captured = (record.remove('capture')! as SPresetResponseLogCapture).finish(secrets: _logSecrets);
-      record['body'] = redactSPresetResponseBody(captured.text, truncated: captured.truncated);
+      record['body'] = redactSPresetResponseBody(captured.text, truncated: captured.truncated, secrets: _logSecrets);
       record['truncated'] = captured.truncated;
     }
     return records;
@@ -179,6 +179,7 @@ class _SPresetGeneration {
         },
         secrets: _logSecrets,
         upstreamDropped: response.scriptLogsDropped,
+        upstreamTruncatedValues: response.scriptLogValuesTruncated,
       );
     }
     return response;

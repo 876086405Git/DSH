@@ -1917,9 +1917,9 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
       final name = selected.preset?.name ?? _spString(preset['preset_settings_openai'], 'current');
       final config = SPresetConfig.fromPreset(preset);
       final target = address ?? _spString(config.module('LogUpload')['url']);
-      final enabled = _readMap(_document['settings'])['spresetLogUploadEnabled'] == true;
       await _loadSPresetLogs();
       final report = _spresetLogs.report(presetName: name, at: _clock(), tavernHelper: helper, browserConsole: console);
+      final enabled = _readMap(_document['settings'])['spresetLogUploadEnabled'] == true;
       return uploadSPresetLogReport(Uri.parse(target), report, enabled: enabled, bearerToken: bearerToken);
     });
   }
@@ -3402,8 +3402,12 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
   Future<Map<String, Object?>?> _readBook(String id) => _bookOperation(() => _readBookNow(id));
 
   Future<({Map<String, Object?> raw, String? stWorldName})?> _readBookSnapshot(String id) => _bookOperation(() async {
+    // Bound standalone books share the directory's admission rules. Keep raw
+    // reads separate so an unreadable entries field can still be repaired.
+    if (_scripts.scriptResources.directory.standalone[id]?.readable == false) return null;
     final raw = await _readBookNow(id);
-    return raw == null ? null : (raw: raw, stWorldName: _bookSourceNames[id]);
+    if (raw == null || _scripts._bookDirectoryEntriesFailure(raw) != null) return null;
+    return (raw: raw, stWorldName: _bookSourceNames[id]);
   });
 
   Future<Map<String, Object?>?> _readBookNow(String id) async {

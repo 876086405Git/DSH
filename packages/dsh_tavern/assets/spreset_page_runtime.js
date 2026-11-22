@@ -60,7 +60,7 @@
       logger[level] = (...values) => {
         const capture = sink.capture;
         if (capture.enabled) {
-          const budget = {nodes: 0};
+          const budget = {nodes: 0, truncated: Math.max(0, values.length - 8)};
           const formatted = values.slice(0, 8).map(value => {
             const saved = logValue(value, budget);
             return typeof saved === 'string' ? saved : JSON.stringify(saved);
@@ -68,9 +68,11 @@
           let event = {level, stage: sink.request.stage, values: formatted};
           let encoded = JSON.stringify(event);
           if (encoded.length > 65536) {
+            budget.truncated++;
             event = {level, stage: sink.request.stage, truncated: true, preview: encoded.slice(0, 16384)};
             encoded = JSON.stringify(event);
           }
+          capture.truncatedValues += budget.truncated;
           while (capture.logs.length && (capture.logs.length >= 500 || capture.chars + encoded.length > 512 * 1024)) {
             capture.chars -= JSON.stringify(capture.logs.shift()).length;
             capture.dropped++;
@@ -86,12 +88,21 @@
   // Snapshot a bounded number of own data properties. Do not invoke getters
   // or serialize an unbounded object merely to discover that it is too large.
   function logValue(value, budget, depth = 0, seen = new Set()) {
-    if (++budget.nodes > 500 || depth > 6) return '[TRUNCATED]';
-    if (typeof value === 'string') return value.length > 8192 ? `[OMITTED string: ${value.length} chars]` : value;
+    if (++budget.nodes > 500 || depth > 6) {
+      budget.truncated++;
+      return '[TRUNCATED]';
+    }
+    if (typeof value === 'string') {
+      if (value.length <= 8192) return value;
+      budget.truncated++;
+      return `[OMITTED string: ${value.length} chars]`;
+    }
     if (value === undefined) return '[undefined]';
     if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
       const text = typeof value === 'function' ? Function.prototype.toString.call(value) : String(value);
-      return text.length > 8192 ? `[OMITTED string: ${text.length} chars]` : text;
+      if (text.length <= 8192) return text;
+      budget.truncated++;
+      return `[OMITTED string: ${text.length} chars]`;
     }
     if (value === null || typeof value !== 'object') return value;
     if (seen.has(value)) return '[Circular]';
@@ -102,9 +113,27 @@
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         return descriptor && 'value' in descriptor ? logValue(descriptor.value, budget, depth + 1, seen) : '[Accessor]';
       };
-      result = Array.isArray(value)
-        ? Array.from({length: Math.min(value.length, 50)}, (_, index) => own(String(index)))
-        : Object.fromEntries(Object.keys(value).slice(0, 50).map(key => [key, own(key)]));
+      if (Array.isArray(value)) {
+        // Reuse Array.from's ToLength semantics for the count as well, with
+        // the original one property read and one numeric conversion.
+        const length = Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(+value.length) || 0));
+        budget.truncated += Math.max(0, length - 50);
+        result = Array.from({length: Math.min(length, 50)}, (_, index) => own(String(index)));
+      } else {
+        const keys = Object.keys(value);
+        budget.truncated += Math.max(0, keys.length - 50);
+        const entries = [];
+        for (const key of keys.slice(0, 50)) {
+          // Omit the entire slot before reading its value or constructing a
+          // snapshot. Truncating a key could collide with another real key.
+          if (key.length > 8192) {
+            budget.truncated++;
+            continue;
+          }
+          entries.push([key, own(key)]);
+        }
+        result = Object.fromEntries(entries);
+      }
     } catch { result = '[UNSERIALIZABLE]'; }
     seen.delete(value);
     return result;
@@ -145,7 +174,7 @@
   async function evaluate(request, signal) {
     check(signal);
     const args = copy(request.arguments ?? []);
-    const capture = {enabled: request.captureLogs === true, logs: [], chars: 0, dropped: 0};
+    const capture = {enabled: request.captureLogs === true, logs: [], chars: 0, dropped: 0, truncatedValues: 0};
     const sink = { request, capture };
     const logger = loggerFor(sink);
     let value;
@@ -254,7 +283,8 @@
     // cancellation arrived. The App must keep its real bridge receipt facts;
     // this evaluator does not invent committed=false for arbitrary JS.
     return { requestId: request.requestId, value: copy(value), isUndefined: value === undefined,
-      arguments: copy(args), scriptLogs: capture.logs, scriptLogsDropped: capture.dropped };
+      arguments: copy(args), scriptLogs: capture.logs, scriptLogsDropped: capture.dropped,
+      scriptLogValuesTruncated: capture.truncatedValues };
   }
   globalThis.DshSPresetPageRuntime = Object.freeze({
     evaluate,
