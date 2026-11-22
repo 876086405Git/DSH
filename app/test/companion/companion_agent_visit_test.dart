@@ -107,6 +107,18 @@ http.Response _message({
   );
 }
 
+Map _context(Map<String, Object?> request) {
+  final texts = <String>[
+    for (final message in (request['messages']! as List).cast<Map>())
+      if (message['role'] == 'user' && message['content'] is List)
+        for (final block in (message['content']! as List).cast<Map>())
+          if (block['type'] == 'text') block['text']! as String,
+  ];
+  final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
+  return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length))
+      as Map;
+}
+
 class _Host extends ActiveHostController {
   @override
   HostRef build() => HostRef.local;
@@ -388,9 +400,13 @@ void main() {
       expect(source['zone_id'], 'Asia/Shanghai');
       expect(source['offset_seconds'], 28800);
       expect(visit.calls('clock'), 1);
+      expect(_context(visit.requests.single)['localTime'], '2026-11-22T18:00+08:00');
+      expect(_context(visit.requests.single).containsKey('originalMessage'), isFalse);
 
       visit.clockAt += 3600000;
+      final retryStartedAt = DateTime.now().millisecondsSinceEpoch;
       await visit.attachment.submit(_raw);
+      final retryFinishedAt = DateTime.now().millisecondsSinceEpoch;
       expect(visit.userSource, source);
       expect(visit.agent.sourceId, source['id']);
       expect(visit.turn['id'], turn['id']);
@@ -400,6 +416,15 @@ void main() {
       expect(visit.calls('clock'), 1);
       expect(visit.calls('wake'), 1);
       expect(visit.requests, hasLength(3));
+      final retryContext = _context(visit.requests[1]);
+      expect(retryContext['originalMessage'], {
+        'localTime': '2026-11-22T18:00+08:00',
+        'zoneId': 'Asia/Shanghai',
+      });
+      expect(_context(visit.requests.last)['originalMessage'], retryContext['originalMessage']);
+      final currentClock = DateTime.parse(retryContext['localTime']! as String).millisecondsSinceEpoch;
+      // The wire clock has minute precision and must remain the current clock.
+      expect(currentClock, inInclusiveRange(retryStartedAt - 60000, retryFinishedAt));
       expect(visit.attachment.error, isNull);
       expect(visit.attachment.text, '已记下这条提醒。');
       final task = visit.memory.store.tasks().single;
@@ -718,22 +743,10 @@ void main() {
       visit.clockAt += const Duration(minutes: 5).inMilliseconds;
       await visit.attachment.submit('明天是哪一天？');
       expect(visit.requests, hasLength(2));
-      Map context(Map<String, Object?> request) {
-        final texts = <String>[
-          for (final message in (request['messages']! as List).cast<Map>())
-            if (message['role'] == 'user' && message['content'] is List)
-              for (final block in (message['content']! as List).cast<Map>())
-                if (block['type'] == 'text') block['text']! as String,
-        ];
-        final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
-        return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length))
-            as Map;
-      }
-
-      expect(context(visit.requests.first)['localTime'], '2026-11-22T18:00+08:00');
-      expect(context(visit.requests.last)['localTime'], '2026-11-22T18:05+08:00');
-      expect(context(visit.requests.first)['zoneId'], 'Asia/Shanghai');
-      expect(context(visit.requests.last)['zoneId'], 'Asia/Shanghai');
+      expect(_context(visit.requests.first)['localTime'], '2026-11-22T18:00+08:00');
+      expect(_context(visit.requests.last)['localTime'], '2026-11-22T18:05+08:00');
+      expect(_context(visit.requests.first)['zoneId'], 'Asia/Shanghai');
+      expect(_context(visit.requests.last)['zoneId'], 'Asia/Shanghai');
       expect(visit.calls('clock'), 2);
       final sources = visit.memory.store.messages().where((row) => row['role'] == 'user').toList();
       expect(sources.map((row) => row['said_at_utc']), [_now, _now + 300000]);

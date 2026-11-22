@@ -406,14 +406,25 @@ class _CompanionAgentVisit {
         askTime: true,
         events: events,
       );
-      final turnContext = sourceClock == null
-          ? sampledContext
-          : CompanionTurnContext(
-              Map.unmodifiable({...sampledContext.data, 'zoneId': sourceClock.zoneId}),
-              sampledContext.eventIds,
-              sampledAt: sampledContext.sampledAt,
-              hasClock: sampledContext.hasClock,
-            );
+      final turnContext = CompanionTurnContext(
+        Map.unmodifiable({
+          ...sampledContext.data,
+          if (sourceClock != null) 'zoneId': sourceClock.zoneId,
+          // A retry's current clock is not when its unchanged words were said.
+          if (reuse)
+            'originalMessage': {
+              ...companionTurnContext(
+                now: DateTime.fromMillisecondsSinceEpoch(source['said_at_utc']! as int, isUtc: true),
+                utcOffsetMinutes: source['offset_minutes']! as int,
+                askTime: true,
+              ).data,
+              if (source['zone_id'] case final String zone) 'zoneId': zone,
+            },
+        }),
+        sampledContext.eventIds,
+        sampledAt: sampledContext.sampledAt,
+        hasClock: sampledContext.hasClock,
+      );
       lastSpokenAt = now;
       final persona = ref.read(companionPersonaProvider);
       final system = companionLightSystem(
