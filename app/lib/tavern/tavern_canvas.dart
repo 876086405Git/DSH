@@ -547,14 +547,16 @@ ${lowPower ? tavernCalmJs : ''}
   }
   // A preset's SPreset function (packages/dsh_tavern/assets/
   // spreset_page_runtime.js, on this page with the preset's scripts): the
-  // runtime's answer goes back, or why it threw; a cancel aborts it.
+  // runtime's answer goes back, or why it threw. A cancel settles it at
+  // once, as not known what it did, even if the function never returns.
   var spresetRuns={};
   function spreset(r){
     var run=new AbortController();spresetRuns[r.requestId]=run;
-    Promise.resolve().then(function(){
+    var cancelled=new Promise(function(_,no){run.signal.addEventListener('abort',function(){no(new Error('SPreset evaluation cancelled; what it did is not known.'));});});
+    Promise.race([cancelled,Promise.resolve().then(function(){
       if(!window.DshSPresetPageRuntime)throw new Error('The SPreset runtime is not on this page (scripts are off).');
       return DshSPresetPageRuntime.evaluate(r,run.signal);
-    }).then(function(a){delete spresetRuns[r.requestId];post(Object.assign({},a,{type:'spreset'}));},
+    })]).then(function(a){delete spresetRuns[r.requestId];post(Object.assign({},a,{type:'spreset'}));},
       function(e){delete spresetRuns[r.requestId];post({type:'spreset',requestId:r.requestId,error:String(e&&e.message||e)});});
   }
   function reload(){loaded=false;loading=null;dsh.scripts.ready().catch(function(){});}
