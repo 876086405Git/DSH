@@ -57,6 +57,7 @@ export function mediaMeta(request, rid, status, job) {
     request: { provider: request.service.provider, model: request.model.id, label: request.model.label,
       n: request.n ?? 1, refs: request.refs?.length ?? 0,
       ...(request.aspect ? { aspect: request.aspect } : {}), ...(request.quality ? { quality: request.quality } : {}),
+      ...(request.resolution ? { resolution: request.resolution } : {}),
       ...(request.seconds ? { seconds: request.seconds } : {}) }, prompt: request.prompt };
 }
 export async function generateMedia(request, context) {
