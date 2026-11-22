@@ -51,6 +51,7 @@ class ReplayFrames {
   final Map<int, ChatItem> _done = {};
   final Map<int, TurnTrace> _open = {};
   final Map<int, TurnTrace> _closed = {};
+  final Map<int, ToolChatItem> _runningTools = {};
 
   /// The sequence number entry [i] gets (turns start just before their
   /// prompt; room for a turn's end after its last part).
@@ -88,7 +89,9 @@ class ReplayFrames {
             done ? (_done[i] ??= _reply(i, entry, beat, time, done: true)) : _reply(i, entry, beat, time, done: false),
           );
         case ToolEntry():
-          items.add(done ? (_done[i] ??= _tool(i, entry, done: true)) : _tool(i, entry, done: false));
+          items.add(
+            done ? (_done[i] ??= _tool(i, entry, done: true)) : (_runningTools[i] ??= _tool(i, entry, done: false)),
+          );
         case NoticeEntry():
           items.add(_done[i] ??= NoticeChatItem(seq: seqOf(i), kind: entry.kind, text: entry.text));
         case CommandEntry():

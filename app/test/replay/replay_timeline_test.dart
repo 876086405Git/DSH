@@ -108,6 +108,9 @@ void main() {
     expect(running.resultParts, isEmpty);
     final done = frames.at(bash.end).items.whereType<ToolChatItem>().single;
     expect(done.status, ToolStatus.failed);
+    expect(frames.at(bash.start + 2).items.whereType<ToolChatItem>().single, same(running));
+    expect(done, isNot(same(running)));
+    expect(done.arguments, running.arguments);
 
     // The todo list appears with its write and goes when the next turn starts.
     expect(frames.at(plan.beats[4].start).todos, hasLength(2));
