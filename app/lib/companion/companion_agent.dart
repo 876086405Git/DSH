@@ -94,7 +94,7 @@ class CompanionAgent extends ChangeNotifier {
     required Future<Directory> root,
     required CompanionCharacter character,
     required CompanionMoves moves,
-    required String sourceKey,
+    required String? sourceKey,
     required CompanionAgentRoomUi ui,
     required CompanionMapHandoff mapHandoff,
   }) {
@@ -461,8 +461,7 @@ class CompanionAgent extends ChangeNotifier {
 
   void stop({bool discard = false}) {
     cancelScreenObservation();
-    final background = _visit?.residentUi;
-    if (background is CompanionAgentAmbientUi) (background as CompanionAgentAmbientUi).stopSpeech();
+    if (_visit?.residentUi case final CompanionAgentAmbientUi background) background.stopSpeech();
     final run = _run;
     if (run == null || !run.running) return;
     run.onStop?.call();

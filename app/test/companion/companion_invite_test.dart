@@ -182,6 +182,8 @@ class _FollowupPreparation extends CompanionInitiative {
     bool nightCareEnabled = false,
     String? followupId,
     Future<bool> Function()? prepare,
+    Future<bool> Function(CompanionInitiativeDisplay)? deliver,
+    void Function(Future<void>)? retainDelivery,
   }) => super.requestSignal(
     room,
     view,
@@ -191,6 +193,8 @@ class _FollowupPreparation extends CompanionInitiative {
     hide: hide,
     nightCareEnabled: nightCareEnabled,
     followupId: followupId,
+    deliver: deliver,
+    retainDelivery: retainDelivery,
     prepare: prepare == null
         ? null
         : () {

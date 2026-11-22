@@ -21,13 +21,16 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
   /// request primitive. Screen text is data, never a user source or tool grant.
   Future<Map<String, Object?>?> classifyScreen({required Map<String, Object?> context}) async {
     final visit = _visit;
-    final ui = visit?.residentUi;
+    final ui = switch (visit?.residentUi) {
+      final CompanionAgentAmbientUi ambient => ambient,
+      _ => null,
+    };
     if (visit == null ||
         !visit.active ||
         running ||
         visit.preparing ||
-        ui is! CompanionAgentAmbientUi ||
-        !(ui as CompanionAgentAmbientUi).presentationAvailable ||
+        ui == null ||
+        !ui.presentationAvailable ||
         context['type'] != 'screen_observation' ||
         context['text'] is! String) {
       return null;
@@ -45,7 +48,7 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         identical(_visit, visit) &&
         visit.characterId == role &&
         identical(visit.residentUi, ui) &&
-        (ui as CompanionAgentAmbientUi).presentationAvailable &&
+        ui.presentationAvailable &&
         visit.lastUserInteractionAt == originalUserTime &&
         owner.store.archive['control_revision'] == revision &&
         _run?.running != true;

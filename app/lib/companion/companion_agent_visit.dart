@@ -274,8 +274,7 @@ class _CompanionAgentVisit {
   }
 
   CompanionAgentAttachment attachWindow(CompanionAgentRoomUi next, CompanionMapHandoff handoff) {
-    final background = residentUi;
-    if (background is CompanionAgentAmbientUi) (background as CompanionAgentAmbientUi).stopSpeech();
+    if (residentUi case final CompanionAgentAmbientUi background) background.stopSpeech();
     final previous = window;
     if (previous != null) detachWindow(previous, replacing: true);
     final captured = window = _CompanionAgentWindow(next, handoff);
@@ -697,8 +696,7 @@ class _CompanionAgentVisit {
         turnId: memoryTools.turnId,
         isCurrent: () => current() && memoryTools?.isCurrent == true,
         onStep: (text) {
-          final target = residentUi;
-          if (current() && target is CompanionAgentAmbientUi && (target as CompanionAgentAmbientUi).presentationAvailable) {
+          if (residentUi case final CompanionAgentAmbientUi target when current() && target.presentationAvailable) {
             unawaited(target.presentLine(id: 'phone:${source['id']}', text: text, emotion: 'neutral', speak: false));
           }
         },
@@ -1102,6 +1100,10 @@ class _CompanionAgentVisit {
         owner.store.isAgentFollowupCurrent(captured, nowMs: clock().wallMs, characterId: role);
     String? line;
     String? notificationTicket;
+    final notify = switch (target) {
+      final CompanionAgentNotificationUi notify => notify,
+      _ => null,
+    };
     void recordPresented(String ticketId) {
       if (role == null) return;
       try {
@@ -1166,13 +1168,13 @@ class _CompanionAgentVisit {
         }
         return true;
       },
-      deliver: target is CompanionAgentNotificationUi
-          ? (display) async {
+      deliver: notify == null
+          ? null
+          : (display) async {
               if (!current() || line == null) return false;
               notificationTicket = display.ticket.id;
-              return target.deliverFollowup(id: 'followup:${captured['id']}', text: line!);
-            }
-          : null,
+              return notify.deliverFollowup(id: 'followup:${captured['id']}', text: line!);
+            },
       retainDelivery: (future) {
         owner.retainReceipt(
           future.then((_) {
@@ -1194,7 +1196,9 @@ class _CompanionAgentVisit {
   void offerResidentSignal(CompanionSignalSpeech speech, bool Function() signalCurrent) {
     final target = residentUi;
     final owner = memory;
-    if (target is! CompanionAgentNotificationUi || owner == null || !active || !identical(initiativeUi, target)) return;
+    if (target == null || owner == null || !active || !identical(initiativeUi, target)) return;
+    if (target is! CompanionAgentNotificationUi) return;
+    final notify = target as CompanionAgentNotificationUi;
     final view = target.initiativeView;
     final candidate = CompanionInitiativeSignal(
       id: speech.id,
@@ -1215,7 +1219,7 @@ class _CompanionAgentVisit {
       nightCareEnabled: speech.nightCare,
       deliver: (_) async {
         if (!current()) return false;
-        return target.deliverFollowup(id: 'task:${speech.slot.signal.id}', text: speech.text);
+        return notify.deliverFollowup(id: 'task:${speech.slot.signal.id}', text: speech.text);
       },
       retainDelivery: owner.retainReceipt,
     );

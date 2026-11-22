@@ -761,6 +761,8 @@ class _FollowupObserver extends CompanionInitiative {
     bool nightCareEnabled = false,
     String? followupId,
     Future<bool> Function()? prepare,
+    Future<bool> Function(CompanionInitiativeDisplay)? deliver,
+    void Function(Future<void>)? retainDelivery,
   }) {
     final accepted = super.requestSignal(
       room,
@@ -775,6 +777,8 @@ class _FollowupObserver extends CompanionInitiative {
       nightCareEnabled: nightCareEnabled,
       followupId: followupId,
       prepare: prepare,
+      deliver: deliver,
+      retainDelivery: retainDelivery,
     );
     if (accepted && followupId != null) captured.add(candidate);
     return accepted;

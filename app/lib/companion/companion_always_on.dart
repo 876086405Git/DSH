@@ -61,7 +61,6 @@ class CompanionAlwaysOnOwner {
   StreamSubscription<int>? _packChanges;
   void Function()? _removeBeforePack;
   CompanionAgentResident? _resident;
-  _ResidentUi? _ui;
   CompanionAlwaysOnStatus _status = const CompanionAlwaysOnStatus();
   Future<void> _opening = Future.value();
   Future<void> _notificationQueue = Future.value();
@@ -117,9 +116,9 @@ class CompanionAlwaysOnOwner {
     });
     final identity = await store.characterIdentity();
     if (_closed || generation != _generation) return;
-    _name = identity.character.name;
+    _name = identity.character.name ?? _name;
     unawaited(overlay.companionMode(enabled: true, name: _name));
-    final ui = _ui = _ResidentUi(this);
+    final ui = _ResidentUi(this);
     final lease = _resident = agent.retainAlwaysOn(
       root: Future.value(store.root),
       character: identity.character,
@@ -261,7 +260,6 @@ class CompanionAlwaysOnOwner {
     _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) => channel.clear(epoch));
     _resident?.close();
     _resident = null;
-    _ui = null;
     _reply = null;
     _sentText = null;
     _sentRunning = null;
