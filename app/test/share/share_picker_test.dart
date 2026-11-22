@@ -5,6 +5,8 @@
 //
 //   flutter test --update-goldens test/share/share_picker_test.dart
 
+import 'dart:collection';
+
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/ui/share/share_content.dart';
 import 'package:dsh_app/ui/share/share_picker.dart';
@@ -13,6 +15,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chat/support/harness.dart';
+
+class _ReadCountingItems extends ListBase<ChatItem> {
+  _ReadCountingItems(this.items);
+
+  final List<ChatItem> items;
+  int reads = 0;
+
+  @override
+  int get length => items.length;
+  @override
+  set length(int value) => throw UnsupportedError('read-only');
+  @override
+  ChatItem operator [](int index) {
+    reads++;
+    return items[index];
+  }
+
+  @override
+  void operator []=(int index, ChatItem value) => throw UnsupportedError('read-only');
+}
 
 /// Six exchanges, the third prompt a picture only.
 List<ChatItem> _items() {
@@ -108,6 +130,32 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(find.text('完成（3）'), findsOneWidget);
+  });
+
+  testWidgets('a drag near the last message visits mounted rows only', (tester) async {
+    usePhoneView(tester);
+    final items = _ReadCountingItems([
+      for (var i = 0; i < 1000; i++) AssistantChatItem(id: 'a$i', text: 'Reply $i', reasoning: ''),
+    ]);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: MessagePicker(items: items, selected: const {'a999'}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final visible = find.byType(MessagePickRow).hitTestable();
+    final middle = visible.at(visible.evaluate().length ~/ 2);
+    final row = tester.widget<MessagePickRow>(middle);
+    expect(int.parse(row.item.key.substring(1)), greaterThan(500));
+    final gesture = await tester.startGesture(tester.getCenter(middle));
+    await tester.pump(const Duration(milliseconds: 600));
+    items.reads = 0;
+    await gesture.moveBy(const Offset(0, 5));
+    expect(items.reads, inInclusiveRange(1, 99));
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('picked neighbours share a rail through their checks', (tester) async {
