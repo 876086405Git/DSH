@@ -82,13 +82,13 @@ export async function generateMedia(request, context) {
       ...(request.model.kind === 'video' ? { duration: 3600, codec: 'hevc' } : {}),
     }));
     if (Buffer.byteLength(JSON.stringify({ 'dsh-go/media': { ...meta, items: maximumItems } })) > 8192) fail('metadata');
-    const refs = context.resumeTaskId ? [] : context.referenceSources ?? await readReferences(request.refs, { ...context, signal });
+    let refs = context.resumeTaskId ? [] : context.references?.sources ?? await readReferences(request.refs, { ...context, signal });
     secret = await context.resolveCredential();
     if (typeof secret !== 'string' || secret.length < 1 || secret.length > 8192 || /[\r\n]/.test(secret)) fail('credential');
     // Reject a secret deliberately echoed through any public metadata/input field.
     if (containsSecret({ request, cwd: store.cwd }, secret)) fail('credential');
     await store.recheck();
-    await validateReferencePins(context.referencePins);
+    await validateReferencePins(context.references?.pins);
     checkAbort(signal);
     let performCreate;
     if (!context.resumeTaskId) {
@@ -101,6 +101,10 @@ export async function generateMedia(request, context) {
     }
     submitted = true; // Intent may have reached the provider, even if the response is lost.
     const created = context.resumeTaskId ? { taskId: context.resumeTaskId } : await performCreate();
+    // The background job shares captured inputs with its caller. Polling needs only the task ID.
+    if (context.references) context.references.sources = undefined;
+    refs = undefined;
+    performCreate = undefined;
     if (request.model.kind === 'image') {
       let total = 0;
       for (const source of created.images) {
