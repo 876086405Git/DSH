@@ -1298,7 +1298,9 @@ ${lowPower ? tavernCalmJs : ''}
     var value=null,error=null;
     r.then(function(v){value=v;},function(e){error=e||new Error('failed');}).then(function(){
       var at=watching.indexOf(w);if(at>=0)watching.splice(at,1);
-      return settle().then(function(){return Promise.all(w.entries.map(function(e){return e.done;}));});
+      // Only the writes this filter started: never the page's other calls
+      // (a generation may be waiting on this very answer).
+      return Promise.all(w.entries.map(function(e){return e.done;}));
     }).then(function(){
       var issues=[];
       w.entries.forEach(function(e){
