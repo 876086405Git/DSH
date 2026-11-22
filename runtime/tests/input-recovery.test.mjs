@@ -377,21 +377,26 @@ test('an explicit inbox remove/clear is not a claim and is never resurrected', a
   assert.equal(f.agent.inbox.hasPending, false);
 });
 
-test('cancel followed by a new wake cannot turn recovered input into an automatic error storm', async () => {
+test('an explicit followup after abort admits the recovered steer and new input in the next turn', async () => {
   let release;
   let entered;
   const inside = new Promise(resolve => { entered = resolve; });
   const gate = new Promise(resolve => { release = resolve; });
   const f = fixture({ assemble: async () => { entered(); await gate; return { tools: [] }; } });
-  f.agent.followup(message('claimed'));
+  f.agent.steer(message('claimed'));
   await inside;
   f.agent.cancel({ kind: 'user' });
   f.agent.followup(message('new'));
   release();
   await f.agent.whenIdle();
-  assert.deepEqual(ids(f.agent.inbox.nextTurn), ['claimed', 'new']);
-  assert.equal(f.counters.assembly, 1);
+  assert.deepEqual(f.log.filter(e => e.type === 'turn/start').map(e => e.data.turn), [1, 2]);
+  assert.deepEqual(ids(f.log.filter(e => e.type === 'user/message').map(e => e.data)), ['claimed', 'new']);
+  assert.deepEqual(f.log.filter(e => e.type === 'turn/end').map(e => e.data.reason.kind), ['aborted', 'error']);
+  assert.equal(f.agent.inbox.hasPending, false);
+  assert.deepEqual(f.state().inFlight, []);
+  assert.equal(f.counters.assembly, 2);
   assert.equal(f.agent.status, 'idle');
+  assertClientSees(f);
 });
 
 test('failed restore append is contained once and cold resume can finish the durable claim', async () => {
