@@ -90,12 +90,12 @@ export class CompanionTaskStore {
     return this.runner.foreground(id, body.taskRev, signal);
   }
   project(record) {
-    const {originalCreate, originalFingerprint, operations, notes, execution, ...publicRecord} = clone(record);
+    const {originalCreate, originalFingerprint, operations, notes, execution, ...publicRecord} = record;
     publicRecord.hostStoreId = this.hostStoreId;
     publicRecord.originalCreatePresent = originalCreate !== null;
-    publicRecord.steps = record.steps.map(({reserveMs, finishFingerprint, ...step}) => clone(step));
-    publicRecord.artifacts = record.artifacts.map(({identity, reference, ...artifact}) => clone(artifact));
-    return publicRecord;
+    publicRecord.steps = record.steps.map(({reserveMs, finishFingerprint, ...step}) => step);
+    publicRecord.artifacts = record.artifacts.map(({identity, reference, ...artifact}) => artifact);
+    return clone(publicRecord);
   }
   list(cursor) {
     let after = '';
