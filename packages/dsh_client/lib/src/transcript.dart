@@ -1151,9 +1151,9 @@ class _TurnTracer {
             lastToken: bounds.last,
             retries: failures.length,
             retryFailures: List.unmodifiable(failures.where((f) => f.isNotEmpty)),
-            hasText: message.text.trim().isNotEmpty,
-            hasReasoning: message.reasoning.trim().isNotEmpty,
-            toolCalls: message.toolCalls.length,
+            hasText: message.parts.any((p) => p is TextPart && p.text.trim().isNotEmpty),
+            hasReasoning: message.parts.any((p) => p is ReasoningPart && p.text.trim().isNotEmpty),
+            toolCalls: message.parts.whereType<ToolCallPart>().length,
             interrupted: event.interrupted,
           ),
         );
