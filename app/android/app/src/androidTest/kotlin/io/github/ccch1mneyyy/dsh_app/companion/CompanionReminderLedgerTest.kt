@@ -259,7 +259,7 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
     fun testSchemaGateStillRejectsUnmigratedAndUnknownFutureStores() {
         f.revision(1)
         try {
-            for (version in listOf(10, 15)) {
+            for (version in listOf(10, 17)) {
                 f.sql.version = version
                 try { f.probe(); fail("Unsupported version $version was opened") }
                 catch (_: IllegalStateException) { }
