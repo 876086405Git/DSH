@@ -55,7 +55,7 @@ Map<String, Object?> _input(http.Request request) {
   return jsonDecode((messages.first as Map)['content'] as String) as Map<String, Object?>;
 }
 
-http.Response _tool(String name, String arguments) => http.Response(
+http.Response _tool(String name, String arguments, {String? text}) => http.Response(
   [
     {
       'type': 'message_start',
@@ -63,17 +63,25 @@ http.Response _tool(String name, String arguments) => http.Response(
         'usage': {'input_tokens': 900},
       },
     },
+    if (text != null) ...[
+      {
+        'type': 'content_block_start',
+        'index': 0,
+        'content_block': {'type': 'text', 'text': text},
+      },
+      {'type': 'content_block_stop', 'index': 0},
+    ],
     {
       'type': 'content_block_start',
-      'index': 0,
+      'index': text == null ? 0 : 1,
       'content_block': {'type': 'tool_use', 'id': 'maintenance-call', 'name': name, 'input': <String, Object?>{}},
     },
     {
       'type': 'content_block_delta',
-      'index': 0,
+      'index': text == null ? 0 : 1,
       'delta': {'type': 'input_json_delta', 'partial_json': arguments},
     },
-    {'type': 'content_block_stop', 'index': 0},
+    {'type': 'content_block_stop', 'index': text == null ? 0 : 1},
     {
       'type': 'message_delta',
       'delta': {'stop_reason': 'tool_use'},
@@ -623,7 +631,9 @@ void main() {
       final worker = phone.withHttp((request) async {
         bodies.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
         measured.add(estimateCompanionMemoryTokens(request.body));
-        return bodies.length == 1 ? _tool('forget', jsonEncode({'card': home['id']})) : _reply('Done.');
+        return bodies.length == 1
+            ? _tool('forget', jsonEncode({'card': home['id']}), text: '我会忘掉杭州的住处，只保留养猫这件事。')
+            : _reply('Done.');
       });
       expect(await worker.consolidate(offsetMinutes: 480), CompanionMemoryWork.committed);
       expect(bodies, hasLength(2));
@@ -637,6 +647,14 @@ void main() {
       expect(kept['text'], '我养猫。');
       expect(kept['evidence'], isEmpty);
       final messages = bodies.last['messages'] as List;
+      expect(messages, hasLength(3));
+      expect((messages[1] as Map)['role'], 'assistant');
+      final calls = ((messages[1] as Map)['content'] as List).cast<Map>();
+      expect(calls, hasLength(1), reason: 'the pre-forget assistant text is no longer model input');
+      expect(calls.single['type'], 'tool_use');
+      expect(calls.single['id'], 'maintenance-call');
+      expect(calls.single['name'], 'forget');
+      expect(calls.single['input'], {'_retired_after_memory_change': true});
       final result = ((messages.last as Map)['content'] as List).single as Map;
       expect(result['tool_use_id'], 'maintenance-call');
       expect((jsonDecode(result['content'] as String) as Map)['applied'], isTrue);

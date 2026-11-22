@@ -52,7 +52,7 @@
     },
     {
       "path": "app/test/companion/companion_memory_worker_test.dart",
-      "sha256": "5b77d39b227507799c8d193229f03173b941247fddccd3c0d8167ec04d6f809e"
+      "sha256": "bd7c6b95387df856f128b81c02d4290b15b00891f471f5a647f8b47fbe7944d4"
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
