@@ -1,0 +1,46 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": true,
+  "names_behavior": -1,
+  "prompts": [
+    {
+      "identifier": "main",
+      "name": "main",
+      "role": "system",
+      "content": "SETTINGS",
+      "injection_position": 0,
+      "system_prompt": true
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "main",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "continue_prefill": true,
+  "continue_postfix": "\n",
+  "assistant_prefill": "PREFILL",
+  "show_thoughts": true,
+  "reasoning_effort": "max",
+  "function_calling": true,
+  "tool_call_recurse_limit": 5,
+  "tool_reasoning_mode": "active_chain",
+  "custom_prompt_post_processing": "strict",
+  "extensions": {
+    "future": {
+      "round_trip": [
+        false,
+        null,
+        7
+      ]
+    }
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": false,
+  "names_behavior": 0,
+  "prompts": [
+    {
+      "identifier": "main",
+      "name": "main",
+      "role": "system",
+      "content": "BASE",
+      "injection_position": 0,
+      "system_prompt": true
+    },
+    {
+      "identifier": "jailbreak",
+      "name": "jailbreak",
+      "role": "system",
+      "content": "TAIL",
+      "injection_position": 0,
+      "system_prompt": true
+    },
+    {
+      "identifier": "worldInfoBefore",
+      "name": "worldInfoBefore",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "worldInfoAfter",
+      "name": "worldInfoAfter",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "charDescription",
+      "name": "charDescription",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "charPersonality",
+      "name": "charPersonality",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "scenario",
+      "name": "scenario",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "personaDescription",
+      "name": "personaDescription",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "dialogueExamples",
+      "name": "dialogueExamples",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "chatHistory",
+      "name": "chatHistory",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "worldInfoBefore",
+          "enabled": true
+        },
+        {
+          "identifier": "main",
+          "enabled": true
+        },
+        {
+          "identifier": "worldInfoAfter",
+          "enabled": true
+        },
+        {
+          "identifier": "charDescription",
+          "enabled": true
+        },
+        {
+          "identifier": "charPersonality",
+          "enabled": true
+        },
+        {
+          "identifier": "scenario",
+          "enabled": true
+        },
+        {
+          "identifier": "personaDescription",
+          "enabled": true
+        },
+        {
+          "identifier": "dialogueExamples",
+          "enabled": true
+        },
+        {
+          "identifier": "chatHistory",
+          "enabled": true
+        },
+        {
+          "identifier": "jailbreak",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../json_copy.dart';
 import '../preset_library.dart';
 import '../prompt/preset.dart';
 
@@ -429,7 +430,7 @@ Map<String, Object?> _jsonCopy(Map<String, Object?> value) {
   }
 }
 
-Map<String, Object?> _copy(Map<String, Object?> value) => jsonDecode(jsonEncode(value)) as Map<String, Object?>;
+Map<String, Object?> _copy(Map<String, Object?> value) => copyJsonObject(value);
 
 bool _sameJson(Object? left, Object? right) {
   if (left is Map<String, Object?> && right is Map<String, Object?>) {

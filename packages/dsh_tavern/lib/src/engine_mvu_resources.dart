@@ -18,6 +18,7 @@ class _MvuResources {
     required this.groupIdentity,
     required this.selection,
     required this.hostVersion,
+    required this.primary,
   });
 
   final _ScriptDataContext dataContext;
@@ -28,18 +29,21 @@ class _MvuResources {
   final String? groupIdentity;
   final List<({String handle, TavernScriptBookRef ref, WorldInfoSource source})> selection;
   final String? hostVersion;
+  final _CharacterPrimaryBook primary;
   final books = <mvu_core.MvuBook>[];
   final issues = <TavernScriptIssue>[];
   final _bookVersions = <String, String?>{};
   Object? selectionChatVersion;
   Object? selectionSettings;
   int? selectionPresetRevision;
+  String? selectionDirectoryVersion;
 }
 
 List<({String handle, TavernScriptBookRef ref, WorldInfoSource source})> _mvuBookSelection(
   Map<String, Object?> settings,
   String hostId, {
   required bool embedded,
+  required _CharacterPrimaryBook primary,
 }) {
   final result = <({String handle, TavernScriptBookRef ref, WorldInfoSource source})>[];
   final seen = <String>{};
@@ -61,14 +65,9 @@ List<({String handle, TavernScriptBookRef ref, WorldInfoSource source})> _mvuBoo
       source: WorldInfoSource.character,
     ));
   }
-  if (!embedded) {
-    final primary = _map(settings['characterPrimaryLorebooks'])[hostId];
-    if (primary is String) {
-      standalone([primary], WorldInfoSource.character);
-    }
-  }
+  standalone([?primary.bookId], WorldInfoSource.character);
   standalone(bindings['character'], WorldInfoSource.character);
-  standalone(_characterLinkedBookIds(settings, hostId, embedded: embedded), WorldInfoSource.character);
+  standalone(_characterLinkedBookIds(settings, hostId, primary: primary), WorldInfoSource.character);
   return result;
 }
 
@@ -163,10 +162,15 @@ extension _ScriptMvuResources on _ScriptCoordinator {
     final hostVersion = _mvuObservedVersion('characterData:${dataContext.hostId}');
     final settings = _personaSettings(dataContext.settings, engine._personas.resolve(personaId: chat.personaId));
     final config = engine._config;
+    final primaries = await _captureCharacterPrimaryBooks(dataContext.settings, {
+      dataContext.hostId: dataContext.hostData,
+    });
+    final primary = primaries[dataContext.hostId]!;
     final selection = _mvuBookSelection(
       dataContext.settings,
       dataContext.hostId,
       embedded: dataContext.hostData.containsKey('character_book'),
+      primary: primary,
     );
     final names = group == null ? null : await engine._groups.captureNames(group);
     check();
@@ -179,7 +183,9 @@ extension _ScriptMvuResources on _ScriptCoordinator {
       groupIdentity: groupIdentity,
       selection: selection,
       hostVersion: hostVersion,
+      primary: primary,
     );
+    if (primary.issue(dataContext.hostId) case final issue?) capture.issues.add(issue);
     _checkMvuResources(capture);
     for (final item in selection) {
       mvu_core.MvuBook? book;
@@ -229,10 +235,12 @@ extension _ScriptMvuResources on _ScriptCoordinator {
     final chatId = capture.dataContext.chatId;
     final chatVersion = engine._store.displayVersion(chatId);
     final settings = engine._document['settings'];
+    final directoryVersion = scriptResources.directory.standaloneVersion;
     var sameSelection = true;
     if (!identical(capture.selectionChatVersion, chatVersion) ||
         !identical(capture.selectionSettings, settings) ||
-        capture.selectionPresetRevision != engine._presetWorkingRevision) {
+        capture.selectionPresetRevision != engine._presetWorkingRevision ||
+        capture.selectionDirectoryVersion != directoryVersion) {
       final chat = engine._store.chat(chatId);
       final leaf = chat.currentLeafId;
       final Map<String, Object?> metadata;
@@ -247,12 +255,16 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         final state = override is Map<String, Object?> ? override : engine._store.nodeState(chatId, leaf);
         metadata = engine._chatCodec.metadataForState(chat, state);
       }
+      final currentSettings = engine._effectiveReadSettings(chat, metadata);
+      final primary = _characterPrimaryBook(currentSettings, capture.dataContext.hostId, capture.dataContext.hostData);
       final current = _mvuBookSelection(
-        engine._effectiveReadSettings(chat, metadata),
+        currentSettings,
         capture.dataContext.hostId,
         embedded: capture.dataContext.hostData.containsKey('character_book'),
+        primary: primary,
       );
       sameSelection =
+          _stateJsonEqual(primary.evidence, capture.primary.evidence) &&
           current.length == capture.selection.length &&
           Iterable<int>.generate(current.length).every(
             (index) =>
@@ -263,6 +275,7 @@ extension _ScriptMvuResources on _ScriptCoordinator {
         capture.selectionChatVersion = chatVersion;
         capture.selectionSettings = settings;
         capture.selectionPresetRevision = engine._presetWorkingRevision;
+        capture.selectionDirectoryVersion = directoryVersion;
       }
     }
     if (!sameSelection ||

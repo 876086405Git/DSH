@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'json_copy.dart';
 
 import 'regex_library.dart';
 
@@ -97,4 +97,4 @@ final class TavernPresetImportResult {
   final List<TavernRegexDiagnostic> regexDiagnostics;
 }
 
-Map<String, Object?> _copy(Map<String, Object?> value) => jsonDecode(jsonEncode(value)) as Map<String, Object?>;
+Map<String, Object?> _copy(Map<String, Object?> value) => copyJsonObject(value);

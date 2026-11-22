@@ -490,6 +490,7 @@ extension _SlashGenerationOperations on _ScriptCoordinator {
         capture,
         record.cancellation,
         quiet: _SlashQuietPreparation(spec),
+        spreset: record.spreset,
         onPhase: (phase) {
           record.receipt.phase = phase;
         },

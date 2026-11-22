@@ -198,7 +198,9 @@ void main() {
       final actor = await h.card(
         'Actor',
         description: 'FIELD={{getvar::step}} INPUT=[{{input}}] RANDOM={{random::red::green::blue}}',
+        extensions: {'world': 'Actor world'},
       );
+      await h.engine.putLorebook('actor-world', {..._book('AUTOMATIC_ACTOR_WORLD'), 'name': 'Actor world'});
       final other = await h.card('Other');
       final chat = await h.engine.createGroupChat([actor, other], hostCharacterId: host, addGreetings: false);
       // Native explicit selection can choose a muted actor. Preview must use
@@ -254,6 +256,11 @@ void main() {
       final text = _promptText(body);
       expect(text, contains('FIELD=1 INPUT=[]'));
       expect(text, contains('GROUP_Actor_'));
+      expect('AUTOMATIC_ACTOR_WORLD'.allMatches(text), hasLength(1));
+      expect(
+        (preview.origin['resources']! as List<Object?>).map(scriptMap).map((row) => row['physicalResourceId']),
+        contains('lorebook:actor-world'),
+      );
       expect(preview.regexTrace.where((row) => row['source'] == 'userInput'), hasLength(1));
       expect(_databaseState(h), database);
       expect(await _persistentFiles(h.root), files);

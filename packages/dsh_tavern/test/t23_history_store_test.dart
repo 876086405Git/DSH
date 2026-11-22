@@ -138,7 +138,12 @@ void main() {
     expect(page(id, limit: 2, before: 'n2'), ['n0', 'n1']);
     expect(page(id, before: 'n0'), isEmpty);
     expect(page(id, limit: 0), isEmpty);
+    expect(page(id, limit: 0, before: 'n0'), isEmpty);
     expect(() => page(id, limit: -1), throwsArgumentError);
+    expect(() => page('missing-chat', limit: -1), throwsArgumentError);
+    expect(() => page('missing-chat', limit: 0), throwsStateError);
+    expect(() => page(id, limit: 0, before: 'missing-node'), throwsStateError);
+    expect(() => page(id, limit: 0, before: 'inactive'), throwsStateError);
     expect(() => page(id, before: 'inactive'), throwsStateError);
     expect(history(id, 'inactive'), ['n0', 'inactive']);
     expect(store.chat(id).currentLeafId, 'n5');
@@ -210,47 +215,106 @@ void main() {
     expect(page(id, limit: 2), ['a', 'b']);
   });
 
-  test('history uses the streaming projection and suppresses stale terminal evidence', () {
+  test('path and history keep full messages while streaming suppresses stale terminal evidence', () {
     final id = chat('pending');
+    append(id, 'other-root');
+    final at = DateTime.utc(2024, 1, 2, 3, 4, 5);
+    const speaker = '\ufeffWhale\u0001';
+    const character = '\ufeffactor';
+    const text = '\ufeffoldword\u0000海🌊';
+    const reasoning = '\ufeff\ufeffold reasoning';
+    final opaque = List<String>.filled(4096, 'opaque').join();
     store.append(
       id,
       id: 'reply',
       parentId: null,
       role: TavernRole.character,
-      speaker: 'Whale',
-      text: 'oldword',
-      reasoning: 'old reasoning',
-      usage: const TavernUsage(promptTokens: 7),
+      speaker: speaker,
+      speakerCharacterId: character,
+      text: text,
+      reasoning: reasoning,
+      at: at,
+      hidden: true,
+      usage: const TavernUsage(promptTokens: 7, cacheHitTokens: 2, completionTokens: 3, model: 'estimate'),
       extra: {
         'dshgo': {
-          'inspection': {'status': 'completed'},
+          'inspection': {
+            'version': 1,
+            'chatId': id,
+            'nodeId': 'reply',
+            'status': 'completed',
+            'reportedUsage': {'promptTokens': 12, 'cacheHitTokens': 4, 'completionTokens': 5, 'model': 'reported'},
+          },
           'keep': 1,
         },
-        'opaque': true,
+        'opaque': opaque,
       },
-      original: {'vendor': 'preserved'},
+      original: {'vendor': 'preserved', 'opaque': opaque},
     );
+    final saved = store.path(id).single;
+    expect(
+      [
+        saved.nodeId,
+        saved.parentId,
+        saved.role,
+        saved.speaker,
+        saved.speakerCharacterId,
+        saved.text,
+        saved.reasoning,
+        saved.at,
+        saved.hidden,
+        saved.siblingIndex,
+        saved.siblingCount,
+      ],
+      ['reply', null, TavernRole.character, speaker, character, text, reasoning, at, true, 1, 2],
+    );
+    expect(
+      [saved.usage?.promptTokens, saved.usage?.cacheHitTokens, saved.usage?.completionTokens, saved.usage?.model],
+      [7, 2, 3, 'estimate'],
+    );
+    expect(
+      [
+        saved.reportedUsage?.promptTokens,
+        saved.reportedUsage?.cacheHitTokens,
+        saved.reportedUsage?.completionTokens,
+        saved.reportedUsage?.model,
+      ],
+      [12, 4, 5, 'reported'],
+    );
+    expect(store.path(id, beforeNodeId: 'reply'), isEmpty);
     store.beginStreamingWrites();
     try {
-      store.writeStreamingBody(id, 'reply', text: 'newword', reasoning: null);
+      store.writeStreamingBody(id, 'reply', text: '\ufeffnewword', reasoning: '\u0001\ufeffnew reason');
+      final pending = store.path(id).single;
+      expect([pending.text, pending.reasoning], ['\ufeffnewword', '\u0001\ufeffnew reason']);
+      store.writeStreamingBody(id, 'reply', text: '', reasoning: null);
     } finally {
       store.endStreamingWrites();
     }
+    final empty = store.path(id).single;
+    expect([empty.text, empty.reasoning, empty.usage, empty.reportedUsage], ['', null, null, null]);
     final node = store.historyTo(id, 'reply').single;
-    expect(node.message.text, 'newword');
+    expect(node.message.text, '');
     expect(node.message.reasoning, isNull);
     expect(node.message.usage, isNull);
+    expect(node.message.reportedUsage, isNull);
     expect(node.extra, {
       'dshgo': {'keep': 1},
-      'opaque': true,
+      'opaque': opaque,
     });
-    expect(node.original, {'vendor': 'preserved'});
+    expect(node.original, {'vendor': 'preserved', 'opaque': opaque});
     expect(jsonDecode(database.select('SELECT extra FROM nodes WHERE id = ?', ['reply']).single['extra'] as String), {
       'dshgo': {
-        'inspection': {'status': 'completed'},
+        'inspection': {
+          'version': 1,
+          'chatId': id,
+          'nodeId': 'reply',
+          'status': 'completed',
+          'reportedUsage': {'promptTokens': 12, 'cacheHitTokens': 4, 'completionTokens': 5, 'model': 'reported'},
+        },
         'keep': 1,
       },
-      'opaque': true,
+      'opaque': opaque,
     });
   });
 

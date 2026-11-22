@@ -1,0 +1,1000 @@
+{
+  "sourceCommit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+  "sourceSha256": "7275aa31d7cd45d7b3083849d291e467066ffd2f38fbe0e78e61636bca015e7b",
+  "sourceUrl": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/src/prompt-converters.js",
+  "names": {
+    "userName": "User",
+    "charName": "Character",
+    "groupNames": [
+      "Other"
+    ]
+  },
+  "cases": [
+    {
+      "id": "names-and-mid-system/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "system",
+          "content": "RULE"
+        },
+        {
+          "role": "system",
+          "name": "example_assistant",
+          "content": "hello"
+        },
+        {
+          "role": "user",
+          "name": "Alex",
+          "content": "next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "content": "RULE\n\nCharacter: hello"
+        },
+        {
+          "role": "user",
+          "content": "Alex: next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ]
+    },
+    {
+      "id": "names-and-mid-system/semi",
+      "mode": "semi",
+      "messages": [
+        {
+          "role": "system",
+          "content": "RULE"
+        },
+        {
+          "role": "system",
+          "name": "example_assistant",
+          "content": "hello"
+        },
+        {
+          "role": "user",
+          "name": "Alex",
+          "content": "next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "content": "RULE\n\nCharacter: hello"
+        },
+        {
+          "role": "user",
+          "content": "Alex: next\n\nLATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ]
+    },
+    {
+      "id": "names-and-mid-system/strict",
+      "mode": "strict",
+      "messages": [
+        {
+          "role": "system",
+          "content": "RULE"
+        },
+        {
+          "role": "system",
+          "name": "example_assistant",
+          "content": "hello"
+        },
+        {
+          "role": "user",
+          "name": "Alex",
+          "content": "next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "content": "RULE\n\nCharacter: hello"
+        },
+        {
+          "role": "user",
+          "content": "Alex: next\n\nLATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ]
+    },
+    {
+      "id": "names-and-mid-system/single",
+      "mode": "single",
+      "messages": [
+        {
+          "role": "system",
+          "content": "RULE"
+        },
+        {
+          "role": "system",
+          "name": "example_assistant",
+          "content": "hello"
+        },
+        {
+          "role": "user",
+          "name": "Alex",
+          "content": "next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "RULE\n\nCharacter: hello\n\nUser: Alex: next\n\nLATE\n\nCharacter: done"
+        }
+      ]
+    },
+    {
+      "id": "names-and-mid-system/claude",
+      "mode": "claude",
+      "messages": [
+        {
+          "role": "system",
+          "content": "RULE"
+        },
+        {
+          "role": "system",
+          "name": "example_assistant",
+          "content": "hello"
+        },
+        {
+          "role": "user",
+          "name": "Alex",
+          "content": "next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "content": "RULE\n\nCharacter: hello"
+        },
+        {
+          "role": "user",
+          "content": "Alex: next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ]
+    },
+    {
+      "id": "tool-fields/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept"
+        },
+        {
+          "role": "user",
+          "content": "3\n\n4"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ]
+    },
+    {
+      "id": "tool-fields/merge_tools",
+      "mode": "merge_tools",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ]
+    },
+    {
+      "id": "tool-fields/semi",
+      "mode": "semi",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept"
+        },
+        {
+          "role": "user",
+          "content": "3\n\n4"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ]
+    },
+    {
+      "id": "tool-fields/semi_tools",
+      "mode": "semi_tools",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ]
+    },
+    {
+      "id": "tool-fields/strict_tools",
+      "mode": "strict_tools",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "Let's get started."
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ]
+    },
+    {
+      "id": "media-and-unknown-parts/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "see"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AA=="
+              }
+            },
+            {
+              "type": "text",
+              "text": "end"
+            },
+            {
+              "type": "unknown",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "data:audio/wav;base64,AA=="
+              }
+            },
+            {
+              "type": "video_url",
+              "video_url": {
+                "url": "https://example.invalid/synthetic.mp4"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "see"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AA=="
+              }
+            },
+            {
+              "type": "text",
+              "text": "end\n\n"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "data:audio/wav;base64,AA=="
+              }
+            },
+            {
+              "type": "video_url",
+              "video_url": {
+                "url": "https://example.invalid/synthetic.mp4"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media-and-unknown-parts/semi_tools",
+      "mode": "semi_tools",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "see"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AA=="
+              }
+            },
+            {
+              "type": "text",
+              "text": "end"
+            },
+            {
+              "type": "unknown",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "data:audio/wav;base64,AA=="
+              }
+            },
+            {
+              "type": "video_url",
+              "video_url": {
+                "url": "https://example.invalid/synthetic.mp4"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "see"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AA=="
+              }
+            },
+            {
+              "type": "text",
+              "text": "end\n\n"
+            },
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "data:audio/wav;base64,AA=="
+              }
+            },
+            {
+              "type": "video_url",
+              "video_url": {
+                "url": "https://example.invalid/synthetic.mp4"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "system-only/semi",
+      "mode": "semi",
+      "messages": [
+        {
+          "role": "system",
+          "content": "only"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "content": "only"
+        }
+      ]
+    },
+    {
+      "id": "system-only/strict",
+      "mode": "strict",
+      "messages": [
+        {
+          "role": "system",
+          "content": "only"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "content": "only"
+        },
+        {
+          "role": "user",
+          "content": "Let's get started."
+        }
+      ]
+    },
+    {
+      "id": "assistant-first/strict",
+      "mode": "strict",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "start"
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "Let's get started."
+        },
+        {
+          "role": "assistant",
+          "content": "start"
+        }
+      ]
+    },
+    {
+      "id": "assistant-first/strict_tools",
+      "mode": "strict_tools",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "start"
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "Let's get started."
+        },
+        {
+          "role": "assistant",
+          "content": "start"
+        }
+      ]
+    },
+    {
+      "id": "empty/merge",
+      "mode": "merge",
+      "messages": [],
+      "expected": [
+        {
+          "role": "user",
+          "content": "Let's get started."
+        }
+      ]
+    },
+    {
+      "id": "empty/strict",
+      "mode": "strict",
+      "messages": [],
+      "expected": [
+        {
+          "role": "user",
+          "content": "Let's get started."
+        }
+      ]
+    },
+    {
+      "id": "single-and-existing-names/single",
+      "mode": "single",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "Other: hello"
+        },
+        {
+          "role": "user",
+          "content": "User: reply"
+        },
+        {
+          "role": "system",
+          "content": "rule"
+        },
+        {
+          "role": "tool",
+          "content": "result",
+          "tool_call_id": "x"
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "Other: hello\n\nUser: reply\n\nrule\n\nUser: result"
+        }
+      ]
+    },
+    {
+      "id": "none-preserves/none",
+      "mode": "",
+      "messages": [
+        {
+          "role": "system",
+          "name": "example_user",
+          "content": "a"
+        },
+        {
+          "role": "system",
+          "content": "b"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "name": "example_user",
+          "content": "a"
+        },
+        {
+          "role": "system",
+          "content": "b"
+        }
+      ]
+    },
+    {
+      "id": "none-preserves/unrecognized",
+      "mode": "unrecognized",
+      "messages": [
+        {
+          "role": "system",
+          "name": "example_user",
+          "content": "a"
+        },
+        {
+          "role": "system",
+          "content": "b"
+        }
+      ],
+      "expected": [
+        {
+          "role": "system",
+          "name": "example_user",
+          "content": "a"
+        },
+        {
+          "role": "system",
+          "content": "b"
+        }
+      ]
+    },
+    {
+      "id": "primitive-and-null-text-parts/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            "A",
+            3,
+            false,
+            {
+              "type": "text",
+              "text": null
+            },
+            {
+              "type": "text"
+            },
+            {
+              "type": "text",
+              "text": "Z"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "\n\n\n\n\n\n\n\n\n\nZ"
+        }
+      ]
+    },
+    {
+      "id": "primitive-and-null-text-parts/semi_tools",
+      "mode": "semi_tools",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            "A",
+            3,
+            false,
+            {
+              "type": "text",
+              "text": null
+            },
+            {
+              "type": "text"
+            },
+            {
+              "type": "text",
+              "text": "Z"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "role": "user",
+          "content": "\n\n\n\n\n\n\n\n\n\nZ"
+        }
+      ]
+    },
+    {
+      "id": "object-content-without-string-methods/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "object-content-without-string-methods/semi_tools",
+      "mode": "semi_tools",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "object-content-concatenation/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        },
+        {
+          "role": "assistant",
+          "content": "TAIL"
+        }
+      ],
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "[object Object]\n\nTAIL"
+        }
+      ]
+    },
+    {
+      "id": "null-content-part/merge",
+      "mode": "merge",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            null
+          ]
+        }
+      ],
+      "expectedError": "TypeError"
+    }
+  ]
+}

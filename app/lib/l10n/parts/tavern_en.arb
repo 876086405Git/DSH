@@ -1442,5 +1442,14 @@
         "type": "int"
       }
     }
+  },
+  "tavernIslandStoryWaiting": "Loading this message’s data…",
+  "tavernIslandStoryFailed": "Could not read this message’s data: {reason}",
+  "@tavernIslandStoryFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
   }
 }

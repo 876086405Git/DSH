@@ -1,0 +1,57 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": false,
+  "names_behavior": 0,
+  "prompts": [
+    {
+      "identifier": "main",
+      "name": "main",
+      "role": "system",
+      "content": "HOST_FIXTURE",
+      "injection_position": 0,
+      "system_prompt": true
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "main",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "extensions": {
+    "tavern_helper": {
+      "scripts": [
+        {
+          "type": "script",
+          "id": "synthetic-page-probe",
+          "name": "Synthetic page probe",
+          "enabled": true,
+          "content": "eventOn(tavern_events.MESSAGE_RECEIVED, () => { const rows = getChatMessages('0'); if (!rows.length) throw new Error('Missing floor'); });",
+          "info": "Independently authored API-shape fixture; no external network."
+        }
+      ]
+    },
+    "fixture_unconsumed": {
+      "automatic_trigger": true,
+      "external_processor": "noass",
+      "helper_generation_options": {
+        "ordered_prompts": [
+          "char_description",
+          "chat_history",
+          "user_input"
+        ],
+        "should_silence": true,
+        "max_chat_history": 2,
+        "image": "https://example.invalid/synthetic.png",
+        "generation_id": "synthetic-id"
+      }
+    }
+  }
+}

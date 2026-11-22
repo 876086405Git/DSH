@@ -188,14 +188,20 @@ extension _ScriptRawResources on _ScriptCoordinator {
       _observeStandaloneDirectory(id, null, null);
       return null;
     }
+    Never unreadable(TavernScriptErrorCode code, String message) {
+      final error = _scriptError(code, 'readBook', message);
+      _observeStandaloneDirectory(id, null, null, error: error);
+      throw error;
+    }
+
     final Object? decoded;
     try {
       decoded = jsonDecode(utf8.decode(bytes));
     } on FormatException {
-      throw _scriptError(TavernScriptErrorCode.invalidJson, 'readBook', 'The book file is not valid JSON.');
+      unreadable(TavernScriptErrorCode.invalidJson, 'The book file is not valid JSON.');
     }
     if (decoded is! Map<String, Object?>) {
-      throw _scriptError(TavernScriptErrorCode.shapeMismatch, 'readBook', 'The book root is not an object.');
+      unreadable(TavernScriptErrorCode.shapeMismatch, 'The book root is not an object.');
     }
     Map<String, Object?> raw = decoded;
     Map<String, Object?>? envelope;
@@ -204,7 +210,7 @@ extension _ScriptRawResources on _ScriptCoordinator {
       if (decoded['version'] != 1 ||
           decoded['book'] is! Map<String, Object?> ||
           (decoded['stWorldName'] != null && decoded['stWorldName'] is! String)) {
-        throw _scriptError(TavernScriptErrorCode.shapeMismatch, 'readBook', 'The stored book envelope is malformed.');
+        unreadable(TavernScriptErrorCode.shapeMismatch, 'The stored book envelope is malformed.');
       }
       envelope = decoded;
       raw = decoded['book']! as Map<String, Object?>;
@@ -419,14 +425,15 @@ extension _ScriptRawResources on _ScriptCoordinator {
     for (final id in actors) {
       final source = group == null ? TavernScriptBookSource.character : TavernScriptBookSource.groupMember;
       standalone(bindings['character'], source, characterId: id, chatId: group == null ? null : chatId);
-      final embedded = await engine._library.readAuthority(id, (data) => data.containsKey('character_book'));
+      final data = await engine._library.readRuntimeAuthority(id, (data) => data) ?? <String, Object?>{};
+      final primaries = await _captureCharacterPrimaryBooks(settings, {id: data});
       standalone(
-        _characterLinkedBookIds(settings, id, embedded: embedded == true),
+        _characterLinkedBookIds(settings, id, primary: primaries[id]!),
         source,
         characterId: id,
         chatId: group == null ? null : chatId,
       );
-      if (embedded == true) {
+      if (data.containsKey('character_book')) {
         add(
           TavernScriptBookRef.embedded(characterId: id),
           source,

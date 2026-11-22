@@ -1442,5 +1442,14 @@
         "type": "int"
       }
     }
+  },
+  "tavernIslandStoryWaiting": "正在读取本条消息的数据…",
+  "tavernIslandStoryFailed": "本条消息的数据读取失败：{reason}",
+  "@tavernIslandStoryFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
   }
 }

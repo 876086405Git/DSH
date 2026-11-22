@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
@@ -197,7 +199,209 @@ void main() {
     expect(second, isNot(contains('BIND_MASKED')));
     expect(h.model.generated, 2);
   });
+
+  test('character world names link before or after import by source name or display name', () async {
+    for (final bookFirst in [true, false]) {
+      for (final sourceName in [true, false]) {
+        final h = await T24Harness.open(thinking: false);
+        addTearDown(h.dispose);
+        Future<TavernScriptStandaloneBookRef> importWorldBook() =>
+            _book(h.engine, 'World title', 'WORLD_AUTO', sourceName: 'World source');
+        var book = bookFirst ? await importWorldBook() : null;
+        final card = await h.engine.importCard(_card(world: sourceName ? 'World source' : 'World title'));
+        final chatId = await h.engine.createChat(card.id);
+        var bridge = h.engine.scripts;
+        var context = await bridge.openContext(
+          TavernScriptContextSpec(instanceId: 'world-import-order', chatId: chatId, characterId: card.id),
+        );
+        final target = TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.character, targetId: card.id);
+        if (!bookFirst) {
+          expect((await bridge.readBookBindings(context.id, target)).primary, isNull);
+          expect(_bindingIssues(await bridge.snapshot(context.id)).single['code'], 'notFound');
+          book = await importWorldBook();
+        }
+        expect((await bridge.readBookBindings(context.id, target)).primary, book);
+        expect((await bridge.getContextBooks(context.id)).map((binding) => binding.ref), contains(book));
+        expect(_bindingIssues(await bridge.snapshot(context.id)), isEmpty);
+        final body = jsonEncode(await _complete(h, h.engine.send(chatId, 'Read the automatic book.')));
+        expect('WORLD_AUTO'.allMatches(body), hasLength(1));
+        await h.reopen();
+        bridge = h.engine.scripts;
+        context = await bridge.openContext(
+          TavernScriptContextSpec(instanceId: 'world-reopened', chatId: chatId, characterId: card.id),
+        );
+        expect((await bridge.readBookBindings(context.id, target)).primary, book);
+      }
+    }
+  });
+
+  test('manual and embedded primaries override automatic links and explicit clearing survives reopen', () async {
+    final h = await T24Harness.open(thinking: false);
+    addTearDown(h.dispose);
+    final automatic = await _book(h.engine, 'World', 'WORLD_AUTO');
+    final manual = await _book(h.engine, 'Manual', 'WORLD_MANUAL');
+    final card = await h.engine.importCard(_card(world: 'World'));
+    final chatId = await h.engine.createChat(card.id);
+    final bridge = h.engine.scripts;
+    final context = await bridge.openContext(
+      TavernScriptContextSpec(instanceId: 'world-precedence', chatId: chatId, characterId: card.id),
+    );
+    final target = TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.character, targetId: card.id);
+    await h.engine.bindLorebooks([automatic.bookId]);
+    await h.engine.bindLorebooks(
+      [automatic.bookId, automatic.bookId],
+      source: WorldInfoSource.character,
+      characterId: card.id,
+    );
+    var view = await bridge.readBookBindings(context.id, target);
+    expect(view.primary, automatic, reason: 'Matching both exact aliases still selects one book.');
+    expect(view.additional, [automatic, automatic]);
+    final body = jsonEncode(await _complete(h, h.engine.send(chatId, 'Read once.')));
+    expect('WORLD_AUTO'.allMatches(body), hasLength(1));
+    await h.engine.bindLorebooks([]);
+    view = await bridge.updateBookBindings(
+      context.id,
+      TavernScriptBookBindingsEdit(scope: target.scope, targetId: card.id, primary: manual),
+      expectedVersion: view.version,
+    );
+    expect(view.primary, manual);
+    var text = jsonEncode(await _complete(h, h.engine.send(chatId, 'Read the manual selection.')));
+    expect(text, contains('WORLD_MANUAL'));
+    expect(text, isNot(contains('WORLD_AUTO')));
+    final embedded = TavernScriptBookRef.embedded(characterId: card.id);
+    await bridge.replaceBook(context.id, embedded, _embeddedBook());
+    expect((await bridge.readBookBindings(context.id, target)).primary, embedded);
+    text = jsonEncode(await _complete(h, h.engine.send(chatId, 'Read the embedded selection.')));
+    expect(text, contains('BIND_EMBEDDED'));
+    expect(text, isNot(contains('WORLD_AUTO')));
+    expect(text, isNot(contains('WORLD_MANUAL')));
+    await bridge.deleteBook(
+      context.id,
+      embedded,
+      expectedVersion: (await bridge.readBook(context.id, embedded)).version,
+    );
+    view = await bridge.readBookBindings(context.id, target);
+    expect(view.primary, manual);
+    await bridge.updateBookBindings(
+      context.id,
+      TavernScriptBookBindingsEdit(scope: target.scope, targetId: card.id, primary: null),
+      expectedVersion: view.version,
+    );
+    final saved = _object((await h.engine.readSettings())['characterPrimaryLorebooks']);
+    expect(saved.containsKey(card.id), isTrue);
+    expect(saved[card.id], isNull);
+    await h.reopen();
+    final reopened = await h.engine.scripts.openContext(
+      TavernScriptContextSpec(instanceId: 'world-unbound', chatId: chatId, characterId: card.id),
+    );
+    expect((await h.engine.scripts.readBookBindings(reopened.id, target)).primary, isNull);
+    text = jsonEncode(await _complete(h, h.engine.send(chatId, 'Keep the world unbound.')));
+    expect(text, isNot(contains('WORLD_AUTO')));
+    expect(text, isNot(contains('WORLD_MANUAL')));
+  });
+
+  test('binding commit rechecks relevant name evidence after writing its temporary file', () async {
+    for (final related in [false, true]) {
+      final h = await T24Harness.open(thinking: false);
+      addTearDown(h.dispose);
+      final automatic = await _book(h.engine, 'World', 'WORLD_AUTO');
+      final unrelated = await _book(h.engine, 'Other', 'WORLD_OTHER');
+      final manual = await _book(h.engine, 'Manual', 'WORLD_MANUAL');
+      final card = await h.engine.importCard(_card(world: 'World'));
+      final context = await h.engine.scripts.openContext(
+        TavernScriptContextSpec(instanceId: 'world-cas', characterId: card.id),
+      );
+      final target = TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.character, targetId: card.id);
+      final before = await h.engine.scripts.readBookBindings(context.id, target);
+      final settingsFile = File('${h.root.path}/settings.json');
+      final saved = await settingsFile.readAsBytes();
+      final temporary = File('${settingsFile.path}.writing').absolute.uri;
+      final parent = Zone.current;
+      var observed = false;
+      await IOOverrides.runZoned(
+        () async {
+          final update = h.engine.scripts.updateBookBindings(
+            context.id,
+            TavernScriptBookBindingsEdit(scope: target.scope, targetId: card.id, primary: manual),
+            expectedVersion: before.version,
+          );
+          if (related) {
+            await expectLater(update, throwsA(_revisionConflict));
+          } else {
+            expect((await update).primary, manual, reason: 'An unrelated name must not invalidate this binding.');
+          }
+        },
+        createFile: (path) {
+          final real = parent.run(() => File(path));
+          if (parent.run(() => real.absolute.uri) != temporary) return real;
+          return _AfterBindingWriteFile(real, () async {
+            expect(observed, isFalse);
+            observed = true;
+            // Deletes use the book queue without waiting for this settings
+            // file queue. The removed book is not the requested manual ID.
+            await h.engine.deleteLorebook(related ? automatic.bookId : unrelated.bookId);
+          });
+        },
+      );
+      expect(observed, isTrue);
+      if (related) expect(await settingsFile.readAsBytes(), saved);
+    }
+  });
+
+  test('ambiguous world names remain repairable and missing manual IDs do not fall back', () async {
+    final h = await T24Harness.open(thinking: false);
+    addTearDown(h.dispose);
+    await h.engine.putLorebook('world-a', _bookRaw('Shared', 'WORLD_A'));
+    await h.engine.putLorebook('world-b', _bookRaw('Shared', 'WORLD_B'));
+    final a = TavernScriptBookRef.standalone(bookId: 'world-a');
+    final card = await h.engine.importCard(_card(world: 'Shared'));
+    final chatId = await h.engine.createChat(card.id);
+    final bridge = h.engine.scripts;
+    final context = await bridge.openContext(
+      TavernScriptContextSpec(instanceId: 'world-ambiguity', chatId: chatId, characterId: card.id),
+    );
+    final target = TavernScriptBookBindingsTarget(scope: TavernScriptBookBindingScope.character, targetId: card.id);
+    expect((await bridge.readBookBindings(context.id, target)).primary, isNull);
+    final issue = _bindingIssues(await bridge.snapshot(context.id)).single;
+    expect(issue['code'], 'ambiguousName');
+    expect(_object(issue['details'])['candidateBookIds'], ['world-a', 'world-b']);
+    var body = jsonEncode(await _complete(h, h.engine.send(chatId, 'Report ambiguity.')));
+    expect(body, isNot(contains('WORLD_A')));
+    expect(body, isNot(contains('WORLD_B')));
+    await h.engine.deleteLorebook('world-b');
+    expect((await bridge.readBookBindings(context.id, target)).primary, a);
+    await h.engine.putLorebook('world-b', _bookRaw('Shared', 'WORLD_B'));
+    await File('${h.root.path}/lorebooks/world-b.json').writeAsString('null');
+    await expectLater(
+      bridge.readBook(context.id, TavernScriptBookRef.standalone(bookId: 'world-b')),
+      throwsA(isA<TavernScriptException>().having((error) => error.code, 'code', TavernScriptErrorCode.shapeMismatch)),
+    );
+    expect((await bridge.readBookBindings(context.id, target)).primary, a);
+    expect((await bridge.getBookDirectory(context.id)).issues.single.details['handle'], 'standalone:world-b');
+    await h.engine.putLorebook('world-b', _bookRaw('Shared', 'WORLD_B'));
+    final ambiguous = await bridge.readBookBindings(context.id, target);
+    expect(ambiguous.primary, isNull);
+    await bridge.updateBookBindings(
+      context.id,
+      TavernScriptBookBindingsEdit(scope: target.scope, targetId: card.id, primary: a),
+      expectedVersion: ambiguous.version,
+    );
+    expect(_bindingIssues(await bridge.snapshot(context.id)), isEmpty);
+    await h.engine.deleteLorebook('world-a');
+    expect((await bridge.readBookBindings(context.id, target)).primary, a);
+    body = jsonEncode(await _complete(h, h.engine.send(chatId, 'Keep the missing manual choice.')));
+    expect(body, isNot(contains('WORLD_B')));
+  });
 }
+
+final _revisionConflict = isA<TavernScriptException>().having(
+  (error) => error.code,
+  'code',
+  TavernScriptErrorCode.revisionConflict,
+);
+
+List<Map<String, Object?>> _bindingIssues(TavernScriptSnapshot snapshot) =>
+    (snapshot.resourceRefs['bookBindingIssues'] as List<Object?>? ?? []).map(_object).toList();
 
 Future<TavernScriptStandaloneBookRef> _book(
   TavernEngine engine,
@@ -205,28 +409,27 @@ Future<TavernScriptStandaloneBookRef> _book(
   String content, {
   String? sourceName,
 }) async {
-  await engine.importLorebook(
-    jsonEncode({
-      'name': name,
-      'entries': {
-        '1': {
-          'uid': 1,
-          'key': <String>[],
-          'keysecondary': <String>[],
-          'comment': name,
-          'content': content,
-          'constant': true,
-          'disable': false,
-          'position': 0,
-          'order': 100,
-        },
-      },
-    }),
-    fileName: '${sourceName ?? name}.json',
-  );
+  await engine.importLorebook(jsonEncode(_bookRaw(name, content)), fileName: '${sourceName ?? name}.json');
   final id = (await engine.listLorebooks()).singleWhere((book) => book.name == name).id;
   return TavernScriptStandaloneBookRef(bookId: id);
 }
+
+Map<String, Object?> _bookRaw(String name, String content) => {
+  'name': name,
+  'entries': {
+    '1': {
+      'uid': 1,
+      'key': <String>[],
+      'keysecondary': <String>[],
+      'comment': name,
+      'content': content,
+      'constant': true,
+      'disable': false,
+      'position': 0,
+      'order': 100,
+    },
+  },
+};
 
 Future<Map<String, Object?>> _metadata(TavernEngine engine, String chatId) async {
   final exported = (await engine.exportChat(chatId)).first;
@@ -272,7 +475,7 @@ Map<String, Object?> _embeddedBook() => {
   ],
 };
 
-Uint8List _card() => Uint8List.fromList(
+Uint8List _card({String? world}) => Uint8List.fromList(
   utf8.encode(
     jsonEncode({
       'spec': 'chara_card_v3',
@@ -291,8 +494,33 @@ Uint8List _card() => Uint8List.fromList(
         'tags': <String>[],
         'creator': '',
         'character_version': '',
-        'extensions': <String, Object?>{},
+        'extensions': <String, Object?>{'world': ?world},
       },
     }),
   ),
 );
+
+class _AfterBindingWriteFile implements File {
+  _AfterBindingWriteFile(this.real, this.afterWrite);
+  final File real;
+  final Future<void> Function() afterWrite;
+
+  @override
+  String get path => real.path;
+  @override
+  Future<File> writeAsString(
+    String contents, {
+    FileMode mode = FileMode.write,
+    Encoding encoding = utf8,
+    bool flush = false,
+  }) async {
+    final written = await real.writeAsString(contents, mode: mode, encoding: encoding, flush: flush);
+    await afterWrite();
+    return written;
+  }
+
+  @override
+  Future<File> rename(String newPath) => real.rename(newPath);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

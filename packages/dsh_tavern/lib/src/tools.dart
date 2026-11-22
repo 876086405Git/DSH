@@ -104,7 +104,7 @@ class TavernToolContextAnchor extends _ToolView {
 }
 
 /// Facts about one registered model request. Attempts are transport sends,
-/// while requestIndex counts application requests against the four-call budget.
+/// while requestIndex counts logical requests against the captured turn budget.
 class TavernToolRequestSnapshot extends _ToolView {
   factory TavernToolRequestSnapshot.fromJson(Map<String, Object?> json) => TavernToolRequestSnapshot._(json);
   TavernToolRequestSnapshot._(super.json) {
@@ -145,7 +145,7 @@ class TavernToolTurnSnapshot extends _ToolView {
     final candidate = _optionalObject('candidateSource');
     if (candidate != null) TavernToolSourceToken.fromJson(candidate);
     _integer('budgetUsed', minimum: 0);
-    if (_integer('budgetMax') != 4) throw const FormatException('budgetMax must be 4.');
+    _optionalInteger('budgetMax', minimum: 1);
     for (final request in _objects('requests')) {
       TavernToolRequestSnapshot.fromJson(request);
     }
@@ -172,7 +172,11 @@ class TavernToolTurnSnapshot extends _ToolView {
   }
 
   int get budgetUsed => _integer('budgetUsed');
-  int get budgetMax => _integer('budgetMax');
+
+  /// Null represents an explicitly unbounded SPreset recursion setting.
+  /// Captured logical-request ceiling. Null represents an explicit unbounded
+  /// SPreset recursion limit; native-only turns retain the legacy ceiling 4.
+  int? get budgetMax => _optionalInteger('budgetMax');
   List<TavernToolRequestSnapshot> get requests =>
       List.unmodifiable([for (final value in _objects('requests')) TavernToolRequestSnapshot.fromJson(value)]);
   List<String> get receiptIds => _stringList('receiptIds');

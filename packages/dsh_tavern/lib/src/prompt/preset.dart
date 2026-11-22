@@ -2,6 +2,7 @@
 // Source commit: 7e8663cd9c184a550b37238218bdd32c6efc68e9 (1.19.0).
 import 'dart:convert';
 
+import '../json_copy.dart';
 import 'default_preset.dart';
 
 /// A lossless JSON preset plus a normalized, independent execution view.
@@ -114,8 +115,7 @@ final class ChatPreset {
     return value;
   }
 
-  static Map<String, Object?> _copy(Map<String, Object?> value) =>
-      jsonDecode(jsonEncode(value)) as Map<String, Object?>;
+  static Map<String, Object?> _copy(Map<String, Object?> value) => copyJsonObject(value);
 
   // Explicit export choice; this does not remove unfamiliar extension data.
   static const _connectionFields = {

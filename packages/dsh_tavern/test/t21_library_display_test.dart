@@ -382,6 +382,160 @@ void main() {
     expect(h.engine.globalVariables, {'kept': 1});
   });
 
+  test('preset regex fixtures switch one chat A on A prompt-off B A without writing transformed text', () async {
+    final fixtures =
+        (jsonDecode(await File('test/fixtures/st-native-preset-regex.json').readAsString()) as List<Object?>)
+            .cast<Map<String, Object?>>();
+    expect(fixtures.map((fixture) => fixture['id']), ['rx-a', 'rx-b']);
+    final fixtureA = fixtures[0];
+    final fixtureB = fixtures[1];
+    final rawA = fixtureA['preset']! as Map<String, Object?>;
+    final rawB = fixtureB['preset']! as Map<String, Object?>;
+    const anchor = 'DSHRXANCHOR | DSHRXPRAW | RECORDER_OK';
+    const input = 'Please continue.';
+    final h = await _open();
+    h.model.responseText = 'RECORDER_OK';
+    await h.engine.setSettings(fixtureA['settings']! as Map<String, Object?>);
+    await h.engine.setGlobalVariables(fixtureA['globalVariables']! as Map<String, Object?>);
+    await h.engine.setToolPolicy({
+      'roll': {'allow': false},
+      'remember': {'allow': false},
+    });
+    final character = await h.engine.importCard(Uint8List.fromList(utf8.encode(jsonEncode(fixtureA['card']))));
+    final document = StChatDocument(
+      fileName: 'preset-regex.jsonl',
+      header: fixtureA['chatHeader']! as Map<String, Object?>,
+      messages: (fixtureA['messages']! as List<Object?>).cast<Map<String, Object?>>(),
+    );
+    final importedChat = await h.engine.importChats(character.id, [
+      TavernChatFile(fileName: document.fileName, bytes: document.encode()),
+    ]);
+    final chat = importedChat.chatIds.single;
+    final anchorNodeId = (await h.engine.path(chat)).single.nodeId;
+
+    Future<void> expectStored(int stage, {String? lastNodeId}) async {
+      final path = await h.engine.path(chat);
+      expect(path.map((message) => (message.role, message.text)), [
+        (TavernRole.character, anchor),
+        for (var index = 0; index < stage; index++) ...[
+          (TavernRole.user, input),
+          (TavernRole.character, 'RECORDER_OK'),
+        ],
+      ], reason: 'complete stored path after stage $stage');
+      expect(path.first.nodeId, anchorNodeId);
+      if (lastNodeId != null) expect(path.last.nodeId, lastNodeId);
+      // exportChat returns the current path first and also preserves other imported paths/branches.
+      final exported = (await h.engine.exportChat(chat)).first;
+      final rows = StChatDocument.decode(exported.fileName, exported.bytes).messages;
+      expect(rows.map((row) => (row['is_user'], row['is_system'] ?? false, row['mes'])), [
+        (false, false, anchor),
+        for (var index = 0; index < stage; index++) ...[(true, false, input), (false, false, 'RECORDER_OK')],
+      ], reason: 'complete exported message sequence after stage $stage');
+    }
+
+    await expectStored(0);
+    final a = await h.engine.importPreset(jsonEncode(rawA), fileName: 'DSHRXPRESETA.json');
+    final b = await h.engine.importPreset(jsonEncode(rawB), fileName: 'DSHRXPRESETB.json');
+    expect(a.issues, isEmpty);
+    expect(b.issues, isEmpty);
+    expect(a.preset.raw, rawA);
+    expect(b.preset.raw, rawB);
+    expect(a.regexDiagnostics.map((diagnostic) => diagnostic.toJson()), [
+      {
+        'path': r'$.extensions.regex_scripts[0].findRegex',
+        'status': 'compatible',
+        'code': 'compiled',
+        'message': '已按本来源的解析规则试编译。',
+        'identifier': '10000000-0000-4000-8000-000000000001',
+      },
+      {
+        'path': r'$.extensions.regex_scripts[1].findRegex',
+        'status': 'compatible',
+        'code': 'compiled',
+        'message': '已按本来源的解析规则试编译。',
+        'identifier': '10000000-0000-4000-8000-000000000002',
+      },
+    ]);
+    expect(b.regexDiagnostics, isEmpty);
+
+    Future<void> expectSelection(String presetId) async {
+      final selection = await h.engine.presetSelection(chatId: chat);
+      expect(selection.source, PresetSelectionSource.chat);
+      expect(selection.boundPresetId, presetId);
+      expect(selection.effectivePresetId, presetId);
+      expect(selection.missingPresetIds, isEmpty);
+    }
+
+    Future<void> setPromptDisabled(bool disabled) async {
+      final raw = (await h.engine.preset(a.preset.id))!.raw;
+      final rules = ((raw['extensions']! as Map<String, Object?>)['regex_scripts']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      rules[0]['disabled'] = disabled;
+      final updated = await h.engine.updatePreset(a.preset.id, {
+        'extensions': {'regex_scripts': rules},
+      });
+      final expected = jsonDecode(jsonEncode(rawA)) as Map<String, Object?>;
+      final expectedRules = ((expected['extensions']! as Map<String, Object?>)['regex_scripts']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      expectedRules[0]['disabled'] = disabled;
+      expect(updated.preset.id, a.preset.id);
+      expect(updated.issues, isEmpty);
+      expect(updated.preset.raw, expected);
+      expect((await h.engine.preset(a.preset.id))!.raw, expected);
+      expect(jsonDecode(await h.engine.exportPreset(a.preset.id)), expected);
+      // updatePreset validates the saved document; it does not recompile rules.
+    }
+
+    Future<void> expectDisplay(String nodeId, String text) async {
+      final display = await h.engine.displayText(chat, nodeId: nodeId);
+      expect(display.text, text);
+      expect(display.warnings, isEmpty);
+      expect(display.superseded, isFalse);
+    }
+
+    await h.engine.bindPreset(chat, a.preset.id);
+    await expectSelection(a.preset.id);
+    await expectDisplay(anchorNodeId, 'DSHRXANCHOR | DSHRXPRAW | DSHRXDOUT');
+    await expectStored(0);
+    for (var stage = 1; stage <= 4; stage++) {
+      if (stage == 2) await setPromptDisabled(true);
+      if (stage == 3) {
+        await setPromptDisabled(false);
+        await h.engine.bindPreset(chat, b.preset.id);
+      }
+      if (stage == 4) await h.engine.bindPreset(chat, a.preset.id);
+      await expectSelection(stage == 3 ? b.preset.id : a.preset.id);
+      final events = await h.engine.send(chat, input).toList();
+      expect(events.whereType<TavernTurnFailed>(), isEmpty);
+      final completed = events.whereType<TavernTurnDone>();
+      expect(completed, hasLength(1));
+      final reply = completed.single.message;
+      expect(h.model.bodies, hasLength(stage));
+      // These are generate-interface assembly snapshots, not HTTP wire bytes.
+      final body = h.model.bodies.last;
+      expect(body.containsKey('tools'), isFalse);
+      expect(body.containsKey('tool_choice'), isFalse);
+      final messages = (body['messages']! as List<Object?>).cast<Map<String, Object?>>();
+      expect(messages.every((message) => message['content'] is String), isTrue);
+      final text = messages.map((message) => message['content']! as String).join('\n');
+      int occurrences(String marker) => RegExp(RegExp.escape(marker)).allMatches(text).length;
+      final main = stage == 3 ? 'DSHRXPRESETB' : 'DSHRXPRESETA';
+      final prompt = stage == 1 || stage == 4 ? 'DSHRXPOUT' : 'DSHRXPRAW';
+      expect(occurrences('DSHRXANCHOR'), 1);
+      expect(occurrences(main), 1);
+      expect(occurrences(stage == 3 ? 'DSHRXPRESETA' : 'DSHRXPRESETB'), 0);
+      expect(occurrences(prompt), 1);
+      expect(occurrences(prompt == 'DSHRXPOUT' ? 'DSHRXPRAW' : 'DSHRXPOUT'), 0);
+      expect(occurrences('DSHRXANCHOR | $prompt | RECORDER_OK'), 1);
+      expect(occurrences('RECORDER_OK'), stage);
+      expect(occurrences('DSHRXDOUT'), 0);
+      final displayedReply = stage == 3 ? 'RECORDER_OK' : 'DSHRXDOUT';
+      await expectDisplay(reply.nodeId, displayedReply);
+      await expectDisplay(anchorNodeId, 'DSHRXANCHOR | DSHRXPRAW | $displayedReply');
+      await expectStored(stage, lastNodeId: reply.nodeId);
+    }
+  });
+
   test('independent book import exports unknown JSON and returns scoped regex diagnostics', () async {
     final h = await _open();
     final raw = {
@@ -840,6 +994,7 @@ class _Harness {
 
 class _Model extends TavernModelClient {
   final bodies = <Map<String, Object?>>[];
+  String responseText = 'A';
   String? reasoning;
   Completer<void>? _held;
   Completer<void>? _started;
@@ -871,7 +1026,7 @@ class _Model extends TavernModelClient {
       }
     }
     if (reasoning != null) yield ModelReasoning(reasoning!);
-    yield const ModelText('A');
+    yield ModelText(responseText);
     yield const ModelFinished('stop');
   }
 }

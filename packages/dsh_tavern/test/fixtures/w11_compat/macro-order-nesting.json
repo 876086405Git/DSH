@@ -1,0 +1,76 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": false,
+  "names_behavior": 0,
+  "prompts": [
+    {
+      "identifier": "seed",
+      "name": "seed",
+      "role": "system",
+      "content": "{{setvar::counter::1}}{{setvar::key::counter}}",
+      "injection_position": 0,
+      "system_prompt": false
+    },
+    {
+      "identifier": "read",
+      "name": "read",
+      "role": "system",
+      "content": "VALUE={{getvar::counter}};NEST={{getvar::{{getvar::key}}}};PICK={{random::A::B}};LAST={{lastUserMessage}}",
+      "injection_position": 0,
+      "system_prompt": false
+    },
+    {
+      "identifier": "end",
+      "name": "end",
+      "role": "system",
+      "content": "a\n{{trim}}\nb{{setvar::counter::2}}",
+      "injection_position": 0,
+      "system_prompt": false
+    },
+    {
+      "identifier": "message_variable",
+      "name": "message_variable",
+      "role": "system",
+      "content": "{{get_message_variable::stat_data.value}}",
+      "injection_position": 0,
+      "system_prompt": false
+    },
+    {
+      "identifier": "unprovided_extension",
+      "name": "unprovided_extension",
+      "role": "system",
+      "content": "{{nemolore}}/{{long_term_memory}}",
+      "injection_position": 0,
+      "system_prompt": false
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "seed",
+          "enabled": true
+        },
+        {
+          "identifier": "read",
+          "enabled": true
+        },
+        {
+          "identifier": "end",
+          "enabled": true
+        },
+        {
+          "identifier": "message_variable",
+          "enabled": true
+        },
+        {
+          "identifier": "unprovided_extension",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

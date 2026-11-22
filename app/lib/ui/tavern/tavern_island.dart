@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../l10n/l10n.dart';
 import '../../tavern/tavern_island_story.dart';
 import '../../tavern/tavern_islands.dart';
 import '../../tavern/tavern_page_perf.dart';
@@ -272,9 +273,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     return NavigationDecision.prevent;
   }
 
-  /// Works out what its scripts get; loads again when that changed. A
-  /// library or the story that could not be had: it goes without.
-  void _prepare() {
+  /// Works out what its scripts get. A page that reads its own message
+  /// must wait for that actual floor, even when an older story is ready.
+  ({String chatId, Object? error})? _prepare() {
     final scripted =
         !ref.watch(tavernSettingsProvider.select((s) => s.islandNoScripts)) && tavernIslandHasScript(widget.html);
     final libraries = scripted ? ref.watch(tavernCanvasLibrariesProvider) : null;
@@ -282,7 +283,6 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     final story = at == null ? null : ref.watch(tavernIslandStoryProvider(at.chatId));
     // The reader's name (SillyTavern's name1).
     final persona = at == null ? null : ref.watch(tavernPersonaSelectionProvider(at.chatId));
-    final waiting = (libraries?.isLoading ?? false) || (story?.isLoading ?? false) || (persona?.isLoading ?? false);
     // zod and YAML (over half a megabyte) only where the page could use them.
     final libs = [
       for (final (i, code) in (libraries?.value ?? const <String>[]).indexed)
@@ -290,9 +290,9 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     ];
     final name1 = persona?.value?.persona?.name;
     final from = (story?.value, at?.nodeId, at?.text, name1);
-    if (waiting == _waiting && libs.length == _libraries.length && from == _storyFrom) return;
-    _storyFrom = from;
-    final read = at == null
+    final read = from == _storyFrom
+        ? _story
+        : at == null
         ? null
         : story?.value?.forMessage(
             at.nodeId,
@@ -302,6 +302,16 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
             persona: name1 ?? '',
             chatId: at.chatId,
           );
+    final missing = at != null && (read == null || (story?.hasError ?? false))
+        ? (chatId: at.chatId, error: story?.error)
+        : null;
+    final waiting =
+        missing != null ||
+        (libraries?.isLoading ?? false) ||
+        (story?.isLoading ?? false) ||
+        (persona?.isLoading ?? false);
+    if (waiting == _waiting && libs.length == _libraries.length && from == _storyFrom) return missing;
+    _storyFrom = from;
     // What else moves without loading the page again.
     const told = ['latest', 'chat', 'last', 'global', 'character', 'floors'];
     final own = read == null ? null : jsonEncode({...read}..removeWhere((k, _) => told.contains(k)));
@@ -311,7 +321,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     if (waiting == _waiting && libs.length == _libraries.length && own == _storyKey) {
       // The rest of the story moved: the page is told, not loaded again.
       if (moved) _live ? _tell() : _untold = true;
-      return;
+      return missing;
     }
     _storyKey = own;
     _waiting = waiting;
@@ -320,6 +330,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(_open);
     });
+    return missing;
   }
 
   void _onGone(bool crashed) {
@@ -360,7 +371,29 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
       tavernSettingsProvider.select((s) => (s.islandNoScripts, s.islandOffline, s.lowPower)),
       (_, _) => _open(),
     );
-    _prepare();
+    final missing = _prepare();
+    if (missing != null) {
+      final l10n = context.l10n;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                missing.error == null
+                    ? l10n.tavernIslandStoryWaiting
+                    : l10n.tavernIslandStoryFailed(missing.error.toString()),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(tavernIslandStoryProvider(missing.chatId)),
+              child: Text(l10n.commonRetry),
+            ),
+          ],
+        ),
+      );
+    }
     final controller = _controller;
     if (_gone || controller == null) return const SizedBox(height: TavernHtmlIsland.minHeight);
     return AnimatedSize(

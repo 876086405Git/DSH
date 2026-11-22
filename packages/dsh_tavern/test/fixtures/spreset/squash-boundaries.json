@@ -1,0 +1,622 @@
+{
+  "sourceCommit": "53bd585da14248ba10baaede7fc7ed0cebe1eeeb",
+  "sourceSha256": "d0766c830f3bfd4a69c63bba60423d7a797276fbd4695420adb8f17ea330037b",
+  "squashed": [
+    {
+      "reSplit": false,
+      "returned": "string",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "string",
+            "value": "U:NEW"
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":\"U:NEW\"}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "undefined",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "undefined"
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\"}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "null",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "null"
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":null}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "false",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "boolean",
+            "value": false
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":false}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "zero",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "number",
+            "value": 0
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":0}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "number",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "number",
+            "value": 3
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":3}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "object",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "object",
+            "value": {
+              "x": 1
+            }
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":{\"x\":1}}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "emptyArray",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "array",
+            "value": []
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":[]}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "array",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "array",
+            "value": [
+              "A"
+            ]
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":[\"A\"]}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": false,
+      "returned": "Promise",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "kind": "Promise",
+            "json": "{}"
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"assistant\",\"content\":{}}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "string",
+      "outcome": "return",
+      "messages": [
+        {
+          "role": "user",
+          "content": {
+            "kind": "string",
+            "value": "NEW"
+          }
+        }
+      ],
+      "wireJson": "[{\"role\":\"user\",\"content\":\"NEW\"}]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "undefined",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'length')",
+      "mutatedMessages": [],
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "null",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "Cannot read properties of null (reading 'length')",
+      "mutatedMessages": [],
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "false",
+      "outcome": "return",
+      "messages": [],
+      "wireJson": "[]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "zero",
+      "outcome": "return",
+      "messages": [],
+      "wireJson": "[]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "number",
+      "outcome": "return",
+      "messages": [],
+      "wireJson": "[]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "object",
+      "outcome": "return",
+      "messages": [],
+      "wireJson": "[]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "emptyArray",
+      "outcome": "return",
+      "messages": [],
+      "wireJson": "[]",
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "array",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "remaining.startsWith is not a function",
+      "mutatedMessages": [],
+      "diagnostics": 0
+    },
+    {
+      "reSplit": true,
+      "returned": "Promise",
+      "outcome": "return",
+      "messages": [],
+      "wireJson": "[]",
+      "diagnostics": 0
+    }
+  ],
+  "arrayMode": [
+    {
+      "returned": "string",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    },
+    {
+      "returned": "undefined",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 0
+    },
+    {
+      "returned": "null",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    },
+    {
+      "returned": "false",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    },
+    {
+      "returned": "zero",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    },
+    {
+      "returned": "number",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    },
+    {
+      "returned": "object",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    },
+    {
+      "returned": "emptyArray",
+      "result": [],
+      "sameReference": true,
+      "diagnostics": 0
+    },
+    {
+      "returned": "array",
+      "result": [
+        "A"
+      ],
+      "sameReference": true,
+      "diagnostics": 0
+    },
+    {
+      "returned": "Promise",
+      "result": [
+        {
+          "role": "user",
+          "content": "ORIGINAL"
+        }
+      ],
+      "sameReference": true,
+      "diagnostics": 1
+    }
+  ],
+  "stopping": [
+    {
+      "stopString": "\"ABA\"",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": "ABA"
+      }
+    },
+    {
+      "stopString": "\"ABA\"",
+      "shape": "empty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "A",
+          "B",
+          "A"
+        ]
+      }
+    },
+    {
+      "stopString": "\"ABA\"",
+      "shape": "nonempty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "old",
+          "A",
+          "B",
+          "A"
+        ]
+      }
+    },
+    {
+      "stopString": "\"\"",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": ""
+      }
+    },
+    {
+      "stopString": "\"\"",
+      "shape": "empty",
+      "outcome": "return",
+      "data": {
+        "stop": []
+      }
+    },
+    {
+      "stopString": "\"\"",
+      "shape": "nonempty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "AB",
+          "A",
+          "old"
+        ]
+      }
+    },
+    {
+      "stopString": "null",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": null
+      }
+    },
+    {
+      "stopString": "null",
+      "shape": "empty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "custom_stopping_strings is not iterable (cannot read property null)",
+      "data": {
+        "stop": []
+      }
+    },
+    {
+      "stopString": "null",
+      "shape": "nonempty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "Cannot read properties of null (reading 'includes')",
+      "data": {
+        "stop": [
+          "AB",
+          "A",
+          "old"
+        ]
+      }
+    },
+    {
+      "stopString": "{}",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": {}
+      }
+    },
+    {
+      "stopString": "{}",
+      "shape": "empty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "Spread syntax requires ...iterable[Symbol.iterator] to be a function",
+      "data": {
+        "stop": []
+      }
+    },
+    {
+      "stopString": "{}",
+      "shape": "nonempty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "custom_stopping_strings.includes is not a function",
+      "data": {
+        "stop": [
+          "AB",
+          "A",
+          "old"
+        ]
+      }
+    },
+    {
+      "stopString": "3",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": 3
+      }
+    },
+    {
+      "stopString": "3",
+      "shape": "empty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "Spread syntax requires ...iterable[Symbol.iterator] to be a function",
+      "data": {
+        "stop": []
+      }
+    },
+    {
+      "stopString": "3",
+      "shape": "nonempty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "custom_stopping_strings.includes is not a function",
+      "data": {
+        "stop": [
+          "AB",
+          "A",
+          "old"
+        ]
+      }
+    },
+    {
+      "stopString": "false",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": false
+      }
+    },
+    {
+      "stopString": "false",
+      "shape": "empty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "Spread syntax requires ...iterable[Symbol.iterator] to be a function",
+      "data": {
+        "stop": []
+      }
+    },
+    {
+      "stopString": "false",
+      "shape": "nonempty",
+      "outcome": "throw",
+      "error": "TypeError",
+      "message": "custom_stopping_strings.includes is not a function",
+      "data": {
+        "stop": [
+          "AB",
+          "A",
+          "old"
+        ]
+      }
+    },
+    {
+      "stopString": "[\"A\",\"B\"]",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "A",
+          "B"
+        ]
+      }
+    },
+    {
+      "stopString": "[\"A\",\"B\"]",
+      "shape": "empty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "A",
+          "B"
+        ]
+      }
+    },
+    {
+      "stopString": "[\"A\",\"B\"]",
+      "shape": "nonempty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "AB",
+          "old",
+          "A",
+          "B"
+        ]
+      }
+    },
+    {
+      "stopString": "User:",
+      "shape": "absent",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "User:"
+        ]
+      }
+    },
+    {
+      "stopString": "User:",
+      "shape": "empty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "User:"
+        ]
+      }
+    },
+    {
+      "stopString": "User:",
+      "shape": "nonempty",
+      "outcome": "return",
+      "data": {
+        "stop": [
+          "AB",
+          "A",
+          "old",
+          "User:"
+        ]
+      }
+    }
+  ]
+}
