@@ -31,7 +31,7 @@ export function createNotesExecutionOwner(ctx, store) {
     const capturedApprovalPolicy = approvalPolicy();
     const policyFingerprint = fingerprint(policy ?? null);
     const guard = () => {
-      const current = store.read(record.taskId);
+      const current = store.stored(record.taskId);
       if (closing || store.stopping || current.taskRev !== record.taskRev || current.cancelRequested ||
           !store.executionAllowed(current) ||
           current.agreement.deadlineAtMs !== null && Date.now() >= current.agreement.deadlineAtMs ||

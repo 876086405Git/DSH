@@ -514,18 +514,31 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       throw const _AgentMemoryRejected('incomplete_effect_set');
     }
     final planned = {for (final id in revised.keys) id: (originals[id]!['row_rev'] as int) + 1};
-    final writes = [
-      for (final entry in revised.entries)
-        _agentPrepareEntry(
-          turn,
-          entry.key,
-          originals[entry.key],
-          entry.value,
-          planned,
-          deleted,
-          preserveProof: deleted.isNotEmpty && raw != null,
-        ),
-    ];
+    final prepared = <String, _AgentEntryWrite>{};
+    final preparing = <String>{};
+    _AgentEntryWrite? prepare(String id) {
+      final change = revised[id];
+      if (change == null) return null;
+      final existing = prepared[id];
+      if (existing != null) return existing;
+      if (!preparing.add(id)) throw const _AgentMemoryRejected('reference_cycle');
+      // Resolve each referenced member's validated final basis before the
+      // dependent's current-value check, regardless of input order.
+      final write = _agentPrepareEntry(
+        turn,
+        id,
+        originals[id],
+        change,
+        planned,
+        deleted,
+        preserveProof: deleted.isNotEmpty && raw != null,
+        plannedBasis: (reference) => prepare(reference)?.basis,
+      );
+      preparing.remove(id);
+      return prepared[id] = write;
+    }
+
+    final writes = [for (final id in revised.keys) prepare(id)!];
     _agentValidateReferencePlan({for (final write in writes) write.id: write.references}, deleted);
     // Every ID/revision, retained nonempty body, reference and shared budget
     // above is settled before the first card is touched.
@@ -628,6 +641,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     Map<String, int> planned,
     Set<String> deleted, {
     bool preserveProof = false,
+    int? Function(String)? plannedBasis,
   }) {
     final text = _agentText(input, 'text');
     final collection = previous?['collection'] as String? ?? input['collection'] as String? ?? 'about_you';
@@ -671,7 +685,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       }
       references[reference] = planned[reference] ?? card['row_rev'] as int;
       cleanup = cleanup && card['cleanup_history_complete'] == 1;
-      basis = math.max(basis, card['current_basis_seq'] as int? ?? 0);
+      basis = math.max(basis, plannedBasis?.call(reference) ?? card['current_basis_seq'] as int? ?? 0);
       sourceAt = math.max(sourceAt, card['source_at_ms'] as int);
     }
     final sources = <MemoryRow>[];
@@ -1000,11 +1014,20 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       targetId: (target['row_rev'] as int) + 1,
       for (final id in updateInputs.keys) id: (rows[id]!['row_rev'] as int) + 1,
     };
+    final mergedRows = [target, for (final id in fromIds) rows[id]!];
+    final basis = mergedRows.map((row) => row['current_basis_seq'] as int? ?? 0).reduce(math.max);
     final writes = {
       for (final entry in updateInputs.entries)
-        entry.key: _agentPrepareEntry(turn, entry.key, rows[entry.key], entry.value, planned, fromIds),
+        entry.key: _agentPrepareEntry(
+          turn,
+          entry.key,
+          rows[entry.key],
+          entry.value,
+          planned,
+          fromIds,
+          plannedBasis: (reference) => reference == targetId ? basis : null,
+        ),
     };
-    final mergedRows = [target, for (final id in fromIds) rows[id]!];
     final targetRefs = <String, int>{};
     for (final row in mergedRows) {
       for (final reference in _db.select(
@@ -1036,7 +1059,6 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         if (proofKeys.add(_mergeProofKey(group))) proofs.add(group);
       }
     }
-    final basis = mergedRows.map((row) => row['current_basis_seq'] as int? ?? 0).reduce(math.max);
     final sourceAt = mergedRows.map((row) => row['source_at_ms'] as int).reduce(math.max);
     final at = _checkedNow();
     void mergeBody() {

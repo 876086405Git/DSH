@@ -131,6 +131,10 @@ test('full model and original policy changes invalidate actual synchronous guard
  f.setModel({provider:'other-provider',model:'other'});assert.throws(opened.guard,/changed/);
  f.setModel({provider:'chosen-provider',model:'chosen-model'});opened.guard();f.setPolicy('workspace-write');assert.throws(opened.guard,/changed/);
 });
+test('owner guard checks the stored task without copying it',async t=>{
+ const f=await fixture(t),opened=await f.execution.openExecution(f.store.read('task-1'));
+ const read=t.mock.method(f.store,'read');opened.guard();assert.equal(read.mock.callCount(),0);
+});
 test('real F01 task turn and ApprovalService save distinct audit/wire IDs before delivery',async t=>{
  const f=await fixture(t),opened=await f.execution.openExecution(f.store.read('task-1'));
  const grant=opened.approve('writePage',{requestedMode:'workspace-write',justification:'只写已选择目录的新待办页'});

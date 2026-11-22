@@ -221,6 +221,9 @@ class ChatTranscript {
 
   Iterable<SessionLogEvent> get events => _log.values;
 
+  /// Loaded events at or after [seq], in sequence order.
+  Iterable<SessionLogEvent> eventsFrom(int seq) => _traceEventsAfter(seq - 1);
+
   /// Where each loaded turn's time went ([traceTurns] over the merged log).
   /// Finished turns keep their [TurnTrace] instance across later events.
   List<TurnTrace> get turns => _traces ??= _buildTraces();

@@ -46,7 +46,7 @@ class _World {
       : _RecoveryPreferences(events, recovery!);
   _RecoveryPreferences get journal => preferences as _RecoveryPreferences;
 
-  /// What the system file picker hands back for a cover.
+  /// What the cover picker hands back after local normalization.
   Future<Uint8List?> Function()? pickCover;
   late final client = PublishClient(events);
   late final drafts = PublishDrafts(events);
@@ -911,7 +911,7 @@ void main() {
       await _fillCompanion(tester);
 
       expect(find.text('封面（选填）'), findsOneWidget);
-      expect(find.text('PNG，每边不超过 512 像素，不超过 2 MB。不选就显示名字的第一个字。'), findsOneWidget);
+      expect(find.text('支持 JPEG、PNG、WebP 等，上传前自动缩小。不选就显示名字的第一个字。'), findsOneWidget);
       expect(find.text('预览图'), findsNothing);
       expect(_publish(tester).source?.preview, isNull, reason: 'a companion starts without a cover');
 
@@ -937,14 +937,18 @@ void main() {
     });
 
     for (final (name, pick, words) in <(String, Future<Uint8List?> Function(), String)>[
-      ('an empty file', () async => Uint8List(0), '这张图是空的或超过 2 MB，换一张试试。'),
+      ('an empty file', () async => Uint8List(0), '图片为空或超过 32 MB，换一张试试。'),
       (
         'a file over the limit, refused before it is read',
         () async => throw const WorkshopException('workshop_preview_size'),
-        '这张图是空的或超过 2 MB，换一张试试。',
+        '图片为空或超过 32 MB，换一张试试。',
       ),
-      ('not a PNG', () async => Uint8List.fromList([1, 2, 3, 4]), '这不是一张完整的 PNG 图片，换一张试试。'),
-      ('a PNG wider than 512', () async => workshopPng(600, 8), '这张图太大了，每边最多 512 像素。缩小后再选。'),
+      ('not an image', () async => Uint8List.fromList([1, 2, 3, 4]), '图片损坏或格式不支持，换一张试试。'),
+      (
+        'over the source pixel limit',
+        () async => throw const WorkshopException('workshop_preview_dimensions'),
+        '图片分辨率过高，缩小后再选。',
+      ),
       ('a file that cannot be read', () async => throw StateError('gone'), '没能读出这张图，换一张试试。'),
     ]) {
       testWidgets('a cover that is $name is refused in words, and nothing is set', (tester) async {
@@ -991,7 +995,7 @@ void main() {
 
       world.pickCover = () async => Uint8List.fromList([9, 9, 9]);
       await _tapVisible(tester, find.text('换一张'));
-      expect(find.text('这不是一张完整的 PNG 图片，换一张试试。'), findsOneWidget);
+      expect(find.text('图片损坏或格式不支持，换一张试试。'), findsOneWidget);
       expect(_publish(tester).source?.preview, same(first));
       expect(find.byType(WorkshopCoverThumb), findsOneWidget);
 
@@ -999,7 +1003,7 @@ void main() {
       world.pickCover = () async => other;
       await _tapVisible(tester, find.text('换一张'));
       expect(find.text('8×8 · ${formatBytes(other.length)}'), findsOneWidget);
-      expect(find.text('这不是一张完整的 PNG 图片，换一张试试。'), findsNothing);
+      expect(find.text('图片损坏或格式不支持，换一张试试。'), findsNothing);
       expect(_publish(tester).source?.preview, isNot(same(first)));
 
       await _tapVisible(tester, find.text('移除'));
@@ -1145,7 +1149,10 @@ void main() {
         final world = _World()
           ..capabilities(previews: _bothPreviews)
           ..sources = [publishSource, _companion]
-          ..pickCover = () async => pick++ == 0 ? workshopPng(512, 512) : workshopPng(513, 1);
+          ..pickCover = () async {
+            if (pick++ == 0) return workshopPng(512, 512);
+            throw const WorkshopException('workshop_preview_dimensions');
+          };
         await _open(tester, world, size: const Size(360, 740), textScale: 1.3);
         if (kind == 'pet') {
           await _tapVisible(tester, find.text('Cat'));
@@ -1158,7 +1165,7 @@ void main() {
           expect(find.byType(WorkshopCoverThumb), findsOneWidget);
           // The cover with a refusal under it is the tallest this group gets.
           await _tapVisible(tester, find.text('换一张'));
-          expect(find.textContaining('每边最多 512 像素'), findsOneWidget);
+          expect(find.text('图片分辨率过高，缩小后再选。'), findsOneWidget);
           await _tapVisible(tester, find.text('移除'));
           await _tapVisible(tester, find.text('选一张封面'));
         }

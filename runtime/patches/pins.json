@@ -304,6 +304,30 @@
         }
       }
     },
+    "jsonl-decoder-stream-buffer.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "4022ad10ebf4d792a83111cf87252ded165f658c0633a4f0d878bb1e7ff2e441",
+          "before": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3"
+        }
+      }
+    },
+    "jsonl-frozen-live-event.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "4ce5ef22bc25c37ead321f86427231ca8b4491e46ffa6033c6760d0783fc38eb",
+          "before": "4a1cafd5a6db7e51c9e0e7b27f841ab0653056cbbf76767e6a818f21e6a73988"
+        }
+      }
+    },
+    "jsonl-header-first-read.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "4a1cafd5a6db7e51c9e0e7b27f841ab0653056cbbf76767e6a818f21e6a73988",
+          "before": "4022ad10ebf4d792a83111cf87252ded165f658c0633a4f0d878bb1e7ff2e441"
+        }
+      }
+    },
     "jsonl-materialize-rename.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
@@ -855,6 +879,14 @@
         "node_modules/@deepseek-ai/schemastery/lib/index.mjs": {
           "after": "f9caeae34766dc34b091d52ec9a8308f2cedd8a4cd0d5528dd59f6284bef9cee",
           "before": "cfcbe46c7416bdb35ce891c252152bbf519e08199bede5930dd7cb880c65f1ef"
+        }
+      }
+    },
+    "session-cold-unused-fingerprint.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
+          "after": "f226f15108bd2079a6a88f3cc5d9e7e022b6b46bf6628fde38df66f0c1ec83a4",
+          "before": "6a70f328528d9c799b9f15a0c4505712ebb259163d4e9abe7a6a7dfa0557730b"
         }
       }
     },
@@ -1421,8 +1453,8 @@
     "zzzzzzz-ohos-session-publication.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "a2fccd3b699d7d327246f684a2a3eb6b7e26f50d4ed57ec34c9eb750fa0cd199",
-          "before": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3"
+          "after": "53a8eb489be48479da039d63696d831149c37c8b9d645b9ae94560fcc86941dc",
+          "before": "4ce5ef22bc25c37ead321f86427231ca8b4491e46ffa6033c6760d0783fc38eb"
         }
       }
     },
@@ -1665,8 +1697,8 @@
           "before": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b"
         },
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "ad21b818c567beb6f42e1091a37e622e3172d19e81952118e877b74195952fc1",
-          "before": "a2fccd3b699d7d327246f684a2a3eb6b7e26f50d4ed57ec34c9eb750fa0cd199"
+          "after": "4ea142d366555ee3cf64992e56745a9299dff44404fa8ccd7abaecbdd88b019b",
+          "before": "53a8eb489be48479da039d63696d831149c37c8b9d645b9ae94560fcc86941dc"
         }
       }
     },
@@ -2041,8 +2073,8 @@
     "zzzzzzzzzzzz-ohos-runtime-capabilities.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "31fb1a973e40c7886ebe6987344434bb5e33f6288850fcd861fb95f43cab27c9",
-          "before": "ad21b818c567beb6f42e1091a37e622e3172d19e81952118e877b74195952fc1"
+          "after": "7718483b03c2b036c14318a6123fd43e5e07a521dbd2bdf0a7b9a078bb50353a",
+          "before": "4ea142d366555ee3cf64992e56745a9299dff44404fa8ccd7abaecbdd88b019b"
         }
       }
     },
@@ -2702,9 +2734,11 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
+      "session-cold-unused-fingerprint.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
+      "jsonl-decoder-stream-buffer.diff",
       "attachment-link-fallback.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff",
@@ -2728,10 +2762,12 @@
       "session-format-error.diff",
       "session-queue-steer-deletion.diff",
       "webserver-resource-abort.diff",
+      "jsonl-header-first-read.diff",
       "rrule-negative-position-range.diff",
       "rrule-weekly-first-period.diff",
       "rrule-mixed-byday.diff",
       "input-trigger-source-recovery.diff",
+      "jsonl-frozen-live-event.diff",
       "web-preset-save-freshness.diff",
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
@@ -2764,6 +2800,7 @@
       "companion-compare-output-window.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
+      "ohos-web-converter-lazy.diff",
       "input-recovery.diff"
     ],
     "ohos": [
@@ -2883,9 +2920,11 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
+      "session-cold-unused-fingerprint.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
+      "jsonl-decoder-stream-buffer.diff",
       "attachment-link-fallback.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff",
@@ -2909,10 +2948,12 @@
       "session-format-error.diff",
       "session-queue-steer-deletion.diff",
       "webserver-resource-abort.diff",
+      "jsonl-header-first-read.diff",
       "rrule-negative-position-range.diff",
       "rrule-weekly-first-period.diff",
       "rrule-mixed-byday.diff",
       "input-trigger-source-recovery.diff",
+      "jsonl-frozen-live-event.diff",
       "web-preset-save-freshness.diff",
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
@@ -2945,6 +2986,7 @@
       "companion-compare-output-window.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
+      "ohos-web-converter-lazy.diff",
       "input-recovery.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
@@ -2980,7 +3022,6 @@
       "ohos-workspace-edit.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-image-codec.diff",
-      "ohos-web-converter-lazy.diff",
       "ohos-cordis-catalog-lazy.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",

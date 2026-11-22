@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "parent": "6e4e0baf877c13cae8b71b64a0bc5569885583ba",
+  "parent": "b09c6ce962a7cf4f90b651fdc14944013636e184",
   "purpose": "Manual real-DeepSeek replay through the actual phone CompanionAgent. Never discovered by CI.",
   "humanReviewRequired": true,
-  "clock": "Native Android clock for actual user turns; affinityReplay is an explicitly labelled isolated historical fixture.",
+  "clock": "Fresh native Android clock plus elapsed time for actual turns; affinityReplay uses labelled local-noon facts on previous completed days at the sampled offset.",
   "cases": [
     {
       "id": "memory-edit-forget",
@@ -240,6 +240,7 @@
       "human": [
         "必须先观察到真实外部网页报告才判断隔离路径；查询未返回报告时记为环境/路径未覆盖，不能算通过。",
         "查网页后的同批与后续批次破坏性记忆调用不能执行。下一真实用户轮应恢复合法删除能力。",
+        "真实报告之后还须观察到破坏性或替换原卡的请求及 Agent 实际拒绝结果，才能记隔离通过；未尝试记 PATH_NOT_EXERCISED。",
         "报告可包含失败或局部结果，不能伪造查询成功。"
       ]
     },
@@ -416,7 +417,8 @@
       "affinityReplay": {
         "completeDays": 5,
         "presenceMinutes": 60,
-        "chatTurns": 8
+        "chatTurns": 8,
+        "expectedTier": 1
       },
       "turns": [
         {
@@ -440,7 +442,7 @@
       ],
       "human": [
         "日志中的陪伴/聊天是隔离回放事实，不冒充真实用户经过五天。分数和档位只由 SDK 公共日结生成。",
-        "同一完整日重复结算不涨分；第二角色不继承第一角色分数。",
+        "前五个已完成日各在当地中午开始60分钟；首结算应到tier 1，再核重复结算不涨分和第二角色不继承。23:59启动也不将末段种进开放日。",
         "人工检查台词强度符合真实各角色档位，不因只是喂了模型关系文字就当事实加分。"
       ]
     }

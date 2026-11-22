@@ -46,5 +46,17 @@ object SpeechGates {
         return SpeechGate(echoCancelled)
     }
 
-    private fun load(assets: AssetManager, name: String): ByteArray = assets.open("speech/$name").use { it.readBytes() }
+    // AssetInputStream.available() is the remaining uncompressed length, so the model
+    // usually lands in one array; read to EOF anyway, since the API calls it an estimate.
+    private fun load(assets: AssetManager, name: String): ByteArray = assets.open("speech/$name").use { input ->
+        val head = ByteArray(input.available())
+        var n = 0
+        while (n < head.size) {
+            val read = input.read(head, n, head.size - n)
+            if (read < 0) break
+            n += read
+        }
+        val rest = input.readBytes()
+        if (n == head.size && rest.isEmpty()) head else head.copyOf(n) + rest
+    }
 }

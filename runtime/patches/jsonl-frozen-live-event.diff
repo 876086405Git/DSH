@@ -1,0 +1,11 @@
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -39,1 +39,1 @@
+-	/** Routed live events awaiting their batching deadline (persistence-owned copies). */
++	/** Frozen events published by Session and retained until their batching deadline. */
+@@ -184,1 +184,1 @@
+-	* @param event - the live event, retained as a persistence-owned copy.
++	* @param event - the frozen event published by Session.
+@@ -189,1 +189,1 @@
+-		this.buffered.push(structuredClone(event));
++		this.buffered.push(event);

@@ -42,10 +42,11 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
   if (required.some(name => typeof fs?.[name] !== 'function'))
     throw new NotesTaskError('notes_filesystem_unavailable');
 
-  function guard(taskId, taskRev, signal, owner) {
+  // read = store.stored for checks that discard the record (once per streamed model chunk).
+  function guard(taskId, taskRev, signal, owner, read = store.read) {
     signal?.throwIfAborted();
     if (closed) throw new NotesTaskError('task_owner_stopping');
-    const record = store.read(taskId);
+    const record = read.call(store, taskId);
     if (record.taskRev !== taskRev || record.cancelRequested || !record.originalCreate ||
       !store.executionAllowed(record)) throw new NotesTaskError('task_agreement_changed');
     if (record.agreement.deadlineAtMs !== null && Date.now() >= record.agreement.deadlineAtMs)
@@ -57,7 +58,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
   async function segment(id, rev, key, reserveMs, controller, owner, job) {
     const pause = guard(id, rev, controller.signal, owner).agreement.afterExit === 'pause';
     const claim = await store.claimStep(id, rev, key, {reserveMs,
-      retryKnownSafe: step(store.read(id), key, rev)?.state === 'waiting'});
+      retryKnownSafe: step(store.stored(id), key, rev)?.state === 'waiting'});
     const start = performance.now(), clock = new AbortController();
     // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
     const timeout = setTimeout(() => clock.abort(new NotesTaskError(
@@ -65,17 +66,16 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
       'failed')), claim.reserveMs);
     timeout.unref?.();
     const signal = AbortSignal.any([controller.signal, clock.signal]);
-    const current = () => guard(id, rev, signal, owner);
+    const current = read => guard(id, rev, signal, owner, read);
     let jobEntered = false;
     try {
-      current();
+      current(store.stored);
       const result = await owner.runTurn(turnSignal => {
         jobEntered = true;
         return job({claim, signal: AbortSignal.any([signal, turnSignal]),
-          guard: () => {turnSignal.throwIfAborted(); return current();}, elapsed: () => duration(start)});
+          guard: read => {turnSignal.throwIfAborted(); return current(read);}, elapsed: () => duration(start)});
       });
-      const latest = store.read(id), original = step(latest, key, rev);
-      if (original.finishedAtMs === null)
+      if (step(store.stored(id), key, rev).finishedAtMs === null)
         await store.finishStep(claim, {state: 'done', reason: null, result: result ?? null, elapsedMs: duration(start)});
       return result;
     } catch (caught) {
@@ -181,7 +181,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
       catch (error) { if (error?.code !== 'FS_SANDBOX_DENIED') throw error; }
     }
     if (!requestedMode) throw new NotesTaskError('output_policy_unavailable');
-    guard(record.taskId, record.taskRev, signal, owner);
+    guard(record.taskId, record.taskRev, signal, owner, store.stored);
     return owner.approve('writePage', {requestedMode,
       justification: `只在 ${directory.target.displayPath} 新建《${record.agreement.args.outputName}》以整理本次选定笔记；不覆盖已有文件，不改原笔记。`}, signal);
   }
@@ -194,7 +194,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     if (!capability || typeof owner.llm?.prepareCompanionAuxiliaryCall !== 'function')
       throw new NotesTaskError('model_channel_unavailable');
     return segment(id, rev, 'model', 180_000, controller, owner, async ({claim, signal, guard: current}) => {
-      const {text, inputBudget, usage} = await runTaskModel({store, claim, owner, signal, guard: current,
+      const {text, inputBudget, usage} = await runTaskModel({store, claim, owner, signal, guard: () => current(store.stored),
         system: notesSystem, input, capability, inputEstimate: notesInputEstimate, outputTokens: NOTES_LIMITS.outputTokens});
       const mediaType = current().agreement.args.outputName.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain';
       const page = renderNotesPage(readNotesProposal(text, inputs), inputs, mediaType);
@@ -216,7 +216,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     }
     const revision = record.taskRev, stopDeadline = deadlineTimer(controller, record.agreement.deadlineAtMs);
     try {
-      guard(id, revision, controller.signal);
+      guard(id, revision, controller.signal, undefined, store.stored);
       const owner = await execution.openExecution(record, controller.signal);
       if (!step(record, 'selectInputs') || step(record, 'selectInputs').state === 'waiting') await segment(id, revision, 'selectInputs', 25_000, controller, owner,
         async ({claim, signal, guard: current}) => {
@@ -228,7 +228,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
           if (await fs.stat(outputTarget, signal)) throw new NotesTaskError('output_exists');
           const listing = await fs.dshGoListNotes(store.folder(args.folderRef), signal);
           const selection = selectNotes(listing, args, notes.dayRange, output, Date.now());
-          current(); await store.saveSelection(claim, selection);
+          current(store.stored); await store.saveSelection(claim, selection);
           return {selectedCount: selection.entries.length, gapCount: selection.scope.gaps.length};
         });
       record = guard(id, revision, controller.signal, owner);
@@ -239,13 +239,13 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
           if (!selection) throw new NotesTaskError('selection_unavailable');
           const entries = [], gaps = [...selection.scope.gaps];
           for (const selected of selection.entries) {
-            current();
+            current(store.stored);
             try {
               const actual = await fs.dshGoReadNote(selection.directory, selected, NOTES_LIMITS.fileBytes, signal);
               entries.push({...selected, text: actual.text, sha256: actual.sha256});
             } catch (error) {signal.throwIfAborted(); gaps.push({name: selected.name, reason: inputFailure(error)});}
           }
-          current();
+          current(store.stored);
           if (!entries.length) throw new NotesTaskError('matching_inputs_unavailable');
           await store.saveInputs(claim, {directory: selection.directory, entries, scope: {...selection.scope, gaps}});
           return {sourceCount: entries.length, gapCount: gaps.length};
@@ -275,9 +275,9 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
             const actual = await fs.dshGoReadNote(notes.inputs.directory, entry, NOTES_LIMITS.fileBytes, signal);
             if (actual.sha256 !== entry.sha256) throw new NotesTaskError('input_changed');
           }
-          current();
+          current(store.stored);
           const snapshot = await store.publish(claim, async saved => {
-            current();
+            current(store.stored);
             const verified = await fs.dshGoPublishNotesFile(saved, signal, policy);
             return {...artifactData(saved, verified, notes, candidate), elapsedMs: elapsed()};
           });

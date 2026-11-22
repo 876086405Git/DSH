@@ -1,8 +1,8 @@
 // The picture a submission shows in the workshop, on the 投稿 form.
 //
 // A pixel pet's is cut by the workshop from the first frame of its idle
-// animation, so the form only asks whether to have one. A companion's is a
-// PNG the person picks. Either way the choice is handed to the state layer
+// animation, so the form only asks whether to have one. Companion and theme
+// covers are picked and normalized locally before being handed to the state layer
 // at once (setPreview): it drops the packed result and takes the rights tick
 // back, because the picture is part of what is sent. The form's text is not
 // touched by it.
@@ -36,22 +36,12 @@ import 'workshop_publish_text.dart';
 /// bytes for the thumbnail.
 typedef WorkshopCover = ({WorkshopPreviewInput input, Uint8List bytes});
 
-/// Lets the person pick a PNG and reads it. Null when they closed the picker.
-/// A file over the workshop's limit is refused before it is read
-/// (`workshop_preview_size`), and reading stops as soon as it turns out to be
-/// over when the picker could not say how large it is.
+/// Picks an image and returns its upload-ready PNG, or null on cancellation.
 final workshopCoverPickerProvider = Provider<Future<Uint8List?> Function()>(
   (ref) => () async {
-    final picked = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: const ['png']);
+    final picked = await FilePicker.pickFile(type: FileType.image);
     if (picked == null) return null;
-    final length = await picked.length();
-    if (length != null && length > workshopPreviewBytes) throw const WorkshopException('workshop_preview_size');
-    final bytes = BytesBuilder(copy: false);
-    await for (final chunk in picked.readAsByteStream()) {
-      bytes.add(chunk);
-      if (bytes.length > workshopPreviewBytes) throw const WorkshopException('workshop_preview_size');
-    }
-    return bytes.takeBytes();
+    return workshopReadCover(picked.readAsByteStream(), length: await picked.length());
   },
 );
 

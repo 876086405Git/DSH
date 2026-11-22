@@ -57,6 +57,18 @@ test('SOURCE_HTTP 21 matching candidates reports partial and verifies only the o
  assert.equal(report.matches.length,20);assert.equal(f.counters.reads.length,20);
  assert.equal(f.store.read(f.body.taskId).notes['1'].sources.length,20);
 });
+test('find verifies originals without copying the task between file reads', async t => {
+ const f=await findFixture(t);
+ await putDraft(f.root,'a.md'); await putDraft(f.root,'b.md');
+ const runner=f.start(), fileRead=f.fs.dshGoReadNote.bind(f.fs), taskRead=f.store.read.bind(f.store);
+ const finish=f.store.finishFind.bind(f.store);
+ let verifying=false, copies=0;
+ t.mock.method(f.fs,'dshGoReadNote',(...args)=>{verifying=true;return fileRead(...args);});
+ t.mock.method(f.store,'read',id=>{if(verifying)copies++;return taskRead(id);});
+ t.mock.method(f.store,'finishFind',(...args)=>{verifying=false;return finish(...args);});
+ await f.store.create(f.body); await runner.wake(f.body.taskId);
+ assert.equal(f.counters.reads.length,2); assert.equal(copies,0);
+});
 test('SOURCE_HTTP 201 out-of-window entries retain the 200-entry bound and cannot claim zero complete',async t=>{
  const f=await findFixture(t);for(let i=0;i<201;i++)await putDraft(f.root,`${i}.md`,'old',Date.parse('2026-11-19T12:00:00Z'));
  const {snapshot}=await completeFind(f),report=completion(snapshot);assert.equal(snapshot.state,'partial');

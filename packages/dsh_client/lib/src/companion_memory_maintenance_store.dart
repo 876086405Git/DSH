@@ -364,16 +364,32 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
     List<MemoryRow> sources,
     List<MemoryRow> cards,
     List<MemoryRow> presentations,
-  ) => {
-    'character_id': characterId,
-    'local_day': localDay,
-    'zone_id': zoneId,
-    'processed_at_utc': DateTime.fromMillisecondsSinceEpoch(_checkedNow(), isUtc: true).toIso8601String(),
-    'source_coverage': 'selected_original_messages',
-    'sources': sources,
-    'cards': cards,
-    'presentations': presentations,
-  };
+  ) {
+    final cutoff = archive['history_after_seq'] as int;
+    return {
+      'character_id': characterId,
+      'local_day': localDay,
+      'zone_id': zoneId,
+      'processed_at_utc': DateTime.fromMillisecondsSinceEpoch(_checkedNow(), isUtc: true).toIso8601String(),
+      'source_coverage': 'selected_original_messages',
+      'sources': sources,
+      'cards': [
+        for (final card in cards)
+          {
+            ...card,
+            // Independent facts keep their full local proofs. A model input
+            // may only see complete AND groups beyond the current cutoff;
+            // other legal OR groups, including our_story assistant proofs,
+            // remain intact. This projection never changes stored evidence.
+            'evidence': [
+              for (final group in _supportGroups(card).values)
+                if (group.every((proof) => (proof['first_seq'] as int) > cutoff)) ...group,
+            ],
+          },
+      ],
+      'presentations': presentations,
+    };
+  }
 
   MemoryRow beginAgentMaintenance({required String kind, required String claimId, String? characterId}) =>
       _transaction(() {

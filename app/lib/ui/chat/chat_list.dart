@@ -1262,8 +1262,10 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   Widget _reply(AssistantChatItem item, bool showActions, TurnTrace? footnote) {
     // A picture a media card shows is not drawn again in the reply.
-    if (withoutShownImages(item.text, ref.read(sessionMediaPathsProvider(widget.sessionId))) case final text?) {
-      item = replyWithText(item, text);
+    if (item.text.contains('![')) {
+      if (withoutShownImages(item.text, ref.read(sessionMediaPathsProvider(widget.sessionId))) case final text?) {
+        item = replyWithText(item, text);
+      }
     }
     final chat = ref.read(chatProvider(widget.sessionId).notifier);
     final branchable = chat.branchPointAfter(item) != null;

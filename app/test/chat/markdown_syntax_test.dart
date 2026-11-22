@@ -206,4 +206,16 @@ void main() {
       expect(blankLineBeforeTables('标题\n---'), '标题\n---');
     });
   });
+
+  test('prepareTables is one pass of blankLineBeforeTables then boldTableHeaders', () {
+    for (final source in [
+      '清单：\n| a | b |\n|---|---|\n| 1 | 2 |',
+      // The blank above the second header cuts the first one off its delimiter.
+      '| x | y |\n|---|---|\n|---|---|',
+      '| a | b |\n|---|---|\n|---|---|\n|---|---|',
+    ]) {
+      expect(prepareTables(source), boldTableHeaders(blankLineBeforeTables(source)));
+    }
+    expect(prepareTables('| x | y |\n|---|---|\n|---|---|'), '| x | y |\n\n|**---**|**---**|\n|---|---|');
+  });
 }
