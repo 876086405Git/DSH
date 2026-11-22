@@ -106,6 +106,7 @@ class CompanionAgentResident {
     if (active) await _visit.submit(raw, origin: _ui, handoff: _visit.residentMapHandoff!, originCurrent: () => active,
       replacePreparing: true, onCommitted: onCommitted);
   }
+  void setReducedPower(bool value) { if (active) _visit.setReducedPower(value); }
   void close() => _visit.releaseResident(_ui);
 }
 
@@ -135,13 +136,7 @@ class _CompanionAgentVisit {
       ref.listen(activeConnectionProvider.select((value) => value.value?.client), (_, _) => connectionChanged()).close,
     );
     subscriptions.add(ref.listen(companionModeProvider, (_, _) => connectionChanged()).close);
-    idleTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (active) {
-        observe(ui.initiativeView);
-        unawaited(consolidate());
-      }
-    });
-    usageTimer = Timer.periodic(const Duration(seconds: 15), (_) => refreshHostUsage());
+    _schedulePeriodicWork();
   }
 
   final CompanionAgent agent;
@@ -187,6 +182,7 @@ class _CompanionAgentVisit {
   Timer? quietTimer;
   Timer? idleTimer;
   Timer? usageTimer;
+  bool _reducedPower = false;
   CompanionKeeper? phone;
   CompanionKeeper? keeper;
   CompanionSnapshot? snapshot;
@@ -206,6 +202,27 @@ class _CompanionAgentVisit {
   bool get active => !closed && !agent._disposed && identical(agent._visit, this) &&
       (residentUi != null || (window?.attached == true && window!.ui.mounted));
   DateTime? lastUserInteractionAt;
+
+  // Only resident-owned periodic work slows down. User input, the current
+  // request and its receipt are unchanged; equal state never resets a timer.
+  void setReducedPower(bool value) {
+    if (closed || _reducedPower == value) return;
+    _reducedPower = value;
+    _schedulePeriodicWork();
+  }
+
+  void _schedulePeriodicWork() {
+    idleTimer?.cancel();
+    usageTimer?.cancel();
+    final factor = _reducedPower ? 2 : 1;
+    idleTimer = Timer.periodic(Duration(minutes: factor), (_) {
+      if (active) {
+        observe(ui.initiativeView);
+        unawaited(consolidate());
+      }
+    });
+    usageTimer = Timer.periodic(Duration(seconds: 15 * factor), (_) => refreshHostUsage());
+  }
 
   CompanionAgentAttachment attachWindow(CompanionAgentRoomUi next, CompanionMapHandoff handoff) {
     final background = residentUi;
@@ -253,6 +270,7 @@ class _CompanionAgentVisit {
       close();
     } else {
       residentUi = null;
+      setReducedPower(false);
       observe(ui.initiativeView);
       changed();
     }

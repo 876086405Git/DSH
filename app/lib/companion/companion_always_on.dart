@@ -82,7 +82,10 @@ class CompanionAlwaysOnOwner {
   void synchronize(CompanionAlwaysOnStatus next) {
     final changed = next.epoch != _status.epoch || next.enabled != _status.enabled || next.running != _status.running;
     _status = next;
-    if (!changed || _closed) return;
+    if (_closed) return;
+    _resident?.setReducedPower(next.reducedPower);
+    _screen.setReducedPower(next.reducedPower);
+    if (!changed) return;
     final generation = ++_generation;
     _release();
     unawaited(overlay.companionMode(enabled: next.enabled && next.running, name: _name));
@@ -117,6 +120,7 @@ class CompanionAlwaysOnOwner {
       moves: const CompanionMoves(), sourceKey: identity.key,
       ui: ui, mapHandoff: CompanionMapHandoff(ref.read(companionMapsProvider)),
     );
+    lease.setReducedPower(_status.reducedPower);
     await lease.openMemory();
     if (_closed || generation != _generation || !lease.active) return;
     _screen.start();

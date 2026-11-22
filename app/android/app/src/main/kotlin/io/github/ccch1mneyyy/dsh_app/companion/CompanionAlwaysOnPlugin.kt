@@ -1,9 +1,14 @@
 package io.github.ccch1mneyyy.dsh_app.companion
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodChannel
 
@@ -12,9 +17,22 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
     private lateinit var context: Context
     private lateinit var channel: MethodChannel
     private var ready = false
+    private var batteryLow: Boolean? = null
+    private var powerSave = false
+    private var powerReceiverRegistered = false
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (current !== this@CompanionAlwaysOnPlugin) return
+            val beforeLow = batteryLow
+            val beforeSave = powerSave
+            readPower(intent)
+            if (batteryLow != beforeLow || powerSave != beforeSave) statusChanged()
+        }
+    }
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        batteryLow = null
         current = this
         channel = MethodChannel(binding.binaryMessenger, "dsh/companion/always_on")
         channel.setMethodCallHandler { call, result ->
@@ -68,12 +86,38 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
                 result.error("companion_resident_failed", error.message, null)
             }
         }
+        // All four actions are system broadcasts; no exported flag or new
+        // permission/manifest receiver is needed. The returned sticky Intent
+        // supplies the initial low-battery state when the API exposes it.
+        val sticky = context.registerReceiver(powerReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_BATTERY_LOW)
+            addAction(Intent.ACTION_BATTERY_OKAY)
+            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        })
+        powerReceiverRegistered = true
+        readPower(sticky)
+    }
+
+    private fun readPower(intent: Intent?) {
+        when (intent?.action) {
+            Intent.ACTION_BATTERY_LOW -> batteryLow = true
+            Intent.ACTION_BATTERY_OKAY -> batteryLow = false
+            Intent.ACTION_BATTERY_CHANGED -> {
+                if (intent != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && intent.hasExtra(BatteryManager.EXTRA_BATTERY_LOW)) {
+                    batteryLow = intent.getBooleanExtra(BatteryManager.EXTRA_BATTERY_LOW, false)
+                }
+            }
+        }
+        powerSave = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isPowerSaveMode
     }
 
     private fun status(): Map<String, Any?> {
+        readPower(null)
         val state = CompanionAlwaysOnState.read(context)
         return mapOf("enabled" to state.enabled, "epoch" to state.epoch,
             "running" to CompanionAlwaysOnService.running,
+            "batteryLow" to batteryLow, "powerSave" to powerSave,
             "notificationAvailable" to CompanionConversationNotification.available(context), "failure" to failure)
     }
 
@@ -89,6 +133,10 @@ class CompanionAlwaysOnPlugin : FlutterPlugin {
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         ready = false
+        if (powerReceiverRegistered) {
+            context.unregisterReceiver(powerReceiver)
+            powerReceiverRegistered = false
+        }
         channel.setMethodCallHandler(null)
         if (current === this) current = null
     }

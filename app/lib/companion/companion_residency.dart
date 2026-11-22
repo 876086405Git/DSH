@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// The native switch is authoritative; the Dart object never auto-enables it.
 class CompanionAlwaysOnStatus {
   const CompanionAlwaysOnStatus({this.available = false, this.enabled = false,
-    this.running = false, this.notificationAvailable = false, this.epoch = 0, this.failure});
+    this.running = false, this.notificationAvailable = false, this.epoch = 0, this.failure,
+    this.batteryLow, this.powerSave = false});
 
   final bool available;
   final bool enabled;
@@ -14,6 +15,11 @@ class CompanionAlwaysOnStatus {
   final bool notificationAvailable;
   final int epoch;
   final String? failure;
+  // API 26/27 has no public sticky low-battery field. Unknown stays unknown
+  // until an actual system LOW/OKAY broadcast arrives; no percentage is guessed.
+  final bool? batteryLow;
+  final bool powerSave;
+  bool get reducedPower => batteryLow == true || powerSave;
 
   factory CompanionAlwaysOnStatus.fromMap(Map<Object?, Object?> value) => CompanionAlwaysOnStatus(
     available: true,
@@ -22,6 +28,8 @@ class CompanionAlwaysOnStatus {
     notificationAvailable: value['notificationAvailable'] == true,
     epoch: value['epoch'] as int? ?? 0,
     failure: value['failure'] as String?,
+    batteryLow: value['batteryLow'] as bool?,
+    powerSave: value['powerSave'] == true,
   );
 }
 
@@ -89,7 +97,8 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
       if (!_disposed) state = const CompanionAlwaysOnStatus();
     } on PlatformException catch (error) {
       if (!_disposed) state = CompanionAlwaysOnStatus(available: true,
-        enabled: state.enabled, running: false, epoch: state.epoch, failure: error.code);
+        enabled: state.enabled, running: false, epoch: state.epoch, failure: error.code,
+        batteryLow: state.batteryLow, powerSave: state.powerSave);
     }
   }
 
