@@ -84,7 +84,7 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
    tooling/build-apk.sh
    ```
 
-   运行时里的 Node 和 Linux ONNX Runtime 装包前把调试信息（DWARF）清零了，文件布局不动。带调试信息的原件在同一次 Runtime 工作流的 `runtime-debug-arm64-v8a` artifact 里（只保留 90 天），连同 `build-report.json`（记着原件和装包件的 SHA-256）：发版时下载下来自己留存，以后定位引擎崩溃用，不上传到发布线路。
+   运行时里的 Node 和 Linux ONNX Runtime 装包前把调试信息（DWARF）清零了，文件布局不动。带调试信息的原件和打进 APK 的运行时出自同一次构建：用 Runtime 工作流的产物打包，就取同一次运行的 `runtime-debug-arm64-v8a` artifact（只保留 90 天）；在本机构建，就取 `runtime/out/arm64-v8a/debug/`。两种情况都连同同一次的 `build-report.json`（记着原件和装包件的 SHA-256）一起留存，以后定位引擎崩溃用，不上传到发布线路。
 
    脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`（`app/lib/state/app_info.dart`），作为诊断信息和更新状态的编译期默认版本。设置和关于页读取更新状态中的版本；原生版本读取成功且版本名可解析时，更新状态改用系统提供的 `versionName` / `versionCode`，读取失败或版本名无法解析时保留默认值。
 
