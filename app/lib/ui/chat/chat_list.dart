@@ -693,7 +693,6 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final oldestTurn = s.turns.firstOrNull?.startSeq;
     if (oldestTurn != null) _oldestRowSeq = math.min(_oldestRowSeq ?? oldestTurn, oldestTurn);
     final prepended = previousOldest != null && _oldestRowSeq != null && _oldestRowSeq! < previousOldest;
-    final hadPending = _rows.any((r) => r is PendingRow);
     _rows = _rowCache.update(s, foldTurns: foldTurns, artifacts: artifacts);
     _index = _rowCache.index;
     // Only a draft streaming on keeps the other rows' widgets: anything else
@@ -715,7 +714,9 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     }
     _settling.removeWhere((key) => !_index.containsKey(key));
     _autoAnswered = s.autoAnswered;
-    _markFresh(previousKeys, hadPending: hadPending, loading: s.loading);
+    if (!identical(previousKeys, _index)) {
+      _markFresh(previousKeys, hadPending: previousRows.any((row) => row is PendingRow), loading: s.loading);
+    }
 
     if (s.pending.length > _lastPendingCount) {
       // 自己刚发了消息:无论之前翻到哪,都回到底部。
