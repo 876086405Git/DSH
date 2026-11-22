@@ -2021,7 +2021,7 @@ void main() {
   // because retrySource still holds that source, sending the identical line
   // again is refused the same way (companion_agent_visit.dart:292-301) instead
   // of getting a fresh reply. The old engine retried such a draft in place.
-  testWidgets('buffered failed draft to a resent replacement plays the identical action once per reply', skip: true, (
+  testWidgets('buffered failed draft to a resent replacement plays the identical action once per reply', (
     tester,
   ) async {
     final room = _Room(temporary);
@@ -2163,7 +2163,7 @@ void main() {
   // (companion_agent_visit.dart:424-430 and :292-301): a draft that broke off
   // without any tool cannot be answered again, so the shorter successful
   // reply never replaces the failed subtitle and marker.
-  testWidgets('desired contract: successful shorter retry replaces failed attempt subtitle and marker', skip: true, (
+  testWidgets('desired contract: successful shorter retry replaces failed attempt subtitle and marker', (
     tester,
   ) async {
     final room = _Room(temporary);

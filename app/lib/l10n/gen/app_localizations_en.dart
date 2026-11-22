@@ -5380,7 +5380,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionAgentRetryClosed =>
-      'I can\'t retry this action directly. Check Tasks or Memories first, then tell me what you want to do next.';
+      'I may have already started on that, and I don\'t want to do it twice. Take a look in Tasks, then tell me whether to carry on?';
 
   @override
   String get companionLogTitle => 'Log';

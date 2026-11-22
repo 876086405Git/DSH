@@ -46,7 +46,9 @@ class CompanionAgentAttachment {
   String? get replyId => _visit.run?.replyId;
   Object? get error {
     final run = _visit.run;
-    if (run != null && run.error != null && (run.toolDispatchStarted || run.text.trim().isNotEmpty)) {
+    // Only a turn that already ran a tool is closed: retrying it could repeat
+    // the tool's effect. A dropped stream with words only is an ordinary failure.
+    if (run != null && run.error != null && run.toolDispatchStarted) {
       return _agentRetryClosed;
     }
     return run?.error;
@@ -421,14 +423,18 @@ class _CompanionAgentVisit {
         // say has returned after its physical request's first cancel drain.
         // No tool callback has entered, so the original clock and budget can
         // survive until a later explicit click in this same live visit.
-        if (submittedRun.text.trim().isEmpty && !submittedRun.toolDispatchStarted && memoryTools.isCurrent) {
+        if (submittedRun.toolDispatchStarted) {
+          ui.failed(_agentRetryClosed);
+        } else if (memoryTools.isCurrent) {
+          // No tool ran, with or without words: retrying reuses the same line.
           retryTools = memoryTools;
           memoryTools = null;
           ui.failed(error, retry: raw);
         } else {
-          ui.failed(_agentRetryClosed);
+          retrySource = null;
+          ui.failed(error, retry: raw);
         }
-      } else if (submittedRun.text.trim().isNotEmpty) {
+      } else if (submittedRun.text.trim().isNotEmpty || !submittedRun.toolDispatchStarted) {
         retrySource = null;
       }
       queueExtraction();

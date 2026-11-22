@@ -9323,7 +9323,7 @@ abstract class L10n {
   /// No description provided for @companionAgentRetryClosed.
   ///
   /// In zh, this message translates to:
-  /// **'这次的操作不能直接重试。先在「交代的事」或「她记得的事」里查看，再告诉我接下来要做什么。'**
+  /// **'刚才那件事我可能已经动手了，怕做两遍。你先在「交代的事」里看一眼，再告诉我要不要接着来？'**
   String get companionAgentRetryClosed;
 
   /// No description provided for @companionLogTitle.
