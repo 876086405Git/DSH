@@ -26,11 +26,22 @@ import android.widget.TextView
  * Where 问一句 sends, as Dart answers `askTarget` (docs/design/pets.md §2.7): the conversation the
  * pet stands for when it has one and it is idle ([current]), else a new chat on the host in use
  * ([fresh]); [problem] when nothing can be sent there (the engine is off, no host); whether the
- * offline voice model can take a recording ([voice]).
+ * offline voice model can take a recording ([voice]); for the resident companion, the light
+ * session's last few messages, oldest first ([recent]).
  */
-data class AskTarget(val current: AskChat?, val fresh: AskChat?, val problem: String?, val voice: String, val offer: Long? = null) {
+data class AskTarget(
+    val current: AskChat?,
+    val fresh: AskChat?,
+    val problem: String?,
+    val voice: String,
+    val offer: Long? = null,
+    val recent: List<AskLine> = emptyList(),
+) {
     /** One conversation (null [sessionId]: a new one) and its one line, 「修复登录 · 本机」. */
     data class AskChat(val sessionId: String?, val host: String?, val line: String)
+
+    /** One message shown above the input: the person's ([user]) or hers. */
+    data class AskLine(val user: Boolean, val text: String)
 
     /** Where a send goes: [fresh] when asked for (「新对话」) or when there is no [current]. */
     fun chat(wantFresh: Boolean): AskChat? = if (wantFresh || current == null) fresh else current
@@ -43,6 +54,8 @@ data class AskTarget(val current: AskChat?, val fresh: AskChat?, val problem: St
         const val VOICE_MISSING = "missing"
         const val VOICE_OFF = "off"
         private const val MAX_LINE = 40
+        private const val MAX_RECENT = 3
+        private const val MAX_RECENT_TEXT = 300
 
         fun fromMap(raw: Any?): AskTarget? {
             val m = raw as? Map<*, *> ?: return null
@@ -60,6 +73,12 @@ data class AskTarget(val current: AskChat?, val fresh: AskChat?, val problem: St
                 fresh = chat(m["fresh"])?.copy(sessionId = null),
                 problem = PetPush.clean(m["problem"] as? String, MAX_LINE),
                 voice = (m["voice"] as? String)?.takeIf { it == VOICE_READY || it == VOICE_MISSING } ?: VOICE_OFF,
+                recent = (m["recent"] as? List<*>).orEmpty().mapNotNull { r ->
+                    val row = r as? Map<*, *> ?: return@mapNotNull null
+                    val role = row["role"] as? String
+                    if (role != "user" && role != "assistant") return@mapNotNull null
+                    AskLine(role == "user", PetPush.clean(row["text"] as? String, MAX_RECENT_TEXT) ?: return@mapNotNull null)
+                }.takeLast(MAX_RECENT),
             )
         }
     }
@@ -164,6 +183,12 @@ internal class AskBarView(context: Context, private val listener: Listener) : Li
         setTextColor(palette.muted)
         visibility = GONE
     }
+
+    /** The resident companion's last few messages, between her name and the input. */
+    private val history = LinearLayout(context).apply {
+        orientation = VERTICAL
+        visibility = GONE
+    }
     private var blocked = false
     private var busy = false
     private var listening = false
@@ -181,6 +206,7 @@ internal class AskBarView(context: Context, private val listener: Listener) : Li
         head.addView(target, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         head.addView(switch, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = context.dp(8f) })
         addView(head, LayoutParams(LayoutParams.MATCH_PARENT, context.dp(28f)))
+        addView(history, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(2f) })
         val row = LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.BOTTOM }
         row.addView(input, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         val size = context.dp(40f)
@@ -236,6 +262,32 @@ internal class AskBarView(context: Context, private val listener: Listener) : Li
     fun setTarget(line: String?, switchShown: Boolean, on: Boolean) {
         target.text = line ?: ""
         setSwitch(on, switchShown)
+    }
+
+    /**
+     * [lines] above the input: hers at the start in ink, the person's at the end and muted, three
+     * lines each at most. Empty hides the panel; [fade] brings it in briefly.
+     */
+    fun setRecent(lines: List<AskTarget.AskLine>, fade: Boolean) {
+        history.removeAllViews()
+        history.visibility = if (lines.isEmpty()) GONE else VISIBLE
+        val indent = context.dp(28f)
+        lines.forEachIndexed { i, line ->
+            val row = TextView(context).apply {
+                text = line.text
+                textSize = 13f
+                setTextColor(if (line.user) palette.muted else palette.ink)
+                maxLines = 3
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = if (line.user) Gravity.END else Gravity.START
+                setPaddingRelative(if (line.user) indent else 0, 0, if (line.user) 0 else indent, 0)
+            }
+            history.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { if (i > 0) topMargin = context.dp(6f) })
+        }
+        if (fade && lines.isNotEmpty()) {
+            history.alpha = 0f
+            history.animate().alpha(1f).setDuration(150).start()
+        }
     }
 
     private fun setSwitch(on: Boolean, shown: Boolean) {

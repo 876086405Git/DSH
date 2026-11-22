@@ -1836,7 +1836,30 @@ internal object PetOverlay {
             // No answer: nothing known to stand in the way; a send hands the text to the app.
             askTarget = AskTarget.fromMap(raw) ?: AskTarget(null, null, null, AskTarget.VOICE_OFF)
             showTarget(view)
+            val recent = askTarget?.recent.orEmpty()
+            if (companion && recent.isNotEmpty()) {
+                view.setRecent(recent, fade = animationsOn())
+                growAsk(view, pet)
+            }
         }
+    }
+
+    /**
+     * The bar got taller (her recent messages came): centred on [pet] again with the keyboard
+     * down; lifted above it, the input stays where it is and the bar grows upwards.
+     */
+    private fun growAsk(view: AskBarView, pet: ScreenRect) {
+        val p = askParams ?: return
+        val ctx = hostContext ?: return
+        val area = safeArea()
+        val margin = edge(ctx)
+        val before = view.height.takeIf { it > 0 } ?: view.measuredHeight
+        val (_, h) = view.measureFor(p.width)
+        val pos = AskPlace.beside(pet, dock.side, p.width, h, area, ctx.dp(8f), margin)
+        val lifted = p.y != askY
+        askY = pos.y
+        p.y = if (lifted) (p.y - (h - before)).coerceAtLeast(EdgeSnap.minY(area, margin)) else pos.y
+        update(view, p)
     }
 
     private fun showTarget(view: AskBarView) {

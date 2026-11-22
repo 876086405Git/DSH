@@ -18,6 +18,7 @@ import 'companion_maps.dart';
 import 'companion_moves.dart';
 import 'companion_residency.dart';
 import 'companion_screen_observer.dart';
+import 'companion_state.dart' show companionNameProvider;
 import 'companion_voice.dart';
 
 /// DshApp watches this provider. Merely reading an ordinary Provider does not
@@ -33,6 +34,7 @@ final companionAlwaysOnOwnerProvider = Provider<CompanionAlwaysOnOwner>((ref) {
   ref.listen(petOverlayProvider, (_, value) {
     if (!value.showing) owner._hush();
   });
+  ref.listen(companionNameProvider, (_, value) => owner._rename(value));
   ref.onDispose(owner.close);
   scheduleMicrotask(() {
     if (ref.mounted) owner.synchronize(ref.read(companionResidencyProvider));
@@ -42,6 +44,7 @@ final companionAlwaysOnOwnerProvider = Provider<CompanionAlwaysOnOwner>((ref) {
 
 class CompanionAlwaysOnOwner {
   CompanionAlwaysOnOwner(this.ref, this.agent, this.channel) : overlay = ref.read(petOverlayChannelProvider) {
+    _givenName = ref.read(companionNameProvider);
     _input = channel.listenInputs(_receive);
     agent.addListener(_changed);
     overlay.setCompanionActionHandler(_overlayAction);
@@ -68,7 +71,11 @@ class CompanionAlwaysOnOwner {
   int _generation = 0;
   int _outputGeneration = 0;
   bool _closed = false;
-  String _name = 'Companion';
+
+  /// The name the person gave her, as the room shows it; else the pack's own.
+  String? _givenName;
+  String? _packName;
+  String get _name => _givenName ?? _packName ?? 'Companion';
   String? _reply;
   String? _sentText;
   bool? _sentRunning;
@@ -99,6 +106,12 @@ class CompanionAlwaysOnOwner {
     });
   }
 
+  void _rename(String? given) {
+    if (given == _givenName) return;
+    _givenName = given;
+    if (!_closed && _status.enabled && _status.running) unawaited(overlay.companionMode(enabled: true, name: _name));
+  }
+
   Future<void> _start(int generation) async {
     final store = await ref.read(companionFloatStoreProvider)();
     if (_closed || generation != _generation) return;
@@ -116,7 +129,7 @@ class CompanionAlwaysOnOwner {
     });
     final identity = await store.characterIdentity();
     if (_closed || generation != _generation) return;
-    _name = identity.character.name ?? _name;
+    _packName = identity.character.name;
     unawaited(overlay.companionMode(enabled: true, name: _name));
     final ui = _ResidentUi(this);
     final lease = _resident = agent.retainAlwaysOn(
