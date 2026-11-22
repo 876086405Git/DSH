@@ -302,10 +302,12 @@ String? petApprovalText(ApprovalRequest request, ToolCallPart? call) {
   // just as much as the command/path. Never approve an abbreviated action.
   if (!const {'bash', 'pwsh', 'write', 'edit', 'str_replace_editor', 'web_fetch'}.contains(call.name)) return null;
   final text = '${call.name} ${jsonEncode(args)}';
-  if (text.contains(RegExp('[\\u061c\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]')) || _masked(text) != text) {
+  if (text.runes.elementAtOrNull(petApprovalMax) != null ||
+      text.contains(RegExp('[\\u061c\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]')) ||
+      _masked(text) != text) {
     return null;
   }
-  return text.runes.length <= petApprovalMax ? text : null;
+  return text;
 }
 
 /// A question the pet's bubble takes with one tap: exactly one, single choice,

@@ -307,6 +307,12 @@ void main() {
       ),
       isNull,
     );
+    final fits = '🙂' * (petApprovalMax - 'bash {"command":""}'.length);
+    String? bash(String command) =>
+        petApprovalText(request, ToolCallPart(id: 'call-1', name: 'bash', arguments: '{"command":"$command"}'));
+    expect(bash(fits), 'bash {"command":"$fits"}');
+    expect(bash('$fits🙂'), isNull);
+    expect(bash('run\u202e'), isNull);
     const phone = ApprovalRequest(eventId: 'p', sessionId: 's', toolName: 'phone_click', callId: 'p');
     expect(petApprovalText(phone, const ToolCallPart(id: 'p', name: 'phone_click', arguments: '{"x":1}')), isNull);
   });
