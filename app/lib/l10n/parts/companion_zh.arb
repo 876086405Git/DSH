@@ -16,6 +16,7 @@
   "companionSend": "发送",
   "companionNotConnected": "现在连不上引擎，等一下再和我说吧。",
   "companionSendFailed": "这句话没送出去，要不要再说一次？",
+  "companionAgentRetryClosed": "这次的操作不能直接重试。先在「交代的事」或「她记得的事」里查看，再告诉我接下来要做什么。",
   "companionLogTitle": "聊天记录",
   "companionContextUnsupported": "这台主机还不支持她的上下文：名字、设定、刚才发生的事和手机里的记忆都传不过去，只发你说的话。升级主机或换成轻量模式就好。",
   "companionLogEmpty": "还没有说过话。",

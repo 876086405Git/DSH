@@ -3,15 +3,40 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../notify/chat_alerts.dart' show companionHostKey;
+import '../state/connection_state.dart';
+import '../state/hosts_state.dart';
 import '../state/run_pulse.dart' show estimateTokens;
+import '../ui/companion/companion_memory_page.dart' show companionMemoryId;
+import 'companion_agent_task_tools.dart';
+import 'companion_agent_task_ui.dart';
+import 'companion_agent_tools.dart';
 import 'companion_context.dart';
 import 'companion_light.dart';
 import 'companion_memory.dart';
+import 'companion_memory_worker.dart';
+import 'companion_keeper.dart';
+import 'companion_initiative.dart';
+import 'companion_initiative_owner.dart';
+import 'companion_maps.dart';
+import 'companion_moves.dart';
+import 'companion_pack.dart';
+import 'companion_public_lookup.dart';
+import 'companion_recall_prefs.dart';
+import 'companion_reminder.dart';
+import 'companion_state.dart';
+import 'companion_widget.dart';
+
+part 'companion_agent_visit.dart';
 
 /// One phone loop in either room mode. The caller supplies the tool bindings
 /// once per original user source, including any genuine foreground capability.
@@ -21,10 +46,40 @@ class CompanionAgent extends ChangeNotifier {
     required String Function() apiKey,
     void Function(CompanionUsage)? onUsage,
     void Function(Map<String, Object?>, {required bool partial})? onUsageSettled,
-  }) : _client = client,
+    Ref? ref,
+    CompanionMemoryTransport Function()? memoryTransport,
+    ({HostRef host, DshClient client})? Function()? host,
+  }) : _ref = ref,
+       _memoryTransport = memoryTransport,
+       _host = host,
+       _client = client,
        _apiKey = apiKey,
        _onUsage = onUsage,
        _onUsageSettled = onUsageSettled;
+
+  final Ref? _ref;
+  final CompanionMemoryTransport Function()? _memoryTransport;
+  final ({HostRef host, DshClient client})? Function()? _host;
+  _CompanionAgentVisit? _visit;
+
+  /// The Page keeps this particular attachment. Old window actions never
+  /// resolve through a later current visit on this process owner.
+  CompanionAgentAttachment attach({
+    required Future<Directory> root,
+    required CompanionCharacter character,
+    required CompanionMoves moves,
+    required CompanionAgentRoomUi ui,
+    required CompanionMapHandoff mapHandoff,
+  }) {
+    final ref = _ref;
+    if (_disposed || ref == null || _memoryTransport == null || _host == null) {
+      throw const DshClosedException('Companion room owner is not available');
+    }
+    _visit?.close();
+    final visit = _CompanionAgentVisit(this, ref, root, character, moves, ui, mapHandoff);
+    _visit = visit;
+    return CompanionAgentAttachment._(visit);
+  }
 
   final http.Client Function() _client;
   final String Function() _apiKey;
@@ -158,6 +213,9 @@ class CompanionAgent extends ChangeNotifier {
       final results = <Map<String, Object?>>[];
       for (final call in calls) {
         if (!_current(run)) return;
+        // Even an unavailable/read-only call retires the no-tool retry path.
+        // Record entry before lookup or an executor can synchronously commit.
+        run.toolDispatchStarted = true;
         final before = run.controlRevision;
         final binding = run.tools.where((tool) => tool.definition.name == call.name).firstOrNull;
         CompanionAgentToolResult result;
@@ -337,6 +395,7 @@ class CompanionAgent extends ChangeNotifier {
 
   @override
   void dispose() {
+    _visit?.close();
     _disposed = true;
     stop(discard: true);
     super.dispose();
@@ -373,6 +432,7 @@ class _CompanionAgentRun {
   bool running = true;
   bool cancelled = false;
   bool discard = false;
+  bool toolDispatchStarted = false;
   int savedRows = 0;
   String text = '';
   CompanionLightError? error;

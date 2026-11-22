@@ -16,6 +16,9 @@ import 'settings_state.dart';
 /// attach to this owner; disposing a window does not dispose the provider.
 final companionAgentProvider = Provider<CompanionAgent>((ref) {
   final agent = CompanionAgent(
+    ref: ref,
+    memoryTransport: () => ref.read(companionAgentMemoryTransportProvider),
+    host: () => ref.read(companionAgentHostProvider),
     client: () => ref.read(companionLightClientProvider)(),
     apiKey: () => ref.read(settingsProvider).apiKey,
     onUsage: (usage) {
